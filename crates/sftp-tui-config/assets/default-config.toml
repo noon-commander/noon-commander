@@ -1,0 +1,39 @@
+# sftp-tui configuration
+#
+# sftp-tui uses the system OpenSSH client, so hosts, users, keys, and connection options come
+# from ssh_config. This file only decorates those hosts (labels, start directories, hiding); it
+# never duplicates them.
+#
+# Every setting is optional. Uncommented values are the defaults; commented lines are examples.
+
+[ssh]
+# The OpenSSH client, version 8.7 or later: a name looked up in PATH, or a path. Here and in
+# config_file, a leading ~/ stands for the home directory.
+program = "ssh"
+
+# Read this file instead of ~/.ssh/config and /etc/ssh/ssh_config, like `ssh -F`. It also
+# decides which hosts are listed.
+# config_file = "~/.ssh/work_config"
+
+# Extra arguments for every ssh invocation, for example ["-o", "ServerAliveInterval=15"].
+# Options that sftp-tui manages itself, such as -F (use config_file), -M, or ControlPath, are
+# rejected. So are forwarding options, such as -L, -D, -A, or ForwardAgent, unless sftp-tui was
+# built with the `forwarding` feature.
+args = []
+
+# Share one authenticated connection (ControlMaster) per host between panels and transfers.
+# Set to false for servers that allow one session per connection (MaxSessions 1); every panel
+# and transfer then opens its own connection and authenticates again.
+multiplex = true
+
+[discovery]
+# Hosts from ssh_config to leave out of the host list. Patterns may use `*` and `?`.
+hide = ["github.com", "gitlab.com", "bitbucket.org"]
+
+# Per-host settings, keyed by a Host alias from ssh_config. Quote aliases that contain dots,
+# such as [hosts."web.example.com"].
+#
+# [hosts."prod-web"]
+# label = "Prod"                    # name shown in the host list
+# start_dir = "/var/www"            # remote directory opened on connect instead of home
+# args = ["-o", "Compression=yes"]  # extra ssh arguments for this host, after ssh.args

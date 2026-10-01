@@ -8,5 +8,15 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[dependencies]
+futures-util.workspace = true
+openssh-sftp-client.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
 [lints]
 workspace = true

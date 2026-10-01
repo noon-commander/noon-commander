@@ -17,7 +17,21 @@ forwarding = ["sftp-tui-ssh/forwarding"]
 
 [dependencies]
 clap.workspace = true
+color-eyre.workspace = true
+futures-util.workspace = true
+rustix = { workspace = true, features = ["termios"] }
+secrecy.workspace = true
+sftp-tui-config.workspace = true
 sftp-tui-ssh.workspace = true
+sftp-tui-vfs.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

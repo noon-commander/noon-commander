@@ -8,12 +8,11 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use color_eyre::eyre::{Result, WrapErr as _, bail};
-use sftp_tui_config::{APP_NAME, Config, Paths};
+use sftp_tui_config::{Config, Paths};
 use sftp_tui_ssh::discovery::{Discovery, DiscoveryOptions, DiscoveryWarning, discover};
 use sftp_tui_ssh::{SshSettings, Target};
 
 use crate::cli::{Cli, Command, ConfigCommand};
-use crate::i18n::fl;
 
 /// Exit code after Ctrl-C, as shells report a process killed by SIGINT.
 const INTERRUPTED: u8 = 130;
@@ -25,7 +24,7 @@ pub(crate) async fn run(cli: Cli) -> Result<ExitCode> {
         None => {
             let context = Context::load(paths, &config_path)?;
             crate::i18n::select(&context.config.ui.language);
-            eprintln!("{}", fl!("tui-not-implemented", program = APP_NAME));
+            crate::tui::run().await?;
             Ok(ExitCode::SUCCESS)
         }
         Some(Command::Config(ConfigCommand::Init { force })) => config::init(&config_path, force),

@@ -52,7 +52,7 @@ fn select_into(loader: &FluentLanguageLoader, language: &str) {
 }
 
 /// A localized message, checked against the English messages at compile time:
-/// `fl!("tui-not-implemented", program = "sftp-tui")`.
+/// `fl!("fkey-quit")`, or with arguments `fl!("panel-connecting", host = alias)`.
 macro_rules! fl {
     ($id:literal) => {
         i18n_embed_fl::fl!($crate::i18n::LOADER, $id)
@@ -67,12 +67,9 @@ pub(crate) use fl;
 mod tests {
     use super::*;
 
-    const NOT_IMPLEMENTED: &str = "st: the TUI is not implemented yet; try `st hosts` or \
-                                   `st ls <host>:<path>`";
-
     #[test]
-    fn arguments_have_no_isolation_marks() {
-        assert_eq!(fl!("tui-not-implemented", program = "st"), NOT_IMPLEMENTED);
+    fn reads_messages() {
+        assert_eq!(fl!("fkey-quit"), "Quit");
     }
 
     #[test]
@@ -90,8 +87,8 @@ mod tests {
             let loader: FluentLanguageLoader = fluent_language_loader!();
             select_into(&loader, language);
             assert_eq!(
-                i18n_embed_fl::fl!(loader, "tui-not-implemented", program = "st"),
-                NOT_IMPLEMENTED,
+                i18n_embed_fl::fl!(loader, "fkey-quit"),
+                "Quit",
                 "{language}"
             );
         }

@@ -104,7 +104,7 @@ and returns the answer. Until the TUI exists, the command-line subcommands answe
 ## Command line
 
 ```text
-sftp-tui                    the TUI (not implemented yet)
+sftp-tui                    the TUI (needs a terminal)
 sftp-tui hosts [--resolve]  hosts from ssh_config with cached addresses; --resolve runs ssh -G
 sftp-tui ls [LOCATION]      virtual root, a local path, or host:path
 sftp-tui config init        write the commented default config.toml
@@ -124,6 +124,9 @@ sftp-tui config paths       show the files and directories in use
 - Every request carries a generation number, so stale replies (for example, a listing of a
   directory the user has already left) are dropped.
 - The UI task never awaits network I/O.
+- The terminal is restored on every exit: a guard leaves raw mode and the alternate screen when
+  the TUI returns or fails, ratatui's panic hook does it before a panic message, and SIGTERM,
+  SIGHUP, and SIGINT end the event loop like a quit.
 
 ## Configuration and paths
 

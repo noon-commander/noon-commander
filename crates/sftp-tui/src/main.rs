@@ -7,6 +7,7 @@ mod i18n;
 mod logging;
 mod prompt;
 mod tty;
+mod tui;
 
 use std::io::Write as _;
 use std::process::ExitCode;

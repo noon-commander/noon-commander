@@ -147,23 +147,19 @@ fn version_shows_the_forwarding_feature() {
 }
 
 #[test]
-fn without_a_subcommand_explains_what_works() {
+fn the_tui_needs_a_terminal() {
     let sandbox = Sandbox::new(&[]);
-    for language in ["auto", "fr-FR"] {
-        sandbox.write_config(&format!("[ui]\nlanguage = \"{language}\"\n"));
-        let output = sandbox
-            .command()
-            .env("LANG", "de_DE.UTF-8")
-            .output()
-            .unwrap();
-        assert!(output.status.success(), "{}", stderr(&output));
-        assert_eq!(
-            stderr(&output),
-            "sftp-tui: the TUI is not implemented yet; try `sftp-tui hosts` or \
-             `sftp-tui ls <host>:<path>`\n",
-            "{language}"
-        );
-    }
+    let output = sandbox.run(&[]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        stderr(&output).contains("the TUI needs a terminal"),
+        "{}",
+        stderr(&output)
+    );
+    assert!(
+        output.stdout.is_empty(),
+        "no escape codes without a terminal"
+    );
 }
 
 #[test]

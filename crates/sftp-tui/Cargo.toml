@@ -18,9 +18,11 @@ forwarding = ["sftp-tui-ssh/forwarding"]
 [dependencies]
 clap.workspace = true
 color-eyre.workspace = true
+crossterm.workspace = true
 futures-util.workspace = true
 i18n-embed.workspace = true
 i18n-embed-fl.workspace = true
+ratatui.workspace = true
 rust-embed.workspace = true
 rustix = { workspace = true, features = ["termios"] }
 secrecy.workspace = true
@@ -34,6 +36,7 @@ tracing-subscriber.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
+insta.workspace = true
 tempfile.workspace = true
 
 [lints]

@@ -20,7 +20,8 @@
 
 ## M2: TUI for browsing (current)
 
-- [ ] Two panels, virtual root, navigation, sorting, hidden files, quick search
+- [x] TUI skeleton: alternate screen, event loop, two panels, F10 quits, terminal restore
+- [ ] Panels: virtual root, navigation, sorting, hidden files, quick search
 - [ ] Keymap engine with the mc preset
 - [ ] Nerd Font icons and mc markers
 - [x] Fluent i18n (`en-US`) and `ui.language`

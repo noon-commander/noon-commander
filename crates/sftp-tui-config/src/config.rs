@@ -35,6 +35,9 @@ pub struct UiConfig {
     /// Interface language as a language tag such as `en-US`, or `auto` for the system locale.
     /// Default: `auto`.
     pub language: String,
+    /// Whether names get Nerd Font icons; otherwise mc's type markers (`/`, `*`, `@`, …).
+    /// Needs a Nerd Font in the terminal. Default: `true`.
+    pub icons: bool,
     /// Whether panels start out showing files whose names begin with a dot. Default: `true`.
     pub show_hidden: bool,
     /// Whether typing in a panel starts quick search; otherwise only Ctrl-S and Alt-S do, as
@@ -46,6 +49,7 @@ impl Default for UiConfig {
     fn default() -> Self {
         Self {
             language: "auto".to_owned(),
+            icons: true,
             show_hidden: true,
             type_to_search: true,
         }
@@ -247,6 +251,7 @@ mod tests {
 
         [ui]
         language = "de-DE"
+        icons = false
         show_hidden = false
         type_to_search = false
     "#;
@@ -275,6 +280,7 @@ mod tests {
             ]),
             ui: UiConfig {
                 language: "de-DE".to_owned(),
+                icons: false,
                 show_hidden: false,
                 type_to_search: false,
             },
@@ -294,6 +300,7 @@ mod tests {
         );
         assert!(config.hosts.is_empty());
         assert_eq!(config.ui.language, "auto");
+        assert!(config.ui.icons);
         assert!(config.ui.show_hidden);
         assert!(config.ui.type_to_search);
     }
@@ -457,6 +464,7 @@ mod tests {
         }
         assert!(table["discovery"].get("hide").is_some());
         assert!(table["ui"].get("language").is_some());
+        assert!(table["ui"].get("icons").is_some());
         assert!(table["ui"].get("show_hidden").is_some());
         assert!(table["ui"].get("type_to_search").is_some());
     }

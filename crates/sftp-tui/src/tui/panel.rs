@@ -14,6 +14,7 @@ use ratatui::widgets::Block;
 use sftp_tui_vfs::{DirEntry, Location, RemotePath};
 
 use super::cells::{self, Align, MTIME_WIDTH};
+use super::decor::Decor;
 use super::keymap::Action;
 use super::root::RootHost;
 use crate::i18n::fl;
@@ -67,16 +68,15 @@ pub(crate) enum HostStatus {
     Failed,
 }
 
-impl HostStatus {
-    /// The marker in front of the host's name.
-    fn marker(self) -> char {
-        match self {
-            Self::Idle => '○',
-            Self::Connecting => '◌',
-            Self::Connected => '●',
-            Self::Failed => '✗',
-        }
-    }
+/// What drawing a panel needs from the app.
+pub(crate) struct View<'a> {
+    /// What the app knows about a host.
+    pub(crate) hosts: &'a dyn Fn(&str) -> HostState,
+    pub(crate) decor: Decor,
+    /// Turns spinners.
+    pub(crate) tick: u64,
+    pub(crate) now: SystemTime,
+    pub(crate) tz: &'a TimeZone,
 }
 
 /// What a directory is sorted by. Directories always come first.
@@ -490,17 +490,15 @@ impl Panel {
     }
 
     /// Draws the panel: the location in the frame, column headers, the rows, and a status line
-    /// with the name under the cursor, the loading state, or the last error. `hosts` tells what
-    /// the app knows about a host.
+    /// with the name under the cursor, the loading state, or the last error.
     pub(crate) fn render(
         &mut self,
         frame: &mut Frame<'_>,
         area: Rect,
         active: bool,
-        hosts: &dyn Fn(&str) -> HostState,
-        now: SystemTime,
-        tz: &TimeZone,
+        view: &View<'_>,
     ) {
+        let hosts = view.hosts;
         let reversed = Style::new().reversed();
         let mut title = location_text(&self.location);
         let room = usize::from(area.width.saturating_sub(4));
@@ -537,7 +535,7 @@ impl Panel {
                 Style::new()
             };
             let y = inner.y + 1 + u16::try_from(screen_row).unwrap_or(u16::MAX);
-            let text = columns.row(row, hosts, now, tz);
+            let text = columns.row(row, view);
             frame.render_widget(Line::styled(text, style), line(y));
         }
 
@@ -623,16 +621,14 @@ impl Columns {
         }
     }
 
-    fn row(
-        self,
-        row: Row<'_>,
-        hosts: &dyn Fn(&str) -> HostState,
-        now: SystemTime,
-        tz: &TimeZone,
-    ) -> String {
+    fn row(self, row: Row<'_>, view: &View<'_>) -> String {
         const DIR: [Align; 3] = [Align::Left, Align::Right, Align::Left];
+        let decor = view.decor;
         match (self, row) {
-            (Self::Dir(columns), Row::Parent) => columns.join("..", &fl!("panel-up-dir"), "", DIR),
+            (Self::Dir(columns), Row::Parent) => {
+                let name = format!("{}..", decor.parent());
+                columns.join(&name, &fl!("panel-up-dir"), "", DIR)
+            }
             (Self::Dir(columns), Row::Entry(entry)) => {
                 let size = if entry.is_dir_like() {
                     fl!("panel-dir")
@@ -642,20 +638,21 @@ impl Columns {
                         .size
                         .map_or_else(String::new, |size| cells::size(size, SIZE_WIDTH))
                 };
-                let time = cells::mtime(entry.metadata.modified, now, tz);
-                columns.join(&cells::sanitize(&entry.name), &size, &time, DIR)
+                let time = cells::mtime(entry.metadata.modified, view.now, view.tz);
+                let name = format!("{}{}", decor.entry(entry), cells::sanitize(&entry.name));
+                columns.join(&name, &size, &time, DIR)
             }
-            // Without a marker, but in line with the hosts.
             (Self::Root(columns), Row::Local) => {
-                columns.join(&format!("  {}", fl!("root-local")), "~", [Align::Left; 2])
+                let name = format!("{}{}", decor.local(), fl!("root-local"));
+                columns.join(&name, "~", [Align::Left; 2])
             }
             (Self::Root(columns), Row::Host(host)) => {
                 let name = host.label.as_deref().unwrap_or(&host.alias);
                 let name = cells::sanitize(name.as_bytes());
-                let marker = hosts(&host.alias).status.marker();
+                let prefix = decor.host((view.hosts)(&host.alias).status, view.tick);
                 columns.join(
-                    &format!("{marker} {name}"),
-                    &address(host, hosts),
+                    &format!("{prefix}{name}"),
+                    &address(host, view.hosts),
                     [Align::Left; 2],
                 )
             }
@@ -945,6 +942,28 @@ mod tests {
         names(panel)[panel.cursor].clone()
     }
 
+    /// Draws `panel` with mc's markers, or icons with `decor`.
+    fn render_with(
+        panel: &mut Panel,
+        (width, height): (u16, u16),
+        active: bool,
+        hosts: &dyn Fn(&str) -> HostState,
+        decor: Decor,
+    ) -> Terminal<TestBackend> {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        let view = View {
+            hosts,
+            decor,
+            tick: 0,
+            now: UNIX_EPOCH + Duration::from_secs(NOW),
+            tz: &TimeZone::UTC,
+        };
+        terminal
+            .draw(|frame| panel.render(frame, frame.area(), active, &view))
+            .unwrap();
+        terminal
+    }
+
     fn render(
         panel: &mut Panel,
         width: u16,
@@ -952,14 +971,7 @@ mod tests {
         active: bool,
         hosts: &dyn Fn(&str) -> HostState,
     ) -> TestBackend {
-        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-        let now = UNIX_EPOCH + Duration::from_secs(NOW);
-        terminal
-            .draw(|frame| {
-                let area = frame.area();
-                panel.render(frame, area, active, hosts, now, &TimeZone::UTC);
-            })
-            .unwrap();
+        let terminal = render_with(panel, (width, height), active, hosts, Decor::new(false));
         terminal.backend().clone()
     }
 
@@ -1104,15 +1116,8 @@ mod tests {
         panel.search_next();
         assert_eq!(under_cursor(&panel), "Beta", "round to the top");
         panel.search_type('e');
-        let mut terminal = Terminal::new(TestBackend::new(40, 6)).unwrap();
-        let now = UNIX_EPOCH + Duration::from_secs(NOW);
-        terminal
-            .draw(|frame| {
-                let area = frame.area();
-                let hosts = |_: &str| HostState::default();
-                panel.render(frame, area, true, &hosts, now, &TimeZone::UTC);
-            })
-            .unwrap();
+        let hosts = |_: &str| HostState::default();
+        let mut terminal = render_with(&mut panel, (40, 6), true, &hosts, Decor::new(false));
         assert!(terminal.backend().to_string().contains("│Search: be"));
         assert_eq!(
             terminal.get_cursor_position().unwrap(),
@@ -1398,6 +1403,21 @@ mod tests {
         );
         panel.handle(Action::End);
         insta::assert_snapshot!(draw(&mut panel, 24, 7, true));
+    }
+
+    #[test]
+    fn draws_icons_with_ui_icons() {
+        let mut panel = loaded("/srv", listing());
+        let hosts = |_: &str| HostState::default();
+        let terminal = render_with(&mut panel, (40, 10), true, &hosts, Decor::new(true));
+        insta::assert_snapshot!(terminal.backend());
+        let mut root = root();
+        let connected = |_: &str| HostState {
+            status: HostStatus::Connected,
+            address: None,
+        };
+        let terminal = render_with(&mut root, (40, 8), true, &connected, Decor::new(true));
+        insta::assert_snapshot!("draws_icons_in_the_root", terminal.backend());
     }
 
     #[test]

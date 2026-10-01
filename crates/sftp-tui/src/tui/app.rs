@@ -13,9 +13,10 @@ use sftp_tui_config::UiConfig;
 use sftp_tui_vfs::Location;
 use tokio_util::sync::CancellationToken;
 
+use super::decor::Decor;
 use super::dialog::{Ask, Dialog, DialogEvent, Reply};
 use super::keymap::{Action, Context, Keymap, Resolved};
-use super::panel::{HostState, HostStatus, ListRequest, Listed, Panel};
+use super::panel::{HostState, HostStatus, ListRequest, Listed, Panel, View};
 use super::tasks::HostHandle;
 use crate::i18n::fl;
 
@@ -105,6 +106,9 @@ pub(crate) struct App {
     connections: u64,
     /// The `[ui]` settings; `show_hidden` follows Alt-.
     ui: UiConfig,
+    decor: Decor,
+    /// Counts the frames of spinners.
+    tick: u64,
     /// Hosts whose last attempt failed or whose connection was lost.
     failed: HashSet<String>,
     /// Addresses from `ssh -G` in this session.
@@ -134,6 +138,8 @@ impl App {
             hosts: HashMap::new(),
             connections: 0,
             ui: ui.clone(),
+            decor: Decor::new(ui.icons),
+            tick: 0,
             failed: HashSet::new(),
             addresses: HashMap::new(),
             dialogs: VecDeque::new(),
@@ -465,6 +471,18 @@ impl App {
         self.dialogs.retain(|open| open.dialog.id() != id);
     }
 
+    /// Whether something on screen moves while time passes: a host that is connecting.
+    pub(crate) fn animates(&self) -> bool {
+        self.hosts
+            .values()
+            .any(|host| matches!(host, Host::Connecting { .. }))
+    }
+
+    /// Moves spinners on by a frame.
+    pub(crate) fn tick(&mut self) {
+        self.tick = self.tick.wrapping_add(1);
+    }
+
     /// Stops every connection and connection attempt, for quitting.
     pub(crate) fn disconnect_all(&mut self) {
         for (_, state) in self.hosts.drain() {
@@ -492,10 +510,16 @@ impl App {
             .map(|host| (host.clone(), self.host_state(host)))
             .collect();
         let hosts = |host: &str| states.get(host).cloned().unwrap_or_default();
-        self.left
-            .render(frame, left, active == Side::Left, &hosts, now, tz);
+        let view = View {
+            hosts: &hosts,
+            decor: self.decor,
+            tick: self.tick,
+            now,
+            tz,
+        };
+        self.left.render(frame, left, active == Side::Left, &view);
         self.right
-            .render(frame, right, active == Side::Right, &hosts, now, tz);
+            .render(frame, right, active == Side::Right, &view);
         self.render_fkeys(frame, key_bar, keymap);
         if let Some(open) = self.dialogs.front() {
             open.dialog.render(frame, panels);
@@ -569,6 +593,14 @@ mod tests {
         }
     }
 
+    /// Settings with mc's markers, which read better in tests than icons.
+    fn ui() -> UiConfig {
+        UiConfig {
+            icons: false,
+            ..UiConfig::default()
+        }
+    }
+
     fn local(path: &str) -> Location {
         Location::Local(PathBuf::from(path))
     }
@@ -604,11 +636,7 @@ mod tests {
 
     /// An app on `/srv` whose first listings arrived.
     fn loaded() -> App {
-        let (mut app, effects) = App::new(
-            Path::new("/srv"),
-            Path::new("/home/me"),
-            &UiConfig::default(),
-        );
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &ui());
         answer(
             &mut app,
             effects,
@@ -619,8 +647,7 @@ mod tests {
 
     /// An app with both panels on the virtual root, which lists `web` and `db`.
     fn at_root() -> App {
-        let (mut app, effects) =
-            App::new(Path::new("/"), Path::new("/home/me"), &UiConfig::default());
+        let (mut app, effects) = App::new(Path::new("/"), Path::new("/home/me"), &ui());
         answer(&mut app, effects, &Listing::Dir(Vec::new()));
         let hosts = ["web", "db"].map(|alias| RootHost {
             alias: alias.to_owned(),
@@ -657,11 +684,7 @@ mod tests {
 
     #[test]
     fn lists_both_panels_at_start() {
-        let (_, effects) = App::new(
-            Path::new("/srv"),
-            Path::new("/home/me"),
-            &UiConfig::default(),
-        );
+        let (_, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &ui());
         let sides: Vec<Side> = effects
             .iter()
             .map(|effect| match effect {
@@ -1015,7 +1038,7 @@ mod tests {
     fn hidden_files_switch_in_both_panels() {
         let ui = UiConfig {
             show_hidden: false,
-            ..UiConfig::default()
+            ..ui()
         };
         let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &ui);
         answer(
@@ -1065,7 +1088,7 @@ mod tests {
     fn without_type_to_search_only_ctrl_s_searches() {
         let ui = UiConfig {
             type_to_search: false,
-            ..UiConfig::default()
+            ..ui()
         };
         let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &ui);
         answer(

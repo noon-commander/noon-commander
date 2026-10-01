@@ -20,6 +20,7 @@ clap.workspace = true
 color-eyre.workspace = true
 crokey.workspace = true
 crossterm.workspace = true
+devicons.workspace = true
 futures-util.workspace = true
 i18n-embed.workspace = true
 i18n-embed-fl.workspace = true

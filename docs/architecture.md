@@ -77,8 +77,8 @@ config:
 - Entering a host connects in the background (the status line says so; Esc stops it) and opens
   the configured `start_dir` or the remote home directory, shown as an absolute path.
 - When a connection is lost, the panels on that host go back to the root and say why.
-- A marker in front of each host shows its state: `○` not connected, `◌` connecting, `●`
-  connected, `✗` the last attempt failed or the connection was lost. F8 (`Esc 8`) in the root
+- A marker in front of each host shows its state: `○` not connected, a spinner while
+  connecting, `●` connected, `✗` the last attempt failed or the connection was lost. F8 (`Esc 8`) in the root
   closes the connection to the host under the cursor, or stops connecting to it.
 - Locations are `Root`, `Local(PathBuf)`, or `Remote { host, path }`. Remote paths are bytes,
   because SFTP v3 does not guarantee UTF-8, and are displayed lossily. The SFTP client library
@@ -186,6 +186,7 @@ args = ["-o", "Compression=yes"]
 
 [ui]
 language = "auto"                # or a language tag such as "en-US"; others fall back to it
+icons = true                     # Nerd Font icons; false: mc's markers (/ * @ ~ …)
 show_hidden = true               # names that start with a dot; Alt-. switches while running
 type_to_search = true            # typing in a panel starts quick search; false: only Ctrl-S
 ```
@@ -199,7 +200,6 @@ preserve_mtime = true
 atomic_upload = true             # write to a temporary name, then rename
 
 [ui]                             # M2
-icons = true
 theme = "mc-classic"
 ```
 
@@ -245,7 +245,10 @@ theme = "mc-classic"
   `fl!` from `i18n-embed-fl`, which checks message IDs against `en-US` at compile time; only
   `en-US` for now. `ui.language = "auto"` follows the system locale (through `sys-locale`).
   Arguments are inserted without Unicode isolation marks, which terminals would show.
-- **Icons.** Nerd Fonts v3 glyphs from `devicons`, plus our own table for directories, links, and
-  virtual-root entries; on by default (`ui.icons`). Icons sit in a fixed-width column. Without
-  icons, the mc markers are used: `/` directory, `*` executable, `@` symlink, `~` symlink to a
-  directory.
+- **Icons.** Nerd Fonts v3 glyphs, on by default (`ui.icons`), in front of each name: our own for
+  directories, `..`, links, broken links, FIFOs, sockets, devices, executables, `[Local]`, and
+  hosts; `devicons` for files by name or extension. devicons asks the disk whether a name it
+  does not know is a directory, so names go to it inside a path with a NUL byte, which names
+  nothing: drawing stays free of I/O, and remote names are never looked up locally. Without
+  icons, mc's markers: `/` directory, `~` link to a directory, `@` link, `!` broken link, `*`
+  executable, `|` FIFO, `=` socket, `-` character device, `+` block device.

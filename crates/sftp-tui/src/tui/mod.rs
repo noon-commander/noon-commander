@@ -2,6 +2,7 @@
 
 mod app;
 mod cells;
+mod decor;
 mod describe;
 mod dialog;
 mod keymap;
@@ -12,7 +13,7 @@ mod tasks;
 use std::io::{self, IsTerminal as _};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Instant, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use color_eyre::eyre::{Result, bail};
 use crossterm::event::{Event, EventStream, KeyEventKind};
@@ -30,6 +31,9 @@ use tasks::{Done, Tasks};
 
 use crate::context::Context;
 
+/// How long a spinner shows each of its frames.
+const SPINNER_FRAME: Duration = Duration::from_millis(150);
+
 /// Runs the TUI with both panels on the local directory `start` until the user quits or the
 /// process gets SIGTERM, SIGHUP, or SIGINT.
 pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
@@ -46,6 +50,8 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     let restore = Restore;
     let mut terminal = ratatui::try_init()?;
     let mut events = EventStream::new();
+    let mut spinner = tokio::time::interval(SPINNER_FRAME);
+    spinner.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let keymap = Keymap::mc();
     let mut keys = KeyState::default();
     let context = Arc::new(context);
@@ -97,6 +103,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
                     tasks.run(app.closed(&host, connection, reason.as_deref()));
                 }
             },
+            _ = spinner.tick(), if app.animates() => app.tick(),
             _ = terminate.recv() => break Ok(()),
             _ = hangup.recv() => break Ok(()),
             _ = interrupt.recv() => break Ok(()),

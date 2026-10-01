@@ -29,7 +29,7 @@
 - [x] Sorting (Ctrl-F3 … Ctrl-F6) and hidden files (`ui.show_hidden`, Alt-.)
 - [x] Quick search
 - [x] Keymap engine with the mc preset
-- [ ] Nerd Font icons and mc markers
+- [x] Nerd Font icons and mc markers
 - [x] Fluent i18n (`en-US`) and `ui.language`
 - [x] Askpass and host-key dialogs
 - [ ] mc-classic theme, F-key bar

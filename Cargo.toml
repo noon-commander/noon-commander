@@ -17,6 +17,7 @@ sftp-tui-vfs = { path = "crates/sftp-tui-vfs" }
 
 clap = { version = "4.6", features = ["derive"] }
 color-eyre = { version = "0.6", default-features = false }
+crokey = "1.5"
 crossterm = { version = "0.29", features = ["event-stream"] }
 futures-util = "0.3"
 getrandom = "0.4"

@@ -180,11 +180,15 @@ show_hidden = true
 
 ## UI
 
-- **Keymap.** Keys map to `Action`s per context (`panel`, `dialog`, `viewer`, `quick_search`,
-  `menu`). Bindings are key sequences matched with a prefix tree and a timeout, so a vim preset
-  (`g g`, `d d`) can follow the default mc preset; the mc preset also accepts `Esc 1` … `Esc 0`
-  for F1 … F10. User overrides live in `keymap.toml`, parsed with `crokey`. The F-key bar and
-  help are generated from the active keymap.
+- **Keymap.** Keys map to `Action`s per context (`panel`, `quick_search`, `dialog`,
+  `dialog_input`; `viewer` and `menu` will follow). Each context falls back along a chain, for
+  example quick search to the panel; the first context that knows a key sequence decides.
+  Bindings are key sequences matched by prefix with a 1-second timeout, so a vim preset
+  (`g g`, `d d`) can follow the default mc preset. As in mc, `Esc 1` … `Esc 0` stand for
+  F1 … F10, except where `Esc` alone is bound (dialogs, quick search), and a pending `Esc`
+  followed by a character stands for Alt and that character, for terminals whose Alt key sends
+  nothing. Keys are written with `crokey` names. User overrides in `keymap.toml` are planned
+  for M4. The F-key bar is generated from the active keymap; the help screen will be too.
 - **Text.** Fluent files under `crates/sftp-tui/i18n/`, embedded in the binary and read with
   `fl!` from `i18n-embed-fl`, which checks message IDs against `en-US` at compile time; only
   `en-US` for now. `ui.language = "auto"` follows the system locale (through `sys-locale`).

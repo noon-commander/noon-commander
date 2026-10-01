@@ -18,6 +18,7 @@ forwarding = ["sftp-tui-ssh/forwarding"]
 [dependencies]
 clap.workspace = true
 color-eyre.workspace = true
+crokey.workspace = true
 crossterm.workspace = true
 futures-util.workspace = true
 i18n-embed.workspace = true

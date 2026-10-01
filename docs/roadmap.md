@@ -1,21 +1,22 @@
 # Roadmap
 
-## M0: Skeleton (current)
+## M0: Skeleton (done)
 
 - [x] Cargo workspace and crate layout
 - [x] License, README, AGENTS.md, CHANGELOG, editor and lint configuration
 - [x] Architecture document and ADRs 0001–0004
 - [x] CI: rustfmt, clippy, and tests (default and `forwarding`), MSRV, cargo-deny
 
-## M1: Core without UI
+## M1: Core without UI (current)
 
-- [ ] `sftp-tui-config`: XDG paths, TOML schema, defaults, `sftp-tui config init`
-- [ ] Host discovery: scanner for `Host`, `Match`, and `Include`; lazy `ssh -G`; cache
-- [ ] ssh argument validator and forwarding policy ([ADR 0004](adr/0004-forwarding-compile-time-feature.md))
-- [ ] Master connection, SFTP channels, askpass bridge ([ADR 0002](adr/0002-controlmaster-per-host.md), [ADR 0003](adr/0003-askpass-bridge.md))
-- [ ] `sftp-tui-vfs`: virtual root, local, and SFTP backends
-- [ ] Debug commands: `sftp-tui hosts`, `sftp-tui ls <host>:<path>`
-- [ ] Tests: local `sftp-server` over pipes, fake `ssh` program
+- [x] `sftp-tui-config`: XDG paths, TOML schema, defaults, `sftp-tui config init`
+- [x] Host discovery: scanner for `Host`, `Match`, and `Include`; lazy `ssh -G`
+- [ ] Cache for `ssh -G` results, keyed by config file mtimes
+- [x] ssh argument validator and forwarding policy ([ADR 0004](adr/0004-forwarding-compile-time-feature.md))
+- [x] Master connection, SFTP channels, askpass bridge ([ADR 0002](adr/0002-controlmaster-per-host.md), [ADR 0003](adr/0003-askpass-bridge.md))
+- [x] `sftp-tui-vfs`: virtual root, local, and SFTP backends
+- [x] Debug commands: `sftp-tui hosts`, `sftp-tui ls <host>:<path>`
+- [x] Tests: local `sftp-server` over pipes, fake `ssh` program
 
 ## M2: TUI for browsing
 
@@ -42,6 +43,14 @@
 - [ ] chmod and symlinks
 - [ ] Mouse support
 - [ ] Restore panel state on start
+
+## Known issues
+
+- **Non-UTF-8 remote file names end the SFTP session.** `openssh-sftp-client` 0.15 decodes names
+  as UTF-8 (`openssh-sftp-protocol` deserializes `Box<Path>` through `ssh_format`, which calls
+  `str::from_utf8`), so listing a directory with, say, a cp1251 or KOI8-R name fails and the
+  session closes. Options: an upstream patch that keeps names as bytes, a fork, or our own SFTP
+  v3 codec behind `SftpFs`.
 
 ## Backlog
 

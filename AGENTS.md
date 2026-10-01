@@ -62,7 +62,9 @@ Work is done when all of them pass.
   destination.
 - User-supplied ssh arguments must pass the validator (ADR 0004). Unknown flags are errors.
 - Never pass `StrictHostKeyChecking=no` and never write to `~/.ssh/`.
-- No blocking I/O in async code. Every remote operation takes a `CancellationToken`.
+- No blocking I/O in async code; use `spawn_blocking`. Remote operations must be cancel-safe
+  (dropping the future abandons them cleanly); long-running work such as connecting, transfers,
+  and recursive walks also takes a `CancellationToken`.
 - Secrets live in `secrecy::SecretString`. Never log them, persist them, or pass them via argv.
 - No user-facing TUI text in code: it goes to Fluent files and is read with `fl!`.
 - Widgets never match raw keys; they receive `Action`s from the keymap.
@@ -99,7 +101,10 @@ Work is done when all of them pass.
 - Forced options live in `policy.rs`; change them only together with an ADR.
 - `ssh -G` runs `Match exec` predicates: call it lazily (on selection or connect), never for
   every host at startup.
-- Minimum OpenSSH is 8.4 (`SSH_ASKPASS_REQUIRE`).
+- Minimum OpenSSH is 8.7: `SSH_ASKPASS_REQUIRE` (8.4) and the `StdinNull` and
+  `ForkAfterAuthentication` keywords (8.7), which sftp-tui forces off.
+- Every ssh child runs in its own session (`setsid`), without a controlling terminal; prompts go
+  through the askpass bridge. `ssh -O` commands use `-F /dev/null`.
 
 ## Testing
 
@@ -107,8 +112,9 @@ Work is done when all of them pass.
 - UI: `insta` snapshots on ratatui's `TestBackend`; review with `cargo insta review`.
 - SFTP backends run against the local `sftp-server` (`/usr/libexec/sftp-server` on macOS) over
   pipes, with no network.
-- ssh orchestration tests set `ssh.program` to a fake ssh that emulates `-V`, `-G`, `-M`, `-O`,
-  and `-s … sftp`.
+- ssh orchestration tests set `ssh.program` to `crates/sftp-tui-ssh/tests/support/fake-ssh`, a
+  POSIX shell script that emulates `-V`, `-G`, `-M`, `-O`, and `-s … sftp` (served by the local
+  `sftp-server`) and logs its command lines. Keep it in sync with the flags we pass.
 - Tests must not touch the real `~/.ssh` or XDG directories; use temporary directories.
 
 ## Platforms

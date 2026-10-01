@@ -30,15 +30,22 @@ Each connected host has one master connection; everything else is multiplexed ov
 socket ([ADR 0002](adr/0002-controlmaster-per-host.md)):
 
 ```text
-ssh -M -N -S <sock> -o ControlPersist=no <master options> -- <alias>  # authenticates once
-ssh -S <sock> -T -s <channel options> -- <alias> sftp                 # panel channel
-ssh -S <sock> -T -s <channel options> -- <alias> sftp                 # transfer channels
+ssh <master options> -M -N -S <sock> -o ControlPersist=no -- <alias>  # authenticates once
+ssh <channel options> -S <sock> -T -s -- <alias> sftp                 # panel channel
+ssh <channel options> -S <sock> -T -s -- <alias> sftp                 # transfer channels
 ssh -S <sock> -t -- <alias> 'cd <dir> && exec $SHELL -l'              # console (backlog)
-ssh -S <sock> -O exit -- <alias>                                      # disconnect
+ssh -F /dev/null -S <sock> -O exit -- sftp-tui                        # disconnect
 ```
 
 The SFTP protocol client is `openssh-sftp-client`, whose `Sftp::new` works over the pipes of any
-child process.
+child process. Every ssh child runs in its own session (`setsid`), without a controlling
+terminal, so it can neither read from nor draw on the TUI's terminal.
+
+`sftp-tui-ssh` API in short: `version::check_version` runs `ssh -V`; `resolve::resolve` runs
+`ssh -G`; `Session::connect` starts the master (or nothing, without multiplexing);
+`Session::open_sftp` returns the pipes of a new SFTP channel, which `SftpFs::from_pipes` in
+`sftp-tui-vfs` turns into a file system; `Session::close` shuts down; `cleanup_stale` removes
+leftovers of crashed instances.
 
 Every ssh command line is assembled in `sftp-tui-ssh`, in this order: program → forced options →
 `ssh.args` → host `args` → role options → `--` → destination. ssh keeps the first value it sees
@@ -65,7 +72,10 @@ config:
 - Entering a host connects (with a cancellable spinner) and opens the remote home directory or the
   configured `start_dir`.
 - Locations are `Root`, `Local(PathBuf)`, or `Remote { host, path }`. Remote paths are bytes,
-  because SFTP v3 does not guarantee UTF-8, and are displayed lossily.
+  because SFTP v3 does not guarantee UTF-8, and are displayed lossily. The SFTP client library
+  still requires UTF-8 names; see the known issues in the [roadmap](roadmap.md).
+- Names from the server that are empty or contain `/` or NUL are dropped from listings: joined
+  to a local path, they could point outside the target directory.
 
 ## Host discovery
 
@@ -78,14 +88,30 @@ predicates. So:
 2. Concrete patterns (no `*`, `?`, or `!`) become hosts. `Include` lines with `%` tokens cannot be
    expanded statically; they are skipped and logged.
 3. Effective values (user, hostname, port, proxy jump) come only from `ssh -G`, run lazily on
-   selection or connect, with bounded parallelism, and cached by config file mtimes.
+   selection or connect, with bounded parallelism. A cache keyed by config file mtimes is
+   planned.
 4. `discovery.hide` hides patterns such as `github.com`.
 
 ## Authentication
 
 Prompts go through the askpass bridge ([ADR 0003](adr/0003-askpass-bridge.md)): ssh runs
 `sftp-tui` as its `SSH_ASKPASS` program, which forwards the prompt to the TUI over a Unix socket
-and returns the answer.
+and returns the answer. Until the TUI exists, the command-line subcommands answer prompts on
+`/dev/tty`.
+
+## Command line
+
+```text
+sftp-tui                    the TUI (not implemented yet)
+sftp-tui hosts [--resolve]  hosts from ssh_config; --resolve adds ssh -G addresses
+sftp-tui ls [LOCATION]      virtual root, a local path, or host:path
+sftp-tui config init        write the commented default config.toml
+sftp-tui config paths       show the files and directories in use
+```
+
+`--config FILE` replaces `~/.config/sftp-tui/config.toml`. Logs go to
+`~/.local/state/sftp-tui/sftp-tui.log`; `SFTP_TUI_LOG` sets the filter, for example
+`SFTP_TUI_LOG=debug`.
 
 ## Async model
 
@@ -111,28 +137,34 @@ variables:
 | Runtime (control sockets, askpass socket, F4 temp files) | `$XDG_RUNTIME_DIR/sftp-tui/` or `$TMPDIR/sftp-tui-$UID/`, mode 0700 |
 
 sftp-tui never rewrites `config.toml` wholesale; edits go through `toml_edit` and keep comments.
+Unknown keys are errors, so a typo does not silently fall back to a default.
+`sftp-tui config init` writes the commented defaults.
 
 ```toml
 [ssh]
-program = "ssh"                  # name in PATH or absolute path, OpenSSH 8.4+
+program = "ssh"                  # name in PATH or absolute path, OpenSSH 8.7+
 config_file = "~/.ssh/config"    # optional: passed as -F, also drives host discovery
 args = ["-o", "ServerAliveInterval=15"]
 multiplex = true                 # false: one connection per channel
 
 [discovery]
-hide = ["github.com", "gitlab.com"]
+hide = ["github.com", "gitlab.com", "bitbucket.org"]
 
 [hosts."prod-web"]               # decorates the ssh_config host, never duplicates it
 label = "Prod"
 start_dir = "/var/www"
 args = ["-o", "Compression=yes"]
+```
 
-[transfer]
+Planned sections, not accepted yet:
+
+```toml
+[transfer]                       # M3
 parallel_jobs = 2
 preserve_mtime = true
 atomic_upload = true             # write to a temporary name, then rename
 
-[ui]
+[ui]                             # M2
 icons = true
 language = "auto"
 theme = "mc-classic"

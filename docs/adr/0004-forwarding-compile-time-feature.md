@@ -16,9 +16,10 @@ the SFTP channels.
   feature adds a capability, as Cargo features should be additive, so there is no `no-forwarding`
   feature.
 - `crates/sftp-tui-ssh/src/policy.rs` is the only place that checks the feature.
-- Default build: the master and the console get `ClearAllForwardings=yes`, `ForwardAgent=no`,
-  `ForwardX11=no`, `Tunnel=no`, and `GSSAPIDelegateCredentials=no`. Forwarding-related user
-  arguments are rejected with an error that names the missing feature.
+- Default build: the master, direct SFTP connections (`ssh.multiplex = false`), and the console
+  get `ClearAllForwardings=yes`, `ForwardAgent=no`, `ForwardX11=no`, `Tunnel=no`, and
+  `GSSAPIDelegateCredentials=no`. Forwarding-related user arguments are rejected with an error
+  that names the missing feature.
 - Build with `--features forwarding`: the master and the console follow the user's ssh config and
   arguments.
 - SFTP channels always use `SFTP_CHANNEL_OPTIONS`, which mirror `sftp(1)`, in every build.

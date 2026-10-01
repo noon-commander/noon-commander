@@ -44,7 +44,7 @@ password manager, editing `~/.ssh/config` or `known_hosts`.
 ## Requirements
 
 - macOS (Linux support is planned).
-- OpenSSH 8.4 or newer: check with `ssh -V`.
+- OpenSSH 8.7 or newer: check with `ssh -V`.
 - Rust 1.88 or newer to build from source.
 
 ## Building

@@ -19,7 +19,11 @@ over the stdin and stdout of `ssh -s <host> sftp`.
   fallback is `russh-sftp`. Both sit behind our `SftpFs` adapter.
 - The `ssh` binary and extra arguments are configurable: `ssh.program`, `ssh.args`, and per-host
   `args`.
-- OpenSSH 8.4 or newer is required, for `SSH_ASKPASS_REQUIRE` ([ADR 0003](0003-askpass-bridge.md)).
+- OpenSSH 8.7 or newer is required: 8.4 added `SSH_ASKPASS_REQUIRE`
+  ([ADR 0003](0003-askpass-bridge.md)), and 8.7 added the `StdinNull` and
+  `ForkAfterAuthentication` keywords, which sftp-tui forces off so that a user's config cannot
+  close ssh's stdin or send it to the background. `sftp-tui` checks the version with `ssh -V`
+  before connecting.
 - SSH implementation crates are banned in `deny.toml`.
 
 ## Consequences

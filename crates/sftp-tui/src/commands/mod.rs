@@ -78,10 +78,13 @@ impl Context {
         Target::new(alias).with_args(args)
     }
 
+    fn discovery_options(&self) -> DiscoveryOptions {
+        DiscoveryOptions::new(self.paths.home.clone(), self.config.ssh.config_file.clone())
+    }
+
     /// Scans the `ssh_config` files and prints what was skipped.
     async fn discover(&self) -> Result<Discovery> {
-        let options =
-            DiscoveryOptions::new(self.paths.home.clone(), self.config.ssh.config_file.clone());
+        let options = self.discovery_options();
         let discovery = tokio::task::spawn_blocking(move || {
             discover(&options, &|name| std::env::var(name).ok())
         })

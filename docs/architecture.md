@@ -88,8 +88,10 @@ predicates. So:
 2. Concrete patterns (no `*`, `?`, or `!`) become hosts. `Include` lines with `%` tokens cannot be
    expanded statically; they are skipped and logged.
 3. Effective values (user, hostname, port, proxy jump) come only from `ssh -G`, run lazily on
-   selection or connect, with bounded parallelism. A cache keyed by config file mtimes is
-   planned.
+   selection or connect, with bounded parallelism. Results are cached in
+   `~/.cache/sftp-tui/resolve.json`, valid while the ssh settings, the config files read
+   (inode, mtime, size), and the names in their directories stay the same, so earlier
+   addresses show at once. A cached entry only stands in until `ssh -G` runs again.
 4. `discovery.hide` hides patterns such as `github.com`.
 
 ## Authentication
@@ -103,7 +105,7 @@ and returns the answer. Until the TUI exists, the command-line subcommands answe
 
 ```text
 sftp-tui                    the TUI (not implemented yet)
-sftp-tui hosts [--resolve]  hosts from ssh_config; --resolve adds ssh -G addresses
+sftp-tui hosts [--resolve]  hosts from ssh_config with cached addresses; --resolve runs ssh -G
 sftp-tui ls [LOCATION]      virtual root, a local path, or host:path
 sftp-tui config init        write the commented default config.toml
 sftp-tui config paths       show the files and directories in use

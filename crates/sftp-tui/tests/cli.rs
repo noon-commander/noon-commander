@@ -249,6 +249,38 @@ fn hosts_lists_ssh_config_hosts() {
 }
 
 #[test]
+fn hosts_shows_cached_addresses_until_ssh_config_changes() {
+    let sandbox = Sandbox::new(&[("FAKE_SSH_PORT", "2222")]);
+    // The cache also watches the names next to ssh_config, so it gets a directory of its own.
+    let ssh_config = sandbox.path("home/.ssh/config");
+    std::fs::write(&ssh_config, "Host web\n").unwrap();
+    std::fs::write(
+        sandbox.path("config/sftp-tui/config.toml"),
+        format!(
+            "[ssh]\nprogram = {}\nconfig_file = {}\n",
+            quote(sandbox.path("ssh").to_str().unwrap()),
+            quote(ssh_config.to_str().unwrap()),
+        ),
+    )
+    .unwrap();
+    let resolved = sandbox.run(&["hosts", "--resolve"]);
+    assert!(resolved.status.success(), "{}", stderr(&resolved));
+    assert_eq!(stdout(&resolved), "web  tester@web.example:2222\n");
+    assert!(sandbox.path("cache/sftp-tui/resolve.json").is_file());
+
+    // Without the fake ssh, the address can only come from the cache.
+    std::fs::remove_file(sandbox.path("ssh")).unwrap();
+    let cached = sandbox.run(&["hosts"]);
+    assert!(cached.status.success(), "{}", stderr(&cached));
+    assert_eq!(stdout(&cached), stdout(&resolved));
+
+    std::fs::write(&ssh_config, "Host web\n  Port 2200\n").unwrap();
+    let changed = sandbox.run(&["hosts"]);
+    assert!(changed.status.success(), "{}", stderr(&changed));
+    assert_eq!(stdout(&changed), "web\n");
+}
+
+#[test]
 fn ls_lists_the_virtual_root_and_local_directories() {
     let sandbox = Sandbox::new(&[]);
     std::fs::write(sandbox.path("ssh_config"), "Host web\nHost db\n").unwrap();

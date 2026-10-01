@@ -90,6 +90,26 @@ impl DiscoveryOptions {
             system_config: PathBuf::from("/etc/ssh/ssh_config"),
         }
     }
+
+    /// The top-level config files ssh reads: `config_file`, unless it is `none`, or
+    /// `<home>/.ssh/config` and `system_config`, whether they exist or not. Include them in the
+    /// files of a [`ConfigStamp`](crate::ConfigStamp), so that creating a missing config file
+    /// changes it.
+    pub fn root_files(&self) -> Vec<PathBuf> {
+        self.roots().into_iter().map(|(file, _)| file).collect()
+    }
+
+    fn roots(&self) -> Vec<(PathBuf, Origin)> {
+        match &self.config_file {
+            // `ssh -F none` reads no config at all.
+            Some(file) if file.as_os_str().eq_ignore_ascii_case("none") => Vec::new(),
+            Some(file) => vec![(file.clone(), Origin::User)],
+            None => vec![
+                (self.home.join(".ssh").join("config"), Origin::User),
+                (self.system_config.clone(), Origin::System),
+            ],
+        }
+    }
 }
 
 /// How deep ssh nests includes; the top-level file is at depth 0.
@@ -107,15 +127,8 @@ pub fn discover(options: &DiscoveryOptions, env: &dyn Fn(&str) -> Option<String>
         names: HashSet::new(),
         reads: HashSet::new(),
     };
-    match &options.config_file {
-        // `ssh -F none` reads no config at all.
-        Some(file) if file.as_os_str().eq_ignore_ascii_case("none") => {}
-        Some(file) => scanner.read_file(file, Origin::User, 0),
-        None => {
-            let user_config = options.home.join(".ssh").join("config");
-            scanner.read_file(&user_config, Origin::User, 0);
-            scanner.read_file(&options.system_config, Origin::System, 0);
-        }
+    for (file, origin) in options.roots() {
+        scanner.read_file(&file, origin, 0);
     }
     scanner.discovery
 }
@@ -982,6 +995,40 @@ mod tests {
                 ..tree.options()
             };
             assert_eq!(discover(&options, &no_env), Discovery::default());
+        }
+    }
+
+    #[test]
+    fn root_files_are_what_ssh_reads_first() {
+        let tree = Tree::new();
+        assert_eq!(
+            tree.options().root_files(),
+            [
+                tree.path("home/.ssh/config"),
+                tree.path("etc/ssh/ssh_config")
+            ]
+        );
+        assert_eq!(
+            DiscoveryOptions::new(PathBuf::from("/home/u"), None).root_files(),
+            [
+                PathBuf::from("/home/u/.ssh/config"),
+                PathBuf::from("/etc/ssh/ssh_config")
+            ]
+        );
+
+        let custom = tree.path("custom/ssh_config");
+        let options = DiscoveryOptions {
+            config_file: Some(custom.clone()),
+            ..tree.options()
+        };
+        assert_eq!(options.root_files(), [custom]);
+
+        for none in ["none", "NONE"] {
+            let options = DiscoveryOptions {
+                config_file: Some(PathBuf::from(none)),
+                ..tree.options()
+            };
+            assert_eq!(options.root_files(), Vec::<PathBuf>::new());
         }
     }
 

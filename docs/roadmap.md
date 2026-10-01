@@ -7,18 +7,18 @@
 - [x] Architecture document and ADRs 0001–0004
 - [x] CI: rustfmt, clippy, and tests (default and `forwarding`), MSRV, cargo-deny
 
-## M1: Core without UI (current)
+## M1: Core without UI (done)
 
 - [x] `sftp-tui-config`: XDG paths, TOML schema, defaults, `sftp-tui config init`
 - [x] Host discovery: scanner for `Host`, `Match`, and `Include`; lazy `ssh -G`
-- [ ] Cache for `ssh -G` results, keyed by config file mtimes
+- [x] Cache for `ssh -G` results, keyed by the state of the config files
 - [x] ssh argument validator and forwarding policy ([ADR 0004](adr/0004-forwarding-compile-time-feature.md))
 - [x] Master connection, SFTP channels, askpass bridge ([ADR 0002](adr/0002-controlmaster-per-host.md), [ADR 0003](adr/0003-askpass-bridge.md))
 - [x] `sftp-tui-vfs`: virtual root, local, and SFTP backends
 - [x] Debug commands: `sftp-tui hosts`, `sftp-tui ls <host>:<path>`
 - [x] Tests: local `sftp-server` over pipes, fake `ssh` program
 
-## M2: TUI for browsing
+## M2: TUI for browsing (current)
 
 - [ ] Two panels, virtual root, navigation, sorting, hidden files, quick search
 - [ ] Keymap engine with the mc preset

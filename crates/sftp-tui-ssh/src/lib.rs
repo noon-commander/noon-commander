@@ -12,11 +12,13 @@ mod error;
 pub mod pattern;
 pub mod policy;
 pub mod resolve;
+mod resolve_cache;
 mod runtime;
 mod session;
 pub mod version;
 
 pub use command::{SshSettings, Target};
 pub use error::SshError;
+pub use resolve_cache::{CachedHost, ConfigStamp, ResolveCache};
 pub use runtime::cleanup_stale;
 pub use session::{ChannelProcess, Session, SftpChannel, StderrTail};

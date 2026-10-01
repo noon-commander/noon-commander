@@ -1,0 +1,8 @@
+# Localization of the TUI with Fluent, read by i18n-embed and the `fl!` macro.
+
+# Every message must exist in this language; `fl!` checks message IDs against it at compile time.
+fallback_language = "en-US"
+
+[fluent]
+# Files are `i18n/<language>/sftp-tui.ftl`.
+assets_dir = "i18n"

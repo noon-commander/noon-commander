@@ -19,6 +19,9 @@ forwarding = ["sftp-tui-ssh/forwarding"]
 clap.workspace = true
 color-eyre.workspace = true
 futures-util.workspace = true
+i18n-embed.workspace = true
+i18n-embed-fl.workspace = true
+rust-embed.workspace = true
 rustix = { workspace = true, features = ["termios"] }
 secrecy.workspace = true
 sftp-tui-config.workspace = true

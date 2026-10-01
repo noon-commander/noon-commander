@@ -23,7 +23,7 @@
 - [ ] Two panels, virtual root, navigation, sorting, hidden files, quick search
 - [ ] Keymap engine with the mc preset
 - [ ] Nerd Font icons and mc markers
-- [ ] Fluent i18n (`en-US`)
+- [x] Fluent i18n (`en-US`) and `ui.language`
 - [ ] Askpass and host-key dialogs
 - [ ] mc-classic theme, F-key bar
 

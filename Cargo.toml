@@ -20,7 +20,10 @@ color-eyre = { version = "0.6", default-features = false }
 futures-util = "0.3"
 getrandom = "0.4"
 glob = "0.3"
+i18n-embed = { version = "0.16", features = ["fluent-system", "desktop-requester"] }
+i18n-embed-fl = "0.10"
 openssh-sftp-client = "0.15"
+rust-embed = { version = "8", features = ["debug-embed"] }
 rustix = { version = "1.1", features = ["process"] }
 secrecy = "0.10"
 serde = { version = "1", features = ["derive"] }

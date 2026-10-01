@@ -3,6 +3,7 @@
 mod cli;
 mod commands;
 mod format;
+mod i18n;
 mod logging;
 mod prompt;
 mod tty;

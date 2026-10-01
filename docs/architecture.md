@@ -156,9 +156,12 @@ hide = ["github.com", "gitlab.com", "bitbucket.org"]
 label = "Prod"
 start_dir = "/var/www"
 args = ["-o", "Compression=yes"]
+
+[ui]
+language = "auto"                # or a language tag such as "en-US"; others fall back to it
 ```
 
-Planned sections, not accepted yet:
+Planned keys and sections, not accepted yet:
 
 ```toml
 [transfer]                       # M3
@@ -168,8 +171,8 @@ atomic_upload = true             # write to a temporary name, then rename
 
 [ui]                             # M2
 icons = true
-language = "auto"
 theme = "mc-classic"
+show_hidden = true
 ```
 
 ## UI
@@ -179,8 +182,10 @@ theme = "mc-classic"
   (`g g`, `d d`) can follow the default mc preset; the mc preset also accepts `Esc 1` … `Esc 0`
   for F1 … F10. User overrides live in `keymap.toml`, parsed with `crokey`. The F-key bar and
   help are generated from the active keymap.
-- **Text.** Fluent files under `crates/sftp-tui/i18n/`, read with `fl!` from `i18n-embed-fl`;
-  only `en-US` for now. `ui.language = "auto"` picks the locale with `sys-locale`.
+- **Text.** Fluent files under `crates/sftp-tui/i18n/`, embedded in the binary and read with
+  `fl!` from `i18n-embed-fl`, which checks message IDs against `en-US` at compile time; only
+  `en-US` for now. `ui.language = "auto"` follows the system locale (through `sys-locale`).
+  Arguments are inserted without Unicode isolation marks, which terminals would show.
 - **Icons.** Nerd Fonts v3 glyphs from `devicons`, plus our own table for directories, links, and
   virtual-root entries; on by default (`ui.icons`). Icons sit in a fixed-width column. Without
   icons, the mc markers are used: `/` directory, `*` executable, `@` symlink, `~` symlink to a

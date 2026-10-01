@@ -24,6 +24,25 @@ pub struct Config {
     pub discovery: DiscoveryConfig,
     /// `[hosts."<alias>"]`: decorations for hosts from `ssh_config`, keyed by host alias.
     pub hosts: BTreeMap<String, HostConfig>,
+    /// `[ui]`: how the TUI looks.
+    pub ui: UiConfig,
+}
+
+/// The `[ui]` section. Values are checked by the TUI, which knows its languages.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct UiConfig {
+    /// Interface language as a language tag such as `en-US`, or `auto` for the system locale.
+    /// Default: `auto`.
+    pub language: String,
+}
+
+impl Default for UiConfig {
+    fn default() -> Self {
+        Self {
+            language: "auto".to_owned(),
+        }
+    }
 }
 
 /// The `[ssh]` section.
@@ -182,7 +201,7 @@ mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
 
-    use super::{Config, DEFAULT_CONFIG, DiscoveryConfig, HostConfig, SshConfig};
+    use super::{Config, DEFAULT_CONFIG, DiscoveryConfig, HostConfig, SshConfig, UiConfig};
     use crate::{ConfigError, write_default_config};
 
     const ORIGIN: &str = "/cfg/sftp-tui/config.toml";
@@ -218,6 +237,9 @@ mod tests {
         args = ["-o", "Compression=yes"]
 
         [hosts.staging]
+
+        [ui]
+        language = "de-DE"
     "#;
 
     fn full() -> Config {
@@ -242,6 +264,9 @@ mod tests {
                 ),
                 ("staging".to_owned(), HostConfig::default()),
             ]),
+            ui: UiConfig {
+                language: "de-DE".to_owned(),
+            },
         }
     }
 
@@ -257,6 +282,7 @@ mod tests {
             ["github.com", "gitlab.com", "bitbucket.org"]
         );
         assert!(config.hosts.is_empty());
+        assert_eq!(config.ui.language, "auto");
     }
 
     #[test]
@@ -417,6 +443,7 @@ mod tests {
             assert!(table["ssh"].get(key).is_some(), "ssh.{key}");
         }
         assert!(table["discovery"].get("hide").is_some());
+        assert!(table["ui"].get("language").is_some());
     }
 
     #[test]

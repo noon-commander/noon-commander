@@ -147,6 +147,39 @@ fn version_shows_the_forwarding_feature() {
 }
 
 #[test]
+fn without_a_subcommand_explains_what_works() {
+    let sandbox = Sandbox::new(&[]);
+    for language in ["auto", "fr-FR"] {
+        sandbox.write_config(&format!("[ui]\nlanguage = \"{language}\"\n"));
+        let output = sandbox
+            .command()
+            .env("LANG", "de_DE.UTF-8")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{}", stderr(&output));
+        assert_eq!(
+            stderr(&output),
+            "sftp-tui: the TUI is not implemented yet; try `sftp-tui hosts` or \
+             `sftp-tui ls <host>:<path>`\n",
+            "{language}"
+        );
+    }
+}
+
+#[test]
+fn rejects_an_invalid_language() {
+    let sandbox = Sandbox::new(&[]);
+    sandbox.write_config("[ui]\nlanguage = \"not a tag\"\n");
+    let output = sandbox.run(&[]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        stderr(&output).contains("invalid `ui.language`"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
 fn config_init_writes_the_defaults_once() {
     let sandbox = Sandbox::new(&[]);
     let file = sandbox.path("config/sftp-tui/config.toml");

@@ -7,12 +7,13 @@ mod ls;
 use std::path::Path;
 use std::process::ExitCode;
 
-use color_eyre::eyre::{Result, WrapErr as _};
-use sftp_tui_config::{Config, Paths};
+use color_eyre::eyre::{Result, WrapErr as _, bail};
+use sftp_tui_config::{APP_NAME, Config, Paths};
 use sftp_tui_ssh::discovery::{Discovery, DiscoveryOptions, DiscoveryWarning, discover};
 use sftp_tui_ssh::{SshSettings, Target};
 
 use crate::cli::{Cli, Command, ConfigCommand};
+use crate::i18n::fl;
 
 /// Exit code after Ctrl-C, as shells report a process killed by SIGINT.
 const INTERRUPTED: u8 = 130;
@@ -22,10 +23,9 @@ pub(crate) async fn run(cli: Cli) -> Result<ExitCode> {
     let config_path = cli.config.unwrap_or_else(|| paths.config_file());
     match cli.command {
         None => {
-            eprintln!(
-                "sftp-tui: the TUI is not implemented yet; try `sftp-tui hosts` or \
-                 `sftp-tui ls <host>:<path>`"
-            );
+            let context = Context::load(paths, &config_path)?;
+            crate::i18n::select(&context.config.ui.language);
+            eprintln!("{}", fl!("tui-not-implemented", program = APP_NAME));
             Ok(ExitCode::SUCCESS)
         }
         Some(Command::Config(ConfigCommand::Init { force })) => config::init(&config_path, force),
@@ -54,6 +54,14 @@ impl Context {
         let config = Config::load(config_path, &paths.home)?;
         sftp_tui_ssh::args::validate(&config.ssh.args)
             .wrap_err_with(|| format!("invalid `ssh.args` in {}", config_path.display()))?;
+        if !crate::i18n::is_valid_language(&config.ui.language) {
+            bail!(
+                "invalid `ui.language` in {}: `{}` is not `auto` or a language tag such as \
+                 `en-US`",
+                config_path.display(),
+                config.ui.language
+            );
+        }
         let settings = SshSettings {
             program: config.ssh.program.clone(),
             config_file: config.ssh.config_file.clone(),

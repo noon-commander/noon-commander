@@ -1,6 +1,6 @@
 //! State and drawing of the whole screen.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::SystemTime;
 
@@ -13,7 +13,7 @@ use sftp_tui_vfs::Location;
 use tokio_util::sync::CancellationToken;
 
 use super::keymap::{Action, Context, Keymap, Resolved};
-use super::panel::{ListRequest, Listed, Panel};
+use super::panel::{HostState, HostStatus, ListRequest, Listed, Panel};
 use super::tasks::HostHandle;
 use crate::i18n::fl;
 
@@ -93,6 +93,10 @@ pub(crate) struct App {
     active: Side,
     hosts: HashMap<String, Host>,
     connections: u64,
+    /// Hosts whose last attempt failed or whose connection was lost.
+    failed: HashSet<String>,
+    /// Addresses from `ssh -G` in this session.
+    addresses: HashMap<String, String>,
     quit: bool,
     redraw: bool,
 }
@@ -110,6 +114,8 @@ impl App {
             active: Side::Left,
             hosts: HashMap::new(),
             connections: 0,
+            failed: HashSet::new(),
+            addresses: HashMap::new(),
             quit: false,
             redraw: false,
         };
@@ -129,14 +135,17 @@ impl App {
     }
 
     /// Where keys go now.
-    #[expect(clippy::unused_self, reason = "dialogs and quick search come later")]
     pub(crate) fn context(&self) -> Context {
-        Context::Panel
+        if self.panel(self.active).shows_root() {
+            Context::Root
+        } else {
+            Context::Panel
+        }
     }
 
     /// Whether the app does something for `action` yet; the F-key bar shows only those.
     fn supports(action: Action) -> bool {
-        matches!(action, Action::Quit | Action::Redraw)
+        matches!(action, Action::Quit | Action::Redraw | Action::Disconnect)
     }
 
     fn panel(&self, side: Side) -> &Panel {
@@ -162,6 +171,7 @@ impl App {
             Action::Redraw => self.redraw = true,
             Action::SwitchPanel => self.active = self.active.other(),
             Action::Cancel => self.cancel(self.active),
+            Action::Disconnect => return self.disconnect(self.active),
             _ => {
                 let side = self.active;
                 if let Some(request) = self.panel_mut(side).handle(action) {
@@ -193,6 +203,7 @@ impl App {
             }
             Some(Host::Connecting { .. }) => Vec::new(),
             None => {
+                self.failed.remove(host);
                 self.connections += 1;
                 let connection = self.connections;
                 let stop = CancellationToken::new();
@@ -229,6 +240,49 @@ impl App {
             }
         }
         self.panel_mut(side).cancel();
+    }
+
+    /// Closes the connection to the host under the cursor of the panel on `side`, or stops
+    /// connecting to it. Panels on that host go back to the root.
+    fn disconnect(&mut self, side: Side) -> Vec<Effect> {
+        let Some(host) = self.panel(side).host_under_cursor().map(str::to_owned) else {
+            return Vec::new();
+        };
+        let Some(state) = self.hosts.remove(&host) else {
+            return Vec::new();
+        };
+        state.stop();
+        let mut effects = Vec::new();
+        for side in Side::BOTH {
+            let panel = self.panel_mut(side);
+            if matches!(state, Host::Connecting { .. }) {
+                if waits_for(panel, &host) {
+                    panel.cancel();
+                }
+            } else if let Some(request) = panel.leave_host(&host, None) {
+                effects.extend(self.route(side, request));
+            }
+        }
+        effects
+    }
+
+    /// Takes the address `ssh -G` gave for a host.
+    pub(crate) fn resolved(&mut self, host: String, address: String) {
+        self.addresses.insert(host, address);
+    }
+
+    /// What the root shows for a host.
+    fn host_state(&self, host: &str) -> HostState {
+        let status = match self.hosts.get(host) {
+            Some(Host::Connecting { .. }) => HostStatus::Connecting,
+            Some(Host::Connected { .. }) => HostStatus::Connected,
+            None if self.failed.contains(host) => HostStatus::Failed,
+            None => HostStatus::Idle,
+        };
+        HostState {
+            status,
+            address: self.addresses.get(host).cloned(),
+        }
     }
 
     /// Takes the result of an [`Effect::List`].
@@ -284,6 +338,9 @@ impl App {
         let Some(state) = self.hosts.remove(host) else {
             return Vec::new();
         };
+        if reason.is_some() {
+            self.failed.insert(host.to_owned());
+        }
         let mut effects = Vec::new();
         for side in Side::BOTH {
             let panel = self.panel_mut(side);
@@ -301,9 +358,7 @@ impl App {
                     }
                 }
                 (Host::Connected { .. }, _) => {
-                    let reason =
-                        reason.map_or_else(|| fl!("error-connection-closed"), str::to_owned);
-                    if let Some(request) = panel.leave_host(host, &reason) {
+                    if let Some(request) = panel.leave_host(host, reason) {
                         effects.extend(self.route(side, request));
                     }
                 }
@@ -319,14 +374,6 @@ impl App {
         }
     }
 
-    /// Whether the panel on `side` waits for a host that is not connected yet.
-    fn connecting(&self, side: Side) -> bool {
-        let panel = self.panel(side);
-        self.hosts
-            .iter()
-            .any(|(host, state)| matches!(state, Host::Connecting { .. }) && waits_for(panel, host))
-    }
-
     /// Two panels side by side above the F-key bar.
     pub(crate) fn render(
         &mut self,
@@ -339,11 +386,18 @@ impl App {
             Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).areas(frame.area());
         let [left, right] = Layout::horizontal([Constraint::Fill(1); 2]).areas(panels);
         let active = self.active;
-        let connecting = Side::BOTH.map(|side| self.connecting(side));
+        let states: HashMap<String, HostState> = self
+            .hosts
+            .keys()
+            .chain(&self.failed)
+            .chain(self.addresses.keys())
+            .map(|host| (host.clone(), self.host_state(host)))
+            .collect();
+        let hosts = |host: &str| states.get(host).cloned().unwrap_or_default();
         self.left
-            .render(frame, left, active == Side::Left, connecting[0], now, tz);
+            .render(frame, left, active == Side::Left, &hosts, now, tz);
         self.right
-            .render(frame, right, active == Side::Right, connecting[1], now, tz);
+            .render(frame, right, active == Side::Right, &hosts, now, tz);
         self.render_fkeys(frame, key_bar, keymap);
     }
 
@@ -376,6 +430,7 @@ fn waits_for(panel: &Panel, host: &str) -> bool {
 fn fkey_label(action: Action) -> Option<String> {
     match action {
         Action::Quit => Some(fl!("fkey-quit")),
+        Action::Disconnect => Some(fl!("fkey-disconnect")),
         _ => None,
     }
 }
@@ -668,6 +723,89 @@ mod tests {
             "{text}"
         );
         assert!(!stop.is_cancelled(), "it ended on its own");
+    }
+
+    #[test]
+    fn the_root_disconnects_the_host_under_the_cursor() {
+        let mut app = at_root();
+        assert_eq!(app.context(), Context::Root);
+        assert!(screen(&mut app).contains("8Disconn"));
+        let Effect::Connect {
+            connection, stop, ..
+        } = one(enter_host(&mut app, Side::Left, 1))
+        else {
+            panic!("expected a connection");
+        };
+        let (handle, _requests) = HostHandle::channel();
+        let effects = app.connected("web", connection, handle);
+        answer(&mut app, effects, &Listing::Dir(vec![dir("www")]));
+        assert_eq!(app.context(), Context::Panel, "the left panel is on web");
+        assert!(!screen(&mut app).contains("Disconn"));
+        assert_eq!(app.host_state("web").status, HostStatus::Connected);
+
+        // From the other panel's root.
+        app.active = Side::Right;
+        app.handle(action(Action::Down));
+        let Effect::List {
+            side,
+            request,
+            host: None,
+        } = one(app.handle(action(Action::Disconnect)))
+        else {
+            panic!("expected the root for the left panel");
+        };
+        assert_eq!((side, &request.location), (Side::Left, &Location::Root));
+        assert!(stop.is_cancelled());
+        assert_eq!(app.host_state("web").status, HostStatus::Idle);
+        assert!(
+            app.closed("web", connection, None).is_empty(),
+            "already gone"
+        );
+        assert!(
+            !screen(&mut app).contains("Lost"),
+            "asked for, so no reason"
+        );
+        // Nothing to close, or not a host.
+        assert!(app.handle(action(Action::Disconnect)).is_empty());
+        app.handle(action(Action::Home));
+        assert!(app.handle(action(Action::Disconnect)).is_empty());
+    }
+
+    #[test]
+    fn disconnect_stops_a_connection_attempt() {
+        let mut app = at_root();
+        let Effect::Connect { stop, .. } = one(enter_host(&mut app, Side::Left, 2)) else {
+            panic!("expected a connection");
+        };
+        assert_eq!(app.host_state("db").status, HostStatus::Connecting);
+        assert!(app.handle(action(Action::Disconnect)).is_empty());
+        assert!(stop.is_cancelled());
+        assert_eq!(app.panel(Side::Left).pending_request(), None);
+        assert_eq!(app.host_state("db").status, HostStatus::Idle);
+    }
+
+    #[test]
+    fn the_root_shows_failures_and_fresh_addresses() {
+        let mut app = at_root();
+        let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
+            panic!("expected a connection");
+        };
+        app.resolved("web".to_owned(), "deploy@10.0.0.9".to_owned());
+        app.closed("web", connection, Some("Connection refused"));
+        assert_eq!(
+            app.host_state("web"),
+            HostState {
+                status: HostStatus::Failed,
+                address: Some("deploy@10.0.0.9".to_owned()),
+            }
+        );
+        let text = screen(&mut app);
+        assert!(text.contains("✗ web"), "{text}");
+        assert!(text.contains("deploy@10.0.0.9"), "{text}");
+
+        // A new attempt clears the failure.
+        enter_host(&mut app, Side::Left, 0);
+        assert_eq!(app.host_state("web").status, HostStatus::Connecting);
     }
 
     #[test]

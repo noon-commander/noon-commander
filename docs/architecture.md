@@ -78,6 +78,9 @@ config:
   the configured `start_dir` or the remote home directory, shown as an absolute path. Until the
   dialogs exist, the TUI declines password and host-key prompts, so only keys and the agent work.
 - When a connection is lost, the panels on that host go back to the root and say why.
+- A marker in front of each host shows its state: `○` not connected, `◌` connecting, `●`
+  connected, `✗` the last attempt failed or the connection was lost. F8 (`Esc 8`) in the root
+  closes the connection to the host under the cursor, or stops connecting to it.
 - Locations are `Root`, `Local(PathBuf)`, or `Remote { host, path }`. Remote paths are bytes,
   because SFTP v3 does not guarantee UTF-8, and are displayed lossily. The SFTP client library
   still requires UTF-8 names; see the known issues in the [roadmap](roadmap.md).
@@ -94,8 +97,9 @@ predicates. So:
    like `ssh -F`, replaces both. It skips every other keyword and never fails on unknown ones.
 2. Concrete patterns (no `*`, `?`, or `!`) become hosts. `Include` lines with `%` tokens cannot be
    expanded statically; they are skipped and logged.
-3. Effective values (user, hostname, port, proxy jump) come only from `ssh -G`, run lazily on
-   selection or connect, with bounded parallelism. Results are cached in
+3. Effective values (user, hostname, port, proxy jump) come only from `ssh -G`, which runs
+   when the TUI connects to a host (or for `sftp-tui hosts --resolve`, with bounded
+   parallelism), never for every host at startup. Results are cached in
    `~/.cache/sftp-tui/resolve.json`, valid while the ssh settings, the config files read
    (inode, mtime, size), and the names in their directories stay the same, so earlier
    addresses show at once. A cached entry only stands in until `ssh -G` runs again.
@@ -199,15 +203,18 @@ show_hidden = true
   dropped. If a directory cannot be read, the panel stays where it was and says why below the
   listing. Going up puts the cursor on the directory just left. A panel shows a `Location`, so
   the [virtual root](#virtual-root) is one more kind of listing.
-- **Keymap.** Keys map to `Action`s per context (`panel`, `quick_search`, `dialog`,
+- **Keymap.** Keys map to `Action`s per context (`panel`, `root`, `quick_search`, `dialog`,
   `dialog_input`; `viewer` and `menu` will follow). Each context falls back along a chain, for
-  example quick search to the panel; the first context that knows a key sequence decides.
+  example the root and quick search to the panel; the first context that knows a key sequence
+  decides, except that a sequence it only starts does what a later context binds it to.
   Bindings are key sequences matched by prefix with a 1-second timeout, so a vim preset
   (`g g`, `d d`) can follow the default mc preset. As in mc, `Esc` in a panel waits for the
   next key: `Esc 1` … `Esc 0` stand for F1 … F10, `Esc` followed by a character stands for Alt
   and that character, for terminals whose Alt key sends nothing, and `Esc` alone cancels once
-  the timeout passes (`Esc Esc` at once). In dialogs and quick search `Esc` acts at once. Keys are written with `crokey` names. User overrides in `keymap.toml` are planned
-  for M4. The F-key bar is generated from the active keymap; the help screen will be too.
+  the timeout passes (`Esc Esc` at once). An `Esc` and a quick next key arrive as Alt and that
+  key, so there an unbound Alt and a character count as `Esc` and the character. In dialogs and
+  quick search `Esc` acts at once. Keys are written with `crokey` names. User overrides in
+  `keymap.toml` are planned for M4. The F-key bar is generated from the active keymap; the help screen will be too.
 - **Text.** Fluent files under `crates/sftp-tui/i18n/`, embedded in the binary and read with
   `fl!` from `i18n-embed-fl`, which checks message IDs against `en-US` at compile time; only
   `en-US` for now. `ui.language = "auto"` follows the system locale (through `sys-locale`).

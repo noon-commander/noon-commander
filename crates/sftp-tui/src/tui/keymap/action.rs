@@ -6,6 +6,8 @@
 pub(crate) enum Context {
     /// A panel that lists a directory.
     Panel,
+    /// A panel on the virtual root; falls back to `Panel`.
+    Root,
     /// Quick search in the active panel. Keys it does not bind fall through to the panel.
     QuickSearch,
     /// A dialog whose focus is on a button or a list.
@@ -19,6 +21,7 @@ impl Context {
     pub(crate) fn chain(self) -> &'static [Self] {
         match self {
             Self::Panel => &[Self::Panel],
+            Self::Root => &[Self::Root, Self::Panel],
             Self::QuickSearch => &[Self::QuickSearch, Self::Panel],
             // Dialogs are modal: panel keys do nothing while one is open.
             Self::Dialog => &[Self::Dialog],
@@ -30,12 +33,15 @@ impl Context {
     /// `Esc` and a character for Alt and that character, and `Esc` alone acts once the sequence
     /// times out. Elsewhere `Esc` acts at once.
     pub(crate) fn esc_waits(self) -> bool {
-        matches!(self, Self::Panel)
+        matches!(self, Self::Panel | Self::Root)
     }
 
     /// Whether an unbound printable key becomes [`Resolved::Insert`](super::Resolved::Insert).
     pub(crate) fn accepts_text(self) -> bool {
-        matches!(self, Self::Panel | Self::QuickSearch | Self::DialogInput)
+        matches!(
+            self,
+            Self::Panel | Self::Root | Self::QuickSearch | Self::DialogInput
+        )
     }
 }
 
@@ -77,6 +83,8 @@ pub(crate) enum Action {
     ToggleHidden,
     /// Starts quick search, or jumps to the next match.
     QuickSearch,
+    /// Closes the connection to the host under the cursor.
+    Disconnect,
     /// Deletes the character before the text cursor.
     Backspace,
     /// Deletes the character at the text cursor.
@@ -122,6 +130,7 @@ impl Action {
         Self::Reload,
         Self::ToggleHidden,
         Self::QuickSearch,
+        Self::Disconnect,
         Self::Backspace,
         Self::Delete,
         Self::DeleteToStart,

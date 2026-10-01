@@ -48,6 +48,37 @@ pub(crate) enum Listing {
     Dir(Vec<DirEntry>),
 }
 
+/// What the app knows about a host beyond the listing of the virtual root.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct HostState {
+    pub(crate) status: HostStatus,
+    /// From `ssh -G` in this session, fresher than the cached address in the listing.
+    pub(crate) address: Option<String>,
+}
+
+/// The connection state of a host.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum HostStatus {
+    #[default]
+    Idle,
+    Connecting,
+    Connected,
+    /// The last attempt failed, or the connection was lost.
+    Failed,
+}
+
+impl HostStatus {
+    /// The marker in front of the host's name.
+    fn marker(self) -> char {
+        match self {
+            Self::Idle => '○',
+            Self::Connecting => '◌',
+            Self::Connected => '●',
+            Self::Failed => '✗',
+        }
+    }
+}
+
 /// Which row gets the cursor once a listing arrives.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Focus {
@@ -205,19 +236,34 @@ impl Panel {
         self.pending = None;
     }
 
-    /// Leaves `host` for the virtual root, with the cursor on it and `reason` below the listing,
-    /// if the panel shows or waits for that host.
-    pub(crate) fn leave_host(&mut self, host: &str, reason: &str) -> Option<ListRequest> {
+    /// Leaves `host` for the virtual root, with the cursor on it and the `reason` of a lost
+    /// connection below the listing, if the panel shows or waits for that host.
+    pub(crate) fn leave_host(&mut self, host: &str, reason: Option<&str>) -> Option<ListRequest> {
         let on_host = |location: &Location| matches!(location, Location::Remote { host: shown, .. } if shown == host);
         let pending = self.pending.as_ref().map(|pending| &pending.location);
         if !on_host(&self.location) && !pending.is_some_and(on_host) {
             return None;
         }
         let request = self.open(Location::Root, Focus::Host(host.to_owned()));
-        let reason = cells::sanitize(reason.as_bytes());
-        let host = cells::sanitize(host.as_bytes());
-        self.error = Some(fl!("panel-host-lost", host = host, reason = reason));
+        if let Some(reason) = reason {
+            let reason = cells::sanitize(reason.as_bytes());
+            let host = cells::sanitize(host.as_bytes());
+            self.error = Some(fl!("panel-host-lost", host = host, reason = reason));
+        }
         Some(request)
+    }
+
+    /// Whether the panel shows the virtual root.
+    pub(crate) fn shows_root(&self) -> bool {
+        self.location == Location::Root
+    }
+
+    /// The alias of the host under the cursor in the virtual root.
+    pub(crate) fn host_under_cursor(&self) -> Option<&str> {
+        match self.row(self.cursor)? {
+            Row::Host(host) => Some(&host.alias),
+            Row::Parent | Row::Entry(_) | Row::Local => None,
+        }
     }
 
     /// Moves the cursor or opens a directory or host. Returns the listing to request, if any.
@@ -300,14 +346,14 @@ impl Panel {
     }
 
     /// Draws the panel: the location in the frame, column headers, the rows, and a status line
-    /// with the name under the cursor, the loading state, or the last error. `connecting` says
-    /// that the host of the pending request is not connected yet.
+    /// with the name under the cursor, the loading state, or the last error. `hosts` tells what
+    /// the app knows about a host.
     pub(crate) fn render(
         &mut self,
         frame: &mut Frame<'_>,
         area: Rect,
         active: bool,
-        connecting: bool,
+        hosts: &dyn Fn(&str) -> HostState,
         now: SystemTime,
         tz: &TimeZone,
     ) {
@@ -332,7 +378,10 @@ impl Panel {
 
         let columns = match &self.listing {
             Listing::Dir(_) => Columns::Dir(DirColumns::for_width(width)),
-            Listing::Root(hosts) => Columns::Root(RootColumns::for_width(width, hosts)),
+            Listing::Root(listed) => {
+                let addresses = listed.iter().map(|host| address(host, hosts));
+                Columns::Root(RootColumns::for_width(width, addresses))
+            }
         };
         let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
         frame.render_widget(Line::raw(columns.header()), line(inner.y));
@@ -344,7 +393,8 @@ impl Panel {
                 Style::new()
             };
             let y = inner.y + 1 + u16::try_from(screen_row).unwrap_or(u16::MAX);
-            frame.render_widget(Line::styled(columns.row(row, now, tz), style), line(y));
+            let text = columns.row(row, hosts, now, tz);
+            frame.render_widget(Line::styled(text, style), line(y));
         }
 
         let separator_y = inner.bottom() - 2;
@@ -360,7 +410,7 @@ impl Panel {
             error.clone()
         } else if let Some(pending) = &self.pending {
             match &pending.location {
-                Location::Remote { host, .. } if connecting => {
+                Location::Remote { host, .. } if hosts(host).status == HostStatus::Connecting => {
                     fl!("panel-connecting", host = cells::sanitize(host.as_bytes()))
                 }
                 _ => fl!("panel-loading"),
@@ -413,7 +463,13 @@ impl Columns {
         }
     }
 
-    fn row(self, row: Row<'_>, now: SystemTime, tz: &TimeZone) -> String {
+    fn row(
+        self,
+        row: Row<'_>,
+        hosts: &dyn Fn(&str) -> HostState,
+        now: SystemTime,
+        tz: &TimeZone,
+    ) -> String {
         const DIR: [Align; 3] = [Align::Left, Align::Right, Align::Left];
         match (self, row) {
             (Self::Dir(columns), Row::Parent) => columns.join("..", &fl!("panel-up-dir"), "", DIR),
@@ -429,15 +485,17 @@ impl Columns {
                 let time = cells::mtime(entry.metadata.modified, now, tz);
                 columns.join(&cells::sanitize(&entry.name), &size, &time, DIR)
             }
+            // Without a marker, but in line with the hosts.
             (Self::Root(columns), Row::Local) => {
-                columns.join(&fl!("root-local"), "~", [Align::Left; 2])
+                columns.join(&format!("  {}", fl!("root-local")), "~", [Align::Left; 2])
             }
             (Self::Root(columns), Row::Host(host)) => {
                 let name = host.label.as_deref().unwrap_or(&host.alias);
-                let address = host.address.as_deref().unwrap_or_default();
+                let name = cells::sanitize(name.as_bytes());
+                let marker = hosts(&host.alias).status.marker();
                 columns.join(
-                    &cells::sanitize(name.as_bytes()),
-                    &cells::sanitize(address.as_bytes()),
+                    &format!("{marker} {name}"),
+                    &address(host, hosts),
                     [Align::Left; 2],
                 )
             }
@@ -505,11 +563,9 @@ struct RootColumns {
 }
 
 impl RootColumns {
-    fn for_width(width: usize, hosts: &[RootHost]) -> Self {
-        let address = hosts
-            .iter()
-            .filter_map(|host| host.address.as_deref())
-            .map(|address| cells::width(&cells::sanitize(address.as_bytes())))
+    fn for_width(width: usize, addresses: impl Iterator<Item = String>) -> Self {
+        let address = addresses
+            .map(|address| cells::width(&address))
             .chain([cells::width(&fl!("root-address"))])
             .max()
             .unwrap_or(0)
@@ -536,6 +592,12 @@ impl RootColumns {
         }
         text
     }
+}
+
+/// The address of a host, terminal-safe: from `ssh -G` in this session, else the cached one.
+fn address(host: &RootHost, hosts: &dyn Fn(&str) -> HostState) -> String {
+    let address = hosts(&host.alias).address.or_else(|| host.address.clone());
+    cells::sanitize(address.unwrap_or_default().as_bytes())
 }
 
 /// The directory `name` in `location`.
@@ -685,25 +747,29 @@ mod tests {
         width: u16,
         height: u16,
         active: bool,
-        connecting: bool,
+        hosts: &dyn Fn(&str) -> HostState,
     ) -> TestBackend {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         let now = UNIX_EPOCH + Duration::from_secs(NOW);
         terminal
             .draw(|frame| {
                 let area = frame.area();
-                panel.render(frame, area, active, connecting, now, &TimeZone::UTC);
+                panel.render(frame, area, active, hosts, now, &TimeZone::UTC);
             })
             .unwrap();
         terminal.backend().clone()
     }
 
     fn draw(panel: &mut Panel, width: u16, height: u16, active: bool) -> TestBackend {
-        render(panel, width, height, active, false)
+        render(panel, width, height, active, &|_| HostState::default())
     }
 
     fn draw_connecting(panel: &mut Panel, width: u16, height: u16) -> TestBackend {
-        render(panel, width, height, true, true)
+        let connecting = |_: &str| HostState {
+            status: HostStatus::Connecting,
+            address: None,
+        };
+        render(panel, width, height, true, &connecting)
     }
 
     #[test]
@@ -946,8 +1012,8 @@ mod tests {
     #[test]
     fn a_lost_host_sends_its_panels_back_to_the_root() {
         let mut panel = loaded_at(remote("db", "/srv"), Listing::Dir(listing()));
-        assert_eq!(panel.leave_host("web", "gone"), None, "another host");
-        let request = panel.leave_host("db", "Connection reset").unwrap();
+        assert_eq!(panel.leave_host("web", Some("gone")), None, "another host");
+        let request = panel.leave_host("db", Some("Connection reset")).unwrap();
         assert_eq!(request.location, Location::Root);
         answer(&mut panel, &request, Listing::Root(hosts()));
         assert_eq!(under_cursor(&panel), "db");
@@ -960,7 +1026,8 @@ mod tests {
         let mut panel = root();
         panel.handle(Action::Down);
         panel.handle(Action::Enter);
-        assert!(panel.leave_host("web", "gone").is_some());
+        assert!(panel.leave_host("web", None).is_some());
+        assert_eq!(panel.error, None, "a disconnect needs no reason");
     }
 
     #[test]
@@ -984,11 +1051,34 @@ mod tests {
     fn draws_the_root_with_labels_and_cached_addresses() {
         let mut panel = root();
         panel.handle(Action::Down);
+        assert_eq!(panel.host_under_cursor(), Some("web"));
         insta::assert_snapshot!(draw(&mut panel, 50, 9, true));
 
         let narrow = draw(&mut panel, 20, 9, true).to_string();
         assert!(!narrow.contains("deploy"), "{narrow}");
         assert!(narrow.contains("Prod"), "{narrow}");
+    }
+
+    #[test]
+    fn the_root_marks_connection_states_and_prefers_fresh_addresses() {
+        let mut panel = root();
+        assert!(panel.shows_root());
+        assert_eq!(panel.host_under_cursor(), None, "[Local]");
+        let hosts = |alias: &str| match alias {
+            "web" => HostState {
+                status: HostStatus::Connected,
+                address: Some("deploy@10.0.0.9".to_owned()),
+            },
+            "db" => HostState {
+                status: HostStatus::Failed,
+                address: None,
+            },
+            _ => HostState {
+                status: HostStatus::Connecting,
+                address: None,
+            },
+        };
+        insta::assert_snapshot!(render(&mut panel, 50, 9, false, &hosts));
     }
 
     #[test]

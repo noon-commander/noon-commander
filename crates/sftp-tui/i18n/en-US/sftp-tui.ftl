@@ -3,9 +3,12 @@
 # Each section below belongs to one module. Message IDs are kebab-case and start with the
 # section's prefix; arguments are written { $name }.
 
-## F-key bar (src/tui). Prefix: fkey-.
+## F-key bar (src/tui). Prefix: fkey-. Keep labels short, as mc does: a slot has about
+## seven cells in an 80-column terminal.
 
 fkey-quit = Quit
+# Closes the connection to the host under the cursor.
+fkey-disconnect = Disconn
 
 ## Panels (src/tui/panel). Prefixes: panel-, error-.
 

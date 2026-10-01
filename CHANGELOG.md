@@ -31,5 +31,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Enter on a host connects in the background and opens its `start_dir` or the remote home
   directory; Esc stops the attempt. Keys and the agent work; password and host-key prompts are
   declined for now. If the connection is lost, its panels go back to the host list and say why.
+- The host list marks each host as not connected, connecting, connected, or failed, and F8
+  (`Esc 8`) there disconnects the host under the cursor. Connecting runs `ssh -G`, whose
+  address is shown and cached for the next run.
+- `Esc` followed quickly by a digit now works as the F-key too; terminals deliver it as Alt and
+  the digit.
 - `[ui] language` selects the interface language (`auto` by default); only English exists so
   far. Interface text lives in Fluent files.

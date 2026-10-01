@@ -98,12 +98,12 @@ impl Keymap {
     /// the F-key, for terminals that lack them.
     pub(crate) fn mc() -> Self {
         use Action::{
-            Backspace, Cancel, Confirm, Delete, DeleteToEnd, DeleteToStart, Down, End, Enter, Help,
-            Home, Left, NextField, OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent,
-            PrevField, QuickSearch, Quit, Redraw, Reload, Right, SwapPanels, SwitchPanel,
+            Backspace, Cancel, Confirm, Delete, DeleteToEnd, DeleteToStart, Disconnect, Down, End,
+            Enter, Help, Home, Left, NextField, OtherPanelOpen, OtherPanelSync, PageDown, PageUp,
+            Parent, PrevField, QuickSearch, Quit, Redraw, Reload, Right, SwapPanels, SwitchPanel,
             ToggleHidden, Up,
         };
-        let presets: [(Context, Preset); 4] = [
+        let presets: [(Context, Preset); 5] = [
             (
                 Context::Panel,
                 &[
@@ -128,6 +128,7 @@ impl Keymap {
                     (Redraw, &["ctrl-l"]),
                 ],
             ),
+            (Context::Root, &[(Disconnect, &["f8"])]),
             (
                 Context::QuickSearch,
                 &[(Backspace, &["backspace"]), (Cancel, &["esc"])],
@@ -179,15 +180,24 @@ impl Keymap {
         Self { contexts }
     }
 
-    /// What the first context in `context`'s chain that knows `keys` knows about them.
+    /// What the first context in `context`'s chain that knows `keys` knows about them. A prefix
+    /// that this context does not bind itself does, once it times out, what a later context
+    /// binds it to: `Esc` still cancels where a context adds `Esc 8`.
     fn lookup(&self, context: Context, keys: &[KeyCombination]) -> Lookup {
-        context
+        let mut known = context
             .chain()
             .iter()
             .filter_map(|context| self.contexts.get(context))
             .map(|bindings| bindings.lookup(keys))
-            .find(|lookup| *lookup != Lookup::Unknown)
-            .unwrap_or(Lookup::Unknown)
+            .filter(|lookup| *lookup != Lookup::Unknown);
+        match known.next() {
+            Some(Lookup::Prefix(None)) => Lookup::Prefix(known.find_map(|lookup| match lookup {
+                Lookup::Exact(action) | Lookup::Prefix(Some(action)) => Some(action),
+                Lookup::Prefix(None) | Lookup::Unknown => None,
+            })),
+            Some(lookup) => lookup,
+            None => Lookup::Unknown,
+        }
     }
 
     /// Feeds one key press. Returns what to do now; nothing while a sequence waits for its next
@@ -202,6 +212,17 @@ impl Keymap {
         if state.context != Some(context) {
             state.clear();
             state.context = Some(context);
+        }
+        // An Esc and the key right after it reach a terminal program in one read, which
+        // crossterm reports as Alt and the key; so do terminals whose Alt key sends Esc.
+        if context.esc_waits()
+            && state.keys.is_empty()
+            && let Some(plain) = without_alt(event)
+            && self.lookup(context, &[KeyCombination::from(event)]) == Lookup::Unknown
+        {
+            let mut resolved = self.feed(state, context, KeyEvent::from(KeyCode::Esc), now);
+            resolved.extend(self.feed(state, context, plain, now));
+            return resolved;
         }
         let mut resolved = Vec::new();
         let mut alt_from_esc = false;
@@ -296,6 +317,15 @@ fn with_esc_digits(mut bindings: Vec<(Sequence, Action)>) -> Vec<(Sequence, Acti
         }
     }
     bindings
+}
+
+/// The same character key without Alt, if `event` is Alt and a character.
+fn without_alt(event: KeyEvent) -> Option<KeyEvent> {
+    let KeyCode::Char(_) = event.code else {
+        return None;
+    };
+    (event.modifiers - KeyModifiers::SHIFT == KeyModifiers::ALT)
+        .then(|| KeyEvent::new(event.code, event.modifiers - KeyModifiers::ALT))
 }
 
 /// Whether `key` is a character without Ctrl or Alt, which a pending `Esc` turns into Alt.
@@ -435,7 +465,30 @@ mod tests {
         );
         // An unbound Alt combination types nothing.
         assert_eq!(feed(&keymap, &mut state, Context::Panel, &["esc", "z"]), []);
+        assert_eq!(feed(&keymap, &mut state, Context::Panel, &["alt-z"]), []);
         assert_eq!(state.deadline(), None);
+    }
+
+    #[test]
+    fn alt_and_a_digit_stand_for_esc_and_the_digit() {
+        // What `Esc 0` typed quickly, or Alt-0 where Alt sends Esc, arrives as.
+        let keymap = Keymap::mc();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Panel, &["alt-0", "alt-1"]),
+            actions(&[Action::Quit, Action::Help])
+        );
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Root, &["alt-8"]),
+            actions(&[Action::Disconnect])
+        );
+        assert_eq!(state.deadline(), None);
+        // Bound Alt keys keep their binding, and dialogs keep Alt as it is.
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Panel, &["alt-."]),
+            actions(&[Action::ToggleHidden])
+        );
+        assert_eq!(feed(&keymap, &mut state, Context::Dialog, &["alt-0"]), []);
     }
 
     #[test]
@@ -500,6 +553,46 @@ mod tests {
             ),
             actions(&[Action::DeleteToStart, Action::Confirm, Action::Cancel])
         );
+    }
+
+    #[test]
+    fn the_root_adds_disconnect_to_the_panel_keys() {
+        let keymap = Keymap::mc();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(
+                &keymap,
+                &mut state,
+                Context::Root,
+                &["f8", "esc", "8", "esc", "0", "enter"]
+            ),
+            actions(&[
+                Action::Disconnect,
+                Action::Disconnect,
+                Action::Quit,
+                Action::Enter
+            ])
+        );
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Panel, &["f8"]),
+            [],
+            "only the root disconnects"
+        );
+        // `Esc 8` makes `Esc` a prefix in the root too, but alone it still cancels.
+        let start = Instant::now();
+        assert_eq!(
+            keymap.feed(&mut state, Context::Root, key("esc"), start),
+            []
+        );
+        assert_eq!(
+            keymap.expire(&mut state, start + SEQUENCE_TIMEOUT),
+            actions(&[Action::Cancel])
+        );
+        let mut root = [None; 10];
+        root[0] = Some(Action::Help);
+        root[7] = Some(Action::Disconnect);
+        root[9] = Some(Action::Quit);
+        assert_eq!(keymap.fkeys(Context::Root), root);
     }
 
     #[test]

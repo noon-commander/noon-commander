@@ -7,10 +7,11 @@ use std::time::Duration;
 use futures_util::StreamExt as _;
 use futures_util::stream::FuturesUnordered;
 use sftp_tui_ssh::askpass::{AskpassEnv, AskpassEvent, AskpassServer};
+use sftp_tui_ssh::resolve::resolve;
 use sftp_tui_ssh::version::check_version;
-use sftp_tui_ssh::{ChannelProcess, Session, SftpChannel, SshError, cleanup_stale};
+use sftp_tui_ssh::{CachedHost, ChannelProcess, Session, SftpChannel, SshError, cleanup_stale};
 use sftp_tui_vfs::{LocalFs, Location, RemotePath, SftpFs, Vfs as _, VfsError};
-use tokio::sync::mpsc;
+use tokio::sync::{Mutex, mpsc};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
@@ -42,6 +43,8 @@ pub(crate) enum Done {
         connection: u64,
         handle: HostHandle,
     },
+    /// `ssh -G` gave the address of a host that [`Effect::Connect`] connects to.
+    Resolved { host: String, address: String },
     /// The attempt or connection of [`Effect::Connect`] ended; `reason` is `None` if it was
     /// asked to stop.
     Closed {
@@ -71,6 +74,8 @@ pub(crate) struct Tasks {
     /// The askpass bridge, or why there is none.
     askpass: Result<AskpassServer, String>,
     hosts: JoinSet<()>,
+    /// Taken while the `ssh -G` cache is read, changed, and written.
+    cache: Arc<Mutex<()>>,
 }
 
 impl Tasks {
@@ -86,6 +91,7 @@ impl Tasks {
             done,
             askpass,
             hosts: JoinSet::new(),
+            cache: Arc::new(Mutex::new(())),
         }
     }
 
@@ -126,6 +132,13 @@ impl Tasks {
                         Ok(server) => Ok(server.env(&host)),
                         Err(reason) => Err(reason.clone()),
                     };
+                    self.hosts.spawn(resolve_address(
+                        Arc::clone(&self.context),
+                        host.clone(),
+                        stop.clone(),
+                        Arc::clone(&self.cache),
+                        self.done.clone(),
+                    ));
                     let task = HostTask {
                         context: Arc::clone(&self.context),
                         host,
@@ -171,6 +184,40 @@ async fn prepare_ssh(context: &Context) -> Result<AskpassServer, String> {
         }
     });
     Ok(server)
+}
+
+/// Runs `ssh -G` for a host that is being connected to, as the root shows effective addresses
+/// only from there: reports the address and stores it in the cache. Failures only go to the
+/// log; the connection reports its own.
+async fn resolve_address(
+    context: Arc<Context>,
+    host: String,
+    stop: CancellationToken,
+    cache: Arc<Mutex<()>>,
+    done: mpsc::UnboundedSender<Done>,
+) {
+    let target = context.target(&host);
+    let resolved = tokio::select! {
+        resolved = resolve(&context.settings, &target) => resolved,
+        () = stop.cancelled() => return,
+    };
+    let cached = match resolved {
+        Ok(resolved) => CachedHost::from(&resolved),
+        Err(error) => {
+            tracing::debug!(%host, error = %describe::chain(&error), "ssh -G failed");
+            return;
+        }
+    };
+    let address = cached.address();
+    let _ = done.send(Done::Resolved {
+        host: host.clone(),
+        address,
+    });
+    let _guard = cache.lock().await;
+    let saved = tokio::task::spawn_blocking(move || root::remember(&context, &host, cached)).await;
+    if let Ok(Err(error)) = saved {
+        tracing::warn!(%error, "cannot save the ssh -G cache");
+    }
 }
 
 /// Lists the virtual root or a local directory. The root reads the ssh config each time, so a

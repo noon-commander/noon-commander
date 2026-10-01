@@ -1,5 +1,7 @@
 //! The hosts of the virtual root.
 
+use std::io;
+
 use sftp_tui_ssh::CachedHost;
 
 use crate::context::{Context, describe};
@@ -37,6 +39,15 @@ pub(crate) fn read_hosts(context: &Context) -> Vec<RootHost> {
         .collect()
 }
 
+/// Stores what `ssh -G` said about `alias` in the cache, for the next listing and run.
+///
+/// Blocking: reads the ssh config files and writes the cache.
+pub(crate) fn remember(context: &Context, alias: &str, host: CachedHost) -> io::Result<()> {
+    let mut cache = context.load_cache(&context.scan());
+    cache.insert(&context.target(alias), host);
+    cache.save()
+}
+
 #[cfg(test)]
 mod tests {
     use std::ffi::OsString;
@@ -68,17 +79,13 @@ mod tests {
         );
         let context = Context::new(Paths::resolve(&home, 501, &env), config);
 
-        let mut cache = context.load_cache(&context.scan());
-        cache.insert(
-            &context.target("db"),
-            CachedHost {
-                user: "admin".to_owned(),
-                hostname: "10.0.0.5".to_owned(),
-                port: 2222,
-                proxy_jump: None,
-            },
-        );
-        cache.save().unwrap();
+        let db = CachedHost {
+            user: "admin".to_owned(),
+            hostname: "10.0.0.5".to_owned(),
+            port: 2222,
+            proxy_jump: None,
+        };
+        remember(&context, "db", db).unwrap();
 
         assert_eq!(
             read_hosts(&context),

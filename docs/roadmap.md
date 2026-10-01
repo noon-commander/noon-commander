@@ -25,7 +25,7 @@
 - [x] Virtual root: `[Local]` and the hosts from ssh_config, with labels and cached addresses
 - [x] Opening hosts: background connect (Esc stops it), remote listings, `start_dir`, lost
       connections
-- [ ] Disconnect, `ssh -G` on connect, connection state in the root
+- [x] Disconnect, `ssh -G` on connect, connection state in the root
 - [ ] Panels: sorting, hidden files, quick search
 - [x] Keymap engine with the mc preset
 - [ ] Nerd Font icons and mc markers

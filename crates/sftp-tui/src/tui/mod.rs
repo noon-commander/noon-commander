@@ -88,6 +88,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
                 Done::Connected { host, connection, handle } => {
                     tasks.run(app.connected(&host, connection, handle));
                 }
+                Done::Resolved { host, address } => app.resolved(host, address),
                 Done::Closed { host, connection, reason } => {
                     tasks.run(app.closed(&host, connection, reason.as_deref()));
                 }

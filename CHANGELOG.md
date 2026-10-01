@@ -21,8 +21,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Validation of `ssh.args` and per-host `args`: options that sftp-tui manages itself and, in
   default builds, forwarding options are rejected.
 - Logs in `~/.local/state/sftp-tui/sftp-tui.log`; `SFTP_TUI_LOG` sets the level.
-- `sftp-tui` without a subcommand starts the TUI: two empty panels for now. Keys follow
-  Midnight Commander: F10 or `Esc 0` quits, Ctrl-L redraws the screen, and `Esc` followed by a
-  key works like Alt with that key.
+- `sftp-tui` without a subcommand starts the TUI: two panels on the current directory, with
+  name, size, and modification time. Keys follow Midnight Commander: arrows, PgUp/PgDn,
+  Home/End, Enter, Ctrl-PgUp for the parent, Tab for the other panel, Ctrl-R to reread, F10 or
+  `Esc 0` to quit, Ctrl-L to redraw; `Esc` followed by a key works like Alt with that key.
 - `[ui] language` selects the interface language (`auto` by default); only English exists so
   far. Interface text lives in Fluent files.

@@ -23,6 +23,7 @@ crossterm.workspace = true
 futures-util.workspace = true
 i18n-embed.workspace = true
 i18n-embed-fl.workspace = true
+jiff.workspace = true
 ratatui.workspace = true
 rust-embed.workspace = true
 rustix = { workspace = true, features = ["termios"] }
@@ -34,6 +35,7 @@ tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+unicode-width.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]

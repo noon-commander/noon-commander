@@ -1,22 +1,77 @@
 //! State and drawing of the whole screen.
 
+use std::path::PathBuf;
+use std::time::SystemTime;
+
+use jiff::tz::TimeZone;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Block;
+use sftp_tui_vfs::{DirEntry, VfsError};
 
 use super::keymap::{Action, Context, Keymap, Resolved};
+use super::panel::{ListRequest, Panel};
 use crate::i18n::fl;
 
+/// One of the two panels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Side {
+    Left,
+    Right,
+}
+
+impl Side {
+    fn other(self) -> Self {
+        match self {
+            Self::Left => Self::Right,
+            Self::Right => Self::Left,
+        }
+    }
+}
+
+/// Work the app asks the event loop to do.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Effect {
+    /// List a directory and pass the result to [`App::listed`].
+    List { side: Side, request: ListRequest },
+}
+
 /// What the TUI shows and whether it keeps running.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct App {
+    left: Panel,
+    right: Panel,
+    active: Side,
     quit: bool,
     redraw: bool,
 }
 
 impl App {
+    /// Both panels on `start`, and the listings to request for them.
+    pub(crate) fn new(start: &std::path::Path) -> (Self, Vec<Effect>) {
+        let (left, left_request) = Panel::new(PathBuf::from(start));
+        let (right, right_request) = Panel::new(PathBuf::from(start));
+        let app = Self {
+            left,
+            right,
+            active: Side::Left,
+            quit: false,
+            redraw: false,
+        };
+        let effects = vec![
+            Effect::List {
+                side: Side::Left,
+                request: left_request,
+            },
+            Effect::List {
+                side: Side::Right,
+                request: right_request,
+            },
+        ];
+        (app, effects)
+    }
+
     /// Whether the user asked to quit.
     pub(crate) fn quits(&self) -> bool {
         self.quit
@@ -38,21 +93,56 @@ impl App {
         matches!(action, Action::Quit | Action::Redraw)
     }
 
-    pub(crate) fn handle(&mut self, input: Resolved) {
-        match input {
-            Resolved::Action(Action::Quit) => self.quit = true,
-            Resolved::Action(Action::Redraw) => self.redraw = true,
-            Resolved::Action(_) | Resolved::Insert(_) => {}
+    fn panel_mut(&mut self, side: Side) -> &mut Panel {
+        match side {
+            Side::Left => &mut self.left,
+            Side::Right => &mut self.right,
         }
     }
 
+    pub(crate) fn handle(&mut self, input: Resolved) -> Vec<Effect> {
+        let Resolved::Action(action) = input else {
+            return Vec::new();
+        };
+        match action {
+            Action::Quit => self.quit = true,
+            Action::Redraw => self.redraw = true,
+            Action::SwitchPanel => self.active = self.active.other(),
+            _ => {
+                let side = self.active;
+                if let Some(request) = self.panel_mut(side).handle(action) {
+                    return vec![Effect::List { side, request }];
+                }
+            }
+        }
+        Vec::new()
+    }
+
+    /// Takes the result of an [`Effect::List`].
+    pub(crate) fn listed(
+        &mut self,
+        side: Side,
+        generation: u64,
+        result: Result<Vec<DirEntry>, VfsError>,
+    ) {
+        self.panel_mut(side).listed(generation, result);
+    }
+
     /// Two panels side by side above the F-key bar.
-    pub(crate) fn render(&self, frame: &mut Frame<'_>, keymap: &Keymap) {
+    pub(crate) fn render(
+        &mut self,
+        frame: &mut Frame<'_>,
+        keymap: &Keymap,
+        now: SystemTime,
+        tz: &TimeZone,
+    ) {
         let [panels, key_bar] =
             Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).areas(frame.area());
         let [left, right] = Layout::horizontal([Constraint::Fill(1); 2]).areas(panels);
-        frame.render_widget(Block::bordered(), left);
-        frame.render_widget(Block::bordered(), right);
+        let active = self.active;
+        self.left.render(frame, left, active == Side::Left, now, tz);
+        self.right
+            .render(frame, right, active == Side::Right, now, tz);
         self.render_fkeys(frame, key_bar, keymap);
     }
 
@@ -84,32 +174,108 @@ fn fkey_label(action: Action) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::time::{Duration, UNIX_EPOCH};
+
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
+    use sftp_tui_vfs::{FileKind, Metadata};
 
     use super::*;
 
+    fn dir(name: &str) -> DirEntry {
+        DirEntry {
+            name: name.as_bytes().to_vec(),
+            metadata: Metadata {
+                kind: FileKind::Dir,
+                size: Some(4096),
+                permissions: Some(0o755),
+                modified: Some(UNIX_EPOCH + Duration::from_secs(1_699_990_000)),
+                uid: None,
+                gid: None,
+            },
+            target_kind: None,
+        }
+    }
+
+    /// An app on `/srv` whose first listings arrived.
+    fn loaded() -> App {
+        let (mut app, effects) = App::new(std::path::Path::new("/srv"));
+        for effect in effects {
+            let Effect::List { side, request } = effect;
+            assert_eq!(request.path, PathBuf::from("/srv"));
+            app.listed(
+                side,
+                request.generation,
+                Ok(vec![dir("left"), dir("right")]),
+            );
+        }
+        app
+    }
+
+    fn action(action: Action) -> Resolved {
+        Resolved::Action(action)
+    }
+
     #[test]
-    fn draws_two_panels_above_the_key_bar() {
+    fn lists_both_panels_at_start() {
+        let (_, effects) = App::new(std::path::Path::new("/srv"));
+        let sides: Vec<Side> = effects
+            .iter()
+            .map(|Effect::List { side, .. }| *side)
+            .collect();
+        assert_eq!(sides, [Side::Left, Side::Right]);
+    }
+
+    #[test]
+    fn keys_go_to_the_active_panel_and_tab_switches_it() {
+        let mut app = loaded();
+        app.handle(action(Action::Down));
+        let [Effect::List { side, request }] =
+            app.handle(action(Action::Enter)).try_into().unwrap();
+        assert_eq!(
+            (side, request.path),
+            (Side::Left, PathBuf::from("/srv/left"))
+        );
+
+        assert!(app.handle(action(Action::SwitchPanel)).is_empty());
+        app.handle(action(Action::End));
+        let [Effect::List { side, request }] =
+            app.handle(action(Action::Enter)).try_into().unwrap();
+        assert_eq!(
+            (side, request.path),
+            (Side::Right, PathBuf::from("/srv/right"))
+        );
+
+        app.handle(action(Action::SwitchPanel));
+        assert_eq!(app.active, Side::Left);
+    }
+
+    #[test]
+    fn replies_reach_their_own_panel() {
+        let mut app = loaded();
+        app.handle(action(Action::Down));
+        let [Effect::List { side, request }] =
+            app.handle(action(Action::Enter)).try_into().unwrap();
+        app.listed(side.other(), request.generation, Ok(Vec::new()));
+        app.listed(side, request.generation, Ok(vec![dir("deeper")]));
         let mut terminal = Terminal::new(TestBackend::new(60, 8)).unwrap();
-        let keymap = Keymap::mc();
+        let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| App::default().render(frame, &keymap))
+            .draw(|frame| app.render(frame, &Keymap::mc(), now, &TimeZone::UTC))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
 
     #[test]
-    fn handles_quit_and_redraw() {
-        let mut app = App::default();
-        app.handle(Resolved::Insert('q'));
-        app.handle(Resolved::Action(Action::Down));
+    fn handles_quit_redraw_and_text() {
+        let mut app = loaded();
+        assert!(app.handle(Resolved::Insert('q')).is_empty());
         assert!(!app.quits());
         assert!(!app.take_redraw());
-        app.handle(Resolved::Action(Action::Redraw));
+        app.handle(action(Action::Redraw));
         assert!(app.take_redraw());
         assert!(!app.take_redraw(), "a redraw is requested once");
-        app.handle(Resolved::Action(Action::Quit));
+        app.handle(action(Action::Quit));
         assert!(app.quits());
     }
 

@@ -6,3 +6,19 @@
 ## F-key bar (src/tui). Prefix: fkey-.
 
 fkey-quit = Quit
+
+## Panels (src/tui/panel). Prefixes: panel-, error-.
+
+# Column headers.
+panel-name = Name
+panel-size = Size
+panel-time = Modify time
+# The size column of the `..` row and of directories.
+panel-up-dir = UP--DIR
+panel-dir = DIR
+# Status line while a directory is read.
+panel-loading = Loading…
+# Status line when a directory cannot be read; the panel keeps showing the previous one.
+panel-error = Cannot open { $path }: { $reason }
+error-not-found = no such file or directory
+error-permission-denied = permission denied

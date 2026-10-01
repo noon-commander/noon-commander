@@ -1,0 +1,16 @@
+---
+source: crates/sftp-tui/src/tui/panel.rs
+expression: "draw(&mut panel, 50, 12, true)"
+---
+"┌ /srv ──────────────────────────────────────────┐"
+"│           Name            │ Size  │Modify time │"
+"│..                         │UP--DIR│            │"
+"│alpha-link                 │    DIR│Nov 14 21:13│"
+"│Beta                       │    DIR│Nov 14 21:13│"
+"│bin                        │    DIR│Nov 14 21:13│"
+"│.hidden                    │      1│Nov 14 21:13│"
+"│Alpha.md                   │  9766K│Nov 14 21:13│"
+"│zeta.txt                   │  12345│Nov 14 21:13│"
+"├────────────────────────────────────────────────┤"
+"│alpha-link                                      │"
+"└────────────────────────────────────────────────┘"

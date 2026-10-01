@@ -1,0 +1,11 @@
+---
+source: crates/sftp-tui/src/tui/panel.rs
+expression: "draw(&mut panel, 24, 7, true)"
+---
+"┌ /a/very/lo~s/not/fit ┐"
+"│     Name     │ Size  │"
+"│..            │UP--DIR│"
+"│bad?[2Jname   │      3│"
+"├──────────────────────┤"
+"│bad?[2Jname           │"
+"└──────────────────────┘"

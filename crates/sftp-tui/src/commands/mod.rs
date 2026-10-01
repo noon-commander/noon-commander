@@ -24,7 +24,8 @@ pub(crate) async fn run(cli: Cli) -> Result<ExitCode> {
         None => {
             let context = Context::load(paths, &config_path)?;
             crate::i18n::select(&context.config.ui.language);
-            crate::tui::run().await?;
+            let start = std::env::current_dir().wrap_err("cannot read the current directory")?;
+            crate::tui::run(&start).await?;
             Ok(ExitCode::SUCCESS)
         }
         Some(Command::Config(ConfigCommand::Init { force })) => config::init(&config_path, force),

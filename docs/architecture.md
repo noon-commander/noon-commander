@@ -180,6 +180,13 @@ show_hidden = true
 
 ## UI
 
+- **Panels.** Each panel lists a directory with `..` first, then directories, then files, by
+  name ignoring case; columns are name, size, and modification time (local time, `ls -l`
+  style), and narrow panels drop the time, then the size. Long names lose their middle, marked
+  with `~`. Names are shown terminal-safe: control and bidi characters become `?`. Listings
+  run in background tasks; a reply carries the generation of its request, so a stale one is
+  dropped. If a directory cannot be read, the panel stays where it was and says why below the
+  listing. Going up puts the cursor on the directory just left.
 - **Keymap.** Keys map to `Action`s per context (`panel`, `quick_search`, `dialog`,
   `dialog_input`; `viewer` and `menu` will follow). Each context falls back along a chain, for
   example quick search to the panel; the first context that knows a key sequence decides.

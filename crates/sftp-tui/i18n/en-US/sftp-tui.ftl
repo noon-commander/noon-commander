@@ -23,6 +23,8 @@ panel-name-by-extension = Name, by extension
 # The size column of the `..` row and of directories.
 panel-up-dir = UP--DIR
 panel-dir = DIR
+# Status line during quick search: what was typed so far.
+panel-search = Search: { $text }
 # Status line while a directory is read.
 panel-loading = Loading…
 # Status line while the panel waits for a connection to a host; Esc stops it.

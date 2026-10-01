@@ -187,6 +187,7 @@ args = ["-o", "Compression=yes"]
 [ui]
 language = "auto"                # or a language tag such as "en-US"; others fall back to it
 show_hidden = true               # names that start with a dot; Alt-. switches while running
+type_to_search = true            # typing in a panel starts quick search; false: only Ctrl-S
 ```
 
 Planned keys and sections, not accepted yet:
@@ -212,7 +213,13 @@ theme = "mc-classic"
   time and size start newest and largest first, the same key again reverses, ties go by name,
   and an arrow in the header marks the order. Directories stay first. Names that start with a
   dot are shown unless `ui.show_hidden` is off; Alt-. switches them in both panels, as in mc.
-  Sorting and hiding keep the cursor on its entry. Long names lose their middle, marked
+  Sorting and hiding keep the cursor on its entry.
+- **Quick search.** Ctrl-S / Alt-S as in mc, or, since there is no command line, typing in a
+  panel (unless `ui.type_to_search` is off) starts quick search: the cursor jumps to the first name from where it is that starts with
+  the text, ignoring case, and a character that matches nothing is dropped, as in mc. Ctrl-S
+  again finds the next match, round to the top; Backspace takes a character back; Esc ends the
+  search, and any other key ends it and then does what it does. The root searches the names it
+  shows: labels, or aliases. Long names lose their middle, marked
   with `~`. Names are shown terminal-safe: control and bidi characters become `?`. Listings
   run in background tasks; a reply carries the generation of its request, so a stale one is
   dropped. If a directory cannot be read, the panel stays where it was and says why below the

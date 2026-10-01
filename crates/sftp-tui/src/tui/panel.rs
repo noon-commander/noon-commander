@@ -172,6 +172,8 @@ pub(crate) struct Panel {
     page: usize,
     generation: u64,
     pending: Option<Pending>,
+    /// What quick search has matched so far, while it runs.
+    search: Option<String>,
     error: Option<String>,
 }
 
@@ -198,6 +200,7 @@ impl Panel {
             page: 1,
             generation: 0,
             pending: None,
+            search: None,
             error: None,
         };
         let request = panel.open(location, Focus::First);
@@ -207,6 +210,7 @@ impl Panel {
     fn open(&mut self, location: Location, focus: Focus) -> ListRequest {
         self.generation += 1;
         self.error = None;
+        self.search = None;
         self.pending = Some(Pending {
             generation: self.generation,
             location: location.clone(),
@@ -323,6 +327,62 @@ impl Panel {
         self.shown = (0..entries.len())
             .filter(|&index| show_hidden || !entries[index].name.starts_with(b"."))
             .collect();
+    }
+
+    /// Whether quick search runs.
+    pub(crate) fn searching(&self) -> bool {
+        self.search.is_some()
+    }
+
+    /// Starts quick search, or jumps to the next match while it runs.
+    pub(crate) fn search_next(&mut self) {
+        match &self.search {
+            None => self.search = Some(String::new()),
+            Some(text) => {
+                let text = text.clone();
+                if let Some(row) = self.find(&text, self.cursor + 1) {
+                    self.cursor = row;
+                }
+            }
+        }
+    }
+
+    /// Adds `c` to quick search, starting it if needed, and moves the cursor to the first match
+    /// from where it is. As in mc, a character that nothing matches is dropped.
+    pub(crate) fn search_type(&mut self, c: char) {
+        let mut text = self.search.clone().unwrap_or_default();
+        text.extend(c.to_lowercase());
+        if let Some(row) = self.find(&text, self.cursor) {
+            self.cursor = row;
+            self.search = Some(text);
+        }
+    }
+
+    /// Takes the last character off quick search; the cursor stays.
+    pub(crate) fn search_back(&mut self) {
+        if let Some(text) = &mut self.search {
+            text.pop();
+        }
+    }
+
+    pub(crate) fn end_search(&mut self) {
+        self.search = None;
+    }
+
+    /// The first row from `start` on, round to the top, whose name starts with `text` (lower
+    /// case). `..` and `[Local]` never match.
+    fn find(&self, text: &str, start: usize) -> Option<usize> {
+        let rows = self.rows();
+        (start..rows).chain(0..start.min(rows)).find(|&index| {
+            let name = match self.row(index) {
+                Some(Row::Entry(entry)) => entry.display_name().to_lowercase(),
+                Some(Row::Host(host)) => {
+                    host.label.as_deref().unwrap_or(&host.alias).to_lowercase()
+                }
+                Some(Row::Parent | Row::Local) | None => return false,
+            };
+            name.starts_with(text)
+        })
     }
 
     /// Whether the panel shows the virtual root.
@@ -490,7 +550,15 @@ impl Panel {
             Line::raw(separator),
             Rect::new(area.x, separator_y, area.width, 1),
         );
-        let status = if let Some(error) = &self.error {
+        let status = if let Some(text) = &self.search {
+            let status = fl!("panel-search", text = cells::sanitize(text.as_bytes()));
+            if active {
+                let column = u16::try_from(cells::width(&status)).unwrap_or(u16::MAX);
+                let x = inner.x.saturating_add(column).min(inner.right() - 1);
+                frame.set_cursor_position((x, inner.bottom() - 1));
+            }
+            status
+        } else if let Some(error) = &self.error {
             error.clone()
         } else if let Some(pending) = &self.pending {
             match &pending.location {
@@ -769,6 +837,7 @@ mod tests {
 
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
+    use ratatui::layout::Position;
     use sftp_tui_vfs::{FileKind, Metadata};
 
     use super::*;
@@ -1018,6 +1087,60 @@ mod tests {
             "a.txt",
             "the entry is gone; the row stays"
         );
+    }
+
+    #[test]
+    fn quick_search_finds_name_prefixes_from_the_cursor() {
+        let mut panel = loaded("/srv", listing());
+        panel.search_type('b');
+        assert!(panel.searching());
+        assert_eq!(under_cursor(&panel), "Beta", "case does not matter");
+        panel.search_type('I');
+        assert_eq!(under_cursor(&panel), "bin");
+        panel.search_type('x');
+        assert_eq!(panel.search.as_deref(), Some("bi"), "a miss is dropped");
+        panel.search_back();
+        assert_eq!(under_cursor(&panel), "bin", "the cursor stays");
+        panel.search_next();
+        assert_eq!(under_cursor(&panel), "Beta", "round to the top");
+        panel.search_type('e');
+        let mut terminal = Terminal::new(TestBackend::new(40, 6)).unwrap();
+        let now = UNIX_EPOCH + Duration::from_secs(NOW);
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                let hosts = |_: &str| HostState::default();
+                panel.render(frame, area, true, &hosts, now, &TimeZone::UTC);
+            })
+            .unwrap();
+        assert!(terminal.backend().to_string().contains("│Search: be"));
+        assert_eq!(
+            terminal.get_cursor_position().unwrap(),
+            Position::new(11, 4),
+            "after the text"
+        );
+
+        panel.end_search();
+        assert!(!panel.searching());
+        // A character that starts no match starts no search.
+        panel.search_type('q');
+        assert!(!panel.searching());
+        // Opening another directory ends a search.
+        panel.search_type('b');
+        panel.handle(Action::Reload);
+        assert!(!panel.searching());
+    }
+
+    #[test]
+    fn quick_search_finds_hosts_by_the_name_shown() {
+        let mut panel = root();
+        panel.search_type('p');
+        assert_eq!(under_cursor(&panel), "web", "labelled Prod");
+        panel.search_next();
+        assert_eq!(under_cursor(&panel), "web", "the only match");
+        panel.end_search();
+        panel.search_type('s');
+        assert_eq!(under_cursor(&panel), "staging");
     }
 
     #[test]

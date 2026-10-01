@@ -9,6 +9,7 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
+use sftp_tui_config::UiConfig;
 use sftp_tui_vfs::Location;
 use tokio_util::sync::CancellationToken;
 
@@ -102,8 +103,8 @@ pub(crate) struct App {
     active: Side,
     hosts: HashMap<String, Host>,
     connections: u64,
-    /// Whether panels show names that start with a dot.
-    show_hidden: bool,
+    /// The `[ui]` settings; `show_hidden` follows Alt-.
+    ui: UiConfig,
     /// Hosts whose last attempt failed or whose connection was lost.
     failed: HashSet<String>,
     /// Addresses from `ssh -G` in this session.
@@ -117,9 +118,9 @@ pub(crate) struct App {
 
 impl App {
     /// Both panels on the local directory `start`, and the listings to request for them. From
-    /// the virtual root, the local file system opens at `home`. `show_hidden` shows names that
-    /// start with a dot.
-    pub(crate) fn new(start: &Path, home: &Path, show_hidden: bool) -> (Self, Vec<Effect>) {
+    /// the virtual root, the local file system opens at `home`.
+    pub(crate) fn new(start: &Path, home: &Path, ui: &UiConfig) -> (Self, Vec<Effect>) {
+        let show_hidden = ui.show_hidden;
         let panel = || {
             let start = Location::Local(start.to_path_buf());
             Panel::new(start, home.to_path_buf(), show_hidden)
@@ -132,7 +133,7 @@ impl App {
             active: Side::Left,
             hosts: HashMap::new(),
             connections: 0,
-            show_hidden,
+            ui: ui.clone(),
             failed: HashSet::new(),
             addresses: HashMap::new(),
             dialogs: VecDeque::new(),
@@ -158,6 +159,8 @@ impl App {
     pub(crate) fn context(&self) -> Context {
         if let Some(open) = self.dialogs.front() {
             open.dialog.context()
+        } else if self.panel(self.active).searching() {
+            Context::QuickSearch
         } else if self.panel(self.active).shows_root() {
             Context::Root
         } else {
@@ -199,18 +202,46 @@ impl App {
             }
             return Vec::new();
         }
-        let Resolved::Action(action) = input else {
-            return Vec::new();
+        let type_to_search = self.ui.type_to_search;
+        let panel = self.panel_mut(self.active);
+        let action = match input {
+            Resolved::Insert(c) => {
+                if type_to_search || panel.searching() {
+                    panel.search_type(c);
+                }
+                return Vec::new();
+            }
+            Resolved::Action(action) if panel.searching() => match action {
+                Action::Backspace => {
+                    panel.search_back();
+                    return Vec::new();
+                }
+                Action::QuickSearch => {
+                    panel.search_next();
+                    return Vec::new();
+                }
+                Action::Cancel => {
+                    panel.end_search();
+                    return Vec::new();
+                }
+                // Any other key ends the search, then does what it does.
+                _ => {
+                    panel.end_search();
+                    action
+                }
+            },
+            Resolved::Action(action) => action,
         };
         match action {
+            Action::QuickSearch => self.panel_mut(self.active).search_next(),
             Action::Quit => self.quit = true,
             Action::Redraw => self.redraw = true,
             Action::SwitchPanel => self.active = self.active.other(),
             // As in mc, for both panels.
             Action::ToggleHidden => {
-                self.show_hidden = !self.show_hidden;
+                self.ui.show_hidden = !self.ui.show_hidden;
                 for side in Side::BOTH {
-                    let show = self.show_hidden;
+                    let show = self.ui.show_hidden;
                     self.panel_mut(side).set_show_hidden(show);
                 }
             }
@@ -573,7 +604,11 @@ mod tests {
 
     /// An app on `/srv` whose first listings arrived.
     fn loaded() -> App {
-        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), true);
+        let (mut app, effects) = App::new(
+            Path::new("/srv"),
+            Path::new("/home/me"),
+            &UiConfig::default(),
+        );
         answer(
             &mut app,
             effects,
@@ -584,7 +619,8 @@ mod tests {
 
     /// An app with both panels on the virtual root, which lists `web` and `db`.
     fn at_root() -> App {
-        let (mut app, effects) = App::new(Path::new("/"), Path::new("/home/me"), true);
+        let (mut app, effects) =
+            App::new(Path::new("/"), Path::new("/home/me"), &UiConfig::default());
         answer(&mut app, effects, &Listing::Dir(Vec::new()));
         let hosts = ["web", "db"].map(|alias| RootHost {
             alias: alias.to_owned(),
@@ -621,7 +657,11 @@ mod tests {
 
     #[test]
     fn lists_both_panels_at_start() {
-        let (_, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), true);
+        let (_, effects) = App::new(
+            Path::new("/srv"),
+            Path::new("/home/me"),
+            &UiConfig::default(),
+        );
         let sides: Vec<Side> = effects
             .iter()
             .map(|effect| match effect {
@@ -973,7 +1013,11 @@ mod tests {
 
     #[test]
     fn hidden_files_switch_in_both_panels() {
-        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), false);
+        let ui = UiConfig {
+            show_hidden: false,
+            ..UiConfig::default()
+        };
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &ui);
         answer(
             &mut app,
             effects,
@@ -988,6 +1032,59 @@ mod tests {
         );
         app.handle(action(Action::ToggleHidden));
         assert!(!screen(&mut app).contains(".git"));
+    }
+
+    #[test]
+    fn typing_searches_and_other_keys_end_the_search() {
+        let mut app = loaded();
+        assert!(app.handle(Resolved::Insert('r')).is_empty());
+        assert_eq!(app.context(), Context::QuickSearch);
+        assert!(screen(&mut app).contains("Search: r"));
+        // Enter ends the search and opens what it found.
+        let Effect::List { request, .. } = one(app.handle(action(Action::Enter))) else {
+            panic!("expected a listing");
+        };
+        assert_eq!(request.location, local("/srv/right"));
+        assert_eq!(app.context(), Context::Panel);
+
+        let mut app = loaded();
+        app.handle(action(Action::QuickSearch));
+        assert_eq!(
+            app.context(),
+            Context::QuickSearch,
+            "Ctrl-S starts an empty search"
+        );
+        app.handle(Resolved::Insert('l'));
+        app.handle(action(Action::Backspace));
+        assert!(screen(&mut app).contains("Search: "));
+        assert!(app.handle(action(Action::Cancel)).is_empty());
+        assert_eq!(app.context(), Context::Panel, "Esc ends it");
+    }
+
+    #[test]
+    fn without_type_to_search_only_ctrl_s_searches() {
+        let ui = UiConfig {
+            type_to_search: false,
+            ..UiConfig::default()
+        };
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &ui);
+        answer(
+            &mut app,
+            effects,
+            &Listing::Dir(vec![dir("left"), dir("right")]),
+        );
+        app.handle(Resolved::Insert('r'));
+        assert_eq!(
+            app.context(),
+            Context::Panel,
+            "typing does nothing, as in mc"
+        );
+        app.handle(action(Action::QuickSearch));
+        app.handle(Resolved::Insert('r'));
+        assert!(
+            screen(&mut app).contains("Search: r"),
+            "but goes into a search"
+        );
     }
 
     #[test]

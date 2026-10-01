@@ -44,3 +44,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Panels sort by name, extension, modification time, or size with Ctrl-F3 … Ctrl-F6, as in Far
   Manager; the same key again reverses the order. `[ui] show_hidden` (on by default) shows
   names that start with a dot; Alt-. switches it while sftp-tui runs.
+- Quick search: typing in a panel, or Ctrl-S, moves the cursor to the first name that starts
+  with what was typed; Ctrl-S again finds the next one, and Esc or any other key ends it.
+  `[ui] type_to_search = false` leaves it to Ctrl-S and Alt-S, as in mc.

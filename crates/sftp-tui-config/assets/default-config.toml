@@ -36,6 +36,8 @@ hide = ["github.com", "gitlab.com", "bitbucket.org"]
 language = "auto"
 # Show files whose names begin with a dot. Alt-. switches it while sftp-tui runs.
 show_hidden = true
+# Typing in a panel starts quick search. When off, only Ctrl-S and Alt-S do, as in mc.
+type_to_search = true
 
 # Per-host settings, keyed by a Host alias from ssh_config. Quote aliases that contain dots,
 # such as [hosts."web.example.com"].

@@ -37,6 +37,9 @@ pub struct UiConfig {
     pub language: String,
     /// Whether panels start out showing files whose names begin with a dot. Default: `true`.
     pub show_hidden: bool,
+    /// Whether typing in a panel starts quick search; otherwise only Ctrl-S and Alt-S do, as
+    /// in mc. Default: `true`.
+    pub type_to_search: bool,
 }
 
 impl Default for UiConfig {
@@ -44,6 +47,7 @@ impl Default for UiConfig {
         Self {
             language: "auto".to_owned(),
             show_hidden: true,
+            type_to_search: true,
         }
     }
 }
@@ -244,6 +248,7 @@ mod tests {
         [ui]
         language = "de-DE"
         show_hidden = false
+        type_to_search = false
     "#;
 
     fn full() -> Config {
@@ -271,6 +276,7 @@ mod tests {
             ui: UiConfig {
                 language: "de-DE".to_owned(),
                 show_hidden: false,
+                type_to_search: false,
             },
         }
     }
@@ -289,6 +295,7 @@ mod tests {
         assert!(config.hosts.is_empty());
         assert_eq!(config.ui.language, "auto");
         assert!(config.ui.show_hidden);
+        assert!(config.ui.type_to_search);
     }
 
     #[test]
@@ -451,6 +458,7 @@ mod tests {
         assert!(table["discovery"].get("hide").is_some());
         assert!(table["ui"].get("language").is_some());
         assert!(table["ui"].get("show_hidden").is_some());
+        assert!(table["ui"].get("type_to_search").is_some());
     }
 
     #[test]

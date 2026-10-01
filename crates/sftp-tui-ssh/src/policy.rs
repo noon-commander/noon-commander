@@ -20,6 +20,26 @@ pub const SFTP_CHANNEL_OPTIONS: &[(&str, &str)] = &[
     ("RequestTTY", "no"),
 ];
 
+/// Options forced on the master and on every SFTP channel: ssh must keep its stdin and stay
+/// in the foreground, whatever the user's config says (both keywords exist since OpenSSH 8.7).
+/// `SessionType` needs no override: `-N` and `-s` on the command line take precedence.
+pub const PROCESS_OPTIONS: &[(&str, &str)] =
+    &[("StdinNull", "no"), ("ForkAfterAuthentication", "no")];
+
+/// Options forced on SFTP channels multiplexed over a master, in addition to
+/// [`SFTP_CHANNEL_OPTIONS`]. If the master is gone, ssh silently falls back to a direct
+/// connection; that fallback must never prompt.
+pub const MUX_CHANNEL_OPTIONS: &[(&str, &str)] = &[("BatchMode", "yes")];
+
+/// Options forced on the master connection in every build, in addition to
+/// [`session_options`]. `-N` must not pick up a remote command or TTY request from the
+/// user's config, and like `sftp(1)` the connection runs no `LocalCommand`.
+pub const MASTER_OPTIONS: &[(&str, &str)] = &[
+    ("PermitLocalCommand", "no"),
+    ("RemoteCommand", "none"),
+    ("RequestTTY", "no"),
+];
+
 /// Options forced on the master connection and the console when forwarding is compiled out.
 pub const NO_FORWARDING_OPTIONS: &[(&str, &str)] = &[
     ("ClearAllForwardings", "yes"),

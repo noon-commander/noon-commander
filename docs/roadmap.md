@@ -39,7 +39,8 @@
 
 - [x] Panel actions that the keymap binds already: Ctrl-U swaps the panels, Alt-O opens the
       directory under the cursor in the other panel, Alt-I shows this directory there
-- [ ] Selection: Insert, `+`, `-`, `*`
+- [x] Marks: Insert or Ctrl-T, Shift-Up/Down, `*`; their total below the listing
+- [ ] `+` and `-` mark and unmark by pattern
 - [ ] F5 copy and F6 move/rename in any direction, with progress, cancellation, and a conflict
       dialog
 - [ ] F7 mkdir, F8 delete

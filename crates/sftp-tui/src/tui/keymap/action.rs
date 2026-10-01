@@ -36,6 +36,12 @@ impl Context {
         matches!(self, Self::Panel | Self::Root)
     }
 
+    /// Whether every character is text, even one that a fallback context binds: in quick
+    /// search, `*` is part of a name, not a command.
+    pub(crate) fn text_first(self) -> bool {
+        matches!(self, Self::QuickSearch)
+    }
+
     /// Whether an unbound printable key becomes [`Resolved::Insert`](super::Resolved::Insert).
     pub(crate) fn accepts_text(self) -> bool {
         matches!(
@@ -67,6 +73,13 @@ pub(crate) enum Action {
     End,
     /// Opens the directory or host under the cursor.
     Enter,
+    /// Marks the entry under the cursor, or unmarks it, and moves down.
+    Mark,
+    /// Marks the entry under the cursor, or unmarks it, and moves up.
+    MarkUp,
+    /// Marks the files that are not marked and unmarks those that are; directories stay as
+    /// they are.
+    InvertMarks,
     /// Opens the parent directory; from `/`, the virtual root.
     Parent,
     /// Makes the other panel active.
@@ -130,6 +143,9 @@ impl Action {
         Self::Home,
         Self::End,
         Self::Enter,
+        Self::Mark,
+        Self::MarkUp,
+        Self::InvertMarks,
         Self::Parent,
         Self::SwitchPanel,
         Self::SwapPanels,

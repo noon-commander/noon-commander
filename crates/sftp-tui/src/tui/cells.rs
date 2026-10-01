@@ -126,6 +126,20 @@ fn take_width(chars: impl Iterator<Item = char>, limit: usize) -> (String, usize
     (taken, used)
 }
 
+/// `bytes` with a comma between each group of three digits, as mc shows the size of marked
+/// files.
+pub(crate) fn grouped(bytes: u64) -> String {
+    let digits = bytes.to_string();
+    let mut text = String::with_capacity(digits.len() + digits.len() / 3);
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            text.push(',');
+        }
+        text.push(digit);
+    }
+    text
+}
+
 /// A file size in at most `width` cells: the bytes when they fit, otherwise K, M, G, …
 /// (powers of 1024, rounded), as mc shows it.
 pub(crate) fn size(bytes: u64, width: usize) -> String {
@@ -221,6 +235,15 @@ mod tests {
         assert_eq!(wrap("bad\x1b[2J", 20), ["bad?[2J"]);
         assert_eq!(wrap("文件文件", 3), ["文", "件", "文", "件"]);
         assert_eq!(wrap("", 10), Vec::<String>::new());
+    }
+
+    #[test]
+    fn groups_digits_in_threes() {
+        assert_eq!(grouped(0), "0");
+        assert_eq!(grouped(999), "999");
+        assert_eq!(grouped(1_000), "1,000");
+        assert_eq!(grouped(10_012_345), "10,012,345");
+        assert_eq!(grouped(u64::MAX), "18,446,744,073,709,551,615");
     }
 
     #[test]

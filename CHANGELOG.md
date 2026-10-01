@@ -57,3 +57,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   read from the keymap; the F-key bar shows `1Help`.
 - Ctrl-U swaps the panels; Alt-O opens the directory or host under the cursor in the other
   panel; Alt-I shows the current directory there, as in mc.
+- Marks, as in mc: Insert or Ctrl-T marks or unmarks the entry under the cursor (Shift-Up and
+  Shift-Down too), `*` inverts the marks on files, and the line below the listing shows the
+  size and number of marked entries.

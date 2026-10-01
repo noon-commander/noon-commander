@@ -99,9 +99,10 @@ impl Keymap {
     pub(crate) fn mc() -> Self {
         use Action::{
             Backspace, Cancel, Confirm, Delete, DeleteToEnd, DeleteToStart, Disconnect, Down, End,
-            Enter, Help, Home, Left, NextField, OtherPanelOpen, OtherPanelSync, PageDown, PageUp,
-            Parent, PrevField, QuickSearch, Quit, Redraw, Reload, Right, SortByExtension,
-            SortByName, SortBySize, SortByTime, SwapPanels, SwitchPanel, ToggleHidden, Up,
+            Enter, Help, Home, InvertMarks, Left, Mark, MarkUp, NextField, OtherPanelOpen,
+            OtherPanelSync, PageDown, PageUp, Parent, PrevField, QuickSearch, Quit, Redraw, Reload,
+            Right, SortByExtension, SortByName, SortBySize, SortByTime, SwapPanels, SwitchPanel,
+            ToggleHidden, Up,
         };
         let presets: [(Context, Preset); 5] = [
             (
@@ -114,6 +115,10 @@ impl Keymap {
                     (Home, &["home"]),
                     (End, &["end"]),
                     (Enter, &["enter"]),
+                    (Mark, &["insert", "ctrl-t", "shift-down"]),
+                    (MarkUp, &["shift-up"]),
+                    // mc takes `*` as a command while its command line is empty.
+                    (InvertMarks, &["*", "alt-*"]),
                     (Parent, &["ctrl-pageup"]),
                     (SwitchPanel, &["tab"]),
                     (SwapPanels, &["ctrl-u"]),
@@ -233,6 +238,16 @@ impl Keymap {
             let mut resolved = self.feed(state, context, KeyEvent::from(KeyCode::Esc), now);
             resolved.extend(self.feed(state, context, plain, now));
             return resolved;
+        }
+        if context.text_first()
+            && state.keys.is_empty()
+            && let Some(c) = text(event)
+            && self
+                .contexts
+                .get(&context)
+                .is_none_or(|own| own.lookup(&[KeyCombination::from(event)]) == Lookup::Unknown)
+        {
+            return vec![Resolved::Insert(c)];
         }
         let mut resolved = Vec::new();
         let mut alt_from_esc = false;
@@ -558,6 +573,45 @@ mod tests {
             actions(&[Action::Cancel])
         );
         assert_eq!(state.deadline(), None);
+    }
+
+    #[test]
+    fn quick_search_takes_characters_that_the_panel_binds() {
+        let keymap = Keymap::mc();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(
+                &keymap,
+                &mut state,
+                Context::Panel,
+                &["*", "insert", "ctrl-t", "shift-down", "shift-up"]
+            ),
+            actions(&[
+                Action::InvertMarks,
+                Action::Mark,
+                Action::Mark,
+                Action::Mark,
+                Action::MarkUp
+            ])
+        );
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Panel, &["esc", "*"]),
+            actions(&[Action::InvertMarks]),
+            "Esc * is Alt-*"
+        );
+        assert_eq!(
+            feed(
+                &keymap,
+                &mut state,
+                Context::QuickSearch,
+                &["*", "insert", "ctrl-s"]
+            ),
+            [
+                Resolved::Insert('*'),
+                Resolved::Action(Action::Mark),
+                Resolved::Action(Action::QuickSearch)
+            ]
+        );
     }
 
     #[test]

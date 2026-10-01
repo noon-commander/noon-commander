@@ -1,5 +1,6 @@
 //! A panel that lists the virtual root or a directory.
 
+use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::PathBuf;
@@ -171,6 +172,8 @@ pub(crate) struct Panel {
     shown: Vec<usize>,
     sort: Sort,
     show_hidden: bool,
+    /// Names of the marked entries; only shown ones, and never `..`.
+    marked: HashSet<Vec<u8>>,
     /// Where the local file system opens from the virtual root.
     home: PathBuf,
     /// Row under the cursor; row 0 is `..`, or the local file system in the virtual root.
@@ -203,6 +206,7 @@ impl Panel {
                 descending: false,
             },
             show_hidden,
+            marked: HashSet::new(),
             home,
             cursor: 0,
             offset: 0,
@@ -242,6 +246,10 @@ impl Panel {
         };
         match result {
             Ok(Listed { location, listing }) => {
+                // Reading the same directory again keeps the marks on names still there.
+                if location != self.location {
+                    self.marked.clear();
+                }
                 self.location = location;
                 self.listing = listing;
                 self.arrange();
@@ -325,10 +333,12 @@ impl Panel {
         }
     }
 
-    /// Sorts a directory listing and picks the entries to show.
+    /// Sorts a directory listing and picks the entries to show; entries that are not shown
+    /// lose their marks.
     fn arrange(&mut self) {
         let Listing::Dir(entries) = &mut self.listing else {
             self.shown.clear();
+            self.marked.clear();
             return;
         };
         sort(entries, self.sort);
@@ -336,6 +346,51 @@ impl Panel {
         self.shown = (0..entries.len())
             .filter(|&index| show_hidden || !entries[index].name.starts_with(b"."))
             .collect();
+        if !self.marked.is_empty() {
+            let shown: HashSet<&[u8]> = self
+                .shown
+                .iter()
+                .map(|&index| entries[index].name.as_slice())
+                .collect();
+            self.marked.retain(|name| shown.contains(name.as_slice()));
+        }
+    }
+
+    /// Marks the entry under the cursor, or unmarks it; `..` and the rows of the virtual root
+    /// cannot be marked.
+    fn toggle_mark(&mut self) {
+        if let Some(Row::Entry(entry)) = self.row(self.cursor) {
+            let name = entry.name.clone();
+            if !self.marked.remove(&name) {
+                self.marked.insert(name);
+            }
+        }
+    }
+
+    /// Inverts the marks on the shown entries that are not directories, as mc does by default.
+    fn invert_marks(&mut self) {
+        let Listing::Dir(entries) = &self.listing else {
+            return;
+        };
+        for &index in &self.shown {
+            let entry = &entries[index];
+            if !entry.is_dir_like() && !self.marked.remove(&entry.name) {
+                self.marked.insert(entry.name.clone());
+            }
+        }
+    }
+
+    /// How many entries are marked, and the bytes in the files among them.
+    fn marked_total(&self) -> (usize, u64) {
+        let Listing::Dir(entries) = &self.listing else {
+            return (0, 0);
+        };
+        let bytes = entries
+            .iter()
+            .filter(|entry| !entry.is_dir_like() && self.marked.contains(&entry.name))
+            .filter_map(|entry| entry.metadata.size)
+            .sum();
+        (self.marked.len(), bytes)
     }
 
     /// Whether quick search runs.
@@ -418,6 +473,16 @@ impl Panel {
             Action::PageDown => self.cursor = (self.cursor + page).min(last),
             Action::Home => self.cursor = 0,
             Action::End => self.cursor = last,
+            // As in mc, the cursor moves on even from `..`, which cannot be marked.
+            Action::Mark => {
+                self.toggle_mark();
+                self.cursor = (self.cursor + 1).min(last);
+            }
+            Action::MarkUp => {
+                self.toggle_mark();
+                self.cursor = self.cursor.saturating_sub(1);
+            }
+            Action::InvertMarks => self.invert_marks(),
             Action::Enter => return self.row_destination().map(|to| self.go(to)),
             Action::Parent => return self.parent_destination().map(|to| self.go(to)),
             Action::SortByName => self.sort_by(SortKey::Name),
@@ -525,8 +590,9 @@ impl Panel {
         }
     }
 
-    /// Draws the panel: the location in the frame, column headers, the rows, and a status line
-    /// with the name under the cursor, the loading state, or the last error.
+    /// Draws the panel: the location in the frame, column headers, the rows, the size and number
+    /// of marked entries on the line below them, and a status line with the name under the
+    /// cursor, the loading state, or the last error.
     pub(crate) fn render(
         &mut self,
         frame: &mut Frame<'_>,
@@ -574,26 +640,25 @@ impl Panel {
         for (screen_row, index) in (self.offset..self.rows()).take(list_height).enumerate() {
             let Some(row) = self.row(index) else { break };
             let mut text = columns.row(row, view);
-            // The cursor replaces the colors of the row, as in mc.
-            if active && index == self.cursor {
+            // The cursor and marks replace the colors of the row, as in mc.
+            let marked = matches!(row, Row::Entry(entry) if self.marked.contains(&entry.name));
+            let style = match (active && index == self.cursor, marked) {
+                (true, true) => Some(theme.marked_cursor),
+                (true, false) => Some(theme.cursor),
+                (false, true) => Some(theme.marked),
+                (false, false) => None,
+            };
+            if let Some(style) = style {
                 for span in &mut text.spans {
                     span.style = Style::new();
                 }
-                text = text.style(theme.cursor);
+                text = text.style(style);
             }
             let y = inner.y + 1 + u16::try_from(screen_row).unwrap_or(u16::MAX);
             frame.render_widget(text, line(y));
         }
 
-        let separator_y = inner.bottom() - 2;
-        let separator = format!(
-            "├{}┤",
-            "─".repeat(usize::from(area.width.saturating_sub(2)))
-        );
-        frame.render_widget(
-            Line::styled(separator, theme.panel_border),
-            Rect::new(area.x, separator_y, area.width, 1),
-        );
+        self.render_separator(frame, area, inner.bottom() - 2, theme);
         let mut status_style = Style::new();
         let status = if let Some(text) = &self.search {
             status_style = theme.quick_search;
@@ -625,6 +690,32 @@ impl Panel {
         };
         let status = cells::fit(&status, width, Align::Left);
         frame.render_widget(Line::styled(status, status_style), line(inner.bottom() - 1));
+    }
+
+    /// The line between the listing and the status line, across the panel's frame, with the
+    /// total of the marked entries in the middle.
+    fn render_separator(&self, frame: &mut Frame<'_>, area: Rect, y: u16, theme: &Theme) {
+        let inside = area.width.saturating_sub(2);
+        let separator = format!("├{}┤", "─".repeat(usize::from(inside)));
+        frame.render_widget(
+            Line::styled(separator, theme.panel_border),
+            Rect::new(area.x, y, area.width, 1),
+        );
+        let (count, bytes) = self.marked_total();
+        if count == 0 {
+            return;
+        }
+        let total = fl!("panel-marked", size = cells::grouped(bytes), count = count);
+        let mut total = format!(" {total} ");
+        if cells::width(&total) > usize::from(inside) {
+            total = cells::fit(&total, usize::from(inside), Align::Left);
+        }
+        let total_width = u16::try_from(cells::width(&total)).unwrap_or(u16::MAX);
+        let x = area.x + area.width.saturating_sub(total_width) / 2;
+        frame.render_widget(
+            Line::styled(total, theme.marked),
+            Rect::new(x, y, total_width.min(inside), 1),
+        );
     }
 
     /// Keeps the cursor within the rows and on screen.
@@ -1411,6 +1502,78 @@ mod tests {
         assert_eq!(root.here(), here);
     }
 
+    fn marked(panel: &Panel) -> Vec<String> {
+        let mut names: Vec<String> = panel
+            .marked
+            .iter()
+            .map(|name| String::from_utf8_lossy(name).into_owned())
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn marks_entries_but_not_dot_dot_and_moves_on() {
+        let mut panel = loaded("/srv", listing());
+        panel.handle(Action::Mark);
+        assert_eq!(under_cursor(&panel), "alpha-link", "moves on from `..`");
+        assert_eq!(panel.marked_total(), (0, 0), "but `..` is not marked");
+        panel.handle(Action::Mark);
+        panel.handle(Action::End);
+        panel.handle(Action::Mark);
+        assert_eq!(under_cursor(&panel), "zeta.txt", "the last row stays");
+        assert_eq!(
+            panel.marked_total(),
+            (2, 12_345),
+            "directories count, but not their size"
+        );
+        panel.handle(Action::MarkUp);
+        assert_eq!(under_cursor(&panel), "Alpha.md");
+        assert_eq!(marked(&panel), ["alpha-link"]);
+
+        panel.handle(Action::InvertMarks);
+        assert_eq!(
+            marked(&panel),
+            [".hidden", "Alpha.md", "alpha-link", "zeta.txt"],
+            "files only"
+        );
+        assert_eq!(panel.marked_total(), (4, 10_012_346));
+
+        let mut root = root();
+        root.handle(Action::Mark);
+        root.handle(Action::Mark);
+        root.handle(Action::InvertMarks);
+        assert_eq!(under_cursor(&root), "db");
+        assert!(root.marked.is_empty(), "hosts cannot be marked");
+    }
+
+    #[test]
+    fn marks_stay_while_the_directory_does() {
+        let mut panel = loaded("/srv", listing());
+        panel.handle(Action::InvertMarks);
+        panel.handle(Action::SortBySize);
+        assert_eq!(marked(&panel), [".hidden", "Alpha.md", "zeta.txt"]);
+        panel.set_show_hidden(false);
+        assert_eq!(
+            marked(&panel),
+            ["Alpha.md", "zeta.txt"],
+            "hidden ones lose them"
+        );
+        panel.set_show_hidden(true);
+        assert_eq!(marked(&panel), ["Alpha.md", "zeta.txt"]);
+
+        let request = panel.handle(Action::Reload).unwrap();
+        let mut changed = listing();
+        changed.retain(|entry| entry.name != b"zeta.txt");
+        answer(&mut panel, &request, Listing::Dir(changed));
+        assert_eq!(marked(&panel), ["Alpha.md"], "names still there keep them");
+
+        panel.handle(Action::Home);
+        let request = panel.handle(Action::Enter).unwrap();
+        answer(&mut panel, &request, Listing::Dir(listing()));
+        assert!(panel.marked.is_empty(), "another directory starts unmarked");
+    }
+
     #[test]
     fn reload_keeps_the_cursor_on_its_entry() {
         let mut panel = loaded("/srv", listing());
@@ -1547,6 +1710,44 @@ mod tests {
         );
         panel.handle(Action::End);
         insta::assert_snapshot!(draw(&mut panel, 24, 7, true));
+    }
+
+    #[test]
+    fn marked_rows_and_their_total_are_yellow() {
+        use ratatui::style::Color;
+
+        let mut panel = loaded("/srv", listing());
+        panel.handle(Action::End);
+        panel.handle(Action::MarkUp);
+        panel.handle(Action::Mark);
+        let hosts = |_: &str| HostState::default();
+        let theme = Theme::mc_classic();
+        let terminal = render_themed(
+            &mut panel,
+            (40, 12),
+            true,
+            &hosts,
+            Decor::new(false),
+            &theme,
+        );
+        let buffer = terminal.backend().buffer();
+        let colors = |x: u16, y: u16| (buffer[(x, y)].fg, buffer[(x, y)].bg);
+        // Rows: frame, header, `..`, alpha-link, Beta, bin, .hidden, Alpha.md, zeta.txt.
+        assert_eq!(colors(1, 7), (Color::LightYellow, Color::Blue), "marked");
+        assert_eq!(
+            colors(30, 7),
+            (Color::LightYellow, Color::Blue),
+            "all of it"
+        );
+        assert_eq!(
+            colors(1, 8),
+            (Color::LightYellow, Color::Cyan),
+            "marked, under the cursor"
+        );
+        let separator: String = (0..40).map(|x| buffer[(x, 9)].symbol()).collect();
+        assert_eq!(separator, "├────── 10,012,345 B in 2 files ───────┤");
+        assert_eq!(colors(7, 9), (Color::LightYellow, Color::Blue));
+        assert_eq!(colors(6, 9), (Color::Gray, Color::Blue));
     }
 
     #[test]

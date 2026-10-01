@@ -19,6 +19,10 @@ pub(crate) struct Theme {
     pub(crate) header: Style,
     /// The row under the cursor in the active panel; replaces the entry style.
     pub(crate) cursor: Style,
+    /// A marked row, and the total of the marked entries.
+    pub(crate) marked: Style,
+    /// A marked row under the cursor.
+    pub(crate) marked_cursor: Style,
     /// What quick search has matched so far.
     pub(crate) quick_search: Style,
     /// Regular file.
@@ -81,6 +85,8 @@ impl Theme {
             panel_title_active: on(Color::Black, Color::Cyan),
             header: on(Color::LightYellow, Color::Blue),
             cursor: on(Color::Black, Color::Cyan),
+            marked: on(Color::LightYellow, Color::Blue),
+            marked_cursor: on(Color::LightYellow, Color::Cyan),
             quick_search: on(Color::Black, Color::Cyan),
             file: fg(Color::Gray),
             directory: fg(Color::White),
@@ -115,6 +121,9 @@ impl Theme {
             panel_title_active: reversed,
             header: plain,
             cursor: reversed,
+            // As mc draws marks in black and white.
+            marked: Style::new().bold(),
+            marked_cursor: reversed.bold(),
             quick_search: reversed,
             file: plain,
             directory: plain,

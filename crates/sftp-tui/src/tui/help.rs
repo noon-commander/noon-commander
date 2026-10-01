@@ -12,8 +12,8 @@ use crate::i18n::fl;
 
 /// Widest the help gets, in cells, borders included.
 const MAX_WIDTH: u16 = 80;
-/// Widest the key column gets.
-const MAX_KEYS_WIDTH: usize = 24;
+/// Widest the key column gets; longer lists of keys go on to the next lines.
+const MAX_KEYS_WIDTH: usize = 16;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Entry {
@@ -125,13 +125,19 @@ impl Help {
                     )]
                 }
                 Entry::Keys { keys, text } => {
-                    let keys = cells::fit(keys, keys_width, Align::Left);
                     let text = cells::fit(text, text_width, Align::Left);
-                    vec![Line::from(vec![
-                        Span::styled(keys, theme.dialog_title),
-                        Span::raw(" "),
-                        Span::raw(text),
-                    ])]
+                    key_lines(keys, keys_width)
+                        .into_iter()
+                        .zip(std::iter::once(text).chain(std::iter::repeat(String::new())))
+                        .map(|(keys, text)| {
+                            let keys = cells::fit(&keys, keys_width, Align::Left);
+                            Line::from(vec![
+                                Span::styled(keys, theme.dialog_title),
+                                Span::raw(" "),
+                                Span::raw(text),
+                            ])
+                        })
+                        .collect()
                 }
                 Entry::Note(text) => cells::wrap(text, width)
                     .into_iter()
@@ -155,6 +161,28 @@ impl Help {
     }
 }
 
+/// `keys`, a list such as `Insert, Ctrl-t`, in lines of at most `width` cells, broken after
+/// the commas. A single key wider than that gets a line of its own.
+fn key_lines(keys: &str, width: usize) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    let mut alternatives = keys.split(", ").peekable();
+    while let Some(key) = alternatives.next() {
+        let key = if alternatives.peek().is_some() {
+            format!("{key},")
+        } else {
+            key.to_owned()
+        };
+        match lines.last_mut() {
+            Some(line) if cells::width(line) + 1 + cells::width(&key) <= width => {
+                line.push(' ');
+                line.push_str(&key);
+            }
+            _ => lines.push(key),
+        }
+    }
+    lines
+}
+
 /// What `action` does in `context`; `None` for what the app cannot do yet, which the help
 /// leaves out.
 fn describe(context: Context, action: Action) -> Option<String> {
@@ -166,6 +194,9 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::Home) => fl!("help-first-row"),
         (Context::Panel, Action::End) => fl!("help-last-row"),
         (Context::Panel, Action::Enter) => fl!("help-enter"),
+        (Context::Panel, Action::Mark) => fl!("help-mark"),
+        (Context::Panel, Action::MarkUp) => fl!("help-mark-up"),
+        (Context::Panel, Action::InvertMarks) => fl!("help-invert-marks"),
         (Context::Panel, Action::Parent) => fl!("help-parent"),
         (Context::Panel, Action::SwitchPanel) => fl!("help-switch-panel"),
         (Context::Panel, Action::SwapPanels) => fl!("help-swap-panels"),
@@ -278,6 +309,17 @@ mod tests {
             Some(Entry::Note(_))
         ));
         assert_ne!(without_typing.entries.last(), help.entries.last());
+    }
+
+    #[test]
+    fn long_lists_of_keys_go_on_to_the_next_lines() {
+        assert_eq!(key_lines("F10", 16), ["F10"]);
+        assert_eq!(key_lines("PageDown, Ctrl-v", 16), ["PageDown, Ctrl-v"]);
+        assert_eq!(
+            key_lines("Insert, Ctrl-t, Shift-Down", 16),
+            ["Insert, Ctrl-t,", "Shift-Down"]
+        );
+        assert_eq!(key_lines("Esc, Esc Esc", 4), ["Esc,", "Esc Esc"]);
     }
 
     #[test]

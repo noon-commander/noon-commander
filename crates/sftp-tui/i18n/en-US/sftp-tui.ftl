@@ -30,6 +30,12 @@ panel-search = Search: { $text }
 panel-loading = Loading…
 # Status line while the panel waits for a connection to a host; Esc stops it.
 panel-connecting = Connecting to { $host }…
+# Below the listing: the size of the marked files in bytes, with a comma between each group of
+# three digits, and how many entries are marked.
+panel-marked = { $size } B in { $count ->
+        [one] { $count } file
+       *[other] { $count } files
+    }
 # Status line when a directory cannot be read; the panel keeps showing the previous one.
 panel-error = Cannot open { $path }: { $reason }
 error-not-found = no such file or directory
@@ -78,6 +84,9 @@ help-page-down = One page down
 help-first-row = First row
 help-last-row = Last row
 help-enter = Open the directory or host under the cursor
+help-mark = Mark or unmark, then the next row
+help-mark-up = Mark or unmark, then the row above
+help-invert-marks = Invert the marks on files
 help-parent = Parent directory; above /, the host list
 help-switch-panel = The other panel
 help-swap-panels = Swap the panels

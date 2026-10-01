@@ -212,6 +212,13 @@ atomic_upload = true             # write to a temporary name, then rename
   and an arrow in the header marks the order. Directories stay first. Names that start with a
   dot are shown unless `ui.show_hidden` is off; Alt-. switches them in both panels, as in mc.
   Sorting and hiding keep the cursor on its entry.
+- **Marks.** As in mc: Insert or Ctrl-T marks the entry under the cursor, or unmarks it, and
+  moves down (Shift-Down too, Shift-Up moves up); `*` (or Alt-*) inverts the marks on files,
+  leaving directories as they are; `..` and the rows of the virtual root cannot be marked.
+  Marked rows are yellow, and the line below the listing shows the size of the marked files
+  and how many entries are marked, such as `12,345 B in 3 files`. Marks are names, so they
+  survive sorting and Ctrl-R (for names still there); another directory starts unmarked, and
+  entries that get hidden lose their marks, so that no operation acts on what is not shown.
 - **The other panel.** As in mc: Ctrl-U swaps the panels, and the active one stays active on
   the other side; Alt-O opens the directory or host under the cursor in the other panel (from
   a file, the parent directory with the cursor on this one) and moves the cursor down; Alt-I
@@ -223,7 +230,8 @@ atomic_upload = true             # write to a temporary name, then rename
   panel (unless `ui.type_to_search` is off) starts quick search: the cursor jumps to the first name from where it is that starts with
   the text, ignoring case, and a character that matches nothing is dropped, as in mc. Ctrl-S
   again finds the next match, round to the top; Backspace takes a character back; Esc ends the
-  search, and any other key ends it and then does what it does. The root searches the names it
+  search, and any other key ends it and then does what it does. While it runs, every
+  character is text, even one that a panel binds, such as `*`. The root searches the names it
   shows: labels, or aliases. Long names lose their middle, marked
   with `~`. Names are shown terminal-safe: control and bidi characters become `?`. Listings
   run in background tasks; a reply carries the generation of its request, so a stale one is

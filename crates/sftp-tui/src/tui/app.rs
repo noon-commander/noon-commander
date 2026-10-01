@@ -17,12 +17,13 @@ use super::decor::Decor;
 use super::dialog::{Ask, Dialog, DialogEvent, Reply};
 use super::help::Help;
 use super::keymap::{Action, Context, Keymap, Resolved};
-use super::panel::{HostState, HostStatus, ListRequest, Listed, Panel, View};
+use super::panel::{Destination, HostState, HostStatus, ListRequest, Listed, Panel, View};
 use super::tasks::HostHandle;
 use super::theme::Theme;
 use crate::i18n::fl;
 
-/// One of the two panels.
+/// One of the two panels, named by the side it starts on. Ctrl-U swaps where the panels are
+/// drawn, not who they are, so replies to requests in flight still reach the panel that asked.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Side {
     Left,
@@ -104,6 +105,8 @@ pub(crate) struct App {
     left: Panel,
     right: Panel,
     active: Side,
+    /// The right panel is drawn on the left.
+    swapped: bool,
     hosts: HashMap<String, Host>,
     connections: u64,
     /// The `[ui]` settings; `show_hidden` follows Alt-.
@@ -141,6 +144,7 @@ impl App {
             left,
             right,
             active: Side::Left,
+            swapped: false,
             hosts: HashMap::new(),
             connections: 0,
             ui: ui.clone(),
@@ -267,6 +271,17 @@ impl App {
             Action::Redraw => self.redraw = true,
             Action::Help => self.help = Some(Help::new(&self.keymap, self.ui.type_to_search)),
             Action::SwitchPanel => self.active = self.active.other(),
+            // The active panel moves to the other side and stays active, as in mc.
+            Action::SwapPanels => self.swapped = !self.swapped,
+            Action::OtherPanelOpen => {
+                if let Some(destination) = self.panel_mut(self.active).for_other_panel() {
+                    return self.go(self.active.other(), destination);
+                }
+            }
+            Action::OtherPanelSync => {
+                let here = self.panel(self.active).here();
+                return self.go(self.active.other(), here);
+            }
             // As in mc, for both panels.
             Action::ToggleHidden => {
                 self.ui.show_hidden = !self.ui.show_hidden;
@@ -285,6 +300,12 @@ impl App {
             }
         }
         Vec::new()
+    }
+
+    /// Sends the panel on `side` to `destination`.
+    fn go(&mut self, side: Side, destination: Destination) -> Vec<Effect> {
+        let request = self.panel_mut(side).go(destination);
+        self.route(side, request)
     }
 
     /// Sends a panel's request where it can be answered. A host that is not connected gets
@@ -518,7 +539,10 @@ impl App {
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, now: SystemTime, tz: &TimeZone) {
         let [panels, key_bar] =
             Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).areas(frame.area());
-        let [left, right] = Layout::horizontal([Constraint::Fill(1); 2]).areas(panels);
+        let [mut left, mut right] = Layout::horizontal([Constraint::Fill(1); 2]).areas(panels);
+        if self.swapped {
+            std::mem::swap(&mut left, &mut right);
+        }
         let active = self.active;
         let states: HashMap<String, HostState> = self
             .hosts
@@ -741,6 +765,99 @@ mod tests {
 
         app.handle(action(Action::SwitchPanel));
         assert_eq!(app.active, Side::Left);
+    }
+
+    /// The titles of the panels drawn on the left and on the right.
+    fn titles(app: &mut App) -> (String, String) {
+        let text = screen(app);
+        let top = text.lines().next().unwrap();
+        let (left, right) = top.split_once("┐┌").unwrap();
+        (left.to_owned(), right.to_owned())
+    }
+
+    #[test]
+    fn ctrl_u_swaps_where_the_panels_are_and_replies_follow_them() {
+        let mut app = loaded();
+        app.handle(action(Action::Down));
+        let Effect::List { side, request, .. } = one(app.handle(action(Action::Enter))) else {
+            panic!("expected a listing");
+        };
+        assert!(app.handle(action(Action::SwapPanels)).is_empty());
+        assert_eq!(app.active, Side::Left, "the active panel stays active");
+
+        let location = request.location.clone();
+        let listing = Listing::Dir(vec![dir("inner")]);
+        app.listed(side, request.generation, Ok(Listed { location, listing }));
+        let (left, right) = titles(&mut app);
+        assert!(
+            right.contains("/srv/left"),
+            "the panel that asked, now on the right"
+        );
+        assert!(!left.contains("/srv/left"), "{left}");
+
+        app.handle(action(Action::SwapPanels));
+        let (left, _) = titles(&mut app);
+        assert!(left.contains("/srv/left"), "{left}");
+    }
+
+    #[test]
+    fn alt_o_and_alt_i_send_the_other_panel_here() {
+        let mut app = loaded();
+        app.handle(action(Action::Down));
+        let Effect::List { side, request, .. } = one(app.handle(action(Action::OtherPanelOpen)))
+        else {
+            panic!("expected a listing");
+        };
+        assert_eq!(
+            (side, &request.location),
+            (Side::Right, &local("/srv/left"))
+        );
+        assert_eq!(app.active, Side::Left);
+        answer(
+            &mut app,
+            vec![Effect::List {
+                side,
+                request,
+                host: None,
+            }],
+            &Listing::Dir(Vec::new()),
+        );
+
+        let effects = app.handle(action(Action::OtherPanelSync));
+        let [Effect::List { side, request, .. }] = &effects[..] else {
+            panic!("expected a listing, got {effects:?}");
+        };
+        assert_eq!((*side, &request.location), (Side::Right, &local("/srv")));
+        answer(
+            &mut app,
+            effects,
+            &Listing::Dir(vec![dir("left"), dir("right")]),
+        );
+        assert_eq!(
+            app.panel(Side::Right).here(),
+            app.panel(Side::Left).here(),
+            "on the row Alt-O moved on to"
+        );
+
+        // A host opens in the other panel once it is connected.
+        let mut app = at_root();
+        app.handle(action(Action::Down));
+        let Effect::Connect {
+            host, connection, ..
+        } = one(app.handle(action(Action::OtherPanelOpen)))
+        else {
+            panic!("expected a connection");
+        };
+        assert_eq!(host, "web");
+        let (handle, _requests) = HostHandle::channel();
+        let effects = app.connected("web", connection, handle);
+        assert!(matches!(
+            &effects[..],
+            [Effect::List {
+                side: Side::Right,
+                ..
+            }]
+        ));
     }
 
     #[test]

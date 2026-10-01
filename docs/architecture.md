@@ -212,6 +212,13 @@ atomic_upload = true             # write to a temporary name, then rename
   and an arrow in the header marks the order. Directories stay first. Names that start with a
   dot are shown unless `ui.show_hidden` is off; Alt-. switches them in both panels, as in mc.
   Sorting and hiding keep the cursor on its entry.
+- **The other panel.** As in mc: Ctrl-U swaps the panels, and the active one stays active on
+  the other side; Alt-O opens the directory or host under the cursor in the other panel (from
+  a file, the parent directory with the cursor on this one) and moves the cursor down; Alt-I
+  shows this directory in the other panel with the cursor on the same name. Panels keep their
+  identity when swapped (only where they are drawn changes), so a listing still in flight
+  reaches the panel that asked for it. Sort order and errors go with the panel; mc keeps the
+  sort order on its side.
 - **Quick search.** Ctrl-S / Alt-S as in mc, or, since there is no command line, typing in a
   panel (unless `ui.type_to_search` is off) starts quick search: the cursor jumps to the first name from where it is that starts with
   the text, ignoring case, and a character that matches nothing is dropped, as in mc. Ctrl-S

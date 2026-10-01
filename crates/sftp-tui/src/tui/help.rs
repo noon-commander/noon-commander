@@ -168,6 +168,9 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::Enter) => fl!("help-enter"),
         (Context::Panel, Action::Parent) => fl!("help-parent"),
         (Context::Panel, Action::SwitchPanel) => fl!("help-switch-panel"),
+        (Context::Panel, Action::SwapPanels) => fl!("help-swap-panels"),
+        (Context::Panel, Action::OtherPanelOpen) => fl!("help-other-open"),
+        (Context::Panel, Action::OtherPanelSync) => fl!("help-other-sync"),
         (Context::Panel, Action::Reload) => fl!("help-reload"),
         (Context::Panel, Action::Cancel) => fl!("help-stop"),
         (Context::Panel, Action::ToggleHidden) => fl!("help-toggle-hidden"),
@@ -237,7 +240,7 @@ mod tests {
         assert!(has("F8", "Disconnect the host under the cursor"));
         assert!(has("Ctrl-s, Alt-s", "Quick search; again: the next match"));
         assert!(has("Esc, F10", "Cancel, or close this help"));
-        // Ctrl-U swaps the panels in mc, which sftp-tui cannot do yet; in text fields it works.
+        // One key, two meanings.
         let ctrl_u: Vec<&str> = help
             .entries
             .iter()
@@ -246,7 +249,7 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert_eq!(ctrl_u, ["Delete to the start"]);
+        assert_eq!(ctrl_u, ["Swap the panels", "Delete to the start"]);
         let headings: Vec<&str> = help
             .entries
             .iter()

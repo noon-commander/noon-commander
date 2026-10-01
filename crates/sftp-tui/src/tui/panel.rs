@@ -141,6 +141,13 @@ struct Pending {
     focus: Focus,
 }
 
+/// Where a panel can go: a location, and the row to put the cursor on there.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Destination {
+    location: Location,
+    focus: Focus,
+}
+
 /// A row of the listing.
 #[derive(Debug, Clone, Copy)]
 enum Row<'a> {
@@ -411,38 +418,13 @@ impl Panel {
             Action::PageDown => self.cursor = (self.cursor + page).min(last),
             Action::Home => self.cursor = 0,
             Action::End => self.cursor = last,
-            Action::Enter => match self.row(self.cursor)? {
-                Row::Parent => return self.open_parent(),
-                Row::Entry(entry) if entry.is_dir_like() => {
-                    let location = child(&self.location, &entry.name)?;
-                    return Some(self.open(location, Focus::First));
-                }
-                Row::Entry(_) => {}
-                Row::Local => {
-                    let location = Location::Local(self.home.clone());
-                    return Some(self.open(location, Focus::First));
-                }
-                Row::Host(host) => {
-                    let location = Location::Remote {
-                        host: host.alias.clone(),
-                        path: RemotePath::from(""),
-                    };
-                    return Some(self.open(location, Focus::First));
-                }
-            },
-            Action::Parent => return self.open_parent(),
+            Action::Enter => return self.row_destination().map(|to| self.go(to)),
+            Action::Parent => return self.parent_destination().map(|to| self.go(to)),
             Action::SortByName => self.sort_by(SortKey::Name),
             Action::SortByExtension => self.sort_by(SortKey::Extension),
             Action::SortByTime => self.sort_by(SortKey::Time),
             Action::SortBySize => self.sort_by(SortKey::Size),
-            Action::Reload => {
-                let focus = match self.row(self.cursor) {
-                    Some(Row::Entry(entry)) => Focus::Name(entry.name.clone()),
-                    Some(Row::Host(host)) => Focus::Host(host.alias.clone()),
-                    _ => Focus::First,
-                };
-                return Some(self.open(self.location.clone(), focus));
-            }
+            Action::Reload => return Some(self.go(self.here())),
             _ => {}
         }
         None
@@ -453,9 +435,58 @@ impl Panel {
         self.rearrange();
     }
 
-    /// Opens the parent with the cursor on the directory it came from, or on its host or the
-    /// local file system in the virtual root.
-    fn open_parent(&mut self) -> Option<ListRequest> {
+    /// Goes to `destination`; returns the listing to request.
+    pub(crate) fn go(&mut self, destination: Destination) -> ListRequest {
+        self.open(destination.location, destination.focus)
+    }
+
+    /// This location, with the cursor on the row it is on.
+    pub(crate) fn here(&self) -> Destination {
+        let focus = match self.row(self.cursor) {
+            Some(Row::Entry(entry)) => Focus::Name(entry.name.clone()),
+            Some(Row::Host(host)) => Focus::Host(host.alias.clone()),
+            _ => Focus::First,
+        };
+        Destination {
+            location: self.location.clone(),
+            focus,
+        }
+    }
+
+    /// What Alt-O opens in the other panel, as in mc: the directory or host under the cursor,
+    /// or, for a file, the parent directory with the cursor on this one. The cursor moves on
+    /// to the next row.
+    pub(crate) fn for_other_panel(&mut self) -> Option<Destination> {
+        let destination = match self.row(self.cursor)? {
+            Row::Entry(entry) if !entry.is_dir_like() => self.parent_destination(),
+            _ => self.row_destination(),
+        };
+        self.cursor = (self.cursor + 1).min(self.rows().saturating_sub(1));
+        destination
+    }
+
+    /// Where Enter on the row under the cursor leads: into a directory or host, or up from
+    /// `..`; nowhere from a file.
+    fn row_destination(&self) -> Option<Destination> {
+        let location = match self.row(self.cursor)? {
+            Row::Parent => return self.parent_destination(),
+            Row::Entry(entry) if entry.is_dir_like() => child(&self.location, &entry.name)?,
+            Row::Entry(_) => return None,
+            Row::Local => Location::Local(self.home.clone()),
+            Row::Host(host) => Location::Remote {
+                host: host.alias.clone(),
+                path: RemotePath::from(""),
+            },
+        };
+        Some(Destination {
+            location,
+            focus: Focus::First,
+        })
+    }
+
+    /// The parent, with the cursor on the directory this is, or on its host or the local file
+    /// system in the virtual root. `None` in the virtual root.
+    fn parent_destination(&self) -> Option<Destination> {
         let parent = self.location.parent();
         let focus = match (&self.location, &parent) {
             (Location::Root, _) => return None,
@@ -468,7 +499,10 @@ impl Panel {
                 .file_name()
                 .map_or(Focus::First, |name| Focus::Name(name.to_vec())),
         };
-        Some(self.open(parent, focus))
+        Some(Destination {
+            location: parent,
+            focus,
+        })
     }
 
     /// Both kinds of listing have one row before their entries: `..` or the local file system.
@@ -1319,6 +1353,62 @@ mod tests {
         assert_eq!(request.location, Location::Root);
         answer(&mut panel, &request, Listing::Root(hosts()));
         assert_eq!(under_cursor(&panel), "db");
+    }
+
+    #[test]
+    fn alt_o_picks_what_the_other_panel_opens_and_moves_on() {
+        let mut panel = loaded("/srv", listing());
+        let up = Destination {
+            location: local("/"),
+            focus: Focus::Name(b"srv".to_vec()),
+        };
+        assert_eq!(
+            panel.for_other_panel(),
+            Some(up.clone()),
+            "`..`: the parent"
+        );
+        assert_eq!(under_cursor(&panel), "alpha-link", "the cursor moves on");
+        let into = Destination {
+            location: local("/srv/alpha-link"),
+            focus: Focus::First,
+        };
+        assert_eq!(panel.for_other_panel(), Some(into));
+        panel.handle(Action::End);
+        assert_eq!(
+            panel.for_other_panel(),
+            Some(up),
+            "a file: the parent, as in mc"
+        );
+        assert_eq!(under_cursor(&panel), "zeta.txt", "the last row stays");
+
+        let mut root = root();
+        let location = |to: Option<Destination>| to.map(|to| to.location);
+        assert_eq!(location(root.for_other_panel()), Some(local(HOME)));
+        assert_eq!(location(root.for_other_panel()), Some(remote("web", "")));
+    }
+
+    #[test]
+    fn here_is_the_location_and_the_row_under_the_cursor() {
+        let mut panel = loaded("/srv", listing());
+        panel.handle(Action::End);
+        let here = Destination {
+            location: local("/srv"),
+            focus: Focus::Name(b"zeta.txt".to_vec()),
+        };
+        assert_eq!(panel.here(), here);
+
+        let mut other = loaded("/tmp", Vec::new());
+        let request = other.go(here);
+        answer(&mut other, &request, Listing::Dir(listing()));
+        assert_eq!(under_cursor(&other), "zeta.txt");
+
+        let mut root = root();
+        root.handle(Action::Down);
+        let here = Destination {
+            location: Location::Root,
+            focus: Focus::Host("web".to_owned()),
+        };
+        assert_eq!(root.here(), here);
     }
 
     #[test]

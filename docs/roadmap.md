@@ -37,7 +37,7 @@
 
 ## M3: File operations (current)
 
-- [ ] Panel actions that the keymap binds already: Ctrl-U swaps the panels, Alt-O opens the
+- [x] Panel actions that the keymap binds already: Ctrl-U swaps the panels, Alt-O opens the
       directory under the cursor in the other panel, Alt-I shows this directory there
 - [ ] Selection: Insert, `+`, `-`, `*`
 - [ ] F5 copy and F6 move/rename in any direction, with progress, cancellation, and a conflict

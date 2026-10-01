@@ -55,3 +55,5 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   terminal's own colors.
 - F1 shows the keys of panels, the host list, quick search, and dialogs, with what they do,
   read from the keymap; the F-key bar shows `1Help`.
+- Ctrl-U swaps the panels; Alt-O opens the directory or host under the cursor in the other
+  panel; Alt-I shows the current directory there, as in mc.

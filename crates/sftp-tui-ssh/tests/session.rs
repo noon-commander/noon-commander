@@ -343,6 +343,38 @@ async fn notices_when_the_master_goes_away() {
 }
 
 #[tokio::test]
+async fn notices_when_a_channel_ends() {
+    if sftp_server().is_none() {
+        return;
+    }
+    let fake = Fake::new(&[]);
+    let settings = SshSettings {
+        multiplex: false,
+        ..fake.settings.clone()
+    };
+    let session = fake.connect(&settings).await.unwrap();
+    let SftpChannel {
+        stdin,
+        stdout,
+        mut process,
+    } = session.open_sftp().unwrap();
+    let sftp = Sftp::new(stdin, stdout, SftpOptions::default())
+        .await
+        .unwrap();
+    let pid = Pid::from_raw(i32::try_from(process.id().unwrap()).unwrap()).unwrap();
+    let wait = tokio::time::timeout(Duration::from_millis(200), process.wait()).await;
+    assert!(wait.is_err(), "the channel is still open");
+
+    // Without multiplexing the channel is the connection, so this is a lost connection.
+    kill_process(pid, Signal::TERM).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), process.wait())
+        .await
+        .expect("the channel's end went unnoticed");
+    drop(sftp);
+    session.close().await;
+}
+
+#[tokio::test]
 async fn passes_prompts_to_the_askpass_program() {
     if sftp_server().is_none() {
         return;

@@ -26,6 +26,13 @@ impl Context {
         }
     }
 
+    /// Whether `Esc` waits for another key, as in mc: `Esc 1` … `Esc 0` stand for F1 … F10,
+    /// `Esc` and a character for Alt and that character, and `Esc` alone acts once the sequence
+    /// times out. Elsewhere `Esc` acts at once.
+    pub(crate) fn esc_waits(self) -> bool {
+        matches!(self, Self::Panel)
+    }
+
     /// Whether an unbound printable key becomes [`Resolved::Insert`](super::Resolved::Insert).
     pub(crate) fn accepts_text(self) -> bool {
         matches!(self, Self::Panel | Self::QuickSearch | Self::DialogInput)
@@ -80,7 +87,7 @@ pub(crate) enum Action {
     DeleteToEnd,
     /// Accepts the dialog, or activates the focused button.
     Confirm,
-    /// Closes the dialog, ends quick search, or stops a pending operation.
+    /// Closes the dialog, ends quick search, or stops a pending listing or connection.
     Cancel,
     /// Moves the focus to the next field or button.
     NextField,

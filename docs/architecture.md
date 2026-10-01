@@ -74,8 +74,10 @@ config:
   the alias), with the address cached from an earlier `ssh -G`. The root is listed like a
   directory, in a background task that scans the ssh config and loads the cache, so Ctrl-R
   rereads the ssh config.
-- Entering a host connects (with a cancellable spinner) and opens the remote home directory or the
-  configured `start_dir`.
+- Entering a host connects in the background (the status line says so; Esc stops it) and opens
+  the configured `start_dir` or the remote home directory, shown as an absolute path. Until the
+  dialogs exist, the TUI declines password and host-key prompts, so only keys and the agent work.
+- When a connection is lost, the panels on that host go back to the root and say why.
 - Locations are `Root`, `Local(PathBuf)`, or `Remote { host, path }`. Remote paths are bytes,
   because SFTP v3 does not guarantee UTF-8, and are displayed lossily. The SFTP client library
   still requires UTF-8 names; see the known issues in the [roadmap](roadmap.md).
@@ -103,8 +105,8 @@ predicates. So:
 
 Prompts go through the askpass bridge ([ADR 0003](adr/0003-askpass-bridge.md)): ssh runs
 `sftp-tui` as its `SSH_ASKPASS` program, which forwards the prompt to the TUI over a Unix socket
-and returns the answer. Until the TUI exists, the command-line subcommands answer prompts on
-`/dev/tty`.
+and returns the answer. The command-line subcommands answer prompts on `/dev/tty`; the TUI
+declines them until it has dialogs for them.
 
 ## Command line
 
@@ -129,6 +131,10 @@ sftp-tui config paths       show the files and directories in use
 - Every request carries a generation number, so stale replies (for example, a listing of a
   directory the user has already left) are dropped.
 - The UI task never awaits network I/O.
+- One task per host owns its ssh session and SFTP channel. The app sends it listing requests
+  over a channel and gets told when the host is connected and when the connection ends: on
+  request, when the master exits, or, without multiplexing, when the channel's ssh exits.
+  Quitting restores the terminal first, then gives the connections a few seconds to close.
 - The terminal is restored on every exit: a guard leaves raw mode and the alternate screen when
   the TUI returns or fails, ratatui's panic hook does it before a panic message, and SIGTERM,
   SIGHUP, and SIGINT end the event loop like a quit.
@@ -197,10 +203,10 @@ show_hidden = true
   `dialog_input`; `viewer` and `menu` will follow). Each context falls back along a chain, for
   example quick search to the panel; the first context that knows a key sequence decides.
   Bindings are key sequences matched by prefix with a 1-second timeout, so a vim preset
-  (`g g`, `d d`) can follow the default mc preset. As in mc, `Esc 1` … `Esc 0` stand for
-  F1 … F10, except where `Esc` alone is bound (dialogs, quick search), and a pending `Esc`
-  followed by a character stands for Alt and that character, for terminals whose Alt key sends
-  nothing. Keys are written with `crokey` names. User overrides in `keymap.toml` are planned
+  (`g g`, `d d`) can follow the default mc preset. As in mc, `Esc` in a panel waits for the
+  next key: `Esc 1` … `Esc 0` stand for F1 … F10, `Esc` followed by a character stands for Alt
+  and that character, for terminals whose Alt key sends nothing, and `Esc` alone cancels once
+  the timeout passes (`Esc Esc` at once). In dialogs and quick search `Esc` acts at once. Keys are written with `crokey` names. User overrides in `keymap.toml` are planned
   for M4. The F-key bar is generated from the active keymap; the help screen will be too.
 - **Text.** Fluent files under `crates/sftp-tui/i18n/`, embedded in the binary and read with
   `fl!` from `i18n-embed-fl`, which checks message IDs against `en-US` at compile time; only

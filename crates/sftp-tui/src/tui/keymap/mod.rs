@@ -120,6 +120,7 @@ impl Keymap {
                     (OtherPanelOpen, &["alt-o"]),
                     (OtherPanelSync, &["alt-i"]),
                     (Reload, &["ctrl-r"]),
+                    (Cancel, &["esc", "esc esc"]),
                     (ToggleHidden, &["alt-."]),
                     (QuickSearch, &["ctrl-s", "alt-s"]),
                     (Help, &["f1"]),
@@ -168,7 +169,12 @@ impl Keymap {
                     })
                 })
                 .collect();
-            contexts.insert(context, Bindings(with_esc_digits(bindings)));
+            let bindings = if context.esc_waits() {
+                with_esc_digits(bindings)
+            } else {
+                bindings
+            };
+            contexts.insert(context, Bindings(bindings));
         }
         Self { contexts }
     }
@@ -269,12 +275,7 @@ impl Keymap {
 const ESC: KeyCombination = KeyCombination::one_key(KeyCode::Esc, KeyModifiers::NONE);
 
 /// Adds `Esc 1` … `Esc 0` next to every binding of F1 … F10, unless that sequence is bound.
-/// A context that binds `Esc` alone gets none, so that its `Esc` acts at once instead of
-/// waiting for a digit.
 fn with_esc_digits(mut bindings: Vec<(Sequence, Action)>) -> Vec<(Sequence, Action)> {
-    if bindings.iter().any(|(sequence, _)| *sequence == [ESC]) {
-        return bindings;
-    }
     let aliases: Vec<(Sequence, Action)> = bindings
         .iter()
         .filter_map(|(sequence, action)| match sequence.as_slice() {
@@ -407,8 +408,11 @@ mod tests {
         );
         assert_eq!(state.deadline(), Some(start + SEQUENCE_TIMEOUT));
         assert_eq!(keymap.expire(&mut state, start), [], "not yet");
-        // A lone Esc means nothing in a panel, so it is dropped.
-        assert_eq!(keymap.expire(&mut state, start + SEQUENCE_TIMEOUT), []);
+        // A lone Esc cancels once nothing follows, as in mc.
+        assert_eq!(
+            keymap.expire(&mut state, start + SEQUENCE_TIMEOUT),
+            actions(&[Action::Cancel])
+        );
         assert_eq!(state.deadline(), None);
         assert_eq!(
             keymap.feed(&mut state, Context::Panel, key("0"), start),
@@ -438,20 +442,27 @@ mod tests {
     fn a_broken_sequence_lets_the_new_key_through() {
         let keymap = Keymap::mc();
         let mut state = KeyState::default();
+        // The pending Esc settles as if it had timed out, then the new key runs.
         assert_eq!(
             feed(&keymap, &mut state, Context::Panel, &["esc", "tab"]),
-            actions(&[Action::SwitchPanel])
+            actions(&[Action::Cancel, Action::SwitchPanel])
         );
         // The new key may start a sequence of its own.
         assert_eq!(
-            feed(&keymap, &mut state, Context::Panel, &["esc", "esc"]),
-            []
+            feed(&keymap, &mut state, Context::Panel, &["esc", "f10", "esc"]),
+            actions(&[Action::Cancel, Action::Quit])
         );
         assert!(state.deadline().is_some());
         assert_eq!(
             feed(&keymap, &mut state, Context::Panel, &["0"]),
             actions(&[Action::Quit])
         );
+        // Esc Esc cancels without waiting.
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Panel, &["esc", "esc"]),
+            actions(&[Action::Cancel])
+        );
+        assert_eq!(state.deadline(), None);
     }
 
     #[test]
@@ -574,10 +585,10 @@ mod tests {
     }
 
     #[test]
-    fn every_f_key_has_an_esc_digit_alias() {
+    fn every_f_key_has_an_esc_digit_alias_where_esc_waits() {
         let keymap = Keymap::mc();
         for (context, bindings) in &keymap.contexts {
-            if bindings.0.iter().any(|(sequence, _)| *sequence == [ESC]) {
+            if !context.esc_waits() {
                 continue;
             }
             for (sequence, action) in &bindings.0 {

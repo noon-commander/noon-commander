@@ -379,6 +379,12 @@ impl ChannelProcess {
         self.child.id()
     }
 
+    /// Completes when the process exits on its own, for example when its connection is lost.
+    /// Cancel-safe.
+    pub async fn wait(&mut self) -> Option<ExitStatus> {
+        self.child.wait().await.ok()
+    }
+
     /// Waits for ssh to exit after its SFTP session was closed; kills it if that takes long.
     pub async fn finish(mut self) -> Option<ExitStatus> {
         match tokio::time::timeout(EXIT_GRACE, self.child.wait()).await {

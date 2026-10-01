@@ -27,7 +27,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Esc 0` to quit, Ctrl-L to redraw; `Esc` followed by a key works like Alt with that key.
 - Going up from `/` leads to the virtual root: `[Local]`, which opens the home directory, and
   the hosts from ssh_config in config order, shown by their `label` if set, with the addresses
-  cached by `sftp-tui hosts --resolve`. Ctrl-R there rereads ssh_config. Opening a host is not
-  supported yet.
+  cached by `sftp-tui hosts --resolve`. Ctrl-R there rereads ssh_config.
+- Enter on a host connects in the background and opens its `start_dir` or the remote home
+  directory; Esc stops the attempt. Keys and the agent work; password and host-key prompts are
+  declined for now. If the connection is lost, its panels go back to the host list and say why.
 - `[ui] language` selects the interface language (`auto` by default); only English exists so
   far. Interface text lives in Fluent files.

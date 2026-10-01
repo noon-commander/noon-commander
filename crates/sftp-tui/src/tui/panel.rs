@@ -11,7 +11,7 @@ use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::Line;
 use ratatui::widgets::Block;
-use sftp_tui_vfs::{DirEntry, Location, RemotePath, VfsError};
+use sftp_tui_vfs::{DirEntry, Location, RemotePath};
 
 use super::cells::{self, Align, MTIME_WIDTH};
 use super::keymap::Action;
@@ -31,7 +31,15 @@ pub(crate) struct ListRequest {
     pub(crate) location: Location,
 }
 
-/// The reply to a [`ListRequest`].
+/// The reply to a [`ListRequest`]: where the listing is from, which may be more exact than
+/// the request (a host's start directory as a path), and what it holds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Listed {
+    pub(crate) location: Location,
+    pub(crate) listing: Listing,
+}
+
+/// What a location holds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Listing {
     /// The hosts of the virtual root, which shows the local file system before them.
@@ -137,8 +145,8 @@ impl Panel {
     }
 
     /// Takes the reply to a [`ListRequest`]; replies to older requests are dropped. On error the
-    /// panel keeps showing what it showed and reports the error below the listing.
-    pub(crate) fn listed(&mut self, generation: u64, result: Result<Listing, VfsError>) {
+    /// panel keeps showing what it showed and reports `reason` below the listing.
+    pub(crate) fn listed(&mut self, generation: u64, result: Result<Listed, String>) {
         let Some(pending) = self
             .pending
             .take_if(|pending| pending.generation == generation)
@@ -146,14 +154,17 @@ impl Panel {
             return;
         };
         match result {
-            Ok(mut listing) => {
+            Ok(Listed {
+                location,
+                mut listing,
+            }) => {
                 if let Listing::Dir(entries) = &mut listing {
                     entries.sort_by_cached_key(|entry| {
                         let name = String::from_utf8_lossy(&entry.name).to_lowercase();
                         (!entry.is_dir_like(), name, entry.name.clone())
                     });
                 }
-                self.location = pending.location;
+                self.location = location;
                 self.listing = listing;
                 self.offset = 0;
                 self.cursor = (0..self.rows())
@@ -163,7 +174,7 @@ impl Panel {
                     })
                     .unwrap_or(0);
             }
-            Err(error) => {
+            Err(reason) => {
                 let shown = match (&pending.location, &self.location) {
                     // The title shows the directory, so a subdirectory needs only its name.
                     (Location::Local(path), Location::Local(current)) => path
@@ -174,9 +185,39 @@ impl Panel {
                     _ => None,
                 };
                 let shown = shown.unwrap_or_else(|| location_text(&pending.location));
-                self.error = Some(fl!("panel-error", path = shown, reason = describe(&error)));
+                // The reason may quote ssh, which may quote the server.
+                let reason = cells::sanitize(reason.as_bytes());
+                self.error = Some(fl!("panel-error", path = shown, reason = reason));
             }
         }
+    }
+
+    /// The request the panel waits for, if any.
+    pub(crate) fn pending_request(&self) -> Option<ListRequest> {
+        self.pending.as_ref().map(|pending| ListRequest {
+            generation: pending.generation,
+            location: pending.location.clone(),
+        })
+    }
+
+    /// Stops waiting for a listing; its reply will be dropped.
+    pub(crate) fn cancel(&mut self) {
+        self.pending = None;
+    }
+
+    /// Leaves `host` for the virtual root, with the cursor on it and `reason` below the listing,
+    /// if the panel shows or waits for that host.
+    pub(crate) fn leave_host(&mut self, host: &str, reason: &str) -> Option<ListRequest> {
+        let on_host = |location: &Location| matches!(location, Location::Remote { host: shown, .. } if shown == host);
+        let pending = self.pending.as_ref().map(|pending| &pending.location);
+        if !on_host(&self.location) && !pending.is_some_and(on_host) {
+            return None;
+        }
+        let request = self.open(Location::Root, Focus::Host(host.to_owned()));
+        let reason = cells::sanitize(reason.as_bytes());
+        let host = cells::sanitize(host.as_bytes());
+        self.error = Some(fl!("panel-host-lost", host = host, reason = reason));
+        Some(request)
     }
 
     /// Moves the cursor or opens a directory or host. Returns the listing to request, if any.
@@ -259,12 +300,14 @@ impl Panel {
     }
 
     /// Draws the panel: the location in the frame, column headers, the rows, and a status line
-    /// with the name under the cursor, the loading state, or the last error.
+    /// with the name under the cursor, the loading state, or the last error. `connecting` says
+    /// that the host of the pending request is not connected yet.
     pub(crate) fn render(
         &mut self,
         frame: &mut Frame<'_>,
         area: Rect,
         active: bool,
+        connecting: bool,
         now: SystemTime,
         tz: &TimeZone,
     ) {
@@ -315,8 +358,13 @@ impl Panel {
         );
         let status = if let Some(error) = &self.error {
             error.clone()
-        } else if self.pending.is_some() {
-            fl!("panel-loading")
+        } else if let Some(pending) = &self.pending {
+            match &pending.location {
+                Location::Remote { host, .. } if connecting => {
+                    fl!("panel-connecting", host = cells::sanitize(host.as_bytes()))
+                }
+                _ => fl!("panel-loading"),
+            }
         } else {
             match self.row(self.cursor) {
                 Some(Row::Parent) => "..".to_owned(),
@@ -519,19 +567,8 @@ fn location_text(location: &Location) -> String {
     }
 }
 
-/// Why a location could not be listed, for the status line.
-fn describe(error: &VfsError) -> String {
-    match error {
-        VfsError::NotFound(_) => fl!("error-not-found"),
-        VfsError::PermissionDenied(_) => fl!("error-permission-denied"),
-        VfsError::Io(error) => error.to_string(),
-        VfsError::Sftp(error) => error.to_string(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use std::io;
     use std::time::{Duration, UNIX_EPOCH};
 
     use ratatui::Terminal;
@@ -606,10 +643,16 @@ mod tests {
         }
     }
 
+    /// Answers `request` with `listing` from the location it asked for.
+    fn answer(panel: &mut Panel, request: &ListRequest, listing: Listing) {
+        let location = request.location.clone();
+        panel.listed(request.generation, Ok(Listed { location, listing }));
+    }
+
     /// A panel on `location` whose first listing arrived.
     fn loaded_at(location: Location, listing: Listing) -> Panel {
         let (mut panel, request) = Panel::new(location, PathBuf::from(HOME));
-        panel.listed(request.generation, Ok(listing));
+        answer(&mut panel, &request, listing);
         panel
     }
 
@@ -637,13 +680,30 @@ mod tests {
         names(panel)[panel.cursor].clone()
     }
 
-    fn draw(panel: &mut Panel, width: u16, height: u16, active: bool) -> TestBackend {
+    fn render(
+        panel: &mut Panel,
+        width: u16,
+        height: u16,
+        active: bool,
+        connecting: bool,
+    ) -> TestBackend {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         let now = UNIX_EPOCH + Duration::from_secs(NOW);
         terminal
-            .draw(|frame| panel.render(frame, frame.area(), active, now, &TimeZone::UTC))
+            .draw(|frame| {
+                let area = frame.area();
+                panel.render(frame, area, active, connecting, now, &TimeZone::UTC);
+            })
             .unwrap();
         terminal.backend().clone()
+    }
+
+    fn draw(panel: &mut Panel, width: u16, height: u16, active: bool) -> TestBackend {
+        render(panel, width, height, active, false)
+    }
+
+    fn draw_connecting(panel: &mut Panel, width: u16, height: u16) -> TestBackend {
+        render(panel, width, height, true, true)
     }
 
     #[test]
@@ -698,7 +758,7 @@ mod tests {
         assert_eq!(request.location, local("/srv/alpha-link"));
         assert_eq!(request.generation, 2);
         let inside = vec![entry("inside", FileKind::File, 1)];
-        panel.listed(request.generation, Ok(Listing::Dir(inside)));
+        answer(&mut panel, &request, Listing::Dir(inside));
         assert_eq!(panel.location, local("/srv/alpha-link"));
         assert_eq!(names(&panel), ["..", "inside"]);
 
@@ -711,7 +771,7 @@ mod tests {
         let mut panel = loaded("/srv/bin", vec![entry("tool", FileKind::File, 1)]);
         let request = panel.handle(Action::Parent).unwrap();
         assert_eq!(request.location, local("/srv"));
-        panel.listed(request.generation, Ok(Listing::Dir(listing())));
+        answer(&mut panel, &request, Listing::Dir(listing()));
         assert_eq!(under_cursor(&panel), "bin");
 
         // Enter on `..` does the same.
@@ -719,7 +779,7 @@ mod tests {
         let request = panel.handle(Action::Enter).unwrap();
         assert_eq!(request.location, local("/"));
         let srv = vec![entry("srv", FileKind::Dir, 1)];
-        panel.listed(request.generation, Ok(Listing::Dir(srv)));
+        answer(&mut panel, &request, Listing::Dir(srv));
         assert_eq!(under_cursor(&panel), "srv");
     }
 
@@ -729,7 +789,7 @@ mod tests {
         assert_eq!(names(&panel), ["..", "srv"]);
         let request = panel.handle(Action::Parent).unwrap();
         assert_eq!(request.location, Location::Root);
-        panel.listed(request.generation, Ok(Listing::Root(hosts())));
+        answer(&mut panel, &request, Listing::Root(hosts()));
         assert_eq!(names(&panel), ["<local>", "web", "db", "staging"]);
         assert_eq!(under_cursor(&panel), "<local>", "the file system just left");
         assert_eq!(panel.handle(Action::Parent), None, "the root is the top");
@@ -748,21 +808,38 @@ mod tests {
         panel.handle(Action::End);
         let request = panel.handle(Action::Enter).unwrap();
         assert_eq!(request.location, remote("staging", ""));
-        let unsupported = VfsError::Io(io::ErrorKind::Unsupported.into());
-        panel.listed(request.generation, Err(unsupported));
+        let refused = "deploy@stg: Permission denied (publickey).".to_owned();
+        panel.listed(request.generation, Err(refused));
         assert_eq!(panel.location, Location::Root);
         assert_eq!(
             panel.error.as_deref(),
-            Some("Cannot open staging: unsupported")
+            Some("Cannot open staging: deploy@stg: Permission denied (publickey).")
         );
+
+        // The reply names the start directory, which `..` then leads up from.
+        let request = panel.handle(Action::Enter).unwrap();
+        let home = remote("staging", "/home/ubuntu");
+        let reply = Listed {
+            location: home.clone(),
+            listing: Listing::Dir(Vec::new()),
+        };
+        panel.listed(request.generation, Ok(reply));
+        assert_eq!(panel.location, home);
+        assert!(
+            draw(&mut panel, 40, 6, true)
+                .to_string()
+                .contains("staging:/home/ubuntu")
+        );
+        let request = panel.handle(Action::Parent).unwrap();
+        assert_eq!(request.location, remote("staging", "/home"));
 
         let mut panel = loaded_at(remote("db", "/srv"), Listing::Dir(Vec::new()));
         let request = panel.handle(Action::Parent).unwrap();
         assert_eq!(request.location, remote("db", "/"));
-        panel.listed(request.generation, Ok(Listing::Dir(listing())));
+        answer(&mut panel, &request, Listing::Dir(listing()));
         let request = panel.handle(Action::Parent).unwrap();
         assert_eq!(request.location, Location::Root);
-        panel.listed(request.generation, Ok(Listing::Root(hosts())));
+        answer(&mut panel, &request, Listing::Root(hosts()));
         assert_eq!(under_cursor(&panel), "db");
     }
 
@@ -774,12 +851,12 @@ mod tests {
         assert_eq!(request.location, local("/srv"));
         let mut changed = listing();
         changed.push(entry("new.txt", FileKind::File, 1));
-        panel.listed(request.generation, Ok(Listing::Dir(changed)));
+        answer(&mut panel, &request, Listing::Dir(changed));
         assert_eq!(under_cursor(&panel), "zeta.txt");
 
         let request = panel.handle(Action::Reload).unwrap();
         let other = vec![entry("other", FileKind::File, 1)];
-        panel.listed(request.generation, Ok(Listing::Dir(other)));
+        answer(&mut panel, &request, Listing::Dir(other));
         assert_eq!(panel.cursor, 0, "the entry is gone");
 
         let mut root = root();
@@ -789,7 +866,7 @@ mod tests {
         assert_eq!(request.location, Location::Root);
         let mut reordered = hosts();
         reordered.reverse();
-        root.listed(request.generation, Ok(Listing::Root(reordered)));
+        answer(&mut root, &request, Listing::Root(reordered));
         assert_eq!(under_cursor(&root), "db");
     }
 
@@ -801,15 +878,15 @@ mod tests {
         panel.handle(Action::Home);
         let second = panel.handle(Action::Enter).unwrap();
         let stale = vec![entry("stale", FileKind::File, 1)];
-        panel.listed(first.generation, Ok(Listing::Dir(stale)));
+        answer(&mut panel, &first, Listing::Dir(stale));
         assert_eq!(
             panel.location,
             local("/srv"),
             "an older request was answered"
         );
-        panel.listed(second.generation, Ok(Listing::Dir(listing())));
+        answer(&mut panel, &second, Listing::Dir(listing()));
         assert_eq!(panel.location, local("/"));
-        panel.listed(second.generation, Ok(Listing::Dir(Vec::new())));
+        answer(&mut panel, &second, Listing::Dir(Vec::new()));
         assert_eq!(panel.rows(), 1 + listing().len(), "a reply counts once");
     }
 
@@ -818,8 +895,7 @@ mod tests {
         let mut panel = loaded("/srv", listing());
         panel.handle(Action::Down);
         let request = panel.handle(Action::Enter).unwrap();
-        let denied = VfsError::PermissionDenied("/srv/alpha-link".to_owned());
-        panel.listed(request.generation, Err(denied));
+        panel.listed(request.generation, Err("permission denied".to_owned()));
         assert_eq!(panel.location, local("/srv"));
         assert_eq!(under_cursor(&panel), "alpha-link");
         assert_eq!(
@@ -828,7 +904,10 @@ mod tests {
         );
         // The parent is not inside the directory shown, so it gets its full path.
         let request = panel.handle(Action::Parent).unwrap();
-        panel.listed(request.generation, Err(VfsError::NotFound("/".to_owned())));
+        panel.listed(
+            request.generation,
+            Err("no such file or directory".to_owned()),
+        );
         assert_eq!(
             panel.error.as_deref(),
             Some("Cannot open /: no such file or directory")
@@ -836,6 +915,52 @@ mod tests {
         // The next request clears it.
         panel.handle(Action::Reload);
         assert_eq!(panel.error, None);
+
+        let request = panel.handle(Action::Reload).unwrap();
+        panel.listed(request.generation, Err("bad\x1b[2Jthing".to_owned()));
+        assert_eq!(
+            panel.error.as_deref(),
+            Some("Cannot open /srv: bad?[2Jthing"),
+            "reasons are shown terminal-safe"
+        );
+    }
+
+    #[test]
+    fn a_cancelled_request_is_forgotten() {
+        let mut panel = root();
+        panel.handle(Action::Down);
+        let request = panel.handle(Action::Enter).unwrap();
+        assert_eq!(panel.pending_request(), Some(request.clone()));
+        let status = draw(&mut panel, 40, 6, true).to_string();
+        assert!(status.contains("Loading…"), "{status}");
+        let status = draw_connecting(&mut panel, 40, 6).to_string();
+        assert!(status.contains("Connecting to web…"), "{status}");
+
+        panel.cancel();
+        assert_eq!(panel.pending_request(), None);
+        answer(&mut panel, &request, Listing::Dir(listing()));
+        assert_eq!(panel.location, Location::Root, "the late reply is dropped");
+        assert_eq!(under_cursor(&panel), "web");
+    }
+
+    #[test]
+    fn a_lost_host_sends_its_panels_back_to_the_root() {
+        let mut panel = loaded_at(remote("db", "/srv"), Listing::Dir(listing()));
+        assert_eq!(panel.leave_host("web", "gone"), None, "another host");
+        let request = panel.leave_host("db", "Connection reset").unwrap();
+        assert_eq!(request.location, Location::Root);
+        answer(&mut panel, &request, Listing::Root(hosts()));
+        assert_eq!(under_cursor(&panel), "db");
+        assert_eq!(
+            panel.error.as_deref(),
+            Some("Lost the connection to db: Connection reset")
+        );
+
+        // A panel that was about to open the host goes back as well.
+        let mut panel = root();
+        panel.handle(Action::Down);
+        panel.handle(Action::Enter);
+        assert!(panel.leave_host("web", "gone").is_some());
     }
 
     #[test]

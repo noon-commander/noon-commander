@@ -18,10 +18,24 @@ panel-up-dir = UP--DIR
 panel-dir = DIR
 # Status line while a directory is read.
 panel-loading = Loading…
+# Status line while the panel waits for a connection to a host; Esc stops it.
+panel-connecting = Connecting to { $host }…
 # Status line when a directory cannot be read; the panel keeps showing the previous one.
 panel-error = Cannot open { $path }: { $reason }
 error-not-found = no such file or directory
 error-permission-denied = permission denied
+# Status line when the connection of a host the panel showed ends; the panel goes back to the
+# list of hosts.
+panel-host-lost = Lost the connection to { $host }: { $reason }
+
+## Connection errors (src/tui/describe). Prefix: error-. Most of the time ssh's own words are
+## shown instead.
+
+error-connection-closed = the connection is closed
+error-ssh-exited = ssh ended with { $status }
+error-ssh-spawn = cannot run { $program }: { $reason }
+error-ssh-too-old = OpenSSH { $found } is too old; sftp-tui needs { $required } or newer
+error-not-openssh = { $program } is not OpenSSH
 
 ## Virtual root (src/tui/panel). Prefix: root-.
 

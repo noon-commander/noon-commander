@@ -219,6 +219,13 @@ atomic_upload = true             # write to a temporary name, then rename
   and how many entries are marked, such as `12,345 B in 3 files`. Marks are names, so they
   survive sorting and Ctrl-R (for names still there); another directory starts unmarked, and
   entries that get hidden lose their marks, so that no operation acts on what is not shown.
+  `+` (or Alt-+) marks and `-` (or `\`, Alt--) unmarks the names that match a shell pattern,
+  in a dialog with mc's options: Files only (off) and Case sensitive (on). Patterns are read
+  as mc reads them: `*`, `?`, `[a-z]` (`[!…]` or `[^…]` outside the set), `{a,b}`, and `\`
+  for the next character as it is; the whole name must match, and what does not parse is
+  literal. mc's regular expressions are left out. The dialog opens with the last pattern
+  (`*` at first) and options. `+`, `-`, `\`, and `*` are commands, as in mc with an empty
+  command line, so typing them does not start quick search.
 - **The other panel.** As in mc: Ctrl-U swaps the panels, and the active one stays active on
   the other side; Alt-O opens the directory or host under the cursor in the other panel (from
   a file, the parent directory with the cursor on this one) and moves the cursor down; Alt-I
@@ -253,9 +260,15 @@ atomic_upload = true             # write to a temporary name, then rename
   is the help screen (F1): the keys of each context, with what they do, for what the app can
   do already; a prompt from ssh shows over it.
 - **Dialogs.** Modal and centered over the panels, with mc-style buttons: `[< OK >]` marks the
-  default one. Keys go to the first dialog in the queue (contexts `dialog` and `dialog_input`);
-  Tab and the arrows move between the field and the buttons, Enter activates, Esc or F10
-  cancels.
+  default one. A dialog has a message, a text field, check boxes, and buttons, each optional
+  but the buttons; ssh's prompts and the app's own questions are the same kind of dialog, and
+  each one in the queue knows where its answer goes. Keys go to the first dialog in the queue
+  (contexts `dialog` and `dialog_input`); Tab and the arrows move between the field, the check
+  boxes, and the buttons, Space switches a check box or presses a button, Enter presses the
+  button with the focus (the default one from the field or a check box), and Esc or F10
+  cancels. In a text field every character is text, Space too. A field that opens with text
+  shows it dimmed, and typing replaces it, as in mc; an edit or a cursor move keeps it. Long
+  text scrolls to keep the cursor in view.
 - **Text.** Fluent files under `crates/sftp-tui/i18n/`, embedded in the binary and read with
   `fl!` from `i18n-embed-fl`, which checks message IDs against `en-US` at compile time; only
   `en-US` for now. `ui.language = "auto"` follows the system locale (through `sys-locale`).

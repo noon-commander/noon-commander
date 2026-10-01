@@ -101,8 +101,8 @@ impl Keymap {
             Backspace, Cancel, Confirm, Delete, DeleteToEnd, DeleteToStart, Disconnect, Down, End,
             Enter, Help, Home, InvertMarks, Left, Mark, MarkUp, NextField, OtherPanelOpen,
             OtherPanelSync, PageDown, PageUp, Parent, PrevField, QuickSearch, Quit, Redraw, Reload,
-            Right, SortByExtension, SortByName, SortBySize, SortByTime, SwapPanels, SwitchPanel,
-            ToggleHidden, Up,
+            Right, Select, SortByExtension, SortByName, SortBySize, SortByTime, SwapPanels,
+            SwitchPanel, Toggle, ToggleHidden, Unselect, Up,
         };
         let presets: [(Context, Preset); 5] = [
             (
@@ -117,7 +117,10 @@ impl Keymap {
                     (Enter, &["enter"]),
                     (Mark, &["insert", "ctrl-t", "shift-down"]),
                     (MarkUp, &["shift-up"]),
-                    // mc takes `*` as a command while its command line is empty.
+                    // mc takes `+`, `-`, `\`, and `*` as commands while its command line is
+                    // empty.
+                    (Select, &["+", "alt-+"]),
+                    (Unselect, &["-", "\\", "alt--"]),
                     (InvertMarks, &["*", "alt-*"]),
                     (Parent, &["ctrl-pageup"]),
                     (SwitchPanel, &["tab"]),
@@ -158,6 +161,7 @@ impl Keymap {
                     (NextField, &["tab"]),
                     (PrevField, &["backtab"]),
                     (Confirm, &["enter"]),
+                    (Toggle, &["space"]),
                     (Cancel, &["esc", "f10"]),
                 ],
             ),
@@ -598,6 +602,33 @@ mod tests {
             feed(&keymap, &mut state, Context::Panel, &["esc", "*"]),
             actions(&[Action::InvertMarks]),
             "Esc * is Alt-*"
+        );
+        assert_eq!(
+            feed(
+                &keymap,
+                &mut state,
+                Context::Panel,
+                &["+", "-", "\\", "esc", "-"]
+            ),
+            actions(&[
+                Action::Select,
+                Action::Unselect,
+                Action::Unselect,
+                Action::Unselect
+            ])
+        );
+        assert_eq!(
+            feed(&keymap, &mut state, Context::QuickSearch, &["+", "-"]),
+            [Resolved::Insert('+'), Resolved::Insert('-')]
+        );
+        // Space switches check boxes, but in a text field it is a space.
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Dialog, &["space"]),
+            actions(&[Action::Toggle])
+        );
+        assert_eq!(
+            feed(&keymap, &mut state, Context::DialogInput, &["space"]),
+            [Resolved::Insert(' ')]
         );
         assert_eq!(
             feed(

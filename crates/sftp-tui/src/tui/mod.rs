@@ -8,6 +8,7 @@ mod dialog;
 mod help;
 mod keymap;
 mod panel;
+mod pattern;
 mod root;
 mod tasks;
 mod theme;

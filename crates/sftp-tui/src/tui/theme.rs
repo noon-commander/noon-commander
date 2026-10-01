@@ -58,6 +58,8 @@ pub(crate) struct Theme {
     pub(crate) dialog_button_focused: Style,
     /// Text field in a dialog.
     pub(crate) dialog_input: Style,
+    /// Text field that still holds the text it opened with, which typing replaces.
+    pub(crate) dialog_input_fresh: Style,
     /// What mc draws to the right of and below a dialog; `None` draws nothing.
     pub(crate) shadow: Option<Style>,
 }
@@ -107,6 +109,7 @@ impl Theme {
             dialog_button: on(Color::Black, Color::Gray),
             dialog_button_focused: on(Color::Black, Color::Cyan),
             dialog_input: on(Color::Black, Color::Cyan),
+            dialog_input_fresh: on(Color::DarkGray, Color::Cyan),
             shadow: Some(on(Color::DarkGray, Color::Black)),
         }
     }
@@ -144,6 +147,7 @@ impl Theme {
             dialog_button: plain,
             dialog_button_focused: reversed,
             dialog_input: reversed,
+            dialog_input_fresh: reversed.dim(),
             shadow: None,
         }
     }

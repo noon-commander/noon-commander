@@ -1,0 +1,14 @@
+---
+source: crates/sftp-tui/src/tui/dialog.rs
+expression: terminal.backend()
+---
+"                                                            "
+"     ┌ Select ────────────────────────────────────────┐     "
+"     │ *.md                                           │     "
+"     │ [ ] Files only                                 │     "
+"     │ [x] Case sensitive                             │     "
+"     │                                                │     "
+"     │              [< OK >] [ Cancel ]               │     "
+"     └────────────────────────────────────────────────┘     "
+"                                                            "
+"                                                            "

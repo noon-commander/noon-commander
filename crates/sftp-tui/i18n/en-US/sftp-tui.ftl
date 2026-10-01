@@ -87,6 +87,8 @@ help-enter = Open the directory or host under the cursor
 help-mark = Mark or unmark, then the next row
 help-mark-up = Mark or unmark, then the row above
 help-invert-marks = Invert the marks on files
+help-select = Mark the names that match a pattern
+help-unselect = Unmark the names that match a pattern
 help-parent = Parent directory; above /, the host list
 help-switch-panel = The other panel
 help-swap-panels = Swap the panels
@@ -117,6 +119,7 @@ help-dialog-end = In this help, the end
 help-next-field = Next field or button
 help-prev-field = Previous field or button
 help-confirm = Press the button with the focus
+help-toggle = Switch the check box, or press the button
 help-dialog-cancel = Cancel, or close this help
 help-field-home = Start of the text
 help-field-end = End of the text
@@ -126,3 +129,12 @@ help-field-delete-to-start = Delete to the start
 help-field-delete-to-end = Delete to the end
 help-note-esc = Esc 1 … Esc 0 stand for F1 … F10, and Esc followed by a key for Alt and the key, for terminals without them. A lone Esc acts after a second; Esc Esc at once.
 help-note-typing = Typing in a panel starts quick search.
+
+## Marking by pattern, + and - (src/tui/app). Prefix: pattern-. As in mc.
+
+# Dialog titles.
+pattern-select = Select
+pattern-unselect = Unselect
+# Check boxes: leave directories alone; tell upper and lower case apart.
+pattern-files-only = Files only
+pattern-case-sensitive = Case sensitive

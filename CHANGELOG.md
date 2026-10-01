@@ -60,3 +60,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Marks, as in mc: Insert or Ctrl-T marks or unmarks the entry under the cursor (Shift-Up and
   Shift-Down too), `*` inverts the marks on files, and the line below the listing shows the
   size and number of marked entries.
+- `+` marks and `-` unmarks the names that match a shell pattern such as `*.{jpg,png}`, with
+  mc's Files only and Case sensitive options. Dialogs can now have text fields and check
+  boxes; Space switches a check box.

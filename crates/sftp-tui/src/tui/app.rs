@@ -14,10 +14,11 @@ use tokio_util::sync::CancellationToken;
 
 use super::cells::{self, Align};
 use super::decor::Decor;
-use super::dialog::{Ask, Dialog, DialogEvent, Reply};
+use super::dialog::{Ask, Button, Dialog, DialogEvent, Reply};
 use super::help::Help;
 use super::keymap::{Action, Context, Keymap, Resolved};
 use super::panel::{Destination, HostState, HostStatus, ListRequest, Listed, Panel, View};
+use super::pattern::Pattern;
 use super::tasks::HostHandle;
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -91,12 +92,42 @@ impl Host {
     }
 }
 
-/// A dialog on screen or waiting for its turn, and where its answer goes.
+/// Width of the dialogs of `+` and `-`, as in mc.
+const PATTERN_DIALOG_WIDTH: u16 = 50;
+
+/// A dialog on screen or waiting for its turn, and what it is for.
 #[derive(Debug)]
 struct Open {
     dialog: Dialog,
-    /// `None` for a notice.
-    reply: Option<Reply>,
+    purpose: Purpose,
+}
+
+#[derive(Debug)]
+enum Purpose {
+    /// A prompt from ssh, or a notice, which has no `reply`.
+    Ssh { id: u64, reply: Option<Reply> },
+    /// `+` (`mark`) or `-` in the panel on `side`.
+    Pattern { side: Side, mark: bool },
+}
+
+/// What `+` and `-` asked for last; their dialogs start with it.
+#[derive(Debug, Clone)]
+struct PatternOptions {
+    pattern: String,
+    /// Leaves directories alone.
+    files_only: bool,
+    case_sensitive: bool,
+}
+
+impl Default for PatternOptions {
+    /// As in mc: case counts, and directories match too.
+    fn default() -> Self {
+        Self {
+            pattern: "*".to_owned(),
+            files_only: false,
+            case_sensitive: true,
+        }
+    }
 }
 
 /// What the TUI shows and whether it keeps running.
@@ -122,6 +153,7 @@ pub(crate) struct App {
     /// The first one is on screen and gets the keys; the others wait, so that a new prompt
     /// never takes the keys from a dialog in use.
     dialogs: VecDeque<Open>,
+    pattern_options: PatternOptions,
     /// Over the panels, under the dialogs.
     help: Option<Help>,
     keymap: Keymap,
@@ -155,6 +187,7 @@ impl App {
             failed: HashSet::new(),
             addresses: HashMap::new(),
             dialogs: VecDeque::new(),
+            pattern_options: PatternOptions::default(),
             help: None,
             keymap: Keymap::mc(),
             quit: false,
@@ -219,13 +252,23 @@ impl App {
 
     pub(crate) fn handle(&mut self, input: Resolved) -> Vec<Effect> {
         if let Some(open) = self.dialogs.front_mut() {
-            let answer = match open.dialog.handle(input) {
-                DialogEvent::Pending => return Vec::new(),
-                DialogEvent::Answer(text) => Some(text),
-                DialogEvent::Decline | DialogEvent::Close => None,
-            };
-            if let Some(reply) = self.dialogs.pop_front().and_then(|open| open.reply) {
-                reply.send(answer);
+            let event = open.dialog.handle(input);
+            if event == DialogEvent::Pending {
+                return Vec::new();
+            }
+            if let Some(Open { dialog, purpose }) = self.dialogs.pop_front() {
+                match purpose {
+                    Purpose::Ssh { reply, .. } => {
+                        if let Some(reply) = reply {
+                            reply.send(dialog.answer(event));
+                        }
+                    }
+                    Purpose::Pattern { side, mark } => {
+                        if event == DialogEvent::Pressed(Button::Ok) {
+                            self.mark_matching(side, mark, &dialog);
+                        }
+                    }
+                }
             }
             return Vec::new();
         }
@@ -290,6 +333,8 @@ impl App {
                     self.panel_mut(side).set_show_hidden(show);
                 }
             }
+            Action::Select => self.ask_pattern(true),
+            Action::Unselect => self.ask_pattern(false),
             Action::Cancel => self.cancel(self.active),
             Action::Disconnect => return self.disconnect(self.active),
             _ => {
@@ -300,6 +345,56 @@ impl App {
             }
         }
         Vec::new()
+    }
+
+    /// Opens the dialog of `+` (`mark`) or `-` for the active panel, as in mc: a pattern, and
+    /// whether it applies to files only and whether case counts.
+    fn ask_pattern(&mut self, mark: bool) {
+        if self.panel(self.active).shows_root() {
+            return;
+        }
+        let title = if mark {
+            fl!("pattern-select")
+        } else {
+            fl!("pattern-unselect")
+        };
+        let options = &self.pattern_options;
+        let checks = [
+            (fl!("pattern-files-only"), options.files_only),
+            (fl!("pattern-case-sensitive"), options.case_sensitive),
+        ];
+        let dialog = Dialog::form(&title, &options.pattern, &checks, PATTERN_DIALOG_WIDTH);
+        let side = self.active;
+        self.dialogs.push_back(Open {
+            dialog,
+            purpose: Purpose::Pattern { side, mark },
+        });
+    }
+
+    /// Marks, or unmarks, what the dialog of `+` or `-` asked for. An empty pattern does
+    /// nothing.
+    fn mark_matching(&mut self, side: Side, mark: bool, dialog: &Dialog) {
+        if dialog.text().is_empty() {
+            return;
+        }
+        let options = PatternOptions {
+            pattern: dialog.text().to_owned(),
+            files_only: dialog.checked(0),
+            case_sensitive: dialog.checked(1),
+        };
+        let fold = |text: &str| {
+            if options.case_sensitive {
+                text.to_owned()
+            } else {
+                text.to_lowercase()
+            }
+        };
+        let pattern = Pattern::new(&fold(&options.pattern));
+        self.panel_mut(side).mark_where(mark, |entry| {
+            !(options.files_only && entry.is_dir_like())
+                && pattern.matches(&fold(&entry.display_name()))
+        });
+        self.pattern_options = options;
     }
 
     /// Sends the panel on `side` to `destination`.
@@ -495,25 +590,29 @@ impl App {
 
     /// Queues a dialog for a question from ssh.
     pub(crate) fn ask(&mut self, ask: Ask) {
-        let dialog = Dialog::prompt(ask.id, &ask.context, &ask.message, ask.kind);
+        let dialog = Dialog::prompt(&ask.context, &ask.message, ask.kind);
         self.dialogs.push_back(Open {
             dialog,
-            reply: Some(ask.reply),
+            purpose: Purpose::Ssh {
+                id: ask.id,
+                reply: Some(ask.reply),
+            },
         });
     }
 
     /// Queues a dialog for information from ssh.
     pub(crate) fn notice(&mut self, id: u64, context: &str, message: &str) {
-        let dialog = Dialog::notice(id, context, message);
+        let dialog = Dialog::notice(context, message);
         self.dialogs.push_back(Open {
             dialog,
-            reply: None,
+            purpose: Purpose::Ssh { id, reply: None },
         });
     }
 
     /// Closes the dialog of a prompt or notice that ssh no longer waits for.
     pub(crate) fn prompt_closed(&mut self, id: u64) {
-        self.dialogs.retain(|open| open.dialog.id() != id);
+        self.dialogs
+            .retain(|open| !matches!(open.purpose, Purpose::Ssh { id: shown, .. } if shown == id));
     }
 
     /// Whether something on screen moves while time passes: a host that is connecting.
@@ -641,6 +740,13 @@ mod tests {
             },
             target_kind: None,
         }
+    }
+
+    fn file(name: &str, size: u64) -> DirEntry {
+        let mut entry = dir(name);
+        entry.metadata.kind = FileKind::File;
+        entry.metadata.size = Some(size);
+        entry
     }
 
     /// Settings with mc's markers, which read better in tests than icons.
@@ -858,6 +964,85 @@ mod tests {
                 ..
             }]
         ));
+    }
+
+    fn type_text(app: &mut App, text: &str) {
+        for c in text.chars() {
+            app.handle(Resolved::Insert(c));
+        }
+    }
+
+    #[test]
+    fn plus_and_minus_mark_and_unmark_by_pattern() {
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &ui());
+        let entries = vec![
+            file("a.md", 10),
+            file("B.MD", 20),
+            file("c.txt", 30),
+            dir("docs.md"),
+        ];
+        answer(&mut app, effects, &Listing::Dir(entries));
+
+        app.handle(action(Action::Select));
+        assert_eq!(app.context(), Context::DialogInput);
+        assert!(screen(&mut app).contains("Select"));
+        type_text(&mut app, "*.md");
+        app.handle(action(Action::Confirm));
+        assert_eq!(app.context(), Context::Panel);
+        let text = screen(&mut app);
+        assert!(text.contains(" 10 B in 2 files "), "case counts: {text}");
+
+        // The dialog opens with the last pattern; Case sensitive is the second box.
+        app.handle(action(Action::Select));
+        for step in [
+            Action::NextField,
+            Action::Down,
+            Action::Toggle,
+            Action::Confirm,
+        ] {
+            app.handle(action(step));
+        }
+        assert!(screen(&mut app).contains(" 30 B in 3 files "));
+
+        // `-` with Files only leaves the directory marked.
+        app.handle(action(Action::Unselect));
+        assert!(screen(&mut app).contains("Unselect"));
+        type_text(&mut app, "*");
+        for step in [Action::NextField, Action::Toggle, Action::Confirm] {
+            app.handle(action(step));
+        }
+        assert!(screen(&mut app).contains(" 0 B in 1 file "));
+
+        // Esc and an empty pattern change nothing.
+        app.handle(action(Action::Select));
+        type_text(&mut app, "c*");
+        app.handle(action(Action::Cancel));
+        app.handle(action(Action::Select));
+        app.handle(action(Action::DeleteToStart));
+        app.handle(action(Action::Confirm));
+        assert!(screen(&mut app).contains(" 0 B in 1 file "));
+        assert_eq!(app.pattern_options.pattern, "*");
+    }
+
+    #[test]
+    fn pattern_dialogs_wait_for_no_prompt_and_skip_the_root() {
+        let mut app = at_root();
+        app.handle(action(Action::Select));
+        assert_eq!(app.context(), Context::Root, "no names to match");
+
+        let mut app = loaded();
+        app.handle(action(Action::Select));
+        let (password, answer) = ask(1, PromptKind::Secret, "deploy@web's password: ");
+        app.ask(password);
+        app.prompt_closed(1);
+        assert_eq!(app.context(), Context::DialogInput);
+        assert!(
+            screen(&mut app).contains("Select"),
+            "the app's own dialog stays"
+        );
+        app.handle(action(Action::Cancel));
+        assert_eq!(app.context(), Context::Panel);
+        assert!(answer.try_recv().is_err(), "the prompt went with ssh");
     }
 
     #[test]

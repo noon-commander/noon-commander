@@ -37,9 +37,9 @@ impl Context {
     }
 
     /// Whether every character is text, even one that a fallback context binds: in quick
-    /// search, `*` is part of a name, not a command.
+    /// search, `*` is part of a name, not a command; in a text field, Space is a space.
     pub(crate) fn text_first(self) -> bool {
-        matches!(self, Self::QuickSearch)
+        matches!(self, Self::QuickSearch | Self::DialogInput)
     }
 
     /// Whether an unbound printable key becomes [`Resolved::Insert`](super::Resolved::Insert).
@@ -80,6 +80,10 @@ pub(crate) enum Action {
     /// Marks the files that are not marked and unmarks those that are; directories stay as
     /// they are.
     InvertMarks,
+    /// Asks for a pattern and marks the entries whose names match it.
+    Select,
+    /// Asks for a pattern and unmarks the entries whose names match it.
+    Unselect,
     /// Opens the parent directory; from `/`, the virtual root.
     Parent,
     /// Makes the other panel active.
@@ -116,6 +120,8 @@ pub(crate) enum Action {
     DeleteToEnd,
     /// Accepts the dialog, or activates the focused button.
     Confirm,
+    /// Switches the focused check box, or presses the focused button.
+    Toggle,
     /// Closes the dialog, ends quick search, or stops a pending listing or connection.
     Cancel,
     /// Moves the focus to the next field or button.
@@ -146,6 +152,8 @@ impl Action {
         Self::Mark,
         Self::MarkUp,
         Self::InvertMarks,
+        Self::Select,
+        Self::Unselect,
         Self::Parent,
         Self::SwitchPanel,
         Self::SwapPanels,
@@ -164,6 +172,7 @@ impl Action {
         Self::DeleteToStart,
         Self::DeleteToEnd,
         Self::Confirm,
+        Self::Toggle,
         Self::Cancel,
         Self::NextField,
         Self::PrevField,

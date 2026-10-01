@@ -1,5 +1,5 @@
-//! Modal dialogs for prompts from ssh: passwords and passphrases, host keys, confirmations,
-//! and notices.
+//! Modal dialogs: prompts from ssh (passwords and passphrases, host keys, confirmations, and
+//! notices) and the app's own questions.
 
 use std::fmt;
 
@@ -9,6 +9,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear};
 use secrecy::SecretString;
 use sftp_tui_ssh::askpass::PromptKind;
+use unicode_width::UnicodeWidthChar as _;
 use zeroize::Zeroizing;
 
 use super::cells;
@@ -54,7 +55,7 @@ pub(crate) struct Ask {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Button {
+pub(crate) enum Button {
     Ok,
     Cancel,
     Yes,
@@ -76,21 +77,38 @@ impl Button {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Focus {
     Field,
+    Check(usize),
     Button(usize),
 }
 
-/// A masked text field. The text lives in memory that is wiped when the field goes.
-struct SecretField {
+/// A text field. A secret one is masked, and its text lives in memory reserved up front and
+/// wiped when the field goes.
+struct Field {
     text: Zeroizing<String>,
     /// In characters.
     cursor: usize,
+    secret: bool,
+    /// Still the text the dialog opened with: typing replaces it, as in mc.
+    fresh: bool,
 }
 
-impl SecretField {
-    fn new() -> Self {
+impl Field {
+    fn secret() -> Self {
         Self {
             text: Zeroizing::new(String::with_capacity(SECRET_CAPACITY)),
             cursor: 0,
+            secret: true,
+            fresh: false,
+        }
+    }
+
+    /// A plain field that opens with `text`, the cursor at its end.
+    fn plain(text: &str) -> Self {
+        Self {
+            text: Zeroizing::new(text.to_owned()),
+            cursor: text.chars().count(),
+            secret: false,
+            fresh: !text.is_empty(),
         }
     }
 
@@ -107,8 +125,12 @@ impl SecretField {
     }
 
     fn insert(&mut self, c: char) {
-        // Growing would copy the text to new memory and leave the old one unwiped.
-        if self.text.len() + c.len_utf8() > self.text.capacity() {
+        if std::mem::take(&mut self.fresh) {
+            self.text.clear();
+            self.cursor = 0;
+        }
+        // Growing would copy the secret to new memory and leave the old one unwiped.
+        if self.secret && self.text.len() + c.len_utf8() > self.text.capacity() {
             return;
         }
         let offset = self.offset(self.cursor);
@@ -143,93 +165,169 @@ impl SecretField {
             Action::Backspace | Action::Delete => {}
             _ => return false,
         }
+        self.fresh = false;
         true
     }
 
-    fn secret(&self) -> SecretString {
-        // From `&str`: an exact copy, where `String` would be shrunk into new memory.
-        SecretString::from(self.text.as_str())
+    /// What fits in `room` cells, as shown (stars for a secret), from where the cursor stays
+    /// on screen, and the cursor's column in it.
+    fn visible(&self, room: usize) -> (String, usize) {
+        let chars: Vec<char> = if self.secret {
+            vec!['*'; self.chars()]
+        } else {
+            self.text.chars().collect()
+        };
+        let width = |c: char| c.width().unwrap_or(0);
+        // Back from the cursor while the text before it and the cursor itself fit.
+        let mut first = self.cursor;
+        let mut column = 0;
+        while first > 0 && column + width(chars[first - 1]) < room {
+            first -= 1;
+            column += width(chars[first]);
+        }
+        let mut used = 0;
+        let shown: String = chars[first..]
+            .iter()
+            .take_while(|&&c| {
+                used += width(c);
+                used <= room
+            })
+            .collect();
+        (cells::sanitize(shown.as_bytes()), column)
     }
 }
 
-impl fmt::Debug for SecretField {
+impl fmt::Debug for Field {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SecretField").finish_non_exhaustive()
+        let mut debug = f.debug_struct("Field");
+        if !self.secret {
+            debug.field("text", &self.text.as_str());
+        }
+        debug.finish_non_exhaustive()
     }
+}
+
+/// A check box.
+#[derive(Debug)]
+struct Check {
+    label: String,
+    on: bool,
 }
 
 /// What a key did to a dialog.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DialogEvent {
     /// The dialog stays open.
     Pending,
-    /// Accepted: the text of a secret prompt, or `yes`.
-    Answer(SecretString),
-    /// Declined: Cancel, No, or Esc on a prompt.
-    Decline,
-    /// Dismissed: OK on a notice.
-    Close,
+    /// A button was pressed: Enter in the field or on a check box presses the default one.
+    Pressed(Button),
+    /// Esc or F10.
+    Cancelled,
 }
 
-/// A modal dialog.
+/// A modal dialog: a message, a text field, check boxes, and buttons, each of them optional
+/// but the buttons. Whoever opens it reads the field and the check boxes once it closes.
 #[derive(Debug)]
 pub(crate) struct Dialog {
-    id: u64,
     title: String,
     message: String,
-    field: Option<SecretField>,
+    field: Option<Field>,
+    checks: Vec<Check>,
     buttons: Vec<Button>,
     /// The button that Enter in the field activates, and that starts with the focus otherwise;
     /// drawn as `[< … >]`, as in mc.
     default: usize,
     focus: Focus,
+    /// Widest the dialog gets, in cells, borders included.
+    width: u16,
 }
 
 impl Dialog {
     /// A dialog for a prompt of `kind`: a masked field with OK and Cancel for secrets, Yes and
     /// No (with the focus) for questions. `context` is the host alias.
-    pub(crate) fn prompt(id: u64, context: &str, message: &str, kind: PromptKind) -> Self {
+    pub(crate) fn prompt(context: &str, message: &str, kind: PromptKind) -> Self {
         match kind {
             PromptKind::Secret => Self {
-                field: Some(SecretField::new()),
+                field: Some(Field::secret()),
                 focus: Focus::Field,
-                ..Self::new(id, context, message, vec![Button::Ok, Button::Cancel])
+                ..Self::new(context, message, vec![Button::Ok, Button::Cancel])
             },
             PromptKind::HostKey | PromptKind::Confirm => Self {
                 default: 1,
                 focus: Focus::Button(1),
-                ..Self::new(id, context, message, vec![Button::Yes, Button::No])
+                ..Self::new(context, message, vec![Button::Yes, Button::No])
             },
         }
     }
 
     /// Information from ssh that needs no answer, such as a request to touch a security key.
-    pub(crate) fn notice(id: u64, context: &str, message: &str) -> Self {
-        Self::new(id, context, message, vec![Button::Ok])
+    pub(crate) fn notice(context: &str, message: &str) -> Self {
+        Self::new(context, message, vec![Button::Ok])
     }
 
-    fn new(id: u64, context: &str, message: &str, buttons: Vec<Button>) -> Self {
+    /// A text field that opens with `text`, check boxes with their labels and states, and OK
+    /// and Cancel, `width` cells wide.
+    pub(crate) fn form(title: &str, text: &str, checks: &[(String, bool)], width: u16) -> Self {
+        let checks = checks
+            .iter()
+            .map(|(label, on)| Check {
+                label: label.clone(),
+                on: *on,
+            })
+            .collect();
         Self {
-            id,
-            title: cells::sanitize(context.as_bytes()),
-            message: message.trim_end().to_owned(),
-            field: None,
-            buttons,
-            default: 0,
-            focus: Focus::Button(0),
+            field: Some(Field::plain(text)),
+            checks,
+            focus: Focus::Field,
+            width,
+            ..Self::new(title, "", vec![Button::Ok, Button::Cancel])
         }
     }
 
-    /// The askpass id of the prompt or notice.
-    pub(crate) fn id(&self) -> u64 {
-        self.id
+    fn new(title: &str, message: &str, buttons: Vec<Button>) -> Self {
+        Self {
+            title: cells::sanitize(title.as_bytes()),
+            message: message.trim_end().to_owned(),
+            field: None,
+            checks: Vec::new(),
+            buttons,
+            default: 0,
+            focus: Focus::Button(0),
+            width: MAX_WIDTH,
+        }
+    }
+
+    /// The answer for ssh after `event`: the secret for OK on a secret prompt, `yes` for Yes,
+    /// and `None` to decline.
+    pub(crate) fn answer(&self, event: DialogEvent) -> Option<SecretString> {
+        match (event, &self.field) {
+            (DialogEvent::Pressed(Button::Ok), Some(field)) => {
+                // From `&str`: an exact copy, where `String` would be shrunk into new memory.
+                Some(SecretString::from(field.text.as_str()))
+            }
+            (DialogEvent::Pressed(Button::Yes), _) => Some(SecretString::from("yes")),
+            _ => None,
+        }
+    }
+
+    /// The text of a plain field.
+    pub(crate) fn text(&self) -> &str {
+        match &self.field {
+            Some(field) if !field.secret => &field.text,
+            _ => "",
+        }
+    }
+
+    /// Whether check box `index` is checked.
+    pub(crate) fn checked(&self, index: usize) -> bool {
+        self.checks.get(index).is_some_and(|check| check.on)
     }
 
     /// The keymap context for the next key: `DialogInput` while the text field has the focus.
     pub(crate) fn context(&self) -> Context {
         match self.focus {
             Focus::Field => Context::DialogInput,
-            Focus::Button(_) => Context::Dialog,
+            Focus::Check(_) | Focus::Button(_) => Context::Dialog,
         }
     }
 
@@ -254,9 +352,19 @@ impl Dialog {
             (Resolved::Action(action), None) => action,
         };
         match action {
-            Action::Confirm => self.activate(),
-            Action::Cancel if self.buttons == [Button::Ok] => DialogEvent::Close,
-            Action::Cancel => DialogEvent::Decline,
+            Action::Confirm => match self.focus {
+                Focus::Button(index) => DialogEvent::Pressed(self.buttons[index]),
+                Focus::Field | Focus::Check(_) => DialogEvent::Pressed(self.buttons[self.default]),
+            },
+            Action::Toggle => match self.focus {
+                Focus::Check(index) => {
+                    self.checks[index].on = !self.checks[index].on;
+                    DialogEvent::Pending
+                }
+                Focus::Button(index) => DialogEvent::Pressed(self.buttons[index]),
+                Focus::Field => DialogEvent::Pending,
+            },
+            Action::Cancel => DialogEvent::Cancelled,
             Action::NextField | Action::Right | Action::Down => {
                 self.move_focus(true);
                 DialogEvent::Pending
@@ -269,27 +377,13 @@ impl Dialog {
         }
     }
 
-    /// What Enter does where the focus is.
-    fn activate(&self) -> DialogEvent {
-        let index = match self.focus {
-            Focus::Field => self.default,
-            Focus::Button(index) => index,
-        };
-        let button = self.buttons[index];
-        match (button, &self.field) {
-            (Button::Ok, Some(field)) => DialogEvent::Answer(field.secret()),
-            (Button::Ok, None) => DialogEvent::Close,
-            (Button::Yes, _) => DialogEvent::Answer(SecretString::from("yes")),
-            (Button::Cancel | Button::No, _) => DialogEvent::Decline,
-        }
-    }
-
-    /// Moves the focus through the field and the buttons, round.
+    /// Moves the focus through the field, the check boxes, and the buttons, round.
     fn move_focus(&mut self, forward: bool) {
         let stops: Vec<Focus> = self
             .field
             .iter()
             .map(|_| Focus::Field)
+            .chain((0..self.checks.len()).map(Focus::Check))
             .chain((0..self.buttons.len()).map(Focus::Button))
             .collect();
         let current = stops
@@ -302,14 +396,13 @@ impl Dialog {
 
     /// Draws the dialog centered in `area`, with the terminal cursor in the text field.
     pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        let width = MAX_WIDTH.min(area.width.saturating_sub(4)).max(20);
+        let width = self.width.min(area.width.saturating_sub(4)).max(20);
         let text_width = usize::from(width.saturating_sub(4));
         let lines = cells::wrap(&self.message, text_width);
-        let field_rows = u16::from(self.field.is_some());
-        let lines_rows = u16::try_from(lines.len()).unwrap_or(u16::MAX);
-        // Borders, the message, the field, a blank line, the buttons.
-        let height = lines_rows + field_rows + 4;
-        let inner = draw_box(frame, area, (width, height), &self.title, theme);
+        let rows = |count: usize| u16::try_from(count).unwrap_or(u16::MAX);
+        // Borders, the message, the field, the check boxes, a blank line, the buttons.
+        let height = rows(lines.len()) + u16::from(self.field.is_some()) + rows(self.checks.len());
+        let inner = draw_box(frame, area, (width, height + 4), &self.title, theme);
         let row = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
         let mut index = 0;
         for line in &lines {
@@ -322,16 +415,33 @@ impl Dialog {
         if let Some(field) = &self.field
             && index < inner.height
         {
-            // A bar of stars; the visible part follows the cursor.
             let room = usize::from(inner.width).max(1);
-            let first = field.cursor.saturating_sub(room - 1);
-            let shown = field.chars().saturating_sub(first).min(room);
-            let text = format!("{}{}", "*".repeat(shown), " ".repeat(room - shown));
-            frame.render_widget(Line::styled(text, theme.dialog_input), row(index));
+            let (text, column) = field.visible(room);
+            let style = if field.fresh {
+                theme.dialog_input_fresh
+            } else {
+                theme.dialog_input
+            };
+            let text = cells::fit(&text, room, cells::Align::Left);
+            frame.render_widget(Line::styled(text, style), row(index));
             if self.focus == Focus::Field {
-                let column = u16::try_from(field.cursor - first).unwrap_or(0);
+                let column = u16::try_from(column).unwrap_or(0);
                 frame.set_cursor_position(Position::new(inner.x + column, inner.y + index));
             }
+            index += 1;
+        }
+        for (number, check) in self.checks.iter().enumerate() {
+            if index >= inner.height {
+                return;
+            }
+            let mark = if check.on { 'x' } else { ' ' };
+            let text = format!("[{mark}] {}", check.label);
+            let style = if self.focus == Focus::Check(number) {
+                theme.dialog_button_focused
+            } else {
+                theme.dialog
+            };
+            frame.render_widget(Line::from(Span::styled(text, style)), row(index));
             index += 1;
         }
         if index + 1 < inner.height {
@@ -414,11 +524,13 @@ mod tests {
         }
     }
 
-    fn answer(event: DialogEvent) -> String {
-        match event {
-            DialogEvent::Answer(text) => text.expose_secret().to_owned(),
-            other => panic!("expected an answer, got {other:?}"),
-        }
+    /// Presses Enter and returns what ssh would get.
+    fn confirm(dialog: &mut Dialog) -> Option<String> {
+        let event = dialog.handle(action(Action::Confirm));
+        assert_ne!(event, DialogEvent::Pending);
+        dialog
+            .answer(event)
+            .map(|answer| answer.expose_secret().to_owned())
     }
 
     fn draw(dialog: &Dialog, width: u16, height: u16) -> Terminal<TestBackend> {
@@ -439,16 +551,16 @@ mod tests {
     }
 
     fn secret() -> Dialog {
-        Dialog::prompt(7, "web", "deploy@10.0.0.5's password: ", PromptKind::Secret)
+        Dialog::prompt("web", "deploy@10.0.0.5's password: ", PromptKind::Secret)
     }
 
     #[test]
     fn a_secret_prompt_answers_what_was_typed() {
         let mut dialog = secret();
-        assert_eq!(dialog.id(), 7);
         assert_eq!(dialog.context(), Context::DialogInput);
         typed(&mut dialog, "pässwd");
-        assert_eq!(answer(dialog.handle(action(Action::Confirm))), "pässwd");
+        assert_eq!(dialog.text(), "", "a secret is not text");
+        assert_eq!(confirm(&mut dialog).as_deref(), Some("pässwd"));
     }
 
     #[test]
@@ -462,7 +574,7 @@ mod tests {
         dialog.handle(action(Action::Delete));
         dialog.handle(action(Action::End));
         dialog.handle(action(Action::Backspace));
-        assert_eq!(answer(dialog.handle(action(Action::Confirm))), "Xbce");
+        assert_eq!(confirm(&mut dialog).as_deref(), Some("Xbce"));
 
         let mut dialog = secret();
         typed(&mut dialog, "abcdef");
@@ -470,17 +582,14 @@ mod tests {
         dialog.handle(action(Action::DeleteToEnd));
         dialog.handle(action(Action::Left));
         dialog.handle(action(Action::DeleteToStart));
-        assert_eq!(answer(dialog.handle(action(Action::Confirm))), "e");
+        assert_eq!(confirm(&mut dialog).as_deref(), Some("e"));
     }
 
     #[test]
     fn the_secret_field_never_grows_its_memory() {
         let mut dialog = secret();
         typed(&mut dialog, &"x".repeat(SECRET_CAPACITY + 10));
-        assert_eq!(
-            answer(dialog.handle(action(Action::Confirm))).len(),
-            SECRET_CAPACITY
-        );
+        assert_eq!(confirm(&mut dialog).unwrap().len(), SECRET_CAPACITY);
     }
 
     #[test]
@@ -490,39 +599,39 @@ mod tests {
         assert_eq!(dialog.context(), Context::Dialog);
         typed(&mut dialog, "ignored");
         dialog.handle(action(Action::NextField));
-        assert!(matches!(
+        assert_eq!(
             dialog.handle(action(Action::Confirm)),
-            DialogEvent::Decline
-        ));
+            DialogEvent::Pressed(Button::Cancel)
+        );
+        assert!(
+            dialog
+                .answer(DialogEvent::Pressed(Button::Cancel))
+                .is_none()
+        );
         dialog.handle(action(Action::NextField));
         assert_eq!(dialog.context(), Context::DialogInput, "round to the field");
-        assert_eq!(answer(dialog.handle(action(Action::Confirm))), "");
-        assert!(matches!(
+        assert_eq!(confirm(&mut dialog).as_deref(), Some(""));
+        assert_eq!(
             dialog.handle(action(Action::Cancel)),
-            DialogEvent::Decline
-        ));
+            DialogEvent::Cancelled
+        );
+        assert!(dialog.answer(DialogEvent::Cancelled).is_none());
     }
 
     #[test]
     fn questions_default_to_no() {
-        let mut dialog = Dialog::prompt(1, "web", "Continue? (yes/no)", PromptKind::HostKey);
+        let mut dialog = Dialog::prompt("web", "Continue? (yes/no)", PromptKind::HostKey);
         assert_eq!(dialog.context(), Context::Dialog);
-        assert!(matches!(
-            dialog.handle(action(Action::Confirm)),
-            DialogEvent::Decline
-        ));
+        assert_eq!(confirm(&mut dialog), None);
         dialog.handle(action(Action::Left));
-        assert_eq!(answer(dialog.handle(action(Action::Confirm))), "yes");
+        assert_eq!(confirm(&mut dialog).as_deref(), Some("yes"));
 
-        let mut notice = Dialog::notice(2, "web", "Confirm user presence for key");
-        assert!(matches!(
+        let mut notice = Dialog::notice("web", "Confirm user presence for key");
+        assert_eq!(
             notice.handle(action(Action::Cancel)),
-            DialogEvent::Close
-        ));
-        assert!(matches!(
-            notice.handle(action(Action::Confirm)),
-            DialogEvent::Close
-        ));
+            DialogEvent::Cancelled
+        );
+        assert_eq!(confirm(&mut notice), None);
     }
 
     #[test]
@@ -573,7 +682,96 @@ mod tests {
             ED25519 key fingerprint is SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU.\n\
             This key is not known by any other names.\x1b[2J\n\
             Are you sure you want to continue connecting (yes/no/[fingerprint])? ";
-        let dialog = Dialog::prompt(1, "web", message, PromptKind::HostKey);
+        let dialog = Dialog::prompt("web", message, PromptKind::HostKey);
         insta::assert_snapshot!(draw(&dialog, 60, 14).backend());
+    }
+
+    fn form() -> Dialog {
+        let checks = [
+            ("Files only".to_owned(), false),
+            ("Case sensitive".to_owned(), true),
+        ];
+        Dialog::form("Select", "*", &checks, 50)
+    }
+
+    #[test]
+    fn typing_replaces_the_text_a_form_opens_with() {
+        let mut dialog = form();
+        assert_eq!(dialog.context(), Context::DialogInput);
+        assert_eq!(dialog.text(), "*");
+        typed(&mut dialog, "*.txt");
+        assert_eq!(dialog.text(), "*.txt");
+        typed(&mut dialog, " x");
+        assert_eq!(dialog.text(), "*.txt x", "only the first key replaces it");
+
+        let mut dialog = form();
+        dialog.handle(action(Action::Home));
+        typed(&mut dialog, "a");
+        assert_eq!(dialog.text(), "a*", "an edit keeps it");
+    }
+
+    #[test]
+    fn check_boxes_switch_and_enter_presses_the_default_button() {
+        let mut dialog = form();
+        assert_eq!(dialog.handle(action(Action::Toggle)), DialogEvent::Pending);
+        dialog.handle(action(Action::NextField));
+        assert_eq!(dialog.context(), Context::Dialog);
+        dialog.handle(action(Action::Toggle));
+        dialog.handle(action(Action::Down));
+        dialog.handle(action(Action::Toggle));
+        assert!(dialog.checked(0));
+        assert!(!dialog.checked(1));
+        assert!(!dialog.checked(2), "no such box");
+        assert_eq!(
+            dialog.handle(action(Action::Confirm)),
+            DialogEvent::Pressed(Button::Ok)
+        );
+        dialog.handle(action(Action::NextField));
+        dialog.handle(action(Action::NextField));
+        assert_eq!(
+            dialog.handle(action(Action::Toggle)),
+            DialogEvent::Pressed(Button::Cancel),
+            "Space presses a button"
+        );
+        dialog.handle(action(Action::NextField));
+        assert_eq!(dialog.context(), Context::DialogInput, "round to the field");
+        assert_eq!(dialog.text(), "*");
+    }
+
+    #[test]
+    fn a_long_field_shows_the_part_around_its_cursor() {
+        let mut field = Field::plain("abcdefghij");
+        assert_eq!(field.visible(5), ("ghij".to_owned(), 4));
+        field.cursor = 0;
+        assert_eq!(field.visible(5), ("abcde".to_owned(), 0));
+        let wide = Field::plain("文件文件");
+        assert_eq!(wide.visible(5), ("文件".to_owned(), 4));
+        let mut secret = Field::secret();
+        for c in "hunter2".chars() {
+            secret.insert(c);
+        }
+        assert_eq!(secret.visible(4), ("***".to_owned(), 3));
+    }
+
+    #[test]
+    fn draws_a_form_with_its_check_boxes() {
+        let mut dialog = form();
+        typed(&mut dialog, "*.md");
+        dialog.handle(action(Action::NextField));
+        let terminal = draw(&dialog, 60, 10);
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn mc_classic_draws_the_opening_text_dimmed() {
+        use ratatui::style::Color;
+
+        let terminal = draw_themed(&form(), 60, 10, &Theme::mc_classic());
+        let buffer = terminal.backend().buffer();
+        // The dialog spans columns 5 … 54 and rows 1 … 7; the field is on row 2.
+        assert_eq!(
+            (buffer[(7, 2)].fg, buffer[(7, 2)].bg),
+            (Color::DarkGray, Color::Cyan)
+        );
     }
 }

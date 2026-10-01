@@ -380,6 +380,24 @@ impl Panel {
         }
     }
 
+    /// Marks, or unmarks, the shown entries for which `test` holds.
+    pub(crate) fn mark_where(&mut self, mark: bool, test: impl Fn(&DirEntry) -> bool) {
+        let Listing::Dir(entries) = &self.listing else {
+            return;
+        };
+        for &index in &self.shown {
+            let entry = &entries[index];
+            if !test(entry) {
+                continue;
+            }
+            if mark {
+                self.marked.insert(entry.name.clone());
+            } else {
+                self.marked.remove(&entry.name);
+            }
+        }
+    }
+
     /// How many entries are marked, and the bytes in the files among them.
     fn marked_total(&self) -> (usize, u64) {
         let Listing::Dir(entries) = &self.listing else {

@@ -1,0 +1,49 @@
+# cargo-deny configuration: https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-gnu",
+]
+all-features = true
+
+[advisories]
+ignore = []
+
+[licenses]
+# Every license here must be compatible with GPL-3.0-or-later.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.8
+unused-allowed-license = "allow"
+
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+deny = [
+    { crate = "libssh2-sys", reason = "sftp-tui drives the system OpenSSH client, see docs/adr/0001" },
+    { crate = "russh", reason = "sftp-tui drives the system OpenSSH client, see docs/adr/0001" },
+    { crate = "ssh2", reason = "sftp-tui drives the system OpenSSH client, see docs/adr/0001" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

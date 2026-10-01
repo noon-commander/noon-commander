@@ -1,0 +1,17 @@
+[package]
+name = "sftp-tui-ssh"
+description = "System OpenSSH integration for sftp-tui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[features]
+default = []
+# Allow port, agent, X11, and tunnel forwarding. Off by default; see docs/adr/0004.
+forwarding = []
+
+[lints]
+workspace = true

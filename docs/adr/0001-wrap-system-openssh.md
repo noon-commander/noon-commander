@@ -1,0 +1,32 @@
+# 0001. Wrap the system OpenSSH client
+
+- Status: Accepted
+- Date: 2026-10-01
+
+## Context
+
+sftp-tui needs SSH connections that behave exactly like the user's `ssh`: `~/.ssh/config` with
+`Host`, `Match`, `Include`, `ProxyJump`, and `ProxyCommand`; agents, FIDO keys, certificates, and
+Kerberos; `known_hosts`. SSH libraries such as russh and libssh2 reimplement subsets of this, and
+each needs its own configuration and authentication code.
+
+## Decision
+
+sftp-tui never implements SSH. It spawns the system OpenSSH client and speaks the SFTP protocol
+over the stdin and stdout of `ssh -s <host> sftp`.
+
+- The SFTP client library is `openssh-sftp-client`; its `Sftp::new` accepts any pipes. The
+  fallback is `russh-sftp`. Both sit behind our `SftpFs` adapter.
+- The `ssh` binary and extra arguments are configurable: `ssh.program`, `ssh.args`, and per-host
+  `args`.
+- OpenSSH 8.4 or newer is required, for `SSH_ASKPASS_REQUIRE` ([ADR 0003](0003-askpass-bridge.md)).
+- SSH implementation crates are banned in `deny.toml`.
+
+## Consequences
+
+- Everything the user's ssh setup supports works without code on our side.
+- We depend on the `ssh` command-line contract: argument syntax, exit codes, and stderr text.
+  Errors are less structured than with a library.
+- Process management (spawning, killing, cleanup) is our responsibility.
+- Windows is out of scope, because OpenSSH for Windows lacks `ControlMaster`
+  ([ADR 0002](0002-controlmaster-per-host.md)).

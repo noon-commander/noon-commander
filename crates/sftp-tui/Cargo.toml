@@ -1,0 +1,23 @@
+[package]
+name = "sftp-tui"
+description = "Midnight Commander-style SFTP file manager built on the system OpenSSH client"
+keywords = ["sftp", "ssh", "tui", "file-manager", "midnight-commander"]
+categories = ["command-line-utilities"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[features]
+default = []
+# Allow port, agent, X11, and tunnel forwarding. Off by default; see docs/adr/0004.
+forwarding = ["sftp-tui-ssh/forwarding"]
+
+[dependencies]
+clap.workspace = true
+sftp-tui-ssh.workspace = true
+
+[lints]
+workspace = true

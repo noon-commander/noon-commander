@@ -1,0 +1,12 @@
+[package]
+name = "sftp-tui-ops"
+description = "File operation engine for sftp-tui: copy, move, delete, mkdir jobs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true

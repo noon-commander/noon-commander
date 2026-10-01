@@ -1,4 +1,4 @@
-//! A panel that lists a directory of the local file system.
+//! A panel that lists the virtual root or a directory.
 
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt as _;
@@ -11,53 +11,84 @@ use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::Line;
 use ratatui::widgets::Block;
-use sftp_tui_vfs::{DirEntry, VfsError};
+use sftp_tui_vfs::{DirEntry, Location, RemotePath, VfsError};
 
 use super::cells::{self, Align, MTIME_WIDTH};
 use super::keymap::Action;
+use super::root::RootHost;
 use crate::i18n::fl;
 
 /// Width of the size column, as in mc.
 const SIZE_WIDTH: usize = 7;
 
-/// A request to list `path` for a panel; the reply must carry `generation`.
+/// Narrow panels drop columns to keep at least this many cells for names.
+const MIN_NAME_WIDTH: usize = 8;
+
+/// A request to list `location` for a panel; the reply must carry `generation`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ListRequest {
     pub(crate) generation: u64,
-    pub(crate) path: PathBuf,
+    pub(crate) location: Location,
+}
+
+/// The reply to a [`ListRequest`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Listing {
+    /// The hosts of the virtual root, which shows the local file system before them.
+    Root(Vec<RootHost>),
+    /// The entries of a directory, in any order.
+    Dir(Vec<DirEntry>),
 }
 
 /// Which row gets the cursor once a listing arrives.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Focus {
+    /// The first row: `..`, or the local file system in the virtual root.
     First,
     /// The entry with this name, or the first row if it is gone.
     Name(Vec<u8>),
+    /// The host with this alias, or the first row if it is gone.
+    Host(String),
+}
+
+impl Focus {
+    fn matches(&self, row: Row<'_>) -> bool {
+        match (self, row) {
+            (Self::Name(name), Row::Entry(entry)) => entry.name == *name,
+            (Self::Host(alias), Row::Host(host)) => host.alias == *alias,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug)]
 struct Pending {
     generation: u64,
-    path: PathBuf,
+    location: Location,
     focus: Focus,
 }
 
 /// A row of the listing.
 #[derive(Debug, Clone, Copy)]
 enum Row<'a> {
-    /// `..`, the parent directory.
+    /// `..`: the parent directory, or the virtual root from `/`.
     Parent,
     Entry(&'a DirEntry),
+    /// The local file system, first in the virtual root.
+    Local,
+    Host(&'a RootHost),
 }
 
-/// One directory listing with a cursor.
+/// One listing with a cursor.
 #[derive(Debug)]
 pub(crate) struct Panel {
-    /// The directory shown; a requested one replaces it once its listing arrives.
-    path: PathBuf,
-    /// Directories first, then by name.
-    entries: Vec<DirEntry>,
-    /// Row under the cursor; row 0 is `..` unless the directory is `/`.
+    /// What is shown; a requested location replaces it once its listing arrives.
+    location: Location,
+    /// Directories first, then by name; hosts in config order.
+    listing: Listing,
+    /// Where the local file system opens from the virtual root.
+    home: PathBuf,
+    /// Row under the cursor; row 0 is `..`, or the local file system in the virtual root.
     cursor: usize,
     /// First row on screen.
     offset: usize,
@@ -69,11 +100,17 @@ pub(crate) struct Panel {
 }
 
 impl Panel {
-    /// A panel for `path`, and the request for its first listing.
-    pub(crate) fn new(path: PathBuf) -> (Self, ListRequest) {
+    /// A panel for `location`, and the request for its first listing. From the virtual root,
+    /// the local file system opens at `home`.
+    pub(crate) fn new(location: Location, home: PathBuf) -> (Self, ListRequest) {
+        let listing = match location {
+            Location::Root => Listing::Root(Vec::new()),
+            Location::Local(_) | Location::Remote { .. } => Listing::Dir(Vec::new()),
+        };
         let mut panel = Self {
-            path: path.clone(),
-            entries: Vec::new(),
+            location: location.clone(),
+            listing,
+            home,
             cursor: 0,
             offset: 0,
             page: 1,
@@ -81,27 +118,27 @@ impl Panel {
             pending: None,
             error: None,
         };
-        let request = panel.open(path, Focus::First);
+        let request = panel.open(location, Focus::First);
         (panel, request)
     }
 
-    fn open(&mut self, path: PathBuf, focus: Focus) -> ListRequest {
+    fn open(&mut self, location: Location, focus: Focus) -> ListRequest {
         self.generation += 1;
         self.error = None;
         self.pending = Some(Pending {
             generation: self.generation,
-            path: path.clone(),
+            location: location.clone(),
             focus,
         });
         ListRequest {
             generation: self.generation,
-            path,
+            location,
         }
     }
 
     /// Takes the reply to a [`ListRequest`]; replies to older requests are dropped. On error the
-    /// panel keeps showing its directory and reports the error below the listing.
-    pub(crate) fn listed(&mut self, generation: u64, result: Result<Vec<DirEntry>, VfsError>) {
+    /// panel keeps showing what it showed and reports the error below the listing.
+    pub(crate) fn listed(&mut self, generation: u64, result: Result<Listing, VfsError>) {
         let Some(pending) = self
             .pending
             .take_if(|pending| pending.generation == generation)
@@ -109,36 +146,40 @@ impl Panel {
             return;
         };
         match result {
-            Ok(mut entries) => {
-                entries.sort_by_cached_key(|entry| {
-                    let name = String::from_utf8_lossy(&entry.name).to_lowercase();
-                    (!entry.is_dir_like(), name, entry.name.clone())
-                });
-                self.path = pending.path;
-                self.entries = entries;
+            Ok(mut listing) => {
+                if let Listing::Dir(entries) = &mut listing {
+                    entries.sort_by_cached_key(|entry| {
+                        let name = String::from_utf8_lossy(&entry.name).to_lowercase();
+                        (!entry.is_dir_like(), name, entry.name.clone())
+                    });
+                }
+                self.location = pending.location;
+                self.listing = listing;
                 self.offset = 0;
-                self.cursor = match pending.focus {
-                    Focus::First => 0,
-                    Focus::Name(name) => (0..self.rows())
-                        .find(|&row| matches!(self.row(row), Some(Row::Entry(entry)) if entry.name == name))
-                        .unwrap_or(0),
-                };
+                self.cursor = (0..self.rows())
+                    .find(|&index| {
+                        self.row(index)
+                            .is_some_and(|row| pending.focus.matches(row))
+                    })
+                    .unwrap_or(0);
             }
             Err(error) => {
-                // The title shows the directory, so a subdirectory needs only its name.
-                let shown = pending
-                    .path
-                    .strip_prefix(&self.path)
-                    .ok()
-                    .filter(|relative| !relative.as_os_str().is_empty())
-                    .unwrap_or(&pending.path);
-                let path = cells::sanitize(shown.as_os_str().as_bytes());
-                self.error = Some(fl!("panel-error", path = path, reason = describe(&error)));
+                let shown = match (&pending.location, &self.location) {
+                    // The title shows the directory, so a subdirectory needs only its name.
+                    (Location::Local(path), Location::Local(current)) => path
+                        .strip_prefix(current)
+                        .ok()
+                        .filter(|relative| !relative.as_os_str().is_empty())
+                        .map(|relative| cells::sanitize(relative.as_os_str().as_bytes())),
+                    _ => None,
+                };
+                let shown = shown.unwrap_or_else(|| location_text(&pending.location));
+                self.error = Some(fl!("panel-error", path = shown, reason = describe(&error)));
             }
         }
     }
 
-    /// Moves the cursor or opens a directory. Returns the listing to request, if any.
+    /// Moves the cursor or opens a directory or host. Returns the listing to request, if any.
     pub(crate) fn handle(&mut self, action: Action) -> Option<ListRequest> {
         let last = self.rows().saturating_sub(1);
         let page = self.page.max(1);
@@ -152,51 +193,73 @@ impl Panel {
             Action::Enter => match self.row(self.cursor)? {
                 Row::Parent => return self.open_parent(),
                 Row::Entry(entry) if entry.is_dir_like() => {
-                    let path = self.path.join(OsStr::from_bytes(&entry.name));
-                    return Some(self.open(path, Focus::First));
+                    let location = child(&self.location, &entry.name)?;
+                    return Some(self.open(location, Focus::First));
                 }
                 Row::Entry(_) => {}
+                Row::Local => {
+                    let location = Location::Local(self.home.clone());
+                    return Some(self.open(location, Focus::First));
+                }
+                Row::Host(host) => {
+                    let location = Location::Remote {
+                        host: host.alias.clone(),
+                        path: RemotePath::from(""),
+                    };
+                    return Some(self.open(location, Focus::First));
+                }
             },
             Action::Parent => return self.open_parent(),
             Action::Reload => {
                 let focus = match self.row(self.cursor) {
                     Some(Row::Entry(entry)) => Focus::Name(entry.name.clone()),
+                    Some(Row::Host(host)) => Focus::Host(host.alias.clone()),
                     _ => Focus::First,
                 };
-                return Some(self.open(self.path.clone(), focus));
+                return Some(self.open(self.location.clone(), focus));
             }
             _ => {}
         }
         None
     }
 
-    /// Opens the parent directory with the cursor on the directory it came from.
+    /// Opens the parent with the cursor on the directory it came from, or on its host or the
+    /// local file system in the virtual root.
     fn open_parent(&mut self) -> Option<ListRequest> {
-        let parent = self.path.parent()?.to_path_buf();
-        let focus = self
-            .path
-            .file_name()
-            .map_or(Focus::First, |name| Focus::Name(name.as_bytes().to_vec()));
+        let parent = self.location.parent();
+        let focus = match (&self.location, &parent) {
+            (Location::Root, _) => return None,
+            (Location::Local(_), Location::Root) => Focus::First,
+            (Location::Remote { host, .. }, Location::Root) => Focus::Host(host.clone()),
+            (Location::Local(path), _) => path
+                .file_name()
+                .map_or(Focus::First, |name| Focus::Name(name.as_bytes().to_vec())),
+            (Location::Remote { path, .. }, _) => path
+                .file_name()
+                .map_or(Focus::First, |name| Focus::Name(name.to_vec())),
+        };
         Some(self.open(parent, focus))
     }
 
-    fn has_parent(&self) -> bool {
-        self.path.parent().is_some()
-    }
-
+    /// Both kinds of listing have one row before their entries: `..` or the local file system.
     fn rows(&self) -> usize {
-        self.entries.len() + usize::from(self.has_parent())
-    }
-
-    fn row(&self, index: usize) -> Option<Row<'_>> {
-        match index.checked_sub(usize::from(self.has_parent())) {
-            None => Some(Row::Parent),
-            Some(index) => self.entries.get(index).map(Row::Entry),
+        1 + match &self.listing {
+            Listing::Root(hosts) => hosts.len(),
+            Listing::Dir(entries) => entries.len(),
         }
     }
 
-    /// Draws the panel: the directory in the frame, column headers, the rows, and a status
-    /// line with the name under the cursor, the loading state, or the last error.
+    fn row(&self, index: usize) -> Option<Row<'_>> {
+        match (&self.listing, index.checked_sub(1)) {
+            (Listing::Root(_), None) => Some(Row::Local),
+            (Listing::Root(hosts), Some(index)) => hosts.get(index).map(Row::Host),
+            (Listing::Dir(_), None) => Some(Row::Parent),
+            (Listing::Dir(entries), Some(index)) => entries.get(index).map(Row::Entry),
+        }
+    }
+
+    /// Draws the panel: the location in the frame, column headers, the rows, and a status line
+    /// with the name under the cursor, the loading state, or the last error.
     pub(crate) fn render(
         &mut self,
         frame: &mut Frame<'_>,
@@ -206,7 +269,7 @@ impl Panel {
         tz: &TimeZone,
     ) {
         let reversed = Style::new().reversed();
-        let mut title = cells::sanitize(self.path.as_os_str().as_bytes());
+        let mut title = location_text(&self.location);
         let room = usize::from(area.width.saturating_sub(4));
         if cells::width(&title) > room {
             title = cells::fit(&title, room, Align::Left);
@@ -219,44 +282,26 @@ impl Panel {
         if inner.height < 3 || inner.width < 2 {
             return;
         }
-        let columns = Columns::for_width(usize::from(inner.width));
+        let width = usize::from(inner.width);
         let list_height = usize::from(inner.height - 3);
         self.page = list_height;
         self.scroll(list_height);
 
+        let columns = match &self.listing {
+            Listing::Dir(_) => Columns::Dir(DirColumns::for_width(width)),
+            Listing::Root(hosts) => Columns::Root(RootColumns::for_width(width, hosts)),
+        };
         let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
-        let header = columns.line(
-            &fl!("panel-name"),
-            &fl!("panel-size"),
-            &fl!("panel-time"),
-            Align::Center,
-        );
-        frame.render_widget(Line::raw(header), line(inner.y));
+        frame.render_widget(Line::raw(columns.header()), line(inner.y));
         for (screen_row, index) in (self.offset..self.rows()).take(list_height).enumerate() {
             let Some(row) = self.row(index) else { break };
-            let (name, size, time) = match row {
-                Row::Parent => ("..".to_owned(), fl!("panel-up-dir"), String::new()),
-                Row::Entry(entry) => (
-                    cells::sanitize(&entry.name),
-                    if entry.is_dir_like() {
-                        fl!("panel-dir")
-                    } else {
-                        entry
-                            .metadata
-                            .size
-                            .map_or_else(String::new, |size| cells::size(size, SIZE_WIDTH))
-                    },
-                    cells::mtime(entry.metadata.modified, now, tz),
-                ),
-            };
-            let text = columns.row(&name, &size, &time);
             let style = if active && index == self.cursor {
                 reversed
             } else {
                 Style::new()
             };
             let y = inner.y + 1 + u16::try_from(screen_row).unwrap_or(u16::MAX);
-            frame.render_widget(Line::styled(text, style), line(y));
+            frame.render_widget(Line::styled(columns.row(row, now, tz), style), line(y));
         }
 
         let separator_y = inner.bottom() - 2;
@@ -276,10 +321,13 @@ impl Panel {
             match self.row(self.cursor) {
                 Some(Row::Parent) => "..".to_owned(),
                 Some(Row::Entry(entry)) => cells::sanitize(&entry.name),
+                // Where it opens, and the alias that a label stands for.
+                Some(Row::Local) => cells::sanitize(self.home.as_os_str().as_bytes()),
+                Some(Row::Host(host)) => cells::sanitize(host.alias.as_bytes()),
                 None => String::new(),
             }
         };
-        let status = cells::fit(&status, usize::from(inner.width), Align::Left);
+        let status = cells::fit(&status, width, Align::Left);
         frame.render_widget(Line::raw(status), line(inner.bottom() - 1));
     }
 
@@ -296,21 +344,75 @@ impl Panel {
     }
 }
 
-/// Column widths of the listing: the name takes what the size and time columns leave, and
+/// How rows become text: the columns of a directory or of the virtual root.
+#[derive(Debug, Clone, Copy)]
+enum Columns {
+    Dir(DirColumns),
+    Root(RootColumns),
+}
+
+impl Columns {
+    fn header(self) -> String {
+        let name = fl!("panel-name");
+        match self {
+            Self::Dir(columns) => columns.join(
+                &name,
+                &fl!("panel-size"),
+                &fl!("panel-time"),
+                [Align::Center; 3],
+            ),
+            Self::Root(columns) => columns.join(&name, &fl!("root-address"), [Align::Center; 2]),
+        }
+    }
+
+    fn row(self, row: Row<'_>, now: SystemTime, tz: &TimeZone) -> String {
+        const DIR: [Align; 3] = [Align::Left, Align::Right, Align::Left];
+        match (self, row) {
+            (Self::Dir(columns), Row::Parent) => columns.join("..", &fl!("panel-up-dir"), "", DIR),
+            (Self::Dir(columns), Row::Entry(entry)) => {
+                let size = if entry.is_dir_like() {
+                    fl!("panel-dir")
+                } else {
+                    entry
+                        .metadata
+                        .size
+                        .map_or_else(String::new, |size| cells::size(size, SIZE_WIDTH))
+                };
+                let time = cells::mtime(entry.metadata.modified, now, tz);
+                columns.join(&cells::sanitize(&entry.name), &size, &time, DIR)
+            }
+            (Self::Root(columns), Row::Local) => {
+                columns.join(&fl!("root-local"), "~", [Align::Left; 2])
+            }
+            (Self::Root(columns), Row::Host(host)) => {
+                let name = host.label.as_deref().unwrap_or(&host.alias);
+                let address = host.address.as_deref().unwrap_or_default();
+                columns.join(
+                    &cells::sanitize(name.as_bytes()),
+                    &cells::sanitize(address.as_bytes()),
+                    [Align::Left; 2],
+                )
+            }
+            // A listing has only rows of its own kind.
+            (Self::Dir(_), Row::Local | Row::Host(_))
+            | (Self::Root(_), Row::Parent | Row::Entry(_)) => String::new(),
+        }
+    }
+}
+
+/// Column widths of a directory: the name takes what the size and time columns leave, and
 /// narrow panels drop the time, then the size.
 #[derive(Debug, Clone, Copy)]
-struct Columns {
+struct DirColumns {
     name: usize,
     size: bool,
     time: bool,
 }
 
-impl Columns {
-    const MIN_NAME: usize = 8;
-
+impl DirColumns {
     fn for_width(width: usize) -> Self {
         let full = width.saturating_sub(SIZE_WIDTH + MTIME_WIDTH + 2);
-        if full >= Self::MIN_NAME {
+        if full >= MIN_NAME_WIDTH {
             return Self {
                 name: full,
                 size: true,
@@ -318,7 +420,7 @@ impl Columns {
             };
         }
         let sized = width.saturating_sub(SIZE_WIDTH + 1);
-        if sized >= Self::MIN_NAME {
+        if sized >= MIN_NAME_WIDTH {
             return Self {
                 name: sized,
                 size: true,
@@ -332,34 +434,92 @@ impl Columns {
         }
     }
 
-    fn line(self, name: &str, size: &str, time: &str, align: Align) -> String {
-        let mut text = cells::fit(name, self.name, align);
+    fn join(self, name: &str, size: &str, time: &str, align: [Align; 3]) -> String {
+        let mut text = cells::fit(name, self.name, align[0]);
         if self.size {
             text.push('│');
-            text.push_str(&cells::fit(size, SIZE_WIDTH, align));
+            text.push_str(&cells::fit(size, SIZE_WIDTH, align[1]));
         }
         if self.time {
             text.push('│');
-            text.push_str(&cells::fit(time, MTIME_WIDTH, align));
-        }
-        text
-    }
-
-    fn row(self, name: &str, size: &str, time: &str) -> String {
-        let mut text = cells::fit(name, self.name, Align::Left);
-        if self.size {
-            text.push('│');
-            text.push_str(&cells::fit(size, SIZE_WIDTH, Align::Right));
-        }
-        if self.time {
-            text.push('│');
-            text.push_str(&cells::fit(time, MTIME_WIDTH, Align::Left));
+            text.push_str(&cells::fit(time, MTIME_WIDTH, align[2]));
         }
         text
     }
 }
 
-/// Why a directory could not be listed, for the status line.
+/// Column widths of the virtual root: the address column fits the longest address, up to half
+/// the width, and the name takes the rest; narrow panels drop the address.
+#[derive(Debug, Clone, Copy)]
+struct RootColumns {
+    name: usize,
+    address: Option<usize>,
+}
+
+impl RootColumns {
+    fn for_width(width: usize, hosts: &[RootHost]) -> Self {
+        let address = hosts
+            .iter()
+            .filter_map(|host| host.address.as_deref())
+            .map(|address| cells::width(&cells::sanitize(address.as_bytes())))
+            .chain([cells::width(&fl!("root-address"))])
+            .max()
+            .unwrap_or(0)
+            .min(width / 2);
+        let name = width.saturating_sub(address + 1);
+        if name >= MIN_NAME_WIDTH {
+            Self {
+                name,
+                address: Some(address),
+            }
+        } else {
+            Self {
+                name: width,
+                address: None,
+            }
+        }
+    }
+
+    fn join(self, name: &str, address: &str, align: [Align; 2]) -> String {
+        let mut text = cells::fit(name, self.name, align[0]);
+        if let Some(width) = self.address {
+            text.push('│');
+            text.push_str(&cells::fit(address, width, align[1]));
+        }
+        text
+    }
+}
+
+/// The directory `name` in `location`.
+fn child(location: &Location, name: &[u8]) -> Option<Location> {
+    match location {
+        Location::Root => None,
+        Location::Local(path) => Some(Location::Local(path.join(OsStr::from_bytes(name)))),
+        Location::Remote { host, path } => Some(Location::Remote {
+            host: host.clone(),
+            path: path.join(name),
+        }),
+    }
+}
+
+/// A location for the title and messages: a local path, `host:path`, only `host` for the
+/// remote home directory, or the title of the virtual root.
+fn location_text(location: &Location) -> String {
+    match location {
+        Location::Root => fl!("root-title"),
+        Location::Local(path) => cells::sanitize(path.as_os_str().as_bytes()),
+        Location::Remote { host, path } => {
+            let mut text = host.as_bytes().to_vec();
+            if !path.as_bytes().is_empty() {
+                text.push(b':');
+                text.extend_from_slice(path.as_bytes());
+            }
+            cells::sanitize(&text)
+        }
+    }
+}
+
+/// Why a location could not be listed, for the status line.
 fn describe(error: &VfsError) -> String {
     match error {
         VfsError::NotFound(_) => fl!("error-not-found"),
@@ -371,6 +531,7 @@ fn describe(error: &VfsError) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::io;
     use std::time::{Duration, UNIX_EPOCH};
 
     use ratatui::Terminal;
@@ -381,6 +542,8 @@ mod tests {
 
     /// 2023-11-14 22:13:20 UTC.
     const NOW: u64 = 1_700_000_000;
+
+    const HOME: &str = "/home/me";
 
     fn entry(name: &str, kind: FileKind, size: u64) -> DirEntry {
         DirEntry {
@@ -415,11 +578,47 @@ mod tests {
         ]
     }
 
-    /// A panel on `path` whose first listing arrived.
-    fn loaded(path: &str, entries: Vec<DirEntry>) -> Panel {
-        let (mut panel, request) = Panel::new(PathBuf::from(path));
-        panel.listed(request.generation, Ok(entries));
+    fn host(alias: &str, label: Option<&str>, address: Option<&str>) -> RootHost {
+        RootHost {
+            alias: alias.to_owned(),
+            label: label.map(str::to_owned),
+            address: address.map(str::to_owned),
+        }
+    }
+
+    /// Hosts in config order, which the root keeps.
+    fn hosts() -> Vec<RootHost> {
+        vec![
+            host("web", Some("Prod"), Some("deploy@10.0.0.5")),
+            host("db", None, None),
+            host("staging", None, Some("ubuntu@stg.example.org:2222")),
+        ]
+    }
+
+    fn local(path: &str) -> Location {
+        Location::Local(PathBuf::from(path))
+    }
+
+    fn remote(host: &str, path: &str) -> Location {
+        Location::Remote {
+            host: host.to_owned(),
+            path: RemotePath::from(path),
+        }
+    }
+
+    /// A panel on `location` whose first listing arrived.
+    fn loaded_at(location: Location, listing: Listing) -> Panel {
+        let (mut panel, request) = Panel::new(location, PathBuf::from(HOME));
+        panel.listed(request.generation, Ok(listing));
         panel
+    }
+
+    fn loaded(path: &str, entries: Vec<DirEntry>) -> Panel {
+        loaded_at(local(path), Listing::Dir(entries))
+    }
+
+    fn root() -> Panel {
+        loaded_at(Location::Root, Listing::Root(hosts()))
     }
 
     fn names(panel: &Panel) -> Vec<String> {
@@ -427,6 +626,8 @@ mod tests {
             .map(|row| match panel.row(row) {
                 Some(Row::Parent) => "..".to_owned(),
                 Some(Row::Entry(entry)) => entry.display_name().into_owned(),
+                Some(Row::Local) => "<local>".to_owned(),
+                Some(Row::Host(host)) => host.alias.clone(),
                 None => unreachable!(),
             })
             .collect()
@@ -461,8 +662,6 @@ mod tests {
             ]
         );
         assert_eq!(panel.cursor, 0);
-        let root = loaded("/", listing());
-        assert_eq!(names(&root)[0], "alpha-link", "no `..` in /");
     }
 
     #[test]
@@ -484,8 +683,8 @@ mod tests {
         panel.handle(Action::End);
         assert_eq!(under_cursor(&panel), "zeta.txt");
 
-        let mut empty = loaded("/", Vec::new());
-        for action in [Action::Down, Action::End, Action::PageDown, Action::Enter] {
+        let mut empty = loaded("/srv", Vec::new());
+        for action in [Action::Down, Action::End, Action::PageDown] {
             assert_eq!(empty.handle(action), None);
             assert_eq!(empty.cursor, 0);
         }
@@ -496,13 +695,11 @@ mod tests {
         let mut panel = loaded("/srv", listing());
         panel.handle(Action::Down);
         let request = panel.handle(Action::Enter).unwrap();
-        assert_eq!(request.path, PathBuf::from("/srv/alpha-link"));
+        assert_eq!(request.location, local("/srv/alpha-link"));
         assert_eq!(request.generation, 2);
-        panel.listed(
-            request.generation,
-            Ok(vec![entry("inside", FileKind::File, 1)]),
-        );
-        assert_eq!(panel.path, PathBuf::from("/srv/alpha-link"));
+        let inside = vec![entry("inside", FileKind::File, 1)];
+        panel.listed(request.generation, Ok(Listing::Dir(inside)));
+        assert_eq!(panel.location, local("/srv/alpha-link"));
         assert_eq!(names(&panel), ["..", "inside"]);
 
         panel.handle(Action::End);
@@ -513,17 +710,60 @@ mod tests {
     fn going_up_puts_the_cursor_on_the_directory_left() {
         let mut panel = loaded("/srv/bin", vec![entry("tool", FileKind::File, 1)]);
         let request = panel.handle(Action::Parent).unwrap();
-        assert_eq!(request.path, PathBuf::from("/srv"));
-        panel.listed(request.generation, Ok(listing()));
+        assert_eq!(request.location, local("/srv"));
+        panel.listed(request.generation, Ok(Listing::Dir(listing())));
         assert_eq!(under_cursor(&panel), "bin");
 
         // Enter on `..` does the same.
         panel.handle(Action::Home);
         let request = panel.handle(Action::Enter).unwrap();
-        assert_eq!(request.path, PathBuf::from("/"));
-        panel.listed(request.generation, Ok(vec![entry("srv", FileKind::Dir, 1)]));
+        assert_eq!(request.location, local("/"));
+        let srv = vec![entry("srv", FileKind::Dir, 1)];
+        panel.listed(request.generation, Ok(Listing::Dir(srv)));
         assert_eq!(under_cursor(&panel), "srv");
-        assert_eq!(panel.handle(Action::Parent), None, "/ has no parent");
+    }
+
+    #[test]
+    fn above_slash_is_the_root_with_local_first_and_hosts_in_config_order() {
+        let mut panel = loaded("/", vec![entry("srv", FileKind::Dir, 1)]);
+        assert_eq!(names(&panel), ["..", "srv"]);
+        let request = panel.handle(Action::Parent).unwrap();
+        assert_eq!(request.location, Location::Root);
+        panel.listed(request.generation, Ok(Listing::Root(hosts())));
+        assert_eq!(names(&panel), ["<local>", "web", "db", "staging"]);
+        assert_eq!(under_cursor(&panel), "<local>", "the file system just left");
+        assert_eq!(panel.handle(Action::Parent), None, "the root is the top");
+
+        let request = panel.handle(Action::Enter).unwrap();
+        assert_eq!(
+            request.location,
+            local(HOME),
+            "the local file system opens at home"
+        );
+    }
+
+    #[test]
+    fn hosts_open_their_home_directory_and_lead_back_to_themselves() {
+        let mut panel = root();
+        panel.handle(Action::End);
+        let request = panel.handle(Action::Enter).unwrap();
+        assert_eq!(request.location, remote("staging", ""));
+        let unsupported = VfsError::Io(io::ErrorKind::Unsupported.into());
+        panel.listed(request.generation, Err(unsupported));
+        assert_eq!(panel.location, Location::Root);
+        assert_eq!(
+            panel.error.as_deref(),
+            Some("Cannot open staging: unsupported")
+        );
+
+        let mut panel = loaded_at(remote("db", "/srv"), Listing::Dir(Vec::new()));
+        let request = panel.handle(Action::Parent).unwrap();
+        assert_eq!(request.location, remote("db", "/"));
+        panel.listed(request.generation, Ok(Listing::Dir(listing())));
+        let request = panel.handle(Action::Parent).unwrap();
+        assert_eq!(request.location, Location::Root);
+        panel.listed(request.generation, Ok(Listing::Root(hosts())));
+        assert_eq!(under_cursor(&panel), "db");
     }
 
     #[test]
@@ -531,18 +771,26 @@ mod tests {
         let mut panel = loaded("/srv", listing());
         panel.handle(Action::End);
         let request = panel.handle(Action::Reload).unwrap();
-        assert_eq!(request.path, PathBuf::from("/srv"));
+        assert_eq!(request.location, local("/srv"));
         let mut changed = listing();
         changed.push(entry("new.txt", FileKind::File, 1));
-        panel.listed(request.generation, Ok(changed));
+        panel.listed(request.generation, Ok(Listing::Dir(changed)));
         assert_eq!(under_cursor(&panel), "zeta.txt");
 
         let request = panel.handle(Action::Reload).unwrap();
-        panel.listed(
-            request.generation,
-            Ok(vec![entry("other", FileKind::File, 1)]),
-        );
+        let other = vec![entry("other", FileKind::File, 1)];
+        panel.listed(request.generation, Ok(Listing::Dir(other)));
         assert_eq!(panel.cursor, 0, "the entry is gone");
+
+        let mut root = root();
+        root.handle(Action::Down);
+        root.handle(Action::Down);
+        let request = root.handle(Action::Reload).unwrap();
+        assert_eq!(request.location, Location::Root);
+        let mut reordered = hosts();
+        reordered.reverse();
+        root.listed(request.generation, Ok(Listing::Root(reordered)));
+        assert_eq!(under_cursor(&root), "db");
     }
 
     #[test]
@@ -552,19 +800,17 @@ mod tests {
         let first = panel.handle(Action::Enter).unwrap();
         panel.handle(Action::Home);
         let second = panel.handle(Action::Enter).unwrap();
-        panel.listed(
-            first.generation,
-            Ok(vec![entry("stale", FileKind::File, 1)]),
-        );
+        let stale = vec![entry("stale", FileKind::File, 1)];
+        panel.listed(first.generation, Ok(Listing::Dir(stale)));
         assert_eq!(
-            panel.path,
-            PathBuf::from("/srv"),
+            panel.location,
+            local("/srv"),
             "an older request was answered"
         );
-        panel.listed(second.generation, Ok(listing()));
-        assert_eq!(panel.path, PathBuf::from("/"));
-        panel.listed(second.generation, Ok(Vec::new()));
-        assert_eq!(panel.rows(), listing().len(), "a reply counts once");
+        panel.listed(second.generation, Ok(Listing::Dir(listing())));
+        assert_eq!(panel.location, local("/"));
+        panel.listed(second.generation, Ok(Listing::Dir(Vec::new())));
+        assert_eq!(panel.rows(), 1 + listing().len(), "a reply counts once");
     }
 
     #[test]
@@ -574,7 +820,7 @@ mod tests {
         let request = panel.handle(Action::Enter).unwrap();
         let denied = VfsError::PermissionDenied("/srv/alpha-link".to_owned());
         panel.listed(request.generation, Err(denied));
-        assert_eq!(panel.path, PathBuf::from("/srv"));
+        assert_eq!(panel.location, local("/srv"));
         assert_eq!(under_cursor(&panel), "alpha-link");
         assert_eq!(
             panel.error.as_deref(),
@@ -607,6 +853,17 @@ mod tests {
         );
         panel.handle(Action::End);
         insta::assert_snapshot!(draw(&mut panel, 24, 7, true));
+    }
+
+    #[test]
+    fn draws_the_root_with_labels_and_cached_addresses() {
+        let mut panel = root();
+        panel.handle(Action::Down);
+        insta::assert_snapshot!(draw(&mut panel, 50, 9, true));
+
+        let narrow = draw(&mut panel, 20, 9, true).to_string();
+        assert!(!narrow.contains("deploy"), "{narrow}");
+        assert!(narrow.contains("Prod"), "{narrow}");
     }
 
     #[test]

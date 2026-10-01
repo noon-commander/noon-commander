@@ -25,5 +25,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   name, size, and modification time. Keys follow Midnight Commander: arrows, PgUp/PgDn,
   Home/End, Enter, Ctrl-PgUp for the parent, Tab for the other panel, Ctrl-R to reread, F10 or
   `Esc 0` to quit, Ctrl-L to redraw; `Esc` followed by a key works like Alt with that key.
+- Going up from `/` leads to the virtual root: `[Local]`, which opens the home directory, and
+  the hosts from ssh_config in config order, shown by their `label` if set, with the addresses
+  cached by `sftp-tui hosts --resolve`. Ctrl-R there rereads ssh_config. Opening a host is not
+  supported yet.
 - `[ui] language` selects the interface language (`auto` by default); only English exists so
   far. Interface text lives in Fluent files.

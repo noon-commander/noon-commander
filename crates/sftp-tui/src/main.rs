@@ -2,6 +2,7 @@
 
 mod cli;
 mod commands;
+mod context;
 mod format;
 mod i18n;
 mod logging;

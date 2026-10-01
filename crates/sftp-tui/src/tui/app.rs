@@ -1,6 +1,6 @@
 //! State and drawing of the whole screen.
 
-use std::path::PathBuf;
+use std::path::Path;
 use std::time::SystemTime;
 
 use jiff::tz::TimeZone;
@@ -8,10 +8,10 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use sftp_tui_vfs::{DirEntry, VfsError};
+use sftp_tui_vfs::{Location, VfsError};
 
 use super::keymap::{Action, Context, Keymap, Resolved};
-use super::panel::{ListRequest, Panel};
+use super::panel::{ListRequest, Listing, Panel};
 use crate::i18n::fl;
 
 /// One of the two panels.
@@ -33,7 +33,7 @@ impl Side {
 /// Work the app asks the event loop to do.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Effect {
-    /// List a directory and pass the result to [`App::listed`].
+    /// List a location and pass the result to [`App::listed`].
     List { side: Side, request: ListRequest },
 }
 
@@ -48,10 +48,12 @@ pub(crate) struct App {
 }
 
 impl App {
-    /// Both panels on `start`, and the listings to request for them.
-    pub(crate) fn new(start: &std::path::Path) -> (Self, Vec<Effect>) {
-        let (left, left_request) = Panel::new(PathBuf::from(start));
-        let (right, right_request) = Panel::new(PathBuf::from(start));
+    /// Both panels on the local directory `start`, and the listings to request for them. From
+    /// the virtual root, the local file system opens at `home`.
+    pub(crate) fn new(start: &Path, home: &Path) -> (Self, Vec<Effect>) {
+        let panel = || Panel::new(Location::Local(start.to_path_buf()), home.to_path_buf());
+        let (left, left_request) = panel();
+        let (right, right_request) = panel();
         let app = Self {
             left,
             right,
@@ -123,7 +125,7 @@ impl App {
         &mut self,
         side: Side,
         generation: u64,
-        result: Result<Vec<DirEntry>, VfsError>,
+        result: Result<Listing, VfsError>,
     ) {
         self.panel_mut(side).listed(generation, result);
     }
@@ -178,7 +180,9 @@ mod tests {
 
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
-    use sftp_tui_vfs::{FileKind, Metadata};
+    use std::path::PathBuf;
+
+    use sftp_tui_vfs::{DirEntry, FileKind, Metadata};
 
     use super::*;
 
@@ -199,17 +203,18 @@ mod tests {
 
     /// An app on `/srv` whose first listings arrived.
     fn loaded() -> App {
-        let (mut app, effects) = App::new(std::path::Path::new("/srv"));
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"));
         for effect in effects {
             let Effect::List { side, request } = effect;
-            assert_eq!(request.path, PathBuf::from("/srv"));
-            app.listed(
-                side,
-                request.generation,
-                Ok(vec![dir("left"), dir("right")]),
-            );
+            assert_eq!(request.location, local("/srv"));
+            let entries = vec![dir("left"), dir("right")];
+            app.listed(side, request.generation, Ok(Listing::Dir(entries)));
         }
         app
+    }
+
+    fn local(path: &str) -> Location {
+        Location::Local(PathBuf::from(path))
     }
 
     fn action(action: Action) -> Resolved {
@@ -218,7 +223,7 @@ mod tests {
 
     #[test]
     fn lists_both_panels_at_start() {
-        let (_, effects) = App::new(std::path::Path::new("/srv"));
+        let (_, effects) = App::new(Path::new("/srv"), Path::new("/home/me"));
         let sides: Vec<Side> = effects
             .iter()
             .map(|Effect::List { side, .. }| *side)
@@ -232,19 +237,13 @@ mod tests {
         app.handle(action(Action::Down));
         let [Effect::List { side, request }] =
             app.handle(action(Action::Enter)).try_into().unwrap();
-        assert_eq!(
-            (side, request.path),
-            (Side::Left, PathBuf::from("/srv/left"))
-        );
+        assert_eq!((side, request.location), (Side::Left, local("/srv/left")));
 
         assert!(app.handle(action(Action::SwitchPanel)).is_empty());
         app.handle(action(Action::End));
         let [Effect::List { side, request }] =
             app.handle(action(Action::Enter)).try_into().unwrap();
-        assert_eq!(
-            (side, request.path),
-            (Side::Right, PathBuf::from("/srv/right"))
-        );
+        assert_eq!((side, request.location), (Side::Right, local("/srv/right")));
 
         app.handle(action(Action::SwitchPanel));
         assert_eq!(app.active, Side::Left);
@@ -256,8 +255,16 @@ mod tests {
         app.handle(action(Action::Down));
         let [Effect::List { side, request }] =
             app.handle(action(Action::Enter)).try_into().unwrap();
-        app.listed(side.other(), request.generation, Ok(Vec::new()));
-        app.listed(side, request.generation, Ok(vec![dir("deeper")]));
+        app.listed(
+            side.other(),
+            request.generation,
+            Ok(Listing::Dir(Vec::new())),
+        );
+        app.listed(
+            side,
+            request.generation,
+            Ok(Listing::Dir(vec![dir("deeper")])),
+        );
         let mut terminal = Terminal::new(TestBackend::new(60, 8)).unwrap();
         let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal

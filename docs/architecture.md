@@ -58,7 +58,7 @@ The root of the virtual file system lists the local file system and every host f
 config:
 
 ```text
-┌─ / ─────────────────────────────┐┌─ prod-web:/var/www ─────────────┐
+┌─ Hosts ─────────────────────────┐┌─ prod-web:/var/www ─────────────┐
 │ Name             Address        ││ Name                Size Modify │
 │ [Local]          ~              ││ /..               UP-DIR        │
 │ ● prod-web       deploy@10.0.0.5││ /html                DIR Sep 30 │
@@ -68,7 +68,12 @@ config:
  1Help 2Menu 3View 4Edit 5Copy 6RenMov 7Mkdir 8Delete 9PullDn 10Quit
 ```
 
-- `..` from `/` of any file system leads back to the virtual root.
+- `..` from `/` of any file system leads back to the virtual root, with the cursor on the file
+  system just left. `[Local]` opens the home directory.
+- Hosts come in config order, named by their `hosts.<alias>.label` if set (the status line shows
+  the alias), with the address cached from an earlier `ssh -G`. The root is listed like a
+  directory, in a background task that scans the ssh config and loads the cache, so Ctrl-R
+  rereads the ssh config.
 - Entering a host connects (with a cancellable spinner) and opens the remote home directory or the
   configured `start_dir`.
 - Locations are `Root`, `Local(PathBuf)`, or `Remote { host, path }`. Remote paths are bytes,
@@ -186,7 +191,8 @@ show_hidden = true
   with `~`. Names are shown terminal-safe: control and bidi characters become `?`. Listings
   run in background tasks; a reply carries the generation of its request, so a stale one is
   dropped. If a directory cannot be read, the panel stays where it was and says why below the
-  listing. Going up puts the cursor on the directory just left.
+  listing. Going up puts the cursor on the directory just left. A panel shows a `Location`, so
+  the [virtual root](#virtual-root) is one more kind of listing.
 - **Keymap.** Keys map to `Action`s per context (`panel`, `quick_search`, `dialog`,
   `dialog_input`; `viewer` and `menu` will follow). Each context falls back along a chain, for
   example quick search to the panel; the first context that knows a key sequence decides.

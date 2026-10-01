@@ -5,10 +5,10 @@ use std::process::ExitCode;
 
 use color_eyre::eyre::Result;
 use futures_util::StreamExt as _;
+use sftp_tui_ssh::CachedHost;
 use sftp_tui_ssh::resolve::resolve;
-use sftp_tui_ssh::{CachedHost, ConfigStamp, ResolveCache};
 
-use super::Context;
+use crate::context::Context;
 
 /// Parallel `ssh -G` processes for `--resolve`.
 const RESOLVE_JOBS: usize = 4;
@@ -16,20 +16,16 @@ const RESOLVE_JOBS: usize = 4;
 /// Shows the hosts with the addresses cached by earlier runs; `refresh` runs `ssh -G` for every
 /// host first and updates the cache.
 pub(super) async fn run(context: &Context, refresh: bool) -> Result<ExitCode> {
-    let discovery = context.discover().await?;
+    let discovery = super::discover(context).await?;
     let hosts: Vec<_> = discovery.visible(&context.config.discovery.hide).collect();
     if hosts.is_empty() {
         eprintln!("no hosts found in ssh_config");
         return Ok(ExitCode::SUCCESS);
     }
-    let mut files = discovery.files.clone();
-    files.extend(context.discovery_options().root_files());
-    let settings = context.settings.clone();
-    let path = context.paths.cache_dir.join("resolve.json");
-    let mut cache = tokio::task::spawn_blocking(move || {
-        ResolveCache::load(path, ConfigStamp::read(&files, &settings))
-    })
-    .await?;
+    let mut cache = {
+        let (context, discovery) = (context.clone(), discovery.clone());
+        tokio::task::spawn_blocking(move || context.load_cache(&discovery)).await?
+    };
 
     let addresses: Vec<String> = if refresh {
         let results: Vec<_> = futures_util::stream::iter(&hosts)
@@ -75,12 +71,7 @@ pub(super) async fn run(context: &Context, refresh: bool) -> Result<ExitCode> {
         if address_width > 0 {
             let _ = write!(line, "  {address:<address_width$}");
         }
-        if let Some(label) = context
-            .config
-            .hosts
-            .get(&host.alias)
-            .and_then(|config| config.label.as_deref())
-        {
+        if let Some(label) = context.label(&host.alias) {
             let _ = write!(line, "  {label}");
         }
         if !host.other_names.is_empty() {

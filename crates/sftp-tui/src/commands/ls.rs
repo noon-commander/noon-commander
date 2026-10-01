@@ -10,13 +10,14 @@ use sftp_tui_ssh::{Session, SftpChannel, SshError, cleanup_stale};
 use sftp_tui_vfs::{DirEntry, FileKind, LocalFs, Location, RemotePath, RootEntry, SftpFs, Vfs};
 use tokio_util::sync::CancellationToken;
 
-use super::{Context, INTERRUPTED};
+use super::INTERRUPTED;
+use crate::context::Context;
 use crate::format;
 
 pub(super) async fn run(context: &Context, location: Option<&str>) -> Result<ExitCode> {
     match location.map_or(Location::Root, Location::parse) {
         Location::Root => {
-            for entry in sftp_tui_vfs::root_entries(context.host_aliases().await?) {
+            for entry in sftp_tui_vfs::root_entries(super::host_aliases(context).await?) {
                 match entry {
                     RootEntry::Local => println!("[local]"),
                     RootEntry::Host { alias } => println!("{alias}"),

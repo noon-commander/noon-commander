@@ -4,9 +4,11 @@ mod app;
 mod cells;
 mod keymap;
 mod panel;
+mod root;
 
 use std::io::{self, IsTerminal as _};
-use std::path::Path;
+use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 
 use color_eyre::eyre::{Result, bail};
@@ -16,25 +18,28 @@ use jiff::tz::TimeZone;
 use ratatui::DefaultTerminal;
 use ratatui::backend::{Backend as _, ClearType};
 use ratatui::widgets::Clear;
-use sftp_tui_vfs::{DirEntry, LocalFs, Vfs as _, VfsError};
+use sftp_tui_vfs::{LocalFs, Location, Vfs as _, VfsError};
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::mpsc;
 
 use app::{App, Effect, Side};
 use keymap::{KeyState, Keymap};
+use panel::Listing;
+
+use crate::context::Context;
 
 /// A finished background job.
 enum Done {
     Listed {
         side: Side,
         generation: u64,
-        result: Result<Vec<DirEntry>, VfsError>,
+        result: Result<Listing, VfsError>,
     },
 }
 
-/// Runs the TUI with both panels on `start` until the user quits or the process gets
-/// SIGTERM, SIGHUP, or SIGINT.
-pub(crate) async fn run(start: &Path) -> Result<()> {
+/// Runs the TUI with both panels on the local directory `start` until the user quits or the
+/// process gets SIGTERM, SIGHUP, or SIGINT.
+pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     if !io::stdout().is_terminal() {
         bail!("the TUI needs a terminal; in scripts, use the subcommands (`sftp-tui --help`)");
     }
@@ -50,9 +55,10 @@ pub(crate) async fn run(start: &Path) -> Result<()> {
     let mut events = EventStream::new();
     let keymap = Keymap::mc();
     let mut keys = KeyState::default();
+    let context = Arc::new(context);
     let (done_tx, mut done) = mpsc::unbounded_channel();
-    let (mut app, effects) = App::new(start);
-    run_effects(effects, &done_tx);
+    let (mut app, effects) = App::new(&start, &context.paths.home);
+    run_effects(effects, &context, &done_tx);
     while !app.quits() {
         if app.take_redraw() {
             repaint(&mut terminal)?;
@@ -64,7 +70,7 @@ pub(crate) async fn run(start: &Path) -> Result<()> {
             event = events.next() => match event {
                 Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => {
                     for input in keymap.feed(&mut keys, app.context(), key, Instant::now()) {
-                        run_effects(app.handle(input), &done_tx);
+                        run_effects(app.handle(input), &context, &done_tx);
                     }
                 }
                 // Resizes and other events only need a redraw.
@@ -74,7 +80,7 @@ pub(crate) async fn run(start: &Path) -> Result<()> {
             },
             () = sleep_until(deadline) => {
                 for input in keymap.expire(&mut keys, Instant::now()) {
-                    run_effects(app.handle(input), &done_tx);
+                    run_effects(app.handle(input), &context, &done_tx);
                 }
             }
             Some(job) = done.recv() => match job {
@@ -89,13 +95,14 @@ pub(crate) async fn run(start: &Path) -> Result<()> {
 }
 
 /// Starts the work of `effects` in the background; results come back through `done`.
-fn run_effects(effects: Vec<Effect>, done: &mpsc::UnboundedSender<Done>) {
+fn run_effects(effects: Vec<Effect>, context: &Arc<Context>, done: &mpsc::UnboundedSender<Done>) {
     for effect in effects {
         match effect {
             Effect::List { side, request } => {
+                let context = Arc::clone(context);
                 let done = done.clone();
                 tokio::spawn(async move {
-                    let result = LocalFs.list_dir(&request.path).await;
+                    let result = list(context, request.location).await;
                     let _ = done.send(Done::Listed {
                         side,
                         generation: request.generation,
@@ -104,6 +111,19 @@ fn run_effects(effects: Vec<Effect>, done: &mpsc::UnboundedSender<Done>) {
                 });
             }
         }
+    }
+}
+
+/// Lists a location. The virtual root reads the ssh config each time, so a reload shows new
+/// hosts.
+async fn list(context: Arc<Context>, location: Location) -> Result<Listing, VfsError> {
+    match location {
+        Location::Root => tokio::task::spawn_blocking(move || root::read_hosts(&context))
+            .await
+            .map(Listing::Root)
+            .map_err(|error| VfsError::Io(io::Error::other(error))),
+        Location::Local(path) => LocalFs.list_dir(&path).await.map(Listing::Dir),
+        Location::Remote { .. } => Err(VfsError::Io(io::ErrorKind::Unsupported.into())),
     }
 }
 

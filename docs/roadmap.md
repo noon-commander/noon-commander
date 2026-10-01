@@ -22,7 +22,9 @@
 
 - [x] TUI skeleton: alternate screen, event loop, two panels, F10 quits, terminal restore
 - [x] Local panels: listing, navigation, background loading, errors
-- [ ] Panels: virtual root, sorting, hidden files, quick search
+- [x] Virtual root: `[Local]` and the hosts from ssh_config, with labels and cached addresses
+- [ ] Opening hosts: connect, remote listings, disconnect
+- [ ] Panels: sorting, hidden files, quick search
 - [x] Keymap engine with the mc preset
 - [ ] Nerd Font icons and mc markers
 - [x] Fluent i18n (`en-US`) and `ui.language`

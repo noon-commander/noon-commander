@@ -22,3 +22,12 @@ panel-loading = Loading…
 panel-error = Cannot open { $path }: { $reason }
 error-not-found = no such file or directory
 error-permission-denied = permission denied
+
+## Virtual root (src/tui/panel). Prefix: root-.
+
+# Title of the panel that lists the local file system and the hosts from ssh_config.
+root-title = Hosts
+# The row that opens the local file system.
+root-local = [Local]
+# Column header: user@hostname:port from ssh -G.
+root-address = Address

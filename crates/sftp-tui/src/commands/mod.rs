@@ -4,15 +4,14 @@ mod config;
 mod hosts;
 mod ls;
 
-use std::path::Path;
 use std::process::ExitCode;
 
-use color_eyre::eyre::{Result, WrapErr as _, bail};
-use sftp_tui_config::{Config, Paths};
-use sftp_tui_ssh::discovery::{Discovery, DiscoveryOptions, DiscoveryWarning, discover};
-use sftp_tui_ssh::{SshSettings, Target};
+use color_eyre::eyre::{Result, WrapErr as _};
+use sftp_tui_config::Paths;
+use sftp_tui_ssh::discovery::Discovery;
 
 use crate::cli::{Cli, Command, ConfigCommand};
+use crate::context::{Context, describe};
 
 /// Exit code after Ctrl-C, as shells report a process killed by SIGINT.
 const INTERRUPTED: u8 = 130;
@@ -25,7 +24,7 @@ pub(crate) async fn run(cli: Cli) -> Result<ExitCode> {
             let context = Context::load(paths, &config_path)?;
             crate::i18n::select(&context.config.ui.language);
             let start = std::env::current_dir().wrap_err("cannot read the current directory")?;
-            crate::tui::run(&start).await?;
+            crate::tui::run(context, start).await?;
             Ok(ExitCode::SUCCESS)
         }
         Some(Command::Config(ConfigCommand::Init { force })) => config::init(&config_path, force),
@@ -41,93 +40,21 @@ pub(crate) async fn run(cli: Cli) -> Result<ExitCode> {
     }
 }
 
-/// What the subcommands that talk to ssh share.
-struct Context {
-    paths: Paths,
-    config: Config,
-    settings: SshSettings,
+/// Scans the `ssh_config` files and prints what was skipped.
+async fn discover(context: &Context) -> Result<Discovery> {
+    let scanner = context.clone();
+    let discovery = tokio::task::spawn_blocking(move || scanner.scan()).await?;
+    for warning in &discovery.warnings {
+        eprintln!("warning: {}", describe(warning));
+    }
+    Ok(discovery)
 }
 
-impl Context {
-    fn load(paths: Paths, config_path: &Path) -> Result<Self> {
-        crate::logging::init(&paths);
-        let config = Config::load(config_path, &paths.home)?;
-        sftp_tui_ssh::args::validate(&config.ssh.args)
-            .wrap_err_with(|| format!("invalid `ssh.args` in {}", config_path.display()))?;
-        if !crate::i18n::is_valid_language(&config.ui.language) {
-            bail!(
-                "invalid `ui.language` in {}: `{}` is not `auto` or a language tag such as \
-                 `en-US`",
-                config_path.display(),
-                config.ui.language
-            );
-        }
-        let settings = SshSettings {
-            program: config.ssh.program.clone(),
-            config_file: config.ssh.config_file.clone(),
-            args: config.ssh.args.clone(),
-            multiplex: config.ssh.multiplex,
-        };
-        Ok(Self {
-            paths,
-            config,
-            settings,
-        })
-    }
-
-    /// The ssh target for a host alias, with its `hosts.<alias>.args`.
-    fn target(&self, alias: &str) -> Target {
-        let args = self
-            .config
-            .hosts
-            .get(alias)
-            .map(|host| host.args.clone())
-            .unwrap_or_default();
-        Target::new(alias).with_args(args)
-    }
-
-    fn discovery_options(&self) -> DiscoveryOptions {
-        DiscoveryOptions::new(self.paths.home.clone(), self.config.ssh.config_file.clone())
-    }
-
-    /// Scans the `ssh_config` files and prints what was skipped.
-    async fn discover(&self) -> Result<Discovery> {
-        let options = self.discovery_options();
-        let discovery = tokio::task::spawn_blocking(move || {
-            discover(&options, &|name| std::env::var(name).ok())
-        })
-        .await?;
-        for warning in &discovery.warnings {
-            eprintln!("warning: {}", describe(warning));
-        }
-        Ok(discovery)
-    }
-
-    /// Visible host aliases in config order.
-    async fn host_aliases(&self) -> Result<Vec<String>> {
-        let discovery = self.discover().await?;
-        Ok(discovery
-            .visible(&self.config.discovery.hide)
-            .map(|host| host.alias.clone())
-            .collect())
-    }
-}
-
-fn describe(warning: &DiscoveryWarning) -> String {
-    match warning {
-        DiscoveryWarning::Unreadable { file, error } => {
-            format!("cannot read {}: {error}", file.display())
-        }
-        DiscoveryWarning::IncludeWithTokens { file, line, path } => format!(
-            "{}:{line}: skipped `Include {path}`: ssh expands % tokens only for a given host",
-            file.display()
-        ),
-        DiscoveryWarning::UndefinedVariable { file, line, name } => format!(
-            "{}:{line}: skipped an Include: the environment variable `{name}` is not set",
-            file.display()
-        ),
-        DiscoveryWarning::IncludeTooDeep { file, line } => {
-            format!("{}:{line}: Include is nested too deeply", file.display())
-        }
-    }
+/// Visible host aliases in config order.
+async fn host_aliases(context: &Context) -> Result<Vec<String>> {
+    let discovery = discover(context).await?;
+    Ok(discovery
+        .visible(&context.config.discovery.hide)
+        .map(|host| host.alias.clone())
+        .collect())
 }

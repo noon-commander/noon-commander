@@ -34,6 +34,8 @@ hide = ["github.com", "gitlab.com", "bitbucket.org"]
 # Interface language, such as "en-US", or "auto" for the system locale. Only English exists so
 # far; other languages fall back to it.
 language = "auto"
+# Colors: "mc-classic" (blue panels, as Midnight Commander) or "terminal" (the terminal's own).
+theme = "mc-classic"
 # Nerd Font icons in front of names; needs a Nerd Font in the terminal. Without them, mc's
 # markers: / directory, * executable, @ symlink, ~ symlink to a directory.
 icons = true

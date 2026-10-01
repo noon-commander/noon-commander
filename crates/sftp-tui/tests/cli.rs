@@ -176,6 +176,20 @@ fn rejects_an_invalid_language() {
 }
 
 #[test]
+fn rejects_an_unknown_theme() {
+    let sandbox = Sandbox::new(&[]);
+    sandbox.write_config("[ui]\ntheme = \"solarized\"\n");
+    let output = sandbox.run(&[]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        stderr(&output).contains("invalid `ui.theme`")
+            && stderr(&output).contains("mc-classic, terminal"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
 fn config_init_writes_the_defaults_once() {
     let sandbox = Sandbox::new(&[]);
     let file = sandbox.path("config/sftp-tui/config.toml");

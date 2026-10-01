@@ -186,6 +186,7 @@ args = ["-o", "Compression=yes"]
 
 [ui]
 language = "auto"                # or a language tag such as "en-US"; others fall back to it
+theme = "mc-classic"             # or "terminal": the terminal's own colors, reverse video
 icons = true                     # Nerd Font icons; false: mc's markers (/ * @ ~ …)
 show_hidden = true               # names that start with a dot; Alt-. switches while running
 type_to_search = true            # typing in a panel starts quick search; false: only Ctrl-S
@@ -198,9 +199,6 @@ Planned keys and sections, not accepted yet:
 parallel_jobs = 2
 preserve_mtime = true
 atomic_upload = true             # write to a temporary name, then rename
-
-[ui]                             # M2
-theme = "mc-classic"
 ```
 
 ## UI
@@ -245,6 +243,12 @@ theme = "mc-classic"
   `fl!` from `i18n-embed-fl`, which checks message IDs against `en-US` at compile time; only
   `en-US` for now. `ui.language = "auto"` follows the system locale (through `sys-locale`).
   Arguments are inserted without Unicode isolation marks, which terminals would show.
+- **Themes.** Built in: `mc-classic`, the colors of mc's default skin (blue panels, a cyan
+  cursor that replaces the row's colors, yellow headers; directories white, executables green,
+  broken links red, devices magenta; gray dialogs with mc's shadow; a black-and-cyan F-key
+  bar), and `terminal`, the terminal's own colors with reverse video. `ui.theme` picks one; an
+  unknown name is an error. Only the 16 ANSI colors are used, so the terminal's palette
+  decides the exact shades. User themes in `themes/` are planned for M4.
 - **Icons.** Nerd Fonts v3 glyphs, on by default (`ui.icons`), in front of each name: our own for
   directories, `..`, links, broken links, FIFOs, sockets, devices, executables, `[Local]`, and
   hosts; `devicons` for files by name or extension. devicons asks the disk whether a name it

@@ -32,7 +32,8 @@
 - [x] Nerd Font icons and mc markers
 - [x] Fluent i18n (`en-US`) and `ui.language`
 - [x] Askpass and host-key dialogs
-- [ ] mc-classic theme, F-key bar
+- [x] mc-classic and terminal themes (`ui.theme`)
+- [ ] F-key bar and help screen
 
 ## M3: File operations
 

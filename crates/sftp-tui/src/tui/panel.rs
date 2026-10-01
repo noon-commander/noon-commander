@@ -9,7 +9,7 @@ use jiff::tz::TimeZone;
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
-use ratatui::text::Line;
+use ratatui::text::{Line, Span};
 use ratatui::widgets::Block;
 use sftp_tui_vfs::{DirEntry, Location, RemotePath};
 
@@ -17,6 +17,7 @@ use super::cells::{self, Align, MTIME_WIDTH};
 use super::decor::Decor;
 use super::keymap::Action;
 use super::root::RootHost;
+use super::theme::Theme;
 use crate::i18n::fl;
 
 /// Width of the size column, as in mc.
@@ -73,6 +74,7 @@ pub(crate) struct View<'a> {
     /// What the app knows about a host.
     pub(crate) hosts: &'a dyn Fn(&str) -> HostState,
     pub(crate) decor: Decor,
+    pub(crate) theme: &'a Theme,
     /// Turns spinners.
     pub(crate) tick: u64,
     pub(crate) now: SystemTime,
@@ -499,15 +501,22 @@ impl Panel {
         view: &View<'_>,
     ) {
         let hosts = view.hosts;
-        let reversed = Style::new().reversed();
+        let theme = view.theme;
         let mut title = location_text(&self.location);
         let room = usize::from(area.width.saturating_sub(4));
         if cells::width(&title) > room {
             title = cells::fit(&title, room, Align::Left);
         }
-        let title_style = if active { reversed } else { Style::new() };
+        let title_style = if active {
+            theme.panel_title_active
+        } else {
+            theme.panel_border
+        };
         let title = Line::styled(format!(" {title} "), title_style);
-        let block = Block::bordered().title(title);
+        let block = Block::bordered()
+            .title(title)
+            .style(theme.panel)
+            .border_style(theme.panel_border);
         let inner = block.inner(area);
         frame.render_widget(block, area);
         if inner.height < 3 || inner.width < 2 {
@@ -526,17 +535,20 @@ impl Panel {
             }
         };
         let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
-        frame.render_widget(Line::raw(columns.header(self.sort)), line(inner.y));
+        let header = Line::styled(columns.header(self.sort), theme.header);
+        frame.render_widget(header, line(inner.y));
         for (screen_row, index) in (self.offset..self.rows()).take(list_height).enumerate() {
             let Some(row) = self.row(index) else { break };
-            let style = if active && index == self.cursor {
-                reversed
-            } else {
-                Style::new()
-            };
+            let mut text = columns.row(row, view);
+            // The cursor replaces the colors of the row, as in mc.
+            if active && index == self.cursor {
+                for span in &mut text.spans {
+                    span.style = Style::new();
+                }
+                text = text.style(theme.cursor);
+            }
             let y = inner.y + 1 + u16::try_from(screen_row).unwrap_or(u16::MAX);
-            let text = columns.row(row, view);
-            frame.render_widget(Line::styled(text, style), line(y));
+            frame.render_widget(text, line(y));
         }
 
         let separator_y = inner.bottom() - 2;
@@ -545,10 +557,12 @@ impl Panel {
             "─".repeat(usize::from(area.width.saturating_sub(2)))
         );
         frame.render_widget(
-            Line::raw(separator),
+            Line::styled(separator, theme.panel_border),
             Rect::new(area.x, separator_y, area.width, 1),
         );
+        let mut status_style = Style::new();
         let status = if let Some(text) = &self.search {
+            status_style = theme.quick_search;
             let status = fl!("panel-search", text = cells::sanitize(text.as_bytes()));
             if active {
                 let column = u16::try_from(cells::width(&status)).unwrap_or(u16::MAX);
@@ -576,7 +590,7 @@ impl Panel {
             }
         };
         let status = cells::fit(&status, width, Align::Left);
-        frame.render_widget(Line::raw(status), line(inner.bottom() - 1));
+        frame.render_widget(Line::styled(status, status_style), line(inner.bottom() - 1));
     }
 
     /// Keeps the cursor within the rows and on screen.
@@ -613,21 +627,31 @@ impl Columns {
                 };
                 titles[column] = format!("{}{title}", sort.arrow());
                 let [name, size, time] = titles;
-                columns.join(&name, &size, &time, [Align::Center; 3])
+                let (name, rest) = columns.join(&name, &size, &time, [Align::Center; 3]);
+                name + &rest
             }
             Self::Root(columns) => {
-                columns.join(&fl!("panel-name"), &fl!("root-address"), [Align::Center; 2])
+                let (name, rest) =
+                    columns.join(&fl!("panel-name"), &fl!("root-address"), [Align::Center; 2]);
+                name + &rest
             }
         }
     }
 
-    fn row(self, row: Row<'_>, view: &View<'_>) -> String {
+    /// A row, with the name in the color of its kind, as mc highlights files.
+    fn row(self, row: Row<'_>, view: &View<'_>) -> Line<'static> {
         const DIR: [Align; 3] = [Align::Left, Align::Right, Align::Left];
-        let decor = view.decor;
+        let (decor, theme) = (view.decor, view.theme);
+        let styled = |(name, rest): (String, String), style: Style| {
+            Line::from(vec![Span::styled(name, style), Span::raw(rest)])
+        };
         match (self, row) {
             (Self::Dir(columns), Row::Parent) => {
                 let name = format!("{}..", decor.parent());
-                columns.join(&name, &fl!("panel-up-dir"), "", DIR)
+                styled(
+                    columns.join(&name, &fl!("panel-up-dir"), "", DIR),
+                    theme.directory,
+                )
             }
             (Self::Dir(columns), Row::Entry(entry)) => {
                 let size = if entry.is_dir_like() {
@@ -640,25 +664,34 @@ impl Columns {
                 };
                 let time = cells::mtime(entry.metadata.modified, view.now, view.tz);
                 let name = format!("{}{}", decor.entry(entry), cells::sanitize(&entry.name));
-                columns.join(&name, &size, &time, DIR)
+                styled(columns.join(&name, &size, &time, DIR), theme.entry(entry))
             }
             (Self::Root(columns), Row::Local) => {
                 let name = format!("{}{}", decor.local(), fl!("root-local"));
-                columns.join(&name, "~", [Align::Left; 2])
+                styled(columns.join(&name, "~", [Align::Left; 2]), theme.directory)
             }
             (Self::Root(columns), Row::Host(host)) => {
                 let name = host.label.as_deref().unwrap_or(&host.alias);
                 let name = cells::sanitize(name.as_bytes());
-                let prefix = decor.host((view.hosts)(&host.alias).status, view.tick);
-                columns.join(
+                let status = (view.hosts)(&host.alias).status;
+                let prefix = decor.host(status, view.tick);
+                let (name, rest) = columns.join(
                     &format!("{prefix}{name}"),
                     &address(host, view.hosts),
                     [Align::Left; 2],
-                )
+                );
+                // The status marker leads the name cell and has a color of its own.
+                let marker_len = name.chars().next().map_or(0, char::len_utf8);
+                let (marker, name) = name.split_at(marker_len);
+                Line::from(vec![
+                    Span::styled(marker.to_owned(), theme.host_status(status)),
+                    Span::raw(name.to_owned()),
+                    Span::styled(rest, theme.address),
+                ])
             }
             // A listing has only rows of its own kind.
             (Self::Dir(_), Row::Local | Row::Host(_))
-            | (Self::Root(_), Row::Parent | Row::Entry(_)) => String::new(),
+            | (Self::Root(_), Row::Parent | Row::Entry(_)) => Line::default(),
         }
     }
 }
@@ -697,17 +730,18 @@ impl DirColumns {
         }
     }
 
-    fn join(self, name: &str, size: &str, time: &str, align: [Align; 3]) -> String {
-        let mut text = cells::fit(name, self.name, align[0]);
+    /// The name cell, and the other cells with their separators.
+    fn join(self, name: &str, size: &str, time: &str, align: [Align; 3]) -> (String, String) {
+        let mut rest = String::new();
         if self.size {
-            text.push('│');
-            text.push_str(&cells::fit(size, SIZE_WIDTH, align[1]));
+            rest.push('│');
+            rest.push_str(&cells::fit(size, SIZE_WIDTH, align[1]));
         }
         if self.time {
-            text.push('│');
-            text.push_str(&cells::fit(time, MTIME_WIDTH, align[2]));
+            rest.push('│');
+            rest.push_str(&cells::fit(time, MTIME_WIDTH, align[2]));
         }
-        text
+        (cells::fit(name, self.name, align[0]), rest)
     }
 }
 
@@ -741,13 +775,14 @@ impl RootColumns {
         }
     }
 
-    fn join(self, name: &str, address: &str, align: [Align; 2]) -> String {
-        let mut text = cells::fit(name, self.name, align[0]);
+    /// The name cell, and the address cell with its separator.
+    fn join(self, name: &str, address: &str, align: [Align; 2]) -> (String, String) {
+        let mut rest = String::new();
         if let Some(width) = self.address {
-            text.push('│');
-            text.push_str(&cells::fit(address, width, align[1]));
+            rest.push('│');
+            rest.push_str(&cells::fit(address, width, align[1]));
         }
-        text
+        (cells::fit(name, self.name, align[0]), rest)
     }
 }
 
@@ -942,7 +977,7 @@ mod tests {
         names(panel)[panel.cursor].clone()
     }
 
-    /// Draws `panel` with mc's markers, or icons with `decor`.
+    /// Draws `panel` with mc's markers, or icons with `decor`, in the `terminal` theme.
     fn render_with(
         panel: &mut Panel,
         (width, height): (u16, u16),
@@ -950,10 +985,29 @@ mod tests {
         hosts: &dyn Fn(&str) -> HostState,
         decor: Decor,
     ) -> Terminal<TestBackend> {
+        render_themed(
+            panel,
+            (width, height),
+            active,
+            hosts,
+            decor,
+            &Theme::terminal(),
+        )
+    }
+
+    fn render_themed(
+        panel: &mut Panel,
+        (width, height): (u16, u16),
+        active: bool,
+        hosts: &dyn Fn(&str) -> HostState,
+        decor: Decor,
+        theme: &Theme,
+    ) -> Terminal<TestBackend> {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         let view = View {
             hosts,
             decor,
+            theme,
             tick: 0,
             now: UNIX_EPOCH + Duration::from_secs(NOW),
             tz: &TimeZone::UTC,
@@ -1403,6 +1457,60 @@ mod tests {
         );
         panel.handle(Action::End);
         insta::assert_snapshot!(draw(&mut panel, 24, 7, true));
+    }
+
+    #[test]
+    fn mc_classic_colors_panels_as_mc_does() {
+        use ratatui::style::Color;
+
+        let mut panel = loaded("/srv", varied());
+        panel.handle(Action::Down);
+        let hosts = |_: &str| HostState::default();
+        let theme = Theme::mc_classic();
+        let terminal = render_themed(
+            &mut panel,
+            (40, 12),
+            true,
+            &hosts,
+            Decor::new(false),
+            &theme,
+        );
+        let buffer = terminal.backend().buffer();
+        let colors = |x: u16, y: u16| (buffer[(x, y)].fg, buffer[(x, y)].bg);
+        // Rows: frame, header, `..`, Adir (cursor), dir1, .env, a.txt, b.md.
+        assert_eq!(colors(0, 0), (Color::Gray, Color::Blue), "frame");
+        assert_eq!(colors(1, 1), (Color::LightYellow, Color::Blue), "header");
+        assert_eq!(colors(1, 3), (Color::Black, Color::Cyan), "the cursor row");
+        assert_eq!(colors(30, 3), (Color::Black, Color::Cyan), "all of it");
+        assert_eq!(colors(1, 4), (Color::White, Color::Blue), "a directory");
+        assert_eq!(colors(1, 6), (Color::Gray, Color::Blue), "a file");
+        assert_eq!(colors(30, 4), (Color::Gray, Color::Blue), "other columns");
+        assert_eq!(
+            colors(2, 0),
+            (Color::Black, Color::Cyan),
+            "the active title"
+        );
+
+        let mut root = root();
+        let connected = |_: &str| HostState {
+            status: HostStatus::Connected,
+            address: None,
+        };
+        let terminal = render_themed(
+            &mut root,
+            (40, 8),
+            false,
+            &connected,
+            Decor::new(false),
+            &theme,
+        );
+        let buffer = terminal.backend().buffer();
+        assert_eq!(
+            buffer[(1, 3)].fg,
+            Color::LightGreen,
+            "the marker of a connected host"
+        );
+        assert_eq!(buffer[(3, 3)].fg, Color::Gray, "its name");
     }
 
     #[test]

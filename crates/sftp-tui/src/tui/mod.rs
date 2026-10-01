@@ -9,6 +9,7 @@ mod keymap;
 mod panel;
 mod root;
 mod tasks;
+mod theme;
 
 use std::io::{self, IsTerminal as _};
 use std::path::PathBuf;
@@ -30,6 +31,15 @@ use keymap::{KeyState, Keymap};
 use tasks::{Done, Tasks};
 
 use crate::context::Context;
+
+/// Whether `name` is a built-in theme, for `ui.theme`; and the names there are.
+pub(crate) fn is_valid_theme(name: &str) -> bool {
+    theme::Theme::by_name(name).is_some()
+}
+
+pub(crate) fn theme_names() -> &'static [&'static str] {
+    theme::Theme::NAMES
+}
 
 /// How long a spinner shows each of its frames.
 const SPINNER_FRAME: Duration = Duration::from_millis(150);

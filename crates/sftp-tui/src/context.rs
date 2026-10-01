@@ -30,6 +30,14 @@ impl Context {
                 config.ui.language
             );
         }
+        if !crate::tui::is_valid_theme(&config.ui.theme) {
+            bail!(
+                "invalid `ui.theme` in {}: `{}` is not one of {}",
+                config_path.display(),
+                config.ui.theme,
+                crate::tui::theme_names().join(", ")
+            );
+        }
         Ok(Self::new(paths, config))
     }
 

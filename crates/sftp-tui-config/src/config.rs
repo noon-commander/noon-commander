@@ -35,6 +35,8 @@ pub struct UiConfig {
     /// Interface language as a language tag such as `en-US`, or `auto` for the system locale.
     /// Default: `auto`.
     pub language: String,
+    /// A built-in color theme: `mc-classic` or `terminal`. Default: `mc-classic`.
+    pub theme: String,
     /// Whether names get Nerd Font icons; otherwise mc's type markers (`/`, `*`, `@`, …).
     /// Needs a Nerd Font in the terminal. Default: `true`.
     pub icons: bool,
@@ -49,6 +51,7 @@ impl Default for UiConfig {
     fn default() -> Self {
         Self {
             language: "auto".to_owned(),
+            theme: "mc-classic".to_owned(),
             icons: true,
             show_hidden: true,
             type_to_search: true,
@@ -251,6 +254,7 @@ mod tests {
 
         [ui]
         language = "de-DE"
+        theme = "terminal"
         icons = false
         show_hidden = false
         type_to_search = false
@@ -280,6 +284,7 @@ mod tests {
             ]),
             ui: UiConfig {
                 language: "de-DE".to_owned(),
+                theme: "terminal".to_owned(),
                 icons: false,
                 show_hidden: false,
                 type_to_search: false,
@@ -300,6 +305,7 @@ mod tests {
         );
         assert!(config.hosts.is_empty());
         assert_eq!(config.ui.language, "auto");
+        assert_eq!(config.ui.theme, "mc-classic");
         assert!(config.ui.icons);
         assert!(config.ui.show_hidden);
         assert!(config.ui.type_to_search);
@@ -464,6 +470,7 @@ mod tests {
         }
         assert!(table["discovery"].get("hide").is_some());
         assert!(table["ui"].get("language").is_some());
+        assert!(table["ui"].get("theme").is_some());
         assert!(table["ui"].get("icons").is_some());
         assert!(table["ui"].get("show_hidden").is_some());
         assert!(table["ui"].get("type_to_search").is_some());

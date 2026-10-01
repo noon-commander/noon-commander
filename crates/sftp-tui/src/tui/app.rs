@@ -7,17 +7,18 @@ use std::time::SystemTime;
 use jiff::tz::TimeZone;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use sftp_tui_config::UiConfig;
 use sftp_tui_vfs::Location;
 use tokio_util::sync::CancellationToken;
 
+use super::cells::{self, Align};
 use super::decor::Decor;
 use super::dialog::{Ask, Dialog, DialogEvent, Reply};
 use super::keymap::{Action, Context, Keymap, Resolved};
 use super::panel::{HostState, HostStatus, ListRequest, Listed, Panel, View};
 use super::tasks::HostHandle;
+use super::theme::Theme;
 use crate::i18n::fl;
 
 /// One of the two panels.
@@ -107,6 +108,7 @@ pub(crate) struct App {
     /// The `[ui]` settings; `show_hidden` follows Alt-.
     ui: UiConfig,
     decor: Decor,
+    theme: Theme,
     /// Counts the frames of spinners.
     tick: u64,
     /// Hosts whose last attempt failed or whose connection was lost.
@@ -139,6 +141,8 @@ impl App {
             connections: 0,
             ui: ui.clone(),
             decor: Decor::new(ui.icons),
+            // `ui.theme` was checked when the config was loaded.
+            theme: Theme::by_name(&ui.theme).unwrap_or_else(Theme::mc_classic),
             tick: 0,
             failed: HashSet::new(),
             addresses: HashMap::new(),
@@ -513,6 +517,7 @@ impl App {
         let view = View {
             hosts: &hosts,
             decor: self.decor,
+            theme: &self.theme,
             tick: self.tick,
             now,
             tz,
@@ -522,7 +527,7 @@ impl App {
             .render(frame, right, active == Side::Right, &view);
         self.render_fkeys(frame, key_bar, keymap);
         if let Some(open) = self.dialogs.front() {
-            open.dialog.render(frame, panels);
+            open.dialog.render(frame, panels, &self.theme);
         }
     }
 
@@ -535,9 +540,12 @@ impl App {
                 .filter(|action| Self::supports(*action))
                 .and_then(fkey_label)
                 .unwrap_or_default();
+            let number = number.to_string();
+            // The label's color fills its slot, as in mc.
+            let room = usize::from(slot.width).saturating_sub(number.len());
             let line = Line::from(vec![
-                Span::raw(number.to_string()),
-                Span::styled(label, Style::new().reversed()),
+                Span::styled(number, self.theme.fkey_number),
+                Span::styled(cells::fit(&label, room, Align::Left), self.theme.fkey_label),
             ]);
             frame.render_widget(line, *slot);
         }
@@ -979,7 +987,7 @@ mod tests {
         for c in "s3cret".chars() {
             app.handle(Resolved::Insert(c));
         }
-        assert!(screen(&mut app).contains("[******"));
+        assert!(screen(&mut app).contains("│ ****** "));
         app.handle(action(Action::Confirm));
         assert_eq!(password_answer.try_recv(), Ok(Some("s3cret".to_owned())));
 
@@ -1107,6 +1115,34 @@ mod tests {
         assert!(
             screen(&mut app).contains("Search: r"),
             "but goes into a search"
+        );
+    }
+
+    #[test]
+    fn the_f_key_bar_colors_whole_slots() {
+        use ratatui::style::Color;
+
+        let mut app = loaded();
+        let mut terminal = Terminal::new(TestBackend::new(80, 6)).unwrap();
+        let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        terminal
+            .draw(|frame| app.render(frame, &Keymap::mc(), now, &TimeZone::UTC))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        // `10Quit` starts at column 72; its slot runs to the edge.
+        assert_eq!(
+            (buffer[(72, 5)].fg, buffer[(72, 5)].bg),
+            (Color::White, Color::Black)
+        );
+        assert_eq!(
+            (buffer[(74, 5)].fg, buffer[(74, 5)].bg),
+            (Color::Black, Color::Cyan)
+        );
+        assert_eq!(buffer[(79, 5)].bg, Color::Cyan);
+        assert_eq!(
+            buffer[(1, 5)].bg,
+            Color::Cyan,
+            "an empty label is colored too"
         );
     }
 

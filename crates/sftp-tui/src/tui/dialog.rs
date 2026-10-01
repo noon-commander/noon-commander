@@ -5,7 +5,6 @@ use std::fmt;
 
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
-use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear};
 use secrecy::SecretString;
@@ -14,6 +13,7 @@ use zeroize::Zeroizing;
 
 use super::cells;
 use super::keymap::{Action, Context, Resolved};
+use super::theme::Theme;
 use crate::i18n::fl;
 
 /// Bytes a secret may have. Reserved up front, so typing never moves it in memory and leaves
@@ -301,7 +301,7 @@ impl Dialog {
     }
 
     /// Draws the dialog centered in `area`, with the terminal cursor in the text field.
-    pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect) {
+    pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let width = MAX_WIDTH.min(area.width.saturating_sub(4)).max(20);
         let text_width = usize::from(width.saturating_sub(4));
         let lines = cells::wrap(&self.message, text_width);
@@ -313,7 +313,18 @@ impl Dialog {
         let y = area.y + area.height.saturating_sub(height) / 2;
         let outer = Rect::new(x, y, width.min(area.width), height);
         frame.render_widget(Clear, outer);
-        let block = Block::bordered().title(Line::raw(format!(" {} ", self.title)));
+        if let Some(shadow) = theme.shadow {
+            // Two columns to the right and a row below, as mc draws it.
+            let right = Rect::new(outer.right(), outer.y + 1, 2, outer.height);
+            let below = Rect::new(outer.x + 2, outer.bottom(), outer.width, 1);
+            for rect in [right, below] {
+                frame
+                    .buffer_mut()
+                    .set_style(rect.intersection(area), shadow);
+            }
+        }
+        let title = Line::styled(format!(" {} ", self.title), theme.dialog_title);
+        let block = Block::bordered().title(title).style(theme.dialog);
         let inner = block.inner(outer).inner(ratatui::layout::Margin::new(1, 0));
         frame.render_widget(block, outer);
         let row = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
@@ -328,25 +339,25 @@ impl Dialog {
         if let Some(field) = &self.field
             && index < inner.height
         {
-            // `[` and `]` around the stars; the visible part follows the cursor.
-            let room = usize::from(inner.width.saturating_sub(2)).max(1);
+            // A bar of stars; the visible part follows the cursor.
+            let room = usize::from(inner.width).max(1);
             let first = field.cursor.saturating_sub(room - 1);
             let shown = field.chars().saturating_sub(first).min(room);
-            let text = format!("[{}{}]", "*".repeat(shown), " ".repeat(room - shown));
-            frame.render_widget(Line::raw(text), row(index));
+            let text = format!("{}{}", "*".repeat(shown), " ".repeat(room - shown));
+            frame.render_widget(Line::styled(text, theme.dialog_input), row(index));
             if self.focus == Focus::Field {
                 let column = u16::try_from(field.cursor - first).unwrap_or(0);
-                frame.set_cursor_position(Position::new(inner.x + 1 + column, inner.y + index));
+                frame.set_cursor_position(Position::new(inner.x + column, inner.y + index));
             }
             index += 1;
         }
         if index + 1 < inner.height {
-            frame.render_widget(self.button_line(), row(index + 1));
+            frame.render_widget(self.button_line(theme), row(index + 1));
         }
     }
 
     /// The buttons, centered.
-    fn button_line(&self) -> Line<'static> {
+    fn button_line(&self, theme: &Theme) -> Line<'static> {
         let mut spans = Vec::new();
         for (index, button) in self.buttons.iter().enumerate() {
             if index > 0 {
@@ -358,9 +369,9 @@ impl Dialog {
                 format!("[ {} ]", button.label())
             };
             let style = if self.focus == Focus::Button(index) {
-                Style::new().reversed()
+                theme.dialog_button_focused
             } else {
-                Style::new()
+                theme.dialog_button
             };
             spans.push(Span::styled(text, style));
         }
@@ -397,9 +408,18 @@ mod tests {
     }
 
     fn draw(dialog: &Dialog, width: u16, height: u16) -> Terminal<TestBackend> {
+        draw_themed(dialog, width, height, &Theme::terminal())
+    }
+
+    fn draw_themed(
+        dialog: &Dialog,
+        width: u16,
+        height: u16,
+        theme: &Theme,
+    ) -> Terminal<TestBackend> {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         terminal
-            .draw(|frame| dialog.render(frame, frame.area()))
+            .draw(|frame| dialog.render(frame, frame.area(), theme))
             .unwrap();
         terminal
     }
@@ -497,10 +517,39 @@ mod tests {
         typed(&mut dialog, "hunter2");
         let mut terminal = draw(&dialog, 50, 9);
         insta::assert_snapshot!(terminal.backend());
-        // After the seven stars: the dialog starts at column 2, its `[` at column 4.
+        // After the seven stars: the dialog starts at column 2, its field at column 4.
         assert_eq!(
             terminal.get_cursor_position().unwrap(),
-            Position::new(12, 3)
+            Position::new(11, 3)
+        );
+    }
+
+    #[test]
+    fn mc_classic_draws_gray_dialogs_with_a_shadow() {
+        use ratatui::style::Color;
+
+        let dialog = secret();
+        let terminal = draw_themed(&dialog, 50, 9, &Theme::mc_classic());
+        let buffer = terminal.backend().buffer();
+        let colors = |x: u16, y: u16| (buffer[(x, y)].fg, buffer[(x, y)].bg);
+        // The dialog spans columns 2 … 47 and rows 1 … 6.
+        assert_eq!(colors(2, 1), (Color::Black, Color::Gray), "frame");
+        assert_eq!(colors(4, 1), (Color::Blue, Color::Gray), "title");
+        assert_eq!(colors(4, 3), (Color::Black, Color::Cyan), "field");
+        assert_eq!(
+            colors(48, 2),
+            (Color::DarkGray, Color::Black),
+            "shadow to the right"
+        );
+        assert_eq!(
+            colors(10, 7),
+            (Color::DarkGray, Color::Black),
+            "shadow below"
+        );
+        assert_eq!(
+            colors(2, 7).1,
+            Color::Reset,
+            "the shadow starts two columns in"
         );
     }
 

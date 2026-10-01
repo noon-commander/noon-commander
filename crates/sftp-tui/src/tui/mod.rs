@@ -3,6 +3,7 @@
 mod app;
 mod cells;
 mod describe;
+mod dialog;
 mod keymap;
 mod panel;
 mod root;
@@ -89,6 +90,9 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
                     tasks.run(app.connected(&host, connection, handle));
                 }
                 Done::Resolved { host, address } => app.resolved(host, address),
+                Done::Ask(ask) => app.ask(ask),
+                Done::Notice { id, context, message } => app.notice(id, &context, &message),
+                Done::PromptClosed { id } => app.prompt_closed(id),
                 Done::Closed { host, connection, reason } => {
                     tasks.run(app.closed(&host, connection, reason.as_deref()));
                 }

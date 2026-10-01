@@ -1,6 +1,6 @@
 //! State and drawing of the whole screen.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::Path;
 use std::time::SystemTime;
 
@@ -12,6 +12,7 @@ use ratatui::text::{Line, Span};
 use sftp_tui_vfs::Location;
 use tokio_util::sync::CancellationToken;
 
+use super::dialog::{Ask, Dialog, DialogEvent, Reply};
 use super::keymap::{Action, Context, Keymap, Resolved};
 use super::panel::{HostState, HostStatus, ListRequest, Listed, Panel};
 use super::tasks::HostHandle;
@@ -85,6 +86,14 @@ impl Host {
     }
 }
 
+/// A dialog on screen or waiting for its turn, and where its answer goes.
+#[derive(Debug)]
+struct Open {
+    dialog: Dialog,
+    /// `None` for a notice.
+    reply: Option<Reply>,
+}
+
 /// What the TUI shows and whether it keeps running.
 #[derive(Debug)]
 pub(crate) struct App {
@@ -97,6 +106,9 @@ pub(crate) struct App {
     failed: HashSet<String>,
     /// Addresses from `ssh -G` in this session.
     addresses: HashMap<String, String>,
+    /// The first one is on screen and gets the keys; the others wait, so that a new prompt
+    /// never takes the keys from a dialog in use.
+    dialogs: VecDeque<Open>,
     quit: bool,
     redraw: bool,
 }
@@ -116,6 +128,7 @@ impl App {
             connections: 0,
             failed: HashSet::new(),
             addresses: HashMap::new(),
+            dialogs: VecDeque::new(),
             quit: false,
             redraw: false,
         };
@@ -136,7 +149,9 @@ impl App {
 
     /// Where keys go now.
     pub(crate) fn context(&self) -> Context {
-        if self.panel(self.active).shows_root() {
+        if let Some(open) = self.dialogs.front() {
+            open.dialog.context()
+        } else if self.panel(self.active).shows_root() {
             Context::Root
         } else {
             Context::Panel
@@ -145,7 +160,10 @@ impl App {
 
     /// Whether the app does something for `action` yet; the F-key bar shows only those.
     fn supports(action: Action) -> bool {
-        matches!(action, Action::Quit | Action::Redraw | Action::Disconnect)
+        matches!(
+            action,
+            Action::Quit | Action::Redraw | Action::Disconnect | Action::Cancel
+        )
     }
 
     fn panel(&self, side: Side) -> &Panel {
@@ -163,6 +181,17 @@ impl App {
     }
 
     pub(crate) fn handle(&mut self, input: Resolved) -> Vec<Effect> {
+        if let Some(open) = self.dialogs.front_mut() {
+            let answer = match open.dialog.handle(input) {
+                DialogEvent::Pending => return Vec::new(),
+                DialogEvent::Answer(text) => Some(text),
+                DialogEvent::Decline | DialogEvent::Close => None,
+            };
+            if let Some(reply) = self.dialogs.pop_front().and_then(|open| open.reply) {
+                reply.send(answer);
+            }
+            return Vec::new();
+        }
         let Resolved::Action(action) = input else {
             return Vec::new();
         };
@@ -367,6 +396,29 @@ impl App {
         effects
     }
 
+    /// Queues a dialog for a question from ssh.
+    pub(crate) fn ask(&mut self, ask: Ask) {
+        let dialog = Dialog::prompt(ask.id, &ask.context, &ask.message, ask.kind);
+        self.dialogs.push_back(Open {
+            dialog,
+            reply: Some(ask.reply),
+        });
+    }
+
+    /// Queues a dialog for information from ssh.
+    pub(crate) fn notice(&mut self, id: u64, context: &str, message: &str) {
+        let dialog = Dialog::notice(id, context, message);
+        self.dialogs.push_back(Open {
+            dialog,
+            reply: None,
+        });
+    }
+
+    /// Closes the dialog of a prompt or notice that ssh no longer waits for.
+    pub(crate) fn prompt_closed(&mut self, id: u64) {
+        self.dialogs.retain(|open| open.dialog.id() != id);
+    }
+
     /// Stops every connection and connection attempt, for quitting.
     pub(crate) fn disconnect_all(&mut self) {
         for (_, state) in self.hosts.drain() {
@@ -399,6 +451,9 @@ impl App {
         self.right
             .render(frame, right, active == Side::Right, &hosts, now, tz);
         self.render_fkeys(frame, key_bar, keymap);
+        if let Some(open) = self.dialogs.front() {
+            open.dialog.render(frame, panels);
+        }
     }
 
     /// The F-key bar: ten equal slots, each the key number and the label of its action.
@@ -430,6 +485,7 @@ fn waits_for(panel: &Panel, host: &str) -> bool {
 fn fkey_label(action: Action) -> Option<String> {
     match action {
         Action::Quit => Some(fl!("fkey-quit")),
+        Action::Cancel => Some(fl!("fkey-cancel")),
         Action::Disconnect => Some(fl!("fkey-disconnect")),
         _ => None,
     }
@@ -440,8 +496,12 @@ mod tests {
     use std::path::PathBuf;
     use std::time::{Duration, UNIX_EPOCH};
 
+    use std::sync::mpsc;
+
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
+    use secrecy::ExposeSecret as _;
+    use sftp_tui_ssh::askpass::PromptKind;
     use sftp_tui_vfs::{DirEntry, FileKind, Metadata, RemotePath};
 
     use super::super::panel::Listing;
@@ -806,6 +866,79 @@ mod tests {
         // A new attempt clears the failure.
         enter_host(&mut app, Side::Left, 0);
         assert_eq!(app.host_state("web").status, HostStatus::Connecting);
+    }
+
+    /// A question from ssh, and where its answer arrives.
+    fn ask(id: u64, kind: PromptKind, message: &str) -> (Ask, mpsc::Receiver<Option<String>>) {
+        let (sender, answers) = mpsc::channel();
+        let reply = Reply::new(move |answer| {
+            let answer = answer.map(|text| text.expose_secret().to_owned());
+            let _ = sender.send(answer);
+        });
+        let ask = Ask {
+            id,
+            context: "web".to_owned(),
+            message: message.to_owned(),
+            kind,
+            reply,
+        };
+        (ask, answers)
+    }
+
+    #[test]
+    fn prompts_wait_their_turn_and_take_the_keys() {
+        let mut app = at_root();
+        let (password, password_answer) = ask(1, PromptKind::Secret, "deploy@web's password: ");
+        let (host_key, host_key_answer) = ask(2, PromptKind::HostKey, "Continue (yes/no)? ");
+        app.ask(password);
+        app.ask(host_key);
+        assert_eq!(app.context(), Context::DialogInput);
+        let text = screen(&mut app);
+        assert!(text.contains("deploy@web's password:"), "{text}");
+        assert!(!text.contains("Continue"), "the second waits: {text}");
+        assert!(text.contains("10Cancel"), "{text}");
+
+        for c in "s3cret".chars() {
+            app.handle(Resolved::Insert(c));
+        }
+        assert!(screen(&mut app).contains("[******"));
+        app.handle(action(Action::Confirm));
+        assert_eq!(password_answer.try_recv(), Ok(Some("s3cret".to_owned())));
+
+        assert_eq!(app.context(), Context::Dialog);
+        assert!(screen(&mut app).contains("Continue (yes/no)?"));
+        // Panel keys do nothing while a dialog is open; F10 closes the dialog, not the app.
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Cancel));
+        assert!(!app.quits());
+        assert_eq!(host_key_answer.try_recv(), Ok(None));
+        assert_eq!(app.context(), Context::Root);
+        assert_eq!(
+            app.panel(Side::Left).host_under_cursor(),
+            None,
+            "still on [Local]"
+        );
+    }
+
+    #[test]
+    fn dialogs_close_when_ssh_stops_waiting() {
+        let mut app = at_root();
+        let (first, first_answer) = ask(1, PromptKind::Secret, "first");
+        let (second, second_answer) = ask(2, PromptKind::Confirm, "second");
+        app.ask(first);
+        app.ask(second);
+        app.notice(3, "web", "Confirm user presence for key ED25519-SK");
+        app.prompt_closed(2);
+        app.prompt_closed(1);
+        assert!(first_answer.try_recv().is_err(), "nobody to answer");
+        assert!(second_answer.try_recv().is_err());
+        assert!(screen(&mut app).contains("Confirm user presence"));
+        app.handle(action(Action::Confirm));
+        assert_eq!(app.context(), Context::Root, "OK dismisses a notice");
+
+        app.notice(4, "web", "Touch your key");
+        app.prompt_closed(4);
+        assert_eq!(app.context(), Context::Root);
     }
 
     #[test]

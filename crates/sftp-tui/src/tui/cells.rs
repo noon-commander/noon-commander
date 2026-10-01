@@ -67,6 +67,50 @@ pub(crate) fn fit(text: &str, width: usize, align: Align) -> String {
     format!("{head}~{}{tail}", " ".repeat(gap))
 }
 
+/// Breaks `text` into lines of at most `width` cells: at its newlines, then between words,
+/// and inside words longer than a line. Each line is made terminal-safe.
+pub(crate) fn wrap(text: &str, width: usize) -> Vec<String> {
+    let width = width.max(1);
+    let mut lines = Vec::new();
+    for paragraph in text.lines() {
+        let mut line = String::new();
+        let mut used = 0;
+        for word in sanitize(paragraph.as_bytes()).split(' ') {
+            let mut word = word;
+            loop {
+                let word_width = word.width();
+                let gap = usize::from(used > 0);
+                if used + gap + word_width <= width {
+                    if gap == 1 {
+                        line.push(' ');
+                    }
+                    line.push_str(word);
+                    used += gap + word_width;
+                    break;
+                }
+                if used > 0 {
+                    lines.push(std::mem::take(&mut line));
+                    used = 0;
+                    continue;
+                }
+                // A word longer than a line goes on in the next one; a character wider than a
+                // line gets one of its own.
+                let (head, _) = take_width(word.chars(), width);
+                let head_len = head
+                    .len()
+                    .max(word.chars().next().map_or(0, char::len_utf8));
+                lines.push(word[..head_len].to_owned());
+                word = &word[head_len..];
+                if word.is_empty() {
+                    break;
+                }
+            }
+        }
+        lines.push(line);
+    }
+    lines
+}
+
 /// The longest prefix of `chars` that fits into `limit` cells, and its width.
 fn take_width(chars: impl Iterator<Item = char>, limit: usize) -> (String, usize) {
     let mut taken = String::new();
@@ -161,6 +205,22 @@ mod tests {
             wide, "文~ 件",
             "a wide character never splits; its cell stays blank"
         );
+    }
+
+    #[test]
+    fn wrap_breaks_lines_at_newlines_spaces_and_long_words() {
+        assert_eq!(
+            wrap("The authenticity of host 'web' can't be established.", 20),
+            ["The authenticity of", "host 'web' can't be", "established."]
+        );
+        assert_eq!(wrap("one\ntwo  three", 20), ["one", "two  three"]);
+        assert_eq!(
+            wrap("SHA256:abcdefghijklmnop", 8),
+            ["SHA256:a", "bcdefghi", "jklmnop"]
+        );
+        assert_eq!(wrap("bad\x1b[2J", 20), ["bad?[2J"]);
+        assert_eq!(wrap("文件文件", 3), ["文", "件", "文", "件"]);
+        assert_eq!(wrap("", 10), Vec::<String>::new());
     }
 
     #[test]

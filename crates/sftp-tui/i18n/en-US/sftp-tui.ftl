@@ -9,6 +9,8 @@
 fkey-quit = Quit
 # Closes the connection to the host under the cursor.
 fkey-disconnect = Disconn
+# Closes a dialog.
+fkey-cancel = Cancel
 
 ## Panels (src/tui/panel). Prefixes: panel-, error-.
 
@@ -48,3 +50,10 @@ root-title = Hosts
 root-local = [Local]
 # Column header: user@hostname:port from ssh -G.
 root-address = Address
+
+## Dialogs (src/tui/dialog). Prefix: dialog-. Their text comes from ssh; these are the buttons.
+
+dialog-ok = OK
+dialog-cancel = Cancel
+dialog-yes = Yes
+dialog-no = No

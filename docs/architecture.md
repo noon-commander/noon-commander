@@ -75,8 +75,7 @@ config:
   directory, in a background task that scans the ssh config and loads the cache, so Ctrl-R
   rereads the ssh config.
 - Entering a host connects in the background (the status line says so; Esc stops it) and opens
-  the configured `start_dir` or the remote home directory, shown as an absolute path. Until the
-  dialogs exist, the TUI declines password and host-key prompts, so only keys and the agent work.
+  the configured `start_dir` or the remote home directory, shown as an absolute path.
 - When a connection is lost, the panels on that host go back to the root and say why.
 - A marker in front of each host shows its state: `○` not connected, `◌` connecting, `●`
   connected, `✗` the last attempt failed or the connection was lost. F8 (`Esc 8`) in the root
@@ -110,7 +109,17 @@ predicates. So:
 Prompts go through the askpass bridge ([ADR 0003](adr/0003-askpass-bridge.md)): ssh runs
 `sftp-tui` as its `SSH_ASKPASS` program, which forwards the prompt to the TUI over a Unix socket
 and returns the answer. The command-line subcommands answer prompts on `/dev/tty`; the TUI
-declines them until it has dialogs for them.
+shows them as dialogs:
+
+- passwords, passphrases, PINs, and codes: a masked field, OK, and Cancel;
+- host keys and confirmations: ssh's question, Yes, and No, which is the default;
+- notices, such as a request to touch a security key: shown until ssh is done.
+
+Dialogs queue: a new prompt, say from a second host, waits until the one in use is answered,
+so it never takes over the keys mid-password. A dialog closes by itself when ssh stops
+waiting. The typed secret lives in memory reserved up front, so it is never copied by growing,
+and is wiped when the dialog closes; it is passed on as a `SecretString` and never logged.
+Messages from ssh, which may quote the server, are shown terminal-safe.
 
 ## Command line
 
@@ -215,6 +224,10 @@ show_hidden = true
   key, so there an unbound Alt and a character count as `Esc` and the character. In dialogs and
   quick search `Esc` acts at once. Keys are written with `crokey` names. User overrides in
   `keymap.toml` are planned for M4. The F-key bar is generated from the active keymap; the help screen will be too.
+- **Dialogs.** Modal and centered over the panels, with mc-style buttons: `[< OK >]` marks the
+  default one. Keys go to the first dialog in the queue (contexts `dialog` and `dialog_input`);
+  Tab and the arrows move between the field and the buttons, Enter activates, Esc or F10
+  cancels.
 - **Text.** Fluent files under `crates/sftp-tui/i18n/`, embedded in the binary and read with
   `fl!` from `i18n-embed-fl`, which checks message IDs against `en-US` at compile time; only
   `en-US` for now. `ui.language = "auto"` follows the system locale (through `sys-locale`).

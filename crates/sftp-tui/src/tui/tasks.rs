@@ -17,6 +17,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::app::{Effect, Side};
 use super::describe;
+use super::dialog::{Ask, Reply};
 use super::panel::{ListRequest, Listed, Listing};
 use super::root;
 use crate::context::Context;
@@ -43,6 +44,16 @@ pub(crate) enum Done {
         connection: u64,
         handle: HostHandle,
     },
+    /// ssh asks something.
+    Ask(Ask),
+    /// ssh tells something that needs no answer, until [`Done::PromptClosed`].
+    Notice {
+        id: u64,
+        context: String,
+        message: String,
+    },
+    /// ssh no longer waits for the prompt or notice `id`.
+    PromptClosed { id: u64 },
     /// `ssh -G` gave the address of a host that [`Effect::Connect`] connects to.
     Resolved { host: String, address: String },
     /// The attempt or connection of [`Effect::Connect`] ended; `reason` is `None` if it was
@@ -82,7 +93,7 @@ impl Tasks {
     /// Prepares the runtime directory and the askpass bridge, and cleans up after crashed
     /// instances in the background. A failure here only affects connections.
     pub(crate) async fn start(context: Arc<Context>, done: mpsc::UnboundedSender<Done>) -> Self {
-        let askpass = prepare_ssh(&context).await;
+        let askpass = prepare_ssh(&context, done.clone()).await;
         if let Err(reason) = &askpass {
             tracing::warn!(%reason, "cannot prepare for ssh connections");
         }
@@ -161,9 +172,11 @@ impl Tasks {
     }
 }
 
-/// The runtime directory and the askpass bridge. Until there are dialogs for them, prompts are
-/// declined, so ssh fails as it would without a way to ask.
-async fn prepare_ssh(context: &Context) -> Result<AskpassServer, String> {
+/// The runtime directory and the askpass bridge, whose prompts go to the app as [`Done`]s.
+async fn prepare_ssh(
+    context: &Context,
+    done: mpsc::UnboundedSender<Done>,
+) -> Result<AskpassServer, String> {
     let paths = context.paths.clone();
     tokio::task::spawn_blocking(move || paths.ensure_runtime_dir())
         .await
@@ -177,9 +190,30 @@ async fn prepare_ssh(context: &Context) -> Result<AskpassServer, String> {
         .map_err(|error| describe::chain(&error))?;
     tokio::spawn(async move {
         while let Some(event) = events.recv().await {
-            if let AskpassEvent::Prompt(prompt) = event {
-                tracing::info!(host = %prompt.context, "declining an ssh prompt");
-                prompt.cancel();
+            let done_event = match event {
+                AskpassEvent::Prompt(prompt) => Done::Ask(Ask {
+                    id: prompt.id,
+                    context: prompt.context.clone(),
+                    message: prompt.message.clone(),
+                    kind: prompt.kind,
+                    reply: Reply::new(move |answer| match answer {
+                        Some(text) => prompt.answer(text),
+                        None => prompt.cancel(),
+                    }),
+                }),
+                AskpassEvent::Notice {
+                    id,
+                    context,
+                    message,
+                } => Done::Notice {
+                    id,
+                    context,
+                    message,
+                },
+                AskpassEvent::Closed { id } => Done::PromptClosed { id },
+            };
+            if done.send(done_event).is_err() {
+                break;
             }
         }
     });

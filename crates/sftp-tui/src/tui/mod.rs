@@ -51,7 +51,8 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     let context = Arc::new(context);
     let (done_tx, mut done) = mpsc::unbounded_channel();
     let mut tasks = Tasks::start(Arc::clone(&context), done_tx).await;
-    let (mut app, effects) = App::new(&start, &context.paths.home);
+    let show_hidden = context.config.ui.show_hidden;
+    let (mut app, effects) = App::new(&start, &context.paths.home, show_hidden);
     tasks.run(effects);
     let result = loop {
         if app.quits() {

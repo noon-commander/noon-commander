@@ -100,8 +100,8 @@ impl Keymap {
         use Action::{
             Backspace, Cancel, Confirm, Delete, DeleteToEnd, DeleteToStart, Disconnect, Down, End,
             Enter, Help, Home, Left, NextField, OtherPanelOpen, OtherPanelSync, PageDown, PageUp,
-            Parent, PrevField, QuickSearch, Quit, Redraw, Reload, Right, SwapPanels, SwitchPanel,
-            ToggleHidden, Up,
+            Parent, PrevField, QuickSearch, Quit, Redraw, Reload, Right, SortByExtension,
+            SortByName, SortBySize, SortByTime, SwapPanels, SwitchPanel, ToggleHidden, Up,
         };
         let presets: [(Context, Preset); 5] = [
             (
@@ -122,6 +122,12 @@ impl Keymap {
                     (Reload, &["ctrl-r"]),
                     (Cancel, &["esc", "esc esc"]),
                     (ToggleHidden, &["alt-."]),
+                    // mc leaves sorting to its menu; these are Far Manager's keys. macOS takes
+                    // them for keyboard navigation unless those shortcuts are turned off.
+                    (SortByName, &["ctrl-f3"]),
+                    (SortByExtension, &["ctrl-f4"]),
+                    (SortByTime, &["ctrl-f5"]),
+                    (SortBySize, &["ctrl-f6"]),
                     (QuickSearch, &["ctrl-s", "alt-s"]),
                     (Help, &["f1"]),
                     (Quit, &["f10"]),
@@ -686,6 +692,7 @@ mod tests {
             }
             for (sequence, action) in &bindings.0 {
                 if let [key] = sequence.as_slice()
+                    && key.modifiers.is_empty()
                     && let KeyCode::F(number @ 1..=10) = *key.codes.first()
                 {
                     let alias = parse_sequence(&format!("esc {}", number % 10)).unwrap();

@@ -79,8 +79,16 @@ pub(crate) enum Action {
     OtherPanelSync,
     /// Reads the directory again.
     Reload,
-    /// Shows or hides files whose names start with a dot.
+    /// Shows or hides files whose names start with a dot, in both panels.
     ToggleHidden,
+    /// Sorts by name; once more: reverses the order. Likewise for the other sort actions.
+    SortByName,
+    /// Sorts by extension, then name.
+    SortByExtension,
+    /// Sorts by modification time.
+    SortByTime,
+    /// Sorts by size.
+    SortBySize,
     /// Starts quick search, or jumps to the next match.
     QuickSearch,
     /// Closes the connection to the host under the cursor.
@@ -129,6 +137,10 @@ impl Action {
         Self::OtherPanelSync,
         Self::Reload,
         Self::ToggleHidden,
+        Self::SortByName,
+        Self::SortByExtension,
+        Self::SortByTime,
+        Self::SortBySize,
         Self::QuickSearch,
         Self::Disconnect,
         Self::Backspace,

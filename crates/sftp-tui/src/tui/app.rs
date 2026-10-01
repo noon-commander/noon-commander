@@ -102,6 +102,8 @@ pub(crate) struct App {
     active: Side,
     hosts: HashMap<String, Host>,
     connections: u64,
+    /// Whether panels show names that start with a dot.
+    show_hidden: bool,
     /// Hosts whose last attempt failed or whose connection was lost.
     failed: HashSet<String>,
     /// Addresses from `ssh -G` in this session.
@@ -115,9 +117,13 @@ pub(crate) struct App {
 
 impl App {
     /// Both panels on the local directory `start`, and the listings to request for them. From
-    /// the virtual root, the local file system opens at `home`.
-    pub(crate) fn new(start: &Path, home: &Path) -> (Self, Vec<Effect>) {
-        let panel = || Panel::new(Location::Local(start.to_path_buf()), home.to_path_buf());
+    /// the virtual root, the local file system opens at `home`. `show_hidden` shows names that
+    /// start with a dot.
+    pub(crate) fn new(start: &Path, home: &Path, show_hidden: bool) -> (Self, Vec<Effect>) {
+        let panel = || {
+            let start = Location::Local(start.to_path_buf());
+            Panel::new(start, home.to_path_buf(), show_hidden)
+        };
         let (left, left_request) = panel();
         let (right, right_request) = panel();
         let mut app = Self {
@@ -126,6 +132,7 @@ impl App {
             active: Side::Left,
             hosts: HashMap::new(),
             connections: 0,
+            show_hidden,
             failed: HashSet::new(),
             addresses: HashMap::new(),
             dialogs: VecDeque::new(),
@@ -199,6 +206,14 @@ impl App {
             Action::Quit => self.quit = true,
             Action::Redraw => self.redraw = true,
             Action::SwitchPanel => self.active = self.active.other(),
+            // As in mc, for both panels.
+            Action::ToggleHidden => {
+                self.show_hidden = !self.show_hidden;
+                for side in Side::BOTH {
+                    let show = self.show_hidden;
+                    self.panel_mut(side).set_show_hidden(show);
+                }
+            }
             Action::Cancel => self.cancel(self.active),
             Action::Disconnect => return self.disconnect(self.active),
             _ => {
@@ -558,7 +573,7 @@ mod tests {
 
     /// An app on `/srv` whose first listings arrived.
     fn loaded() -> App {
-        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"));
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), true);
         answer(
             &mut app,
             effects,
@@ -569,7 +584,7 @@ mod tests {
 
     /// An app with both panels on the virtual root, which lists `web` and `db`.
     fn at_root() -> App {
-        let (mut app, effects) = App::new(Path::new("/"), Path::new("/home/me"));
+        let (mut app, effects) = App::new(Path::new("/"), Path::new("/home/me"), true);
         answer(&mut app, effects, &Listing::Dir(Vec::new()));
         let hosts = ["web", "db"].map(|alias| RootHost {
             alias: alias.to_owned(),
@@ -606,7 +621,7 @@ mod tests {
 
     #[test]
     fn lists_both_panels_at_start() {
-        let (_, effects) = App::new(Path::new("/srv"), Path::new("/home/me"));
+        let (_, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), true);
         let sides: Vec<Side> = effects
             .iter()
             .map(|effect| match effect {
@@ -954,6 +969,25 @@ mod tests {
         app.disconnect_all();
         assert!(stops.iter().all(CancellationToken::is_cancelled));
         assert!(app.hosts.is_empty());
+    }
+
+    #[test]
+    fn hidden_files_switch_in_both_panels() {
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), false);
+        answer(
+            &mut app,
+            effects,
+            &Listing::Dir(vec![dir(".git"), dir("src")]),
+        );
+        assert!(!screen(&mut app).contains(".git"));
+        app.handle(action(Action::ToggleHidden));
+        assert_eq!(
+            screen(&mut app).matches(".git").count(),
+            2,
+            "in both panels"
+        );
+        app.handle(action(Action::ToggleHidden));
+        assert!(!screen(&mut app).contains(".git"));
     }
 
     #[test]

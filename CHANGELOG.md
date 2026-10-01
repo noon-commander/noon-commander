@@ -41,3 +41,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the digit.
 - `[ui] language` selects the interface language (`auto` by default); only English exists so
   far. Interface text lives in Fluent files.
+- Panels sort by name, extension, modification time, or size with Ctrl-F3 … Ctrl-F6, as in Far
+  Manager; the same key again reverses the order. `[ui] show_hidden` (on by default) shows
+  names that start with a dot; Alt-. switches it while sftp-tui runs.

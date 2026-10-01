@@ -79,6 +79,38 @@ impl HostStatus {
     }
 }
 
+/// What a directory is sorted by. Directories always come first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SortKey {
+    Name,
+    Extension,
+    Time,
+    Size,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Sort {
+    key: SortKey,
+    descending: bool,
+}
+
+impl Sort {
+    /// Sorting by `key`: a new key starts as Far does, newest and largest first, names A to
+    /// Z; the same key again reverses the order.
+    fn by(self, key: SortKey) -> Self {
+        let descending = if key == self.key {
+            !self.descending
+        } else {
+            matches!(key, SortKey::Time | SortKey::Size)
+        };
+        Self { key, descending }
+    }
+
+    fn arrow(self) -> char {
+        if self.descending { '↓' } else { '↑' }
+    }
+}
+
 /// Which row gets the cursor once a listing arrives.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Focus {
@@ -123,8 +155,13 @@ enum Row<'a> {
 pub(crate) struct Panel {
     /// What is shown; a requested location replaces it once its listing arrives.
     location: Location,
-    /// Directories first, then by name; hosts in config order.
+    /// Directories first, then as `sort` says; hosts in config order.
     listing: Listing,
+    /// The entries of a directory listing that are shown, in order: hidden files may be left
+    /// out.
+    shown: Vec<usize>,
+    sort: Sort,
+    show_hidden: bool,
     /// Where the local file system opens from the virtual root.
     home: PathBuf,
     /// Row under the cursor; row 0 is `..`, or the local file system in the virtual root.
@@ -140,8 +177,8 @@ pub(crate) struct Panel {
 
 impl Panel {
     /// A panel for `location`, and the request for its first listing. From the virtual root,
-    /// the local file system opens at `home`.
-    pub(crate) fn new(location: Location, home: PathBuf) -> (Self, ListRequest) {
+    /// the local file system opens at `home`. `show_hidden` shows names that start with a dot.
+    pub(crate) fn new(location: Location, home: PathBuf, show_hidden: bool) -> (Self, ListRequest) {
         let listing = match location {
             Location::Root => Listing::Root(Vec::new()),
             Location::Local(_) | Location::Remote { .. } => Listing::Dir(Vec::new()),
@@ -149,6 +186,12 @@ impl Panel {
         let mut panel = Self {
             location: location.clone(),
             listing,
+            shown: Vec::new(),
+            sort: Sort {
+                key: SortKey::Name,
+                descending: false,
+            },
+            show_hidden,
             home,
             cursor: 0,
             offset: 0,
@@ -185,18 +228,10 @@ impl Panel {
             return;
         };
         match result {
-            Ok(Listed {
-                location,
-                mut listing,
-            }) => {
-                if let Listing::Dir(entries) = &mut listing {
-                    entries.sort_by_cached_key(|entry| {
-                        let name = String::from_utf8_lossy(&entry.name).to_lowercase();
-                        (!entry.is_dir_like(), name, entry.name.clone())
-                    });
-                }
+            Ok(Listed { location, listing }) => {
                 self.location = location;
                 self.listing = listing;
+                self.arrange();
                 self.offset = 0;
                 self.cursor = (0..self.rows())
                     .find(|&index| {
@@ -253,6 +288,43 @@ impl Panel {
         Some(request)
     }
 
+    /// Shows or hides names that start with a dot; the cursor stays on its entry if it can.
+    pub(crate) fn set_show_hidden(&mut self, show: bool) {
+        if self.show_hidden != show {
+            self.show_hidden = show;
+            self.rearrange();
+        }
+    }
+
+    /// Sorts and filters a directory listing again, keeping the cursor on its entry, or on its
+    /// row if the entry is no longer shown.
+    fn rearrange(&mut self) {
+        let name = match self.row(self.cursor) {
+            Some(Row::Entry(entry)) => Some(entry.name.clone()),
+            _ => None,
+        };
+        self.arrange();
+        if let Some(name) = name
+            && let Some(row) = (0..self.rows())
+                .find(|&row| matches!(self.row(row), Some(Row::Entry(entry)) if entry.name == name))
+        {
+            self.cursor = row;
+        }
+    }
+
+    /// Sorts a directory listing and picks the entries to show.
+    fn arrange(&mut self) {
+        let Listing::Dir(entries) = &mut self.listing else {
+            self.shown.clear();
+            return;
+        };
+        sort(entries, self.sort);
+        let show_hidden = self.show_hidden;
+        self.shown = (0..entries.len())
+            .filter(|&index| show_hidden || !entries[index].name.starts_with(b"."))
+            .collect();
+    }
+
     /// Whether the panel shows the virtual root.
     pub(crate) fn shows_root(&self) -> bool {
         self.location == Location::Root
@@ -297,6 +369,10 @@ impl Panel {
                 }
             },
             Action::Parent => return self.open_parent(),
+            Action::SortByName => self.sort_by(SortKey::Name),
+            Action::SortByExtension => self.sort_by(SortKey::Extension),
+            Action::SortByTime => self.sort_by(SortKey::Time),
+            Action::SortBySize => self.sort_by(SortKey::Size),
             Action::Reload => {
                 let focus = match self.row(self.cursor) {
                     Some(Row::Entry(entry)) => Focus::Name(entry.name.clone()),
@@ -308,6 +384,11 @@ impl Panel {
             _ => {}
         }
         None
+    }
+
+    fn sort_by(&mut self, key: SortKey) {
+        self.sort = self.sort.by(key);
+        self.rearrange();
     }
 
     /// Opens the parent with the cursor on the directory it came from, or on its host or the
@@ -332,7 +413,7 @@ impl Panel {
     fn rows(&self) -> usize {
         1 + match &self.listing {
             Listing::Root(hosts) => hosts.len(),
-            Listing::Dir(entries) => entries.len(),
+            Listing::Dir(_) => self.shown.len(),
         }
     }
 
@@ -341,7 +422,10 @@ impl Panel {
             (Listing::Root(_), None) => Some(Row::Local),
             (Listing::Root(hosts), Some(index)) => hosts.get(index).map(Row::Host),
             (Listing::Dir(_), None) => Some(Row::Parent),
-            (Listing::Dir(entries), Some(index)) => entries.get(index).map(Row::Entry),
+            (Listing::Dir(entries), Some(index)) => {
+                let index = *self.shown.get(index)?;
+                entries.get(index).map(Row::Entry)
+            }
         }
     }
 
@@ -384,7 +468,7 @@ impl Panel {
             }
         };
         let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
-        frame.render_widget(Line::raw(columns.header()), line(inner.y));
+        frame.render_widget(Line::raw(columns.header(self.sort)), line(inner.y));
         for (screen_row, index) in (self.offset..self.rows()).take(list_height).enumerate() {
             let Some(row) = self.row(index) else { break };
             let style = if active && index == self.cursor {
@@ -450,16 +534,24 @@ enum Columns {
 }
 
 impl Columns {
-    fn header(self) -> String {
-        let name = fl!("panel-name");
+    /// The column titles; an arrow marks the one a directory is sorted by, and its direction.
+    fn header(self, sort: Sort) -> String {
         match self {
-            Self::Dir(columns) => columns.join(
-                &name,
-                &fl!("panel-size"),
-                &fl!("panel-time"),
-                [Align::Center; 3],
-            ),
-            Self::Root(columns) => columns.join(&name, &fl!("root-address"), [Align::Center; 2]),
+            Self::Dir(columns) => {
+                let mut titles = [fl!("panel-name"), fl!("panel-size"), fl!("panel-time")];
+                let (column, title) = match sort.key {
+                    SortKey::Name => (0, fl!("panel-name")),
+                    SortKey::Extension => (0, fl!("panel-name-by-extension")),
+                    SortKey::Size => (1, fl!("panel-size")),
+                    SortKey::Time => (2, fl!("panel-time")),
+                };
+                titles[column] = format!("{}{title}", sort.arrow());
+                let [name, size, time] = titles;
+                columns.join(&name, &size, &time, [Align::Center; 3])
+            }
+            Self::Root(columns) => {
+                columns.join(&fl!("panel-name"), &fl!("root-address"), [Align::Center; 2])
+            }
         }
     }
 
@@ -594,6 +686,48 @@ impl RootColumns {
     }
 }
 
+/// Sorts a directory: directories first, then by `sort`; ties by name ignoring case, then by
+/// the bytes of the name.
+fn sort(entries: &mut Vec<DirEntry>, sort: Sort) {
+    #[derive(PartialEq, Eq, PartialOrd, Ord)]
+    enum Value {
+        Name,
+        Extension(String),
+        Time(Option<SystemTime>),
+        Size(u64),
+    }
+    let mut keyed: Vec<(bool, Value, String, DirEntry)> = std::mem::take(entries)
+        .into_iter()
+        .map(|entry| {
+            let name = String::from_utf8_lossy(&entry.name).to_lowercase();
+            let value = match sort.key {
+                SortKey::Name => Value::Name,
+                SortKey::Extension => Value::Extension(extension(&name).to_owned()),
+                SortKey::Time => Value::Time(entry.metadata.modified),
+                SortKey::Size => Value::Size(entry.metadata.size.unwrap_or(0)),
+            };
+            (!entry.is_dir_like(), value, name, entry)
+        })
+        .collect();
+    keyed.sort_by(|a, b| {
+        let order = (&a.1, &a.2, &a.3.name).cmp(&(&b.1, &b.2, &b.3.name));
+        a.0.cmp(&b.0).then(if sort.descending {
+            order.reverse()
+        } else {
+            order
+        })
+    });
+    *entries = keyed.into_iter().map(|(.., entry)| entry).collect();
+}
+
+/// What follows the last dot of a name, unless the dot starts it.
+fn extension(name: &str) -> &str {
+    match name.rfind('.') {
+        Some(dot) if dot > 0 => &name[dot + 1..],
+        _ => "",
+    }
+}
+
 /// The address of a host, terminal-safe: from `ssh -G` in this session, else the cached one.
 fn address(host: &RootHost, hosts: &dyn Fn(&str) -> HostState) -> String {
     let address = hosts(&host.alias).address.or_else(|| host.address.clone());
@@ -713,7 +847,7 @@ mod tests {
 
     /// A panel on `location` whose first listing arrived.
     fn loaded_at(location: Location, listing: Listing) -> Panel {
-        let (mut panel, request) = Panel::new(location, PathBuf::from(HOME));
+        let (mut panel, request) = Panel::new(location, PathBuf::from(HOME), true);
         answer(&mut panel, &request, listing);
         panel
     }
@@ -788,6 +922,102 @@ mod tests {
             ]
         );
         assert_eq!(panel.cursor, 0);
+    }
+
+    /// Entries whose names, extensions, times, and sizes all sort differently.
+    fn varied() -> Vec<DirEntry> {
+        let at = |seconds: u64| Some(UNIX_EPOCH + Duration::from_secs(NOW - 1000 + seconds));
+        let file = |name: &str, size: u64, seconds: u64| DirEntry {
+            metadata: Metadata {
+                modified: at(seconds),
+                ..entry(name, FileKind::File, size).metadata
+            },
+            ..entry(name, FileKind::File, size)
+        };
+        let dir = |name: &str, seconds: u64| DirEntry {
+            metadata: Metadata {
+                modified: at(seconds),
+                ..entry(name, FileKind::Dir, 4096).metadata
+            },
+            ..entry(name, FileKind::Dir, 4096)
+        };
+        vec![
+            file("c.txt", 20, 2),
+            dir("dir1", 0),
+            file("b.md", 10, 1),
+            file("Z", 5, 5),
+            dir("Adir", 4),
+            file("a.txt", 30, 3),
+            file(".env", 1, 6),
+        ]
+    }
+
+    #[test]
+    fn sorts_by_name_extension_time_and_size_and_reverses() {
+        let mut panel = loaded("/srv", varied());
+        let order = |panel: &Panel| names(panel)[1..].join(" ");
+        assert_eq!(order(&panel), "Adir dir1 .env a.txt b.md c.txt Z");
+        let header = |panel: &mut Panel| draw(panel, 60, 6, true).to_string();
+        assert!(header(&mut panel).contains("↑Name"));
+
+        panel.handle(Action::End);
+        assert_eq!(panel.handle(Action::SortByExtension), None);
+        assert_eq!(order(&panel), "Adir dir1 .env Z b.md a.txt c.txt");
+        assert_eq!(under_cursor(&panel), "Z", "the cursor stays on its entry");
+        assert!(header(&mut panel).contains("↑Name, by extension"));
+        panel.handle(Action::SortByExtension);
+        assert_eq!(order(&panel), "dir1 Adir c.txt a.txt b.md Z .env");
+
+        panel.handle(Action::SortByTime);
+        assert_eq!(
+            order(&panel),
+            "Adir dir1 .env Z a.txt c.txt b.md",
+            "newest first"
+        );
+        assert!(header(&mut panel).contains("↓Modify time"));
+        panel.handle(Action::SortBySize);
+        assert_eq!(
+            order(&panel),
+            "dir1 Adir a.txt c.txt b.md Z .env",
+            "largest first"
+        );
+        assert!(header(&mut panel).contains("↓Size"));
+        panel.handle(Action::SortBySize);
+        assert_eq!(order(&panel), "Adir dir1 .env Z b.md c.txt a.txt");
+        panel.handle(Action::SortByName);
+        assert_eq!(order(&panel), "Adir dir1 .env a.txt b.md c.txt Z");
+
+        // The order holds for the next directory, and the root keeps the config order.
+        panel.handle(Action::SortByTime);
+        let request = panel.handle(Action::Reload).unwrap();
+        answer(&mut panel, &request, Listing::Dir(varied()));
+        assert_eq!(order(&panel), "Adir dir1 .env Z a.txt c.txt b.md");
+        let mut root = root();
+        root.handle(Action::SortBySize);
+        assert_eq!(names(&root), ["<local>", "web", "db", "staging"]);
+    }
+
+    #[test]
+    fn hidden_files_come_and_go_and_the_cursor_stays() {
+        let (mut panel, request) = Panel::new(local("/srv"), PathBuf::from(HOME), false);
+        answer(&mut panel, &request, Listing::Dir(varied()));
+        assert_eq!(names(&panel)[1..].join(" "), "Adir dir1 a.txt b.md c.txt Z");
+        panel.handle(Action::End);
+        panel.set_show_hidden(true);
+        assert_eq!(names(&panel).len(), 8);
+        assert_eq!(under_cursor(&panel), "Z", "still on its entry");
+
+        panel.handle(Action::Home);
+        for _ in 0..3 {
+            panel.handle(Action::Down);
+        }
+        assert_eq!(under_cursor(&panel), ".env");
+        panel.set_show_hidden(false);
+        assert_eq!(
+            under_cursor(&panel),
+            "a.txt",
+            "the entry is gone; the row stays"
+        );
     }
 
     #[test]

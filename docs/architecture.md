@@ -186,6 +186,7 @@ args = ["-o", "Compression=yes"]
 
 [ui]
 language = "auto"                # or a language tag such as "en-US"; others fall back to it
+show_hidden = true               # names that start with a dot; Alt-. switches while running
 ```
 
 Planned keys and sections, not accepted yet:
@@ -199,14 +200,19 @@ atomic_upload = true             # write to a temporary name, then rename
 [ui]                             # M2
 icons = true
 theme = "mc-classic"
-show_hidden = true
 ```
 
 ## UI
 
 - **Panels.** Each panel lists a directory with `..` first, then directories, then files, by
   name ignoring case; columns are name, size, and modification time (local time, `ls -l`
-  style), and narrow panels drop the time, then the size. Long names lose their middle, marked
+  style), and narrow panels drop the time, then the size. Each panel has its own sort order:
+  name, extension, modification time, or size (Far's Ctrl-F3 … Ctrl-F6, as mc binds none;
+  macOS keeps them for keyboard navigation unless that is turned off in its settings);
+  time and size start newest and largest first, the same key again reverses, ties go by name,
+  and an arrow in the header marks the order. Directories stay first. Names that start with a
+  dot are shown unless `ui.show_hidden` is off; Alt-. switches them in both panels, as in mc.
+  Sorting and hiding keep the cursor on its entry. Long names lose their middle, marked
   with `~`. Names are shown terminal-safe: control and bidi characters become `?`. Listings
   run in background tasks; a reply carries the generation of its request, so a stale one is
   dropped. If a directory cannot be read, the panel stays where it was and says why below the

@@ -3,7 +3,7 @@ source: crates/sftp-tui/src/tui/app.rs
 expression: terminal.backend()
 ---
 "┌ /srv/left ─────────────────┐┌ /srv ──────────────────────┐"
-"│        Name        │ Size  ││        Name        │ Size  │"
+"│       ↑Name        │ Size  ││       ↑Name        │ Size  │"
 "│..                  │UP--DIR││..                  │UP--DIR│"
 "│deeper              │    DIR││left                │    DIR│"
 "├────────────────────────────┤├────────────────────────────┤"

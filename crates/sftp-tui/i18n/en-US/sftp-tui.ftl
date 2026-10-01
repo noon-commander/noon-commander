@@ -18,6 +18,8 @@ fkey-cancel = Cancel
 panel-name = Name
 panel-size = Size
 panel-time = Modify time
+# The name column's title while the panel is sorted by extension.
+panel-name-by-extension = Name, by extension
 # The size column of the `..` row and of directories.
 panel-up-dir = UP--DIR
 panel-dir = DIR

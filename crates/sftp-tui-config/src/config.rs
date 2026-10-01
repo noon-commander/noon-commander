@@ -35,12 +35,15 @@ pub struct UiConfig {
     /// Interface language as a language tag such as `en-US`, or `auto` for the system locale.
     /// Default: `auto`.
     pub language: String,
+    /// Whether panels start out showing files whose names begin with a dot. Default: `true`.
+    pub show_hidden: bool,
 }
 
 impl Default for UiConfig {
     fn default() -> Self {
         Self {
             language: "auto".to_owned(),
+            show_hidden: true,
         }
     }
 }
@@ -240,6 +243,7 @@ mod tests {
 
         [ui]
         language = "de-DE"
+        show_hidden = false
     "#;
 
     fn full() -> Config {
@@ -266,6 +270,7 @@ mod tests {
             ]),
             ui: UiConfig {
                 language: "de-DE".to_owned(),
+                show_hidden: false,
             },
         }
     }
@@ -283,6 +288,7 @@ mod tests {
         );
         assert!(config.hosts.is_empty());
         assert_eq!(config.ui.language, "auto");
+        assert!(config.ui.show_hidden);
     }
 
     #[test]
@@ -444,6 +450,7 @@ mod tests {
         }
         assert!(table["discovery"].get("hide").is_some());
         assert!(table["ui"].get("language").is_some());
+        assert!(table["ui"].get("show_hidden").is_some());
     }
 
     #[test]

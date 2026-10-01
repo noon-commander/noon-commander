@@ -234,7 +234,9 @@ atomic_upload = true             # write to a temporary name, then rename
   the timeout passes (`Esc Esc` at once). An `Esc` and a quick next key arrive as Alt and that
   key, so there an unbound Alt and a character count as `Esc` and the character. In dialogs and
   quick search `Esc` acts at once. Keys are written with `crokey` names. User overrides in
-  `keymap.toml` are planned for M4. The F-key bar is generated from the active keymap; the help screen will be too.
+  `keymap.toml` are planned for M4. The F-key bar is generated from the active keymap, and so
+  is the help screen (F1): the keys of each context, with what they do, for what the app can
+  do already; a prompt from ssh shows over it.
 - **Dialogs.** Modal and centered over the panels, with mc-style buttons: `[< OK >]` marks the
   default one. Keys go to the first dialog in the queue (contexts `dialog` and `dialog_input`);
   Tab and the arrows move between the field and the buttons, Enter activates, Esc or F10

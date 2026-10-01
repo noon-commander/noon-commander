@@ -308,25 +308,8 @@ impl Dialog {
         let field_rows = u16::from(self.field.is_some());
         let lines_rows = u16::try_from(lines.len()).unwrap_or(u16::MAX);
         // Borders, the message, the field, a blank line, the buttons.
-        let height = (lines_rows + field_rows + 4).min(area.height);
-        let x = area.x + area.width.saturating_sub(width) / 2;
-        let y = area.y + area.height.saturating_sub(height) / 2;
-        let outer = Rect::new(x, y, width.min(area.width), height);
-        frame.render_widget(Clear, outer);
-        if let Some(shadow) = theme.shadow {
-            // Two columns to the right and a row below, as mc draws it.
-            let right = Rect::new(outer.right(), outer.y + 1, 2, outer.height);
-            let below = Rect::new(outer.x + 2, outer.bottom(), outer.width, 1);
-            for rect in [right, below] {
-                frame
-                    .buffer_mut()
-                    .set_style(rect.intersection(area), shadow);
-            }
-        }
-        let title = Line::styled(format!(" {} ", self.title), theme.dialog_title);
-        let block = Block::bordered().title(title).style(theme.dialog);
-        let inner = block.inner(outer).inner(ratatui::layout::Margin::new(1, 0));
-        frame.render_widget(block, outer);
+        let height = lines_rows + field_rows + 4;
+        let inner = draw_box(frame, area, (width, height), &self.title, theme);
         let row = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
         let mut index = 0;
         for line in &lines {
@@ -377,6 +360,37 @@ impl Dialog {
         }
         Line::from(spans).centered()
     }
+}
+
+/// Draws an empty dialog box of `size` centered in `area`, with its title and mc's shadow, and
+/// returns the room inside, one column in from the frame on either side.
+pub(crate) fn draw_box(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    (width, height): (u16, u16),
+    title: &str,
+    theme: &Theme,
+) -> Rect {
+    let (width, height) = (width.min(area.width), height.min(area.height));
+    let x = area.x + (area.width - width) / 2;
+    let y = area.y + (area.height - height) / 2;
+    let outer = Rect::new(x, y, width, height);
+    frame.render_widget(Clear, outer);
+    if let Some(shadow) = theme.shadow {
+        // Two columns to the right and a row below, as mc draws it.
+        let right = Rect::new(outer.right(), outer.y + 1, 2, outer.height);
+        let below = Rect::new(outer.x + 2, outer.bottom(), outer.width, 1);
+        for rect in [right, below] {
+            frame
+                .buffer_mut()
+                .set_style(rect.intersection(area), shadow);
+        }
+    }
+    let title = Line::styled(format!(" {title} "), theme.dialog_title);
+    let block = Block::bordered().title(title).style(theme.dialog);
+    let inner = block.inner(outer).inner(ratatui::layout::Margin::new(1, 0));
+    frame.render_widget(block, outer);
+    inner
 }
 
 #[cfg(test)]

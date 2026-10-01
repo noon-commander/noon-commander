@@ -5,6 +5,7 @@ mod cells;
 mod decor;
 mod describe;
 mod dialog;
+mod help;
 mod keymap;
 mod panel;
 mod root;
@@ -27,7 +28,7 @@ use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::mpsc;
 
 use app::App;
-use keymap::{KeyState, Keymap};
+use keymap::KeyState;
 use tasks::{Done, Tasks};
 
 use crate::context::Context;
@@ -62,7 +63,6 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     let mut events = EventStream::new();
     let mut spinner = tokio::time::interval(SPINNER_FRAME);
     spinner.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    let keymap = Keymap::mc();
     let mut keys = KeyState::default();
     let context = Arc::new(context);
     let (done_tx, mut done) = mpsc::unbounded_channel();
@@ -79,14 +79,15 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
             break Err(error.into());
         }
         let now = SystemTime::now();
-        if let Err(error) = terminal.draw(|frame| app.render(frame, &keymap, now, &tz)) {
+        if let Err(error) = terminal.draw(|frame| app.render(frame, now, &tz)) {
             break Err(error.into());
         }
         let deadline = keys.deadline();
         tokio::select! {
             event = events.next() => match event {
                 Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => {
-                    for input in keymap.feed(&mut keys, app.context(), key, Instant::now()) {
+                    let context = app.context();
+                    for input in app.keymap().feed(&mut keys, context, key, Instant::now()) {
                         tasks.run(app.handle(input));
                     }
                 }
@@ -96,7 +97,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
                 None => break Ok(()),
             },
             () = sleep_until(deadline) => {
-                for input in keymap.expire(&mut keys, Instant::now()) {
+                for input in app.keymap().expire(&mut keys, Instant::now()) {
                     tasks.run(app.handle(input));
                 }
             }

@@ -53,3 +53,5 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Midnight Commander's colors (`[ui] theme = "mc-classic"`, the default): blue panels, a cyan
   cursor, names colored by type, gray dialogs with a shadow. `theme = "terminal"` keeps the
   terminal's own colors.
+- F1 shows the keys of panels, the host list, quick search, and dialogs, with what they do,
+  read from the keymap; the F-key bar shows `1Help`.

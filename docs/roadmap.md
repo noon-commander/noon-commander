@@ -18,7 +18,7 @@
 - [x] Debug commands: `sftp-tui hosts`, `sftp-tui ls <host>:<path>`
 - [x] Tests: local `sftp-server` over pipes, fake `ssh` program
 
-## M2: TUI for browsing (current)
+## M2: TUI for browsing (done)
 
 - [x] TUI skeleton: alternate screen, event loop, two panels, F10 quits, terminal restore
 - [x] Local panels: listing, navigation, background loading, errors
@@ -33,10 +33,12 @@
 - [x] Fluent i18n (`en-US`) and `ui.language`
 - [x] Askpass and host-key dialogs
 - [x] mc-classic and terminal themes (`ui.theme`)
-- [ ] F-key bar and help screen
+- [x] F-key bar and help screen (F1), both from the keymap
 
-## M3: File operations
+## M3: File operations (current)
 
+- [ ] Panel actions that the keymap binds already: Ctrl-U swaps the panels, Alt-O opens the
+      directory under the cursor in the other panel, Alt-I shows this directory there
 - [ ] Selection: Insert, `+`, `-`, `*`
 - [ ] F5 copy and F6 move/rename in any direction, with progress, cancellation, and a conflict
       dialog

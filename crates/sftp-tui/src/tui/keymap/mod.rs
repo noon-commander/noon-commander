@@ -146,6 +146,10 @@ impl Keymap {
                     (Down, &["down"]),
                     (Left, &["left"]),
                     (Right, &["right"]),
+                    (PageUp, &["pageup"]),
+                    (PageDown, &["pagedown"]),
+                    (Home, &["home"]),
+                    (End, &["end"]),
                     (NextField, &["tab"]),
                     (PrevField, &["backtab"]),
                     (Confirm, &["enter"]),
@@ -284,6 +288,38 @@ impl Keymap {
         };
         state.clear();
         resolved
+    }
+
+    /// The actions `context` binds itself, in the order of the preset, each with its keys as
+    /// text such as `Ctrl-r, Alt-s`, for the help screen. The `Esc 1` … `Esc 0` aliases are
+    /// left out; the help explains them once.
+    pub(crate) fn help(&self, context: Context) -> Vec<(Action, String)> {
+        let format = crokey::KeyCombinationFormat::default();
+        let mut rows: Vec<(Action, String)> = Vec::new();
+        let Some(bindings) = self.contexts.get(&context) else {
+            return rows;
+        };
+        for (sequence, action) in &bindings.0 {
+            if let [first, digit] = sequence.as_slice()
+                && *first == ESC
+                && matches!(digit.codes.first(), KeyCode::Char('0'..='9'))
+            {
+                continue;
+            }
+            let keys = sequence
+                .iter()
+                .map(|key| format.to_string(*key))
+                .collect::<Vec<_>>()
+                .join(" ");
+            match rows.iter_mut().find(|(bound, _)| bound == action) {
+                Some((_, text)) => {
+                    text.push_str(", ");
+                    text.push_str(&keys);
+                }
+                None => rows.push((*action, keys)),
+            }
+        }
+        rows
     }
 
     /// The actions on F1 … F10 in `context`'s chain, for the F-key bar.
@@ -703,6 +739,27 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn help_lists_keys_by_action_without_esc_digit_aliases() {
+        let keymap = Keymap::mc();
+        let panel = keymap.help(Context::Panel);
+        let keys = |action| {
+            panel
+                .iter()
+                .find(|(bound, _)| *bound == action)
+                .map(|(_, keys)| keys.as_str())
+        };
+        assert_eq!(keys(Action::Up), Some("Up, Ctrl-p"));
+        assert_eq!(keys(Action::Quit), Some("F10"));
+        assert_eq!(keys(Action::Cancel), Some("Esc, Esc Esc"));
+        assert_eq!(keys(Action::SortByName), Some("Ctrl-F3"));
+        assert_eq!(panel[0].0, Action::Up, "in the order of the preset");
+        assert_eq!(
+            keymap.help(Context::Root),
+            [(Action::Disconnect, "F8".to_owned())]
+        );
     }
 
     #[test]

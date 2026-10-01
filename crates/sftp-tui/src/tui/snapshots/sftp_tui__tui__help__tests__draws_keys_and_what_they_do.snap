@@ -1,0 +1,20 @@
+---
+source: crates/sftp-tui/src/tui/help.rs
+expression: "draw(&mut help, 70, 16)"
+---
+"                                                                      "
+"  ┌ Help ──────────────────────────────────────────────────────────┐  "
+"  │ Panels                                                         │  "
+"  │ Up, Ctrl-p       One row up                                    │  "
+"  │ Down, Ctrl-n     One row down                                  │  "
+"  │ PageUp, Alt-v    One page up                                   │  "
+"  │ PageDown, Ctrl-v One page down                                 │  "
+"  │ Home             First row                                     │  "
+"  │ End              Last row                                      │  "
+"  │ Enter            Open the directory or host under the cursor   │  "
+"  │ Ctrl-PageUp      Parent directory; above /, the host list      │  "
+"  │ Tab              The other panel                               │  "
+"  │ Ctrl-r           Read the directory again                      │  "
+"  │ Esc, Esc Esc     Stop loading or connecting                    │  "
+"  └────────────────────────────────────────────────────────────────┘  "
+"                                                                      "

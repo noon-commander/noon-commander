@@ -15,6 +15,7 @@ use tokio_util::sync::CancellationToken;
 use super::cells::{self, Align};
 use super::decor::Decor;
 use super::dialog::{Ask, Dialog, DialogEvent, Reply};
+use super::help::Help;
 use super::keymap::{Action, Context, Keymap, Resolved};
 use super::panel::{HostState, HostStatus, ListRequest, Listed, Panel, View};
 use super::tasks::HostHandle;
@@ -118,6 +119,9 @@ pub(crate) struct App {
     /// The first one is on screen and gets the keys; the others wait, so that a new prompt
     /// never takes the keys from a dialog in use.
     dialogs: VecDeque<Open>,
+    /// Over the panels, under the dialogs.
+    help: Option<Help>,
+    keymap: Keymap,
     quit: bool,
     redraw: bool,
 }
@@ -147,6 +151,8 @@ impl App {
             failed: HashSet::new(),
             addresses: HashMap::new(),
             dialogs: VecDeque::new(),
+            help: None,
+            keymap: Keymap::mc(),
             quit: false,
             redraw: false,
         };
@@ -165,10 +171,17 @@ impl App {
         std::mem::take(&mut self.redraw)
     }
 
+    /// What turns keys into actions.
+    pub(crate) fn keymap(&self) -> &Keymap {
+        &self.keymap
+    }
+
     /// Where keys go now.
     pub(crate) fn context(&self) -> Context {
         if let Some(open) = self.dialogs.front() {
             open.dialog.context()
+        } else if self.help.is_some() {
+            Context::Dialog
         } else if self.panel(self.active).searching() {
             Context::QuickSearch
         } else if self.panel(self.active).shows_root() {
@@ -182,7 +195,7 @@ impl App {
     fn supports(action: Action) -> bool {
         matches!(
             action,
-            Action::Quit | Action::Redraw | Action::Disconnect | Action::Cancel
+            Action::Help | Action::Quit | Action::Redraw | Action::Disconnect | Action::Cancel
         )
     }
 
@@ -209,6 +222,12 @@ impl App {
             };
             if let Some(reply) = self.dialogs.pop_front().and_then(|open| open.reply) {
                 reply.send(answer);
+            }
+            return Vec::new();
+        }
+        if let Some(help) = &mut self.help {
+            if help.handle(input) {
+                self.help = None;
             }
             return Vec::new();
         }
@@ -246,6 +265,7 @@ impl App {
             Action::QuickSearch => self.panel_mut(self.active).search_next(),
             Action::Quit => self.quit = true,
             Action::Redraw => self.redraw = true,
+            Action::Help => self.help = Some(Help::new(&self.keymap, self.ui.type_to_search)),
             Action::SwitchPanel => self.active = self.active.other(),
             // As in mc, for both panels.
             Action::ToggleHidden => {
@@ -495,13 +515,7 @@ impl App {
     }
 
     /// Two panels side by side above the F-key bar.
-    pub(crate) fn render(
-        &mut self,
-        frame: &mut Frame<'_>,
-        keymap: &Keymap,
-        now: SystemTime,
-        tz: &TimeZone,
-    ) {
+    pub(crate) fn render(&mut self, frame: &mut Frame<'_>, now: SystemTime, tz: &TimeZone) {
         let [panels, key_bar] =
             Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).areas(frame.area());
         let [left, right] = Layout::horizontal([Constraint::Fill(1); 2]).areas(panels);
@@ -525,16 +539,19 @@ impl App {
         self.left.render(frame, left, active == Side::Left, &view);
         self.right
             .render(frame, right, active == Side::Right, &view);
-        self.render_fkeys(frame, key_bar, keymap);
+        self.render_fkeys(frame, key_bar);
+        if let Some(help) = &mut self.help {
+            help.render(frame, panels, &self.theme);
+        }
         if let Some(open) = self.dialogs.front() {
             open.dialog.render(frame, panels, &self.theme);
         }
     }
 
     /// The F-key bar: ten equal slots, each the key number and the label of its action.
-    fn render_fkeys(&self, frame: &mut Frame<'_>, area: Rect, keymap: &Keymap) {
+    fn render_fkeys(&self, frame: &mut Frame<'_>, area: Rect) {
         let slots = Layout::horizontal([Constraint::Fill(1); 10]).split(area);
-        let actions = keymap.fkeys(self.context());
+        let actions = self.keymap.fkeys(self.context());
         for (number, (slot, action)) in (1..).zip(slots.iter().zip(actions)) {
             let label = action
                 .filter(|action| Self::supports(*action))
@@ -562,6 +579,7 @@ fn waits_for(panel: &Panel, host: &str) -> bool {
 /// The label of an action in the F-key bar.
 fn fkey_label(action: Action) -> Option<String> {
     match action {
+        Action::Help => Some(fl!("fkey-help")),
         Action::Quit => Some(fl!("fkey-quit")),
         Action::Cancel => Some(fl!("fkey-cancel")),
         Action::Disconnect => Some(fl!("fkey-disconnect")),
@@ -685,7 +703,7 @@ mod tests {
         let mut terminal = Terminal::new(TestBackend::new(160, 8)).unwrap();
         let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, &Keymap::mc(), now, &TimeZone::UTC))
+            .draw(|frame| app.render(frame, now, &TimeZone::UTC))
             .unwrap();
         terminal.backend().to_string()
     }
@@ -749,7 +767,7 @@ mod tests {
         let mut terminal = Terminal::new(TestBackend::new(60, 8)).unwrap();
         let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, &Keymap::mc(), now, &TimeZone::UTC))
+            .draw(|frame| app.render(frame, now, &TimeZone::UTC))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
@@ -1028,6 +1046,30 @@ mod tests {
     }
 
     #[test]
+    fn f1_opens_the_help_under_any_prompt() {
+        let mut app = loaded();
+        app.handle(action(Action::Help));
+        assert_eq!(app.context(), Context::Dialog);
+        assert!(screen(&mut app).contains("Help"));
+        assert!(screen(&mut app).contains("10Cancel"));
+
+        let (password, answer) = ask(1, PromptKind::Secret, "deploy@web's password: ");
+        app.ask(password);
+        assert_eq!(
+            app.context(),
+            Context::DialogInput,
+            "the prompt takes the keys"
+        );
+        assert!(screen(&mut app).contains("password"));
+        app.handle(action(Action::Cancel));
+        assert_eq!(answer.try_recv(), Ok(None));
+        assert_eq!(app.context(), Context::Dialog, "back to the help");
+        app.handle(action(Action::Cancel));
+        assert_eq!(app.context(), Context::Panel);
+        assert!(!app.quits());
+    }
+
+    #[test]
     fn quitting_stops_every_connection() {
         let mut app = at_root();
         let stops: Vec<CancellationToken> = [(Side::Left, 1), (Side::Right, 2)]
@@ -1126,7 +1168,7 @@ mod tests {
         let mut terminal = Terminal::new(TestBackend::new(80, 6)).unwrap();
         let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, &Keymap::mc(), now, &TimeZone::UTC))
+            .draw(|frame| app.render(frame, now, &TimeZone::UTC))
             .unwrap();
         let buffer = terminal.backend().buffer();
         // `10Quit` starts at column 72; its slot runs to the edge.

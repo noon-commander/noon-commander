@@ -11,7 +11,8 @@ sftp-tui is a Midnight Commander-style, two-panel file manager for SFTP, written
 - Roadmap and current milestone: [docs/roadmap.md](docs/roadmap.md)
 - Decisions: [docs/adr/](docs/adr/)
 
-Status: pre-alpha. Read the roadmap before starting work; most crates are still empty.
+Status: pre-alpha. Read the roadmap before starting work. Browsing works (M2); file operations
+(M3) are next, and `sftp-tui-ops` is still empty.
 
 ## Philosophy
 

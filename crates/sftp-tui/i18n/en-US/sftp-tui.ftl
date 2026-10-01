@@ -6,6 +6,7 @@
 ## F-key bar (src/tui). Prefix: fkey-. Keep labels short, as mc does: a slot has about
 ## seven cells in an 80-column terminal.
 
+fkey-help = Help
 fkey-quit = Quit
 # Closes the connection to the host under the cursor.
 fkey-disconnect = Disconn
@@ -61,3 +62,55 @@ dialog-ok = OK
 dialog-cancel = Cancel
 dialog-yes = Yes
 dialog-no = No
+
+## Help screen (src/tui/help). Prefix: help-. One line per key: say what it does, briefly.
+
+help-title = Help
+help-panels = Panels
+help-root = Host list
+help-quick-search = Quick search
+help-dialogs = Dialogs and help
+help-text-fields = Text fields
+help-row-up = One row up
+help-row-down = One row down
+help-page-up = One page up
+help-page-down = One page down
+help-first-row = First row
+help-last-row = Last row
+help-enter = Open the directory or host under the cursor
+help-parent = Parent directory; above /, the host list
+help-switch-panel = The other panel
+help-reload = Read the directory again
+help-stop = Stop loading or connecting
+help-toggle-hidden = Show or hide names that start with a dot
+help-sort-name = Sort by name; again: reverse
+help-sort-extension = Sort by extension; again: reverse
+help-sort-time = Sort by modification time, newest first; again: reverse
+help-sort-size = Sort by size, largest first; again: reverse
+help-quick-search-start = Quick search; again: the next match
+help-help = This help
+help-quit = Quit
+help-redraw = Redraw the screen
+help-disconnect = Disconnect the host under the cursor
+help-search-back = Take back the last character
+help-search-end = End the search
+help-dialog-up = Previous button; in this help, one line up
+help-dialog-down = Next button; in this help, one line down
+help-dialog-left = Previous button
+help-dialog-right = Next button
+help-dialog-page-up = In this help, one page up
+help-dialog-page-down = In this help, one page down
+help-dialog-home = In this help, the top
+help-dialog-end = In this help, the end
+help-next-field = Next field or button
+help-prev-field = Previous field or button
+help-confirm = Press the button with the focus
+help-dialog-cancel = Cancel, or close this help
+help-field-home = Start of the text
+help-field-end = End of the text
+help-field-backspace = Delete the character before the cursor
+help-field-delete = Delete the character at the cursor
+help-field-delete-to-start = Delete to the start
+help-field-delete-to-end = Delete to the end
+help-note-esc = Esc 1 … Esc 0 stand for F1 … F10, and Esc followed by a key for Alt and the key, for terminals without them. A lone Esc acts after a second; Esc Esc at once.
+help-note-typing = Typing in a panel starts quick search.

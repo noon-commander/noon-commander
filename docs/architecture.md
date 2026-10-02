@@ -318,6 +318,12 @@ Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
   unless `transfer.atomic_upload` is off.
   When the job ends, panels on the target, its parent, and the source directory read them
   again.
+- **F6 moves or renames** the marked entries, or the one under the cursor, with the dialog
+  of F5 (`Move "x" to:`, without Preserve attributes: moves keep them); a new name in the
+  field renames in place, as in mc. Locally, and within one host, the job renames
+  (`move_within`); between the local file system and a host, or two hosts, it copies and
+  removes each source once all of it is copied. Its window says Moving; when it ends, the
+  panels on both sides read their directories again.
 - **F8 (or Delete) deletes** the marked entries, or the one under the cursor, after a red
   question with Yes as the default, as in mc: `Delete file "x"?`, `Delete directory "x" and
   everything in it?`, or `Delete 3 files and directories?`. mc asks a second time before it

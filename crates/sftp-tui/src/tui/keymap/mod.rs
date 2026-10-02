@@ -99,7 +99,7 @@ impl Keymap {
     pub(crate) fn mc() -> Self {
         use Action::{
             Backspace, Cancel, Confirm, Copy, Delete, DeleteToEnd, DeleteToStart, Disconnect, Down,
-            End, Enter, Help, Home, InvertMarks, Left, Mark, MarkUp, Mkdir, NextField,
+            End, Enter, Help, Home, InvertMarks, Left, Mark, MarkUp, Mkdir, Move, NextField,
             OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent, PrevField, QuickSearch, Quit,
             Redraw, Reload, Right, Select, SortByExtension, SortByName, SortBySize, SortByTime,
             SwapPanels, SwitchPanel, Toggle, ToggleHidden, Unselect, Up,
@@ -139,6 +139,7 @@ impl Keymap {
                     (QuickSearch, &["ctrl-s", "alt-s"]),
                     (Help, &["f1"]),
                     (Copy, &["f5"]),
+                    (Move, &["f6"]),
                     (Mkdir, &["f7"]),
                     // In text fields, Delete deletes a character.
                     (Delete, &["f8", "delete"]),
@@ -722,6 +723,7 @@ mod tests {
         let mut root = [None; 10];
         root[0] = Some(Action::Help);
         root[4] = Some(Action::Copy);
+        root[5] = Some(Action::Move);
         root[6] = Some(Action::Mkdir);
         root[7] = Some(Action::Disconnect);
         root[9] = Some(Action::Quit);
@@ -779,6 +781,7 @@ mod tests {
         let mut panel = [None; 10];
         panel[0] = Some(Action::Help);
         panel[4] = Some(Action::Copy);
+        panel[5] = Some(Action::Move);
         panel[6] = Some(Action::Mkdir);
         panel[7] = Some(Action::Delete);
         panel[9] = Some(Action::Quit);

@@ -498,8 +498,9 @@ struct CopyJob<'a> {
 }
 
 impl CopyJob<'_> {
-    /// Copies `sources`, all local or all on one host, to `target`; `hosts` lead to the hosts
-    /// of the sources and of the target, if they are remote.
+    /// Copies `sources`, all local or all on one host, to `target`, or moves them if the
+    /// options remove sources; `hosts` lead to the hosts of the sources and of the target, if
+    /// they are remote.
     async fn run(
         self,
         sources: Vec<Location>,
@@ -533,7 +534,18 @@ impl CopyJob<'_> {
             }
         };
         let here = |path: &PathBuf| Location::Local(path.clone());
+        let moving = self.options.remove_sources;
         match (from, to, target) {
+            // Within one file system, a move renames.
+            (None, None, Location::Local(target)) if moving => {
+                self.move_within(&LocalFs, local, target, &here).await
+            }
+            (Some(from), Some(_), Location::Remote { host, path })
+                if moving && host == source_host =>
+            {
+                let there = on_host(host);
+                self.move_within(&*from, remote, path, &there).await
+            }
             (None, None, Location::Local(target)) => {
                 self.copy((&LocalFs, local, &here), (&LocalFs, target, &here))
                     .await
@@ -554,6 +566,28 @@ impl CopyJob<'_> {
                     .await
             }
             _ => finished,
+        }
+    }
+
+    async fn move_within<V: Vfs>(
+        &self,
+        vfs: &V,
+        sources: Vec<V::Path>,
+        target: V::Path,
+        report: Report<'_, V::Path>,
+    ) -> Done {
+        let (events, incoming) = mpsc::unbounded_channel();
+        let reporter = Reporter::new(events, self.cancel.clone());
+        let options = self.options;
+        let work = async move {
+            let mut reporter = reporter;
+            let side = Endpoint { vfs, report };
+            sftp_tui_ops::move_within(side, sources, target, options, &mut reporter).await
+        };
+        tokio::join!(work, forward(incoming, self.id, self.done, |path| path));
+        Done::Job {
+            id: self.id,
+            event: JobEvent::Finished,
         }
     }
 

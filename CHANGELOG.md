@@ -77,3 +77,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   half file. A taken name asks with both sizes and times: Yes, No, All, None, Older, Abort.
 - `[transfer] atomic_upload = false` writes copies to their targets directly instead of under
   a temporary name.
+- F6 moves the marked entries or the one under the cursor, or renames it in place when given a
+  new name, as in mc. Within one file system it renames; between the local file system and a
+  host, or two hosts, it copies and removes each source once all of it is copied, so what is
+  skipped stays where it was.

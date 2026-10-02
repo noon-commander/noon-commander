@@ -8,6 +8,7 @@
 
 fkey-help = Help
 fkey-copy = Copy
+fkey-move = RenMov
 fkey-mkdir = Mkdir
 fkey-delete = Delete
 fkey-quit = Quit
@@ -120,6 +121,7 @@ help-sort-time = Sort by modification time, newest first; again: reverse
 help-sort-size = Sort by size, largest first; again: reverse
 help-quick-search-start = Quick search; again: the next match
 help-copy = Copy the marked entries, or the one under the cursor
+help-move = Move or rename the marked entries, or the one under the cursor
 help-mkdir = Make a directory
 help-delete = Delete the marked entries, or the one under the cursor
 help-help = This help
@@ -197,8 +199,6 @@ copy-preserve = Preserve attributes
 # Above the entry the job works on.
 copy-copying = Copying
 copy-error = Cannot copy to { $path }: { $reason }
-copy-same = the source and the target are the same
-copy-into-itself = it is in { $path }
 # A taken name: what is to be copied, what is there, and the question.
 copy-exists-title = File exists
 copy-exists =
@@ -206,3 +206,17 @@ copy-exists =
     New:      { $new_size } bytes, { $new_time }
     Existing: { $old_size } bytes, { $old_time }
     Overwrite it?
+
+## Moving, F6 (src/tui/app). Prefix: move-. As in mc; a new name in the field renames.
+
+move-title = Move
+move-one = Move "{ $name }" to:
+move-many = Move { $count } files and directories to:
+move-moving = Moving
+move-error = Cannot move to { $path }: { $reason }
+
+## Why a copy or a move cannot start (src/tui/app). Prefix: transfer-.
+
+transfer-same = the source and the target are the same
+# The target is in a source directory.
+transfer-into-itself = it is in { $path }

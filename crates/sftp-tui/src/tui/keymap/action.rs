@@ -82,6 +82,8 @@ pub(crate) enum Action {
     InvertMarks,
     /// Asks where to, and copies the marked entries or the one under the cursor.
     Copy,
+    /// Asks where to, and moves or renames the marked entries or the one under the cursor.
+    Move,
     /// Asks for a name and makes a directory.
     Mkdir,
     /// Asks for a pattern and marks the entries whose names match it.
@@ -158,6 +160,7 @@ impl Action {
         Self::MarkUp,
         Self::InvertMarks,
         Self::Copy,
+        Self::Move,
         Self::Mkdir,
         Self::Select,
         Self::Unselect,

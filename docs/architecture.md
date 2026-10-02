@@ -18,7 +18,7 @@ crates/
 ├── noc-ssh/       host discovery, ssh -G, argument validation, forwarding policy,
 │                  ControlMaster, SFTP channels, askpass bridge
 ├── noc-vfs/       Vfs trait: local and SFTP backends, mounted volumes
-└── noc-ops/       job engine: copy, move, delete, mkdir; progress, cancellation, conflicts
+└── noc-ops/       job engine: copy, move, delete, mkdir, checksums; progress, cancellation, conflicts
 ```
 
 Dependencies point one way: `config ← ssh ← vfs ← ops ← noc`. Library crates contain no UI
@@ -307,6 +307,19 @@ replaces; a directory whose name is taken by a directory merges into it by copyi
 removing, and so does anything the rename refuses as crossing file systems (`EXDEV`
 locally, or a plain failure over SFTP v3, which has no code for it). Moves keep times and
 permissions.
+
+Checksums (`Checksum`) hash files with SHA-256, SHA-512, SHA-1, MD5, or BLAKE3 (RustCrypto's
+`sha2`, `sha1`, and `md-5`, and `blake3`). A job may span several endpoints, such as a local
+file and one on a host to compare: it scans every group of targets first, so that progress
+has one total, then hashes them in turn. Symlinks among the targets are followed; inside
+directories, symlinks to files are hashed and other symlinks left out, so that a walk never
+loops, and FIFOs, sockets, and devices are left out without being opened, since reading a
+FIFO would wait for a writer. Directories are walked in the order of their names, and each
+file is named relative to the targets' directory (`dir/sub/file`), as `sha256sum` would name
+it from there. Files are read as streams through the `Vfs`, over SFTP too, and hashed off the
+async thread (`spawn_blocking`) in batches of 256 KiB while the next batch is read. A failure
+asks as other jobs do: Retry hashes the file from its start, and a skipped file has no
+checksum. The job returns its sums with its outcome; an aborted one shows none.
 
 ## Configuration and paths
 

@@ -1,6 +1,6 @@
 [package]
 name = "noc-ops"
-description = "File operation engine for Noon Commander: copy, move, delete, mkdir jobs"
+description = "File operation engine for Noon Commander: copy, move, delete, mkdir, checksum jobs"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,11 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+blake3.workspace = true
+md-5.workspace = true
 noc-vfs.workspace = true
+sha1.workspace = true
+sha2.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 

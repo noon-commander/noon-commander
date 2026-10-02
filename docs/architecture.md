@@ -218,8 +218,10 @@ Options → Configuration… shows the settings of `config.toml` by category
   ║              │ Theme              < mc-classic >               █ ║
   ║              │ Borders            < Double ═ ║ ╔ >             ░ ║
   ║              │ Icons              [x]                          ░ ║
+  ╟──────────────┴───────────────────────────────────────────────────╢
   ║ A language tag, such as en-US, or auto for the system locale.    ║
   ║ Takes effect after a restart.                                    ║
+  ╟──────────────────────────────────────────────────────────────────╢
   ║                       [< OK >] [ Cancel ]                        ║
   ╚══════════════════════════════════════════════════════════════════╝
 ```
@@ -228,7 +230,7 @@ Options → Configuration… shows the settings of `config.toml` by category
   the settings of the chosen one are on the right: check boxes `[x]`, choices `< … >`, and
   text fields. Only Interface (`[ui]`) exists so far.
 - Settings that do not fit scroll with the cursor, and a scroll bar (`█` on `░`) shows in the
-  last column. The two lines below them say what the setting under the cursor does, and
+  last column. The two lines below them, between lines across the dialog, say what the setting under the cursor does, and
   whether it takes effect only after a restart.
 - Tab moves between the categories, the settings, and the buttons; Up and Down move within
   them; Space switches a check box or picks the next choice; Left and Right pick choices, and
@@ -606,7 +608,8 @@ remember_dir = true              # reopen the last directory of this session
   is the help screen (F1): the keys of each context, with what they do, for what the app can
   do already; a prompt from ssh shows over it.
 - **Dialogs.** Modal and centered over the panels, with mc-style buttons: `[< OK >]` marks the
-  default one. A dialog has a message, radio buttons (`(*)` on the chosen one), text fields,
+  default one, and a line across the dialog (`╟───╢`, or `├───┤` with single lines) sets the
+  buttons apart from what is above them, in every dialog and window. A dialog has a message, radio buttons (`(*)` on the chosen one), text fields,
   check boxes, and buttons, each optional but the buttons; ssh's prompts and the app's own questions are the same kind of dialog, and
   each one in the queue knows where its answer goes. Keys go to the first dialog in the queue
   (contexts `dialog` and `dialog_input`); Tab and the arrows move between the radio buttons,

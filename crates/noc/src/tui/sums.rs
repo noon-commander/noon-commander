@@ -7,7 +7,7 @@ use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, button_line, draw_box};
+use super::dialog::{Colors, button_line, draw_box, draw_separator};
 use super::keymap::{Action, Resolved};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -190,7 +190,7 @@ impl SumsWindow {
             lines.push(Line::raw(cells::fit(status, room, Align::Left)));
         }
         let height = u16::try_from(lines.len() + 2).unwrap_or(u16::MAX);
-        // Borders, the lines, a blank line, the buttons.
+        // Borders, the lines, a line, the buttons.
         let inner = draw_box(frame, area, (width, height + 2), &self.title, colors, theme);
         let visible = usize::from(inner.height.saturating_sub(2));
         for (index, line) in lines.into_iter().take(visible).enumerate() {
@@ -201,6 +201,7 @@ impl SumsWindow {
             let labels: Vec<String> = self.buttons.iter().map(|button| button.label()).collect();
             let buttons = button_line(&labels, 0, Some(self.focus), colors);
             let y = inner.bottom() - 1;
+            draw_separator(frame, inner, y - 1, colors, theme);
             frame.render_widget(buttons, Rect::new(inner.x, y, inner.width, 1));
         }
     }

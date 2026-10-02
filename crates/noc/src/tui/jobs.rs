@@ -6,7 +6,7 @@ use ratatui::layout::Rect;
 use ratatui::text::Line;
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, button_line, draw_box};
+use super::dialog::{Colors, button_line, draw_box, draw_separator};
 use super::keymap::{Action, Resolved};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -111,7 +111,7 @@ impl JobsList {
     pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, rows: &[Row]) {
         let colors = Colors::of(theme, false);
         let listed = u16::try_from(rows.len().max(1)).unwrap_or(u16::MAX);
-        // Borders, the rows, a blank line, the buttons.
+        // Borders, the rows, a line, the buttons.
         let size = (WIDTH, listed.saturating_add(4));
         let title = fl!("jobs-title");
         let inner = draw_box(frame, area, size, &title, colors, theme);
@@ -147,6 +147,7 @@ impl JobsList {
             let labels = [fl!("jobs-show"), fl!("dialog-abort"), fl!("dialog-ok")];
             let buttons = button_line(&labels, 0, Some(self.focus), colors);
             let y = inner.bottom() - 1;
+            draw_separator(frame, inner, y - 1, colors, theme);
             frame.render_widget(buttons, Rect::new(inner.x, y, inner.width, 1));
         }
     }

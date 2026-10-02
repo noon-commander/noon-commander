@@ -7,7 +7,7 @@ use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, button_line, draw_box};
+use super::dialog::{Colors, button_line, draw_box, draw_separator};
 use super::keymap::{Action, Resolved};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -277,7 +277,7 @@ impl JobView {
     /// Draws the window as it is at `now`.
     pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, now: Instant) {
         let colors = Colors::of(theme, false);
-        // Borders, what it does, where, the gauge, the count, the time, a blank line, Abort.
+        // Borders, what it does, where, the gauge, the count, the time, a line, the buttons.
         let inner = draw_box(frame, area, (WIDTH, 9), &self.title, colors, theme);
         let width = usize::from(inner.width);
         // On a small screen, what fits.
@@ -332,6 +332,9 @@ impl JobView {
             })
             .collect();
         put(6, button_line(&labels, 0, Some(self.focus), colors));
+        if inner.height > 6 {
+            draw_separator(frame, inner, inner.y + 5, colors, theme);
+        }
     }
 
     /// The time the job has worked, and for jobs that move data the time left and the speed.

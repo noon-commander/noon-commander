@@ -613,7 +613,7 @@ impl Dialog {
         let lines = cells::wrap(&self.message, text_width);
         let rows = |count: usize| u16::try_from(count).unwrap_or(u16::MAX);
         // Borders, the message, the choices, the fields under their labels, the check boxes, a
-        // blank line, the buttons.
+        // line, the buttons.
         let labels = self.fields.iter().filter(|f| !f.label.is_empty()).count();
         let height = rows(lines.len())
             .saturating_add(rows(self.choices.len()))
@@ -687,6 +687,7 @@ impl Dialog {
             index += 1;
         }
         if index + 1 < inner.height {
+            draw_separator(frame, inner, inner.y + index, colors, theme);
             let labels: Vec<String> = self.buttons.iter().map(|button| button.label()).collect();
             let focus = match self.focus {
                 Focus::Button(index) => Some(index),
@@ -724,6 +725,28 @@ pub(crate) fn button_line(
         spans.push(Span::styled(text, style));
     }
     Line::from(spans).centered()
+}
+
+/// Draws a line across a dialog whose room inside is `inner`, on its row `y`, joined to the
+/// frame as mc joins them: `╟───╢`, or `├───┤` with single lines. It sets the buttons apart
+/// from what is above them.
+pub(crate) fn draw_separator(
+    frame: &mut Frame<'_>,
+    inner: Rect,
+    y: u16,
+    colors: Colors,
+    theme: &Theme,
+) {
+    let (left, right) = theme.tees();
+    // The frame is a cell of padding and a cell of border away from the room inside.
+    let x = inner.x.saturating_sub(2);
+    let width = inner.width.saturating_add(4);
+    let line = format!(
+        "{left}{}{right}",
+        "─".repeat(usize::from(width.saturating_sub(2)))
+    );
+    let row = Rect::new(x, y, width, 1).intersection(frame.area());
+    frame.render_widget(Line::styled(line, colors.body), row);
 }
 
 /// Draws an empty dialog box centered in `area`: a frame of `size` in the theme's lines with

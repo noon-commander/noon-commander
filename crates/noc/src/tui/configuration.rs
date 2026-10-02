@@ -8,7 +8,7 @@ use ratatui::layout::{Position, Rect};
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
-use super::dialog::{Button, Colors, Field, button_line, draw_box};
+use super::dialog::{Button, Colors, Field, button_line, draw_box, draw_separator};
 use super::keymap::{Action, Context, Resolved};
 use super::scrollbar;
 use super::theme::Theme;
@@ -16,7 +16,7 @@ use crate::i18n::fl;
 
 /// Widest and tallest the dialog gets, in cells, borders included.
 const WIDTH: u16 = 72;
-const HEIGHT: u16 = 20;
+const HEIGHT: u16 = 22;
 /// Cells between a setting's name and its value.
 const LABEL_GAP: usize = 2;
 /// Lines of the hint of the setting under the cursor.
@@ -413,12 +413,12 @@ impl Configuration {
             HEIGHT.min(area.height.saturating_sub(2)),
         );
         let inner = draw_box(frame, area, size, &fl!("config-title"), colors, theme);
-        // The body, two lines of hint below it, and the buttons.
-        if inner.height < HINT_ROWS + 2 || inner.width < 20 {
+        // The body, a line, two lines of hint, a line, and the buttons.
+        if inner.height < HINT_ROWS + 4 || inner.width < 20 {
             return;
         }
         let body = Rect {
-            height: inner.height - HINT_ROWS - 1,
+            height: inner.height - HINT_ROWS - 3,
             ..inner
         };
         let sidebar = self.render_sidebar(frame, body, theme, colors);
@@ -433,6 +433,12 @@ impl Configuration {
             body.height,
         );
         self.render_settings(frame, content, theme, colors);
+        draw_separator(frame, inner, body.bottom(), colors, theme);
+        // The line between the categories and the settings meets it.
+        frame.render_widget(
+            Line::styled("┴", theme.dialog),
+            Rect::new(x, body.bottom(), 1, 1),
+        );
 
         let hint = match self.settings().get(self.row) {
             Some(setting) if self.focus == Focus::Settings && setting.restart => {
@@ -445,7 +451,7 @@ impl Configuration {
         let lines = cells::wrap(&hint, usize::from(inner.width));
         for (row, line) in (0..HINT_ROWS).zip(lines) {
             let line = cells::fit(&line, usize::from(inner.width), Align::Left);
-            let area = Rect::new(inner.x, body.bottom() + row, inner.width, 1);
+            let area = Rect::new(inner.x, body.bottom() + 1 + row, inner.width, 1);
             frame.render_widget(Line::styled(line, style), area);
         }
         let labels: Vec<String> = BUTTONS.iter().map(|button| button.label()).collect();
@@ -453,6 +459,7 @@ impl Configuration {
             Focus::Button(index) => Some(index),
             Focus::Sidebar | Focus::Settings => None,
         };
+        draw_separator(frame, inner, inner.bottom() - 2, colors, theme);
         frame.render_widget(
             button_line(&labels, 0, focus, colors),
             Rect::new(inner.x, inner.bottom() - 1, inner.width, 1),

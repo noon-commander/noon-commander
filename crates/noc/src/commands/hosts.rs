@@ -17,7 +17,8 @@ const RESOLVE_JOBS: usize = 4;
 /// host first and updates the cache.
 pub(super) async fn run(context: &Context, refresh: bool) -> Result<ExitCode> {
     let discovery = super::discover(context).await?;
-    let hosts: Vec<_> = discovery.visible(&context.config.discovery.hide).collect();
+    let config = context.config();
+    let hosts: Vec<_> = discovery.visible(&config.discovery.hide).collect();
     if hosts.is_empty() {
         eprintln!("no hosts found in ssh_config");
         return Ok(ExitCode::SUCCESS);
@@ -31,7 +32,7 @@ pub(super) async fn run(context: &Context, refresh: bool) -> Result<ExitCode> {
         let results: Vec<_> = futures_util::stream::iter(&hosts)
             .map(|host| async move {
                 let target = Target::new(host.alias.as_str());
-                let result = resolve(&context.settings, &target).await;
+                let result = resolve(&context.settings(), &target).await;
                 (target, result)
             })
             .buffered(RESOLVE_JOBS)

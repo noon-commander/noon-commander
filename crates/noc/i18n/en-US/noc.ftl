@@ -172,6 +172,32 @@ config-menu-bar = Menu bar
 config-menu-bar-hint = When the menu bar of F9 shows.
 config-menu-bar-on-demand = While a menu is open
 config-menu-bar-always = Always
+# Settings of copying and moving, [transfer].
+config-transfers = Transfers
+config-atomic-upload = Atomic copies
+config-atomic-upload-hint = Write each copy under a hidden name and rename it when complete, so the target never holds part of a file.
+config-parallel-jobs = Parallel jobs
+config-parallel-jobs-hint = How many jobs run at once; later ones wait. Editing with F4 never waits.
+config-parallel-jobs-invalid = "{ $text }" is not a number of jobs: it takes a whole number, at least 1.
+# Settings of ssh, [ssh], and of the list of hosts, [discovery]. Lists are words separated by
+# spaces, with "…" around a word that has spaces.
+config-ssh = SSH
+config-ssh-program = Program
+config-ssh-program-hint = The OpenSSH client, 8.7 or later: a name in PATH, or a path. Applies to new connections.
+config-ssh-program-empty = The ssh program cannot be empty.
+config-ssh-config-file = Config file
+config-ssh-config-file-hint = Read this file instead of ~/.ssh/config, like ssh -F; empty: the default. Applies to new connections.
+config-ssh-args = Extra arguments
+config-ssh-args-hint = For every ssh run, such as -o ServerAliveInterval=15. Forwarding is refused. Applies to new connections.
+config-ssh-args-invalid = Invalid extra ssh arguments: { $reason }
+config-multiplex = Share connections
+config-multiplex-hint = One authenticated connection per host for panels and transfers; off for servers with MaxSessions 1.
+config-hide-hosts = Hidden hosts
+config-hide-hosts-hint = Hosts from ssh_config to leave out, as patterns with * and ?, separated by spaces.
+# Settings of the virtual root, [volumes].
+config-volumes = Volumes
+config-hide-volumes = Hidden volumes
+config-hide-volumes-hint = Mount points to leave out of the root, as patterns with * and ?, separated by spaces. The system volume always shows.
 # After the hint of a setting that the running Noon Commander cannot change.
 config-restart = Takes effect after a restart.
 # The reason names the file.

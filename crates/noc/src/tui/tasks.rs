@@ -282,7 +282,10 @@ impl Tasks {
                     stop,
                 } => self.connect(host, connection, stop),
                 Effect::SaveHost { name, host } => self.save_host(name, host),
-                Effect::SaveConfig { old, new } => self.save_config(*old, *new),
+                Effect::SaveConfig { old, new, config } => {
+                    self.context.set_config(*config);
+                    self.save_config(*old, *new);
+                }
             }
         }
     }
@@ -520,7 +523,7 @@ async fn prepare_ssh(
         .map_err(|error| error.to_string())?
         .map_err(|error| describe::chain(&error))?;
     let runtime_dir = context.paths.runtime_dir.clone();
-    let settings = context.settings.clone();
+    let settings = context.settings();
     tokio::spawn(async move { cleanup_stale(&runtime_dir, &settings).await });
     let program = std::env::current_exe().map_err(|error| describe::chain(&error))?;
     let (server, mut events) = AskpassServer::bind(&context.paths.runtime_dir, program)
@@ -568,8 +571,9 @@ async fn resolve_address(
     done: mpsc::UnboundedSender<Done>,
 ) {
     let target = Target::new(host.as_str());
+    let settings = context.settings();
     let resolved = tokio::select! {
-        resolved = resolve(&context.settings, &target) => resolved,
+        resolved = resolve(&settings, &target) => resolved,
         () = stop.cancelled() => return,
     };
     let cached = match resolved {
@@ -962,7 +966,7 @@ impl CopyJob<'_> {
 async fn list(context: Arc<Context>, location: Location) -> Result<Listed, String> {
     let (listing, space) = match &location {
         Location::Root => {
-            let hide = context.config.volumes.hide.clone();
+            let hide = context.config().volumes.hide.clone();
             let hosts = tokio::task::spawn_blocking(move || root::read_hosts(&context));
             let (volumes, hosts) = tokio::join!(root::read_volumes(&hide), hosts);
             let listing = Listing::Root {
@@ -1040,7 +1044,7 @@ impl HostTask {
         askpass: Result<AskpassEnv, String>,
     ) -> Result<Connection, Option<String>> {
         let askpass = askpass.map_err(Some)?;
-        let settings = &self.context.settings;
+        let settings = &self.context.settings();
         let failed = |error: SshError| describe::ssh_error(&error);
         tokio::select! {
             result = check_version(settings) => result.map_err(failed)?,

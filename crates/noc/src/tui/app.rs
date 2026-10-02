@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 
 use jiff::tz::TimeZone;
-use noc_config::{Config, HostConfig, Hosts, MenuBar, SftpHost, TransferConfig, UiConfig};
+use noc_config::{Config, HostConfig, Hosts, MenuBar, SftpHost};
 use noc_ops::{Algorithm, Conflict, CopyOptions, Decision, Sum};
 use noc_vfs::{FileKind, Location, Metadata, RemotePath};
 use ratatui::Frame;
@@ -134,9 +134,14 @@ pub(crate) enum Effect {
         name: String,
         host: Option<HostConfig>,
     },
-    /// Write to the config file the settings that differ between `old`, what the app had,
-    /// and `new`, and report to [`App::config_saved`].
-    SaveConfig { old: Box<Config>, new: Box<Config> },
+    /// Use `config` for new connections and listings, write to the config file the settings
+    /// that differ between `old`, what the dialog showed, and `new`, both as the file writes
+    /// them, and report to [`App::config_saved`].
+    SaveConfig {
+        old: Box<Config>,
+        new: Box<Config>,
+        config: Box<Config>,
+    },
 }
 
 /// A host that is connected or on its way. `connection` tells attempts apart, so that reports
@@ -408,8 +413,8 @@ pub(crate) struct App {
     swapped: bool,
     hosts: HashMap<String, Host>,
     connections: u64,
-    /// The `[ui]` settings; `show_hidden` follows Alt-.
-    ui: UiConfig,
+    /// The settings, with `~` expanded; `ui.show_hidden` follows Alt-.
+    config: Config,
     decor: Decor,
     theme: Theme,
     /// Counts the frames of spinners.
@@ -477,12 +482,8 @@ pub(crate) struct App {
 impl App {
     /// Both panels on the local directory `start`, and the listings to request for them. The
     /// virtual root and the location menu open `home`, which `~` in dialogs stands for too.
-    pub(crate) fn new(
-        start: &Path,
-        home: &Path,
-        ui: &UiConfig,
-        transfer: &TransferConfig,
-    ) -> (Self, Vec<Effect>) {
+    pub(crate) fn new(start: &Path, home: &Path, config: &Config) -> (Self, Vec<Effect>) {
+        let (ui, transfer) = (&config.ui, &config.transfer);
         let show_hidden = ui.show_hidden;
         let panel = || {
             let start = Location::Local(start.to_path_buf());
@@ -497,7 +498,7 @@ impl App {
             swapped: false,
             hosts: HashMap::new(),
             connections: 0,
-            ui: ui.clone(),
+            config: config.clone(),
             decor: Decor::new(ui.icons),
             // `ui.theme` was checked when the config was loaded.
             theme: Theme::by_name(&ui.theme)
@@ -789,7 +790,7 @@ impl App {
         if let Some(effects) = self.handle_over(input) {
             return effects;
         }
-        let type_to_search = self.ui.type_to_search;
+        let type_to_search = self.config.ui.type_to_search;
         let panel = self.panel_mut(self.active);
         let action = match input {
             Resolved::Insert(c) => {
@@ -824,7 +825,9 @@ impl App {
             Action::Quit => self.ask_quit(),
             Action::Jobs => self.jobs_list = Some(JobsList::default()),
             Action::Redraw => self.redraw = true,
-            Action::Help => self.help = Some(Help::new(&self.keymap, self.ui.type_to_search)),
+            Action::Help => {
+                self.help = Some(Help::new(&self.keymap, self.config.ui.type_to_search));
+            }
             Action::SwitchPanel => self.active = self.active.other(),
             // The active panel moves to the other side and stays active, as in mc.
             Action::SwapPanels => self.swapped = !self.swapped,
@@ -839,9 +842,9 @@ impl App {
             }
             // As in mc, for both panels.
             Action::ToggleHidden => {
-                self.ui.show_hidden = !self.ui.show_hidden;
+                self.config.ui.show_hidden = !self.config.ui.show_hidden;
                 for side in Side::BOTH {
-                    let show = self.ui.show_hidden;
+                    let show = self.config.ui.show_hidden;
                     self.panel_mut(side).set_show_hidden(show);
                 }
             }
@@ -958,7 +961,9 @@ impl App {
                 None => Vec::new(),
             },
             Command::Configuration => {
-                let configuration = Configuration::new(&self.ui, Theme::NAMES, self.decor.icons());
+                let icons = self.decor.icons();
+                let configuration =
+                    Configuration::new(&self.config, &self.home, Theme::NAMES, icons);
                 self.configuration = Some(configuration);
                 Vec::new()
             }
@@ -966,7 +971,8 @@ impl App {
     }
 
     /// Gives a key to the Configuration dialog. OK uses the settings at once, where the
-    /// running app can, and writes them to the config file.
+    /// running app can, and writes them to the config file; an invalid one keeps the dialog
+    /// open and says why.
     fn handle_configuration(&mut self, input: Resolved) -> Vec<Effect> {
         let Some(configuration) = &mut self.configuration else {
             return Vec::new();
@@ -977,46 +983,57 @@ impl App {
                 self.configuration = None;
                 Vec::new()
             }
-            ConfigEvent::Accepted => {
-                let ui = configuration.ui(&self.ui);
-                if !crate::i18n::is_valid_language(&ui.language) {
-                    let text = cells::sanitize(ui.language.as_bytes());
-                    self.show_error(&fl!("config-language-invalid", text = text));
-                    return Vec::new();
+            ConfigEvent::Accepted => match configuration.change() {
+                Ok((old, new)) => {
+                    self.configuration = None;
+                    self.apply_config(old, new)
                 }
-                self.configuration = None;
-                self.apply_ui(ui)
-            }
+                Err(message) => {
+                    self.show_error(&message);
+                    Vec::new()
+                }
+            },
         }
     }
 
-    /// Uses the `[ui]` settings `ui` from now on, but the language, which the next start
-    /// does; and writes to the config file those that changed.
-    fn apply_ui(&mut self, ui: UiConfig) -> Vec<Effect> {
-        if ui == self.ui {
+    /// Uses the settings `new`, as `config.toml` writes them, from now on, but the language,
+    /// which the next start reads; and writes to the config file those that differ from `old`.
+    fn apply_config(&mut self, old: Config, new: Config) -> Vec<Effect> {
+        if old == new {
             return Vec::new();
         }
+        let mut config = new.clone();
+        config.expand_tilde(&self.home);
+        let ui = &config.ui;
         // The dialog offers only the built-in themes and those `ui.theme` names.
         if let Some(theme) = Theme::by_name(&ui.theme) {
             self.theme = theme.with_borders(ui.borders);
         }
         self.decor = Decor::new(ui.icons);
-        if ui.show_hidden != self.ui.show_hidden {
+        if ui.show_hidden != self.config.ui.show_hidden {
             for side in Side::BOTH {
                 self.panel_mut(side).set_show_hidden(ui.show_hidden);
             }
         }
-        let old = std::mem::replace(&mut self.ui, ui);
-        let config = |ui: &UiConfig| {
-            Box::new(Config {
-                ui: ui.clone(),
-                ..Config::default()
-            })
-        };
-        vec![Effect::SaveConfig {
-            old: config(&old),
-            new: config(&self.ui),
-        }]
+        self.copy_choices.atomic = config.transfer.atomic_upload;
+        self.parallel_jobs = config.transfer.parallel_jobs.get();
+        // What the root and the list of hosts show may change with the ssh settings and the
+        // hidden hosts and volumes.
+        let lists = config.ssh != self.config.ssh
+            || config.discovery != self.config.discovery
+            || config.volumes != self.config.volumes;
+        self.config = config.clone();
+        let mut effects = vec![Effect::SaveConfig {
+            old: Box::new(old),
+            new: Box::new(new),
+            config: Box::new(config),
+        }];
+        effects.extend(self.start_queued());
+        if lists {
+            effects.extend(self.reload(&Location::Root));
+            effects.extend(self.reload(&Location::Sftp));
+        }
+        effects
     }
 
     /// Takes the result of an [`Effect::SaveConfig`].
@@ -1056,7 +1073,7 @@ impl App {
                     | Action::ToggleHidden => true,
                     _ => self.supports(action),
                 },
-                checked: action == Action::ToggleHidden && self.ui.show_hidden,
+                checked: action == Action::ToggleHidden && self.config.ui.show_hidden,
                 key: self.keymap.key(context, action),
             },
             Command::On(side, action) => Status {
@@ -1397,7 +1414,9 @@ impl App {
             return;
         };
         match action {
-            Action::Help => self.help = Some(Help::new(&self.keymap, self.ui.type_to_search)),
+            Action::Help => {
+                self.help = Some(Help::new(&self.keymap, self.config.ui.type_to_search));
+            }
             Action::Redraw => self.redraw = true,
             action => {
                 if let Some(viewing) = &mut self.viewing
@@ -2681,7 +2700,7 @@ impl App {
     /// Two panels side by side above the F-key bar; the menu bar of F9 above them with
     /// `ui.menu_bar`, else over their top line while a menu is open.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, now: SystemTime, tz: &TimeZone) {
-        let always = self.ui.menu_bar == MenuBar::Always;
+        let always = self.config.ui.menu_bar == MenuBar::Always;
         let bar_height = u16::from(always);
         let [menu_bar, panels, key_bar] = Layout::vertical([
             Constraint::Length(bar_height),
@@ -2997,6 +3016,7 @@ mod tests {
 
     use std::sync::mpsc;
 
+    use noc_config::{TransferConfig, UiConfig};
     use noc_ssh::askpass::PromptKind;
     use noc_vfs::{DirEntry, FileKind, Metadata, RemotePath};
     use ratatui::Terminal;
@@ -3029,8 +3049,12 @@ mod tests {
         entry
     }
 
-    fn transfer() -> TransferConfig {
-        TransferConfig::default()
+    /// Settings with mc's markers in the interface.
+    fn config() -> Config {
+        Config {
+            ui: ui(),
+            ..Config::default()
+        }
     }
 
     /// Settings with mc's markers, which read better in tests than icons.
@@ -3084,8 +3108,7 @@ mod tests {
 
     /// An app on `/srv` whose first listings arrived.
     fn loaded() -> App {
-        let (mut app, effects) =
-            App::new(Path::new("/srv"), Path::new("/home/me"), &ui(), &transfer());
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
         answer(
             &mut app,
             effects,
@@ -3097,8 +3120,7 @@ mod tests {
     /// An app with both panels on the list of hosts, `web` and `db`, which they reached from the
     /// virtual root.
     fn at_root() -> App {
-        let (mut app, effects) =
-            App::new(Path::new("/"), Path::new("/home/me"), &ui(), &transfer());
+        let (mut app, effects) = App::new(Path::new("/"), Path::new("/home/me"), &config());
         answer(&mut app, effects, &Listing::Dir(Vec::new()));
         let hosts = ["web", "db"].map(|alias| RootHost {
             alias: alias.to_owned(),
@@ -3146,7 +3168,7 @@ mod tests {
 
     #[test]
     fn lists_both_panels_at_start() {
-        let (_, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &ui(), &transfer());
+        let (_, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
         let sides: Vec<Side> = effects
             .iter()
             .map(|effect| match effect {
@@ -3288,8 +3310,7 @@ mod tests {
 
     #[test]
     fn plus_and_minus_mark_and_unmark_by_pattern() {
-        let (mut app, effects) =
-            App::new(Path::new("/srv"), Path::new("/home/me"), &ui(), &transfer());
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
         let entries = vec![
             file("a.md", 10),
             file("B.MD", 20),
@@ -3539,8 +3560,7 @@ mod tests {
 
     #[test]
     fn f8_names_what_it_deletes_and_no_keeps_it() {
-        let (mut app, effects) =
-            App::new(Path::new("/srv"), Path::new("/home/me"), &ui(), &transfer());
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
         let entries = vec![file("a.txt", 1), file("b.txt", 2), dir("c")];
         answer(&mut app, effects, &Listing::Dir(entries));
         app.handle(action(Action::Delete));
@@ -4009,8 +4029,14 @@ mod tests {
             atomic_upload: false,
             ..TransferConfig::default()
         };
-        let (mut app, effects) =
-            App::new(Path::new("/srv"), Path::new("/home/me"), &ui(), &transfer);
+        let (mut app, effects) = App::new(
+            Path::new("/srv"),
+            Path::new("/home/me"),
+            &Config {
+                transfer,
+                ..config()
+            },
+        );
         answer(&mut app, effects, &Listing::Dir(vec![dir("left")]));
         app.handle(action(Action::Down));
         app.handle(action(Action::Copy));
@@ -4135,8 +4161,7 @@ mod tests {
 
     #[test]
     fn f3_views_files_and_opens_directories() {
-        let (mut app, effects) =
-            App::new(Path::new("/srv"), Path::new("/home/me"), &ui(), &transfer());
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
         answer(
             &mut app,
             effects,
@@ -4185,8 +4210,7 @@ mod tests {
 
     #[test]
     fn f4_edits_local_files_where_they_are() {
-        let (mut app, effects) =
-            App::new(Path::new("/srv"), Path::new("/home/me"), &ui(), &transfer());
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
         answer(
             &mut app,
             effects,
@@ -4360,8 +4384,7 @@ mod tests {
 
     #[test]
     fn a_file_that_cannot_be_read_is_an_error() {
-        let (mut app, effects) =
-            App::new(Path::new("/srv"), Path::new("/home/me"), &ui(), &transfer());
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
         answer(&mut app, effects, &Listing::Dir(vec![file("secret", 1)]));
         app.handle(action(Action::Down));
         let Effect::Read { id, .. } = one(app.handle(action(Action::View))) else {
@@ -4919,7 +4942,7 @@ mod tests {
         }
         assert!(screen_of(&mut app, 20).contains("x Show hidden files"));
         app.handle(Resolved::Insert('h'));
-        assert!(!app.ui.show_hidden);
+        assert!(!app.config.ui.show_hidden);
 
         // Commands that cannot run do nothing, and Esc closes the menu.
         app.handle(action(Action::PullDown));
@@ -4964,12 +4987,13 @@ mod tests {
         let effects = app.handle(action(Action::Confirm));
         assert!(app.configuration.is_none());
         assert_eq!(app.theme, Theme::terminal());
-        assert_eq!(app.ui.menu_bar, MenuBar::Always);
-        let [Effect::SaveConfig { old, new }] = &effects[..] else {
+        assert_eq!(app.config.ui.menu_bar, MenuBar::Always);
+        let [Effect::SaveConfig { old, new, config }] = &effects[..] else {
             panic!("expected the settings to be saved: {effects:?}");
         };
         assert_eq!(old.ui, ui());
-        assert_eq!(new.ui, app.ui);
+        assert_eq!(new.ui, app.config.ui);
+        assert_eq!(**config, app.config, "for new connections and listings");
         assert_eq!(
             Config {
                 ui: ui(),
@@ -5001,12 +5025,75 @@ mod tests {
         assert!(app.configuration.is_some() && app.dialogs.front().is_some());
     }
 
+    /// Opens the category `index` of the Configuration dialog, with the cursor on its first
+    /// setting.
+    fn config_category(app: &mut App, index: usize) {
+        for _ in 0..3 {
+            app.handle(action(Action::NextField));
+        }
+        app.handle(action(Action::Home));
+        for _ in 0..index {
+            app.handle(action(Action::Down));
+        }
+        app.handle(action(Action::Right));
+    }
+
+    #[test]
+    fn transfer_and_ssh_settings_apply_at_once() {
+        let mut app = loaded();
+        open_configuration(&mut app);
+        config_category(&mut app, 1);
+        app.handle(action(Action::Toggle));
+        app.handle(action(Action::Down));
+        app.handle(Resolved::Insert('5'));
+        config_category(&mut app, 2);
+        app.handle(action(Action::DeleteToStart));
+        for c in "~/bin/ssh".chars() {
+            app.handle(Resolved::Insert(c));
+        }
+        let effects = app.handle(action(Action::Confirm));
+        assert!(!app.copy_choices.atomic);
+        assert_eq!(app.parallel_jobs, 5);
+        let [Effect::SaveConfig { new, config, .. }] = &effects[..] else {
+            panic!("expected the settings to be saved, and nothing to reload: {effects:?}");
+        };
+        assert_eq!(
+            new.ssh.program,
+            Path::new("~/bin/ssh"),
+            "as typed, for the file"
+        );
+        assert_eq!(
+            config.ssh.program,
+            Path::new("/home/me/bin/ssh"),
+            "expanded, for ssh"
+        );
+
+        // Hidden hosts and volumes change what the root and the list of hosts show, so panels
+        // there read them again.
+        let mut app = at_root();
+        open_configuration(&mut app);
+        config_category(&mut app, 3);
+        app.handle(Resolved::Insert('x'));
+        let effects = app.handle(action(Action::Confirm));
+        assert!(matches!(effects[0], Effect::SaveConfig { .. }));
+        assert!(
+            effects[1..].iter().any(|effect| matches!(
+                effect,
+                Effect::List {
+                    side: Side::Left,
+                    ..
+                }
+            )),
+            "{effects:?}"
+        );
+    }
+
     #[test]
     fn the_menu_bar_stays_above_the_panels_with_ui_menu_bar() {
         let mut app = loaded();
         let top = |app: &mut App| screen_of(app, 10).lines().next().unwrap_or("").to_owned();
         assert!(!top(&mut app).contains("Left"), "on demand");
-        app.ui.menu_bar = MenuBar::Always;
+        app.config.ui.menu_bar = MenuBar::Always;
         let text = screen_of(&mut app, 10);
         let lines: Vec<&str> = text.lines().collect();
         assert!(lines[0].contains("Left     File"), "{text}");
@@ -5043,8 +5130,7 @@ mod tests {
 
     #[test]
     fn the_root_shows_connected_hosts_below_its_row_of_hosts() {
-        let (mut app, effects) =
-            App::new(Path::new("/"), Path::new("/home/me"), &ui(), &transfer());
+        let (mut app, effects) = App::new(Path::new("/"), Path::new("/home/me"), &config());
         answer(&mut app, effects, &Listing::Dir(Vec::new()));
         let hosts = ["web", "db"].map(|alias| RootHost {
             alias: alias.to_owned(),
@@ -5233,8 +5319,11 @@ mod tests {
             show_hidden: false,
             ..ui()
         };
-        let (mut app, effects) =
-            App::new(Path::new("/srv"), Path::new("/home/me"), &ui, &transfer());
+        let (mut app, effects) = App::new(
+            Path::new("/srv"),
+            Path::new("/home/me"),
+            &Config { ui, ..config() },
+        );
         answer(
             &mut app,
             effects,
@@ -5284,8 +5373,11 @@ mod tests {
             type_to_search: false,
             ..ui()
         };
-        let (mut app, effects) =
-            App::new(Path::new("/srv"), Path::new("/home/me"), &ui, &transfer());
+        let (mut app, effects) = App::new(
+            Path::new("/srv"),
+            Path::new("/home/me"),
+            &Config { ui, ..config() },
+        );
         answer(
             &mut app,
             effects,
@@ -5359,8 +5451,7 @@ mod tests {
     /// An app with both panels on `/srv`, which holds `sub`, `a`, and `b`, the cursor of the
     /// left one on `b`.
     fn on_files() -> App {
-        let (mut app, effects) =
-            App::new(Path::new("/srv"), Path::new("/home/me"), &ui(), &transfer());
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
         let listing = Listing::Dir(vec![dir("sub"), file("a", 3), file("b", 4)]);
         answer(&mut app, effects, &listing);
         app.handle(action(Action::End));

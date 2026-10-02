@@ -215,9 +215,9 @@ Options → Configuration… shows the settings of `config.toml` by category
 ```text
   ╔═════════════════════════ Configuration ══════════════════════════╗
   ║  󰍹 Interface │ Language           auto                         █ ║
-  ║              │ Theme              < mc-classic >               █ ║
-  ║              │ Borders            < Double ═ ║ ╔ >             ░ ║
-  ║              │ Icons              [x]                          ░ ║
+  ║  󰓡 Transfers │ Theme              < mc-classic >               █ ║
+  ║  󰣀 SSH       │ Borders            < Double ═ ║ ╔ >             ░ ║
+  ║  󰋊 Volumes   │ Icons              [x]                          ░ ║
   ╟──────────────┴───────────────────────────────────────────────────╢
   ║ A language tag, such as en-US, or auto for the system locale.    ║
   ║ Takes effect after a restart.                                    ║
@@ -228,16 +228,28 @@ Options → Configuration… shows the settings of `config.toml` by category
 
 - Categories are on the left, with a Nerd Font icon each (without `ui.icons`, names only);
   the settings of the chosen one are on the right: check boxes `[x]`, choices `< … >`, and
-  text fields. Only Interface (`[ui]`) exists so far.
+  text fields. Every option of `config.toml` is there, so that nobody has to edit the file:
+  Interface (`[ui]`), Transfers (`[transfer]`), SSH (`[ssh]` and the hidden hosts of
+  `[discovery]`), and Volumes (`[volumes]`).
+- Paths under the home directory show from `~`, and are written as typed. Lists, such as
+  `ssh.args` and the hidden hosts and volumes, are words separated by spaces, as a shell
+  reads them: `"…"` around a word with spaces, `\` before a character to take it as it is.
 - Settings that do not fit scroll with the cursor, and a scroll bar (`█` on `░`) shows in the
-  last column. The two lines below them, between lines across the dialog, say what the setting under the cursor does, and
-  whether it takes effect only after a restart.
+  last column. The two lines below them, between lines across the dialog, say what the
+  setting under the cursor does, and whether it takes effect only after a restart.
 - Tab moves between the categories, the settings, and the buttons; Up and Down move within
-  them; Space switches a check box or picks the next choice; Left and Right pick choices, and
+  them, and Home and End go to the first and last category; Space switches a check box or picks the next choice; Left and Right pick choices, and
   Left on anything else goes back to the categories; Enter presses OK; Esc cancels.
-- OK uses the settings at once (theme, frames, icons, hidden files, typing to search, menu
-  bar); the language needs a restart. The changed keys are written to the config file in the
-  background, and a failure shows an error. An invalid language keeps the dialog open.
+- OK checks the settings: the language tag, a whole number of parallel jobs, a program for
+  ssh, and the extra ssh arguments, through the same validator as at start
+  ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)). An invalid one keeps the dialog
+  open, with the cursor on it, and an error says why.
+- Then it uses them at once, but the language, which the next start reads: the interface
+  redraws, copies and the job queue follow `[transfer]`, and the settings in `Context`, which
+  sit behind a lock, change for new connections, `ssh -G`, and listings, so panels on the
+  root or the list of hosts read them again. Connections that are open stay as they are. The
+  changed keys are written to the config file in the background, and a failure shows an
+  error.
 
 ## Host discovery
 

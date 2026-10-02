@@ -19,7 +19,7 @@ pub(super) async fn run(context: &Context, location: Option<&str>) -> Result<Exi
     match location.map_or(Location::Root, Location::parse) {
         // Each line is a location to list: the mount point of a volume, or `host:`.
         Location::Root | Location::Sftp => {
-            for volume in read_volumes(&context.config.volumes.hide).await {
+            for volume in read_volumes(&context.config().volumes.hide).await {
                 println!("{}", volume.mount_point.display());
             }
             for alias in super::host_aliases(context).await? {
@@ -40,11 +40,11 @@ pub(super) async fn run(context: &Context, location: Option<&str>) -> Result<Exi
 }
 
 async fn remote(context: &Context, host: &str, path: RemotePath) -> Result<ExitCode> {
-    let version = check_version(&context.settings).await?;
+    let version = check_version(&context.settings()).await?;
     tracing::info!(%version, "using OpenSSH");
     let runtime_dir = &context.paths.runtime_dir;
     context.paths.ensure_runtime_dir()?;
-    cleanup_stale(runtime_dir, &context.settings).await;
+    cleanup_stale(runtime_dir, &context.settings()).await;
     let program = std::env::current_exe().wrap_err("cannot locate the noc executable")?;
     let (askpass, events) =
         AskpassServer::bind(runtime_dir, program).wrap_err("cannot start the askpass bridge")?;
@@ -85,7 +85,7 @@ async fn list_remote(
     cancel: &CancellationToken,
 ) -> Result<(RemotePath, Vec<DirEntry>)> {
     let session = Session::connect(
-        &context.settings,
+        &context.settings(),
         &Target::new(host),
         &context.paths.runtime_dir,
         Some(askpass.env(host)),

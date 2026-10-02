@@ -22,7 +22,7 @@ pub(crate) async fn run(cli: Cli) -> Result<ExitCode> {
     match cli.command {
         None => {
             let context = Context::load(paths, &config_path)?;
-            crate::i18n::select(&context.config.ui.language);
+            crate::i18n::select(&context.config().ui.language);
             let start = std::env::current_dir().wrap_err("cannot read the current directory")?;
             crate::tui::run(context, start).await?;
             Ok(ExitCode::SUCCESS)
@@ -54,7 +54,7 @@ async fn discover(context: &Context) -> Result<Discovery> {
 async fn host_aliases(context: &Context) -> Result<Vec<String>> {
     let discovery = discover(context).await?;
     Ok(discovery
-        .visible(&context.config.discovery.hide)
+        .visible(&context.config().discovery.hide)
         .map(|host| host.alias.clone())
         .collect())
 }

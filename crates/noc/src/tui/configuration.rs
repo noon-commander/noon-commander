@@ -2,7 +2,10 @@
 //! category. Categories are listed on the left, each with an icon; the settings of the chosen
 //! one are on the right and scroll, with a scroll bar, when they do not fit.
 
-use noc_config::{Borders, MenuBar, UiConfig};
+use std::num::NonZeroUsize;
+use std::path::{Path, PathBuf};
+
+use noc_config::{Borders, Config, MenuBar};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::text::{Line, Span};
@@ -15,7 +18,7 @@ use super::theme::Theme;
 use crate::i18n::fl;
 
 /// Widest and tallest the dialog gets, in cells, borders included.
-const WIDTH: u16 = 72;
+const WIDTH: u16 = 76;
 const HEIGHT: u16 = 22;
 /// Cells between a setting's name and its value.
 const LABEL_GAP: usize = 2;
@@ -33,6 +36,14 @@ enum Key {
     ShowHidden,
     TypeToSearch,
     MenuBar,
+    AtomicUpload,
+    ParallelJobs,
+    SshProgram,
+    SshConfigFile,
+    SshArgs,
+    Multiplex,
+    HideHosts,
+    HideVolumes,
 }
 
 /// A value and how it is edited.
@@ -45,6 +56,7 @@ enum Value {
         options: Vec<(String, String)>,
         chosen: usize,
     },
+    /// A text field; lists are words in it, see [`split_words`].
     Text(Field),
 }
 
@@ -106,6 +118,68 @@ impl Setting {
             Value::Toggle(_) => "",
         }
     }
+
+    /// Writes the value into `config`, or says why it is not valid.
+    fn apply(&self, config: &mut Config) -> Result<(), String> {
+        let text = self.text();
+        let (ui, transfer, ssh) = (&mut config.ui, &mut config.transfer, &mut config.ssh);
+        match self.key {
+            Key::Language => {
+                let language = text.trim();
+                if !crate::i18n::is_valid_language(language) {
+                    let text = cells::sanitize(language.as_bytes());
+                    return Err(fl!("config-language-invalid", text = text));
+                }
+                language.clone_into(&mut ui.language);
+            }
+            Key::Theme => text.clone_into(&mut ui.theme),
+            Key::Borders => {
+                ui.borders = match text {
+                    "single" => Borders::Single,
+                    _ => Borders::Double,
+                };
+            }
+            Key::Icons => ui.icons = self.on(),
+            Key::ShowHidden => ui.show_hidden = self.on(),
+            Key::TypeToSearch => ui.type_to_search = self.on(),
+            Key::MenuBar => {
+                ui.menu_bar = match text {
+                    "always" => MenuBar::Always,
+                    _ => MenuBar::OnDemand,
+                };
+            }
+            Key::AtomicUpload => transfer.atomic_upload = self.on(),
+            Key::ParallelJobs => {
+                transfer.parallel_jobs = text.trim().parse::<NonZeroUsize>().map_err(|_| {
+                    let text = cells::sanitize(text.as_bytes());
+                    fl!("config-parallel-jobs-invalid", text = text)
+                })?;
+            }
+            Key::SshProgram => {
+                let program = text.trim();
+                if program.is_empty() {
+                    return Err(fl!("config-ssh-program-empty"));
+                }
+                ssh.program = PathBuf::from(program);
+            }
+            Key::SshConfigFile => {
+                let file = text.trim();
+                ssh.config_file = (!file.is_empty()).then(|| PathBuf::from(file));
+            }
+            Key::SshArgs => {
+                let args = split_words(text);
+                noc_ssh::args::validate(&args).map_err(|error| {
+                    let reason = cells::sanitize(error.to_string().as_bytes());
+                    fl!("config-ssh-args-invalid", reason = reason)
+                })?;
+                ssh.args = args;
+            }
+            Key::Multiplex => ssh.multiplex = self.on(),
+            Key::HideHosts => config.discovery.hide = split_words(text),
+            Key::HideVolumes => config.volumes.hide = split_words(text),
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -129,7 +203,7 @@ enum Focus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ConfigEvent {
     Pending,
-    /// OK: read the settings with [`Configuration::ui`].
+    /// OK: read the settings with [`Configuration::change`].
     Accepted,
     Cancelled,
 }
@@ -147,6 +221,8 @@ pub(crate) struct Configuration {
     offset: usize,
     page: usize,
     icons: bool,
+    /// The settings as the dialog opened, as `config.toml` writes them.
+    initial: Config,
 }
 
 /// The values of a choice with their texts; `current` is chosen, and added if it is not
@@ -166,121 +242,115 @@ fn choice(values: &[(&str, String)], current: &str) -> Value {
     Value::Choice { options, chosen }
 }
 
+fn text(value: &str) -> Value {
+    Value::Text(Field::plain(value))
+}
+
+/// A path as the field shows it: under `home`, from `~`, as `config.toml` may write it.
+fn path_text(path: &Path, home: &Path) -> Value {
+    let shown = match path.strip_prefix(home) {
+        Ok(rest) if rest.as_os_str().is_empty() => "~".to_owned(),
+        Ok(rest) => format!("~/{}", rest.to_string_lossy()),
+        Err(_) => path.to_string_lossy().into_owned(),
+    };
+    text(&shown)
+}
+
+/// The words of a list typed in a field: separated by spaces, with `"…"` around a word that
+/// has spaces and `\` before a character to take it as it is, as a shell reads them.
+fn split_words(text: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut word: Option<String> = None;
+    let mut quoted = false;
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => {
+                if let Some(next) = chars.next() {
+                    word.get_or_insert_with(String::new).push(next);
+                }
+            }
+            '"' => {
+                quoted = !quoted;
+                word.get_or_insert_with(String::new);
+            }
+            c if c.is_whitespace() && !quoted => words.extend(word.take()),
+            c => word.get_or_insert_with(String::new).push(c),
+        }
+    }
+    words.extend(word);
+    words
+}
+
+/// A list as [`split_words`] reads it back.
+fn join_words(words: &[String]) -> String {
+    words
+        .iter()
+        .map(|word| {
+            let escaped = word.replace('\\', "\\\\").replace('"', "\\\"");
+            if word.is_empty() || word.chars().any(char::is_whitespace) {
+                format!("\"{escaped}\"")
+            } else {
+                escaped
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 impl Configuration {
-    /// The dialog with the settings `ui` has; `icons` puts the categories' icons in front of
-    /// their names.
-    pub(crate) fn new(ui: &UiConfig, themes: &[&str], icons: bool) -> Self {
-        let themes: Vec<(&str, String)> = themes
-            .iter()
-            .map(|name| (*name, (*name).to_owned()))
-            .collect();
-        let borders = match ui.borders {
-            Borders::Double => "double",
-            Borders::Single => "single",
-        };
-        let menu_bar = match ui.menu_bar {
-            MenuBar::OnDemand => "on-demand",
-            MenuBar::Always => "always",
-        };
-        let interface = Category {
-            icon: "󰍹",
-            title: fl!("config-interface"),
-            settings: vec![
-                Setting {
-                    restart: true,
-                    ..Setting::new(
-                        Key::Language,
-                        (fl!("config-language"), fl!("config-language-hint")),
-                        Value::Text(Field::plain(&ui.language)),
-                    )
-                },
-                Setting::new(
-                    Key::Theme,
-                    (fl!("config-theme"), fl!("config-theme-hint")),
-                    choice(&themes, &ui.theme),
-                ),
-                Setting::new(
-                    Key::Borders,
-                    (fl!("config-borders"), fl!("config-borders-hint")),
-                    choice(
-                        &[
-                            ("double", fl!("config-borders-double")),
-                            ("single", fl!("config-borders-single")),
-                        ],
-                        borders,
-                    ),
-                ),
-                Setting::new(
-                    Key::Icons,
-                    (fl!("config-icons"), fl!("config-icons-hint")),
-                    Value::Toggle(ui.icons),
-                ),
-                Setting::new(
-                    Key::ShowHidden,
-                    (fl!("config-show-hidden"), fl!("config-show-hidden-hint")),
-                    Value::Toggle(ui.show_hidden),
-                ),
-                Setting::new(
-                    Key::TypeToSearch,
-                    (
-                        fl!("config-type-to-search"),
-                        fl!("config-type-to-search-hint"),
-                    ),
-                    Value::Toggle(ui.type_to_search),
-                ),
-                Setting::new(
-                    Key::MenuBar,
-                    (fl!("config-menu-bar"), fl!("config-menu-bar-hint")),
-                    choice(
-                        &[
-                            ("on-demand", fl!("config-menu-bar-on-demand")),
-                            ("always", fl!("config-menu-bar-always")),
-                        ],
-                        menu_bar,
-                    ),
-                ),
+    /// The dialog with the settings `config` has, which shows paths under `home` from `~`;
+    /// `themes` are the themes to choose from, and `icons` puts the categories' icons in front
+    /// of their names.
+    pub(crate) fn new(config: &Config, home: &Path, themes: &[&str], icons: bool) -> Self {
+        let mut dialog = Self {
+            categories: vec![
+                interface(config, themes),
+                transfers(config),
+                ssh(config, home),
+                volumes(config),
             ],
-        };
-        Self {
-            categories: vec![interface],
             category: 0,
             focus: Focus::Settings,
             row: 0,
             offset: 0,
             page: 1,
             icons,
+            initial: config.clone(),
+        };
+        if let Ok(initial) = dialog.config() {
+            dialog.initial = initial;
+        }
+        dialog
+    }
+
+    /// The settings as the dialog opened and as it has them now, both as `config.toml` writes
+    /// them, with `~` in paths; or why they are not valid, in words, with the cursor on the
+    /// setting.
+    pub(crate) fn change(&mut self) -> Result<(Config, Config), String> {
+        match self.config() {
+            Ok(config) => Ok((self.initial.clone(), config)),
+            Err((category, row, message)) => {
+                self.category = category;
+                self.row = row;
+                self.focus = Focus::Settings;
+                Err(message)
+            }
         }
     }
 
-    /// `base` with the settings as the dialog has them.
-    pub(crate) fn ui(&self, base: &UiConfig) -> UiConfig {
-        let mut ui = base.clone();
-        for setting in self
-            .categories
-            .iter()
-            .flat_map(|category| &category.settings)
-        {
-            match setting.key {
-                Key::Language => setting.text().trim().clone_into(&mut ui.language),
-                Key::Theme => setting.text().clone_into(&mut ui.theme),
-                Key::Borders => {
-                    ui.borders = match setting.text() {
-                        "single" => Borders::Single,
-                        _ => Borders::Double,
-                    };
-                }
-                Key::Icons => ui.icons = setting.on(),
-                Key::ShowHidden => ui.show_hidden = setting.on(),
-                Key::TypeToSearch => ui.type_to_search = setting.on(),
-                Key::MenuBar => {
-                    ui.menu_bar = match setting.text() {
-                        "always" => MenuBar::Always,
-                        _ => MenuBar::OnDemand,
-                    };
-                }
+    /// The settings as the dialog has them, or the category and row of one that is not valid,
+    /// and why.
+    fn config(&self) -> Result<Config, (usize, usize, String)> {
+        let mut config = self.initial.clone();
+        for (index, category) in self.categories.iter().enumerate() {
+            for (row, setting) in category.settings.iter().enumerate() {
+                setting
+                    .apply(&mut config)
+                    .map_err(|message| (index, row, message))?;
             }
         }
-        ui
+        Ok(config)
     }
 
     fn settings(&self) -> &[Setting] {
@@ -373,6 +443,10 @@ impl Configuration {
             (Focus::Sidebar, Action::Down) => {
                 let last = self.categories.len() - 1;
                 self.choose_category((self.category + 1).min(last));
+            }
+            (Focus::Sidebar, Action::Home | Action::PageUp) => self.choose_category(0),
+            (Focus::Sidebar, Action::End | Action::PageDown) => {
+                self.choose_category(self.categories.len() - 1);
             }
             (Focus::Sidebar, Action::Right | Action::Toggle) if rows > 0 => {
                 self.focus = Focus::Settings;
@@ -591,6 +665,165 @@ impl Configuration {
     }
 }
 
+/// Interface, `[ui]`.
+fn interface(config: &Config, themes: &[&str]) -> Category {
+    let ui = &config.ui;
+    let themes: Vec<(&str, String)> = themes
+        .iter()
+        .map(|name| (*name, (*name).to_owned()))
+        .collect();
+    let borders = match ui.borders {
+        Borders::Double => "double",
+        Borders::Single => "single",
+    };
+    let menu_bar = match ui.menu_bar {
+        MenuBar::OnDemand => "on-demand",
+        MenuBar::Always => "always",
+    };
+    Category {
+        icon: "󰍹",
+        title: fl!("config-interface"),
+        settings: vec![
+            Setting {
+                restart: true,
+                ..Setting::new(
+                    Key::Language,
+                    (fl!("config-language"), fl!("config-language-hint")),
+                    text(&ui.language),
+                )
+            },
+            Setting::new(
+                Key::Theme,
+                (fl!("config-theme"), fl!("config-theme-hint")),
+                choice(&themes, &ui.theme),
+            ),
+            Setting::new(
+                Key::Borders,
+                (fl!("config-borders"), fl!("config-borders-hint")),
+                choice(
+                    &[
+                        ("double", fl!("config-borders-double")),
+                        ("single", fl!("config-borders-single")),
+                    ],
+                    borders,
+                ),
+            ),
+            Setting::new(
+                Key::Icons,
+                (fl!("config-icons"), fl!("config-icons-hint")),
+                Value::Toggle(ui.icons),
+            ),
+            Setting::new(
+                Key::ShowHidden,
+                (fl!("config-show-hidden"), fl!("config-show-hidden-hint")),
+                Value::Toggle(ui.show_hidden),
+            ),
+            Setting::new(
+                Key::TypeToSearch,
+                (
+                    fl!("config-type-to-search"),
+                    fl!("config-type-to-search-hint"),
+                ),
+                Value::Toggle(ui.type_to_search),
+            ),
+            Setting::new(
+                Key::MenuBar,
+                (fl!("config-menu-bar"), fl!("config-menu-bar-hint")),
+                choice(
+                    &[
+                        ("on-demand", fl!("config-menu-bar-on-demand")),
+                        ("always", fl!("config-menu-bar-always")),
+                    ],
+                    menu_bar,
+                ),
+            ),
+        ],
+    }
+}
+
+/// Transfers, `[transfer]`.
+fn transfers(config: &Config) -> Category {
+    let transfer = &config.transfer;
+    Category {
+        icon: "󰓡",
+        title: fl!("config-transfers"),
+        settings: vec![
+            Setting::new(
+                Key::AtomicUpload,
+                (
+                    fl!("config-atomic-upload"),
+                    fl!("config-atomic-upload-hint"),
+                ),
+                Value::Toggle(transfer.atomic_upload),
+            ),
+            Setting::new(
+                Key::ParallelJobs,
+                (
+                    fl!("config-parallel-jobs"),
+                    fl!("config-parallel-jobs-hint"),
+                ),
+                text(&transfer.parallel_jobs.to_string()),
+            ),
+        ],
+    }
+}
+
+/// SSH, `[ssh]` and `[discovery]`: how ssh runs, and which hosts are listed.
+fn ssh(config: &Config, home: &Path) -> Category {
+    let ssh = &config.ssh;
+    let config_file = ssh
+        .config_file
+        .as_deref()
+        .map_or_else(|| text(""), |file| path_text(file, home));
+    Category {
+        icon: "󰣀",
+        title: fl!("config-ssh"),
+        settings: vec![
+            Setting::new(
+                Key::SshProgram,
+                (fl!("config-ssh-program"), fl!("config-ssh-program-hint")),
+                path_text(&ssh.program, home),
+            ),
+            Setting::new(
+                Key::SshConfigFile,
+                (
+                    fl!("config-ssh-config-file"),
+                    fl!("config-ssh-config-file-hint"),
+                ),
+                config_file,
+            ),
+            Setting::new(
+                Key::SshArgs,
+                (fl!("config-ssh-args"), fl!("config-ssh-args-hint")),
+                text(&join_words(&ssh.args)),
+            ),
+            Setting::new(
+                Key::Multiplex,
+                (fl!("config-multiplex"), fl!("config-multiplex-hint")),
+                Value::Toggle(ssh.multiplex),
+            ),
+            Setting::new(
+                Key::HideHosts,
+                (fl!("config-hide-hosts"), fl!("config-hide-hosts-hint")),
+                text(&join_words(&config.discovery.hide)),
+            ),
+        ],
+    }
+}
+
+/// Volumes, `[volumes]`.
+fn volumes(config: &Config) -> Category {
+    Category {
+        icon: "󰋊",
+        title: fl!("config-volumes"),
+        settings: vec![Setting::new(
+            Key::HideVolumes,
+            (fl!("config-hide-volumes"), fl!("config-hide-volumes-hint")),
+            text(&join_words(&config.volumes.hide)),
+        )],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use ratatui::Terminal;
@@ -604,8 +837,14 @@ mod tests {
         Resolved::Action(action)
     }
 
+    const HOME: &str = "/home/me";
+
+    fn dialog_of(config: &Config) -> Configuration {
+        Configuration::new(config, Path::new(HOME), THEMES, false)
+    }
+
     fn dialog() -> Configuration {
-        Configuration::new(&UiConfig::default(), THEMES, false)
+        dialog_of(&Config::default())
     }
 
     fn draw(dialog: &mut Configuration, width: u16, height: u16) -> String {
@@ -616,19 +855,42 @@ mod tests {
         terminal.backend().to_string()
     }
 
+    fn typed(dialog: &mut Configuration, text: &str) {
+        for c in text.chars() {
+            dialog.handle(Resolved::Insert(c));
+        }
+    }
+
+    /// Opens the category `index`, with the cursor on its first setting.
+    fn category(dialog: &mut Configuration, index: usize) {
+        dialog.handle(action(Action::NextField));
+        dialog.handle(action(Action::NextField));
+        dialog.handle(action(Action::NextField));
+        assert_eq!(dialog.focus, Focus::Sidebar);
+        dialog.handle(action(Action::Home));
+        for _ in 0..index {
+            dialog.handle(action(Action::Down));
+        }
+        dialog.handle(action(Action::Right));
+    }
+
     #[test]
     fn reads_back_what_it_shows_and_what_was_changed() {
-        let ui = UiConfig {
-            theme: "solarized".to_owned(),
-            ..UiConfig::default()
-        };
-        let dialog = Configuration::new(&ui, THEMES, false);
-        assert_eq!(dialog.ui(&ui), ui, "an unknown value is kept");
+        let mut config = Config::default();
+        config.ui.theme = "solarized".to_owned();
+        config.ssh.program = PathBuf::from("/home/me/bin/ssh");
+        config.ssh.args = vec!["-o".to_owned(), "ServerAliveInterval=15".to_owned()];
+        config.volumes.hide = vec!["/Volumes/My Disk".to_owned()];
+        let (old, new) = dialog_of(&config).change().unwrap();
+        assert_eq!(old, new, "nothing changed");
+        assert_eq!(new.ui.theme, "solarized", "an unknown value is kept");
+        assert_eq!(new.ssh.program, Path::new("~/bin/ssh"), "paths from ~");
+        assert_eq!(new.ssh.args, config.ssh.args);
+        assert_eq!(new.volumes.hide, config.volumes.hide);
 
         let mut dialog = self::dialog();
         assert_eq!(dialog.context(), Context::DialogInput, "on the language");
-        dialog.handle(Resolved::Insert('d'));
-        dialog.handle(Resolved::Insert('e'));
+        typed(&mut dialog, "de");
         dialog.handle(action(Action::Down));
         assert_eq!(dialog.context(), Context::Dialog);
         dialog.handle(action(Action::Right));
@@ -638,17 +900,37 @@ mod tests {
         dialog.handle(action(Action::Toggle));
         dialog.handle(action(Action::End));
         dialog.handle(action(Action::Left));
-        assert_eq!(
-            dialog.ui(&UiConfig::default()),
-            UiConfig {
-                language: "de".to_owned(),
-                theme: "terminal".to_owned(),
-                borders: Borders::Single,
-                icons: false,
-                menu_bar: MenuBar::Always,
-                ..UiConfig::default()
-            }
-        );
+        category(&mut dialog, 1);
+        dialog.handle(action(Action::Toggle));
+        dialog.handle(action(Action::Down));
+        typed(&mut dialog, "4");
+        category(&mut dialog, 2);
+        dialog.handle(action(Action::Down));
+        typed(&mut dialog, "~/.ssh/work");
+        dialog.handle(action(Action::Down));
+        typed(&mut dialog, "-o \"SetEnv A=b c\"");
+        dialog.handle(action(Action::Down));
+        dialog.handle(action(Action::Toggle));
+        dialog.handle(action(Action::Down));
+        dialog.handle(action(Action::DeleteToStart));
+        category(&mut dialog, 3);
+        typed(&mut dialog, "/mnt/*");
+        let (old, new) = dialog.change().unwrap();
+        assert_eq!(old, Config::default());
+        let mut expected = Config::default();
+        expected.ui.language = "de".to_owned();
+        expected.ui.theme = "terminal".to_owned();
+        expected.ui.borders = Borders::Single;
+        expected.ui.icons = false;
+        expected.ui.menu_bar = MenuBar::Always;
+        expected.transfer.atomic_upload = false;
+        expected.transfer.parallel_jobs = NonZeroUsize::new(4).unwrap();
+        expected.ssh.config_file = Some(PathBuf::from("~/.ssh/work"));
+        expected.ssh.args = vec!["-o".to_owned(), "SetEnv A=b c".to_owned()];
+        expected.ssh.multiplex = false;
+        expected.discovery.hide = Vec::new();
+        expected.volumes.hide = vec!["/mnt/*".to_owned()];
+        assert_eq!(new, expected);
         assert_eq!(
             dialog.handle(action(Action::Confirm)),
             ConfigEvent::Accepted
@@ -657,6 +939,48 @@ mod tests {
             dialog.handle(action(Action::Cancel)),
             ConfigEvent::Cancelled
         );
+    }
+
+    #[test]
+    fn an_invalid_setting_says_why_and_gets_the_cursor() {
+        let cases: [(usize, usize, &str, &str); 4] = [
+            (0, 0, "?", "is not auto or a language tag"),
+            (1, 1, "x", "is not a number of jobs"),
+            (2, 2, "-F other_config", "Invalid extra ssh arguments"),
+            (2, 0, "", "cannot be empty"),
+        ];
+        for (index, row, text, message) in cases {
+            let mut dialog = dialog();
+            category(&mut dialog, index);
+            for _ in 0..row {
+                dialog.handle(action(Action::Down));
+            }
+            dialog.handle(action(Action::DeleteToStart));
+            dialog.handle(action(Action::DeleteToEnd));
+            typed(&mut dialog, text);
+            category(&mut dialog, 3);
+            let error = dialog.change().unwrap_err();
+            assert!(error.contains(message), "{error}");
+            assert_eq!((dialog.category, dialog.row), (index, row), "{message}");
+            assert_eq!(dialog.focus, Focus::Settings);
+        }
+    }
+
+    #[test]
+    fn lists_are_words_as_a_shell_reads_them() {
+        let words = |text: &str| split_words(text);
+        assert_eq!(words("  a b\tc "), ["a", "b", "c"]);
+        assert_eq!(words(r#"-o "SetEnv A=b c""#), ["-o", "SetEnv A=b c"]);
+        assert_eq!(words(r#"a\ b \"q\" "" x\\"#), ["a b", "\"q\"", "", "x\\"]);
+        assert_eq!(words(""), Vec::<String>::new());
+        let list: Vec<String> = ["/Volumes/My Disk", "a\"b", "", "c\\d", "plain"]
+            .map(str::to_owned)
+            .to_vec();
+        assert_eq!(
+            join_words(&list),
+            r#""/Volumes/My Disk" a\"b "" c\\d plain"#
+        );
+        assert_eq!(split_words(&join_words(&list)), list);
     }
 
     #[test]
@@ -719,7 +1043,7 @@ mod tests {
 
     #[test]
     fn draws_the_categories_and_the_settings() {
-        let mut dialog = Configuration::new(&UiConfig::default(), THEMES, true);
+        let mut dialog = Configuration::new(&Config::default(), Path::new(HOME), THEMES, true);
         dialog.handle(action(Action::Down));
         insta::assert_snapshot!(draw(&mut dialog, 72, 16));
     }

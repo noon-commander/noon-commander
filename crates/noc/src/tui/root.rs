@@ -37,7 +37,7 @@ pub(crate) fn read_hosts(context: &Context) -> Vec<RootHost> {
     }
     let cache = context.load_cache(&discovery);
     discovery
-        .visible(&context.config.discovery.hide)
+        .visible(&context.config().discovery.hide)
         .map(|host| RootHost {
             alias: host.alias.clone(),
             label: context.label(&host.alias),

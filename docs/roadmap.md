@@ -72,7 +72,8 @@
 - [x] Configuration dialog (Options → Configuration…): categories with icons, scrolling
       settings with a scroll bar, Interface; writes changed keys to `config.toml`
       ([ADR 0009](adr/0009-configuration-dialog-writes-config-toml.md))
-- [ ] Configuration: categories for `[transfer]`, `[ssh]`, `[discovery]`, `[volumes]`
+- [x] Configuration: categories for `[transfer]`, `[ssh]`, `[discovery]`, `[volumes]`, applied
+      at once
 - [ ] User themes and keymap overrides
 - [ ] Bookmarks and history
 - [ ] chmod and symlinks

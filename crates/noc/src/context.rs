@@ -12,8 +12,8 @@ use noc_ssh::{ConfigStamp, ResolveCache, SshSettings};
 #[derive(Debug)]
 pub(crate) struct Context {
     pub(crate) paths: Paths,
-    pub(crate) config: Config,
-    pub(crate) settings: SshSettings,
+    /// The settings, which the Configuration dialog changes while the TUI runs.
+    config: RwLock<Arc<Config>>,
     /// `config.toml`, or the file of `--config`, which the Configuration dialog changes.
     pub(crate) config_file: PathBuf,
     /// `hosts.toml`, next to the config file.
@@ -26,8 +26,7 @@ impl Clone for Context {
     fn clone(&self) -> Self {
         Self {
             paths: self.paths.clone(),
-            config: self.config.clone(),
-            settings: self.settings.clone(),
+            config: RwLock::new(self.config()),
             config_file: self.config_file.clone(),
             hosts_file: self.hosts_file.clone(),
             hosts: RwLock::new(self.hosts()),
@@ -66,19 +65,35 @@ impl Context {
     /// A context for a config from `config_file` that is already valid; the host settings
     /// are from `hosts.toml` next to it.
     pub(crate) fn new(paths: Paths, config: Config, config_file: PathBuf, hosts: Hosts) -> Self {
-        let settings = SshSettings {
-            program: config.ssh.program.clone(),
-            config_file: config.ssh.config_file.clone(),
-            args: config.ssh.args.clone(),
-            multiplex: config.ssh.multiplex,
-        };
         Self {
             paths,
-            config,
-            settings,
+            config: RwLock::new(Arc::new(config)),
             hosts_file: Paths::hosts_file(&config_file),
             config_file,
             hosts: RwLock::new(Arc::new(hosts)),
+        }
+    }
+
+    /// The settings as they are now.
+    pub(crate) fn config(&self) -> Arc<Config> {
+        // The lock guards a pointer swap, which cannot leave it half done.
+        Arc::clone(&self.config.read().unwrap_or_else(PoisonError::into_inner))
+    }
+
+    /// Uses `config`, which is valid and has `~` expanded, from now on: new connections, `ssh
+    /// -G`, and listings of the hosts and the volumes follow it.
+    pub(crate) fn set_config(&self, config: Config) {
+        *self.config.write().unwrap_or_else(PoisonError::into_inner) = Arc::new(config);
+    }
+
+    /// How ssh is run now.
+    pub(crate) fn settings(&self) -> SshSettings {
+        let ssh = &self.config().ssh;
+        SshSettings {
+            program: ssh.program.clone(),
+            config_file: ssh.config_file.clone(),
+            args: ssh.args.clone(),
+            multiplex: ssh.multiplex,
         }
     }
 
@@ -103,7 +118,10 @@ impl Context {
     }
 
     pub(crate) fn discovery_options(&self) -> DiscoveryOptions {
-        DiscoveryOptions::new(self.paths.home.clone(), self.config.ssh.config_file.clone())
+        DiscoveryOptions::new(
+            self.paths.home.clone(),
+            self.config().ssh.config_file.clone(),
+        )
     }
 
     /// Scans the `ssh_config` files for hosts.
@@ -120,7 +138,7 @@ impl Context {
         let mut files = discovery.files.clone();
         files.extend(self.discovery_options().root_files());
         let path = self.paths.cache_dir.join("resolve.json");
-        ResolveCache::load(path, ConfigStamp::read(&files, &self.settings))
+        ResolveCache::load(path, ConfigStamp::read(&files, &self.settings()))
     }
 }
 
@@ -141,5 +159,38 @@ pub(crate) fn describe(warning: &DiscoveryWarning) -> String {
         DiscoveryWarning::IncludeTooDeep { file, line } => {
             format!("{}:{line}: Include is nested too deeply", file.display())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::*;
+
+    #[test]
+    fn a_new_config_takes_over_for_ssh_and_listings() {
+        let paths = Paths::resolve(Path::new("/home/me"), 501, &|_| None);
+        let context = Context::new(
+            paths,
+            Config::default(),
+            PathBuf::from("/home/me/.config/noc/config.toml"),
+            Hosts::default(),
+        );
+        assert_eq!(context.settings().program, Path::new("ssh"));
+        assert_eq!(
+            context.hosts_file,
+            Path::new("/home/me/.config/noc/hosts.toml")
+        );
+        let mut config = Config::default();
+        config.ssh.program = PathBuf::from("/opt/bin/ssh");
+        config.ssh.multiplex = false;
+        config.volumes.hide = vec!["/mnt/*".to_owned()];
+        context.set_config(config);
+        let settings = context.settings();
+        assert_eq!(settings.program, Path::new("/opt/bin/ssh"));
+        assert!(!settings.multiplex);
+        assert_eq!(context.config().volumes.hide, ["/mnt/*"]);
+        assert_eq!(context.clone().config().volumes.hide, ["/mnt/*"]);
     }
 }

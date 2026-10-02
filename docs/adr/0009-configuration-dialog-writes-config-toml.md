@@ -19,11 +19,11 @@ rewrites one table through `toml_edit` and keeps everything else.
 
 - Options → Configuration… opens a dialog of the settings, by category: a list of categories
   on the left, each with a Nerd Font icon, and the settings of the chosen one on the right,
-  which scroll, with a scroll bar, when they do not fit. The first category is Interface
-  (`[ui]`); others follow.
-- OK uses the settings at once where the running program can (theme, frames, icons, hidden
-  files, quick search, menu bar); the language takes effect at the next start, which the
-  dialog says. Then `noc_config::save_config` writes them in the background.
+  which scroll, with a scroll bar, when they do not fit: Interface (`[ui]`), Transfers
+  (`[transfer]`), SSH (`[ssh]`, `[discovery]`), and Volumes (`[volumes]`).
+- OK checks the settings, then uses them at once where the running program can: the
+  interface, transfers, and, for new connections and listings, ssh and the hidden hosts and
+  volumes. The language takes effect at the next start, which the dialog says. Then `noc_config::save_config` writes them in the background.
 - Only keys that the dialog changed are written: those that differ between what the dialog
   showed and what it closed with. The file is read again first, so keys changed in it
   meanwhile stay. A changed key keeps its comments, a new key goes at the end of its table
@@ -42,5 +42,7 @@ rewrites one table through `toml_edit` and keeps everything else.
 - Comments and formatting survive, but new keys go at the end of their table rather than
   next to the commented defaults.
 - Settings that the dialog cannot apply at once must say so, or move to the next start.
-- The settings that only the start reads, in `Context`, stay as they were loaded; categories
-  for them (ssh, discovery, volumes) need a way to pass changes on, or a restart note.
+- Every option of `config.toml` has its row in the dialog, and a new option comes with one
+  (see `AGENTS.md`).
+- The settings in `Context` sit behind a lock, so that the dialog can change them for new
+  connections, `ssh -G`, and listings; connections that are open keep what they started with.

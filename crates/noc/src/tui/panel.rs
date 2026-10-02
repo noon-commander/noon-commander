@@ -935,12 +935,12 @@ impl Columns {
     }
 }
 
-/// A name cell in `style`, with the icon of its `prefix` toned down. A cell cut so short that
-/// the prefix lost its end, and mc's markers, are drawn whole in `style`.
+/// A name cell in `style`, with the icon of its `prefix` in a toned-down `style`. A cell cut so
+/// short that the prefix lost its end, and mc's markers, are drawn whole in `style`.
 fn icon_spans(name: String, prefix: &str, style: Style, view: &View<'_>) -> Vec<Span<'static>> {
     match name.strip_prefix(prefix) {
         Some(rest) if view.decor.icons() && !prefix.is_empty() => vec![
-            Span::styled(prefix.to_owned(), view.theme.icon),
+            Span::styled(prefix.to_owned(), Theme::icon(style)),
             Span::styled(rest.to_owned(), style),
         ],
         _ => vec![Span::styled(name, style)],
@@ -1990,7 +1990,7 @@ mod tests {
     }
 
     #[test]
-    fn icons_are_dimmed_and_names_keep_their_colors() {
+    fn icons_are_dimmed_names_in_their_colors() {
         use ratatui::style::{Color, Modifier};
 
         let mut panel = loaded("/srv", varied());
@@ -2010,9 +2010,17 @@ mod tests {
             (cell.fg, cell.modifier.contains(Modifier::DIM))
         };
         // Rows: frame, header, `..`, Adir, dir1, .env, a.txt, b.md.
-        assert_eq!(look(1, 2), (Color::Gray, true), "the icon of `..`");
-        assert_eq!(look(1, 3), (Color::Gray, true), "the icon of a directory");
+        assert_eq!(look(1, 2), (Color::White, true), "the icon of `..`");
+        assert_eq!(look(1, 3), (Color::White, true), "the icon of a directory");
         assert_eq!(look(3, 3), (Color::White, false), "its name");
+        assert!(
+            !buffer[(1, 3)].modifier.contains(Modifier::BOLD),
+            "not bold"
+        );
+        assert!(
+            buffer[(3, 3)].modifier.contains(Modifier::BOLD),
+            "unlike the name"
+        );
         assert_eq!(look(1, 6), (Color::Gray, true), "the icon of a file");
         assert_eq!(look(3, 6), (Color::Gray, false), "its name");
 
@@ -2037,7 +2045,7 @@ mod tests {
         // Rows: frame, header, local, the first host.
         assert_eq!(
             look(3, 2),
-            (Color::Gray, true),
+            (Color::White, true),
             "the icon of the local files"
         );
         assert_eq!(look(1, 3), (Color::LightGreen, false), "the host's status");

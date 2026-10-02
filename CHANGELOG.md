@@ -56,8 +56,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   with what was typed; Ctrl-S again finds the next one, and Esc or any other key ends it.
   `[ui] type_to_search = false` leaves it to Ctrl-S and Alt-S, as in mc.
 - Nerd Font icons in front of names, by file type and extension (`[ui] icons`, on by default),
-  dimmed so the names stand out; without them, mc's markers such as `/` for directories and
-  `*` for executables. A host that is connecting shows a spinner.
+  in a dimmed color of the name so the names stand out; without them, mc's markers such as `/`
+  for directories and `*` for executables. A host that is connecting shows a spinner.
 - Midnight Commander's colors (`[ui] theme = "mc-classic"`, the default): blue panels, a cyan
   cursor, names colored by type, gray dialogs with a shadow. `theme = "terminal"` keeps the
   terminal's own colors. In both, directories are bold.

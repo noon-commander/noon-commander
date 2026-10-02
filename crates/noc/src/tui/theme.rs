@@ -25,8 +25,6 @@ pub(crate) struct Theme {
     pub(crate) marked_cursor: Style,
     /// What quick search has matched so far.
     pub(crate) quick_search: Style,
-    /// Icons in front of names, toned down so the names stand out.
-    pub(crate) icon: Style,
     /// Regular file.
     pub(crate) file: Style,
     /// Directory, and symlink to a directory.
@@ -98,7 +96,6 @@ impl Theme {
             marked: on(Color::LightYellow, Color::Blue).underlined(),
             marked_cursor: on(Color::LightYellow, Color::Cyan).underlined(),
             quick_search: on(Color::Black, Color::Cyan),
-            icon: fg(Color::Gray).dim(),
             file: fg(Color::Gray),
             directory: fg(Color::White).bold(),
             executable: fg(Color::LightGreen),
@@ -141,7 +138,6 @@ impl Theme {
             marked: Style::new().underlined(),
             marked_cursor: reversed.underlined(),
             quick_search: reversed,
-            icon: plain.dim(),
             file: plain,
             directory: plain.bold(),
             executable: plain,
@@ -191,6 +187,12 @@ impl Theme {
             }
             FileKind::File => self.file,
         }
+    }
+
+    /// The style of the icon in front of a name in `name`: the name's color, toned down so the
+    /// name stands out. Not bold, which many terminals cannot draw together with dim.
+    pub(crate) fn icon(name: Style) -> Style {
+        name.not_bold().dim()
     }
 
     /// The style of a host's status marker.
@@ -251,7 +253,10 @@ mod tests {
         assert_eq!(fg(entry(FileKind::File, 0o644, None)), Some(Color::Gray));
         let directory = theme.entry(&entry(FileKind::Dir, 0o755, None));
         assert_eq!(directory, Style::new().fg(Color::White).bold());
-        assert_eq!(theme.icon, Style::new().fg(Color::Gray).dim());
+        assert_eq!(
+            Theme::icon(directory),
+            Style::new().fg(Color::White).not_bold().dim()
+        );
         assert_eq!(
             fg(entry(FileKind::CharDevice, 0o644, None)),
             Some(Color::LightMagenta)

@@ -47,7 +47,7 @@ pub(crate) use root::read_volumes;
 
 /// Whether `name` is a built-in theme, for `ui.theme`; and the names there are.
 pub(crate) fn is_valid_theme(name: &str) -> bool {
-    theme::Theme::by_name(name).is_some()
+    theme::Theme::by_name(name, theme::ColorDepth::TrueColor).is_some()
 }
 
 pub(crate) fn theme_names() -> &'static [&'static str] {
@@ -120,6 +120,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     let (done_tx, mut done) = mpsc::unbounded_channel();
     let mut tasks = Tasks::start(Arc::clone(&context), done_tx).await;
     let (mut app, effects) = App::new(&start, &context.paths.home, &context.config());
+    app.set_color_depth(theme::ColorDepth::detect());
     app.set_time_zone(tz.clone());
     if let Some(name) = host_name() {
         app.set_root_title(name);

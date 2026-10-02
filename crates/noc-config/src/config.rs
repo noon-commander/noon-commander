@@ -60,7 +60,8 @@ pub struct UiConfig {
     /// Interface language as a language tag such as `en-US`, or `auto` for the system locale.
     /// Default: `auto`.
     pub language: String,
-    /// A built-in color theme: `mc-classic` or `terminal`. Default: `mc-classic`.
+    /// A built-in color theme: `mc-classic`, `terminal`, `catppuccin-mocha`, or
+    /// `catppuccin-latte`. Default: `mc-classic`.
     pub theme: String,
     /// The lines that frame panels and dialogs. Default: `double`.
     pub borders: Borders,

@@ -436,7 +436,7 @@ hide = ["/Volumes/Backup*"]      # mount points to leave out of the root; never 
 
 [ui]
 language = "auto"                # or a language tag such as "en-US"; others fall back to it
-theme = "mc-classic"             # or "terminal": the terminal's own colors, reverse video
+theme = "mc-classic"             # "terminal", "catppuccin-mocha", or "catppuccin-latte"
 borders = "double"               # frames of panels and dialogs: ═ ║ ╔; "single": ─ │ ┌
 icons = true                     # Nerd Font icons; false: mc's markers (/ * @ ~ …)
 show_hidden = true               # names that start with a dot; Alt-. switches while running
@@ -638,9 +638,20 @@ remember_dir = true              # reopen the last directory of this session
 - **Themes.** Built in: `mc-classic`, the colors of mc's default skin (blue panels, a cyan
   cursor that replaces the row's colors, yellow headers; directories white, executables green,
   broken links red, devices magenta; gray dialogs with mc's shadow; a black-and-cyan F-key
-  bar; red error dialogs), and `terminal`, the terminal's own colors with reverse video.
-  `ui.theme` picks one; an unknown name is an error. Only the 16 ANSI colors are used, so the
-  terminal's palette decides the exact shades. User themes in `themes/` are planned for M4.
+  bar; red error dialogs); `terminal`, the terminal's own colors with reverse video; and
+  `catppuccin-mocha` and `catppuccin-latte`, the dark and light flavors of
+  [Catppuccin](https://catppuccin.com) ([ADR 0010](adr/0010-truecolor-themes.md)).
+  `ui.theme` picks one; an unknown name is an error. `mc-classic` uses the 16 ANSI colors, so
+  the terminal's palette decides its shades. The Catppuccin themes are built by one function
+  from a palette of named colors, so both flavors give each color the same role: panels on
+  `base`, dialogs, menus, and the F-key labels on `surface0`, text fields on `surface1`, the
+  idle menu bar on `mantle`, the F-key numbers and the shadow on `crust`; a `blue` cursor, the
+  active panel's title, and focused buttons; `lavender` headers, `mauve` marks and dialog
+  titles; directories `blue`, executables `green`, symlinks `teal`, broken links `red`,
+  devices `pink`; hosts `overlay1`, `yellow`, `green`, `red` by state. Their colors are 24-bit
+  RGB where `COLORTERM` is `truecolor` or `24bit`; elsewhere each is the nearest of the 6×6×6
+  cube and the gray ramp of the 256-color palette, never the 16 colors below them, which the
+  terminal's palette redefines. User themes in `themes/` are planned for M4.
   Panels and dialogs are framed with double lines unless `ui.borders` is `single`; as in mc,
   a dialog leaves a blank cell between its frame and its edge, which gives way on a screen too
   small for it.

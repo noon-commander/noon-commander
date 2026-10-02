@@ -41,7 +41,9 @@ hide = []
 # Interface language, such as "en-US", or "auto" for the system locale. Only English exists so
 # far; other languages fall back to it.
 language = "auto"
-# Colors: "mc-classic" (blue panels, as Midnight Commander) or "terminal" (the terminal's own).
+# Colors: "mc-classic" (blue panels, as Midnight Commander), "terminal" (the terminal's own),
+# "catppuccin-mocha" (dark), or "catppuccin-latte" (light). The Catppuccin themes use 24-bit
+# color where COLORTERM says the terminal has it, else the nearest of 256 colors.
 theme = "mc-classic"
 # Frames of panels and dialogs: "double" (═ ║ ╔, as Midnight Commander) or "single" (─ │ ┌).
 borders = "double"

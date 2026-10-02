@@ -74,6 +74,11 @@
       ([ADR 0009](adr/0009-configuration-dialog-writes-config-toml.md))
 - [x] Configuration: categories for `[transfer]`, `[ssh]`, `[discovery]`, `[volumes]`, applied
       at once
+- [x] Catppuccin themes in 24-bit color, Mocha and Latte, with the nearest of 256 colors
+      where `COLORTERM` does not announce 24-bit color
+      ([ADR 0010](adr/0010-truecolor-themes.md))
+- [ ] More built-in dark and light pairs from the same palette roles: Gruvbox (dark/light),
+      Rosé Pine (main/dawn), Tokyo Night (night/day), Solarized (dark/light)
 - [ ] User themes and keymap overrides
 - [ ] Bookmarks and history
 - [ ] chmod and symlinks

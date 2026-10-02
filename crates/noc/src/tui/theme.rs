@@ -89,15 +89,53 @@ pub(crate) struct Theme {
     pub(crate) borders: Borders,
 }
 
+/// The colors the terminal can show: 24-bit RGB, or only its 256-color palette, to which
+/// themes in RGB are brought down.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ColorDepth {
+    TrueColor,
+    Indexed,
+}
+
+impl ColorDepth {
+    /// From `COLORTERM`, which terminals with 24-bit color set to `truecolor` or `24bit`.
+    pub(crate) fn detect() -> Self {
+        let depth = Self::from_colorterm(std::env::var_os("COLORTERM").as_deref());
+        if depth == Self::Indexed {
+            tracing::info!("COLORTERM does not announce 24-bit color; RGB themes use 256 colors");
+        }
+        depth
+    }
+
+    fn from_colorterm(value: Option<&std::ffi::OsStr>) -> Self {
+        match value.and_then(std::ffi::OsStr::to_str) {
+            Some(value) if value.eq_ignore_ascii_case("truecolor") => Self::TrueColor,
+            Some(value) if value.eq_ignore_ascii_case("24bit") => Self::TrueColor,
+            _ => Self::Indexed,
+        }
+    }
+}
+
 impl Theme {
     /// Names of the built-in themes, for `ui.theme`.
-    pub(crate) const NAMES: &'static [&'static str] = &["mc-classic", "terminal"];
+    pub(crate) const NAMES: &'static [&'static str] = &[
+        "mc-classic",
+        "terminal",
+        "catppuccin-mocha",
+        "catppuccin-latte",
+    ];
 
-    /// A built-in theme by name.
-    pub(crate) fn by_name(name: &str) -> Option<Self> {
+    /// A built-in theme by name, in the colors that `depth` allows.
+    pub(crate) fn by_name(name: &str, depth: ColorDepth) -> Option<Self> {
+        let palette = |palette: Palette| match depth {
+            ColorDepth::TrueColor => palette,
+            ColorDepth::Indexed => palette.indexed(),
+        };
         match name {
             "mc-classic" => Some(Self::mc_classic()),
             "terminal" => Some(Self::terminal()),
+            "catppuccin-mocha" => Some(Self::catppuccin(&palette(Palette::MOCHA))),
+            "catppuccin-latte" => Some(Self::catppuccin(&palette(Palette::LATTE))),
             _ => None,
         }
     }
@@ -212,6 +250,59 @@ impl Theme {
         }
     }
 
+    /// Catppuccin in the flavor `p`: panels on the base color, dialogs and menus a surface
+    /// above it, accents for names and states; the same roles in every flavor.
+    fn catppuccin(p: &Palette) -> Self {
+        let on = |fg: Color, bg: Color| Style::new().fg(fg).bg(bg);
+        let fg = |fg: Color| Style::new().fg(fg);
+        let cursor = on(p.base, p.blue);
+        Self {
+            panel: on(p.text, p.base),
+            panel_border: on(p.overlay0, p.base),
+            panel_title_active: cursor,
+            header: on(p.lavender, p.base),
+            cursor,
+            marked: on(p.mauve, p.base).underlined(),
+            marked_cursor: on(p.base, p.mauve).underlined(),
+            quick_search: cursor,
+            file: fg(p.text),
+            directory: fg(p.blue).bold(),
+            executable: fg(p.green),
+            symlink: fg(p.teal),
+            stale_link: fg(p.red),
+            device: fg(p.pink),
+            special: fg(p.overlay1),
+            host_idle: fg(p.overlay1),
+            host_connecting: fg(p.yellow),
+            host_connected: fg(p.green),
+            host_failed: fg(p.red),
+            address: fg(p.subtext0),
+            dialog_host: [fg(p.subtext0), fg(p.yellow), fg(p.green), fg(p.red)],
+            fkey_number: on(p.text, p.crust),
+            fkey_label: on(p.text, p.surface0),
+            menu_bar: on(p.text, p.surface0),
+            menu_bar_selected: cursor,
+            menu_bar_inactive: on(p.subtext0, p.mantle),
+            menu: on(p.text, p.surface0),
+            menu_selected: cursor,
+            // Without a color of its own: an accent would not show on the selected command.
+            menu_hotkey: Style::new().bold().underlined(),
+            menu_disabled: fg(p.subtext0),
+            dialog: on(p.text, p.surface0),
+            dialog_title: on(p.mauve, p.surface0),
+            dialog_button: on(p.text, p.surface0),
+            dialog_button_focused: cursor,
+            dialog_input: on(p.text, p.surface1),
+            dialog_input_fresh: on(p.subtext0, p.surface1),
+            gauge: on(p.blue, p.surface0),
+            error_dialog: on(p.base, p.red),
+            error_title: on(p.base, p.red),
+            error_button_focused: on(p.text, p.surface0),
+            shadow: Some(on(p.overlay0, p.crust)),
+            borders: Borders::default(),
+        }
+    }
+
     /// This theme framed with `borders`, from `ui.borders`.
     pub(crate) fn with_borders(self, borders: Borders) -> Self {
         Self { borders, ..self }
@@ -284,6 +375,127 @@ impl Theme {
     }
 }
 
+/// The colors of a Catppuccin flavor that the themes use, by their names in Catppuccin
+/// (<https://github.com/catppuccin/palette>, v1.8.0).
+#[derive(Debug, Clone, Copy)]
+struct Palette {
+    pink: Color,
+    mauve: Color,
+    red: Color,
+    yellow: Color,
+    green: Color,
+    teal: Color,
+    blue: Color,
+    lavender: Color,
+    text: Color,
+    subtext0: Color,
+    overlay1: Color,
+    overlay0: Color,
+    surface1: Color,
+    surface0: Color,
+    base: Color,
+    mantle: Color,
+    crust: Color,
+}
+
+impl Palette {
+    const MOCHA: Self = Self {
+        pink: Color::from_u32(0x00f5_c2e7),
+        mauve: Color::from_u32(0x00cb_a6f7),
+        red: Color::from_u32(0x00f3_8ba8),
+        yellow: Color::from_u32(0x00f9_e2af),
+        green: Color::from_u32(0x00a6_e3a1),
+        teal: Color::from_u32(0x0094_e2d5),
+        blue: Color::from_u32(0x0089_b4fa),
+        lavender: Color::from_u32(0x00b4_befe),
+        text: Color::from_u32(0x00cd_d6f4),
+        subtext0: Color::from_u32(0x00a6_adc8),
+        overlay1: Color::from_u32(0x007f_849c),
+        overlay0: Color::from_u32(0x006c_7086),
+        surface1: Color::from_u32(0x0045_475a),
+        surface0: Color::from_u32(0x0031_3244),
+        base: Color::from_u32(0x001e_1e2e),
+        mantle: Color::from_u32(0x0018_1825),
+        crust: Color::from_u32(0x0011_111b),
+    };
+
+    const LATTE: Self = Self {
+        pink: Color::from_u32(0x00ea_76cb),
+        mauve: Color::from_u32(0x0088_39ef),
+        red: Color::from_u32(0x00d2_0f39),
+        yellow: Color::from_u32(0x00df_8e1d),
+        green: Color::from_u32(0x0040_a02b),
+        teal: Color::from_u32(0x0017_9299),
+        blue: Color::from_u32(0x001e_66f5),
+        lavender: Color::from_u32(0x0072_87fd),
+        text: Color::from_u32(0x004c_4f69),
+        subtext0: Color::from_u32(0x006c_6f85),
+        overlay1: Color::from_u32(0x008c_8fa1),
+        overlay0: Color::from_u32(0x009c_a0b0),
+        surface1: Color::from_u32(0x00bc_c0cc),
+        surface0: Color::from_u32(0x00cc_d0da),
+        base: Color::from_u32(0x00ef_f1f5),
+        mantle: Color::from_u32(0x00e6_e9ef),
+        crust: Color::from_u32(0x00dc_e0e8),
+    };
+
+    /// The nearest colors of the 256-color palette, for terminals without 24-bit color.
+    fn indexed(self) -> Self {
+        Self {
+            pink: indexed(self.pink),
+            mauve: indexed(self.mauve),
+            red: indexed(self.red),
+            yellow: indexed(self.yellow),
+            green: indexed(self.green),
+            teal: indexed(self.teal),
+            blue: indexed(self.blue),
+            lavender: indexed(self.lavender),
+            text: indexed(self.text),
+            subtext0: indexed(self.subtext0),
+            overlay1: indexed(self.overlay1),
+            overlay0: indexed(self.overlay0),
+            surface1: indexed(self.surface1),
+            surface0: indexed(self.surface0),
+            base: indexed(self.base),
+            mantle: indexed(self.mantle),
+            crust: indexed(self.crust),
+        }
+    }
+}
+
+/// The nearest color to `color` in the 6×6×6 cube or the gray ramp of the 256-color palette.
+/// The 16 colors below them are left out: the terminal's palette decides those.
+fn indexed(color: Color) -> Color {
+    const LEVELS: [u8; 6] = [0, 95, 135, 175, 215, 255];
+    let Color::Rgb(r, g, b) = color else {
+        return color;
+    };
+    let distance = |(r2, g2, b2): (u8, u8, u8)| {
+        let d = |a: u8, b: u8| (i32::from(a) - i32::from(b)).pow(2);
+        d(r, r2) + d(g, g2) + d(b, b2)
+    };
+    let level = |value: u8| {
+        (0u8..6)
+            .min_by_key(|&index| (i32::from(LEVELS[usize::from(index)]) - i32::from(value)).abs())
+            .unwrap_or(0)
+    };
+    let (ri, gi, bi) = (level(r), level(g), level(b));
+    let cube = (
+        LEVELS[usize::from(ri)],
+        LEVELS[usize::from(gi)],
+        LEVELS[usize::from(bi)],
+    );
+    // Gray `index` is 8 + 10 × index, for index 0 … 23.
+    let mean = (u16::from(r) + u16::from(g) + u16::from(b)) / 3;
+    let gray_index = u8::try_from((mean.saturating_sub(3) / 10).min(23)).unwrap_or(23);
+    let gray = 8 + 10 * gray_index;
+    if distance((gray, gray, gray)) < distance(cube) {
+        Color::Indexed(232 + gray_index)
+    } else {
+        Color::Indexed(16 + 36 * ri + 6 * gi + bi)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use noc_vfs::Metadata;
@@ -313,7 +525,12 @@ mod tests {
             HostStatus::Connected,
             HostStatus::Failed,
         ];
-        for theme in Theme::NAMES.iter().filter_map(|name| Theme::by_name(name)) {
+        let themes = Theme::NAMES.iter().flat_map(|name| {
+            [ColorDepth::TrueColor, ColorDepth::Indexed]
+                .into_iter()
+                .filter_map(move |depth| Theme::by_name(name, depth))
+        });
+        for theme in themes {
             let background = theme.dialog.bg;
             for status in statuses {
                 let style = theme.dialog.patch(theme.dialog_host_status(status));
@@ -340,9 +557,65 @@ mod tests {
     #[test]
     fn every_name_is_a_theme() {
         for name in Theme::NAMES {
-            assert!(Theme::by_name(name).is_some(), "{name}");
+            assert!(
+                Theme::by_name(name, ColorDepth::TrueColor).is_some(),
+                "{name}"
+            );
         }
-        assert_eq!(Theme::by_name("solarized"), None);
+        assert_eq!(Theme::by_name("solarized", ColorDepth::TrueColor), None);
+    }
+
+    #[test]
+    fn catppuccin_flavors_share_their_roles() {
+        let theme = |name| Theme::by_name(name, ColorDepth::TrueColor).unwrap();
+        let (mocha, latte) = (theme("catppuccin-mocha"), theme("catppuccin-latte"));
+        assert_eq!(mocha.panel.bg, Some(Color::Rgb(0x1e, 0x1e, 0x2e)));
+        assert_eq!(latte.panel.bg, Some(Color::Rgb(0xef, 0xf1, 0xf5)));
+        assert_eq!(mocha.directory.fg, Some(Color::Rgb(0x89, 0xb4, 0xfa)));
+        assert_eq!(latte.directory.fg, Some(Color::Rgb(0x1e, 0x66, 0xf5)));
+        for theme in [mocha, latte] {
+            assert_ne!(theme.panel.bg, theme.dialog.bg);
+            assert_ne!(theme.dialog.bg, theme.dialog_input.bg);
+            assert_eq!(theme.cursor, theme.dialog_button_focused);
+        }
+    }
+
+    #[test]
+    fn rgb_comes_down_to_the_256_color_palette() {
+        assert_eq!(indexed(Color::Rgb(0, 0, 0)), Color::Indexed(16));
+        assert_eq!(indexed(Color::Rgb(255, 0, 0)), Color::Indexed(196));
+        assert_eq!(indexed(Color::Rgb(255, 255, 255)), Color::Indexed(231));
+        assert_eq!(indexed(Color::Rgb(0x1e, 0x1e, 0x2e)), Color::Indexed(235));
+        assert_eq!(indexed(Color::Rgb(0x89, 0xb4, 0xfa)), Color::Indexed(111));
+        assert_eq!(indexed(Color::Blue), Color::Blue);
+        for name in ["catppuccin-mocha", "catppuccin-latte"] {
+            let theme = Theme::by_name(name, ColorDepth::Indexed).unwrap();
+            let layers = [
+                theme.panel.bg,
+                theme.dialog.bg,
+                theme.dialog_input.bg,
+                theme.fkey_number.bg,
+            ];
+            for (index, layer) in layers.iter().enumerate() {
+                assert!(
+                    matches!(layer, Some(Color::Indexed(232..))),
+                    "{name}: {layer:?}"
+                );
+                assert!(!layers[index + 1..].contains(layer), "{name}: {layer:?}");
+            }
+            assert!(matches!(theme.directory.fg, Some(Color::Indexed(16..))));
+        }
+    }
+
+    #[test]
+    fn colorterm_tells_true_color() {
+        let depth =
+            |value: Option<&str>| ColorDepth::from_colorterm(value.map(std::ffi::OsStr::new));
+        assert_eq!(depth(Some("truecolor")), ColorDepth::TrueColor);
+        assert_eq!(depth(Some("24bit")), ColorDepth::TrueColor);
+        assert_eq!(depth(Some("256color")), ColorDepth::Indexed);
+        assert_eq!(depth(Some("")), ColorDepth::Indexed);
+        assert_eq!(depth(None), ColorDepth::Indexed);
     }
 
     #[test]

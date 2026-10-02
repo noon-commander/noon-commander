@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 
 use jiff::tz::TimeZone;
-use noc_config::{Config, HostConfig, Hosts, MenuBar, SftpHost};
+use noc_config::{Config, HostConfig, Hosts, MenuBar, SftpHost, UiConfig};
 use noc_ops::{Algorithm, Conflict, CopyOptions, Decision, Sum};
 use noc_vfs::{FileKind, Location, Metadata, RemotePath};
 use ratatui::Frame;
@@ -32,7 +32,7 @@ use super::progress::{Counts, JobButton, JobView};
 use super::pulldown::{self, Command, PullDown, PullDownEvent, Status};
 use super::sums::{Mark, SumRow, SumsButton, SumsEvent, SumsWindow, Verdict};
 use super::tasks::{HostHandle, JobEvent};
-use super::theme::Theme;
+use super::theme::{ColorDepth, Theme};
 use super::viewer::Viewer;
 use crate::i18n::fl;
 
@@ -417,6 +417,8 @@ pub(crate) struct App {
     config: Config,
     decor: Decor,
     theme: Theme,
+    /// What the terminal can show, for themes in RGB.
+    color_depth: ColorDepth,
     /// Counts the frames of spinners.
     tick: u64,
     /// Hosts whose last attempt failed or whose connection was lost.
@@ -501,9 +503,8 @@ impl App {
             config: config.clone(),
             decor: Decor::new(ui.icons),
             // `ui.theme` was checked when the config was loaded.
-            theme: Theme::by_name(&ui.theme)
-                .unwrap_or_else(Theme::mc_classic)
-                .with_borders(ui.borders),
+            theme: theme_of(ui, ColorDepth::TrueColor),
+            color_depth: ColorDepth::TrueColor,
             tick: 0,
             failed: HashSet::new(),
             addresses: HashMap::new(),
@@ -577,6 +578,12 @@ impl App {
     /// Titles the virtual root with `name`, the name of this machine.
     pub(crate) fn set_root_title(&mut self, name: String) {
         self.root_title = name;
+    }
+
+    /// Draws in the colors that the terminal can show, `depth`.
+    pub(crate) fn set_color_depth(&mut self, depth: ColorDepth) {
+        self.color_depth = depth;
+        self.theme = theme_of(&self.config.ui, depth);
     }
 
     /// Shows times in `tz`.
@@ -1006,9 +1013,7 @@ impl App {
         config.expand_tilde(&self.home);
         let ui = &config.ui;
         // The dialog offers only the built-in themes and those `ui.theme` names.
-        if let Some(theme) = Theme::by_name(&ui.theme) {
-            self.theme = theme.with_borders(ui.borders);
-        }
+        self.theme = theme_of(ui, self.color_depth);
         self.decor = Decor::new(ui.icons);
         if ui.show_hidden != self.config.ui.show_hidden {
             for side in Side::BOTH {
@@ -2840,6 +2845,14 @@ impl App {
     }
 }
 
+/// The theme that `ui` picks, in the colors of `depth`. `ui.theme` was checked when the config
+/// was loaded, and the dialog offers only the built-in themes.
+fn theme_of(ui: &UiConfig, depth: ColorDepth) -> Theme {
+    Theme::by_name(&ui.theme, depth)
+        .unwrap_or_else(Theme::mc_classic)
+        .with_borders(ui.borders)
+}
+
 /// Saves what the dialog of F4 on the host `name` holds, if it changed anything.
 fn save_host(name: String, old: Option<&HostConfig>, dialog: &Dialog) -> Vec<Effect> {
     let text = |index: usize| {
@@ -3016,7 +3029,7 @@ mod tests {
 
     use std::sync::mpsc;
 
-    use noc_config::{TransferConfig, UiConfig};
+    use noc_config::TransferConfig;
     use noc_ssh::askpass::PromptKind;
     use noc_vfs::{DirEntry, FileKind, Metadata, RemotePath};
     use ratatui::Terminal;

@@ -183,7 +183,7 @@ fn rejects_an_unknown_theme() {
     assert_eq!(output.status.code(), Some(1));
     assert!(
         stderr(&output).contains("invalid `ui.theme`")
-            && stderr(&output).contains("mc-classic, terminal"),
+            && stderr(&output).contains("mc-classic, terminal, catppuccin-mocha, catppuccin-latte"),
         "{}",
         stderr(&output)
     );

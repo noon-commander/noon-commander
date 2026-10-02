@@ -35,6 +35,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Catppuccin themes in 24-bit color: `[ui] theme = "catppuccin-mocha"`, dark, and
+  `"catppuccin-latte"`, light, with the same colors for the same things in both. Where
+  `COLORTERM` is not `truecolor` or `24bit`, they use the nearest of the 256 colors
+  ([ADR 0010](docs/adr/0010-truecolor-themes.md)).
 - Options → Configuration… opens a dialog of every setting of `config.toml`, by category
   with icons, that scrolls with a scroll bar: Interface, Transfers, SSH (with the hidden
   hosts), and Volumes. Lists are typed as words, as in a shell. OK checks the values (the

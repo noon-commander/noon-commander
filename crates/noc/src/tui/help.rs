@@ -42,6 +42,7 @@ impl Help {
             (Context::Panel, fl!("help-panels")),
             (Context::Root, fl!("help-root")),
             (Context::QuickSearch, fl!("help-quick-search")),
+            (Context::Menu, fl!("help-menu")),
             (Context::Dialog, fl!("help-dialogs")),
             (Context::DialogInput, fl!("help-text-fields")),
             (Context::Viewer, fl!("help-viewer")),
@@ -65,6 +66,7 @@ impl Help {
             }
         }
         entries.push(Entry::Blank);
+        entries.push(Entry::Note(fl!("help-note-menu")));
         entries.push(Entry::Note(fl!("help-note-esc")));
         if type_to_search {
             entries.push(Entry::Note(fl!("help-note-typing")));
@@ -190,12 +192,14 @@ fn key_lines(keys: &str, width: usize) -> Vec<String> {
 /// leaves out.
 fn describe(context: Context, action: Action) -> Option<String> {
     let text = match (context, action) {
-        (Context::Panel | Context::Viewer, Action::Up) => fl!("help-row-up"),
-        (Context::Panel | Context::Viewer, Action::Down) => fl!("help-row-down"),
-        (Context::Panel | Context::Viewer, Action::PageUp) => fl!("help-page-up"),
-        (Context::Panel | Context::Viewer, Action::PageDown) => fl!("help-page-down"),
-        (Context::Panel, Action::Home) => fl!("help-first-row"),
-        (Context::Panel, Action::End) => fl!("help-last-row"),
+        (Context::Panel | Context::Viewer | Context::Menu, Action::Up) => fl!("help-row-up"),
+        (Context::Panel | Context::Viewer | Context::Menu, Action::Down) => fl!("help-row-down"),
+        (Context::Panel | Context::Viewer | Context::Menu, Action::PageUp) => fl!("help-page-up"),
+        (Context::Panel | Context::Viewer | Context::Menu, Action::PageDown) => {
+            fl!("help-page-down")
+        }
+        (Context::Panel | Context::Menu, Action::Home) => fl!("help-first-row"),
+        (Context::Panel | Context::Menu, Action::End) => fl!("help-last-row"),
         (Context::Panel, Action::Enter) => fl!("help-enter"),
         (Context::Panel, Action::Mark) => fl!("help-mark"),
         (Context::Panel, Action::MarkUp) => fl!("help-mark-up"),
@@ -222,10 +226,16 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::Mkdir) => fl!("help-mkdir"),
         (Context::Panel, Action::Delete) => fl!("help-delete"),
         (Context::Panel, Action::Jobs) => fl!("help-jobs"),
+        (Context::Panel, Action::LocationMenuLeft) => fl!("help-menu-left"),
+        (Context::Panel, Action::LocationMenuRight) => fl!("help-menu-right"),
         (Context::Panel | Context::Viewer, Action::Help) => fl!("help-help"),
         (Context::Panel, Action::Quit) => fl!("help-quit"),
         (Context::Panel | Context::Viewer, Action::Redraw) => fl!("help-redraw"),
-        (Context::Root, Action::Disconnect) => fl!("help-disconnect"),
+        (Context::Root | Context::Menu, Action::Disconnect) => fl!("help-disconnect"),
+        (Context::Menu, Action::Confirm) => fl!("help-menu-open"),
+        (Context::Menu, Action::Backspace) => fl!("help-menu-back"),
+        (Context::Menu, Action::Reload) => fl!("help-menu-reload"),
+        (Context::Menu, Action::Cancel) => fl!("help-menu-close"),
         (Context::QuickSearch, Action::Backspace) => fl!("help-search-back"),
         (Context::QuickSearch, Action::Cancel) => fl!("help-search-end"),
         (Context::Dialog, Action::Up) => fl!("help-dialog-up"),
@@ -312,8 +322,9 @@ mod tests {
             headings,
             [
                 "Panels",
-                "Host list",
+                "Volumes and hosts",
                 "Quick search",
+                "Location menu",
                 "Dialogs and help",
                 "Text fields",
                 "Viewer"

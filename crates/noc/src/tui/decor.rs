@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use noc_vfs::{DirEntry, FileKind};
+use noc_vfs::{DirEntry, FileKind, VolumeKind};
 
 use super::panel::HostStatus;
 
@@ -36,10 +36,19 @@ impl Decor {
         if self.icons { " " } else { "/" }
     }
 
-    /// The prefix of the local file system in the virtual root: no status, in line with the
-    /// hosts.
-    pub(crate) fn local(self) -> &'static str {
-        if self.icons { "  󰌢 " } else { "  " }
+    /// The prefix of a volume in the virtual root, in line with the hosts' status: a disk, a
+    /// network drive, or mc's marker of block devices.
+    pub(crate) fn volume(self, kind: VolumeKind) -> &'static str {
+        match (self.icons, kind) {
+            (false, _) => "+ ",
+            (true, VolumeKind::Network) => "  󰣳 ",
+            (true, VolumeKind::System | VolumeKind::Local) => "  󰋊 ",
+        }
+    }
+
+    /// The prefix of the row of SFTP hosts in the virtual root, which opens like a directory.
+    pub(crate) fn sftp(self) -> &'static str {
+        if self.icons { "  󰒍 " } else { "/ " }
     }
 
     /// The prefix of a host in the virtual root: its status, and with icons a server. `tick`
@@ -213,9 +222,12 @@ mod tests {
             .map(|tick| plain.host(HostStatus::Connecting, tick))
             .collect();
         assert_eq!(spun, ["| ", "/ ", "- ", "\\ ", "| "]);
-        assert_eq!(plain.local(), "  ");
+        assert_eq!(plain.volume(VolumeKind::System), "+ ");
+        assert_eq!(plain.sftp(), "/ ");
         let icons = Decor::new(true);
         assert_eq!(icons.host(HostStatus::Connected, 0), "● 󰒋 ");
-        assert_eq!(icons.local(), "  󰌢 ");
+        assert_eq!(icons.volume(VolumeKind::Local), "  󰋊 ");
+        assert_eq!(icons.volume(VolumeKind::Network), "  󰣳 ");
+        assert_eq!(icons.sftp(), "  󰒍 ");
     }
 }

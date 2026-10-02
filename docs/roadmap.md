@@ -14,7 +14,7 @@
 - [x] Cache for `ssh -G` results, keyed by the state of the config files
 - [x] ssh argument validator and forwarding policy ([ADR 0004](adr/0004-forwarding-compile-time-feature.md))
 - [x] Master connection, SFTP channels, askpass bridge ([ADR 0002](adr/0002-controlmaster-per-host.md), [ADR 0003](adr/0003-askpass-bridge.md))
-- [x] `noc-vfs`: virtual root, local, and SFTP backends
+- [x] `noc-vfs`: local and SFTP backends
 - [x] Debug commands: `noc hosts`, `noc ls <host>:<path>`
 - [x] Tests: local `sftp-server` over pipes, fake `ssh` program
 
@@ -58,6 +58,10 @@
 
 ## M4: Polish (current)
 
+- [x] Virtual root of mounted volumes and a list of SFTP hosts, with the connected hosts in the
+      root; `[volumes] hide` ([ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md))
+- [x] Location menu: Alt-F1, Alt-F2 (Ctrl-X 1, Ctrl-X 2), with a filter and hotkeys
+- [ ] F9 pull-down menu, as in mc, with Left/Right → Change location
 - [ ] User themes and keymap overrides
 - [ ] Bookmarks and history
 - [ ] chmod and symlinks
@@ -82,4 +86,7 @@
 - Translations.
 - Resumable transfers.
 - Release binaries and a Homebrew tap.
+- Watch for volumes that are mounted or unmounted (DiskArbitration on macOS, `poll` on
+  `/proc/self/mountinfo` on Linux) instead of reading them on each listing; eject from the root.
+- Plugins for other backends as rows of the virtual root.
 - Anything behind the `forwarding` feature ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)).

@@ -9,6 +9,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The virtual root lists the mounted volumes, the system volume first, named by their label,
+  with their free space and size, and opens the hosts from ssh_config as one row, `SFTP`; the
+  hosts that are connected or connecting show again below it. Every volume opens at its mount
+  point, the system volume at `/` (`[Local]` opened the home directory). `..` from a remote `/` or
+  a lost connection now leads to the list of hosts. The root is titled with the machine's name
+  ([ADR 0006](docs/adr/0006-virtual-root-with-volumes-and-hosts.md)).
+- `noc ls` without a location prints the mount points of the volumes, then the hosts as
+  `host:`.
+
 - The project is renamed from sftp-tui to Noon Commander and grows into a full terminal file
   manager for local and SFTP file operations ([ADR 0005](docs/adr/0005-rename-to-noon-commander.md)).
   The binary is now `noc`; settings, state, and caches live in `noc` directories
@@ -17,6 +26,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Alt-F1 and Alt-F2 open a location menu over the left or the right panel, as in Far Manager
+  (Ctrl-X 1 and Ctrl-X 2 too): the volumes and the hosts, with `1` … `0` as hotkeys, typing to
+  filter, F8 to disconnect a host, and Ctrl-R to read them again.
+- `[volumes] hide` leaves mount points out of the virtual root, by pattern.
 - Project skeleton: Cargo workspace, crate layout, CI, and documentation.
 - Configuration in `~/.config/noc/config.toml` (XDG layout on macOS too):
   `noc config init` writes the commented defaults, `noc config paths` shows the

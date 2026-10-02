@@ -44,6 +44,11 @@ pub(crate) enum Done {
         generation: u64,
         result: Result<Listed, String>,
     },
+    /// The listing of the virtual root for the location menu, of [`Effect::ListPlaces`].
+    Places {
+        generation: u64,
+        result: Result<Listed, String>,
+    },
     /// A report from the job `id` of [`Effect::Delete`] or [`Effect::Copy`].
     Job { id: u64, event: JobEvent },
     /// The start of the file of [`Effect::Read`], and whether there is more, or why not.
@@ -194,6 +199,14 @@ impl Tasks {
                     request,
                     host: None,
                 } => self.list(side, request),
+                Effect::ListPlaces { generation } => {
+                    let context = Arc::clone(&self.context);
+                    let done = self.done.clone();
+                    tokio::spawn(async move {
+                        let result = list(context, Location::Root).await;
+                        let _ = done.send(Done::Places { generation, result });
+                    });
+                }
                 Effect::CreateDir {
                     side,
                     location,
@@ -268,7 +281,7 @@ impl Tasks {
         }
     }
 
-    /// Lists the virtual root or a local directory here.
+    /// Lists the virtual root, the hosts, or a local directory here.
     fn list(&self, side: Side, request: ListRequest) {
         let context = Arc::clone(&self.context);
         let done = self.done.clone();
@@ -322,7 +335,7 @@ impl Tasks {
                     });
                 });
             }
-            (Location::Root | Location::Remote { .. }, _) => {
+            (Location::Root | Location::Sftp | Location::Remote { .. }, _) => {
                 let result = Err(fl!("error-connection-closed"));
                 let _ = self.done.send(Done::Created {
                     side,
@@ -348,7 +361,7 @@ impl Tasks {
             match target {
                 Location::Local(path) => local.push(path),
                 Location::Remote { path, .. } => remote.push(path),
-                Location::Root => {}
+                Location::Root | Location::Sftp => {}
             }
         }
         if let Some(handle) = host {
@@ -613,7 +626,7 @@ impl CopyJob<'_> {
                     source_host = host;
                     remote.push(path);
                 }
-                Location::Root => {}
+                Location::Root | Location::Sftp => {}
             }
         }
         let on_host = |host: String| {
@@ -702,13 +715,22 @@ impl CopyJob<'_> {
     }
 }
 
-/// Lists the virtual root or a local directory. The root reads the ssh config each time, so a
-/// reload shows new hosts.
+/// Lists the virtual root, the hosts, or a local directory. The root reads the volumes and the
+/// ssh config each time, so a reload shows what changed.
 async fn list(context: Arc<Context>, location: Location) -> Result<Listed, String> {
     let listing = match &location {
-        Location::Root => tokio::task::spawn_blocking(move || root::read_hosts(&context))
+        Location::Root => {
+            let hide = context.config.volumes.hide.clone();
+            let hosts = tokio::task::spawn_blocking(move || root::read_hosts(&context));
+            let (volumes, hosts) = tokio::join!(root::read_volumes(&hide), hosts);
+            Listing::Root {
+                volumes,
+                hosts: hosts.map_err(|error| error.to_string())?,
+            }
+        }
+        Location::Sftp => tokio::task::spawn_blocking(move || root::read_hosts(&context))
             .await
-            .map(Listing::Root)
+            .map(Listing::Hosts)
             .map_err(|error| error.to_string())?,
         Location::Local(path) => LocalFs
             .list_dir(path)

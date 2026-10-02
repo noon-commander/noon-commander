@@ -1,10 +1,18 @@
-//! The hosts of the virtual root.
+//! What the virtual root lists: the mounted volumes and the hosts.
 
 use std::io;
+use std::os::unix::ffi::OsStrExt as _;
+use std::time::Duration;
 
 use noc_ssh::CachedHost;
+use noc_ssh::pattern::wildcard_match;
+use noc_vfs::{Volume, VolumeKind};
 
+use super::cells;
 use crate::context::{Context, describe};
+
+/// How long a volume may take to say how big it is; a dead network mount never does.
+pub(crate) const VOLUME_TIMEOUT: Duration = Duration::from_millis(500);
 
 /// A host in the virtual root.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,6 +47,31 @@ pub(crate) fn read_hosts(context: &Context) -> Vec<RootHost> {
         .collect()
 }
 
+/// Taken while the volumes are read. A second reader waits for the first, rather than finding
+/// every volume busy and taking it for a dead network mount.
+static READING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// The mounted volumes that `volumes.hide` does not hide. The system volume always stays.
+pub(crate) async fn read_volumes(hide: &[String]) -> Vec<Volume> {
+    let reading = READING.lock().await;
+    let mut volumes = noc_vfs::volumes(VOLUME_TIMEOUT).await;
+    drop(reading);
+    volumes.retain(|volume| {
+        let path = volume.mount_point.to_string_lossy();
+        volume.kind == VolumeKind::System
+            || !hide.iter().any(|pattern| wildcard_match(pattern, &path))
+    });
+    volumes
+}
+
+/// The name of a volume, terminal-safe: its label, or else its mount point.
+pub(crate) fn volume_name(volume: &Volume) -> String {
+    match &volume.label {
+        Some(label) => cells::sanitize(label.as_bytes()),
+        None => cells::sanitize(volume.mount_point.as_os_str().as_bytes()),
+    }
+}
+
 /// Stores what `ssh -G` said about `alias` in the cache, for the next listing and run.
 ///
 /// Blocking: reads the ssh config files and writes the cache.
@@ -52,6 +85,7 @@ pub(crate) fn remember(context: &Context, alias: &str, host: CachedHost) -> io::
 mod tests {
     use std::ffi::OsString;
     use std::fs;
+    use std::path::PathBuf;
 
     use noc_config::{Config, HostConfig, Paths};
 
@@ -102,5 +136,31 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn volumes_are_named_by_label_or_mount_point() {
+        let mut volume = Volume {
+            mount_point: PathBuf::from("/mnt/usb"),
+            label: Some("My\x1bDisk".to_owned()),
+            fs_type: None,
+            kind: VolumeKind::Local,
+            space: None,
+        };
+        assert_eq!(volume_name(&volume), "My?Disk", "terminal-safe");
+        volume.label = None;
+        assert_eq!(volume_name(&volume), "/mnt/usb");
+    }
+
+    #[tokio::test]
+    async fn hidden_volumes_leave_the_system_volume() {
+        let volumes = read_volumes(&["*".to_owned()]).await;
+        assert!(
+            volumes
+                .iter()
+                .all(|volume| volume.kind == VolumeKind::System),
+            "{volumes:?}"
+        );
+        assert_eq!(volumes.len(), 1);
     }
 }

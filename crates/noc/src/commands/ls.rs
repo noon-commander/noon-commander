@@ -7,21 +7,23 @@ use color_eyre::eyre::{Result, WrapErr as _};
 use noc_ssh::askpass::AskpassServer;
 use noc_ssh::version::check_version;
 use noc_ssh::{Session, SftpChannel, SshError, cleanup_stale};
-use noc_vfs::{DirEntry, FileKind, LocalFs, Location, RemotePath, RootEntry, SftpFs, Vfs};
+use noc_vfs::{DirEntry, FileKind, LocalFs, Location, RemotePath, SftpFs, Vfs};
 use tokio_util::sync::CancellationToken;
 
 use super::INTERRUPTED;
 use crate::context::Context;
 use crate::format;
+use crate::tui::read_volumes;
 
 pub(super) async fn run(context: &Context, location: Option<&str>) -> Result<ExitCode> {
     match location.map_or(Location::Root, Location::parse) {
-        Location::Root => {
-            for entry in noc_vfs::root_entries(super::host_aliases(context).await?) {
-                match entry {
-                    RootEntry::Local => println!("[local]"),
-                    RootEntry::Host { alias } => println!("{alias}"),
-                }
+        // Each line is a location to list: the mount point of a volume, or `host:`.
+        Location::Root | Location::Sftp => {
+            for volume in read_volumes(&context.config.volumes.hide).await {
+                println!("{}", volume.mount_point.display());
+            }
+            for alias in super::host_aliases(context).await? {
+                println!("{alias}:");
             }
             Ok(ExitCode::SUCCESS)
         }

@@ -4,11 +4,14 @@ use std::str::FromStr;
 
 use crate::RemotePath;
 
-/// A place a panel can show: the virtual root, a local directory, or a remote directory.
+/// A place a panel can show: the virtual root, the list of SFTP hosts, a local directory, or a
+/// remote directory.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Location {
-    /// The virtual root: the local file system and the hosts from the ssh config.
+    /// The virtual root: the mounted volumes, and the list of SFTP hosts.
     Root,
+    /// The hosts from the ssh config, in the virtual root.
+    Sftp,
     /// A path on the local file system. Relative paths, including the empty path, are relative
     /// to the current directory.
     Local(PathBuf),
@@ -38,26 +41,32 @@ impl Location {
         }
     }
 
-    /// `..` semantics: `/` of any file system, and remote paths without a parent (the empty
-    /// path, which is the home directory), lead to [`Location::Root`]; otherwise the lexical
-    /// parent on the same file system. The parent of [`Location::Root`] is itself.
+    /// `..` semantics: the lexical parent on the same file system. Above a local `/` is
+    /// [`Location::Root`]; above a remote `/` and remote paths without a parent (the empty path,
+    /// which is the home directory) is [`Location::Sftp`], and above that the root. The parent of
+    /// [`Location::Root`] is itself.
     ///
     /// Like [`Path::parent`](std::path::Path::parent), the parent of a single relative component
     /// such as `a` is the empty path.
     #[must_use]
     pub fn parent(&self) -> Self {
         match self {
-            Self::Root => Self::Root,
+            Self::Root | Self::Sftp => Self::Root,
             Self::Local(path) => path
                 .parent()
                 .map_or(Self::Root, |parent| Self::Local(parent.to_path_buf())),
             Self::Remote { host, path } => {
-                path.parent().map_or(Self::Root, |parent| Self::Remote {
+                path.parent().map_or(Self::Sftp, |parent| Self::Remote {
                     host: host.clone(),
                     path: parent,
                 })
             }
         }
+    }
+
+    /// Whether this is a list the app makes, rather than a directory: the root or the hosts.
+    pub fn is_virtual(&self) -> bool {
+        matches!(self, Self::Root | Self::Sftp)
     }
 }
 
@@ -68,25 +77,6 @@ impl FromStr for Location {
     fn from_str(arg: &str) -> Result<Self, Self::Err> {
         Ok(Self::parse(arg))
     }
-}
-
-/// An entry of the virtual root.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum RootEntry {
-    /// The local file system.
-    Local,
-    /// A remote host.
-    Host {
-        /// The host alias from the ssh config.
-        alias: String,
-    },
-}
-
-/// Entries of the virtual root: `Local` first, then hosts in the given order.
-pub fn root_entries(hosts: impl IntoIterator<Item = String>) -> Vec<RootEntry> {
-    std::iter::once(RootEntry::Local)
-        .chain(hosts.into_iter().map(|alias| RootEntry::Host { alias }))
-        .collect()
 }
 
 #[cfg(test)]
@@ -138,33 +128,19 @@ mod tests {
 
     #[test]
     fn remote_parents() {
-        assert_eq!(remote("h", "/").parent(), Location::Root);
+        assert_eq!(remote("h", "/").parent(), Location::Sftp);
         assert_eq!(remote("h", "/a").parent(), remote("h", "/"));
         assert_eq!(remote("h", "/a/b/").parent(), remote("h", "/a"));
         assert_eq!(remote("h", "a/b").parent(), remote("h", "a"));
         assert_eq!(remote("h", "a").parent(), remote("h", ""));
-        assert_eq!(remote("h", "").parent(), Location::Root);
+        assert_eq!(remote("h", "").parent(), Location::Sftp);
     }
 
     #[test]
-    fn root_is_its_own_parent() {
+    fn the_hosts_lead_to_the_root_which_is_its_own_parent() {
+        assert_eq!(Location::Sftp.parent(), Location::Root);
         assert_eq!(Location::Root.parent(), Location::Root);
-    }
-
-    #[test]
-    fn root_entries_start_with_local() {
-        assert_eq!(root_entries(Vec::new()), [RootEntry::Local]);
-        assert_eq!(
-            root_entries(["web".to_owned(), "db".to_owned()]),
-            [
-                RootEntry::Local,
-                RootEntry::Host {
-                    alias: "web".to_owned()
-                },
-                RootEntry::Host {
-                    alias: "db".to_owned()
-                },
-            ]
-        );
+        assert!(Location::Root.is_virtual() && Location::Sftp.is_virtual());
+        assert!(!local("/").is_virtual() && !remote("h", "").is_virtual());
     }
 }

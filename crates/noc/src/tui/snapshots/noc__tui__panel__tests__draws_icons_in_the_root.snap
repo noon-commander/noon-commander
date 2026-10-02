@@ -2,11 +2,13 @@
 source: crates/noc/src/tui/panel.rs
 expression: terminal.backend()
 ---
-"╔ Hosts ═══════════════════════════════╗"
-"║       Name       │      Address      ║"
-"║  󰌢 [Local]       │~                  ║"
-"║● 󰒋 Prod          │deploy@10.0.0.5    ║"
-"║● 󰒋 db            │                   ║"
+"╔ alex-mbp ════════════════════════════╗"
+"║         Name         │ Free  │ Size  ║"
+"║  󰋊 Macintosh HD      │   212G│   994G║"
+"║  󰋊 USB               │   212G│   994G║"
+"║  󰣳 share             │      ?│      ?║"
+"║  󰒍 SFTP              │        3 hosts║"
+"║● 󰒋 Prod              │deploy@10.0.0.5║"
 "╟──────────────────────────────────────╢"
-"║/home/me                              ║"
+"║/  apfs                               ║"
 "╚══════════════════════════════════════╝"

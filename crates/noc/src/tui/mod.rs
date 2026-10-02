@@ -8,6 +8,7 @@ mod dialog;
 mod help;
 mod jobs;
 mod keymap;
+mod menu;
 mod panel;
 mod pattern;
 mod progress;
@@ -38,6 +39,8 @@ use tasks::{Done, Tasks};
 use crate::context::Context;
 use crate::i18n::fl;
 
+pub(crate) use root::read_volumes;
+
 /// Whether `name` is a built-in theme, for `ui.theme`; and the names there are.
 pub(crate) fn is_valid_theme(name: &str) -> bool {
     theme::Theme::by_name(name).is_some()
@@ -55,6 +58,7 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
             generation,
             result,
         } => app.listed(side, generation, result),
+        Done::Places { generation, result } => app.places(generation, result),
         Done::Created {
             side,
             location,
@@ -111,6 +115,9 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     let config = &context.config;
     let (mut app, effects) = App::new(&start, &context.paths.home, &config.ui, &config.transfer);
     app.set_time_zone(tz.clone());
+    if let Some(name) = host_name() {
+        app.set_root_title(name);
+    }
     app.set_runtime_dir(context.paths.runtime_dir.clone());
     tasks.run(effects);
     let result = loop {
@@ -188,6 +195,14 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     app.disconnect_all();
     tasks.shutdown().await;
     result
+}
+
+/// The name of this machine without its domain, for the title of the virtual root.
+fn host_name() -> Option<String> {
+    let uname = rustix::system::uname();
+    let name = uname.nodename().to_string_lossy();
+    let name = name.split('.').next().unwrap_or_default();
+    (!name.is_empty()).then(|| name.to_owned())
 }
 
 /// Runs the editor on `file`, with the terminal handed over, and tells whether the file changed

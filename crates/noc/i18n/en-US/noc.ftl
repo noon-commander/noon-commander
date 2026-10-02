@@ -64,12 +64,33 @@ error-not-openssh = { $program } is not OpenSSH
 
 ## Virtual root (src/tui/panel). Prefix: root-.
 
-# Title of the panel that lists the local file system and the hosts from ssh_config.
-root-title = Hosts
-# The row that opens the local file system.
-root-local = [Local]
+# Title of the panel that lists the mounted volumes and the hosts, where the name of the machine
+# is not known.
+root-title = Locations
+# The row of the virtual root that opens the list of hosts from ssh_config, and that list's title.
+root-sftp = SFTP
+# Next to that row: how many hosts it holds.
+root-sftp-hosts = { $count ->
+        [one] { $count } host
+       *[other] { $count } hosts
+    }
+# Status line on that row.
+root-sftp-status = Hosts from the ssh config
+# Column header: the space left on a volume; its size is under panel-size.
+root-free = Free
 # Column header: user@hostname:port from ssh -G.
 root-address = Address
+
+## The location menu of Alt-F1 and Alt-F2 (src/tui/menu), as Far Manager's menu to change
+## drives. Prefix: menu-.
+
+# Titles: the panel the menu changes.
+menu-left = Left
+menu-right = Right
+# The first line: what was typed to filter the menu.
+menu-filter = Filter: { $text }
+# When the filter leaves no row.
+menu-nothing = Nothing matches.
 
 ## Dialogs (src/tui/dialog). Prefix: dialog-. Their text comes from ssh; these are the buttons.
 
@@ -95,7 +116,8 @@ dialog-error = Error
 
 help-title = Help
 help-panels = Panels
-help-root = Host list
+help-root = Volumes and hosts
+help-menu = Location menu
 help-quick-search = Quick search
 help-dialogs = Dialogs and help
 help-text-fields = Text fields
@@ -118,7 +140,7 @@ help-mark-up = Mark or unmark, then the row above
 help-invert-marks = Invert the marks on files
 help-select = Mark the names that match a pattern
 help-unselect = Unmark the names that match a pattern
-help-parent = Parent directory; above /, the host list
+help-parent = Parent directory; above /, the volumes and hosts
 help-switch-panel = The other panel
 help-swap-panels = Swap the panels
 help-other-open = Open the directory under the cursor in the other panel
@@ -138,10 +160,16 @@ help-move = Move or rename the marked entries, or the one under the cursor
 help-mkdir = Make a directory
 help-delete = Delete the marked entries, or the one under the cursor
 help-jobs = The running jobs: bring one to the front, or abort it
+help-menu-left = Change the left panel's location: a volume or a host
+help-menu-right = Change the right panel's location: a volume or a host
 help-help = This help
 help-quit = Quit
 help-redraw = Redraw the screen
 help-disconnect = Disconnect the host under the cursor
+help-menu-open = Open the volume or host in the panel
+help-menu-back = Take back the last character of the filter
+help-menu-reload = Read the volumes and hosts again
+help-menu-close = Close the menu
 help-search-back = Take back the last character
 help-search-end = End the search
 help-dialog-up = Previous button; in this help, one line up
@@ -165,6 +193,7 @@ help-field-delete-to-start = Delete to the start
 help-field-delete-to-end = Delete to the end
 help-note-esc = Esc 1 … Esc 0 stand for F1 … F10, and Esc followed by a key for Alt and the key, for terminals without them. A lone Esc acts after a second; Esc Esc at once.
 help-note-typing = Typing in a panel starts quick search.
+help-note-menu = Typing in the location menu filters it; 1 … 9 and 0 open the first ten rows while the filter is empty.
 
 ## Marking by pattern, + and - (src/tui/app). Prefix: pattern-. As in mc.
 

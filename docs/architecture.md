@@ -17,7 +17,7 @@ crates/
 ├── noc-config/    XDG paths, TOML schema, defaults
 ├── noc-ssh/       host discovery, ssh -G, argument validation, forwarding policy,
 │                  ControlMaster, SFTP channels, askpass bridge
-├── noc-vfs/       Vfs trait: virtual root, local, and SFTP backends
+├── noc-vfs/       Vfs trait: local and SFTP backends, mounted volumes
 └── noc-ops/       job engine: copy, move, delete, mkdir; progress, cancellation, conflicts
 ```
 
@@ -73,37 +73,86 @@ by validation ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)).
 
 ## Virtual root
 
-The root of the virtual file system lists the local file system and every host from the ssh
-config:
+The root of the virtual file system lists the mounted volumes and, as one row, the hosts from
+the ssh config ([ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)):
 
 ```text
-┌─ Hosts ─────────────────────────┐┌─ prod-web:/var/www ─────────────┐
-│ Name             Address        ││ Name                Size Modify │
-│ [Local]          ~              ││ /..               UP-DIR        │
-│ ● prod-web       deploy@10.0.0.5││ /html                DIR Sep 30 │
-│ ○ staging        ubuntu@stg:2222││  index.php          4.2K Sep 29 │
-│ ✗ nas            admin@nas      ││                                 │
-└─────────────────────────────────┘└─────────────────────────────────┘
+╔ alex-mbp ═══════════════════════════╗╔ SFTP ═══════════════════════════════╗
+║          Name        │ Free  │ Size ║║        Name       │     Address     ║
+║+ Macintosh HD        │   212G│  994G║║/..                │UP--DIR          ║
+║+ SANDISK             │    12G│   64G║║● prod-web         │deploy@10.0.0.5  ║
+║+ share               │      ?│     ?║║○ staging          │ubuntu@stg:2222  ║
+║/ SFTP                │        3 hosts║║✗ nas              │admin@nas        ║
+║● prod-web            │deploy@10.0.0.5║║                                     ║
+╟─────────────────────────────────────╢╟─────────────────────────────────────╢
+║/Volumes/SANDISK  exfat              ║║prod-web                             ║
+╚═════════════════════════════════════╝╚═════════════════════════════════════╝
  1Help 2Menu 3View 4Edit 5Copy 6RenMov 7Mkdir 8Delete 9PullDn 10Quit
 ```
 
-- `..` from `/` of any file system leads back to the virtual root, with the cursor on the file
-  system just left. `[Local]` opens the home directory.
+- The root is titled with the name of the machine. Volumes come first, the system volume (`/`)
+  on top and the others by mount point, named by their label or else their mount point, with
+  their free space and size; the status line shows a volume's mount point and file system.
+  Every volume opens at its mount point, the system volume at `/`, so `..` from `/` and Enter
+  lead back where the panel was.
+- Below the volumes, `SFTP` opens the list of hosts, and the hosts that are connected or
+  connecting follow it, so that they stay one keystroke away.
+- `..` follows paths, as in mc: from `/Volumes/USB` to `/Volumes`; from a local `/` to the root,
+  with the cursor on the system volume; from a remote `/` (or the remote home directory) to the
+  list of hosts, with the cursor on the host; from the list of hosts to the root.
+- Volumes come from `noc_vfs::volumes`: on macOS `/` and the entries of `/Volumes`, without
+  symlinks and without mounts marked `nobrowse` (Time Machine snapshots, for instance); on
+  Linux the mounts of `/proc/self/mountinfo` that are `/`, on a `/dev/` device, or a network
+  file system, without pseudo file systems or those under `/proc`, `/sys`, `/dev`, `/run`
+  (but `/run/media`), `/snap`, and `/boot`; elsewhere only `/`. Their sizes come from
+  `statfs`/`statvfs` on blocking threads, each awaited for at most 500 ms: a volume that does
+  not answer (a dead network mount can block forever) is listed with `?` and is not asked
+  again until the earlier call returns. `[volumes] hide` leaves out mount points by pattern;
+  the system volume always stays.
 - Hosts come in config order, named by their `hosts.<alias>.label` if set (the status line shows
-  the alias), with the address cached from an earlier `ssh -G`. The root is listed like a
-  directory, in a background task that scans the ssh config and loads the cache, so Ctrl-R
-  rereads the ssh config.
+  the alias), with the address cached from an earlier `ssh -G`. The root and the list of hosts
+  are listed like directories, in background tasks that read the volumes, scan the ssh config,
+  and load the cache, so Ctrl-R reads them again.
 - Entering a host connects in the background (the status line says so; Esc stops it) and opens
   the configured `start_dir` or the remote home directory, shown as an absolute path.
-- When a connection is lost, the panels on that host go back to the root and say why.
+- When a connection is lost, the panels on that host go back to the list of hosts and say why.
 - A marker in front of each host shows its state: `○` not connected, a spinner while
-  connecting, `●` connected, `✗` the last attempt failed or the connection was lost. F8 (`Esc 8`) in the root
-  closes the connection to the host under the cursor, or stops connecting to it.
-- Locations are `Root`, `Local(PathBuf)`, or `Remote { host, path }`. Remote paths are bytes,
-  because SFTP v3 does not guarantee UTF-8, and are displayed lossily. The SFTP client library
-  still requires UTF-8 names; see the known issues in the [roadmap](roadmap.md).
+  connecting, `●` connected, `✗` the last attempt failed or the connection was lost. F8 (`Esc 8`)
+  on a host closes the connection to it, or stops connecting to it.
+- Locations are `Root`, `Sftp` (the list of hosts), `Local(PathBuf)`, or `Remote { host, path }`.
+  Remote paths are bytes, because SFTP v3 does not guarantee UTF-8, and are displayed lossily.
+  The SFTP client library still requires UTF-8 names; see the known issues in the
+  [roadmap](roadmap.md).
 - Names from the server that are empty or contain `/` or NUL are dropped from listings: joined
   to a local path, they could point outside the target directory.
+
+### Location menu
+
+Alt-F1 and Alt-F2, as Far Manager's menus to change drives, open a menu over the left or the
+right panel with the same places: the volumes, then every host (Ctrl-X 1 and Ctrl-X 2 too, for
+terminals whose Alt-F1 never arrives, such as macOS Terminal without Option as Meta).
+
+```text
+ ╔════════════════════ Left ════════════════════╗
+ ║ Filter:                                      ║
+ ║ ──────────────────────────────────────────── ║
+ ║ 1 + Macintosh HD                        212G ║
+ ║ 2 + USB                                  12G ║
+ ║ 3 + share                                  ? ║
+ ║ ─ SFTP ───────────────────────────────────── ║
+ ║ 4 ● Prod                     deploy@10.0.0.5 ║
+ ║ 5 ○ db                                       ║
+ ╚══════════════════════════════════════════════╝
+```
+
+- The cursor starts on the volume that holds the panel's directory, or on its host. Enter
+  opens the row in that panel, which becomes active; while the filter is empty, `1` … `9` and
+  `0` open the first ten rows.
+- Typing filters the rows by name, mount point, alias, and address, ignoring case; Backspace
+  takes a character back. F8 disconnects the host under the cursor, Ctrl-R reads the volumes
+  and hosts again, and Esc or F10 closes the menu.
+- The menu is modal (keymap context `menu`) and lists the root in the background; its listing
+  carries a generation of its own, so a stale one is dropped.
 
 ## Host discovery
 
@@ -145,7 +194,7 @@ Messages from ssh, which may quote the server, are shown terminal-safe.
 ```text
 noc                    the TUI (needs a terminal)
 noc hosts [--resolve]  hosts from ssh_config with cached addresses; --resolve runs ssh -G
-noc ls [LOCATION]      virtual root, a local path, or host:path
+noc ls [LOCATION]      a local path or host:path; without one, the mount points and hosts
 noc config init        write the commented default config.toml
 noc config paths       show the files and directories in use
 ```
@@ -270,6 +319,9 @@ multiplex = true                 # false: one connection per channel
 [discovery]
 hide = ["github.com", "gitlab.com", "bitbucket.org"]
 
+[volumes]
+hide = ["/Volumes/Backup*"]      # mount points to leave out of the root; never the system volume
+
 [hosts."prod-web"]               # decorates the ssh_config host, never duplicates it
 label = "Prod"
 start_dir = "/var/www"
@@ -303,7 +355,7 @@ Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
   Sorting and hiding keep the cursor on its entry.
 - **Marks.** As in mc: Insert or Ctrl-T marks the entry under the cursor, or unmarks it, and
   moves down (Shift-Down too, Shift-Up moves up); `*` (or Alt-*) inverts the marks on files,
-  leaving directories as they are; `..` and the rows of the virtual root cannot be marked.
+  leaving directories as they are; `..`, volumes, and hosts cannot be marked.
   Marked rows are underlined, and yellow in mc-classic (bold, which mc uses without colors, is
   for directories); the line below the listing shows the size of the marked files and how
   many entries are marked, such as `12,345 B in 3 files`. Marks are names, so they
@@ -322,7 +374,7 @@ Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
   parents are not made. The directory is made in the background, locally or by the host's
   task, and panels on the directory it is in read it again, the one that asked with the
   cursor on it. An error shows in a red dialog, as mc shows errors. F7 is not offered in the
-  virtual root.
+  virtual root or the list of hosts.
 - **F5 copies** the marked entries, or the one under the cursor, as mc does: a dialog asks
   where to, opening with the other panel's location (`host:/path` for a host), and whether to
   preserve attributes (times and permission bits; on, and remembered). A typed target is
@@ -395,15 +447,15 @@ Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
   the text, ignoring case, and a character that matches nothing is dropped, as in mc. Ctrl-S
   again finds the next match, round to the top; Backspace takes a character back; Esc ends the
   search, and any other key ends it and then does what it does. While it runs, every
-  character is text, even one that a panel binds, such as `*`. The root searches the names it
-  shows: labels, or aliases. Long names lose their middle, marked
+  character is text, even one that a panel binds, such as `*`. The root and the list of hosts
+  search the names they show: volume labels, labels, or aliases. Long names lose their middle, marked
   with `~`. Names are shown terminal-safe: control and bidi characters become `?`. Listings
   run in background tasks; a reply carries the generation of its request, so a stale one is
   dropped. If a directory cannot be read, the panel stays where it was and says why below the
   listing. Going up puts the cursor on the directory just left. A panel shows a `Location`, so
-  the [virtual root](#virtual-root) is one more kind of listing.
-- **Keymap.** Keys map to `Action`s per context (`panel`, `root`, `quick_search`, `dialog`,
-  `dialog_input`, `viewer`; `menu` will follow). Each context falls back along a chain, for
+  the [virtual root](#virtual-root) and the list of hosts are kinds of listing too.
+- **Keymap.** Keys map to `Action`s per context (`panel`, `root`, `quick_search`, `menu`,
+  `dialog`, `dialog_input`, `viewer`). Each context falls back along a chain, for
   example the root and quick search to the panel; the first context that knows a key sequence
   decides, except that a sequence it only starts does what a later context binds it to.
   Bindings are key sequences matched by prefix with a 1-second timeout, so a vim preset
@@ -411,9 +463,9 @@ Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
   next key: `Esc 1` … `Esc 0` stand for F1 … F10, `Esc` followed by a character stands for Alt
   and that character, for terminals whose Alt key sends nothing, and `Esc` alone cancels once
   the timeout passes (`Esc Esc` at once). An `Esc` and a quick next key arrive as Alt and that
-  key, so there an unbound Alt and a character count as `Esc` and the character. In dialogs and
-  quick search `Esc` acts at once. Keys are written with `crokey` names. User overrides in
-  `keymap.toml` are planned for M4. The F-key bar is generated from the active keymap, and so
+  key, so there an unbound Alt and a character count as `Esc` and the character. In dialogs,
+  quick search, and the location menu `Esc` acts at once. Keys are written with `crokey`
+  names. User overrides in `keymap.toml` are planned for M4. The F-key bar is generated from the active keymap, and so
   is the help screen (F1): the keys of each context, with what they do, for what the app can
   do already; a prompt from ssh shows over it.
 - **Dialogs.** Modal and centered over the panels, with mc-style buttons: `[< OK >]` marks the
@@ -440,9 +492,10 @@ Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
   a dialog leaves a blank cell between its frame and its edge, which gives way on a screen too
   small for it.
 - **Icons.** Nerd Fonts v3 glyphs, on by default (`ui.icons`), in front of each name: our own for
-  directories, `..`, links, broken links, FIFOs, sockets, devices, executables, `[Local]`, and
-  hosts; `devicons` for files by name or extension. devicons asks the disk whether a name it
+  directories, `..`, links, broken links, FIFOs, sockets, devices, executables, volumes,
+  network volumes, the list of hosts, and hosts; `devicons` for files by name or extension. devicons asks the disk whether a name it
   does not know is a directory, so names go to it inside a path with a NUL byte, which names
   nothing: drawing stays free of I/O, and remote names are never looked up locally. Without
   icons, mc's markers: `/` directory, `~` link to a directory, `@` link, `!` broken link, `*`
-  executable, `|` FIFO, `=` socket, `-` character device, `+` block device.
+  executable, `|` FIFO, `=` socket, `-` character device, `+` block device and volume; the
+  list of hosts is `/`, as it opens like a directory.

@@ -6,8 +6,10 @@
 pub(crate) enum Context {
     /// A panel that lists a directory.
     Panel,
-    /// A panel on the virtual root; falls back to `Panel`.
+    /// A panel on the virtual root or the list of hosts; falls back to `Panel`.
     Root,
+    /// The location menu of Alt-F1 and Alt-F2, which has a filter.
+    Menu,
     /// Quick search in the active panel. Keys it does not bind fall through to the panel.
     QuickSearch,
     /// A dialog whose focus is on a button or a list.
@@ -29,6 +31,8 @@ impl Context {
             Self::Dialog => &[Self::Dialog],
             Self::DialogInput => &[Self::DialogInput, Self::Dialog],
             Self::Viewer => &[Self::Viewer],
+            // The menu is modal too.
+            Self::Menu => &[Self::Menu],
         }
     }
 
@@ -40,16 +44,17 @@ impl Context {
     }
 
     /// Whether every character is text, even one that a fallback context binds: in quick
-    /// search, `*` is part of a name, not a command; in a text field, Space is a space.
+    /// search, `*` is part of a name, not a command; in a text field, Space is a space; in the
+    /// menu, digits are hotkeys and letters filter.
     pub(crate) fn text_first(self) -> bool {
-        matches!(self, Self::QuickSearch | Self::DialogInput)
+        matches!(self, Self::QuickSearch | Self::DialogInput | Self::Menu)
     }
 
     /// Whether an unbound printable key becomes [`Resolved::Insert`](super::Resolved::Insert).
     pub(crate) fn accepts_text(self) -> bool {
         matches!(
             self,
-            Self::Panel | Self::Root | Self::QuickSearch | Self::DialogInput
+            Self::Panel | Self::Root | Self::QuickSearch | Self::DialogInput | Self::Menu
         )
     }
 }
@@ -111,7 +116,11 @@ pub(crate) enum Action {
     OtherPanelOpen,
     /// Shows this panel's directory in the other panel.
     OtherPanelSync,
-    /// Reads the directory again.
+    /// Opens the location menu of the left panel: volumes and hosts.
+    LocationMenuLeft,
+    /// Opens the location menu of the right panel.
+    LocationMenuRight,
+    /// Reads the directory, or the volumes and hosts, again.
     Reload,
     /// Shows or hides files whose names start with a dot, in both panels.
     ToggleHidden,
@@ -125,7 +134,7 @@ pub(crate) enum Action {
     SortBySize,
     /// Starts quick search, or jumps to the next match.
     QuickSearch,
-    /// Closes the connection to the host under the cursor.
+    /// Closes the connection to the host under the cursor, or stops connecting to it.
     Disconnect,
     /// Deletes the character before the text cursor.
     Backspace,
@@ -184,6 +193,8 @@ impl Action {
         Self::SwapPanels,
         Self::OtherPanelOpen,
         Self::OtherPanelSync,
+        Self::LocationMenuLeft,
+        Self::LocationMenuRight,
         Self::Reload,
         Self::ToggleHidden,
         Self::SortByName,

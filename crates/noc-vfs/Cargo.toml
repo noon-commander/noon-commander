@@ -1,6 +1,6 @@
 [package]
 name = "noc-vfs"
-description = "Virtual file system for Noon Commander: virtual root, local, and SFTP backends"
+description = "Virtual file system for Noon Commander: local and SFTP backends, mounted volumes"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

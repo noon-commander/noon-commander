@@ -1,4 +1,4 @@
-//! A panel that lists the virtual root or a directory.
+//! A panel that lists the virtual root, the SFTP hosts, or a directory.
 
 use std::collections::HashSet;
 use std::ffi::OsStr;
@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 
 use jiff::tz::TimeZone;
-use noc_vfs::{DirEntry, Location, RemotePath};
+use noc_vfs::{DirEntry, Location, RemotePath, Volume};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
@@ -17,7 +17,7 @@ use ratatui::widgets::Block;
 use super::cells::{self, Align, MTIME_WIDTH};
 use super::decor::Decor;
 use super::keymap::Action;
-use super::root::RootHost;
+use super::root::{RootHost, volume_name};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -26,6 +26,9 @@ const SIZE_WIDTH: usize = 7;
 
 /// Narrow panels drop columns to keep at least this many cells for names.
 const MIN_NAME_WIDTH: usize = 8;
+
+/// Cells of the free space and size of a volume, such as `212G`; the column is wider.
+const VOLUME_SIZE_WIDTH: usize = 5;
 
 /// A request to list `location` for a panel; the reply must carry `generation`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,8 +48,14 @@ pub(crate) struct Listed {
 /// What a location holds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Listing {
-    /// The hosts of the virtual root, which shows the local file system before them.
-    Root(Vec<RootHost>),
+    /// The virtual root: the mounted volumes, the system volume first, then the hosts, which
+    /// it shows as one row, with the connected ones again below it.
+    Root {
+        volumes: Vec<Volume>,
+        hosts: Vec<RootHost>,
+    },
+    /// The SFTP hosts, in config order.
+    Hosts(Vec<RootHost>),
     /// The entries of a directory, in any order.
     Dir(Vec<DirEntry>),
 }
@@ -76,6 +85,8 @@ pub(crate) struct View<'a> {
     pub(crate) hosts: &'a dyn Fn(&str) -> HostState,
     pub(crate) decor: Decor,
     pub(crate) theme: &'a Theme,
+    /// The title of the virtual root: the name of this machine.
+    pub(crate) root_title: &'a str,
     /// Turns spinners.
     pub(crate) tick: u64,
     pub(crate) now: SystemTime,
@@ -117,7 +128,7 @@ impl Sort {
 /// Which row gets the cursor once a listing arrives.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Focus {
-    /// The first row: `..`, or the local file system in the virtual root.
+    /// The first row: `..`, or the system volume in the virtual root.
     First,
     /// The entry with this name, or the first row if it is gone.
     Name(Vec<u8>),
@@ -126,6 +137,10 @@ enum Focus {
     Near { name: Vec<u8>, row: usize },
     /// The host with this alias, or the first row if it is gone.
     Host(String),
+    /// The volume mounted here, or the first row if it is gone.
+    Volume(PathBuf),
+    /// The row of the SFTP hosts in the virtual root.
+    Sftp,
 }
 
 impl Focus {
@@ -133,6 +148,8 @@ impl Focus {
         match (self, row) {
             (Self::Name(name) | Self::Near { name, .. }, Row::Entry(entry)) => entry.name == *name,
             (Self::Host(alias), Row::Host(host)) => host.alias == *alias,
+            (Self::Volume(path), Row::Volume(volume)) => volume.mount_point == *path,
+            (Self::Sftp, Row::Sftp) => true,
             _ => false,
         }
     }
@@ -152,14 +169,26 @@ pub(crate) struct Destination {
     focus: Focus,
 }
 
+impl Destination {
+    /// `location`, with the cursor on its first row.
+    pub(crate) fn to(location: Location) -> Self {
+        Self {
+            location,
+            focus: Focus::First,
+        }
+    }
+}
+
 /// A row of the listing.
 #[derive(Debug, Clone, Copy)]
 enum Row<'a> {
-    /// `..`: the parent directory, or the virtual root from `/`.
+    /// `..`: the parent directory, or the virtual root from `/` and from the hosts.
     Parent,
     Entry(&'a DirEntry),
-    /// The local file system, first in the virtual root.
-    Local,
+    /// A mounted volume in the virtual root.
+    Volume(&'a Volume),
+    /// The SFTP hosts, as one row of the virtual root.
+    Sftp,
     Host(&'a RootHost),
 }
 
@@ -171,15 +200,17 @@ pub(crate) struct Panel {
     /// Directories first, then as `sort` says; hosts in config order.
     listing: Listing,
     /// The entries of a directory listing that are shown, in order: hidden files may be left
-    /// out.
+    /// out. In the virtual root, the hosts shown below its row of hosts.
     shown: Vec<usize>,
+    /// Hosts that are connected or connecting, which the virtual root shows again.
+    connected: HashSet<String>,
     sort: Sort,
     show_hidden: bool,
     /// Names of the marked entries; only shown ones, and never `..`.
     marked: HashSet<Vec<u8>>,
-    /// Where the local file system opens from the virtual root.
+    /// What `~` stands for in dialogs.
     home: PathBuf,
-    /// Row under the cursor; row 0 is `..`, or the local file system in the virtual root.
+    /// Row under the cursor; row 0 is `..`, or the system volume in the virtual root.
     cursor: usize,
     /// First row on screen.
     offset: usize,
@@ -193,17 +224,22 @@ pub(crate) struct Panel {
 }
 
 impl Panel {
-    /// A panel for `location`, and the request for its first listing. From the virtual root,
-    /// the local file system opens at `home`. `show_hidden` shows names that start with a dot.
+    /// A panel for `location`, and the request for its first listing. `~` in dialogs stands for
+    /// `home`; `show_hidden` shows names that start with a dot.
     pub(crate) fn new(location: Location, home: PathBuf, show_hidden: bool) -> (Self, ListRequest) {
         let listing = match location {
-            Location::Root => Listing::Root(Vec::new()),
+            Location::Root => Listing::Root {
+                volumes: Vec::new(),
+                hosts: Vec::new(),
+            },
+            Location::Sftp => Listing::Hosts(Vec::new()),
             Location::Local(_) | Location::Remote { .. } => Listing::Dir(Vec::new()),
         };
         let mut panel = Self {
             location: location.clone(),
             listing,
             shown: Vec::new(),
+            connected: HashSet::new(),
             sort: Sort {
                 key: SortKey::Name,
                 descending: false,
@@ -299,7 +335,7 @@ impl Panel {
         self.pending = None;
     }
 
-    /// Leaves `host` for the virtual root, with the cursor on it and the `reason` of a lost
+    /// Leaves `host` for the list of hosts, with the cursor on it and the `reason` of a lost
     /// connection below the listing, if the panel shows or waits for that host.
     pub(crate) fn leave_host(&mut self, host: &str, reason: Option<&str>) -> Option<ListRequest> {
         let on_host = |location: &Location| matches!(location, Location::Remote { host: shown, .. } if shown == host);
@@ -307,7 +343,7 @@ impl Panel {
         if !on_host(&self.location) && !pending.is_some_and(on_host) {
             return None;
         }
-        let request = self.open(Location::Root, Focus::Host(host.to_owned()));
+        let request = self.open(Location::Sftp, Focus::Host(host.to_owned()));
         if let Some(reason) = reason {
             let reason = cells::sanitize(reason.as_bytes());
             let host = cells::sanitize(host.as_bytes());
@@ -324,29 +360,44 @@ impl Panel {
         }
     }
 
-    /// Sorts and filters a directory listing again, keeping the cursor on its entry, or on its
-    /// row if the entry is no longer shown.
-    fn rearrange(&mut self) {
-        let name = match self.row(self.cursor) {
-            Some(Row::Entry(entry)) => Some(entry.name.clone()),
-            _ => None,
-        };
-        self.arrange();
-        if let Some(name) = name
-            && let Some(row) = (0..self.rows())
-                .find(|&row| matches!(self.row(row), Some(Row::Entry(entry)) if entry.name == name))
-        {
-            self.cursor = row;
+    /// Takes the hosts that are connected or connecting, which the virtual root shows below
+    /// its row of hosts. The cursor stays on its row's volume or host, or on its row.
+    pub(crate) fn set_connected(&mut self, connected: HashSet<String>) {
+        if self.connected != connected {
+            self.connected = connected;
+            self.rearrange();
         }
     }
 
-    /// Sorts a directory listing and picks the entries to show; entries that are not shown
-    /// lose their marks.
+    /// Sorts and filters a listing again, keeping the cursor on its entry, or on its row if the
+    /// entry is no longer shown.
+    fn rearrange(&mut self) {
+        let focus = self.focus();
+        self.arrange();
+        let rows = self.rows();
+        self.cursor = (0..rows)
+            .find(|&row| self.row(row).is_some_and(|row| focus.matches(row)))
+            .unwrap_or_else(|| self.cursor.min(rows.saturating_sub(1)));
+    }
+
+    /// Sorts a directory listing and picks the entries to show, or the connected hosts in the
+    /// virtual root; entries that are not shown lose their marks.
     fn arrange(&mut self) {
-        let Listing::Dir(entries) = &mut self.listing else {
-            self.shown.clear();
-            self.marked.clear();
-            return;
+        let entries = match &mut self.listing {
+            Listing::Dir(entries) => entries,
+            Listing::Root { hosts, .. } => {
+                let connected = &self.connected;
+                self.shown = (0..hosts.len())
+                    .filter(|&index| connected.contains(&hosts[index].alias))
+                    .collect();
+                self.marked.clear();
+                return;
+            }
+            Listing::Hosts(_) => {
+                self.shown.clear();
+                self.marked.clear();
+                return;
+            }
         };
         sort(entries, self.sort);
         let show_hidden = self.show_hidden;
@@ -363,8 +414,8 @@ impl Panel {
         }
     }
 
-    /// Marks the entry under the cursor, or unmarks it; `..` and the rows of the virtual root
-    /// cannot be marked.
+    /// Marks the entry under the cursor, or unmarks it; `..`, volumes, and hosts cannot be
+    /// marked.
     fn toggle_mark(&mut self) {
         if let Some(Row::Entry(entry)) = self.row(self.cursor) {
             let name = entry.name.clone();
@@ -459,7 +510,7 @@ impl Panel {
     }
 
     /// The first row from `start` on, round to the top, whose name starts with `text` (lower
-    /// case). `..` and `[Local]` never match.
+    /// case). `..` never matches.
     fn find(&self, text: &str, start: usize) -> Option<usize> {
         let rows = self.rows();
         (start..rows).chain(0..start.min(rows)).find(|&index| {
@@ -468,15 +519,17 @@ impl Panel {
                 Some(Row::Host(host)) => {
                     host.label.as_deref().unwrap_or(&host.alias).to_lowercase()
                 }
-                Some(Row::Parent | Row::Local) | None => return false,
+                Some(Row::Volume(volume)) => volume_name(volume).to_lowercase(),
+                Some(Row::Sftp) => fl!("root-sftp").to_lowercase(),
+                Some(Row::Parent) | None => return false,
             };
             name.starts_with(text)
         })
     }
 
-    /// Whether the panel shows the virtual root.
+    /// Whether the panel shows the virtual root or the list of hosts, which hold no files.
     pub(crate) fn shows_root(&self) -> bool {
-        self.location == Location::Root
+        self.location.is_virtual()
     }
 
     /// What the panel shows.
@@ -484,26 +537,23 @@ impl Panel {
         &self.location
     }
 
-    /// The entry under the cursor; `None` on `..` and in the virtual root.
+    /// The entry under the cursor; `None` on `..`, volumes, and hosts.
     pub(crate) fn entry_under_cursor(&self) -> Option<&DirEntry> {
         match self.row(self.cursor)? {
             Row::Entry(entry) => Some(entry),
-            Row::Parent | Row::Local | Row::Host(_) => None,
+            Row::Parent | Row::Volume(_) | Row::Sftp | Row::Host(_) => None,
         }
     }
 
-    /// The name of the entry under the cursor; `None` on `..` and in the virtual root.
+    /// The name of the entry under the cursor; `None` on `..`, volumes, and hosts.
     pub(crate) fn name_under_cursor(&self) -> Option<&[u8]> {
-        match self.row(self.cursor)? {
-            Row::Entry(entry) => Some(&entry.name),
-            Row::Parent | Row::Local | Row::Host(_) => None,
-        }
+        self.entry_under_cursor().map(|entry| entry.name.as_slice())
     }
 
     /// Where `text`, typed in a dialog, points from this directory: a name or a relative path,
     /// an absolute path, or `~` or `~/…` for the home directory (the remote one on a host);
     /// `\~` stands for a name that starts with `~`, as in mc. Trailing slashes are dropped.
-    /// `None` in the virtual root.
+    /// `None` in the virtual root and the list of hosts.
     pub(crate) fn resolve(&self, text: &str) -> Option<Location> {
         let trimmed = text.trim_end_matches('/');
         let text = if trimmed.is_empty() { text } else { trimmed };
@@ -514,7 +564,7 @@ impl Panel {
         };
         let text = text.strip_prefix("\\~").map_or(text, |_| &text[1..]);
         match (&self.location, home_relative) {
-            (Location::Root, _) => None,
+            (Location::Root | Location::Sftp, _) => None,
             (Location::Local(_), Some(rest)) => Some(Location::Local(self.home.join(rest))),
             (Location::Remote { host, .. }, Some(rest)) => Some(Location::Remote {
                 host: host.clone(),
@@ -526,7 +576,7 @@ impl Panel {
     }
 
     /// What an operation acts on: the marked entries in the order shown, or else the entry
-    /// under the cursor. Nothing on `..` and in the virtual root.
+    /// under the cursor. Nothing on `..`, volumes, and hosts.
     pub(crate) fn chosen(&self) -> Vec<&DirEntry> {
         let Listing::Dir(entries) = &self.listing else {
             return Vec::new();
@@ -550,11 +600,11 @@ impl Panel {
         self.open(self.location.clone(), Focus::Name(name))
     }
 
-    /// The alias of the host under the cursor in the virtual root.
+    /// The alias of the host under the cursor, in the virtual root or the list of hosts.
     pub(crate) fn host_under_cursor(&self) -> Option<&str> {
         match self.row(self.cursor)? {
             Row::Host(host) => Some(&host.alias),
-            Row::Parent | Row::Entry(_) | Row::Local => None,
+            Row::Parent | Row::Entry(_) | Row::Volume(_) | Row::Sftp => None,
         }
     }
 
@@ -603,17 +653,23 @@ impl Panel {
 
     /// This location, with the cursor on the row it is on.
     pub(crate) fn here(&self) -> Destination {
-        let focus = match self.row(self.cursor) {
+        Destination {
+            location: self.location.clone(),
+            focus: self.focus(),
+        }
+    }
+
+    /// What the cursor is on.
+    fn focus(&self) -> Focus {
+        match self.row(self.cursor) {
             Some(Row::Entry(entry)) => Focus::Near {
                 name: entry.name.clone(),
                 row: self.cursor,
             },
             Some(Row::Host(host)) => Focus::Host(host.alias.clone()),
-            _ => Focus::First,
-        };
-        Destination {
-            location: self.location.clone(),
-            focus,
+            Some(Row::Volume(volume)) => Focus::Volume(volume.mount_point.clone()),
+            Some(Row::Sftp) => Focus::Sftp,
+            Some(Row::Parent) | None => Focus::First,
         }
     }
 
@@ -629,14 +685,15 @@ impl Panel {
         destination
     }
 
-    /// Where Enter on the row under the cursor leads: into a directory or host, or up from
-    /// `..`; nowhere from a file.
+    /// Where Enter on the row under the cursor leads: into a directory, volume, or host, to the
+    /// list of hosts, or up from `..`; nowhere from a file. Volumes open at their mount points.
     fn row_destination(&self) -> Option<Destination> {
         let location = match self.row(self.cursor)? {
             Row::Parent => return self.parent_destination(),
             Row::Entry(entry) if entry.is_dir_like() => child(&self.location, &entry.name)?,
             Row::Entry(_) => return None,
-            Row::Local => Location::Local(self.home.clone()),
+            Row::Volume(volume) => Location::Local(volume.mount_point.clone()),
+            Row::Sftp => Location::Sftp,
             Row::Host(host) => Location::Remote {
                 host: host.alias.clone(),
                 path: RemotePath::from(""),
@@ -648,14 +705,16 @@ impl Panel {
         })
     }
 
-    /// The parent, with the cursor on the directory this is, or on its host or the local file
-    /// system in the virtual root. `None` in the virtual root.
+    /// The parent, with the cursor on the directory this is, on its host in the list of hosts,
+    /// or in the virtual root on the system volume or the row of hosts. `None` in the virtual
+    /// root.
     fn parent_destination(&self) -> Option<Destination> {
         let parent = self.location.parent();
         let focus = match (&self.location, &parent) {
             (Location::Root, _) => return None,
+            (Location::Sftp, _) => Focus::Sftp,
             (Location::Local(_), Location::Root) => Focus::First,
-            (Location::Remote { host, .. }, Location::Root) => Focus::Host(host.clone()),
+            (Location::Remote { host, .. }, Location::Sftp) => Focus::Host(host.clone()),
             (Location::Local(path), _) => path
                 .file_name()
                 .map_or(Focus::First, |name| Focus::Name(name.as_bytes().to_vec())),
@@ -669,23 +728,35 @@ impl Panel {
         })
     }
 
-    /// Both kinds of listing have one row before their entries: `..` or the local file system.
+    /// The rows: in the virtual root the volumes, the row of hosts, and the connected hosts;
+    /// elsewhere `..` and the hosts or the entries shown.
     fn rows(&self) -> usize {
-        1 + match &self.listing {
-            Listing::Root(hosts) => hosts.len(),
-            Listing::Dir(_) => self.shown.len(),
+        match &self.listing {
+            Listing::Root { volumes, .. } => volumes.len() + 1 + self.shown.len(),
+            Listing::Hosts(hosts) => 1 + hosts.len(),
+            Listing::Dir(_) => 1 + self.shown.len(),
         }
     }
 
     fn row(&self, index: usize) -> Option<Row<'_>> {
-        match (&self.listing, index.checked_sub(1)) {
-            (Listing::Root(_), None) => Some(Row::Local),
-            (Listing::Root(hosts), Some(index)) => hosts.get(index).map(Row::Host),
-            (Listing::Dir(_), None) => Some(Row::Parent),
-            (Listing::Dir(entries), Some(index)) => {
-                let index = *self.shown.get(index)?;
-                entries.get(index).map(Row::Entry)
+        match &self.listing {
+            Listing::Root { volumes, hosts } => {
+                if let Some(volume) = volumes.get(index) {
+                    return Some(Row::Volume(volume));
+                }
+                match index - volumes.len() {
+                    0 => Some(Row::Sftp),
+                    shown => hosts.get(*self.shown.get(shown - 1)?).map(Row::Host),
+                }
             }
+            Listing::Hosts(hosts) => match index.checked_sub(1) {
+                None => Some(Row::Parent),
+                Some(index) => hosts.get(index).map(Row::Host),
+            },
+            Listing::Dir(entries) => match index.checked_sub(1) {
+                None => Some(Row::Parent),
+                Some(index) => entries.get(*self.shown.get(index)?).map(Row::Entry),
+            },
         }
     }
 
@@ -701,7 +772,10 @@ impl Panel {
     ) {
         let hosts = view.hosts;
         let theme = view.theme;
-        let mut title = location_text(&self.location);
+        let mut title = match self.location {
+            Location::Root => cells::sanitize(view.root_title.as_bytes()),
+            _ => location_text(&self.location),
+        };
         let room = usize::from(area.width.saturating_sub(4));
         if cells::width(&title) > room {
             title = cells::fit(&title, room, Align::Left);
@@ -729,9 +803,12 @@ impl Panel {
 
         let columns = match &self.listing {
             Listing::Dir(_) => Columns::Dir(DirColumns::for_width(width)),
-            Listing::Root(listed) => {
+            Listing::Root { hosts: listed, .. } => {
+                Columns::Root(RootColumns::for_width(width, listed.len()))
+            }
+            Listing::Hosts(listed) => {
                 let addresses = listed.iter().map(|host| address(host, hosts));
-                Columns::Root(RootColumns::for_width(width, addresses))
+                Columns::Hosts(HostColumns::for_width(width, addresses))
             }
         };
         let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
@@ -783,13 +860,23 @@ impl Panel {
                 Some(Row::Parent) => "..".to_owned(),
                 Some(Row::Entry(entry)) => cells::sanitize(&entry.name),
                 // Where it opens, and the alias that a label stands for.
-                Some(Row::Local) => cells::sanitize(self.home.as_os_str().as_bytes()),
+                Some(Row::Volume(volume)) => Self::volume_status(volume),
+                Some(Row::Sftp) => fl!("root-sftp-status"),
                 Some(Row::Host(host)) => cells::sanitize(host.alias.as_bytes()),
                 None => String::new(),
             }
         };
         let status = cells::fit(&status, width, Align::Left);
         frame.render_widget(Line::styled(status, status_style), line(inner.bottom() - 1));
+    }
+
+    /// The status line on a volume: its mount point, and its file system.
+    fn volume_status(volume: &Volume) -> String {
+        let path = cells::sanitize(volume.mount_point.as_os_str().as_bytes());
+        match &volume.fs_type {
+            Some(fs_type) => format!("{path}  {}", cells::sanitize(fs_type.as_bytes())),
+            None => path,
+        }
     }
 
     /// The line between the listing and the status line, across the panel's frame, with the
@@ -833,11 +920,12 @@ impl Panel {
     }
 }
 
-/// How rows become text: the columns of a directory or of the virtual root.
+/// How rows become text: the columns of a directory, of the virtual root, or of the hosts.
 #[derive(Debug, Clone, Copy)]
 enum Columns {
     Dir(DirColumns),
     Root(RootColumns),
+    Hosts(HostColumns),
 }
 
 impl Columns {
@@ -858,6 +946,15 @@ impl Columns {
                 name + &rest
             }
             Self::Root(columns) => {
+                let (name, rest) = columns.join(
+                    &fl!("panel-name"),
+                    &fl!("root-free"),
+                    &fl!("panel-size"),
+                    [Align::Center; 2],
+                );
+                name + &rest
+            }
+            Self::Hosts(columns) => {
                 let (name, rest) =
                     columns.join(&fl!("panel-name"), &fl!("root-address"), [Align::Center; 2]);
                 name + &rest
@@ -902,39 +999,80 @@ impl Columns {
                     theme.entry(entry),
                 )
             }
-            (Self::Root(columns), Row::Local) => {
-                let prefix = decor.local();
-                let name = format!("{prefix}{}", fl!("root-local"));
+            (Self::Root(columns), Row::Volume(volume)) => {
+                let prefix = decor.volume(volume.kind);
+                let name = format!("{prefix}{}", volume_name(volume));
+                let (free, size) = volume.space.map_or_else(
+                    || ("?".to_owned(), "?".to_owned()),
+                    |space| {
+                        (
+                            cells::size(space.available, VOLUME_SIZE_WIDTH),
+                            cells::size(space.total, VOLUME_SIZE_WIDTH),
+                        )
+                    },
+                );
                 styled(
-                    columns.join(&name, "~", [Align::Left; 2]),
+                    columns.join(&name, &free, &size, [Align::Left, Align::Right]),
                     prefix,
                     theme.directory,
                 )
             }
-            (Self::Root(columns), Row::Host(host)) => {
-                let name = host.label.as_deref().unwrap_or(&host.alias);
-                let name = cells::sanitize(name.as_bytes());
-                let status = (view.hosts)(&host.alias).status;
-                let prefix = decor.host(status, view.tick);
-                let (name, rest) = columns.join(
-                    &format!("{prefix}{name}"),
-                    &address(host, view.hosts),
-                    [Align::Left; 2],
-                );
-                // The status marker leads the name cell and has a color of its own.
-                let marker_len = name.chars().next().map_or(0, char::len_utf8);
-                let (marker, name) = name.split_at(marker_len);
-                let mut spans = vec![Span::styled(marker.to_owned(), theme.host_status(status))];
-                let prefix = prefix.get(marker_len..).unwrap_or_default();
-                spans.extend(icon_spans(name.to_owned(), prefix, Style::new(), view));
-                spans.push(Span::styled(rest, theme.address));
-                Line::from(spans)
+            (Self::Root(columns), Row::Sftp) => {
+                let prefix = decor.sftp();
+                let name = format!("{prefix}{}", fl!("root-sftp"));
+                let count = fl!("root-sftp-hosts", count = columns.hosts);
+                styled(
+                    columns.join_wide(&name, &count, Align::Right),
+                    prefix,
+                    theme.directory,
+                )
             }
+            (Self::Root(columns), Row::Host(host)) => host_line(host, view, |name, address| {
+                columns.join_wide(name, address, Align::Left)
+            }),
+            (Self::Hosts(columns), Row::Parent) => {
+                let prefix = decor.parent();
+                let name = format!("{prefix}..");
+                styled(
+                    columns.join(&name, &fl!("panel-up-dir"), [Align::Left; 2]),
+                    prefix,
+                    theme.directory,
+                )
+            }
+            (Self::Hosts(columns), Row::Host(host)) => host_line(host, view, |name, address| {
+                columns.join(name, address, [Align::Left; 2])
+            }),
             // A listing has only rows of its own kind.
-            (Self::Dir(_), Row::Local | Row::Host(_))
-            | (Self::Root(_), Row::Parent | Row::Entry(_)) => Line::default(),
+            (Self::Dir(_), Row::Volume(_) | Row::Sftp | Row::Host(_))
+            | (Self::Root(_), Row::Parent | Row::Entry(_))
+            | (Self::Hosts(_), Row::Entry(_) | Row::Volume(_) | Row::Sftp) => Line::default(),
         }
     }
+}
+
+/// The row of a host: its status marker in a color of its own, then its name, and its address
+/// in the cells `join` makes.
+fn host_line(
+    host: &RootHost,
+    view: &View<'_>,
+    join: impl FnOnce(&str, &str) -> (String, String),
+) -> Line<'static> {
+    let name = host.label.as_deref().unwrap_or(&host.alias);
+    let name = cells::sanitize(name.as_bytes());
+    let status = (view.hosts)(&host.alias).status;
+    let prefix = view.decor.host(status, view.tick);
+    let (name, rest) = join(&format!("{prefix}{name}"), &address(host, view.hosts));
+    // The status marker leads the name cell and has a color of its own.
+    let marker_len = name.chars().next().map_or(0, char::len_utf8);
+    let (marker, name) = name.split_at(marker_len);
+    let mut spans = vec![Span::styled(
+        marker.to_owned(),
+        view.theme.host_status(status),
+    )];
+    let prefix = prefix.get(marker_len..).unwrap_or_default();
+    spans.extend(icon_spans(name.to_owned(), prefix, Style::new(), view));
+    spans.push(Span::styled(rest, view.theme.address));
+    Line::from(spans)
 }
 
 /// A name cell in `style`, with the icon of its `prefix` in a toned-down `style`. A cell cut so
@@ -998,15 +1136,59 @@ impl DirColumns {
     }
 }
 
-/// Column widths of the virtual root: the address column fits the longest address, up to half
-/// the width, and the name takes the rest; narrow panels drop the address.
+/// Column widths of the virtual root: the free space and the size of volumes, whose cells the
+/// other rows take together for what they show, and the name; narrow panels drop the numbers.
 #[derive(Debug, Clone, Copy)]
 struct RootColumns {
+    name: usize,
+    numbers: bool,
+    /// How many hosts the row of hosts stands for.
+    hosts: usize,
+}
+
+impl RootColumns {
+    fn for_width(width: usize, hosts: usize) -> Self {
+        let name = width.saturating_sub(2 * SIZE_WIDTH + 2);
+        let numbers = name >= MIN_NAME_WIDTH;
+        Self {
+            name: if numbers { name } else { width },
+            numbers,
+            hosts,
+        }
+    }
+
+    /// The name cell, and the free space and size cells with their separators.
+    fn join(self, name: &str, free: &str, size: &str, align: [Align; 2]) -> (String, String) {
+        let mut rest = String::new();
+        if self.numbers {
+            rest.push('│');
+            rest.push_str(&cells::fit(free, SIZE_WIDTH, align[1]));
+            rest.push('│');
+            rest.push_str(&cells::fit(size, SIZE_WIDTH, align[1]));
+        }
+        (cells::fit(name, self.name, align[0]), rest)
+    }
+
+    /// The name cell, and `text` across the cells of the numbers.
+    fn join_wide(self, name: &str, text: &str, align: Align) -> (String, String) {
+        let mut rest = String::new();
+        if self.numbers {
+            rest.push('│');
+            rest.push_str(&cells::fit(text, 2 * SIZE_WIDTH + 1, align));
+        }
+        (cells::fit(name, self.name, Align::Left), rest)
+    }
+}
+
+/// Column widths of the list of hosts: the address column fits the longest address, up to half
+/// the width, and the name takes the rest; narrow panels drop the address.
+#[derive(Debug, Clone, Copy)]
+struct HostColumns {
     name: usize,
     address: Option<usize>,
 }
 
-impl RootColumns {
+impl HostColumns {
     fn for_width(width: usize, addresses: impl Iterator<Item = String>) -> Self {
         let address = addresses
             .map(|address| cells::width(&address))
@@ -1090,7 +1272,7 @@ fn address(host: &RootHost, hosts: &dyn Fn(&str) -> HostState) -> String {
 /// The entry `name` in `location`; `name` may be a path, relative or absolute.
 pub(crate) fn child(location: &Location, name: &[u8]) -> Option<Location> {
     match location {
-        Location::Root => None,
+        Location::Root | Location::Sftp => None,
         Location::Local(path) => Some(Location::Local(path.join(OsStr::from_bytes(name)))),
         Location::Remote { host, path } => Some(Location::Remote {
             host: host.clone(),
@@ -1100,10 +1282,11 @@ pub(crate) fn child(location: &Location, name: &[u8]) -> Option<Location> {
 }
 
 /// A location for the title and messages: a local path, `host:path`, only `host` for the
-/// remote home directory, or the title of the virtual root.
+/// remote home directory, or the title of the virtual root or of the hosts.
 pub(crate) fn location_text(location: &Location) -> String {
     match location {
         Location::Root => fl!("root-title"),
+        Location::Sftp => fl!("root-sftp"),
         Location::Local(path) => cells::sanitize(path.as_os_str().as_bytes()),
         Location::Remote { host, path } => {
             let mut text = host.as_bytes().to_vec();
@@ -1120,7 +1303,7 @@ pub(crate) fn location_text(location: &Location) -> String {
 mod tests {
     use std::time::{Duration, UNIX_EPOCH};
 
-    use noc_vfs::{FileKind, Metadata};
+    use noc_vfs::{FileKind, Metadata, Space, VolumeKind};
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
     use ratatui::layout::Position;
@@ -1182,6 +1365,36 @@ mod tests {
         ]
     }
 
+    fn volume(path: &str, label: &str, kind: VolumeKind, space: Option<Space>) -> Volume {
+        Volume {
+            mount_point: PathBuf::from(path),
+            label: Some(label.to_owned()),
+            fs_type: Some("apfs".to_owned()),
+            kind,
+            space,
+        }
+    }
+
+    /// The system volume, a local one, and a network one that did not say how big it is.
+    fn volumes() -> Vec<Volume> {
+        let space = Some(Space {
+            total: 994 << 30,
+            available: 212 << 30,
+        });
+        vec![
+            volume("/", "Macintosh HD", VolumeKind::System, space),
+            volume("/Volumes/USB", "USB", VolumeKind::Local, space),
+            volume("/Volumes/share", "share", VolumeKind::Network, None),
+        ]
+    }
+
+    fn root_listing(hosts: Vec<RootHost>) -> Listing {
+        Listing::Root {
+            volumes: volumes(),
+            hosts,
+        }
+    }
+
     fn local(path: &str) -> Location {
         Location::Local(PathBuf::from(path))
     }
@@ -1211,7 +1424,16 @@ mod tests {
     }
 
     fn root() -> Panel {
-        loaded_at(Location::Root, Listing::Root(hosts()))
+        loaded_at(Location::Root, root_listing(hosts()))
+    }
+
+    /// The list of hosts.
+    fn sftp() -> Panel {
+        loaded_at(Location::Sftp, Listing::Hosts(hosts()))
+    }
+
+    fn connected(aliases: &[&str]) -> HashSet<String> {
+        aliases.iter().map(|alias| (*alias).to_owned()).collect()
     }
 
     fn names(panel: &Panel) -> Vec<String> {
@@ -1219,7 +1441,8 @@ mod tests {
             .map(|row| match panel.row(row) {
                 Some(Row::Parent) => "..".to_owned(),
                 Some(Row::Entry(entry)) => entry.display_name().into_owned(),
-                Some(Row::Local) => "<local>".to_owned(),
+                Some(Row::Volume(volume)) => volume_name(volume),
+                Some(Row::Sftp) => "<sftp>".to_owned(),
                 Some(Row::Host(host)) => host.alias.clone(),
                 None => unreachable!(),
             })
@@ -1261,6 +1484,7 @@ mod tests {
             hosts,
             decor,
             theme,
+            root_title: "alex-mbp",
             tick: 0,
             now: UNIX_EPOCH + Duration::from_secs(NOW),
             tz: &TimeZone::UTC,
@@ -1375,14 +1599,14 @@ mod tests {
         panel.handle(Action::SortByName);
         assert_eq!(order(&panel), "Adir dir1 .env a.txt b.md c.txt Z");
 
-        // The order holds for the next directory, and the root keeps the config order.
+        // The order holds for the next directory, and the hosts keep the config order.
         panel.handle(Action::SortByTime);
         let request = panel.handle(Action::Reload).unwrap();
         answer(&mut panel, &request, Listing::Dir(varied()));
         assert_eq!(order(&panel), "Adir dir1 .env Z a.txt c.txt b.md");
-        let mut root = root();
-        root.handle(Action::SortBySize);
-        assert_eq!(names(&root), ["<local>", "web", "db", "staging"]);
+        let mut hosts = sftp();
+        hosts.handle(Action::SortBySize);
+        assert_eq!(names(&hosts), ["..", "web", "db", "staging"]);
     }
 
     #[test]
@@ -1445,7 +1669,16 @@ mod tests {
 
     #[test]
     fn quick_search_finds_hosts_by_the_name_shown() {
-        let mut panel = root();
+        let mut root = root();
+        root.search_type('u');
+        assert_eq!(under_cursor(&root), "USB", "volumes by their labels");
+        root.end_search();
+        root.search_type('s');
+        assert_eq!(under_cursor(&root), "share");
+        root.search_type('f');
+        assert_eq!(under_cursor(&root), "<sftp>");
+
+        let mut panel = sftp();
         panel.search_type('p');
         assert_eq!(under_cursor(&panel), "web", "labelled Prod");
         panel.search_next();
@@ -1515,33 +1748,99 @@ mod tests {
     }
 
     #[test]
-    fn above_slash_is_the_root_with_local_first_and_hosts_in_config_order() {
+    fn above_slash_is_the_root_with_the_volumes_and_the_hosts() {
         let mut panel = loaded("/", vec![entry("srv", FileKind::Dir, 1)]);
         assert_eq!(names(&panel), ["..", "srv"]);
         let request = panel.handle(Action::Parent).unwrap();
         assert_eq!(request.location, Location::Root);
-        answer(&mut panel, &request, Listing::Root(hosts()));
-        assert_eq!(names(&panel), ["<local>", "web", "db", "staging"]);
-        assert_eq!(under_cursor(&panel), "<local>", "the file system just left");
+        answer(&mut panel, &request, root_listing(hosts()));
+        assert_eq!(names(&panel), ["Macintosh HD", "USB", "share", "<sftp>"]);
+        assert_eq!(
+            under_cursor(&panel),
+            "Macintosh HD",
+            "the file system just left"
+        );
         assert_eq!(panel.handle(Action::Parent), None, "the root is the top");
 
         let request = panel.handle(Action::Enter).unwrap();
         assert_eq!(
             request.location,
-            local(HOME),
-            "the local file system opens at home"
+            local("/"),
+            "volumes open at their mount points"
         );
+        // `..` and Enter come back to where the panel left.
+        answer(&mut panel, &request, Listing::Dir(listing()));
+        let request = panel.handle(Action::Parent).unwrap();
+        answer(&mut panel, &request, root_listing(hosts()));
+        assert_eq!(under_cursor(&panel), "Macintosh HD");
+        panel.handle(Action::Down);
+        let request = panel.handle(Action::Enter).unwrap();
+        assert_eq!(request.location, local("/Volumes/USB"));
+        panel.cancel();
+
+        // The hosts open as a directory of their own, with `..` back to their row.
+        panel.handle(Action::End);
+        let request = panel.handle(Action::Enter).unwrap();
+        assert_eq!(request.location, Location::Sftp);
+        answer(&mut panel, &request, Listing::Hosts(hosts()));
+        assert_eq!(names(&panel), ["..", "web", "db", "staging"]);
+        assert_eq!(panel.cursor, 0);
+        let request = panel.handle(Action::Enter).unwrap();
+        assert_eq!(request.location, Location::Root);
+        answer(&mut panel, &request, root_listing(hosts()));
+        assert_eq!(under_cursor(&panel), "<sftp>");
+    }
+
+    #[test]
+    fn the_root_shows_connected_hosts_again_and_the_cursor_stays_on_its_row() {
+        let mut panel = root();
+        panel.set_connected(connected(&["staging"]));
+        assert_eq!(
+            names(&panel),
+            ["Macintosh HD", "USB", "share", "<sftp>", "staging"]
+        );
+        panel.handle(Action::End);
+        panel.set_connected(connected(&["web", "staging"]));
+        assert_eq!(
+            names(&panel),
+            ["Macintosh HD", "USB", "share", "<sftp>", "web", "staging"],
+            "in config order"
+        );
+        assert_eq!(
+            under_cursor(&panel),
+            "staging",
+            "the cursor stays on its host"
+        );
+        assert_eq!(panel.host_under_cursor(), Some("staging"));
+        let request = panel.handle(Action::Enter).unwrap();
+        assert_eq!(request.location, remote("staging", ""));
+        panel.cancel();
+
+        panel.set_connected(connected(&["web"]));
+        assert_eq!(
+            under_cursor(&panel),
+            "web",
+            "its host is gone; the last row"
+        );
+        panel.set_connected(HashSet::new());
+        let _ = draw(&mut panel, 40, 10, true);
+        assert_eq!(under_cursor(&panel), "<sftp>");
+
+        // A host that connects while the list of hosts is shown changes nothing there.
+        let mut hosts = sftp();
+        hosts.set_connected(connected(&["web"]));
+        assert_eq!(names(&hosts), ["..", "web", "db", "staging"]);
     }
 
     #[test]
     fn hosts_open_their_home_directory_and_lead_back_to_themselves() {
-        let mut panel = root();
+        let mut panel = sftp();
         panel.handle(Action::End);
         let request = panel.handle(Action::Enter).unwrap();
         assert_eq!(request.location, remote("staging", ""));
         let refused = "deploy@stg: Permission denied (publickey).".to_owned();
         panel.listed(request.generation, Err(refused));
-        assert_eq!(panel.location, Location::Root);
+        assert_eq!(panel.location, Location::Sftp);
         assert_eq!(
             panel.error.as_deref(),
             Some("Cannot open staging: deploy@stg: Permission denied (publickey).")
@@ -1569,8 +1868,8 @@ mod tests {
         assert_eq!(request.location, remote("db", "/"));
         answer(&mut panel, &request, Listing::Dir(listing()));
         let request = panel.handle(Action::Parent).unwrap();
-        assert_eq!(request.location, Location::Root);
-        answer(&mut panel, &request, Listing::Root(hosts()));
+        assert_eq!(request.location, Location::Sftp);
+        answer(&mut panel, &request, Listing::Hosts(hosts()));
         assert_eq!(under_cursor(&panel), "db");
     }
 
@@ -1602,8 +1901,14 @@ mod tests {
 
         let mut root = root();
         let location = |to: Option<Destination>| to.map(|to| to.location);
-        assert_eq!(location(root.for_other_panel()), Some(local(HOME)));
-        assert_eq!(location(root.for_other_panel()), Some(remote("web", "")));
+        assert_eq!(location(root.for_other_panel()), Some(local("/")));
+        assert_eq!(
+            location(root.for_other_panel()),
+            Some(local("/Volumes/USB"))
+        );
+        let mut hosts = sftp();
+        hosts.handle(Action::Down);
+        assert_eq!(location(hosts.for_other_panel()), Some(remote("web", "")));
     }
 
     #[test]
@@ -1628,9 +1933,14 @@ mod tests {
         root.handle(Action::Down);
         let here = Destination {
             location: Location::Root,
-            focus: Focus::Host("web".to_owned()),
+            focus: Focus::Volume(PathBuf::from("/Volumes/USB")),
         };
         assert_eq!(root.here(), here);
+        root.handle(Action::End);
+        assert_eq!(root.here().focus, Focus::Sftp);
+        let mut hosts = sftp();
+        hosts.handle(Action::Down);
+        assert_eq!(hosts.here().focus, Focus::Host("web".to_owned()));
     }
 
     fn marked(panel: &Panel) -> Vec<String> {
@@ -1670,12 +1980,17 @@ mod tests {
         );
         assert_eq!(panel.marked_total(), (4, 10_012_346));
 
+        let mut hosts = sftp();
+        hosts.handle(Action::Mark);
+        hosts.handle(Action::Mark);
+        hosts.handle(Action::InvertMarks);
+        assert_eq!(under_cursor(&hosts), "db");
+        assert!(hosts.marked.is_empty(), "hosts cannot be marked");
         let mut root = root();
         root.handle(Action::Mark);
-        root.handle(Action::Mark);
         root.handle(Action::InvertMarks);
-        assert_eq!(under_cursor(&root), "db");
-        assert!(root.marked.is_empty(), "hosts cannot be marked");
+        assert_eq!(under_cursor(&root), "USB");
+        assert!(root.marked.is_empty(), "nor volumes");
     }
 
     #[test]
@@ -1733,6 +2048,7 @@ mod tests {
         assert_eq!(resolve("~"), remote("db", ""));
 
         assert_eq!(root().resolve("x"), None);
+        assert_eq!(sftp().resolve("x"), None);
     }
 
     #[test]
@@ -1754,15 +2070,27 @@ mod tests {
             "the entry is gone: its row, or the last one"
         );
 
+        let mut hosts = sftp();
+        hosts.handle(Action::Down);
+        hosts.handle(Action::Down);
+        let request = hosts.handle(Action::Reload).unwrap();
+        assert_eq!(request.location, Location::Sftp);
+        let mut reordered = self::hosts();
+        reordered.reverse();
+        answer(&mut hosts, &request, Listing::Hosts(reordered));
+        assert_eq!(under_cursor(&hosts), "db");
+
         let mut root = root();
         root.handle(Action::Down);
-        root.handle(Action::Down);
         let request = root.handle(Action::Reload).unwrap();
-        assert_eq!(request.location, Location::Root);
-        let mut reordered = hosts();
-        reordered.reverse();
-        answer(&mut root, &request, Listing::Root(reordered));
-        assert_eq!(under_cursor(&root), "db");
+        let mut fewer = volumes();
+        fewer.remove(0);
+        let listing = Listing::Root {
+            volumes: fewer,
+            hosts: self::hosts(),
+        };
+        answer(&mut root, &request, listing);
+        assert_eq!(under_cursor(&root), "USB", "on its volume");
     }
 
     #[test]
@@ -1822,7 +2150,7 @@ mod tests {
 
     #[test]
     fn a_cancelled_request_is_forgotten() {
-        let mut panel = root();
+        let mut panel = sftp();
         panel.handle(Action::Down);
         let request = panel.handle(Action::Enter).unwrap();
         assert_eq!(panel.pending_request(), Some(request.clone()));
@@ -1834,17 +2162,17 @@ mod tests {
         panel.cancel();
         assert_eq!(panel.pending_request(), None);
         answer(&mut panel, &request, Listing::Dir(listing()));
-        assert_eq!(panel.location, Location::Root, "the late reply is dropped");
+        assert_eq!(panel.location, Location::Sftp, "the late reply is dropped");
         assert_eq!(under_cursor(&panel), "web");
     }
 
     #[test]
-    fn a_lost_host_sends_its_panels_back_to_the_root() {
+    fn a_lost_host_sends_its_panels_back_to_the_list_of_hosts() {
         let mut panel = loaded_at(remote("db", "/srv"), Listing::Dir(listing()));
         assert_eq!(panel.leave_host("web", Some("gone")), None, "another host");
         let request = panel.leave_host("db", Some("Connection reset")).unwrap();
-        assert_eq!(request.location, Location::Root);
-        answer(&mut panel, &request, Listing::Root(hosts()));
+        assert_eq!(request.location, Location::Sftp);
+        answer(&mut panel, &request, Listing::Hosts(hosts()));
         assert_eq!(under_cursor(&panel), "db");
         assert_eq!(
             panel.error.as_deref(),
@@ -1852,7 +2180,7 @@ mod tests {
         );
 
         // A panel that was about to open the host goes back as well.
-        let mut panel = root();
+        let mut panel = sftp();
         panel.handle(Action::Down);
         panel.handle(Action::Enter);
         assert!(panel.leave_host("web", None).is_some());
@@ -1975,13 +2303,13 @@ mod tests {
             "the active title"
         );
 
-        let mut root = root();
+        let mut hosts = sftp();
         let connected = |_: &str| HostState {
             status: HostStatus::Connected,
             address: None,
         };
         let terminal = render_themed(
-            &mut root,
+            &mut hosts,
             (40, 8),
             false,
             &connected,
@@ -2004,11 +2332,12 @@ mod tests {
         let terminal = render_with(&mut panel, (40, 10), true, &hosts, Decor::new(true));
         insta::assert_snapshot!(terminal.backend());
         let mut root = root();
-        let connected = |_: &str| HostState {
+        root.set_connected(connected(&["web"]));
+        let online = |_: &str| HostState {
             status: HostStatus::Connected,
             address: None,
         };
-        let terminal = render_with(&mut root, (40, 8), true, &connected, Decor::new(true));
+        let terminal = render_with(&mut root, (40, 10), true, &online, Decor::new(true));
         insta::assert_snapshot!("draws_icons_in_the_root", terminal.backend());
     }
 
@@ -2061,24 +2390,68 @@ mod tests {
             &theme,
         );
         let buffer = terminal.backend().buffer();
+        // Rows: frame, header, the system volume.
+        assert_eq!(
+            (
+                buffer[(3, 2)].fg,
+                buffer[(3, 2)].modifier.contains(Modifier::DIM)
+            ),
+            (Color::White, true),
+            "the icon of a volume"
+        );
+        let mut hosts = sftp();
+        let terminal = render_themed(
+            &mut hosts,
+            (40, 8),
+            false,
+            &connected,
+            Decor::new(true),
+            &theme,
+        );
+        let buffer = terminal.backend().buffer();
         let look = |x: u16, y: u16| {
             let cell = &buffer[(x, y)];
             (cell.fg, cell.modifier.contains(Modifier::DIM))
         };
-        // Rows: frame, header, local, the first host.
-        assert_eq!(
-            look(3, 2),
-            (Color::White, true),
-            "the icon of the local files"
-        );
+        // Rows: frame, header, `..`, the first host.
         assert_eq!(look(1, 3), (Color::LightGreen, false), "the host's status");
         assert_eq!(look(3, 3), (Color::Gray, true), "the icon of the host");
         assert_eq!(look(5, 3), (Color::Gray, false), "its name");
     }
 
     #[test]
-    fn draws_the_root_with_labels_and_cached_addresses() {
+    fn draws_the_root_with_volumes_and_connected_hosts() {
         let mut panel = root();
+        panel.set_connected(connected(&["web"]));
+        panel.handle(Action::Down);
+        assert_eq!(panel.host_under_cursor(), None, "a volume");
+        let online = |alias: &str| HostState {
+            status: if alias == "web" {
+                HostStatus::Connected
+            } else {
+                HostStatus::Idle
+            },
+            address: None,
+        };
+        insta::assert_snapshot!(render(&mut panel, 50, 10, true, &online));
+        panel.handle(Action::End);
+        let text = render(&mut panel, 50, 10, true, &online).to_string();
+        assert!(
+            text.contains("║web"),
+            "the alias of the label on the status line: {text}"
+        );
+        panel.handle(Action::Up);
+        let text = draw(&mut panel, 50, 10, true).to_string();
+        assert!(text.contains("Hosts from the ssh config"), "{text}");
+
+        let narrow = draw(&mut panel, 20, 10, true).to_string();
+        assert!(!narrow.contains("212G"), "{narrow}");
+        assert!(narrow.contains("USB"), "{narrow}");
+    }
+
+    #[test]
+    fn draws_the_hosts_with_labels_and_cached_addresses() {
+        let mut panel = sftp();
         panel.handle(Action::Down);
         assert_eq!(panel.host_under_cursor(), Some("web"));
         insta::assert_snapshot!(draw(&mut panel, 50, 9, true));
@@ -2089,10 +2462,10 @@ mod tests {
     }
 
     #[test]
-    fn the_root_marks_connection_states_and_prefers_fresh_addresses() {
-        let mut panel = root();
+    fn the_hosts_show_connection_states_and_prefer_fresh_addresses() {
+        let mut panel = sftp();
         assert!(panel.shows_root());
-        assert_eq!(panel.host_under_cursor(), None, "[Local]");
+        assert_eq!(panel.host_under_cursor(), None, "`..`");
         let hosts = |alias: &str| match alias {
             "web" => HostState {
                 status: HostStatus::Connected,

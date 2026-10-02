@@ -1,7 +1,8 @@
 //! Virtual file system for Noon Commander: the `Vfs` trait and its backends
-//! (virtual root, local file system, SFTP).
+//! (local file system, SFTP), and the mounted volumes.
 //!
-//! The virtual root is not a backend: it is [`Location::Root`], listed with [`root_entries`].
+//! The virtual root and its list of hosts are not backends: they are [`Location::Root`] and
+//! [`Location::Sftp`], which the app lists from [`volumes`] and the ssh config.
 
 mod entry;
 mod error;
@@ -20,7 +21,7 @@ pub use entry::{DirEntry, FileKind, Metadata};
 pub use error::VfsError;
 pub use files::{FileReader, FileWriter};
 pub use local::{LocalFs, LocalReader, LocalWriter};
-pub use location::{Location, RootEntry, root_entries};
+pub use location::Location;
 pub use remote_path::RemotePath;
 pub use sftp::{SftpFs, SftpReader, SftpWriter};
 pub use vfs::{Vfs, VfsPath};

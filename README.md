@@ -17,8 +17,9 @@ operations. The command is `noc`.
 - **Your `~/.ssh/config` just works.** Noon Commander never implements SSH. It runs the `ssh` you
   already use, so `ProxyJump`, `Match`, `Include`, agents, FIDO keys, certificates, and
   `known_hosts` behave exactly as in your terminal.
-- **Every server in one place.** The virtual root lists the local file system and all hosts from
-  your ssh config.
+- **Every disk and server in one place.** The virtual root lists the mounted volumes and all
+  hosts from your ssh config; Alt-F1 and Alt-F2 switch a panel to any of them, as in Far
+  Manager.
 
 ## Philosophy
 
@@ -37,7 +38,7 @@ Non-goals: forwarding of any kind, a built-in SSH implementation, a password man
 
 ## Planned features
 
-- Virtual root with the local file system and all hosts from `ssh_config`.
+- Virtual root with the mounted volumes and all hosts from `ssh_config`.
 - Copy and move between local and remote, or between two remote hosts.
 - Password, OTP, and host-key prompts inside the TUI (via `SSH_ASKPASS`).
 - One authentication per host, shared by all panels and transfers (OpenSSH `ControlMaster`).

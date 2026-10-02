@@ -276,10 +276,10 @@ impl Keymap {
 }
 
 /// The bindings of the mc preset, by context.
-fn mc_presets() -> [(Context, Preset); 6] {
+fn mc_presets() -> [(Context, Preset); 7] {
     use Action::{
-        Backspace, Cancel, Confirm, Copy, Delete, DeleteToEnd, DeleteToStart, Disconnect, Down,
-        Edit, End, Enter, Help, Home, InvertMarks, Jobs, Left, Mark, MarkUp, Mkdir, Move,
+        Backspace, Cancel, Confirm, Copy, Delete, Disconnect, Down, Edit, End, Enter, Help, Home,
+        InvertMarks, Jobs, Left, LocationMenuLeft, LocationMenuRight, Mark, MarkUp, Mkdir, Move,
         NextField, OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent, PrevField,
         QuickSearch, Quit, Redraw, Reload, Right, Select, SortByExtension, SortByName, SortBySize,
         SortByTime, SwapPanels, SwitchPanel, Toggle, ToggleHidden, ToggleWrap, Unselect, Up, View,
@@ -326,6 +326,10 @@ fn mc_presets() -> [(Context, Preset); 6] {
                 // In text fields, Delete deletes a character.
                 (Delete, &["f8", "delete"]),
                 (Jobs, &["ctrl-x j"]),
+                // Far Manager's menus to change drives. Ctrl-X 1 and 2 are for terminals whose
+                // Alt-F1 never arrives, such as macOS Terminal without Option as Meta.
+                (LocationMenuLeft, &["alt-f1", "ctrl-x 1"]),
+                (LocationMenuRight, &["alt-f2", "ctrl-x 2"]),
                 (Quit, &["f10"]),
                 (Redraw, &["ctrl-l"]),
             ],
@@ -370,19 +374,35 @@ fn mc_presets() -> [(Context, Preset); 6] {
                 (Redraw, &["ctrl-l"]),
             ],
         ),
-        (
-            Context::DialogInput,
-            &[
-                (Home, &["home", "ctrl-a"]),
-                (End, &["end", "ctrl-e"]),
-                (Backspace, &["backspace"]),
-                (Delete, &["delete"]),
-                (DeleteToStart, &["ctrl-u"]),
-                (DeleteToEnd, &["ctrl-k"]),
-            ],
-        ),
+        (Context::Menu, MENU),
+        (Context::DialogInput, TEXT_FIELD),
     ]
 }
+
+/// The bindings of text fields in the mc preset, on top of the dialog's.
+const TEXT_FIELD: Preset = &[
+    (Action::Home, &["home", "ctrl-a"]),
+    (Action::End, &["end", "ctrl-e"]),
+    (Action::Backspace, &["backspace"]),
+    (Action::Delete, &["delete"]),
+    (Action::DeleteToStart, &["ctrl-u"]),
+    (Action::DeleteToEnd, &["ctrl-k"]),
+];
+
+/// The location menu's bindings in the mc preset; characters filter it.
+const MENU: Preset = &[
+    (Action::Up, &["up"]),
+    (Action::Down, &["down"]),
+    (Action::PageUp, &["pageup"]),
+    (Action::PageDown, &["pagedown"]),
+    (Action::Home, &["home"]),
+    (Action::End, &["end"]),
+    (Action::Confirm, &["enter"]),
+    (Action::Backspace, &["backspace"]),
+    (Action::Disconnect, &["f8"]),
+    (Action::Reload, &["ctrl-r"]),
+    (Action::Cancel, &["esc", "f10"]),
+];
 
 const ESC: KeyCombination = KeyCombination::one_key(KeyCode::Esc, KeyModifiers::NONE);
 
@@ -781,6 +801,58 @@ mod tests {
             [Resolved::Insert('q')]
         );
         assert_eq!(feed(&keymap, &mut state, Context::Dialog, &["y"]), []);
+    }
+
+    #[test]
+    fn location_menus_open_with_alt_f1_and_f2_or_ctrl_x_and_the_digit() {
+        let keymap = Keymap::mc();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(
+                &keymap,
+                &mut state,
+                Context::Panel,
+                &["alt-f1", "alt-f2", "ctrl-x", "1", "ctrl-x", "2"]
+            ),
+            actions(&[
+                Action::LocationMenuLeft,
+                Action::LocationMenuRight,
+                Action::LocationMenuLeft,
+                Action::LocationMenuRight
+            ])
+        );
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Root, &["alt-f2"]),
+            actions(&[Action::LocationMenuRight])
+        );
+        // In the menu, every character filters or is a hotkey; keys move and act.
+        assert_eq!(
+            feed(
+                &keymap,
+                &mut state,
+                Context::Menu,
+                &["1", "p", "+", "space", "down", "enter", "f8", "esc"]
+            ),
+            [
+                Resolved::Insert('1'),
+                Resolved::Insert('p'),
+                Resolved::Insert('+'),
+                Resolved::Insert(' '),
+                Resolved::Action(Action::Down),
+                Resolved::Action(Action::Confirm),
+                Resolved::Action(Action::Disconnect),
+                Resolved::Action(Action::Cancel),
+            ]
+        );
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Menu, &["tab", "ctrl-u", "f5"]),
+            [],
+            "the menu is modal"
+        );
+        let mut menu = [None; 10];
+        menu[7] = Some(Action::Disconnect);
+        menu[9] = Some(Action::Cancel);
+        assert_eq!(keymap.fkeys(Context::Menu), menu);
     }
 
     #[test]

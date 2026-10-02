@@ -322,7 +322,18 @@ fn ls_lists_the_virtual_root_and_local_directories() {
     std::fs::write(sandbox.path("ssh_config"), "Host web\nHost db\n").unwrap();
     let output = sandbox.run(&["ls"]);
     assert!(output.status.success(), "{}", stderr(&output));
-    assert_eq!(stdout(&output), "[local]\nweb\ndb\n");
+    // The mount points of the volumes, which depend on the machine, the system volume first,
+    // then the hosts.
+    let text = stdout(&output);
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.first(), Some(&"/"), "{text}");
+    assert!(lines.ends_with(&["web:", "db:"]), "{text}");
+    assert!(
+        lines[..lines.len() - 2]
+            .iter()
+            .all(|line| line.starts_with('/')),
+        "{text}"
+    );
 
     std::fs::write(sandbox.path("root/notes.txt"), b"x").unwrap();
     std::fs::create_dir(sandbox.path("root/docs")).unwrap();

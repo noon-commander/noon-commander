@@ -2,9 +2,9 @@
 source: crates/noc/src/tui/panel.rs
 expression: "draw(&mut panel, 50, 9, true)"
 ---
-"╔ Hosts ═════════════════════════════════════════╗"
+"╔ SFTP ══════════════════════════════════════════╗"
 "║         Name          │        Address         ║"
-"║  [Local]              │~                       ║"
+"║/..                    │UP--DIR                 ║"
 "║○ Prod                 │deploy@10.0.0.5         ║"
 "║○ db                   │                        ║"
 "║○ staging              │ubuntu@stg.e~le.org:2222║"

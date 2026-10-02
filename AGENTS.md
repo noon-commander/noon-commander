@@ -41,7 +41,7 @@ credentials; editing `~/.ssh/*`.
 | `crates/noc` | Binary and UI: CLI, bootstrap, askpass entry point, ratatui app, keymap, themes, icons, i18n |
 | `crates/noc-config` | XDG paths, TOML schema, defaults |
 | `crates/noc-ssh` | Host discovery, `ssh -G`, argument validation, forwarding policy, ControlMaster, SFTP channels, askpass bridge |
-| `crates/noc-vfs` | `Vfs` trait and backends: virtual root, local, SFTP |
+| `crates/noc-vfs` | `Vfs` trait and backends (local, SFTP), mounted volumes |
 | `crates/noc-ops` | Job engine: copy, move, delete, mkdir; progress, cancellation, conflicts |
 
 Dependencies point one way: `config ← ssh ← vfs ← ops ← noc`. Library crates contain no UI

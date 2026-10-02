@@ -8,7 +8,8 @@ mod error;
 mod paths;
 
 pub use config::{
-    Config, DEFAULT_CONFIG, DiscoveryConfig, HostConfig, SshConfig, UiConfig, write_default_config,
+    Config, DEFAULT_CONFIG, DiscoveryConfig, HostConfig, SshConfig, TransferConfig, UiConfig,
+    write_default_config,
 };
 pub use error::ConfigError;
 pub use paths::Paths;

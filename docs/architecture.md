@@ -251,16 +251,19 @@ theme = "mc-classic"             # or "terminal": the terminal's own colors, rev
 icons = true                     # Nerd Font icons; false: mc's markers (/ * @ ~ …)
 show_hidden = true               # names that start with a dot; Alt-. switches while running
 type_to_search = true            # typing in a panel starts quick search; false: only Ctrl-S
+
+[transfer]
+atomic_upload = true             # copies go to a hidden temporary name, then are renamed
 ```
 
-Planned keys and sections, not accepted yet:
+Planned keys, not accepted yet:
 
 ```toml
-[transfer]                       # M3
-parallel_jobs = 2
-preserve_mtime = true
-atomic_upload = true             # write to a temporary name, then rename
+[transfer]
+parallel_jobs = 2                # with the background job queue
 ```
+
+Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
 
 ## UI
 
@@ -301,7 +304,8 @@ atomic_upload = true             # write to a temporary name, then rename
   takes it. A target that is the source directory, or in one of the sources, is an error.
   The job's window shows entries and bytes, with the gauge on the bytes. A taken name asks in
   red, as mc does, with the path, both sizes and times, and Yes, No (the default), All, None,
-  Older, and Abort. Copies are written under a temporary name and renamed when complete.
+  Older, and Abort. Copies are written under a temporary name and renamed when complete,
+  unless `transfer.atomic_upload` is off.
   When the job ends, panels on the target, its parent, and the source directory read them
   again.
 - **F8 (or Delete) deletes** the marked entries, or the one under the cursor, after a red

@@ -44,6 +44,12 @@ show_hidden = true
 # Typing in a panel starts quick search. When off, only Ctrl-S and Alt-S do, as in mc.
 type_to_search = true
 
+[transfer]
+# Write each copy under a hidden temporary name next to its target and rename it when it is
+# complete, so that the target never holds part of a file. When off, copies are written to
+# their targets directly; a copy that does not finish is still removed.
+atomic_upload = true
+
 # Per-host settings, keyed by a Host alias from ssh_config. Quote aliases that contain dots,
 # such as [hosts."web.example.com"].
 #

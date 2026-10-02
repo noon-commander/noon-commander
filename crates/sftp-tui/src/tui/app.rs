@@ -9,7 +9,7 @@ use jiff::tz::TimeZone;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::text::{Line, Span};
-use sftp_tui_config::UiConfig;
+use sftp_tui_config::{TransferConfig, UiConfig};
 use sftp_tui_ops::{Conflict, CopyOptions, Decision};
 use sftp_tui_vfs::{FileKind, Location, Metadata, RemotePath};
 use tokio::sync::oneshot;
@@ -213,10 +213,12 @@ impl Job {
     }
 }
 
-/// What F5 asked for last; its dialog starts with it.
+/// How F5 copies: what its dialog asked for last, which it starts with, and the setting.
 #[derive(Debug, Clone, Copy)]
 struct CopyChoices {
     preserve: bool,
+    /// Through temporary names: `transfer.atomic_upload`.
+    atomic: bool,
 }
 
 /// What `+` and `-` asked for last; their dialogs start with it.
@@ -279,7 +281,12 @@ pub(crate) struct App {
 impl App {
     /// Both panels on the local directory `start`, and the listings to request for them. From
     /// the virtual root, the local file system opens at `home`.
-    pub(crate) fn new(start: &Path, home: &Path, ui: &UiConfig) -> (Self, Vec<Effect>) {
+    pub(crate) fn new(
+        start: &Path,
+        home: &Path,
+        ui: &UiConfig,
+        transfer: &TransferConfig,
+    ) -> (Self, Vec<Effect>) {
         let show_hidden = ui.show_hidden;
         let panel = || {
             let start = Location::Local(start.to_path_buf());
@@ -303,7 +310,10 @@ impl App {
             addresses: HashMap::new(),
             dialogs: VecDeque::new(),
             pattern_options: PatternOptions::default(),
-            copy_choices: CopyChoices { preserve: true },
+            copy_choices: CopyChoices {
+                preserve: true,
+                atomic: transfer.atomic_upload,
+            },
             tz: TimeZone::UTC,
             job: None,
             jobs: 0,
@@ -681,7 +691,7 @@ impl App {
         self.job = Some(Job::new(id, JobKind::Copy, changes, cancel.clone()));
         let options = CopyOptions {
             preserve: self.copy_choices.preserve,
-            atomic: true,
+            atomic: self.copy_choices.atomic,
         };
         vec![Effect::Copy {
             id,
@@ -1356,6 +1366,10 @@ mod tests {
         entry
     }
 
+    fn transfer() -> TransferConfig {
+        TransferConfig::default()
+    }
+
     /// Settings with mc's markers, which read better in tests than icons.
     fn ui() -> UiConfig {
         UiConfig {
@@ -1399,7 +1413,8 @@ mod tests {
 
     /// An app on `/srv` whose first listings arrived.
     fn loaded() -> App {
-        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &ui());
+        let (mut app, effects) =
+            App::new(Path::new("/srv"), Path::new("/home/me"), &ui(), &transfer());
         answer(
             &mut app,
             effects,
@@ -1410,7 +1425,8 @@ mod tests {
 
     /// An app with both panels on the virtual root, which lists `web` and `db`.
     fn at_root() -> App {
-        let (mut app, effects) = App::new(Path::new("/"), Path::new("/home/me"), &ui());
+        let (mut app, effects) =
+            App::new(Path::new("/"), Path::new("/home/me"), &ui(), &transfer());
         answer(&mut app, effects, &Listing::Dir(Vec::new()));
         let hosts = ["web", "db"].map(|alias| RootHost {
             alias: alias.to_owned(),
@@ -1451,7 +1467,7 @@ mod tests {
 
     #[test]
     fn lists_both_panels_at_start() {
-        let (_, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &ui());
+        let (_, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &ui(), &transfer());
         let sides: Vec<Side> = effects
             .iter()
             .map(|effect| match effect {
@@ -1585,7 +1601,8 @@ mod tests {
 
     #[test]
     fn plus_and_minus_mark_and_unmark_by_pattern() {
-        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &ui());
+        let (mut app, effects) =
+            App::new(Path::new("/srv"), Path::new("/home/me"), &ui(), &transfer());
         let entries = vec![
             file("a.md", 10),
             file("B.MD", 20),
@@ -1823,7 +1840,8 @@ mod tests {
 
     #[test]
     fn f8_names_what_it_deletes_and_no_keeps_it() {
-        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &ui());
+        let (mut app, effects) =
+            App::new(Path::new("/srv"), Path::new("/home/me"), &ui(), &transfer());
         let entries = vec![file("a.txt", 1), file("b.txt", 2), dir("c")];
         answer(&mut app, effects, &Listing::Dir(entries));
         app.handle(action(Action::Delete));
@@ -2020,6 +2038,22 @@ mod tests {
         assert!(screen(&mut app).contains("[ ] Preserve attributes"));
         let (_, _, _, _, options) = copy_job(app.handle(action(Action::Confirm)));
         assert!(!options.preserve);
+    }
+
+    #[test]
+    fn copies_write_directly_without_atomic_upload() {
+        let transfer = TransferConfig {
+            atomic_upload: false,
+        };
+        let (mut app, effects) =
+            App::new(Path::new("/srv"), Path::new("/home/me"), &ui(), &transfer);
+        answer(&mut app, effects, &Listing::Dir(vec![dir("left")]));
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Copy));
+        type_text(&mut app, "/tmp");
+        let (_, _, target, _, options) = copy_job(app.handle(action(Action::Confirm)));
+        assert_eq!(target, local("/tmp"));
+        assert!(!options.atomic);
     }
 
     #[test]
@@ -2458,7 +2492,8 @@ mod tests {
             show_hidden: false,
             ..ui()
         };
-        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &ui);
+        let (mut app, effects) =
+            App::new(Path::new("/srv"), Path::new("/home/me"), &ui, &transfer());
         answer(
             &mut app,
             effects,
@@ -2508,7 +2543,8 @@ mod tests {
             type_to_search: false,
             ..ui()
         };
-        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &ui);
+        let (mut app, effects) =
+            App::new(Path::new("/srv"), Path::new("/home/me"), &ui, &transfer());
         answer(
             &mut app,
             effects,

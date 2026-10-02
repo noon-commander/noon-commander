@@ -48,7 +48,7 @@
 - [x] F8 delete
 - [x] VFS: read and write files as streams
 - [x] F5 copy in any direction, with progress, cancellation, and a question for taken names
-- [ ] `[transfer]` settings: `atomic_upload`
+- [x] `[transfer]` settings: `atomic_upload`
 - [ ] F6 move/rename
 - [ ] F3 viewer, F4 edit via `$EDITOR` (suspends and resumes the TUI)
 - [ ] Background job queue

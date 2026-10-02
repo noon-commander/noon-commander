@@ -75,3 +75,5 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   symlinks; times and permissions are kept unless Preserve attributes is off. Files are
   written under a temporary name and renamed when complete, so a cancelled copy leaves no
   half file. A taken name asks with both sizes and times: Yes, No, All, None, Older, Abort.
+- `[transfer] atomic_upload = false` writes copies to their targets directly instead of under
+  a temporary name.

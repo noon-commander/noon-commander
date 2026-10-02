@@ -26,6 +26,26 @@ pub struct Config {
     pub hosts: BTreeMap<String, HostConfig>,
     /// `[ui]`: how the TUI looks.
     pub ui: UiConfig,
+    /// `[transfer]`: how files are copied.
+    pub transfer: TransferConfig,
+}
+
+/// The `[transfer]` section.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct TransferConfig {
+    /// Whether a copy is written under a hidden temporary name next to its target and renamed
+    /// when complete, so that the target never holds part of a file; otherwise the target is
+    /// written directly. Default: `true`.
+    pub atomic_upload: bool,
+}
+
+impl Default for TransferConfig {
+    fn default() -> Self {
+        Self {
+            atomic_upload: true,
+        }
+    }
 }
 
 /// The `[ui]` section. Values are checked by the TUI, which knows its languages.
@@ -215,7 +235,9 @@ mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
 
-    use super::{Config, DEFAULT_CONFIG, DiscoveryConfig, HostConfig, SshConfig, UiConfig};
+    use super::{
+        Config, DEFAULT_CONFIG, DiscoveryConfig, HostConfig, SshConfig, TransferConfig, UiConfig,
+    };
     use crate::{ConfigError, write_default_config};
 
     const ORIGIN: &str = "/cfg/sftp-tui/config.toml";
@@ -258,6 +280,9 @@ mod tests {
         icons = false
         show_hidden = false
         type_to_search = false
+
+        [transfer]
+        atomic_upload = false
     "#;
 
     fn full() -> Config {
@@ -289,6 +314,9 @@ mod tests {
                 show_hidden: false,
                 type_to_search: false,
             },
+            transfer: TransferConfig {
+                atomic_upload: false,
+            },
         }
     }
 
@@ -309,6 +337,7 @@ mod tests {
         assert!(config.ui.icons);
         assert!(config.ui.show_hidden);
         assert!(config.ui.type_to_search);
+        assert!(config.transfer.atomic_upload);
     }
 
     #[test]

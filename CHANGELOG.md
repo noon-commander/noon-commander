@@ -63,6 +63,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   terminal's own colors. In both, directories are bold.
 - Panels and dialogs are framed with double lines (`═`, `║`, `╔`), as in mc;
   `[ui] borders = "single"` draws single ones (`─`, `│`, `┌`).
+- Dialogs leave a blank cell between their frame and their edge, as in mc.
 - F1 shows the keys of panels, the host list, quick search, and dialogs, with what they do,
   read from the keymap; the F-key bar shows `1Help`.
 - Ctrl-U swaps the panels; Alt-O opens the directory or host under the cursor in the other

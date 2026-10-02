@@ -5,7 +5,7 @@ use std::fmt;
 
 use noc_ssh::askpass::PromptKind;
 use ratatui::Frame;
-use ratatui::layout::{Position, Rect};
+use ratatui::layout::{Margin, Position, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear};
@@ -23,6 +23,8 @@ use crate::i18n::fl;
 const SECRET_CAPACITY: usize = 1024;
 /// Widest a dialog gets, in cells, borders included.
 const MAX_WIDTH: u16 = 76;
+/// Cells between a dialog's frame and its edge, as mc leaves them.
+const MARGIN: u16 = 1;
 
 /// Sends the answer to a prompt back to ssh; `None` declines it.
 pub(crate) struct Reply(Box<dyn FnOnce(Option<SecretString>) + Send>);
@@ -573,9 +575,9 @@ pub(crate) fn button_line(
     Line::from(spans).centered()
 }
 
-/// Draws an empty dialog box of `size` centered in `area`, with its title, the theme's frame
-/// lines, and mc's shadow, and returns the room inside, one column in from the frame on either
-/// side.
+/// Draws an empty dialog box centered in `area`: a frame of `size` with its title in the
+/// theme's lines, a blank cell around it where there is room, and mc's shadow. Returns the room
+/// inside, one column in from the frame on either side.
 pub(crate) fn draw_box(
     frame: &mut Frame<'_>,
     area: Rect,
@@ -584,11 +586,19 @@ pub(crate) fn draw_box(
     colors: Colors,
     theme: &Theme,
 ) -> Rect {
-    let (width, height) = (width.min(area.width), height.min(area.height));
+    // On a small screen the frame keeps its room and the margin gives way.
+    let fit = |size: u16, room: u16| {
+        let size = size.min(room);
+        let margin = ((room - size) / 2).min(MARGIN);
+        (size + 2 * margin, margin)
+    };
+    let (width, margin_x) = fit(width, area.width);
+    let (height, margin_y) = fit(height, area.height);
     let x = area.x + (area.width - width) / 2;
     let y = area.y + (area.height - height) / 2;
     let outer = Rect::new(x, y, width, height);
     frame.render_widget(Clear, outer);
+    frame.render_widget(Block::new().style(colors.body), outer);
     if let Some(shadow) = theme.shadow {
         // Two columns to the right and a row below, as mc draws it.
         let right = Rect::new(outer.right(), outer.y + 1, 2, outer.height);
@@ -604,8 +614,9 @@ pub(crate) fn draw_box(
         .border_type(theme.border_type())
         .title(title)
         .style(colors.body);
-    let inner = block.inner(outer).inner(ratatui::layout::Margin::new(1, 0));
-    frame.render_widget(block, outer);
+    let framed = outer.inner(Margin::new(margin_x, margin_y));
+    let inner = block.inner(framed).inner(Margin::new(1, 0));
+    frame.render_widget(block, framed);
     inner
 }
 
@@ -761,22 +772,29 @@ mod tests {
         let terminal = draw_themed(&dialog, 50, 9, &Theme::mc_classic());
         let buffer = terminal.backend().buffer();
         let colors = |x: u16, y: u16| (buffer[(x, y)].fg, buffer[(x, y)].bg);
-        // The dialog spans columns 2 … 47 and rows 1 … 6.
+        // The frame spans columns 2 … 47 and rows 1 … 6, and the margin around it the rest of
+        // columns 1 … 48 and rows 0 … 7.
         assert_eq!(colors(2, 1), (Color::Black, Color::Gray), "frame");
+        assert_eq!(buffer[(2, 1)].symbol(), "╔");
         assert_eq!(colors(4, 1), (Color::Blue, Color::Gray), "title");
         assert_eq!(colors(4, 3), (Color::Black, Color::Cyan), "field");
+        for (x, y) in [(1, 0), (1, 3), (48, 3), (10, 0), (10, 7)] {
+            assert_eq!(colors(x, y).1, Color::Gray, "margin at {x}, {y}");
+            assert_eq!(buffer[(x, y)].symbol(), " ", "margin at {x}, {y}");
+        }
+        assert_eq!(colors(0, 3).1, Color::Reset, "outside");
         assert_eq!(
-            colors(48, 2),
+            colors(49, 2),
             (Color::DarkGray, Color::Black),
             "shadow to the right"
         );
         assert_eq!(
-            colors(10, 7),
+            colors(10, 8),
             (Color::DarkGray, Color::Black),
             "shadow below"
         );
         assert_eq!(
-            colors(2, 7).1,
+            colors(2, 8).1,
             Color::Reset,
             "the shadow starts two columns in"
         );

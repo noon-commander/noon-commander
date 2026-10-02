@@ -436,6 +436,9 @@ Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
   bar; red error dialogs), and `terminal`, the terminal's own colors with reverse video.
   `ui.theme` picks one; an unknown name is an error. Only the 16 ANSI colors are used, so the
   terminal's palette decides the exact shades. User themes in `themes/` are planned for M4.
+  Panels and dialogs are framed with double lines unless `ui.borders` is `single`; as in mc,
+  a dialog leaves a blank cell between its frame and its edge, which gives way on a screen too
+  small for it.
 - **Icons.** Nerd Fonts v3 glyphs, on by default (`ui.icons`), in front of each name: our own for
   directories, `..`, links, broken links, FIFOs, sockets, devices, executables, `[Local]`, and
   hosts; `devicons` for files by name or extension. devicons asks the disk whether a name it

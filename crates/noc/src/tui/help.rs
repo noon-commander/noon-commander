@@ -100,7 +100,7 @@ impl Help {
     /// Draws the help over most of `area`.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let width = MAX_WIDTH.min(area.width.saturating_sub(4)).max(20);
-        let height = area.height.saturating_sub(2).max(3);
+        let height = area.height.saturating_sub(4).max(3);
         let colors = Colors::of(theme, false);
         let size = (width, height);
         let inner = draw_box(frame, area, size, &fl!("help-title"), colors, theme);

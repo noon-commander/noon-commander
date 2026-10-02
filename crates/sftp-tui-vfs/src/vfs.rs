@@ -11,17 +11,50 @@ pub trait VfsPath: Clone + fmt::Debug + Send + Sync + 'static {
     /// The entry `name`, as a directory listing names it, of the directory at this path.
     #[must_use]
     fn join_name(&self, name: &[u8]) -> Self;
+
+    /// The last component; `None` for `/` and the empty path.
+    fn name(&self) -> Option<&[u8]>;
+
+    /// The path without its last component; `None` for `/` and the empty path.
+    fn parent(&self) -> Option<Self>;
+
+    /// The path for messages, with invalid UTF-8 replaced.
+    fn display(&self) -> String;
 }
 
 impl VfsPath for PathBuf {
     fn join_name(&self, name: &[u8]) -> Self {
         self.join(OsStr::from_bytes(name))
     }
+
+    fn name(&self) -> Option<&[u8]> {
+        self.file_name().map(OsStr::as_bytes)
+    }
+
+    fn parent(&self) -> Option<Self> {
+        self.as_path().parent().map(std::path::Path::to_path_buf)
+    }
+
+    fn display(&self) -> String {
+        self.as_path().display().to_string()
+    }
 }
 
 impl VfsPath for RemotePath {
     fn join_name(&self, name: &[u8]) -> Self {
         self.join(name)
+    }
+
+    fn name(&self) -> Option<&[u8]> {
+        self.file_name()
+    }
+
+    fn parent(&self) -> Option<Self> {
+        Self::parent(self)
+    }
+
+    fn display(&self) -> String {
+        Self::display(self).into_owned()
     }
 }
 

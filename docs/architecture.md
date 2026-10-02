@@ -186,6 +186,20 @@ first. Listings report symlinks without following them, so a link goes and its t
 A directory in which something stays (skipped, or unreadable) is left alone without asking
 again, and an entry that is already gone counts as deleted.
 
+Copying works between any two backends (`copy` takes an `Endpoint` for each side: a `Vfs`
+and how its paths are reported). If the target is a directory, the sources go into it under
+their own names; otherwise a single source becomes the target, and several make it a new
+directory. Directories merge into a directory of the same name; symlinks are copied as
+symlinks, with their targets as stored; FIFOs, sockets, and devices fail. The job counts
+entries and bytes first, then copies parents before what they hold, reporting progress after
+every chunk. With `preserve`, copies get the modification times and permission bits of their
+sources, directories last, since writing into a directory changes its time. With `atomic`,
+each file is written under a hidden temporary name next to its target
+(`.name.sftp-tui-PID-N`) and renamed when complete, so the target never holds part of a
+file; without it, the target is written directly. Either way, a file that does not finish
+(an error, Skip, or cancellation) is removed. A taken name is, for now, a failure like any
+other; questions about overwriting follow.
+
 ## Configuration and paths
 
 sftp-tui uses the XDG layout on every platform, including macOS, and respects the `XDG_*`

@@ -26,6 +26,9 @@ pub struct Progress<P> {
     pub items_done: u64,
     /// Entries the job found to work on.
     pub items_total: u64,
+    /// Bytes of files done or skipped so far; zero for jobs that do not move data.
+    pub bytes_done: u64,
+    pub bytes_total: u64,
 }
 
 /// A report from a running job.

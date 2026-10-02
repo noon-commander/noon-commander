@@ -137,6 +137,8 @@ async fn remove<V: Vfs>(
                 current: item.path.clone(),
                 items_done: outcome.done + outcome.skipped,
                 items_total: total,
+                bytes_done: 0,
+                bytes_total: 0,
             }));
             loop {
                 let result = if item.dir {
@@ -174,13 +176,13 @@ mod tests {
     use std::fs;
     use std::os::unix::fs::{PermissionsExt as _, symlink};
     use std::path::{Path, PathBuf};
-    use std::process::Stdio;
 
-    use sftp_tui_vfs::{LocalFs, RemotePath, SftpFs};
+    use sftp_tui_vfs::{LocalFs, RemotePath};
     use tokio::sync::mpsc;
     use tokio_util::sync::CancellationToken;
 
     use super::*;
+    use crate::testing;
 
     /// Deletes `targets` with `vfs`, answering failures with `answers` in turn, and returns
     /// the outcome, the paths that failed, and the totals that progress reported.
@@ -408,32 +410,11 @@ mod tests {
         assert!(outcome.aborted);
     }
 
-    /// A local `sftp-server` that starts in `dir`, if there is one.
-    async fn sftp_server(dir: &Path) -> Option<(tokio::process::Child, SftpFs)> {
-        let program = ["/usr/libexec/sftp-server", "/usr/lib/openssh/sftp-server"]
-            .into_iter()
-            .map(Path::new)
-            .find(|path| path.exists())?;
-        let mut child = tokio::process::Command::new(program)
-            .arg("-e")
-            .arg("-d")
-            .arg(dir)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
-            .unwrap();
-        let stdin = child.stdin.take().unwrap();
-        let stdout = child.stdout.take().unwrap();
-        let fs = SftpFs::from_pipes(stdin, stdout).await.unwrap();
-        Some((child, fs))
-    }
-
     #[tokio::test]
     async fn deletes_remote_trees_without_following_links() {
         let root = tempfile::tempdir().unwrap();
         let dir = tree(root.path());
-        let Some((_server, fs)) = sftp_server(root.path()).await else {
+        let Some((_server, fs)) = testing::sftp_server(root.path()).await else {
             return;
         };
         let targets = vec![RemotePath::from("dir")];

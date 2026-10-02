@@ -101,6 +101,12 @@ Work is done when all of them pass.
 - Icons: Nerd Fonts v3, written as literal glyphs in Rust and TOML, never as escape sequences.
   Icons are optional (`ui.icons`, on by default); without them use mc markers: `/` directory,
   `*` executable, `@` symlink, `~` symlink to a directory.
+- Settings: every option in `config.toml` must be editable in the UI, in the Configuration
+  dialog (Options → Configuration…); users should never have to edit the file by hand. A new
+  option ships together with its row in the dialog (name, hint, Fluent text) and is written
+  back through `noc_config::save_config` ([ADR 0009](docs/adr/0009-configuration-dialog-writes-config-toml.md)).
+  Apply it at once where the running app can; otherwise the dialog says it takes effect after
+  a restart.
 
 ## SSH integration
 

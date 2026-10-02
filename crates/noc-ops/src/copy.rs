@@ -216,6 +216,7 @@ pub async fn copy<A: Vfs, B: Vfs, L>(
         items_total: 0,
         bytes_done: 0,
         bytes_total: 0,
+        bytes_copied: 0,
         policy: options.overwrite.then_some(Policy::OverwriteAll),
     };
     let count = sources.len();
@@ -254,6 +255,7 @@ pub async fn move_within<V: Vfs, L>(
         items_total: sources.len() as u64,
         bytes_done: 0,
         bytes_total: 0,
+        bytes_copied: 0,
         policy: options.overwrite.then_some(Policy::OverwriteAll),
     };
     let count = sources.len();
@@ -280,6 +282,9 @@ struct Job<'a, 'r, A: Vfs, B: Vfs, L> {
     items_total: u64,
     bytes_done: u64,
     bytes_total: u64,
+    /// Bytes read and written, for speeds: unlike `bytes_done`, it neither jumps on a skip nor
+    /// goes back on a retry.
+    bytes_copied: u64,
     policy: Option<Policy>,
 }
 
@@ -549,6 +554,7 @@ impl<A: Vfs, B: Vfs, L> Job<'_, '_, A, B, L> {
             items_total: self.items_total,
             bytes_done: self.bytes_done,
             bytes_total: self.bytes_total,
+            bytes_copied: self.bytes_copied,
         }));
     }
 
@@ -753,11 +759,13 @@ impl<A: Vfs, B: Vfs, L> Job<'_, '_, A, B, L> {
                 .await
                 .map_err(|error| Stop::Failed((self.from.report)(&item.source), error))?;
             let Some(chunk) = chunk else { break };
-            self.bytes_done += chunk.len() as u64;
+            let size = chunk.len() as u64;
+            self.bytes_done += size;
             writer
                 .write(chunk)
                 .await
                 .map_err(|error| self.at_target(written, error))?;
+            self.bytes_copied += size;
             self.progress(&item.source);
         }
         writer
@@ -841,6 +849,8 @@ mod tests {
     struct Seen {
         failed: Vec<String>,
         bytes: Vec<(u64, u64)>,
+        /// The largest `bytes_copied` reported.
+        copied: u64,
         /// Each taken name: the target, and the sizes of the source and the target.
         exists: Vec<(String, Option<u64>, Option<u64>)>,
     }
@@ -930,6 +940,8 @@ mod tests {
                 Event::Scanning { .. } => {}
                 Event::Progress(progress) => {
                     seen.bytes.push((progress.bytes_done, progress.bytes_total));
+                    assert!(progress.bytes_copied >= seen.copied, "it never goes back");
+                    seen.copied = progress.bytes_copied;
                     if script.cancel_midway && progress.bytes_done > 0 {
                         cancel.cancel();
                     }
@@ -1068,6 +1080,7 @@ mod tests {
             seen.bytes
         );
         assert_eq!(seen.bytes.iter().map(|(done, _)| *done).max(), Some(total));
+        assert_eq!(seen.copied, total);
     }
 
     #[tokio::test]
@@ -1144,6 +1157,7 @@ mod tests {
         // dir and sub (merged), a, link, and dangling; b stays.
         assert_eq!((outcome.done, outcome.skipped), (5, 1));
         assert_eq!(leftovers(&dir), Vec::<PathBuf>::new());
+        assert_eq!(seen.copied, 10, "only a moved data");
     }
 
     #[tokio::test]

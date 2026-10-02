@@ -46,6 +46,9 @@ pub struct Progress<P> {
     /// Bytes of files done or skipped so far; zero for jobs that do not move data.
     pub bytes_done: u64,
     pub bytes_total: u64,
+    /// Bytes actually read and written so far, retried ones included and skipped ones not: it
+    /// only grows, so speeds follow it rather than `bytes_done`.
+    pub bytes_copied: u64,
 }
 
 /// A report from a running job.

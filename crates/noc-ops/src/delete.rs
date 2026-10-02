@@ -139,6 +139,7 @@ async fn remove<V: Vfs>(
                 items_total: total,
                 bytes_done: 0,
                 bytes_total: 0,
+                bytes_copied: 0,
             }));
             loop {
                 let result = if item.dir {

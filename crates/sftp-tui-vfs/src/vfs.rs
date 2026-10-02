@@ -81,6 +81,20 @@ pub trait Vfs: Send + Sync {
         to: &Self::Path,
     ) -> impl Future<Output = Result<(), VfsError>> + Send;
 
+    /// What the symlink at `path` points to, as stored: relative or absolute, never resolved.
+    fn read_link(
+        &self,
+        path: &Self::Path,
+    ) -> impl Future<Output = Result<Vec<u8>, VfsError>> + Send;
+
+    /// Makes a symlink at `path` that points to `target`, stored as given;
+    /// [`VfsError::AlreadyExists`] if the name is taken.
+    fn create_symlink(
+        &self,
+        target: &[u8],
+        path: &Self::Path,
+    ) -> impl Future<Output = Result<(), VfsError>> + Send;
+
     /// Sets the permission bits (the lower twelve of `mode`) of `path`, following symlinks.
     fn set_permissions(
         &self,

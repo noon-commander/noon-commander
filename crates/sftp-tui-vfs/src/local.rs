@@ -1,6 +1,7 @@
+use std::ffi::OsStr;
 use std::fs;
 use std::io;
-use std::os::unix::ffi::OsStringExt;
+use std::os::unix::ffi::{OsStrExt as _, OsStringExt};
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -126,6 +127,19 @@ impl Vfs for LocalFs {
             };
             VfsError::local(err, path)
         })
+    }
+
+    async fn read_link(&self, path: &PathBuf) -> Result<Vec<u8>, VfsError> {
+        tokio::fs::read_link(path)
+            .await
+            .map(|target| target.into_os_string().into_vec())
+            .map_err(|err| VfsError::local(err, path))
+    }
+
+    async fn create_symlink(&self, target: &[u8], path: &PathBuf) -> Result<(), VfsError> {
+        tokio::fs::symlink(OsStr::from_bytes(target), path)
+            .await
+            .map_err(|err| VfsError::local(err, path))
     }
 
     async fn set_permissions(&self, path: &PathBuf, mode: u32) -> Result<(), VfsError> {
@@ -314,6 +328,12 @@ mod tests {
     async fn changes_entries() {
         let dir = tempfile::tempdir().unwrap();
         fixture::check_changes(&LocalFs, dir.path(), |name| dir.path().join(name)).await;
+    }
+
+    #[tokio::test]
+    async fn makes_and_reads_links() {
+        let dir = tempfile::tempdir().unwrap();
+        fixture::check_links(&LocalFs, dir.path(), |name| dir.path().join(name)).await;
     }
 
     #[tokio::test]

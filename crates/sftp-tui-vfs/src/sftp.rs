@@ -277,6 +277,28 @@ impl Vfs for SftpFs {
         }
     }
 
+    async fn read_link(&self, path: &RemotePath) -> Result<Vec<u8>, VfsError> {
+        let mut fs = self.sftp.fs();
+        fs.read_link(wire_path(path))
+            .await
+            .map(|target| target.into_os_string().into_vec())
+            .map_err(|err| VfsError::remote(err, path))
+    }
+
+    async fn create_symlink(&self, target: &[u8], path: &RemotePath) -> Result<(), VfsError> {
+        // The client sends only UTF-8 paths; others it would refuse anyway.
+        let target = RemotePath::from(target);
+        let result = self
+            .sftp
+            .fs()
+            .symlink(target.as_path(), wire_path(path))
+            .await;
+        match result {
+            Ok(()) => Ok(()),
+            Err(err) => Err(self.naming_error(err, path).await),
+        }
+    }
+
     async fn set_permissions(&self, path: &RemotePath, mode: u32) -> Result<(), VfsError> {
         let bits = u16::try_from(mode & 0o7777).unwrap_or_else(|_| unreachable!());
         let mut fs = self.sftp.fs();
@@ -562,6 +584,16 @@ mod tests {
         };
         assert!(server.fs.sftp.support_posix_rename(), "OpenSSH has it");
         fixture::check_changes(&server.fs, dir.path(), |name: &str| RemotePath::from(name)).await;
+        server.stop().await;
+    }
+
+    #[tokio::test]
+    async fn makes_and_reads_links() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(server) = Server::start(dir.path()).await else {
+            return;
+        };
+        fixture::check_links(&server.fs, dir.path(), |name: &str| RemotePath::from(name)).await;
         server.stop().await;
     }
 

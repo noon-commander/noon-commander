@@ -174,6 +174,38 @@ pub(crate) async fn check_attributes<V: Vfs>(vfs: &V, root: &Path, path: impl Fn
     assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
 }
 
+/// Makes and reads symlinks through `vfs` in `root`, an empty local directory that `path`
+/// names entries of for `vfs`, and checks them on disk.
+pub(crate) async fn check_links<V: Vfs>(vfs: &V, root: &Path, path: impl Fn(&str) -> V::Path) {
+    let on_disk = |name: &str| root.join(name);
+    fs::write(on_disk("file"), "x").unwrap();
+    for (name, target) in [
+        ("relative", "file"),
+        ("dangling", "../nowhere/x"),
+        ("absolute", "/tmp"),
+    ] {
+        vfs.create_symlink(target.as_bytes(), &path(name))
+            .await
+            .unwrap();
+        assert_eq!(
+            fs::read_link(on_disk(name)).unwrap(),
+            PathBuf::from(target),
+            "stored as given: {name}"
+        );
+        assert_eq!(vfs.read_link(&path(name)).await.unwrap(), target.as_bytes());
+    }
+    assert_eq!(fs::read_to_string(on_disk("relative")).unwrap(), "x");
+
+    let err = vfs
+        .create_symlink(b"file", &path("file"))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, VfsError::AlreadyExists(_)), "{err:?}");
+    let err = vfs.read_link(&path("missing")).await.unwrap_err();
+    assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
+    assert!(vfs.read_link(&path("file")).await.is_err(), "not a link");
+}
+
 /// `size` bytes that differ from offset to offset, so that a piece in the wrong place shows.
 pub(crate) fn pattern(size: usize) -> Vec<u8> {
     (0..size)

@@ -54,13 +54,64 @@ Non-goals: forwarding of any kind, a built-in SSH implementation, a password man
 
 ## Building
 
+### Prerequisites
+
+- A Rust toolchain, 1.88 or newer, installed with [rustup](https://rustup.rs):
+
+  ```sh
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  rustup update stable
+  ```
+
+- A C toolchain for linking: `xcode-select --install` on macOS, or `build-essential` (Debian,
+  Ubuntu) or `base-devel` (Arch) on Linux.
+- OpenSSH 8.7 or newer at runtime (`ssh -V`).
+
+### Build and run
+
 ```sh
+git clone https://github.com/0ldkettle/noon-commander.git
+cd noon-commander
 cargo build --release
 ./target/release/noc --version
+./target/release/noc
 ```
 
+The version line shows the compile-time features, e.g. `noc 0.1.0 (-forwarding)`.
+
+### Install
+
+To put `noc` into `~/.cargo/bin` (make sure it is on your `PATH`):
+
+```sh
+cargo install --path crates/noc --locked
+```
+
+### Optional features
+
+Port, agent, X11, and tunnel forwarding are compiled out by default
+([ADR 0004](docs/adr/0004-forwarding-compile-time-feature.md)). To build with them:
+
+```sh
+cargo build --release --features forwarding
+```
+
+### Tests
+
+```sh
+cargo test --workspace
+```
+
+The SFTP tests run against the local `sftp-server` over pipes, with no network and no real
+`ssh`. If it is not in a standard location (`/usr/libexec/sftp-server` on macOS,
+`/usr/lib/openssh/sftp-server` on Debian and Ubuntu), set `SFTP_SERVER` to its path; otherwise
+those tests are skipped. The full set of checks is listed in [AGENTS.md](AGENTS.md#commands).
+
+## Configuration
+
 Configuration lives in `~/.config/noc/`, following the XDG layout on macOS too;
-`noc config init` writes the commented defaults.
+`noc config init` writes the commented defaults, and `noc config paths` shows every file and
+directory Noon Commander uses.
 
 ## Contributing
 

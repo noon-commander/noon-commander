@@ -36,7 +36,7 @@ pub enum ConfigError {
         host: String,
         reason: String,
     },
-    /// `hosts.toml` is not valid TOML, so it is not changed.
+    /// A file to edit, `config.toml` or `hosts.toml`, is not valid TOML, so it is not changed.
     #[error("cannot edit {path}")]
     Edit {
         path: PathBuf,

@@ -296,8 +296,9 @@ Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
 - **Marks.** As in mc: Insert or Ctrl-T marks the entry under the cursor, or unmarks it, and
   moves down (Shift-Down too, Shift-Up moves up); `*` (or Alt-*) inverts the marks on files,
   leaving directories as they are; `..` and the rows of the virtual root cannot be marked.
-  Marked rows are yellow, and the line below the listing shows the size of the marked files
-  and how many entries are marked, such as `12,345 B in 3 files`. Marks are names, so they
+  Marked rows are underlined, and yellow in mc-classic (bold, which mc uses without colors, is
+  for directories); the line below the listing shows the size of the marked files and how
+  many entries are marked, such as `12,345 B in 3 files`. Marks are names, so they
   survive sorting and Ctrl-R (for names still there); another directory starts unmarked, and
   entries that get hidden lose their marks, so that no operation acts on what is not shown.
   `+` (or Alt-+) marks and `-` (or `\`, Alt--) unmarks the names that match a shell pattern,

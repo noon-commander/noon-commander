@@ -95,12 +95,12 @@ impl Theme {
             panel_title_active: on(Color::Black, Color::Cyan),
             header: on(Color::LightYellow, Color::Blue),
             cursor: on(Color::Black, Color::Cyan),
-            marked: on(Color::LightYellow, Color::Blue),
-            marked_cursor: on(Color::LightYellow, Color::Cyan),
+            marked: on(Color::LightYellow, Color::Blue).underlined(),
+            marked_cursor: on(Color::LightYellow, Color::Cyan).underlined(),
             quick_search: on(Color::Black, Color::Cyan),
             icon: fg(Color::Gray).dim(),
             file: fg(Color::Gray),
-            directory: fg(Color::White),
+            directory: fg(Color::White).bold(),
             executable: fg(Color::LightGreen),
             symlink: fg(Color::Gray),
             stale_link: fg(Color::LightRed),
@@ -137,13 +137,13 @@ impl Theme {
             panel_title_active: reversed,
             header: plain,
             cursor: reversed,
-            // As mc draws marks in black and white.
-            marked: Style::new().bold(),
-            marked_cursor: reversed.bold(),
+            // Not bold as in mc: that is what directories are.
+            marked: Style::new().underlined(),
+            marked_cursor: reversed.underlined(),
             quick_search: reversed,
             icon: plain.dim(),
             file: plain,
-            directory: plain,
+            directory: plain.bold(),
             executable: plain,
             symlink: plain,
             stale_link: plain,
@@ -249,6 +249,8 @@ mod tests {
             Some(Color::LightGreen)
         );
         assert_eq!(fg(entry(FileKind::File, 0o644, None)), Some(Color::Gray));
+        let directory = theme.entry(&entry(FileKind::Dir, 0o755, None));
+        assert_eq!(directory, Style::new().fg(Color::White).bold());
         assert_eq!(theme.icon, Style::new().fg(Color::Gray).dim());
         assert_eq!(
             fg(entry(FileKind::CharDevice, 0o644, None)),

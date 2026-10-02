@@ -812,7 +812,8 @@ impl Panel {
         let total_width = u16::try_from(cells::width(&total)).unwrap_or(u16::MAX);
         let x = area.x + area.width.saturating_sub(total_width) / 2;
         frame.render_widget(
-            Line::styled(total, theme.marked),
+            // An underline would run along the frame.
+            Line::styled(total, theme.marked.not_underlined()),
             Rect::new(x, y, total_width.min(inside), 1),
         );
     }
@@ -1875,7 +1876,7 @@ mod tests {
 
     #[test]
     fn marked_rows_and_their_total_are_yellow() {
-        use ratatui::style::Color;
+        use ratatui::style::{Color, Modifier};
 
         let mut panel = loaded("/srv", listing());
         panel.handle(Action::End);
@@ -1895,6 +1896,14 @@ mod tests {
         let colors = |x: u16, y: u16| (buffer[(x, y)].fg, buffer[(x, y)].bg);
         // Rows: frame, header, `..`, alpha-link, Beta, bin, .hidden, Alpha.md, zeta.txt.
         assert_eq!(colors(1, 7), (Color::LightYellow, Color::Blue), "marked");
+        let underlined = |x: u16, y: u16| buffer[(x, y)].modifier.contains(Modifier::UNDERLINED);
+        assert!(underlined(1, 7), "marked, and underlined");
+        assert!(underlined(1, 8), "under the cursor too");
+        assert!(!underlined(1, 6), "not the others");
+        assert!(
+            buffer[(1, 4)].modifier.contains(Modifier::BOLD),
+            "a directory is bold"
+        );
         assert_eq!(
             colors(30, 7),
             (Color::LightYellow, Color::Blue),

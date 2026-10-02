@@ -575,8 +575,8 @@ pub(crate) fn button_line(
     Line::from(spans).centered()
 }
 
-/// Draws an empty dialog box centered in `area`: a frame of `size` with its title in the
-/// theme's lines, a blank cell around it where there is room, and mc's shadow. Returns the room
+/// Draws an empty dialog box centered in `area`: a frame of `size` in the theme's lines with
+/// its title bold in the middle, a blank cell around it where there is room, and mc's shadow. Returns the room
 /// inside, one column in from the frame on either side.
 pub(crate) fn draw_box(
     frame: &mut Frame<'_>,
@@ -609,7 +609,7 @@ pub(crate) fn draw_box(
                 .set_style(rect.intersection(area), shadow);
         }
     }
-    let title = Line::styled(format!(" {title} "), colors.title);
+    let title = Line::styled(format!(" {title} "), colors.title.bold()).centered();
     let block = Block::bordered()
         .border_type(theme.border_type())
         .title(title)
@@ -624,6 +624,7 @@ pub(crate) fn draw_box(
 mod tests {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
+    use ratatui::buffer::Buffer;
     use secrecy::ExposeSecret as _;
 
     use super::*;
@@ -669,6 +670,15 @@ mod tests {
 
     fn secret() -> Dialog {
         Dialog::prompt("web", "deploy@10.0.0.5's password: ", PromptKind::Secret)
+    }
+
+    /// The column where `title` starts on the dialog's top row, row 1.
+    fn title_column(buffer: &Buffer, title: &str) -> u16 {
+        let row: String = (0..buffer.area.width)
+            .map(|x| buffer[(x, 1)].symbol())
+            .collect();
+        let start = row.find(title).unwrap();
+        u16::try_from(row[..start].chars().count()).unwrap()
     }
 
     #[test]
@@ -766,7 +776,7 @@ mod tests {
 
     #[test]
     fn mc_classic_draws_gray_dialogs_with_a_shadow() {
-        use ratatui::style::Color;
+        use ratatui::style::{Color, Modifier};
 
         let dialog = secret();
         let terminal = draw_themed(&dialog, 50, 9, &Theme::mc_classic());
@@ -776,7 +786,12 @@ mod tests {
         // columns 1 … 48 and rows 0 … 7.
         assert_eq!(colors(2, 1), (Color::Black, Color::Gray), "frame");
         assert_eq!(buffer[(2, 1)].symbol(), "╔");
-        assert_eq!(colors(4, 1), (Color::Blue, Color::Gray), "title");
+        let title = title_column(buffer, "web");
+        assert_eq!(colors(title, 1), (Color::Blue, Color::Gray), "title");
+        assert!(buffer[(title, 1)].modifier.contains(Modifier::BOLD));
+        // ` web ` between the corners in columns 2 and 47.
+        let (left, right) = (title - 1 - 3, 46 - (title + 3));
+        assert!(left.abs_diff(right) <= 1, "centered: {left} and {right}");
         assert_eq!(colors(4, 3), (Color::Black, Color::Cyan), "field");
         for (x, y) in [(1, 0), (1, 3), (48, 3), (10, 0), (10, 7)] {
             assert_eq!(colors(x, y).1, Color::Gray, "margin at {x}, {y}");
@@ -888,7 +903,7 @@ mod tests {
 
     #[test]
     fn errors_are_red_in_mc_classic() {
-        use ratatui::style::Color;
+        use ratatui::style::{Color, Modifier};
 
         let mut dialog = Dialog::error("Error", "Cannot create directory /x: already exists");
         let terminal = draw_themed(&dialog, 60, 8, &Theme::mc_classic());
@@ -896,7 +911,9 @@ mod tests {
         let colors = |x: u16, y: u16| (buffer[(x, y)].fg, buffer[(x, y)].bg);
         // The dialog spans columns 2 … 57 and rows 1 … 6.
         assert_eq!(colors(2, 1), (Color::White, Color::Red), "frame");
-        assert_eq!(colors(4, 1), (Color::LightYellow, Color::Red), "title");
+        let title = title_column(buffer, "Error");
+        assert_eq!(colors(title, 1), (Color::LightYellow, Color::Red), "title");
+        assert!(buffer[(title, 1)].modifier.contains(Modifier::BOLD));
         assert_eq!(colors(4, 2), (Color::White, Color::Red), "message");
         let (x, y) = (0..60)
             .flat_map(|x| (0..8).map(move |y| (x, y)))

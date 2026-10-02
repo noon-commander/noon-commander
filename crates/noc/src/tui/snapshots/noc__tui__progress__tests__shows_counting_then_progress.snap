@@ -3,7 +3,7 @@ source: crates/noc/src/tui/progress.rs
 expression: "draw_at(&view, start + secs(75))"
 ---
 "                                                                "
-"  ╔ Delete ══════════════════════════════════════════════════╗  "
+"  ╔═════════════════════════ Delete ═════════════════════════╗  "
 "  ║ Deleting                                                 ║  "
 "  ║ /srv/www/index.html                                      ║  "
 "  ║ █████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  25% ║  "

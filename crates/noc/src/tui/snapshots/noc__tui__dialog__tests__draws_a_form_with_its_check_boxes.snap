@@ -3,7 +3,7 @@ source: crates/noc/src/tui/dialog.rs
 expression: terminal.backend()
 ---
 "                                                            "
-"     ╔ Select ════════════════════════════════════════╗     "
+"     ╔════════════════════ Select ════════════════════╗     "
 "     ║ *.md                                           ║     "
 "     ║ [ ] Files only                                 ║     "
 "     ║ [x] Case sensitive                             ║     "

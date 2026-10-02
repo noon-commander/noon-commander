@@ -3,7 +3,7 @@ source: crates/noc/src/tui/dialog.rs
 expression: "draw(&dialog, 60, 14).backend()"
 ---
 "                                                            "
-"  ╔ web ═════════════════════════════════════════════════╗  "
+"  ╔════════════════════════ web ═════════════════════════╗  "
 "  ║ The authenticity of host 'web (10.0.0.5)' can't be   ║  "
 "  ║ established.                                         ║  "
 "  ║ ED25519 key fingerprint is                           ║  "

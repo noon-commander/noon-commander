@@ -430,7 +430,7 @@ impl Look<'_> {
                 (
                     self.decor.host(status, self.tick),
                     cells::sanitize(name.as_bytes()),
-                    Some(self.theme.host_status(status)),
+                    Some(self.theme.dialog_host_status(status)),
                 )
             }
         };
@@ -702,6 +702,39 @@ mod tests {
         menu.listed(2, Ok(reordered));
         assert_eq!(menu.chosen().map(key), Some(Key::Host("db".to_owned())));
         assert_eq!(menu.items().len(), 7);
+    }
+
+    #[test]
+    fn host_icons_show_on_the_gray_of_mc_classic() {
+        use ratatui::style::Color;
+
+        let mut menu = menu_at(Location::Root);
+        let mut terminal = Terminal::new(TestBackend::new(50, 14)).unwrap();
+        let hosts = |alias: &str| HostState {
+            status: match alias {
+                "web" => HostStatus::Connected,
+                "proxy" => HostStatus::Failed,
+                _ => HostStatus::Idle,
+            },
+            address: None,
+        };
+        terminal
+            .draw(|frame| {
+                let theme = Theme::mc_classic();
+                menu.render(frame, frame.area(), &theme, Decor::new(true), &hosts, 0);
+            })
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        // Rows 9 … 11 hold the hosts, below the cursor on Home; their icons are in column 5.
+        let colors = |y: u16| (buffer[(5, y)].fg, buffer[(5, y)].bg);
+        assert_eq!(colors(9), (Color::Green, Color::Gray), "connected");
+        assert_eq!(
+            colors(10),
+            (Color::Black, Color::Gray),
+            "idle: the dialog's own color"
+        );
+        assert_eq!(colors(11), (Color::Red, Color::Gray), "failed");
+        assert_eq!(buffer[(5, 10)].symbol(), "󰒋");
     }
 
     #[test]

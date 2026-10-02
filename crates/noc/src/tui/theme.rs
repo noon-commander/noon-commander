@@ -48,6 +48,9 @@ pub(crate) struct Theme {
     pub(crate) host_failed: Style,
     /// Host address from `ssh -G`.
     pub(crate) address: Style,
+    /// The status of a host in the location menu, drawn over `dialog`, which the panel colors
+    /// may not show on: idle, connecting, connected, failed.
+    pub(crate) dialog_host: [Style; 4],
     /// F-key bar: the key numbers.
     pub(crate) fkey_number: Style,
     /// F-key bar: the labels.
@@ -112,6 +115,13 @@ impl Theme {
             host_connected: fg(Color::LightGreen),
             host_failed: fg(Color::LightRed),
             address: fg(Color::Gray),
+            // Dark colors, as mc draws on its gray dialogs; idle takes the dialog's black.
+            dialog_host: [
+                Style::new(),
+                fg(Color::Yellow),
+                fg(Color::Green),
+                fg(Color::Red),
+            ],
             fkey_number: on(Color::White, Color::Black),
             fkey_label: on(Color::Black, Color::Cyan),
             dialog: on(Color::Black, Color::Gray),
@@ -157,6 +167,7 @@ impl Theme {
             host_connected: plain.bold(),
             host_failed: plain,
             address: plain,
+            dialog_host: [plain.dim(), plain, plain.bold(), plain],
             fkey_number: plain,
             fkey_label: reversed,
             dialog: plain,
@@ -233,6 +244,17 @@ impl Theme {
             HostStatus::Failed => self.host_failed,
         }
     }
+
+    /// The style of a host's status icon or marker in a dialog, such as the location menu.
+    pub(crate) fn dialog_host_status(&self, status: HostStatus) -> Style {
+        let [idle, connecting, connected, failed] = self.dialog_host;
+        match status {
+            HostStatus::Idle => idle,
+            HostStatus::Connecting => connecting,
+            HostStatus::Connected => connected,
+            HostStatus::Failed => failed,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -254,6 +276,38 @@ mod tests {
             },
             target_kind,
         }
+    }
+
+    #[test]
+    fn host_states_show_on_dialogs() {
+        let statuses = [
+            HostStatus::Idle,
+            HostStatus::Connecting,
+            HostStatus::Connected,
+            HostStatus::Failed,
+        ];
+        for theme in Theme::NAMES.iter().filter_map(|name| Theme::by_name(name)) {
+            let background = theme.dialog.bg;
+            for status in statuses {
+                let style = theme.dialog.patch(theme.dialog_host_status(status));
+                assert!(
+                    style.fg.is_none() || style.fg != background,
+                    "{status:?} on {background:?}"
+                );
+            }
+        }
+        let theme = Theme::mc_classic();
+        assert_eq!(
+            theme
+                .dialog
+                .patch(theme.dialog_host_status(HostStatus::Idle))
+                .fg,
+            Some(Color::Black)
+        );
+        assert_eq!(
+            theme.dialog_host_status(HostStatus::Connected).fg,
+            Some(Color::Green)
+        );
     }
 
     #[test]

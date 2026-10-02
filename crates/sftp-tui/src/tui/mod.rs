@@ -13,6 +13,7 @@ mod progress;
 mod root;
 mod tasks;
 mod theme;
+mod viewer;
 
 use std::io::{self, IsTerminal as _};
 use std::path::PathBuf;
@@ -58,6 +59,7 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
             result,
         } => tasks.run(app.created(side, &location, result)),
         Done::Job { id, event } => tasks.run(app.job_event(id, event)),
+        Done::Read { id, result } => app.read(id, result),
         Done::Connected {
             host,
             connection,

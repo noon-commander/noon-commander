@@ -318,6 +318,16 @@ Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
   unless `transfer.atomic_upload` is off.
   When the job ends, panels on the target, its parent, and the source directory read them
   again.
+- **F3 views** the file under the cursor, as mc does (on a directory it opens it): the
+  viewer takes the screen, with the path and the position (first line, lines, and how far
+  the last line on screen is) on top, and its own F-key bar. It reads the first 16 MiB,
+  locally or through the host's shared session, in the background (closing the viewer stops
+  that), and says so when the file is longer. Text is UTF-8 with invalid bytes replaced,
+  tabs go to stops of 8, `\r\n` ends lines, and control characters are shown safely. Long
+  lines wrap (F2 cuts them, and Left and Right scroll then); the position is a line and a
+  row within it, so that only the lines in view are wrapped, whatever the size of the file.
+  Keys follow mc's viewer: arrows, `j`/`k`, PgUp/PgDn, Space and `b`, Home/End, `g`/`G`,
+  and F3, F10, `q`, or Esc to close; F1 shows the help over it.
 - **F6 moves or renames** the marked entries, or the one under the cursor, with the dialog
   of F5 (`Move "x" to:`, without Preserve attributes: moves keep them); a new name in the
   field renames in place, as in mc. Locally, and within one host, the job renames
@@ -353,7 +363,7 @@ Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
   listing. Going up puts the cursor on the directory just left. A panel shows a `Location`, so
   the [virtual root](#virtual-root) is one more kind of listing.
 - **Keymap.** Keys map to `Action`s per context (`panel`, `root`, `quick_search`, `dialog`,
-  `dialog_input`; `viewer` and `menu` will follow). Each context falls back along a chain, for
+  `dialog_input`, `viewer`; `menu` will follow). Each context falls back along a chain, for
   example the root and quick search to the panel; the first context that knows a key sequence
   decides, except that a sequence it only starts does what a later context binds it to.
   Bindings are key sequences matched by prefix with a 1-second timeout, so a vim preset

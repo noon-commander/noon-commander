@@ -97,91 +97,7 @@ impl Keymap {
     /// The default preset, modelled on Midnight Commander. `Esc` followed by a digit stands for
     /// the F-key, for terminals that lack them.
     pub(crate) fn mc() -> Self {
-        use Action::{
-            Backspace, Cancel, Confirm, Copy, Delete, DeleteToEnd, DeleteToStart, Disconnect, Down,
-            End, Enter, Help, Home, InvertMarks, Left, Mark, MarkUp, Mkdir, Move, NextField,
-            OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent, PrevField, QuickSearch, Quit,
-            Redraw, Reload, Right, Select, SortByExtension, SortByName, SortBySize, SortByTime,
-            SwapPanels, SwitchPanel, Toggle, ToggleHidden, Unselect, Up,
-        };
-        let presets: [(Context, Preset); 5] = [
-            (
-                Context::Panel,
-                &[
-                    (Up, &["up", "ctrl-p"]),
-                    (Down, &["down", "ctrl-n"]),
-                    (PageUp, &["pageup", "alt-v"]),
-                    (PageDown, &["pagedown", "ctrl-v"]),
-                    (Home, &["home"]),
-                    (End, &["end"]),
-                    (Enter, &["enter"]),
-                    (Mark, &["insert", "ctrl-t", "shift-down"]),
-                    (MarkUp, &["shift-up"]),
-                    // mc takes `+`, `-`, `\`, and `*` as commands while its command line is
-                    // empty.
-                    (Select, &["+", "alt-+"]),
-                    (Unselect, &["-", "\\", "alt--"]),
-                    (InvertMarks, &["*", "alt-*"]),
-                    (Parent, &["ctrl-pageup"]),
-                    (SwitchPanel, &["tab"]),
-                    (SwapPanels, &["ctrl-u"]),
-                    (OtherPanelOpen, &["alt-o"]),
-                    (OtherPanelSync, &["alt-i"]),
-                    (Reload, &["ctrl-r"]),
-                    (Cancel, &["esc", "esc esc"]),
-                    (ToggleHidden, &["alt-."]),
-                    // mc leaves sorting to its menu; these are Far Manager's keys. macOS takes
-                    // them for keyboard navigation unless those shortcuts are turned off.
-                    (SortByName, &["ctrl-f3"]),
-                    (SortByExtension, &["ctrl-f4"]),
-                    (SortByTime, &["ctrl-f5"]),
-                    (SortBySize, &["ctrl-f6"]),
-                    (QuickSearch, &["ctrl-s", "alt-s"]),
-                    (Help, &["f1"]),
-                    (Copy, &["f5"]),
-                    (Move, &["f6"]),
-                    (Mkdir, &["f7"]),
-                    // In text fields, Delete deletes a character.
-                    (Delete, &["f8", "delete"]),
-                    (Quit, &["f10"]),
-                    (Redraw, &["ctrl-l"]),
-                ],
-            ),
-            (Context::Root, &[(Disconnect, &["f8"])]),
-            (
-                Context::QuickSearch,
-                &[(Backspace, &["backspace"]), (Cancel, &["esc"])],
-            ),
-            (
-                Context::Dialog,
-                &[
-                    (Up, &["up"]),
-                    (Down, &["down"]),
-                    (Left, &["left"]),
-                    (Right, &["right"]),
-                    (PageUp, &["pageup"]),
-                    (PageDown, &["pagedown"]),
-                    (Home, &["home"]),
-                    (End, &["end"]),
-                    (NextField, &["tab"]),
-                    (PrevField, &["backtab"]),
-                    (Confirm, &["enter"]),
-                    (Toggle, &["space"]),
-                    (Cancel, &["esc", "f10"]),
-                ],
-            ),
-            (
-                Context::DialogInput,
-                &[
-                    (Home, &["home", "ctrl-a"]),
-                    (End, &["end", "ctrl-e"]),
-                    (Backspace, &["backspace"]),
-                    (Delete, &["delete"]),
-                    (DeleteToStart, &["ctrl-u"]),
-                    (DeleteToEnd, &["ctrl-k"]),
-                ],
-            ),
-        ];
+        let presets = mc_presets();
         let mut contexts = HashMap::new();
         for (context, bindings) in presets {
             let bindings = bindings
@@ -357,6 +273,113 @@ impl Keymap {
             }
         })
     }
+}
+
+/// The bindings of the mc preset, by context.
+fn mc_presets() -> [(Context, Preset); 6] {
+    use Action::{
+        Backspace, Cancel, Confirm, Copy, Delete, DeleteToEnd, DeleteToStart, Disconnect, Down,
+        End, Enter, Help, Home, InvertMarks, Left, Mark, MarkUp, Mkdir, Move, NextField,
+        OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent, PrevField, QuickSearch, Quit,
+        Redraw, Reload, Right, Select, SortByExtension, SortByName, SortBySize, SortByTime,
+        SwapPanels, SwitchPanel, Toggle, ToggleHidden, ToggleWrap, Unselect, Up, View,
+    };
+    [
+        (
+            Context::Panel,
+            &[
+                (Up, &["up", "ctrl-p"]),
+                (Down, &["down", "ctrl-n"]),
+                (PageUp, &["pageup", "alt-v"]),
+                (PageDown, &["pagedown", "ctrl-v"]),
+                (Home, &["home"]),
+                (End, &["end"]),
+                (Enter, &["enter"]),
+                (Mark, &["insert", "ctrl-t", "shift-down"]),
+                (MarkUp, &["shift-up"]),
+                // mc takes `+`, `-`, `\`, and `*` as commands while its command line is
+                // empty.
+                (Select, &["+", "alt-+"]),
+                (Unselect, &["-", "\\", "alt--"]),
+                (InvertMarks, &["*", "alt-*"]),
+                (Parent, &["ctrl-pageup"]),
+                (SwitchPanel, &["tab"]),
+                (SwapPanels, &["ctrl-u"]),
+                (OtherPanelOpen, &["alt-o"]),
+                (OtherPanelSync, &["alt-i"]),
+                (Reload, &["ctrl-r"]),
+                (Cancel, &["esc", "esc esc"]),
+                (ToggleHidden, &["alt-."]),
+                // mc leaves sorting to its menu; these are Far Manager's keys. macOS takes
+                // them for keyboard navigation unless those shortcuts are turned off.
+                (SortByName, &["ctrl-f3"]),
+                (SortByExtension, &["ctrl-f4"]),
+                (SortByTime, &["ctrl-f5"]),
+                (SortBySize, &["ctrl-f6"]),
+                (QuickSearch, &["ctrl-s", "alt-s"]),
+                (Help, &["f1"]),
+                (View, &["f3"]),
+                (Copy, &["f5"]),
+                (Move, &["f6"]),
+                (Mkdir, &["f7"]),
+                // In text fields, Delete deletes a character.
+                (Delete, &["f8", "delete"]),
+                (Quit, &["f10"]),
+                (Redraw, &["ctrl-l"]),
+            ],
+        ),
+        (Context::Root, &[(Disconnect, &["f8"])]),
+        (
+            Context::QuickSearch,
+            &[(Backspace, &["backspace"]), (Cancel, &["esc"])],
+        ),
+        (
+            Context::Dialog,
+            &[
+                (Up, &["up"]),
+                (Down, &["down"]),
+                (Left, &["left"]),
+                (Right, &["right"]),
+                (PageUp, &["pageup"]),
+                (PageDown, &["pagedown"]),
+                (Home, &["home"]),
+                (End, &["end"]),
+                (NextField, &["tab"]),
+                (PrevField, &["backtab"]),
+                (Confirm, &["enter"]),
+                (Toggle, &["space"]),
+                (Cancel, &["esc", "f10"]),
+            ],
+        ),
+        (
+            Context::Viewer,
+            &[
+                (Up, &["up", "k", "y", "ctrl-p"]),
+                (Down, &["down", "j", "e", "enter", "ctrl-n"]),
+                (PageUp, &["pageup", "b", "alt-v", "backspace"]),
+                (PageDown, &["pagedown", "space", "f", "ctrl-v"]),
+                (Home, &["home", "g", "ctrl-home"]),
+                (End, &["end", "shift-g", "ctrl-end"]),
+                (Left, &["left", "h"]),
+                (Right, &["right", "l"]),
+                (ToggleWrap, &["f2"]),
+                (Help, &["f1"]),
+                (Quit, &["f3", "f10", "q", "esc"]),
+                (Redraw, &["ctrl-l"]),
+            ],
+        ),
+        (
+            Context::DialogInput,
+            &[
+                (Home, &["home", "ctrl-a"]),
+                (End, &["end", "ctrl-e"]),
+                (Backspace, &["backspace"]),
+                (Delete, &["delete"]),
+                (DeleteToStart, &["ctrl-u"]),
+                (DeleteToEnd, &["ctrl-k"]),
+            ],
+        ),
+    ]
 }
 
 const ESC: KeyCombination = KeyCombination::one_key(KeyCode::Esc, KeyModifiers::NONE);
@@ -722,6 +745,7 @@ mod tests {
         );
         let mut root = [None; 10];
         root[0] = Some(Action::Help);
+        root[2] = Some(Action::View);
         root[4] = Some(Action::Copy);
         root[5] = Some(Action::Move);
         root[6] = Some(Action::Mkdir);
@@ -780,6 +804,7 @@ mod tests {
         let keymap = Keymap::mc();
         let mut panel = [None; 10];
         panel[0] = Some(Action::Help);
+        panel[2] = Some(Action::View);
         panel[4] = Some(Action::Copy);
         panel[5] = Some(Action::Move);
         panel[6] = Some(Action::Mkdir);

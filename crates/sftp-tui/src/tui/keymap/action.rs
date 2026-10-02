@@ -14,6 +14,8 @@ pub(crate) enum Context {
     Dialog,
     /// A dialog whose focus is on a text field; falls back to `Dialog`.
     DialogInput,
+    /// The viewer of F3.
+    Viewer,
 }
 
 impl Context {
@@ -26,6 +28,7 @@ impl Context {
             // Dialogs are modal: panel keys do nothing while one is open.
             Self::Dialog => &[Self::Dialog],
             Self::DialogInput => &[Self::DialogInput, Self::Dialog],
+            Self::Viewer => &[Self::Viewer],
         }
     }
 
@@ -80,6 +83,10 @@ pub(crate) enum Action {
     /// Marks the files that are not marked and unmarks those that are; directories stay as
     /// they are.
     InvertMarks,
+    /// Views the file under the cursor; opens a directory.
+    View,
+    /// Wraps long lines in the viewer, or cuts them.
+    ToggleWrap,
     /// Asks where to, and copies the marked entries or the one under the cursor.
     Copy,
     /// Asks where to, and moves or renames the marked entries or the one under the cursor.
@@ -159,6 +166,8 @@ impl Action {
         Self::Mark,
         Self::MarkUp,
         Self::InvertMarks,
+        Self::View,
+        Self::ToggleWrap,
         Self::Copy,
         Self::Move,
         Self::Mkdir,

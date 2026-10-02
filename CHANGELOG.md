@@ -81,3 +81,5 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   new name, as in mc. Within one file system it renames; between the local file system and a
   host, or two hosts, it copies and removes each source once all of it is copied, so what is
   skipped stays where it was.
+- F3 views the file under the cursor, locally or on a host: text with long lines wrapped (F2
+  cuts them), scrolled with mc's viewer keys, up to the first 16 MiB.

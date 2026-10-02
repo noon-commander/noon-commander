@@ -13,7 +13,9 @@ use sftp_tui_ssh::askpass::{AskpassEnv, AskpassEvent, AskpassServer};
 use sftp_tui_ssh::resolve::resolve;
 use sftp_tui_ssh::version::check_version;
 use sftp_tui_ssh::{CachedHost, ChannelProcess, Session, SftpChannel, SshError, cleanup_stale};
-use sftp_tui_vfs::{LocalFs, Location, Metadata, RemotePath, SftpFs, Vfs, VfsError};
+use sftp_tui_vfs::{
+    FileReader as _, LocalFs, Location, Metadata, RemotePath, SftpFs, Vfs, VfsError,
+};
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
@@ -25,6 +27,9 @@ use super::panel::{ListRequest, Listed, Listing};
 use super::root;
 use crate::context::Context;
 use crate::i18n::fl;
+
+/// Bytes of a file the viewer reads.
+pub(crate) const VIEW_LIMIT: usize = 16 * 1024 * 1024;
 
 /// How long quitting waits for connections to shut down.
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
@@ -43,6 +48,11 @@ pub(crate) enum Done {
     },
     /// A report from the job `id` of [`Effect::Delete`] or [`Effect::Copy`].
     Job { id: u64, event: JobEvent },
+    /// The start of the file of [`Effect::Read`], and whether there is more, or why not.
+    Read {
+        id: u64,
+        result: Result<(Vec<u8>, bool), String>,
+    },
     /// The directory of [`Effect::CreateDir`] was made, or why not.
     Created {
         side: Side,
@@ -198,6 +208,21 @@ impl Tasks {
                     location,
                     host,
                 } => self.create_dir(side, location, host),
+                Effect::Read {
+                    id,
+                    location,
+                    host,
+                    cancel,
+                } => {
+                    let done = self.done.clone();
+                    tokio::spawn(async move {
+                        let result = tokio::select! {
+                            result = read(location, host) => result,
+                            () = cancel.cancelled() => return,
+                        };
+                        let _ = done.send(Done::Read { id, result });
+                    });
+                }
                 Effect::Delete {
                     id,
                     targets,
@@ -474,6 +499,30 @@ async fn forward<P>(
         };
         let _ = done.send(Done::Job { id, event });
     }
+}
+
+/// The start of the file at `location`, up to [`VIEW_LIMIT`], and whether there is more.
+async fn read(location: Location, host: Option<HostHandle>) -> Result<(Vec<u8>, bool), String> {
+    let result = match (location, share(host).await) {
+        (Location::Local(path), _) => read_start(&LocalFs, &path).await,
+        (Location::Remote { path, .. }, Some(Some(fs))) => read_start(&*fs, &path).await,
+        _ => return Err(fl!("error-connection-closed")),
+    };
+    result.map_err(|error| describe::vfs_error(&error))
+}
+
+async fn read_start<V: Vfs>(vfs: &V, path: &V::Path) -> Result<(Vec<u8>, bool), VfsError> {
+    let mut reader = vfs.open_file(path).await?;
+    let mut bytes = Vec::new();
+    while let Some(chunk) = reader.read().await? {
+        bytes.extend_from_slice(&chunk);
+        if bytes.len() >= VIEW_LIMIT {
+            let more = bytes.len() > VIEW_LIMIT || reader.read().await?.is_some();
+            bytes.truncate(VIEW_LIMIT);
+            return Ok((bytes, more));
+        }
+    }
+    Ok((bytes, false))
 }
 
 /// The session of a connected host, from its task; `None` if the host is gone.

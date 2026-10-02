@@ -27,6 +27,7 @@ use super::pattern::Pattern;
 use super::progress::{Counts, JobView};
 use super::tasks::{HostHandle, JobEvent};
 use super::theme::Theme;
+use super::viewer::Viewer;
 use crate::i18n::fl;
 
 /// One of the two panels, named by the side it starts on. Ctrl-U swaps where the panels are
@@ -59,6 +60,14 @@ pub(crate) enum Effect {
         side: Side,
         request: ListRequest,
         host: Option<HostHandle>,
+    },
+    /// Read the start of the file at `location` for the viewer `id`, through `host` if it is
+    /// remote, and report to [`App::read`]; `cancel` stops it.
+    Read {
+        id: u64,
+        location: Location,
+        host: Option<HostHandle>,
+        cancel: CancellationToken,
     },
     /// Make the directory at `location` and report to [`App::created`]. Remote ones go to the
     /// task of their host.
@@ -217,6 +226,14 @@ impl Job {
     }
 }
 
+/// The viewer on screen, and what stops it loading.
+#[derive(Debug)]
+struct Viewing {
+    viewer: Viewer,
+    location: Location,
+    cancel: CancellationToken,
+}
+
 /// How F5 copies: what its dialog asked for last, which it starts with, and the setting.
 #[derive(Debug, Clone, Copy)]
 struct CopyChoices {
@@ -274,6 +291,8 @@ pub(crate) struct App {
     tz: TimeZone,
     /// Over the panels and the help, under the dialogs.
     job: Option<Job>,
+    /// Instead of the panels.
+    viewing: Option<Viewing>,
     jobs: u64,
     /// Over the panels, under the dialogs.
     help: Option<Help>,
@@ -320,6 +339,7 @@ impl App {
             },
             tz: TimeZone::UTC,
             job: None,
+            viewing: None,
             jobs: 0,
             help: None,
             keymap: Keymap::mc(),
@@ -357,6 +377,8 @@ impl App {
             open.dialog.context()
         } else if self.job.is_some() || self.help.is_some() {
             Context::Dialog
+        } else if self.viewing.is_some() {
+            Context::Viewer
         } else if self.panel(self.active).searching() {
             Context::QuickSearch
         } else if self.panel(self.active).shows_root() {
@@ -372,9 +394,10 @@ impl App {
             Action::Help | Action::Quit | Action::Redraw | Action::Disconnect | Action::Cancel => {
                 true
             }
-            Action::Mkdir | Action::Delete | Action::Copy | Action::Move => {
+            Action::Mkdir | Action::Delete | Action::Copy | Action::Move | Action::View => {
                 !self.panel(self.active).shows_root()
             }
+            Action::ToggleWrap => self.viewing.is_some(),
             _ => false,
         }
     }
@@ -415,6 +438,10 @@ impl App {
             if help.handle(input) {
                 self.help = None;
             }
+            return Vec::new();
+        }
+        if self.viewing.is_some() {
+            self.handle_viewer(input);
             return Vec::new();
         }
         let type_to_search = self.ui.type_to_search;
@@ -474,6 +501,7 @@ impl App {
             }
             Action::Mkdir => self.ask_mkdir(),
             Action::Delete => self.ask_delete(),
+            Action::View => return self.view(),
             Action::Copy => self.ask_transfer(JobKind::Copy),
             Action::Move => self.ask_transfer(JobKind::Move),
             Action::Select => self.ask_pattern(true),
@@ -558,6 +586,89 @@ impl App {
             | Purpose::Info => {}
         }
         Vec::new()
+    }
+
+    /// Views the file under the cursor of the active panel, as F3 does in mc; a directory, or
+    /// a row of the virtual root, opens as with Enter.
+    fn view(&mut self) -> Vec<Effect> {
+        let side = self.active;
+        let panel = self.panel(side);
+        let file = panel
+            .entry_under_cursor()
+            .filter(|entry| !entry.is_dir_like())
+            .and_then(|entry| child(panel.location(), &entry.name));
+        let Some(location) = file else {
+            if let Some(request) = self.panel_mut(side).handle(Action::Enter) {
+                return self.route(side, request);
+            }
+            return Vec::new();
+        };
+        let host = match &location {
+            Location::Remote { host, .. } => match self.hosts.get(host) {
+                Some(Host::Connected { handle, .. }) => Some(handle.clone()),
+                _ => None,
+            },
+            Location::Root | Location::Local(_) => None,
+        };
+        self.jobs += 1;
+        let id = self.jobs;
+        let cancel = CancellationToken::new();
+        self.viewing = Some(Viewing {
+            viewer: Viewer::new(id, location_text(&location)),
+            location: location.clone(),
+            cancel: cancel.clone(),
+        });
+        vec![Effect::Read {
+            id,
+            location,
+            host,
+            cancel,
+        }]
+    }
+
+    /// Takes what [`Effect::Read`] read for the viewer `id`; an error closes the viewer and
+    /// shows why.
+    pub(crate) fn read(&mut self, id: u64, result: Result<(Vec<u8>, bool), String>) {
+        let Some(viewing) = self
+            .viewing
+            .as_mut()
+            .filter(|viewing| viewing.viewer.id() == id)
+        else {
+            return;
+        };
+        match result {
+            Ok((bytes, truncated)) => viewing.viewer.show(&bytes, truncated),
+            Err(reason) => {
+                let path = location_text(&viewing.location);
+                self.close_viewer();
+                let reason = cells::sanitize(reason.as_bytes());
+                self.show_error(&fl!("viewer-error", path = path, reason = reason));
+            }
+        }
+    }
+
+    /// Takes a key for the viewer: F1 shows the help over it.
+    fn handle_viewer(&mut self, input: Resolved) {
+        let Resolved::Action(action) = input else {
+            return;
+        };
+        match action {
+            Action::Help => self.help = Some(Help::new(&self.keymap, self.ui.type_to_search)),
+            Action::Redraw => self.redraw = true,
+            action => {
+                if let Some(viewing) = &mut self.viewing
+                    && viewing.viewer.handle(action)
+                {
+                    self.close_viewer();
+                }
+            }
+        }
+    }
+
+    fn close_viewer(&mut self) {
+        if let Some(viewing) = self.viewing.take() {
+            viewing.cancel.cancel();
+        }
     }
 
     /// Asks before F8 deletes the marked entries of the active panel, or the one under the
@@ -1231,6 +1342,7 @@ impl App {
         if let Some(job) = &self.job {
             job.cancel.cancel();
         }
+        self.close_viewer();
     }
 
     /// Two panels side by side above the F-key bar.
@@ -1258,9 +1370,13 @@ impl App {
             now,
             tz,
         };
-        self.left.render(frame, left, active == Side::Left, &view);
-        self.right
-            .render(frame, right, active == Side::Right, &view);
+        if let Some(viewing) = &mut self.viewing {
+            viewing.viewer.render(frame, panels, &self.theme);
+        } else {
+            self.left.render(frame, left, active == Side::Left, &view);
+            self.right
+                .render(frame, right, active == Side::Right, &view);
+        }
         self.render_fkeys(frame, key_bar);
         if let Some(help) = &mut self.help {
             help.render(frame, panels, &self.theme);
@@ -1350,6 +1466,8 @@ fn fkey_label(action: Action) -> Option<String> {
         Action::Disconnect => Some(fl!("fkey-disconnect")),
         Action::Mkdir => Some(fl!("fkey-mkdir")),
         Action::Delete => Some(fl!("fkey-delete")),
+        Action::View => Some(fl!("fkey-view")),
+        Action::ToggleWrap => Some(fl!("fkey-wrap")),
         Action::Copy => Some(fl!("fkey-copy")),
         Action::Move => Some(fl!("fkey-move")),
         _ => None,
@@ -2189,6 +2307,74 @@ mod tests {
 
         app.closed("web", connection, Some("Broken pipe"));
         assert!(app.job.is_none());
+    }
+
+    #[test]
+    fn f3_views_files_and_opens_directories() {
+        let (mut app, effects) =
+            App::new(Path::new("/srv"), Path::new("/home/me"), &ui(), &transfer());
+        answer(
+            &mut app,
+            effects,
+            &Listing::Dir(vec![dir("sub"), file("notes", 12)]),
+        );
+        app.handle(action(Action::End));
+        let Effect::Read {
+            id,
+            location,
+            host,
+            cancel,
+        } = one(app.handle(action(Action::View)))
+        else {
+            panic!("expected a read");
+        };
+        assert_eq!((location, host.is_none()), (local("/srv/notes"), true));
+        assert_eq!(app.context(), Context::Viewer);
+        assert!(screen(&mut app).contains("Loading"));
+        app.read(id + 1, Ok((b"not this".to_vec(), false)));
+        app.read(id, Ok((b"hello\nworld\n".to_vec(), false)));
+        let text = screen(&mut app);
+        assert!(
+            text.contains("/srv/notes") && text.contains("hello"),
+            "{text}"
+        );
+        assert!(text.contains("2Wrap") && text.contains("10Quit"), "{text}");
+
+        // F1 shows the help over it, and Esc goes back to it.
+        app.handle(action(Action::Help));
+        assert_eq!(app.context(), Context::Dialog);
+        app.handle(action(Action::Cancel));
+        assert_eq!(app.context(), Context::Viewer);
+        app.handle(action(Action::Quit));
+        assert_eq!(app.context(), Context::Panel);
+        assert!(cancel.is_cancelled(), "a read in flight stops");
+        assert!(!app.quits(), "Quit closes the viewer, not the app");
+
+        // On a directory, F3 opens it.
+        app.handle(action(Action::Home));
+        app.handle(action(Action::Down));
+        let Effect::List { request, .. } = one(app.handle(action(Action::View))) else {
+            panic!("expected a listing");
+        };
+        assert_eq!(request.location, local("/srv/sub"));
+    }
+
+    #[test]
+    fn a_file_that_cannot_be_read_is_an_error() {
+        let (mut app, effects) =
+            App::new(Path::new("/srv"), Path::new("/home/me"), &ui(), &transfer());
+        answer(&mut app, effects, &Listing::Dir(vec![file("secret", 1)]));
+        app.handle(action(Action::Down));
+        let Effect::Read { id, .. } = one(app.handle(action(Action::View))) else {
+            panic!("expected a read");
+        };
+        app.read(id, Err("permission denied".to_owned()));
+        assert_eq!(app.context(), Context::Dialog);
+        let text = screen(&mut app);
+        assert!(
+            text.contains("Cannot view /srv/secret: permission denied"),
+            "{text}"
+        );
     }
 
     #[test]

@@ -484,6 +484,14 @@ impl Panel {
         &self.location
     }
 
+    /// The entry under the cursor; `None` on `..` and in the virtual root.
+    pub(crate) fn entry_under_cursor(&self) -> Option<&DirEntry> {
+        match self.row(self.cursor)? {
+            Row::Entry(entry) => Some(entry),
+            Row::Parent | Row::Local | Row::Host(_) => None,
+        }
+    }
+
     /// The name of the entry under the cursor; `None` on `..` and in the virtual root.
     pub(crate) fn name_under_cursor(&self) -> Option<&[u8]> {
         match self.row(self.cursor)? {

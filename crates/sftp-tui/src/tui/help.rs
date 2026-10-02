@@ -44,6 +44,7 @@ impl Help {
             (Context::QuickSearch, fl!("help-quick-search")),
             (Context::Dialog, fl!("help-dialogs")),
             (Context::DialogInput, fl!("help-text-fields")),
+            (Context::Viewer, fl!("help-viewer")),
         ];
         let mut entries = Vec::new();
         for (context, title) in sections {
@@ -189,10 +190,10 @@ fn key_lines(keys: &str, width: usize) -> Vec<String> {
 /// leaves out.
 fn describe(context: Context, action: Action) -> Option<String> {
     let text = match (context, action) {
-        (Context::Panel, Action::Up) => fl!("help-row-up"),
-        (Context::Panel, Action::Down) => fl!("help-row-down"),
-        (Context::Panel, Action::PageUp) => fl!("help-page-up"),
-        (Context::Panel, Action::PageDown) => fl!("help-page-down"),
+        (Context::Panel | Context::Viewer, Action::Up) => fl!("help-row-up"),
+        (Context::Panel | Context::Viewer, Action::Down) => fl!("help-row-down"),
+        (Context::Panel | Context::Viewer, Action::PageUp) => fl!("help-page-up"),
+        (Context::Panel | Context::Viewer, Action::PageDown) => fl!("help-page-down"),
         (Context::Panel, Action::Home) => fl!("help-first-row"),
         (Context::Panel, Action::End) => fl!("help-last-row"),
         (Context::Panel, Action::Enter) => fl!("help-enter"),
@@ -214,13 +215,14 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::SortByTime) => fl!("help-sort-time"),
         (Context::Panel, Action::SortBySize) => fl!("help-sort-size"),
         (Context::Panel, Action::QuickSearch) => fl!("help-quick-search-start"),
+        (Context::Panel, Action::View) => fl!("help-view"),
         (Context::Panel, Action::Copy) => fl!("help-copy"),
         (Context::Panel, Action::Move) => fl!("help-move"),
         (Context::Panel, Action::Mkdir) => fl!("help-mkdir"),
         (Context::Panel, Action::Delete) => fl!("help-delete"),
-        (Context::Panel, Action::Help) => fl!("help-help"),
+        (Context::Panel | Context::Viewer, Action::Help) => fl!("help-help"),
         (Context::Panel, Action::Quit) => fl!("help-quit"),
-        (Context::Panel, Action::Redraw) => fl!("help-redraw"),
+        (Context::Panel | Context::Viewer, Action::Redraw) => fl!("help-redraw"),
         (Context::Root, Action::Disconnect) => fl!("help-disconnect"),
         (Context::QuickSearch, Action::Backspace) => fl!("help-search-back"),
         (Context::QuickSearch, Action::Cancel) => fl!("help-search-end"),
@@ -243,6 +245,12 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::DialogInput, Action::Delete) => fl!("help-field-delete"),
         (Context::DialogInput, Action::DeleteToStart) => fl!("help-field-delete-to-start"),
         (Context::DialogInput, Action::DeleteToEnd) => fl!("help-field-delete-to-end"),
+        (Context::Viewer, Action::Home) => fl!("help-viewer-top"),
+        (Context::Viewer, Action::End) => fl!("help-viewer-end"),
+        (Context::Viewer, Action::Left) => fl!("help-viewer-left"),
+        (Context::Viewer, Action::Right) => fl!("help-viewer-right"),
+        (Context::Viewer, Action::ToggleWrap) => fl!("help-viewer-wrap"),
+        (Context::Viewer, Action::Quit) => fl!("help-viewer-quit"),
         _ => return None,
     };
     Some(text)
@@ -305,7 +313,8 @@ mod tests {
                 "Host list",
                 "Quick search",
                 "Dialogs and help",
-                "Text fields"
+                "Text fields",
+                "Viewer"
             ]
         );
         assert_eq!(

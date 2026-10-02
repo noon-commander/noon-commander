@@ -1,0 +1,10 @@
+---
+source: crates/sftp-tui/src/tui/viewer.rs
+expression: wrapped
+---
+" f         1/2 100% "
+"abcdefghijklmnopqrst"
+"uvwxyzabcdefghijklmn"
+"opqrstuvwx          "
+"short               "
+"                    "

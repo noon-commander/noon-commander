@@ -7,6 +7,9 @@
 ## seven cells in an 80-column terminal.
 
 fkey-help = Help
+fkey-view = View
+# Wraps long lines in the viewer, or cuts them.
+fkey-wrap = Wrap
 fkey-copy = Copy
 fkey-move = RenMov
 fkey-mkdir = Mkdir
@@ -95,6 +98,13 @@ help-root = Host list
 help-quick-search = Quick search
 help-dialogs = Dialogs and help
 help-text-fields = Text fields
+help-viewer = Viewer
+help-viewer-top = The start of the file
+help-viewer-end = The end of the file
+help-viewer-left = One column left, when lines are cut
+help-viewer-right = One column right, when lines are cut
+help-viewer-wrap = Wrap long lines, or cut them
+help-viewer-quit = Close the viewer
 help-row-up = One row up
 help-row-down = One row down
 help-page-up = One page up
@@ -120,6 +130,7 @@ help-sort-extension = Sort by extension; again: reverse
 help-sort-time = Sort by modification time, newest first; again: reverse
 help-sort-size = Sort by size, largest first; again: reverse
 help-quick-search-start = Quick search; again: the next match
+help-view = View the file under the cursor; on a directory, open it
 help-copy = Copy the marked entries, or the one under the cursor
 help-move = Move or rename the marked entries, or the one under the cursor
 help-mkdir = Make a directory
@@ -220,3 +231,12 @@ move-error = Cannot move to { $path }: { $reason }
 transfer-same = the source and the target are the same
 # The target is in a source directory.
 transfer-into-itself = it is in { $path }
+
+## The viewer, F3 (src/tui/viewer). Prefix: viewer-. As in mc.
+
+# Right of the title: the first line on screen, the lines, and how far the last one on screen
+# is.
+viewer-position = { $line }/{ $lines } { $percent }%
+# The same, when only the start of a long file was read.
+viewer-truncated = { $position } of the first 16 MiB
+viewer-error = Cannot view { $path }: { $reason }

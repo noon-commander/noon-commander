@@ -11,4 +11,4 @@ mod testing;
 
 pub use copy::{CopyOptions, Endpoint, copy};
 pub use delete::delete;
-pub use job::{Decision, Event, Outcome, Progress, Reporter};
+pub use job::{Conflict, Decision, Event, Outcome, Progress, Reporter};

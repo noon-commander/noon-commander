@@ -193,12 +193,20 @@ directory. Directories merge into a directory of the same name; symlinks are cop
 symlinks, with their targets as stored; FIFOs, sockets, and devices fail. The job counts
 entries and bytes first, then copies parents before what they hold, reporting progress after
 every chunk. With `preserve`, copies get the modification times and permission bits of their
-sources, directories last, since writing into a directory changes its time. With `atomic`,
+sources, and directories that the copy made get theirs last, since writing into a directory
+changes its time; directories that were there keep their own. With `atomic`,
 each file is written under a hidden temporary name next to its target
 (`.name.sftp-tui-PID-N`) and renamed when complete, so the target never holds part of a
 file; without it, the target is written directly. Either way, a file that does not finish
-(an error, Skip, or cancellation) is removed. A taken name is, for now, a failure like any
-other; questions about overwriting follow.
+(an error, Skip, or cancellation) is removed; written directly over an existing file, that
+file is gone too.
+
+When the name of a file or symlink is taken, the job sends `Exists` with the metadata of both,
+for sizes and times, and waits for a `Conflict`: Overwrite, Skip, Overwrite all, Skip all,
+Overwrite older (every later one that is older than its source; unknown times keep the
+target), or Abort. A directory where a file would go is a failure, not a question. A symlink
+in the way is removed first, so that a file written directly never goes through it; renaming
+replaces it anyway. Without `posix-rename`, the target is removed before the rename.
 
 ## Configuration and paths
 

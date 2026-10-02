@@ -1,6 +1,6 @@
 //! What jobs share: their reports, the decisions they wait for, and their outcome.
 
-use sftp_tui_vfs::VfsError;
+use sftp_tui_vfs::{Metadata, VfsError};
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
@@ -13,6 +13,23 @@ pub enum Decision {
     Skip,
     /// Leave it and every later one that fails, without asking again.
     SkipAll,
+    /// Stop the job.
+    Abort,
+}
+
+/// What to do about a target that is there already.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Conflict {
+    /// Replace it.
+    Overwrite,
+    /// Leave it, and do not copy the source.
+    Skip,
+    /// Replace it and every later one, without asking.
+    OverwriteAll,
+    /// Leave it and every later one, without asking.
+    SkipAll,
+    /// Replace it and every later one if it is older than its source; leave the others.
+    OverwriteOlder,
     /// Stop the job.
     Abort,
 }
@@ -45,6 +62,16 @@ pub enum Event<P> {
         path: P,
         error: VfsError,
         reply: oneshot::Sender<Decision>,
+    },
+    /// The name of a copy is taken; the job waits for an answer on `reply`. Dropping `reply`
+    /// aborts the job.
+    Exists {
+        source: P,
+        target: P,
+        /// What the source and the target are now, for their sizes and times.
+        source_metadata: Metadata,
+        target_metadata: Metadata,
+        reply: oneshot::Sender<Conflict>,
     },
 }
 
@@ -86,24 +113,30 @@ impl<P> Reporter<P> {
         let _ = self.events.send(event);
     }
 
+    /// Sends the question `event` makes of a reply, and waits for the answer; `None` if the job
+    /// is cancelled or the answer never comes.
+    pub(crate) async fn question<T>(
+        &self,
+        event: impl FnOnce(oneshot::Sender<T>) -> Event<P>,
+    ) -> Option<T> {
+        let (reply, answer) = oneshot::channel();
+        self.events.send(event(reply)).ok()?;
+        tokio::select! {
+            answer = answer => answer.ok(),
+            () = self.cancel.cancelled() => None,
+        }
+    }
+
     /// Asks what to do about `error` on `path`. After [`Decision::SkipAll`] every failure is
     /// skipped without asking; cancellation, and a reply that never comes, abort.
     pub(crate) async fn ask(&mut self, path: P, error: VfsError) -> Decision {
         if self.skip_all {
             return Decision::Skip;
         }
-        let (reply, answer) = oneshot::channel();
-        if self
-            .events
-            .send(Event::Failed { path, error, reply })
-            .is_err()
-        {
-            return Decision::Abort;
-        }
-        let decision = tokio::select! {
-            answer = answer => answer.unwrap_or(Decision::Abort),
-            () = self.cancel.cancelled() => Decision::Abort,
-        };
+        let decision = self
+            .question(|reply| Event::Failed { path, error, reply })
+            .await
+            .unwrap_or(Decision::Abort);
         match decision {
             Decision::SkipAll => {
                 self.skip_all = true;

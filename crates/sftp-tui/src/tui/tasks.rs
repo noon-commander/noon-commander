@@ -409,6 +409,8 @@ async fn run_delete<V: Vfs>(
                     error: describe::vfs_error(&error),
                     reply,
                 },
+                // Deleting takes no names; dropping the question would abort it.
+                Event::Exists { .. } => continue,
             };
             let _ = done.send(Done::Job { id, event });
         }

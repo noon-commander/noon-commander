@@ -7,7 +7,7 @@ use sftp_tui_vfs::{
     FileKind, FileReader as _, FileWriter as _, Metadata, Vfs, VfsError, VfsPath as _,
 };
 
-use crate::job::{Decision, Event, Outcome, Progress, Reporter};
+use crate::job::{Conflict, Decision, Event, Outcome, Progress, Reporter};
 
 /// How to copy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,7 +50,26 @@ enum Destination<Q> {
 /// Why one attempt at an entry did not work.
 enum Stop<L> {
     Failed(L, VfsError),
-    Cancelled,
+    /// Cancelled, or Abort.
+    Aborted,
+}
+
+/// What to do about the name of a copy.
+enum Plan {
+    /// It is free.
+    New,
+    /// Replace what is there: something of this kind.
+    Replace(FileKind),
+    /// Leave what is there, and the source with it.
+    Skip,
+}
+
+/// What every later taken name gets, after an answer for all of them.
+#[derive(Debug, Clone, Copy)]
+enum Policy {
+    OverwriteAll,
+    SkipAll,
+    OverwriteOlder,
 }
 
 /// Why the job stopped early.
@@ -80,6 +99,7 @@ pub async fn copy<A: Vfs, B: Vfs, L>(
         items_total: 0,
         bytes_done: 0,
         bytes_total: 0,
+        policy: None,
     };
     let count = sources.len();
     if job.run(sources, target, count).await.is_err() {
@@ -97,6 +117,7 @@ struct Job<'a, 'r, A: Vfs, B: Vfs, L> {
     items_total: u64,
     bytes_done: u64,
     bytes_total: u64,
+    policy: Option<Policy>,
 }
 
 impl<A: Vfs, B: Vfs, L> Job<'_, '_, A, B, L> {
@@ -140,6 +161,7 @@ impl<A: Vfs, B: Vfs, L> Job<'_, '_, A, B, L> {
                         if made {
                             made_dirs.push((target.clone(), item.metadata.clone()));
                         }
+                        true
                     }),
                     FileKind::Symlink => self.copy_link(item, &target).await,
                     FileKind::File | FileKind::Unknown => self.copy_file(item, &target).await,
@@ -152,8 +174,8 @@ impl<A: Vfs, B: Vfs, L> Job<'_, '_, A, B, L> {
                     )),
                 };
                 match attempt {
-                    Ok(()) => break true,
-                    Err(Stop::Cancelled) => return Err(Aborted),
+                    Ok(copied) => break copied,
+                    Err(Stop::Aborted) => return Err(Aborted),
                     Err(Stop::Failed(path, error)) => {
                         self.bytes_done = before;
                         match self.reporter.ask(path, error).await {
@@ -330,7 +352,72 @@ impl<A: Vfs, B: Vfs, L> Job<'_, '_, A, B, L> {
         }
     }
 
-    async fn copy_link(&self, item: &Item<A::Path>, target: &B::Path) -> Result<(), Stop<L>> {
+    /// What to do about the name `target` of a copy of `item`: free, or taken by something
+    /// that the answer to a question, or an earlier answer for all, says to replace or keep.
+    /// A directory there is a failure: a file does not replace one.
+    async fn plan(&mut self, item: &Item<A::Path>, target: &B::Path) -> Result<Plan, Stop<L>> {
+        let existing = match self.to.vfs.symlink_metadata(target).await {
+            Ok(existing) => existing,
+            Err(VfsError::NotFound(_)) => return Ok(Plan::New),
+            Err(error) => return Err(self.at_target(target, error)),
+        };
+        if existing.kind == FileKind::Dir {
+            let error = VfsError::AlreadyExists(target.display());
+            return Err(self.at_target(target, error));
+        }
+        let policy = if let Some(policy) = self.policy {
+            policy
+        } else {
+            let source = (self.from.report)(&item.source);
+            let target = (self.to.report)(target);
+            let (source_metadata, target_metadata) = (item.metadata.clone(), existing.clone());
+            let answer = self
+                .reporter
+                .question(|reply| Event::Exists {
+                    source,
+                    target,
+                    source_metadata,
+                    target_metadata,
+                    reply,
+                })
+                .await;
+            match answer.unwrap_or(Conflict::Abort) {
+                Conflict::Overwrite => return Ok(Plan::Replace(existing.kind)),
+                Conflict::Skip => return Ok(Plan::Skip),
+                Conflict::Abort => return Err(Stop::Aborted),
+                Conflict::OverwriteAll => *self.policy.insert(Policy::OverwriteAll),
+                Conflict::SkipAll => *self.policy.insert(Policy::SkipAll),
+                Conflict::OverwriteOlder => *self.policy.insert(Policy::OverwriteOlder),
+            }
+        };
+        let replace = match policy {
+            Policy::OverwriteAll => true,
+            Policy::SkipAll => false,
+            // Unknown times keep the target.
+            Policy::OverwriteOlder => matches!(
+                (existing.modified, item.metadata.modified),
+                (Some(there), Some(source)) if there < source
+            ),
+        };
+        Ok(if replace {
+            Plan::Replace(existing.kind)
+        } else {
+            Plan::Skip
+        })
+    }
+
+    /// Copies a symlink, as a symlink; `false` if the name is taken and stays.
+    async fn copy_link(&mut self, item: &Item<A::Path>, target: &B::Path) -> Result<bool, Stop<L>> {
+        match self.plan(item, target).await? {
+            Plan::New => {}
+            Plan::Skip => return Ok(false),
+            Plan::Replace(_) => self
+                .to
+                .vfs
+                .remove_file(target)
+                .await
+                .map_err(|error| self.at_target(target, error))?,
+        }
         let link = self
             .from
             .vfs
@@ -341,49 +428,78 @@ impl<A: Vfs, B: Vfs, L> Job<'_, '_, A, B, L> {
             .vfs
             .create_symlink(&link, target)
             .await
-            .map_err(|error| self.at_target(target, error))
+            .map_err(|error| self.at_target(target, error))?;
+        Ok(true)
     }
 
-    /// Copies a file to `target`, which must not exist, through a temporary name if the copy
-    /// is atomic. What it wrote goes again if it does not finish.
-    async fn copy_file(&mut self, item: &Item<A::Path>, target: &B::Path) -> Result<(), Stop<L>> {
+    /// Copies a file to `target`, through a temporary name if the copy is atomic; `false` if
+    /// the name is taken and stays. What it wrote goes again if it does not finish.
+    async fn copy_file(&mut self, item: &Item<A::Path>, target: &B::Path) -> Result<bool, Stop<L>> {
         let to = self.to.vfs;
-        match to.symlink_metadata(target).await {
-            Err(VfsError::NotFound(_)) => {}
-            Ok(_) => {
-                let error = VfsError::AlreadyExists(target.display());
-                return Err(self.at_target(target, error));
+        let replace = match self.plan(item, target).await? {
+            Plan::New => false,
+            Plan::Skip => return Ok(false),
+            // Written directly, a file would go through a symlink to whatever it points to.
+            Plan::Replace(FileKind::Symlink) if !self.options.atomic => {
+                to.remove_file(target)
+                    .await
+                    .map_err(|error| self.at_target(target, error))?;
+                false
             }
-            Err(error) => return Err(self.at_target(target, error)),
-        }
+            Plan::Replace(_) => true,
+        };
         let mut reader = self
             .from
             .vfs
             .open_file(&item.source)
             .await
             .map_err(|error| Stop::Failed((self.from.report)(&item.source), error))?;
-        let (writer, written) = self.create(target).await?;
+        let (writer, written) = self.create(target, replace).await?;
         let result = self.transfer(item, &mut reader, writer, &written).await;
         let result = match result {
-            Ok(()) if self.options.atomic => to
-                .rename(&written, target)
-                .await
-                .map_err(|error| self.at_target(target, error)),
+            Ok(()) if self.options.atomic => self.rename_over(&written, target, replace).await,
             other => other,
         };
         if result.is_err() {
             // Best effort: what is left of it is no use, and an error here would hide the first.
             let _ = to.remove_file(&written).await;
         }
-        result
+        result.map(|()| true)
+    }
+
+    /// Gives the file written at `written` its name `target`, replacing what is there if
+    /// `replace`. Servers without `posix-rename` refuse to rename over a file, so then the
+    /// target goes first.
+    async fn rename_over(
+        &self,
+        written: &B::Path,
+        target: &B::Path,
+        replace: bool,
+    ) -> Result<(), Stop<L>> {
+        let to = self.to.vfs;
+        let error = match to.rename(written, target).await {
+            Ok(()) => return Ok(()),
+            Err(VfsError::AlreadyExists(_)) if replace => to.remove_file(target).await.err(),
+            Err(error) => Some(error),
+        };
+        if let Some(error) = error {
+            return Err(self.at_target(target, error));
+        }
+        to.rename(written, target)
+            .await
+            .map_err(|error| self.at_target(target, error))
     }
 
     /// Opens the file to write for `target`: a temporary name next to it if the copy is atomic,
-    /// or the target itself.
-    async fn create(&self, target: &B::Path) -> Result<(B::Writer, B::Path), Stop<L>> {
+    /// or the target itself, emptied if `replace`.
+    async fn create(
+        &self,
+        target: &B::Path,
+        replace: bool,
+    ) -> Result<(B::Writer, B::Path), Stop<L>> {
         let to = self.to.vfs;
         if !self.options.atomic {
-            return match to.create_file(target, false).await {
+            return match to.create_file(target, replace).await {
                 Ok(writer) => Ok((writer, target.clone())),
                 Err(error) => Err(self.at_target(target, error)),
             };
@@ -413,7 +529,7 @@ impl<A: Vfs, B: Vfs, L> Job<'_, '_, A, B, L> {
     ) -> Result<(), Stop<L>> {
         loop {
             if self.reporter.cancelled() {
-                return Err(Stop::Cancelled);
+                return Err(Stop::Aborted);
             }
             let chunk = reader
                 .read()
@@ -508,15 +624,39 @@ mod tests {
     struct Seen {
         failed: Vec<String>,
         bytes: Vec<(u64, u64)>,
+        /// Each taken name: the target, and the sizes of the source and the target.
+        exists: Vec<(String, Option<u64>, Option<u64>)>,
+    }
+
+    /// The answers a copy gets, in turn, and whether it is cancelled once data has moved.
+    #[derive(Default)]
+    struct Script<'a> {
+        failures: &'a [Decision],
+        conflicts: &'a [Conflict],
+        cancel_midway: bool,
     }
 
     /// Copies with `answers` for failures; cancels once data has moved if `cancel_midway`.
     async fn run<A: Vfs, B: Vfs>(
-        (from, sources): (&A, Vec<A::Path>),
-        (to, target): (&B, B::Path),
+        from: (&A, Vec<A::Path>),
+        to: (&B, B::Path),
         options: CopyOptions,
         answers: &[Decision],
         cancel_midway: bool,
+    ) -> (Outcome, Seen) {
+        let script = Script {
+            failures: answers,
+            conflicts: &[],
+            cancel_midway,
+        };
+        run_script(from, to, options, script).await
+    }
+
+    async fn run_script<A: Vfs, B: Vfs>(
+        (from, sources): (&A, Vec<A::Path>),
+        (to, target): (&B, B::Path),
+        options: CopyOptions,
+        script: Script<'_>,
     ) -> (Outcome, Seen) {
         let (events, mut incoming) = mpsc::unbounded_channel();
         let cancel = CancellationToken::new();
@@ -536,19 +676,32 @@ mod tests {
         };
         let listen = async {
             let mut seen = Seen::default();
-            let mut answers = answers.iter();
+            let mut failures = script.failures.iter();
+            let mut conflicts = script.conflicts.iter();
             while let Some(event) = incoming.recv().await {
                 match event {
                     Event::Scanning { .. } => {}
                     Event::Progress(progress) => {
                         seen.bytes.push((progress.bytes_done, progress.bytes_total));
-                        if cancel_midway && progress.bytes_done > 0 {
+                        if script.cancel_midway && progress.bytes_done > 0 {
                             cancel.cancel();
                         }
                     }
                     Event::Failed { path, reply, .. } => {
                         seen.failed.push(path);
-                        let answer = *answers.next().expect("an answer for each failure");
+                        let answer = *failures.next().expect("an answer for each failure");
+                        let _ = reply.send(answer);
+                    }
+                    Event::Exists {
+                        target,
+                        source_metadata,
+                        target_metadata,
+                        reply,
+                        ..
+                    } => {
+                        let sizes = (source_metadata.size, target_metadata.size);
+                        seen.exists.push((target, sizes.0, sizes.1));
+                        let answer = *conflicts.next().expect("an answer for each taken name");
                         let _ = reply.send(answer);
                     }
                 }
@@ -705,27 +858,116 @@ mod tests {
         assert_ne!(modified(&new.join("a")), at(1_000), "not preserved");
     }
 
-    #[tokio::test]
-    async fn a_taken_name_fails_and_merges_directories() {
-        let root = tempfile::tempdir().unwrap();
-        let src = sources(root.path());
-        let dst = root.path().join("dst");
-        fs::create_dir_all(dst.join("dir")).unwrap();
-        fs::write(dst.join("dir/a"), "mine").unwrap();
+    /// `dst/dir` with `a` and `sub/b` already there, older and newer than their sources.
+    fn taken(root: &Path) -> (PathBuf, PathBuf) {
+        let src = sources(root);
+        let dst = root.join("dst");
+        fs::create_dir_all(dst.join("dir/sub")).unwrap();
+        fs::write(dst.join("dir/a"), "older").unwrap();
+        fs::write(dst.join("dir/sub/b"), "newer").unwrap();
+        set_modified(&dst.join("dir/a"), at(500));
+        set_modified(&dst.join("dir/sub/b"), at(9_000));
+        (src, dst)
+    }
+
+    async fn copy_taken(root: &Path, conflicts: &[Conflict]) -> (Outcome, Seen, PathBuf) {
+        let (src, dst) = taken(root);
+        let script = Script {
+            conflicts,
+            ..Script::default()
+        };
         let sources = vec![src.join("dir")];
-        let (outcome, seen) = run(
-            (&LocalFs, sources),
-            (&LocalFs, dst.clone()),
-            BOTH,
-            &[Decision::Skip],
-            false,
-        )
-        .await;
-        assert_eq!(seen.failed, [dst.join("dir/a").to_string_lossy()]);
-        assert_eq!(fs::read_to_string(dst.join("dir/a")).unwrap(), "mine");
-        assert_eq!(fs::read(dst.join("dir/sub/b")).unwrap(), vec![7; 100_000]);
-        // dir (merged), sub, b, link, and dangling; a stays.
+        let (outcome, seen) =
+            run_script((&LocalFs, sources), (&LocalFs, dst.clone()), BOTH, script).await;
+        (outcome, seen, dst.join("dir"))
+    }
+
+    #[tokio::test]
+    async fn a_taken_name_asks_and_directories_merge() {
+        let root = tempfile::tempdir().unwrap();
+        let answers = [Conflict::Overwrite, Conflict::Skip];
+        let (outcome, seen, dir) = copy_taken(root.path(), &answers).await;
+        let a = dir.join("a").to_string_lossy().into_owned();
+        assert_eq!(seen.exists[0], (a, Some(10), Some(5)), "with both sizes");
+        assert_eq!(seen.exists.len(), 2);
+        assert_eq!(fs::read_to_string(dir.join("a")).unwrap(), "0123456789");
+        assert_eq!(fs::read_to_string(dir.join("sub/b")).unwrap(), "newer");
+        // dir and sub (merged), a, link, and dangling; b stays.
         assert_eq!((outcome.done, outcome.skipped), (5, 1));
+        assert_eq!(leftovers(&dir), Vec::<PathBuf>::new());
+    }
+
+    #[tokio::test]
+    async fn answers_for_all_ask_once() {
+        let root = tempfile::tempdir().unwrap();
+        let (_, seen, dir) = copy_taken(root.path(), &[Conflict::OverwriteAll]).await;
+        assert_eq!(seen.exists.len(), 1);
+        assert_eq!(
+            fs::read_to_string(dir.join("sub/b")).unwrap().len(),
+            100_000
+        );
+
+        let root = tempfile::tempdir().unwrap();
+        let (_, seen, dir) = copy_taken(root.path(), &[Conflict::SkipAll]).await;
+        assert_eq!(seen.exists.len(), 1);
+        assert_eq!(fs::read_to_string(dir.join("a")).unwrap(), "older");
+        assert_eq!(fs::read_to_string(dir.join("sub/b")).unwrap(), "newer");
+
+        let root = tempfile::tempdir().unwrap();
+        let (_, seen, dir) = copy_taken(root.path(), &[Conflict::OverwriteOlder]).await;
+        assert_eq!(seen.exists.len(), 1);
+        assert_eq!(
+            fs::read_to_string(dir.join("a")).unwrap(),
+            "0123456789",
+            "older"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.join("sub/b")).unwrap(),
+            "newer",
+            "newer"
+        );
+
+        let root = tempfile::tempdir().unwrap();
+        let (outcome, _, dir) = copy_taken(root.path(), &[Conflict::Abort]).await;
+        assert!(outcome.aborted);
+        assert!(!dir.join("link").exists(), "stopped there");
+    }
+
+    #[tokio::test]
+    async fn a_file_does_not_replace_a_directory_or_go_through_a_link() {
+        for atomic in [true, false] {
+            let root = tempfile::tempdir().unwrap();
+            let src = sources(root.path());
+            let dst = root.path().join("dst");
+            fs::create_dir_all(dst.join("dir/a")).unwrap();
+            fs::write(root.path().join("elsewhere"), "keep").unwrap();
+            fs::create_dir_all(dst.join("dir/sub")).unwrap();
+            symlink(root.path().join("elsewhere"), dst.join("dir/sub/b")).unwrap();
+            let options = CopyOptions {
+                preserve: false,
+                atomic,
+            };
+            let script = Script {
+                failures: &[Decision::Skip],
+                conflicts: &[Conflict::Overwrite],
+                cancel_midway: false,
+            };
+            let sources = vec![src.join("dir")];
+            let (_, seen) = run_script(
+                (&LocalFs, sources),
+                (&LocalFs, dst.clone()),
+                options,
+                script,
+            )
+            .await;
+            assert_eq!(seen.failed.len(), 1, "a directory is in the way: {seen:?}");
+            assert!(dst.join("dir/a").is_dir());
+            let b = dst.join("dir/sub/b");
+            assert!(!b.is_symlink(), "atomic: {atomic}");
+            assert_eq!(fs::read(&b).unwrap().len(), 100_000);
+            let elsewhere = fs::read_to_string(root.path().join("elsewhere")).unwrap();
+            assert_eq!(elsewhere, "keep", "atomic: {atomic}");
+        }
     }
 
     #[tokio::test]
@@ -818,6 +1060,23 @@ mod tests {
         assert!(seen.failed.is_empty(), "{seen:?}");
         assert_eq!(outcome.done, 6);
         check_dir(&back);
+
+        // Again, over what is there: renamed over it with posix-rename.
+        let again = vec![src.join("dir")];
+        let script = Script {
+            conflicts: &[Conflict::OverwriteAll],
+            ..Script::default()
+        };
+        let target = RemotePath::from("up");
+        let (_, replaced) = run_script((&LocalFs, again), (&sftp, target), BOTH, script).await;
+        assert!(replaced.failed.is_empty(), "{replaced:?}");
+        assert_eq!(replaced.exists.len(), 1);
+        // Directories that were there keep their attributes; what went into them changed them.
+        let dir = remote.join("up/dir");
+        assert_eq!(fs::read(dir.join("sub/b")).unwrap(), vec![7; 100_000]);
+        assert_eq!(modified(&dir.join("a")), at(1_000));
+        assert_eq!(fs::read_link(dir.join("link")).unwrap(), Path::new("a"));
+        assert_eq!(leftovers(&remote), Vec::<PathBuf>::new());
         sftp.close().await.unwrap();
     }
 }

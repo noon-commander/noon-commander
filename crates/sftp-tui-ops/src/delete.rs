@@ -211,6 +211,7 @@ mod tests {
                         let answer = *answers.next().expect("an answer for each failure");
                         let _ = reply.send(answer);
                     }
+                    Event::Exists { .. } => panic!("deleting takes no names"),
                 }
             }
             (failed, totals)

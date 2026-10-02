@@ -44,7 +44,7 @@
 - [x] VFS: create and remove directories, remove files, rename, set permissions and times
 - [x] F7 mkdir
 - [x] Job engine (`sftp-tui-ops`): progress, a decision on each failure, cancellation; deleting
-- [ ] F8 delete
+- [x] F8 delete
 - [ ] VFS: read and write files as streams
 - [ ] F5 copy and F6 move/rename in any direction, with progress, cancellation, and a conflict
       dialog

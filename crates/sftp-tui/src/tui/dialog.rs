@@ -61,6 +61,10 @@ pub(crate) enum Button {
     Cancel,
     Yes,
     No,
+    Skip,
+    SkipAll,
+    Retry,
+    Abort,
 }
 
 impl Button {
@@ -70,6 +74,10 @@ impl Button {
             Self::Cancel => fl!("dialog-cancel"),
             Self::Yes => fl!("dialog-yes"),
             Self::No => fl!("dialog-no"),
+            Self::Skip => fl!("dialog-skip"),
+            Self::SkipAll => fl!("dialog-skip-all"),
+            Self::Retry => fl!("dialog-retry"),
+            Self::Abort => fl!("dialog-abort"),
         }
     }
 }
@@ -218,6 +226,11 @@ pub(crate) struct Colors {
 }
 
 impl Colors {
+    /// The style of the button with the focus.
+    pub(crate) fn focused_style(self) -> Style {
+        self.focused
+    }
+
     /// A dialog's colors, or an error's: mc draws errors and warnings red.
     pub(crate) fn of(theme: &Theme, error: bool) -> Self {
         if error {
@@ -296,6 +309,23 @@ impl Dialog {
     /// Information from ssh that needs no answer, such as a request to touch a security key.
     pub(crate) fn notice(context: &str, message: &str) -> Self {
         Self::new(context, message, vec![Button::Ok])
+    }
+
+    /// A question with `buttons`, of which `default` has the focus, in the colors of errors if
+    /// `error`, as mc asks before deleting and after a failure.
+    pub(crate) fn question(
+        title: &str,
+        message: &str,
+        buttons: Vec<Button>,
+        default: usize,
+        error: bool,
+    ) -> Self {
+        Self {
+            default,
+            focus: Focus::Button(default),
+            error,
+            ..Self::new(title, message, buttons)
+        }
     }
 
     /// Something that went wrong, with OK, in the colors of errors.

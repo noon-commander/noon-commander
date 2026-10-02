@@ -114,7 +114,8 @@ pub(crate) enum Action {
     Disconnect,
     /// Deletes the character before the text cursor.
     Backspace,
-    /// Deletes the character at the text cursor.
+    /// Deletes the marked entries or the one under the cursor; in a text field, the character
+    /// at the text cursor.
     Delete,
     /// Deletes from the start of the text field to the cursor.
     DeleteToStart,

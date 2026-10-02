@@ -8,6 +8,7 @@
 
 fkey-help = Help
 fkey-mkdir = Mkdir
+fkey-delete = Delete
 fkey-quit = Quit
 # Closes the connection to the host under the cursor.
 fkey-disconnect = Disconn
@@ -70,6 +71,12 @@ dialog-ok = OK
 dialog-cancel = Cancel
 dialog-yes = Yes
 dialog-no = No
+# Buttons of a failed file operation, as in mc: leave this entry, leave every failing one
+# without asking again, try again, stop.
+dialog-skip = Ignore
+dialog-skip-all = Ignore all
+dialog-retry = Retry
+dialog-abort = Abort
 # Title of error dialogs.
 dialog-error = Error
 
@@ -107,6 +114,7 @@ help-sort-time = Sort by modification time, newest first; again: reverse
 help-sort-size = Sort by size, largest first; again: reverse
 help-quick-search-start = Quick search; again: the next match
 help-mkdir = Make a directory
+help-delete = Delete the marked entries, or the one under the cursor
 help-help = This help
 help-quit = Quit
 help-redraw = Redraw the screen
@@ -150,3 +158,22 @@ mkdir-title = Create a new directory
 # Above the name field; the name under the cursor is filled in.
 mkdir-prompt = Enter directory name:
 mkdir-error = Cannot create directory { $path }: { $reason }
+
+## The window of a running job (src/tui/progress). Prefix: job-.
+
+# While a job counts what it has to do.
+job-scanning = Counting…
+job-found = { $items } found
+# Entries done or skipped, of all.
+job-count = { $done } of { $total }
+job-aborting = Aborting…
+
+## Deleting, F8 (src/tui/app). Prefix: delete-. As in mc.
+
+delete-title = Delete
+delete-file = Delete file "{ $name }"?
+delete-directory = Delete directory "{ $name }" and everything in it?
+delete-many = Delete { $count } files and directories?
+# Above the entry the job works on.
+delete-deleting = Deleting
+delete-error = Cannot delete { $path }: { $reason }

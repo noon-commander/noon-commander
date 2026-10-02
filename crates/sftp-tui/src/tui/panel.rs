@@ -121,6 +121,9 @@ enum Focus {
     First,
     /// The entry with this name, or the first row if it is gone.
     Name(Vec<u8>),
+    /// The entry with this name, or, if it is gone, the row it was on (or the last one), so
+    /// that the cursor stays where it was when an entry is deleted.
+    Near { name: Vec<u8>, row: usize },
     /// The host with this alias, or the first row if it is gone.
     Host(String),
 }
@@ -128,7 +131,7 @@ enum Focus {
 impl Focus {
     fn matches(&self, row: Row<'_>) -> bool {
         match (self, row) {
-            (Self::Name(name), Row::Entry(entry)) => entry.name == *name,
+            (Self::Name(name) | Self::Near { name, .. }, Row::Entry(entry)) => entry.name == *name,
             (Self::Host(alias), Row::Host(host)) => host.alias == *alias,
             _ => false,
         }
@@ -254,12 +257,16 @@ impl Panel {
                 self.listing = listing;
                 self.arrange();
                 self.offset = 0;
-                self.cursor = (0..self.rows())
+                let rows = self.rows();
+                self.cursor = (0..rows)
                     .find(|&index| {
                         self.row(index)
                             .is_some_and(|row| pending.focus.matches(row))
                     })
-                    .unwrap_or(0);
+                    .unwrap_or(match pending.focus {
+                        Focus::Near { row, .. } => row.min(rows.saturating_sub(1)),
+                        _ => 0,
+                    });
             }
             Err(reason) => {
                 let shown = match (&pending.location, &self.location) {
@@ -510,6 +517,26 @@ impl Panel {
         }
     }
 
+    /// What an operation acts on: the marked entries in the order shown, or else the entry
+    /// under the cursor. Nothing on `..` and in the virtual root.
+    pub(crate) fn chosen(&self) -> Vec<&DirEntry> {
+        let Listing::Dir(entries) = &self.listing else {
+            return Vec::new();
+        };
+        if !self.marked.is_empty() {
+            return self
+                .shown
+                .iter()
+                .map(|&index| &entries[index])
+                .filter(|entry| self.marked.contains(&entry.name))
+                .collect();
+        }
+        match self.row(self.cursor) {
+            Some(Row::Entry(entry)) => vec![entry],
+            _ => Vec::new(),
+        }
+    }
+
     /// Reads the directory again with the cursor on `name`, such as a directory just made.
     pub(crate) fn reload_onto(&mut self, name: Vec<u8>) -> ListRequest {
         self.open(self.location.clone(), Focus::Name(name))
@@ -569,7 +596,10 @@ impl Panel {
     /// This location, with the cursor on the row it is on.
     pub(crate) fn here(&self) -> Destination {
         let focus = match self.row(self.cursor) {
-            Some(Row::Entry(entry)) => Focus::Name(entry.name.clone()),
+            Some(Row::Entry(entry)) => Focus::Near {
+                name: entry.name.clone(),
+                row: self.cursor,
+            },
             Some(Row::Host(host)) => Focus::Host(host.alias.clone()),
             _ => Focus::First,
         };
@@ -1021,7 +1051,7 @@ fn address(host: &RootHost, hosts: &dyn Fn(&str) -> HostState) -> String {
 }
 
 /// The entry `name` in `location`; `name` may be a path, relative or absolute.
-fn child(location: &Location, name: &[u8]) -> Option<Location> {
+pub(crate) fn child(location: &Location, name: &[u8]) -> Option<Location> {
     match location {
         Location::Root => None,
         Location::Local(path) => Some(Location::Local(path.join(OsStr::from_bytes(name)))),
@@ -1545,7 +1575,10 @@ mod tests {
         panel.handle(Action::End);
         let here = Destination {
             location: local("/srv"),
-            focus: Focus::Name(b"zeta.txt".to_vec()),
+            focus: Focus::Near {
+                name: b"zeta.txt".to_vec(),
+                row: 6,
+            },
         };
         assert_eq!(panel.here(), here);
 
@@ -1679,7 +1712,10 @@ mod tests {
         let request = panel.handle(Action::Reload).unwrap();
         let other = vec![entry("other", FileKind::File, 1)];
         answer(&mut panel, &request, Listing::Dir(other));
-        assert_eq!(panel.cursor, 0, "the entry is gone");
+        assert_eq!(
+            panel.cursor, 1,
+            "the entry is gone: its row, or the last one"
+        );
 
         let mut root = root();
         root.handle(Action::Down);

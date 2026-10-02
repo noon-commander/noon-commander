@@ -2100,6 +2100,7 @@ dependencies = [
  "rustix",
  "secrecy",
  "sftp-tui-config",
+ "sftp-tui-ops",
  "sftp-tui-ssh",
  "sftp-tui-vfs",
  "tempfile",

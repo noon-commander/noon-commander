@@ -152,8 +152,9 @@ sftp-tui config paths       show the files and directories in use
 
 - tokio runtime; ratatui with the crossterm `EventStream`.
 - One-way data flow: events (keys, VFS replies, job progress, connection state) →
-  `update(state, msg)` → effects (spawned tasks with a `CancellationToken`) → render, at most 60
-  frames per second.
+  `update(state, msg)` → effects (spawned tasks with a `CancellationToken`) → render. Reports
+  that queue up, such as the progress of a job, are all taken before the next frame, so a job
+  that reports every entry does not draw every entry.
 - Every request carries a generation number, so stale replies (for example, a listing of a
   directory the user has already left) are dropped.
 - The UI task never awaits network I/O.
@@ -261,6 +262,15 @@ atomic_upload = true             # write to a temporary name, then rename
   task, and panels on the directory it is in read it again, the one that asked with the
   cursor on it. An error shows in a red dialog, as mc shows errors. F7 is not offered in the
   virtual root.
+- **F8 (or Delete) deletes** the marked entries, or the one under the cursor, after a red
+  question with Yes as the default, as in mc: `Delete file "x"?`, `Delete directory "x" and
+  everything in it?`, or `Delete 3 files and directories?`. mc asks a second time before it
+  goes into a directory that is not empty; sftp-tui says so in the first question instead.
+  The job runs in the background, locally or in the host's task, with a window that shows
+  what it counts, the entry at hand, a gauge, and done/total; Esc or Abort stops it. A
+  failure asks in a red dialog, with mc's buttons: Ignore, Ignore all, Retry, and Abort.
+  When the job ends, panels on the directory read it again, and a cursor whose entry is gone
+  stays on its row. If the host's connection is lost, the job ends with it.
 - **The other panel.** As in mc: Ctrl-U swaps the panels, and the active one stays active on
   the other side; Alt-O opens the directory or host under the cursor in the other panel (from
   a file, the parent directory with the cursor on this one) and moves the cursor down; Alt-I

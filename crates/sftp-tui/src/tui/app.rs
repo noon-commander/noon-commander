@@ -10,7 +10,9 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::text::{Line, Span};
 use sftp_tui_config::UiConfig;
-use sftp_tui_vfs::Location;
+use sftp_tui_ops::Decision;
+use sftp_tui_vfs::{FileKind, Location};
+use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
 use super::cells::{self, Align};
@@ -19,10 +21,11 @@ use super::dialog::{Ask, Button, Dialog, DialogEvent, Reply};
 use super::help::Help;
 use super::keymap::{Action, Context, Keymap, Resolved};
 use super::panel::{
-    Destination, HostState, HostStatus, ListRequest, Listed, Panel, View, location_text,
+    Destination, HostState, HostStatus, ListRequest, Listed, Panel, View, child, location_text,
 };
 use super::pattern::Pattern;
-use super::tasks::HostHandle;
+use super::progress::JobView;
+use super::tasks::{HostHandle, JobEvent};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -63,6 +66,14 @@ pub(crate) enum Effect {
         side: Side,
         location: Location,
         host: Option<HostHandle>,
+    },
+    /// Run the delete job `id` on `targets`, which are all local or all on the host of `host`,
+    /// and report to [`App::job_event`]; `cancel` stops it.
+    Delete {
+        id: u64,
+        targets: Vec<Location>,
+        host: Option<HostHandle>,
+        cancel: CancellationToken,
     },
     /// Connect to a host and report to [`App::connected`] and [`App::closed`]; `stop` ends the
     /// attempt or the connection.
@@ -122,8 +133,25 @@ enum Purpose {
     Pattern { side: Side, mark: bool },
     /// F7 in the panel on `side`.
     Mkdir { side: Side },
+    /// F8 in a panel on `dir`, for the entries `names`.
+    Delete { dir: Location, names: Vec<Vec<u8>> },
+    /// A failure in the job `job`, which waits for `reply`.
+    Failure {
+        job: u64,
+        reply: oneshot::Sender<Decision>,
+    },
     /// Something to read, such as an error.
     Info,
+}
+
+/// A job on screen, over the panels; one runs at a time.
+#[derive(Debug)]
+struct Job {
+    id: u64,
+    /// The directory it works in, which panels read again when it ends.
+    dir: Location,
+    cancel: CancellationToken,
+    view: JobView,
 }
 
 /// What `+` and `-` asked for last; their dialogs start with it.
@@ -170,6 +198,9 @@ pub(crate) struct App {
     /// never takes the keys from a dialog in use.
     dialogs: VecDeque<Open>,
     pattern_options: PatternOptions,
+    /// Over the panels and the help, under the dialogs.
+    job: Option<Job>,
+    jobs: u64,
     /// Over the panels, under the dialogs.
     help: Option<Help>,
     keymap: Keymap,
@@ -204,6 +235,8 @@ impl App {
             addresses: HashMap::new(),
             dialogs: VecDeque::new(),
             pattern_options: PatternOptions::default(),
+            job: None,
+            jobs: 0,
             help: None,
             keymap: Keymap::mc(),
             quit: false,
@@ -233,7 +266,7 @@ impl App {
     pub(crate) fn context(&self) -> Context {
         if let Some(open) = self.dialogs.front() {
             open.dialog.context()
-        } else if self.help.is_some() {
+        } else if self.job.is_some() || self.help.is_some() {
             Context::Dialog
         } else if self.panel(self.active).searching() {
             Context::QuickSearch
@@ -250,7 +283,7 @@ impl App {
             Action::Help | Action::Quit | Action::Redraw | Action::Disconnect | Action::Cancel => {
                 true
             }
-            Action::Mkdir => !self.panel(self.active).shows_root(),
+            Action::Mkdir | Action::Delete => !self.panel(self.active).shows_root(),
             _ => false,
         }
     }
@@ -277,6 +310,13 @@ impl App {
             }
             if let Some(Open { dialog, purpose }) = self.dialogs.pop_front() {
                 return self.dialog_closed(&dialog, purpose, event);
+            }
+            return Vec::new();
+        }
+        if let Some(job) = &mut self.job {
+            if JobView::wants_abort(input) {
+                job.cancel.cancel();
+                job.view.abort();
             }
             return Vec::new();
         }
@@ -342,6 +382,7 @@ impl App {
                 }
             }
             Action::Mkdir => self.ask_mkdir(),
+            Action::Delete => self.ask_delete(),
             Action::Select => self.ask_pattern(true),
             Action::Unselect => self.ask_pattern(false),
             Action::Cancel => self.cancel(self.active),
@@ -376,9 +417,140 @@ impl App {
                     return self.create_dir(side, location);
                 }
             }
-            Purpose::Pattern { .. } | Purpose::Mkdir { .. } | Purpose::Info => {}
+            Purpose::Delete { dir, names } if event == DialogEvent::Pressed(Button::Yes) => {
+                return self.start_delete(dir, &names);
+            }
+            Purpose::Failure { reply, .. } => {
+                let decision = match event {
+                    DialogEvent::Pressed(Button::Skip) => Decision::Skip,
+                    DialogEvent::Pressed(Button::SkipAll) => Decision::SkipAll,
+                    DialogEvent::Pressed(Button::Retry) => Decision::Retry,
+                    _ => Decision::Abort,
+                };
+                let _ = reply.send(decision);
+            }
+            Purpose::Pattern { .. }
+            | Purpose::Mkdir { .. }
+            | Purpose::Delete { .. }
+            | Purpose::Info => {}
         }
         Vec::new()
+    }
+
+    /// Asks before F8 deletes the marked entries of the active panel, or the one under the
+    /// cursor, in red with Yes as the default, as mc does.
+    fn ask_delete(&mut self) {
+        let panel = self.panel(self.active);
+        let chosen = panel.chosen();
+        let message = match chosen.as_slice() {
+            [] => return,
+            [entry] => {
+                let name = cells::sanitize(&entry.name);
+                if entry.metadata.kind == FileKind::Dir {
+                    fl!("delete-directory", name = name)
+                } else {
+                    fl!("delete-file", name = name)
+                }
+            }
+            many => fl!("delete-many", count = many.len()),
+        };
+        let names = chosen.iter().map(|entry| entry.name.clone()).collect();
+        let dir = panel.location().clone();
+        let buttons = vec![Button::Yes, Button::No];
+        let dialog = Dialog::question(&fl!("delete-title"), &message, buttons, 0, true);
+        self.dialogs.push_back(Open {
+            dialog,
+            purpose: Purpose::Delete { dir, names },
+        });
+    }
+
+    /// Starts deleting `names` in `dir`, and shows its progress.
+    fn start_delete(&mut self, dir: Location, names: &[Vec<u8>]) -> Vec<Effect> {
+        let host = match &dir {
+            Location::Remote { host, .. } => {
+                if let Some(Host::Connected { handle, .. }) = self.hosts.get(host) {
+                    Some(handle.clone())
+                } else {
+                    let reason = fl!("error-connection-closed");
+                    let path = location_text(&dir);
+                    self.show_error(&fl!("delete-error", path = path, reason = reason));
+                    return Vec::new();
+                }
+            }
+            Location::Root | Location::Local(_) => None,
+        };
+        let targets = names.iter().filter_map(|name| child(&dir, name)).collect();
+        self.jobs += 1;
+        let id = self.jobs;
+        let cancel = CancellationToken::new();
+        self.job = Some(Job {
+            id,
+            dir,
+            cancel: cancel.clone(),
+            view: JobView::new(fl!("delete-title"), fl!("delete-deleting")),
+        });
+        vec![Effect::Delete {
+            id,
+            targets,
+            host,
+            cancel,
+        }]
+    }
+
+    /// Takes a report from the job `id`: progress for its window, a failure for a dialog
+    /// that waits for an answer, or its end.
+    pub(crate) fn job_event(&mut self, id: u64, event: JobEvent) -> Vec<Effect> {
+        let Some(job) = self.job.as_mut().filter(|job| job.id == id) else {
+            return Vec::new();
+        };
+        match event {
+            JobEvent::Scanning { items } => job.view.scanning(items),
+            JobEvent::Progress {
+                current,
+                done,
+                total,
+            } => job.view.working(location_text(&current), done, total),
+            JobEvent::Failed { path, error, reply } => {
+                let path = location_text(&path);
+                let reason = cells::sanitize(error.as_bytes());
+                let message = fl!("delete-error", path = path, reason = reason);
+                let buttons = vec![Button::Skip, Button::SkipAll, Button::Retry, Button::Abort];
+                let dialog = Dialog::question(&fl!("dialog-error"), &message, buttons, 0, true);
+                self.dialogs.push_back(Open {
+                    dialog,
+                    purpose: Purpose::Failure { job: id, reply },
+                });
+            }
+            JobEvent::Finished => {
+                if let Some(job) = self.end_job() {
+                    return self.reload(&job.dir);
+                }
+            }
+        }
+        Vec::new()
+    }
+
+    /// Takes the job off the screen, with the questions it asked.
+    fn end_job(&mut self) -> Option<Job> {
+        let job = self.job.take()?;
+        self.dialogs.retain(
+            |open| !matches!(open.purpose, Purpose::Failure { job: asked, .. } if asked == job.id),
+        );
+        Some(job)
+    }
+
+    /// Reads `dir` again in the panels that show it, with their cursors where they were.
+    fn reload(&mut self, dir: &Location) -> Vec<Effect> {
+        let mut effects = Vec::new();
+        for side in Side::BOTH {
+            let panel = self.panel_mut(side);
+            if panel.location() == dir {
+                let here = panel.here();
+                let request = panel.go(here);
+                effects.extend(self.route(side, request));
+            }
+        }
+        effects
     }
 
     /// Opens the dialog of F7 for the active panel, with the name under the cursor, as in mc.
@@ -673,6 +845,14 @@ impl App {
         if reason.is_some() {
             self.failed.insert(host.to_owned());
         }
+        // Its task dropped the job; its panels leave the host, so there is nothing to read.
+        if self
+            .job
+            .as_ref()
+            .is_some_and(|job| matches!(&job.dir, Location::Remote { host: on, .. } if on == host))
+        {
+            self.end_job();
+        }
         let mut effects = Vec::new();
         for side in Side::BOTH {
             let panel = self.panel_mut(side);
@@ -743,6 +923,9 @@ impl App {
         for (_, state) in self.hosts.drain() {
             state.stop();
         }
+        if let Some(job) = &self.job {
+            job.cancel.cancel();
+        }
     }
 
     /// Two panels side by side above the F-key bar.
@@ -776,6 +959,9 @@ impl App {
         self.render_fkeys(frame, key_bar);
         if let Some(help) = &mut self.help {
             help.render(frame, panels, &self.theme);
+        }
+        if let Some(job) = &self.job {
+            job.view.render(frame, panels, &self.theme);
         }
         if let Some(open) = self.dialogs.front() {
             open.dialog.render(frame, panels, &self.theme);
@@ -827,6 +1013,7 @@ fn fkey_label(action: Action) -> Option<String> {
         Action::Cancel => Some(fl!("fkey-cancel")),
         Action::Disconnect => Some(fl!("fkey-disconnect")),
         Action::Mkdir => Some(fl!("fkey-mkdir")),
+        Action::Delete => Some(fl!("fkey-delete")),
         _ => None,
     }
 }
@@ -1251,6 +1438,157 @@ mod tests {
         let (_, location, host) = create_dir(app.handle(action(Action::Confirm)));
         assert_eq!(location, remote("web", "/home/deploy/www"));
         assert!(host.is_some(), "through the host's task");
+    }
+
+    /// The only effect, which must start deleting: the job, its targets, and its host.
+    fn delete_job(effects: Vec<Effect>) -> (u64, Vec<Location>, bool, CancellationToken) {
+        match one(effects) {
+            Effect::Delete {
+                id,
+                targets,
+                host,
+                cancel,
+            } => (id, targets, host.is_some(), cancel),
+            other => panic!("expected a delete job, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn f8_asks_deletes_and_reads_the_directory_again() {
+        let mut app = loaded();
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        assert_eq!(app.context(), Context::Dialog);
+        let text = screen(&mut app);
+        assert!(
+            text.contains("Delete directory \"left\" and everything in it?"),
+            "{text}"
+        );
+        assert!(
+            text.contains("[< Yes >]"),
+            "Yes is the default, as in mc: {text}"
+        );
+        let (id, targets, remote, _) = delete_job(app.handle(action(Action::Confirm)));
+        assert_eq!((targets, remote), (vec![local("/srv/left")], false));
+
+        assert_eq!(
+            app.context(),
+            Context::Dialog,
+            "the job's window takes the keys"
+        );
+        app.job_event(id, JobEvent::Scanning { items: 3 });
+        assert!(screen(&mut app).contains("3 found"));
+        let current = local("/srv/left/a");
+        let progress = JobEvent::Progress {
+            current,
+            done: 1,
+            total: 3,
+        };
+        app.job_event(id, progress);
+        let text = screen(&mut app);
+        assert!(
+            text.contains("/srv/left/a") && text.contains("1 of 3"),
+            "{text}"
+        );
+
+        // A failure waits for an answer: Ignore all is next to Ignore.
+        let (reply, mut decision) = oneshot::channel();
+        let failed = JobEvent::Failed {
+            path: local("/srv/left/b"),
+            error: "permission denied".to_owned(),
+            reply,
+        };
+        app.job_event(id, failed);
+        let text = screen(&mut app);
+        assert!(
+            text.contains("Cannot delete /srv/left/b: permission denied"),
+            "{text}"
+        );
+        assert!(text.contains("[< Ignore >]"), "{text}");
+        app.handle(action(Action::Right));
+        app.handle(action(Action::Confirm));
+        assert_eq!(decision.try_recv(), Ok(Decision::SkipAll));
+
+        // Reports of other jobs change nothing; the end reads /srv again in both panels.
+        assert!(app.job_event(id + 1, JobEvent::Finished).is_empty());
+        let effects = app.job_event(id, JobEvent::Finished);
+        assert_eq!(effects.len(), 2);
+        assert_eq!(app.context(), Context::Panel);
+    }
+
+    #[test]
+    fn f8_names_what_it_deletes_and_no_keeps_it() {
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &ui());
+        let entries = vec![file("a.txt", 1), file("b.txt", 2), dir("c")];
+        answer(&mut app, effects, &Listing::Dir(entries));
+        app.handle(action(Action::Delete));
+        assert!(app.dialogs.is_empty(), "nothing to delete on `..`");
+
+        app.handle(action(Action::End));
+        app.handle(action(Action::Delete));
+        assert!(screen(&mut app).contains("Delete file \"b.txt\"?"));
+        app.handle(action(Action::Right));
+        assert!(app.handle(action(Action::Confirm)).is_empty(), "No");
+
+        app.handle(action(Action::InvertMarks));
+        app.handle(action(Action::Delete));
+        assert!(screen(&mut app).contains("Delete 2 files and directories?"));
+        let (_, targets, _, _) = delete_job(app.handle(action(Action::Confirm)));
+        assert_eq!(targets, [local("/srv/a.txt"), local("/srv/b.txt")]);
+    }
+
+    #[test]
+    fn esc_aborts_a_job_and_its_questions_go_with_it() {
+        let mut app = loaded();
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        let (id, _, _, cancel) = delete_job(app.handle(action(Action::Confirm)));
+        app.handle(action(Action::Cancel));
+        assert!(cancel.is_cancelled());
+        assert!(screen(&mut app).contains("Aborting"));
+
+        let (reply, mut decision) = oneshot::channel();
+        let path = local("/srv/left/x");
+        let error = "busy".to_owned();
+        app.job_event(id, JobEvent::Failed { path, error, reply });
+        app.job_event(id, JobEvent::Finished);
+        assert_eq!(
+            app.context(),
+            Context::Panel,
+            "the question went with the job"
+        );
+        assert!(decision.try_recv().is_err());
+
+        // Esc in a failure answers Abort.
+        app.handle(action(Action::Delete));
+        let (id, _, _, _) = delete_job(app.handle(action(Action::Confirm)));
+        let (reply, mut decision) = oneshot::channel();
+        let path = local("/srv/left/y");
+        let error = "busy".to_owned();
+        app.job_event(id, JobEvent::Failed { path, error, reply });
+        app.handle(action(Action::Cancel));
+        assert_eq!(decision.try_recv(), Ok(Decision::Abort));
+    }
+
+    #[test]
+    fn a_job_on_a_lost_host_ends_with_it() {
+        let mut app = at_root();
+        let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
+            panic!("expected a connection");
+        };
+        let (handle, _requests) = HostHandle::channel();
+        let effects = app.connected("web", connection, handle);
+        answer(&mut app, effects, &Listing::Dir(vec![dir("www")]));
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        let (_, targets, through_host, _) = delete_job(app.handle(action(Action::Confirm)));
+        assert_eq!(targets, [remote("web", "www")]);
+        assert!(through_host, "through the host's task");
+
+        let effects = app.closed("web", connection, Some("Broken pipe"));
+        assert_eq!(effects.len(), 1, "back to the root");
+        assert!(app.job.is_none());
+        assert_ne!(app.context(), Context::Dialog);
     }
 
     #[test]

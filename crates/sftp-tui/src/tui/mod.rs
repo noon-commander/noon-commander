@@ -9,6 +9,7 @@ mod help;
 mod keymap;
 mod panel;
 mod pattern;
+mod progress;
 mod root;
 mod tasks;
 mod theme;
@@ -41,6 +42,41 @@ pub(crate) fn is_valid_theme(name: &str) -> bool {
 
 pub(crate) fn theme_names() -> &'static [&'static str] {
     theme::Theme::NAMES
+}
+
+/// Hands finished background work to the app, and runs what the app asks for next.
+fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
+    match done {
+        Done::Listed {
+            side,
+            generation,
+            result,
+        } => app.listed(side, generation, result),
+        Done::Created {
+            side,
+            location,
+            result,
+        } => tasks.run(app.created(side, &location, result)),
+        Done::Job { id, event } => tasks.run(app.job_event(id, event)),
+        Done::Connected {
+            host,
+            connection,
+            handle,
+        } => tasks.run(app.connected(&host, connection, handle)),
+        Done::Resolved { host, address } => app.resolved(host, address),
+        Done::Ask(ask) => app.ask(ask),
+        Done::Notice {
+            id,
+            context,
+            message,
+        } => app.notice(id, &context, &message),
+        Done::PromptClosed { id } => app.prompt_closed(id),
+        Done::Closed {
+            host,
+            connection,
+            reason,
+        } => tasks.run(app.closed(&host, connection, reason.as_deref())),
+    }
 }
 
 /// How long a spinner shows each of its frames.
@@ -102,22 +138,13 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
                     tasks.run(app.handle(input));
                 }
             }
-            Some(job) = done.recv() => match job {
-                Done::Listed { side, generation, result } => app.listed(side, generation, result),
-                Done::Created { side, location, result } => {
-                    tasks.run(app.created(side, &location, result));
+            Some(job) = done.recv() => {
+                // Jobs report every entry; take all that waits, then draw once.
+                take_done(&mut app, &mut tasks, job);
+                while let Ok(job) = done.try_recv() {
+                    take_done(&mut app, &mut tasks, job);
                 }
-                Done::Connected { host, connection, handle } => {
-                    tasks.run(app.connected(&host, connection, handle));
-                }
-                Done::Resolved { host, address } => app.resolved(host, address),
-                Done::Ask(ask) => app.ask(ask),
-                Done::Notice { id, context, message } => app.notice(id, &context, &message),
-                Done::PromptClosed { id } => app.prompt_closed(id),
-                Done::Closed { host, connection, reason } => {
-                    tasks.run(app.closed(&host, connection, reason.as_deref()));
-                }
-            },
+            }
             _ = spinner.tick(), if app.animates() => app.tick(),
             _ = terminate.recv() => break Ok(()),
             _ = hangup.recv() => break Ok(()),

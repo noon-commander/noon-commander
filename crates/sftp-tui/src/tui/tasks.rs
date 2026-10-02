@@ -1,5 +1,5 @@
-//! Background work for the app: listings, new directories, and one task per connected host
-//! that owns its ssh session and SFTP channel.
+//! Background work for the app: listings, new directories, jobs, and one task per connected
+//! host that owns its ssh session and SFTP channel.
 
 use std::pin::Pin;
 use std::sync::Arc;
@@ -7,12 +7,13 @@ use std::time::Duration;
 
 use futures_util::StreamExt as _;
 use futures_util::stream::FuturesUnordered;
+use sftp_tui_ops::{Decision, Event, Reporter};
 use sftp_tui_ssh::askpass::{AskpassEnv, AskpassEvent, AskpassServer};
 use sftp_tui_ssh::resolve::resolve;
 use sftp_tui_ssh::version::check_version;
 use sftp_tui_ssh::{CachedHost, ChannelProcess, Session, SftpChannel, SshError, cleanup_stale};
-use sftp_tui_vfs::{LocalFs, Location, RemotePath, SftpFs, Vfs as _, VfsError};
-use tokio::sync::{Mutex, mpsc};
+use sftp_tui_vfs::{LocalFs, Location, RemotePath, SftpFs, Vfs, VfsError};
+use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
@@ -39,6 +40,8 @@ pub(crate) enum Done {
         generation: u64,
         result: Result<Listed, String>,
     },
+    /// A report from the job `id` of [`Effect::Delete`].
+    Job { id: u64, event: JobEvent },
     /// The directory of [`Effect::CreateDir`] was made, or why not.
     Created {
         side: Side,
@@ -72,12 +75,39 @@ pub(crate) enum Done {
     },
 }
 
+/// A report from a job, with its paths as locations and its errors in words.
+#[derive(Debug)]
+pub(crate) enum JobEvent {
+    /// Counting what to do: `items` found so far.
+    Scanning { items: u64 },
+    /// At `current`, with `done` of `total` entries behind it.
+    Progress {
+        current: Location,
+        done: u64,
+        total: u64,
+    },
+    /// Something failed at `path`; the job waits for `reply`.
+    Failed {
+        path: Location,
+        error: String,
+        reply: oneshot::Sender<Decision>,
+    },
+    /// The job is over: done, aborted, or cancelled.
+    Finished,
+}
+
 /// Work for the task of a connected host, for the panel on a side.
 #[derive(Debug)]
 pub(crate) enum HostRequest {
     List(Side, ListRequest),
     /// Makes the directory at `path`.
     CreateDir(Side, RemotePath),
+    /// Runs the delete job `id` on `paths` until `cancel`.
+    Delete {
+        id: u64,
+        paths: Vec<RemotePath>,
+        cancel: CancellationToken,
+    },
 }
 
 /// Passes requests to the task of a connected host.
@@ -154,6 +184,12 @@ impl Tasks {
                     location,
                     host,
                 } => self.create_dir(side, location, host),
+                Effect::Delete {
+                    id,
+                    targets,
+                    host,
+                    cancel,
+                } => self.delete(id, targets, host, cancel),
                 Effect::Connect {
                     host,
                     connection,
@@ -212,6 +248,43 @@ impl Tasks {
                     result,
                 });
             }
+        }
+    }
+
+    /// Runs the delete job `id` on `targets`, all local or all on one host, here or in the task
+    /// of their host.
+    fn delete(
+        &self,
+        id: u64,
+        targets: Vec<Location>,
+        host: Option<HostHandle>,
+        cancel: CancellationToken,
+    ) {
+        let mut local = Vec::new();
+        let mut remote = Vec::new();
+        for target in targets {
+            match target {
+                Location::Local(path) => local.push(path),
+                Location::Remote { path, .. } => remote.push(path),
+                Location::Root => {}
+            }
+        }
+        if let Some(handle) = host {
+            let request = HostRequest::Delete {
+                id,
+                paths: remote,
+                cancel,
+            };
+            if handle.0.send(request).is_err() {
+                let event = JobEvent::Finished;
+                let _ = self.done.send(Done::Job { id, event });
+            }
+        } else {
+            let done = self.done.clone();
+            tokio::spawn(async move {
+                let finished = run_delete(&LocalFs, local, cancel, id, &done, Location::Local);
+                let _ = done.send(finished.await);
+            });
         }
     }
 
@@ -303,6 +376,47 @@ async fn resolve_address(
     let saved = tokio::task::spawn_blocking(move || root::remember(&context, &host, cached)).await;
     if let Ok(Err(error)) = saved {
         tracing::warn!(%error, "cannot save the ssh -G cache");
+    }
+}
+
+/// Runs the delete job `id` on `targets` with `vfs`, passing its reports on to `done` with
+/// paths made locations by `location`, and returns its end.
+async fn run_delete<V: Vfs>(
+    vfs: &V,
+    targets: Vec<V::Path>,
+    cancel: CancellationToken,
+    id: u64,
+    done: &mpsc::UnboundedSender<Done>,
+    location: impl Fn(V::Path) -> Location,
+) -> Done {
+    let (events, mut incoming) = mpsc::unbounded_channel();
+    let reporter = Reporter::new(events, cancel);
+    let work = async move {
+        let mut reporter = reporter;
+        sftp_tui_ops::delete(vfs, targets, &mut reporter).await
+    };
+    let forward = async {
+        while let Some(event) = incoming.recv().await {
+            let event = match event {
+                Event::Scanning { items } => JobEvent::Scanning { items },
+                Event::Progress(progress) => JobEvent::Progress {
+                    current: location(progress.current),
+                    done: progress.items_done,
+                    total: progress.items_total,
+                },
+                Event::Failed { path, error, reply } => JobEvent::Failed {
+                    path: location(path),
+                    error: describe::vfs_error(&error),
+                    reply,
+                },
+            };
+            let _ = done.send(Done::Job { id, event });
+        }
+    };
+    tokio::join!(work, forward);
+    Done::Job {
+        id,
+        event: JobEvent::Finished,
     }
 }
 
@@ -434,6 +548,15 @@ impl HostTask {
                     }
                     HostRequest::CreateDir(side, path) => {
                         running.push(Box::pin(self.create_dir(&fs, side, path)));
+                    }
+                    HostRequest::Delete { id, paths, cancel } => {
+                        let host = self.host.clone();
+                        let location = move |path| Location::Remote {
+                            host: host.clone(),
+                            path,
+                        };
+                        let job = run_delete(&fs, paths, cancel, id, &self.done, location);
+                        running.push(Box::pin(job));
                     }
                 },
                 Some(done) = running.next() => {

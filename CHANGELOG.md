@@ -65,3 +65,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   boxes; Space switches a check box.
 - F7 makes a directory, locally or on a host, and puts the cursor on it. The dialog opens with
   the name under the cursor; `~` stands for the home directory. Errors show in a red dialog.
+- F8 (or Delete) deletes the marked entries or the one under the cursor, locally or on a host,
+  after asking. Directories go with everything in them; symlinks are deleted, never followed.
+  A window shows the progress, and Esc stops it; a failure offers Ignore, Ignore all, Retry,
+  and Abort, as in mc.

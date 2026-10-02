@@ -31,6 +31,7 @@ rustix = { workspace = true, features = ["termios"] }
 secrecy.workspace = true
 sftp-tui-config.workspace = true
 sftp-tui-ssh.workspace = true
+sftp-tui-ops.workspace = true
 sftp-tui-vfs.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

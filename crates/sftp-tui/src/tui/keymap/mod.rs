@@ -139,6 +139,8 @@ impl Keymap {
                     (QuickSearch, &["ctrl-s", "alt-s"]),
                     (Help, &["f1"]),
                     (Mkdir, &["f7"]),
+                    // In text fields, Delete deletes a character.
+                    (Delete, &["f8", "delete"]),
                     (Quit, &["f10"]),
                     (Redraw, &["ctrl-l"]),
                 ],
@@ -703,8 +705,8 @@ mod tests {
         );
         assert_eq!(
             feed(&keymap, &mut state, Context::Panel, &["f8"]),
-            [],
-            "only the root disconnects"
+            actions(&[Action::Delete]),
+            "only the root disconnects; panels delete"
         );
         // `Esc 8` makes `Esc` a prefix in the root too, but alone it still cancels.
         let start = Instant::now();
@@ -775,6 +777,7 @@ mod tests {
         let mut panel = [None; 10];
         panel[0] = Some(Action::Help);
         panel[6] = Some(Action::Mkdir);
+        panel[7] = Some(Action::Delete);
         panel[9] = Some(Action::Quit);
         assert_eq!(keymap.fkeys(Context::Panel), panel);
         assert_eq!(keymap.fkeys(Context::QuickSearch), panel);

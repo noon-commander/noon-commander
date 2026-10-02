@@ -60,6 +60,8 @@ pub(crate) struct Theme {
     pub(crate) dialog_input: Style,
     /// Text field that still holds the text it opened with, which typing replaces.
     pub(crate) dialog_input_fresh: Style,
+    /// The progress bar of a job.
+    pub(crate) gauge: Style,
     /// Error dialogs: body, frame, text, and buttons without the focus.
     pub(crate) error_dialog: Style,
     pub(crate) error_title: Style,
@@ -114,6 +116,7 @@ impl Theme {
             dialog_button_focused: on(Color::Black, Color::Cyan),
             dialog_input: on(Color::Black, Color::Cyan),
             dialog_input_fresh: on(Color::DarkGray, Color::Cyan),
+            gauge: on(Color::White, Color::Black),
             error_dialog: on(Color::White, Color::Red),
             error_title: on(Color::LightYellow, Color::Red),
             error_button_focused: on(Color::Black, Color::Gray),
@@ -155,6 +158,7 @@ impl Theme {
             dialog_button_focused: reversed,
             dialog_input: reversed,
             dialog_input_fresh: reversed.dim(),
+            gauge: plain,
             error_dialog: plain,
             error_title: plain.bold(),
             error_button_focused: reversed,

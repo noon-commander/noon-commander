@@ -15,6 +15,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   directory, as `[Local]` did, and every volume its mount point, the system volume `/`. `..`
   from a remote `/` or a lost connection now leads to the list of hosts. The root is titled
   with the machine's name ([ADR 0006](docs/adr/0006-virtual-root-with-volumes-and-hosts.md)).
+- With icons, a host's icon shows its state by its color (and a cross after a failure) instead
+  of a marker in front of it, so names line up with the other rows.
 - `noc ls` without a location prints the mount points of the volumes, then the hosts as
   `host:`.
 

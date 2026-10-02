@@ -118,9 +118,13 @@ row, the hosts from the ssh config ([ADR 0006](adr/0006-virtual-root-with-volume
 - Entering a host connects in the background (the status line says so; Esc stops it) and opens
   the configured `start_dir` or the remote home directory, shown as an absolute path.
 - When a connection is lost, the panels on that host go back to the list of hosts and say why.
-- A marker in front of each host shows its state: `○` not connected, a spinner while
-  connecting, `●` connected, `✗` the last attempt failed or the connection was lost. F8 (`Esc 8`)
-  on a host closes the connection to it, or stops connecting to it.
+- The icon in front of each host shows its state, in a color of its own: a server, gray when
+  not connected and green when connected; a spinner while connecting; a server with a cross,
+  red, when the last attempt failed or the connection was lost. In the `terminal` theme, which
+  has no colors, connected hosts are bold and the others dim. Without icons, the markers are
+  `○`, `●`, the spinner, and `✗`. Every row has one cell in front of its name, so names line
+  up across volumes, hosts, and `..`. F8 (`Esc 8`) on a host closes the connection to it, or
+  stops connecting to it.
 - Locations are `Root`, `Sftp` (the list of hosts), `Local(PathBuf)`, or `Remote { host, path }`.
   Remote paths are bytes, because SFTP v3 does not guarantee UTF-8, and are displayed lossily.
   The SFTP client library still requires UTF-8 names; see the known issues in the
@@ -496,10 +500,11 @@ Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
   a dialog leaves a blank cell between its frame and its edge, which gives way on a screen too
   small for it.
 - **Icons.** Nerd Fonts v3 glyphs, on by default (`ui.icons`), in front of each name: our own for
-  directories, `..`, links, broken links, FIFOs, sockets, devices, executables, volumes,
-  network volumes, the list of hosts, and hosts; `devicons` for files by name or extension. devicons asks the disk whether a name it
-  does not know is a directory, so names go to it inside a path with a NUL byte, which names
+  directories, `..`, links, broken links, FIFOs, sockets, devices, executables, the home
+  directory, volumes, network volumes, the list of hosts, and hosts (which tell their state);
+  `devicons` for files by name or extension. devicons asks the disk whether a name it does not
+  know is a directory, so names go to it inside a path with a NUL byte, which names
   nothing: drawing stays free of I/O, and remote names are never looked up locally. Without
   icons, mc's markers: `/` directory, `~` link to a directory, `@` link, `!` broken link, `*`
   executable, `|` FIFO, `=` socket, `-` character device, `+` block device and volume; the
-  list of hosts is `/`, as it opens like a directory.
+  home directory is `~`, and the list of hosts `/`, as it opens like a directory.

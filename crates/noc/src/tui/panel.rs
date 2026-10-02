@@ -1096,17 +1096,14 @@ fn host_line(
     let status = (view.hosts)(&host.alias).status;
     let prefix = view.decor.host(status, view.tick);
     let (name, rest) = join(&format!("{prefix}{name}"), &address(host, view.hosts));
-    // The status marker leads the name cell and has a color of its own.
+    // The icon or marker that leads the name cell tells the status by its color.
     let marker_len = name.chars().next().map_or(0, char::len_utf8);
     let (marker, name) = name.split_at(marker_len);
-    let mut spans = vec![Span::styled(
-        marker.to_owned(),
-        view.theme.host_status(status),
-    )];
-    let prefix = prefix.get(marker_len..).unwrap_or_default();
-    spans.extend(icon_spans(name.to_owned(), prefix, Style::new(), view));
-    spans.push(Span::styled(rest, view.theme.address));
-    Line::from(spans)
+    Line::from(vec![
+        Span::styled(marker.to_owned(), view.theme.host_status(status)),
+        Span::raw(name.to_owned()),
+        Span::styled(rest, view.theme.address),
+    ])
 }
 
 /// A name cell in `style`, with the icon of its `prefix` in a toned-down `style`. A cell cut so
@@ -2452,15 +2449,14 @@ mod tests {
             &theme,
         );
         let buffer = terminal.backend().buffer();
-        // Rows: frame, header, the system volume.
-        assert_eq!(
-            (
-                buffer[(3, 2)].fg,
-                buffer[(3, 2)].modifier.contains(Modifier::DIM)
-            ),
-            (Color::White, true),
-            "the icon of a volume"
-        );
+        let look = |x: u16, y: u16| {
+            let cell = &buffer[(x, y)];
+            (cell.fg, cell.modifier.contains(Modifier::DIM))
+        };
+        // Rows: frame, header, home, the system volume; their icons all in the first column.
+        assert_eq!(look(1, 2), (Color::White, true), "the icon of home");
+        assert_eq!(look(1, 3), (Color::White, true), "the icon of a volume");
+        assert_eq!(look(3, 3), (Color::White, false), "its name");
         let mut hosts = sftp();
         let terminal = render_themed(
             &mut hosts,
@@ -2475,10 +2471,14 @@ mod tests {
             let cell = &buffer[(x, y)];
             (cell.fg, cell.modifier.contains(Modifier::DIM))
         };
-        // Rows: frame, header, `..`, the first host.
-        assert_eq!(look(1, 3), (Color::LightGreen, false), "the host's status");
-        assert_eq!(look(3, 3), (Color::Gray, true), "the icon of the host");
-        assert_eq!(look(5, 3), (Color::Gray, false), "its name");
+        // Rows: frame, header, `..`, the first host, in line with `..`.
+        assert_eq!(look(1, 2), (Color::White, true), "the icon of `..`");
+        assert_eq!(
+            look(1, 3),
+            (Color::LightGreen, false),
+            "the icon of the host, in the color of its status"
+        );
+        assert_eq!(look(3, 3), (Color::Gray, false), "its name");
     }
 
     #[test]

@@ -150,9 +150,11 @@ impl Theme {
             stale_link: plain,
             device: plain,
             special: plain,
-            host_idle: plain,
+            // Without colors, connected hosts stand out by weight; a failure has a glyph or
+            // marker of its own.
+            host_idle: plain.dim(),
             host_connecting: plain,
-            host_connected: plain,
+            host_connected: plain.bold(),
             host_failed: plain,
             address: plain,
             fkey_number: plain,

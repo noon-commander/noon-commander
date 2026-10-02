@@ -36,40 +36,41 @@ impl Decor {
         if self.icons { " " } else { "/" }
     }
 
-    /// The prefix of the home directory in the virtual root, in line with the hosts' status.
+    /// The prefix of the home directory in the virtual root.
     pub(crate) fn home(self) -> &'static str {
-        if self.icons { "  󰋜 " } else { "~ " }
+        if self.icons { "󰋜 " } else { "~ " }
     }
 
-    /// The prefix of a volume in the virtual root, in line with the hosts' status: a disk, a
-    /// network drive, or mc's marker of block devices.
+    /// The prefix of a volume in the virtual root: a disk, a network drive, or mc's marker of
+    /// block devices.
     pub(crate) fn volume(self, kind: VolumeKind) -> &'static str {
         match (self.icons, kind) {
             (false, _) => "+ ",
-            (true, VolumeKind::Network) => "  󰣳 ",
-            (true, VolumeKind::System | VolumeKind::Local) => "  󰋊 ",
+            (true, VolumeKind::Network) => "󰣳 ",
+            (true, VolumeKind::System | VolumeKind::Local) => "󰋊 ",
         }
     }
 
-    /// The prefix of the row of SFTP hosts in the virtual root, which opens like a directory.
+    /// The prefix of the row of SFTP hosts in the virtual root, which opens like a directory: a
+    /// network folder, or mc's marker of directories.
     pub(crate) fn sftp(self) -> &'static str {
-        if self.icons { "  󰒍 " } else { "/ " }
+        if self.icons { "󰡰 " } else { "/ " }
     }
 
-    /// The prefix of a host in the virtual root: its status, and with icons a server. `tick`
-    /// turns the spinner while connecting.
+    /// The prefix of a host, which tells its status in one cell, as every prefix takes one:
+    /// with icons a server, a server with a cross after a failure, or the spinner while
+    /// connecting, which `tick` turns; without them `○`, `●`, `✗`, or the spinner. The theme
+    /// colors it by the status.
     pub(crate) fn host(self, status: HostStatus, tick: u64) -> String {
-        let status = match status {
-            HostStatus::Idle => '○',
-            HostStatus::Connecting => spinner(tick),
-            HostStatus::Connected => '●',
-            HostStatus::Failed => '✗',
+        let marker = match (self.icons, status) {
+            (_, HostStatus::Connecting) => spinner(tick),
+            (true, HostStatus::Idle | HostStatus::Connected) => '󰒋',
+            (true, HostStatus::Failed) => '󰒑',
+            (false, HostStatus::Idle) => '○',
+            (false, HostStatus::Connected) => '●',
+            (false, HostStatus::Failed) => '✗',
         };
-        if self.icons {
-            format!("{status} 󰒋 ")
-        } else {
-            format!("{status} ")
-        }
+        format!("{marker} ")
     }
 }
 
@@ -230,11 +231,18 @@ mod tests {
         assert_eq!(plain.volume(VolumeKind::System), "+ ");
         assert_eq!(plain.sftp(), "/ ");
         assert_eq!(plain.home(), "~ ");
+        // With icons, the icon itself tells the status, so every prefix is one cell wide.
         let icons = Decor::new(true);
-        assert_eq!(icons.host(HostStatus::Connected, 0), "● 󰒋 ");
-        assert_eq!(icons.volume(VolumeKind::Local), "  󰋊 ");
-        assert_eq!(icons.volume(VolumeKind::Network), "  󰣳 ");
-        assert_eq!(icons.sftp(), "  󰒍 ");
-        assert_eq!(icons.home(), "  󰋜 ");
+        assert_eq!(icons.host(HostStatus::Idle, 0), "󰒋 ");
+        assert_eq!(icons.host(HostStatus::Connected, 0), "󰒋 ");
+        assert_eq!(icons.host(HostStatus::Failed, 0), "󰒑 ");
+        assert_eq!(icons.host(HostStatus::Connecting, 1), "/ ");
+        assert_eq!(icons.volume(VolumeKind::Local), "󰋊 ");
+        assert_eq!(icons.volume(VolumeKind::Network), "󰣳 ");
+        assert_eq!(icons.sftp(), "󰡰 ");
+        assert_eq!(icons.home(), "󰋜 ");
+        for prefix in [icons.parent(), icons.home(), icons.sftp()] {
+            assert_eq!(prefix.chars().count(), 2, "{prefix:?}");
+        }
     }
 }

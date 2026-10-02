@@ -36,7 +36,15 @@ pub(crate) struct Counts {
     pub(crate) bytes_total: u64,
 }
 
-/// The window of a job, with Abort.
+/// A button of a job's window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum JobButton {
+    /// The job goes on behind the panels.
+    Background,
+    Abort,
+}
+
+/// The window of a job, with Background, the default, and Abort.
 #[derive(Debug)]
 pub(crate) struct JobView {
     title: String,
@@ -44,6 +52,8 @@ pub(crate) struct JobView {
     doing: String,
     stage: Stage,
     aborting: bool,
+    buttons: Vec<JobButton>,
+    focus: usize,
 }
 
 impl JobView {
@@ -53,7 +63,15 @@ impl JobView {
             doing,
             stage: Stage::Scanning { items: 0 },
             aborting: false,
+            buttons: vec![JobButton::Background, JobButton::Abort],
+            focus: 0,
         }
+    }
+
+    /// Leaves Abort the only button, for a job that must stay in front.
+    pub(crate) fn keep_in_front(&mut self) {
+        self.buttons = vec![JobButton::Abort];
+        self.focus = 0;
     }
 
     pub(crate) fn scanning(&mut self, items: u64) {
@@ -70,12 +88,43 @@ impl JobView {
         };
     }
 
-    /// Whether a key asks to abort: Esc, Enter, or Space, as Abort is the only button.
-    pub(crate) fn wants_abort(input: Resolved) -> bool {
-        matches!(
-            input,
-            Resolved::Action(Action::Cancel | Action::Confirm | Action::Toggle)
-        )
+    /// How far the job is, from 0 to 1: by bytes if it moves data, else by entries.
+    pub(crate) fn ratio(&self) -> f64 {
+        match self.stage {
+            Stage::Scanning { .. } => 0.0,
+            Stage::Working {
+                done,
+                total,
+                bytes: (_, 0),
+                ..
+            }
+            | Stage::Working {
+                bytes: (done, total),
+                ..
+            } => ratio(done, total),
+        }
+    }
+
+    /// Takes a key: Enter or Space presses the focused button, Esc aborts, as in mc, and
+    /// arrows and Tab move the focus.
+    pub(crate) fn handle(&mut self, input: Resolved) -> Option<JobButton> {
+        let Resolved::Action(action) = input else {
+            return None;
+        };
+        let count = self.buttons.len();
+        match action {
+            Action::Cancel => Some(JobButton::Abort),
+            Action::Confirm | Action::Toggle => Some(self.buttons[self.focus]),
+            Action::NextField | Action::Right | Action::Down => {
+                self.focus = (self.focus + 1) % count;
+                None
+            }
+            Action::PrevField | Action::Left | Action::Up => {
+                self.focus = (self.focus + count - 1) % count;
+                None
+            }
+            _ => None,
+        }
     }
 
     /// Shows that the job was asked to stop.
@@ -135,11 +184,33 @@ impl JobView {
         put(1, Line::raw(cells::fit(&current, width, Align::Left)));
         put(2, gauge(ratio, width, theme));
         put(3, Line::raw(cells::fit(&count, width, Align::Left)));
-        let abort = Span::styled(
-            format!("[< {} >]", fl!("dialog-abort")),
-            colors.focused_style(),
-        );
-        put(5, Line::from(abort).centered());
+        put(5, self.button_line(colors));
+    }
+
+    /// The buttons, centered; the first is the default.
+    fn button_line(&self, colors: Colors) -> Line<'static> {
+        let mut spans = Vec::new();
+        for (index, button) in self.buttons.iter().enumerate() {
+            if index > 0 {
+                spans.push(Span::raw(" "));
+            }
+            let label = match button {
+                JobButton::Background => fl!("job-background"),
+                JobButton::Abort => fl!("dialog-abort"),
+            };
+            let text = if index == 0 {
+                format!("[< {label} >]")
+            } else {
+                format!("[ {label} ]")
+            };
+            let style = if index == self.focus {
+                colors.focused_style()
+            } else {
+                colors.button_style()
+            };
+            spans.push(Span::styled(text, style));
+        }
+        Line::from(spans).centered()
     }
 }
 
@@ -227,11 +298,51 @@ mod tests {
     }
 
     #[test]
-    fn abort_is_the_only_button() {
+    fn enter_sends_to_the_background_and_esc_aborts() {
+        let press = |view: &mut JobView, action| view.handle(Resolved::Action(action));
+        let mut view = JobView::new("Copy".to_owned(), "Copying".to_owned());
+        assert!(draw(&view).contains("[< Background >] [ Abort ]"));
+        assert_eq!(
+            press(&mut view, Action::Confirm),
+            Some(JobButton::Background)
+        );
+        assert_eq!(press(&mut view, Action::Cancel), Some(JobButton::Abort));
+        assert_eq!(press(&mut view, Action::Right), None);
+        assert_eq!(press(&mut view, Action::Toggle), Some(JobButton::Abort));
+        assert_eq!(press(&mut view, Action::PrevField), None);
+        assert_eq!(
+            press(&mut view, Action::Confirm),
+            Some(JobButton::Background)
+        );
+        assert_eq!(view.handle(Resolved::Insert('a')), None);
+
+        view.keep_in_front();
+        assert!(!draw(&view).contains("Background"));
         for action in [Action::Cancel, Action::Confirm, Action::Toggle] {
-            assert!(JobView::wants_abort(Resolved::Action(action)));
+            assert_eq!(press(&mut view, action), Some(JobButton::Abort));
         }
-        assert!(!JobView::wants_abort(Resolved::Action(Action::Down)));
-        assert!(!JobView::wants_abort(Resolved::Insert('a')));
+        assert_eq!(press(&mut view, Action::Right), None);
+        assert_eq!(press(&mut view, Action::Confirm), Some(JobButton::Abort));
+    }
+
+    #[test]
+    fn the_ratio_follows_bytes_or_entries() {
+        let mut view = JobView::new("Delete".to_owned(), "Deleting".to_owned());
+        assert!(view.ratio() < f64::EPSILON);
+        let counts = Counts {
+            done: 1,
+            total: 4,
+            ..Counts::default()
+        };
+        view.working(String::new(), counts);
+        assert!((view.ratio() - 0.25).abs() < f64::EPSILON);
+        let counts = Counts {
+            done: 1,
+            total: 4,
+            bytes_done: 3,
+            bytes_total: 4,
+        };
+        view.working(String::new(), counts);
+        assert!((view.ratio() - 0.75).abs() < f64::EPSILON);
     }
 }

@@ -52,7 +52,8 @@
 - [x] F6 move/rename
 - [x] F3 viewer
 - [x] F4 edit via `$EDITOR` (suspends and resumes the TUI)
-- [ ] Background job queue
+- [x] Background jobs: the Background button, an indicator, a question on quit
+- [ ] Job queue: `[transfer] parallel_jobs` and a list of jobs
 
 ## M4: Polish
 

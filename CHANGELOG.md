@@ -87,3 +87,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   with the terminal handed over until the editor exits. A remote file is edited as a local
   copy, which goes back, with the original's permissions, if it changed; if it cannot go
   back, it stays, and sftp-tui says where.
+- A job's window has a Background button, the default: Enter sends the job behind the panels,
+  and other jobs can start while it runs. The top right corner shows how many jobs run and
+  how far they are; their questions open as they come. F10 asks before quitting while jobs
+  run, and quitting lets them remove their unfinished files first.

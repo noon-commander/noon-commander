@@ -191,6 +191,19 @@ job-count = { $done } of { $total }
 # The same, for jobs that move data: the sizes are shown like those in panels.
 job-count-bytes = { $done } of { $total }, { $bytes_done } of { $bytes_total } bytes
 job-aborting = Aborting…
+# The button that sends the job behind the panels, where it goes on.
+job-background = Background
+# At the top right while jobs run in the background: how many, and how far they are together.
+jobs-running = { $count ->
+        [one] { $count } job
+       *[other] { $count } jobs
+    } { $percent }%
+# F10 while jobs run.
+quit-title = Quit
+quit-jobs = { $count ->
+        [one] A job is still running. Quit and stop it?
+       *[other] { $count } jobs are still running. Quit and stop them?
+    }
 
 ## Deleting, F8 (src/tui/app). Prefix: delete-. As in mc.
 

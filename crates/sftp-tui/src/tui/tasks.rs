@@ -154,6 +154,8 @@ pub(crate) struct Tasks {
     /// The askpass bridge, or why there is none.
     askpass: Result<AskpassServer, String>,
     hosts: JoinSet<()>,
+    /// Jobs that run here, not in the task of a host.
+    jobs: JoinSet<()>,
     /// Taken while the `ssh -G` cache is read, changed, and written.
     cache: Arc<Mutex<()>>,
 }
@@ -171,6 +173,7 @@ impl Tasks {
             done,
             askpass,
             hosts: JoinSet::new(),
+            jobs: JoinSet::new(),
             cache: Arc::new(Mutex::new(())),
         }
     }
@@ -224,7 +227,8 @@ impl Tasks {
                     cancel,
                 } => {
                     let done = self.done.clone();
-                    tokio::spawn(async move {
+                    self.reap_jobs();
+                    self.jobs.spawn(async move {
                         let job = CopyJob {
                             id,
                             options,
@@ -332,7 +336,7 @@ impl Tasks {
     /// Runs the delete job `id` on `targets`, all local or all on one host, here or in the task
     /// of their host.
     fn delete(
-        &self,
+        &mut self,
         id: u64,
         targets: Vec<Location>,
         host: Option<HostHandle>,
@@ -358,10 +362,25 @@ impl Tasks {
             }
         } else {
             let done = self.done.clone();
-            tokio::spawn(async move {
+            self.reap_jobs();
+            self.jobs.spawn(async move {
                 let finished = run_delete(&LocalFs, local, cancel, id, &done, Location::Local);
                 let _ = done.send(finished.await);
             });
+        }
+    }
+
+    /// Forgets the jobs that are over.
+    fn reap_jobs(&mut self) {
+        while self.jobs.try_join_next().is_some() {}
+    }
+
+    /// Waits a while for the jobs, which the app has told to stop, to clean up: a copy removes
+    /// its unfinished file, through a session that is still there.
+    pub(crate) async fn finish_jobs(&mut self) {
+        let all = async { while self.jobs.join_next().await.is_some() {} };
+        if tokio::time::timeout(SHUTDOWN_TIMEOUT, all).await.is_err() {
+            tracing::warn!("some jobs did not stop in time");
         }
     }
 

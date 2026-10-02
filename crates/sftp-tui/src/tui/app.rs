@@ -24,7 +24,7 @@ use super::panel::{
     Destination, HostState, HostStatus, ListRequest, Listed, Panel, View, child, location_text,
 };
 use super::pattern::Pattern;
-use super::progress::{Counts, JobView};
+use super::progress::{Counts, JobButton, JobView};
 use super::tasks::{HostHandle, JobEvent};
 use super::theme::Theme;
 use super::viewer::Viewer;
@@ -178,6 +178,8 @@ enum Purpose {
         job: u64,
         reply: oneshot::Sender<Conflict>,
     },
+    /// F10 while jobs run: Yes quits and stops them.
+    Quit,
     /// Something to read, such as an error.
     Info,
 }
@@ -210,11 +212,12 @@ struct Editing {
     dir: Location,
 }
 
-/// A job on screen, over the panels; one runs at a time.
+/// A running job: in front, in its window over the panels, or in the background.
 #[derive(Debug)]
 struct Job {
     id: u64,
     kind: JobKind,
+    background: bool,
     then: Option<Then>,
     /// Directories it changes, which panels read again when it ends.
     changes: Vec<Location>,
@@ -225,6 +228,13 @@ struct Job {
 }
 
 impl Job {
+    /// What follows the job, which then stays in front: a job of F4.
+    fn then(mut self, then: Then) -> Self {
+        self.then = Some(then);
+        self.view.keep_in_front();
+        self
+    }
+
     fn new(id: u64, kind: JobKind, changes: Vec<Location>, cancel: CancellationToken) -> Self {
         let hosts = changes
             .iter()
@@ -241,6 +251,7 @@ impl Job {
         Self {
             id,
             kind,
+            background: false,
             then: None,
             changes,
             hosts,
@@ -313,8 +324,9 @@ pub(crate) struct App {
     copy_choices: CopyChoices,
     /// For the times in questions.
     tz: TimeZone,
-    /// Over the panels and the help, under the dialogs.
-    job: Option<Job>,
+    /// Running jobs: at most one in front, over the panels and the help and under the
+    /// dialogs, and any number in the background.
+    jobs: Vec<Job>,
     /// Instead of the panels.
     viewing: Option<Viewing>,
     editing: Option<Editing>,
@@ -322,7 +334,8 @@ pub(crate) struct App {
     edit_now: Option<PathBuf>,
     /// Where copies of remote files for the editor go.
     runtime_dir: PathBuf,
-    jobs: u64,
+    /// The id of the last job started.
+    last_job: u64,
     /// Over the panels, under the dialogs.
     help: Option<Help>,
     keymap: Keymap,
@@ -367,12 +380,12 @@ impl App {
                 atomic: transfer.atomic_upload,
             },
             tz: TimeZone::UTC,
-            job: None,
+            jobs: Vec::new(),
             viewing: None,
             editing: None,
             edit_now: None,
             runtime_dir: std::env::temp_dir(),
-            jobs: 0,
+            last_job: 0,
             help: None,
             keymap: Keymap::mc(),
             quit: false,
@@ -417,7 +430,7 @@ impl App {
     pub(crate) fn context(&self) -> Context {
         if let Some(open) = self.dialogs.front() {
             open.dialog.context()
-        } else if self.job.is_some() || self.help.is_some() {
+        } else if self.in_front().is_some() || self.help.is_some() {
             Context::Dialog
         } else if self.viewing.is_some() {
             Context::Viewer
@@ -447,6 +460,43 @@ impl App {
         }
     }
 
+    /// Gives a key to the job in front, if there is one: Abort stops it, Background sends it
+    /// behind the panels.
+    fn handle_job(&mut self, input: Resolved) -> bool {
+        let Some(job) = self.jobs.iter_mut().find(|job| !job.background) else {
+            return false;
+        };
+        match job.view.handle(input) {
+            Some(JobButton::Abort) => {
+                job.cancel.cancel();
+                job.view.abort();
+            }
+            Some(JobButton::Background) => job.background = true,
+            None => {}
+        }
+        true
+    }
+
+    /// The job in front, in its window.
+    fn in_front(&self) -> Option<&Job> {
+        self.jobs.iter().find(|job| !job.background)
+    }
+
+    /// Quits, after asking if jobs would stop.
+    fn ask_quit(&mut self) {
+        if self.jobs.is_empty() {
+            self.quit = true;
+            return;
+        }
+        let message = fl!("quit-jobs", count = self.jobs.len());
+        let buttons = vec![Button::Yes, Button::No];
+        let dialog = Dialog::question(&fl!("quit-title"), &message, buttons, 1, false);
+        self.dialogs.push_back(Open {
+            dialog,
+            purpose: Purpose::Quit,
+        });
+    }
+
     fn panel(&self, side: Side) -> &Panel {
         match side {
             Side::Left => &self.left,
@@ -472,11 +522,7 @@ impl App {
             }
             return Vec::new();
         }
-        if let Some(job) = &mut self.job {
-            if JobView::wants_abort(input) {
-                job.cancel.cancel();
-                job.view.abort();
-            }
+        if self.handle_job(input) {
             return Vec::new();
         }
         if let Some(help) = &mut self.help {
@@ -521,7 +567,7 @@ impl App {
         };
         match action {
             Action::QuickSearch => self.panel_mut(self.active).search_next(),
-            Action::Quit => self.quit = true,
+            Action::Quit => self.ask_quit(),
             Action::Redraw => self.redraw = true,
             Action::Help => self.help = Some(Help::new(&self.keymap, self.ui.type_to_search)),
             Action::SwitchPanel => self.active = self.active.other(),
@@ -625,6 +671,7 @@ impl App {
                 };
                 let _ = reply.send(conflict);
             }
+            Purpose::Quit => self.quit = event == DialogEvent::Pressed(Button::Yes),
             Purpose::Pattern { .. }
             | Purpose::Mkdir { .. }
             | Purpose::Delete { .. }
@@ -656,8 +703,8 @@ impl App {
             },
             Location::Root | Location::Local(_) => None,
         };
-        self.jobs += 1;
-        let id = self.jobs;
+        self.last_job += 1;
+        let id = self.last_job;
         let cancel = CancellationToken::new();
         self.viewing = Some(Viewing {
             viewer: Viewer::new(id, location_text(&location)),
@@ -705,8 +752,8 @@ impl App {
             return Vec::new();
         };
         let (handle, on) = (handle.clone(), host.clone());
-        self.jobs += 1;
-        let id = self.jobs;
+        self.last_job += 1;
+        let id = self.last_job;
         // Its own name last, so that the editor knows what kind of file it is.
         let mut temporary = format!("edit-{}-{id}-", std::process::id()).into_bytes();
         temporary.extend_from_slice(&name);
@@ -714,10 +761,9 @@ impl App {
             .runtime_dir
             .join(std::ffi::OsStr::from_bytes(&temporary));
         let cancel = CancellationToken::new();
-        let mut job = Job::new(id, JobKind::Copy, Vec::new(), cancel.clone());
-        job.then = Some(Then::Edit);
+        let mut job = Job::new(id, JobKind::Copy, Vec::new(), cancel.clone()).then(Then::Edit);
         job.hosts.push(on);
-        self.job = Some(job);
+        self.jobs.push(job);
         self.editing = Some(Editing {
             file: file.clone(),
             remote: Some(location.clone()),
@@ -773,15 +819,15 @@ impl App {
             self.keep_edit(&path, &editing.file);
             return Vec::new();
         };
-        self.jobs += 1;
-        let id = self.jobs;
+        self.last_job += 1;
+        let id = self.last_job;
         let cancel = CancellationToken::new();
-        let mut job = Job::new(id, JobKind::Copy, vec![editing.dir], cancel.clone());
-        job.then = Some(Then::Discard {
+        let then = Then::Discard {
             copy: editing.file.clone(),
             remote: remote.clone(),
-        });
-        self.job = Some(job);
+        };
+        let job = Job::new(id, JobKind::Copy, vec![editing.dir], cancel.clone()).then(then);
+        self.jobs.push(job);
         vec![Effect::Copy {
             id,
             sources: vec![Location::Local(editing.file)],
@@ -891,10 +937,11 @@ impl App {
             Location::Root | Location::Local(_) => None,
         };
         let targets = names.iter().filter_map(|name| child(&dir, name)).collect();
-        self.jobs += 1;
-        let id = self.jobs;
+        self.last_job += 1;
+        let id = self.last_job;
         let cancel = CancellationToken::new();
-        self.job = Some(Job::new(id, JobKind::Delete, vec![dir], cancel.clone()));
+        self.jobs
+            .push(Job::new(id, JobKind::Delete, vec![dir], cancel.clone()));
         vec![Effect::Delete {
             id,
             targets,
@@ -996,12 +1043,12 @@ impl App {
             self.show_error(&error(fl!("error-connection-closed")));
             return Vec::new();
         };
-        self.jobs += 1;
-        let id = self.jobs;
+        self.last_job += 1;
+        let id = self.last_job;
         let cancel = CancellationToken::new();
         // Into the target, or to it as a new name in its parent; a move empties the source.
         let changes = vec![target.clone(), target.parent(), dir];
-        self.job = Some(Job::new(id, kind, changes, cancel.clone()));
+        self.jobs.push(Job::new(id, kind, changes, cancel.clone()));
         let moving = kind == JobKind::Move;
         let options = CopyOptions {
             preserve: self.copy_choices.preserve || moving,
@@ -1062,7 +1109,7 @@ impl App {
     /// Takes a report from the job `id`: progress for its window, a failure for a dialog
     /// that waits for an answer, or its end.
     pub(crate) fn job_event(&mut self, id: u64, event: JobEvent) -> Vec<Effect> {
-        let Some(job) = self.job.as_mut().filter(|job| job.id == id) else {
+        let Some(job) = self.jobs.iter_mut().find(|job| job.id == id) else {
             return Vec::new();
         };
         match event {
@@ -1107,7 +1154,7 @@ impl App {
                 });
             }
             JobEvent::Finished { complete } => {
-                if let Some(job) = self.end_job() {
+                if let Some(job) = self.end_job(id) {
                     let mut effects = job
                         .then
                         .map_or_else(Vec::new, |then| self.follow_up(then, complete));
@@ -1123,9 +1170,10 @@ impl App {
         Vec::new()
     }
 
-    /// Takes the job off the screen, with the questions it asked.
-    fn end_job(&mut self) -> Option<Job> {
-        let job = self.job.take()?;
+    /// Takes the job `id` away, with the questions it asked.
+    fn end_job(&mut self, id: u64) -> Option<Job> {
+        let index = self.jobs.iter().position(|job| job.id == id)?;
+        let job = self.jobs.remove(index);
         self.dialogs.retain(|open| match open.purpose {
             Purpose::Failure { job: asked, .. } | Purpose::Conflict { job: asked, .. } => {
                 asked != job.id
@@ -1465,16 +1513,21 @@ impl App {
             self.failed.insert(host.to_owned());
         }
         let mut effects = Vec::new();
-        // Its task dropped the job; its panels leave the host, so there is nothing to read.
-        if self
-            .job
-            .as_ref()
-            .is_some_and(|job| job.hosts.iter().any(|on| on == host))
-            && let Some(Job {
+        // Their tasks dropped the jobs on the host; its panels leave it, so there is nothing
+        // to read.
+        let lost: Vec<u64> = self
+            .jobs
+            .iter()
+            .filter(|job| job.hosts.iter().any(|on| on == host))
+            .map(|job| job.id)
+            .collect();
+        for id in lost {
+            if let Some(Job {
                 then: Some(then), ..
-            }) = self.end_job()
-        {
-            effects = self.follow_up(then, false);
+            }) = self.end_job(id)
+            {
+                effects.extend(self.follow_up(then, false));
+            }
         }
         for side in Side::BOTH {
             let panel = self.panel_mut(side);
@@ -1540,13 +1593,17 @@ impl App {
         self.tick = self.tick.wrapping_add(1);
     }
 
+    /// Stops every job, for quitting; they clean up before the connections go.
+    pub(crate) fn stop_jobs(&self) {
+        for job in &self.jobs {
+            job.cancel.cancel();
+        }
+    }
+
     /// Stops every connection and connection attempt, for quitting.
     pub(crate) fn disconnect_all(&mut self) {
         for (_, state) in self.hosts.drain() {
             state.stop();
-        }
-        if let Some(job) = &self.job {
-            job.cancel.cancel();
         }
         self.close_viewer();
     }
@@ -1584,15 +1641,50 @@ impl App {
                 .render(frame, right, active == Side::Right, &view);
         }
         self.render_fkeys(frame, key_bar);
+        if self.viewing.is_none() {
+            self.render_jobs(frame, panels);
+        }
         if let Some(help) = &mut self.help {
             help.render(frame, panels, &self.theme);
         }
-        if let Some(job) = &self.job {
+        if let Some(job) = self.in_front() {
             job.view.render(frame, panels, &self.theme);
         }
         if let Some(open) = self.dialogs.front() {
             open.dialog.render(frame, panels, &self.theme);
         }
+    }
+
+    /// The jobs in the background at the top right, where Far has its clock: how many, and
+    /// how far they are together.
+    fn render_jobs(&self, frame: &mut Frame<'_>, area: Rect) {
+        let behind: Vec<&Job> = self.jobs.iter().filter(|job| job.background).collect();
+        if behind.is_empty() {
+            return;
+        }
+        let ratio = behind.iter().map(|job| job.view.ratio()).sum::<f64>();
+        // A few jobs, each at 0 … 1.
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss
+        )]
+        let percent = (ratio / behind.len() as f64 * 100.0).round() as u64;
+        let text = format!(
+            " {} ",
+            fl!(
+                "jobs-running",
+                count = behind.len(),
+                percent = percent.to_string()
+            )
+        );
+        // Inside the corner of the right panel's frame.
+        let room = usize::from(area.width.saturating_sub(2));
+        let text = cells::fit(&text, cells::width(&text).min(room), cells::Align::Left);
+        let width = u16::try_from(cells::width(&text)).unwrap_or(0);
+        let x = area.right().saturating_sub(width + 1);
+        let row = Rect::new(x, area.y, width, 1.min(area.height));
+        frame.render_widget(Line::styled(text, self.theme.panel_title_active), row);
     }
 
     /// The F-key bar: ten equal slots, each the key number and the label of its action.
@@ -2251,6 +2343,80 @@ mod tests {
     }
 
     #[test]
+    fn enter_sends_a_job_to_the_background_where_others_join_it() {
+        let mut app = loaded();
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        let (first, _, _, cancel) = delete_job(app.handle(action(Action::Confirm)));
+        app.handle(action(Action::Confirm));
+        assert!(!cancel.is_cancelled());
+        assert_eq!(app.context(), Context::Panel, "the panels take the keys");
+        let progress = JobEvent::Progress {
+            current: local("/srv/left/a"),
+            done: 1,
+            total: 4,
+            bytes_done: 0,
+            bytes_total: 0,
+        };
+        app.job_event(first, progress);
+        let text = screen(&mut app);
+        assert!(text.contains(" 1 job 25% ┐"), "{text}");
+
+        // Another job starts in front, and goes behind too.
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        let (second, _, _, _) = delete_job(app.handle(action(Action::Confirm)));
+        assert_eq!(app.context(), Context::Dialog);
+        app.handle(action(Action::Confirm));
+        assert!(screen(&mut app).contains(" 2 jobs 13% "));
+
+        // A question from behind shows over the panels.
+        let (reply, mut decision) = oneshot::channel();
+        let path = local("/srv/right/x");
+        let error = "busy".to_owned();
+        app.job_event(second, JobEvent::Failed { path, error, reply });
+        assert_eq!(app.context(), Context::Dialog);
+        app.handle(action(Action::Confirm));
+        assert_eq!(decision.try_recv(), Ok(Decision::Skip));
+
+        // F10 asks while jobs run; No, the default, goes on.
+        app.handle(action(Action::Quit));
+        let text = screen_of(&mut app, 12);
+        assert!(
+            text.contains("2 jobs are still running. Quit and stop them?"),
+            "{text}"
+        );
+        app.handle(action(Action::Confirm));
+        assert!(!app.quits());
+
+        // A job that ends reads its directory again.
+        let effects = app.job_event(first, JobEvent::Finished { complete: true });
+        assert_eq!(effects.len(), 2, "both panels show /srv");
+        assert!(screen(&mut app).contains(" 1 job 0% "));
+        app.job_event(second, JobEvent::Finished { complete: true });
+        assert!(!screen(&mut app).contains(" job"));
+        app.handle(action(Action::Quit));
+        assert!(app.quits(), "nothing to ask");
+    }
+
+    #[test]
+    fn quitting_stops_the_jobs_and_yes_quits() {
+        let mut app = loaded();
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        let (_, _, _, cancel) = delete_job(app.handle(action(Action::Confirm)));
+        app.handle(action(Action::Confirm));
+        app.handle(action(Action::Quit));
+        assert!(screen_of(&mut app, 12).contains("A job is still running. Quit and stop it?"));
+        app.handle(action(Action::Left));
+        app.handle(action(Action::Confirm));
+        assert!(app.quits());
+        assert!(!cancel.is_cancelled(), "not before the loop stops them");
+        app.stop_jobs();
+        assert!(cancel.is_cancelled());
+    }
+
+    #[test]
     fn a_job_on_a_lost_host_ends_with_it() {
         let mut app = at_root();
         let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
@@ -2267,7 +2433,7 @@ mod tests {
 
         let effects = app.closed("web", connection, Some("Broken pipe"));
         assert_eq!(effects.len(), 1, "back to the root");
-        assert!(app.job.is_none());
+        assert!(app.jobs.is_empty());
         assert_ne!(app.context(), Context::Dialog);
     }
 
@@ -2379,20 +2545,20 @@ mod tests {
         };
         let (_, _, target, _, _) = copy_job(copy_to(&mut app, "sub"));
         assert_eq!(target, local("/srv/sub"), "from the source's directory");
-        app.end_job();
+        app.jobs.clear();
         let (_, _, target, ends, _) = copy_job(copy_to(&mut app, "web:/var/www"));
         assert_eq!((target, ends), (remote("web", "/var/www"), (false, true)));
-        app.end_job();
+        app.jobs.clear();
         let (_, _, target, _, _) = copy_job(copy_to(&mut app, "x:y"));
         assert_eq!(target, local("/srv/x:y"), "no host called x");
-        app.end_job();
+        app.jobs.clear();
 
         // Preserve attributes, switched off, stays off.
         app.handle(action(Action::Copy));
         for step in [Action::NextField, Action::Toggle, Action::Confirm] {
             app.handle(action(step));
         }
-        app.end_job();
+        app.jobs.clear();
         app.handle(action(Action::Copy));
         assert!(screen(&mut app).contains("[ ] Preserve attributes"));
         let (_, _, _, _, options) = copy_job(app.handle(action(Action::Confirm)));
@@ -2439,7 +2605,7 @@ mod tests {
         let (_, _, target, _, options) = copy_job(app.handle(action(Action::Confirm)));
         assert_eq!(target, local("/srv/renamed"));
         assert!(options.remove_sources);
-        app.end_job();
+        app.jobs.clear();
 
         let mut app = loaded();
         app.handle(action(Action::Down));
@@ -2517,7 +2683,7 @@ mod tests {
         );
 
         app.closed("web", connection, Some("Broken pipe"));
-        assert!(app.job.is_none());
+        assert!(app.jobs.is_empty());
     }
 
     #[test]
@@ -2637,6 +2803,11 @@ mod tests {
         assert_eq!(ends, (true, false));
         assert!(options.overwrite && options.preserve);
         assert_eq!(app.take_edit(), None, "not before the copy is there");
+        let text = screen_of(&mut app, 12);
+        assert!(
+            !text.contains("Background"),
+            "the editor would open later: {text}"
+        );
 
         app.job_event(id, JobEvent::Finished { complete: true });
         assert_eq!(app.take_edit(), Some(copy.clone()));
@@ -2712,7 +2883,7 @@ mod tests {
                 .any(|effect| matches!(effect, Effect::Discard(path) if *path == copy)),
             "{effects:?}"
         );
-        assert!(app.job.is_none());
+        assert!(app.jobs.is_empty());
         assert_eq!(app.take_edit(), None);
 
         // While the edited copy goes back: it stays, and the user hears where.

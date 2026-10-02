@@ -166,7 +166,9 @@ sftp-tui config paths       show the files and directories in use
 - One task per host owns its ssh session and SFTP channel. The app sends it listing requests
   over a channel and gets told when the host is connected and when the connection ends: on
   request, when the master exits, or, without multiplexing, when the channel's ssh exits.
-  Quitting restores the terminal first, then gives the connections a few seconds to close.
+  Quitting restores the terminal first, then stops the jobs and gives them a few seconds to
+  clean up through sessions that are still there, then gives the connections a few seconds
+  to close.
 - The terminal is restored on every exit: a guard leaves raw mode and the alternate screen when
   the TUI returns or fails, ratatui's panic hook does it before a panic message, and SIGTERM,
   SIGHUP, and SIGINT end the event loop like a quit.
@@ -357,11 +359,20 @@ Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
   question with Yes as the default, as in mc: `Delete file "x"?`, `Delete directory "x" and
   everything in it?`, or `Delete 3 files and directories?`. mc asks a second time before it
   goes into a directory that is not empty; sftp-tui says so in the first question instead.
-  The job runs in the background, locally or in the host's task, with a window that shows
+  The job runs in a task of its own, or in the host's task, with a window that shows
   what it counts, the entry at hand, a gauge, and done/total; Esc or Abort stops it. A
   failure asks in a red dialog, with mc's buttons: Ignore, Ignore all, Retry, and Abort.
   When the job ends, panels on the directory read it again, and a cursor whose entry is gone
   stays on its row. If the host's connection is lost, the job ends with it.
+- **Jobs.** A job's window has Background, the default, and Abort: Enter sends the job
+  behind the panels, which take the keys again, and Esc aborts, as in mc. Any number of jobs
+  run in the background (a limit, `transfer.parallel_jobs`, and a list of jobs follow).
+  Their questions open over whatever is on screen, in turn with other dialogs, and the top
+  right corner, where Far has its clock, says how many run and how far they are together
+  (`2 jobs 37%`, the mean of their gauges). The jobs of F4 stay in front, so that the editor
+  does not open in the middle of other work. F10 asks before quitting while jobs run;
+  quitting stops them and waits up to five seconds, so that a copy removes its unfinished
+  file before the connections close.
 - **The other panel.** As in mc: Ctrl-U swaps the panels, and the active one stays active on
   the other side; Alt-O opens the directory or host under the cursor in the other panel (from
   a file, the parent directory with the cursor on this one) and moves the cursor down; Alt-I

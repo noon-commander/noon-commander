@@ -240,6 +240,11 @@ impl Colors {
         self.focused
     }
 
+    /// The style of the other buttons.
+    pub(crate) fn button_style(self) -> Style {
+        self.button
+    }
+
     /// A dialog's colors, or an error's: mc draws errors and warnings red.
     pub(crate) fn of(theme: &Theme, error: bool) -> Self {
         if error {

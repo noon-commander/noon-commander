@@ -182,6 +182,8 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     // The terminal comes back first, so a slow shutdown does not look like a hang.
     drop(terminal);
     drop(restore);
+    app.stop_jobs();
+    tasks.finish_jobs().await;
     app.disconnect_all();
     tasks.shutdown().await;
     result

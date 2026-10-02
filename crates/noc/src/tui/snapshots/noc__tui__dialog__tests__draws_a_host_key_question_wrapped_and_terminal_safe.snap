@@ -1,0 +1,18 @@
+---
+source: crates/noc/src/tui/dialog.rs
+expression: "draw(&dialog, 60, 14).backend()"
+---
+"                                                            "
+"  ┌ web ─────────────────────────────────────────────────┐  "
+"  │ The authenticity of host 'web (10.0.0.5)' can't be   │  "
+"  │ established.                                         │  "
+"  │ ED25519 key fingerprint is                           │  "
+"  │ SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU.  │  "
+"  │ This key is not known by any other names.?[2J        │  "
+"  │ Are you sure you want to continue connecting         │  "
+"  │ (yes/no/[fingerprint])?                              │  "
+"  │                                                      │  "
+"  │                   [ Yes ] [< No >]                   │  "
+"  └──────────────────────────────────────────────────────┘  "
+"                                                            "
+"                                                            "

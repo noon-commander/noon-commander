@@ -7,13 +7,13 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
 license = "GPL-3.0-or-later"
-repository = "https://github.com/0ldkettle/sftp-tui"
+repository = "https://github.com/0ldkettle/noon-commander"
 
 [workspace.dependencies]
-sftp-tui-config = { path = "crates/sftp-tui-config" }
-sftp-tui-ops = { path = "crates/sftp-tui-ops" }
-sftp-tui-ssh = { path = "crates/sftp-tui-ssh" }
-sftp-tui-vfs = { path = "crates/sftp-tui-vfs" }
+noc-config = { path = "crates/noc-config" }
+noc-ops = { path = "crates/noc-ops" }
+noc-ssh = { path = "crates/noc-ssh" }
+noc-vfs = { path = "crates/noc-vfs" }
 
 bytes = "1"
 clap = { version = "4.6", features = ["derive"] }

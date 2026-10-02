@@ -11,14 +11,14 @@ of them.
 
 ## Decision
 
-For each connected host, sftp-tui starts one master connection and multiplexes everything else
+For each connected host, Noon Commander starts one master connection and multiplexes everything else
 over its control socket:
 
 ```text
 ssh <master options> -M -N -S <sock> -o ControlPersist=no -- <alias>  # authenticates once
 ssh <channel options> -S <sock> -T -s -- <alias> sftp                 # panel channel
 ssh <channel options> -S <sock> -T -s -- <alias> sftp                 # transfer channels
-ssh -F /dev/null -S <sock> -O exit -- sftp-tui                        # disconnect
+ssh -F /dev/null -S <sock> -O exit -- noc                             # disconnect
 ```
 
 - The master is our child process (`ControlPersist=no`), so we see its exit status and stderr.
@@ -31,7 +31,7 @@ ssh -F /dev/null -S <sock> -O exit -- sftp-tui                        # disconne
 - Our `-S` overrides any `ControlPath` from the user's config; channels use `ControlMaster=no`.
 - `ssh -O` commands only talk to the socket, so they run with `-F /dev/null`: no config is
   evaluated, and no `Match exec` runs.
-- Sockets live in `$XDG_RUNTIME_DIR/sftp-tui/` or `$TMPDIR/sftp-tui-$UID/` (mode 0700) and are
+- Sockets live in `$XDG_RUNTIME_DIR/noc/` or `$TMPDIR/noc-$UID/` (mode 0700) and are
   named `cm-<pid>-<8 hex digits>`. macOS limits socket paths to 104 bytes, and ssh appends a
   17-character temporary suffix while creating the socket, so the path length is checked
   before connecting.
@@ -43,7 +43,7 @@ ssh -F /dev/null -S <sock> -O exit -- sftp-tui                        # disconne
 ## Consequences
 
 - One authentication per host; new channels open instantly.
-- If sftp-tui crashes, a master may outlive it. On startup, sftp-tui looks for sockets whose
-  owner pid is no longer running, closes their masters with `-O exit`, and removes the files;
-  sockets of running instances are left alone.
+- If Noon Commander crashes, a master may outlive it. On startup, Noon Commander looks for sockets
+  whose owner pid is no longer running, closes their masters with `-O exit`, and removes the
+  files; sockets of running instances are left alone.
 - Unix only.

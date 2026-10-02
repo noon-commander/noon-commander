@@ -1,0 +1,48 @@
+[package]
+name = "noc"
+description = "A Rust-based terminal file manager for macOS and Linux, focused on seamless local and SFTP file operations."
+keywords = ["file-manager", "terminal", "tui", "sftp", "midnight-commander"]
+categories = ["command-line-utilities"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[features]
+default = []
+# Allow port, agent, X11, and tunnel forwarding. Off by default; see docs/adr/0004.
+forwarding = ["noc-ssh/forwarding"]
+
+[dependencies]
+clap.workspace = true
+color-eyre.workspace = true
+crokey.workspace = true
+crossterm.workspace = true
+devicons.workspace = true
+futures-util.workspace = true
+i18n-embed.workspace = true
+i18n-embed-fl.workspace = true
+jiff.workspace = true
+ratatui.workspace = true
+rust-embed.workspace = true
+rustix = { workspace = true, features = ["termios"] }
+secrecy.workspace = true
+noc-config.workspace = true
+noc-ssh.workspace = true
+noc-ops.workspace = true
+noc-vfs.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+unicode-width.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -5,15 +5,15 @@
 
 ## Context
 
-sftp-tui needs SSH connections that behave exactly like the user's `ssh`: `~/.ssh/config` with
+Noon Commander needs SSH connections that behave exactly like the user's `ssh`: `~/.ssh/config` with
 `Host`, `Match`, `Include`, `ProxyJump`, and `ProxyCommand`; agents, FIDO keys, certificates, and
 Kerberos; `known_hosts`. SSH libraries such as russh and libssh2 reimplement subsets of this, and
 each needs its own configuration and authentication code.
 
 ## Decision
 
-sftp-tui never implements SSH. It spawns the system OpenSSH client and speaks the SFTP protocol
-over the stdin and stdout of `ssh -s <host> sftp`.
+Noon Commander never implements SSH. It spawns the system OpenSSH client and speaks the SFTP
+protocol over the stdin and stdout of `ssh -s <host> sftp`.
 
 - The SFTP client library is `openssh-sftp-client`; its `Sftp::new` accepts any pipes. The
   fallback is `russh-sftp`. Both sit behind our `SftpFs` adapter.
@@ -21,8 +21,8 @@ over the stdin and stdout of `ssh -s <host> sftp`.
   `args`.
 - OpenSSH 8.7 or newer is required: 8.4 added `SSH_ASKPASS_REQUIRE`
   ([ADR 0003](0003-askpass-bridge.md)), and 8.7 added the `StdinNull` and
-  `ForkAfterAuthentication` keywords, which sftp-tui forces off so that a user's config cannot
-  close ssh's stdin or send it to the background. `sftp-tui` checks the version with `ssh -V`
+  `ForkAfterAuthentication` keywords, which Noon Commander forces off so that a user's config cannot
+  close ssh's stdin or send it to the background. `noc` checks the version with `ssh -V`
   before connecting.
 - SSH implementation crates are banned in `deny.toml`.
 

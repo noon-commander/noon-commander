@@ -7,27 +7,35 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The project is renamed from sftp-tui to Noon Commander and grows into a full terminal file
+  manager for local and SFTP file operations ([ADR 0005](docs/adr/0005-rename-to-noon-commander.md)).
+  The binary is now `noc`; settings, state, and caches live in `noc` directories
+  (`~/.config/noc/` and so on), the log is `noc.log`, and the environment variables are
+  `NOC_LOG` and `NOC_ASKPASS_*`. Files under the old `sftp-tui` directories are not migrated.
+
 ### Added
 
 - Project skeleton: Cargo workspace, crate layout, CI, and documentation.
-- Configuration in `~/.config/sftp-tui/config.toml` (XDG layout on macOS too):
-  `sftp-tui config init` writes the commented defaults, `sftp-tui config paths` shows the
+- Configuration in `~/.config/noc/config.toml` (XDG layout on macOS too):
+  `noc config init` writes the commented defaults, `noc config paths` shows the
   files and directories in use, and `--config` selects another file.
-- `sftp-tui hosts` lists the hosts from ssh_config, following `Include`; `--resolve` adds
-  their addresses from `ssh -G`. Addresses are cached in `~/.cache/sftp-tui/resolve.json`
+- `noc hosts` lists the hosts from ssh_config, following `Include`; `--resolve` adds
+  their addresses from `ssh -G`. Addresses are cached in `~/.cache/noc/resolve.json`
   and shown without `--resolve` until the ssh configuration changes.
-- `sftp-tui ls` lists the virtual root, a local directory, or a remote one (`host:path`) over
+- `noc ls` lists the virtual root, a local directory, or a remote one (`host:path`) over
   SFTP through the system OpenSSH client, with password and host-key prompts on the terminal.
-- Validation of `ssh.args` and per-host `args`: options that sftp-tui manages itself and, in
-  default builds, forwarding options are rejected.
-- Logs in `~/.local/state/sftp-tui/sftp-tui.log`; `SFTP_TUI_LOG` sets the level.
-- `sftp-tui` without a subcommand starts the TUI: two panels on the current directory, with
+- Validation of `ssh.args` and per-host `args`: options that Noon Commander manages itself and,
+  in default builds, forwarding options are rejected.
+- Logs in `~/.local/state/noc/noc.log`; `NOC_LOG` sets the level.
+- `noc` without a subcommand starts the TUI: two panels on the current directory, with
   name, size, and modification time. Keys follow Midnight Commander: arrows, PgUp/PgDn,
   Home/End, Enter, Ctrl-PgUp for the parent, Tab for the other panel, Ctrl-R to reread, F10 or
   `Esc 0` to quit, Ctrl-L to redraw; `Esc` followed by a key works like Alt with that key.
 - Going up from `/` leads to the virtual root: `[Local]`, which opens the home directory, and
   the hosts from ssh_config in config order, shown by their `label` if set, with the addresses
-  cached by `sftp-tui hosts --resolve`. Ctrl-R there rereads ssh_config.
+  cached by `noc hosts --resolve`. Ctrl-R there rereads ssh_config.
 - Enter on a host connects in the background and opens its `start_dir` or the remote home
   directory; Esc stops the attempt. If the connection is lost, its panels go back to the host
   list and say why.
@@ -43,7 +51,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   far. Interface text lives in Fluent files.
 - Panels sort by name, extension, modification time, or size with Ctrl-F3 … Ctrl-F6, as in Far
   Manager; the same key again reverses the order. `[ui] show_hidden` (on by default) shows
-  names that start with a dot; Alt-. switches it while sftp-tui runs.
+  names that start with a dot; Alt-. switches it while Noon Commander runs.
 - Quick search: typing in a panel, or Ctrl-S, moves the cursor to the first name that starts
   with what was typed; Ctrl-S again finds the next one, and Esc or any other key ends it.
   `[ui] type_to_search = false` leaves it to Ctrl-S and Alt-S, as in mc.
@@ -86,7 +94,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - F4 edits the file under the cursor in `$VISUAL` or `$EDITOR` (`vi` if neither is set),
   with the terminal handed over until the editor exits. A remote file is edited as a local
   copy, which goes back, with the original's permissions, if it changed; if it cannot go
-  back, it stays, and sftp-tui says where.
+  back, it stays, and Noon Commander says where.
 - A job's window has a Background button, the default: Enter sends the job behind the panels,
   and other jobs can start while it runs. The top right corner shows how many jobs run and
   how far they are; their questions open as they come. F10 asks before quitting while jobs

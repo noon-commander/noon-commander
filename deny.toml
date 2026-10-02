@@ -37,9 +37,9 @@ ignore = true
 multiple-versions = "warn"
 wildcards = "allow"
 deny = [
-    { crate = "libssh2-sys", reason = "sftp-tui drives the system OpenSSH client, see docs/adr/0001" },
-    { crate = "russh", reason = "sftp-tui drives the system OpenSSH client, see docs/adr/0001" },
-    { crate = "ssh2", reason = "sftp-tui drives the system OpenSSH client, see docs/adr/0001" },
+    { crate = "libssh2-sys", reason = "Noon Commander drives the system OpenSSH client, see docs/adr/0001" },
+    { crate = "russh", reason = "Noon Commander drives the system OpenSSH client, see docs/adr/0001" },
+    { crate = "ssh2", reason = "Noon Commander drives the system OpenSSH client, see docs/adr/0001" },
 ]
 
 [sources]

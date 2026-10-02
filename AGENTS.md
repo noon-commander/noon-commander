@@ -1,11 +1,16 @@
 # AGENTS.md
 
-Instructions for AI coding agents (and humans) working on sftp-tui.
+Instructions for AI coding agents (and humans) working on Noon Commander.
 
 ## Project
 
-sftp-tui is a Midnight Commander-style, two-panel file manager for SFTP, written in async Rust
-(tokio, ratatui). It drives the system OpenSSH client instead of implementing SSH.
+Noon Commander (binary `noc`) is a Midnight Commander-style, two-panel terminal file manager for
+macOS and Linux, focused on seamless local and SFTP file operations, written in async Rust
+(tokio, ratatui). SFTP is its foundation and the reason it exists. It drives the system OpenSSH
+client instead of implementing SSH.
+
+Naming: the full name "Noon Commander" is used only in prose; everything technical is `noc`
+(binary, crates `noc-*`, XDG directories, `NOC_*` environment variables).
 
 - Architecture: [docs/architecture.md](docs/architecture.md)
 - Roadmap and current milestone: [docs/roadmap.md](docs/roadmap.md)
@@ -16,28 +21,30 @@ Status: pre-alpha. Read the roadmap before starting work. Browsing (M2) and file
 
 ## Philosophy
 
-- SFTP only. sftp-tui moves files; it does not tunnel anything.
+- A full file manager: local and remote files are equally first-class. SFTP is the foundation;
+  other backends may be added behind the `Vfs` trait.
+- Noon Commander moves files; it does not tunnel anything.
 - The system `ssh` is the single source of truth for connections, configuration, and
   authentication.
-- The sftp-tui config decorates hosts from `ssh_config` (labels, start directories, hiding); it
-  never duplicates them.
+- The Noon Commander config decorates hosts from `ssh_config` (labels, start directories,
+  hiding); it never duplicates them.
 - The UI never waits on the network. Remote operations are asynchronous, cancellable, and report
   progress.
 
-Non-goals: port, agent, X11, or tunnel forwarding; protocols other than SFTP; an in-process SSH
-implementation; storing credentials; editing `~/.ssh/*`.
+Non-goals: port, agent, X11, or tunnel forwarding; an in-process SSH implementation; storing
+credentials; editing `~/.ssh/*`.
 
 ## Layout
 
 | Crate | Responsibility |
 | --- | --- |
-| `crates/sftp-tui` | Binary and UI: CLI, bootstrap, askpass entry point, ratatui app, keymap, themes, icons, i18n |
-| `crates/sftp-tui-config` | XDG paths, TOML schema, defaults |
-| `crates/sftp-tui-ssh` | Host discovery, `ssh -G`, argument validation, forwarding policy, ControlMaster, SFTP channels, askpass bridge |
-| `crates/sftp-tui-vfs` | `Vfs` trait and backends: virtual root, local, SFTP |
-| `crates/sftp-tui-ops` | Job engine: copy, move, delete, mkdir; progress, cancellation, conflicts |
+| `crates/noc` | Binary and UI: CLI, bootstrap, askpass entry point, ratatui app, keymap, themes, icons, i18n |
+| `crates/noc-config` | XDG paths, TOML schema, defaults |
+| `crates/noc-ssh` | Host discovery, `ssh -G`, argument validation, forwarding policy, ControlMaster, SFTP channels, askpass bridge |
+| `crates/noc-vfs` | `Vfs` trait and backends: virtual root, local, SFTP |
+| `crates/noc-ops` | Job engine: copy, move, delete, mkdir; progress, cancellation, conflicts |
 
-Dependencies point one way: `config ← ssh ← vfs ← ops ← sftp-tui`. Library crates contain no UI
+Dependencies point one way: `config ← ssh ← vfs ← ops ← noc`. Library crates contain no UI
 code and no user-facing text.
 
 ## Commands
@@ -55,11 +62,11 @@ Work is done when all of them pass.
 
 ## Hard rules
 
-- SFTP only. Forwarding code may exist only behind the `forwarding` feature, which is checked
-  solely in `crates/sftp-tui-ssh/src/policy.rs`. SFTP channels always use
+- No forwarding by default. Forwarding code may exist only behind the `forwarding` feature,
+  which is checked solely in `crates/noc-ssh/src/policy.rs`. SFTP channels always use
   `policy::SFTP_CHANNEL_OPTIONS`.
 - Never add an SSH implementation (`russh`, `ssh2`, `libssh2-sys`); `deny.toml` bans them.
-- Spawn `ssh` only from `sftp-tui-ssh`: never through `sh -c`, always with `--` before the
+- Spawn `ssh` only from `noc-ssh`: never through `sh -c`, always with `--` before the
   destination.
 - User-supplied ssh arguments must pass the validator (ADR 0004). Unknown flags are errors.
 - Never pass `StrictHostKeyChecking=no` and never write to `~/.ssh/`.
@@ -80,7 +87,7 @@ Work is done when all of them pass.
 - Logging: `tracing` only, written to a file in the XDG state directory (the terminal belongs to
   the TUI). Library crates never print.
 - `unsafe` is denied. The only planned exception is `setsid` in a `pre_exec` hook in
-  `sftp-tui-ssh`, with a local `#[allow(unsafe_code)]` and a `// SAFETY:` comment.
+  `noc-ssh`, with a local `#[allow(unsafe_code)]` and a `// SAFETY:` comment.
 - Prefer `pub(crate)`; `unreachable_pub` is on.
 - Comments explain why, not what, and stay sparse.
 
@@ -89,7 +96,7 @@ Work is done when all of them pass.
 - Keymap: actions per context (`panel`, `dialog`, `viewer`, `quick_search`, `menu`); bindings are
   key sequences so a vim preset can be added. The default preset is mc. The F-key bar and help
   are generated from the active keymap.
-- Text: Fluent files in `crates/sftp-tui/i18n/`, `en-US` only for now. Library errors are typed;
+- Text: Fluent files in `crates/noc/i18n/`, `en-US` only for now. Library errors are typed;
   the UI turns them into messages. clap `--help` output and logs stay English.
 - Icons: Nerd Fonts v3, written as literal glyphs in Rust and TOML, never as escape sequences.
   Icons are optional (`ui.icons`, on by default); without them use mc markers: `/` directory,
@@ -103,7 +110,7 @@ Work is done when all of them pass.
 - `ssh -G` runs `Match exec` predicates: call it lazily (on selection or connect), never for
   every host at startup.
 - Minimum OpenSSH is 8.7: `SSH_ASKPASS_REQUIRE` (8.4) and the `StdinNull` and
-  `ForkAfterAuthentication` keywords (8.7), which sftp-tui forces off.
+  `ForkAfterAuthentication` keywords (8.7), which Noon Commander forces off.
 - Every ssh child runs in its own session (`setsid`), without a controlling terminal; prompts go
   through the askpass bridge. `ssh -O` commands use `-F /dev/null`.
 
@@ -113,7 +120,7 @@ Work is done when all of them pass.
 - UI: `insta` snapshots on ratatui's `TestBackend`; review with `cargo insta review`.
 - SFTP backends run against the local `sftp-server` (`/usr/libexec/sftp-server` on macOS) over
   pipes, with no network.
-- ssh orchestration tests set `ssh.program` to `crates/sftp-tui-ssh/tests/support/fake-ssh`, a
+- ssh orchestration tests set `ssh.program` to `crates/noc-ssh/tests/support/fake-ssh`, a
   POSIX shell script that emulates `-V`, `-G`, `-M`, `-O`, and `-s … sftp` (served by the local
   `sftp-server`) and logs its command lines. Keep it in sync with the flags we pass.
 - Tests must not touch the real `~/.ssh` or XDG directories; use temporary directories.

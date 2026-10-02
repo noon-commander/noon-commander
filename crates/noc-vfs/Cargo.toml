@@ -1,0 +1,24 @@
+[package]
+name = "noc-vfs"
+description = "Virtual file system for Noon Commander: virtual root, local, and SFTP backends"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+bytes.workspace = true
+futures-util.workspace = true
+openssh-sftp-client.workspace = true
+rustix = { workspace = true, features = ["fs"] }
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

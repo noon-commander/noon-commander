@@ -1,8 +1,9 @@
 # Architecture
 
-sftp-tui is a two-panel file manager for SFTP. It never implements SSH: every connection is a
-process of the system OpenSSH client, and sftp-tui speaks the SFTP protocol over that process's
-stdin and stdout.
+Noon Commander (`noc`) is a two-panel terminal file manager for local and SFTP file operations.
+SFTP is its foundation and the reason it exists. It never implements SSH: every connection is a
+process of the system OpenSSH client, and Noon Commander speaks the SFTP protocol over that
+process's stdin and stdout.
 
 This document describes the planned design; see the [roadmap](roadmap.md) for what exists. Key
 decisions are recorded as [ADRs](adr/).
@@ -11,16 +12,16 @@ decisions are recorded as [ADRs](adr/).
 
 ```text
 crates/
-├── sftp-tui/           bin + UI: CLI, bootstrap, askpass entry point, ratatui app,
-│                       keymap, themes, icons, i18n
-├── sftp-tui-config/    XDG paths, TOML schema, defaults
-├── sftp-tui-ssh/       host discovery, ssh -G, argument validation, forwarding policy,
-│                       ControlMaster, SFTP channels, askpass bridge
-├── sftp-tui-vfs/       Vfs trait: virtual root, local, and SFTP backends
-└── sftp-tui-ops/       job engine: copy, move, delete, mkdir; progress, cancellation, conflicts
+├── noc/           bin + UI: CLI, bootstrap, askpass entry point, ratatui app,
+│                  keymap, themes, icons, i18n
+├── noc-config/    XDG paths, TOML schema, defaults
+├── noc-ssh/       host discovery, ssh -G, argument validation, forwarding policy,
+│                  ControlMaster, SFTP channels, askpass bridge
+├── noc-vfs/       Vfs trait: virtual root, local, and SFTP backends
+└── noc-ops/       job engine: copy, move, delete, mkdir; progress, cancellation, conflicts
 ```
 
-Dependencies point one way: `config ← ssh ← vfs ← ops ← sftp-tui`. Library crates contain no UI
+Dependencies point one way: `config ← ssh ← vfs ← ops ← noc`. Library crates contain no UI
 code and no user-facing text; they return typed errors and events, and the UI turns them into
 messages.
 
@@ -34,20 +35,20 @@ ssh <master options> -M -N -S <sock> -o ControlPersist=no -- <alias>  # authenti
 ssh <channel options> -S <sock> -T -s -- <alias> sftp                 # panel channel
 ssh <channel options> -S <sock> -T -s -- <alias> sftp                 # transfer channels
 ssh -S <sock> -t -- <alias> 'cd <dir> && exec $SHELL -l'              # console (backlog)
-ssh -F /dev/null -S <sock> -O exit -- sftp-tui                        # disconnect
+ssh -F /dev/null -S <sock> -O exit -- noc                             # disconnect
 ```
 
 The SFTP protocol client is `openssh-sftp-client`, whose `Sftp::new` works over the pipes of any
 child process. Every ssh child runs in its own session (`setsid`), without a controlling
 terminal, so it can neither read from nor draw on the TUI's terminal.
 
-`sftp-tui-ssh` API in short: `version::check_version` runs `ssh -V`; `resolve::resolve` runs
+`noc-ssh` API in short: `version::check_version` runs `ssh -V`; `resolve::resolve` runs
 `ssh -G`; `Session::connect` starts the master (or nothing, without multiplexing);
 `Session::open_sftp` returns the pipes of a new SFTP channel, which `SftpFs::from_pipes` in
-`sftp-tui-vfs` turns into a file system; `Session::close` shuts down; `cleanup_stale` removes
+`noc-vfs` turns into a file system; `Session::close` shuts down; `cleanup_stale` removes
 leftovers of crashed instances.
 
-The `Vfs` trait of `sftp-tui-vfs`, implemented by `LocalFs` and `SftpFs`, lists directories,
+The `Vfs` trait of `noc-vfs`, implemented by `LocalFs` and `SftpFs`, lists directories,
 reads metadata with and without following symlinks, canonicalizes paths, creates and removes
 directories, removes files, renames, reads and makes symlinks (their targets stored as given,
 never resolved), sets permissions and modification times, and reads and writes files as chunks (`FileReader`, `FileWriter`, whose `finish` reports errors that only
@@ -65,7 +66,7 @@ times as whole seconds from 1970 to 2106 and sets the access time with the modif
 time, so the access time becomes the current time on both backends. Local times are set by
 path (`utimensat`), since opening a FIFO would block.
 
-Every ssh command line is assembled in `sftp-tui-ssh`, in this order: program → forced options →
+Every ssh command line is assembled in `noc-ssh`, in this order: program → forced options →
 `ssh.args` → host `args` → role options → `--` → destination. ssh keeps the first value it sees
 for an option, so `-o` values in user arguments cannot override forced options; flags are covered
 by validation ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)).
@@ -115,9 +116,9 @@ predicates. So:
 2. Concrete patterns (no `*`, `?`, or `!`) become hosts. `Include` lines with `%` tokens cannot be
    expanded statically; they are skipped and logged.
 3. Effective values (user, hostname, port, proxy jump) come only from `ssh -G`, which runs
-   when the TUI connects to a host (or for `sftp-tui hosts --resolve`, with bounded
+   when the TUI connects to a host (or for `noc hosts --resolve`, with bounded
    parallelism), never for every host at startup. Results are cached in
-   `~/.cache/sftp-tui/resolve.json`, valid while the ssh settings, the config files read
+   `~/.cache/noc/resolve.json`, valid while the ssh settings, the config files read
    (inode, mtime, size), and the names in their directories stay the same, so earlier
    addresses show at once. A cached entry only stands in until `ssh -G` runs again.
 4. `discovery.hide` hides patterns such as `github.com`.
@@ -125,7 +126,7 @@ predicates. So:
 ## Authentication
 
 Prompts go through the askpass bridge ([ADR 0003](adr/0003-askpass-bridge.md)): ssh runs
-`sftp-tui` as its `SSH_ASKPASS` program, which forwards the prompt to the TUI over a Unix socket
+`noc` as its `SSH_ASKPASS` program, which forwards the prompt to the TUI over a Unix socket
 and returns the answer. The command-line subcommands answer prompts on `/dev/tty`; the TUI
 shows them as dialogs:
 
@@ -142,16 +143,16 @@ Messages from ssh, which may quote the server, are shown terminal-safe.
 ## Command line
 
 ```text
-sftp-tui                    the TUI (needs a terminal)
-sftp-tui hosts [--resolve]  hosts from ssh_config with cached addresses; --resolve runs ssh -G
-sftp-tui ls [LOCATION]      virtual root, a local path, or host:path
-sftp-tui config init        write the commented default config.toml
-sftp-tui config paths       show the files and directories in use
+noc                    the TUI (needs a terminal)
+noc hosts [--resolve]  hosts from ssh_config with cached addresses; --resolve runs ssh -G
+noc ls [LOCATION]      virtual root, a local path, or host:path
+noc config init        write the commented default config.toml
+noc config paths       show the files and directories in use
 ```
 
-`--config FILE` replaces `~/.config/sftp-tui/config.toml`. Logs go to
-`~/.local/state/sftp-tui/sftp-tui.log`; `SFTP_TUI_LOG` sets the filter, for example
-`SFTP_TUI_LOG=debug`.
+`--config FILE` replaces `~/.config/noc/config.toml`. Logs go to
+`~/.local/state/noc/noc.log`; `NOC_LOG` sets the filter, for example
+`NOC_LOG=debug`.
 
 ## Async model
 
@@ -178,13 +179,13 @@ sftp-tui config paths       show the files and directories in use
   while it waits, and a new stream takes that lock, so the old one must go before the
   program starts, or its reader eats the first key, and the new one is made after it. The
   loop waits for the program, then takes the terminal back and draws everything. Ctrl-C in
-  the program reaches sftp-tui too, so the SIGINT stream is made anew; SIGTERM and SIGHUP
+  the program reaches Noon Commander too, so the SIGINT stream is made anew; SIGTERM and SIGHUP
   wait until the program ends. ssh children are in sessions of their own and see none of
   it.
 
 ## File operations
 
-`sftp-tui-ops` holds jobs that work on any `Vfs` backend: generic code, which the UI runs
+`noc-ops` holds jobs that work on any `Vfs` backend: generic code, which the UI runs
 with `LocalFs` in a task of its own or with a host's `SftpFs` in that host's task. A copy runs
 in a task of its own with the sessions of the hosts at its ends, which their tasks share
 (`Arc<SftpFs>`), so a copy between two hosts has both; it shares the panels' SFTP channel,
@@ -212,7 +213,7 @@ every chunk. With `preserve`, copies get the modification times and permission b
 sources, and directories that the copy made get theirs last, since writing into a directory
 changes its time; directories that were there keep their own. With `atomic`,
 each file is written under a hidden temporary name next to its target
-(`.name.sftp-tui-PID-N`) and renamed when complete, so the target never holds part of a
+(`.name.noc-PID-N`) and renamed when complete, so the target never holds part of a
 file; without it, the target is written directly. Either way, a file that does not finish
 (an error, Skip, or cancellation) is removed; written directly over an existing file, that
 file is gone too.
@@ -237,20 +238,20 @@ permissions.
 
 ## Configuration and paths
 
-sftp-tui uses the XDG layout on every platform, including macOS, and respects the `XDG_*`
+Noon Commander uses the XDG layout on every platform, including macOS, and respects the `XDG_*`
 variables:
 
 | Purpose | Path |
 | --- | --- |
-| Settings, keymap, themes | `~/.config/sftp-tui/` (`config.toml`, `keymap.toml`, `themes/`) |
-| Data (bookmarks) | `~/.local/share/sftp-tui/` |
-| State (history, last directories, logs) | `~/.local/state/sftp-tui/` |
-| Cache (`ssh -G` results) | `~/.cache/sftp-tui/` |
-| Runtime (control sockets, askpass socket, F4 temp files) | `$XDG_RUNTIME_DIR/sftp-tui/` or `$TMPDIR/sftp-tui-$UID/`, mode 0700 |
+| Settings, keymap, themes | `~/.config/noc/` (`config.toml`, `keymap.toml`, `themes/`) |
+| Data (bookmarks) | `~/.local/share/noc/` |
+| State (history, last directories, logs) | `~/.local/state/noc/` |
+| Cache (`ssh -G` results) | `~/.cache/noc/` |
+| Runtime (control sockets, askpass socket, F4 temp files) | `$XDG_RUNTIME_DIR/noc/` or `$TMPDIR/noc-$UID/`, mode 0700 |
 
-sftp-tui never rewrites `config.toml` wholesale; edits go through `toml_edit` and keep comments.
-Unknown keys are errors, so a typo does not silently fall back to a default.
-`sftp-tui config init` writes the commented defaults.
+Noon Commander never rewrites `config.toml` wholesale; edits go through `toml_edit` and keep
+comments. Unknown keys are errors, so a typo does not silently fall back to a default.
+`noc config init` writes the commented defaults.
 
 ```toml
 [ssh]
@@ -352,7 +353,7 @@ Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
 - **F8 (or Delete) deletes** the marked entries, or the one under the cursor, after a red
   question with Yes as the default, as in mc: `Delete file "x"?`, `Delete directory "x" and
   everything in it?`, or `Delete 3 files and directories?`. mc asks a second time before it
-  goes into a directory that is not empty; sftp-tui says so in the first question instead.
+  goes into a directory that is not empty; Noon Commander says so in the first question instead.
   The job runs in a task of its own, or in the host's task, with a window that shows
   what it counts, the entry at hand, a gauge, and done/total; Esc or Abort stops it. A
   failure asks in a red dialog, with mc's buttons: Ignore, Ignore all, Retry, and Abort.
@@ -416,7 +417,7 @@ Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
   cancels. In a text field every character is text, Space too. A field that opens with text
   shows it dimmed, and typing replaces it, as in mc; an edit or a cursor move keeps it. Long
   text scrolls to keep the cursor in view.
-- **Text.** Fluent files under `crates/sftp-tui/i18n/`, embedded in the binary and read with
+- **Text.** Fluent files under `crates/noc/i18n/`, embedded in the binary and read with
   `fl!` from `i18n-embed-fl`, which checks message IDs against `en-US` at compile time; only
   `en-US` for now. `ui.language = "auto"` follows the system locale (through `sys-locale`).
   Arguments are inserted without Unicode isolation marks, which terminals would show.

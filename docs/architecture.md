@@ -170,6 +170,15 @@ sftp-tui config paths       show the files and directories in use
 - The terminal is restored on every exit: a guard leaves raw mode and the alternate screen when
   the TUI returns or fails, ratatui's panic hook does it before a panic message, and SIGTERM,
   SIGHUP, and SIGINT end the event loop like a quit.
+- Another program (the editor of F4; the Ctrl-O console later) gets the terminal as the shell
+  would give it: the event loop shows the cursor, leaves the alternate screen and raw mode,
+  and drops its `EventStream` first. The stream's reader thread holds crossterm's input lock
+  while it waits, and a new stream takes that lock, so the old one must go before the
+  program starts, or its reader eats the first key, and the new one is made after it. The
+  loop waits for the program, then takes the terminal back and draws everything. Ctrl-C in
+  the program reaches sftp-tui too, so the SIGINT stream is made anew; SIGTERM and SIGHUP
+  wait until the program ends. ssh children are in sessions of their own and see none of
+  it.
 
 ## File operations
 
@@ -209,7 +218,8 @@ file is gone too.
 When the name of a file or symlink is taken, the job sends `Exists` with the metadata of both,
 for sizes and times, and waits for a `Conflict`: Overwrite, Skip, Overwrite all, Skip all,
 Overwrite older (every later one that is older than its source; unknown times keep the
-target), or Abort. A directory where a file would go is a failure, not a question. A symlink
+target), or Abort. With `overwrite`, the job replaces without asking, as when an edited
+file goes back where it came from. A directory where a file would go is a failure, not a question. A symlink
 in the way is removed first, so that a file written directly never goes through it; renaming
 replaces it anyway. Without `posix-rename`, the target is removed before the rename.
 
@@ -328,6 +338,15 @@ Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
   row within it, so that only the lines in view are wrapped, whatever the size of the file.
   Keys follow mc's viewer: arrows, `j`/`k`, PgUp/PgDn, Space and `b`, Home/End, `g`/`G`,
   and F3, F10, `q`, or Esc to close; F1 shows the help over it.
+- **F4 edits** the file under the cursor in `$VISUAL`, else `$EDITOR`, else `vi`, split at
+  spaces (`code -w`), without a shell. A local file is edited where it is. A remote one is
+  copied, with its times and permission bits, to `edit-PID-N-name` in the runtime directory
+  (the name last, so that the editor knows the kind of file); when the editor exits and the
+  copy's size or time changed, it goes back over the original by the copy job, with
+  `overwrite` and as `transfer.atomic_upload` says, keeping the original's permissions. Both
+  copies show the job's window. The local copy is removed once it went back, or at once if
+  it did not change; one that did not go back (a failure, Abort, or the host gone) stays, and
+  a red dialog says where. Panels on the file's directory read it again.
 - **F6 moves or renames** the marked entries, or the one under the cursor, with the dialog
   of F5 (`Move "x" to:`, without Preserve attributes: moves keep them); a new name in the
   field renames in place, as in mc. Locally, and within one host, the job renames

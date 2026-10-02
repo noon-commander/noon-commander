@@ -8,6 +8,7 @@
 
 fkey-help = Help
 fkey-view = View
+fkey-edit = Edit
 # Wraps long lines in the viewer, or cuts them.
 fkey-wrap = Wrap
 fkey-copy = Copy
@@ -131,6 +132,7 @@ help-sort-time = Sort by modification time, newest first; again: reverse
 help-sort-size = Sort by size, largest first; again: reverse
 help-quick-search-start = Quick search; again: the next match
 help-view = View the file under the cursor; on a directory, open it
+help-edit = Edit the file under the cursor in $VISUAL or $EDITOR
 help-copy = Copy the marked entries, or the one under the cursor
 help-move = Move or rename the marked entries, or the one under the cursor
 help-mkdir = Make a directory
@@ -240,3 +242,11 @@ viewer-position = { $line }/{ $lines } { $percent }%
 # The same, when only the start of a long file was read.
 viewer-truncated = { $position } of the first 16 MiB
 viewer-error = Cannot view { $path }: { $reason }
+
+## Editing, F4 (src/tui). Prefix: edit-. The editor of $VISUAL or $EDITOR, or vi.
+
+edit-error = Cannot edit { $path }: { $reason }
+# The edited copy of a remote file could not go back; it stays where the user can find it.
+edit-kept = The changes to { $path } did not go back; they are in { $copy }
+# Why the editor did not run.
+edit-cannot-run = cannot run { $program }: { $reason }

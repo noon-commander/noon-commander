@@ -87,6 +87,8 @@ pub(crate) enum Action {
     View,
     /// Wraps long lines in the viewer, or cuts them.
     ToggleWrap,
+    /// Edits the file under the cursor in the editor of `$VISUAL` or `$EDITOR`.
+    Edit,
     /// Asks where to, and copies the marked entries or the one under the cursor.
     Copy,
     /// Asks where to, and moves or renames the marked entries or the one under the cursor.
@@ -168,6 +170,7 @@ impl Action {
         Self::InvertMarks,
         Self::View,
         Self::ToggleWrap,
+        Self::Edit,
         Self::Copy,
         Self::Move,
         Self::Mkdir,

@@ -279,7 +279,7 @@ impl Keymap {
 fn mc_presets() -> [(Context, Preset); 6] {
     use Action::{
         Backspace, Cancel, Confirm, Copy, Delete, DeleteToEnd, DeleteToStart, Disconnect, Down,
-        End, Enter, Help, Home, InvertMarks, Left, Mark, MarkUp, Mkdir, Move, NextField,
+        Edit, End, Enter, Help, Home, InvertMarks, Left, Mark, MarkUp, Mkdir, Move, NextField,
         OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent, PrevField, QuickSearch, Quit,
         Redraw, Reload, Right, Select, SortByExtension, SortByName, SortBySize, SortByTime,
         SwapPanels, SwitchPanel, Toggle, ToggleHidden, ToggleWrap, Unselect, Up, View,
@@ -319,6 +319,7 @@ fn mc_presets() -> [(Context, Preset); 6] {
                 (QuickSearch, &["ctrl-s", "alt-s"]),
                 (Help, &["f1"]),
                 (View, &["f3"]),
+                (Edit, &["f4"]),
                 (Copy, &["f5"]),
                 (Move, &["f6"]),
                 (Mkdir, &["f7"]),
@@ -746,6 +747,7 @@ mod tests {
         let mut root = [None; 10];
         root[0] = Some(Action::Help);
         root[2] = Some(Action::View);
+        root[3] = Some(Action::Edit);
         root[4] = Some(Action::Copy);
         root[5] = Some(Action::Move);
         root[6] = Some(Action::Mkdir);
@@ -805,6 +807,7 @@ mod tests {
         let mut panel = [None; 10];
         panel[0] = Some(Action::Help);
         panel[2] = Some(Action::View);
+        panel[3] = Some(Action::Edit);
         panel[4] = Some(Action::Copy);
         panel[5] = Some(Action::Move);
         panel[6] = Some(Action::Mkdir);

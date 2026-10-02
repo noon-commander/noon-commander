@@ -9,6 +9,10 @@ use crate::job::{Conflict, Decision, Event, Outcome, Progress, Reporter};
 
 /// How to copy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "independent switches, like the options of cp"
+)]
 pub struct CopyOptions {
     /// Give copies the modification times and permission bits of their sources.
     pub preserve: bool,
@@ -17,6 +21,9 @@ pub struct CopyOptions {
     pub atomic: bool,
     /// Remove each source once all of it is copied, which moves it.
     pub remove_sources: bool,
+    /// Replace what has a target's name without asking, as when a file goes back where it came
+    /// from.
+    pub overwrite: bool,
 }
 
 /// One side of a copy: a file system, and how its paths are reported.
@@ -209,7 +216,7 @@ pub async fn copy<A: Vfs, B: Vfs, L>(
         items_total: 0,
         bytes_done: 0,
         bytes_total: 0,
-        policy: None,
+        policy: options.overwrite.then_some(Policy::OverwriteAll),
     };
     let count = sources.len();
     if job.run(sources, target, count).await.is_err() {
@@ -247,7 +254,7 @@ pub async fn move_within<V: Vfs, L>(
         items_total: sources.len() as u64,
         bytes_done: 0,
         bytes_total: 0,
-        policy: None,
+        policy: options.overwrite.then_some(Policy::OverwriteAll),
     };
     let count = sources.len();
     if job.run_move(sources, target, count).await.is_err() {
@@ -953,6 +960,7 @@ mod tests {
         preserve: true,
         atomic: true,
         remove_sources: false,
+        overwrite: false,
     };
 
     fn at(seconds: u64) -> SystemTime {
@@ -1071,6 +1079,7 @@ mod tests {
             preserve: false,
             atomic: false,
             remove_sources: false,
+            overwrite: false,
         };
         let one = vec![src.join("dir")];
         run(
@@ -1174,6 +1183,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn overwrite_replaces_without_asking() {
+        let root = tempfile::tempdir().unwrap();
+        let (src, dst) = taken(root.path());
+        let options = CopyOptions {
+            overwrite: true,
+            ..BOTH
+        };
+        let sources = vec![src.join("dir/a")];
+        let target = dst.join("dir/a");
+        let (outcome, seen) = run_script(
+            (&LocalFs, sources),
+            (&LocalFs, target.clone()),
+            options,
+            Script::default(),
+        )
+        .await;
+        assert_eq!(seen.exists.len(), 0);
+        assert_eq!((outcome.done, outcome.skipped), (1, 0));
+        assert_eq!(fs::read_to_string(&target).unwrap(), "0123456789");
+        assert_eq!(leftovers(&dst.join("dir")), Vec::<PathBuf>::new());
+    }
+
+    #[tokio::test]
     async fn a_file_does_not_replace_a_directory_or_go_through_a_link() {
         for atomic in [true, false] {
             let root = tempfile::tempdir().unwrap();
@@ -1187,6 +1219,7 @@ mod tests {
                 preserve: false,
                 atomic,
                 remove_sources: false,
+                overwrite: false,
             };
             let script = Script {
                 failures: &[Decision::Skip],
@@ -1222,6 +1255,7 @@ mod tests {
                 preserve: true,
                 atomic,
                 remove_sources: false,
+                overwrite: false,
             };
             let sources = vec![root.path().join("big")];
             let (outcome, _) = run(

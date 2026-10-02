@@ -51,7 +51,7 @@
 - [x] `[transfer]` settings: `atomic_upload`
 - [x] F6 move/rename
 - [x] F3 viewer
-- [ ] F4 edit via `$EDITOR` (suspends and resumes the TUI)
+- [x] F4 edit via `$EDITOR` (suspends and resumes the TUI)
 - [ ] Background job queue
 
 ## M4: Polish

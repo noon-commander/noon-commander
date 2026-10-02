@@ -83,3 +83,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   skipped stays where it was.
 - F3 views the file under the cursor, locally or on a host: text with long lines wrapped (F2
   cuts them), scrolled with mc's viewer keys, up to the first 16 MiB.
+- F4 edits the file under the cursor in `$VISUAL` or `$EDITOR` (`vi` if neither is set),
+  with the terminal handed over until the editor exits. A remote file is edited as a local
+  copy, which goes back, with the original's permissions, if it changed; if it cannot go
+  back, it stays, and sftp-tui says where.

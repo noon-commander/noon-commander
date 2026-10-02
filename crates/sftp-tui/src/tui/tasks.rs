@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use futures_util::StreamExt as _;
 use futures_util::stream::FuturesUnordered;
-use sftp_tui_ops::{Conflict, CopyOptions, Decision, Endpoint, Event, Reporter};
+use sftp_tui_ops::{Conflict, CopyOptions, Decision, Endpoint, Event, Outcome, Reporter};
 use sftp_tui_ssh::askpass::{AskpassEnv, AskpassEvent, AskpassServer};
 use sftp_tui_ssh::resolve::resolve;
 use sftp_tui_ssh::version::check_version;
@@ -113,8 +113,8 @@ pub(crate) enum JobEvent {
         target_metadata: Metadata,
         reply: oneshot::Sender<Conflict>,
     },
-    /// The job is over: done, aborted, or cancelled.
-    Finished,
+    /// The job is over; `complete` if it did all it was asked, without skipping or aborting.
+    Finished { complete: bool },
 }
 
 /// Work for the task of a connected host, for the panel on a side.
@@ -190,39 +190,25 @@ impl Tasks {
                     side,
                     request,
                     host: None,
-                } => {
-                    let context = Arc::clone(&self.context);
-                    let done = self.done.clone();
-                    tokio::spawn(async move {
-                        let generation = request.generation;
-                        let result = list(context, request.location).await;
-                        let _ = done.send(Done::Listed {
-                            side,
-                            generation,
-                            result,
-                        });
-                    });
-                }
+                } => self.list(side, request),
                 Effect::CreateDir {
                     side,
                     location,
                     host,
                 } => self.create_dir(side, location, host),
+                Effect::Discard(path) => {
+                    tokio::spawn(async move {
+                        if let Err(error) = tokio::fs::remove_file(&path).await {
+                            tracing::debug!(path = %path.display(), %error, "cannot remove");
+                        }
+                    });
+                }
                 Effect::Read {
                     id,
                     location,
                     host,
                     cancel,
-                } => {
-                    let done = self.done.clone();
-                    tokio::spawn(async move {
-                        let result = tokio::select! {
-                            result = read(location, host) => result,
-                            () = cancel.cancelled() => return,
-                        };
-                        let _ = done.send(Done::Read { id, result });
-                    });
-                }
+                } => self.read(id, location, host, cancel),
                 Effect::Delete {
                     id,
                     targets,
@@ -276,6 +262,39 @@ impl Tasks {
                 }
             }
         }
+    }
+
+    /// Lists the virtual root or a local directory here.
+    fn list(&self, side: Side, request: ListRequest) {
+        let context = Arc::clone(&self.context);
+        let done = self.done.clone();
+        tokio::spawn(async move {
+            let generation = request.generation;
+            let result = list(context, request.location).await;
+            let _ = done.send(Done::Listed {
+                side,
+                generation,
+                result,
+            });
+        });
+    }
+
+    /// Reads the start of a file for the viewer `id`, until `cancel`.
+    fn read(
+        &self,
+        id: u64,
+        location: Location,
+        host: Option<HostHandle>,
+        cancel: CancellationToken,
+    ) {
+        let done = self.done.clone();
+        tokio::spawn(async move {
+            let result = tokio::select! {
+                result = read(location, host) => result,
+                () = cancel.cancelled() => return,
+            };
+            let _ = done.send(Done::Read { id, result });
+        });
     }
 
     /// Makes a local directory here, or passes a remote one to the task of its host.
@@ -335,8 +354,7 @@ impl Tasks {
                 cancel,
             };
             if handle.0.send(request).is_err() {
-                let event = JobEvent::Finished;
-                let _ = self.done.send(Done::Job { id, event });
+                let _ = self.done.send(finished(id, None));
             }
         } else {
             let done = self.done.clone();
@@ -454,10 +472,16 @@ async fn run_delete<V: Vfs>(
         let mut reporter = reporter;
         sftp_tui_ops::delete(vfs, targets, &mut reporter).await
     };
-    tokio::join!(work, forward(incoming, id, done, location));
+    let (outcome, ()) = tokio::join!(work, forward(incoming, id, done, location));
+    finished(id, Some(outcome))
+}
+
+/// The end of the job `id`, with its outcome if it ran.
+fn finished(id: u64, outcome: Option<Outcome>) -> Done {
+    let complete = outcome.is_some_and(|outcome| !outcome.aborted && outcome.skipped == 0);
     Done::Job {
         id,
-        event: JobEvent::Finished,
+        event: JobEvent::Finished { complete },
     }
 }
 
@@ -556,12 +580,8 @@ impl CopyJob<'_> {
         target: Location,
         (from, to): (Option<HostHandle>, Option<HostHandle>),
     ) -> Done {
-        let finished = Done::Job {
-            id: self.id,
-            event: JobEvent::Finished,
-        };
         let (Some(from), Some(to)) = (share(from).await, share(to).await) else {
-            return finished;
+            return finished(self.id, None);
         };
         let mut local: Vec<PathBuf> = Vec::new();
         let mut remote = Vec::new();
@@ -614,7 +634,7 @@ impl CopyJob<'_> {
                 self.copy((&*from, remote, &source), (&*to, path, &target))
                     .await
             }
-            _ => finished,
+            _ => finished(self.id, None),
         }
     }
 
@@ -633,11 +653,8 @@ impl CopyJob<'_> {
             let side = Endpoint { vfs, report };
             sftp_tui_ops::move_within(side, sources, target, options, &mut reporter).await
         };
-        tokio::join!(work, forward(incoming, self.id, self.done, |path| path));
-        Done::Job {
-            id: self.id,
-            event: JobEvent::Finished,
-        }
+        let (outcome, ()) = tokio::join!(work, forward(incoming, self.id, self.done, |path| path));
+        finished(self.id, Some(outcome))
     }
 
     async fn copy<A: Vfs, B: Vfs>(
@@ -660,11 +677,8 @@ impl CopyJob<'_> {
             };
             sftp_tui_ops::copy(from, sources, to, target, options, &mut reporter).await
         };
-        tokio::join!(work, forward(incoming, self.id, self.done, |path| path));
-        Done::Job {
-            id: self.id,
-            event: JobEvent::Finished,
-        }
+        let (outcome, ()) = tokio::join!(work, forward(incoming, self.id, self.done, |path| path));
+        finished(self.id, Some(outcome))
     }
 }
 

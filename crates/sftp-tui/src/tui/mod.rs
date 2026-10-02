@@ -16,7 +16,7 @@ mod theme;
 mod viewer;
 
 use std::io::{self, IsTerminal as _};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -35,6 +35,7 @@ use keymap::KeyState;
 use tasks::{Done, Tasks};
 
 use crate::context::Context;
+use crate::i18n::fl;
 
 /// Whether `name` is a built-in theme, for `ui.theme`; and the names there are.
 pub(crate) fn is_valid_theme(name: &str) -> bool {
@@ -109,10 +110,33 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     let config = &context.config;
     let (mut app, effects) = App::new(&start, &context.paths.home, &config.ui, &config.transfer);
     app.set_time_zone(tz.clone());
+    app.set_runtime_dir(context.paths.runtime_dir.clone());
     tasks.run(effects);
     let result = loop {
         if app.quits() {
             break Ok(());
+        }
+        if let Some(file) = app.take_edit() {
+            // The editor gets every key. A stream's reader holds crossterm's input lock while it
+            // waits, and a new stream takes that lock, so the old one goes first; the new one
+            // reads nothing until it is polled.
+            drop(events);
+            let result = match suspend(&mut terminal) {
+                Ok(()) => edit(&file).await,
+                Err(error) => Err(error.to_string()),
+            };
+            events = EventStream::new();
+            if let Err(error) = resume(&mut terminal) {
+                break Err(error.into());
+            }
+            // Ctrl-C in the editor reached sftp-tui too; forget it.
+            match signal(SignalKind::interrupt()) {
+                Ok(fresh) => interrupt = fresh,
+                Err(error) => break Err(error.into()),
+            }
+            keys = KeyState::default();
+            tasks.run(app.edited(result));
+            continue;
         }
         if app.take_redraw()
             && let Err(error) = repaint(&mut terminal)
@@ -161,6 +185,66 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     app.disconnect_all();
     tasks.shutdown().await;
     result
+}
+
+/// Runs the editor on `file`, with the terminal handed over, and tells whether the file changed
+/// (its size or time), or why the editor could not run.
+async fn edit(file: &Path) -> Result<bool, String> {
+    let stamp = |metadata: std::fs::Metadata| (metadata.len(), metadata.modified().ok());
+    let before = tokio::fs::metadata(file)
+        .await
+        .map(stamp)
+        .map_err(|error| error.to_string())?;
+    let command = editor();
+    let status = tokio::process::Command::new(&command[0])
+        .args(&command[1..])
+        .arg(file)
+        .status()
+        .await;
+    if let Err(error) = status {
+        let program = command[0].clone();
+        return Err(fl!(
+            "edit-cannot-run",
+            program = program,
+            reason = error.to_string()
+        ));
+    }
+    let after = tokio::fs::metadata(file)
+        .await
+        .map(stamp)
+        .map_err(|error| error.to_string())?;
+    Ok(before != after)
+}
+
+/// The editor: `$VISUAL`, else `$EDITOR`, else `vi`, split at spaces, as in `code -w`.
+fn editor() -> Vec<String> {
+    ["VISUAL", "EDITOR"]
+        .iter()
+        .filter_map(|name| std::env::var(name).ok())
+        .map(|value| {
+            value
+                .split_whitespace()
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .find(|words| !words.is_empty())
+        .unwrap_or_else(|| vec!["vi".to_owned()])
+}
+
+/// Hands the terminal over to another program as the shell has it: with the cursor, on the
+/// main screen, and out of raw mode.
+fn suspend(terminal: &mut DefaultTerminal) -> io::Result<()> {
+    terminal.show_cursor()?;
+    crossterm::execute!(io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
+    crossterm::terminal::disable_raw_mode()
+}
+
+/// Takes the terminal back after a program had it: raw mode, the alternate screen, and a
+/// full redraw; the next draw hides the cursor.
+fn resume(terminal: &mut DefaultTerminal) -> io::Result<()> {
+    crossterm::terminal::enable_raw_mode()?;
+    crossterm::execute!(io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
+    repaint(terminal)
 }
 
 /// Makes the next draw write every cell. Unlike `Terminal::clear`, this does not ask the

@@ -216,6 +216,7 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::SortBySize) => fl!("help-sort-size"),
         (Context::Panel, Action::QuickSearch) => fl!("help-quick-search-start"),
         (Context::Panel, Action::View) => fl!("help-view"),
+        (Context::Panel, Action::Edit) => fl!("help-edit"),
         (Context::Panel, Action::Copy) => fl!("help-copy"),
         (Context::Panel, Action::Move) => fl!("help-move"),
         (Context::Panel, Action::Mkdir) => fl!("help-mkdir"),

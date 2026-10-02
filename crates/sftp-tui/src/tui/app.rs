@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::os::unix::ffi::OsStrExt as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use jiff::tz::TimeZone;
@@ -69,6 +69,8 @@ pub(crate) enum Effect {
         host: Option<HostHandle>,
         cancel: CancellationToken,
     },
+    /// Remove a temporary file, if it is there.
+    Discard(PathBuf),
     /// Make the directory at `location` and report to [`App::created`]. Remote ones go to the
     /// task of their host.
     CreateDir {
@@ -188,11 +190,32 @@ enum JobKind {
     Move,
 }
 
+/// What follows a job of F4 on a host.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Then {
+    /// The copy for the editor is there: open it.
+    Edit,
+    /// The edited `copy` went back to `remote`: remove it.
+    Discard { copy: PathBuf, remote: Location },
+}
+
+/// A file in the editor of F4.
+#[derive(Debug)]
+struct Editing {
+    /// The local file the editor works on.
+    file: PathBuf,
+    /// Where it came from, if it is a copy of a remote file; it goes back there if it changes.
+    remote: Option<Location>,
+    /// Panels on this directory read it again afterwards.
+    dir: Location,
+}
+
 /// A job on screen, over the panels; one runs at a time.
 #[derive(Debug)]
 struct Job {
     id: u64,
     kind: JobKind,
+    then: Option<Then>,
     /// Directories it changes, which panels read again when it ends.
     changes: Vec<Location>,
     /// Hosts it works on; it ends with their connections.
@@ -218,6 +241,7 @@ impl Job {
         Self {
             id,
             kind,
+            then: None,
             changes,
             hosts,
             cancel,
@@ -293,6 +317,11 @@ pub(crate) struct App {
     job: Option<Job>,
     /// Instead of the panels.
     viewing: Option<Viewing>,
+    editing: Option<Editing>,
+    /// A file for the event loop to open in the editor.
+    edit_now: Option<PathBuf>,
+    /// Where copies of remote files for the editor go.
+    runtime_dir: PathBuf,
     jobs: u64,
     /// Over the panels, under the dialogs.
     help: Option<Help>,
@@ -340,6 +369,9 @@ impl App {
             tz: TimeZone::UTC,
             job: None,
             viewing: None,
+            editing: None,
+            edit_now: None,
+            runtime_dir: std::env::temp_dir(),
             jobs: 0,
             help: None,
             keymap: Keymap::mc(),
@@ -359,6 +391,16 @@ impl App {
     /// Whether the whole screen must be drawn again; resets the request.
     pub(crate) fn take_redraw(&mut self) -> bool {
         std::mem::take(&mut self.redraw)
+    }
+
+    /// Puts copies of remote files for the editor in `dir`, which is private.
+    pub(crate) fn set_runtime_dir(&mut self, dir: PathBuf) {
+        self.runtime_dir = dir;
+    }
+
+    /// A file to open in the editor now, with the screen handed over; resets the request.
+    pub(crate) fn take_edit(&mut self) -> Option<PathBuf> {
+        self.edit_now.take()
     }
 
     /// Shows times in `tz`.
@@ -394,9 +436,12 @@ impl App {
             Action::Help | Action::Quit | Action::Redraw | Action::Disconnect | Action::Cancel => {
                 true
             }
-            Action::Mkdir | Action::Delete | Action::Copy | Action::Move | Action::View => {
-                !self.panel(self.active).shows_root()
-            }
+            Action::Mkdir
+            | Action::Delete
+            | Action::Copy
+            | Action::Move
+            | Action::View
+            | Action::Edit => !self.panel(self.active).shows_root(),
             Action::ToggleWrap => self.viewing.is_some(),
             _ => false,
         }
@@ -502,6 +547,7 @@ impl App {
             Action::Mkdir => self.ask_mkdir(),
             Action::Delete => self.ask_delete(),
             Action::View => return self.view(),
+            Action::Edit => return self.edit(),
             Action::Copy => self.ask_transfer(JobKind::Copy),
             Action::Move => self.ask_transfer(JobKind::Move),
             Action::Select => self.ask_pattern(true),
@@ -624,6 +670,137 @@ impl App {
             host,
             cancel,
         }]
+    }
+
+    /// Edits the file under the cursor of the active panel with F4: a local one where it is, a
+    /// remote one as a local copy, which goes back if it changes.
+    fn edit(&mut self) -> Vec<Effect> {
+        let panel = self.panel(self.active);
+        let dir = panel.location().clone();
+        let Some((name, location)) = panel
+            .entry_under_cursor()
+            .filter(|entry| !entry.is_dir_like())
+            .and_then(|entry| Some((entry.name.clone(), child(&dir, &entry.name)?)))
+        else {
+            return Vec::new();
+        };
+        let Location::Remote { host, .. } = &location else {
+            if let Location::Local(path) = location {
+                self.editing = Some(Editing {
+                    file: path.clone(),
+                    remote: None,
+                    dir,
+                });
+                self.edit_now = Some(path);
+            }
+            return Vec::new();
+        };
+        let Some(Host::Connected { handle, .. }) = self.hosts.get(host) else {
+            let reason = fl!("error-connection-closed");
+            self.show_error(&fl!(
+                "edit-error",
+                path = location_text(&location),
+                reason = reason
+            ));
+            return Vec::new();
+        };
+        let (handle, on) = (handle.clone(), host.clone());
+        self.jobs += 1;
+        let id = self.jobs;
+        // Its own name last, so that the editor knows what kind of file it is.
+        let mut temporary = format!("edit-{}-{id}-", std::process::id()).into_bytes();
+        temporary.extend_from_slice(&name);
+        let file = self
+            .runtime_dir
+            .join(std::ffi::OsStr::from_bytes(&temporary));
+        let cancel = CancellationToken::new();
+        let mut job = Job::new(id, JobKind::Copy, Vec::new(), cancel.clone());
+        job.then = Some(Then::Edit);
+        job.hosts.push(on);
+        self.job = Some(job);
+        self.editing = Some(Editing {
+            file: file.clone(),
+            remote: Some(location.clone()),
+            dir,
+        });
+        vec![Effect::Copy {
+            id,
+            sources: vec![location],
+            target: Location::Local(file),
+            hosts: (Some(handle), None),
+            options: CopyOptions {
+                preserve: true,
+                atomic: false,
+                remove_sources: false,
+                overwrite: true,
+            },
+            cancel,
+        }]
+    }
+
+    /// Takes the end of the editor: whether the file changed, or why it could not run. A
+    /// changed copy of a remote file goes back.
+    pub(crate) fn edited(&mut self, result: Result<bool, String>) -> Vec<Effect> {
+        let Some(editing) = self.editing.take() else {
+            return Vec::new();
+        };
+        let path = editing.remote.as_ref().map_or_else(
+            || location_text(&Location::Local(editing.file.clone())),
+            location_text,
+        );
+        let changed = match result {
+            Ok(changed) => changed,
+            Err(reason) => {
+                let reason = cells::sanitize(reason.as_bytes());
+                self.show_error(&fl!("edit-error", path = path.clone(), reason = reason));
+                false
+            }
+        };
+        let Some(remote) = editing.remote else {
+            return self.reload(&editing.dir);
+        };
+        if !changed {
+            return vec![Effect::Discard(editing.file)];
+        }
+        let handle = match &remote {
+            Location::Remote { host, .. } => match self.hosts.get(host) {
+                Some(Host::Connected { handle, .. }) => Some(handle.clone()),
+                _ => None,
+            },
+            Location::Root | Location::Local(_) => None,
+        };
+        let Some(handle) = handle else {
+            self.keep_edit(&path, &editing.file);
+            return Vec::new();
+        };
+        self.jobs += 1;
+        let id = self.jobs;
+        let cancel = CancellationToken::new();
+        let mut job = Job::new(id, JobKind::Copy, vec![editing.dir], cancel.clone());
+        job.then = Some(Then::Discard {
+            copy: editing.file.clone(),
+            remote: remote.clone(),
+        });
+        self.job = Some(job);
+        vec![Effect::Copy {
+            id,
+            sources: vec![Location::Local(editing.file)],
+            target: remote,
+            hosts: (None, Some(handle)),
+            options: CopyOptions {
+                preserve: true,
+                atomic: self.copy_choices.atomic,
+                remove_sources: false,
+                overwrite: true,
+            },
+            cancel,
+        }]
+    }
+
+    /// Says that the edited copy of `path` could not go back, and where it stays.
+    fn keep_edit(&mut self, path: &str, file: &Path) {
+        let copy = cells::sanitize(file.as_os_str().as_bytes());
+        self.show_error(&fl!("edit-kept", path = path, copy = copy));
     }
 
     /// Takes what [`Effect::Read`] read for the viewer `id`; an error closes the viewer and
@@ -830,6 +1007,7 @@ impl App {
             preserve: self.copy_choices.preserve || moving,
             atomic: self.copy_choices.atomic,
             remove_sources: moving,
+            overwrite: false,
         };
         vec![Effect::Copy {
             id,
@@ -928,9 +1106,11 @@ impl App {
                     purpose: Purpose::Failure { job: id, reply },
                 });
             }
-            JobEvent::Finished => {
+            JobEvent::Finished { complete } => {
                 if let Some(job) = self.end_job() {
-                    let mut effects = Vec::new();
+                    let mut effects = job
+                        .then
+                        .map_or_else(Vec::new, |then| self.follow_up(then, complete));
                     for (index, dir) in job.changes.iter().enumerate() {
                         if !job.changes[..index].contains(dir) {
                             effects.extend(self.reload(dir));
@@ -953,6 +1133,29 @@ impl App {
             _ => true,
         });
         Some(job)
+    }
+
+    /// Does what follows a job of F4 once it ends, `complete` if it did all it was asked: opens
+    /// the editor on a copy that came, or removes a copy that went back. A partial copy goes;
+    /// an edited one that did not go back stays, and the user hears where.
+    fn follow_up(&mut self, then: Then, complete: bool) -> Vec<Effect> {
+        match (then, complete) {
+            (Then::Edit, true) => {
+                self.edit_now = self.editing.as_ref().map(|editing| editing.file.clone());
+                Vec::new()
+            }
+            (Then::Edit, false) => self
+                .editing
+                .take()
+                .map(|editing| Effect::Discard(editing.file))
+                .into_iter()
+                .collect(),
+            (Then::Discard { copy, .. }, true) => vec![Effect::Discard(copy)],
+            (Then::Discard { copy, remote }, false) => {
+                self.keep_edit(&location_text(&remote), &copy);
+                Vec::new()
+            }
+        }
     }
 
     /// Reads `dir` again in the panels that show it, with their cursors where they were.
@@ -1261,15 +1464,18 @@ impl App {
         if reason.is_some() {
             self.failed.insert(host.to_owned());
         }
+        let mut effects = Vec::new();
         // Its task dropped the job; its panels leave the host, so there is nothing to read.
         if self
             .job
             .as_ref()
             .is_some_and(|job| job.hosts.iter().any(|on| on == host))
+            && let Some(Job {
+                then: Some(then), ..
+            }) = self.end_job()
         {
-            self.end_job();
+            effects = self.follow_up(then, false);
         }
-        let mut effects = Vec::new();
         for side in Side::BOTH {
             let panel = self.panel_mut(side);
             match (&state, reason) {
@@ -1467,6 +1673,7 @@ fn fkey_label(action: Action) -> Option<String> {
         Action::Mkdir => Some(fl!("fkey-mkdir")),
         Action::Delete => Some(fl!("fkey-delete")),
         Action::View => Some(fl!("fkey-view")),
+        Action::Edit => Some(fl!("fkey-edit")),
         Action::ToggleWrap => Some(fl!("fkey-wrap")),
         Action::Copy => Some(fl!("fkey-copy")),
         Action::Move => Some(fl!("fkey-move")),
@@ -1979,8 +2186,11 @@ mod tests {
         assert_eq!(decision.try_recv(), Ok(Decision::SkipAll));
 
         // Reports of other jobs change nothing; the end reads /srv again in both panels.
-        assert!(app.job_event(id + 1, JobEvent::Finished).is_empty());
-        let effects = app.job_event(id, JobEvent::Finished);
+        assert!(
+            app.job_event(id + 1, JobEvent::Finished { complete: true })
+                .is_empty()
+        );
+        let effects = app.job_event(id, JobEvent::Finished { complete: true });
         assert_eq!(effects.len(), 2);
         assert_eq!(app.context(), Context::Panel);
     }
@@ -2021,7 +2231,7 @@ mod tests {
         let path = local("/srv/left/x");
         let error = "busy".to_owned();
         app.job_event(id, JobEvent::Failed { path, error, reply });
-        app.job_event(id, JobEvent::Finished);
+        app.job_event(id, JobEvent::Finished { complete: true });
         assert_eq!(
             app.context(),
             Context::Panel,
@@ -2110,6 +2320,7 @@ mod tests {
                 preserve: true,
                 atomic: true,
                 remove_sources: false,
+                overwrite: false,
             }
         );
         assert!(screen(&mut app).contains("Counting"), "the job's window");
@@ -2145,7 +2356,7 @@ mod tests {
         assert_eq!(answer.try_recv(), Ok(Conflict::Overwrite));
 
         // The end reads the target and the source's directory again.
-        let effects = app.job_event(id, JobEvent::Finished);
+        let effects = app.job_event(id, JobEvent::Finished { complete: true });
         assert_eq!(effects.len(), 2);
         assert_eq!(app.context(), Context::Panel);
     }
@@ -2219,7 +2430,7 @@ mod tests {
         );
         assert!(options.remove_sources && options.preserve);
         assert!(screen(&mut app).contains("Move"));
-        let effects = app.job_event(id, JobEvent::Finished);
+        let effects = app.job_event(id, JobEvent::Finished { complete: true });
         assert_eq!(effects.len(), 2, "both panels: the source changed too");
 
         // A new name renames in place.
@@ -2357,6 +2568,168 @@ mod tests {
             panic!("expected a listing");
         };
         assert_eq!(request.location, local("/srv/sub"));
+    }
+
+    #[test]
+    fn f4_edits_local_files_where_they_are() {
+        let (mut app, effects) =
+            App::new(Path::new("/srv"), Path::new("/home/me"), &ui(), &transfer());
+        answer(
+            &mut app,
+            effects,
+            &Listing::Dir(vec![dir("sub"), file("notes", 12)]),
+        );
+        app.handle(action(Action::Down));
+        assert!(
+            app.handle(action(Action::Edit)).is_empty(),
+            "not a directory"
+        );
+        assert_eq!(app.take_edit(), None);
+        app.handle(action(Action::End));
+        assert!(app.handle(action(Action::Edit)).is_empty());
+        assert_eq!(app.take_edit(), Some(PathBuf::from("/srv/notes")));
+        assert_eq!(app.take_edit(), None, "once");
+        assert_eq!(app.edited(Ok(true)).len(), 2, "both panels read /srv again");
+
+        app.handle(action(Action::Edit));
+        app.take_edit();
+        app.edited(Err("cannot run nano: not found".to_owned()));
+        let text = screen(&mut app);
+        assert!(
+            text.contains("Cannot edit /srv/notes: cannot run nano: not found"),
+            "{text}"
+        );
+    }
+
+    /// An app whose left panel is on `web:/home/deploy`, which holds `notes`.
+    fn on_a_host() -> (App, u64) {
+        let mut app = at_root();
+        let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
+            panic!("expected a connection");
+        };
+        let (handle, _requests) = HostHandle::channel();
+        let effects = app.connected("web", connection, handle);
+        let [Effect::List { request, .. }] = &effects[..] else {
+            panic!("expected a listing, got {effects:?}");
+        };
+        let generation = request.generation;
+        let location = remote("web", "/home/deploy");
+        let listing = Listing::Dir(vec![file("notes", 12)]);
+        app.listed(Side::Left, generation, Ok(Listed { location, listing }));
+        app.set_runtime_dir(PathBuf::from("/run/sftp-tui"));
+        app.handle(action(Action::Down));
+        (app, connection)
+    }
+
+    #[test]
+    fn f4_edits_a_copy_of_a_remote_file_and_sends_it_back() {
+        let (mut app, _) = on_a_host();
+        let (id, sources, target, ends, options) = copy_job(app.handle(action(Action::Edit)));
+        assert_eq!(sources, [remote("web", "/home/deploy/notes")]);
+        let Location::Local(copy) = target else {
+            panic!("expected a local copy, got {target:?}");
+        };
+        assert!(copy.starts_with("/run/sftp-tui"), "{copy:?}");
+        assert!(
+            copy.to_string_lossy().ends_with("-notes"),
+            "its own name last"
+        );
+        assert_eq!(ends, (true, false));
+        assert!(options.overwrite && options.preserve);
+        assert_eq!(app.take_edit(), None, "not before the copy is there");
+
+        app.job_event(id, JobEvent::Finished { complete: true });
+        assert_eq!(app.take_edit(), Some(copy.clone()));
+        let (id, sources, target, ends, options) = copy_job(app.edited(Ok(true)));
+        assert_eq!(
+            (sources, target),
+            (
+                vec![Location::Local(copy.clone())],
+                remote("web", "/home/deploy/notes")
+            )
+        );
+        assert_eq!(ends, (false, true));
+        assert!(options.overwrite, "it goes back over the original");
+        let effects = app.job_event(id, JobEvent::Finished { complete: true });
+        assert!(
+            effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Discard(path) if *path == copy)),
+            "{effects:?}"
+        );
+    }
+
+    #[test]
+    fn an_unchanged_copy_goes_and_one_that_cannot_go_back_stays() {
+        let (mut app, connection) = on_a_host();
+        let (id, _, target, _, _) = copy_job(app.handle(action(Action::Edit)));
+        app.job_event(id, JobEvent::Finished { complete: true });
+        let copy = app.take_edit().unwrap();
+        assert_eq!(Location::Local(copy.clone()), target);
+        let effects = app.edited(Ok(false));
+        assert!(matches!(&effects[..], [Effect::Discard(path)] if *path == copy));
+
+        // The upload fails: the copy stays, and the user hears where it is.
+        let (id, _, _, _, _) = copy_job(app.handle(action(Action::Edit)));
+        app.job_event(id, JobEvent::Finished { complete: true });
+        let copy = app.take_edit().unwrap();
+        let (id, _, _, _, _) = copy_job(app.edited(Ok(true)));
+        let effects = app.job_event(id, JobEvent::Finished { complete: false });
+        assert!(
+            !effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Discard(_)))
+        );
+        let text = screen_of(&mut app, 12);
+        assert!(
+            text.contains("The changes to web:/home/deploy/notes did not go back"),
+            "{text}"
+        );
+        assert!(text.contains(&*copy.to_string_lossy()), "{text}");
+        app.handle(action(Action::Confirm));
+
+        // So does one whose host is gone by then.
+        let (id, _, _, _, _) = copy_job(app.handle(action(Action::Edit)));
+        app.job_event(id, JobEvent::Finished { complete: true });
+        app.take_edit().unwrap();
+        app.closed("web", connection, Some("Broken pipe"));
+        assert!(app.edited(Ok(true)).is_empty());
+        assert!(screen_of(&mut app, 12).contains("did not go back"));
+    }
+
+    #[test]
+    fn a_host_that_goes_ends_the_jobs_of_f4() {
+        // While the copy comes: the partial copy goes, and there is nothing to edit.
+        let (mut app, connection) = on_a_host();
+        let (_, _, target, _, _) = copy_job(app.handle(action(Action::Edit)));
+        let effects = app.closed("web", connection, Some("Broken pipe"));
+        let Location::Local(copy) = target else {
+            panic!("expected a local copy");
+        };
+        assert!(
+            effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Discard(path) if *path == copy)),
+            "{effects:?}"
+        );
+        assert!(app.job.is_none());
+        assert_eq!(app.take_edit(), None);
+
+        // While the edited copy goes back: it stays, and the user hears where.
+        let (mut app, connection) = on_a_host();
+        let (id, _, _, _, _) = copy_job(app.handle(action(Action::Edit)));
+        app.job_event(id, JobEvent::Finished { complete: true });
+        let copy = app.take_edit().unwrap();
+        copy_job(app.edited(Ok(true)));
+        let effects = app.closed("web", connection, Some("Broken pipe"));
+        assert!(
+            !effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Discard(_)))
+        );
+        let text = screen_of(&mut app, 12);
+        assert!(text.contains("did not go back"), "{text}");
+        assert!(text.contains(&*copy.to_string_lossy()), "{text}");
     }
 
     #[test]

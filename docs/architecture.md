@@ -363,6 +363,13 @@ Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
   and an arrow in the header marks the order. Directories stay first. Names that start with a
   dot are shown unless `ui.show_hidden` is off; Alt-. switches them in both panels, as in mc.
   Sorting and hiding keep the cursor on its entry.
+- **Free space.** As in mc, the bottom of a panel's frame shows the free space and size of the
+  file system that holds the directory, and the share that is free: `123G / 500G (24%)`. It is
+  read with every listing, so it changes when a job reads the panel again or on Ctrl-R; a panel
+  on another directory of the same file system keeps what it read last. Locally it waits at
+  most as long as a volume of the virtual root, so a dead network mount leaves it out; over
+  SFTP it needs the `statvfs@openssh.com` extension, which OpenSSH's server has. A file system
+  that reports no size, or a panel too narrow for it, shows none.
 - **Marks.** As in mc: Insert or Ctrl-T marks the entry under the cursor, or unmarks it, and
   moves down (Shift-Down too, Shift-Up moves up); `*` (or Alt-*) inverts the marks on files,
   leaving directories as they are; `..`, volumes, and hosts cannot be marked.

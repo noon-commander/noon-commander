@@ -13,7 +13,10 @@ use noc_ssh::askpass::{AskpassEnv, AskpassEvent, AskpassServer};
 use noc_ssh::resolve::resolve;
 use noc_ssh::version::check_version;
 use noc_ssh::{CachedHost, ChannelProcess, Session, SftpChannel, SshError, cleanup_stale};
-use noc_vfs::{FileReader as _, LocalFs, Location, Metadata, RemotePath, SftpFs, Vfs, VfsError};
+use noc_vfs::{
+    FileReader as _, LocalFs, Location, Metadata, RemotePath, SftpFs, Space, Vfs, VfsError,
+    VfsPath as _,
+};
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
@@ -718,29 +721,49 @@ impl CopyJob<'_> {
 /// Lists the virtual root, the hosts, or a local directory. The root reads the volumes and the
 /// ssh config each time, so a reload shows what changed.
 async fn list(context: Arc<Context>, location: Location) -> Result<Listed, String> {
-    let listing = match &location {
+    let (listing, space) = match &location {
         Location::Root => {
             let hide = context.config.volumes.hide.clone();
             let hosts = tokio::task::spawn_blocking(move || root::read_hosts(&context));
             let (volumes, hosts) = tokio::join!(root::read_volumes(&hide), hosts);
-            Listing::Root {
+            let listing = Listing::Root {
                 volumes,
                 hosts: hosts.map_err(|error| error.to_string())?,
-            }
+            };
+            (listing, None)
         }
-        Location::Sftp => tokio::task::spawn_blocking(move || root::read_hosts(&context))
-            .await
-            .map(Listing::Hosts)
-            .map_err(|error| error.to_string())?,
-        Location::Local(path) => LocalFs
-            .list_dir(path)
-            .await
-            .map(Listing::Dir)
-            .map_err(|error| describe::vfs_error(&error))?,
+        Location::Sftp => {
+            let hosts = tokio::task::spawn_blocking(move || root::read_hosts(&context))
+                .await
+                .map_err(|error| error.to_string())?;
+            (Listing::Hosts(hosts), None)
+        }
+        Location::Local(path) => {
+            // The listing does not wait for a file system that is slow to tell its space.
+            let space = tokio::time::timeout(root::VOLUME_TIMEOUT, space(&LocalFs, path));
+            let (entries, space) = tokio::join!(LocalFs.list_dir(path), space);
+            let entries = entries.map_err(|error| describe::vfs_error(&error))?;
+            (Listing::Dir(entries), space.ok().flatten())
+        }
         // The app sends these to the host's task.
         Location::Remote { .. } => return Err(fl!("error-connection-closed")),
     };
-    Ok(Listed { location, listing })
+    Ok(Listed {
+        location,
+        listing,
+        space,
+    })
+}
+
+/// The space of the file system that holds `path`, or `None` if it cannot be told.
+async fn space<V: Vfs>(vfs: &V, path: &V::Path) -> Option<Space> {
+    match vfs.space(path).await {
+        Ok(space) => space,
+        Err(error) => {
+            tracing::debug!(path = %path.display(), %error, "no file system space");
+            None
+        }
+    }
 }
 
 /// A connection to a host: the session, an SFTP channel, and the ssh process behind it.
@@ -934,10 +957,10 @@ impl HostTask {
             } else {
                 path.clone()
             };
-            let entries = fs
-                .list_dir(&path)
-                .await
-                .map_err(|error| describe::vfs_error(&error))?;
+            // No timeout, unlike locally: the server serves requests in order, so a statvfs
+            // that hangs there would hold up the listing anyway.
+            let (space, entries) = tokio::join!(space(fs, &path), fs.list_dir(&path));
+            let entries = entries.map_err(|error| describe::vfs_error(&error))?;
             let location = Location::Remote {
                 host: self.host.clone(),
                 path,
@@ -945,6 +968,7 @@ impl HostTask {
             Ok(Listed {
                 location,
                 listing: Listing::Dir(entries),
+                space,
             })
         }
         .await;

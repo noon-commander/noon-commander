@@ -537,6 +537,7 @@ mod tests {
                     host("proxy", None, Some("root@proxy.example.org")),
                 ],
             },
+            space: None,
         }
     }
 
@@ -697,6 +698,7 @@ mod tests {
             Ok(Listed {
                 location: Location::Root,
                 listing: Listing::Hosts(Vec::new()),
+                space: None,
             }),
         );
         menu.listed(2, Ok(reordered));

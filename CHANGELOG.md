@@ -28,6 +28,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Panels show the free space and size of the file system that holds their directory on the
+  bottom of their frame, as mc does, such as `123G / 500G (24%)`, for local and SFTP
+  directories alike.
 - Alt-F1 and Alt-F2 open a location menu over the left or the right panel, as in Far Manager
   (Ctrl-X 1 and Ctrl-X 2 too): `Home`, the volumes, and the hosts, with `1` … `0` as hotkeys, typing to
   filter, F8 to disconnect a host, and Ctrl-R to read them again.

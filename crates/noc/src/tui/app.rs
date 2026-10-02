@@ -2076,7 +2076,15 @@ mod tests {
             };
             let location = request.location;
             let listing = listing.clone();
-            app.listed(side, request.generation, Ok(Listed { location, listing }));
+            app.listed(
+                side,
+                request.generation,
+                Ok(Listed {
+                    location,
+                    listing,
+                    space: None,
+                }),
+            );
         }
     }
 
@@ -2197,7 +2205,15 @@ mod tests {
 
         let location = request.location.clone();
         let listing = Listing::Dir(vec![dir("inner")]);
-        app.listed(side, request.generation, Ok(Listed { location, listing }));
+        app.listed(
+            side,
+            request.generation,
+            Ok(Listed {
+                location,
+                listing,
+                space: None,
+            }),
+        );
         let (left, right) = titles(&mut app);
         assert!(
             right.contains("/srv/left"),
@@ -2428,7 +2444,15 @@ mod tests {
         let generation = request.generation;
         let location = remote("web", "/home/deploy");
         let listing = Listing::Dir(Vec::new());
-        app.listed(Side::Left, generation, Ok(Listed { location, listing }));
+        app.listed(
+            Side::Left,
+            generation,
+            Ok(Listed {
+                location,
+                listing,
+                space: None,
+            }),
+        );
         assert!(screen(&mut app).contains("7Mkdir"));
         app.handle(action(Action::Mkdir));
         type_text(&mut app, "www");
@@ -3088,7 +3112,15 @@ mod tests {
         let generation = request.generation;
         let location = remote("web", "/home/deploy");
         let listing = Listing::Dir(Vec::new());
-        app.listed(Side::Right, generation, Ok(Listed { location, listing }));
+        app.listed(
+            Side::Right,
+            generation,
+            Ok(Listed {
+                location,
+                listing,
+                space: None,
+            }),
+        );
 
         app.active = Side::Left;
         app.handle(action(Action::Home));
@@ -3202,7 +3234,15 @@ mod tests {
         let generation = request.generation;
         let location = remote("web", "/home/deploy");
         let listing = Listing::Dir(vec![file("notes", 12)]);
-        app.listed(Side::Left, generation, Ok(Listed { location, listing }));
+        app.listed(
+            Side::Left,
+            generation,
+            Ok(Listed {
+                location,
+                listing,
+                space: None,
+            }),
+        );
         app.set_runtime_dir(PathBuf::from("/run/noc"));
         app.handle(action(Action::Down));
         (app, connection)
@@ -3372,7 +3412,11 @@ mod tests {
         };
         let reply = |listing| {
             let location = request.location.clone();
-            Ok(Listed { location, listing })
+            Ok(Listed {
+                location,
+                listing,
+                space: None,
+            })
         };
         app.listed(
             side.other(),
@@ -3581,7 +3625,14 @@ mod tests {
             hosts: hosts.to_vec(),
         };
         let location = Location::Root;
-        app.places(generation, Ok(Listed { location, listing }));
+        app.places(
+            generation,
+            Ok(Listed {
+                location,
+                listing,
+                space: None,
+            }),
+        );
     }
 
     #[test]

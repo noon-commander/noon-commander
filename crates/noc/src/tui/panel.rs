@@ -43,6 +43,9 @@ pub(crate) struct ListRequest {
 pub(crate) struct Listed {
     pub(crate) location: Location,
     pub(crate) listing: Listing,
+    /// The space of the file system that holds a directory; `None` for the virtual root and the
+    /// hosts, and when unknown.
+    pub(crate) space: Option<Space>,
 }
 
 /// What a location holds.
@@ -203,6 +206,8 @@ pub(crate) struct Panel {
     location: Location,
     /// Directories first, then as `sort` says; hosts in config order.
     listing: Listing,
+    /// The space of the file system that holds the directory shown, on the bottom of the frame.
+    space: Option<Space>,
     /// The entries of a directory listing that are shown, in order: hidden files may be left
     /// out. In the virtual root, the hosts shown below its row of hosts.
     shown: Vec<usize>,
@@ -243,6 +248,7 @@ impl Panel {
         let mut panel = Self {
             location: location.clone(),
             listing,
+            space: None,
             shown: Vec::new(),
             connected: HashSet::new(),
             sort: Sort {
@@ -289,13 +295,18 @@ impl Panel {
             return;
         };
         match result {
-            Ok(Listed { location, listing }) => {
+            Ok(Listed {
+                location,
+                listing,
+                space,
+            }) => {
                 // Reading the same directory again keeps the marks on names still there.
                 if location != self.location {
                     self.marked.clear();
                 }
                 self.location = location;
                 self.listing = listing;
+                self.space = space;
                 self.arrange();
                 self.offset = 0;
                 let rows = self.rows();
@@ -808,6 +819,7 @@ impl Panel {
         if inner.height < 3 || inner.width < 2 {
             return;
         }
+        self.render_space(frame, area, theme);
         let width = usize::from(inner.width);
         let list_height = usize::from(inner.height - 3);
         self.page = list_height;
@@ -921,6 +933,33 @@ impl Panel {
             // An underline would run along the frame.
             Line::styled(total, theme.marked.not_underlined()),
             Rect::new(x, y, total_width.min(inside), 1),
+        );
+    }
+
+    /// The free space and size of the directory's file system, on the bottom of the frame at
+    /// the right, as in mc; left out when unknown or when it does not fit.
+    fn render_space(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
+        // Pseudo file systems such as devfs report nothing.
+        let Some(space) = self.space.filter(|space| space.total > 0) else {
+            return;
+        };
+        let percent = u128::from(space.available.min(space.total)) * 100 / u128::from(space.total);
+        let text = fl!(
+            "panel-space",
+            free = cells::size(space.available, VOLUME_SIZE_WIDTH),
+            total = cells::size(space.total, VOLUME_SIZE_WIDTH),
+            percent = u64::try_from(percent).unwrap_or(100)
+        );
+        let text = format!(" {text} ");
+        let width = u16::try_from(cells::width(&text)).unwrap_or(u16::MAX);
+        // A corner and a line on either side.
+        if width.saturating_add(4) > area.width {
+            return;
+        }
+        let x = area.right() - 2 - width;
+        frame.render_widget(
+            Line::styled(text, theme.panel),
+            Rect::new(x, area.bottom() - 1, width, 1),
         );
     }
 
@@ -1443,7 +1482,14 @@ mod tests {
     /// Answers `request` with `listing` from the location it asked for.
     fn answer(panel: &mut Panel, request: &ListRequest, listing: Listing) {
         let location = request.location.clone();
-        panel.listed(request.generation, Ok(Listed { location, listing }));
+        panel.listed(
+            request.generation,
+            Ok(Listed {
+                location,
+                listing,
+                space: None,
+            }),
+        );
     }
 
     /// A panel on `location` whose first listing arrived.
@@ -1910,6 +1956,7 @@ mod tests {
         let reply = Listed {
             location: home.clone(),
             listing: Listing::Dir(Vec::new()),
+            space: None,
         };
         panel.listed(request.generation, Ok(reply));
         assert_eq!(panel.location, home);
@@ -2251,6 +2298,47 @@ mod tests {
         let mut panel = loaded("/srv", listing());
         panel.handle(Action::Down);
         insta::assert_snapshot!(draw(&mut panel, 50, 12, true));
+    }
+
+    #[test]
+    fn the_frame_shows_the_space_of_the_file_system_while_it_fits() {
+        let (mut panel, request) = Panel::new(local("/srv"), PathBuf::from(HOME), true);
+        let space = Space {
+            total: 500 << 30,
+            available: 123 << 30,
+        };
+        let reply = Listed {
+            location: local("/srv"),
+            listing: Listing::Dir(Vec::new()),
+            space: Some(space),
+        };
+        panel.listed(request.generation, Ok(reply));
+        insta::assert_snapshot!(draw(&mut panel, 30, 6, true));
+        let bottom = |panel: &mut Panel, width| {
+            let backend = draw(panel, width, 6, true);
+            let buffer = backend.buffer();
+            (0..width)
+                .map(|x| buffer[(x, 5)].symbol().to_owned())
+                .collect::<String>()
+        };
+        assert!(bottom(&mut panel, 23).contains("123G / 500G (24%)"));
+        assert!(!bottom(&mut panel, 22).contains("123G"), "too narrow");
+
+        // A failed reload keeps it; the next listing replaces it.
+        let request = panel.reload_onto(Vec::new());
+        panel.listed(request.generation, Err("gone".to_owned()));
+        assert_eq!(panel.space, Some(space));
+        let request = panel.reload_onto(Vec::new());
+        answer(&mut panel, &request, Listing::Dir(Vec::new()));
+        assert_eq!(panel.space, None);
+        assert!(!bottom(&mut panel, 30).contains('G'));
+
+        // A file system that reports nothing shows nothing.
+        panel.space = Some(Space {
+            total: 0,
+            available: 0,
+        });
+        assert!(!bottom(&mut panel, 30).contains('0'));
     }
 
     #[test]

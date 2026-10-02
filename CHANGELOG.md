@@ -91,3 +91,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and other jobs can start while it runs. The top right corner shows how many jobs run and
   how far they are; their questions open as they come. F10 asks before quitting while jobs
   run, and quitting lets them remove their unfinished files first.
+- `[transfer] parallel_jobs` (2 by default) is how many jobs run at once; later ones wait
+  their turn, and editing with F4 never waits.
+- Ctrl-X J lists the jobs, as mc's Background jobs do, with how far each is: Show brings one to
+  the front, and Abort stops it.

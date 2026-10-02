@@ -53,7 +53,8 @@
 - [x] F3 viewer
 - [x] F4 edit via `$EDITOR` (suspends and resumes the TUI)
 - [x] Background jobs: the Background button, an indicator, a question on quit
-- [ ] Job queue: `[transfer] parallel_jobs` and a list of jobs
+- [x] Job queue: `[transfer] parallel_jobs`
+- [x] A list of jobs (Ctrl-X J)
 
 ## M4: Polish
 

@@ -6,6 +6,7 @@ mod decor;
 mod describe;
 mod dialog;
 mod help;
+mod jobs;
 mod keymap;
 mod panel;
 mod pattern;

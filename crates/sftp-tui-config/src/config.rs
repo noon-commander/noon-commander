@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write as _};
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -38,12 +39,16 @@ pub struct TransferConfig {
     /// when complete, so that the target never holds part of a file; otherwise the target is
     /// written directly. Default: `true`.
     pub atomic_upload: bool,
+    /// How many jobs run at once; later ones wait their turn. Editing (F4) never waits.
+    /// Default: `2`.
+    pub parallel_jobs: NonZeroUsize,
 }
 
 impl Default for TransferConfig {
     fn default() -> Self {
         Self {
             atomic_upload: true,
+            parallel_jobs: NonZeroUsize::new(2).unwrap_or(NonZeroUsize::MIN),
         }
     }
 }
@@ -233,6 +238,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::ffi::OsStr;
     use std::fs;
+    use std::num::NonZeroUsize;
     use std::path::{Path, PathBuf};
 
     use super::{
@@ -283,6 +289,7 @@ mod tests {
 
         [transfer]
         atomic_upload = false
+        parallel_jobs = 4
     "#;
 
     fn full() -> Config {
@@ -316,6 +323,7 @@ mod tests {
             },
             transfer: TransferConfig {
                 atomic_upload: false,
+                parallel_jobs: NonZeroUsize::new(4).unwrap(),
             },
         }
     }
@@ -338,6 +346,13 @@ mod tests {
         assert!(config.ui.show_hidden);
         assert!(config.ui.type_to_search);
         assert!(config.transfer.atomic_upload);
+        assert_eq!(config.transfer.parallel_jobs.get(), 2);
+    }
+
+    #[test]
+    fn at_least_one_job_runs() {
+        let error = toml::from_str::<Config>("[transfer]\nparallel_jobs = 0").unwrap_err();
+        assert!(error.to_string().contains("nonzero"), "{error}");
     }
 
     #[test]

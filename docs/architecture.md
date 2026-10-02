@@ -276,13 +276,7 @@ type_to_search = true            # typing in a panel starts quick search; false:
 
 [transfer]
 atomic_upload = true             # copies go to a hidden temporary name, then are renamed
-```
-
-Planned keys, not accepted yet:
-
-```toml
-[transfer]
-parallel_jobs = 2                # with the background job queue
+parallel_jobs = 2                # jobs that run at once; later ones wait; F4 never waits
 ```
 
 Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
@@ -365,9 +359,15 @@ Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
   When the job ends, panels on the directory read it again, and a cursor whose entry is gone
   stays on its row. If the host's connection is lost, the job ends with it.
 - **Jobs.** A job's window has Background, the default, and Abort: Enter sends the job
-  behind the panels, which take the keys again, and Esc aborts, as in mc. Any number of jobs
-  run in the background (a limit, `transfer.parallel_jobs`, and a list of jobs follow).
-  Their questions open over whatever is on screen, in turn with other dialogs, and the top
+  behind the panels, which take the keys again, and Esc aborts, as in mc. As many jobs run
+  at once as `transfer.parallel_jobs` says (2); a later one waits, in front or behind, and
+  starts when one ends, the oldest first. Abort takes a waiting job away at once. The jobs
+  of F4 never wait, but count while they run. Ctrl-X J lists the jobs, as mc's Background
+  jobs: a row for each, with what it does, how far it is (a percentage, `counting`,
+  `waiting`, or `aborting`), and the entry at hand, and Show (the default), Abort, and OK.
+  Show brings the selected job to the front, in its window; the selection follows its job
+  while jobs above it end, and the next row once it ends itself. Questions from jobs
+  behind the panels open over whatever is on screen, in turn with other dialogs, and the top
   right corner, where Far has its clock, says how many run and how far they are together
   (`2 jobs 37%`, the mean of their gauges). The jobs of F4 stay in front, so that the editor
   does not open in the middle of other work. F10 asks before quitting while jobs run;

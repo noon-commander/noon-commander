@@ -137,6 +137,7 @@ help-copy = Copy the marked entries, or the one under the cursor
 help-move = Move or rename the marked entries, or the one under the cursor
 help-mkdir = Make a directory
 help-delete = Delete the marked entries, or the one under the cursor
+help-jobs = The running jobs: bring one to the front, or abort it
 help-help = This help
 help-quit = Quit
 help-redraw = Redraw the screen
@@ -191,6 +192,20 @@ job-count = { $done } of { $total }
 # The same, for jobs that move data: the sizes are shown like those in panels.
 job-count-bytes = { $done } of { $total }, { $bytes_done } of { $bytes_total } bytes
 job-aborting = Aborting…
+# While a job waits for others to finish, as transfer.parallel_jobs allows.
+job-waiting = Waiting for other jobs to finish…
+
+## The list of jobs, Ctrl-X J (src/tui/jobs), as mc's Background jobs. Prefix: jobs-.
+
+jobs-title = Jobs
+jobs-none = No jobs are running.
+# The button that brings the selected job to the front, in its window.
+jobs-show = Show
+# How far a job is, in the list, in a column of 9.
+jobs-state-waiting = waiting
+jobs-state-counting = counting
+jobs-state-aborting = aborting
+jobs-state-percent = { $percent }%
 # The button that sends the job behind the panels, where it goes on.
 job-background = Background
 # At the top right while jobs run in the background: how many, and how far they are together.

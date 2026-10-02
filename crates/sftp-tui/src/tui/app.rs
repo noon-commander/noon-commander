@@ -19,6 +19,7 @@ use super::cells::{self, Align};
 use super::decor::Decor;
 use super::dialog::{Ask, Button, Dialog, DialogEvent, Reply};
 use super::help::Help;
+use super::jobs::{JobsEvent, JobsList, Row};
 use super::keymap::{Action, Context, Keymap, Resolved};
 use super::panel::{
     Destination, HostState, HostStatus, ListRequest, Listed, Panel, View, child, location_text,
@@ -218,6 +219,8 @@ struct Job {
     id: u64,
     kind: JobKind,
     background: bool,
+    /// What starts the job when its turn comes, while it waits.
+    queued: Option<Effect>,
     then: Option<Then>,
     /// Directories it changes, which panels read again when it ends.
     changes: Vec<Location>,
@@ -252,6 +255,7 @@ impl Job {
             id,
             kind,
             background: false,
+            queued: None,
             then: None,
             changes,
             hosts,
@@ -336,6 +340,10 @@ pub(crate) struct App {
     runtime_dir: PathBuf,
     /// The id of the last job started.
     last_job: u64,
+    /// How many jobs run at once: `transfer.parallel_jobs`.
+    parallel_jobs: usize,
+    /// The list of jobs, over the panels and the help.
+    jobs_list: Option<JobsList>,
     /// Over the panels, under the dialogs.
     help: Option<Help>,
     keymap: Keymap,
@@ -386,6 +394,8 @@ impl App {
             edit_now: None,
             runtime_dir: std::env::temp_dir(),
             last_job: 0,
+            parallel_jobs: transfer.parallel_jobs.get(),
+            jobs_list: None,
             help: None,
             keymap: Keymap::mc(),
             quit: false,
@@ -430,7 +440,7 @@ impl App {
     pub(crate) fn context(&self) -> Context {
         if let Some(open) = self.dialogs.front() {
             open.dialog.context()
-        } else if self.in_front().is_some() || self.help.is_some() {
+        } else if self.in_front().is_some() || self.jobs_list.is_some() || self.help.is_some() {
             Context::Dialog
         } else if self.viewing.is_some() {
             Context::Viewer
@@ -468,13 +478,63 @@ impl App {
         };
         match job.view.handle(input) {
             Some(JobButton::Abort) => {
-                job.cancel.cancel();
-                job.view.abort();
+                let id = job.id;
+                self.abort_job(id);
             }
             Some(JobButton::Background) => job.background = true,
             None => {}
         }
         true
+    }
+
+    /// Gives a key to the list of jobs, if it is open: Show brings a job to the front, in place
+    /// of the list.
+    fn handle_jobs_list(&mut self, input: Resolved) -> bool {
+        let rows = self.job_rows();
+        let Some(list) = &mut self.jobs_list else {
+            return false;
+        };
+        match list.handle(input, &rows) {
+            JobsEvent::Pending => {}
+            JobsEvent::Show(id) => {
+                if let Some(job) = self.jobs.iter_mut().find(|job| job.id == id) {
+                    job.background = false;
+                }
+                self.jobs_list = None;
+            }
+            JobsEvent::Abort(id) => self.abort_job(id),
+            JobsEvent::Closed => self.jobs_list = None,
+        }
+        true
+    }
+
+    /// Stops the job `id`; one that waits goes at once, as it has not started.
+    fn abort_job(&mut self, id: u64) {
+        let Some(job) = self.jobs.iter_mut().find(|job| job.id == id) else {
+            return;
+        };
+        if job.queued.is_some() {
+            self.end_job(id);
+        } else {
+            job.cancel.cancel();
+            job.view.abort();
+        }
+    }
+
+    /// The jobs, as the list shows them.
+    fn job_rows(&self) -> Vec<Row> {
+        self.jobs
+            .iter()
+            .map(|job| {
+                let (state, current) = job.view.summary();
+                Row {
+                    id: job.id,
+                    title: job.view.title().to_owned(),
+                    state,
+                    current,
+                }
+            })
+            .collect()
     }
 
     /// The job in front, in its window.
@@ -522,7 +582,7 @@ impl App {
             }
             return Vec::new();
         }
-        if self.handle_job(input) {
+        if self.handle_job(input) || self.handle_jobs_list(input) {
             return Vec::new();
         }
         if let Some(help) = &mut self.help {
@@ -568,6 +628,7 @@ impl App {
         match action {
             Action::QuickSearch => self.panel_mut(self.active).search_next(),
             Action::Quit => self.ask_quit(),
+            Action::Jobs => self.jobs_list = Some(JobsList::default()),
             Action::Redraw => self.redraw = true,
             Action::Help => self.help = Some(Help::new(&self.keymap, self.ui.type_to_search)),
             Action::SwitchPanel => self.active = self.active.other(),
@@ -940,14 +1001,45 @@ impl App {
         self.last_job += 1;
         let id = self.last_job;
         let cancel = CancellationToken::new();
-        self.jobs
-            .push(Job::new(id, JobKind::Delete, vec![dir], cancel.clone()));
-        vec![Effect::Delete {
+        let job = Job::new(id, JobKind::Delete, vec![dir], cancel.clone());
+        let effect = Effect::Delete {
             id,
             targets,
             host,
             cancel,
-        }]
+        };
+        self.launch(job, effect)
+    }
+
+    /// Starts `job` with `effect`, or lets it wait while as many jobs run as
+    /// `transfer.parallel_jobs` allows. The jobs of F4 never wait.
+    fn launch(&mut self, mut job: Job, effect: Effect) -> Vec<Effect> {
+        let running = self.jobs.iter().filter(|job| job.queued.is_none()).count();
+        if job.then.is_some() || running < self.parallel_jobs {
+            self.jobs.push(job);
+            return vec![effect];
+        }
+        job.view.wait();
+        job.queued = Some(effect);
+        self.jobs.push(job);
+        Vec::new()
+    }
+
+    /// Starts the jobs that wait, the oldest first, as far as `transfer.parallel_jobs` allows.
+    fn start_queued(&mut self) -> Vec<Effect> {
+        let mut running = self.jobs.iter().filter(|job| job.queued.is_none()).count();
+        let mut effects = Vec::new();
+        for job in &mut self.jobs {
+            if running >= self.parallel_jobs {
+                break;
+            }
+            if let Some(effect) = job.queued.take() {
+                job.view.scanning(0);
+                effects.push(effect);
+                running += 1;
+            }
+        }
+        effects
     }
 
     /// Asks where F5 copies, or F6 moves, the marked entries of the active panel, or the one
@@ -1048,7 +1140,7 @@ impl App {
         let cancel = CancellationToken::new();
         // Into the target, or to it as a new name in its parent; a move empties the source.
         let changes = vec![target.clone(), target.parent(), dir];
-        self.jobs.push(Job::new(id, kind, changes, cancel.clone()));
+        let job = Job::new(id, kind, changes, cancel.clone());
         let moving = kind == JobKind::Move;
         let options = CopyOptions {
             preserve: self.copy_choices.preserve || moving,
@@ -1056,14 +1148,15 @@ impl App {
             remove_sources: moving,
             overwrite: false,
         };
-        vec![Effect::Copy {
+        let effect = Effect::Copy {
             id,
             sources,
             target,
             hosts: (from, to),
             options,
             cancel,
-        }]
+        };
+        self.launch(job, effect)
     }
 
     /// Asks what to do about a taken name in the copy job `id`, as mc does: in red, with the
@@ -1163,6 +1256,7 @@ impl App {
                             effects.extend(self.reload(dir));
                         }
                     }
+                    effects.extend(self.start_queued());
                     return effects;
                 }
             }
@@ -1529,6 +1623,7 @@ impl App {
                 effects.extend(self.follow_up(then, false));
             }
         }
+        effects.extend(self.start_queued());
         for side in Side::BOTH {
             let panel = self.panel_mut(side);
             match (&state, reason) {
@@ -1646,6 +1741,9 @@ impl App {
         }
         if let Some(help) = &mut self.help {
             help.render(frame, panels, &self.theme);
+        }
+        if let Some(list) = &self.jobs_list {
+            list.render(frame, panels, &self.theme, &self.job_rows());
         }
         if let Some(job) = self.in_front() {
             job.view.render(frame, panels, &self.theme);
@@ -2399,6 +2497,125 @@ mod tests {
         assert!(app.quits(), "nothing to ask");
     }
 
+    /// The delete jobs that `effects` start: their ids and targets.
+    fn deletes(effects: &[Effect]) -> Vec<(u64, Vec<Location>)> {
+        effects
+            .iter()
+            .filter_map(|effect| match effect {
+                Effect::Delete { id, targets, .. } => Some((*id, targets.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn jobs_wait_their_turn() {
+        let mut app = loaded();
+        app.parallel_jobs = 1;
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        let (first, _, _, _) = delete_job(app.handle(action(Action::Confirm)));
+        app.handle(action(Action::Confirm));
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        assert!(app.handle(action(Action::Confirm)).is_empty(), "it waits");
+        let text = screen_of(&mut app, 12);
+        assert!(text.contains("Waiting for other jobs to finish"), "{text}");
+        app.handle(action(Action::Confirm));
+        assert!(screen(&mut app).contains(" 2 jobs 0% "));
+
+        // A third waits too; Abort takes it away at once, as it has not started.
+        app.handle(action(Action::Delete));
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        app.handle(action(Action::Cancel));
+        assert_eq!(app.context(), Context::Panel);
+        assert_eq!(app.jobs.len(), 2);
+
+        // When the first ends, the second starts.
+        let effects = app.job_event(first, JobEvent::Finished { complete: true });
+        let started = deletes(&effects);
+        assert_eq!(started.len(), 1, "{effects:?}");
+        let (second, targets) = &started[0];
+        assert_eq!(targets, &[local("/srv/right")]);
+        let effects = app.job_event(*second, JobEvent::Finished { complete: true });
+        assert!(deletes(&effects).is_empty());
+        assert!(app.jobs.is_empty());
+    }
+
+    #[test]
+    fn ctrl_x_j_lists_the_jobs_to_show_or_abort() {
+        let mut app = loaded();
+        app.parallel_jobs = 1;
+        app.handle(action(Action::Jobs));
+        assert!(screen_of(&mut app, 12).contains("No jobs are running."));
+        app.handle(action(Action::Cancel));
+        assert_eq!(app.context(), Context::Panel);
+
+        // Two jobs behind the panels, the second waiting.
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        let (first, _, _, cancel) = delete_job(app.handle(action(Action::Confirm)));
+        app.handle(action(Action::Confirm));
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        app.handle(action(Action::Confirm));
+        app.handle(action(Action::Confirm));
+        let progress = JobEvent::Progress {
+            current: local("/srv/left/a"),
+            done: 1,
+            total: 2,
+            bytes_done: 0,
+            bytes_total: 0,
+        };
+        app.job_event(first, progress);
+        app.handle(action(Action::Jobs));
+        assert_eq!(app.context(), Context::Dialog);
+        let text = screen_of(&mut app, 12);
+        assert!(
+            text.contains("Delete") && text.contains("50%  /srv/left/a"),
+            "{text}"
+        );
+        assert!(text.contains("waiting"), "{text}");
+
+        // Abort takes the waiting one away at once, and stops the running one.
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Right));
+        app.handle(action(Action::Confirm));
+        assert_eq!(app.jobs.len(), 1);
+        app.handle(action(Action::Confirm));
+        assert!(cancel.is_cancelled());
+        assert!(screen_of(&mut app, 12).contains("aborting"));
+
+        // Show brings it to the front, in place of the list.
+        app.handle(action(Action::Left));
+        app.handle(action(Action::Confirm));
+        assert!(app.jobs_list.is_none());
+        assert!(app.in_front().is_some());
+        assert!(screen_of(&mut app, 12).contains("Aborting…"));
+    }
+
+    #[test]
+    fn a_lost_host_makes_room_and_f4_never_waits() {
+        let (mut app, connection) = on_a_host();
+        app.parallel_jobs = 1;
+        app.handle(action(Action::Delete));
+        delete_job(app.handle(action(Action::Confirm)));
+        app.handle(action(Action::Confirm));
+        let (id, _, _, _, _) = copy_job(app.handle(action(Action::Edit)));
+        app.job_event(id, JobEvent::Finished { complete: false });
+
+        // A local job waits behind the one on the host, and starts when the host goes.
+        let effects = enter_host(&mut app, Side::Right, 0);
+        answer(&mut app, effects, &Listing::Dir(vec![file("a", 1)]));
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        app.handle(action(Action::Confirm));
+        let effects = app.closed("web", connection, Some("Broken pipe"));
+        assert_eq!(deletes(&effects).len(), 1, "{effects:?}");
+        assert_eq!(app.jobs.len(), 1);
+    }
+
     #[test]
     fn quitting_stops_the_jobs_and_yes_quits() {
         let mut app = loaded();
@@ -2569,6 +2786,7 @@ mod tests {
     fn copies_write_directly_without_atomic_upload() {
         let transfer = TransferConfig {
             atomic_upload: false,
+            ..TransferConfig::default()
         };
         let (mut app, effects) =
             App::new(Path::new("/srv"), Path::new("/home/me"), &ui(), &transfer);

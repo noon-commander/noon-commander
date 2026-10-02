@@ -279,10 +279,10 @@ impl Keymap {
 fn mc_presets() -> [(Context, Preset); 6] {
     use Action::{
         Backspace, Cancel, Confirm, Copy, Delete, DeleteToEnd, DeleteToStart, Disconnect, Down,
-        Edit, End, Enter, Help, Home, InvertMarks, Left, Mark, MarkUp, Mkdir, Move, NextField,
-        OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent, PrevField, QuickSearch, Quit,
-        Redraw, Reload, Right, Select, SortByExtension, SortByName, SortBySize, SortByTime,
-        SwapPanels, SwitchPanel, Toggle, ToggleHidden, ToggleWrap, Unselect, Up, View,
+        Edit, End, Enter, Help, Home, InvertMarks, Jobs, Left, Mark, MarkUp, Mkdir, Move,
+        NextField, OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent, PrevField,
+        QuickSearch, Quit, Redraw, Reload, Right, Select, SortByExtension, SortByName, SortBySize,
+        SortByTime, SwapPanels, SwitchPanel, Toggle, ToggleHidden, ToggleWrap, Unselect, Up, View,
     };
     [
         (
@@ -325,6 +325,7 @@ fn mc_presets() -> [(Context, Preset); 6] {
                 (Mkdir, &["f7"]),
                 // In text fields, Delete deletes a character.
                 (Delete, &["f8", "delete"]),
+                (Jobs, &["ctrl-x j"]),
                 (Quit, &["f10"]),
                 (Redraw, &["ctrl-l"]),
             ],

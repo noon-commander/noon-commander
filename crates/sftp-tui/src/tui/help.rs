@@ -221,6 +221,7 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::Move) => fl!("help-move"),
         (Context::Panel, Action::Mkdir) => fl!("help-mkdir"),
         (Context::Panel, Action::Delete) => fl!("help-delete"),
+        (Context::Panel, Action::Jobs) => fl!("help-jobs"),
         (Context::Panel | Context::Viewer, Action::Help) => fl!("help-help"),
         (Context::Panel, Action::Quit) => fl!("help-quit"),
         (Context::Panel | Context::Viewer, Action::Redraw) => fl!("help-redraw"),

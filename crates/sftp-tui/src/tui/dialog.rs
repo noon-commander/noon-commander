@@ -240,11 +240,6 @@ impl Colors {
         self.focused
     }
 
-    /// The style of the other buttons.
-    pub(crate) fn button_style(self) -> Style {
-        self.button
-    }
-
     /// A dialog's colors, or an error's: mc draws errors and warnings red.
     pub(crate) fn of(theme: &Theme, error: bool) -> Self {
         if error {
@@ -539,31 +534,43 @@ impl Dialog {
             index += 1;
         }
         if index + 1 < inner.height {
-            frame.render_widget(self.button_line(colors), row(index + 1));
+            let labels: Vec<String> = self.buttons.iter().map(|button| button.label()).collect();
+            let focus = match self.focus {
+                Focus::Button(index) => Some(index),
+                Focus::Field | Focus::Check(_) => None,
+            };
+            let line = button_line(&labels, self.default, focus, colors);
+            frame.render_widget(line, row(index + 1));
         }
     }
+}
 
-    /// The buttons, centered.
-    fn button_line(&self, colors: Colors) -> Line<'static> {
-        let mut spans = Vec::new();
-        for (index, button) in self.buttons.iter().enumerate() {
-            if index > 0 {
-                spans.push(Span::raw(" "));
-            }
-            let text = if index == self.default {
-                format!("[< {} >]", button.label())
-            } else {
-                format!("[ {} ]", button.label())
-            };
-            let style = if self.focus == Focus::Button(index) {
-                colors.focused
-            } else {
-                colors.button
-            };
-            spans.push(Span::styled(text, style));
+/// Buttons, centered, as mc draws them: the default one in `[< >]`, the one with the focus in
+/// its color.
+pub(crate) fn button_line(
+    labels: &[String],
+    default: usize,
+    focus: Option<usize>,
+    colors: Colors,
+) -> Line<'static> {
+    let mut spans = Vec::new();
+    for (index, label) in labels.iter().enumerate() {
+        if index > 0 {
+            spans.push(Span::raw(" "));
         }
-        Line::from(spans).centered()
+        let text = if index == default {
+            format!("[< {label} >]")
+        } else {
+            format!("[ {label} ]")
+        };
+        let style = if focus == Some(index) {
+            colors.focused
+        } else {
+            colors.button
+        };
+        spans.push(Span::styled(text, style));
     }
+    Line::from(spans).centered()
 }
 
 /// Draws an empty dialog box of `size` centered in `area`, with its title and mc's `shadow`,

@@ -95,6 +95,8 @@ pub(crate) enum Action {
     Move,
     /// Asks for a name and makes a directory.
     Mkdir,
+    /// Lists the running jobs.
+    Jobs,
     /// Asks for a pattern and marks the entries whose names match it.
     Select,
     /// Asks for a pattern and unmarks the entries whose names match it.
@@ -174,6 +176,7 @@ impl Action {
         Self::Copy,
         Self::Move,
         Self::Mkdir,
+        Self::Jobs,
         Self::Select,
         Self::Unselect,
         Self::Parent,

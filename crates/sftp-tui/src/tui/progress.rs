@@ -5,7 +5,7 @@ use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, draw_box};
+use super::dialog::{Colors, button_line, draw_box};
 use super::keymap::{Action, Resolved};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -15,6 +15,8 @@ const WIDTH: u16 = 60;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Stage {
+    /// Waiting for other jobs to finish.
+    Waiting,
     /// Counting what to do.
     Scanning { items: u64 },
     /// At `current`, `done` of `total` entries and `bytes` of their bytes.
@@ -74,6 +76,11 @@ impl JobView {
         self.focus = 0;
     }
 
+    /// The job waits its turn.
+    pub(crate) fn wait(&mut self) {
+        self.stage = Stage::Waiting;
+    }
+
     pub(crate) fn scanning(&mut self, items: u64) {
         self.stage = Stage::Scanning { items };
     }
@@ -91,7 +98,7 @@ impl JobView {
     /// How far the job is, from 0 to 1: by bytes if it moves data, else by entries.
     pub(crate) fn ratio(&self) -> f64 {
         match self.stage {
-            Stage::Scanning { .. } => 0.0,
+            Stage::Waiting | Stage::Scanning { .. } => 0.0,
             Stage::Working {
                 done,
                 total,
@@ -103,6 +110,32 @@ impl JobView {
                 ..
             } => ratio(done, total),
         }
+    }
+
+    /// What the job does, such as `Copy`.
+    pub(crate) fn title(&self) -> &str {
+        &self.title
+    }
+
+    /// How far the job is, in a word or a percentage, and the entry at hand: for the list of
+    /// jobs.
+    pub(crate) fn summary(&self) -> (String, String) {
+        let state = match &self.stage {
+            _ if self.aborting => fl!("jobs-state-aborting"),
+            Stage::Waiting => fl!("jobs-state-waiting"),
+            Stage::Scanning { .. } => fl!("jobs-state-counting"),
+            Stage::Working { .. } => {
+                // A ratio within 0 … 1.
+                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                let percent = (self.ratio() * 100.0).round() as u64;
+                fl!("jobs-state-percent", percent = percent.to_string())
+            }
+        };
+        let current = match &self.stage {
+            Stage::Working { current, .. } => current.clone(),
+            Stage::Waiting | Stage::Scanning { .. } => String::new(),
+        };
+        (state, current)
     }
 
     /// Takes a key: Enter or Space presses the focused button, Esc aborts, as in mc, and
@@ -145,6 +178,7 @@ impl JobView {
             }
         };
         let (doing, current, ratio, count) = match &self.stage {
+            Stage::Waiting => (fl!("job-waiting"), String::new(), 0.0, String::new()),
             Stage::Scanning { items } => (
                 fl!("job-scanning"),
                 String::new(),
@@ -184,33 +218,15 @@ impl JobView {
         put(1, Line::raw(cells::fit(&current, width, Align::Left)));
         put(2, gauge(ratio, width, theme));
         put(3, Line::raw(cells::fit(&count, width, Align::Left)));
-        put(5, self.button_line(colors));
-    }
-
-    /// The buttons, centered; the first is the default.
-    fn button_line(&self, colors: Colors) -> Line<'static> {
-        let mut spans = Vec::new();
-        for (index, button) in self.buttons.iter().enumerate() {
-            if index > 0 {
-                spans.push(Span::raw(" "));
-            }
-            let label = match button {
+        let labels: Vec<String> = self
+            .buttons
+            .iter()
+            .map(|button| match button {
                 JobButton::Background => fl!("job-background"),
                 JobButton::Abort => fl!("dialog-abort"),
-            };
-            let text = if index == 0 {
-                format!("[< {label} >]")
-            } else {
-                format!("[ {label} ]")
-            };
-            let style = if index == self.focus {
-                colors.focused_style()
-            } else {
-                colors.button_style()
-            };
-            spans.push(Span::styled(text, style));
-        }
-        Line::from(spans).centered()
+            })
+            .collect();
+        put(5, button_line(&labels, 0, Some(self.focus), colors));
     }
 }
 
@@ -286,6 +302,11 @@ mod tests {
 
         view.abort();
         assert!(draw(&view).contains("Aborting"));
+
+        let mut view = JobView::new("Copy".to_owned(), "Copying".to_owned());
+        view.wait();
+        assert!(draw(&view).contains("Waiting for other jobs"));
+        assert!(view.ratio() < f64::EPSILON);
     }
 
     #[test]

@@ -50,6 +50,10 @@ type_to_search = true
 # their targets directly; a copy that does not finish is still removed.
 atomic_upload = true
 
+# How many jobs (copying, moving, deleting) run at once; later ones wait their turn. Editing
+# with F4 never waits. At least 1.
+parallel_jobs = 2
+
 # Per-host settings, keyed by a Host alias from ssh_config. Quote aliases that contain dots,
 # such as [hosts."web.example.com"].
 #

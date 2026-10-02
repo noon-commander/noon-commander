@@ -35,6 +35,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Copying to the clipboard through OSC 52, which works over ssh in terminals that allow it
+  ([ADR 0008](docs/adr/0008-clipboard-through-osc-52.md)).
+
 - F4 on a host edits its settings: label, remote start directory, a directory for the other
   panel, and whether to remember the last directory; Use Current fills in the directory a panel
   shows on the host. They are saved to `hosts.toml`, keeping its comments and other tables.

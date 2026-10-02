@@ -153,6 +153,11 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
         {
             break Err(error.into());
         }
+        if let Some(text) = app.take_clipboard()
+            && let Err(error) = copy_to_clipboard(&mut terminal, &text)
+        {
+            break Err(error.into());
+        }
         let now = SystemTime::now();
         if let Err(error) = terminal.draw(|frame| app.render(frame, now, &tz)) {
             break Err(error.into());
@@ -273,6 +278,18 @@ fn repaint(terminal: &mut DefaultTerminal) -> io::Result<()> {
     terminal.backend_mut().clear_region(ClearType::All)?;
     terminal.draw(|frame| frame.render_widget(Clear, frame.area()))?;
     Ok(())
+}
+
+/// Asks the terminal to put `text` on the system clipboard with OSC 52 (ADR 0008). Nothing
+/// tells whether it did: terminals that do not know the sequence, or do not allow it, ignore
+/// it.
+fn copy_to_clipboard(terminal: &mut DefaultTerminal, text: &str) -> io::Result<()> {
+    use crossterm::clipboard::CopyToClipboard;
+
+    crossterm::execute!(
+        terminal.backend_mut(),
+        CopyToClipboard::to_clipboard_from(text)
+    )
 }
 
 /// Completes at `deadline`; never without one.

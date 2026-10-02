@@ -63,6 +63,7 @@
 - [x] Location menu: Alt-F1, Alt-F2 (Ctrl-X 1, Ctrl-X 2), with a filter and hotkeys
 - [x] Host settings in `hosts.toml`, typed and edited with F4 on a host: `other_dir`,
       `remember_dir` ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md))
+- [x] Clipboard through OSC 52 ([ADR 0008](adr/0008-clipboard-through-osc-52.md))
 - [ ] F9 pull-down menu, as in mc, with Left/Right → Change location
 - [ ] User themes and keymap overrides
 - [ ] Bookmarks and history
@@ -86,6 +87,9 @@
 - vim keymap preset.
 - Linux: CI job and packages (AUR, deb).
 - Translations.
+- Clipboard fallback where OSC 52 does not work (macOS Terminal, blocked multiplexers): a
+  desktop helper (`pbcopy`, `wl-copy`, `xclip`) when Noon Commander runs on the desktop,
+  behind a setting ([ADR 0008](adr/0008-clipboard-through-osc-52.md)).
 - Resumable transfers.
 - Release binaries and a Homebrew tap.
 - Watch for volumes that are mounted or unmounted (DiskArbitration on macOS, `poll` on

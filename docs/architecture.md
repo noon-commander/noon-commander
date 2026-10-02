@@ -481,6 +481,11 @@ remember_dir = true              # reopen the last directory of this session
   does not open in the middle of other work. F10 asks before quitting while jobs run;
   quitting stops them and waits up to five seconds, so that a copy removes its unfinished
   file before the connections close.
+- **Clipboard.** Copying goes through OSC 52: the event loop writes the escape sequence
+  between frames, and the terminal puts the text on the clipboard of the machine it runs on,
+  over ssh too. Nothing tells whether it did, so the UI says the text was sent to the
+  terminal's clipboard. Noon Commander never reads the clipboard
+  ([ADR 0008](adr/0008-clipboard-through-osc-52.md)).
 - **The other panel.** As in mc: Ctrl-U swaps the panels, and the active one stays active on
   the other side; Alt-O opens the directory or host under the cursor in the other panel (from
   a file, the parent directory with the cursor on this one) and moves the cursor down; Alt-I

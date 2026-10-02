@@ -352,6 +352,8 @@ pub(crate) struct App {
     dialogs: VecDeque<Open>,
     pattern_options: PatternOptions,
     copy_choices: CopyChoices,
+    /// Text for the event loop to put on the clipboard.
+    clipboard: Option<String>,
     /// For the times in questions.
     tz: TimeZone,
     /// Running jobs: at most one in front, over the panels and the help and under the
@@ -425,6 +427,7 @@ impl App {
                 preserve: true,
                 atomic: transfer.atomic_upload,
             },
+            clipboard: None,
             tz: TimeZone::UTC,
             jobs: Vec::new(),
             viewing: None,
@@ -456,6 +459,11 @@ impl App {
     /// Whether the whole screen must be drawn again; resets the request.
     pub(crate) fn take_redraw(&mut self) -> bool {
         std::mem::take(&mut self.redraw)
+    }
+
+    /// Text to put on the clipboard now; resets the request.
+    pub(crate) fn take_clipboard(&mut self) -> Option<String> {
+        self.clipboard.take()
     }
 
     /// Puts copies of remote files for the editor in `dir`, which is private.

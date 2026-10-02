@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" height="1024" viewBox="0 0 1024 1024" width="1024">
+  <title>Noon Commander - base icon</title>
+
+  <defs>
+    <linearGradient id="bg" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#FFF6E4" />
+      <stop offset="1" stop-color="#F6E3BF" />
+    </linearGradient>
+    <radialGradient cx="0.5" cy="0.5" id="glow" r="0.5">
+      <stop offset="0" stop-color="#FFD27A" stop-opacity="0.9" />
+      <stop offset="1" stop-color="#FFD27A" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="panel" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#1F3358" />
+      <stop offset="1" stop-color="#14223F" />
+    </linearGradient>
+    <linearGradient id="ray" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#FFC24A" />
+      <stop offset="1" stop-color="#FFC24A" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+
+  <g id="background">
+    <rect fill="url(#bg)" height="1024" width="1024" />
+    <circle cx="512" cy="210" fill="url(#glow)" r="200" />
+  </g>
+
+  <g id="glyph">
+    <g fill="url(#panel)" id="panels">
+      <rect height="580" rx="44" width="292" x="196" y="260" />
+      <rect height="580" rx="44" width="292" x="536" y="260" />
+    </g>
+    <g fill="#3C5684" id="file-rows">
+      <rect height="26" rx="13" width="204" x="240" y="330" />
+      <rect height="26" rx="13" width="160" x="240" y="390" />
+      <rect height="26" rx="13" width="140" x="240" y="510" />
+      <rect height="26" rx="13" width="204" x="580" y="330" />
+      <rect height="26" rx="13" width="150" x="580" y="390" />
+    </g>
+    <rect fill="#FFC24A" height="42" id="selection" rx="21" width="232" x="226" y="442" />
+    <g id="noon">
+      <rect fill="url(#ray)" height="684" rx="8" width="16" x="504" y="166" />
+      <circle cx="512" cy="184" fill="#FFB52E" r="44" />
+    </g>
+    <path d="M682 750 V570 M616 634 L682 568 L748 634" fill="none" id="transfer-arrow"
+      stroke="#FFC24A" stroke-linecap="round" stroke-linejoin="round" stroke-width="34" />
+  </g>
+</svg>

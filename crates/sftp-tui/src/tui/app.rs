@@ -10,8 +10,8 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::text::{Line, Span};
 use sftp_tui_config::UiConfig;
-use sftp_tui_ops::Decision;
-use sftp_tui_vfs::{FileKind, Location};
+use sftp_tui_ops::{Conflict, CopyOptions, Decision};
+use sftp_tui_vfs::{FileKind, Location, Metadata, RemotePath};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
@@ -24,7 +24,7 @@ use super::panel::{
     Destination, HostState, HostStatus, ListRequest, Listed, Panel, View, child, location_text,
 };
 use super::pattern::Pattern;
-use super::progress::JobView;
+use super::progress::{Counts, JobView};
 use super::tasks::{HostHandle, JobEvent};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -75,6 +75,17 @@ pub(crate) enum Effect {
         host: Option<HostHandle>,
         cancel: CancellationToken,
     },
+    /// Run the copy job `id` of `sources`, all local or all on one host, to `target`, and
+    /// report to [`App::job_event`]; `hosts` lead to the hosts of the sources and of the target,
+    /// if they are remote, and `cancel` stops it.
+    Copy {
+        id: u64,
+        sources: Vec<Location>,
+        target: Location,
+        hosts: (Option<HostHandle>, Option<HostHandle>),
+        options: CopyOptions,
+        cancel: CancellationToken,
+    },
     /// Connect to a host and report to [`App::connected`] and [`App::closed`]; `stop` ends the
     /// attempt or the connection.
     Connect {
@@ -115,8 +126,9 @@ impl Host {
 
 /// Width of the dialogs of `+` and `-`, as in mc.
 const PATTERN_DIALOG_WIDTH: u16 = 50;
-/// Width of the dialog of F7.
+/// Width of the dialogs of F7 and F5.
 const MKDIR_DIALOG_WIDTH: u16 = 60;
+const COPY_DIALOG_WIDTH: u16 = 70;
 
 /// A dialog on screen or waiting for its turn, and what it is for.
 #[derive(Debug)]
@@ -135,23 +147,76 @@ enum Purpose {
     Mkdir { side: Side },
     /// F8 in a panel on `dir`, for the entries `names`.
     Delete { dir: Location, names: Vec<Vec<u8>> },
+    /// F5 in the panel on `side`, which shows `dir`, for the entries `names`. The field
+    /// opened with `offered`, the text for the other panel's location, if it shows one.
+    Copy {
+        side: Side,
+        dir: Location,
+        names: Vec<Vec<u8>>,
+        offered: Option<(String, Location)>,
+    },
     /// A failure in the job `job`, which waits for `reply`.
     Failure {
         job: u64,
         reply: oneshot::Sender<Decision>,
     },
+    /// A taken name in the copy job `job`, which waits for `reply`.
+    Conflict {
+        job: u64,
+        reply: oneshot::Sender<Conflict>,
+    },
     /// Something to read, such as an error.
     Info,
+}
+
+/// What a job does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum JobKind {
+    Delete,
+    Copy,
 }
 
 /// A job on screen, over the panels; one runs at a time.
 #[derive(Debug)]
 struct Job {
     id: u64,
-    /// The directory it works in, which panels read again when it ends.
-    dir: Location,
+    kind: JobKind,
+    /// Directories it changes, which panels read again when it ends.
+    changes: Vec<Location>,
+    /// Hosts it works on; it ends with their connections.
+    hosts: Vec<String>,
     cancel: CancellationToken,
     view: JobView,
+}
+
+impl Job {
+    fn new(id: u64, kind: JobKind, changes: Vec<Location>, cancel: CancellationToken) -> Self {
+        let hosts = changes
+            .iter()
+            .filter_map(|location| match location {
+                Location::Remote { host, .. } => Some(host.clone()),
+                Location::Root | Location::Local(_) => None,
+            })
+            .collect();
+        let view = match kind {
+            JobKind::Delete => JobView::new(fl!("delete-title"), fl!("delete-deleting")),
+            JobKind::Copy => JobView::new(fl!("copy-title"), fl!("copy-copying")),
+        };
+        Self {
+            id,
+            kind,
+            changes,
+            hosts,
+            cancel,
+            view,
+        }
+    }
+}
+
+/// What F5 asked for last; its dialog starts with it.
+#[derive(Debug, Clone, Copy)]
+struct CopyChoices {
+    preserve: bool,
 }
 
 /// What `+` and `-` asked for last; their dialogs start with it.
@@ -198,6 +263,9 @@ pub(crate) struct App {
     /// never takes the keys from a dialog in use.
     dialogs: VecDeque<Open>,
     pattern_options: PatternOptions,
+    copy_choices: CopyChoices,
+    /// For the times in questions.
+    tz: TimeZone,
     /// Over the panels and the help, under the dialogs.
     job: Option<Job>,
     jobs: u64,
@@ -235,6 +303,8 @@ impl App {
             addresses: HashMap::new(),
             dialogs: VecDeque::new(),
             pattern_options: PatternOptions::default(),
+            copy_choices: CopyChoices { preserve: true },
+            tz: TimeZone::UTC,
             job: None,
             jobs: 0,
             help: None,
@@ -255,6 +325,11 @@ impl App {
     /// Whether the whole screen must be drawn again; resets the request.
     pub(crate) fn take_redraw(&mut self) -> bool {
         std::mem::take(&mut self.redraw)
+    }
+
+    /// Shows times in `tz`.
+    pub(crate) fn set_time_zone(&mut self, tz: TimeZone) {
+        self.tz = tz;
     }
 
     /// What turns keys into actions.
@@ -283,7 +358,7 @@ impl App {
             Action::Help | Action::Quit | Action::Redraw | Action::Disconnect | Action::Cancel => {
                 true
             }
-            Action::Mkdir | Action::Delete => !self.panel(self.active).shows_root(),
+            Action::Mkdir | Action::Delete | Action::Copy => !self.panel(self.active).shows_root(),
             _ => false,
         }
     }
@@ -383,6 +458,7 @@ impl App {
             }
             Action::Mkdir => self.ask_mkdir(),
             Action::Delete => self.ask_delete(),
+            Action::Copy => self.ask_copy(),
             Action::Select => self.ask_pattern(true),
             Action::Unselect => self.ask_pattern(false),
             Action::Cancel => self.cancel(self.active),
@@ -420,6 +496,21 @@ impl App {
             Purpose::Delete { dir, names } if event == DialogEvent::Pressed(Button::Yes) => {
                 return self.start_delete(dir, &names);
             }
+            Purpose::Copy {
+                side,
+                dir,
+                names,
+                offered,
+            } if ok => {
+                self.copy_choices.preserve = dialog.checked(0);
+                let target = match offered {
+                    Some((text, location)) if text == dialog.text() => Some(location),
+                    _ => self.resolve_target(side, dialog.text()),
+                };
+                if let Some(target) = target {
+                    return self.start_copy(dir, &names, target);
+                }
+            }
             Purpose::Failure { reply, .. } => {
                 let decision = match event {
                     DialogEvent::Pressed(Button::Skip) => Decision::Skip,
@@ -429,9 +520,21 @@ impl App {
                 };
                 let _ = reply.send(decision);
             }
+            Purpose::Conflict { reply, .. } => {
+                let conflict = match event {
+                    DialogEvent::Pressed(Button::Yes) => Conflict::Overwrite,
+                    DialogEvent::Pressed(Button::No) => Conflict::Skip,
+                    DialogEvent::Pressed(Button::All) => Conflict::OverwriteAll,
+                    DialogEvent::Pressed(Button::KeepAll) => Conflict::SkipAll,
+                    DialogEvent::Pressed(Button::Older) => Conflict::OverwriteOlder,
+                    _ => Conflict::Abort,
+                };
+                let _ = reply.send(conflict);
+            }
             Purpose::Pattern { .. }
             | Purpose::Mkdir { .. }
             | Purpose::Delete { .. }
+            | Purpose::Copy { .. }
             | Purpose::Info => {}
         }
         Vec::new()
@@ -483,18 +586,151 @@ impl App {
         self.jobs += 1;
         let id = self.jobs;
         let cancel = CancellationToken::new();
-        self.job = Some(Job {
-            id,
-            dir,
-            cancel: cancel.clone(),
-            view: JobView::new(fl!("delete-title"), fl!("delete-deleting")),
-        });
+        self.job = Some(Job::new(id, JobKind::Delete, vec![dir], cancel.clone()));
         vec![Effect::Delete {
             id,
             targets,
             host,
             cancel,
         }]
+    }
+
+    /// Asks where F5 copies the marked entries of the active panel, or the one under the
+    /// cursor, as mc does: the field opens with the other panel's location.
+    fn ask_copy(&mut self) {
+        let panel = self.panel(self.active);
+        let chosen = panel.chosen();
+        let message = match chosen.as_slice() {
+            [] => return,
+            [entry] => fl!("copy-one", name = cells::sanitize(&entry.name)),
+            many => fl!("copy-many", count = many.len()),
+        };
+        let names = chosen.iter().map(|entry| entry.name.clone()).collect();
+        let dir = panel.location().clone();
+        let other = self.panel(self.active.other()).location().clone();
+        let offered = (other != Location::Root).then(|| (location_text(&other), other));
+        let text = offered
+            .as_ref()
+            .map(|(text, _)| text.clone())
+            .unwrap_or_default();
+        let checks = [(fl!("copy-preserve"), self.copy_choices.preserve)];
+        let dialog = Dialog::form(
+            &fl!("copy-title"),
+            &message,
+            &text,
+            &checks,
+            COPY_DIALOG_WIDTH,
+        );
+        let side = self.active;
+        self.dialogs.push_back(Open {
+            dialog,
+            purpose: Purpose::Copy {
+                side,
+                dir,
+                names,
+                offered,
+            },
+        });
+    }
+
+    /// Where a typed target points: `host:path` on a host the app knows, or a path from the
+    /// directory of the panel on `side`.
+    fn resolve_target(&self, side: Side, text: &str) -> Option<Location> {
+        if text.is_empty() {
+            return None;
+        }
+        if let Location::Remote { host, path } = Location::parse(text)
+            && self.hosts.contains_key(&host)
+        {
+            return Some(Location::Remote { host, path });
+        }
+        self.panel(side).resolve(text)
+    }
+
+    /// Starts copying `names` from `dir` to `target`, and shows its progress; a target that
+    /// is one of the sources, or in one, is an error.
+    fn start_copy(&mut self, dir: Location, names: &[Vec<u8>], target: Location) -> Vec<Effect> {
+        let sources: Vec<Location> = names.iter().filter_map(|name| child(&dir, name)).collect();
+        let error =
+            |reason: String| fl!("copy-error", path = location_text(&target), reason = reason);
+        if target == dir {
+            self.show_error(&error(fl!("copy-same")));
+            return Vec::new();
+        }
+        if let Some(source) = sources.iter().find(|source| within(source, &target)) {
+            let reason = fl!("copy-into-itself", path = location_text(source));
+            self.show_error(&error(reason));
+            return Vec::new();
+        }
+        let handle = |location: &Location| match location {
+            Location::Remote { host, .. } => match self.hosts.get(host) {
+                Some(Host::Connected { handle, .. }) => Ok(Some(handle.clone())),
+                _ => Err(()),
+            },
+            Location::Root | Location::Local(_) => Ok(None),
+        };
+        let (Ok(from), Ok(to)) = (handle(&dir), handle(&target)) else {
+            self.show_error(&error(fl!("error-connection-closed")));
+            return Vec::new();
+        };
+        self.jobs += 1;
+        let id = self.jobs;
+        let cancel = CancellationToken::new();
+        // A copy goes into the target, or to it as a new name in its parent.
+        let changes = vec![target.clone(), target.parent(), dir];
+        self.job = Some(Job::new(id, JobKind::Copy, changes, cancel.clone()));
+        let options = CopyOptions {
+            preserve: self.copy_choices.preserve,
+            atomic: true,
+        };
+        vec![Effect::Copy {
+            id,
+            sources,
+            target,
+            hosts: (from, to),
+            options,
+            cancel,
+        }]
+    }
+
+    /// Asks what to do about a taken name in the copy job `id`, as mc does: in red, with the
+    /// sizes and times of both, and No as the default.
+    fn ask_conflict(
+        &mut self,
+        id: u64,
+        target: &Location,
+        (new, old): (&Metadata, &Metadata),
+        reply: oneshot::Sender<Conflict>,
+    ) {
+        let now = SystemTime::now();
+        let size = |metadata: &Metadata| metadata.size.map_or_else(String::new, cells::grouped);
+        let time = |metadata: &Metadata| {
+            cells::mtime(metadata.modified, now, &self.tz)
+                .trim()
+                .to_owned()
+        };
+        let message = fl!(
+            "copy-exists",
+            path = location_text(target),
+            new_size = size(new),
+            new_time = time(new),
+            old_size = size(old),
+            old_time = time(old)
+        );
+        let buttons = vec![
+            Button::Yes,
+            Button::No,
+            Button::All,
+            Button::KeepAll,
+            Button::Older,
+            Button::Abort,
+        ];
+        let title = fl!("copy-exists-title");
+        let dialog = Dialog::question(&title, &message, buttons, 1, true);
+        self.dialogs.push_back(Open {
+            dialog,
+            purpose: Purpose::Conflict { job: id, reply },
+        });
     }
 
     /// Takes a report from the job `id`: progress for its window, a failure for a dialog
@@ -509,11 +745,33 @@ impl App {
                 current,
                 done,
                 total,
-            } => job.view.working(location_text(&current), done, total),
+                bytes_done,
+                bytes_total,
+            } => {
+                let counts = Counts {
+                    done,
+                    total,
+                    bytes_done,
+                    bytes_total,
+                };
+                job.view.working(location_text(&current), counts);
+            }
+            JobEvent::Exists {
+                target,
+                source_metadata,
+                target_metadata,
+                reply,
+            } => {
+                let metadata = (&source_metadata, &target_metadata);
+                self.ask_conflict(id, &target, metadata, reply);
+            }
             JobEvent::Failed { path, error, reply } => {
                 let path = location_text(&path);
                 let reason = cells::sanitize(error.as_bytes());
-                let message = fl!("delete-error", path = path, reason = reason);
+                let message = match job.kind {
+                    JobKind::Delete => fl!("delete-error", path = path, reason = reason),
+                    JobKind::Copy => fl!("copy-error", path = path, reason = reason),
+                };
                 let buttons = vec![Button::Skip, Button::SkipAll, Button::Retry, Button::Abort];
                 let dialog = Dialog::question(&fl!("dialog-error"), &message, buttons, 0, true);
                 self.dialogs.push_back(Open {
@@ -523,7 +781,13 @@ impl App {
             }
             JobEvent::Finished => {
                 if let Some(job) = self.end_job() {
-                    return self.reload(&job.dir);
+                    let mut effects = Vec::new();
+                    for (index, dir) in job.changes.iter().enumerate() {
+                        if !job.changes[..index].contains(dir) {
+                            effects.extend(self.reload(dir));
+                        }
+                    }
+                    return effects;
                 }
             }
         }
@@ -533,9 +797,12 @@ impl App {
     /// Takes the job off the screen, with the questions it asked.
     fn end_job(&mut self) -> Option<Job> {
         let job = self.job.take()?;
-        self.dialogs.retain(
-            |open| !matches!(open.purpose, Purpose::Failure { job: asked, .. } if asked == job.id),
-        );
+        self.dialogs.retain(|open| match open.purpose {
+            Purpose::Failure { job: asked, .. } | Purpose::Conflict { job: asked, .. } => {
+                asked != job.id
+            }
+            _ => true,
+        });
         Some(job)
     }
 
@@ -849,7 +1116,7 @@ impl App {
         if self
             .job
             .as_ref()
-            .is_some_and(|job| matches!(&job.dir, Location::Remote { host: on, .. } if on == host))
+            .is_some_and(|job| job.hosts.iter().any(|on| on == host))
         {
             self.end_job();
         }
@@ -989,6 +1256,37 @@ impl App {
     }
 }
 
+/// Whether `inner` is `outer` or in it, on the same file system.
+fn within(outer: &Location, inner: &Location) -> bool {
+    match (outer, inner) {
+        (Location::Local(outer), Location::Local(inner)) => inner.starts_with(outer),
+        (
+            Location::Remote {
+                host: outer_host,
+                path: outer,
+            },
+            Location::Remote {
+                host: inner_host,
+                path: inner,
+            },
+        ) => outer_host == inner_host && remote_within(outer, inner),
+        _ => false,
+    }
+}
+
+/// Whether the remote path `inner` is `outer` or in it, by their components.
+fn remote_within(outer: &RemotePath, inner: &RemotePath) -> bool {
+    let components = |path: &RemotePath| {
+        path.as_bytes()
+            .split(|&byte| byte == b'/')
+            .filter(|part| !part.is_empty())
+            .map(<[u8]>::to_vec)
+            .collect::<Vec<_>>()
+    };
+    let absolute = |path: &RemotePath| path.as_bytes().starts_with(b"/");
+    absolute(outer) == absolute(inner) && components(inner).starts_with(&components(outer))
+}
+
 /// The last component of a local or remote path.
 fn file_name(location: &Location) -> Option<Vec<u8>> {
     match location {
@@ -1014,6 +1312,7 @@ fn fkey_label(action: Action) -> Option<String> {
         Action::Disconnect => Some(fl!("fkey-disconnect")),
         Action::Mkdir => Some(fl!("fkey-mkdir")),
         Action::Delete => Some(fl!("fkey-delete")),
+        Action::Copy => Some(fl!("fkey-copy")),
         _ => None,
     }
 }
@@ -1138,7 +1437,11 @@ mod tests {
 
     /// Wide enough for whole status lines.
     fn screen(app: &mut App) -> String {
-        let mut terminal = Terminal::new(TestBackend::new(160, 8)).unwrap();
+        screen_of(app, 8)
+    }
+
+    fn screen_of(app: &mut App, height: u16) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(160, height)).unwrap();
         let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
             .draw(|frame| app.render(frame, now, &TimeZone::UTC))
@@ -1483,6 +1786,8 @@ mod tests {
             current,
             done: 1,
             total: 3,
+            bytes_done: 0,
+            bytes_total: 0,
         };
         app.job_event(id, progress);
         let text = screen(&mut app);
@@ -1589,6 +1894,200 @@ mod tests {
         assert_eq!(effects.len(), 1, "back to the root");
         assert!(app.job.is_none());
         assert_ne!(app.context(), Context::Dialog);
+    }
+
+    /// The only effect, which must start copying: the job, its sources, its target, whether
+    /// its ends are remote, and its options.
+    fn copy_job(effects: Vec<Effect>) -> (u64, Vec<Location>, Location, (bool, bool), CopyOptions) {
+        match one(effects) {
+            Effect::Copy {
+                id,
+                sources,
+                target,
+                hosts,
+                options,
+                ..
+            } => {
+                let remote = (hosts.0.is_some(), hosts.1.is_some());
+                (id, sources, target, remote, options)
+            }
+            other => panic!("expected a copy job, got {other:?}"),
+        }
+    }
+
+    /// An app on `/srv` with the right panel in `/srv/right` and the cursor of the left one
+    /// on `left`.
+    fn two_directories() -> App {
+        let mut app = loaded();
+        app.active = Side::Right;
+        app.handle(action(Action::End));
+        let effects = app.handle(action(Action::Enter));
+        answer(&mut app, effects, &Listing::Dir(vec![file("old", 1)]));
+        app.active = Side::Left;
+        app.handle(action(Action::Down));
+        app
+    }
+
+    #[test]
+    fn f5_copies_to_the_other_panel_and_asks_about_taken_names() {
+        let mut app = two_directories();
+        app.handle(action(Action::Copy));
+        let text = screen(&mut app);
+        assert!(text.contains("Copy \"left\" to:"), "{text}");
+        assert!(text.contains("/srv/right"), "{text}");
+        assert!(text.contains("[x] Preserve attributes"), "{text}");
+        let (id, sources, target, remote, options) = copy_job(app.handle(action(Action::Confirm)));
+        assert_eq!(sources, [local("/srv/left")]);
+        assert_eq!((target, remote), (local("/srv/right"), (false, false)));
+        assert_eq!(
+            options,
+            CopyOptions {
+                preserve: true,
+                atomic: true
+            }
+        );
+        assert!(screen(&mut app).contains("Counting"), "the job's window");
+
+        // A taken name: No is the default; Left goes to Yes.
+        let mut metadata = dir("left").metadata;
+        metadata.kind = FileKind::File;
+        metadata.size = Some(12_345);
+        let ask = |app: &mut App| {
+            let (reply, answer) = oneshot::channel();
+            let event = JobEvent::Exists {
+                target: local("/srv/right/left/a"),
+                source_metadata: metadata.clone(),
+                target_metadata: metadata.clone(),
+                reply,
+            };
+            app.job_event(id, event);
+            answer
+        };
+        let mut answer = ask(&mut app);
+        let text = screen_of(&mut app, 14);
+        assert!(
+            text.contains("/srv/right/left/a is there already."),
+            "{text}"
+        );
+        assert!(text.contains("New:      12,345 bytes"), "{text}");
+        assert!(text.contains("[< No >]"), "{text}");
+        app.handle(action(Action::Confirm));
+        assert_eq!(answer.try_recv(), Ok(Conflict::Skip));
+        let mut answer = ask(&mut app);
+        app.handle(action(Action::Left));
+        app.handle(action(Action::Confirm));
+        assert_eq!(answer.try_recv(), Ok(Conflict::Overwrite));
+
+        // The end reads the target and the source's directory again.
+        let effects = app.job_event(id, JobEvent::Finished);
+        assert_eq!(effects.len(), 2);
+        assert_eq!(app.context(), Context::Panel);
+    }
+
+    #[test]
+    fn f5_takes_typed_targets_and_remembers_preserve() {
+        let mut app = two_directories();
+        let (handle, _requests) = HostHandle::channel();
+        let stop = CancellationToken::new();
+        let web = Host::Connected {
+            connection: 1,
+            stop,
+            handle,
+        };
+        app.hosts.insert("web".to_owned(), web);
+        let copy_to = |app: &mut App, text: &str| {
+            app.handle(action(Action::Copy));
+            type_text(app, text);
+            app.handle(action(Action::Confirm))
+        };
+        let (_, _, target, _, _) = copy_job(copy_to(&mut app, "sub"));
+        assert_eq!(target, local("/srv/sub"), "from the source's directory");
+        app.end_job();
+        let (_, _, target, ends, _) = copy_job(copy_to(&mut app, "web:/var/www"));
+        assert_eq!((target, ends), (remote("web", "/var/www"), (false, true)));
+        app.end_job();
+        let (_, _, target, _, _) = copy_job(copy_to(&mut app, "x:y"));
+        assert_eq!(target, local("/srv/x:y"), "no host called x");
+        app.end_job();
+
+        // Preserve attributes, switched off, stays off.
+        app.handle(action(Action::Copy));
+        for step in [Action::NextField, Action::Toggle, Action::Confirm] {
+            app.handle(action(step));
+        }
+        app.end_job();
+        app.handle(action(Action::Copy));
+        assert!(screen(&mut app).contains("[ ] Preserve attributes"));
+        let (_, _, _, _, options) = copy_job(app.handle(action(Action::Confirm)));
+        assert!(!options.preserve);
+    }
+
+    #[test]
+    fn f5_does_not_copy_onto_or_into_itself() {
+        let mut app = loaded();
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Copy));
+        assert!(
+            app.handle(action(Action::Confirm)).is_empty(),
+            "the other panel is here too"
+        );
+        let text = screen(&mut app);
+        assert!(
+            text.contains("Cannot copy to /srv: the source and the target are the same"),
+            "{text}"
+        );
+        app.handle(action(Action::Confirm));
+
+        app.handle(action(Action::Copy));
+        type_text(&mut app, "left/inner");
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        let text = screen(&mut app);
+        assert!(text.contains("it is in /srv/left"), "{text}");
+        assert!(remote_within(
+            &RemotePath::from("/a"),
+            &RemotePath::from("/a/b/")
+        ));
+        assert!(!remote_within(
+            &RemotePath::from("/a"),
+            &RemotePath::from("/ab")
+        ));
+        assert!(!remote_within(
+            &RemotePath::from("a"),
+            &RemotePath::from("/a")
+        ));
+    }
+
+    #[test]
+    fn a_copy_to_a_lost_host_ends_with_it() {
+        let mut app = at_root();
+        let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Right, 1)) else {
+            panic!("expected a connection");
+        };
+        let (handle, _requests) = HostHandle::channel();
+        let effects = app.connected("web", connection, handle);
+        let [Effect::List { request, .. }] = &effects[..] else {
+            panic!("expected a listing, got {effects:?}");
+        };
+        let generation = request.generation;
+        let location = remote("web", "/home/deploy");
+        let listing = Listing::Dir(Vec::new());
+        app.listed(Side::Right, generation, Ok(Listed { location, listing }));
+
+        app.active = Side::Left;
+        app.handle(action(Action::Home));
+        let effects = app.handle(action(Action::Enter));
+        answer(&mut app, effects, &Listing::Dir(vec![file("notes", 5)]));
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Copy));
+        assert!(screen(&mut app).contains("web:/home/deploy"));
+        let (_, _, target, ends, _) = copy_job(app.handle(action(Action::Confirm)));
+        assert_eq!(
+            (target, ends),
+            (remote("web", "/home/deploy"), (false, true))
+        );
+
+        app.closed("web", connection, Some("Broken pipe"));
+        assert!(app.job.is_none());
     }
 
     #[test]

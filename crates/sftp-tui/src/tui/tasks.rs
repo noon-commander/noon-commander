@@ -1,18 +1,19 @@
 //! Background work for the app: listings, new directories, jobs, and one task per connected
 //! host that owns its ssh session and SFTP channel.
 
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::StreamExt as _;
 use futures_util::stream::FuturesUnordered;
-use sftp_tui_ops::{Decision, Event, Reporter};
+use sftp_tui_ops::{Conflict, CopyOptions, Decision, Endpoint, Event, Reporter};
 use sftp_tui_ssh::askpass::{AskpassEnv, AskpassEvent, AskpassServer};
 use sftp_tui_ssh::resolve::resolve;
 use sftp_tui_ssh::version::check_version;
 use sftp_tui_ssh::{CachedHost, ChannelProcess, Session, SftpChannel, SshError, cleanup_stale};
-use sftp_tui_vfs::{LocalFs, Location, RemotePath, SftpFs, Vfs, VfsError};
+use sftp_tui_vfs::{LocalFs, Location, Metadata, RemotePath, SftpFs, Vfs, VfsError};
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
@@ -40,7 +41,7 @@ pub(crate) enum Done {
         generation: u64,
         result: Result<Listed, String>,
     },
-    /// A report from the job `id` of [`Effect::Delete`].
+    /// A report from the job `id` of [`Effect::Delete`] or [`Effect::Copy`].
     Job { id: u64, event: JobEvent },
     /// The directory of [`Effect::CreateDir`] was made, or why not.
     Created {
@@ -80,17 +81,27 @@ pub(crate) enum Done {
 pub(crate) enum JobEvent {
     /// Counting what to do: `items` found so far.
     Scanning { items: u64 },
-    /// At `current`, with `done` of `total` entries behind it.
+    /// At `current`, with `done` of `total` entries and `bytes_done` of `bytes_total` bytes
+    /// behind it; jobs that move no data count no bytes.
     Progress {
         current: Location,
         done: u64,
         total: u64,
+        bytes_done: u64,
+        bytes_total: u64,
     },
     /// Something failed at `path`; the job waits for `reply`.
     Failed {
         path: Location,
         error: String,
         reply: oneshot::Sender<Decision>,
+    },
+    /// The name `target` of a copy is taken; the job waits for `reply`.
+    Exists {
+        target: Location,
+        source_metadata: Metadata,
+        target_metadata: Metadata,
+        reply: oneshot::Sender<Conflict>,
     },
     /// The job is over: done, aborted, or cancelled.
     Finished,
@@ -108,6 +119,9 @@ pub(crate) enum HostRequest {
         paths: Vec<RemotePath>,
         cancel: CancellationToken,
     },
+    /// Shares the host's SFTP session, for a job that runs elsewhere, such as a copy between
+    /// two hosts.
+    Share(oneshot::Sender<Arc<SftpFs>>),
 }
 
 /// Passes requests to the task of a connected host.
@@ -190,6 +204,26 @@ impl Tasks {
                     host,
                     cancel,
                 } => self.delete(id, targets, host, cancel),
+                Effect::Copy {
+                    id,
+                    sources,
+                    target,
+                    hosts,
+                    options,
+                    cancel,
+                } => {
+                    let done = self.done.clone();
+                    tokio::spawn(async move {
+                        let job = CopyJob {
+                            id,
+                            options,
+                            cancel,
+                            done: &done,
+                        };
+                        let finished = job.run(sources, target, hosts).await;
+                        let _ = done.send(finished);
+                    });
+                }
                 Effect::Connect {
                     host,
                     connection,
@@ -389,36 +423,165 @@ async fn run_delete<V: Vfs>(
     done: &mpsc::UnboundedSender<Done>,
     location: impl Fn(V::Path) -> Location,
 ) -> Done {
-    let (events, mut incoming) = mpsc::unbounded_channel();
+    let (events, incoming) = mpsc::unbounded_channel();
     let reporter = Reporter::new(events, cancel);
     let work = async move {
         let mut reporter = reporter;
         sftp_tui_ops::delete(vfs, targets, &mut reporter).await
     };
-    let forward = async {
-        while let Some(event) = incoming.recv().await {
-            let event = match event {
-                Event::Scanning { items } => JobEvent::Scanning { items },
-                Event::Progress(progress) => JobEvent::Progress {
-                    current: location(progress.current),
-                    done: progress.items_done,
-                    total: progress.items_total,
-                },
-                Event::Failed { path, error, reply } => JobEvent::Failed {
-                    path: location(path),
-                    error: describe::vfs_error(&error),
-                    reply,
-                },
-                // Deleting takes no names; dropping the question would abort it.
-                Event::Exists { .. } => continue,
-            };
-            let _ = done.send(Done::Job { id, event });
-        }
-    };
-    tokio::join!(work, forward);
+    tokio::join!(work, forward(incoming, id, done, location));
     Done::Job {
         id,
         event: JobEvent::Finished,
+    }
+}
+
+/// Passes the reports of the job `id` on to `done`, with paths made locations by `location`
+/// and errors in words.
+async fn forward<P>(
+    mut incoming: mpsc::UnboundedReceiver<Event<P>>,
+    id: u64,
+    done: &mpsc::UnboundedSender<Done>,
+    location: impl Fn(P) -> Location,
+) {
+    while let Some(event) = incoming.recv().await {
+        let event = match event {
+            Event::Scanning { items } => JobEvent::Scanning { items },
+            Event::Progress(progress) => JobEvent::Progress {
+                current: location(progress.current),
+                done: progress.items_done,
+                total: progress.items_total,
+                bytes_done: progress.bytes_done,
+                bytes_total: progress.bytes_total,
+            },
+            Event::Failed { path, error, reply } => JobEvent::Failed {
+                path: location(path),
+                error: describe::vfs_error(&error),
+                reply,
+            },
+            Event::Exists {
+                target,
+                source_metadata,
+                target_metadata,
+                reply,
+                ..
+            } => JobEvent::Exists {
+                target: location(target),
+                source_metadata,
+                target_metadata,
+                reply,
+            },
+        };
+        let _ = done.send(Done::Job { id, event });
+    }
+}
+
+/// The session of a connected host, from its task; `None` if the host is gone.
+async fn share(handle: Option<HostHandle>) -> Option<Option<Arc<SftpFs>>> {
+    let Some(handle) = handle else {
+        return Some(None);
+    };
+    let (reply, shared) = oneshot::channel();
+    handle.0.send(HostRequest::Share(reply)).ok()?;
+    shared.await.ok().map(Some)
+}
+
+/// How a side of a copy reports its paths.
+type Report<'a, P> = &'a (dyn Fn(&P) -> Location + Send + Sync);
+
+/// A copy job, which runs in a task of its own with the sessions of the hosts at its ends.
+struct CopyJob<'a> {
+    id: u64,
+    options: CopyOptions,
+    cancel: CancellationToken,
+    done: &'a mpsc::UnboundedSender<Done>,
+}
+
+impl CopyJob<'_> {
+    /// Copies `sources`, all local or all on one host, to `target`; `hosts` lead to the hosts
+    /// of the sources and of the target, if they are remote.
+    async fn run(
+        self,
+        sources: Vec<Location>,
+        target: Location,
+        (from, to): (Option<HostHandle>, Option<HostHandle>),
+    ) -> Done {
+        let finished = Done::Job {
+            id: self.id,
+            event: JobEvent::Finished,
+        };
+        let (Some(from), Some(to)) = (share(from).await, share(to).await) else {
+            return finished;
+        };
+        let mut local: Vec<PathBuf> = Vec::new();
+        let mut remote = Vec::new();
+        let mut source_host = String::new();
+        for source in sources {
+            match source {
+                Location::Local(path) => local.push(path),
+                Location::Remote { host, path } => {
+                    source_host = host;
+                    remote.push(path);
+                }
+                Location::Root => {}
+            }
+        }
+        let on_host = |host: String| {
+            move |path: &RemotePath| Location::Remote {
+                host: host.clone(),
+                path: path.clone(),
+            }
+        };
+        let here = |path: &PathBuf| Location::Local(path.clone());
+        match (from, to, target) {
+            (None, None, Location::Local(target)) => {
+                self.copy((&LocalFs, local, &here), (&LocalFs, target, &here))
+                    .await
+            }
+            (None, Some(to), Location::Remote { host, path }) => {
+                let there = on_host(host);
+                self.copy((&LocalFs, local, &here), (&*to, path, &there))
+                    .await
+            }
+            (Some(from), None, Location::Local(target)) => {
+                let there = on_host(source_host);
+                self.copy((&*from, remote, &there), (&LocalFs, target, &here))
+                    .await
+            }
+            (Some(from), Some(to), Location::Remote { host, path }) => {
+                let (source, target) = (on_host(source_host), on_host(host));
+                self.copy((&*from, remote, &source), (&*to, path, &target))
+                    .await
+            }
+            _ => finished,
+        }
+    }
+
+    async fn copy<A: Vfs, B: Vfs>(
+        &self,
+        (from, sources, from_report): (&A, Vec<A::Path>, Report<'_, A::Path>),
+        (to, target, to_report): (&B, B::Path, Report<'_, B::Path>),
+    ) -> Done {
+        let (events, incoming) = mpsc::unbounded_channel();
+        let reporter = Reporter::new(events, self.cancel.clone());
+        let options = self.options;
+        let work = async move {
+            let mut reporter = reporter;
+            let from = Endpoint {
+                vfs: from,
+                report: from_report,
+            };
+            let to = Endpoint {
+                vfs: to,
+                report: to_report,
+            };
+            sftp_tui_ops::copy(from, sources, to, target, options, &mut reporter).await
+        };
+        tokio::join!(work, forward(incoming, self.id, self.done, |path| path));
+        Done::Job {
+            id: self.id,
+            event: JobEvent::Finished,
+        }
     }
 }
 
@@ -534,6 +697,7 @@ impl HostTask {
             fs,
             mut process,
         } = connection;
+        let fs = Arc::new(fs);
         let (requests, mut incoming) = mpsc::unbounded_channel();
         let _ = self.done.send(Done::Connected {
             host: self.host.clone(),
@@ -557,8 +721,11 @@ impl HostTask {
                             host: host.clone(),
                             path,
                         };
-                        let job = run_delete(&fs, paths, cancel, id, &self.done, location);
+                        let job = run_delete(&*fs, paths, cancel, id, &self.done, location);
                         running.push(Box::pin(job));
+                    }
+                    HostRequest::Share(reply) => {
+                        let _ = reply.send(Arc::clone(&fs));
                     }
                 },
                 Some(done) = running.next() => {
@@ -580,7 +747,11 @@ impl HostTask {
         // Requests in flight are abandoned; dropping them is safe.
         drop(running);
         drop(incoming);
-        let _ = tokio::time::timeout(SFTP_CLOSE_TIMEOUT, fs.close()).await;
+        // A job that shares the session still holds it; the session goes with that job, which,
+        // with the channel gone, soon fails.
+        if let Ok(fs) = Arc::try_unwrap(fs) {
+            let _ = tokio::time::timeout(SFTP_CLOSE_TIMEOUT, fs.close()).await;
+        }
         session.close().await;
         process.finish().await;
         reason

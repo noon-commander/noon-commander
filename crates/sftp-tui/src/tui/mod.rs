@@ -105,6 +105,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     let (done_tx, mut done) = mpsc::unbounded_channel();
     let mut tasks = Tasks::start(Arc::clone(&context), done_tx).await;
     let (mut app, effects) = App::new(&start, &context.paths.home, &context.config.ui);
+    app.set_time_zone(tz.clone());
     tasks.run(effects);
     let result = loop {
         if app.quits() {

@@ -69,3 +69,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   after asking. Directories go with everything in them; symlinks are deleted, never followed.
   A window shows the progress, and Esc stops it; a failure offers Ignore, Ignore all, Retry,
   and Abort, as in mc.
+- F5 copies the marked entries or the one under the cursor to the other panel's directory,
+  or to a typed path or `host:path`: between local directories, to and from hosts, and
+  between two hosts. Directories are copied with everything in them and symlinks as
+  symlinks; times and permissions are kept unless Preserve attributes is off. Files are
+  written under a temporary name and renamed when complete, so a cancelled copy leaves no
+  half file. A taken name asks with both sizes and times: Yes, No, All, None, Older, Abort.

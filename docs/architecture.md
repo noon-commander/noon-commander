@@ -174,7 +174,12 @@ sftp-tui config paths       show the files and directories in use
 ## File operations
 
 `sftp-tui-ops` holds jobs that work on any `Vfs` backend: generic code, which the UI runs
-with `LocalFs` in a task of its own or with a host's `SftpFs` in that host's task. A job talks
+with `LocalFs` in a task of its own or with a host's `SftpFs` in that host's task. A copy runs
+in a task of its own with the sessions of the hosts at its ends, which their tasks share
+(`Arc<SftpFs>`), so a copy between two hosts has both; it shares the panels' SFTP channel,
+so on a slow link listings wait behind its data. Separate transfer channels may follow. When
+a host's task ends while a copy holds its session, the session goes with the copy, which
+fails soon with the channel gone; the UI ends the job at once. A job talks
 to the UI through a `Reporter`: it sends `Event`s (`Scanning`, `Progress` with the entry at
 hand and done/total counts, `Failed`), and when an operation fails it waits for a `Decision`:
 Retry, Skip, Skip all (no more questions), or Abort. A `CancellationToken` stops it between
@@ -289,6 +294,16 @@ atomic_upload = true             # write to a temporary name, then rename
   task, and panels on the directory it is in read it again, the one that asked with the
   cursor on it. An error shows in a red dialog, as mc shows errors. F7 is not offered in the
   virtual root.
+- **F5 copies** the marked entries, or the one under the cursor, as mc does: a dialog asks
+  where to, opening with the other panel's location (`host:/path` for a host), and whether to
+  preserve attributes (times and permission bits; on, and remembered). A typed target is
+  `host:path` for a host the app knows, or a path from the active panel's directory, as F7
+  takes it. A target that is the source directory, or in one of the sources, is an error.
+  The job's window shows entries and bytes, with the gauge on the bytes. A taken name asks in
+  red, as mc does, with the path, both sizes and times, and Yes, No (the default), All, None,
+  Older, and Abort. Copies are written under a temporary name and renamed when complete.
+  When the job ends, panels on the target, its parent, and the source directory read them
+  again.
 - **F8 (or Delete) deletes** the marked entries, or the one under the cursor, after a red
   question with Yes as the default, as in mc: `Delete file "x"?`, `Delete directory "x" and
   everything in it?`, or `Delete 3 files and directories?`. mc asks a second time before it

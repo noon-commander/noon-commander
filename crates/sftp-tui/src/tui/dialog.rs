@@ -65,6 +65,12 @@ pub(crate) enum Button {
     SkipAll,
     Retry,
     Abort,
+    /// Overwrite this and every later one.
+    All,
+    /// Keep this and every later one.
+    KeepAll,
+    /// Overwrite this and every later one if older.
+    Older,
 }
 
 impl Button {
@@ -78,6 +84,9 @@ impl Button {
             Self::SkipAll => fl!("dialog-skip-all"),
             Self::Retry => fl!("dialog-retry"),
             Self::Abort => fl!("dialog-abort"),
+            Self::All => fl!("dialog-all"),
+            Self::KeepAll => fl!("dialog-none"),
+            Self::Older => fl!("dialog-older"),
         }
     }
 }

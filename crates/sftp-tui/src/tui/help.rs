@@ -214,6 +214,7 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::SortByTime) => fl!("help-sort-time"),
         (Context::Panel, Action::SortBySize) => fl!("help-sort-size"),
         (Context::Panel, Action::QuickSearch) => fl!("help-quick-search-start"),
+        (Context::Panel, Action::Copy) => fl!("help-copy"),
         (Context::Panel, Action::Mkdir) => fl!("help-mkdir"),
         (Context::Panel, Action::Delete) => fl!("help-delete"),
         (Context::Panel, Action::Help) => fl!("help-help"),

@@ -80,6 +80,8 @@ pub(crate) enum Action {
     /// Marks the files that are not marked and unmarks those that are; directories stay as
     /// they are.
     InvertMarks,
+    /// Asks where to, and copies the marked entries or the one under the cursor.
+    Copy,
     /// Asks for a name and makes a directory.
     Mkdir,
     /// Asks for a pattern and marks the entries whose names match it.
@@ -155,6 +157,7 @@ impl Action {
         Self::Mark,
         Self::MarkUp,
         Self::InvertMarks,
+        Self::Copy,
         Self::Mkdir,
         Self::Select,
         Self::Unselect,

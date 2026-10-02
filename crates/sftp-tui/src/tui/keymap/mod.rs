@@ -98,11 +98,11 @@ impl Keymap {
     /// the F-key, for terminals that lack them.
     pub(crate) fn mc() -> Self {
         use Action::{
-            Backspace, Cancel, Confirm, Delete, DeleteToEnd, DeleteToStart, Disconnect, Down, End,
-            Enter, Help, Home, InvertMarks, Left, Mark, MarkUp, Mkdir, NextField, OtherPanelOpen,
-            OtherPanelSync, PageDown, PageUp, Parent, PrevField, QuickSearch, Quit, Redraw, Reload,
-            Right, Select, SortByExtension, SortByName, SortBySize, SortByTime, SwapPanels,
-            SwitchPanel, Toggle, ToggleHidden, Unselect, Up,
+            Backspace, Cancel, Confirm, Copy, Delete, DeleteToEnd, DeleteToStart, Disconnect, Down,
+            End, Enter, Help, Home, InvertMarks, Left, Mark, MarkUp, Mkdir, NextField,
+            OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent, PrevField, QuickSearch, Quit,
+            Redraw, Reload, Right, Select, SortByExtension, SortByName, SortBySize, SortByTime,
+            SwapPanels, SwitchPanel, Toggle, ToggleHidden, Unselect, Up,
         };
         let presets: [(Context, Preset); 5] = [
             (
@@ -138,6 +138,7 @@ impl Keymap {
                     (SortBySize, &["ctrl-f6"]),
                     (QuickSearch, &["ctrl-s", "alt-s"]),
                     (Help, &["f1"]),
+                    (Copy, &["f5"]),
                     (Mkdir, &["f7"]),
                     // In text fields, Delete deletes a character.
                     (Delete, &["f8", "delete"]),
@@ -720,6 +721,7 @@ mod tests {
         );
         let mut root = [None; 10];
         root[0] = Some(Action::Help);
+        root[4] = Some(Action::Copy);
         root[6] = Some(Action::Mkdir);
         root[7] = Some(Action::Disconnect);
         root[9] = Some(Action::Quit);
@@ -776,6 +778,7 @@ mod tests {
         let keymap = Keymap::mc();
         let mut panel = [None; 10];
         panel[0] = Some(Action::Help);
+        panel[4] = Some(Action::Copy);
         panel[6] = Some(Action::Mkdir);
         panel[7] = Some(Action::Delete);
         panel[9] = Some(Action::Quit);

@@ -7,6 +7,7 @@
 ## seven cells in an 80-column terminal.
 
 fkey-help = Help
+fkey-copy = Copy
 fkey-mkdir = Mkdir
 fkey-delete = Delete
 fkey-quit = Quit
@@ -77,6 +78,11 @@ dialog-skip = Ignore
 dialog-skip-all = Ignore all
 dialog-retry = Retry
 dialog-abort = Abort
+# Buttons of a taken name, as in mc: overwrite this and every later one, keep them all,
+# overwrite those that are older.
+dialog-all = All
+dialog-none = None
+dialog-older = Older
 # Title of error dialogs.
 dialog-error = Error
 
@@ -113,6 +119,7 @@ help-sort-extension = Sort by extension; again: reverse
 help-sort-time = Sort by modification time, newest first; again: reverse
 help-sort-size = Sort by size, largest first; again: reverse
 help-quick-search-start = Quick search; again: the next match
+help-copy = Copy the marked entries, or the one under the cursor
 help-mkdir = Make a directory
 help-delete = Delete the marked entries, or the one under the cursor
 help-help = This help
@@ -166,6 +173,8 @@ job-scanning = Counting…
 job-found = { $items } found
 # Entries done or skipped, of all.
 job-count = { $done } of { $total }
+# The same, for jobs that move data: the sizes are shown like those in panels.
+job-count-bytes = { $done } of { $total }, { $bytes_done } of { $bytes_total } bytes
 job-aborting = Aborting…
 
 ## Deleting, F8 (src/tui/app). Prefix: delete-. As in mc.
@@ -177,3 +186,23 @@ delete-many = Delete { $count } files and directories?
 # Above the entry the job works on.
 delete-deleting = Deleting
 delete-error = Cannot delete { $path }: { $reason }
+
+## Copying, F5 (src/tui/app). Prefix: copy-. As in mc.
+
+copy-title = Copy
+# Above the target field, which opens with the other panel's directory.
+copy-one = Copy "{ $name }" to:
+copy-many = Copy { $count } files and directories to:
+copy-preserve = Preserve attributes
+# Above the entry the job works on.
+copy-copying = Copying
+copy-error = Cannot copy to { $path }: { $reason }
+copy-same = the source and the target are the same
+copy-into-itself = it is in { $path }
+# A taken name: what is to be copied, what is there, and the question.
+copy-exists-title = File exists
+copy-exists =
+    { $path } is there already.
+    New:      { $new_size } bytes, { $new_time }
+    Existing: { $old_size } bytes, { $old_time }
+    Overwrite it?

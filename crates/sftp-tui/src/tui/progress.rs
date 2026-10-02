@@ -17,12 +17,23 @@ const WIDTH: u16 = 60;
 enum Stage {
     /// Counting what to do.
     Scanning { items: u64 },
-    /// At `current`, `done` of `total` entries.
+    /// At `current`, `done` of `total` entries and `bytes` of their bytes.
     Working {
         current: String,
         done: u64,
         total: u64,
+        bytes: (u64, u64),
     },
+}
+
+/// How far a job is, for its window.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct Counts {
+    pub(crate) done: u64,
+    pub(crate) total: u64,
+    /// Bytes done and in all; both zero for jobs that move no data.
+    pub(crate) bytes_done: u64,
+    pub(crate) bytes_total: u64,
 }
 
 /// The window of a job, with Abort.
@@ -49,12 +60,13 @@ impl JobView {
         self.stage = Stage::Scanning { items };
     }
 
-    /// The job is at `current`, shown as given, with `done` of `total` entries behind it.
-    pub(crate) fn working(&mut self, current: String, done: u64, total: u64) {
+    /// The job is at `current`, shown as given, with `counts` behind it.
+    pub(crate) fn working(&mut self, current: String, counts: Counts) {
         self.stage = Stage::Working {
             current,
-            done,
-            total,
+            done: counts.done,
+            total: counts.total,
+            bytes: (counts.bytes_done, counts.bytes_total),
         };
     }
 
@@ -94,19 +106,23 @@ impl JobView {
                 current,
                 done,
                 total,
+                bytes: (bytes_done, bytes_total),
             } => {
-                // Counts stay far below 2^52, where `f64` would round them.
-                #[allow(clippy::cast_precision_loss)]
-                let ratio = if *total == 0 {
-                    0.0
+                let done_total = (done.to_string(), total.to_string());
+                // Data takes the time, so the gauge follows the bytes, if there are any.
+                let (ratio, count) = if *bytes_total > 0 {
+                    let count = fl!(
+                        "job-count-bytes",
+                        done = done_total.0,
+                        total = done_total.1,
+                        bytes_done = cells::size(*bytes_done, 7),
+                        bytes_total = cells::size(*bytes_total, 7)
+                    );
+                    (ratio(*bytes_done, *bytes_total), count)
                 } else {
-                    (*done as f64 / *total as f64).clamp(0.0, 1.0)
+                    let count = fl!("job-count", done = done_total.0, total = done_total.1);
+                    (ratio(*done, *total), count)
                 };
-                let count = fl!(
-                    "job-count",
-                    done = done.to_string(),
-                    total = total.to_string()
-                );
                 (self.doing.clone(), current.clone(), ratio, count)
             }
         };
@@ -125,6 +141,17 @@ impl JobView {
         );
         put(5, Line::from(abort).centered());
     }
+}
+
+/// `done` of `total`, from 0 to 1.
+fn ratio(done: u64, total: u64) -> f64 {
+    if total == 0 {
+        return 0.0;
+    }
+    // Counts and sizes stay far below 2^52, where `f64` would round them.
+    #[allow(clippy::cast_precision_loss)]
+    let ratio = done as f64 / total as f64;
+    ratio.clamp(0.0, 1.0)
 }
 
 /// A bar of `width` cells, filled for `ratio`, and the percentage after it. Block characters
@@ -166,8 +193,25 @@ mod tests {
         assert!(text.contains("Counting"), "{text}");
         assert!(text.contains("42 found"), "{text}");
 
-        view.working("/srv/www/index.html".to_owned(), 3, 12);
+        let counts = Counts {
+            done: 3,
+            total: 12,
+            ..Counts::default()
+        };
+        view.working("/srv/www/index.html".to_owned(), counts);
         insta::assert_snapshot!(draw(&view));
+
+        // With bytes, the gauge follows them.
+        let counts = Counts {
+            done: 1,
+            total: 2,
+            bytes_done: 1536,
+            bytes_total: 2048,
+        };
+        view.working("big".to_owned(), counts);
+        let text = draw(&view);
+        assert!(text.contains("1 of 2, 1536 of 2048 bytes"), "{text}");
+        assert!(text.contains(" 75%"), "{text}");
 
         view.abort();
         assert!(draw(&view).contains("Aborting"));

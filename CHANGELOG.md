@@ -35,6 +35,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Options → Configuration… opens a dialog of the settings by category, with icons, that
+  scrolls with a scroll bar. Interface (`[ui]`) comes first: language, theme, frames, icons,
+  hidden files, typing to search, and the menu bar. OK uses them at once (the language at the
+  next start) and writes the changed keys to `config.toml`, keeping its comments
+  ([ADR 0009](docs/adr/0009-configuration-dialog-writes-config-toml.md)).
 - F9 opens a pull-down menu, as in mc: Left and Right (location menu, sort order, rescan,
   disconnect for the panel on that side), File, Command, and Options (hidden files). Each
   command shows its key from the keymap and has a letter that runs it. Commands that cannot run

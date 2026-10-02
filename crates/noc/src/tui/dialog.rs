@@ -78,7 +78,7 @@ pub(crate) enum Button {
 }
 
 impl Button {
-    fn label(self) -> String {
+    pub(crate) fn label(self) -> String {
         match self {
             Self::Ok => fl!("dialog-ok"),
             Self::Cancel => fl!("dialog-cancel"),
@@ -107,7 +107,7 @@ enum Focus {
 
 /// A text field. A secret one is masked, and its text lives in memory reserved up front and
 /// wiped when the field goes.
-struct Field {
+pub(crate) struct Field {
     text: Zeroizing<String>,
     /// In characters.
     cursor: usize,
@@ -127,7 +127,7 @@ impl Field {
     }
 
     /// A plain field that opens with `text`, the cursor at its end.
-    fn plain(text: &str) -> Self {
+    pub(crate) fn plain(text: &str) -> Self {
         Self {
             text: Zeroizing::new(text.to_owned()),
             cursor: text.chars().count(),
@@ -140,6 +140,16 @@ impl Field {
         self.text.chars().count()
     }
 
+    /// The text, as typed.
+    pub(crate) fn text(&self) -> &str {
+        &self.text
+    }
+
+    /// Whether the field still holds the text it opened with, which typing replaces.
+    pub(crate) fn fresh(&self) -> bool {
+        self.fresh
+    }
+
     /// The byte offset of character `index`.
     fn offset(&self, index: usize) -> usize {
         self.text
@@ -148,7 +158,7 @@ impl Field {
             .map_or(self.text.len(), |(offset, _)| offset)
     }
 
-    fn insert(&mut self, c: char) {
+    pub(crate) fn insert(&mut self, c: char) {
         if std::mem::take(&mut self.fresh) {
             self.text.clear();
             self.cursor = 0;
@@ -169,7 +179,7 @@ impl Field {
     }
 
     /// Edits the text; `false` if `action` is not an edit.
-    fn edit(&mut self, action: Action) -> bool {
+    pub(crate) fn edit(&mut self, action: Action) -> bool {
         let chars = self.chars();
         match action {
             Action::Left => self.cursor = self.cursor.saturating_sub(1),
@@ -195,7 +205,7 @@ impl Field {
 
     /// What fits in `room` cells, as shown (stars for a secret), from where the cursor stays
     /// on screen, and the cursor's column in it.
-    fn visible(&self, room: usize) -> (String, usize) {
+    pub(crate) fn visible(&self, room: usize) -> (String, usize) {
         let chars: Vec<char> = if self.secret {
             vec!['*'; self.chars()]
         } else {

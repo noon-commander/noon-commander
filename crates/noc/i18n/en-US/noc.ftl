@@ -143,7 +143,41 @@ pulldown-disconnect-host = &Disconnect host
 pulldown-help = He&lp
 pulldown-redraw = Red&raw screen
 # Options.
+pulldown-configuration = &Configuration…
 pulldown-hidden = Show &hidden files
+
+## The Configuration dialog, Options → Configuration… (src/tui/configuration): the settings of
+## config.toml by category. Prefix: config-. Each setting has a name and a hint, a line shown
+## below the settings while it has the cursor.
+
+config-title = Configuration
+# Categories.
+config-interface = Interface
+# Settings of the interface, [ui].
+config-language = Language
+config-language-hint = A language tag, such as en-US, or auto for the system locale.
+config-theme = Theme
+config-theme-hint = Colors: mc-classic, as Midnight Commander, or terminal, the terminal's own.
+config-borders = Borders
+config-borders-hint = The frames of panels and dialogs.
+config-borders-double = Double ═ ║ ╔
+config-borders-single = Single ─ │ ┌
+config-icons = Icons
+config-icons-hint = Nerd Font icons in front of names; without them, mc's markers.
+config-show-hidden = Show hidden files
+config-show-hidden-hint = Names that begin with a dot; Alt-. switches them.
+config-type-to-search = Type to search
+config-type-to-search-hint = Typing in a panel starts quick search; otherwise only Ctrl-S does.
+config-menu-bar = Menu bar
+config-menu-bar-hint = When the menu bar of F9 shows.
+config-menu-bar-on-demand = While a menu is open
+config-menu-bar-always = Always
+# After the hint of a setting that the running Noon Commander cannot change.
+config-restart = Takes effect after a restart.
+# The reason names the file.
+config-save-error = Cannot save the configuration: { $reason }
+# The language field holds something else.
+config-language-invalid = "{ $text }" is not auto or a language tag such as en-US.
 
 ## Dialogs (src/tui/dialog). Prefix: dialog-. Their text comes from ssh; these are the buttons.
 

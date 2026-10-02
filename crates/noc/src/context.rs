@@ -14,6 +14,8 @@ pub(crate) struct Context {
     pub(crate) paths: Paths,
     pub(crate) config: Config,
     pub(crate) settings: SshSettings,
+    /// `config.toml`, or the file of `--config`, which the Configuration dialog changes.
+    pub(crate) config_file: PathBuf,
     /// `hosts.toml`, next to the config file.
     pub(crate) hosts_file: PathBuf,
     /// The settings from `hosts_file`, which the TUI changes while it runs.
@@ -26,6 +28,7 @@ impl Clone for Context {
             paths: self.paths.clone(),
             config: self.config.clone(),
             settings: self.settings.clone(),
+            config_file: self.config_file.clone(),
             hosts_file: self.hosts_file.clone(),
             hosts: RwLock::new(self.hosts()),
         }
@@ -56,13 +59,13 @@ impl Context {
                 crate::tui::theme_names().join(", ")
             );
         }
-        let hosts_file = Paths::hosts_file(config_path);
-        let hosts = Hosts::load(&hosts_file)?;
-        Ok(Self::new(paths, config, hosts_file, hosts))
+        let hosts = Hosts::load(&Paths::hosts_file(config_path))?;
+        Ok(Self::new(paths, config, config_path.to_path_buf(), hosts))
     }
 
-    /// A context for a config that is already valid.
-    pub(crate) fn new(paths: Paths, config: Config, hosts_file: PathBuf, hosts: Hosts) -> Self {
+    /// A context for a config from `config_file` that is already valid; the host settings
+    /// are from `hosts.toml` next to it.
+    pub(crate) fn new(paths: Paths, config: Config, config_file: PathBuf, hosts: Hosts) -> Self {
         let settings = SshSettings {
             program: config.ssh.program.clone(),
             config_file: config.ssh.config_file.clone(),
@@ -73,7 +76,8 @@ impl Context {
             paths,
             config,
             settings,
-            hosts_file,
+            hosts_file: Paths::hosts_file(&config_file),
+            config_file,
             hosts: RwLock::new(Arc::new(hosts)),
         }
     }

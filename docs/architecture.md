@@ -193,7 +193,8 @@ F9 (`Esc 9`) opens mc's menu bar with the menu of the active panel open:
   sort order (`•` marks the current one), Rescan, and Disconnect while it shows a host. File
   has F3 … F8, `+`, `-`, `*`, Checksums, and Exit; Command has quick search, the other-panel
   commands, the jobs, host settings and disconnect for the host under the cursor, help, and
-  redraw; Options has Show hidden files (`✓` while on). Without icons, the marks are `*` and `x`.
+  redraw; Options has Configuration… and Show hidden files (`✓` while on). Without icons, the
+  marks are `*` and `x`.
 - Commands do what their keys do, through the same `Action`s. Each shows the key that does
   it in the active panel's context (`Keymap::key`); Left and Right show sort and rescan keys
   only for the active panel, as keys act there. Commands that cannot run now are dimmed, and
@@ -205,6 +206,36 @@ F9 (`Esc 9`) opens mc's menu bar with the menu of the active panel open:
   of the panels only while a menu is open, as Far does; `always` keeps it above the panels, as
   mc does, which takes a row from them. The jobs indicator sits at the right end of that row.
 - The menu is modal (keymap context `pull_down`); letters are text there, so they are hotkeys.
+
+### Configuration dialog
+
+Options → Configuration… shows the settings of `config.toml` by category
+([ADR 0009](adr/0009-configuration-dialog-writes-config-toml.md)):
+
+```text
+  ╔═════════════════════════ Configuration ══════════════════════════╗
+  ║  󰍹 Interface │ Language           auto                         █ ║
+  ║              │ Theme              < mc-classic >               █ ║
+  ║              │ Borders            < Double ═ ║ ╔ >             ░ ║
+  ║              │ Icons              [x]                          ░ ║
+  ║ A language tag, such as en-US, or auto for the system locale.    ║
+  ║ Takes effect after a restart.                                    ║
+  ║                       [< OK >] [ Cancel ]                        ║
+  ╚══════════════════════════════════════════════════════════════════╝
+```
+
+- Categories are on the left, with a Nerd Font icon each (without `ui.icons`, names only);
+  the settings of the chosen one are on the right: check boxes `[x]`, choices `< … >`, and
+  text fields. Only Interface (`[ui]`) exists so far.
+- Settings that do not fit scroll with the cursor, and a scroll bar (`█` on `░`) shows in the
+  last column. The two lines below them say what the setting under the cursor does, and
+  whether it takes effect only after a restart.
+- Tab moves between the categories, the settings, and the buttons; Up and Down move within
+  them; Space switches a check box or picks the next choice; Left and Right pick choices, and
+  Left on anything else goes back to the categories; Enter presses OK; Esc cancels.
+- OK uses the settings at once (theme, frames, icons, hidden files, typing to search, menu
+  bar); the language needs a restart. The changed keys are written to the config file in the
+  background, and a failure shows an error. An invalid language keeps the dialog open.
 
 ## Host discovery
 
@@ -370,9 +401,11 @@ variables:
 | Cache (`ssh -G` results) | `~/.cache/noc/` |
 | Runtime (control sockets, askpass socket, F4 temp files) | `$XDG_RUNTIME_DIR/noc/` or `$TMPDIR/noc-$UID/`, mode 0700 |
 
-Noon Commander never writes `config.toml`. Unknown keys are errors, so a typo does not silently
-fall back to a default. `noc config init` writes the commented defaults, and a commented
-`hosts.toml` unless one exists.
+Unknown keys are errors, so a typo does not silently fall back to a default. `noc config init`
+writes the commented defaults, and a commented `hosts.toml` unless one exists. The
+Configuration dialog writes only the keys it changed, through `toml_edit`, keeping comments and
+the other keys; the result is checked against the schema and replaces the file atomically
+([ADR 0009](adr/0009-configuration-dialog-writes-config-toml.md)).
 
 ```toml
 [ssh]

@@ -122,8 +122,8 @@ mod tests {
             }),
         );
         let paths = Paths::resolve(&home, 501, &env);
-        let hosts_file = dir.path().join("hosts.toml");
-        let context = Context::new(paths, config, hosts_file, hosts);
+        let config_file = dir.path().join("config.toml");
+        let context = Context::new(paths, config, config_file, hosts);
 
         let db = CachedHost {
             user: "admin".to_owned(),

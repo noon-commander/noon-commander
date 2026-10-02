@@ -2,6 +2,7 @@
 
 mod app;
 mod cells;
+mod configuration;
 mod decor;
 mod describe;
 mod dialog;
@@ -14,6 +15,7 @@ mod pattern;
 mod progress;
 mod pulldown;
 mod root;
+mod scrollbar;
 mod sums;
 mod tasks;
 mod theme;
@@ -87,6 +89,7 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
             reason,
         } => tasks.run(app.closed(&host, connection, reason.as_deref())),
         Done::HostSaved(result) => tasks.run(app.host_saved(result)),
+        Done::ConfigSaved(result) => app.config_saved(result),
         Done::Written { location, result } => tasks.run(app.written(&location, result)),
     }
 }

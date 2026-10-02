@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 
 use jiff::tz::TimeZone;
-use noc_config::{HostConfig, Hosts, MenuBar, SftpHost, TransferConfig, UiConfig};
+use noc_config::{Config, HostConfig, Hosts, MenuBar, SftpHost, TransferConfig, UiConfig};
 use noc_ops::{Algorithm, Conflict, CopyOptions, Decision, Sum};
 use noc_vfs::{FileKind, Location, Metadata, RemotePath};
 use ratatui::Frame;
@@ -17,6 +17,7 @@ use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
 use super::cells::{self, Align};
+use super::configuration::{ConfigEvent, Configuration};
 use super::decor::Decor;
 use super::dialog::{Ask, Button, Dialog, DialogEvent, Reply};
 use super::help::Help;
@@ -133,6 +134,9 @@ pub(crate) enum Effect {
         name: String,
         host: Option<HostConfig>,
     },
+    /// Write to the config file the settings that differ between `old`, what the app had,
+    /// and `new`, and report to [`App::config_saved`].
+    SaveConfig { old: Box<Config>, new: Box<Config> },
 }
 
 /// A host that is connected or on its way. `connection` tells attempts apart, so that reports
@@ -458,6 +462,9 @@ pub(crate) struct App {
     menu_listings: u64,
     /// The pull-down menu of F9, over the panels and under the windows and dialogs.
     pulldown: Option<PullDown>,
+    /// The Configuration dialog, over the panels and the menus, under the other windows and
+    /// the dialogs.
+    configuration: Option<Configuration>,
     /// The home directory, the first row of the location menu.
     home: PathBuf,
     /// The title of the virtual root: the name of this machine.
@@ -524,6 +531,7 @@ impl App {
             menu: None,
             menu_listings: 0,
             pulldown: None,
+            configuration: None,
             home: home.to_path_buf(),
             root_title: fl!("root-title"),
             keymap: Keymap::mc(),
@@ -592,6 +600,8 @@ impl App {
             || self.help.is_some()
         {
             Context::Dialog
+        } else if let Some(configuration) = &self.configuration {
+            configuration.context()
         } else if self.pulldown.is_some() {
             Context::PullDown
         } else if self.viewing.is_some() {
@@ -744,29 +754,40 @@ impl App {
         }
     }
 
-    pub(crate) fn handle(&mut self, input: Resolved) -> Vec<Effect> {
-        self.sync_connected();
+    /// Gives a key to what is over the panels, front first, if anything is.
+    fn handle_over(&mut self, input: Resolved) -> Option<Vec<Effect>> {
         if !self.dialogs.is_empty() {
-            return self.handle_dialog(input);
+            return Some(self.handle_dialog(input));
         }
         if self.menu.is_some() {
-            return self.handle_menu(input);
+            return Some(self.handle_menu(input));
         }
         if self.handle_results(input) || self.handle_job(input) || self.handle_jobs_list(input) {
-            return Vec::new();
+            return Some(Vec::new());
         }
         if let Some(help) = &mut self.help {
             if help.handle(input) {
                 self.help = None;
             }
-            return Vec::new();
+            return Some(Vec::new());
+        }
+        if self.configuration.is_some() {
+            return Some(self.handle_configuration(input));
         }
         if self.pulldown.is_some() {
-            return self.handle_pulldown(input);
+            return Some(self.handle_pulldown(input));
         }
         if self.viewing.is_some() {
             self.handle_viewer(input);
-            return Vec::new();
+            return Some(Vec::new());
+        }
+        None
+    }
+
+    pub(crate) fn handle(&mut self, input: Resolved) -> Vec<Effect> {
+        self.sync_connected();
+        if let Some(effects) = self.handle_over(input) {
+            return effects;
         }
         let type_to_search = self.ui.type_to_search;
         let panel = self.panel_mut(self.active);
@@ -936,6 +957,73 @@ impl App {
                 Some(host) => self.disconnect(&host),
                 None => Vec::new(),
             },
+            Command::Configuration => {
+                let configuration = Configuration::new(&self.ui, Theme::NAMES, self.decor.icons());
+                self.configuration = Some(configuration);
+                Vec::new()
+            }
+        }
+    }
+
+    /// Gives a key to the Configuration dialog. OK uses the settings at once, where the
+    /// running app can, and writes them to the config file.
+    fn handle_configuration(&mut self, input: Resolved) -> Vec<Effect> {
+        let Some(configuration) = &mut self.configuration else {
+            return Vec::new();
+        };
+        match configuration.handle(input) {
+            ConfigEvent::Pending => Vec::new(),
+            ConfigEvent::Cancelled => {
+                self.configuration = None;
+                Vec::new()
+            }
+            ConfigEvent::Accepted => {
+                let ui = configuration.ui(&self.ui);
+                if !crate::i18n::is_valid_language(&ui.language) {
+                    let text = cells::sanitize(ui.language.as_bytes());
+                    self.show_error(&fl!("config-language-invalid", text = text));
+                    return Vec::new();
+                }
+                self.configuration = None;
+                self.apply_ui(ui)
+            }
+        }
+    }
+
+    /// Uses the `[ui]` settings `ui` from now on, but the language, which the next start
+    /// does; and writes to the config file those that changed.
+    fn apply_ui(&mut self, ui: UiConfig) -> Vec<Effect> {
+        if ui == self.ui {
+            return Vec::new();
+        }
+        // The dialog offers only the built-in themes and those `ui.theme` names.
+        if let Some(theme) = Theme::by_name(&ui.theme) {
+            self.theme = theme.with_borders(ui.borders);
+        }
+        self.decor = Decor::new(ui.icons);
+        if ui.show_hidden != self.ui.show_hidden {
+            for side in Side::BOTH {
+                self.panel_mut(side).set_show_hidden(ui.show_hidden);
+            }
+        }
+        let old = std::mem::replace(&mut self.ui, ui);
+        let config = |ui: &UiConfig| {
+            Box::new(Config {
+                ui: ui.clone(),
+                ..Config::default()
+            })
+        };
+        vec![Effect::SaveConfig {
+            old: config(&old),
+            new: config(&self.ui),
+        }]
+    }
+
+    /// Takes the result of an [`Effect::SaveConfig`].
+    pub(crate) fn config_saved(&mut self, result: Result<(), String>) {
+        if let Err(reason) = result {
+            let reason = cells::sanitize(reason.as_bytes());
+            self.show_error(&fl!("config-save-error", reason = reason));
         }
     }
 
@@ -992,6 +1080,10 @@ impl App {
             },
             Command::DisconnectPanel(side) => Status {
                 enabled: self.host_of(side).is_some(),
+                ..Status::default()
+            },
+            Command::Configuration => Status {
+                enabled: true,
                 ..Status::default()
             },
         }
@@ -2655,6 +2747,9 @@ impl App {
                 };
                 menu.render(frame, area, &self.theme, self.decor, &hosts, self.tick);
             }
+        }
+        if let Some(configuration) = &mut self.configuration {
+            configuration.render(frame, panels, &self.theme);
         }
         if let Some(help) = &mut self.help {
             help.render(frame, panels, &self.theme);
@@ -4823,7 +4918,7 @@ mod tests {
             app.handle(action(Action::Right));
         }
         assert!(screen_of(&mut app, 20).contains("x Show hidden files"));
-        app.handle(action(Action::Confirm));
+        app.handle(Resolved::Insert('h'));
         assert!(!app.ui.show_hidden);
 
         // Commands that cannot run do nothing, and Esc closes the menu.
@@ -4844,6 +4939,66 @@ mod tests {
         let effects = app.handle(action(Action::Confirm));
         assert!(matches!(&effects[..], [Effect::ListPlaces { .. }]));
         assert_eq!(app.menu.as_ref().map(LocationMenu::side), Some(Side::Left));
+    }
+
+    /// Opens Options → Configuration… through F9.
+    fn open_configuration(app: &mut App) {
+        app.handle(action(Action::PullDown));
+        app.handle(action(Action::Left));
+        app.handle(action(Action::Left));
+        assert!(app.handle(Resolved::Insert('c')).is_empty());
+        assert!(app.configuration.is_some());
+    }
+
+    #[test]
+    fn the_configuration_dialog_uses_its_settings_at_once_and_saves_them() {
+        let mut app = loaded();
+        open_configuration(&mut app);
+        assert_eq!(app.context(), Context::DialogInput, "on the language");
+        assert!(screen_of(&mut app, 24).contains("Configuration"));
+        // The theme, then the menu bar.
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Right));
+        app.handle(action(Action::End));
+        app.handle(action(Action::Toggle));
+        let effects = app.handle(action(Action::Confirm));
+        assert!(app.configuration.is_none());
+        assert_eq!(app.theme, Theme::terminal());
+        assert_eq!(app.ui.menu_bar, MenuBar::Always);
+        let [Effect::SaveConfig { old, new }] = &effects[..] else {
+            panic!("expected the settings to be saved: {effects:?}");
+        };
+        assert_eq!(old.ui, ui());
+        assert_eq!(new.ui, app.ui);
+        assert_eq!(
+            Config {
+                ui: ui(),
+                ..(**new).clone()
+            },
+            Config {
+                ui: ui(),
+                ..Config::default()
+            },
+            "only the interface"
+        );
+        app.config_saved(Err("cannot write config.toml".to_owned()));
+        assert!(app.dialogs.front().is_some(), "a failure says so");
+        app.handle(action(Action::Cancel));
+
+        // Nothing changed, nothing to save; Esc keeps everything as it was.
+        open_configuration(&mut app);
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        open_configuration(&mut app);
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Right));
+        assert!(app.handle(action(Action::Cancel)).is_empty());
+        assert_eq!(app.theme, Theme::terminal());
+
+        // A language that is no tag keeps the dialog open.
+        open_configuration(&mut app);
+        app.handle(Resolved::Insert('?'));
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        assert!(app.configuration.is_some() && app.dialogs.front().is_some());
     }
 
     #[test]

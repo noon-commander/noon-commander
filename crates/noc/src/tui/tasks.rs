@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use futures_util::StreamExt as _;
 use futures_util::stream::FuturesUnordered;
-use noc_config::{ConfigError, HostConfig, Hosts, save_host};
+use noc_config::{Config, ConfigError, HostConfig, Hosts, save_config, save_host};
 use noc_ops::{
     Algorithm, Checksum, Conflict, CopyOptions, Decision, Endpoint, Event, Files, Outcome,
     Reporter, Sum,
@@ -102,6 +102,8 @@ pub(crate) enum Done {
     /// The settings of [`Effect::SaveHost`] are saved, and these are all the host settings
     /// now; or why not.
     HostSaved(Result<Arc<Hosts>, String>),
+    /// The settings of [`Effect::SaveConfig`] are written, or why not.
+    ConfigSaved(Result<(), String>),
 }
 
 /// A report from a job, with its paths as locations and its errors in words.
@@ -278,30 +280,48 @@ impl Tasks {
                     host,
                     connection,
                     stop,
-                } => {
-                    let askpass = match &self.askpass {
-                        Ok(server) => Ok(server.env(&host)),
-                        Err(reason) => Err(reason.clone()),
-                    };
-                    self.hosts.spawn(resolve_address(
-                        Arc::clone(&self.context),
-                        host.clone(),
-                        stop.clone(),
-                        Arc::clone(&self.cache),
-                        self.done.clone(),
-                    ));
-                    let task = HostTask {
-                        context: Arc::clone(&self.context),
-                        host,
-                        connection,
-                        stop,
-                        done: self.done.clone(),
-                    };
-                    self.hosts.spawn(task.run(askpass));
-                }
+                } => self.connect(host, connection, stop),
                 Effect::SaveHost { name, host } => self.save_host(name, host),
+                Effect::SaveConfig { old, new } => self.save_config(*old, *new),
             }
         }
+    }
+
+    /// Starts the task of `host`, which connects to it, and finds its address.
+    fn connect(&mut self, host: String, connection: u64, stop: CancellationToken) {
+        let askpass = match &self.askpass {
+            Ok(server) => Ok(server.env(&host)),
+            Err(reason) => Err(reason.clone()),
+        };
+        self.hosts.spawn(resolve_address(
+            Arc::clone(&self.context),
+            host.clone(),
+            stop.clone(),
+            Arc::clone(&self.cache),
+            self.done.clone(),
+        ));
+        let task = HostTask {
+            context: Arc::clone(&self.context),
+            host,
+            connection,
+            stop,
+            done: self.done.clone(),
+        };
+        self.hosts.spawn(task.run(askpass));
+    }
+
+    /// Writes to the config file the settings that differ between `old` and `new`.
+    fn save_config(&self, old: Config, new: Config) {
+        let path = self.context.config_file.clone();
+        let done = self.done.clone();
+        tokio::spawn(async move {
+            let saved = tokio::task::spawn_blocking(move || save_config(&path, &old, &new)).await;
+            let result = match saved {
+                Ok(result) => result.map_err(|error| describe::chain(&error)),
+                Err(error) => Err(error.to_string()),
+            };
+            let _ = done.send(Done::ConfigSaved(result));
+        });
     }
 
     /// Writes the settings of the host `name` to `hosts.toml` and reads them all again.
@@ -1251,7 +1271,7 @@ mod tests {
         };
         hosts.hosts.insert("web".to_owned(), HostConfig::Sftp(host));
         let paths = Paths::resolve(dir, 501, &|_| None);
-        let context = Context::new(paths, Config::default(), dir.join("hosts.toml"), hosts);
+        let context = Context::new(paths, Config::default(), dir.join("config.toml"), hosts);
         HostTask {
             context: Arc::new(context),
             host: "web".to_owned(),

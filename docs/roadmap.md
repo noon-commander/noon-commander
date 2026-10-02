@@ -69,6 +69,10 @@
 - [ ] Verify files of checksums (`*.sha256`, `SHA256SUMS`, `*.md5`, `*.sfv`): `OK`, `FAILED`,
       and missing, with a total
 - [x] F9 pull-down menu, as in mc, with Left/Right → Change location; `ui.menu_bar`
+- [x] Configuration dialog (Options → Configuration…): categories with icons, scrolling
+      settings with a scroll bar, Interface; writes changed keys to `config.toml`
+      ([ADR 0009](adr/0009-configuration-dialog-writes-config-toml.md))
+- [ ] Configuration: categories for `[transfer]`, `[ssh]`, `[discovery]`, `[volumes]`
 - [ ] User themes and keymap overrides
 - [ ] Bookmarks and history
 - [ ] chmod and symlinks

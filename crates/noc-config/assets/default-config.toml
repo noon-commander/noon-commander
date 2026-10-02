@@ -5,6 +5,8 @@
 # hiding); it never duplicates them.
 #
 # Every setting is optional. Uncommented values are the defaults; commented lines are examples.
+# Options → Configuration… (F9) changes settings too; it rewrites only the keys it changes and
+# keeps these comments.
 
 [ssh]
 # The OpenSSH client, version 8.7 or later: a name looked up in PATH, or a path. Here and in

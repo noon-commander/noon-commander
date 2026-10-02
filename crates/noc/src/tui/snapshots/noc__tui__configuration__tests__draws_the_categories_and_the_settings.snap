@@ -1,0 +1,20 @@
+---
+source: crates/noc/src/tui/configuration.rs
+expression: "draw(&mut dialog, 72, 16)"
+---
+"                                                                        "
+"  ╔═════════════════════════ Configuration ══════════════════════════╗  "
+"  ║  󰍹 Interface │ Language           auto                           ║  "
+"  ║              │ Theme              < mc-classic >                 ║  "
+"  ║              │ Borders            < Double ═ ║ ╔ >               ║  "
+"  ║              │ Icons              [x]                            ║  "
+"  ║              │ Show hidden files  [x]                            ║  "
+"  ║              │ Type to search     [x]                            ║  "
+"  ║              │ Menu bar           < While a menu is open >       ║  "
+"  ║              │                                                   ║  "
+"  ║              │                                                   ║  "
+"  ║ Colors: mc-classic, as Midnight Commander, or terminal, the      ║  "
+"  ║ terminal's own.                                                  ║  "
+"  ║                       [< OK >] [ Cancel ]                        ║  "
+"  ╚══════════════════════════════════════════════════════════════════╝  "
+"                                                                        "

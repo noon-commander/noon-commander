@@ -29,6 +29,8 @@ pub(crate) enum Command {
     Location(Side),
     /// Closes the connection of the host that the panel on that side shows.
     DisconnectPanel(Side),
+    /// Opens the Configuration dialog.
+    Configuration,
 }
 
 /// What the app says about a command now.
@@ -219,6 +221,23 @@ fn plain_menu(title: String, items: Vec<Option<(String, Action)>>) -> Menu {
     Menu { title, entries }
 }
 
+/// Options: the Configuration dialog, then settings that switch at once.
+fn options_menu(title: String) -> Menu {
+    let mut menu = plain_menu(
+        title,
+        vec![None, Some((fl!("pulldown-hidden"), Action::ToggleHidden))],
+    );
+    menu.entries.insert(
+        0,
+        Entry::Item(Item {
+            label: Label::parse(&fl!("pulldown-configuration")),
+            command: Command::Configuration,
+            mark: Mark::None,
+        }),
+    );
+    menu
+}
+
 impl PullDown {
     /// The menu bar, with the menu of the `active` panel open; `swapped` panels are drawn on
     /// each other's sides, and Left and Right go with where they are drawn.
@@ -268,10 +287,7 @@ impl PullDown {
                     Some((fl!("pulldown-redraw"), Action::Redraw)),
                 ],
             ),
-            plain_menu(
-                options,
-                vec![Some((fl!("pulldown-hidden"), Action::ToggleHidden))],
-            ),
+            options_menu(options),
             panel_menu(right, on_right),
         ];
         let selected = if active == on_left {

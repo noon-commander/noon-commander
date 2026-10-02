@@ -481,6 +481,22 @@ remember_dir = true              # reopen the last directory of this session
   does not open in the middle of other work. F10 asks before quitting while jobs run;
   quitting stops them and waits up to five seconds, so that a copy removes its unfinished
   file before the connections close.
+- **Checksums.** Ctrl-X # (not in mc) asks for an algorithm (radio buttons, the last one
+  chosen first, SHA-256 at first) for the marked entries, or the one under the cursor; files
+  in directories count. For one file, the dialog has a field for the checksum it should have,
+  pasted from a download page or a line of `sha256sum` (the first word counts, in any case);
+  hex of another length picks the algorithm that has it, and anything else is an error. If
+  the other panel's cursor is on a file, a check box compares the two (checked when they have
+  the same name), which hashes both. The job has the usual window, Background, and list.
+  When it ends, a window shows the checksums: with several files, a list with each checksum
+  shortened in the middle and a mark (✓, ✗, or `-` for skipped), and under it the selected
+  file's whole checksum; then the verdict (matches or not, the same or different), in color.
+  Copy puts the selected checksum on the clipboard, Copy all every line in the format of
+  `sha256sum` (`<hex>  <name>`; names with a backslash or a line break escaped as GNU
+  coreutils does), and Save… writes those lines to a file in the panel's directory, locally
+  or on the host (`name.sha256` for one file, `SHA256SUMS` for several; `b3`, `md5`, …
+  for the others), after asking before it replaces one. Windows of jobs that end while one
+  is open wait their turn.
 - **Clipboard.** Copying goes through OSC 52: the event loop writes the escape sequence
   between frames, and the terminal puts the text on the clipboard of the machine it runs on,
   over ssh too. Nothing tells whether it did, so the UI says the text was sent to the
@@ -520,12 +536,13 @@ remember_dir = true              # reopen the last directory of this session
   is the help screen (F1): the keys of each context, with what they do, for what the app can
   do already; a prompt from ssh shows over it.
 - **Dialogs.** Modal and centered over the panels, with mc-style buttons: `[< OK >]` marks the
-  default one. A dialog has a message, a text field, check boxes, and buttons, each optional
-  but the buttons; ssh's prompts and the app's own questions are the same kind of dialog, and
+  default one. A dialog has a message, radio buttons (`(*)` on the chosen one), text fields,
+  check boxes, and buttons, each optional but the buttons; ssh's prompts and the app's own questions are the same kind of dialog, and
   each one in the queue knows where its answer goes. Keys go to the first dialog in the queue
-  (contexts `dialog` and `dialog_input`); Tab and the arrows move between the field, the check
-  boxes, and the buttons, Space switches a check box or presses a button, Enter presses the
-  button with the focus (the default one from the field or a check box), and Esc or F10
+  (contexts `dialog` and `dialog_input`); Tab and the arrows move between the radio buttons,
+  the fields, the check boxes, and the buttons, Space chooses a radio button, switches a check
+  box, or presses a button, Enter presses the button with the focus (the default one from
+  elsewhere, after choosing the radio button it is on), and Esc or F10
   cancels. In a text field every character is text, Space too. A field that opens with text
   shows it dimmed, and typing replaces it, as in mc; an edit or a cursor move keeps it. Long
   text scrolls to keep the cursor in view.

@@ -35,6 +35,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Ctrl-X # computes checksums (SHA-256, SHA-512, SHA-1, MD5, or BLAKE3) of the marked files
+  and directories, or the file under the cursor, as a job with progress. For one file, an
+  expected checksum can be pasted, and the file under the other panel's cursor compared. The
+  results can be copied, one or all in the format of `sha256sum`, or saved to a file such as
+  `SHA256SUMS`.
 - Copying to the clipboard through OSC 52, which works over ssh in terminals that allow it
   ([ADR 0008](docs/adr/0008-clipboard-through-osc-52.md)).
 

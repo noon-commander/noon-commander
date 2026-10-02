@@ -9,14 +9,17 @@ use std::time::Duration;
 use futures_util::StreamExt as _;
 use futures_util::stream::FuturesUnordered;
 use noc_config::{ConfigError, HostConfig, Hosts, save_host};
-use noc_ops::{Conflict, CopyOptions, Decision, Endpoint, Event, Outcome, Reporter};
+use noc_ops::{
+    Algorithm, Checksum, Conflict, CopyOptions, Decision, Endpoint, Event, Files, Outcome,
+    Reporter, Sum,
+};
 use noc_ssh::askpass::{AskpassEnv, AskpassEvent, AskpassServer};
 use noc_ssh::resolve::resolve;
 use noc_ssh::version::check_version;
 use noc_ssh::{CachedHost, ChannelProcess, Session, SftpChannel, SshError, Target, cleanup_stale};
 use noc_vfs::{
-    FileReader as _, LocalFs, Location, Metadata, RemotePath, SftpFs, Space, Vfs, VfsError,
-    VfsPath as _,
+    FileReader as _, FileWriter as _, LocalFs, Location, Metadata, RemotePath, SftpFs, Space, Vfs,
+    VfsError, VfsPath as _,
 };
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::task::JoinSet;
@@ -91,6 +94,11 @@ pub(crate) enum Done {
         connection: u64,
         reason: Option<String>,
     },
+    /// The file of [`Effect::WriteFile`] is written, or why not: `None` if the name is taken.
+    Written {
+        location: Location,
+        result: Result<(), Option<String>>,
+    },
     /// The settings of [`Effect::SaveHost`] are saved, and these are all the host settings
     /// now; or why not.
     HostSaved(Result<Arc<Hosts>, String>),
@@ -125,6 +133,8 @@ pub(crate) enum JobEvent {
         target_metadata: Metadata,
         reply: oneshot::Sender<Conflict>,
     },
+    /// The checksums of a checksum job that was not aborted, just before it is over.
+    Sums(Vec<Sum<Location>>),
     /// The job is over; `complete` if it did all it was asked, without skipping or aborting.
     Finished { complete: bool },
 }
@@ -206,14 +216,7 @@ impl Tasks {
                     request,
                     host: None,
                 } => self.list(side, request),
-                Effect::ListPlaces { generation } => {
-                    let context = Arc::clone(&self.context);
-                    let done = self.done.clone();
-                    tokio::spawn(async move {
-                        let result = list(context, Location::Root).await;
-                        let _ = done.send(Done::Places { generation, result });
-                    });
-                }
+                Effect::ListPlaces { generation } => self.list_places(generation),
                 Effect::CreateDir {
                     side,
                     location,
@@ -259,6 +262,18 @@ impl Tasks {
                         let _ = done.send(finished);
                     });
                 }
+                Effect::Checksum {
+                    id,
+                    targets,
+                    algorithm,
+                    cancel,
+                } => self.checksum(id, targets, algorithm, cancel),
+                Effect::WriteFile {
+                    location,
+                    bytes,
+                    replace,
+                    host,
+                } => self.write_file(location, bytes, replace, host),
                 Effect::Connect {
                     host,
                     connection,
@@ -305,6 +320,16 @@ impl Tasks {
                 Err(error) => Err(error.to_string()),
             };
             let _ = done.send(Done::HostSaved(result));
+        });
+    }
+
+    /// Lists the virtual root for the location menu.
+    fn list_places(&self, generation: u64) {
+        let context = Arc::clone(&self.context);
+        let done = self.done.clone();
+        tokio::spawn(async move {
+            let result = list(context, Location::Root).await;
+            let _ = done.send(Done::Places { generation, result });
         });
     }
 
@@ -408,6 +433,37 @@ impl Tasks {
                 let _ = done.send(finished.await);
             });
         }
+    }
+
+    /// Runs the checksum job `id` here.
+    fn checksum(
+        &mut self,
+        id: u64,
+        targets: Vec<(Vec<Location>, Option<HostHandle>)>,
+        algorithm: Algorithm,
+        cancel: CancellationToken,
+    ) {
+        let done = self.done.clone();
+        self.reap_jobs();
+        self.jobs.spawn(async move {
+            let finished = run_checksum(id, targets, algorithm, cancel, &done).await;
+            let _ = done.send(finished);
+        });
+    }
+
+    /// Writes a small file, here or through the session of its host.
+    fn write_file(
+        &self,
+        location: Location,
+        bytes: Vec<u8>,
+        replace: bool,
+        host: Option<HostHandle>,
+    ) {
+        let done = self.done.clone();
+        tokio::spawn(async move {
+            let result = write_file(&location, bytes, replace, host).await;
+            let _ = done.send(Done::Written { location, result });
+        });
     }
 
     /// Forgets the jobs that are over.
@@ -583,6 +639,145 @@ async fn forward<P>(
         };
         let _ = done.send(Done::Job { id, event });
     }
+}
+
+/// Files found for a checksum job, on the file system they are on.
+enum Found {
+    Local(Files<PathBuf>),
+    Remote(Arc<SftpFs>, String, Files<RemotePath>),
+}
+
+/// Runs the checksum job `id` on `targets`, each group local or on the host of its handle:
+/// counts the files of every group first, so that progress has one total, then hashes them.
+async fn run_checksum(
+    id: u64,
+    targets: Vec<(Vec<Location>, Option<HostHandle>)>,
+    algorithm: Algorithm,
+    cancel: CancellationToken,
+    done: &mpsc::UnboundedSender<Done>,
+) -> Done {
+    let mut sessions = Vec::new();
+    for (group, host) in targets {
+        let Some(fs) = share(host).await else {
+            return finished(id, None);
+        };
+        sessions.push((group, fs));
+    }
+    let (events, incoming) = mpsc::unbounded_channel();
+    let reporter = Reporter::new(events, cancel);
+    let work = async move {
+        let mut reporter = reporter;
+        let mut job = Checksum::new(algorithm, &mut reporter);
+        let here = |path: &PathBuf| Location::Local(path.clone());
+        let mut found = Vec::new();
+        for (group, fs) in sessions {
+            match fs {
+                None => {
+                    let paths = group
+                        .into_iter()
+                        .filter_map(|location| match location {
+                            Location::Local(path) => Some(path),
+                            _ => None,
+                        })
+                        .collect();
+                    let side = Endpoint {
+                        vfs: &LocalFs,
+                        report: &here,
+                    };
+                    found.push(Found::Local(job.scan(&side, paths).await));
+                }
+                Some(fs) => {
+                    let mut host = String::new();
+                    let paths = group
+                        .into_iter()
+                        .filter_map(|location| match location {
+                            Location::Remote { host: on, path } => {
+                                host = on;
+                                Some(path)
+                            }
+                            _ => None,
+                        })
+                        .collect();
+                    let there = remote_location(host.clone());
+                    let side = Endpoint {
+                        vfs: &*fs,
+                        report: &there,
+                    };
+                    let files = job.scan(&side, paths).await;
+                    found.push(Found::Remote(fs, host, files));
+                }
+            }
+        }
+        for files in found {
+            match files {
+                Found::Local(files) => {
+                    let side = Endpoint {
+                        vfs: &LocalFs,
+                        report: &here,
+                    };
+                    job.hash(&side, files).await;
+                }
+                Found::Remote(fs, host, files) => {
+                    let there = remote_location(host);
+                    let side = Endpoint {
+                        vfs: &*fs,
+                        report: &there,
+                    };
+                    job.hash(&side, files).await;
+                }
+            }
+        }
+        job.finish()
+    };
+    let ((outcome, sums), ()) = tokio::join!(work, forward(incoming, id, done, |path| path));
+    if !outcome.aborted {
+        let _ = done.send(Done::Job {
+            id,
+            event: JobEvent::Sums(sums),
+        });
+    }
+    finished(id, Some(outcome))
+}
+
+/// How a remote path on `host` is reported.
+fn remote_location(host: String) -> impl Fn(&RemotePath) -> Location + Send + Sync {
+    move |path| Location::Remote {
+        host: host.clone(),
+        path: path.clone(),
+    }
+}
+
+/// Writes `bytes` to the file at `location`; `Err(None)` if the name is taken and not
+/// `replace`.
+async fn write_file(
+    location: &Location,
+    bytes: Vec<u8>,
+    replace: bool,
+    host: Option<HostHandle>,
+) -> Result<(), Option<String>> {
+    let result = match (location, share(host).await) {
+        (Location::Local(path), _) => write_all(&LocalFs, path, bytes, replace).await,
+        (Location::Remote { path, .. }, Some(Some(fs))) => {
+            write_all(&*fs, path, bytes, replace).await
+        }
+        _ => return Err(Some(fl!("error-connection-closed"))),
+    };
+    match result {
+        Ok(()) => Ok(()),
+        Err(VfsError::AlreadyExists(_)) => Err(None),
+        Err(error) => Err(Some(describe::vfs_error(&error))),
+    }
+}
+
+async fn write_all<V: Vfs>(
+    vfs: &V,
+    path: &V::Path,
+    bytes: Vec<u8>,
+    replace: bool,
+) -> Result<(), VfsError> {
+    let mut writer = vfs.create_file(path, replace).await?;
+    writer.write(bytes).await?;
+    writer.finish().await
 }
 
 /// The start of the file at `location`, up to [`VIEW_LIMIT`], and whether there is more.
@@ -1107,5 +1302,58 @@ mod tests {
         assert_eq!(opened(&plain, &fs, Some(&gone)).await, Ok(text(&root)));
         let missing = task(&root, Some("missing"));
         assert!(opened(&missing, &fs, None).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn a_checksum_job_reports_its_sums_then_its_end() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("abc");
+        std::fs::write(&file, "abc").unwrap();
+        let (done, mut reports) = mpsc::unbounded_channel();
+        let targets = vec![(vec![Location::Local(file.clone())], None)];
+        let cancel = CancellationToken::new();
+        let end = run_checksum(7, targets, Algorithm::Sha256, cancel, &done).await;
+        assert!(matches!(
+            end,
+            Done::Job {
+                id: 7,
+                event: JobEvent::Finished { complete: true }
+            }
+        ));
+        let mut sums = None;
+        while let Ok(report) = reports.try_recv() {
+            if let Done::Job {
+                event: JobEvent::Sums(found),
+                ..
+            } = report
+            {
+                sums = Some(found);
+            }
+        }
+        let sums = sums.unwrap();
+        assert_eq!(sums.len(), 1);
+        assert_eq!(sums[0].path, Location::Local(file));
+        assert_eq!(sums[0].name, b"abc");
+        assert_eq!(
+            sums[0].digest.as_ref().unwrap()[..4],
+            [0xba, 0x78, 0x16, 0xbf]
+        );
+
+        let cancel = CancellationToken::new();
+        cancel.cancel();
+        let targets = vec![(vec![Location::Local(tmp.path().join("abc"))], None)];
+        run_checksum(8, targets, Algorithm::Sha256, cancel, &done).await;
+        while let Ok(report) = reports.try_recv() {
+            assert!(
+                !matches!(
+                    report,
+                    Done::Job {
+                        event: JobEvent::Sums(_),
+                        ..
+                    }
+                ),
+                "an aborted job has no sums"
+            );
+        }
     }
 }

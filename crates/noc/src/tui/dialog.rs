@@ -99,6 +99,7 @@ impl Button {
 /// Where the keys go inside a dialog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Focus {
+    Choice(usize),
     Field(usize),
     Check(usize),
     Button(usize),
@@ -299,12 +300,16 @@ pub(crate) enum DialogEvent {
     Cancelled,
 }
 
-/// A modal dialog: a message, text fields, check boxes, and buttons, each of them optional
-/// but the buttons. Whoever opens it reads the fields and the check boxes once it closes.
+/// A modal dialog: a message, a group of choices of which one is chosen, text fields, check
+/// boxes, and buttons, each of them optional but the buttons. Whoever opens it reads the choice,
+/// the fields, and the check boxes once it closes.
 #[derive(Debug)]
 pub(crate) struct Dialog {
     title: String,
     message: String,
+    /// Radio buttons, as mc draws them: `(*)` on the chosen one.
+    choices: Vec<String>,
+    chosen: usize,
     fields: Vec<LabelledField>,
     checks: Vec<Check>,
     buttons: Vec<Button>,
@@ -428,6 +433,8 @@ impl Dialog {
         Self {
             title: cells::sanitize(title.as_bytes()),
             message: message.trim_end().to_owned(),
+            choices: Vec::new(),
+            chosen: 0,
             fields: Vec::new(),
             checks: Vec::new(),
             buttons,
@@ -436,6 +443,28 @@ impl Dialog {
             width: MAX_WIDTH,
             error: false,
         }
+    }
+
+    /// The same dialog with `message` above the rest.
+    pub(crate) fn with_message(mut self, message: &str) -> Self {
+        message.trim_end().clone_into(&mut self.message);
+        self
+    }
+
+    /// The same dialog with `choices` above its fields, `chosen` of them chosen. Without
+    /// fields, the chosen one starts with the focus.
+    pub(crate) fn with_choices(mut self, choices: Vec<String>, chosen: usize) -> Self {
+        self.chosen = chosen.min(choices.len().saturating_sub(1));
+        if self.fields.is_empty() && !choices.is_empty() {
+            self.focus = Focus::Choice(self.chosen);
+        }
+        self.choices = choices;
+        self
+    }
+
+    /// The choice that is chosen.
+    pub(crate) fn chosen(&self) -> usize {
+        self.chosen
     }
 
     /// The answer for ssh after `event`: the secret for OK on a secret prompt, `yes` for Yes,
@@ -489,7 +518,7 @@ impl Dialog {
     pub(crate) fn context(&self) -> Context {
         match self.focus {
             Focus::Field(_) => Context::DialogInput,
-            Focus::Check(_) | Focus::Button(_) => Context::Dialog,
+            Focus::Choice(_) | Focus::Check(_) | Focus::Button(_) => Context::Dialog,
         }
     }
 
@@ -497,7 +526,7 @@ impl Dialog {
     pub(crate) fn handle(&mut self, input: Resolved) -> DialogEvent {
         let field = match self.focus {
             Focus::Field(index) => self.fields.get_mut(index).map(|field| &mut field.field),
-            Focus::Check(_) | Focus::Button(_) => None,
+            Focus::Choice(_) | Focus::Check(_) | Focus::Button(_) => None,
         };
         let action = match (input, field) {
             (Resolved::Insert(c), Some(field)) => {
@@ -514,13 +543,22 @@ impl Dialog {
             (Resolved::Action(action), None) => action,
         };
         match action {
+            // Enter takes the choice it is on, as that is the one that looks chosen.
             Action::Confirm => match self.focus {
                 Focus::Button(index) => DialogEvent::Pressed(self.buttons[index]),
+                Focus::Choice(index) => {
+                    self.chosen = index;
+                    DialogEvent::Pressed(self.buttons[self.default])
+                }
                 Focus::Field(_) | Focus::Check(_) => {
                     DialogEvent::Pressed(self.buttons[self.default])
                 }
             },
             Action::Toggle => match self.focus {
+                Focus::Choice(index) => {
+                    self.chosen = index;
+                    DialogEvent::Pending
+                }
                 Focus::Check(index) => {
                     self.checks[index].on = !self.checks[index].on;
                     DialogEvent::Pending
@@ -541,10 +579,12 @@ impl Dialog {
         }
     }
 
-    /// Moves the focus through the fields, the check boxes, and the buttons, round.
+    /// Moves the focus through the choices, the fields, the check boxes, and the buttons,
+    /// round.
     fn move_focus(&mut self, forward: bool) {
-        let stops: Vec<Focus> = (0..self.fields.len())
-            .map(Focus::Field)
+        let stops: Vec<Focus> = (0..self.choices.len())
+            .map(Focus::Choice)
+            .chain((0..self.fields.len()).map(Focus::Field))
             .chain((0..self.checks.len()).map(Focus::Check))
             .chain((0..self.buttons.len()).map(Focus::Button))
             .collect();
@@ -562,10 +602,11 @@ impl Dialog {
         let text_width = usize::from(width.saturating_sub(4));
         let lines = cells::wrap(&self.message, text_width);
         let rows = |count: usize| u16::try_from(count).unwrap_or(u16::MAX);
-        // Borders, the message, the fields under their labels, the check boxes, a blank line,
-        // the buttons.
+        // Borders, the message, the choices, the fields under their labels, the check boxes, a
+        // blank line, the buttons.
         let labels = self.fields.iter().filter(|f| !f.label.is_empty()).count();
         let height = rows(lines.len())
+            .saturating_add(rows(self.choices.len()))
             .saturating_add(rows(self.fields.len() + labels))
             .saturating_add(rows(self.checks.len()));
         let colors = Colors::of(theme, self.error);
@@ -581,6 +622,20 @@ impl Dialog {
             index += 1;
         }
         let room = usize::from(inner.width).max(1);
+        for (number, choice) in self.choices.iter().enumerate() {
+            if index >= inner.height {
+                return;
+            }
+            let mark = if number == self.chosen { '*' } else { ' ' };
+            let text = format!("({mark}) {choice}");
+            let style = if self.focus == Focus::Choice(number) {
+                colors.focused
+            } else {
+                colors.body
+            };
+            frame.render_widget(Line::from(Span::styled(text, style)), row(index));
+            index += 1;
+        }
         for (number, LabelledField { label, field }) in self.fields.iter().enumerate() {
             if !label.is_empty() {
                 if index >= inner.height {
@@ -625,7 +680,7 @@ impl Dialog {
             let labels: Vec<String> = self.buttons.iter().map(|button| button.label()).collect();
             let focus = match self.focus {
                 Focus::Button(index) => Some(index),
-                Focus::Field(_) | Focus::Check(_) => None,
+                Focus::Choice(_) | Focus::Field(_) | Focus::Check(_) => None,
             };
             let line = button_line(&labels, self.default, focus, colors);
             frame.render_widget(line, row(index + 1));

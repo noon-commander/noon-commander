@@ -169,6 +169,7 @@ help-move = Move or rename the marked entries, or the one under the cursor
 help-mkdir = Make a directory
 help-delete = Delete the marked entries, or the one under the cursor
 help-jobs = The running jobs: bring one to the front, or abort it
+help-checksum = Checksums of the marked files, or the one under the cursor
 help-menu-left = Change the left panel's location: a volume or a host
 help-menu-right = Change the right panel's location: a volume or a host
 help-help = This help
@@ -323,6 +324,47 @@ move-error = Cannot move to { $path }: { $reason }
 transfer-same = the source and the target are the same
 # The target is in a source directory.
 transfer-into-itself = it is in { $path }
+
+## Checksums, Ctrl-X # (src/tui/app, src/tui/sums). Prefix: checksum-.
+
+checksum-title = Checksum
+# Above the algorithms. Directories count with the files in them.
+checksum-one = Checksum of "{ $name }" with:
+checksum-directory = Checksums of the files in "{ $name }" with:
+checksum-many = Checksums of { $count } files and directories with:
+# Above a field for a checksum to compare with, as a download page gives it.
+checksum-expected = Expected checksum (optional; paste it):
+# A check box: also hash the file under the cursor of the other panel, and compare the two.
+checksum-compare = Compare with { $path }
+# The names of the algorithms.
+checksum-sha256 = SHA-256
+checksum-sha512 = SHA-512
+checksum-sha1 = SHA-1
+checksum-md5 = MD5
+checksum-blake3 = BLAKE3
+checksum-expected-invalid = "{ $text }" is not a checksum: it takes the hex digits of an MD5, SHA-1, SHA-256, BLAKE3, or SHA-512 checksum.
+# Above the file the job reads.
+checksum-hashing = Hashing
+checksum-error = Cannot read { $path }: { $reason }
+checksum-no-files = There are no files to hash.
+# In place of the checksum of a file that was skipped after a failure.
+checksum-skipped = skipped
+checksum-matches = Matches the expected checksum.
+checksum-differs = Does not match the expected checksum.
+checksum-same = The files are the same.
+checksum-different = The files differ.
+# Buttons: the checksum of the selected file; every line, as sha256sum prints them; a file of
+# them.
+checksum-copy = Copy
+checksum-copy-all = Copy all
+checksum-save = Save…
+# Nothing tells whether the terminal took it: some ignore the request (OSC 52).
+checksum-copied = Sent to the terminal's clipboard.
+checksum-save-title = Save checksums
+checksum-save-prompt = File name:
+checksum-saved = Saved to { $path }.
+checksum-exists = { $path } is there already. Overwrite it?
+checksum-save-error = Cannot save { $path }: { $reason }
 
 ## The viewer, F3 (src/tui/viewer). Prefix: viewer-. As in mc.
 

@@ -100,6 +100,9 @@ pub(crate) enum Action {
     Move,
     /// Asks for a name and makes a directory.
     Mkdir,
+    /// Asks for an algorithm, and computes the checksums of the marked files or the one under
+    /// the cursor, with the files in marked directories.
+    Checksum,
     /// Lists the running jobs.
     Jobs,
     /// Asks for a pattern and marks the entries whose names match it.
@@ -187,6 +190,7 @@ impl Action {
         Self::Copy,
         Self::Move,
         Self::Mkdir,
+        Self::Checksum,
         Self::Jobs,
         Self::Select,
         Self::Unselect,

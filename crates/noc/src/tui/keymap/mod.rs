@@ -278,9 +278,9 @@ impl Keymap {
 /// The bindings of the mc preset, by context.
 fn mc_presets() -> [(Context, Preset); 7] {
     use Action::{
-        Backspace, Cancel, Confirm, Copy, Delete, Disconnect, Down, Edit, EditHost, End, Enter,
-        Help, Home, InvertMarks, Jobs, Left, LocationMenuLeft, LocationMenuRight, Mark, MarkUp,
-        Mkdir, Move, NextField, OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent,
+        Backspace, Cancel, Checksum, Confirm, Copy, Delete, Disconnect, Down, Edit, EditHost, End,
+        Enter, Help, Home, InvertMarks, Jobs, Left, LocationMenuLeft, LocationMenuRight, Mark,
+        MarkUp, Mkdir, Move, NextField, OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent,
         PrevField, QuickSearch, Quit, Redraw, Reload, Right, Select, SortByExtension, SortByName,
         SortBySize, SortByTime, SwapPanels, SwitchPanel, Toggle, ToggleHidden, ToggleWrap,
         Unselect, Up, View,
@@ -327,6 +327,8 @@ fn mc_presets() -> [(Context, Preset); 7] {
                 // In text fields, Delete deletes a character.
                 (Delete, &["f8", "delete"]),
                 (Jobs, &["ctrl-x j"]),
+                // Not in mc; `#` for a hash.
+                (Checksum, &["ctrl-x #"]),
                 // Far Manager's menus to change drives. Ctrl-X 1 and 2 are for terminals whose
                 // Alt-F1 never arrives, such as macOS Terminal without Option as Meta.
                 (LocationMenuLeft, &["alt-f1", "ctrl-x 1"]),
@@ -802,6 +804,16 @@ mod tests {
             [Resolved::Insert('q')]
         );
         assert_eq!(feed(&keymap, &mut state, Context::Dialog, &["y"]), []);
+    }
+
+    #[test]
+    fn ctrl_x_hash_computes_checksums() {
+        let keymap = Keymap::mc();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Panel, &["ctrl-x", "#"]),
+            actions(&[Action::Checksum])
+        );
     }
 
     #[test]

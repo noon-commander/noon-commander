@@ -8,7 +8,7 @@ use std::time::{Instant, SystemTime};
 
 use jiff::tz::TimeZone;
 use noc_config::{HostConfig, Hosts, SftpHost, TransferConfig, UiConfig};
-use noc_ops::{Conflict, CopyOptions, Decision};
+use noc_ops::{Algorithm, Conflict, CopyOptions, Decision, Sum};
 use noc_vfs::{FileKind, Location, Metadata, RemotePath};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -28,6 +28,7 @@ use super::panel::{
 };
 use super::pattern::Pattern;
 use super::progress::{Counts, JobButton, JobView};
+use super::sums::{Mark, SumRow, SumsButton, SumsEvent, SumsWindow, Verdict};
 use super::tasks::{HostHandle, JobEvent};
 use super::theme::Theme;
 use super::viewer::Viewer;
@@ -102,6 +103,22 @@ pub(crate) enum Effect {
         options: CopyOptions,
         cancel: CancellationToken,
     },
+    /// Run the checksum job `id` on `targets`, groups of locations that are all local or all on
+    /// the host of their handle, and report to [`App::job_event`]; `cancel` stops it.
+    Checksum {
+        id: u64,
+        targets: Vec<(Vec<Location>, Option<HostHandle>)>,
+        algorithm: Algorithm,
+        cancel: CancellationToken,
+    },
+    /// Write `bytes` to a new file at `location`, or with `replace` over the one there, through
+    /// `host` if it is remote, and report to [`App::written`].
+    WriteFile {
+        location: Location,
+        bytes: Vec<u8>,
+        replace: bool,
+        host: Option<HostHandle>,
+    },
     /// Connect to a host and report to [`App::connected`] and [`App::closed`]; `stop` ends the
     /// attempt or the connection.
     Connect {
@@ -152,6 +169,7 @@ const PATTERN_DIALOG_WIDTH: u16 = 50;
 const MKDIR_DIALOG_WIDTH: u16 = 60;
 const COPY_DIALOG_WIDTH: u16 = 70;
 const HOST_DIALOG_WIDTH: u16 = 70;
+const CHECKSUM_DIALOG_WIDTH: u16 = 70;
 /// The fields of the dialog of F4 on a host.
 const HOST_LABEL: usize = 0;
 const HOST_START_DIR: usize = 1;
@@ -201,6 +219,27 @@ enum Purpose {
         old: Option<HostConfig>,
         current: Option<String>,
     },
+    /// The checksum dialog in the panel on `side`, which shows `dir`, for the entries
+    /// `names`; with a check box to compare the one file with `other`, the file under the
+    /// cursor of the other panel, and a field for the expected checksum if `expect`.
+    Checksum {
+        dir: Location,
+        names: Vec<Vec<u8>>,
+        other: Option<Location>,
+        expect: bool,
+    },
+    /// Save the checksums of the window `window` in `dir`, under the name typed.
+    SaveSums {
+        window: u64,
+        dir: Location,
+        bytes: Vec<u8>,
+    },
+    /// `location` is taken: Yes writes the checksums of the window `window` over it.
+    OverwriteSums {
+        window: u64,
+        location: Location,
+        bytes: Vec<u8>,
+    },
     /// F10 while jobs run: Yes quits and stops them.
     Quit,
     /// Something to read, such as an error.
@@ -213,6 +252,7 @@ enum JobKind {
     Delete,
     Copy,
     Move,
+    Checksum,
 }
 
 /// What follows a job of F4 on a host.
@@ -222,6 +262,33 @@ enum Then {
     Edit,
     /// The edited `copy` went back to `remote`: remove it.
     Discard { copy: PathBuf, remote: Location },
+}
+
+/// What a checksum job was asked for, and the checksums it has found.
+#[derive(Debug)]
+struct Hashing {
+    algorithm: Algorithm,
+    /// In lowercase hex.
+    expected: Option<String>,
+    /// Two files, one in each panel, to compare.
+    compare: bool,
+    /// Where the files are, for saving their checksums; compared files have none.
+    dir: Option<Location>,
+    /// `None` until the job reports them, which an aborted one never does.
+    sums: Option<Vec<Sum<Location>>>,
+}
+
+/// The window of a finished checksum job, with what it shows.
+#[derive(Debug)]
+struct Results {
+    /// The job's id.
+    id: u64,
+    window: SumsWindow,
+    algorithm: Algorithm,
+    dir: Option<Location>,
+    /// The names, as files of checksums list them, and the checksums in hex; `None` for
+    /// skipped files.
+    lines: Vec<(Vec<u8>, Option<String>)>,
 }
 
 /// A file in the editor of F4.
@@ -244,6 +311,7 @@ struct Job {
     /// What starts the job when its turn comes, while it waits.
     queued: Option<Effect>,
     then: Option<Then>,
+    hashing: Option<Hashing>,
     /// Directories it changes, which panels read again when it ends.
     changes: Vec<Location>,
     /// Hosts it works on; it ends with their connections.
@@ -272,6 +340,7 @@ impl Job {
             JobKind::Delete => JobView::new(fl!("delete-title"), fl!("delete-deleting")),
             JobKind::Copy => JobView::new(fl!("copy-title"), fl!("copy-copying")),
             JobKind::Move => JobView::new(fl!("move-title"), fl!("move-moving")),
+            JobKind::Checksum => JobView::new(fl!("checksum-title"), fl!("checksum-hashing")),
         };
         Self {
             id,
@@ -279,6 +348,7 @@ impl Job {
             background: false,
             queued: None,
             then: None,
+            hashing: None,
             changes,
             hosts,
             cancel,
@@ -352,8 +422,15 @@ pub(crate) struct App {
     dialogs: VecDeque<Open>,
     pattern_options: PatternOptions,
     copy_choices: CopyChoices,
+    /// The algorithm the checksum dialog chose last.
+    algorithm: Algorithm,
+    /// Windows of finished checksum jobs: the first one is on screen, over the panels and the
+    /// jobs, under the dialogs.
+    results: VecDeque<Results>,
     /// Text for the event loop to put on the clipboard.
     clipboard: Option<String>,
+    /// Files of checksums being written: the window they came from, and what goes in them.
+    saving: HashMap<Location, (u64, Vec<u8>)>,
     /// For the times in questions.
     tz: TimeZone,
     /// Running jobs: at most one in front, over the panels and the help and under the
@@ -427,7 +504,10 @@ impl App {
                 preserve: true,
                 atomic: transfer.atomic_upload,
             },
+            algorithm: Algorithm::Sha256,
+            results: VecDeque::new(),
             clipboard: None,
+            saving: HashMap::new(),
             tz: TimeZone::UTC,
             jobs: Vec::new(),
             viewing: None,
@@ -502,7 +582,11 @@ impl App {
             open.dialog.context()
         } else if self.menu.is_some() {
             Context::Menu
-        } else if self.in_front().is_some() || self.jobs_list.is_some() || self.help.is_some() {
+        } else if !self.results.is_empty()
+            || self.in_front().is_some()
+            || self.jobs_list.is_some()
+            || self.help.is_some()
+        {
             Context::Dialog
         } else if self.viewing.is_some() {
             Context::Viewer
@@ -651,7 +735,7 @@ impl App {
         if self.menu.is_some() {
             return self.handle_menu(input);
         }
-        if self.handle_job(input) || self.handle_jobs_list(input) {
+        if self.handle_results(input) || self.handle_job(input) || self.handle_jobs_list(input) {
             return Vec::new();
         }
         if let Some(help) = &mut self.help {
@@ -721,6 +805,7 @@ impl App {
                 }
             }
             Action::Mkdir => self.ask_mkdir(),
+            Action::Checksum => self.ask_checksum(),
             Action::Delete => self.ask_delete(),
             Action::View => return self.view(),
             Action::Edit => return self.edit(),
@@ -876,8 +961,29 @@ impl App {
             Purpose::EditHost { name, old, .. } if ok => {
                 return save_host(name, old.as_ref(), dialog);
             }
+            Purpose::Checksum {
+                dir,
+                names,
+                other,
+                expect,
+            } if ok => return self.start_checksum(dialog, dir, &names, other, expect),
+            Purpose::SaveSums { window, dir, bytes } if ok && !dialog.text().is_empty() => {
+                if let Some(location) = child(&dir, dialog.text().as_bytes()) {
+                    return self.write_sums(window, location, bytes, false);
+                }
+            }
+            Purpose::OverwriteSums {
+                window,
+                location,
+                bytes,
+            } if event == DialogEvent::Pressed(Button::Yes) => {
+                return self.write_sums(window, location, bytes, true);
+            }
             Purpose::Quit => self.quit = event == DialogEvent::Pressed(Button::Yes),
             Purpose::EditHost { .. }
+            | Purpose::Checksum { .. }
+            | Purpose::SaveSums { .. }
+            | Purpose::OverwriteSums { .. }
             | Purpose::Pattern { .. }
             | Purpose::Mkdir { .. }
             | Purpose::Delete { .. }
@@ -1388,6 +1494,7 @@ impl App {
                     JobKind::Delete => fl!("delete-error", path = path, reason = reason),
                     JobKind::Copy => fl!("copy-error", path = path, reason = reason),
                     JobKind::Move => fl!("move-error", path = path, reason = reason),
+                    JobKind::Checksum => fl!("checksum-error", path = path, reason = reason),
                 };
                 let buttons = vec![Button::Skip, Button::SkipAll, Button::Retry, Button::Abort];
                 let dialog = Dialog::question(&fl!("dialog-error"), &message, buttons, 0, true);
@@ -1396,8 +1503,16 @@ impl App {
                     purpose: Purpose::Failure { job: id, reply },
                 });
             }
+            JobEvent::Sums(sums) => {
+                if let Some(hashing) = &mut job.hashing {
+                    hashing.sums = Some(sums);
+                }
+            }
             JobEvent::Finished { complete } => {
-                if let Some(job) = self.end_job(id) {
+                if let Some(mut job) = self.end_job(id) {
+                    if let Some(hashing) = job.hashing.take() {
+                        self.show_sums(id, hashing);
+                    }
                     let mut effects = job
                         .then
                         .map_or_else(Vec::new, |then| self.follow_up(then, complete));
@@ -1462,6 +1577,360 @@ impl App {
             }
         }
         effects
+    }
+
+    /// How to reach `location`: `None` here, the handle of its host if that is connected,
+    /// and an error if it is not.
+    fn handle_for(&self, location: &Location) -> Result<Option<HostHandle>, ()> {
+        match location {
+            Location::Remote { host, .. } => match self.hosts.get(host) {
+                Some(Host::Connected { handle, .. }) => Ok(Some(handle.clone())),
+                _ => Err(()),
+            },
+            Location::Root | Location::Sftp | Location::Local(_) => Ok(None),
+        }
+    }
+
+    /// Opens the checksum dialog for the marked entries of the active panel, or the one under
+    /// the cursor: the algorithm, last chosen first; for one file, a field for the checksum
+    /// it should have, and, if the other panel's cursor is on a file, a check box to compare
+    /// the two, checked if they have the same name.
+    fn ask_checksum(&mut self) {
+        let panel = self.panel(self.active);
+        let chosen = panel.chosen();
+        let single_file = match chosen.as_slice() {
+            [entry] => !entry.is_dir_like(),
+            _ => false,
+        };
+        let message = match chosen.as_slice() {
+            [] => return,
+            [entry] if single_file => fl!("checksum-one", name = cells::sanitize(&entry.name)),
+            [entry] => fl!("checksum-directory", name = cells::sanitize(&entry.name)),
+            many => fl!("checksum-many", count = many.len()),
+        };
+        let names: Vec<Vec<u8>> = chosen.iter().map(|entry| entry.name.clone()).collect();
+        let dir = panel.location().clone();
+        let other_panel = self.panel(self.active.other());
+        let other = other_panel
+            .entry_under_cursor()
+            .filter(|entry| single_file && !entry.is_dir_like())
+            .and_then(|entry| {
+                let location = child(other_panel.location(), &entry.name)?;
+                Some((location, names.first() == Some(&entry.name)))
+            })
+            .filter(|(location, _)| child(&dir, &names[0]).as_ref() != Some(location));
+        let fields = if single_file {
+            vec![(fl!("checksum-expected"), String::new())]
+        } else {
+            Vec::new()
+        };
+        let checks: Vec<(String, bool)> = other
+            .iter()
+            .map(|(location, same)| {
+                let path = location_text(location);
+                (fl!("checksum-compare", path = path), *same)
+            })
+            .collect();
+        let choices = Algorithm::ALL.iter().map(|&a| algorithm_name(a)).collect();
+        let chosen = Algorithm::ALL
+            .iter()
+            .position(|&a| a == self.algorithm)
+            .unwrap_or(0);
+        let buttons = vec![Button::Ok, Button::Cancel];
+        let title = fl!("checksum-title");
+        let dialog = Dialog::fields(&title, &fields, &checks, buttons, CHECKSUM_DIALOG_WIDTH)
+            .with_message(&message)
+            .with_choices(choices, chosen);
+        self.dialogs.push_back(Open {
+            dialog,
+            purpose: Purpose::Checksum {
+                dir,
+                names,
+                other: other.map(|(location, _)| location),
+                expect: single_file,
+            },
+        });
+    }
+
+    /// Starts the checksum job that the dialog of [`Self::ask_checksum`] asked for. An expected
+    /// checksum of another length picks the algorithm that has it.
+    fn start_checksum(
+        &mut self,
+        dialog: &Dialog,
+        dir: Location,
+        names: &[Vec<u8>],
+        other: Option<Location>,
+        expect: bool,
+    ) -> Vec<Effect> {
+        let mut algorithm = Algorithm::ALL
+            .get(dialog.chosen())
+            .copied()
+            .unwrap_or(Algorithm::Sha256);
+        let typed = if expect { dialog.text().trim() } else { "" };
+        let expected = if typed.is_empty() {
+            None
+        } else if let Some((hex, by_length)) = parse_expected(typed, algorithm) {
+            algorithm = by_length;
+            Some(hex)
+        } else {
+            let text = cells::sanitize(typed.as_bytes());
+            self.show_error(&fl!("checksum-expected-invalid", text = text));
+            return Vec::new();
+        };
+        self.algorithm = algorithm;
+        let compare = other.is_some() && dialog.checked(0);
+        let mut groups = vec![names.iter().filter_map(|name| child(&dir, name)).collect()];
+        if compare {
+            groups.extend(other.map(|location| vec![location]));
+        }
+        let mut targets = Vec::new();
+        let mut hosts = Vec::new();
+        for group in groups {
+            let Some(first) = group.first() else { continue };
+            let Ok(handle) = self.handle_for(first) else {
+                let reason = fl!("error-connection-closed");
+                let path = location_text(first);
+                self.show_error(&fl!("checksum-error", path = path, reason = reason));
+                return Vec::new();
+            };
+            if let Location::Remote { host, .. } = first {
+                hosts.push(host.clone());
+            }
+            targets.push((group, handle));
+        }
+        self.last_job += 1;
+        let id = self.last_job;
+        let cancel = CancellationToken::new();
+        let mut job = Job::new(id, JobKind::Checksum, Vec::new(), cancel.clone());
+        job.hosts = hosts;
+        job.hashing = Some(Hashing {
+            algorithm,
+            expected,
+            compare,
+            dir: (!compare).then_some(dir),
+            sums: None,
+        });
+        let effect = Effect::Checksum {
+            id,
+            targets,
+            algorithm,
+            cancel,
+        };
+        self.launch(job, effect)
+    }
+
+    /// Opens the window with the checksums of the job `id`; an aborted job has none to show,
+    /// and a job that found no files says so.
+    fn show_sums(&mut self, id: u64, hashing: Hashing) {
+        let Some(sums) = hashing.sums else {
+            return;
+        };
+        if sums.is_empty() {
+            self.dialogs.push_back(Open {
+                dialog: Dialog::notice(&fl!("checksum-title"), &fl!("checksum-no-files")),
+                purpose: Purpose::Info,
+            });
+            return;
+        }
+        let hexes: Vec<Option<String>> = sums
+            .iter()
+            .map(|sum| sum.digest.as_deref().map(hex))
+            .collect();
+        let compared = hashing.compare && sums.len() == 2;
+        let same = compared && hexes[0].is_some() && hexes[0] == hexes[1];
+        let rows: Vec<SumRow> = sums
+            .iter()
+            .zip(&hexes)
+            .map(|(sum, hex)| {
+                let mark = match (hex, &hashing.expected) {
+                    (None, _) => Mark::Skipped,
+                    (Some(hex), Some(expected)) if hex == expected => Mark::Match,
+                    (Some(_), Some(_)) => Mark::Mismatch,
+                    (Some(_), None) if compared && same => Mark::Match,
+                    (Some(_), None) if compared => Mark::Mismatch,
+                    (Some(_), None) => Mark::None,
+                };
+                let name = if compared {
+                    location_text(&sum.path)
+                } else {
+                    cells::sanitize(&sum.name)
+                };
+                SumRow {
+                    name,
+                    hex: hex.clone(),
+                    mark,
+                }
+            })
+            .collect();
+        let verdict = if compared {
+            Some(if same {
+                Verdict {
+                    text: fl!("checksum-same"),
+                    good: true,
+                }
+            } else {
+                Verdict {
+                    text: fl!("checksum-different"),
+                    good: false,
+                }
+            })
+        } else {
+            hashing.expected.as_ref().map(|expected| {
+                if hexes[0].as_ref() == Some(expected) {
+                    Verdict {
+                        text: fl!("checksum-matches"),
+                        good: true,
+                    }
+                } else {
+                    Verdict {
+                        text: fl!("checksum-differs"),
+                        good: false,
+                    }
+                }
+            })
+        };
+        let mut buttons = vec![SumsButton::Copy];
+        if rows.len() > 1 {
+            buttons.push(SumsButton::CopyAll);
+        }
+        if hashing.dir.is_some() {
+            buttons.push(SumsButton::Save);
+        }
+        buttons.push(SumsButton::Close);
+        let lines = sums
+            .into_iter()
+            .zip(hexes)
+            .map(|(sum, hex)| {
+                let name = if compared {
+                    location_text(&sum.path).into_bytes()
+                } else {
+                    sum.name
+                };
+                (name, hex)
+            })
+            .collect();
+        let title = algorithm_name(hashing.algorithm);
+        self.results.push_back(Results {
+            id,
+            window: SumsWindow::new(title, rows, verdict, buttons),
+            algorithm: hashing.algorithm,
+            dir: hashing.dir,
+            lines,
+        });
+    }
+
+    /// Gives a key to the window of checksums in front, if there is one: Copy puts a checksum
+    /// on the clipboard, Save asks where to save them all.
+    fn handle_results(&mut self, input: Resolved) -> bool {
+        let Some(results) = self.results.front_mut() else {
+            return false;
+        };
+        match results.window.handle(input) {
+            SumsEvent::Pending => {}
+            SumsEvent::Copy(row) => {
+                if let Some((_, Some(hex))) = results.lines.get(row) {
+                    self.clipboard = Some(hex.clone());
+                    results.window.set_status(fl!("checksum-copied"));
+                }
+            }
+            SumsEvent::CopyAll => {
+                let text = sums_file(&results.lines);
+                self.clipboard = Some(String::from_utf8_lossy(&text).into_owned());
+                results.window.set_status(fl!("checksum-copied"));
+            }
+            SumsEvent::Save => {
+                if let Some(dir) = results.dir.clone() {
+                    let name = match results.lines.as_slice() {
+                        [(name, _)] => {
+                            let name = String::from_utf8_lossy(name).into_owned();
+                            format!("{name}.{}", extension(results.algorithm))
+                        }
+                        _ => format!("{}SUMS", extension(results.algorithm).to_uppercase()),
+                    };
+                    let bytes = sums_file(&results.lines);
+                    let window = results.id;
+                    let (title, prompt) = (fl!("checksum-save-title"), fl!("checksum-save-prompt"));
+                    let dialog = Dialog::form(&title, &prompt, &name, &[], MKDIR_DIALOG_WIDTH);
+                    self.dialogs.push_back(Open {
+                        dialog,
+                        purpose: Purpose::SaveSums { window, dir, bytes },
+                    });
+                }
+            }
+            SumsEvent::Closed => {
+                self.results.pop_front();
+            }
+        }
+        true
+    }
+
+    /// Writes the checksums of the window `window` to `location`, over what is there if
+    /// `replace`.
+    fn write_sums(
+        &mut self,
+        window: u64,
+        location: Location,
+        bytes: Vec<u8>,
+        replace: bool,
+    ) -> Vec<Effect> {
+        let Ok(host) = self.handle_for(&location) else {
+            let reason = fl!("error-connection-closed");
+            let path = location_text(&location);
+            self.show_error(&fl!("checksum-save-error", path = path, reason = reason));
+            return Vec::new();
+        };
+        self.saving
+            .insert(location.clone(), (window, bytes.clone()));
+        vec![Effect::WriteFile {
+            location,
+            bytes,
+            replace,
+            host,
+        }]
+    }
+
+    /// Takes the end of an [`Effect::WriteFile`]: panels on its directory read it again, and
+    /// the window it came from says where it went; a taken name asks whether to replace it.
+    /// `Err(None)` is a taken name.
+    pub(crate) fn written(
+        &mut self,
+        location: &Location,
+        result: Result<(), Option<String>>,
+    ) -> Vec<Effect> {
+        let Some((window, bytes)) = self.saving.remove(location) else {
+            return Vec::new();
+        };
+        let path = location_text(location);
+        match result {
+            Ok(()) => {
+                if let Some(results) = self.results.iter_mut().find(|r| r.id == window) {
+                    results
+                        .window
+                        .set_status(fl!("checksum-saved", path = path));
+                }
+                self.reload(&location.parent())
+            }
+            Err(None) => {
+                let message = fl!("checksum-exists", path = path);
+                let buttons = vec![Button::Yes, Button::No];
+                let title = fl!("copy-exists-title");
+                let dialog = Dialog::question(&title, &message, buttons, 1, true);
+                self.dialogs.push_back(Open {
+                    dialog,
+                    purpose: Purpose::OverwriteSums {
+                        window,
+                        location: location.clone(),
+                        bytes,
+                    },
+                });
+                Vec::new()
+            }
+            Err(Some(reason)) => {
+                let reason = cells::sanitize(reason.as_bytes());
+                self.show_error(&fl!("checksum-save-error", path = path, reason = reason));
+                Vec::new()
+            }
+        }
     }
 
     /// Opens the dialog of F7 for the active panel, with the name under the cursor, as in mc.
@@ -2054,6 +2523,9 @@ impl App {
         if let Some(job) = self.in_front() {
             job.view.render(frame, panels, &self.theme, Instant::now());
         }
+        if let Some(results) = self.results.front() {
+            results.window.render(frame, panels, &self.theme);
+        }
         if let Some(open) = self.dialogs.front() {
             open.dialog.render(frame, panels, &self.theme);
         }
@@ -2133,6 +2605,85 @@ fn save_host(name: String, old: Option<&HostConfig>, dialog: &Dialog) -> Vec<Eff
     }
     let host = (!host.is_default()).then_some(host);
     vec![Effect::SaveHost { name, host }]
+}
+
+/// The name of `algorithm`, as the checksum dialog and window show it.
+fn algorithm_name(algorithm: Algorithm) -> String {
+    match algorithm {
+        Algorithm::Sha256 => fl!("checksum-sha256"),
+        Algorithm::Sha512 => fl!("checksum-sha512"),
+        Algorithm::Sha1 => fl!("checksum-sha1"),
+        Algorithm::Md5 => fl!("checksum-md5"),
+        Algorithm::Blake3 => fl!("checksum-blake3"),
+    }
+}
+
+/// What files of checksums of `algorithm` end in, as `sha256sum` and `b3sum` users name them.
+fn extension(algorithm: Algorithm) -> &'static str {
+    match algorithm {
+        Algorithm::Sha256 => "sha256",
+        Algorithm::Sha512 => "sha512",
+        Algorithm::Sha1 => "sha1",
+        Algorithm::Md5 => "md5",
+        Algorithm::Blake3 => "b3",
+    }
+}
+
+/// `bytes` in lowercase hex.
+fn hex(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+
+    bytes.iter().fold(String::new(), |mut text, byte| {
+        let _ = write!(text, "{byte:02x}");
+        text
+    })
+}
+
+/// An expected checksum as typed or pasted, in lowercase hex, with the algorithm it is for:
+/// `chosen` if its length fits, else the one whose length it has. Only the first word counts,
+/// so a line that `sha256sum` printed works too. `None` if it is not hex of a known length.
+fn parse_expected(text: &str, chosen: Algorithm) -> Option<(String, Algorithm)> {
+    let word = text.split_whitespace().next()?.to_ascii_lowercase();
+    if !word.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    let length = word.len();
+    let algorithm = if chosen.digest_len() * 2 == length {
+        chosen
+    } else {
+        *Algorithm::ALL
+            .iter()
+            .find(|algorithm| algorithm.digest_len() * 2 == length)?
+    };
+    Some((word, algorithm))
+}
+
+/// The lines of a file of checksums, as `sha256sum` writes them: the checksum, two spaces, and
+/// the name. A name with a backslash or a line break is escaped, and its line starts with a
+/// backslash, as GNU coreutils does. Skipped files are left out.
+fn sums_file(lines: &[(Vec<u8>, Option<String>)]) -> Vec<u8> {
+    let mut text = Vec::new();
+    for (name, hex) in lines {
+        let Some(hex) = hex else { continue };
+        let escape = name
+            .iter()
+            .any(|byte| matches!(byte, b'\\' | b'\n' | b'\r'));
+        if escape {
+            text.push(b'\\');
+        }
+        text.extend_from_slice(hex.as_bytes());
+        text.extend_from_slice(b"  ");
+        for &byte in name {
+            match byte {
+                b'\\' => text.extend_from_slice(b"\\\\"),
+                b'\n' => text.extend_from_slice(b"\\n"),
+                b'\r' => text.extend_from_slice(b"\\r"),
+                byte => text.push(byte),
+            }
+        }
+        text.push(b'\n');
+    }
+    text
 }
 
 /// Whether `inner` is `outer` or in it, on the same file system.
@@ -4418,5 +4969,278 @@ mod tests {
                 assert!(fkey_label(action).is_some(), "{action:?}");
             }
         }
+    }
+
+    /// An app with both panels on `/srv`, which holds `sub`, `a`, and `b`, the cursor of the
+    /// left one on `b`.
+    fn on_files() -> App {
+        let (mut app, effects) =
+            App::new(Path::new("/srv"), Path::new("/home/me"), &ui(), &transfer());
+        let listing = Listing::Dir(vec![dir("sub"), file("a", 3), file("b", 4)]);
+        answer(&mut app, effects, &listing);
+        app.handle(action(Action::End));
+        app
+    }
+
+    /// The only effect, which must start a checksum job: its id, its groups of targets with
+    /// whether they are remote, and the algorithm.
+    fn checksum_job(effects: Vec<Effect>) -> (u64, Vec<(Vec<Location>, bool)>, Algorithm) {
+        match one(effects) {
+            Effect::Checksum {
+                id,
+                targets,
+                algorithm,
+                ..
+            } => {
+                let targets = targets
+                    .into_iter()
+                    .map(|(group, host)| (group, host.is_some()))
+                    .collect();
+                (id, targets, algorithm)
+            }
+            other => panic!("expected a checksum job, got {other:?}"),
+        }
+    }
+
+    fn sum(path: &str, name: &str, digest: Option<u8>) -> Sum<Location> {
+        Sum {
+            path: local(path),
+            name: name.as_bytes().to_vec(),
+            size: 4,
+            digest: digest.map(|byte| vec![byte; 32]),
+        }
+    }
+
+    /// Ends the job `id` with `sums`.
+    fn hashed(app: &mut App, id: u64, sums: Vec<Sum<Location>>) -> Vec<Effect> {
+        app.job_event(id, JobEvent::Sums(sums));
+        app.job_event(id, JobEvent::Finished { complete: true })
+    }
+
+    #[test]
+    fn ctrl_x_hash_shows_the_checksum_of_a_file_and_copies_it() {
+        let mut app = on_files();
+        app.handle(action(Action::Checksum));
+        let text = screen_of(&mut app, 20);
+        assert!(text.contains("Checksum of \"b\" with:"), "{text}");
+        assert!(text.contains("(*) SHA-256"), "{text}");
+        assert!(text.contains("( ) BLAKE3"), "{text}");
+        assert!(text.contains("Expected checksum"), "{text}");
+        assert!(!text.contains("Compare with"), "the same file: {text}");
+        let (id, targets, algorithm) = checksum_job(app.handle(action(Action::Confirm)));
+        assert_eq!(targets, [(vec![local("/srv/b")], false)]);
+        assert_eq!(algorithm, Algorithm::Sha256);
+        assert!(screen(&mut app).contains("Counting"), "the job's window");
+
+        let effects = hashed(&mut app, id, vec![sum("/srv/b", "b", Some(0xab))]);
+        assert!(effects.is_empty(), "nothing changed: {effects:?}");
+        let text = screen_of(&mut app, 20);
+        assert!(text.contains(&"ab".repeat(32)), "{text}");
+        assert!(!text.contains("Matches"), "nothing expected: {text}");
+        assert_eq!(app.context(), Context::Dialog);
+        assert_eq!(app.take_clipboard(), None);
+        app.handle(action(Action::Confirm));
+        assert_eq!(app.take_clipboard(), Some("ab".repeat(32)));
+        assert_eq!(app.take_clipboard(), None, "copied once");
+        assert!(screen_of(&mut app, 20).contains("Sent to the terminal's clipboard."));
+        app.handle(action(Action::Cancel));
+        assert_eq!(app.context(), Context::Panel);
+    }
+
+    #[test]
+    fn the_expected_checksum_picks_its_algorithm_and_gives_the_verdict() {
+        let mut app = on_files();
+        app.handle(action(Action::Checksum));
+        // Pasted as sha256sum prints it, in capitals, while SHA-256 is chosen.
+        type_text(&mut app, &format!("{}  b", "CD".repeat(16)));
+        let (id, _, algorithm) = checksum_job(app.handle(action(Action::Confirm)));
+        assert_eq!(algorithm, Algorithm::Md5);
+        let mut md5 = sum("/srv/b", "b", None);
+        md5.digest = Some(vec![0xcd; 16]);
+        hashed(&mut app, id, vec![md5]);
+        let text = screen_of(&mut app, 20);
+        assert!(text.contains(" MD5 "), "{text}");
+        assert!(text.contains("Matches the expected checksum."), "{text}");
+        app.handle(action(Action::Cancel));
+
+        app.handle(action(Action::Checksum));
+        let text = screen_of(&mut app, 20);
+        assert!(text.contains("(*) MD5"), "the last choice: {text}");
+        type_text(&mut app, &"0".repeat(32));
+        let (id, _, _) = checksum_job(app.handle(action(Action::Confirm)));
+        let mut md5 = sum("/srv/b", "b", None);
+        md5.digest = Some(vec![0xcd; 16]);
+        hashed(&mut app, id, vec![md5]);
+        let text = screen_of(&mut app, 20);
+        assert!(text.contains("Does not match"), "{text}");
+        app.handle(action(Action::Cancel));
+
+        app.handle(action(Action::Checksum));
+        type_text(&mut app, "not-hex");
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        let text = screen_of(&mut app, 20);
+        assert!(text.contains("is not a checksum"), "{text}");
+    }
+
+    #[test]
+    fn choices_take_space_or_enter() {
+        let mut app = on_files();
+        app.handle(action(Action::Checksum));
+        // From the field up to the last choice, BLAKE3.
+        app.handle(action(Action::Up));
+        let (id, _, algorithm) = checksum_job(app.handle(action(Action::Confirm)));
+        assert_eq!(algorithm, Algorithm::Blake3);
+        app.job_event(id, JobEvent::Finished { complete: false });
+        app.handle(action(Action::Checksum));
+        app.handle(action(Action::Up));
+        app.handle(action(Action::Up));
+        app.handle(action(Action::Toggle));
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Down));
+        let (_, _, algorithm) = checksum_job(app.handle(action(Action::Confirm)));
+        assert_eq!(
+            algorithm,
+            Algorithm::Md5,
+            "Space chose it; Enter in the field keeps it"
+        );
+    }
+
+    #[test]
+    fn ctrl_x_hash_compares_with_the_file_in_the_other_panel() {
+        let mut app = on_files();
+        app.active = Side::Right;
+        app.handle(action(Action::Down));
+        let effects = app.handle(action(Action::Enter));
+        answer(&mut app, effects, &Listing::Dir(vec![file("b", 4)]));
+        app.handle(action(Action::End));
+        app.active = Side::Left;
+        app.handle(action(Action::Checksum));
+        let text = screen_of(&mut app, 20);
+        assert!(text.contains("[x] Compare with /srv/sub/b"), "{text}");
+        let (id, targets, _) = checksum_job(app.handle(action(Action::Confirm)));
+        assert_eq!(
+            targets,
+            [
+                (vec![local("/srv/b")], false),
+                (vec![local("/srv/sub/b")], false)
+            ]
+        );
+        let sums = vec![sum("/srv/b", "b", Some(1)), sum("/srv/sub/b", "b", Some(1))];
+        hashed(&mut app, id, sums);
+        let text = screen_of(&mut app, 24);
+        assert!(text.contains("The files are the same."), "{text}");
+        assert!(text.contains("/srv/sub/b"), "{text}");
+        assert!(!text.contains("Save"), "two places: {text}");
+        app.handle(action(Action::Cancel));
+
+        app.handle(action(Action::Checksum));
+        let (id, _, _) = checksum_job(app.handle(action(Action::Confirm)));
+        let sums = vec![sum("/srv/b", "b", Some(1)), sum("/srv/sub/b", "b", Some(2))];
+        hashed(&mut app, id, sums);
+        assert!(screen_of(&mut app, 24).contains("The files differ."));
+    }
+
+    #[test]
+    fn checksums_of_many_files_are_saved_as_sha256sum_writes_them() {
+        let mut app = on_files();
+        app.handle(action(Action::Home));
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Mark));
+        app.handle(action(Action::Mark));
+        app.handle(action(Action::Checksum));
+        let text = screen_of(&mut app, 20);
+        assert!(
+            text.contains("Checksums of 2 files and directories"),
+            "{text}"
+        );
+        assert!(!text.contains("Expected"), "{text}");
+        let (id, targets, _) = checksum_job(app.handle(action(Action::Confirm)));
+        assert_eq!(targets, [(vec![local("/srv/sub"), local("/srv/a")], false)]);
+        let sums = vec![
+            sum("/srv/sub/x", "sub/x", Some(1)),
+            sum("/srv/sub/y", "sub/y", None),
+            sum("/srv/a", "a", Some(2)),
+        ];
+        hashed(&mut app, id, sums);
+        let text = screen_of(&mut app, 24);
+        assert!(text.contains("skipped"), "{text}");
+        // Copy, Copy all, Save.
+        app.handle(action(Action::Right));
+        app.handle(action(Action::Confirm));
+        let all = app.take_clipboard().unwrap();
+        let line = |byte: &str, name: &str| format!("{}  {name}\n", byte.repeat(32));
+        assert_eq!(all, line("01", "sub/x") + &line("02", "a"));
+        app.handle(action(Action::Right));
+        app.handle(action(Action::Confirm));
+        let text = screen_of(&mut app, 24);
+        assert!(text.contains("SHA256SUMS"), "{text}");
+        let written = |effects: Vec<Effect>| match one(effects) {
+            Effect::WriteFile {
+                location,
+                bytes,
+                replace,
+                host,
+            } => {
+                assert!(host.is_none());
+                (location, String::from_utf8(bytes).unwrap(), replace)
+            }
+            other => panic!("expected a write, got {other:?}"),
+        };
+        let (location, text, replace) = written(app.handle(action(Action::Confirm)));
+        assert_eq!(
+            (&location, &text, replace),
+            (&local("/srv/SHA256SUMS"), &all, false)
+        );
+
+        // Taken: No is the default, and Yes writes over it.
+        assert!(app.written(&location, Err(None)).is_empty());
+        assert!(screen_of(&mut app, 24).contains("/srv/SHA256SUMS is there already"));
+        app.handle(action(Action::Left));
+        let (_, _, replace) = written(app.handle(action(Action::Confirm)));
+        assert!(replace);
+        let effects = app.written(&location, Ok(()));
+        assert_eq!(effects.len(), 2, "both panels show /srv");
+        assert!(screen_of(&mut app, 24).contains("Saved to /srv/SHA256SUMS."));
+    }
+
+    #[test]
+    fn an_aborted_checksum_job_shows_nothing_and_an_empty_one_says_so() {
+        let mut app = on_files();
+        app.handle(action(Action::Checksum));
+        let (id, _, _) = checksum_job(app.handle(action(Action::Confirm)));
+        app.job_event(id, JobEvent::Finished { complete: false });
+        assert_eq!(app.context(), Context::Panel);
+        app.handle(action(Action::Checksum));
+        let (id, _, _) = checksum_job(app.handle(action(Action::Confirm)));
+        hashed(&mut app, id, Vec::new());
+        assert!(screen_of(&mut app, 20).contains("There are no files to hash."));
+    }
+
+    #[test]
+    fn expected_checksums_and_files_of_them() {
+        assert_eq!(
+            parse_expected(&"A".repeat(64), Algorithm::Blake3),
+            Some(("a".repeat(64), Algorithm::Blake3)),
+            "the choice, where its length fits"
+        );
+        assert_eq!(
+            parse_expected(&"a".repeat(64), Algorithm::Md5),
+            Some(("a".repeat(64), Algorithm::Sha256))
+        );
+        assert_eq!(
+            parse_expected(&"a".repeat(128), Algorithm::Sha256).map(|(_, a)| a),
+            Some(Algorithm::Sha512)
+        );
+        assert_eq!(parse_expected(&"a".repeat(63), Algorithm::Sha256), None);
+        assert_eq!(parse_expected("sha256:abc", Algorithm::Sha256), None);
+        let lines = [
+            (b"plain".to_vec(), Some("01".to_owned())),
+            (b"gone".to_vec(), None),
+            (b"two\nlines\\x".to_vec(), Some("02".to_owned())),
+        ];
+        assert_eq!(
+            sums_file(&lines),
+            b"01  plain\n\\02  two\\nlines\\\\x\n".to_vec()
+        );
     }
 }

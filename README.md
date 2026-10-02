@@ -1,11 +1,15 @@
 # Noon Commander
 
+<img src="assets/icons/logo.svg" alt="Noon Commander logo" width="128" height="128" align="right">
+
 A Rust-based terminal file manager for macOS and Linux, focused on seamless local and SFTP file
 operations. The command is `noc`.
 
 > **Status: pre-alpha.** You can browse local directories and SFTP hosts, and copy, move,
 > delete, view, and edit files between them; polish comes next. See the
 > [roadmap](docs/roadmap.md).
+
+<br clear="right">
 
 ## Why
 

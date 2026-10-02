@@ -240,10 +240,7 @@ impl Keymap {
             return rows;
         };
         for (sequence, action) in &bindings.0 {
-            if let [first, digit] = sequence.as_slice()
-                && *first == ESC
-                && matches!(digit.codes.first(), KeyCode::Char('0'..='9'))
-            {
+            if is_esc_digit(sequence) {
                 continue;
             }
             let keys = sequence
@@ -262,6 +259,33 @@ impl Keymap {
         rows
     }
 
+    /// The first key sequence along `context`'s chain that does `action` there, as text such as
+    /// `Ctrl-F3`, for the pull-down menu. `Esc 1` … `Esc 0` count only where nothing else does.
+    pub(crate) fn key(&self, context: Context, action: Action) -> Option<String> {
+        let format = crokey::KeyCombinationFormat::default();
+        let does = |sequence: &[KeyCombination]| match self.lookup(context, sequence) {
+            Lookup::Exact(bound) | Lookup::Prefix(Some(bound)) => bound == action,
+            Lookup::Prefix(None) | Lookup::Unknown => false,
+        };
+        let sequences = context
+            .chain()
+            .iter()
+            .filter_map(|context| self.contexts.get(context))
+            .flat_map(|bindings| &bindings.0)
+            .filter(|(sequence, bound)| *bound == action && does(sequence))
+            .map(|(sequence, _)| sequence);
+        let (aliases, keys): (Vec<&Sequence>, Vec<&Sequence>) =
+            sequences.partition(|sequence| is_esc_digit(sequence));
+        let sequence = keys.first().or(aliases.first())?;
+        Some(
+            sequence
+                .iter()
+                .map(|key| format.to_string(*key))
+                .collect::<Vec<_>>()
+                .join(" "),
+        )
+    }
+
     /// The actions on F1 … F10 in `context`'s chain, for the F-key bar.
     pub(crate) fn fkeys(&self, context: Context) -> [Option<Action>; 10] {
         std::array::from_fn(|index| {
@@ -276,14 +300,14 @@ impl Keymap {
 }
 
 /// The bindings of the mc preset, by context.
-fn mc_presets() -> [(Context, Preset); 7] {
+fn mc_presets() -> [(Context, Preset); 8] {
     use Action::{
         Backspace, Cancel, Checksum, Confirm, Copy, Delete, Disconnect, Down, Edit, EditHost, End,
         Enter, Help, Home, InvertMarks, Jobs, Left, LocationMenuLeft, LocationMenuRight, Mark,
         MarkUp, Mkdir, Move, NextField, OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent,
-        PrevField, QuickSearch, Quit, Redraw, Reload, Right, Select, SortByExtension, SortByName,
-        SortBySize, SortByTime, SwapPanels, SwitchPanel, Toggle, ToggleHidden, ToggleWrap,
-        Unselect, Up, View,
+        PrevField, PullDown, QuickSearch, Quit, Redraw, Reload, Right, Select, SortByExtension,
+        SortByName, SortBySize, SortByTime, SwapPanels, SwitchPanel, Toggle, ToggleHidden,
+        ToggleWrap, Unselect, Up, View,
     };
     [
         (
@@ -333,6 +357,7 @@ fn mc_presets() -> [(Context, Preset); 7] {
                 // Alt-F1 never arrives, such as macOS Terminal without Option as Meta.
                 (LocationMenuLeft, &["alt-f1", "ctrl-x 1"]),
                 (LocationMenuRight, &["alt-f2", "ctrl-x 2"]),
+                (PullDown, &["f9"]),
                 (Quit, &["f10"]),
                 (Redraw, &["ctrl-l"]),
             ],
@@ -378,9 +403,22 @@ fn mc_presets() -> [(Context, Preset); 7] {
             ],
         ),
         (Context::Menu, MENU),
+        (Context::PullDown, PULL_DOWN),
         (Context::DialogInput, TEXT_FIELD),
     ]
 }
+
+/// The pull-down menu's bindings in the mc preset; letters run the commands that have them.
+const PULL_DOWN: Preset = &[
+    (Action::Up, &["up"]),
+    (Action::Down, &["down"]),
+    (Action::Left, &["left"]),
+    (Action::Right, &["right"]),
+    (Action::Home, &["home", "pageup"]),
+    (Action::End, &["end", "pagedown"]),
+    (Action::Confirm, &["enter"]),
+    (Action::Cancel, &["esc", "f9", "f10"]),
+];
 
 /// The bindings of text fields in the mc preset, on top of the dialog's.
 const TEXT_FIELD: Preset = &[
@@ -408,6 +446,12 @@ const MENU: Preset = &[
 ];
 
 const ESC: KeyCombination = KeyCombination::one_key(KeyCode::Esc, KeyModifiers::NONE);
+
+/// Whether `sequence` is `Esc` and a digit, which stands for an F-key.
+fn is_esc_digit(sequence: &[KeyCombination]) -> bool {
+    matches!(sequence, [first, digit]
+        if *first == ESC && matches!(digit.codes.first(), KeyCode::Char('0'..='9')))
+}
 
 /// Adds `Esc 1` … `Esc 0` next to every binding of F1 … F10, unless that sequence is bound.
 fn with_esc_digits(mut bindings: Vec<(Sequence, Action)>) -> Vec<(Sequence, Action)> {
@@ -776,6 +820,7 @@ mod tests {
         root[5] = Some(Action::Move);
         root[6] = Some(Action::Mkdir);
         root[7] = Some(Action::Disconnect);
+        root[8] = Some(Action::PullDown);
         root[9] = Some(Action::Quit);
         assert_eq!(keymap.fkeys(Context::Root), root);
     }
@@ -869,6 +914,65 @@ mod tests {
     }
 
     #[test]
+    fn the_pull_down_menu_opens_with_f9_and_takes_letters() {
+        let keymap = Keymap::mc();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Panel, &["f9", "esc", "9"]),
+            actions(&[Action::PullDown, Action::PullDown])
+        );
+        assert_eq!(
+            feed(
+                &keymap,
+                &mut state,
+                Context::PullDown,
+                &["v", "+", "left", "pagedown", "enter", "f9", "esc"]
+            ),
+            [
+                Resolved::Insert('v'),
+                Resolved::Insert('+'),
+                Resolved::Action(Action::Left),
+                Resolved::Action(Action::End),
+                Resolved::Action(Action::Confirm),
+                Resolved::Action(Action::Cancel),
+                Resolved::Action(Action::Cancel),
+            ]
+        );
+        assert_eq!(
+            feed(&keymap, &mut state, Context::PullDown, &["tab", "f5"]),
+            [],
+            "the menu is modal"
+        );
+    }
+
+    #[test]
+    fn key_names_the_first_sequence_that_does_the_action_there() {
+        let keymap = Keymap::mc();
+        let key = |context, action| keymap.key(context, action);
+        assert_eq!(key(Context::Panel, Action::View).as_deref(), Some("F3"));
+        assert_eq!(
+            key(Context::Panel, Action::QuickSearch).as_deref(),
+            Some("Ctrl-s")
+        );
+        assert_eq!(
+            key(Context::Panel, Action::Checksum).as_deref(),
+            Some("Ctrl-x #")
+        );
+        assert_eq!(key(Context::Panel, Action::Disconnect), None);
+        // In the root F8 disconnects, so Delete has only its own key there.
+        assert_eq!(
+            key(Context::Root, Action::Disconnect).as_deref(),
+            Some("F8")
+        );
+        assert_eq!(
+            key(Context::Root, Action::Delete).as_deref(),
+            Some("Delete")
+        );
+        assert_eq!(key(Context::Root, Action::EditHost).as_deref(), Some("F4"));
+        assert_eq!(key(Context::Root, Action::Edit), None, "F4 edits the host");
+    }
+
+    #[test]
     fn a_new_context_forgets_a_pending_sequence() {
         let keymap = Keymap::mc();
         let mut state = KeyState::default();
@@ -898,6 +1002,7 @@ mod tests {
         panel[5] = Some(Action::Move);
         panel[6] = Some(Action::Mkdir);
         panel[7] = Some(Action::Delete);
+        panel[8] = Some(Action::PullDown);
         panel[9] = Some(Action::Quit);
         assert_eq!(keymap.fkeys(Context::Panel), panel);
         assert_eq!(keymap.fkeys(Context::QuickSearch), panel);

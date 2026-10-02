@@ -35,6 +35,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- F9 opens a pull-down menu, as in mc: Left and Right (location menu, sort order, rescan,
+  disconnect for the panel on that side), File, Command, and Options (hidden files). Each
+  command shows its key from the keymap and has a letter that runs it. Commands that cannot run
+  now are dimmed and skipped. `ui.menu_bar = "always"` keeps the menu bar above the panels, as
+  in mc; the default `"on-demand"` shows it only while a menu is open, as in Far Manager.
 - Ctrl-X # computes checksums (SHA-256, SHA-512, SHA-1, MD5, or BLAKE3) of the marked files
   and directories, or the file under the cursor, as a job with progress. For one file, an
   expected checksum can be pasted, and the file under the other panel's cursor compared. The

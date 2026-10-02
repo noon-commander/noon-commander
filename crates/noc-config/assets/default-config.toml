@@ -50,6 +50,10 @@ icons = true
 show_hidden = true
 # Typing in a panel starts quick search. When off, only Ctrl-S and Alt-S do, as in mc.
 type_to_search = true
+# The menu bar of F9 (Left, File, Command, Options, Right): "on-demand" shows it only while a
+# menu is open, over the panels, as Far Manager does; "always" keeps it above the panels, as
+# Midnight Commander does.
+menu_bar = "on-demand"
 
 [transfer]
 # Write each copy under a hidden temporary name next to its target and rename it when it is

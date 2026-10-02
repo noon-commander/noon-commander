@@ -12,6 +12,7 @@ mod menu;
 mod panel;
 mod pattern;
 mod progress;
+mod pulldown;
 mod root;
 mod sums;
 mod tasks;

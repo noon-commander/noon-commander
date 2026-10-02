@@ -22,6 +22,8 @@ fkey-disconnect = Disconn
 fkey-edit-host = Edit
 # Closes a dialog.
 fkey-cancel = Cancel
+# Opens the pull-down menu.
+fkey-pulldown = PullDn
 
 ## Panels (src/tui/panel). Prefixes: panel-, error-.
 
@@ -99,6 +101,50 @@ menu-filter = Filter: { $text }
 # When the filter leaves no row.
 menu-nothing = Nothing matches.
 
+## The pull-down menu of F9 (src/tui/pulldown), as mc's. Prefix: pulldown-. An & marks the
+## letter that runs a command while its menu is open; letters must differ within a menu, and
+## && stands for &.
+
+# The menu bar. Left and Right act on the panel drawn on that side.
+pulldown-left = Left
+pulldown-file = File
+pulldown-command = Command
+pulldown-options = Options
+pulldown-right = Right
+# Left and Right.
+pulldown-location = Change &location…
+pulldown-sort-name = Sort by &name
+pulldown-sort-extension = Sort by &extension
+pulldown-sort-time = Sort by &time
+pulldown-sort-size = Sort by si&ze
+pulldown-rescan = &Rescan
+# Closes the connection of the host the panel shows.
+pulldown-disconnect-panel = &Disconnect
+# File.
+pulldown-view = &View
+pulldown-edit = &Edit
+pulldown-copy = &Copy
+pulldown-move = &Rename/Move
+pulldown-mkdir = &Mkdir
+pulldown-delete = &Delete
+pulldown-select = &Select group…
+pulldown-unselect = &Unselect group…
+pulldown-invert = &Invert selection
+pulldown-checksum = Chec&ksums…
+pulldown-exit = E&xit
+# Command.
+pulldown-quick-search = &Quick search
+pulldown-swap = S&wap panels
+pulldown-other-open = &Open in the other panel
+pulldown-other-sync = &This directory in the other panel
+pulldown-jobs = &Background jobs…
+pulldown-edit-host = Edit &host settings…
+pulldown-disconnect-host = &Disconnect host
+pulldown-help = He&lp
+pulldown-redraw = Red&raw screen
+# Options.
+pulldown-hidden = Show &hidden files
+
 ## Dialogs (src/tui/dialog). Prefix: dialog-. Their text comes from ssh; these are the buttons.
 
 dialog-ok = OK
@@ -127,6 +173,7 @@ help-title = Help
 help-panels = Panels
 help-root = Volumes and hosts
 help-menu = Location menu
+help-pulldown = Pull-down menu
 help-quick-search = Quick search
 help-dialogs = Dialogs and help
 help-text-fields = Text fields
@@ -181,6 +228,14 @@ help-menu-open = Open the volume or host in the panel
 help-menu-back = Take back the last character of the filter
 help-menu-reload = Read the volumes and hosts again
 help-menu-close = Close the menu
+help-pulldown-open = The pull-down menu: Left, File, Command, Options, Right
+help-pulldown-up = The command above
+help-pulldown-down = The command below
+help-pulldown-left = The menu to the left
+help-pulldown-right = The menu to the right
+help-pulldown-home = The first command
+help-pulldown-end = The last command
+help-pulldown-run = Run the command
 help-search-back = Take back the last character
 help-search-end = End the search
 help-dialog-up = Previous button; in this help, one line up
@@ -205,6 +260,7 @@ help-field-delete-to-end = Delete to the end
 help-note-esc = Esc 1 … Esc 0 stand for F1 … F10, and Esc followed by a key for Alt and the key, for terminals without them. A lone Esc acts after a second; Esc Esc at once.
 help-note-typing = Typing in a panel starts quick search.
 help-note-menu = Typing in the location menu filters it; 1 … 9 and 0 open the first ten rows while the filter is empty.
+help-note-pulldown = In the pull-down menu, the highlighted letter of a command runs it.
 
 ## Host settings, F4 on a host (src/tui/app), saved to hosts.toml. Prefix: host-.
 

@@ -11,7 +11,7 @@ mod paths;
 mod write;
 
 pub use config::{
-    Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, SshConfig, TransferConfig, UiConfig,
+    Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, SshConfig, TransferConfig, UiConfig,
     VolumesConfig, write_default_config,
 };
 pub use error::ConfigError;

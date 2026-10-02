@@ -68,7 +68,7 @@
       expected checksum, comparison with the file in the other panel, Copy and Save
 - [ ] Verify files of checksums (`*.sha256`, `SHA256SUMS`, `*.md5`, `*.sfv`): `OK`, `FAILED`,
       and missing, with a total
-- [ ] F9 pull-down menu, as in mc, with Left/Right → Change location
+- [x] F9 pull-down menu, as in mc, with Left/Right → Change location; `ui.menu_bar`
 - [ ] User themes and keymap overrides
 - [ ] Bookmarks and history
 - [ ] chmod and symlinks

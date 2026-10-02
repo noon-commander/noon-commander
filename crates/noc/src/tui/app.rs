@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 
 use jiff::tz::TimeZone;
-use noc_config::{HostConfig, Hosts, SftpHost, TransferConfig, UiConfig};
+use noc_config::{HostConfig, Hosts, MenuBar, SftpHost, TransferConfig, UiConfig};
 use noc_ops::{Algorithm, Conflict, CopyOptions, Decision, Sum};
 use noc_vfs::{FileKind, Location, Metadata, RemotePath};
 use ratatui::Frame;
@@ -28,6 +28,7 @@ use super::panel::{
 };
 use super::pattern::Pattern;
 use super::progress::{Counts, JobButton, JobView};
+use super::pulldown::{self, Command, PullDown, PullDownEvent, Status};
 use super::sums::{Mark, SumRow, SumsButton, SumsEvent, SumsWindow, Verdict};
 use super::tasks::{HostHandle, JobEvent};
 use super::theme::Theme;
@@ -455,6 +456,8 @@ pub(crate) struct App {
     menu: Option<LocationMenu>,
     /// The generation of the last listing for the menu.
     menu_listings: u64,
+    /// The pull-down menu of F9, over the panels and under the windows and dialogs.
+    pulldown: Option<PullDown>,
     /// The home directory, the first row of the location menu.
     home: PathBuf,
     /// The title of the virtual root: the name of this machine.
@@ -520,6 +523,7 @@ impl App {
             help: None,
             menu: None,
             menu_listings: 0,
+            pulldown: None,
             home: home.to_path_buf(),
             root_title: fl!("root-title"),
             keymap: Keymap::mc(),
@@ -588,11 +592,21 @@ impl App {
             || self.help.is_some()
         {
             Context::Dialog
+        } else if self.pulldown.is_some() {
+            Context::PullDown
         } else if self.viewing.is_some() {
             Context::Viewer
         } else if self.panel(self.active).searching() {
             Context::QuickSearch
-        } else if self.panel(self.active).shows_root() {
+        } else {
+            self.panel_context()
+        }
+    }
+
+    /// Where keys go in the active panel, out of quick search: the commands of the pull-down
+    /// menu show the keys of that context.
+    fn panel_context(&self) -> Context {
+        if self.panel(self.active).shows_root() {
             Context::Root
         } else {
             Context::Panel
@@ -602,9 +616,12 @@ impl App {
     /// Whether the app does something for `action` now; the F-key bar shows only those.
     fn supports(&self, action: Action) -> bool {
         match action {
-            Action::Help | Action::Quit | Action::Redraw | Action::Disconnect | Action::Cancel => {
-                true
-            }
+            Action::Help
+            | Action::Quit
+            | Action::Redraw
+            | Action::Disconnect
+            | Action::Cancel
+            | Action::PullDown => true,
             Action::Mkdir
             | Action::Delete
             | Action::Copy
@@ -744,6 +761,9 @@ impl App {
             }
             return Vec::new();
         }
+        if self.pulldown.is_some() {
+            return self.handle_pulldown(input);
+        }
         if self.viewing.is_some() {
             self.handle_viewer(input);
             return Vec::new();
@@ -818,6 +838,7 @@ impl App {
             Action::EditHost => self.ask_edit_host(),
             Action::LocationMenuLeft => return self.open_menu(Side::Left),
             Action::LocationMenuRight => return self.open_menu(Side::Right),
+            Action::PullDown => self.open_pulldown(),
             _ => {
                 let side = self.active;
                 if let Some(request) = self.panel_mut(side).handle(action) {
@@ -877,6 +898,102 @@ impl App {
                 menu.reload(generation);
                 vec![Effect::ListPlaces { generation }]
             }
+        }
+    }
+
+    /// Opens the pull-down menu at the menu of the active panel.
+    fn open_pulldown(&mut self) {
+        let mut pulldown = PullDown::new(self.active, self.swapped);
+        pulldown.start(&|command| self.command_status(command));
+        self.pulldown = Some(pulldown);
+    }
+
+    /// Gives a key to the pull-down menu; a command closes it, then runs.
+    fn handle_pulldown(&mut self, input: Resolved) -> Vec<Effect> {
+        let Some(mut pulldown) = self.pulldown.take() else {
+            return Vec::new();
+        };
+        match pulldown.handle(input, &|command| self.command_status(command)) {
+            PullDownEvent::Pending => {
+                self.pulldown = Some(pulldown);
+                Vec::new()
+            }
+            PullDownEvent::Closed => Vec::new(),
+            PullDownEvent::Run(command) => self.run(command),
+        }
+    }
+
+    /// Runs a command of the pull-down menu.
+    fn run(&mut self, command: Command) -> Vec<Effect> {
+        match command {
+            Command::Do(action) => self.handle(Resolved::Action(action)),
+            Command::On(side, action) => match self.panel_mut(side).handle(action) {
+                Some(request) => self.open(side, request),
+                None => Vec::new(),
+            },
+            Command::Location(side) => self.open_menu(side),
+            Command::DisconnectPanel(side) => match self.host_of(side) {
+                Some(host) => self.disconnect(&host),
+                None => Vec::new(),
+            },
+        }
+    }
+
+    /// The host that the panel on `side` shows, if it is connected or connecting.
+    fn host_of(&self, side: Side) -> Option<String> {
+        match self.panel(side).location() {
+            Location::Remote { host, .. } if self.hosts.contains_key(host) => Some(host.clone()),
+            _ => None,
+        }
+    }
+
+    /// Whether a command of the pull-down menu runs now, its mark, and its key.
+    fn command_status(&self, command: Command) -> Status {
+        let context = self.panel_context();
+        let active = self.panel(self.active);
+        let files = !active.shows_root();
+        match command {
+            Command::Do(action) => Status {
+                enabled: match action {
+                    Action::Select | Action::Unselect | Action::InvertMarks => files,
+                    Action::Checksum => !active.chosen().is_empty(),
+                    Action::Disconnect => active
+                        .host_under_cursor()
+                        .is_some_and(|host| self.hosts.contains_key(host)),
+                    Action::QuickSearch
+                    | Action::SwapPanels
+                    | Action::OtherPanelOpen
+                    | Action::OtherPanelSync
+                    | Action::Jobs
+                    | Action::ToggleHidden => true,
+                    _ => self.supports(action),
+                },
+                checked: action == Action::ToggleHidden && self.ui.show_hidden,
+                key: self.keymap.key(context, action),
+            },
+            Command::On(side, action) => Status {
+                enabled: true,
+                checked: self.panel(side).sort_action() == action,
+                // Keys act on the active panel only.
+                key: (side == self.active)
+                    .then(|| self.keymap.key(context, action))
+                    .flatten(),
+            },
+            Command::Location(side) => Status {
+                enabled: true,
+                checked: false,
+                key: self.keymap.key(
+                    context,
+                    match side {
+                        Side::Left => Action::LocationMenuLeft,
+                        Side::Right => Action::LocationMenuRight,
+                    },
+                ),
+            },
+            Command::DisconnectPanel(side) => Status {
+                enabled: self.host_of(side).is_some(),
+                ..Status::default()
+            },
         }
     }
 
@@ -2469,10 +2586,21 @@ impl App {
         self.close_viewer();
     }
 
-    /// Two panels side by side above the F-key bar.
+    /// Two panels side by side above the F-key bar; the menu bar of F9 above them with
+    /// `ui.menu_bar`, else over their top line while a menu is open.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, now: SystemTime, tz: &TimeZone) {
-        let [panels, key_bar] =
-            Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).areas(frame.area());
+        let always = self.ui.menu_bar == MenuBar::Always;
+        let bar_height = u16::from(always);
+        let [menu_bar, panels, key_bar] = Layout::vertical([
+            Constraint::Length(bar_height),
+            Constraint::Fill(1),
+            Constraint::Length(1),
+        ])
+        .areas(frame.area());
+        let menu_bar = Rect {
+            height: 1.min(frame.area().height),
+            ..menu_bar
+        };
         let [mut left, mut right] = Layout::horizontal([Constraint::Fill(1); 2]).areas(panels);
         if self.swapped {
             std::mem::swap(&mut left, &mut right);
@@ -2504,8 +2632,22 @@ impl App {
                 .render(frame, right, active == Side::Right, &view);
         }
         self.render_fkeys(frame, key_bar);
+        if always {
+            pulldown::render_idle(frame, menu_bar, &self.theme);
+        }
+        if let Some(pulldown) = &self.pulldown {
+            let screen = Rect {
+                height: frame.area().height.saturating_sub(1),
+                ..frame.area()
+            };
+            let icons = self.decor.icons();
+            pulldown.render(frame, (menu_bar, screen), &self.theme, icons, &|command| {
+                self.command_status(command)
+            });
+        }
         if self.viewing.is_none() {
-            self.render_jobs(frame, panels);
+            // On the menu bar, or on the top line of the panels without it.
+            self.render_jobs(frame, menu_bar);
             if let Some(menu) = &mut self.menu {
                 let area = match menu.side() {
                     Side::Left => left,
@@ -2531,8 +2673,8 @@ impl App {
         }
     }
 
-    /// The jobs in the background at the top right, where Far has its clock: how many, and
-    /// how far they are together.
+    /// The jobs in the background at the top right of `area`, where Far has its clock: how
+    /// many, and how far they are together.
     fn render_jobs(&self, frame: &mut Frame<'_>, area: Rect) {
         let behind: Vec<&Job> = self.jobs.iter().filter(|job| job.background).collect();
         if behind.is_empty() {
@@ -2748,6 +2890,7 @@ fn fkey_label(action: Action) -> Option<String> {
         Action::ToggleWrap => Some(fl!("fkey-wrap")),
         Action::Copy => Some(fl!("fkey-copy")),
         Action::Move => Some(fl!("fkey-move")),
+        Action::PullDown => Some(fl!("fkey-pulldown")),
         _ => None,
     }
 }
@@ -4628,6 +4771,93 @@ mod tests {
             "a host connects: {effect:?}"
         );
         assert_eq!(app.active, Side::Left);
+    }
+
+    /// The line of `text` that holds `needle`.
+    fn line_with<'a>(text: &'a str, needle: &str) -> &'a str {
+        text.lines()
+            .find(|line| line.contains(needle))
+            .unwrap_or("")
+    }
+
+    #[test]
+    fn f9_opens_the_pull_down_menu_and_its_commands_run() {
+        let mut app = loaded();
+        app.active = Side::Right;
+        app.handle(action(Action::PullDown));
+        assert_eq!(app.context(), Context::PullDown);
+        let text = screen_of(&mut app, 20);
+        assert!(text.contains("Left     File"), "{text}");
+        assert!(
+            line_with(&text, "Change location…").contains("Alt-F2"),
+            "{text}"
+        );
+        assert!(
+            line_with(&text, "Sort by size").contains("Ctrl-F6"),
+            "keys show for the active panel: {text}"
+        );
+        assert!(
+            text.contains("9Cancel") && text.contains("10Cancel"),
+            "{text}"
+        );
+
+        // Right goes round to Left, which acts on the panel on its side.
+        app.handle(action(Action::Right));
+        let text = screen_of(&mut app, 20);
+        assert!(
+            !line_with(&text, "Sort by size").contains("Ctrl-F6"),
+            "{text}"
+        );
+        assert!(app.handle(Resolved::Insert('z')).is_empty());
+        assert!(app.pulldown.is_none(), "a command closes the menu");
+        assert_eq!(app.left.sort_action(), Action::SortBySize);
+        assert_eq!(app.right.sort_action(), Action::SortByName);
+        assert_eq!(app.active, Side::Right);
+        app.handle(action(Action::PullDown));
+        app.handle(action(Action::Right));
+        let text = screen_of(&mut app, 20);
+        assert!(text.contains("* Sort by size"), "{text}");
+
+        // Options: the hidden files, in both panels.
+        for _ in 0..3 {
+            app.handle(action(Action::Right));
+        }
+        assert!(screen_of(&mut app, 20).contains("x Show hidden files"));
+        app.handle(action(Action::Confirm));
+        assert!(!app.ui.show_hidden);
+
+        // Commands that cannot run do nothing, and Esc closes the menu.
+        app.handle(action(Action::PullDown));
+        app.handle(action(Action::Right));
+        app.handle(action(Action::Right));
+        assert!(
+            app.handle(Resolved::Insert('k')).is_empty(),
+            "nothing chosen"
+        );
+        assert!(app.pulldown.is_some());
+        app.handle(action(Action::Cancel));
+        assert!(app.pulldown.is_none());
+
+        // A command that opens something: the location menu of the panel on its side.
+        app.handle(action(Action::PullDown));
+        app.handle(action(Action::Right));
+        let effects = app.handle(action(Action::Confirm));
+        assert!(matches!(&effects[..], [Effect::ListPlaces { .. }]));
+        assert_eq!(app.menu.as_ref().map(LocationMenu::side), Some(Side::Left));
+    }
+
+    #[test]
+    fn the_menu_bar_stays_above_the_panels_with_ui_menu_bar() {
+        let mut app = loaded();
+        let top = |app: &mut App| screen_of(app, 10).lines().next().unwrap_or("").to_owned();
+        assert!(!top(&mut app).contains("Left"), "on demand");
+        app.ui.menu_bar = MenuBar::Always;
+        let text = screen_of(&mut app, 10);
+        let lines: Vec<&str> = text.lines().collect();
+        assert!(lines[0].contains("Left     File"), "{text}");
+        assert!(lines[1].contains('╔'), "the panels start below it: {text}");
+        app.handle(action(Action::PullDown));
+        assert!(screen_of(&mut app, 20).contains("Change location…"));
     }
 
     #[test]

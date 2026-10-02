@@ -72,6 +72,8 @@ pub struct UiConfig {
     /// Whether typing in a panel starts quick search; otherwise only Ctrl-S and Alt-S do, as
     /// in mc. Default: `true`.
     pub type_to_search: bool,
+    /// When the menu bar of F9 shows. Default: `on-demand`.
+    pub menu_bar: MenuBar,
 }
 
 impl Default for UiConfig {
@@ -83,6 +85,7 @@ impl Default for UiConfig {
             icons: true,
             show_hidden: true,
             type_to_search: true,
+            menu_bar: MenuBar::default(),
         }
     }
 }
@@ -96,6 +99,17 @@ pub enum Borders {
     Double,
     /// `─`, `│`, `┌`, ….
     Single,
+}
+
+/// When the menu bar of F9 shows: `ui.menu_bar`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum MenuBar {
+    /// Only while a menu is open, over the top line of the panels, as in Far Manager.
+    #[default]
+    OnDemand,
+    /// Always, above the panels, as in mc.
+    Always,
 }
 
 /// The `[ssh]` section.
@@ -226,8 +240,8 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, SshConfig, TransferConfig, UiConfig,
-        VolumesConfig,
+        Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, SshConfig, TransferConfig,
+        UiConfig, VolumesConfig,
     };
     use crate::{ConfigError, write_default_config};
 
@@ -268,6 +282,7 @@ mod tests {
         icons = false
         show_hidden = false
         type_to_search = false
+        menu_bar = "always"
 
         [transfer]
         atomic_upload = false
@@ -295,6 +310,7 @@ mod tests {
                 icons: false,
                 show_hidden: false,
                 type_to_search: false,
+                menu_bar: MenuBar::Always,
             },
             transfer: TransferConfig {
                 atomic_upload: false,
@@ -320,6 +336,7 @@ mod tests {
         assert!(config.ui.icons);
         assert!(config.ui.show_hidden);
         assert!(config.ui.type_to_search);
+        assert_eq!(config.ui.menu_bar, MenuBar::OnDemand);
         assert!(config.transfer.atomic_upload);
         assert_eq!(config.transfer.parallel_jobs.get(), 2);
     }
@@ -479,6 +496,7 @@ mod tests {
         assert!(table["ui"].get("icons").is_some());
         assert!(table["ui"].get("show_hidden").is_some());
         assert!(table["ui"].get("type_to_search").is_some());
+        assert!(table["ui"].get("menu_bar").is_some());
     }
 
     #[test]

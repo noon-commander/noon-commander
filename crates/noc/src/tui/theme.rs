@@ -55,6 +55,18 @@ pub(crate) struct Theme {
     pub(crate) fkey_number: Style,
     /// F-key bar: the labels.
     pub(crate) fkey_label: Style,
+    /// The menu bar of F9 while a menu is open, and the title of that menu.
+    pub(crate) menu_bar: Style,
+    pub(crate) menu_bar_selected: Style,
+    /// The menu bar while no menu is open, with `ui.menu_bar`.
+    pub(crate) menu_bar_inactive: Style,
+    /// A pull-down menu: body, frame, and commands; the command under the cursor.
+    pub(crate) menu: Style,
+    pub(crate) menu_selected: Style,
+    /// Drawn over the others: the letter of a command or a menu, and a command that cannot
+    /// run now.
+    pub(crate) menu_hotkey: Style,
+    pub(crate) menu_disabled: Style,
     /// Dialog body, frame, and text.
     pub(crate) dialog: Style,
     pub(crate) dialog_title: Style,
@@ -124,6 +136,14 @@ impl Theme {
             ],
             fkey_number: on(Color::White, Color::Black),
             fkey_label: on(Color::Black, Color::Cyan),
+            // mc's `[menu]` colors.
+            menu_bar: on(Color::White, Color::Cyan),
+            menu_bar_selected: on(Color::White, Color::Black),
+            menu_bar_inactive: on(Color::Black, Color::Cyan),
+            menu: on(Color::White, Color::Cyan),
+            menu_selected: on(Color::White, Color::Black),
+            menu_hotkey: fg(Color::LightYellow),
+            menu_disabled: fg(Color::DarkGray),
             dialog: on(Color::Black, Color::Gray),
             dialog_title: on(Color::Blue, Color::Gray),
             dialog_button: on(Color::Black, Color::Gray),
@@ -170,6 +190,13 @@ impl Theme {
             dialog_host: [plain.dim(), plain, plain.bold(), plain],
             fkey_number: plain,
             fkey_label: reversed,
+            menu_bar: reversed,
+            menu_bar_selected: plain,
+            menu_bar_inactive: reversed,
+            menu: plain,
+            menu_selected: reversed,
+            menu_hotkey: Style::new().underlined(),
+            menu_disabled: Style::new().dim(),
             dialog: plain,
             dialog_title: plain,
             dialog_button: plain,

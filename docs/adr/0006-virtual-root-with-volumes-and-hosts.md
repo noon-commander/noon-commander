@@ -51,4 +51,4 @@ NFS or SMB mount can block in the kernel forever.
   skipped until it answers.
 - Volumes are read when the root or the menu is listed (and on Ctrl-R), not watched; a disk
   that is plugged in shows up on the next listing.
-- The F9 pull-down menu, when it comes, offers the location menu too.
+- The F9 pull-down menu offers the location menu too, as Left and Right → Change location.

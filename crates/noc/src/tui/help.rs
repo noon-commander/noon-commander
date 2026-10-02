@@ -43,6 +43,7 @@ impl Help {
             (Context::Root, fl!("help-root")),
             (Context::QuickSearch, fl!("help-quick-search")),
             (Context::Menu, fl!("help-menu")),
+            (Context::PullDown, fl!("help-pulldown")),
             (Context::Dialog, fl!("help-dialogs")),
             (Context::DialogInput, fl!("help-text-fields")),
             (Context::Viewer, fl!("help-viewer")),
@@ -67,6 +68,7 @@ impl Help {
         }
         entries.push(Entry::Blank);
         entries.push(Entry::Note(fl!("help-note-menu")));
+        entries.push(Entry::Note(fl!("help-note-pulldown")));
         entries.push(Entry::Note(fl!("help-note-esc")));
         if type_to_search {
             entries.push(Entry::Note(fl!("help-note-typing")));
@@ -237,7 +239,15 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Menu, Action::Confirm) => fl!("help-menu-open"),
         (Context::Menu, Action::Backspace) => fl!("help-menu-back"),
         (Context::Menu, Action::Reload) => fl!("help-menu-reload"),
-        (Context::Menu, Action::Cancel) => fl!("help-menu-close"),
+        (Context::Menu | Context::PullDown, Action::Cancel) => fl!("help-menu-close"),
+        (Context::Panel, Action::PullDown) => fl!("help-pulldown-open"),
+        (Context::PullDown, Action::Up) => fl!("help-pulldown-up"),
+        (Context::PullDown, Action::Down) => fl!("help-pulldown-down"),
+        (Context::PullDown, Action::Left) => fl!("help-pulldown-left"),
+        (Context::PullDown, Action::Right) => fl!("help-pulldown-right"),
+        (Context::PullDown, Action::Home) => fl!("help-pulldown-home"),
+        (Context::PullDown, Action::End) => fl!("help-pulldown-end"),
+        (Context::PullDown, Action::Confirm) => fl!("help-pulldown-run"),
         (Context::QuickSearch, Action::Backspace) => fl!("help-search-back"),
         (Context::QuickSearch, Action::Cancel) => fl!("help-search-end"),
         (Context::Dialog, Action::Up) => fl!("help-dialog-up"),
@@ -327,6 +337,7 @@ mod tests {
                 "Volumes and hosts",
                 "Quick search",
                 "Location menu",
+                "Pull-down menu",
                 "Dialogs and help",
                 "Text fields",
                 "Viewer"

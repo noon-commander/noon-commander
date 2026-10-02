@@ -170,6 +170,42 @@ terminals whose Alt-F1 never arrives, such as macOS Terminal without Option as M
 - The menu is modal (keymap context `menu`) and lists the root in the background; its listing
   carries a generation of its own, so a stale one is dropped.
 
+### Pull-down menu
+
+F9 (`Esc 9`) opens mc's menu bar with the menu of the active panel open:
+
+```text
+  Left     File     Command     Options     Right                       2 jobs 37%
+ ╔══════════════════════════════╗
+ ║   Change location…    Alt-F1 ║
+ ╟──────────────────────────────╢
+ ║ • Sort by name       Ctrl-F3 ║
+ ║   Sort by extension  Ctrl-F4 ║
+ ║   Sort by time       Ctrl-F5 ║
+ ║   Sort by size       Ctrl-F6 ║
+ ╟──────────────────────────────╢
+ ║   Rescan              Ctrl-r ║
+ ║   Disconnect                 ║
+ ╚══════════════════════════════╝
+```
+
+- Left and Right act on the panel drawn on that side, after Ctrl-U too: its location menu,
+  sort order (`•` marks the current one), Rescan, and Disconnect while it shows a host. File
+  has F3 … F8, `+`, `-`, `*`, Checksums, and Exit; Command has quick search, the other-panel
+  commands, the jobs, host settings and disconnect for the host under the cursor, help, and
+  redraw; Options has Show hidden files (`✓` while on). Without icons, the marks are `*` and `x`.
+- Commands do what their keys do, through the same `Action`s. Each shows the key that does
+  it in the active panel's context (`Keymap::key`); Left and Right show sort and rescan keys
+  only for the active panel, as keys act there. Commands that cannot run now are dimmed, and
+  the cursor skips them.
+- Left and Right move between menus, round the bar; Up and Down move round a menu; Home and
+  End go to its first and last command; Enter or the command's highlighted letter (`&` in the
+  Fluent messages) runs it; Esc, F9, or F10 closes the menu. Running a command closes it first.
+- `ui.menu_bar` decides where the bar is: `on-demand` (the default) draws it over the top line
+  of the panels only while a menu is open, as Far does; `always` keeps it above the panels, as
+  mc does, which takes a row from them. The jobs indicator sits at the right end of that row.
+- The menu is modal (keymap context `pull_down`); letters are text there, so they are hotkeys.
+
 ## Host discovery
 
 OpenSSH cannot list hosts, and `ssh -G` resolves a single host while executing `Match exec`
@@ -358,6 +394,7 @@ borders = "double"               # frames of panels and dialogs: ═ ║ ╔; "s
 icons = true                     # Nerd Font icons; false: mc's markers (/ * @ ~ …)
 show_hidden = true               # names that start with a dot; Alt-. switches while running
 type_to_search = true            # typing in a panel starts quick search; false: only Ctrl-S
+menu_bar = "on-demand"           # the F9 menu bar while a menu is open; "always": above the panels
 
 [transfer]
 atomic_upload = true             # copies go to a hidden temporary name, then are renamed
@@ -522,7 +559,7 @@ remember_dir = true              # reopen the last directory of this session
   listing. Going up puts the cursor on the directory just left. A panel shows a `Location`, so
   the [virtual root](#virtual-root) and the list of hosts are kinds of listing too.
 - **Keymap.** Keys map to `Action`s per context (`panel`, `root`, `quick_search`, `menu`,
-  `dialog`, `dialog_input`, `viewer`). Each context falls back along a chain, for
+  `pull_down`, `dialog`, `dialog_input`, `viewer`). Each context falls back along a chain, for
   example the root and quick search to the panel; the first context that knows a key sequence
   decides, except that a sequence it only starts does what a later context binds it to.
   Bindings are key sequences matched by prefix with a 1-second timeout, so a vim preset
@@ -531,7 +568,7 @@ remember_dir = true              # reopen the last directory of this session
   and that character, for terminals whose Alt key sends nothing, and `Esc` alone cancels once
   the timeout passes (`Esc Esc` at once). An `Esc` and a quick next key arrive as Alt and that
   key, so there an unbound Alt and a character count as `Esc` and the character. In dialogs,
-  quick search, and the location menu `Esc` acts at once. Keys are written with `crokey`
+  quick search, and the menus `Esc` acts at once. Keys are written with `crokey`
   names. User overrides in `keymap.toml` are planned for M4. The F-key bar is generated from the active keymap, and so
   is the help screen (F1): the keys of each context, with what they do, for what the app can
   do already; a prompt from ssh shows over it.

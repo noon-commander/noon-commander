@@ -663,6 +663,16 @@ impl Panel {
         None
     }
 
+    /// The action that sorts as the panel is sorted, for the mark in the pull-down menu.
+    pub(crate) fn sort_action(&self) -> Action {
+        match self.sort.key {
+            SortKey::Name => Action::SortByName,
+            SortKey::Extension => Action::SortByExtension,
+            SortKey::Time => Action::SortByTime,
+            SortKey::Size => Action::SortBySize,
+        }
+    }
+
     fn sort_by(&mut self, key: SortKey) {
         self.sort = self.sort.by(key);
         self.rearrange();

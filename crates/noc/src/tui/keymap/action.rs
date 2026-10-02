@@ -10,6 +10,8 @@ pub(crate) enum Context {
     Root,
     /// The location menu of Alt-F1 and Alt-F2, which has a filter.
     Menu,
+    /// The pull-down menu of F9, whose commands have letters.
+    PullDown,
     /// Quick search in the active panel. Keys it does not bind fall through to the panel.
     QuickSearch,
     /// A dialog whose focus is on a button or a list.
@@ -31,8 +33,9 @@ impl Context {
             Self::Dialog => &[Self::Dialog],
             Self::DialogInput => &[Self::DialogInput, Self::Dialog],
             Self::Viewer => &[Self::Viewer],
-            // The menu is modal too.
+            // Menus are modal too.
             Self::Menu => &[Self::Menu],
+            Self::PullDown => &[Self::PullDown],
         }
     }
 
@@ -45,16 +48,24 @@ impl Context {
 
     /// Whether every character is text, even one that a fallback context binds: in quick
     /// search, `*` is part of a name, not a command; in a text field, Space is a space; in the
-    /// menu, digits are hotkeys and letters filter.
+    /// menu, digits are hotkeys and letters filter; in the pull-down menu, letters run commands.
     pub(crate) fn text_first(self) -> bool {
-        matches!(self, Self::QuickSearch | Self::DialogInput | Self::Menu)
+        matches!(
+            self,
+            Self::QuickSearch | Self::DialogInput | Self::Menu | Self::PullDown
+        )
     }
 
     /// Whether an unbound printable key becomes [`Resolved::Insert`](super::Resolved::Insert).
     pub(crate) fn accepts_text(self) -> bool {
         matches!(
             self,
-            Self::Panel | Self::Root | Self::QuickSearch | Self::DialogInput | Self::Menu
+            Self::Panel
+                | Self::Root
+                | Self::QuickSearch
+                | Self::DialogInput
+                | Self::Menu
+                | Self::PullDown
         )
     }
 }
@@ -123,6 +134,8 @@ pub(crate) enum Action {
     LocationMenuLeft,
     /// Opens the location menu of the right panel.
     LocationMenuRight,
+    /// Opens the pull-down menu, at the menu of the active panel.
+    PullDown,
     /// Reads the directory, or the volumes and hosts, again.
     Reload,
     /// Shows or hides files whose names start with a dot, in both panels.
@@ -201,6 +214,7 @@ impl Action {
         Self::OtherPanelSync,
         Self::LocationMenuLeft,
         Self::LocationMenuRight,
+        Self::PullDown,
         Self::Reload,
         Self::ToggleHidden,
         Self::SortByName,

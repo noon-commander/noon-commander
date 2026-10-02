@@ -278,7 +278,7 @@ impl JobView {
     pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, now: Instant) {
         let colors = Colors::of(theme, false);
         // Borders, what it does, where, the gauge, the count, the time, a blank line, Abort.
-        let inner = draw_box(frame, area, (WIDTH, 9), &self.title, colors, theme.shadow);
+        let inner = draw_box(frame, area, (WIDTH, 9), &self.title, colors, theme);
         let width = usize::from(inner.width);
         // On a small screen, what fits.
         let mut put = |index: u16, line: Line<'static>| {

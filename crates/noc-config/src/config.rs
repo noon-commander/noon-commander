@@ -62,6 +62,8 @@ pub struct UiConfig {
     pub language: String,
     /// A built-in color theme: `mc-classic` or `terminal`. Default: `mc-classic`.
     pub theme: String,
+    /// The lines that frame panels and dialogs. Default: `double`.
+    pub borders: Borders,
     /// Whether names get Nerd Font icons; otherwise mc's type markers (`/`, `*`, `@`, …).
     /// Needs a Nerd Font in the terminal. Default: `true`.
     pub icons: bool,
@@ -77,11 +79,23 @@ impl Default for UiConfig {
         Self {
             language: "auto".to_owned(),
             theme: "mc-classic".to_owned(),
+            borders: Borders::default(),
             icons: true,
             show_hidden: true,
             type_to_search: true,
         }
     }
+}
+
+/// The lines that frame panels and dialogs: `ui.borders`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Borders {
+    /// `═`, `║`, `╔`, …, as mc draws them.
+    #[default]
+    Double,
+    /// `─`, `│`, `┌`, ….
+    Single,
 }
 
 /// The `[ssh]` section.
@@ -242,7 +256,8 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        Config, DEFAULT_CONFIG, DiscoveryConfig, HostConfig, SshConfig, TransferConfig, UiConfig,
+        Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, HostConfig, SshConfig, TransferConfig,
+        UiConfig,
     };
     use crate::{ConfigError, write_default_config};
 
@@ -283,6 +298,7 @@ mod tests {
         [ui]
         language = "de-DE"
         theme = "terminal"
+        borders = "single"
         icons = false
         show_hidden = false
         type_to_search = false
@@ -317,6 +333,7 @@ mod tests {
             ui: UiConfig {
                 language: "de-DE".to_owned(),
                 theme: "terminal".to_owned(),
+                borders: Borders::Single,
                 icons: false,
                 show_hidden: false,
                 type_to_search: false,
@@ -342,6 +359,7 @@ mod tests {
         assert!(config.hosts.is_empty());
         assert_eq!(config.ui.language, "auto");
         assert_eq!(config.ui.theme, "mc-classic");
+        assert_eq!(config.ui.borders, Borders::Double);
         assert!(config.ui.icons);
         assert!(config.ui.show_hidden);
         assert!(config.ui.type_to_search);
@@ -518,6 +536,7 @@ mod tests {
         assert!(table["discovery"].get("hide").is_some());
         assert!(table["ui"].get("language").is_some());
         assert!(table["ui"].get("theme").is_some());
+        assert!(table["ui"].get("borders").is_some());
         assert!(table["ui"].get("icons").is_some());
         assert!(table["ui"].get("show_hidden").is_some());
         assert!(table["ui"].get("type_to_search").is_some());

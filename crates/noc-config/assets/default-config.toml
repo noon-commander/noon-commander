@@ -36,6 +36,8 @@ hide = ["github.com", "gitlab.com", "bitbucket.org"]
 language = "auto"
 # Colors: "mc-classic" (blue panels, as Midnight Commander) or "terminal" (the terminal's own).
 theme = "mc-classic"
+# Frames of panels and dialogs: "double" (═ ║ ╔, as Midnight Commander) or "single" (─ │ ┌).
+borders = "double"
 # Nerd Font icons in front of names; needs a Nerd Font in the terminal. Without them, mc's
 # markers: / directory, * executable, @ symlink, ~ symlink to a directory.
 icons = true

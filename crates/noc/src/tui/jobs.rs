@@ -114,7 +114,7 @@ impl JobsList {
         // Borders, the rows, a blank line, the buttons.
         let size = (WIDTH, listed.saturating_add(4));
         let title = fl!("jobs-title");
-        let inner = draw_box(frame, area, size, &title, colors, theme.shadow);
+        let inner = draw_box(frame, area, size, &title, colors, theme);
         let width = usize::from(inner.width);
         let visible = usize::from(inner.height.saturating_sub(2));
         let line = |shown: usize| {

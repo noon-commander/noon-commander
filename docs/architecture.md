@@ -278,6 +278,7 @@ args = ["-o", "Compression=yes"]
 [ui]
 language = "auto"                # or a language tag such as "en-US"; others fall back to it
 theme = "mc-classic"             # or "terminal": the terminal's own colors, reverse video
+borders = "double"               # frames of panels and dialogs: ═ ║ ╔; "single": ─ │ ┌
 icons = true                     # Nerd Font icons; false: mc's markers (/ * @ ~ …)
 show_hidden = true               # names that start with a dot; Alt-. switches while running
 type_to_search = true            # typing in a panel starts quick search; false: only Ctrl-S

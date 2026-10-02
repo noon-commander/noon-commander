@@ -103,7 +103,7 @@ impl Help {
         let height = area.height.saturating_sub(2).max(3);
         let colors = Colors::of(theme, false);
         let size = (width, height);
-        let inner = draw_box(frame, area, size, &fl!("help-title"), colors, theme.shadow);
+        let inner = draw_box(frame, area, size, &fl!("help-title"), colors, theme);
         let width = usize::from(inner.width);
         let keys_width = self
             .entries

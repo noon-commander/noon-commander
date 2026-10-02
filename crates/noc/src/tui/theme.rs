@@ -1,7 +1,9 @@
-//! Colors and text styles of the UI.
+//! Colors, text styles, and frame lines of the UI.
 
+use noc_config::Borders;
 use noc_vfs::{DirEntry, FileKind};
 use ratatui::style::{Color, Style};
+use ratatui::widgets::BorderType;
 
 use super::panel::HostStatus;
 
@@ -68,6 +70,8 @@ pub(crate) struct Theme {
     pub(crate) error_button_focused: Style,
     /// What mc draws to the right of and below a dialog; `None` draws nothing.
     pub(crate) shadow: Option<Style>,
+    /// The lines that frame panels and dialogs.
+    pub(crate) borders: Borders,
 }
 
 impl Theme {
@@ -121,6 +125,7 @@ impl Theme {
             error_title: on(Color::LightYellow, Color::Red),
             error_button_focused: on(Color::Black, Color::Gray),
             shadow: Some(on(Color::DarkGray, Color::Black)),
+            borders: Borders::default(),
         }
     }
 
@@ -163,6 +168,28 @@ impl Theme {
             error_title: plain.bold(),
             error_button_focused: reversed,
             shadow: None,
+            borders: Borders::default(),
+        }
+    }
+
+    /// This theme framed with `borders`, from `ui.borders`.
+    pub(crate) fn with_borders(self, borders: Borders) -> Self {
+        Self { borders, ..self }
+    }
+
+    /// The frame of a panel or a dialog.
+    pub(crate) fn border_type(&self) -> BorderType {
+        match self.borders {
+            Borders::Double => BorderType::Double,
+            Borders::Single => BorderType::Plain,
+        }
+    }
+
+    /// The ends of a single line across a frame, as mc joins them: `╟` and `╢` on a double one.
+    pub(crate) fn tees(&self) -> (char, char) {
+        match self.borders {
+            Borders::Double => ('╟', '╢'),
+            Borders::Single => ('├', '┤'),
         }
     }
 

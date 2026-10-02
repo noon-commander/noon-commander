@@ -377,7 +377,9 @@ impl App {
             ui: ui.clone(),
             decor: Decor::new(ui.icons),
             // `ui.theme` was checked when the config was loaded.
-            theme: Theme::by_name(&ui.theme).unwrap_or_else(Theme::mc_classic),
+            theme: Theme::by_name(&ui.theme)
+                .unwrap_or_else(Theme::mc_classic)
+                .with_borders(ui.borders),
             tick: 0,
             failed: HashSet::new(),
             addresses: HashMap::new(),
@@ -2071,7 +2073,7 @@ mod tests {
     fn titles(app: &mut App) -> (String, String) {
         let text = screen(app);
         let top = text.lines().next().unwrap();
-        let (left, right) = top.split_once("┐┌").unwrap();
+        let (left, right) = top.split_once("╗╔").unwrap();
         (left.to_owned(), right.to_owned())
     }
 
@@ -2483,7 +2485,7 @@ mod tests {
         };
         app.job_event(first, progress);
         let text = screen(&mut app);
-        assert!(text.contains(" 1 job 25% ┐"), "{text}");
+        assert!(text.contains(" 1 job 25% ╗"), "{text}");
 
         // Another job starts in front, and goes behind too.
         app.handle(action(Action::Down));
@@ -3515,7 +3517,7 @@ mod tests {
         for c in "s3cret".chars() {
             app.handle(Resolved::Insert(c));
         }
-        assert!(screen(&mut app).contains("│ ****** "));
+        assert!(screen(&mut app).contains("║ ****** "));
         app.handle(action(Action::Confirm));
         assert_eq!(password_answer.try_recv(), Ok(Some("s3cret".to_owned())));
 

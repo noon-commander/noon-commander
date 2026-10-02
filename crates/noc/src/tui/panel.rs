@@ -713,6 +713,7 @@ impl Panel {
         };
         let title = Line::styled(format!(" {title} "), title_style);
         let block = Block::bordered()
+            .border_type(theme.border_type())
             .title(title)
             .style(theme.panel)
             .border_style(theme.panel_border);
@@ -795,7 +796,8 @@ impl Panel {
     /// total of the marked entries in the middle.
     fn render_separator(&self, frame: &mut Frame<'_>, area: Rect, y: u16, theme: &Theme) {
         let inside = area.width.saturating_sub(2);
-        let separator = format!("├{}┤", "─".repeat(usize::from(inside)));
+        let (left, right) = theme.tees();
+        let separator = format!("{left}{}{right}", "─".repeat(usize::from(inside)));
         frame.render_widget(
             Line::styled(separator, theme.panel_border),
             Rect::new(area.x, y, area.width, 1),
@@ -1423,7 +1425,7 @@ mod tests {
         panel.search_type('e');
         let hosts = |_: &str| HostState::default();
         let mut terminal = render_with(&mut panel, (40, 6), true, &hosts, Decor::new(false));
-        assert!(terminal.backend().to_string().contains("│Search: be"));
+        assert!(terminal.backend().to_string().contains("║Search: be"));
         assert_eq!(
             terminal.get_cursor_position().unwrap(),
             Position::new(11, 4),
@@ -1915,9 +1917,30 @@ mod tests {
             "marked, under the cursor"
         );
         let separator: String = (0..40).map(|x| buffer[(x, 9)].symbol()).collect();
-        assert_eq!(separator, "├────── 10,012,345 B in 2 files ───────┤");
+        assert_eq!(separator, "╟────── 10,012,345 B in 2 files ───────╢");
         assert_eq!(colors(7, 9), (Color::LightYellow, Color::Blue));
         assert_eq!(colors(6, 9), (Color::Gray, Color::Blue));
+    }
+
+    #[test]
+    fn single_borders_draw_single_lines() {
+        let mut panel = loaded("/srv", listing());
+        let hosts = |_: &str| HostState::default();
+        let theme = Theme::terminal().with_borders(noc_config::Borders::Single);
+        let terminal = render_themed(
+            &mut panel,
+            (40, 12),
+            true,
+            &hosts,
+            Decor::new(false),
+            &theme,
+        );
+        let text = terminal.backend().to_string();
+        let lines: Vec<&str> = text.lines().collect();
+        assert!(lines[0].starts_with("\"┌"), "{text}");
+        assert!(lines[9].starts_with("\"├────"), "{text}");
+        assert!(lines[11].starts_with("\"└"), "{text}");
+        assert!(!text.contains(['═', '║', '╟']), "{text}");
     }
 
     #[test]

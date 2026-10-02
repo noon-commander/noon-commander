@@ -491,7 +491,7 @@ impl Dialog {
         let height = rows(lines.len()) + u16::from(self.field.is_some()) + rows(self.checks.len());
         let colors = Colors::of(theme, self.error);
         let size = (width, height + 4);
-        let inner = draw_box(frame, area, size, &self.title, colors, theme.shadow);
+        let inner = draw_box(frame, area, size, &self.title, colors, theme);
         let row = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
         let mut index = 0;
         for line in &lines {
@@ -573,22 +573,23 @@ pub(crate) fn button_line(
     Line::from(spans).centered()
 }
 
-/// Draws an empty dialog box of `size` centered in `area`, with its title and mc's `shadow`,
-/// and returns the room inside, one column in from the frame on either side.
+/// Draws an empty dialog box of `size` centered in `area`, with its title, the theme's frame
+/// lines, and mc's shadow, and returns the room inside, one column in from the frame on either
+/// side.
 pub(crate) fn draw_box(
     frame: &mut Frame<'_>,
     area: Rect,
     (width, height): (u16, u16),
     title: &str,
     colors: Colors,
-    shadow: Option<Style>,
+    theme: &Theme,
 ) -> Rect {
     let (width, height) = (width.min(area.width), height.min(area.height));
     let x = area.x + (area.width - width) / 2;
     let y = area.y + (area.height - height) / 2;
     let outer = Rect::new(x, y, width, height);
     frame.render_widget(Clear, outer);
-    if let Some(shadow) = shadow {
+    if let Some(shadow) = theme.shadow {
         // Two columns to the right and a row below, as mc draws it.
         let right = Rect::new(outer.right(), outer.y + 1, 2, outer.height);
         let below = Rect::new(outer.x + 2, outer.bottom(), outer.width, 1);
@@ -599,7 +600,10 @@ pub(crate) fn draw_box(
         }
     }
     let title = Line::styled(format!(" {title} "), colors.title);
-    let block = Block::bordered().title(title).style(colors.body);
+    let block = Block::bordered()
+        .border_type(theme.border_type())
+        .title(title)
+        .style(colors.body);
     let inner = block.inner(outer).inner(ratatui::layout::Margin::new(1, 0));
     frame.render_widget(block, outer);
     inner

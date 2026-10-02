@@ -17,6 +17,11 @@ impl Decor {
         Self { icons }
     }
 
+    /// Whether prefixes end in an icon rather than an mc marker.
+    pub(crate) fn icons(self) -> bool {
+        self.icons
+    }
+
     /// The prefix of an entry's name: its icon and a space, or its mc marker.
     pub(crate) fn entry(self, entry: &DirEntry) -> String {
         if self.icons {

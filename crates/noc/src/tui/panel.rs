@@ -866,14 +866,18 @@ impl Columns {
     fn row(self, row: Row<'_>, view: &View<'_>) -> Line<'static> {
         const DIR: [Align; 3] = [Align::Left, Align::Right, Align::Left];
         let (decor, theme) = (view.decor, view.theme);
-        let styled = |(name, rest): (String, String), style: Style| {
-            Line::from(vec![Span::styled(name, style), Span::raw(rest)])
+        let styled = |(name, rest): (String, String), prefix: &str, style: Style| {
+            let mut spans = icon_spans(name, prefix, style, view);
+            spans.push(Span::raw(rest));
+            Line::from(spans)
         };
         match (self, row) {
             (Self::Dir(columns), Row::Parent) => {
-                let name = format!("{}..", decor.parent());
+                let prefix = decor.parent();
+                let name = format!("{prefix}..");
                 styled(
                     columns.join(&name, &fl!("panel-up-dir"), "", DIR),
+                    prefix,
                     theme.directory,
                 )
             }
@@ -887,12 +891,22 @@ impl Columns {
                         .map_or_else(String::new, |size| cells::size(size, SIZE_WIDTH))
                 };
                 let time = cells::mtime(entry.metadata.modified, view.now, view.tz);
-                let name = format!("{}{}", decor.entry(entry), cells::sanitize(&entry.name));
-                styled(columns.join(&name, &size, &time, DIR), theme.entry(entry))
+                let prefix = decor.entry(entry);
+                let name = format!("{prefix}{}", cells::sanitize(&entry.name));
+                styled(
+                    columns.join(&name, &size, &time, DIR),
+                    &prefix,
+                    theme.entry(entry),
+                )
             }
             (Self::Root(columns), Row::Local) => {
-                let name = format!("{}{}", decor.local(), fl!("root-local"));
-                styled(columns.join(&name, "~", [Align::Left; 2]), theme.directory)
+                let prefix = decor.local();
+                let name = format!("{prefix}{}", fl!("root-local"));
+                styled(
+                    columns.join(&name, "~", [Align::Left; 2]),
+                    prefix,
+                    theme.directory,
+                )
             }
             (Self::Root(columns), Row::Host(host)) => {
                 let name = host.label.as_deref().unwrap_or(&host.alias);
@@ -907,16 +921,28 @@ impl Columns {
                 // The status marker leads the name cell and has a color of its own.
                 let marker_len = name.chars().next().map_or(0, char::len_utf8);
                 let (marker, name) = name.split_at(marker_len);
-                Line::from(vec![
-                    Span::styled(marker.to_owned(), theme.host_status(status)),
-                    Span::raw(name.to_owned()),
-                    Span::styled(rest, theme.address),
-                ])
+                let mut spans = vec![Span::styled(marker.to_owned(), theme.host_status(status))];
+                let prefix = prefix.get(marker_len..).unwrap_or_default();
+                spans.extend(icon_spans(name.to_owned(), prefix, Style::new(), view));
+                spans.push(Span::styled(rest, theme.address));
+                Line::from(spans)
             }
             // A listing has only rows of its own kind.
             (Self::Dir(_), Row::Local | Row::Host(_))
             | (Self::Root(_), Row::Parent | Row::Entry(_)) => Line::default(),
         }
+    }
+}
+
+/// A name cell in `style`, with the icon of its `prefix` toned down. A cell cut so short that
+/// the prefix lost its end, and mc's markers, are drawn whole in `style`.
+fn icon_spans(name: String, prefix: &str, style: Style, view: &View<'_>) -> Vec<Span<'static>> {
+    match name.strip_prefix(prefix) {
+        Some(rest) if view.decor.icons() && !prefix.is_empty() => vec![
+            Span::styled(prefix.to_owned(), view.theme.icon),
+            Span::styled(rest.to_owned(), style),
+        ],
+        _ => vec![Span::styled(name, style)],
     }
 }
 
@@ -1952,6 +1978,62 @@ mod tests {
         };
         let terminal = render_with(&mut root, (40, 8), true, &connected, Decor::new(true));
         insta::assert_snapshot!("draws_icons_in_the_root", terminal.backend());
+    }
+
+    #[test]
+    fn icons_are_dimmed_and_names_keep_their_colors() {
+        use ratatui::style::{Color, Modifier};
+
+        let mut panel = loaded("/srv", varied());
+        let hosts = |_: &str| HostState::default();
+        let theme = Theme::mc_classic();
+        let terminal = render_themed(
+            &mut panel,
+            (40, 12),
+            false,
+            &hosts,
+            Decor::new(true),
+            &theme,
+        );
+        let buffer = terminal.backend().buffer();
+        let look = |x: u16, y: u16| {
+            let cell = &buffer[(x, y)];
+            (cell.fg, cell.modifier.contains(Modifier::DIM))
+        };
+        // Rows: frame, header, `..`, Adir, dir1, .env, a.txt, b.md.
+        assert_eq!(look(1, 2), (Color::Gray, true), "the icon of `..`");
+        assert_eq!(look(1, 3), (Color::Gray, true), "the icon of a directory");
+        assert_eq!(look(3, 3), (Color::White, false), "its name");
+        assert_eq!(look(1, 6), (Color::Gray, true), "the icon of a file");
+        assert_eq!(look(3, 6), (Color::Gray, false), "its name");
+
+        let mut root = root();
+        let connected = |_: &str| HostState {
+            status: HostStatus::Connected,
+            address: None,
+        };
+        let terminal = render_themed(
+            &mut root,
+            (40, 8),
+            false,
+            &connected,
+            Decor::new(true),
+            &theme,
+        );
+        let buffer = terminal.backend().buffer();
+        let look = |x: u16, y: u16| {
+            let cell = &buffer[(x, y)];
+            (cell.fg, cell.modifier.contains(Modifier::DIM))
+        };
+        // Rows: frame, header, local, the first host.
+        assert_eq!(
+            look(3, 2),
+            (Color::Gray, true),
+            "the icon of the local files"
+        );
+        assert_eq!(look(1, 3), (Color::LightGreen, false), "the host's status");
+        assert_eq!(look(3, 3), (Color::Gray, true), "the icon of the host");
+        assert_eq!(look(5, 3), (Color::Gray, false), "its name");
     }
 
     #[test]

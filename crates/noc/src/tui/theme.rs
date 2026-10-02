@@ -25,6 +25,8 @@ pub(crate) struct Theme {
     pub(crate) marked_cursor: Style,
     /// What quick search has matched so far.
     pub(crate) quick_search: Style,
+    /// Icons in front of names, toned down so the names stand out.
+    pub(crate) icon: Style,
     /// Regular file.
     pub(crate) file: Style,
     /// Directory, and symlink to a directory.
@@ -96,6 +98,7 @@ impl Theme {
             marked: on(Color::LightYellow, Color::Blue),
             marked_cursor: on(Color::LightYellow, Color::Cyan),
             quick_search: on(Color::Black, Color::Cyan),
+            icon: fg(Color::Gray).dim(),
             file: fg(Color::Gray),
             directory: fg(Color::White),
             executable: fg(Color::LightGreen),
@@ -138,6 +141,7 @@ impl Theme {
             marked: Style::new().bold(),
             marked_cursor: reversed.bold(),
             quick_search: reversed,
+            icon: plain.dim(),
             file: plain,
             directory: plain,
             executable: plain,
@@ -245,6 +249,7 @@ mod tests {
             Some(Color::LightGreen)
         );
         assert_eq!(fg(entry(FileKind::File, 0o644, None)), Some(Color::Gray));
+        assert_eq!(theme.icon, Style::new().fg(Color::Gray).dim());
         assert_eq!(
             fg(entry(FileKind::CharDevice, 0o644, None)),
             Some(Color::LightMagenta)

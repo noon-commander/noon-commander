@@ -23,6 +23,8 @@ pub struct Config {
     pub ssh: SshConfig,
     /// `[discovery]`: which hosts from `ssh_config` are listed.
     pub discovery: DiscoveryConfig,
+    /// `[volumes]`: which mounted volumes the root lists.
+    pub volumes: VolumesConfig,
     /// `[hosts."<alias>"]`: decorations for hosts from `ssh_config`, keyed by host alias.
     pub hosts: BTreeMap<String, HostConfig>,
     /// `[ui]`: how the TUI looks.
@@ -144,6 +146,15 @@ impl Default for DiscoveryConfig {
     }
 }
 
+/// The `[volumes]` section.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct VolumesConfig {
+    /// Mount points to leave out of the root, as patterns with `*` and `?`, such as
+    /// `/Volumes/Backup*`. The system volume is always listed. Default: none.
+    pub hide: Vec<String>,
+}
+
 /// A `[hosts."<alias>"]` table: decorations for one host from `ssh_config`.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
@@ -257,7 +268,7 @@ mod tests {
 
     use super::{
         Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, HostConfig, SshConfig, TransferConfig,
-        UiConfig,
+        UiConfig, VolumesConfig,
     };
     use crate::{ConfigError, write_default_config};
 
@@ -287,6 +298,9 @@ mod tests {
 
         [discovery]
         hide = ["*.internal", "git?"]
+
+        [volumes]
+        hide = ["/Volumes/Backup*"]
 
         [hosts."prod-web"]
         label = "Prod"
@@ -318,6 +332,9 @@ mod tests {
             },
             discovery: DiscoveryConfig {
                 hide: strings(&["*.internal", "git?"]),
+            },
+            volumes: VolumesConfig {
+                hide: strings(&["/Volumes/Backup*"]),
             },
             hosts: BTreeMap::from([
                 (
@@ -534,6 +551,7 @@ mod tests {
             assert!(table["ssh"].get(key).is_some(), "ssh.{key}");
         }
         assert!(table["discovery"].get("hide").is_some());
+        assert!(table["volumes"].get("hide").is_some());
         assert!(table["ui"].get("language").is_some());
         assert!(table["ui"].get("theme").is_some());
         assert!(table["ui"].get("borders").is_some());

@@ -30,6 +30,11 @@ multiplex = true
 # Hosts from ssh_config to leave out of the host list. Patterns may use `*` and `?`.
 hide = ["github.com", "gitlab.com", "bitbucket.org"]
 
+[volumes]
+# Mounted volumes to leave out of the root, by mount point, such as "/Volumes/Backup*" or
+# "/mnt/*". Patterns may use `*` and `?`. The system volume is always listed.
+hide = []
+
 [ui]
 # Interface language, such as "en-US", or "auto" for the system locale. Only English exists so
 # far; other languages fall back to it.

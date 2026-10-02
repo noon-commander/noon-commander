@@ -73,16 +73,17 @@ by validation ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)).
 
 ## Virtual root
 
-The root of the virtual file system lists the mounted volumes and, as one row, the hosts from
-the ssh config ([ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)):
+The root of the virtual file system lists the home directory, the mounted volumes, and, as one
+row, the hosts from the ssh config ([ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)):
 
 ```text
 ╔ alex-mbp ═══════════════════════════╗╔ SFTP ═══════════════════════════════╗
 ║          Name        │ Free  │ Size ║║        Name       │     Address     ║
-║+ Macintosh HD        │   212G│  994G║║/..                │UP--DIR          ║
-║+ SANDISK             │    12G│   64G║║● prod-web         │deploy@10.0.0.5  ║
-║+ share               │      ?│     ?║║○ staging          │ubuntu@stg:2222  ║
-║/ SFTP                │        3 hosts║║✗ nas              │admin@nas        ║
+║~ Home                │   212G│  994G║║/..                │UP--DIR          ║
+║+ Macintosh HD        │   212G│  994G║║● prod-web         │deploy@10.0.0.5  ║
+║+ SANDISK             │    12G│   64G║║○ staging          │ubuntu@stg:2222  ║
+║+ share               │      ?│     ?║║✗ nas              │admin@nas        ║
+║/ SFTP                │        3 hosts║║                                     ║
 ║● prod-web            │deploy@10.0.0.5║║                                     ║
 ╟─────────────────────────────────────╢╟─────────────────────────────────────╢
 ║/Volumes/SANDISK  exfat              ║║prod-web                             ║
@@ -90,8 +91,9 @@ the ssh config ([ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)):
  1Help 2Menu 3View 4Edit 5Copy 6RenMov 7Mkdir 8Delete 9PullDn 10Quit
 ```
 
-- The root is titled with the name of the machine. Volumes come first, the system volume (`/`)
-  on top and the others by mount point, named by their label or else their mount point, with
+- The root is titled with the name of the machine. `Home` comes first and opens the home
+  directory, with the space of the volume that holds it; the status line shows its path. The
+  volumes follow, the system volume (`/`) on top and the others by mount point, named by their label or else their mount point, with
   their free space and size; the status line shows a volume's mount point and file system.
   Every volume opens at its mount point, the system volume at `/`, so `..` from `/` and Enter
   lead back where the panel was.
@@ -129,23 +131,25 @@ the ssh config ([ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)):
 ### Location menu
 
 Alt-F1 and Alt-F2, as Far Manager's menus to change drives, open a menu over the left or the
-right panel with the same places: the volumes, then every host (Ctrl-X 1 and Ctrl-X 2 too, for
+right panel with the same places: the home directory, the volumes, then every host (Ctrl-X 1 and Ctrl-X 2 too, for
 terminals whose Alt-F1 never arrives, such as macOS Terminal without Option as Meta).
 
 ```text
  ╔════════════════════ Left ════════════════════╗
  ║ Filter:                                      ║
  ║ ──────────────────────────────────────────── ║
- ║ 1 + Macintosh HD                        212G ║
- ║ 2 + USB                                  12G ║
- ║ 3 + share                                  ? ║
+ ║ 1 ~ Home                                212G ║
+ ║ 2 + Macintosh HD                        212G ║
+ ║ 3 + USB                                  12G ║
+ ║ 4 + share                                  ? ║
  ║ ─ SFTP ───────────────────────────────────── ║
- ║ 4 ● Prod                     deploy@10.0.0.5 ║
- ║ 5 ○ db                                       ║
+ ║ 5 ● Prod                     deploy@10.0.0.5 ║
+ ║ 6 ○ db                                       ║
  ╚══════════════════════════════════════════════╝
 ```
 
-- The cursor starts on the volume that holds the panel's directory, or on its host. Enter
+- The cursor starts on the home directory or the volume that holds the panel's directory,
+  whichever is nearer, or on its host. Enter
   opens the row in that panel, which becomes active; while the filter is empty, `1` … `9` and
   `0` open the first ten rows.
 - Typing filters the rows by name, mount point, alias, and address, ignoring case; Backspace

@@ -2,6 +2,7 @@
 
 use std::io;
 use std::os::unix::ffi::OsStrExt as _;
+use std::path::Path;
 use std::time::Duration;
 
 use noc_ssh::CachedHost;
@@ -62,6 +63,14 @@ pub(crate) async fn read_volumes(hide: &[String]) -> Vec<Volume> {
             || !hide.iter().any(|pattern| wildcard_match(pattern, &path))
     });
     volumes
+}
+
+/// The volume that holds `path`: the one with the longest mount point it is under.
+pub(crate) fn volume_of<'a>(volumes: &'a [Volume], path: &Path) -> Option<&'a Volume> {
+    volumes
+        .iter()
+        .filter(|volume| path.starts_with(&volume.mount_point))
+        .max_by_key(|volume| volume.mount_point.as_os_str().len())
 }
 
 /// The name of a volume, terminal-safe: its label, or else its mount point.
@@ -150,6 +159,27 @@ mod tests {
         assert_eq!(volume_name(&volume), "My?Disk", "terminal-safe");
         volume.label = None;
         assert_eq!(volume_name(&volume), "/mnt/usb");
+    }
+
+    #[test]
+    fn a_path_is_on_the_volume_with_the_longest_mount_point_above_it() {
+        let volume = |path: &str| Volume {
+            mount_point: PathBuf::from(path),
+            label: None,
+            fs_type: None,
+            kind: VolumeKind::Local,
+            space: None,
+        };
+        let volumes = [volume("/"), volume("/home"), volume("/homes")];
+        let on = |path: &str| volume_of(&volumes, Path::new(path)).map(|v| v.mount_point.clone());
+        assert_eq!(on("/home/me"), Some(PathBuf::from("/home")));
+        assert_eq!(
+            on("/homework"),
+            Some(PathBuf::from("/")),
+            "whole components"
+        );
+        assert_eq!(on("/"), Some(PathBuf::from("/")));
+        assert_eq!(volume_of(&volumes[1..], Path::new("/srv")), None);
     }
 
     #[tokio::test]

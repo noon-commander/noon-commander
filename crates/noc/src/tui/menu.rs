@@ -1,10 +1,10 @@
-//! The location menu of Alt-F1 and Alt-F2, as Far Manager's menu to change drives: the
-//! volumes and the SFTP hosts, for one panel. Typing filters it; while the filter is empty,
+//! The location menu of Alt-F1 and Alt-F2, as Far Manager's menu to change drives: the home
+//! directory, the volumes, and the SFTP hosts, for one panel. Typing filters it; while the filter is empty,
 //! `1` … `9` and `0` open the first ten rows.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use noc_vfs::{Location, Volume};
+use noc_vfs::{Location, Space, Volume};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::Style;
@@ -16,7 +16,7 @@ use super::decor::Decor;
 use super::dialog::{Colors, draw_box};
 use super::keymap::{Action, Resolved};
 use super::panel::{HostState, Listed, Listing};
-use super::root::{RootHost, volume_name};
+use super::root::{RootHost, volume_name, volume_of};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -41,6 +41,8 @@ pub(crate) enum MenuEvent {
 /// A row that can be chosen.
 #[derive(Debug, Clone, Copy)]
 enum Item<'a> {
+    /// The home directory, with the space of the volume that holds it.
+    Home(&'a Path, Option<Space>),
     Volume(&'a Volume),
     Host(&'a RootHost),
 }
@@ -59,6 +61,8 @@ pub(crate) struct LocationMenu {
     side: Side,
     /// Where the panel is: the row the cursor starts on.
     current: Location,
+    /// The home directory, the first row.
+    home: PathBuf,
     /// Of the listing the menu waits for; a reply to an older one is dropped.
     generation: u64,
     volumes: Vec<Volume>,
@@ -76,11 +80,12 @@ pub(crate) struct LocationMenu {
 
 impl LocationMenu {
     /// A menu for the panel on `side`, which shows `current`, waiting for the listing
-    /// `generation`.
-    pub(crate) fn new(side: Side, current: Location, generation: u64) -> Self {
+    /// `generation`. Its first row opens `home`.
+    pub(crate) fn new(side: Side, current: Location, home: PathBuf, generation: u64) -> Self {
         Self {
             side,
             current,
+            home,
             generation,
             volumes: Vec::new(),
             hosts: Vec::new(),
@@ -131,20 +136,24 @@ impl LocationMenu {
         }
     }
 
-    /// The row of the volume that holds the panel's directory, or of its host.
+    /// The row of the home directory or the volume that holds the panel's directory, whichever
+    /// is nearer, or of its host.
     fn current_row(&self, items: &[Item<'_>]) -> usize {
         let position = match &self.current {
             Location::Local(path) => items
                 .iter()
                 .enumerate()
-                .filter_map(|(row, item)| match item {
-                    Item::Volume(volume) if path.starts_with(&volume.mount_point) => {
-                        Some((volume.mount_point.as_os_str().len(), row))
-                    }
-                    _ => None,
+                .filter_map(|(row, item)| {
+                    let top = match item {
+                        Item::Home(home, _) => *home,
+                        Item::Volume(volume) => &volume.mount_point,
+                        Item::Host(_) => return None,
+                    };
+                    path.starts_with(top)
+                        .then_some((top.as_os_str().len(), std::cmp::Reverse(row)))
                 })
                 .max()
-                .map(|(_, row)| row),
+                .map(|(_, std::cmp::Reverse(row))| row),
             Location::Remote { host, .. } => items
                 .iter()
                 .position(|item| matches!(item, Item::Host(shown) if shown.alias == *host)),
@@ -154,10 +163,17 @@ impl LocationMenu {
         position.unwrap_or(0)
     }
 
-    /// The rows the filter shows: volumes, then hosts.
+    /// The rows the filter shows: the home directory, the volumes, then the hosts.
     fn items(&self) -> Vec<Item<'_>> {
         let filter = self.filter.to_lowercase();
         let has = |text: &str| text.to_lowercase().contains(&filter);
+        let home = (filter.is_empty()
+            || has(&fl!("root-home"))
+            || has(&self.home.to_string_lossy()))
+        .then(|| {
+            let space = volume_of(&self.volumes, &self.home).and_then(|volume| volume.space);
+            Item::Home(&self.home, space)
+        });
         let volumes = self
             .volumes
             .iter()
@@ -177,7 +193,7 @@ impl LocationMenu {
                     || host.address.as_deref().is_some_and(has)
             })
             .map(Item::Host);
-        volumes.chain(hosts).collect()
+        home.into_iter().chain(volumes).chain(hosts).collect()
     }
 
     /// The row under the cursor.
@@ -185,9 +201,11 @@ impl LocationMenu {
         self.items().get(self.cursor).copied()
     }
 
-    /// Where a row leads: a volume's mount point, or a host's home directory.
+    /// Where a row leads: the home directory, a volume's mount point, or a host's home
+    /// directory.
     fn open(item: Item<'_>) -> Location {
         match item {
+            Item::Home(home, _) => Location::Local(home.to_path_buf()),
             Item::Volume(volume) => Location::Local(volume.mount_point.clone()),
             Item::Host(host) => Location::Remote {
                 host: host.alias.clone(),
@@ -400,6 +418,7 @@ impl Look<'_> {
         (name_width, info_width): (usize, usize),
     ) -> Line<'static> {
         let (prefix, name, marker) = match item {
+            Item::Home(..) => (self.decor.home().to_owned(), fl!("root-home"), None),
             Item::Volume(volume) => (
                 self.decor.volume(volume.kind).to_owned(),
                 volume_name(volume),
@@ -439,24 +458,30 @@ impl Look<'_> {
 /// What identifies a row across listings.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Key {
+    Home,
     Volume(PathBuf),
     Host(String),
 }
 
 fn key(item: Item<'_>) -> Key {
     match item {
+        Item::Home(..) => Key::Home,
         Item::Volume(volume) => Key::Volume(volume.mount_point.clone()),
         Item::Host(host) => Key::Host(host.alias.clone()),
     }
 }
 
-/// Right of a row: the free space of a volume, or the address of a host.
+/// Right of a row: the free space of the home directory or a volume, or the address of a host.
 fn info(item: Item<'_>, hosts: &dyn Fn(&str) -> HostState) -> String {
-    match item {
-        Item::Volume(volume) => volume.space.map_or_else(
+    let free = |space: Option<Space>| {
+        space.map_or_else(
             || "?".to_owned(),
             |space| cells::size(space.available, FREE_WIDTH),
-        ),
+        )
+    };
+    match item {
+        Item::Home(_, space) => free(space),
+        Item::Volume(volume) => free(volume.space),
         Item::Host(host) => {
             let address = hosts(&host.alias).address.or_else(|| host.address.clone());
             cells::sanitize(address.unwrap_or_default().as_bytes())
@@ -466,7 +491,7 @@ fn info(item: Item<'_>, hosts: &dyn Fn(&str) -> HostState) -> String {
 
 #[cfg(test)]
 mod tests {
-    use noc_vfs::{Space, VolumeKind};
+    use noc_vfs::VolumeKind;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
@@ -517,7 +542,7 @@ mod tests {
 
     /// A menu for the left panel on `current`, with its listing.
     fn menu_at(current: Location) -> LocationMenu {
-        let mut menu = LocationMenu::new(Side::Left, current, 1);
+        let mut menu = LocationMenu::new(Side::Left, current, PathBuf::from("/Users/me"), 1);
         menu.listed(1, Ok(listing()));
         menu
     }
@@ -575,25 +600,31 @@ mod tests {
             at(local("/Volumes/USB/photos")),
             Some(Key::Volume(PathBuf::from("/Volumes/USB")))
         );
-        assert_eq!(at(local("/home/me")), Some(Key::Volume(PathBuf::from("/"))));
+        assert_eq!(at(local("/Users/me/src")), Some(Key::Home), "nearer than /");
+        assert_eq!(at(local("/Users")), Some(Key::Volume(PathBuf::from("/"))));
         assert_eq!(at(remote("db")), Some(Key::Host("db".to_owned())));
         assert_eq!(at(Location::Sftp), Some(Key::Host("web".to_owned())));
-        assert_eq!(at(Location::Root), Some(Key::Volume(PathBuf::from("/"))));
+        assert_eq!(at(Location::Root), Some(Key::Home));
     }
 
     #[test]
-    fn enter_and_digits_open_volumes_at_their_mount_points_and_hosts() {
+    fn enter_and_digits_open_home_volumes_and_hosts() {
         let mut menu = menu_at(Location::Root);
         assert_eq!(
             press(&mut menu, Action::Confirm),
-            MenuEvent::Open(Location::Local(PathBuf::from("/")))
+            MenuEvent::Open(Location::Local(PathBuf::from("/Users/me")))
         );
         assert_eq!(
             menu.handle(Resolved::Insert('2')),
+            MenuEvent::Open(Location::Local(PathBuf::from("/"))),
+            "volumes open at their mount points"
+        );
+        assert_eq!(
+            menu.handle(Resolved::Insert('3')),
             MenuEvent::Open(Location::Local(PathBuf::from("/Volumes/USB")))
         );
         assert_eq!(
-            menu.handle(Resolved::Insert('5')),
+            menu.handle(Resolved::Insert('6')),
             MenuEvent::Open(remote("db"))
         );
         assert_eq!(
@@ -634,6 +665,9 @@ mod tests {
         );
         typed(&mut menu, "1");
         assert!(menu.items().is_empty());
+        let mut home = menu_at(Location::Root);
+        typed(&mut home, "hom");
+        assert_eq!(home.chosen().map(key), Some(Key::Home));
         assert_eq!(press(&mut menu, Action::Confirm), MenuEvent::Pending);
         let text = draw(&mut menu, 12);
         assert!(text.contains("Nothing matches"), "{text}");
@@ -667,14 +701,15 @@ mod tests {
         );
         menu.listed(2, Ok(reordered));
         assert_eq!(menu.chosen().map(key), Some(Key::Host("db".to_owned())));
-        assert_eq!(menu.items().len(), 6);
+        assert_eq!(menu.items().len(), 7);
     }
 
     #[test]
     fn draws_volumes_then_hosts_with_hotkeys() {
         let mut menu = menu_at(remote("web"));
         insta::assert_snapshot!(draw(&mut menu, 14));
-        let mut loading = LocationMenu::new(Side::Right, Location::Root, 1);
+        let mut loading =
+            LocationMenu::new(Side::Right, Location::Root, PathBuf::from("/Users/me"), 1);
         let text = draw(&mut loading, 10);
         assert!(
             text.contains("Right") && text.contains("Loading…"),

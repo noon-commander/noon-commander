@@ -1,14 +1,15 @@
 ---
 source: crates/noc/src/tui/panel.rs
-expression: "render(&mut panel, 50, 10, true, &online)"
+expression: "render(&mut panel, 50, 11, true, &online)"
 ---
 "╔ alex-mbp ══════════════════════════════════════╗"
 "║              Name              │ Free  │ Size  ║"
+"║~ Home                          │   212G│   994G║"
 "║+ Macintosh HD                  │   212G│   994G║"
 "║+ USB                           │   212G│   994G║"
 "║+ share                         │      ?│      ?║"
 "║/ SFTP                          │        3 hosts║"
 "║● Prod                          │deploy@10.0.0.5║"
 "╟────────────────────────────────────────────────╢"
-"║/Volumes/USB  apfs                              ║"
+"║/  apfs                                         ║"
 "╚════════════════════════════════════════════════╝"

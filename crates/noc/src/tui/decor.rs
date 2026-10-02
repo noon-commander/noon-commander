@@ -36,6 +36,11 @@ impl Decor {
         if self.icons { " " } else { "/" }
     }
 
+    /// The prefix of the home directory in the virtual root, in line with the hosts' status.
+    pub(crate) fn home(self) -> &'static str {
+        if self.icons { "  󰋜 " } else { "~ " }
+    }
+
     /// The prefix of a volume in the virtual root, in line with the hosts' status: a disk, a
     /// network drive, or mc's marker of block devices.
     pub(crate) fn volume(self, kind: VolumeKind) -> &'static str {
@@ -224,10 +229,12 @@ mod tests {
         assert_eq!(spun, ["| ", "/ ", "- ", "\\ ", "| "]);
         assert_eq!(plain.volume(VolumeKind::System), "+ ");
         assert_eq!(plain.sftp(), "/ ");
+        assert_eq!(plain.home(), "~ ");
         let icons = Decor::new(true);
         assert_eq!(icons.host(HostStatus::Connected, 0), "● 󰒋 ");
         assert_eq!(icons.volume(VolumeKind::Local), "  󰋊 ");
         assert_eq!(icons.volume(VolumeKind::Network), "  󰣳 ");
         assert_eq!(icons.sftp(), "  󰒍 ");
+        assert_eq!(icons.home(), "  󰋜 ");
     }
 }

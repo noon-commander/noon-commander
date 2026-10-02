@@ -353,6 +353,8 @@ pub(crate) struct App {
     menu: Option<LocationMenu>,
     /// The generation of the last listing for the menu.
     menu_listings: u64,
+    /// The home directory, the first row of the location menu.
+    home: PathBuf,
     /// The title of the virtual root: the name of this machine.
     root_title: String,
     keymap: Keymap,
@@ -361,8 +363,8 @@ pub(crate) struct App {
 }
 
 impl App {
-    /// Both panels on the local directory `start`, and the listings to request for them. `~` in
-    /// dialogs stands for `home`.
+    /// Both panels on the local directory `start`, and the listings to request for them. The
+    /// virtual root and the location menu open `home`, which `~` in dialogs stands for too.
     pub(crate) fn new(
         start: &Path,
         home: &Path,
@@ -410,6 +412,7 @@ impl App {
             help: None,
             menu: None,
             menu_listings: 0,
+            home: home.to_path_buf(),
             root_title: fl!("root-title"),
             keymap: Keymap::mc(),
             quit: false,
@@ -712,7 +715,7 @@ impl App {
         self.menu_listings += 1;
         let generation = self.menu_listings;
         let current = self.panel(side).location().clone();
-        let menu = LocationMenu::new(side, current, generation);
+        let menu = LocationMenu::new(side, current, self.home.clone(), generation);
         self.menu = Some(menu);
         vec![Effect::ListPlaces { generation }]
     }
@@ -2108,6 +2111,7 @@ mod tests {
                 hosts: hosts.to_vec(),
             };
             answer(&mut app, effects, &root);
+            app.handle(action(Action::End));
             let effects = app.handle(action(Action::Enter));
             answer(&mut app, effects, &Listing::Hosts(hosts.to_vec()));
         }
@@ -3596,7 +3600,7 @@ mod tests {
         );
         // Panel keys do nothing while it is open.
         assert!(app.handle(action(Action::SwitchPanel)).is_empty());
-        let Effect::List { side, request, .. } = one(app.handle(Resolved::Insert('2'))) else {
+        let Effect::List { side, request, .. } = one(app.handle(Resolved::Insert('3'))) else {
             panic!("expected a listing");
         };
         assert_eq!(
@@ -3670,7 +3674,7 @@ mod tests {
         app.active = Side::Right;
         let effects = app.handle(action(Action::Parent));
         answer(&mut app, effects, &root);
-        app.handle(action(Action::Enter));
+        app.handle(action(Action::End));
         let effects = app.handle(action(Action::Enter));
         answer(&mut app, effects, &Listing::Hosts(hosts.to_vec()));
         let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Right, 2)) else {
@@ -3678,8 +3682,8 @@ mod tests {
         };
         // The row below the left root's row of hosts.
         let below = |app: &mut App| {
-            let text = screen(app);
-            let line = text.lines().nth(3).unwrap_or_default().to_owned();
+            let text = screen_of(app, 10);
+            let line = text.lines().nth(4).unwrap_or_default().to_owned();
             line.split("║║").next().unwrap_or_default().to_owned()
         };
         assert!(below(&mut app).contains("db"), "the left root shows it");

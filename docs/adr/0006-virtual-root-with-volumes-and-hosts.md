@@ -17,11 +17,13 @@ NFS or SMB mount can block in the kernel forever.
 
 ## Decision
 
-- The root lists the mounted volumes first, the system volume (`/`) on top, named by the file
-  system's label or else its mount point. Every volume opens at its mount point, the system
-  volume at `/` too: a row that looks like `/` and opened the home directory, as `[Local]` did,
-  would be the only one that does not go where it says, and on Linux with a separate `/home` it
-  would lead onto another volume. No row is called "Local": the name means nothing on a
+- The root lists `Home` first, which opens the home directory on macOS and Linux alike, then
+  the mounted volumes, the system volume (`/`) on top, named by the file system's label or else
+  its mount point. Every volume opens at its mount point, the system volume at `/` too: a row
+  that looks like `/` and opened the home directory, as `[Local]` did, would be the only one
+  that does not go where it says, and on Linux with a separate `/home` it would lead onto
+  another volume. The home directory has a row of its own instead, with the space of the volume
+  that holds it. No row is called "Local": the name means nothing on a
   machine with several disks.
 - The hosts from the ssh config are one row of the root, `SFTP`, which opens like a directory:
   `Location::Sftp`, with `..` back to the root. Hosts that are connected or connecting show
@@ -36,7 +38,7 @@ NFS or SMB mount can block in the kernel forever.
   without them and is not asked again until the earlier call returns. `[volumes] hide` leaves
   out mount points by pattern.
 - Alt-F1 and Alt-F2 (and Ctrl-X 1, Ctrl-X 2, for terminals without them) open a location menu
-  over the left or right panel: the volumes, then every host, with `1` … `0` as hotkeys while
+  over the left or right panel: `Home`, the volumes, then every host, with `1` … `0` as hotkeys while
   its filter is empty and typing to filter. It reads the same listing as the root.
 
 ## Consequences
@@ -49,6 +51,4 @@ NFS or SMB mount can block in the kernel forever.
   skipped until it answers.
 - Volumes are read when the root or the menu is listed (and on Ctrl-R), not watched; a disk
   that is plugged in shows up on the next listing.
-- The home directory is no longer one Enter away from the root; bookmarks and history (M4)
-  are to take that over.
 - The F9 pull-down menu, when it comes, offers the location menu too.

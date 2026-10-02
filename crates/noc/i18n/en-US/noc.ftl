@@ -67,6 +67,8 @@ error-not-openssh = { $program } is not OpenSSH
 # Title of the panel that lists the mounted volumes and the hosts, where the name of the machine
 # is not known.
 root-title = Locations
+# The first row of the virtual root, which opens the home directory.
+root-home = Home
 # The row of the virtual root that opens the list of hosts from ssh_config, and that list's title.
 root-sftp = SFTP
 # Next to that row: how many hosts it holds.

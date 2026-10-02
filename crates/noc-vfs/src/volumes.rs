@@ -186,6 +186,19 @@ async fn statvfs_volumes(candidates: Vec<Candidate>, timeout: Duration) -> Vec<V
     .await
 }
 
+/// The space of the file system that holds `path`. Blocking; a dead network mount hangs it.
+#[cfg(target_os = "macos")]
+pub(crate) fn space_of(path: &Path) -> io::Result<Space> {
+    // `statvfs` on macOS has 32-bit block counts; `statfs` does not.
+    macos::stat(path).map(|stat| stat.space)
+}
+
+/// The space of the file system that holds `path`. Blocking; a dead network mount hangs it.
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn space_of(path: &Path) -> io::Result<Space> {
+    statvfs_space(path)
+}
+
 #[cfg_attr(target_os = "macos", allow(dead_code))]
 fn statvfs_space(path: &Path) -> io::Result<Space> {
     let stat = rustix::fs::statvfs(path)?;
@@ -531,7 +544,7 @@ mod macos {
         mount_on: PathBuf,
         fs_type: String,
         flags: u32,
-        space: Space,
+        pub(super) space: Space,
     }
 
     pub(super) fn stat(path: &Path) -> io::Result<Stat> {

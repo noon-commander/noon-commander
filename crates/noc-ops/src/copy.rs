@@ -1471,6 +1471,9 @@ mod tests {
         async fn symlink_metadata(&self, path: &PathBuf) -> Result<Metadata, VfsError> {
             LocalFs.symlink_metadata(path).await
         }
+        async fn space(&self, path: &PathBuf) -> Result<Option<noc_vfs::Space>, VfsError> {
+            LocalFs.space(path).await
+        }
         async fn canonicalize(&self, path: &PathBuf) -> Result<PathBuf, VfsError> {
             LocalFs.canonicalize(path).await
         }

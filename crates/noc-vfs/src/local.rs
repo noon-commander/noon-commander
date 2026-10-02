@@ -9,7 +9,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rustix::fs::{AtFlags, CWD, Timespec, Timestamps};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
-use crate::{DirEntry, FileKind, FileReader, FileWriter, Metadata, Vfs, VfsError};
+use crate::volumes::space_of;
+use crate::{DirEntry, FileKind, FileReader, FileWriter, Metadata, Space, Vfs, VfsError};
 
 /// Bytes each read of a local file asks for.
 const CHUNK: usize = 256 * 1024;
@@ -91,6 +92,15 @@ impl Vfs for LocalFs {
             .await
             .map_err(|err| VfsError::local(err, path))?;
         Ok(convert(&metadata))
+    }
+
+    async fn space(&self, path: &PathBuf) -> Result<Option<Space>, VfsError> {
+        let target = os_path(path).to_path_buf();
+        tokio::task::spawn_blocking(move || space_of(&target))
+            .await
+            .map_err(VfsError::task_failed)?
+            .map(Some)
+            .map_err(|err| VfsError::local(err, path))
     }
 
     async fn canonicalize(&self, path: &PathBuf) -> Result<PathBuf, VfsError> {
@@ -322,6 +332,21 @@ mod tests {
             matches!(&err, VfsError::NotFound(p) if *p == path("dangling").display().to_string()),
             "{err:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn tells_the_space_of_the_file_system() {
+        let dir = tempfile::tempdir().unwrap();
+        let space = LocalFs.space(&dir.path().to_path_buf()).await.unwrap();
+        let space = space.expect("a local file system tells its space");
+        assert!(
+            space.total > 0 && space.available <= space.total,
+            "{space:?}"
+        );
+
+        let missing = dir.path().join("missing");
+        let err = LocalFs.space(&missing).await.unwrap_err();
+        assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
     }
 
     #[tokio::test]

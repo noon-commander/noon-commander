@@ -13,7 +13,9 @@ use openssh_sftp_client::{Error, Sftp, SftpOptions, UnixTimeStamp};
 use tokio::io::{AsyncRead, AsyncSeekExt as _, AsyncWrite};
 
 use crate::files::{Fetch, ReadPipeline};
-use crate::{DirEntry, FileKind, FileReader, FileWriter, Metadata, RemotePath, Vfs, VfsError};
+use crate::{
+    DirEntry, FileKind, FileReader, FileWriter, Metadata, RemotePath, Space, Vfs, VfsError,
+};
 
 /// Symlink targets a listing resolves at a time, the number of requests `sftp(1)` keeps in
 /// flight.
@@ -235,6 +237,26 @@ impl Vfs for SftpFs {
             .map_err(|err| VfsError::remote(err, path))
     }
 
+    async fn space(&self, path: &RemotePath) -> Result<Option<Space>, VfsError> {
+        if !self.sftp.support_statvfs() {
+            return Ok(None);
+        }
+        let mut fs = self.sftp.fs();
+        let stat = fs
+            .statvfs(wire_path(path))
+            .await
+            .map_err(|err| VfsError::remote(err, path))?;
+        let fragment = if stat.frsize == 0 {
+            stat.bsize
+        } else {
+            stat.frsize
+        };
+        Ok(Some(Space {
+            total: stat.blocks.saturating_mul(fragment),
+            available: stat.bavail.saturating_mul(fragment),
+        }))
+    }
+
     async fn canonicalize(&self, path: &RemotePath) -> Result<RemotePath, VfsError> {
         let mut fs = self.sftp.fs();
         let canonical = fs
@@ -432,7 +454,7 @@ mod tests {
     use tokio::process::{Child, ChildStdout, Command};
 
     use super::*;
-    use crate::fixture;
+    use crate::{LocalFs, fixture};
 
     /// `$SFTP_SERVER`, or the first `sftp-server` found in the usual places.
     fn sftp_server() -> Option<PathBuf> {
@@ -689,6 +711,25 @@ mod tests {
         };
         let root = std::fs::canonicalize(dir.path()).unwrap();
         assert_eq!(server.fs.home().await.unwrap(), remote(&root));
+        server.stop().await;
+    }
+
+    #[tokio::test]
+    async fn tells_the_space_of_the_file_system() {
+        let dir = fixture::tree();
+        let Some(server) = Server::start(dir.path()).await else {
+            return;
+        };
+        let local = LocalFs.space(&dir.path().to_path_buf()).await.unwrap();
+        let space = server.fs.space(&remote(&dir.path().join("dir"))).await;
+        let space = space.unwrap().expect("sftp-server has statvfs@openssh.com");
+        let local = local.expect("the local space");
+        assert_eq!(space.total, local.total, "the same file system");
+        assert!(space.available <= space.total, "{space:?}");
+        assert!(server.fs.space(&"".into()).await.unwrap().is_some(), "home");
+
+        let err = server.fs.space(&"missing".into()).await.unwrap_err();
+        assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
         server.stop().await;
     }
 

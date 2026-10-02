@@ -49,7 +49,9 @@ terminal, so it can neither read from nor draw on the TUI's terminal.
 leftovers of crashed instances.
 
 The `Vfs` trait of `noc-vfs`, implemented by `LocalFs` and `SftpFs`, lists directories,
-reads metadata with and without following symlinks, canonicalizes paths, creates and removes
+reads metadata with and without following symlinks, tells the size and free space of the file
+system that holds a path (`None` from an SFTP server without `statvfs@openssh.com`),
+canonicalizes paths, creates and removes
 directories, removes files, renames, reads and makes symlinks (their targets stored as given,
 never resolved), sets permissions and modification times, and reads and writes files as chunks (`FileReader`, `FileWriter`, whose `finish` reports errors that only
 show when a file is closed). Over SFTP, reads and writes of a file keep 64 requests of 32 KiB

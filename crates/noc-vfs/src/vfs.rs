@@ -4,7 +4,7 @@ use std::os::unix::ffi::OsStrExt as _;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
-use crate::{DirEntry, FileReader, FileWriter, Metadata, RemotePath, VfsError};
+use crate::{DirEntry, FileReader, FileWriter, Metadata, RemotePath, Space, VfsError};
 
 /// What code that works on any backend needs from its paths.
 pub trait VfsPath: Clone + fmt::Debug + Send + Sync + 'static {
@@ -87,6 +87,14 @@ pub trait Vfs: Send + Sync {
         &self,
         path: &Self::Path,
     ) -> impl Future<Output = Result<Metadata, VfsError>> + Send;
+
+    /// The size and free space of the file system that holds `path`; `None` when the backend
+    /// cannot tell, as an SFTP server without `statvfs@openssh.com`. A dead network mount may
+    /// never answer, so callers bound the wait.
+    fn space(
+        &self,
+        path: &Self::Path,
+    ) -> impl Future<Output = Result<Option<Space>, VfsError>> + Send;
 
     /// Absolute form of `path` with symlinks resolved.
     fn canonicalize(

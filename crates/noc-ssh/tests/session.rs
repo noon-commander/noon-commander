@@ -292,7 +292,7 @@ async fn reports_authentication_failures() {
         }
         other => panic!("expected an exit error, got {other:?}"),
     }
-    assert!(fake.runtime_entries().is_empty());
+    assert_eq!(fake.runtime_entries(), [] as [PathBuf; 0]);
 }
 
 #[tokio::test]

@@ -1075,7 +1075,7 @@ mod tests {
         let tree = Tree::new();
         let config = tree.mkdir("home/.ssh/config");
         let discovery = tree.discover();
-        assert!(discovery.files.is_empty());
+        assert_eq!(discovery.files, [] as [PathBuf; 0]);
         assert!(
             matches!(
                 discovery.warnings.as_slice(),

@@ -377,7 +377,7 @@ fn ls_reports_connection_failures() {
     let text = stderr(&output);
     assert!(text.contains("cannot connect to web"), "{text}");
     assert!(text.contains("Permission denied (publickey)"), "{text}");
-    assert!(sandbox.runtime_entries().is_empty());
+    assert_eq!(sandbox.runtime_entries(), [] as [String; 0]);
 }
 
 #[test]
@@ -432,5 +432,5 @@ async fn askpass_mode_relays_the_prompt_and_answer() {
     prompt.cancel();
     let output = child.wait_with_output().await.unwrap();
     assert_eq!(output.status.code(), Some(1));
-    assert!(output.stdout.is_empty());
+    assert_eq!(output.stdout, b"");
 }

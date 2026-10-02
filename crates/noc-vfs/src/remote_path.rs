@@ -166,7 +166,7 @@ mod tests {
         assert_eq!(root.file_name(), None);
 
         let home = RemotePath::default();
-        assert!(home.as_bytes().is_empty());
+        assert_eq!(home.as_bytes(), b"");
         assert!(!home.is_absolute());
         assert_eq!(home.parent(), None);
         assert_eq!(home.file_name(), None);

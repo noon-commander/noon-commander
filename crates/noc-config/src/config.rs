@@ -333,7 +333,7 @@ mod tests {
         let config = Config::default();
         assert_eq!(config.ssh.program, Path::new("ssh"));
         assert_eq!(config.ssh.config_file, None);
-        assert!(config.ssh.args.is_empty());
+        assert_eq!(config.ssh.args, [] as [String; 0]);
         assert!(config.ssh.multiplex);
         assert_eq!(
             config.discovery.hide,
@@ -389,7 +389,10 @@ mod tests {
 
     #[test]
     fn an_empty_hide_list_shows_every_host() {
-        assert!(parse("[discovery]\nhide = []\n").discovery.hide.is_empty());
+        assert_eq!(
+            parse("[discovery]\nhide = []\n").discovery.hide,
+            [] as [String; 0]
+        );
     }
 
     #[test]

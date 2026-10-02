@@ -2538,7 +2538,7 @@ mod tests {
         let (second, targets) = &started[0];
         assert_eq!(targets, &[local("/srv/right")]);
         let effects = app.job_event(*second, JobEvent::Finished { complete: true });
-        assert!(deletes(&effects).is_empty());
+        assert_eq!(deletes(&effects), [] as [(u64, Vec<Location>); 0]);
         assert!(app.jobs.is_empty());
     }
 

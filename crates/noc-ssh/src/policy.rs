@@ -79,7 +79,7 @@ mod tests {
     #[test]
     fn session_options_follow_the_feature() {
         if FORWARDING_ENABLED {
-            assert!(session_options().is_empty());
+            assert_eq!(session_options(), []);
         } else {
             assert_eq!(session_options(), NO_FORWARDING_OPTIONS);
         }

@@ -2125,6 +2125,12 @@ dependencies = [
 [[package]]
 name = "sftp-tui-ops"
 version = "0.1.0"
+dependencies = [
+ "sftp-tui-vfs",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
 
 [[package]]
 name = "sftp-tui-ssh"

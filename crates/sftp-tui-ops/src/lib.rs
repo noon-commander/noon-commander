@@ -1,4 +1,10 @@
-//! File operation engine for sftp-tui: copy, move, delete, and mkdir jobs
-//! with progress, cancellation, and conflict handling.
+//! File operation engine for sftp-tui: jobs that work on any [`Vfs`](sftp_tui_vfs::Vfs) backend,
+//! report their progress, ask what to do when something fails, and stop when cancelled.
 //!
-//! Empty until milestone M3; see `docs/roadmap.md`.
+//! Deleting is here; copying and moving follow (see `docs/roadmap.md`).
+
+mod delete;
+mod job;
+
+pub use delete::delete;
+pub use job::{Decision, Event, Outcome, Progress, Reporter};

@@ -165,6 +165,21 @@ sftp-tui config paths       show the files and directories in use
   the TUI returns or fails, ratatui's panic hook does it before a panic message, and SIGTERM,
   SIGHUP, and SIGINT end the event loop like a quit.
 
+## File operations
+
+`sftp-tui-ops` holds jobs that work on any `Vfs` backend: generic code, which the UI runs
+with `LocalFs` in a task of its own or with a host's `SftpFs` in that host's task. A job talks
+to the UI through a `Reporter`: it sends `Event`s (`Scanning`, `Progress` with the entry at
+hand and done/total counts, `Failed`), and when an operation fails it waits for a `Decision`:
+Retry, Skip, Skip all (no more questions), or Abort. A `CancellationToken` stops it between
+operations and while it waits; so does a UI that stops listening. It returns an `Outcome`:
+entries done, entries skipped, and whether it was aborted.
+
+Deleting counts the entries first, so that progress has a total, then removes the deepest
+first. Listings report symlinks without following them, so a link goes and its target stays.
+A directory in which something stays (skipped, or unreadable) is left alone without asking
+again, and an entry that is already gone counts as deleted.
+
 ## Configuration and paths
 
 sftp-tui uses the XDG layout on every platform, including macOS, and respects the `XDG_*`

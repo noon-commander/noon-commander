@@ -1,6 +1,29 @@
+use std::ffi::OsStr;
+use std::fmt;
+use std::os::unix::ffi::OsStrExt as _;
+use std::path::PathBuf;
 use std::time::SystemTime;
 
-use crate::{DirEntry, Metadata, VfsError};
+use crate::{DirEntry, Metadata, RemotePath, VfsError};
+
+/// What code that works on any backend needs from its paths.
+pub trait VfsPath: Clone + fmt::Debug + Send + Sync + 'static {
+    /// The entry `name`, as a directory listing names it, of the directory at this path.
+    #[must_use]
+    fn join_name(&self, name: &[u8]) -> Self;
+}
+
+impl VfsPath for PathBuf {
+    fn join_name(&self, name: &[u8]) -> Self {
+        self.join(OsStr::from_bytes(name))
+    }
+}
+
+impl VfsPath for RemotePath {
+    fn join_name(&self, name: &[u8]) -> Self {
+        self.join(name)
+    }
+}
 
 /// File system operations shared by the local and SFTP backends.
 ///
@@ -10,7 +33,7 @@ use crate::{DirEntry, Metadata, VfsError};
 pub trait Vfs: Send + Sync {
     /// Owned path type: [`PathBuf`](std::path::PathBuf) for the local file system,
     /// [`RemotePath`](crate::RemotePath) for SFTP.
-    type Path: Clone + Send + Sync + 'static;
+    type Path: VfsPath;
 
     /// Lists a directory without `.` and `..`, in no particular order.
     fn list_dir(

@@ -20,4 +20,4 @@ pub use local::LocalFs;
 pub use location::{Location, RootEntry, root_entries};
 pub use remote_path::RemotePath;
 pub use sftp::SftpFs;
-pub use vfs::Vfs;
+pub use vfs::{Vfs, VfsPath};

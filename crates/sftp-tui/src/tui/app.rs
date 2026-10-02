@@ -692,6 +692,7 @@ impl App {
         let options = CopyOptions {
             preserve: self.copy_choices.preserve,
             atomic: self.copy_choices.atomic,
+            remove_sources: false,
         };
         vec![Effect::Copy {
             id,
@@ -1961,7 +1962,8 @@ mod tests {
             options,
             CopyOptions {
                 preserve: true,
-                atomic: true
+                atomic: true,
+                remove_sources: false,
             }
         );
         assert!(screen(&mut app).contains("Counting"), "the job's window");

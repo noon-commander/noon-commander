@@ -43,8 +43,8 @@
 - [x] `+` and `-` mark and unmark by pattern
 - [x] VFS: create and remove directories, remove files, rename, set permissions and times
 - [x] F7 mkdir
-- [x] Job engine (`sftp-tui-ops`): progress, a decision on each failure, cancellation; deleting
-      and copying, with a question when a name is taken
+- [x] Job engine (`sftp-tui-ops`): progress, a decision on each failure, cancellation; deleting,
+      copying, and moving, with a question when a name is taken
 - [x] F8 delete
 - [x] VFS: read and write files as streams
 - [x] F5 copy in any direction, with progress, cancellation, and a question for taken names

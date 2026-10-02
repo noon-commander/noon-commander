@@ -47,6 +47,17 @@ impl VfsError {
         }
     }
 
+    /// Whether a rename failed because its ends are on different file systems, locally
+    /// (`EXDEV`). SFTP v3 reports that as a plain failure, so over SFTP any plain failure
+    /// counts. Copying and removing moves such entries instead.
+    pub fn is_cross_device(&self) -> bool {
+        match self {
+            Self::Io(err) => err.kind() == io::ErrorKind::CrossesDevices,
+            Self::Sftp(openssh_sftp_client::Error::SftpError(SftpErrorKind::Failure, _)) => true,
+            _ => false,
+        }
+    }
+
     pub(crate) fn task_failed(err: tokio::task::JoinError) -> Self {
         Self::Io(io::Error::other(err))
     }
@@ -76,6 +87,13 @@ mod tests {
         );
         let err = VfsError::local(io::ErrorKind::InvalidData.into(), path);
         assert!(matches!(&err, VfsError::Io(e) if e.kind() == io::ErrorKind::InvalidData));
+    }
+
+    #[test]
+    fn tells_moves_across_file_systems() {
+        assert!(VfsError::Io(io::ErrorKind::CrossesDevices.into()).is_cross_device());
+        assert!(!VfsError::Io(io::ErrorKind::Other.into()).is_cross_device());
+        assert!(!VfsError::NotFound("x".into()).is_cross_device());
     }
 
     #[test]

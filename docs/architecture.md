@@ -213,6 +213,16 @@ target), or Abort. A directory where a file would go is a failure, not a questio
 in the way is removed first, so that a file written directly never goes through it; renaming
 replaces it anyway. Without `posix-rename`, the target is removed before the rename.
 
+Moving places sources as copying does. Between file systems (local and a host, or two
+hosts), it is a copy with `remove_sources`: each file or symlink goes from the source once
+it is copied, and each directory once everything in it has gone, so whatever is skipped or
+fails stays, with the directories around it. Within one file system (`move_within`), each
+source is renamed, after the same question if its name is taken by something a rename
+replaces; a directory whose name is taken by a directory merges into it by copying and
+removing, and so does anything the rename refuses as crossing file systems (`EXDEV`
+locally, or a plain failure over SFTP v3, which has no code for it). Moves keep times and
+permissions.
+
 ## Configuration and paths
 
 sftp-tui uses the XDG layout on every platform, including macOS, and respects the `XDG_*`

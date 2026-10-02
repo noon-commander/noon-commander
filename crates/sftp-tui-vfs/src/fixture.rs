@@ -9,7 +9,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tempfile::TempDir;
 
-use crate::{DirEntry, FileKind, Vfs, VfsError};
+use crate::{DirEntry, FileKind, FileReader as _, FileWriter as _, Vfs, VfsError};
 
 /// The names in [`tree`], sorted.
 pub(crate) const TREE: [&str; 5] = ["dangling", "dir", "file.txt", "link-dir", "link-file"];
@@ -172,6 +172,69 @@ pub(crate) async fn check_attributes<V: Vfs>(vfs: &V, root: &Path, path: impl Fn
     assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
     let err = vfs.set_modified(&path("missing"), time).await.unwrap_err();
     assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
+}
+
+/// `size` bytes that differ from offset to offset, so that a piece in the wrong place shows.
+pub(crate) fn pattern(size: usize) -> Vec<u8> {
+    (0..size)
+        .map(|i| u8::try_from(i * 7 % 251).unwrap())
+        .collect()
+}
+
+/// Everything `reader` reads.
+async fn read_all<V: Vfs>(vfs: &V, path: &V::Path) -> Result<Vec<u8>, VfsError> {
+    let mut reader = vfs.open_file(path).await?;
+    let mut all = Vec::new();
+    while let Some(chunk) = reader.read().await? {
+        all.extend(chunk);
+    }
+    Ok(all)
+}
+
+/// Writes and reads files through `vfs` in `root`, an empty local directory that `path` names
+/// entries of for `vfs`, and checks them on disk.
+pub(crate) async fn check_files<V: Vfs>(vfs: &V, root: &Path, path: impl Fn(&str) -> V::Path) {
+    let on_disk = |name: &str| root.join(name);
+    // Sizes around the chunks of both backends and their pipelines.
+    for size in [0, 1, 32 * 1024 + 1, 3 * 1024 * 1024 + 17] {
+        let name = format!("file-{size}");
+        let data = pattern(size);
+        let mut writer = vfs.create_file(&path(&name), false).await.unwrap();
+        for part in data.chunks(100_000) {
+            writer.write(part.to_vec()).await.unwrap();
+        }
+        writer.finish().await.unwrap();
+        assert!(fs::read(on_disk(&name)).unwrap() == data, "written: {size}");
+        assert!(
+            read_all(vfs, &path(&name)).await.unwrap() == data,
+            "read: {size}"
+        );
+    }
+
+    fs::write(on_disk("taken"), "old and long").unwrap();
+    let err = vfs.create_file(&path("taken"), false).await.unwrap_err();
+    assert!(matches!(err, VfsError::AlreadyExists(_)), "{err:?}");
+    let mut writer = vfs.create_file(&path("taken"), true).await.unwrap();
+    writer.write(b"new".to_vec()).await.unwrap();
+    writer.finish().await.unwrap();
+    assert_eq!(
+        fs::read_to_string(on_disk("taken")).unwrap(),
+        "new",
+        "emptied first"
+    );
+
+    let err = read_all(vfs, &path("missing")).await.unwrap_err();
+    assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
+    let err = vfs
+        .create_file(&path("missing/new"), false)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
+    fs::create_dir(on_disk("dir")).unwrap();
+    assert!(
+        read_all(vfs, &path("dir")).await.is_err(),
+        "a directory is no file"
+    );
 }
 
 /// A directory without permissions, removed again when the tests run as root, which ignores

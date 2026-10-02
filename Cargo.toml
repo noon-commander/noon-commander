@@ -15,6 +15,7 @@ sftp-tui-ops = { path = "crates/sftp-tui-ops" }
 sftp-tui-ssh = { path = "crates/sftp-tui-ssh" }
 sftp-tui-vfs = { path = "crates/sftp-tui-vfs" }
 
+bytes = "1"
 clap = { version = "4.6", features = ["derive"] }
 color-eyre = { version = "0.6", default-features = false }
 crokey = "1.5"

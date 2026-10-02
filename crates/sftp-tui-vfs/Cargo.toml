@@ -9,6 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+bytes.workspace = true
 futures-util.workspace = true
 openssh-sftp-client.workspace = true
 rustix = { workspace = true, features = ["fs"] }

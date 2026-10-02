@@ -49,8 +49,11 @@ leftovers of crashed instances.
 
 The `Vfs` trait of `sftp-tui-vfs`, implemented by `LocalFs` and `SftpFs`, lists directories,
 reads metadata with and without following symlinks, canonicalizes paths, creates and removes
-directories, removes files, renames, and sets permissions and modification times; reading and
-writing files will follow for copying. Its futures are cancel-safe: a dropped one leaks
+directories, removes files, renames, sets permissions and modification times, and reads and
+writes files as chunks (`FileReader`, `FileWriter`, whose `finish` reports errors that only
+show when a file is closed). Over SFTP, reads and writes of a file keep 64 requests of 32 KiB
+in flight, as `sftp(1)` does, so a long round trip does not idle the link; a read that comes
+back short is asked again for the rest. Its futures are cancel-safe: a dropped one leaks
 nothing, though a change already sent may still happen. Errors are typed, and the UI words
 them: not found, permission denied, already exists, or the error of the OS or the server.
 SFTP v3 has no code for a name that is taken, so `SftpFs` reports a plain failure to create

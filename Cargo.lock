@@ -2156,6 +2156,7 @@ dependencies = [
 name = "sftp-tui-vfs"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "futures-util",
  "openssh-sftp-client",
  "rustix",

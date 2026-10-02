@@ -4,7 +4,7 @@ use std::os::unix::ffi::OsStrExt as _;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
-use crate::{DirEntry, Metadata, RemotePath, VfsError};
+use crate::{DirEntry, FileReader, FileWriter, Metadata, RemotePath, VfsError};
 
 /// What code that works on any backend needs from its paths.
 pub trait VfsPath: Clone + fmt::Debug + Send + Sync + 'static {
@@ -34,6 +34,8 @@ pub trait Vfs: Send + Sync {
     /// Owned path type: [`PathBuf`](std::path::PathBuf) for the local file system,
     /// [`RemotePath`](crate::RemotePath) for SFTP.
     type Path: VfsPath;
+    type Reader: FileReader;
+    type Writer: FileWriter;
 
     /// Lists a directory without `.` and `..`, in no particular order.
     fn list_dir(
@@ -85,6 +87,21 @@ pub trait Vfs: Send + Sync {
         path: &Self::Path,
         mode: u32,
     ) -> impl Future<Output = Result<(), VfsError>> + Send;
+
+    /// Opens the file at `path` for reading, following symlinks.
+    fn open_file(
+        &self,
+        path: &Self::Path,
+    ) -> impl Future<Output = Result<Self::Reader, VfsError>> + Send;
+
+    /// Creates the file at `path` for writing: a new one, or with `replace` an existing one
+    /// emptied (following a symlink there). Without `replace`, a taken name is
+    /// [`VfsError::AlreadyExists`].
+    fn create_file(
+        &self,
+        path: &Self::Path,
+        replace: bool,
+    ) -> impl Future<Output = Result<Self::Writer, VfsError>> + Send;
 
     /// Sets the modification time of `path`, following symlinks; the access time becomes the
     /// current time. SFTP keeps whole seconds from 1970 to 2106.

@@ -3,17 +3,105 @@ use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::Path;
 use std::time::SystemTime;
 
+use bytes::BytesMut;
+use futures_util::stream::FuturesUnordered;
 use futures_util::{StreamExt, TryStreamExt, stream};
 use openssh_sftp_client::error::SftpErrorKind;
+use openssh_sftp_client::file::{File, OpenOptions};
 use openssh_sftp_client::metadata::{MetaData, MetaDataBuilder, Permissions, RawFileType};
 use openssh_sftp_client::{Error, Sftp, SftpOptions, UnixTimeStamp};
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncSeekExt as _, AsyncWrite};
 
-use crate::{DirEntry, FileKind, Metadata, RemotePath, Vfs, VfsError};
+use crate::files::{Fetch, ReadPipeline};
+use crate::{DirEntry, FileKind, FileReader, FileWriter, Metadata, RemotePath, Vfs, VfsError};
 
 /// Symlink targets a listing resolves at a time, the number of requests `sftp(1)` keeps in
 /// flight.
 const MAX_PENDING_STATS: usize = 64;
+
+/// Bytes each read or write request of a file carries: what every server takes, and what
+/// `sftp(1)` asks for. A server that takes less answers reads short, which the reader asks
+/// again for, and the client splits writes.
+const CHUNK: u32 = 32 * 1024;
+/// Bytes of a file that reads and writes keep in flight: 64 requests, as `sftp(1)` does.
+const IN_FLIGHT: u32 = 64 * CHUNK;
+
+/// A remote file open for reading, with several reads in flight.
+pub struct SftpReader {
+    pipeline: ReadPipeline,
+}
+
+impl std::fmt::Debug for SftpReader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SftpReader").finish_non_exhaustive()
+    }
+}
+
+impl FileReader for SftpReader {
+    async fn read(&mut self) -> Result<Option<Vec<u8>>, VfsError> {
+        self.pipeline.read().await
+    }
+}
+
+/// A remote file open for writing, with several writes in flight.
+#[derive(Debug)]
+pub struct SftpWriter {
+    file: File,
+    path: RemotePath,
+    /// Where the next write goes.
+    offset: u64,
+    /// Writes in flight, and their bytes.
+    pending: FuturesUnordered<WriteFuture>,
+    in_flight: u64,
+}
+
+type WriteFuture = futures_util::future::BoxFuture<'static, (u64, Result<(), Error>)>;
+
+impl SftpWriter {
+    /// Waits for one write in flight.
+    async fn settle_one(&mut self) -> Result<(), VfsError> {
+        if let Some((length, result)) = self.pending.next().await {
+            self.in_flight -= length;
+            result.map_err(|err| VfsError::remote(err, &self.path))?;
+        }
+        Ok(())
+    }
+}
+
+impl FileWriter for SftpWriter {
+    async fn write(&mut self, data: Vec<u8>) -> Result<(), VfsError> {
+        for part in data.chunks(CHUNK as usize) {
+            while self.in_flight >= u64::from(IN_FLIGHT) {
+                self.settle_one().await?;
+            }
+            let mut file = self.file.clone();
+            let offset = self.offset;
+            let part = part.to_vec();
+            let length = part.len() as u64;
+            self.pending.push(Box::pin(async move {
+                let result = match file.seek(io::SeekFrom::Start(offset)).await {
+                    Ok(_) => file.write_all(&part).await,
+                    Err(err) => Err(Error::IOError(err)),
+                };
+                (length, result)
+            }));
+            self.offset += length;
+            self.in_flight += length;
+        }
+        Ok(())
+    }
+
+    async fn finish(mut self) -> Result<(), VfsError> {
+        while !self.pending.is_empty() {
+            self.settle_one().await?;
+        }
+        let path = self.path;
+        self.file
+            .close()
+            .await
+            .map_err(|err| VfsError::remote(err, &path))
+    }
+}
 
 /// A file system on a remote host, reached through an SFTP channel.
 ///
@@ -47,7 +135,8 @@ impl SftpFs {
         self.canonicalize(&RemotePath::from(".")).await
     }
 
-    /// Closes the SFTP session.
+    /// Closes the SFTP session. It waits for the readers and writers of its files to be
+    /// dropped; drop them first.
     pub async fn close(self) -> Result<(), VfsError> {
         self.sftp.close().await.map_err(VfsError::Sftp)
     }
@@ -77,6 +166,8 @@ impl SftpFs {
 
 impl Vfs for SftpFs {
     type Path = RemotePath;
+    type Reader = SftpReader;
+    type Writer = SftpWriter;
 
     async fn list_dir(&self, path: &RemotePath) -> Result<Vec<DirEntry>, VfsError> {
         let error = |err| VfsError::remote(err, path);
@@ -194,6 +285,52 @@ impl Vfs for SftpFs {
             .map_err(|err| VfsError::remote(err, path))
     }
 
+    async fn open_file(&self, path: &RemotePath) -> Result<SftpReader, VfsError> {
+        let mut options = self.sftp.options();
+        options.read(true);
+        let file = open(options, path)
+            .await
+            .map_err(|err| VfsError::remote(err, path))?;
+        let fetch: Fetch = Box::new(move |offset, length| {
+            let mut file = file.clone();
+            Box::pin(async move {
+                file.seek(io::SeekFrom::Start(offset))
+                    .await
+                    .map_err(VfsError::Io)?;
+                let data = file
+                    .read(length, BytesMut::with_capacity(length as usize))
+                    .await
+                    .map_err(VfsError::Sftp)?;
+                Ok(data.map(Vec::from))
+            })
+        });
+        let depth = usize::try_from(IN_FLIGHT / CHUNK).unwrap_or(1);
+        Ok(SftpReader {
+            pipeline: ReadPipeline::new(fetch, CHUNK, depth),
+        })
+    }
+
+    async fn create_file(&self, path: &RemotePath, replace: bool) -> Result<SftpWriter, VfsError> {
+        let mut options = self.sftp.options();
+        options.write(true);
+        if replace {
+            options.create(true).truncate(true);
+        } else {
+            options.create_new(true);
+        }
+        let file = match open(options, path).await {
+            Ok(file) => file,
+            Err(err) => return Err(self.naming_error(err, path).await),
+        };
+        Ok(SftpWriter {
+            file,
+            path: path.clone(),
+            offset: 0,
+            pending: FuturesUnordered::new(),
+            in_flight: 0,
+        })
+    }
+
     async fn set_modified(&self, path: &RemotePath, time: SystemTime) -> Result<(), VfsError> {
         let stamp = |time| {
             UnixTimeStamp::new(time)
@@ -206,6 +343,17 @@ impl Vfs for SftpFs {
         fs.set_metadata(wire_path(path), times)
             .await
             .map_err(|err| VfsError::remote(err, path))
+    }
+}
+
+/// Opens a file in a task of its own, so that if the caller drops the future before the
+/// server answers, the task still receives the handle and closes it, instead of leaking it
+/// on the server.
+async fn open(options: OpenOptions, path: &RemotePath) -> Result<File, Error> {
+    let path = wire_path(path).to_owned();
+    match tokio::spawn(async move { options.open(path).await }).await {
+        Ok(result) => result,
+        Err(err) => Err(Error::IOError(io::Error::other(err))),
     }
 }
 
@@ -414,6 +562,53 @@ mod tests {
         };
         assert!(server.fs.sftp.support_posix_rename(), "OpenSSH has it");
         fixture::check_changes(&server.fs, dir.path(), |name: &str| RemotePath::from(name)).await;
+        server.stop().await;
+    }
+
+    #[tokio::test]
+    async fn writes_and_reads_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(server) = Server::start(dir.path()).await else {
+            return;
+        };
+        fixture::check_files(&server.fs, dir.path(), |name: &str| RemotePath::from(name)).await;
+        server.stop().await;
+    }
+
+    #[tokio::test]
+    async fn dropped_files_close_their_handles() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("big"), fixture::pattern(4 * 1024 * 1024)).unwrap();
+        // Every open file holds a descriptor in the server, so leaked handles soon make
+        // `open` fail for good.
+        let Some(server) = Server::start_with_fd_limit(dir.path(), 16).await else {
+            return;
+        };
+        let big = RemotePath::from("big");
+        for round in 0..40 {
+            // Dropped while opening, after a read with more in flight, and while writing.
+            let mut opening = Box::pin(server.fs.open_file(&big));
+            assert!(futures_util::poll!(opening.as_mut()).is_pending());
+            drop(opening);
+            let mut reader = server.fs.open_file(&big).await.unwrap();
+            assert!(reader.read().await.unwrap().is_some());
+            drop(reader);
+            let name = RemotePath::from(format!("new-{round}").as_str());
+            let mut writer = server.fs.create_file(&name, false).await.unwrap();
+            writer.write(vec![1; 1024 * 1024]).await.unwrap();
+            drop(writer);
+        }
+        let mut attempts = 0;
+        loop {
+            match server.fs.open_file(&big).await {
+                Ok(_) => break,
+                Err(err) if attempts == 100 => panic!("handles leaked: {err:?}"),
+                Err(_) => {
+                    attempts += 1;
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            }
+        }
         server.stop().await;
     }
 

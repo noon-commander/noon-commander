@@ -45,7 +45,7 @@
 - [x] F7 mkdir
 - [x] Job engine (`sftp-tui-ops`): progress, a decision on each failure, cancellation; deleting
 - [x] F8 delete
-- [ ] VFS: read and write files as streams
+- [x] VFS: read and write files as streams
 - [ ] F5 copy and F6 move/rename in any direction, with progress, cancellation, and a conflict
       dialog
 - [ ] F3 viewer, F4 edit via `$EDITOR` (suspends and resumes the TUI)

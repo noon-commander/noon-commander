@@ -5,6 +5,7 @@
 
 mod entry;
 mod error;
+mod files;
 mod local;
 mod location;
 mod remote_path;
@@ -16,8 +17,9 @@ mod fixture;
 
 pub use entry::{DirEntry, FileKind, Metadata};
 pub use error::VfsError;
-pub use local::LocalFs;
+pub use files::{FileReader, FileWriter};
+pub use local::{LocalFs, LocalReader, LocalWriter};
 pub use location::{Location, RootEntry, root_entries};
 pub use remote_path::RemotePath;
-pub use sftp::SftpFs;
+pub use sftp::{SftpFs, SftpReader, SftpWriter};
 pub use vfs::{Vfs, VfsPath};

@@ -6,8 +6,12 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rustix::fs::{AtFlags, CWD, Timespec, Timestamps};
+use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
-use crate::{DirEntry, FileKind, Metadata, Vfs, VfsError};
+use crate::{DirEntry, FileKind, FileReader, FileWriter, Metadata, Vfs, VfsError};
+
+/// Bytes each read of a local file asks for.
+const CHUNK: usize = 256 * 1024;
 
 /// The local file system.
 ///
@@ -16,8 +20,56 @@ use crate::{DirEntry, FileKind, Metadata, Vfs, VfsError};
 #[derive(Debug, Clone, Copy, Default)]
 pub struct LocalFs;
 
+/// A local file open for reading.
+#[derive(Debug)]
+pub struct LocalReader {
+    file: tokio::fs::File,
+    path: PathBuf,
+}
+
+impl FileReader for LocalReader {
+    async fn read(&mut self) -> Result<Option<Vec<u8>>, VfsError> {
+        let mut buffer = vec![0; CHUNK];
+        let read = self
+            .file
+            .read(&mut buffer)
+            .await
+            .map_err(|err| VfsError::local(err, &self.path))?;
+        if read == 0 {
+            return Ok(None);
+        }
+        buffer.truncate(read);
+        Ok(Some(buffer))
+    }
+}
+
+/// A local file open for writing.
+#[derive(Debug)]
+pub struct LocalWriter {
+    file: tokio::fs::File,
+    path: PathBuf,
+}
+
+impl FileWriter for LocalWriter {
+    async fn write(&mut self, data: Vec<u8>) -> Result<(), VfsError> {
+        self.file
+            .write_all(&data)
+            .await
+            .map_err(|err| VfsError::local(err, &self.path))
+    }
+
+    async fn finish(mut self) -> Result<(), VfsError> {
+        self.file
+            .flush()
+            .await
+            .map_err(|err| VfsError::local(err, &self.path))
+    }
+}
+
 impl Vfs for LocalFs {
     type Path = PathBuf;
+    type Reader = LocalReader;
+    type Writer = LocalWriter;
 
     async fn list_dir(&self, path: &PathBuf) -> Result<Vec<DirEntry>, VfsError> {
         let path = path.clone();
@@ -81,6 +133,34 @@ impl Vfs for LocalFs {
         tokio::fs::set_permissions(os_path(path), permissions)
             .await
             .map_err(|err| VfsError::local(err, path))
+    }
+
+    async fn open_file(&self, path: &PathBuf) -> Result<LocalReader, VfsError> {
+        let file = tokio::fs::File::open(path)
+            .await
+            .map_err(|err| VfsError::local(err, path))?;
+        Ok(LocalReader {
+            file,
+            path: path.clone(),
+        })
+    }
+
+    async fn create_file(&self, path: &PathBuf, replace: bool) -> Result<LocalWriter, VfsError> {
+        let mut options = tokio::fs::OpenOptions::new();
+        options.write(true);
+        if replace {
+            options.create(true).truncate(true);
+        } else {
+            options.create_new(true);
+        }
+        let file = options
+            .open(path)
+            .await
+            .map_err(|err| VfsError::local(err, path))?;
+        Ok(LocalWriter {
+            file,
+            path: path.clone(),
+        })
     }
 
     async fn set_modified(&self, path: &PathBuf, time: SystemTime) -> Result<(), VfsError> {
@@ -234,6 +314,12 @@ mod tests {
     async fn changes_entries() {
         let dir = tempfile::tempdir().unwrap();
         fixture::check_changes(&LocalFs, dir.path(), |name| dir.path().join(name)).await;
+    }
+
+    #[tokio::test]
+    async fn writes_and_reads_files() {
+        let dir = tempfile::tempdir().unwrap();
+        fixture::check_files(&LocalFs, dir.path(), |name| dir.path().join(name)).await;
     }
 
     #[tokio::test]

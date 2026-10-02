@@ -11,6 +11,7 @@ mod location;
 mod remote_path;
 mod sftp;
 mod vfs;
+mod volumes;
 
 #[cfg(test)]
 mod fixture;
@@ -23,3 +24,4 @@ pub use location::{Location, RootEntry, root_entries};
 pub use remote_path::RemotePath;
 pub use sftp::{SftpFs, SftpReader, SftpWriter};
 pub use vfs::{Vfs, VfsPath};
+pub use volumes::{Space, Volume, VolumeKind, volumes};

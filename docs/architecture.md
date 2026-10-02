@@ -239,6 +239,13 @@ atomic_upload = true             # write to a temporary name, then rename
   literal. mc's regular expressions are left out. The dialog opens with the last pattern
   (`*` at first) and options. `+`, `-`, `\`, and `*` are commands, as in mc with an empty
   command line, so typing them does not start quick search.
+- **F7 makes a directory**, as in mc: the dialog opens with the name under the cursor, which
+  typing replaces. The name may be a relative path, an absolute one, or start with `~` for the
+  home directory (the remote one on a host; `\~` for a name that starts with `~`); missing
+  parents are not made. The directory is made in the background, locally or by the host's
+  task, and panels on the directory it is in read it again, the one that asked with the
+  cursor on it. An error shows in a red dialog, as mc shows errors. F7 is not offered in the
+  virtual root.
 - **The other panel.** As in mc: Ctrl-U swaps the panels, and the active one stays active on
   the other side; Alt-O opens the directory or host under the cursor in the other panel (from
   a file, the parent directory with the cursor on this one) and moves the cursor down; Alt-I
@@ -289,9 +296,9 @@ atomic_upload = true             # write to a temporary name, then rename
 - **Themes.** Built in: `mc-classic`, the colors of mc's default skin (blue panels, a cyan
   cursor that replaces the row's colors, yellow headers; directories white, executables green,
   broken links red, devices magenta; gray dialogs with mc's shadow; a black-and-cyan F-key
-  bar), and `terminal`, the terminal's own colors with reverse video. `ui.theme` picks one; an
-  unknown name is an error. Only the 16 ANSI colors are used, so the terminal's palette
-  decides the exact shades. User themes in `themes/` are planned for M4.
+  bar; red error dialogs), and `terminal`, the terminal's own colors with reverse video.
+  `ui.theme` picks one; an unknown name is an error. Only the 16 ANSI colors are used, so the
+  terminal's palette decides the exact shades. User themes in `themes/` are planned for M4.
 - **Icons.** Nerd Fonts v3 glyphs, on by default (`ui.icons`), in front of each name: our own for
   directories, `..`, links, broken links, FIFOs, sockets, devices, executables, `[Local]`, and
   hosts; `devicons` for files by name or extension. devicons asks the disk whether a name it

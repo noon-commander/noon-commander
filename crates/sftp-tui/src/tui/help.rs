@@ -5,7 +5,7 @@ use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
-use super::dialog::draw_box;
+use super::dialog::{Colors, draw_box};
 use super::keymap::{Action, Context, Keymap, Resolved};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -100,7 +100,9 @@ impl Help {
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let width = MAX_WIDTH.min(area.width.saturating_sub(4)).max(20);
         let height = area.height.saturating_sub(2).max(3);
-        let inner = draw_box(frame, area, (width, height), &fl!("help-title"), theme);
+        let colors = Colors::of(theme, false);
+        let size = (width, height);
+        let inner = draw_box(frame, area, size, &fl!("help-title"), colors, theme.shadow);
         let width = usize::from(inner.width);
         let keys_width = self
             .entries
@@ -212,6 +214,7 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::SortByTime) => fl!("help-sort-time"),
         (Context::Panel, Action::SortBySize) => fl!("help-sort-size"),
         (Context::Panel, Action::QuickSearch) => fl!("help-quick-search-start"),
+        (Context::Panel, Action::Mkdir) => fl!("help-mkdir"),
         (Context::Panel, Action::Help) => fl!("help-help"),
         (Context::Panel, Action::Quit) => fl!("help-quit"),
         (Context::Panel, Action::Redraw) => fl!("help-redraw"),

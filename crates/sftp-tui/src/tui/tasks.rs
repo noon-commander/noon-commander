@@ -1,6 +1,7 @@
-//! Background work for the app: listings, and one task per connected host that owns its ssh
-//! session and SFTP channel.
+//! Background work for the app: listings, new directories, and one task per connected host
+//! that owns its ssh session and SFTP channel.
 
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -38,6 +39,12 @@ pub(crate) enum Done {
         generation: u64,
         result: Result<Listed, String>,
     },
+    /// The directory of [`Effect::CreateDir`] was made, or why not.
+    Created {
+        side: Side,
+        location: Location,
+        result: Result<(), String>,
+    },
     /// The host of [`Effect::Connect`] is connected; its listings go through `handle`.
     Connected {
         host: String,
@@ -65,14 +72,22 @@ pub(crate) enum Done {
     },
 }
 
-/// Passes listing requests to the task of a connected host.
+/// Work for the task of a connected host, for the panel on a side.
+#[derive(Debug)]
+pub(crate) enum HostRequest {
+    List(Side, ListRequest),
+    /// Makes the directory at `path`.
+    CreateDir(Side, RemotePath),
+}
+
+/// Passes requests to the task of a connected host.
 #[derive(Debug, Clone)]
-pub(crate) struct HostHandle(mpsc::UnboundedSender<(Side, ListRequest)>);
+pub(crate) struct HostHandle(mpsc::UnboundedSender<HostRequest>);
 
 #[cfg(test)]
 impl HostHandle {
     /// A handle and what it receives.
-    pub(crate) fn channel() -> (Self, mpsc::UnboundedReceiver<(Side, ListRequest)>) {
+    pub(crate) fn channel() -> (Self, mpsc::UnboundedReceiver<HostRequest>) {
         let (sender, receiver) = mpsc::unbounded_channel();
         (Self(sender), receiver)
     }
@@ -115,7 +130,7 @@ impl Tasks {
                     host: Some(handle),
                 } => {
                     // If the host's task has ended, its `Closed` report is on its way.
-                    let _ = handle.0.send((side, request));
+                    let _ = handle.0.send(HostRequest::List(side, request));
                 }
                 Effect::List {
                     side,
@@ -134,6 +149,11 @@ impl Tasks {
                         });
                     });
                 }
+                Effect::CreateDir {
+                    side,
+                    location,
+                    host,
+                } => self.create_dir(side, location, host),
                 Effect::Connect {
                     host,
                     connection,
@@ -159,6 +179,38 @@ impl Tasks {
                     };
                     self.hosts.spawn(task.run(askpass));
                 }
+            }
+        }
+    }
+
+    /// Makes a local directory here, or passes a remote one to the task of its host.
+    fn create_dir(&self, side: Side, location: Location, host: Option<HostHandle>) {
+        match (&location, host) {
+            (Location::Remote { path, .. }, Some(handle)) => {
+                let _ = handle.0.send(HostRequest::CreateDir(side, path.clone()));
+            }
+            (Location::Local(path), _) => {
+                let path = path.clone();
+                let done = self.done.clone();
+                tokio::spawn(async move {
+                    let result = LocalFs
+                        .create_dir(&path)
+                        .await
+                        .map_err(|error| describe::vfs_error(&error));
+                    let _ = done.send(Done::Created {
+                        side,
+                        location,
+                        result,
+                    });
+                });
+            }
+            (Location::Root | Location::Remote { .. }, _) => {
+                let result = Err(fl!("error-connection-closed"));
+                let _ = self.done.send(Done::Created {
+                    side,
+                    location,
+                    result,
+                });
             }
         }
     }
@@ -358,7 +410,7 @@ impl HostTask {
         }
     }
 
-    /// Serves listings until the connection is lost or asked to stop, then shuts it down.
+    /// Serves requests until the connection is lost or asked to stop, then shuts it down.
     /// Returns why it ended: `None` if asked to stop.
     async fn serve(&self, connection: Connection) -> Option<String> {
         let Connection {
@@ -372,12 +424,18 @@ impl HostTask {
             connection: self.connection,
             handle: HostHandle(requests),
         });
-        let mut running = FuturesUnordered::new();
+        let mut running: FuturesUnordered<Pin<Box<dyn Future<Output = Done> + Send + '_>>> =
+            FuturesUnordered::new();
         let reason = loop {
             tokio::select! {
-                Some((side, request)) = incoming.recv() => {
-                    running.push(self.list(&fs, side, request));
-                }
+                Some(request) = incoming.recv() => match request {
+                    HostRequest::List(side, request) => {
+                        running.push(Box::pin(self.list(&fs, side, request)));
+                    }
+                    HostRequest::CreateDir(side, path) => {
+                        running.push(Box::pin(self.create_dir(&fs, side, path)));
+                    }
+                },
                 Some(done) = running.next() => {
                     let _ = self.done.send(done);
                 }
@@ -394,13 +452,29 @@ impl HostTask {
                 }
             }
         };
-        // Listings in flight are abandoned; dropping them is safe.
+        // Requests in flight are abandoned; dropping them is safe.
         drop(running);
         drop(incoming);
         let _ = tokio::time::timeout(SFTP_CLOSE_TIMEOUT, fs.close()).await;
         session.close().await;
         process.finish().await;
         reason
+    }
+
+    async fn create_dir(&self, fs: &SftpFs, side: Side, path: RemotePath) -> Done {
+        let result = fs
+            .create_dir(&path)
+            .await
+            .map_err(|error| describe::vfs_error(&error));
+        let location = Location::Remote {
+            host: self.host.clone(),
+            path,
+        };
+        Done::Created {
+            side,
+            location,
+            result,
+        }
     }
 
     /// Lists a remote directory. The empty path is where the host opens: its `start_dir`, or

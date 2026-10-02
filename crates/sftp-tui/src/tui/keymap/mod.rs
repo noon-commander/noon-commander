@@ -99,7 +99,7 @@ impl Keymap {
     pub(crate) fn mc() -> Self {
         use Action::{
             Backspace, Cancel, Confirm, Delete, DeleteToEnd, DeleteToStart, Disconnect, Down, End,
-            Enter, Help, Home, InvertMarks, Left, Mark, MarkUp, NextField, OtherPanelOpen,
+            Enter, Help, Home, InvertMarks, Left, Mark, MarkUp, Mkdir, NextField, OtherPanelOpen,
             OtherPanelSync, PageDown, PageUp, Parent, PrevField, QuickSearch, Quit, Redraw, Reload,
             Right, Select, SortByExtension, SortByName, SortBySize, SortByTime, SwapPanels,
             SwitchPanel, Toggle, ToggleHidden, Unselect, Up,
@@ -138,6 +138,7 @@ impl Keymap {
                     (SortBySize, &["ctrl-f6"]),
                     (QuickSearch, &["ctrl-s", "alt-s"]),
                     (Help, &["f1"]),
+                    (Mkdir, &["f7"]),
                     (Quit, &["f10"]),
                     (Redraw, &["ctrl-l"]),
                 ],
@@ -717,6 +718,7 @@ mod tests {
         );
         let mut root = [None; 10];
         root[0] = Some(Action::Help);
+        root[6] = Some(Action::Mkdir);
         root[7] = Some(Action::Disconnect);
         root[9] = Some(Action::Quit);
         assert_eq!(keymap.fkeys(Context::Root), root);
@@ -772,6 +774,7 @@ mod tests {
         let keymap = Keymap::mc();
         let mut panel = [None; 10];
         panel[0] = Some(Action::Help);
+        panel[6] = Some(Action::Mkdir);
         panel[9] = Some(Action::Quit);
         assert_eq!(keymap.fkeys(Context::Panel), panel);
         assert_eq!(keymap.fkeys(Context::QuickSearch), panel);

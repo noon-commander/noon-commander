@@ -104,6 +104,9 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
             }
             Some(job) = done.recv() => match job {
                 Done::Listed { side, generation, result } => app.listed(side, generation, result),
+                Done::Created { side, location, result } => {
+                    tasks.run(app.created(side, &location, result));
+                }
                 Done::Connected { host, connection, handle } => {
                     tasks.run(app.connected(&host, connection, handle));
                 }

@@ -5,6 +5,7 @@ use std::fmt;
 
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear};
 use secrecy::SecretString;
@@ -207,6 +208,36 @@ impl fmt::Debug for Field {
     }
 }
 
+/// The colors of a dialog box.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Colors {
+    body: Style,
+    title: Style,
+    button: Style,
+    focused: Style,
+}
+
+impl Colors {
+    /// A dialog's colors, or an error's: mc draws errors and warnings red.
+    pub(crate) fn of(theme: &Theme, error: bool) -> Self {
+        if error {
+            Self {
+                body: theme.error_dialog,
+                title: theme.error_title,
+                button: theme.error_dialog,
+                focused: theme.error_button_focused,
+            }
+        } else {
+            Self {
+                body: theme.dialog,
+                title: theme.dialog_title,
+                button: theme.dialog_button,
+                focused: theme.dialog_button_focused,
+            }
+        }
+    }
+}
+
 /// A check box.
 #[derive(Debug)]
 struct Check {
@@ -240,6 +271,8 @@ pub(crate) struct Dialog {
     focus: Focus,
     /// Widest the dialog gets, in cells, borders included.
     width: u16,
+    /// Drawn in the colors of errors.
+    error: bool,
 }
 
 impl Dialog {
@@ -265,9 +298,23 @@ impl Dialog {
         Self::new(context, message, vec![Button::Ok])
     }
 
-    /// A text field that opens with `text`, check boxes with their labels and states, and OK
-    /// and Cancel, `width` cells wide.
-    pub(crate) fn form(title: &str, text: &str, checks: &[(String, bool)], width: u16) -> Self {
+    /// Something that went wrong, with OK, in the colors of errors.
+    pub(crate) fn error(title: &str, message: &str) -> Self {
+        Self {
+            error: true,
+            ..Self::new(title, message, vec![Button::Ok])
+        }
+    }
+
+    /// `message`, a text field that opens with `text`, check boxes with their labels and
+    /// states, and OK and Cancel, `width` cells wide.
+    pub(crate) fn form(
+        title: &str,
+        message: &str,
+        text: &str,
+        checks: &[(String, bool)],
+        width: u16,
+    ) -> Self {
         let checks = checks
             .iter()
             .map(|(label, on)| Check {
@@ -280,7 +327,7 @@ impl Dialog {
             checks,
             focus: Focus::Field,
             width,
-            ..Self::new(title, "", vec![Button::Ok, Button::Cancel])
+            ..Self::new(title, message, vec![Button::Ok, Button::Cancel])
         }
     }
 
@@ -294,6 +341,7 @@ impl Dialog {
             default: 0,
             focus: Focus::Button(0),
             width: MAX_WIDTH,
+            error: false,
         }
     }
 
@@ -402,7 +450,9 @@ impl Dialog {
         let rows = |count: usize| u16::try_from(count).unwrap_or(u16::MAX);
         // Borders, the message, the field, the check boxes, a blank line, the buttons.
         let height = rows(lines.len()) + u16::from(self.field.is_some()) + rows(self.checks.len());
-        let inner = draw_box(frame, area, (width, height + 4), &self.title, theme);
+        let colors = Colors::of(theme, self.error);
+        let size = (width, height + 4);
+        let inner = draw_box(frame, area, size, &self.title, colors, theme.shadow);
         let row = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
         let mut index = 0;
         for line in &lines {
@@ -437,20 +487,20 @@ impl Dialog {
             let mark = if check.on { 'x' } else { ' ' };
             let text = format!("[{mark}] {}", check.label);
             let style = if self.focus == Focus::Check(number) {
-                theme.dialog_button_focused
+                colors.focused
             } else {
-                theme.dialog
+                colors.body
             };
             frame.render_widget(Line::from(Span::styled(text, style)), row(index));
             index += 1;
         }
         if index + 1 < inner.height {
-            frame.render_widget(self.button_line(theme), row(index + 1));
+            frame.render_widget(self.button_line(colors), row(index + 1));
         }
     }
 
     /// The buttons, centered.
-    fn button_line(&self, theme: &Theme) -> Line<'static> {
+    fn button_line(&self, colors: Colors) -> Line<'static> {
         let mut spans = Vec::new();
         for (index, button) in self.buttons.iter().enumerate() {
             if index > 0 {
@@ -462,9 +512,9 @@ impl Dialog {
                 format!("[ {} ]", button.label())
             };
             let style = if self.focus == Focus::Button(index) {
-                theme.dialog_button_focused
+                colors.focused
             } else {
-                theme.dialog_button
+                colors.button
             };
             spans.push(Span::styled(text, style));
         }
@@ -472,21 +522,22 @@ impl Dialog {
     }
 }
 
-/// Draws an empty dialog box of `size` centered in `area`, with its title and mc's shadow, and
-/// returns the room inside, one column in from the frame on either side.
+/// Draws an empty dialog box of `size` centered in `area`, with its title and mc's `shadow`,
+/// and returns the room inside, one column in from the frame on either side.
 pub(crate) fn draw_box(
     frame: &mut Frame<'_>,
     area: Rect,
     (width, height): (u16, u16),
     title: &str,
-    theme: &Theme,
+    colors: Colors,
+    shadow: Option<Style>,
 ) -> Rect {
     let (width, height) = (width.min(area.width), height.min(area.height));
     let x = area.x + (area.width - width) / 2;
     let y = area.y + (area.height - height) / 2;
     let outer = Rect::new(x, y, width, height);
     frame.render_widget(Clear, outer);
-    if let Some(shadow) = theme.shadow {
+    if let Some(shadow) = shadow {
         // Two columns to the right and a row below, as mc draws it.
         let right = Rect::new(outer.right(), outer.y + 1, 2, outer.height);
         let below = Rect::new(outer.x + 2, outer.bottom(), outer.width, 1);
@@ -496,8 +547,8 @@ pub(crate) fn draw_box(
                 .set_style(rect.intersection(area), shadow);
         }
     }
-    let title = Line::styled(format!(" {title} "), theme.dialog_title);
-    let block = Block::bordered().title(title).style(theme.dialog);
+    let title = Line::styled(format!(" {title} "), colors.title);
+    let block = Block::bordered().title(title).style(colors.body);
     let inner = block.inner(outer).inner(ratatui::layout::Margin::new(1, 0));
     frame.render_widget(block, outer);
     inner
@@ -691,7 +742,7 @@ mod tests {
             ("Files only".to_owned(), false),
             ("Case sensitive".to_owned(), true),
         ];
-        Dialog::form("Select", "*", &checks, 50)
+        Dialog::form("Select", "", "*", &checks, 50)
     }
 
     #[test]
@@ -760,6 +811,33 @@ mod tests {
         dialog.handle(action(Action::NextField));
         let terminal = draw(&dialog, 60, 10);
         insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn errors_are_red_in_mc_classic() {
+        use ratatui::style::Color;
+
+        let mut dialog = Dialog::error("Error", "Cannot create directory /x: already exists");
+        let terminal = draw_themed(&dialog, 60, 8, &Theme::mc_classic());
+        let buffer = terminal.backend().buffer();
+        let colors = |x: u16, y: u16| (buffer[(x, y)].fg, buffer[(x, y)].bg);
+        // The dialog spans columns 2 … 57 and rows 1 … 6.
+        assert_eq!(colors(2, 1), (Color::White, Color::Red), "frame");
+        assert_eq!(colors(4, 1), (Color::LightYellow, Color::Red), "title");
+        assert_eq!(colors(4, 2), (Color::White, Color::Red), "message");
+        let (x, y) = (0..60)
+            .flat_map(|x| (0..8).map(move |y| (x, y)))
+            .find(|&(x, y)| buffer[(x, y)].symbol() == "[")
+            .unwrap();
+        assert_eq!(
+            colors(x, y),
+            (Color::Black, Color::Gray),
+            "the focused button"
+        );
+        assert_eq!(
+            dialog.handle(action(Action::Confirm)),
+            DialogEvent::Pressed(Button::Ok)
+        );
     }
 
     #[test]

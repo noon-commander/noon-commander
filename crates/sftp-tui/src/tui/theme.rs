@@ -60,6 +60,10 @@ pub(crate) struct Theme {
     pub(crate) dialog_input: Style,
     /// Text field that still holds the text it opened with, which typing replaces.
     pub(crate) dialog_input_fresh: Style,
+    /// Error dialogs: body, frame, text, and buttons without the focus.
+    pub(crate) error_dialog: Style,
+    pub(crate) error_title: Style,
+    pub(crate) error_button_focused: Style,
     /// What mc draws to the right of and below a dialog; `None` draws nothing.
     pub(crate) shadow: Option<Style>,
 }
@@ -110,6 +114,9 @@ impl Theme {
             dialog_button_focused: on(Color::Black, Color::Cyan),
             dialog_input: on(Color::Black, Color::Cyan),
             dialog_input_fresh: on(Color::DarkGray, Color::Cyan),
+            error_dialog: on(Color::White, Color::Red),
+            error_title: on(Color::LightYellow, Color::Red),
+            error_button_focused: on(Color::Black, Color::Gray),
             shadow: Some(on(Color::DarkGray, Color::Black)),
         }
     }
@@ -148,6 +155,9 @@ impl Theme {
             dialog_button_focused: reversed,
             dialog_input: reversed,
             dialog_input_fresh: reversed.dim(),
+            error_dialog: plain,
+            error_title: plain.bold(),
+            error_button_focused: reversed,
             shadow: None,
         }
     }

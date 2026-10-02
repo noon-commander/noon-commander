@@ -472,6 +472,49 @@ impl Panel {
         self.location == Location::Root
     }
 
+    /// What the panel shows.
+    pub(crate) fn location(&self) -> &Location {
+        &self.location
+    }
+
+    /// The name of the entry under the cursor; `None` on `..` and in the virtual root.
+    pub(crate) fn name_under_cursor(&self) -> Option<&[u8]> {
+        match self.row(self.cursor)? {
+            Row::Entry(entry) => Some(&entry.name),
+            Row::Parent | Row::Local | Row::Host(_) => None,
+        }
+    }
+
+    /// Where `text`, typed in a dialog, points from this directory: a name or a relative path,
+    /// an absolute path, or `~` or `~/…` for the home directory (the remote one on a host);
+    /// `\~` stands for a name that starts with `~`, as in mc. Trailing slashes are dropped.
+    /// `None` in the virtual root.
+    pub(crate) fn resolve(&self, text: &str) -> Option<Location> {
+        let trimmed = text.trim_end_matches('/');
+        let text = if trimmed.is_empty() { text } else { trimmed };
+        let home_relative = match text.strip_prefix('~') {
+            Some("") => Some(""),
+            Some(rest) => rest.strip_prefix('/'),
+            None => None,
+        };
+        let text = text.strip_prefix("\\~").map_or(text, |_| &text[1..]);
+        match (&self.location, home_relative) {
+            (Location::Root, _) => None,
+            (Location::Local(_), Some(rest)) => Some(Location::Local(self.home.join(rest))),
+            (Location::Remote { host, .. }, Some(rest)) => Some(Location::Remote {
+                host: host.clone(),
+                // Relative remote paths start at the remote home directory.
+                path: RemotePath::from(rest),
+            }),
+            (location, None) => child(location, text.as_bytes()),
+        }
+    }
+
+    /// Reads the directory again with the cursor on `name`, such as a directory just made.
+    pub(crate) fn reload_onto(&mut self, name: Vec<u8>) -> ListRequest {
+        self.open(self.location.clone(), Focus::Name(name))
+    }
+
     /// The alias of the host under the cursor in the virtual root.
     pub(crate) fn host_under_cursor(&self) -> Option<&str> {
         match self.row(self.cursor)? {
@@ -977,7 +1020,7 @@ fn address(host: &RootHost, hosts: &dyn Fn(&str) -> HostState) -> String {
     cells::sanitize(address.unwrap_or_default().as_bytes())
 }
 
-/// The directory `name` in `location`.
+/// The entry `name` in `location`; `name` may be a path, relative or absolute.
 fn child(location: &Location, name: &[u8]) -> Option<Location> {
     match location {
         Location::Root => None,
@@ -991,7 +1034,7 @@ fn child(location: &Location, name: &[u8]) -> Option<Location> {
 
 /// A location for the title and messages: a local path, `host:path`, only `host` for the
 /// remote home directory, or the title of the virtual root.
-fn location_text(location: &Location) -> String {
+pub(crate) fn location_text(location: &Location) -> String {
     match location {
         Location::Root => fl!("root-title"),
         Location::Local(path) => cells::sanitize(path.as_os_str().as_bytes()),
@@ -1590,6 +1633,36 @@ mod tests {
         let request = panel.handle(Action::Enter).unwrap();
         answer(&mut panel, &request, Listing::Dir(listing()));
         assert!(panel.marked.is_empty(), "another directory starts unmarked");
+    }
+
+    #[test]
+    fn resolves_what_dialogs_name() {
+        let mut panel = loaded("/srv", listing());
+        assert_eq!(panel.name_under_cursor(), None, "`..`");
+        panel.handle(Action::End);
+        assert_eq!(panel.name_under_cursor(), Some(&b"zeta.txt"[..]));
+        let resolve = |text: &str| panel.resolve(text).unwrap();
+        assert_eq!(resolve("new"), local("/srv/new"));
+        assert_eq!(resolve("a/b//"), local("/srv/a/b"));
+        assert_eq!(resolve("/tmp/x"), local("/tmp/x"));
+        assert_eq!(resolve("/"), local("/"));
+        assert_eq!(resolve("~"), local(HOME));
+        assert_eq!(resolve("~/x"), local("/home/me/x"));
+        assert_eq!(resolve("~x"), local("/srv/~x"), "not the home directory");
+        assert_eq!(
+            resolve("\\~/x"),
+            local("/srv/~/x"),
+            "a name that starts with ~"
+        );
+
+        let remote_panel = loaded_at(remote("db", "/srv"), Listing::Dir(Vec::new()));
+        let resolve = |text: &str| remote_panel.resolve(text).unwrap();
+        assert_eq!(resolve("new"), remote("db", "/srv/new"));
+        assert_eq!(resolve("/abs"), remote("db", "/abs"));
+        assert_eq!(resolve("~/x"), remote("db", "x"), "from the remote home");
+        assert_eq!(resolve("~"), remote("db", ""));
+
+        assert_eq!(root().resolve("x"), None);
     }
 
     #[test]

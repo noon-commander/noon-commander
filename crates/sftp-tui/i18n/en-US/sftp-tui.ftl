@@ -7,6 +7,7 @@
 ## seven cells in an 80-column terminal.
 
 fkey-help = Help
+fkey-mkdir = Mkdir
 fkey-quit = Quit
 # Closes the connection to the host under the cursor.
 fkey-disconnect = Disconn
@@ -69,6 +70,8 @@ dialog-ok = OK
 dialog-cancel = Cancel
 dialog-yes = Yes
 dialog-no = No
+# Title of error dialogs.
+dialog-error = Error
 
 ## Help screen (src/tui/help). Prefix: help-. One line per key: say what it does, briefly.
 
@@ -103,6 +106,7 @@ help-sort-extension = Sort by extension; again: reverse
 help-sort-time = Sort by modification time, newest first; again: reverse
 help-sort-size = Sort by size, largest first; again: reverse
 help-quick-search-start = Quick search; again: the next match
+help-mkdir = Make a directory
 help-help = This help
 help-quit = Quit
 help-redraw = Redraw the screen
@@ -139,3 +143,10 @@ pattern-unselect = Unselect
 # Check boxes: leave directories alone; tell upper and lower case apart.
 pattern-files-only = Files only
 pattern-case-sensitive = Case sensitive
+
+## Making directories, F7 (src/tui/app). Prefix: mkdir-. As in mc.
+
+mkdir-title = Create a new directory
+# Above the name field; the name under the cursor is filled in.
+mkdir-prompt = Enter directory name:
+mkdir-error = Cannot create directory { $path }: { $reason }

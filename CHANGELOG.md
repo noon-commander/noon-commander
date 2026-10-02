@@ -63,3 +63,5 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `+` marks and `-` unmarks the names that match a shell pattern such as `*.{jpg,png}`, with
   mc's Files only and Case sensitive options. Dialogs can now have text fields and check
   boxes; Space switches a check box.
+- F7 makes a directory, locally or on a host, and puts the cursor on it. The dialog opens with
+  the name under the cursor; `~` stands for the home directory. Errors show in a red dialog.

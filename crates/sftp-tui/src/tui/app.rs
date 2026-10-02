@@ -1,6 +1,7 @@
 //! State and drawing of the whole screen.
 
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::os::unix::ffi::OsStrExt as _;
 use std::path::Path;
 use std::time::SystemTime;
 
@@ -17,7 +18,9 @@ use super::decor::Decor;
 use super::dialog::{Ask, Button, Dialog, DialogEvent, Reply};
 use super::help::Help;
 use super::keymap::{Action, Context, Keymap, Resolved};
-use super::panel::{Destination, HostState, HostStatus, ListRequest, Listed, Panel, View};
+use super::panel::{
+    Destination, HostState, HostStatus, ListRequest, Listed, Panel, View, location_text,
+};
 use super::pattern::Pattern;
 use super::tasks::HostHandle;
 use super::theme::Theme;
@@ -52,6 +55,13 @@ pub(crate) enum Effect {
     List {
         side: Side,
         request: ListRequest,
+        host: Option<HostHandle>,
+    },
+    /// Make the directory at `location` and report to [`App::created`]. Remote ones go to the
+    /// task of their host.
+    CreateDir {
+        side: Side,
+        location: Location,
         host: Option<HostHandle>,
     },
     /// Connect to a host and report to [`App::connected`] and [`App::closed`]; `stop` ends the
@@ -94,6 +104,8 @@ impl Host {
 
 /// Width of the dialogs of `+` and `-`, as in mc.
 const PATTERN_DIALOG_WIDTH: u16 = 50;
+/// Width of the dialog of F7.
+const MKDIR_DIALOG_WIDTH: u16 = 60;
 
 /// A dialog on screen or waiting for its turn, and what it is for.
 #[derive(Debug)]
@@ -108,6 +120,10 @@ enum Purpose {
     Ssh { id: u64, reply: Option<Reply> },
     /// `+` (`mark`) or `-` in the panel on `side`.
     Pattern { side: Side, mark: bool },
+    /// F7 in the panel on `side`.
+    Mkdir { side: Side },
+    /// Something to read, such as an error.
+    Info,
 }
 
 /// What `+` and `-` asked for last; their dialogs start with it.
@@ -228,12 +244,15 @@ impl App {
         }
     }
 
-    /// Whether the app does something for `action` yet; the F-key bar shows only those.
-    fn supports(action: Action) -> bool {
-        matches!(
-            action,
-            Action::Help | Action::Quit | Action::Redraw | Action::Disconnect | Action::Cancel
-        )
+    /// Whether the app does something for `action` now; the F-key bar shows only those.
+    fn supports(&self, action: Action) -> bool {
+        match action {
+            Action::Help | Action::Quit | Action::Redraw | Action::Disconnect | Action::Cancel => {
+                true
+            }
+            Action::Mkdir => !self.panel(self.active).shows_root(),
+            _ => false,
+        }
     }
 
     fn panel(&self, side: Side) -> &Panel {
@@ -257,18 +276,7 @@ impl App {
                 return Vec::new();
             }
             if let Some(Open { dialog, purpose }) = self.dialogs.pop_front() {
-                match purpose {
-                    Purpose::Ssh { reply, .. } => {
-                        if let Some(reply) = reply {
-                            reply.send(dialog.answer(event));
-                        }
-                    }
-                    Purpose::Pattern { side, mark } => {
-                        if event == DialogEvent::Pressed(Button::Ok) {
-                            self.mark_matching(side, mark, &dialog);
-                        }
-                    }
-                }
+                return self.dialog_closed(&dialog, purpose, event);
             }
             return Vec::new();
         }
@@ -333,6 +341,7 @@ impl App {
                     self.panel_mut(side).set_show_hidden(show);
                 }
             }
+            Action::Mkdir => self.ask_mkdir(),
             Action::Select => self.ask_pattern(true),
             Action::Unselect => self.ask_pattern(false),
             Action::Cancel => self.cancel(self.active),
@@ -345,6 +354,108 @@ impl App {
             }
         }
         Vec::new()
+    }
+
+    /// Does what a dialog was for, once `event` closed it.
+    fn dialog_closed(
+        &mut self,
+        dialog: &Dialog,
+        purpose: Purpose,
+        event: DialogEvent,
+    ) -> Vec<Effect> {
+        let ok = event == DialogEvent::Pressed(Button::Ok);
+        match purpose {
+            Purpose::Ssh { reply, .. } => {
+                if let Some(reply) = reply {
+                    reply.send(dialog.answer(event));
+                }
+            }
+            Purpose::Pattern { side, mark } if ok => self.mark_matching(side, mark, dialog),
+            Purpose::Mkdir { side } if ok && !dialog.text().is_empty() => {
+                if let Some(location) = self.panel(side).resolve(dialog.text()) {
+                    return self.create_dir(side, location);
+                }
+            }
+            Purpose::Pattern { .. } | Purpose::Mkdir { .. } | Purpose::Info => {}
+        }
+        Vec::new()
+    }
+
+    /// Opens the dialog of F7 for the active panel, with the name under the cursor, as in mc.
+    fn ask_mkdir(&mut self) {
+        let panel = self.panel(self.active);
+        if panel.shows_root() {
+            return;
+        }
+        let name = panel
+            .name_under_cursor()
+            .map(|name| String::from_utf8_lossy(name).into_owned())
+            .unwrap_or_default();
+        let (title, prompt) = (fl!("mkdir-title"), fl!("mkdir-prompt"));
+        let dialog = Dialog::form(&title, &prompt, &name, &[], MKDIR_DIALOG_WIDTH);
+        let side = self.active;
+        self.dialogs.push_back(Open {
+            dialog,
+            purpose: Purpose::Mkdir { side },
+        });
+    }
+
+    /// Makes the directory at `location` for the panel on `side`, in the background.
+    fn create_dir(&self, side: Side, location: Location) -> Vec<Effect> {
+        let host = match &location {
+            Location::Remote { host, .. } => match self.hosts.get(host) {
+                Some(Host::Connected { handle, .. }) => Some(handle.clone()),
+                _ => None,
+            },
+            Location::Root | Location::Local(_) => None,
+        };
+        vec![Effect::CreateDir {
+            side,
+            location,
+            host,
+        }]
+    }
+
+    /// Takes the result of an [`Effect::CreateDir`]: panels on the directory it is in read it
+    /// again, the one that asked with the cursor on it; an error shows in a dialog.
+    pub(crate) fn created(
+        &mut self,
+        side: Side,
+        location: &Location,
+        result: Result<(), String>,
+    ) -> Vec<Effect> {
+        if let Err(reason) = result {
+            let path = location_text(location);
+            let reason = cells::sanitize(reason.as_bytes());
+            self.show_error(&fl!("mkdir-error", path = path, reason = reason));
+            return Vec::new();
+        }
+        let parent = location.parent();
+        let name = file_name(location);
+        let mut effects = Vec::new();
+        for panel_side in Side::BOTH {
+            let panel = self.panel_mut(panel_side);
+            if *panel.location() != parent {
+                continue;
+            }
+            let request = match &name {
+                Some(name) if panel_side == side => panel.reload_onto(name.clone()),
+                _ => {
+                    let here = panel.here();
+                    panel.go(here)
+                }
+            };
+            effects.extend(self.route(panel_side, request));
+        }
+        effects
+    }
+
+    /// Shows `message` in an error dialog.
+    fn show_error(&mut self, message: &str) {
+        self.dialogs.push_back(Open {
+            dialog: Dialog::error(&fl!("dialog-error"), message),
+            purpose: Purpose::Info,
+        });
     }
 
     /// Opens the dialog of `+` (`mark`) or `-` for the active panel, as in mc: a pattern, and
@@ -363,7 +474,7 @@ impl App {
             (fl!("pattern-files-only"), options.files_only),
             (fl!("pattern-case-sensitive"), options.case_sensitive),
         ];
-        let dialog = Dialog::form(&title, &options.pattern, &checks, PATTERN_DIALOG_WIDTH);
+        let dialog = Dialog::form(&title, "", &options.pattern, &checks, PATTERN_DIALOG_WIDTH);
         let side = self.active;
         self.dialogs.push_back(Open {
             dialog,
@@ -677,7 +788,7 @@ impl App {
         let actions = self.keymap.fkeys(self.context());
         for (number, (slot, action)) in (1..).zip(slots.iter().zip(actions)) {
             let label = action
-                .filter(|action| Self::supports(*action))
+                .filter(|action| self.supports(*action))
                 .and_then(fkey_label)
                 .unwrap_or_default();
             let number = number.to_string();
@@ -689,6 +800,15 @@ impl App {
             ]);
             frame.render_widget(line, *slot);
         }
+    }
+}
+
+/// The last component of a local or remote path.
+fn file_name(location: &Location) -> Option<Vec<u8>> {
+    match location {
+        Location::Root => None,
+        Location::Local(path) => path.file_name().map(|name| name.as_bytes().to_vec()),
+        Location::Remote { path, .. } => path.file_name().map(<[u8]>::to_vec),
     }
 }
 
@@ -706,6 +826,7 @@ fn fkey_label(action: Action) -> Option<String> {
         Action::Quit => Some(fl!("fkey-quit")),
         Action::Cancel => Some(fl!("fkey-cancel")),
         Action::Disconnect => Some(fl!("fkey-disconnect")),
+        Action::Mkdir => Some(fl!("fkey-mkdir")),
         _ => None,
     }
 }
@@ -1022,6 +1143,114 @@ mod tests {
         app.handle(action(Action::Confirm));
         assert!(screen(&mut app).contains(" 0 B in 1 file "));
         assert_eq!(app.pattern_options.pattern, "*");
+    }
+
+    /// The only effect, which must make a directory: where, and through which host.
+    fn create_dir(effects: Vec<Effect>) -> (Side, Location, Option<HostHandle>) {
+        match one(effects) {
+            Effect::CreateDir {
+                side,
+                location,
+                host,
+            } => (side, location, host),
+            other => panic!("expected a new directory, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn f7_makes_a_directory_and_puts_the_cursor_on_it() {
+        let mut app = loaded();
+        app.active = Side::Right;
+        app.handle(action(Action::End));
+        app.active = Side::Left;
+
+        app.handle(action(Action::Mkdir));
+        assert_eq!(app.context(), Context::DialogInput);
+        let text = screen(&mut app);
+        assert!(text.contains("Create a new directory"), "{text}");
+        assert!(text.contains("Enter directory name:"), "{text}");
+        type_text(&mut app, "new");
+        let (side, location, host) = create_dir(app.handle(action(Action::Confirm)));
+        assert_eq!(
+            (side, &location, host.is_none()),
+            (Side::Left, &local("/srv/new"), true)
+        );
+
+        // Both panels show /srv and read it again; the one that asked lands on the directory.
+        let effects = app.created(side, &location, Ok(()));
+        assert_eq!(effects.len(), 2);
+        let listing = Listing::Dir(vec![dir("left"), dir("new"), dir("right")]);
+        answer(&mut app, effects, &listing);
+        assert_eq!(app.left.name_under_cursor(), Some(&b"new"[..]));
+        assert_eq!(app.right.name_under_cursor(), Some(&b"right"[..]), "stays");
+
+        // The name under the cursor is filled in, and typing replaces it.
+        app.handle(action(Action::Mkdir));
+        type_text(&mut app, "x");
+        let (_, location, _) = create_dir(app.handle(action(Action::Confirm)));
+        assert_eq!(location, local("/srv/x"));
+        app.handle(action(Action::Mkdir));
+        app.handle(action(Action::End));
+        type_text(&mut app, "2");
+        let (_, location, _) = create_dir(app.handle(action(Action::Confirm)));
+        assert_eq!(location, local("/srv/new2"));
+
+        // Esc and an empty name make nothing.
+        app.handle(action(Action::Mkdir));
+        assert!(app.handle(action(Action::Cancel)).is_empty());
+        app.handle(action(Action::Mkdir));
+        app.handle(action(Action::DeleteToStart));
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+    }
+
+    #[test]
+    fn a_directory_that_cannot_be_made_is_an_error_dialog() {
+        let mut app = loaded();
+        let effects = app.created(
+            Side::Left,
+            &local("/srv/left"),
+            Err("already exists".into()),
+        );
+        assert!(effects.is_empty());
+        assert_eq!(app.context(), Context::Dialog);
+        let text = screen(&mut app);
+        assert!(text.contains("Error"), "{text}");
+        assert!(
+            text.contains("Cannot create directory /srv/left: already exists"),
+            "{text}"
+        );
+        app.handle(action(Action::Confirm));
+        assert_eq!(app.context(), Context::Panel);
+
+        // A directory elsewhere reads no panel again.
+        assert!(app.created(Side::Left, &local("/tmp/x"), Ok(())).is_empty());
+    }
+
+    #[test]
+    fn f7_works_on_hosts_but_not_in_the_root() {
+        let mut app = at_root();
+        assert!(!screen(&mut app).contains("7Mkdir"));
+        app.handle(action(Action::Mkdir));
+        assert_eq!(app.context(), Context::Root, "nowhere to make it");
+
+        let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
+            panic!("expected a connection");
+        };
+        let (handle, _requests) = HostHandle::channel();
+        let effects = app.connected("web", connection, handle);
+        let [Effect::List { request, .. }] = &effects[..] else {
+            panic!("expected a listing, got {effects:?}");
+        };
+        let generation = request.generation;
+        let location = remote("web", "/home/deploy");
+        let listing = Listing::Dir(Vec::new());
+        app.listed(Side::Left, generation, Ok(Listed { location, listing }));
+        assert!(screen(&mut app).contains("7Mkdir"));
+        app.handle(action(Action::Mkdir));
+        type_text(&mut app, "www");
+        let (_, location, host) = create_dir(app.handle(action(Action::Confirm)));
+        assert_eq!(location, remote("web", "/home/deploy/www"));
+        assert!(host.is_some(), "through the host's task");
     }
 
     #[test]
@@ -1505,9 +1734,9 @@ mod tests {
 
     #[test]
     fn every_supported_f_key_action_has_a_label() {
-        let keymap = Keymap::mc();
-        for action in keymap.fkeys(Context::Panel).into_iter().flatten() {
-            if App::supports(action) {
+        let app = loaded();
+        for action in app.keymap.fkeys(Context::Panel).into_iter().flatten() {
+            if app.supports(action) {
                 assert!(fkey_label(action).is_some(), "{action:?}");
             }
         }

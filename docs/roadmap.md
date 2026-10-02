@@ -42,7 +42,8 @@
 - [x] Marks: Insert or Ctrl-T, Shift-Up/Down, `*`; their total below the listing
 - [x] `+` and `-` mark and unmark by pattern
 - [x] VFS: create and remove directories, remove files, rename, set permissions and times
-- [ ] F7 mkdir, F8 delete
+- [x] F7 mkdir
+- [ ] F8 delete
 - [ ] VFS: read and write files as streams
 - [ ] F5 copy and F6 move/rename in any direction, with progress, cancellation, and a conflict
       dialog

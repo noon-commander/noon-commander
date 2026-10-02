@@ -17,7 +17,7 @@ use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
 use super::cells::{self, Align};
-use super::configuration::{ConfigEvent, Configuration};
+use super::configuration::Configuration;
 use super::decor::Decor;
 use super::dialog::{Ask, Button, Dialog, DialogEvent, Reply};
 use super::help::Help;
@@ -977,29 +977,18 @@ impl App {
         }
     }
 
-    /// Gives a key to the Configuration dialog. OK uses the settings at once, where the
-    /// running app can, and writes them to the config file; an invalid one keeps the dialog
-    /// open and says why.
+    /// Gives a key to the Configuration dialog, which applies each change as it is made.
     fn handle_configuration(&mut self, input: Resolved) -> Vec<Effect> {
         let Some(configuration) = &mut self.configuration else {
             return Vec::new();
         };
-        match configuration.handle(input) {
-            ConfigEvent::Pending => Vec::new(),
-            ConfigEvent::Cancelled => {
-                self.configuration = None;
-                Vec::new()
-            }
-            ConfigEvent::Accepted => match configuration.change() {
-                Ok((old, new)) => {
-                    self.configuration = None;
-                    self.apply_config(old, new)
-                }
-                Err(message) => {
-                    self.show_error(&message);
-                    Vec::new()
-                }
-            },
+        let event = configuration.handle(input);
+        if event.closed {
+            self.configuration = None;
+        }
+        match event.change {
+            Some((old, new)) => self.apply_config(old, new),
+            None => Vec::new(),
         }
     }
 
@@ -4987,22 +4976,24 @@ mod tests {
     }
 
     #[test]
-    fn the_configuration_dialog_uses_its_settings_at_once_and_saves_them() {
+    fn the_configuration_dialog_applies_and_saves_each_change() {
         let mut app = loaded();
         open_configuration(&mut app);
         assert_eq!(app.context(), Context::DialogInput, "on the language");
-        assert!(screen_of(&mut app, 24).contains("Configuration"));
-        // The theme, then the menu bar.
-        app.handle(action(Action::Down));
-        app.handle(action(Action::Right));
-        app.handle(action(Action::End));
-        app.handle(action(Action::Toggle));
-        let effects = app.handle(action(Action::Confirm));
-        assert!(app.configuration.is_none());
+        let text = screen_of(&mut app, 24);
+        assert!(
+            text.contains("Configuration") && !text.contains("OK"),
+            "{text}"
+        );
+        assert!(
+            app.handle(action(Action::Down)).is_empty(),
+            "nothing changed"
+        );
+        let effects = app.handle(action(Action::Right));
+        assert!(app.configuration.is_some(), "it stays open");
         assert_eq!(app.theme, Theme::terminal());
-        assert_eq!(app.config.ui.menu_bar, MenuBar::Always);
         let [Effect::SaveConfig { old, new, config }] = &effects[..] else {
-            panic!("expected the settings to be saved: {effects:?}");
+            panic!("expected the theme to be saved: {effects:?}");
         };
         assert_eq!(old.ui, ui());
         assert_eq!(new.ui, app.config.ui);
@@ -5018,32 +5009,32 @@ mod tests {
             },
             "only the interface"
         );
+        app.handle(action(Action::End));
+        let effects = app.handle(action(Action::Toggle));
+        assert_eq!(app.config.ui.menu_bar, MenuBar::Always);
+        let [Effect::SaveConfig { old, .. }] = &effects[..] else {
+            panic!("expected the menu bar to be saved: {effects:?}");
+        };
+        assert_eq!(old.ui.theme, "terminal", "after the theme");
         app.config_saved(Err("cannot write config.toml".to_owned()));
         assert!(app.dialogs.front().is_some(), "a failure says so");
         app.handle(action(Action::Cancel));
-
-        // Nothing changed, nothing to save; Esc keeps everything as it was.
-        open_configuration(&mut app);
-        assert!(app.handle(action(Action::Confirm)).is_empty());
-        open_configuration(&mut app);
-        app.handle(action(Action::Down));
-        app.handle(action(Action::Right));
+        assert!(app.configuration.is_some());
         assert!(app.handle(action(Action::Cancel)).is_empty());
-        assert_eq!(app.theme, Theme::terminal());
+        assert!(app.configuration.is_none(), "Esc closes it");
 
-        // A language that is no tag keeps the dialog open.
+        // A language that is no tag stays in its field and is not used.
         open_configuration(&mut app);
         app.handle(Resolved::Insert('?'));
-        assert!(app.handle(action(Action::Confirm)).is_empty());
-        assert!(app.configuration.is_some() && app.dialogs.front().is_some());
+        assert!(app.handle(action(Action::Down)).is_empty());
+        assert!(app.handle(action(Action::Cancel)).is_empty());
+        assert_eq!(app.config.ui.language, "auto");
     }
 
     /// Opens the category `index` of the Configuration dialog, with the cursor on its first
     /// setting.
     fn config_category(app: &mut App, index: usize) {
-        for _ in 0..3 {
-            app.handle(action(Action::NextField));
-        }
+        app.handle(action(Action::PrevField));
         app.handle(action(Action::Home));
         for _ in 0..index {
             app.handle(action(Action::Down));
@@ -5057,16 +5048,16 @@ mod tests {
         open_configuration(&mut app);
         config_category(&mut app, 1);
         app.handle(action(Action::Toggle));
+        assert!(!app.copy_choices.atomic);
         app.handle(action(Action::Down));
         app.handle(Resolved::Insert('5'));
         config_category(&mut app, 2);
+        assert_eq!(app.parallel_jobs, 5, "as the cursor left the field");
         app.handle(action(Action::DeleteToStart));
         for c in "~/bin/ssh".chars() {
             app.handle(Resolved::Insert(c));
         }
         let effects = app.handle(action(Action::Confirm));
-        assert!(!app.copy_choices.atomic);
-        assert_eq!(app.parallel_jobs, 5);
         let [Effect::SaveConfig { new, config, .. }] = &effects[..] else {
             panic!("expected the settings to be saved, and nothing to reload: {effects:?}");
         };

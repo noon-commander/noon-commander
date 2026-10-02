@@ -41,10 +41,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ([ADR 0010](docs/adr/0010-truecolor-themes.md)).
 - Options → Configuration… opens a dialog of every setting of `config.toml`, by category
   with icons, that scrolls with a scroll bar: Interface, Transfers, SSH (with the hidden
-  hosts), and Volumes. Lists are typed as words, as in a shell. OK checks the values (the
-  extra ssh arguments as at start), uses them at once (the language at the next start; ssh
-  settings for new connections) and writes the changed keys to `config.toml`, keeping its
-  comments ([ADR 0009](docs/adr/0009-configuration-dialog-writes-config-toml.md)).
+  hosts), and Volumes. It has no OK or Cancel: each change takes effect at once (a text
+  field's when the cursor leaves it, the language at the next start, ssh settings for new
+  connections) and is written to `config.toml`, keeping its comments. Values are checked
+  first (the extra ssh arguments as at start), and lists are typed as words, as in a shell
+  ([ADR 0009](docs/adr/0009-configuration-dialog-writes-config-toml.md)).
 - F9 opens a pull-down menu, as in mc: Left and Right (location menu, sort order, rescan,
   disconnect for the panel on that side), File, Command, and Options (hidden files). Each
   command shows its key from the keymap and has a letter that runs it. Commands that cannot run

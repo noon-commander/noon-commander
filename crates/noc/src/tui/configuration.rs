@@ -1,6 +1,7 @@
 //! The Configuration dialog (Options → Configuration…): the settings of `config.toml`, by
 //! category. Categories are listed on the left, each with an icon; the settings of the chosen
-//! one are on the right and scroll, with a scroll bar, when they do not fit.
+//! one are on the right and scroll, with a scroll bar, when they do not fit. There is no OK:
+//! every change takes effect as it is made, a text field's when the cursor leaves it.
 
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
@@ -11,7 +12,7 @@ use ratatui::layout::{Position, Rect};
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
-use super::dialog::{Button, Colors, Field, button_line, draw_box, draw_separator};
+use super::dialog::{Colors, Field, draw_box, draw_separator};
 use super::keymap::{Action, Context, Resolved};
 use super::scrollbar;
 use super::theme::Theme;
@@ -19,12 +20,11 @@ use crate::i18n::fl;
 
 /// Widest and tallest the dialog gets, in cells, borders included.
 const WIDTH: u16 = 76;
-const HEIGHT: u16 = 22;
+const HEIGHT: u16 = 20;
 /// Cells between a setting's name and its value.
 const LABEL_GAP: usize = 2;
 /// Lines of the hint of the setting under the cursor.
 const HINT_ROWS: u16 = 2;
-const BUTTONS: [Button; 2] = [Button::Ok, Button::Cancel];
 
 /// Which setting of `config.toml` a row shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,8 +56,9 @@ enum Value {
         options: Vec<(String, String)>,
         chosen: usize,
     },
-    /// A text field; lists are words in it, see [`split_words`].
-    Text(Field),
+    /// A text field, and the text it had when it was last applied; lists are words in it,
+    /// see [`split_words`].
+    Text { field: Field, applied: String },
 }
 
 #[derive(Debug)]
@@ -86,7 +87,7 @@ impl Setting {
         match &mut self.value {
             Value::Toggle(on) => *on = !*on,
             Value::Choice { options, chosen } => *chosen = (*chosen + 1) % options.len().max(1),
-            Value::Text(_) => {}
+            Value::Text { .. } => {}
         }
     }
 
@@ -114,7 +115,7 @@ impl Setting {
             Value::Choice { options, chosen } => {
                 options.get(*chosen).map_or("", |(value, _)| value.as_str())
             }
-            Value::Text(field) => field.text(),
+            Value::Text { field, .. } => field.text(),
             Value::Toggle(_) => "",
         }
     }
@@ -196,16 +197,16 @@ enum Focus {
     Sidebar,
     /// The setting under the cursor in the chosen category.
     Settings,
-    Button(usize),
 }
 
 /// What a key did to the dialog.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ConfigEvent {
-    Pending,
-    /// OK: read the settings with [`Configuration::change`].
-    Accepted,
-    Cancelled,
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct ConfigEvent {
+    /// The settings changed: from what they were to what they are, both as `config.toml`
+    /// writes them, with `~` in paths.
+    pub(crate) change: Option<(Config, Config)>,
+    /// The dialog closes.
+    pub(crate) closed: bool,
 }
 
 /// The Configuration dialog.
@@ -221,8 +222,10 @@ pub(crate) struct Configuration {
     offset: usize,
     page: usize,
     icons: bool,
-    /// The settings as the dialog opened, as `config.toml` writes them.
-    initial: Config,
+    /// The settings as they were last applied, as `config.toml` writes them.
+    applied: Config,
+    /// Why the text field under the cursor cannot be applied, shown in place of its hint.
+    error: Option<String>,
 }
 
 /// The values of a choice with their texts; `current` is chosen, and added if it is not
@@ -243,7 +246,10 @@ fn choice(values: &[(&str, String)], current: &str) -> Value {
 }
 
 fn text(value: &str) -> Value {
-    Value::Text(Field::plain(value))
+    Value::Text {
+        field: Field::plain(value),
+        applied: value.to_owned(),
+    }
 }
 
 /// A path as the field shows it: under `home`, from `~`, as `config.toml` may write it.
@@ -316,33 +322,61 @@ impl Configuration {
             offset: 0,
             page: 1,
             icons,
-            initial: config.clone(),
+            applied: config.clone(),
+            error: None,
         };
-        if let Ok(initial) = dialog.config() {
-            dialog.initial = initial;
+        if let Ok(applied) = dialog.config() {
+            dialog.applied = applied;
         }
         dialog
     }
 
-    /// The settings as the dialog opened and as it has them now, both as `config.toml` writes
-    /// them, with `~` in paths; or why they are not valid, in words, with the cursor on the
-    /// setting.
-    pub(crate) fn change(&mut self) -> Result<(Config, Config), String> {
-        match self.config() {
-            Ok(config) => Ok((self.initial.clone(), config)),
+    /// Applies the settings as the dialog has them: the change, if there is one, or, if a text
+    /// field holds something invalid, `Err` with the cursor on it and the reason shown.
+    fn apply(&mut self) -> Result<Option<(Config, Config)>, ()> {
+        let config = match self.config() {
+            Ok(config) => config,
             Err((category, row, message)) => {
                 self.category = category;
                 self.row = row;
                 self.focus = Focus::Settings;
-                Err(message)
+                self.error = Some(message);
+                return Err(());
             }
+        };
+        self.error = None;
+        for setting in self
+            .categories
+            .iter_mut()
+            .flat_map(|category| &mut category.settings)
+        {
+            if let Value::Text { field, applied } = &mut setting.value {
+                field.text().clone_into(applied);
+            }
+        }
+        if config == self.applied {
+            return Ok(None);
+        }
+        let old = std::mem::replace(&mut self.applied, config.clone());
+        Ok(Some((old, config)))
+    }
+
+    /// Puts back what the text field under the cursor had when it was last applied.
+    fn revert(&mut self) {
+        self.error = None;
+        if let Some(Setting {
+            value: Value::Text { field, applied },
+            ..
+        }) = self.setting_mut()
+        {
+            *field = Field::plain(applied);
         }
     }
 
     /// The settings as the dialog has them, or the category and row of one that is not valid,
     /// and why.
     fn config(&self) -> Result<Config, (usize, usize, String)> {
-        let mut config = self.initial.clone();
+        let mut config = self.applied.clone();
         for (index, category) in self.categories.iter().enumerate() {
             for (row, setting) in category.settings.iter().enumerate() {
                 setting
@@ -368,7 +402,7 @@ impl Configuration {
             return None;
         }
         match &mut self.setting_mut()?.value {
-            Value::Text(field) => Some(field),
+            Value::Text { field, .. } => Some(field),
             Value::Toggle(_) | Value::Choice { .. } => None,
         }
     }
@@ -378,7 +412,7 @@ impl Configuration {
         let text = self.focus == Focus::Settings
             && matches!(
                 self.settings().get(self.row).map(|setting| &setting.value),
-                Some(Value::Text(_))
+                Some(Value::Text { .. })
             );
         if text {
             Context::DialogInput
@@ -395,48 +429,72 @@ impl Configuration {
         }
     }
 
-    /// Takes a key. Tab moves between the categories, the settings, and the buttons; Up and
-    /// Down move within them; Space switches a check box or picks the next choice, and Left
-    /// and Right pick choices; Enter presses OK, or the button with the focus; Esc cancels.
+    /// Takes a key. Tab moves between the categories and the settings; Up and Down move
+    /// within them; Space or Enter switches a check box or picks the next choice, and Left and
+    /// Right pick choices, each applied at once. A text field is applied when the cursor leaves
+    /// it or on Enter, and keeps the cursor while it holds something invalid. Esc closes the
+    /// dialog, applying the text field under the cursor, or putting it back if invalid.
     pub(crate) fn handle(&mut self, input: Resolved) -> ConfigEvent {
+        let mut event = ConfigEvent::default();
+        let in_text = self.field_mut().is_some();
         let action = match (input, self.field_mut()) {
             (Resolved::Insert(c), Some(field)) => {
                 field.insert(c);
-                return ConfigEvent::Pending;
+                return event;
             }
-            (Resolved::Insert(_), None) => return ConfigEvent::Pending,
+            (Resolved::Insert(_), None) => return event,
             (Resolved::Action(action), Some(field)) => {
                 if field.edit(action) {
-                    return ConfigEvent::Pending;
+                    return event;
                 }
                 action
             }
             (Resolved::Action(action), None) => action,
         };
+        if action == Action::Cancel {
+            if in_text {
+                match self.apply() {
+                    Ok(change) => event.change = change,
+                    Err(()) => self.revert(),
+                }
+            }
+            event.closed = true;
+            return event;
+        }
+        let leaves = matches!(
+            action,
+            Action::Up
+                | Action::Down
+                | Action::PageUp
+                | Action::PageDown
+                | Action::NextField
+                | Action::PrevField
+                | Action::Confirm
+        );
+        if in_text && leaves {
+            match self.apply() {
+                Ok(change) => event.change = change,
+                Err(()) => return event,
+            }
+            if action == Action::Confirm {
+                return event;
+            }
+        }
         let rows = self.settings().len();
         let last = rows.saturating_sub(1);
         let page = self.page.max(1);
         match (self.focus, action) {
-            (Focus::Button(1), Action::Confirm | Action::Toggle) | (_, Action::Cancel) => {
-                return ConfigEvent::Cancelled;
+            (
+                Focus::Sidebar,
+                Action::NextField | Action::Right | Action::Toggle | Action::Confirm,
+            ) if rows > 0 => {
+                self.focus = Focus::Settings;
             }
-            (_, Action::Confirm) | (Focus::Button(_), Action::Toggle) => {
-                return ConfigEvent::Accepted;
-            }
-            (_, Action::NextField) => {
+            (Focus::Settings, Action::NextField | Action::PrevField)
+            | (Focus::Sidebar, Action::PrevField) => {
                 self.focus = match self.focus {
                     Focus::Sidebar if rows > 0 => Focus::Settings,
-                    Focus::Sidebar | Focus::Settings => Focus::Button(0),
-                    Focus::Button(0) => Focus::Button(1),
-                    Focus::Button(_) => Focus::Sidebar,
-                };
-            }
-            (_, Action::PrevField) => {
-                self.focus = match self.focus {
-                    Focus::Sidebar => Focus::Button(1),
-                    Focus::Button(0) if rows > 0 => Focus::Settings,
-                    Focus::Settings | Focus::Button(0) => Focus::Sidebar,
-                    Focus::Button(_) => Focus::Button(0),
+                    Focus::Sidebar | Focus::Settings => Focus::Sidebar,
                 };
             }
             (Focus::Sidebar, Action::Up) => self.choose_category(self.category.saturating_sub(1)),
@@ -448,35 +506,32 @@ impl Configuration {
             (Focus::Sidebar, Action::End | Action::PageDown) => {
                 self.choose_category(self.categories.len() - 1);
             }
-            (Focus::Sidebar, Action::Right | Action::Toggle) if rows > 0 => {
-                self.focus = Focus::Settings;
-            }
             (Focus::Settings, Action::Up) => self.row = self.row.saturating_sub(1),
             (Focus::Settings, Action::Down) => self.row = (self.row + 1).min(last),
             (Focus::Settings, Action::PageUp) => self.row = self.row.saturating_sub(page),
             (Focus::Settings, Action::PageDown) => self.row = (self.row + page).min(last),
             (Focus::Settings, Action::Home) => self.row = 0,
             (Focus::Settings, Action::End) => self.row = last,
-            (Focus::Settings, Action::Toggle) => {
+            (Focus::Settings, Action::Toggle | Action::Confirm) => {
                 if let Some(setting) = self.setting_mut() {
                     setting.toggle();
                 }
+                event.change = self.apply().unwrap_or_default();
             }
             (Focus::Settings, Action::Left | Action::Right) => {
                 let forward = action == Action::Right;
                 let cycled = self
                     .setting_mut()
                     .is_some_and(|setting| setting.cycle(forward));
-                if !cycled && !forward {
+                if cycled {
+                    event.change = self.apply().unwrap_or_default();
+                } else if !forward {
                     self.focus = Focus::Sidebar;
                 }
             }
-            (Focus::Button(_), Action::Up) if rows > 0 => self.focus = Focus::Settings,
-            (Focus::Button(_), Action::Left) => self.focus = Focus::Button(0),
-            (Focus::Button(_), Action::Right) => self.focus = Focus::Button(1),
             _ => {}
         }
-        ConfigEvent::Pending
+        event
     }
 
     /// Draws the dialog centered in `area`, with the terminal cursor in a focused text field.
@@ -487,12 +542,12 @@ impl Configuration {
             HEIGHT.min(area.height.saturating_sub(2)),
         );
         let inner = draw_box(frame, area, size, &fl!("config-title"), colors, theme);
-        // The body, a line, two lines of hint, a line, and the buttons.
-        if inner.height < HINT_ROWS + 4 || inner.width < 20 {
+        // The body, a line, and two lines of hint.
+        if inner.height < HINT_ROWS + 2 || inner.width < 20 {
             return;
         }
         let body = Rect {
-            height: inner.height - HINT_ROWS - 3,
+            height: inner.height - HINT_ROWS - 1,
             ..inner
         };
         let sidebar = self.render_sidebar(frame, body, theme, colors);
@@ -514,30 +569,24 @@ impl Configuration {
             Rect::new(x, body.bottom(), 1, 1),
         );
 
-        let hint = match self.settings().get(self.row) {
-            Some(setting) if self.focus == Focus::Settings && setting.restart => {
-                format!("{} {}", setting.hint, fl!("config-restart"))
-            }
-            Some(setting) if self.focus == Focus::Settings => setting.hint.clone(),
-            _ => String::new(),
+        let (hint, style) = match (&self.error, self.settings().get(self.row)) {
+            (Some(error), _) => (error.clone(), theme.error_dialog),
+            (None, Some(setting)) if self.focus == Focus::Settings && setting.restart => (
+                format!("{} {}", setting.hint, fl!("config-restart")),
+                theme.dialog.patch(theme.menu_disabled),
+            ),
+            (None, Some(setting)) if self.focus == Focus::Settings => (
+                setting.hint.clone(),
+                theme.dialog.patch(theme.menu_disabled),
+            ),
+            _ => (String::new(), theme.dialog),
         };
-        let style = theme.dialog.patch(theme.menu_disabled);
         let lines = cells::wrap(&hint, usize::from(inner.width));
         for (row, line) in (0..HINT_ROWS).zip(lines) {
             let line = cells::fit(&line, usize::from(inner.width), Align::Left);
             let area = Rect::new(inner.x, body.bottom() + 1 + row, inner.width, 1);
             frame.render_widget(Line::styled(line, style), area);
         }
-        let labels: Vec<String> = BUTTONS.iter().map(|button| button.label()).collect();
-        let focus = match self.focus {
-            Focus::Button(index) => Some(index),
-            Focus::Sidebar | Focus::Settings => None,
-        };
-        draw_separator(frame, inner, inner.bottom() - 2, colors, theme);
-        frame.render_widget(
-            button_line(&labels, 0, focus, colors),
-            Rect::new(inner.x, inner.bottom() - 1, inner.width, 1),
-        );
     }
 
     /// The categories down the left of `body`; returns where they are.
@@ -625,7 +674,7 @@ impl Configuration {
             let y = area.y + u16::try_from(index - self.offset).unwrap_or(0);
             let focused = self.focus == Focus::Settings && index == self.row;
             let label = cells::fit(&setting.label, label_width + LABEL_GAP, Align::Left);
-            let label_style = if focused && !matches!(setting.value, Value::Text(_)) {
+            let label_style = if focused && !matches!(setting.value, Value::Text { .. }) {
                 colors.focused_style()
             } else {
                 theme.dialog
@@ -640,7 +689,7 @@ impl Configuration {
                     let text = cells::fit(text, value_width.saturating_sub(4), Align::Left);
                     Span::styled(format!("< {} >", text.trim_end()), label_style)
                 }
-                Value::Text(field) => {
+                Value::Text { field, .. } => {
                     let (text, column) = field.visible(value_width);
                     if focused {
                         let label = u16::try_from(label_width + LABEL_GAP).unwrap_or(0);
@@ -863,10 +912,10 @@ mod tests {
 
     /// Opens the category `index`, with the cursor on its first setting.
     fn category(dialog: &mut Configuration, index: usize) {
-        dialog.handle(action(Action::NextField));
-        dialog.handle(action(Action::NextField));
-        dialog.handle(action(Action::NextField));
-        assert_eq!(dialog.focus, Focus::Sidebar);
+        if dialog.focus != Focus::Sidebar {
+            dialog.handle(action(Action::PrevField));
+        }
+        assert_eq!(dialog.focus, Focus::Sidebar, "{:?}", dialog.error);
         dialog.handle(action(Action::Home));
         for _ in 0..index {
             dialog.handle(action(Action::Down));
@@ -875,24 +924,67 @@ mod tests {
     }
 
     #[test]
-    fn reads_back_what_it_shows_and_what_was_changed() {
+    fn shows_the_settings_as_the_file_writes_them() {
         let mut config = Config::default();
         config.ui.theme = "solarized".to_owned();
         config.ssh.program = PathBuf::from("/home/me/bin/ssh");
         config.ssh.args = vec!["-o".to_owned(), "ServerAliveInterval=15".to_owned()];
         config.volumes.hide = vec!["/Volumes/My Disk".to_owned()];
-        let (old, new) = dialog_of(&config).change().unwrap();
-        assert_eq!(old, new, "nothing changed");
-        assert_eq!(new.ui.theme, "solarized", "an unknown value is kept");
-        assert_eq!(new.ssh.program, Path::new("~/bin/ssh"), "paths from ~");
-        assert_eq!(new.ssh.args, config.ssh.args);
-        assert_eq!(new.volumes.hide, config.volumes.hide);
+        let dialog = dialog_of(&config);
+        let shown = dialog.config().unwrap();
+        assert_eq!(shown, dialog.applied, "nothing changed");
+        assert_eq!(shown.ui.theme, "solarized", "an unknown value is kept");
+        assert_eq!(shown.ssh.program, Path::new("~/bin/ssh"), "paths from ~");
+        assert_eq!(shown.ssh.args, config.ssh.args);
+        assert_eq!(shown.volumes.hide, config.volumes.hide);
+    }
 
-        let mut dialog = self::dialog();
+    #[test]
+    fn each_change_takes_effect_at_once() {
+        let mut dialog = dialog();
         assert_eq!(dialog.context(), Context::DialogInput, "on the language");
+        let event = dialog.handle(action(Action::Down));
+        assert_eq!(event, ConfigEvent::default(), "the language did not change");
+        let event = dialog.handle(action(Action::Right));
+        let (old, new) = event.change.unwrap();
+        assert_eq!(
+            (old.ui.theme.as_str(), new.ui.theme.as_str()),
+            ("mc-classic", "terminal")
+        );
+        dialog.handle(action(Action::Down));
+        let (old, new) = dialog.handle(action(Action::Confirm)).change.unwrap();
+        assert_eq!(old.ui.theme, "terminal", "the change before counts");
+        assert_eq!(
+            new.ui.borders,
+            Borders::Single,
+            "Enter picks the next choice"
+        );
+
+        // A text field takes effect when the cursor leaves it.
+        category(&mut dialog, 1);
+        dialog.handle(action(Action::Down));
+        assert_eq!(dialog.handle(Resolved::Insert('4')), ConfigEvent::default());
+        let (_, new) = dialog.handle(action(Action::Up)).change.unwrap();
+        assert_eq!(new.transfer.parallel_jobs.get(), 4);
+        // Or on Enter, which keeps the cursor there; or as the dialog closes.
+        dialog.handle(action(Action::Down));
+        dialog.handle(action(Action::DeleteToStart));
+        typed(&mut dialog, "5");
+        let event = dialog.handle(action(Action::Confirm));
+        assert_eq!(event.change.unwrap().1.transfer.parallel_jobs.get(), 5);
+        assert_eq!(dialog.row, 1);
+        dialog.handle(action(Action::DeleteToStart));
+        typed(&mut dialog, "3");
+        let event = dialog.handle(action(Action::Cancel));
+        assert!(event.closed);
+        assert_eq!(event.change.unwrap().1.transfer.parallel_jobs.get(), 3);
+    }
+
+    #[test]
+    fn reads_every_category() {
+        let mut dialog = dialog();
         typed(&mut dialog, "de");
         dialog.handle(action(Action::Down));
-        assert_eq!(dialog.context(), Context::Dialog);
         dialog.handle(action(Action::Right));
         dialog.handle(action(Action::Down));
         dialog.handle(action(Action::Toggle));
@@ -915,8 +1007,7 @@ mod tests {
         dialog.handle(action(Action::DeleteToStart));
         category(&mut dialog, 3);
         typed(&mut dialog, "/mnt/*");
-        let (old, new) = dialog.change().unwrap();
-        assert_eq!(old, Config::default());
+        assert!(dialog.handle(action(Action::Cancel)).closed);
         let mut expected = Config::default();
         expected.ui.language = "de".to_owned();
         expected.ui.theme = "terminal".to_owned();
@@ -930,19 +1021,11 @@ mod tests {
         expected.ssh.multiplex = false;
         expected.discovery.hide = Vec::new();
         expected.volumes.hide = vec!["/mnt/*".to_owned()];
-        assert_eq!(new, expected);
-        assert_eq!(
-            dialog.handle(action(Action::Confirm)),
-            ConfigEvent::Accepted
-        );
-        assert_eq!(
-            dialog.handle(action(Action::Cancel)),
-            ConfigEvent::Cancelled
-        );
+        assert_eq!(dialog.applied, expected);
     }
 
     #[test]
-    fn an_invalid_setting_says_why_and_gets_the_cursor() {
+    fn an_invalid_text_keeps_the_cursor_and_says_why() {
         let cases: [(usize, usize, &str, &str); 4] = [
             (0, 0, "?", "is not auto or a language tag"),
             (1, 1, "x", "is not a number of jobs"),
@@ -955,14 +1038,28 @@ mod tests {
             for _ in 0..row {
                 dialog.handle(action(Action::Down));
             }
+            let before = dialog.config().unwrap();
             dialog.handle(action(Action::DeleteToStart));
             dialog.handle(action(Action::DeleteToEnd));
             typed(&mut dialog, text);
-            category(&mut dialog, 3);
-            let error = dialog.change().unwrap_err();
+            for key in [Action::Down, Action::NextField, Action::Confirm] {
+                assert_eq!(
+                    dialog.handle(action(key)),
+                    ConfigEvent::default(),
+                    "{message}"
+                );
+                assert_eq!((dialog.category, dialog.row), (index, row), "{message}");
+                assert_eq!(dialog.focus, Focus::Settings);
+            }
+            let error = dialog.error.clone().unwrap();
             assert!(error.contains(message), "{error}");
-            assert_eq!((dialog.category, dialog.row), (index, row), "{message}");
-            assert_eq!(dialog.focus, Focus::Settings);
+            assert!(draw(&mut dialog, 76, 20).contains(message), "{message}");
+            // Esc puts back what was there and closes.
+            let event = dialog.handle(action(Action::Cancel));
+            assert_eq!(event.change, None);
+            assert!(event.closed);
+            assert_eq!(dialog.config().unwrap(), before);
+            assert_eq!(dialog.error, None);
         }
     }
 
@@ -984,28 +1081,16 @@ mod tests {
     }
 
     #[test]
-    fn tab_moves_between_the_categories_the_settings_and_the_buttons() {
+    fn tab_moves_between_the_categories_and_the_settings() {
         let mut dialog = dialog();
         dialog.handle(action(Action::NextField));
-        assert_eq!(dialog.focus, Focus::Button(0));
-        dialog.handle(action(Action::NextField));
-        assert_eq!(dialog.focus, Focus::Button(1));
-        assert_eq!(
-            dialog.handle(action(Action::Toggle)),
-            ConfigEvent::Cancelled
-        );
-        dialog.handle(action(Action::NextField));
         assert_eq!(dialog.focus, Focus::Sidebar);
-        dialog.handle(action(Action::Right));
+        dialog.handle(action(Action::NextField));
         assert_eq!(dialog.focus, Focus::Settings);
         dialog.handle(action(Action::PrevField));
+        assert_eq!(dialog.focus, Focus::Sidebar);
         dialog.handle(action(Action::PrevField));
-        assert_eq!(dialog.focus, Focus::Button(1));
-        dialog.handle(action(Action::Left));
-        assert_eq!(
-            dialog.handle(action(Action::Confirm)),
-            ConfigEvent::Accepted
-        );
+        assert_eq!(dialog.focus, Focus::Settings);
         // Left on a check box goes back to the categories; in a text field it moves the
         // cursor.
         let mut dialog = self::dialog();
@@ -1016,6 +1101,7 @@ mod tests {
         }
         dialog.handle(action(Action::Left));
         assert_eq!(dialog.focus, Focus::Sidebar);
+        assert!(dialog.handle(action(Action::Cancel)).closed);
     }
 
     #[test]
@@ -1026,14 +1112,14 @@ mod tests {
         // Home and End in the language field move its cursor.
         dialog.handle(action(Action::Down));
         dialog.handle(action(Action::End));
-        let short = draw(&mut dialog, 72, 11);
+        let short = draw(&mut dialog, 72, 9);
         assert!(
             short.contains("Menu bar") && !short.contains("Language"),
             "{short}"
         );
         assert!(short.contains('█') && short.contains('░'), "{short}");
         dialog.handle(action(Action::Home));
-        let top = draw(&mut dialog, 72, 11);
+        let top = draw(&mut dialog, 72, 9);
         assert!(
             top.contains("Language") && !top.contains("Menu bar"),
             "{top}"

@@ -21,11 +21,14 @@ rewrites one table through `toml_edit` and keeps everything else.
   on the left, each with a Nerd Font icon, and the settings of the chosen one on the right,
   which scroll, with a scroll bar, when they do not fit: Interface (`[ui]`), Transfers
   (`[transfer]`), SSH (`[ssh]`, `[discovery]`), and Volumes (`[volumes]`).
-- OK checks the settings, then uses them at once where the running program can: the
-  interface, transfers, and, for new connections and listings, ssh and the hidden hosts and
-  volumes. The language takes effect at the next start, which the dialog says. Then `noc_config::save_config` writes them in the background.
-- Only keys that the dialog changed are written: those that differ between what the dialog
-  showed and what it closed with. The file is read again first, so keys changed in it
+- The dialog has no OK or Cancel, as modern settings windows: each change takes effect as
+  it is made, a text field's when the cursor leaves it, after its value is checked. The
+  running program uses it at once where it can: the interface, transfers, and, for new
+  connections and listings, ssh and the hidden hosts and volumes. The language takes effect
+  at the next start, which the dialog says. `noc_config::save_config` writes each change in
+  the background, one after another, so that none overtakes the one before it.
+- Only keys that a change touched are written: those that differ between the settings before
+  and after it. The file is read again first, so keys changed in it
   meanwhile stay. A changed key keeps its comments, a new key goes at the end of its table
   (made if missing), and a value set back to its default is written only where the file sets
   the key.

@@ -209,7 +209,8 @@ F9 (`Esc 9`) opens mc's menu bar with the menu of the active panel open:
 
 ### Configuration dialog
 
-Options → Configuration… shows the settings of `config.toml` by category
+Options → Configuration… shows the settings of `config.toml` by category, as a modern
+settings window: there is no OK or Cancel, and every change takes effect as it is made
 ([ADR 0009](adr/0009-configuration-dialog-writes-config-toml.md)):
 
 ```text
@@ -221,8 +222,6 @@ Options → Configuration… shows the settings of `config.toml` by category
   ╟──────────────┴───────────────────────────────────────────────────╢
   ║ A language tag, such as en-US, or auto for the system locale.    ║
   ║ Takes effect after a restart.                                    ║
-  ╟──────────────────────────────────────────────────────────────────╢
-  ║                       [< OK >] [ Cancel ]                        ║
   ╚══════════════════════════════════════════════════════════════════╝
 ```
 
@@ -235,21 +234,25 @@ Options → Configuration… shows the settings of `config.toml` by category
   `ssh.args` and the hidden hosts and volumes, are words separated by spaces, as a shell
   reads them: `"…"` around a word with spaces, `\` before a character to take it as it is.
 - Settings that do not fit scroll with the cursor, and a scroll bar (`█` on `░`) shows in the
-  last column. The two lines below them, between lines across the dialog, say what the
-  setting under the cursor does, and whether it takes effect only after a restart.
-- Tab moves between the categories, the settings, and the buttons; Up and Down move within
-  them, and Home and End go to the first and last category; Space switches a check box or picks the next choice; Left and Right pick choices, and
-  Left on anything else goes back to the categories; Enter presses OK; Esc cancels.
-- OK checks the settings: the language tag, a whole number of parallel jobs, a program for
-  ssh, and the extra ssh arguments, through the same validator as at start
-  ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)). An invalid one keeps the dialog
-  open, with the cursor on it, and an error says why.
-- Then it uses them at once, but the language, which the next start reads: the interface
+  last column. The two lines below them, set apart by a line across the dialog, say what the
+  setting under the cursor does and whether it takes effect only after a restart, or, in
+  the colors of errors, why the text typed cannot be used.
+- Tab moves between the categories and the settings; Up and Down move within them, and Home
+  and End go to the first and last category; Left on anything but a text field goes back to
+  the categories; Esc or F10 closes the dialog.
+- Space or Enter switches a check box or picks the next choice, and Left and Right pick
+  choices: each takes effect at once. A text field takes effect when the cursor leaves it
+  (Up, Down, Tab) or on Enter, and as the dialog closes. Its value is checked first: the
+  language tag, a whole number of parallel jobs, a program for ssh, and the extra ssh
+  arguments, through the same validator as at start
+  ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)). An invalid one keeps the cursor
+  in the field; Esc puts back what it had and closes the dialog.
+- A change is used at once, but the language, which the next start reads: the interface
   redraws, copies and the job queue follow `[transfer]`, and the settings in `Context`, which
   sit behind a lock, change for new connections, `ssh -G`, and listings, so panels on the
-  root or the list of hosts read them again. Connections that are open stay as they are. The
-  changed keys are written to the config file in the background, and a failure shows an
-  error.
+  root or the list of hosts read them again. Connections that are open stay as they are.
+- Each change writes its keys to the config file in the background. One task writes them in
+  turn, so that a change never overtakes the one before it; a failure shows an error.
 
 ## Host discovery
 

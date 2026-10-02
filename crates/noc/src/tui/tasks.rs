@@ -182,6 +182,9 @@ pub(crate) struct Tasks {
     jobs: JoinSet<()>,
     /// Taken while the `ssh -G` cache is read, changed, and written.
     cache: Arc<Mutex<()>>,
+    /// Changes to the config file, which one task writes in turn, so that a change never
+    /// overtakes the one before it.
+    config_saves: mpsc::UnboundedSender<(Config, Config)>,
 }
 
 impl Tasks {
@@ -192,6 +195,7 @@ impl Tasks {
         if let Err(reason) = &askpass {
             tracing::warn!(%reason, "cannot prepare for ssh connections");
         }
+        let config_saves = save_configs(context.config_file.clone(), done.clone());
         Self {
             context,
             done,
@@ -199,6 +203,7 @@ impl Tasks {
             hosts: JoinSet::new(),
             jobs: JoinSet::new(),
             cache: Arc::new(Mutex::new(())),
+            config_saves,
         }
     }
 
@@ -313,18 +318,10 @@ impl Tasks {
         self.hosts.spawn(task.run(askpass));
     }
 
-    /// Writes to the config file the settings that differ between `old` and `new`.
+    /// Writes to the config file the settings that differ between `old` and `new`, after
+    /// the changes before.
     fn save_config(&self, old: Config, new: Config) {
-        let path = self.context.config_file.clone();
-        let done = self.done.clone();
-        tokio::spawn(async move {
-            let saved = tokio::task::spawn_blocking(move || save_config(&path, &old, &new)).await;
-            let result = match saved {
-                Ok(result) => result.map_err(|error| describe::chain(&error)),
-                Err(error) => Err(error.to_string()),
-            };
-            let _ = done.send(Done::ConfigSaved(result));
-        });
+        let _ = self.config_saves.send((old, new));
     }
 
     /// Writes the settings of the host `name` to `hosts.toml` and reads them all again.
@@ -558,6 +555,29 @@ async fn prepare_ssh(
         }
     });
     Ok(server)
+}
+
+/// Starts the task that writes changes to the config file at `path`, one after another, and
+/// reports each; returns where to send them.
+fn save_configs(
+    path: PathBuf,
+    done: mpsc::UnboundedSender<Done>,
+) -> mpsc::UnboundedSender<(Config, Config)> {
+    let (sender, mut changes) = mpsc::unbounded_channel::<(Config, Config)>();
+    tokio::spawn(async move {
+        while let Some((old, new)) = changes.recv().await {
+            let path = path.clone();
+            let saved = tokio::task::spawn_blocking(move || save_config(&path, &old, &new)).await;
+            let result = match saved {
+                Ok(result) => result.map_err(|error| describe::chain(&error)),
+                Err(error) => Err(error.to_string()),
+            };
+            if done.send(Done::ConfigSaved(result)).is_err() {
+                break;
+            }
+        }
+    });
+    sender
 }
 
 /// Runs `ssh -G` for a host that is being connected to, as the root shows effective addresses

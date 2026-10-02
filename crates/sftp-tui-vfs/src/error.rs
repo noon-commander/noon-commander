@@ -14,6 +14,9 @@ pub enum VfsError {
     /// Access to the path was denied.
     #[error("permission denied: {0}")]
     PermissionDenied(String),
+    /// Something already has the name to create or rename to.
+    #[error("already exists: {0}")]
+    AlreadyExists(String),
     /// Any other error of the local file system.
     #[error("I/O error")]
     Io(#[source] io::Error),
@@ -27,6 +30,7 @@ impl VfsError {
         match err.kind() {
             io::ErrorKind::NotFound => Self::NotFound(path.display().to_string()),
             io::ErrorKind::PermissionDenied => Self::PermissionDenied(path.display().to_string()),
+            io::ErrorKind::AlreadyExists => Self::AlreadyExists(path.display().to_string()),
             _ => Self::Io(err),
         }
     }
@@ -65,6 +69,11 @@ mod tests {
             matches!(&err, VfsError::PermissionDenied(p) if p == "/x"),
             "{err:?}"
         );
+        let err = VfsError::local(io::ErrorKind::AlreadyExists.into(), path);
+        assert!(
+            matches!(&err, VfsError::AlreadyExists(p) if p == "/x"),
+            "{err:?}"
+        );
         let err = VfsError::local(io::ErrorKind::InvalidData.into(), path);
         assert!(matches!(&err, VfsError::Io(e) if e.kind() == io::ErrorKind::InvalidData));
     }
@@ -75,6 +84,10 @@ mod tests {
         assert_eq!(
             VfsError::PermissionDenied("a".into()).to_string(),
             "permission denied: a"
+        );
+        assert_eq!(
+            VfsError::AlreadyExists("b".into()).to_string(),
+            "already exists: b"
         );
         assert_eq!(
             VfsError::Io(io::ErrorKind::Other.into()).to_string(),

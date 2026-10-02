@@ -47,6 +47,19 @@ terminal, so it can neither read from nor draw on the TUI's terminal.
 `sftp-tui-vfs` turns into a file system; `Session::close` shuts down; `cleanup_stale` removes
 leftovers of crashed instances.
 
+The `Vfs` trait of `sftp-tui-vfs`, implemented by `LocalFs` and `SftpFs`, lists directories,
+reads metadata with and without following symlinks, canonicalizes paths, creates and removes
+directories, removes files, renames, and sets permissions and modification times; reading and
+writing files will follow for copying. Its futures are cancel-safe: a dropped one leaks
+nothing, though a change already sent may still happen. Errors are typed, and the UI words
+them: not found, permission denied, already exists, or the error of the OS or the server.
+SFTP v3 has no code for a name that is taken, so `SftpFs` reports a plain failure to create
+or rename as `AlreadyExists` when something has that name. `rename` replaces an existing file
+where that takes one step: locally, and over SFTP with `posix-rename@openssh.com`. SFTP keeps
+times as whole seconds from 1970 to 2106 and sets the access time with the modification
+time, so the access time becomes the current time on both backends. Local times are set by
+path (`utimensat`), since opening a FIFO would block.
+
 Every ssh command line is assembled in `sftp-tui-ssh`, in this order: program → forced options →
 `ssh.args` → host `args` → role options → `--` → destination. ssh keeps the first value it sees
 for an option, so `-o` values in user arguments cannot override forced options; flags are covered

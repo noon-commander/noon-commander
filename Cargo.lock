@@ -2151,6 +2151,7 @@ version = "0.1.0"
 dependencies = [
  "futures-util",
  "openssh-sftp-client",
+ "rustix",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",

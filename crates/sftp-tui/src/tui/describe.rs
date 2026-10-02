@@ -7,11 +7,12 @@ use sftp_tui_vfs::VfsError;
 
 use crate::i18n::fl;
 
-/// Why a location could not be listed.
+/// Why a file system operation failed.
 pub(crate) fn vfs_error(error: &VfsError) -> String {
     match error {
         VfsError::NotFound(_) => fl!("error-not-found"),
         VfsError::PermissionDenied(_) => fl!("error-permission-denied"),
+        VfsError::AlreadyExists(_) => fl!("error-already-exists"),
         VfsError::Io(error) => error.to_string(),
         VfsError::Sftp(error) => chain(error),
     }
@@ -74,7 +75,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn describes_listing_errors() {
+    fn describes_file_system_errors() {
         assert_eq!(
             vfs_error(&VfsError::PermissionDenied("/x".to_owned())),
             "permission denied"
@@ -82,6 +83,10 @@ mod tests {
         assert_eq!(
             vfs_error(&VfsError::NotFound("/x".to_owned())),
             "no such file or directory"
+        );
+        assert_eq!(
+            vfs_error(&VfsError::AlreadyExists("/x".to_owned())),
+            "already exists"
         );
         let unsupported = VfsError::Io(io::ErrorKind::Unsupported.into());
         assert_eq!(vfs_error(&unsupported), "unsupported");

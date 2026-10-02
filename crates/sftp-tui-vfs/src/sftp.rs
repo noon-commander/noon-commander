@@ -1,9 +1,12 @@
+use std::io;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::Path;
+use std::time::SystemTime;
 
 use futures_util::{StreamExt, TryStreamExt, stream};
-use openssh_sftp_client::metadata::{MetaData, RawFileType};
-use openssh_sftp_client::{Sftp, SftpOptions, UnixTimeStamp};
+use openssh_sftp_client::error::SftpErrorKind;
+use openssh_sftp_client::metadata::{MetaData, MetaDataBuilder, Permissions, RawFileType};
+use openssh_sftp_client::{Error, Sftp, SftpOptions, UnixTimeStamp};
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{DirEntry, FileKind, Metadata, RemotePath, Vfs, VfsError};
@@ -58,6 +61,17 @@ impl SftpFs {
             Err(openssh_sftp_client::Error::SftpError(..)) => Ok(None),
             Err(err) => Err(VfsError::Sftp(err)),
         }
+    }
+
+    /// The error for a failure to give `path` a name: SFTP v3 has no code for a name that is
+    /// taken, so a plain failure where something has that name means that.
+    async fn naming_error(&self, err: Error, path: &RemotePath) -> VfsError {
+        if matches!(err, Error::SftpError(SftpErrorKind::Failure, _))
+            && self.symlink_metadata(path).await.is_ok()
+        {
+            return VfsError::AlreadyExists(path.display().into_owned());
+        }
+        VfsError::remote(err, path)
     }
 }
 
@@ -122,6 +136,14 @@ impl Vfs for SftpFs {
             .map_err(|err| VfsError::remote(err, path))
     }
 
+    async fn symlink_metadata(&self, path: &RemotePath) -> Result<Metadata, VfsError> {
+        let mut fs = self.sftp.fs();
+        fs.symlink_metadata(wire_path(path))
+            .await
+            .map(convert)
+            .map_err(|err| VfsError::remote(err, path))
+    }
+
     async fn canonicalize(&self, path: &RemotePath) -> Result<RemotePath, VfsError> {
         let mut fs = self.sftp.fs();
         let canonical = fs
@@ -129,6 +151,61 @@ impl Vfs for SftpFs {
             .await
             .map_err(|err| VfsError::remote(err, path))?;
         Ok(RemotePath::new(canonical.into_os_string().into_vec()))
+    }
+
+    async fn create_dir(&self, path: &RemotePath) -> Result<(), VfsError> {
+        let result = self.sftp.fs().create_dir(wire_path(path)).await;
+        match result {
+            Ok(()) => Ok(()),
+            Err(err) => Err(self.naming_error(err, path).await),
+        }
+    }
+
+    async fn remove_file(&self, path: &RemotePath) -> Result<(), VfsError> {
+        let mut fs = self.sftp.fs();
+        fs.remove_file(wire_path(path))
+            .await
+            .map_err(|err| VfsError::remote(err, path))
+    }
+
+    async fn remove_dir(&self, path: &RemotePath) -> Result<(), VfsError> {
+        let mut fs = self.sftp.fs();
+        fs.remove_dir(wire_path(path))
+            .await
+            .map_err(|err| VfsError::remote(err, path))
+    }
+
+    async fn rename(&self, from: &RemotePath, to: &RemotePath) -> Result<(), VfsError> {
+        let result = self.sftp.fs().rename(wire_path(from), wire_path(to)).await;
+        match result {
+            Ok(()) => Ok(()),
+            Err(err @ Error::SftpError(SftpErrorKind::Failure, _)) => {
+                Err(self.naming_error(err, to).await)
+            }
+            Err(err) => Err(VfsError::remote(err, from)),
+        }
+    }
+
+    async fn set_permissions(&self, path: &RemotePath, mode: u32) -> Result<(), VfsError> {
+        let bits = u16::try_from(mode & 0o7777).unwrap_or_else(|_| unreachable!());
+        let mut fs = self.sftp.fs();
+        fs.set_permissions(wire_path(path), Permissions::from(bits))
+            .await
+            .map_err(|err| VfsError::remote(err, path))
+    }
+
+    async fn set_modified(&self, path: &RemotePath, time: SystemTime) -> Result<(), VfsError> {
+        let stamp = |time| {
+            UnixTimeStamp::new(time)
+                .map_err(|err| VfsError::Io(io::Error::new(io::ErrorKind::InvalidInput, err)))
+        };
+        let times = MetaDataBuilder::new()
+            .time(stamp(SystemTime::now())?, stamp(time)?)
+            .create();
+        let mut fs = self.sftp.fs();
+        fs.set_metadata(wire_path(path), times)
+            .await
+            .map_err(|err| VfsError::remote(err, path))
     }
 }
 
@@ -330,6 +407,54 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn changes_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(server) = Server::start(dir.path()).await else {
+            return;
+        };
+        assert!(server.fs.sftp.support_posix_rename(), "OpenSSH has it");
+        fixture::check_changes(&server.fs, dir.path(), |name: &str| RemotePath::from(name)).await;
+        server.stop().await;
+    }
+
+    #[tokio::test]
+    async fn sets_attributes() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(server) = Server::start(dir.path()).await else {
+            return;
+        };
+        fixture::check_attributes(&server.fs, dir.path(), |name: &str| RemotePath::from(name))
+            .await;
+        let before_1970 = SystemTime::UNIX_EPOCH - Duration::from_secs(1);
+        let err = server
+            .fs
+            .set_modified(&"file".into(), before_1970)
+            .await
+            .unwrap_err();
+        assert!(matches!(&err, VfsError::Io(e) if e.kind() == io::ErrorKind::InvalidInput));
+        server.stop().await;
+    }
+
+    #[tokio::test]
+    async fn symlink_metadata_does_not_follow() {
+        let dir = fixture::tree();
+        let Some(server) = Server::start(dir.path()).await else {
+            return;
+        };
+        for name in ["link-dir", "link-file", "dangling"] {
+            let link = server.fs.symlink_metadata(&name.into()).await.unwrap();
+            assert_eq!(link.kind, FileKind::Symlink, "{name}");
+        }
+        let file = server
+            .fs
+            .symlink_metadata(&"file.txt".into())
+            .await
+            .unwrap();
+        assert_eq!(file.kind, FileKind::File);
+        server.stop().await;
+    }
+
+    #[tokio::test]
     async fn home_is_the_start_directory() {
         let dir = fixture::tree();
         let Some(server) = Server::start(dir.path()).await else {
@@ -523,6 +648,9 @@ mod tests {
             assert_send(SftpFs::from_pipes(stdin, stdout));
             assert_send(fs.home());
             assert_send(fs.list_dir(&RemotePath::root()));
+            assert_send(fs.create_dir(&RemotePath::root()));
+            assert_send(fs.rename(&RemotePath::root(), &RemotePath::root()));
+            assert_send(fs.set_modified(&RemotePath::root(), SystemTime::now()));
             assert_send(fs.close());
         }
         let _ = check;

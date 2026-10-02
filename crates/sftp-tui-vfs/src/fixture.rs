@@ -5,11 +5,11 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt, symlink};
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tempfile::TempDir;
 
-use crate::{DirEntry, FileKind, Vfs};
+use crate::{DirEntry, FileKind, Vfs, VfsError};
 
 /// The names in [`tree`], sorted.
 pub(crate) const TREE: [&str; 5] = ["dangling", "dir", "file.txt", "link-dir", "link-file"];
@@ -92,6 +92,86 @@ pub(crate) fn check_special_files(entries: &[DirEntry]) {
     assert_eq!(null.metadata.kind, FileKind::Symlink);
     assert_eq!(null.target_kind, Some(FileKind::CharDevice));
     assert!(!null.is_dir_like());
+}
+
+/// Creates, renames, and removes entries through `vfs` in `root`, an empty local directory
+/// that `path` names entries of for `vfs`, and checks what happened on disk.
+pub(crate) async fn check_changes<V: Vfs>(vfs: &V, root: &Path, path: impl Fn(&str) -> V::Path) {
+    let on_disk = |name: &str| root.join(name);
+
+    vfs.create_dir(&path("new")).await.unwrap();
+    assert!(on_disk("new").is_dir());
+    let err = vfs.create_dir(&path("new")).await.unwrap_err();
+    assert!(matches!(err, VfsError::AlreadyExists(_)), "{err:?}");
+    let err = vfs.create_dir(&path("missing/new")).await.unwrap_err();
+    assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
+
+    fs::write(on_disk("new/file"), "first").unwrap();
+    let err = vfs.remove_dir(&path("new")).await.unwrap_err();
+    assert!(on_disk("new").is_dir(), "not empty: {err:?}");
+    vfs.rename(&path("new/file"), &path("moved")).await.unwrap();
+    assert_eq!(fs::read_to_string(on_disk("moved")).unwrap(), "first");
+    assert!(!on_disk("new/file").exists());
+    fs::write(on_disk("other"), "second").unwrap();
+    vfs.rename(&path("other"), &path("moved")).await.unwrap();
+    assert_eq!(
+        fs::read_to_string(on_disk("moved")).unwrap(),
+        "second",
+        "replaced"
+    );
+    let err = vfs
+        .rename(&path("missing"), &path("anywhere"))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
+
+    symlink("new", on_disk("link")).unwrap();
+    let link = vfs.symlink_metadata(&path("link")).await.unwrap();
+    assert_eq!(link.kind, FileKind::Symlink);
+    let err = vfs.remove_dir(&path("link")).await.unwrap_err();
+    assert!(on_disk("new").is_dir(), "a link is no directory: {err:?}");
+    vfs.remove_file(&path("link")).await.unwrap();
+    assert!(on_disk("new").is_dir(), "the target stays");
+    vfs.remove_file(&path("moved")).await.unwrap();
+    vfs.remove_dir(&path("new")).await.unwrap();
+    let err = vfs.remove_file(&path("moved")).await.unwrap_err();
+    assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
+    assert_eq!(fs::read_dir(root).unwrap().count(), 0);
+}
+
+/// Sets permissions and modification times through `vfs` in `root`, an empty local directory
+/// that `path` names entries of for `vfs`, and checks them on disk.
+pub(crate) async fn check_attributes<V: Vfs>(vfs: &V, root: &Path, path: impl Fn(&str) -> V::Path) {
+    let on_disk = |name: &str| root.join(name);
+    fs::write(on_disk("file"), "x").unwrap();
+    fs::create_dir(on_disk("dir")).unwrap();
+    symlink("file", on_disk("link")).unwrap();
+    let mode = |name: &str| fs::metadata(on_disk(name)).unwrap().mode() & 0o7777;
+
+    vfs.set_permissions(&path("file"), 0o100_604).await.unwrap();
+    assert_eq!(mode("file"), 0o604, "only the permission bits");
+    vfs.set_permissions(&path("link"), 0o640).await.unwrap();
+    assert_eq!(mode("file"), 0o640, "through the link");
+    vfs.set_permissions(&path("dir"), 0o700).await.unwrap();
+    assert_eq!(mode("dir"), 0o700);
+
+    let modified = |name: &str| fs::metadata(on_disk(name)).unwrap().modified().unwrap();
+    let time = UNIX_EPOCH + Duration::from_secs(1_600_000_000);
+    let before = SystemTime::now() - Duration::from_secs(1);
+    for name in ["file", "dir"] {
+        vfs.set_modified(&path(name), time).await.unwrap();
+        assert_eq!(modified(name), time, "{name}");
+        let accessed = fs::metadata(on_disk(name)).unwrap().accessed().unwrap();
+        assert!(accessed >= before, "{name}: accessed now");
+    }
+
+    let err = vfs
+        .set_permissions(&path("missing"), 0o600)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
+    let err = vfs.set_modified(&path("missing"), time).await.unwrap_err();
+    assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
 }
 
 /// A directory without permissions, removed again when the tests run as root, which ignores

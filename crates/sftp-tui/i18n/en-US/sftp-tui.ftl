@@ -40,6 +40,7 @@ panel-marked = { $size } B in { $count ->
 panel-error = Cannot open { $path }: { $reason }
 error-not-found = no such file or directory
 error-permission-denied = permission denied
+error-already-exists = already exists
 # Status line when the connection of a host the panel showed ends; the panel goes back to the
 # list of hosts.
 panel-host-lost = Lost the connection to { $host }: { $reason }

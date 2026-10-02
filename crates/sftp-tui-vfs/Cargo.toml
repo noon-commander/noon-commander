@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 futures-util.workspace = true
 openssh-sftp-client.workspace = true
+rustix = { workspace = true, features = ["fs"] }
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true

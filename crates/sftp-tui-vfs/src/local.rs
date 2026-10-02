@@ -1,8 +1,11 @@
 use std::fs;
 use std::io;
 use std::os::unix::ffi::OsStringExt;
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
+use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use rustix::fs::{AtFlags, CWD, Timespec, Timestamps};
 
 use crate::{DirEntry, FileKind, Metadata, Vfs, VfsError};
 
@@ -30,10 +33,85 @@ impl Vfs for LocalFs {
         Ok(convert(&metadata))
     }
 
+    async fn symlink_metadata(&self, path: &PathBuf) -> Result<Metadata, VfsError> {
+        let metadata = tokio::fs::symlink_metadata(os_path(path))
+            .await
+            .map_err(|err| VfsError::local(err, path))?;
+        Ok(convert(&metadata))
+    }
+
     async fn canonicalize(&self, path: &PathBuf) -> Result<PathBuf, VfsError> {
         tokio::fs::canonicalize(os_path(path))
             .await
             .map_err(|err| VfsError::local(err, path))
+    }
+
+    async fn create_dir(&self, path: &PathBuf) -> Result<(), VfsError> {
+        tokio::fs::create_dir(path)
+            .await
+            .map_err(|err| VfsError::local(err, path))
+    }
+
+    async fn remove_file(&self, path: &PathBuf) -> Result<(), VfsError> {
+        tokio::fs::remove_file(path)
+            .await
+            .map_err(|err| VfsError::local(err, path))
+    }
+
+    async fn remove_dir(&self, path: &PathBuf) -> Result<(), VfsError> {
+        tokio::fs::remove_dir(path)
+            .await
+            .map_err(|err| VfsError::local(err, path))
+    }
+
+    async fn rename(&self, from: &PathBuf, to: &PathBuf) -> Result<(), VfsError> {
+        tokio::fs::rename(from, to).await.map_err(|err| {
+            // The name that is taken is the target; any other trouble is the source's.
+            let path = if err.kind() == io::ErrorKind::AlreadyExists {
+                to
+            } else {
+                from
+            };
+            VfsError::local(err, path)
+        })
+    }
+
+    async fn set_permissions(&self, path: &PathBuf, mode: u32) -> Result<(), VfsError> {
+        let permissions = fs::Permissions::from_mode(mode & 0o7777);
+        tokio::fs::set_permissions(os_path(path), permissions)
+            .await
+            .map_err(|err| VfsError::local(err, path))
+    }
+
+    async fn set_modified(&self, path: &PathBuf, time: SystemTime) -> Result<(), VfsError> {
+        let target = path.clone();
+        tokio::task::spawn_blocking(move || {
+            let invalid = || io::Error::from(io::ErrorKind::InvalidInput);
+            let times = Timestamps {
+                last_access: timespec(SystemTime::now()).ok_or_else(invalid)?,
+                last_modification: timespec(time).ok_or_else(invalid)?,
+            };
+            // By path: opening a FIFO to set its times would wait for a writer.
+            rustix::fs::utimensat(CWD, os_path(&target), &times, AtFlags::empty())
+                .map_err(io::Error::from)
+        })
+        .await
+        .map_err(VfsError::task_failed)?
+        .map_err(|err| VfsError::local(err, path))
+    }
+}
+
+/// `time` as seconds and nanoseconds from the epoch, negative before it.
+fn timespec(time: SystemTime) -> Option<Timespec> {
+    match time.duration_since(UNIX_EPOCH) {
+        Ok(after) => Timespec::try_from(after).ok(),
+        Err(before) => {
+            let zero = Timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            };
+            zero.checked_sub(Timespec::try_from(before.duration()).ok()?)
+        }
     }
 }
 
@@ -150,6 +228,40 @@ mod tests {
             matches!(&err, VfsError::NotFound(p) if *p == path("dangling").display().to_string()),
             "{err:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn changes_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        fixture::check_changes(&LocalFs, dir.path(), |name| dir.path().join(name)).await;
+    }
+
+    #[tokio::test]
+    async fn sets_attributes() {
+        let dir = tempfile::tempdir().unwrap();
+        fixture::check_attributes(&LocalFs, dir.path(), |name| dir.path().join(name)).await;
+
+        // The nanoseconds, and times before 1970.
+        let file = dir.path().join("file");
+        for time in [
+            UNIX_EPOCH + std::time::Duration::new(1_600_000_000, 123_456_789),
+            UNIX_EPOCH - std::time::Duration::from_millis(1_500),
+        ] {
+            LocalFs.set_modified(&file, time).await.unwrap();
+            assert_eq!(fs::metadata(&file).unwrap().modified().unwrap(), time);
+        }
+    }
+
+    #[tokio::test]
+    async fn symlink_metadata_does_not_follow() {
+        let dir = fixture::tree();
+        let path = |name: &str| dir.path().join(name);
+        for name in ["link-dir", "link-file", "dangling"] {
+            let link = LocalFs.symlink_metadata(&path(name)).await.unwrap();
+            assert_eq!(link.kind, FileKind::Symlink, "{name}");
+        }
+        let file = LocalFs.symlink_metadata(&path("file.txt")).await.unwrap();
+        assert_eq!(file.kind, FileKind::File);
     }
 
     #[tokio::test]

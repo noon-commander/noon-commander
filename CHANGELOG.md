@@ -103,3 +103,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   their turn, and editing with F4 never waits.
 - Ctrl-X J lists the jobs, as mc's Background jobs do, with how far each is: Show brings one to
   the front, and Abort stops it.
+- A job's window shows how long it has worked, and a copy or move also shows its average speed
+  and the time left, which Ctrl-X J lists too. Unlike mc, time spent waiting for an answer to
+  an error or a taken name does not count, so an open question lowers neither the speed nor
+  the time left; nor do skipped files or retries bend the speed.

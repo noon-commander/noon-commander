@@ -1,6 +1,6 @@
 ---
 source: crates/noc/src/tui/progress.rs
-expression: draw(&view)
+expression: "draw_at(&view, start + secs(75))"
 ---
 "                                                                "
 "  ┌ Delete ──────────────────────────────────────────────────┐  "
@@ -8,6 +8,7 @@ expression: draw(&view)
 "  │ /srv/www/index.html                                      │  "
 "  │ █████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  25% │  "
 "  │ 3 of 12                                                  │  "
+"  │ Time 1:15                                                │  "
 "  │                                                          │  "
 "  │                [< Background >] [ Abort ]                │  "
 "  └──────────────────────────────────────────────────────────┘  "

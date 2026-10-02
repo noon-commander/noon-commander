@@ -13,9 +13,10 @@ use crate::i18n::fl;
 
 /// Width of the window, borders included, where the screen has room.
 const WIDTH: u16 = 76;
-/// Columns for what a job does and for how far it is.
+/// Columns for what a job does, how far it is, and the time it has left.
 const TITLE: usize = 8;
 const STATE: usize = 9;
+const LEFT: usize = 12;
 
 /// A job in the list.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,6 +26,8 @@ pub(crate) struct Row {
     pub(crate) title: String,
     /// How far it is, such as `37%` or `waiting`.
     pub(crate) state: String,
+    /// The time it has left, such as `ETA 1:30`, or empty.
+    pub(crate) left: String,
     /// The entry at hand.
     pub(crate) current: String,
 }
@@ -126,9 +129,10 @@ impl JobsList {
         let top = (index + 1).saturating_sub(visible);
         for (shown, (number, row)) in rows.iter().enumerate().skip(top).take(visible).enumerate() {
             let text = format!(
-                "{} {}  {}",
+                "{} {} {}  {}",
                 cells::fit(&row.title, TITLE, Align::Left),
                 cells::fit(&row.state, STATE, Align::Right),
+                cells::fit(&row.left, LEFT, Align::Right),
                 row.current
             );
             let text = cells::fit(&text, width, Align::Left);
@@ -161,6 +165,11 @@ mod tests {
                 id,
                 title: "Copy".to_owned(),
                 state: format!("{id}0%"),
+                left: if id == 1 {
+                    "ETA 1:30".to_owned()
+                } else {
+                    String::new()
+                },
                 current: format!("/srv/file{id}"),
             })
             .collect()

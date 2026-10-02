@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::time::{Instant, SystemTime};
 
 use jiff::tz::TimeZone;
 use noc_config::{TransferConfig, UiConfig};
@@ -523,18 +523,27 @@ impl App {
 
     /// The jobs, as the list shows them.
     fn job_rows(&self) -> Vec<Row> {
+        let now = Instant::now();
         self.jobs
             .iter()
             .map(|job| {
-                let (state, current) = job.view.summary();
+                let summary = job.view.summary(now);
                 Row {
                     id: job.id,
                     title: job.view.title().to_owned(),
-                    state,
-                    current,
+                    state: summary.state,
+                    left: summary.left,
+                    current: summary.current,
                 }
             })
             .collect()
+    }
+
+    /// The job `id` has the answer to its question and goes on, with its clock.
+    fn answered(&mut self, id: u64) {
+        if let Some(job) = self.jobs.iter_mut().find(|job| job.id == id) {
+            job.view.answered(Instant::now());
+        }
     }
 
     /// The job in front, in its window.
@@ -712,7 +721,8 @@ impl App {
                     return self.start_transfer(kind, dir, &names, target);
                 }
             }
-            Purpose::Failure { reply, .. } => {
+            Purpose::Failure { job, reply } => {
+                self.answered(job);
                 let decision = match event {
                     DialogEvent::Pressed(Button::Skip) => Decision::Skip,
                     DialogEvent::Pressed(Button::SkipAll) => Decision::SkipAll,
@@ -721,7 +731,8 @@ impl App {
                 };
                 let _ = reply.send(decision);
             }
-            Purpose::Conflict { reply, .. } => {
+            Purpose::Conflict { job, reply } => {
+                self.answered(job);
                 let conflict = match event {
                     DialogEvent::Pressed(Button::Yes) => Conflict::Overwrite,
                     DialogEvent::Pressed(Button::No) => Conflict::Skip,
@@ -1205,6 +1216,7 @@ impl App {
         let Some(job) = self.jobs.iter_mut().find(|job| job.id == id) else {
             return Vec::new();
         };
+        let now = Instant::now();
         match event {
             JobEvent::Scanning { items } => job.view.scanning(items),
             JobEvent::Progress {
@@ -1213,14 +1225,16 @@ impl App {
                 total,
                 bytes_done,
                 bytes_total,
+                bytes_copied,
             } => {
                 let counts = Counts {
                     done,
                     total,
                     bytes_done,
                     bytes_total,
+                    bytes_copied,
                 };
-                job.view.working(location_text(&current), counts);
+                job.view.working(location_text(&current), counts, now);
             }
             JobEvent::Exists {
                 target,
@@ -1228,10 +1242,12 @@ impl App {
                 target_metadata,
                 reply,
             } => {
+                job.view.ask(now);
                 let metadata = (&source_metadata, &target_metadata);
                 self.ask_conflict(id, &target, metadata, reply);
             }
             JobEvent::Failed { path, error, reply } => {
+                job.view.ask(now);
                 let path = location_text(&path);
                 let reason = cells::sanitize(error.as_bytes());
                 let message = match job.kind {
@@ -1676,11 +1692,18 @@ impl App {
             .retain(|open| !matches!(open.purpose, Purpose::Ssh { id: shown, .. } if shown == id));
     }
 
-    /// Whether something on screen moves while time passes: a host that is connecting.
+    /// Whether something on screen moves while time passes: a host that is connecting, or the
+    /// time of a working job in its window or in the list of jobs.
     pub(crate) fn animates(&self) -> bool {
-        self.hosts
+        let connecting = self
+            .hosts
             .values()
-            .any(|host| matches!(host, Host::Connecting { .. }))
+            .any(|host| matches!(host, Host::Connecting { .. }));
+        let timed = self
+            .jobs
+            .iter()
+            .any(|job| job.view.ticking() && (!job.background || self.jobs_list.is_some()));
+        connecting || timed
     }
 
     /// Moves spinners on by a frame.
@@ -1746,7 +1769,7 @@ impl App {
             list.render(frame, panels, &self.theme, &self.job_rows());
         }
         if let Some(job) = self.in_front() {
-            job.view.render(frame, panels, &self.theme);
+            job.view.render(frame, panels, &self.theme, Instant::now());
         }
         if let Some(open) = self.dialogs.front() {
             open.dialog.render(frame, panels, &self.theme);
@@ -2349,6 +2372,7 @@ mod tests {
             total: 3,
             bytes_done: 0,
             bytes_total: 0,
+            bytes_copied: 0,
         };
         app.job_event(id, progress);
         let text = screen(&mut app);
@@ -2455,6 +2479,7 @@ mod tests {
             total: 4,
             bytes_done: 0,
             bytes_total: 0,
+            bytes_copied: 0,
         };
         app.job_event(first, progress);
         let text = screen(&mut app);
@@ -2495,6 +2520,73 @@ mod tests {
         assert!(!screen(&mut app).contains(" job"));
         app.handle(action(Action::Quit));
         assert!(app.quits(), "nothing to ask");
+    }
+
+    #[test]
+    fn the_clock_of_a_job_stands_while_its_question_is_open() {
+        let mut app = loaded();
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        let (first, _, _, _) = delete_job(app.handle(action(Action::Confirm)));
+        // The first goes behind the panels, and the second stays in front.
+        app.handle(action(Action::Confirm));
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        let (second, _, _, _) = delete_job(app.handle(action(Action::Confirm)));
+        let ticking = |app: &App, id| {
+            let job = app.jobs.iter().find(|job| job.id == id).unwrap();
+            job.view.ticking()
+        };
+        for id in [first, second] {
+            let progress = JobEvent::Progress {
+                current: local("/srv/left/a"),
+                done: 1,
+                total: 4,
+                bytes_done: 0,
+                bytes_total: 0,
+                bytes_copied: 0,
+            };
+            app.job_event(id, progress);
+        }
+        assert!(ticking(&app, first) && ticking(&app, second));
+        assert!(app.animates(), "the time in front moves");
+
+        // Both ask; the question of the second waits behind that of the first.
+        let mut decisions = Vec::new();
+        for id in [first, second] {
+            let (reply, decision) = oneshot::channel();
+            let path = local("/srv/left/b");
+            let error = "busy".to_owned();
+            app.job_event(id, JobEvent::Failed { path, error, reply });
+            decisions.push(decision);
+        }
+        assert!(!ticking(&app, first) && !ticking(&app, second));
+        assert!(!app.animates(), "nothing moves while they wait");
+
+        app.handle(action(Action::Confirm));
+        assert_eq!(decisions[0].try_recv(), Ok(Decision::Skip));
+        assert!(ticking(&app, first), "the first goes on");
+        assert!(
+            !ticking(&app, second),
+            "the second still waits for its answer"
+        );
+        app.handle(action(Action::Confirm));
+        assert!(ticking(&app, second));
+
+        // A taken name stops it as well.
+        let (reply, _conflict) = oneshot::channel();
+        let mut metadata = dir("a").metadata;
+        metadata.kind = FileKind::File;
+        let exists = JobEvent::Exists {
+            target: local("/srv/right/a"),
+            source_metadata: metadata.clone(),
+            target_metadata: metadata,
+            reply,
+        };
+        app.job_event(second, exists);
+        assert!(!ticking(&app, second));
+        app.handle(action(Action::Cancel));
+        assert!(ticking(&app, second));
     }
 
     /// The delete jobs that `effects` start: their ids and targets.
@@ -2566,13 +2658,14 @@ mod tests {
             total: 2,
             bytes_done: 0,
             bytes_total: 0,
+            bytes_copied: 0,
         };
         app.job_event(first, progress);
         app.handle(action(Action::Jobs));
         assert_eq!(app.context(), Context::Dialog);
         let text = screen_of(&mut app, 12);
         assert!(
-            text.contains("Delete") && text.contains("50%  /srv/left/a"),
+            text.contains("Delete") && text.contains("50%") && text.contains("/srv/left/a"),
             "{text}"
         );
         assert!(text.contains("waiting"), "{text}");

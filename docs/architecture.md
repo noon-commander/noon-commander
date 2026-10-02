@@ -198,6 +198,13 @@ Retry, Skip, Skip all (no more questions), or Abort. A `CancellationToken` stops
 operations and while it waits; so does a UI that stops listening. It returns an `Outcome`:
 entries done, entries skipped, and whether it was aborted.
 
+`Progress` carries two byte counts. `bytes_done` drives the gauge: it takes a skipped file's
+size at once and goes back to the start of a file that is retried. `bytes_copied` counts only
+bytes read and written and never goes back, so the UI derives the average speed from it and the
+time left from both. The job's window times only work: its stopwatch starts with the first
+`Progress` and stands from a `Failed` or `Exists` question until the answer, including while
+the question waits behind other dialogs.
+
 Deleting counts the entries first, so that progress has a total, then removes the deepest
 first. Listings report symlinks without following them, so a link goes and its target stays.
 A directory in which something stays (skipped, or unreadable) is left alone without asking

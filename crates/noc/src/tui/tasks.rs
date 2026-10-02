@@ -90,13 +90,15 @@ pub(crate) enum JobEvent {
     /// Counting what to do: `items` found so far.
     Scanning { items: u64 },
     /// At `current`, with `done` of `total` entries and `bytes_done` of `bytes_total` bytes
-    /// behind it; jobs that move no data count no bytes.
+    /// behind it, `bytes_copied` of them read and written; jobs that move no data count no
+    /// bytes.
     Progress {
         current: Location,
         done: u64,
         total: u64,
         bytes_done: u64,
         bytes_total: u64,
+        bytes_copied: u64,
     },
     /// Something failed at `path`; the job waits for `reply`.
     Failed {
@@ -519,6 +521,7 @@ async fn forward<P>(
                 total: progress.items_total,
                 bytes_done: progress.bytes_done,
                 bytes_total: progress.bytes_total,
+                bytes_copied: progress.bytes_copied,
             },
             Event::Failed { path, error, reply } => JobEvent::Failed {
                 path: location(path),

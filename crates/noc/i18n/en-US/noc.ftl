@@ -192,6 +192,13 @@ job-count = { $done } of { $total }
 # The same, for jobs that move data: the sizes are shown like those in panels.
 job-count-bytes = { $done } of { $total }, { $bytes_done } of { $bytes_total } bytes
 job-aborting = Aborting…
+# The time a job has worked, without the time it waited for answers: M:SS or H:MM:SS.
+job-elapsed = Time { $elapsed }
+# The same, for jobs that move data, with the time left and the average speed; each is shown
+# as -:-- or - until it is known.
+job-timing = Time { $elapsed }   ETA { $left }   { $speed }
+# An average speed: the size is shown like those in panels, such as 1.5M.
+job-speed = { $size }/s
 # While a job waits for others to finish, as transfer.parallel_jobs allows.
 job-waiting = Waiting for other jobs to finish…
 
@@ -206,6 +213,8 @@ jobs-state-waiting = waiting
 jobs-state-counting = counting
 jobs-state-aborting = aborting
 jobs-state-percent = { $percent }%
+# The time left of a job that moves data, in a column of 12, once it is known.
+jobs-left = ETA { $left }
 # The button that sends the job behind the panels, where it goes on.
 job-background = Background
 # At the top right while jobs run in the background: how many, and how far they are together.

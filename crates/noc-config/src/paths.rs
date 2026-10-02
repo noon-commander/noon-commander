@@ -83,6 +83,12 @@ impl Paths {
         self.config_dir.join("config.toml")
     }
 
+    /// The host settings next to `config_file`: `hosts.toml` in its directory, so that
+    /// `--config` moves both.
+    pub fn hosts_file(config_file: &Path) -> PathBuf {
+        config_file.with_file_name("hosts.toml")
+    }
+
     /// Creates [`runtime_dir`](Self::runtime_dir) with mode 0700 if it is missing, and checks
     /// that it is a private directory of the user: a real directory, not a symbolic link,
     /// owned by the user, and closed to group and others.
@@ -208,6 +214,19 @@ mod tests {
                 runtime_dir: PathBuf::from("/run/user/501/noc"),
                 ..defaults
             }
+        );
+    }
+
+    #[test]
+    fn the_hosts_file_is_next_to_the_config_file() {
+        let paths = resolve(&[]);
+        assert_eq!(
+            Paths::hosts_file(&paths.config_file()).as_os_str(),
+            "/home/u/.config/noc/hosts.toml"
+        );
+        assert_eq!(
+            Paths::hosts_file(Path::new("/etc/noc/work.toml")).as_os_str(),
+            "/etc/noc/hosts.toml"
         );
     }
 

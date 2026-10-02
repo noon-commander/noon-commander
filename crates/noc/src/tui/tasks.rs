@@ -8,11 +8,12 @@ use std::time::Duration;
 
 use futures_util::StreamExt as _;
 use futures_util::stream::FuturesUnordered;
+use noc_config::{ConfigError, HostConfig, Hosts, save_host};
 use noc_ops::{Conflict, CopyOptions, Decision, Endpoint, Event, Outcome, Reporter};
 use noc_ssh::askpass::{AskpassEnv, AskpassEvent, AskpassServer};
 use noc_ssh::resolve::resolve;
 use noc_ssh::version::check_version;
-use noc_ssh::{CachedHost, ChannelProcess, Session, SftpChannel, SshError, cleanup_stale};
+use noc_ssh::{CachedHost, ChannelProcess, Session, SftpChannel, SshError, Target, cleanup_stale};
 use noc_vfs::{
     FileReader as _, LocalFs, Location, Metadata, RemotePath, SftpFs, Space, Vfs, VfsError,
     VfsPath as _,
@@ -90,6 +91,9 @@ pub(crate) enum Done {
         connection: u64,
         reason: Option<String>,
     },
+    /// The settings of [`Effect::SaveHost`] are saved, and these are all the host settings
+    /// now; or why not.
+    HostSaved(Result<Arc<Hosts>, String>),
 }
 
 /// A report from a job, with its paths as locations and its errors in words.
@@ -280,8 +284,28 @@ impl Tasks {
                     };
                     self.hosts.spawn(task.run(askpass));
                 }
+                Effect::SaveHost { name, host } => self.save_host(name, host),
             }
         }
+    }
+
+    /// Writes the settings of the host `name` to `hosts.toml` and reads them all again.
+    fn save_host(&self, name: String, host: Option<HostConfig>) {
+        let context = Arc::clone(&self.context);
+        let done = self.done.clone();
+        tokio::spawn(async move {
+            let saved = tokio::task::spawn_blocking(move || {
+                save_host(&context.hosts_file, &name, host.as_ref())?;
+                context.reload_hosts()?;
+                Ok::<_, ConfigError>(context.hosts())
+            })
+            .await;
+            let result = match saved {
+                Ok(result) => result.map_err(|error| describe::chain(&error)),
+                Err(error) => Err(error.to_string()),
+            };
+            let _ = done.send(Done::HostSaved(result));
+        });
     }
 
     /// Lists the virtual root, the hosts, or a local directory here.
@@ -467,7 +491,7 @@ async fn resolve_address(
     cache: Arc<Mutex<()>>,
     done: mpsc::UnboundedSender<Done>,
 ) {
-    let target = context.target(&host);
+    let target = Target::new(host.as_str());
     let resolved = tokio::select! {
         resolved = resolve(&context.settings, &target) => resolved,
         () = stop.cancelled() => return,
@@ -807,7 +831,7 @@ impl HostTask {
             result = check_version(settings) => result.map_err(failed)?,
             () = self.stop.cancelled() => return Err(None),
         };
-        let target = self.context.target(&self.host);
+        let target = Target::new(self.host.as_str());
         let runtime_dir = &self.context.paths.runtime_dir;
         let session = Session::connect(settings, &target, runtime_dir, Some(askpass), &self.stop)
             .await
@@ -935,21 +959,23 @@ impl HostTask {
         }
     }
 
-    /// Lists a remote directory. The empty path is where the host opens: its `start_dir`, or
-    /// the remote home directory; the reply names it as an absolute path.
+    /// Lists a remote directory. The empty path is where the host opens: the directory to
+    /// resume, if it is still there, else its `start_dir`, else the remote home directory; the
+    /// reply names it as an absolute path.
     async fn list(&self, fs: &SftpFs, side: Side, request: ListRequest) -> Done {
         let result = async {
             let Location::Remote { path, .. } = &request.location else {
                 return Err(fl!("error-connection-closed"));
             };
+            if path.as_bytes().is_empty()
+                && let Some(dir) = &request.resume
+                && let Ok(listed) = self.list_dir(fs, dir.clone()).await
+            {
+                return Ok(listed);
+            }
             let path = if path.as_bytes().is_empty() {
-                let start_dir = self
-                    .context
-                    .config
-                    .hosts
-                    .get(&self.host)
-                    .and_then(|host| host.start_dir.as_deref());
-                match start_dir {
+                let hosts = self.context.hosts();
+                match hosts.get(&self.host).and_then(|host| host.start_dir()) {
                     Some(dir) => fs.canonicalize(&RemotePath::from(dir)).await,
                     None => fs.home().await,
                 }
@@ -957,19 +983,9 @@ impl HostTask {
             } else {
                 path.clone()
             };
-            // No timeout, unlike locally: the server serves requests in order, so a statvfs
-            // that hangs there would hold up the listing anyway.
-            let (space, entries) = tokio::join!(space(fs, &path), fs.list_dir(&path));
-            let entries = entries.map_err(|error| describe::vfs_error(&error))?;
-            let location = Location::Remote {
-                host: self.host.clone(),
-                path,
-            };
-            Ok(Listed {
-                location,
-                listing: Listing::Dir(entries),
-                space,
-            })
+            self.list_dir(fs, path)
+                .await
+                .map_err(|error| describe::vfs_error(&error))
         }
         .await;
         Done::Listed {
@@ -977,5 +993,119 @@ impl HostTask {
             generation: request.generation,
             result,
         }
+    }
+
+    async fn list_dir(&self, fs: &SftpFs, path: RemotePath) -> Result<Listed, VfsError> {
+        // No timeout, unlike locally: the server serves requests in order, so a statvfs that
+        // hangs there would hold up the listing anyway.
+        let (space, entries) = tokio::join!(space(fs, &path), fs.list_dir(&path));
+        let location = Location::Remote {
+            host: self.host.clone(),
+            path,
+        };
+        Ok(Listed {
+            location,
+            listing: Listing::Dir(entries?),
+            space,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+    use std::process::Stdio;
+
+    use noc_config::{Config, HostConfig, Hosts, Paths, SftpHost};
+    use noc_vfs::RemotePath;
+    use tokio::process::Command;
+
+    use super::*;
+
+    /// A session with a local `sftp-server` that starts in `dir`; `None` without one.
+    async fn local_sftp(dir: &Path) -> Option<(tokio::process::Child, SftpFs)> {
+        let program = std::env::var_os("SFTP_SERVER")
+            .filter(|program| !program.is_empty())
+            .map(PathBuf::from)
+            .or_else(|| {
+                ["/usr/libexec/sftp-server", "/usr/lib/openssh/sftp-server"]
+                    .into_iter()
+                    .map(PathBuf::from)
+                    .find(|path| path.exists())
+            })?;
+        let mut child = Command::new(program)
+            .arg("-e")
+            .arg("-d")
+            .arg(dir)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        let stdin = child.stdin.take().unwrap();
+        let stdout = child.stdout.take().unwrap();
+        let fs = SftpFs::from_pipes(stdin, stdout).await.unwrap();
+        Some((child, fs))
+    }
+
+    fn task(dir: &Path, start_dir: Option<&str>) -> HostTask {
+        let mut hosts = Hosts::default();
+        let host = SftpHost {
+            start_dir: start_dir.map(str::to_owned),
+            ..SftpHost::default()
+        };
+        hosts.hosts.insert("web".to_owned(), HostConfig::Sftp(host));
+        let paths = Paths::resolve(dir, 501, &|_| None);
+        let context = Context::new(paths, Config::default(), dir.join("hosts.toml"), hosts);
+        HostTask {
+            context: Arc::new(context),
+            host: "web".to_owned(),
+            connection: 1,
+            stop: CancellationToken::new(),
+            done: mpsc::unbounded_channel().0,
+        }
+    }
+
+    /// Where opening `web` lands, resuming `resume`.
+    async fn opened(task: &HostTask, fs: &SftpFs, resume: Option<&Path>) -> Result<String, String> {
+        let request = ListRequest {
+            generation: 1,
+            location: Location::Remote {
+                host: "web".to_owned(),
+                path: RemotePath::from(""),
+            },
+            resume: resume.map(|path| RemotePath::from(path.to_str().unwrap())),
+        };
+        let Done::Listed { result, .. } = task.list(fs, Side::Left, request).await else {
+            panic!("expected a listing");
+        };
+        result.map(|listed| match listed.location {
+            Location::Remote { path, .. } => String::from_utf8_lossy(path.as_bytes()).into_owned(),
+            other => panic!("expected a remote location, got {other:?}"),
+        })
+    }
+
+    #[tokio::test]
+    async fn a_host_opens_where_it_left_off_else_at_its_start_dir_else_at_home() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(tmp.path()).unwrap();
+        std::fs::create_dir_all(root.join("www/app")).unwrap();
+        let Some((_child, fs)) = local_sftp(&root).await else {
+            return;
+        };
+        let text = |path: &Path| path.to_str().unwrap().to_owned();
+        let with_start = task(&root, Some("www"));
+        let app = root.join("www/app");
+        assert_eq!(opened(&with_start, &fs, Some(&app)).await, Ok(text(&app)));
+        let gone = root.join("gone");
+        assert_eq!(
+            opened(&with_start, &fs, Some(&gone)).await,
+            Ok(text(&root.join("www"))),
+            "a directory that is gone falls back to start_dir"
+        );
+        let plain = task(&root, None);
+        assert_eq!(opened(&plain, &fs, Some(&gone)).await, Ok(text(&root)));
+        let missing = task(&root, Some("missing"));
+        assert!(opened(&missing, &fs, None).await.is_err());
     }
 }

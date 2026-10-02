@@ -213,12 +213,44 @@ fn config_init_writes_the_defaults_once() {
 }
 
 #[test]
+fn config_init_writes_the_hosts_template_once() {
+    let sandbox = Sandbox::new(&[]);
+    std::fs::remove_file(sandbox.path("config/noc/config.toml")).unwrap();
+    let hosts = sandbox.path("config/noc/hosts.toml");
+    std::fs::write(&hosts, "# mine\n").unwrap();
+    let output = sandbox.run(&["config", "init"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert_eq!(std::fs::read_to_string(&hosts).unwrap(), "# mine\n");
+
+    std::fs::remove_file(&hosts).unwrap();
+    assert!(sandbox.run(&["config", "init", "--force"]).status.success());
+    assert_eq!(
+        std::fs::read_to_string(&hosts).unwrap(),
+        noc_config::DEFAULT_HOSTS
+    );
+}
+
+#[test]
+fn hosts_in_config_toml_point_to_hosts_toml() {
+    let sandbox = Sandbox::new(&[]);
+    sandbox.write_config("[hosts.nas]\nlabel = \"Storage\"\n");
+    let output = sandbox.run(&["hosts"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        stderr(&output).contains("hosts.toml"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
 fn config_paths_follow_xdg_variables() {
     let sandbox = Sandbox::new(&[]);
     let output = sandbox.run(&["config", "paths"]);
     assert!(output.status.success());
     let text = stdout(&output);
     assert!(text.contains(sandbox.path("config/noc/config.toml").to_str().unwrap()));
+    assert!(text.contains(sandbox.path("config/noc/hosts.toml").to_str().unwrap()));
     assert!(text.contains(sandbox.runtime.path().join("noc").to_str().unwrap()));
 }
 
@@ -262,7 +294,11 @@ fn hosts_lists_ssh_config_hosts() {
     )
     .unwrap();
     std::fs::write(sandbox.path("conf.d/work"), "Host nas\n").unwrap();
-    sandbox.write_config("[hosts.nas]\nlabel = \"Storage\"\n");
+    std::fs::write(
+        sandbox.path("config/noc/hosts.toml"),
+        "[nas]\ntype = \"sftp\"\nlabel = \"Storage\"\n",
+    )
+    .unwrap();
 
     let output = sandbox.run(&["hosts"]);
     assert!(output.status.success(), "{}", stderr(&output));

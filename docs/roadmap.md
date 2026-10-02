@@ -61,6 +61,8 @@
 - [x] Virtual root of mounted volumes and a list of SFTP hosts, with the connected hosts in the
       root; `[volumes] hide` ([ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md))
 - [x] Location menu: Alt-F1, Alt-F2 (Ctrl-X 1, Ctrl-X 2), with a filter and hotkeys
+- [x] Host settings in `hosts.toml`, typed and edited with F4 on a host: `other_dir`,
+      `remember_dir` ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md))
 - [ ] F9 pull-down menu, as in mc, with Left/Right → Change location
 - [ ] User themes and keymap overrides
 - [ ] Bookmarks and history

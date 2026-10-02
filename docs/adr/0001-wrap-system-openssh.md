@@ -17,8 +17,8 @@ protocol over the stdin and stdout of `ssh -s <host> sftp`.
 
 - The SFTP client library is `openssh-sftp-client`; its `Sftp::new` accepts any pipes. The
   fallback is `russh-sftp`. Both sit behind our `SftpFs` adapter.
-- The `ssh` binary and extra arguments are configurable: `ssh.program`, `ssh.args`, and per-host
-  `args`.
+- The `ssh` binary and extra arguments are configurable: `ssh.program` and `ssh.args`. (Per-host
+  `args` existed until [ADR 0007](0007-typed-host-settings-in-hosts-toml.md).)
 - OpenSSH 8.7 or newer is required: 8.4 added `SSH_ASKPASS_REQUIRE`
   ([ADR 0003](0003-askpass-bridge.md)), and 8.7 added the `StdinNull` and
   `ForkAfterAuthentication` keywords, which Noon Commander forces off so that a user's config cannot

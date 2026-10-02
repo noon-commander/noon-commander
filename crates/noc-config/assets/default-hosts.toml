@@ -1,0 +1,15 @@
+# Noon Commander host settings
+#
+# One table per host, keyed by its name; quote names that contain dots, such as
+# ["web.example.com"]. Every table needs a `type`, which decides the other settings. F4 on a
+# host in Noon Commander edits its table here; comments and other tables stay as they are.
+#
+# type = "sftp": a Host alias from ssh_config. This file only decorates the host; how to reach
+# it (user, port, keys, options) stays in ssh_config.
+#
+# ["prod-web"]
+# type = "sftp"
+# label = "Prod"                    # name shown in the host list
+# start_dir = "/var/www"            # remote directory opened on connect instead of home
+# other_dir = "~/projects/site"     # local directory the other panel opens with the host
+# remember_dir = true               # reopen the last directory in this session

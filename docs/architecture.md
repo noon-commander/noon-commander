@@ -69,7 +69,8 @@ time, so the access time becomes the current time on both backends. Local times 
 path (`utimensat`), since opening a FIFO would block.
 
 Every ssh command line is assembled in `noc-ssh`, in this order: program → forced options →
-`ssh.args` → host `args` → role options → `--` → destination. ssh keeps the first value it sees
+`ssh.args` → role options → `--` → destination. Per-host options belong in ssh_config
+([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md)). ssh keeps the first value it sees
 for an option, so `-o` values in user arguments cannot override forced options; flags are covered
 by validation ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)).
 
@@ -113,12 +114,17 @@ row, the hosts from the ssh config ([ADR 0006](adr/0006-virtual-root-with-volume
   not answer (a dead network mount can block forever) is listed with `?` and is not asked
   again until the earlier call returns. `[volumes] hide` leaves out mount points by pattern;
   the system volume always stays.
-- Hosts come in config order, named by their `hosts.<alias>.label` if set (the status line shows
+- Hosts come in config order, named by their `label` from `hosts.toml` if set (the status line shows
   the alias), with the address cached from an earlier `ssh -G`. The root and the list of hosts
   are listed like directories, in background tasks that read the volumes, scan the ssh config,
   and load the cache, so Ctrl-R reads them again.
-- Entering a host connects in the background (the status line says so; Esc stops it) and opens
-  the configured `start_dir` or the remote home directory, shown as an absolute path.
+- Entering a host connects in the background (the status line says so; Esc stops it) and opens,
+  shown as an absolute path, the last directory shown on it in this session if `remember_dir`
+  is set and the directory is still there, else the configured `start_dir`, else the remote home
+  directory. If the host has an `other_dir`, the other panel opens it at the same time.
+- F4 on a host edits its settings in a dialog (label, remote directory, other panel directory,
+  remember the last directory); Use Current fills in the directory a panel shows on the host.
+  They are saved to `hosts.toml` in the background, and the lists of hosts are read again.
 - When a connection is lost, the panels on that host go back to the list of hosts and say why.
 - The icon in front of each host shows its state, in a color of its own: a server, gray when
   not connected and green when connected; a spinner while connecting; a server with a cross,
@@ -309,15 +315,15 @@ variables:
 
 | Purpose | Path |
 | --- | --- |
-| Settings, keymap, themes | `~/.config/noc/` (`config.toml`, `keymap.toml`, `themes/`) |
+| Settings, keymap, themes | `~/.config/noc/` (`config.toml`, `hosts.toml`, `keymap.toml`, `themes/`) |
 | Data (bookmarks) | `~/.local/share/noc/` |
 | State (history, last directories, logs) | `~/.local/state/noc/` |
 | Cache (`ssh -G` results) | `~/.cache/noc/` |
 | Runtime (control sockets, askpass socket, F4 temp files) | `$XDG_RUNTIME_DIR/noc/` or `$TMPDIR/noc-$UID/`, mode 0700 |
 
-Noon Commander never rewrites `config.toml` wholesale; edits go through `toml_edit` and keep
-comments. Unknown keys are errors, so a typo does not silently fall back to a default.
-`noc config init` writes the commented defaults.
+Noon Commander never writes `config.toml`. Unknown keys are errors, so a typo does not silently
+fall back to a default. `noc config init` writes the commented defaults, and a commented
+`hosts.toml` unless one exists.
 
 ```toml
 [ssh]
@@ -331,11 +337,6 @@ hide = ["github.com", "gitlab.com", "bitbucket.org"]
 
 [volumes]
 hide = ["/Volumes/Backup*"]      # mount points to leave out of the root; never the system volume
-
-[hosts."prod-web"]               # decorates the ssh_config host, never duplicates it
-label = "Prod"
-start_dir = "/var/www"
-args = ["-o", "Compression=yes"]
 
 [ui]
 language = "auto"                # or a language tag such as "en-US"; others fall back to it
@@ -351,6 +352,21 @@ parallel_jobs = 2                # jobs that run at once; later ones wait; F4 ne
 ```
 
 Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
+
+Host settings live in `hosts.toml` next to `config.toml`, one table per host with a required
+`type` that decides its other keys ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md)).
+F4 on a host rewrites only its table through `toml_edit`, keeping comments and the other tables,
+and replaces the file atomically. The settings sit behind a lock in the shared `Context`, so the
+TUI and the host tasks see a change at once.
+
+```toml
+["prod-web"]                     # an ssh_config alias; decorates it, never duplicates it
+type = "sftp"
+label = "Prod"
+start_dir = "/var/www"           # opened on connect instead of the remote home
+other_dir = "~/projects/site"    # the other panel opens it with the host; / or ~/ for now
+remember_dir = true              # reopen the last directory of this session
+```
 
 ## UI
 

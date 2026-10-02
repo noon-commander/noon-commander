@@ -18,6 +18,8 @@ fkey-delete = Delete
 fkey-quit = Quit
 # Closes the connection to the host under the cursor.
 fkey-disconnect = Disconn
+# Edits the settings of the host under the cursor.
+fkey-edit-host = Edit
 # Closes a dialog.
 fkey-cancel = Cancel
 
@@ -116,6 +118,8 @@ dialog-none = None
 dialog-older = Older
 # Title of error dialogs.
 dialog-error = Error
+# Fills a field of a form with what a panel shows, such as the directory open on a host.
+dialog-use-current = Use current
 
 ## Help screen (src/tui/help). Prefix: help-. One line per key: say what it does, briefly.
 
@@ -171,6 +175,7 @@ help-help = This help
 help-quit = Quit
 help-redraw = Redraw the screen
 help-disconnect = Disconnect the host under the cursor
+help-edit-host = Edit the settings of the host under the cursor
 help-menu-open = Open the volume or host in the panel
 help-menu-back = Take back the last character of the filter
 help-menu-reload = Read the volumes and hosts again
@@ -199,6 +204,20 @@ help-field-delete-to-end = Delete to the end
 help-note-esc = Esc 1 … Esc 0 stand for F1 … F10, and Esc followed by a key for Alt and the key, for terminals without them. A lone Esc acts after a second; Esc Esc at once.
 help-note-typing = Typing in a panel starts quick search.
 help-note-menu = Typing in the location menu filters it; 1 … 9 and 0 open the first ten rows while the filter is empty.
+
+## Host settings, F4 on a host (src/tui/app), saved to hosts.toml. Prefix: host-.
+
+# Title: the host alias.
+host-edit-title = Host { $host }
+# Field labels.
+host-label = Label (shown instead of the alias):
+host-start-dir = Remote directory (opened on connect; empty: home):
+host-other-dir = Other panel directory (local, / or ~/…; empty: unchanged):
+host-remember-dir = Remember the last directory in this session
+# The reason names the file.
+host-save-error = Cannot save the host settings: { $reason }
+# The other panel directory must be a local path.
+host-other-dir-invalid = the other panel directory must start with / or ~/
 
 ## Marking by pattern, + and - (src/tui/app). Prefix: pattern-. As in mc.
 

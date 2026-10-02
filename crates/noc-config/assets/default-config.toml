@@ -1,8 +1,8 @@
 # Noon Commander configuration
 #
 # Noon Commander uses the system OpenSSH client, so hosts, users, keys, and connection options
-# come from ssh_config. This file only decorates those hosts (labels, start directories, hiding);
-# it never duplicates them.
+# come from ssh_config. Noon Commander only decorates those hosts (labels, start directories,
+# hiding); it never duplicates them.
 #
 # Every setting is optional. Uncommented values are the defaults; commented lines are examples.
 
@@ -61,10 +61,4 @@ atomic_upload = true
 # with F4 never waits. At least 1.
 parallel_jobs = 2
 
-# Per-host settings, keyed by a Host alias from ssh_config. Quote aliases that contain dots,
-# such as [hosts."web.example.com"].
-#
-# [hosts."prod-web"]
-# label = "Prod"                    # name shown in the host list
-# start_dir = "/var/www"            # remote directory opened on connect instead of home
-# args = ["-o", "Compression=yes"]  # extra ssh arguments for this host, after ssh.args
+# Per-host settings (labels, start directories) live in hosts.toml next to this file.

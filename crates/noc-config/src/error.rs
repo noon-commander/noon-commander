@@ -23,6 +23,26 @@ pub enum ConfigError {
         #[source]
         source: Box<toml::de::Error>,
     },
+    /// `config.toml` has a `[hosts]` table, which moved to `hosts.toml`.
+    #[error(
+        "{path}: [hosts] moved to hosts.toml in the same directory; move each \
+         [hosts.\"alias\"] table there as [\"alias\"] with type = \"sftp\", without `args`"
+    )]
+    HostsMoved { path: PathBuf },
+    /// A host table in `hosts.toml` has a value that its type does not allow.
+    #[error("invalid host {host:?} in {path}: {reason}")]
+    InvalidHost {
+        path: PathBuf,
+        host: String,
+        reason: String,
+    },
+    /// `hosts.toml` is not valid TOML, so it is not changed.
+    #[error("cannot edit {path}")]
+    Edit {
+        path: PathBuf,
+        #[source]
+        source: Box<toml_edit::TomlError>,
+    },
     /// [`write_default_config`](crate::write_default_config) found an existing file and was
     /// not asked to overwrite it.
     #[error("{path} already exists; use --force to overwrite it")]

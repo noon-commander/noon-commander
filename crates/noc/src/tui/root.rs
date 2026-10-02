@@ -5,8 +5,8 @@ use std::os::unix::ffi::OsStrExt as _;
 use std::path::Path;
 use std::time::Duration;
 
-use noc_ssh::CachedHost;
 use noc_ssh::pattern::wildcard_match;
+use noc_ssh::{CachedHost, Target};
 use noc_vfs::{Volume, VolumeKind};
 
 use super::cells;
@@ -20,7 +20,7 @@ pub(crate) const VOLUME_TIMEOUT: Duration = Duration::from_millis(500);
 pub(crate) struct RootHost {
     /// The alias from `ssh_config`.
     pub(crate) alias: String,
-    /// `hosts.<alias>.label`.
+    /// The host's label from `hosts.toml`.
     pub(crate) label: Option<String>,
     /// `user@hostname[:port]` from an earlier `ssh -G`, if cached.
     pub(crate) address: Option<String>,
@@ -40,9 +40,9 @@ pub(crate) fn read_hosts(context: &Context) -> Vec<RootHost> {
         .visible(&context.config.discovery.hide)
         .map(|host| RootHost {
             alias: host.alias.clone(),
-            label: context.label(&host.alias).map(str::to_owned),
+            label: context.label(&host.alias),
             address: cache
-                .get(&context.target(&host.alias))
+                .get(&Target::new(host.alias.as_str()))
                 .map(CachedHost::address),
         })
         .collect()
@@ -86,7 +86,7 @@ pub(crate) fn volume_name(volume: &Volume) -> String {
 /// Blocking: reads the ssh config files and writes the cache.
 pub(crate) fn remember(context: &Context, alias: &str, host: CachedHost) -> io::Result<()> {
     let mut cache = context.load_cache(&context.scan());
-    cache.insert(&context.target(alias), host);
+    cache.insert(&Target::new(alias), host);
     cache.save()
 }
 
@@ -96,7 +96,7 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    use noc_config::{Config, HostConfig, Paths};
+    use noc_config::{Config, HostConfig, Hosts, Paths, SftpHost};
 
     use super::*;
 
@@ -113,14 +113,17 @@ mod tests {
         let mut config = Config::default();
         config.ssh.config_file = Some(ssh_config);
         config.discovery.hide = vec!["github.*".to_owned()];
-        config.hosts.insert(
+        let mut hosts = Hosts::default();
+        hosts.hosts.insert(
             "web".to_owned(),
-            HostConfig {
+            HostConfig::Sftp(SftpHost {
                 label: Some("Prod".to_owned()),
-                ..HostConfig::default()
-            },
+                ..SftpHost::default()
+            }),
         );
-        let context = Context::new(Paths::resolve(&home, 501, &env), config);
+        let paths = Paths::resolve(&home, 501, &env);
+        let hosts_file = dir.path().join("hosts.toml");
+        let context = Context::new(paths, config, hosts_file, hosts);
 
         let db = CachedHost {
             user: "admin".to_owned(),

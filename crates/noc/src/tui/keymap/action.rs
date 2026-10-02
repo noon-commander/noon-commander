@@ -136,6 +136,8 @@ pub(crate) enum Action {
     QuickSearch,
     /// Closes the connection to the host under the cursor, or stops connecting to it.
     Disconnect,
+    /// Edits the settings of the host under the cursor.
+    EditHost,
     /// Deletes the character before the text cursor.
     Backspace,
     /// Deletes the marked entries or the one under the cursor; in a text field, the character
@@ -203,6 +205,7 @@ impl Action {
         Self::SortBySize,
         Self::QuickSearch,
         Self::Disconnect,
+        Self::EditHost,
         Self::Backspace,
         Self::Delete,
         Self::DeleteToStart,

@@ -232,6 +232,7 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::Quit) => fl!("help-quit"),
         (Context::Panel | Context::Viewer, Action::Redraw) => fl!("help-redraw"),
         (Context::Root | Context::Menu, Action::Disconnect) => fl!("help-disconnect"),
+        (Context::Root, Action::EditHost) => fl!("help-edit-host"),
         (Context::Menu, Action::Confirm) => fl!("help-menu-open"),
         (Context::Menu, Action::Backspace) => fl!("help-menu-back"),
         (Context::Menu, Action::Reload) => fl!("help-menu-reload"),

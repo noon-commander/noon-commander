@@ -73,6 +73,8 @@ pub(crate) enum Button {
     KeepAll,
     /// Overwrite this and every later one if older.
     Older,
+    /// Take what the panel shows.
+    UseCurrent,
 }
 
 impl Button {
@@ -89,6 +91,7 @@ impl Button {
             Self::All => fl!("dialog-all"),
             Self::KeepAll => fl!("dialog-none"),
             Self::Older => fl!("dialog-older"),
+            Self::UseCurrent => fl!("dialog-use-current"),
         }
     }
 }
@@ -96,7 +99,7 @@ impl Button {
 /// Where the keys go inside a dialog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Focus {
-    Field,
+    Field(usize),
     Check(usize),
     Button(usize),
 }
@@ -227,6 +230,22 @@ impl fmt::Debug for Field {
     }
 }
 
+/// A text field, with its label drawn on a line of its own above it unless empty.
+#[derive(Debug)]
+struct LabelledField {
+    label: String,
+    field: Field,
+}
+
+impl LabelledField {
+    fn unlabelled(field: Field) -> Self {
+        Self {
+            label: String::new(),
+            field,
+        }
+    }
+}
+
 /// The colors of a dialog box.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Colors {
@@ -280,13 +299,13 @@ pub(crate) enum DialogEvent {
     Cancelled,
 }
 
-/// A modal dialog: a message, a text field, check boxes, and buttons, each of them optional
-/// but the buttons. Whoever opens it reads the field and the check boxes once it closes.
+/// A modal dialog: a message, text fields, check boxes, and buttons, each of them optional
+/// but the buttons. Whoever opens it reads the fields and the check boxes once it closes.
 #[derive(Debug)]
 pub(crate) struct Dialog {
     title: String,
     message: String,
-    field: Option<Field>,
+    fields: Vec<LabelledField>,
     checks: Vec<Check>,
     buttons: Vec<Button>,
     /// The button that Enter in the field activates, and that starts with the focus otherwise;
@@ -305,8 +324,8 @@ impl Dialog {
     pub(crate) fn prompt(context: &str, message: &str, kind: PromptKind) -> Self {
         match kind {
             PromptKind::Secret => Self {
-                field: Some(Field::secret()),
-                focus: Focus::Field,
+                fields: vec![LabelledField::unlabelled(Field::secret())],
+                focus: Focus::Field(0),
                 ..Self::new(context, message, vec![Button::Ok, Button::Cancel])
             },
             PromptKind::HostKey | PromptKind::Confirm => Self {
@@ -356,27 +375,60 @@ impl Dialog {
         checks: &[(String, bool)],
         width: u16,
     ) -> Self {
-        let checks = checks
+        Self {
+            fields: vec![LabelledField::unlabelled(Field::plain(text))],
+            checks: Self::checks(checks),
+            focus: Focus::Field(0),
+            width,
+            ..Self::new(title, message, vec![Button::Ok, Button::Cancel])
+        }
+    }
+
+    /// Text fields with their labels and the texts they open with, check boxes with their
+    /// labels and states, and `buttons`, the first of them the default, `width` cells wide.
+    pub(crate) fn fields(
+        title: &str,
+        fields: &[(String, String)],
+        checks: &[(String, bool)],
+        buttons: Vec<Button>,
+        width: u16,
+    ) -> Self {
+        let fields: Vec<LabelledField> = fields
+            .iter()
+            .map(|(label, text)| LabelledField {
+                label: cells::sanitize(label.as_bytes()),
+                field: Field::plain(text),
+            })
+            .collect();
+        let focus = if fields.is_empty() {
+            Focus::Button(0)
+        } else {
+            Focus::Field(0)
+        };
+        Self {
+            fields,
+            checks: Self::checks(checks),
+            focus,
+            width,
+            ..Self::new(title, "", buttons)
+        }
+    }
+
+    fn checks(checks: &[(String, bool)]) -> Vec<Check> {
+        checks
             .iter()
             .map(|(label, on)| Check {
                 label: label.clone(),
                 on: *on,
             })
-            .collect();
-        Self {
-            field: Some(Field::plain(text)),
-            checks,
-            focus: Focus::Field,
-            width,
-            ..Self::new(title, message, vec![Button::Ok, Button::Cancel])
-        }
+            .collect()
     }
 
     fn new(title: &str, message: &str, buttons: Vec<Button>) -> Self {
         Self {
             title: cells::sanitize(title.as_bytes()),
             message: message.trim_end().to_owned(),
-            field: None,
+            fields: Vec::new(),
             checks: Vec::new(),
             buttons,
             default: 0,
@@ -389,8 +441,8 @@ impl Dialog {
     /// The answer for ssh after `event`: the secret for OK on a secret prompt, `yes` for Yes,
     /// and `None` to decline.
     pub(crate) fn answer(&self, event: DialogEvent) -> Option<SecretString> {
-        match (event, &self.field) {
-            (DialogEvent::Pressed(Button::Ok), Some(field)) => {
+        match (event, self.fields.first()) {
+            (DialogEvent::Pressed(Button::Ok), Some(LabelledField { field, .. })) => {
                 // From `&str`: an exact copy, where `String` would be shrunk into new memory.
                 Some(SecretString::from(field.text.as_str()))
             }
@@ -399,12 +451,33 @@ impl Dialog {
         }
     }
 
-    /// The text of a plain field.
+    /// The text of the first field, if plain.
     pub(crate) fn text(&self) -> &str {
-        match &self.field {
-            Some(field) if !field.secret => &field.text,
+        self.text_of(0)
+    }
+
+    /// The text of field `index`, if plain.
+    pub(crate) fn text_of(&self, index: usize) -> &str {
+        match self.fields.get(index) {
+            Some(LabelledField { field, .. }) if !field.secret => &field.text,
             _ => "",
         }
+    }
+
+    /// Replaces the text of plain field `index` and gives it the focus. Unlike the text a
+    /// field opens with, typing edits it.
+    pub(crate) fn set_text(&mut self, index: usize, text: &str) {
+        let Some(LabelledField { field, .. }) = self.fields.get_mut(index) else {
+            return;
+        };
+        if field.secret {
+            return;
+        }
+        *field = Field {
+            fresh: false,
+            ..Field::plain(text)
+        };
+        self.focus = Focus::Field(index);
     }
 
     /// Whether check box `index` is checked.
@@ -412,19 +485,19 @@ impl Dialog {
         self.checks.get(index).is_some_and(|check| check.on)
     }
 
-    /// The keymap context for the next key: `DialogInput` while the text field has the focus.
+    /// The keymap context for the next key: `DialogInput` while a text field has the focus.
     pub(crate) fn context(&self) -> Context {
         match self.focus {
-            Focus::Field => Context::DialogInput,
+            Focus::Field(_) => Context::DialogInput,
             Focus::Check(_) | Focus::Button(_) => Context::Dialog,
         }
     }
 
     /// Handles an action or a typed character.
     pub(crate) fn handle(&mut self, input: Resolved) -> DialogEvent {
-        let field = match (self.focus, &mut self.field) {
-            (Focus::Field, Some(field)) => Some(field),
-            _ => None,
+        let field = match self.focus {
+            Focus::Field(index) => self.fields.get_mut(index).map(|field| &mut field.field),
+            Focus::Check(_) | Focus::Button(_) => None,
         };
         let action = match (input, field) {
             (Resolved::Insert(c), Some(field)) => {
@@ -443,7 +516,9 @@ impl Dialog {
         match action {
             Action::Confirm => match self.focus {
                 Focus::Button(index) => DialogEvent::Pressed(self.buttons[index]),
-                Focus::Field | Focus::Check(_) => DialogEvent::Pressed(self.buttons[self.default]),
+                Focus::Field(_) | Focus::Check(_) => {
+                    DialogEvent::Pressed(self.buttons[self.default])
+                }
             },
             Action::Toggle => match self.focus {
                 Focus::Check(index) => {
@@ -451,7 +526,7 @@ impl Dialog {
                     DialogEvent::Pending
                 }
                 Focus::Button(index) => DialogEvent::Pressed(self.buttons[index]),
-                Focus::Field => DialogEvent::Pending,
+                Focus::Field(_) => DialogEvent::Pending,
             },
             Action::Cancel => DialogEvent::Cancelled,
             Action::NextField | Action::Right | Action::Down => {
@@ -466,12 +541,10 @@ impl Dialog {
         }
     }
 
-    /// Moves the focus through the field, the check boxes, and the buttons, round.
+    /// Moves the focus through the fields, the check boxes, and the buttons, round.
     fn move_focus(&mut self, forward: bool) {
-        let stops: Vec<Focus> = self
-            .field
-            .iter()
-            .map(|_| Focus::Field)
+        let stops: Vec<Focus> = (0..self.fields.len())
+            .map(Focus::Field)
             .chain((0..self.checks.len()).map(Focus::Check))
             .chain((0..self.buttons.len()).map(Focus::Button))
             .collect();
@@ -483,14 +556,18 @@ impl Dialog {
         self.focus = stops[(current + step) % stops.len()];
     }
 
-    /// Draws the dialog centered in `area`, with the terminal cursor in the text field.
+    /// Draws the dialog centered in `area`, with the terminal cursor in the focused field.
     pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let width = self.width.min(area.width.saturating_sub(4)).max(20);
         let text_width = usize::from(width.saturating_sub(4));
         let lines = cells::wrap(&self.message, text_width);
         let rows = |count: usize| u16::try_from(count).unwrap_or(u16::MAX);
-        // Borders, the message, the field, the check boxes, a blank line, the buttons.
-        let height = rows(lines.len()) + u16::from(self.field.is_some()) + rows(self.checks.len());
+        // Borders, the message, the fields under their labels, the check boxes, a blank line,
+        // the buttons.
+        let labels = self.fields.iter().filter(|f| !f.label.is_empty()).count();
+        let height = rows(lines.len())
+            .saturating_add(rows(self.fields.len() + labels))
+            .saturating_add(rows(self.checks.len()));
         let colors = Colors::of(theme, self.error);
         let size = (width, height + 4);
         let inner = draw_box(frame, area, size, &self.title, colors, theme);
@@ -503,10 +580,19 @@ impl Dialog {
             frame.render_widget(Line::raw(line.as_str()), row(index));
             index += 1;
         }
-        if let Some(field) = &self.field
-            && index < inner.height
-        {
-            let room = usize::from(inner.width).max(1);
+        let room = usize::from(inner.width).max(1);
+        for (number, LabelledField { label, field }) in self.fields.iter().enumerate() {
+            if !label.is_empty() {
+                if index >= inner.height {
+                    return;
+                }
+                let label = cells::fit(label, room, cells::Align::Left);
+                frame.render_widget(Line::raw(label), row(index));
+                index += 1;
+            }
+            if index >= inner.height {
+                return;
+            }
             let (text, column) = field.visible(room);
             let style = if field.fresh {
                 theme.dialog_input_fresh
@@ -515,7 +601,7 @@ impl Dialog {
             };
             let text = cells::fit(&text, room, cells::Align::Left);
             frame.render_widget(Line::styled(text, style), row(index));
-            if self.focus == Focus::Field {
+            if self.focus == Focus::Field(number) {
                 let column = u16::try_from(column).unwrap_or(0);
                 frame.set_cursor_position(Position::new(inner.x + column, inner.y + index));
             }
@@ -539,7 +625,7 @@ impl Dialog {
             let labels: Vec<String> = self.buttons.iter().map(|button| button.label()).collect();
             let focus = match self.focus {
                 Focus::Button(index) => Some(index),
-                Focus::Field | Focus::Check(_) => None,
+                Focus::Field(_) | Focus::Check(_) => None,
             };
             let line = button_line(&labels, self.default, focus, colors);
             frame.render_widget(line, row(index + 1));
@@ -899,6 +985,99 @@ mod tests {
         dialog.handle(action(Action::NextField));
         let terminal = draw(&dialog, 60, 10);
         insta::assert_snapshot!(terminal.backend());
+    }
+
+    fn host_form() -> Dialog {
+        let fields = [
+            ("Label:".to_owned(), "Prod".to_owned()),
+            ("Remote directory:".to_owned(), "/var/www".to_owned()),
+            ("Other directory:".to_owned(), String::new()),
+        ];
+        let checks = [("Remember".to_owned(), true)];
+        let buttons = vec![Button::Ok, Button::UseCurrent, Button::Cancel];
+        Dialog::fields("Host web", &fields, &checks, buttons, 60)
+    }
+
+    #[test]
+    fn the_focus_moves_through_the_fields_in_order() {
+        let mut dialog = host_form();
+        assert_eq!(dialog.context(), Context::DialogInput);
+        typed(&mut dialog, "Staging");
+        dialog.handle(action(Action::NextField));
+        assert_eq!(dialog.context(), Context::DialogInput);
+        typed(&mut dialog, "/srv");
+        assert_eq!(dialog.text_of(0), "Staging");
+        assert_eq!(dialog.text(), "Staging");
+        assert_eq!(dialog.text_of(1), "/srv");
+        assert_eq!(dialog.text_of(2), "");
+        assert_eq!(dialog.text_of(3), "", "no such field");
+        dialog.handle(action(Action::Up));
+        typed(&mut dialog, "!");
+        assert_eq!(
+            dialog.text_of(0),
+            "Staging!",
+            "Up goes back to the first field"
+        );
+        dialog.handle(action(Action::Down));
+        dialog.handle(action(Action::Down));
+        typed(&mut dialog, "/tmp");
+        assert_eq!(dialog.text_of(2), "/tmp");
+        dialog.handle(action(Action::NextField));
+        assert_eq!(dialog.context(), Context::Dialog, "the check box");
+        dialog.handle(action(Action::Toggle));
+        assert!(!dialog.checked(0));
+        dialog.handle(action(Action::NextField));
+        dialog.handle(action(Action::NextField));
+        assert_eq!(
+            dialog.handle(action(Action::Confirm)),
+            DialogEvent::Pressed(Button::UseCurrent)
+        );
+        dialog.handle(action(Action::NextField));
+        dialog.handle(action(Action::NextField));
+        assert_eq!(
+            dialog.context(),
+            Context::DialogInput,
+            "round to the first field"
+        );
+        dialog.handle(action(Action::Down));
+        assert_eq!(
+            dialog.handle(action(Action::Confirm)),
+            DialogEvent::Pressed(Button::Ok),
+            "Enter in a field presses OK"
+        );
+    }
+
+    #[test]
+    fn set_text_replaces_a_field_and_focuses_it() {
+        let mut dialog = host_form();
+        dialog.set_text(2, "/home/deploy");
+        assert_eq!(dialog.text_of(2), "/home/deploy");
+        assert_eq!(dialog.context(), Context::DialogInput);
+        typed(&mut dialog, "/app");
+        assert_eq!(dialog.text_of(2), "/home/deploy/app", "typing keeps it");
+        assert_eq!(dialog.text_of(0), "Prod");
+        dialog.set_text(7, "ignored");
+
+        let mut secret = secret();
+        secret.set_text(0, "nope");
+        assert_eq!(confirm(&mut secret).as_deref(), Some(""), "a secret stays");
+    }
+
+    #[test]
+    fn draws_a_form_with_labelled_fields() {
+        let mut dialog = host_form();
+        dialog.handle(action(Action::Down));
+        let mut terminal = draw(&dialog, 64, 16);
+        insta::assert_snapshot!(terminal.backend());
+        // At the end of `/var/www`, under its label.
+        let cursor = terminal.get_cursor_position().unwrap();
+        let buffer = terminal.backend().buffer();
+        let row: String = (0..64).map(|x| buffer[(x, cursor.y)].symbol()).collect();
+        assert!(row.contains("/var/www"), "{row}");
+        let above: String = (0..64)
+            .map(|x| buffer[(x, cursor.y - 1)].symbol())
+            .collect();
+        assert!(above.contains("Remote directory:"), "{above}");
     }
 
     #[test]

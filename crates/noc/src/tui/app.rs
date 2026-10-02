@@ -3,10 +3,11 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 
 use jiff::tz::TimeZone;
-use noc_config::{TransferConfig, UiConfig};
+use noc_config::{HostConfig, Hosts, SftpHost, TransferConfig, UiConfig};
 use noc_ops::{Conflict, CopyOptions, Decision};
 use noc_vfs::{FileKind, Location, Metadata, RemotePath};
 use ratatui::Frame;
@@ -108,6 +109,12 @@ pub(crate) enum Effect {
         connection: u64,
         stop: CancellationToken,
     },
+    /// Write the settings of the host `name` to `hosts.toml`, or remove them if `None`, and
+    /// report to [`App::host_saved`].
+    SaveHost {
+        name: String,
+        host: Option<HostConfig>,
+    },
 }
 
 /// A host that is connected or on its way. `connection` tells attempts apart, so that reports
@@ -144,6 +151,11 @@ const PATTERN_DIALOG_WIDTH: u16 = 50;
 /// Width of the dialogs of F7 and F5.
 const MKDIR_DIALOG_WIDTH: u16 = 60;
 const COPY_DIALOG_WIDTH: u16 = 70;
+const HOST_DIALOG_WIDTH: u16 = 70;
+/// The fields of the dialog of F4 on a host.
+const HOST_LABEL: usize = 0;
+const HOST_START_DIR: usize = 1;
+const HOST_OTHER_DIR: usize = 2;
 
 /// A dialog on screen or waiting for its turn, and what it is for.
 #[derive(Debug)]
@@ -181,6 +193,13 @@ enum Purpose {
     Conflict {
         job: u64,
         reply: oneshot::Sender<Conflict>,
+    },
+    /// F4 on the host `name`, whose settings were `old`. Use Current fills in `current`, the
+    /// directory a panel shows on the host, if one does.
+    EditHost {
+        name: String,
+        old: Option<HostConfig>,
+        current: Option<String>,
     },
     /// F10 while jobs run: Yes quits and stops them.
     Quit,
@@ -324,6 +343,10 @@ pub(crate) struct App {
     failed: HashSet<String>,
     /// Addresses from `ssh -G` in this session.
     addresses: HashMap<String, String>,
+    /// The settings from `hosts.toml`.
+    host_settings: Arc<Hosts>,
+    /// The last directory shown on each host in this session, for `remember_dir`.
+    last_dirs: HashMap<String, RemotePath>,
     /// The first one is on screen and gets the keys; the others wait, so that a new prompt
     /// never takes the keys from a dialog in use.
     dialogs: VecDeque<Open>,
@@ -394,6 +417,8 @@ impl App {
             tick: 0,
             failed: HashSet::new(),
             addresses: HashMap::new(),
+            host_settings: Arc::default(),
+            last_dirs: HashMap::new(),
             dialogs: VecDeque::new(),
             pattern_options: PatternOptions::default(),
             copy_choices: CopyChoices {
@@ -443,6 +468,11 @@ impl App {
         self.edit_now.take()
     }
 
+    /// Uses `hosts`, the settings from `hosts.toml`.
+    pub(crate) fn set_hosts(&mut self, hosts: Arc<Hosts>) {
+        self.host_settings = hosts;
+    }
+
     /// Titles the virtual root with `name`, the name of this machine.
     pub(crate) fn set_root_title(&mut self, name: String) {
         self.root_title = name;
@@ -490,6 +520,7 @@ impl App {
             | Action::View
             | Action::Edit => !self.panel(self.active).shows_root(),
             Action::ToggleWrap => self.viewing.is_some(),
+            Action::EditHost => self.panel(self.active).host_under_cursor().is_some(),
             _ => false,
         }
     }
@@ -606,15 +637,8 @@ impl App {
 
     pub(crate) fn handle(&mut self, input: Resolved) -> Vec<Effect> {
         self.sync_connected();
-        if let Some(open) = self.dialogs.front_mut() {
-            let event = open.dialog.handle(input);
-            if event == DialogEvent::Pending {
-                return Vec::new();
-            }
-            if let Some(Open { dialog, purpose }) = self.dialogs.pop_front() {
-                return self.dialog_closed(&dialog, purpose, event);
-            }
-            return Vec::new();
+        if !self.dialogs.is_empty() {
+            return self.handle_dialog(input);
         }
         if self.menu.is_some() {
             return self.handle_menu(input);
@@ -698,16 +722,32 @@ impl App {
             Action::Unselect => self.ask_pattern(false),
             Action::Cancel => self.cancel(self.active),
             Action::Disconnect => return self.disconnect_under_cursor(),
+            Action::EditHost => self.ask_edit_host(),
             Action::LocationMenuLeft => return self.open_menu(Side::Left),
             Action::LocationMenuRight => return self.open_menu(Side::Right),
             _ => {
                 let side = self.active;
                 if let Some(request) = self.panel_mut(side).handle(action) {
-                    return self.route(side, request);
+                    return self.open(side, request);
                 }
             }
         }
         Vec::new()
+    }
+
+    /// Gives a key to the dialog in front, and does what it was for once it closes.
+    fn handle_dialog(&mut self, input: Resolved) -> Vec<Effect> {
+        let Some(open) = self.dialogs.front_mut() else {
+            return Vec::new();
+        };
+        let event = open.dialog.handle(input);
+        if event == DialogEvent::Pending || self.keeps_open(event) {
+            return Vec::new();
+        }
+        match self.dialogs.pop_front() {
+            Some(Open { dialog, purpose }) => self.dialog_closed(&dialog, purpose, event),
+            None => Vec::new(),
+        }
     }
 
     /// Opens the location menu for the panel on `side`, and lists what it offers.
@@ -825,8 +865,12 @@ impl App {
                 };
                 let _ = reply.send(conflict);
             }
+            Purpose::EditHost { name, old, .. } if ok => {
+                return save_host(name, old.as_ref(), dialog);
+            }
             Purpose::Quit => self.quit = event == DialogEvent::Pressed(Button::Yes),
-            Purpose::Pattern { .. }
+            Purpose::EditHost { .. }
+            | Purpose::Pattern { .. }
             | Purpose::Mkdir { .. }
             | Purpose::Delete { .. }
             | Purpose::Transfer { .. }
@@ -846,7 +890,7 @@ impl App {
             .and_then(|entry| child(panel.location(), &entry.name));
         let Some(location) = file else {
             if let Some(request) = self.panel_mut(side).handle(Action::Enter) {
-                return self.route(side, request);
+                return self.open(side, request);
             }
             return Vec::new();
         };
@@ -1539,15 +1583,139 @@ impl App {
         self.pattern_options = options;
     }
 
+    /// Opens the dialog of F4 on the host under the cursor of the active panel: its settings
+    /// from `hosts.toml`.
+    fn ask_edit_host(&mut self) {
+        let Some(name) = self
+            .panel(self.active)
+            .host_under_cursor()
+            .map(str::to_owned)
+        else {
+            return;
+        };
+        let old = self.host_settings.get(&name).cloned();
+        let sftp = match &old {
+            Some(HostConfig::Sftp(sftp)) => sftp.clone(),
+            None => SftpHost::default(),
+        };
+        // The active panel shows the hosts, so the other one is more likely on this one.
+        let current = [self.active.other(), self.active]
+            .into_iter()
+            .find_map(|side| match self.panel(side).location() {
+                Location::Remote { host, path } if *host == name && !path.as_bytes().is_empty() => {
+                    Some(String::from_utf8_lossy(path.as_bytes()).into_owned())
+                }
+                _ => None,
+            });
+        let text = |value: &Option<String>| value.clone().unwrap_or_default();
+        let fields = [
+            (fl!("host-label"), text(&sftp.label)),
+            (fl!("host-start-dir"), text(&sftp.start_dir)),
+            (fl!("host-other-dir"), text(&sftp.other_dir)),
+        ];
+        let checks = [(fl!("host-remember-dir"), sftp.remember_dir)];
+        let mut buttons = vec![Button::Ok, Button::Cancel];
+        if current.is_some() {
+            buttons.insert(1, Button::UseCurrent);
+        }
+        let title = fl!("host-edit-title", host = cells::sanitize(name.as_bytes()));
+        let dialog = Dialog::fields(&title, &fields, &checks, buttons, HOST_DIALOG_WIDTH);
+        self.dialogs.push_back(Open {
+            dialog,
+            purpose: Purpose::EditHost { name, old, current },
+        });
+    }
+
+    /// Whether the dialog in front stays open after `event`: Use Current fills in a field, and
+    /// OK on host settings that are not valid shows why over it.
+    fn keeps_open(&mut self, event: DialogEvent) -> bool {
+        let Some(Open { dialog, purpose }) = self.dialogs.front_mut() else {
+            return false;
+        };
+        let Purpose::EditHost { current, .. } = purpose else {
+            return false;
+        };
+        match event {
+            DialogEvent::Pressed(Button::UseCurrent) => {
+                if let Some(current) = current {
+                    dialog.set_text(HOST_START_DIR, current);
+                }
+                true
+            }
+            DialogEvent::Pressed(Button::Ok) => {
+                let other_dir = dialog.text_of(HOST_OTHER_DIR).trim();
+                if other_dir.is_empty() || noc_config::local_dir(other_dir, &self.home).is_some() {
+                    return false;
+                }
+                let error = Dialog::error(&fl!("dialog-error"), &fl!("host-other-dir-invalid"));
+                self.dialogs.push_front(Open {
+                    dialog: error,
+                    purpose: Purpose::Info,
+                });
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Takes the end of an [`Effect::SaveHost`]: the host settings now, which the lists of
+    /// hosts show at once, or why they could not be saved.
+    pub(crate) fn host_saved(&mut self, result: Result<Arc<Hosts>, String>) -> Vec<Effect> {
+        match result {
+            Ok(hosts) => {
+                self.host_settings = hosts;
+                let mut effects = self.reload(&Location::Root);
+                effects.extend(self.reload(&Location::Sftp));
+                effects
+            }
+            Err(reason) => {
+                let reason = cells::sanitize(reason.as_bytes());
+                self.show_error(&fl!("host-save-error", reason = reason));
+                Vec::new()
+            }
+        }
+    }
+
     /// Sends the panel on `side` to `destination`.
     fn go(&mut self, side: Side, destination: Destination) -> Vec<Effect> {
         let request = self.panel_mut(side).go(destination);
-        self.route(side, request)
+        self.open(side, request)
+    }
+
+    /// Sends a new request of the panel on `side`. Opening a host sends the other panel to
+    /// the host's `other_dir`, if it has one.
+    fn open(&mut self, side: Side, request: ListRequest) -> Vec<Effect> {
+        let other_dir = match &request.location {
+            Location::Remote { host, path } if path.as_bytes().is_empty() => self
+                .host_settings
+                .get(host)
+                .and_then(HostConfig::other_dir)
+                .and_then(|dir| noc_config::local_dir(dir, &self.home)),
+            _ => None,
+        };
+        let mut effects = self.route(side, request);
+        if let Some(dir) = other_dir {
+            let request = self
+                .panel_mut(side.other())
+                .go(Destination::to(Location::Local(dir)));
+            effects.extend(self.route(side.other(), request));
+        }
+        effects
     }
 
     /// Sends a panel's request where it can be answered. A host that is not connected gets
-    /// connected first; its panels' requests go out once it is.
-    fn route(&mut self, side: Side, request: ListRequest) -> Vec<Effect> {
+    /// connected first; its panels' requests go out once it is. Opening a host with
+    /// `remember_dir` resumes its last directory.
+    fn route(&mut self, side: Side, mut request: ListRequest) -> Vec<Effect> {
+        if let Location::Remote { host, path } = &request.location
+            && path.as_bytes().is_empty()
+            && self
+                .host_settings
+                .get(host)
+                .is_some_and(HostConfig::remember_dir)
+        {
+            request.resume = self.last_dirs.get(host).cloned();
+        }
         let Location::Remote { host, .. } = &request.location else {
             return vec![Effect::List {
                 side,
@@ -1662,6 +1830,11 @@ impl App {
     pub(crate) fn listed(&mut self, side: Side, generation: u64, result: Result<Listed, String>) {
         self.sync_connected();
         self.panel_mut(side).listed(generation, result);
+        if let Location::Remote { host, path } = self.panel(side).location()
+            && !path.as_bytes().is_empty()
+        {
+            self.last_dirs.insert(host.clone(), path.clone());
+        }
     }
 
     /// Takes the handle of a host that [`Effect::Connect`] connected, and sends the requests
@@ -1931,6 +2104,29 @@ impl App {
     }
 }
 
+/// Saves what the dialog of F4 on the host `name` holds, if it changed anything.
+fn save_host(name: String, old: Option<&HostConfig>, dialog: &Dialog) -> Vec<Effect> {
+    let text = |index: usize| {
+        let text = dialog.text_of(index).trim();
+        (!text.is_empty()).then(|| text.to_owned())
+    };
+    let host = HostConfig::Sftp(SftpHost {
+        label: text(HOST_LABEL),
+        start_dir: text(HOST_START_DIR),
+        other_dir: text(HOST_OTHER_DIR),
+        remember_dir: dialog.checked(0),
+    });
+    let unchanged = match old {
+        Some(old) => *old == host,
+        None => host.is_default(),
+    };
+    if unchanged {
+        return Vec::new();
+    }
+    let host = (!host.is_default()).then_some(host);
+    vec![Effect::SaveHost { name, host }]
+}
+
 /// Whether `inner` is `outer` or in it, on the same file system.
 fn within(outer: &Location, inner: &Location) -> bool {
     match (outer, inner) {
@@ -1985,6 +2181,7 @@ fn fkey_label(action: Action) -> Option<String> {
         Action::Quit => Some(fl!("fkey-quit")),
         Action::Cancel => Some(fl!("fkey-cancel")),
         Action::Disconnect => Some(fl!("fkey-disconnect")),
+        Action::EditHost => Some(fl!("fkey-edit-host")),
         Action::Mkdir => Some(fl!("fkey-mkdir")),
         Action::Delete => Some(fl!("fkey-delete")),
         Action::View => Some(fl!("fkey-view")),
@@ -3475,6 +3672,201 @@ mod tests {
         // A connected host lists at once.
         let effects = enter_host(&mut app, Side::Left, 0);
         assert!(matches!(&effects[..], [Effect::List { host: Some(_), .. }]));
+    }
+
+    fn with_host(app: &mut App, name: &str, host: SftpHost) {
+        let mut hosts = Hosts::default();
+        hosts.hosts.insert(name.to_owned(), HostConfig::Sftp(host));
+        app.set_hosts(Arc::new(hosts));
+    }
+
+    /// Connects `web` for the panel on `side`, which waits for it, and answers its listing
+    /// from `path`.
+    fn connect_web(app: &mut App, side: Side, connection: u64, path: &str) -> ListRequest {
+        let (handle, _requests) = HostHandle::channel();
+        let effects = app.connected("web", connection, handle);
+        let [Effect::List { request, .. }] = &effects[..] else {
+            panic!("expected one listing, got {effects:?}");
+        };
+        let request = request.clone();
+        let listed = Listed {
+            location: remote("web", path),
+            listing: Listing::Dir(vec![dir("app")]),
+            space: None,
+        };
+        app.listed(side, request.generation, Ok(listed));
+        request
+    }
+
+    #[test]
+    fn opening_a_host_sends_the_other_panel_to_its_other_dir_once() {
+        let mut app = at_root();
+        let site = SftpHost {
+            other_dir: Some("~/site".to_owned()),
+            ..SftpHost::default()
+        };
+        with_host(&mut app, "web", site);
+        let effects = enter_host(&mut app, Side::Left, 1);
+        let [
+            Effect::Connect { connection, .. },
+            Effect::List {
+                side: Side::Right,
+                request,
+                host: None,
+            },
+        ] = &effects[..]
+        else {
+            panic!("expected a connection and the other directory, got {effects:?}");
+        };
+        assert_eq!(request.location, local("/home/me/site"));
+        let request = connect_web(&mut app, Side::Left, *connection, "/home/web");
+        assert_eq!(request.location, remote("web", ""));
+        assert_eq!(
+            app.panel(Side::Right).pending_request().map(|r| r.location),
+            Some(local("/home/me/site")),
+            "connecting did not send it again"
+        );
+
+        // Other hosts leave the other panel alone.
+        let effects = enter_host(&mut app, Side::Right, 2);
+        assert!(
+            matches!(&effects[..], [Effect::Connect { .. }]),
+            "{effects:?}"
+        );
+    }
+
+    #[test]
+    fn remember_dir_resumes_the_last_directory_of_the_session() {
+        for remember_dir in [true, false] {
+            let mut app = at_root();
+            let host = SftpHost {
+                remember_dir,
+                ..SftpHost::default()
+            };
+            with_host(&mut app, "web", host);
+            let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1))
+            else {
+                panic!("expected a connection");
+            };
+            let first = connect_web(&mut app, Side::Left, connection, "/var/www");
+            assert_eq!(first.resume, None);
+            let effects = app.handle(action(Action::Enter));
+            let [Effect::List { request, .. }] = &effects[..] else {
+                panic!("expected a listing, got {effects:?}");
+            };
+            let listed = Listed {
+                location: remote("web", "/var/www/app"),
+                listing: Listing::Dir(Vec::new()),
+                space: None,
+            };
+            app.listed(Side::Left, request.generation, Ok(listed));
+
+            let effects = app.disconnect("web");
+            answer(&mut app, effects, &Listing::Hosts(Vec::new()));
+            let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Right, 1))
+            else {
+                panic!("expected a connection");
+            };
+            let again = connect_web(&mut app, Side::Right, connection, "/var/www/app");
+            let expected = remember_dir.then(|| RemotePath::from("/var/www/app"));
+            assert_eq!(again.resume, expected, "remember_dir = {remember_dir}");
+        }
+    }
+
+    /// Opens the dialog of F4 on `web` from the list of hosts in the left panel.
+    fn edit_web(app: &mut App) {
+        app.active = Side::Left;
+        app.handle(action(Action::Home));
+        app.handle(action(Action::Down));
+        assert!(app.supports(Action::EditHost));
+        assert!(app.handle(action(Action::EditHost)).is_empty());
+        assert_eq!(app.context(), Context::DialogInput);
+    }
+
+    fn typed(app: &mut App, text: &str) {
+        for c in text.chars() {
+            app.handle(Resolved::Insert(c));
+        }
+    }
+
+    #[test]
+    fn f4_on_a_host_saves_its_settings() {
+        let mut app = at_root();
+        assert!(!screen(&mut app).contains("4Edit"), "not on `..`");
+        app.handle(action(Action::Down));
+        assert!(screen(&mut app).contains("4Edit"));
+        edit_web(&mut app);
+        assert!(screen_of(&mut app, 20).contains("Host web"));
+        typed(&mut app, "Prod");
+        let Effect::SaveHost { name, host } = one(app.handle(action(Action::Confirm))) else {
+            panic!("expected the settings to be saved");
+        };
+        let prod = HostConfig::Sftp(SftpHost {
+            label: Some("Prod".to_owned()),
+            ..SftpHost::default()
+        });
+        assert_eq!((name.as_str(), host.as_ref()), ("web", Some(&prod)));
+
+        let mut hosts = Hosts::default();
+        hosts.hosts.insert("web".to_owned(), prod.clone());
+        let effects = app.host_saved(Ok(Arc::new(hosts)));
+        assert_eq!(effects.len(), 2, "both lists of hosts are read again");
+
+        // The dialog opens with the settings; unchanged, nothing is saved, and emptied, they go.
+        edit_web(&mut app);
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        edit_web(&mut app);
+        app.handle(action(Action::DeleteToStart));
+        let Effect::SaveHost { host, .. } = one(app.handle(action(Action::Confirm))) else {
+            panic!("expected the settings to be removed");
+        };
+        assert_eq!(host, None);
+
+        app.host_saved(Err("cannot write /cfg/hosts.toml: denied".to_owned()));
+        let text = screen_of(&mut app, 20);
+        assert!(text.contains("Cannot save the host settings"), "{text}");
+    }
+
+    #[test]
+    fn f4_on_a_host_rejects_another_kind_of_other_dir() {
+        let mut app = at_root();
+        edit_web(&mut app);
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Down));
+        typed(&mut app, "web:/srv");
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        assert_eq!(app.dialogs.len(), 2, "the reason shows over the dialog");
+        app.handle(action(Action::Confirm));
+        app.handle(action(Action::DeleteToStart));
+        typed(&mut app, "~/site");
+        let Effect::SaveHost { host, .. } = one(app.handle(action(Action::Confirm))) else {
+            panic!("expected the settings to be saved");
+        };
+        assert_eq!(
+            host.as_ref().and_then(HostConfig::other_dir),
+            Some("~/site")
+        );
+    }
+
+    #[test]
+    fn use_current_fills_in_the_directory_open_on_the_host() {
+        let mut app = at_root();
+        let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Right, 1)) else {
+            panic!("expected a connection");
+        };
+        connect_web(&mut app, Side::Right, connection, "/var/www");
+        edit_web(&mut app);
+        // Past the three fields and the check box, then OK, to Use Current.
+        for _ in 0..5 {
+            app.handle(action(Action::NextField));
+        }
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        assert_eq!(app.dialogs.len(), 1, "the dialog stays");
+        let Effect::SaveHost { host, .. } = one(app.handle(action(Action::Confirm))) else {
+            panic!("expected the settings to be saved");
+        };
+        let start_dir = host.as_ref().and_then(HostConfig::start_dir);
+        assert_eq!(start_dir, Some("/var/www"));
     }
 
     #[test]

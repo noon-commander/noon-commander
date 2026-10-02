@@ -1,4 +1,4 @@
-//! Validation of user-supplied ssh arguments (`ssh.args` and per-host `args`).
+//! Validation of user-supplied ssh arguments (`ssh.args`).
 //!
 //! See `docs/adr/0004-forwarding-compile-time-feature.md` for the rules.
 

@@ -198,8 +198,11 @@ async fn resolves_effective_settings() {
         ("FAKE_SSH_HOSTNAME", "10.0.0.5"),
         ("FAKE_SSH_PORT", "2222"),
     ]);
-    let target = Target::new("web").with_args(vec!["-v".to_owned()]);
-    let host = resolve(&fake.settings, &target).await.unwrap();
+    let settings = SshSettings {
+        args: vec!["-v".to_owned()],
+        ..fake.settings.clone()
+    };
+    let host = resolve(&settings, &Target::new("web")).await.unwrap();
     assert_eq!(host.address(), "deploy@10.0.0.5:2222");
     assert_eq!(fake.invocations(), [["-v", "-G", "--", "web"]]);
 }

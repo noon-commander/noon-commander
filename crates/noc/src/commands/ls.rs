@@ -6,7 +6,7 @@ use std::time::Duration;
 use color_eyre::eyre::{Result, WrapErr as _};
 use noc_ssh::askpass::AskpassServer;
 use noc_ssh::version::check_version;
-use noc_ssh::{Session, SftpChannel, SshError, cleanup_stale};
+use noc_ssh::{Session, SftpChannel, SshError, Target, cleanup_stale};
 use noc_vfs::{DirEntry, FileKind, LocalFs, Location, RemotePath, SftpFs, Vfs};
 use tokio_util::sync::CancellationToken;
 
@@ -86,7 +86,7 @@ async fn list_remote(
 ) -> Result<(RemotePath, Vec<DirEntry>)> {
     let session = Session::connect(
         &context.settings,
-        &context.target(host),
+        &Target::new(host),
         &context.paths.runtime_dir,
         Some(askpass.env(host)),
         cancel,

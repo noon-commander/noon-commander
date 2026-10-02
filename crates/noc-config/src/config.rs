@@ -1,12 +1,12 @@
-use std::collections::BTreeMap;
-use std::fs::{self, OpenOptions};
-use std::io::{self, Write as _};
+use std::fs;
+use std::io;
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
 use crate::ConfigError;
+use crate::write::write_new;
 
 /// Commented default configuration written by `noc config init`.
 ///
@@ -25,8 +25,6 @@ pub struct Config {
     pub discovery: DiscoveryConfig,
     /// `[volumes]`: which mounted volumes the root lists.
     pub volumes: VolumesConfig,
-    /// `[hosts."<alias>"]`: decorations for hosts from `ssh_config`, keyed by host alias.
-    pub hosts: BTreeMap<String, HostConfig>,
     /// `[ui]`: how the TUI looks.
     pub ui: UiConfig,
     /// `[transfer]`: how files are copied.
@@ -155,20 +153,6 @@ pub struct VolumesConfig {
     pub hide: Vec<String>,
 }
 
-/// A `[hosts."<alias>"]` table: decorations for one host from `ssh_config`.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct HostConfig {
-    /// Name shown for the host instead of its alias.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub label: Option<String>,
-    /// Remote directory opened on connect, instead of the remote home directory.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub start_dir: Option<String>,
-    /// Extra ssh arguments for this host, used after [`SshConfig::args`].
-    pub args: Vec<String>,
-}
-
 impl Config {
     /// Loads the configuration from `path`; a missing file yields the defaults.
     ///
@@ -191,6 +175,13 @@ impl Config {
 
     /// Parses TOML text; `origin` is only used in errors. Does not expand `~`.
     pub fn from_toml(text: &str, origin: &Path) -> Result<Self, ConfigError> {
+        // Older versions kept the hosts here; say where they went rather than that the key is
+        // unknown.
+        if toml::from_str::<toml::Table>(text).is_ok_and(|table| table.contains_key("hosts")) {
+            return Err(ConfigError::HostsMoved {
+                path: origin.to_path_buf(),
+            });
+        }
         toml::from_str(text).map_err(|source| ConfigError::Parse {
             path: origin.to_path_buf(),
             source: Box::new(source),
@@ -224,51 +215,19 @@ fn expand_tilde_in(path: &mut PathBuf, home: &Path) {
 ///
 /// Fails with [`ConfigError::AlreadyExists`] if `path` exists, unless `force` is set.
 pub fn write_default_config(path: &Path, force: bool) -> Result<(), ConfigError> {
-    if let Some(parent) = path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-    {
-        fs::create_dir_all(parent).map_err(|source| ConfigError::Write {
-            path: parent.to_path_buf(),
-            source,
-        })?;
-    }
-    let mut options = OpenOptions::new();
-    options.write(true);
-    if force {
-        options.create(true).truncate(true);
-    } else {
-        // Checks and creates in one step, so a file that appears meanwhile is not clobbered.
-        options.create_new(true);
-    }
-    let write_error = |source| ConfigError::Write {
-        path: path.to_path_buf(),
-        source,
-    };
-    let mut file = options.open(path).map_err(|error| {
-        if error.kind() == io::ErrorKind::AlreadyExists {
-            ConfigError::AlreadyExists {
-                path: path.to_path_buf(),
-            }
-        } else {
-            write_error(error)
-        }
-    })?;
-    file.write_all(DEFAULT_CONFIG.as_bytes())
-        .map_err(write_error)
+    write_new(path, DEFAULT_CONFIG, force)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
     use std::ffi::OsStr;
     use std::fs;
     use std::num::NonZeroUsize;
     use std::path::{Path, PathBuf};
 
     use super::{
-        Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, HostConfig, SshConfig, TransferConfig,
-        UiConfig, VolumesConfig,
+        Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, SshConfig, TransferConfig, UiConfig,
+        VolumesConfig,
     };
     use crate::{ConfigError, write_default_config};
 
@@ -302,13 +261,6 @@ mod tests {
         [volumes]
         hide = ["/Volumes/Backup*"]
 
-        [hosts."prod-web"]
-        label = "Prod"
-        start_dir = "/var/www"
-        args = ["-o", "Compression=yes"]
-
-        [hosts.staging]
-
         [ui]
         language = "de-DE"
         theme = "terminal"
@@ -336,17 +288,6 @@ mod tests {
             volumes: VolumesConfig {
                 hide: strings(&["/Volumes/Backup*"]),
             },
-            hosts: BTreeMap::from([
-                (
-                    "prod-web".to_owned(),
-                    HostConfig {
-                        label: Some("Prod".to_owned()),
-                        start_dir: Some("/var/www".to_owned()),
-                        args: strings(&["-o", "Compression=yes"]),
-                    },
-                ),
-                ("staging".to_owned(), HostConfig::default()),
-            ]),
             ui: UiConfig {
                 language: "de-DE".to_owned(),
                 theme: "terminal".to_owned(),
@@ -373,7 +314,6 @@ mod tests {
             config.discovery.hide,
             ["github.com", "gitlab.com", "bitbucket.org"]
         );
-        assert!(config.hosts.is_empty());
         assert_eq!(config.ui.language, "auto");
         assert_eq!(config.ui.theme, "mc-classic");
         assert_eq!(config.ui.borders, Borders::Double);
@@ -394,7 +334,7 @@ mod tests {
     fn empty_text_yields_the_defaults() {
         assert_eq!(parse(""), Config::default());
         assert_eq!(parse("# only a comment\n"), Config::default());
-        assert_eq!(parse("[ssh]\n[discovery]\n[hosts]\n"), Config::default());
+        assert_eq!(parse("[ssh]\n[discovery]\n"), Config::default());
     }
 
     #[test]
@@ -404,7 +344,7 @@ mod tests {
 
     #[test]
     fn missing_fields_keep_their_defaults() {
-        let config = parse("[ssh]\nargs = [\"-v\"]\n\n[hosts.web]\nlabel = \"Web\"\n");
+        let config = parse("[ssh]\nargs = [\"-v\"]\n");
         assert_eq!(
             config.ssh,
             SshConfig {
@@ -413,13 +353,6 @@ mod tests {
             }
         );
         assert_eq!(config.discovery, DiscoveryConfig::default());
-        assert_eq!(
-            config.hosts["web"],
-            HostConfig {
-                label: Some("Web".to_owned()),
-                ..HostConfig::default()
-            }
-        );
     }
 
     #[test]
@@ -437,7 +370,6 @@ mod tests {
             "[unknown]\nkey = true",
             "[ssh]\nprogramm = \"ssh\"",
             "[discovery]\nshow = []",
-            "[hosts.web]\nlable = \"Web\"",
         ] {
             assert_parse_error(text);
         }
@@ -452,8 +384,6 @@ mod tests {
             "[ssh]\nargs = [1]",
             "[ssh]\nmultiplex = \"yes\"",
             "[discovery]\nhide = \"github.com\"",
-            "[hosts]\nweb = \"Web\"",
-            "[hosts.web]\nstart_dir = 1",
         ] {
             assert_parse_error(text);
         }
@@ -466,22 +396,13 @@ mod tests {
     }
 
     #[test]
-    fn quoted_host_aliases_may_contain_dots() {
-        let config = parse(
-            "[hosts.\"web.example.com\"]\nlabel = \"Web\"\n\n\
-             [hosts.\"10.0.0.5\"]\nstart_dir = \"/srv\"\n",
-        );
-        assert_eq!(
-            config.hosts.keys().collect::<Vec<_>>(),
-            ["10.0.0.5", "web.example.com"]
-        );
-        assert_eq!(
-            config.hosts["web.example.com"].label.as_deref(),
-            Some("Web")
-        );
-        assert_eq!(config.hosts["10.0.0.5"].start_dir.as_deref(), Some("/srv"));
-        // Unquoted, the dots nest tables, which leaves unknown keys in host `web`.
-        assert_parse_error("[hosts.web.example.com]\nlabel = \"Web\"");
+    fn hosts_moved_to_their_own_file() {
+        for text in ["[hosts.web]\nlabel = \"Web\"", "[hosts]\n"] {
+            match Config::from_toml(text, Path::new(ORIGIN)) {
+                Err(ConfigError::HostsMoved { path }) => assert_eq!(path, Path::new(ORIGIN)),
+                other => panic!("expected HostsMoved for {text:?}, got {other:?}"),
+            }
+        }
     }
 
     #[test]
@@ -580,20 +501,11 @@ mod tests {
         let config = parse(&uncommented.join("\n"));
         assert!(config.ssh.config_file.is_some());
         assert_eq!(
-            config.hosts["prod-web"],
-            HostConfig {
-                label: Some("Prod".to_owned()),
-                start_dir: Some("/var/www".to_owned()),
-                args: strings(&["-o", "Compression=yes"]),
-            }
-        );
-        assert_eq!(
             Config {
                 ssh: SshConfig {
                     config_file: None,
                     ..config.ssh
                 },
-                hosts: BTreeMap::new(),
                 ..config
             },
             Config::default()

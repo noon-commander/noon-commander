@@ -104,7 +104,7 @@ Work is done when all of them pass.
 
 ## SSH integration
 
-- Build ssh command lines in this order: program → forced options → `ssh.args` → host `args` →
+- Build ssh command lines in this order: program → forced options → `ssh.args` →
   role options → `--` → destination.
 - Forced options live in `policy.rs`; change them only together with an ADR.
 - `ssh -G` runs `Match exec` predicates: call it lazily (on selection or connect), never for

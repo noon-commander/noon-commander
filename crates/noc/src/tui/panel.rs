@@ -35,6 +35,9 @@ const VOLUME_SIZE_WIDTH: usize = 5;
 pub(crate) struct ListRequest {
     pub(crate) generation: u64,
     pub(crate) location: Location,
+    /// Where a host opens, if the location is the host itself (the empty path) and the
+    /// directory is still there: the last one shown on it, for `remember_dir`.
+    pub(crate) resume: Option<RemotePath>,
 }
 
 /// The reply to a [`ListRequest`]: where the listing is from, which may be more exact than
@@ -282,6 +285,7 @@ impl Panel {
         ListRequest {
             generation: self.generation,
             location,
+            resume: None,
         }
     }
 
@@ -343,6 +347,7 @@ impl Panel {
         self.pending.as_ref().map(|pending| ListRequest {
             generation: pending.generation,
             location: pending.location.clone(),
+            resume: None,
         })
     }
 

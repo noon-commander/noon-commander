@@ -9,6 +9,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Host settings moved from `[hosts."alias"]` in `config.toml` to `hosts.toml` next to it, one
+  `["alias"]` table per host with a required `type = "sftp"`. A `[hosts]` table left in
+  `config.toml` is an error that says so
+  ([ADR 0007](docs/adr/0007-typed-host-settings-in-hosts-toml.md)).
+- Per-host ssh `args` are removed; put per-host options in ssh_config. `ssh.args` stays. The
+  `ssh -G` cache starts empty once, as its format changed.
+
 - The virtual root lists `Home`, then the mounted volumes, the system volume first, named by
   their label, with their free space and size, and opens the hosts from ssh_config as one row,
   `SFTP`; the hosts that are connected or connecting show again below it. `Home` opens the home
@@ -28,6 +35,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- F4 on a host edits its settings: label, remote start directory, a directory for the other
+  panel, and whether to remember the last directory; Use Current fills in the directory a panel
+  shows on the host. They are saved to `hosts.toml`, keeping its comments and other tables.
+- `other_dir`: opening a host sends the other panel to this local directory.
+- `remember_dir`: opening a host again returns to the last directory shown on it in this
+  session, if it is still there, before `start_dir`.
+- `noc config init` also writes a commented `hosts.toml`, unless one exists; `noc config paths`
+  shows it.
 - Panels show the free space and size of the file system that holds their directory on the
   bottom of their frame, as mc does, such as `123G / 500G (24%)`, for local and SFTP
   directories alike.
@@ -44,7 +59,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and shown without `--resolve` until the ssh configuration changes.
 - `noc ls` lists the virtual root, a local directory, or a remote one (`host:path`) over
   SFTP through the system OpenSSH client, with password and host-key prompts on the terminal.
-- Validation of `ssh.args` and per-host `args`: options that Noon Commander manages itself and,
+- Validation of `ssh.args`: options that Noon Commander manages itself and,
   in default builds, forwarding options are rejected.
 - Logs in `~/.local/state/noc/noc.log`; `NOC_LOG` sets the level.
 - `noc` without a subcommand starts the TUI: two panels on the current directory, with

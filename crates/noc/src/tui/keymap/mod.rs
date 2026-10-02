@@ -278,11 +278,12 @@ impl Keymap {
 /// The bindings of the mc preset, by context.
 fn mc_presets() -> [(Context, Preset); 7] {
     use Action::{
-        Backspace, Cancel, Confirm, Copy, Delete, Disconnect, Down, Edit, End, Enter, Help, Home,
-        InvertMarks, Jobs, Left, LocationMenuLeft, LocationMenuRight, Mark, MarkUp, Mkdir, Move,
-        NextField, OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent, PrevField,
-        QuickSearch, Quit, Redraw, Reload, Right, Select, SortByExtension, SortByName, SortBySize,
-        SortByTime, SwapPanels, SwitchPanel, Toggle, ToggleHidden, ToggleWrap, Unselect, Up, View,
+        Backspace, Cancel, Confirm, Copy, Delete, Disconnect, Down, Edit, EditHost, End, Enter,
+        Help, Home, InvertMarks, Jobs, Left, LocationMenuLeft, LocationMenuRight, Mark, MarkUp,
+        Mkdir, Move, NextField, OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent,
+        PrevField, QuickSearch, Quit, Redraw, Reload, Right, Select, SortByExtension, SortByName,
+        SortBySize, SortByTime, SwapPanels, SwitchPanel, Toggle, ToggleHidden, ToggleWrap,
+        Unselect, Up, View,
     };
     [
         (
@@ -334,7 +335,7 @@ fn mc_presets() -> [(Context, Preset); 7] {
                 (Redraw, &["ctrl-l"]),
             ],
         ),
-        (Context::Root, &[(Disconnect, &["f8"])]),
+        (Context::Root, &[(EditHost, &["f4"]), (Disconnect, &["f8"])]),
         (
             Context::QuickSearch,
             &[(Backspace, &["backspace"]), (Cancel, &["esc"])],
@@ -733,7 +734,7 @@ mod tests {
     }
 
     #[test]
-    fn the_root_adds_disconnect_to_the_panel_keys() {
+    fn the_root_adds_host_keys_to_the_panel_keys() {
         let keymap = Keymap::mc();
         let mut state = KeyState::default();
         assert_eq!(
@@ -768,7 +769,7 @@ mod tests {
         let mut root = [None; 10];
         root[0] = Some(Action::Help);
         root[2] = Some(Action::View);
-        root[3] = Some(Action::Edit);
+        root[3] = Some(Action::EditHost);
         root[4] = Some(Action::Copy);
         root[5] = Some(Action::Move);
         root[6] = Some(Action::Mkdir);
@@ -956,7 +957,10 @@ mod tests {
         assert_eq!(panel[0].0, Action::Up, "in the order of the preset");
         assert_eq!(
             keymap.help(Context::Root),
-            [(Action::Disconnect, "F8".to_owned())]
+            [
+                (Action::EditHost, "F4".to_owned()),
+                (Action::Disconnect, "F8".to_owned())
+            ]
         );
     }
 

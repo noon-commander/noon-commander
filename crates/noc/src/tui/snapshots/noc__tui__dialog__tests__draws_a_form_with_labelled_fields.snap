@@ -1,0 +1,20 @@
+---
+source: crates/noc/src/tui/dialog.rs
+expression: terminal.backend()
+---
+"                                                                "
+"                                                                "
+"  ╔════════════════════════ Host web ════════════════════════╗  "
+"  ║ Label:                                                   ║  "
+"  ║ Prod                                                     ║  "
+"  ║ Remote directory:                                        ║  "
+"  ║ /var/www                                                 ║  "
+"  ║ Other directory:                                         ║  "
+"  ║                                                          ║  "
+"  ║ [x] Remember                                             ║  "
+"  ║                                                          ║  "
+"  ║           [< OK >] [ Use current ] [ Cancel ]            ║  "
+"  ╚══════════════════════════════════════════════════════════╝  "
+"                                                                "
+"                                                                "
+"                                                                "

@@ -5,8 +5,8 @@ use std::process::ExitCode;
 
 use color_eyre::eyre::Result;
 use futures_util::StreamExt as _;
-use noc_ssh::CachedHost;
 use noc_ssh::resolve::resolve;
+use noc_ssh::{CachedHost, Target};
 
 use crate::context::Context;
 
@@ -30,7 +30,7 @@ pub(super) async fn run(context: &Context, refresh: bool) -> Result<ExitCode> {
     let addresses: Vec<String> = if refresh {
         let results: Vec<_> = futures_util::stream::iter(&hosts)
             .map(|host| async move {
-                let target = context.target(&host.alias);
+                let target = Target::new(host.alias.as_str());
                 let result = resolve(&context.settings, &target).await;
                 (target, result)
             })
@@ -57,7 +57,7 @@ pub(super) async fn run(context: &Context, refresh: bool) -> Result<ExitCode> {
             .iter()
             .map(|host| {
                 cache
-                    .get(&context.target(&host.alias))
+                    .get(&Target::new(host.alias.as_str()))
                     .map(CachedHost::address)
                     .unwrap_or_default()
             })

@@ -84,6 +84,7 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
             connection,
             reason,
         } => tasks.run(app.closed(&host, connection, reason.as_deref())),
+        Done::HostSaved(result) => tasks.run(app.host_saved(result)),
     }
 }
 
@@ -119,6 +120,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
         app.set_root_title(name);
     }
     app.set_runtime_dir(context.paths.runtime_dir.clone());
+    app.set_hosts(context.hosts());
     tasks.run(effects);
     let result = loop {
         if app.quits() {

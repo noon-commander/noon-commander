@@ -1,8 +1,8 @@
 //! Assembly of ssh command lines.
 //!
-//! The order is fixed (AGENTS.md): program → forced options → `-F` and `ssh.args` → host
-//! args → role options → `--` → destination. ssh keeps the first value it sees for an
-//! option, so `-o` values in user arguments cannot override forced options.
+//! The order is fixed (AGENTS.md): program → forced options → `-F` and `ssh.args` → role
+//! options → `--` → destination. ssh keeps the first value it sees for an option, so `-o`
+//! values in user arguments cannot override forced options.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -38,35 +38,26 @@ impl Default for SshSettings {
     }
 }
 
-/// A host to talk to: an ssh destination, normally an `ssh_config` alias, and its extra
-/// arguments (`hosts.<alias>.args`).
+/// A host to talk to: an ssh destination, normally an `ssh_config` alias. Per-host options
+/// belong in `ssh_config`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Target {
     pub destination: String,
-    pub args: Vec<String>,
 }
 
 impl Target {
     pub fn new(destination: impl Into<String>) -> Self {
         Self {
             destination: destination.into(),
-            args: Vec::new(),
         }
     }
 
-    #[must_use]
-    pub fn with_args(mut self, args: Vec<String>) -> Self {
-        self.args = args;
-        self
-    }
-
-    /// Checks the destination and the user-supplied arguments of `settings` and `self`.
+    /// Checks the destination and the user-supplied arguments of `settings`.
     pub fn validate(&self, settings: &SshSettings) -> Result<(), SshError> {
         if self.destination.is_empty() || self.destination.starts_with('-') {
             return Err(SshError::InvalidDestination(self.destination.clone()));
         }
         crate::args::validate(&settings.args)?;
-        crate::args::validate(&self.args)?;
         Ok(())
     }
 }
@@ -95,7 +86,6 @@ pub(crate) fn arguments(settings: &SshSettings, target: &Target, role: Role<'_>)
         argv.push(file.into());
     }
     argv.extend(settings.args.iter().map(OsString::from));
-    argv.extend(target.args.iter().map(OsString::from));
     match role {
         Role::Resolve => argv.push("-G".into()),
         Role::Master { control_path } => {
@@ -248,11 +238,11 @@ mod tests {
     }
 
     fn target() -> Target {
-        Target::new("web").with_args(vec!["-p".to_owned(), "2222".to_owned()])
+        Target::new("web")
     }
 
     fn tail(rest: &[&str]) -> Vec<String> {
-        ["-F", "/cfg", "-v", "-p", "2222"]
+        ["-F", "/cfg", "-v"]
             .iter()
             .chain(rest)
             .map(|arg| (*arg).to_owned())

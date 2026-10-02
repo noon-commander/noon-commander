@@ -1,22 +1,40 @@
 //! What the subcommands and the TUI share: directories, settings, and the ssh configuration.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, PoisonError, RwLock};
 
 use color_eyre::eyre::{Result, WrapErr as _, bail};
-use noc_config::{Config, Paths};
+use noc_config::{Config, ConfigError, Hosts, Paths};
 use noc_ssh::discovery::{Discovery, DiscoveryOptions, DiscoveryWarning, discover};
-use noc_ssh::{ConfigStamp, ResolveCache, SshSettings, Target};
+use noc_ssh::{ConfigStamp, ResolveCache, SshSettings};
 
 /// The loaded configuration.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct Context {
     pub(crate) paths: Paths,
     pub(crate) config: Config,
     pub(crate) settings: SshSettings,
+    /// `hosts.toml`, next to the config file.
+    pub(crate) hosts_file: PathBuf,
+    /// The settings from `hosts_file`, which the TUI changes while it runs.
+    hosts: RwLock<Arc<Hosts>>,
+}
+
+impl Clone for Context {
+    fn clone(&self) -> Self {
+        Self {
+            paths: self.paths.clone(),
+            config: self.config.clone(),
+            settings: self.settings.clone(),
+            hosts_file: self.hosts_file.clone(),
+            hosts: RwLock::new(self.hosts()),
+        }
+    }
 }
 
 impl Context {
-    /// Starts logging, then reads and validates the config file at `config_path`.
+    /// Starts logging, then reads and validates the config file at `config_path` and the
+    /// host settings next to it.
     pub(crate) fn load(paths: Paths, config_path: &Path) -> Result<Self> {
         crate::logging::init(&paths);
         let config = Config::load(config_path, &paths.home)?;
@@ -38,11 +56,13 @@ impl Context {
                 crate::tui::theme_names().join(", ")
             );
         }
-        Ok(Self::new(paths, config))
+        let hosts_file = Paths::hosts_file(config_path);
+        let hosts = Hosts::load(&hosts_file)?;
+        Ok(Self::new(paths, config, hosts_file, hosts))
     }
 
     /// A context for a config that is already valid.
-    pub(crate) fn new(paths: Paths, config: Config) -> Self {
+    pub(crate) fn new(paths: Paths, config: Config, hosts_file: PathBuf, hosts: Hosts) -> Self {
         let settings = SshSettings {
             program: config.ssh.program.clone(),
             config_file: config.ssh.config_file.clone(),
@@ -53,23 +73,29 @@ impl Context {
             paths,
             config,
             settings,
+            hosts_file,
+            hosts: RwLock::new(Arc::new(hosts)),
         }
     }
 
-    /// The ssh target for a host alias, with its `hosts.<alias>.args`.
-    pub(crate) fn target(&self, alias: &str) -> Target {
-        let args = self
-            .config
-            .hosts
-            .get(alias)
-            .map(|host| host.args.clone())
-            .unwrap_or_default();
-        Target::new(alias).with_args(args)
+    /// The host settings as they are now.
+    pub(crate) fn hosts(&self) -> Arc<Hosts> {
+        // The lock guards a pointer swap, which cannot leave it half done.
+        Arc::clone(&self.hosts.read().unwrap_or_else(PoisonError::into_inner))
     }
 
-    /// `hosts.<alias>.label`.
-    pub(crate) fn label(&self, alias: &str) -> Option<&str> {
-        self.config.hosts.get(alias)?.label.as_deref()
+    /// Reads `hosts_file` again and uses what it says from now on.
+    ///
+    /// Blocking: call it from a blocking thread.
+    pub(crate) fn reload_hosts(&self) -> Result<(), ConfigError> {
+        let hosts = Arc::new(Hosts::load(&self.hosts_file)?);
+        *self.hosts.write().unwrap_or_else(PoisonError::into_inner) = hosts;
+        Ok(())
+    }
+
+    /// The label of a host from `hosts.toml`.
+    pub(crate) fn label(&self, alias: &str) -> Option<String> {
+        self.hosts().get(alias)?.label().map(str::to_owned)
     }
 
     pub(crate) fn discovery_options(&self) -> DiscoveryOptions {

@@ -18,7 +18,7 @@ use crate::resolve::ResolvedHost;
 use crate::runtime::random_hex;
 
 /// Version of the cache file format.
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 
 /// What the cache is valid for: the state of the ssh config files and the ssh settings.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -179,21 +179,14 @@ impl From<&ResolvedHost> for CachedHost {
 pub struct ResolveCache {
     path: PathBuf,
     stamp: ConfigStamp,
-    /// Sorted by destination and arguments, without duplicates.
+    /// Sorted by destination, without duplicates.
     entries: Vec<Entry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Entry {
     destination: String,
-    args: Vec<String>,
     host: CachedHost,
-}
-
-impl Entry {
-    fn key(&self) -> (&str, &[String]) {
-        (&self.destination, &self.args)
-    }
 }
 
 #[derive(Serialize)]
@@ -241,8 +234,8 @@ impl ResolveCache {
             Vec::new()
         });
         // Only a hand-edited file could be out of order.
-        entries.sort_by(|a, b| a.key().cmp(&b.key()));
-        entries.dedup_by(|a, b| a.key() == b.key());
+        entries.sort_by(|a, b| a.destination.cmp(&b.destination));
+        entries.dedup_by(|a, b| a.destination == b.destination);
         Self {
             path,
             stamp,
@@ -250,7 +243,7 @@ impl ResolveCache {
         }
     }
 
-    /// The entry for `target`: its destination and arguments must both match.
+    /// The entry for the destination of `target`.
     pub fn get(&self, target: &Target) -> Option<&CachedHost> {
         let index = self.position(target).ok()?;
         Some(&self.entries[index].host)
@@ -264,7 +257,6 @@ impl ResolveCache {
                 index,
                 Entry {
                     destination: target.destination.clone(),
-                    args: target.args.clone(),
                     host,
                 },
             ),
@@ -272,8 +264,8 @@ impl ResolveCache {
     }
 
     fn position(&self, target: &Target) -> Result<usize, usize> {
-        let key = (target.destination.as_str(), target.args.as_slice());
-        self.entries.binary_search_by(|entry| entry.key().cmp(&key))
+        self.entries
+            .binary_search_by(|entry| entry.destination.as_str().cmp(&target.destination))
     }
 
     /// Writes the cache file atomically: to a temporary file with mode 0600 in the same
@@ -370,8 +362,8 @@ mod tests {
         }
     }
 
-    fn target(destination: &str, args: &[&str]) -> Target {
-        Target::new(destination).with_args(args.iter().map(ToString::to_string).collect())
+    fn target(destination: &str) -> Target {
+        Target::new(destination)
     }
 
     fn names(dir: &Path) -> Vec<String> {
@@ -393,35 +385,21 @@ mod tests {
         let config = scratch.write("ssh/config", "Host web\n");
         let stamp = stamp(&[config]);
         let path = scratch.path("cache/resolve.json");
-        let web = target("web", &[]);
-        let web_on_2222 = target("web", &["-p", "2222"]);
+        let web = target("web");
+        let jump = target("jump");
 
         let mut cache = ResolveCache::load(path.clone(), stamp.clone());
         assert_eq!(cache.get(&web), None);
         cache.insert(&web, host("deploy", 22));
-        cache.insert(&web_on_2222, host("deploy", 2222));
+        cache.insert(&jump, host("deploy", 2222));
         cache.insert(&web, host("admin", 22));
         cache.save().unwrap();
 
         let loaded = ResolveCache::load(path, stamp);
         assert_eq!(loaded.entries.len(), 2);
         assert_eq!(loaded.get(&web), Some(&host("admin", 22)));
-        assert_eq!(loaded.get(&web_on_2222), Some(&host("deploy", 2222)));
-        assert_eq!(loaded.get(&target("db", &[])), None);
-    }
-
-    #[test]
-    fn arguments_must_match() {
-        let scratch = Scratch::new();
-        let mut cache = ResolveCache::load(scratch.path("resolve.json"), stamp(&[]));
-        cache.insert(&target("web", &["-v"]), host("deploy", 22));
-        assert_eq!(
-            cache.get(&target("web", &["-v"])),
-            Some(&host("deploy", 22))
-        );
-        assert_eq!(cache.get(&target("web", &[])), None);
-        assert_eq!(cache.get(&target("web", &["-4"])), None);
-        assert_eq!(cache.get(&target("web", &["-v", "-4"])), None);
+        assert_eq!(loaded.get(&jump), Some(&host("deploy", 2222)));
+        assert_eq!(loaded.get(&target("db")), None);
     }
 
     #[test]
@@ -429,12 +407,12 @@ mod tests {
         let scratch = Scratch::new();
         let mut cache = ResolveCache::load(scratch.path("resolve.json"), stamp(&[]));
         let targets = [
-            target("m", &[]),
-            target("b", &["-v"]),
-            target("z", &[]),
-            target("b", &[]),
-            target("a", &[]),
-            target("b", &["-4"]),
+            target("m"),
+            target("b2"),
+            target("z"),
+            target("b"),
+            target("a"),
+            target("b1"),
         ];
         for (port, target) in (1..).zip(&targets) {
             cache.insert(target, host("u", port));
@@ -450,7 +428,6 @@ mod tests {
         let path = scratch.path("resolve.json");
         let entry = |destination: &str, user: &str| Entry {
             destination: destination.to_owned(),
-            args: Vec::new(),
             host: host(user, 22),
         };
         let entries = [
@@ -466,8 +443,8 @@ mod tests {
         fs::write(&path, serde_json::to_vec(&file).unwrap()).unwrap();
         let cache = ResolveCache::load(path, stamp(&[]));
         assert_eq!(cache.entries.len(), 2);
-        assert_eq!(cache.get(&target("web", &[])), Some(&host("first", 22)));
-        assert_eq!(cache.get(&target("db", &[])), Some(&host("db", 22)));
+        assert_eq!(cache.get(&target("web")), Some(&host("first", 22)));
+        assert_eq!(cache.get(&target("db")), Some(&host("db", 22)));
     }
 
     #[test]
@@ -476,7 +453,7 @@ mod tests {
         let files = [scratch.write("ssh/config", "Host web\n")];
         let path = scratch.path("resolve.json");
         let mut cache = ResolveCache::load(path.clone(), stamp(&files));
-        cache.insert(&target("web", &[]), host("deploy", 22));
+        cache.insert(&target("web"), host("deploy", 22));
         cache.save().unwrap();
 
         let settings = SshSettings {
@@ -503,18 +480,20 @@ mod tests {
         let scratch = Scratch::new();
         let path = scratch.path("resolve.json");
         let mut cache = ResolveCache::load(path.clone(), stamp(&[]));
-        cache.insert(&target("web", &[]), host("deploy", 22));
+        cache.insert(&target("web"), host("deploy", 22));
         cache.save().unwrap();
         let valid = fs::read(&path).unwrap();
 
+        // Version 1 keyed entries by destination and per-host arguments.
         let mut other_version: serde_json::Value = serde_json::from_slice(&valid).unwrap();
-        assert_eq!(other_version["version"], 1);
-        other_version["version"] = 2.into();
+        assert_eq!(other_version["version"], 2);
+        other_version["version"] = 1.into();
+        other_version["entries"][0]["args"] = serde_json::json!([]);
         let unusable = [
             Vec::new(),
             b"not json".to_vec(),
             b"{}".to_vec(),
-            b"{\"version\": 1}".to_vec(),
+            b"{\"version\": 2}".to_vec(),
             valid[..valid.len() / 2].to_vec(),
             serde_json::to_vec(&other_version).unwrap(),
         ];
@@ -530,10 +509,10 @@ mod tests {
 
         // The next save replaces an unusable file.
         let mut cache = ResolveCache::load(path.clone(), stamp(&[]));
-        cache.insert(&target("db", &[]), host("admin", 22));
+        cache.insert(&target("db"), host("admin", 22));
         cache.save().unwrap();
         let loaded = ResolveCache::load(path, stamp(&[]));
-        assert_eq!(loaded.get(&target("db", &[])), Some(&host("admin", 22)));
+        assert_eq!(loaded.get(&target("db")), Some(&host("admin", 22)));
     }
 
     #[test]
@@ -542,7 +521,7 @@ mod tests {
         let dir = scratch.path("cache/noc");
         let path = dir.join("resolve.json");
         let mut cache = ResolveCache::load(path.clone(), stamp(&[]));
-        cache.insert(&target("web", &[]), host("deploy", 22));
+        cache.insert(&target("web"), host("deploy", 22));
         cache.save().unwrap();
         cache.save().unwrap();
         assert_eq!(mode(&path), 0o600);
@@ -558,7 +537,7 @@ mod tests {
         fs::create_dir(&path).unwrap();
         let mut cache = ResolveCache::load(path, stamp(&[]));
         assert!(cache.entries.is_empty());
-        cache.insert(&target("web", &[]), host("deploy", 22));
+        cache.insert(&target("web"), host("deploy", 22));
         assert!(cache.save().is_err());
         assert_eq!(names(scratch.0.path()), ["resolve.json"]);
     }

@@ -3,8 +3,9 @@
 A Midnight Commander-style, two-panel file manager for SFTP, built on top of your system OpenSSH
 client.
 
-> **Status: pre-alpha.** You can browse local directories and SFTP hosts; copying, moving, and
-> deleting files come next. See the [roadmap](docs/roadmap.md).
+> **Status: pre-alpha.** You can browse local directories and SFTP hosts, and copy, move,
+> delete, view, and edit files between them; polish comes next. See the
+> [roadmap](docs/roadmap.md).
 
 ## Why
 

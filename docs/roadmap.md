@@ -35,7 +35,7 @@
 - [x] mc-classic and terminal themes (`ui.theme`)
 - [x] F-key bar and help screen (F1), both from the keymap
 
-## M3: File operations (current)
+## M3: File operations (done)
 
 - [x] Panel actions that the keymap binds already: Ctrl-U swaps the panels, Alt-O opens the
       directory under the cursor in the other panel, Alt-I shows this directory there
@@ -56,7 +56,7 @@
 - [x] Job queue: `[transfer] parallel_jobs`
 - [x] A list of jobs (Ctrl-X J)
 
-## M4: Polish
+## M4: Polish (current)
 
 - [ ] User themes and keymap overrides
 - [ ] Bookmarks and history

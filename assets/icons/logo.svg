@@ -1,78 +1,153 @@
 <?xml version="1.0" encoding="utf-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" height="1024" viewBox="0 0 32 32" width="1024">
+<svg xmlns="http://www.w3.org/2000/svg" height="1024" viewBox="0 0 1024 1024" width="1024">
   <title>Noon Commander</title>
-
   <defs>
-    <linearGradient id="frameGrad" x1="0" x2="0" y1="0" y2="1">
-      <stop offset="0" stop-color="#996400" />
-      <stop offset="1" stop-color="#743C08" />
+    <linearGradient id="bg" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#FFC94A" />
+      <stop offset="0.55" stop-color="#F59E0B" />
+      <stop offset="1" stop-color="#D9730A" />
     </linearGradient>
-    <linearGradient id="panelGrad" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0" stop-color="#223860" />
-      <stop offset="1" stop-color="#132040" />
+    <linearGradient id="bgGloss" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.45" />
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0" />
     </linearGradient>
+    <linearGradient id="screen" x1="0" x2="0.4" y1="0" y2="1">
+      <stop offset="0" stop-color="#2E4C86" />
+      <stop offset="1" stop-color="#121E42" />
+    </linearGradient>
+    <linearGradient id="screenGloss" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.16" />
+      <stop offset="0.35" stop-color="#FFFFFF" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="amber" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#FFD25E" />
+      <stop offset="1" stop-color="#F29A0E" />
+    </linearGradient>
+    <linearGradient id="key" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#2A467C" />
+      <stop offset="1" stop-color="#16244A" />
+    </linearGradient>
+    <filter height="140%" id="iconShadow" width="140%" x="-20%" y="-20%">
+      <feDropShadow dx="0" dy="12" flood-color="#000" flood-opacity="0.28" stdDeviation="14" />
+    </filter>
+    <filter height="140%" id="soft" width="140%" x="-20%" y="-20%">
+      <feDropShadow dx="0" dy="6" flood-color="#5A2A00" flood-opacity="0.35" stdDeviation="8" />
+    </filter>
+    <filter height="300%" id="glow" width="160%" x="-30%" y="-100%">
+      <feDropShadow dx="0" dy="0" flood-color="#FFB020" flood-opacity="0.6" stdDeviation="6" />
+    </filter>
+    <clipPath id="squircle">
+      <rect height="824" rx="186" width="824" x="100" y="100" />
+    </clipPath>
   </defs>
 
-  <g id="frame">
-    <rect fill="url(#frameGrad)" height="32" width="32" />
-  </g>
 
-  <g fill="url(#panelGrad)" id="panels">
-    <rect height="22" width="10" x="1" y="1" />
-    <rect height="22" width="3.5" x="12" y="1" />
-    <rect height="22" width="10" x="16.5" y="1" />
-    <rect height="22" width="3.5" x="27.5" y="1" />
+  <g filter="url(#iconShadow)">
+    <rect fill="url(#bg)" height="824" rx="186" width="824" x="100" y="100" />
   </g>
+  <g clip-path="url(#squircle)">
+    <rect fill="url(#bgGloss)" height="824" width="824" x="100" y="100" />
+  </g>
+  <rect fill="none" height="821" rx="184.5" stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="3"
+    width="821" x="101.5" y="101.5" />
 
-  <g id="content">
-    <g fill="#A46D00" id="headers">
-      <rect height="1" width="6" x="3" y="2" />
-      <rect height="1" width="2" x="12.75" y="2" />
-      <rect height="1" width="6" x="18.5" y="2" />
-      <rect height="1" width="2" x="28.25" y="2" />
+
+  <g transform="translate(0 20)">
+
+    <g filter="url(#soft)">
+      <path
+        d="M220.00,176 H804.00 A48,48 0 0 1 852.00,224 V720 A16,16 0 0 1 836.00,736 H188.00 A16,16 0 0 1 172.00,720 V224 A48,48 0 0 1 220.00,176 Z"
+        fill="url(#screen)" />
     </g>
-    <g fill="#3C5684" id="file-rows">
-      <rect height="1" width="8" x="2" y="5" />
-      <rect height="1" width="5" x="2" y="7" />
-      <rect height="1" width="7" x="2" y="11" />
-      <rect height="1" width="4" x="2" y="13" />
-      <rect height="1" width="6" x="2" y="15" />
-      <rect height="1" width="5" x="2" y="17" />
-      <rect height="1" width="2" x="12.75" y="5" />
-      <rect height="1" width="2" x="12.75" y="7" />
-      <rect height="1" width="2" x="12.75" y="11" />
-      <rect height="1" width="2" x="12.75" y="13" />
-      <rect height="1" width="2" x="12.75" y="15" />
-      <rect height="1" width="2" x="12.75" y="17" />
-      <rect height="1" width="8" x="17.5" y="5" />
-      <rect height="1" width="5" x="17.5" y="7" />
-      <rect height="1" width="2" x="28.25" y="5" />
-      <rect height="1" width="2" x="28.25" y="7" />
+    <path
+      d="M220.00,176 H804.00 A48,48 0 0 1 852.00,224 V720 A16,16 0 0 1 836.00,736 H188.00 A16,16 0 0 1 172.00,720 V224 A48,48 0 0 1 220.00,176 Z"
+      fill="url(#screenGloss)" />
+    <path
+      d="M220.00,177.5 H804.00 A46.5,46.5 0 0 1 850.50,224.0 V720.0 A14.5,14.5 0 0 1 836.00,734.5 H188.00 A14.5,14.5 0 0 1 173.50,720.0 V224.0 A46.5,46.5 0 0 1 220.00,177.5 Z"
+      fill="none" stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="3" />
+
+
+    <g fill="#FFFFFF" fill-opacity="0.06" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="2">
+      <rect height="420" rx="28" width="300" x="204" y="208" />
+      <rect height="420" rx="28" width="300" x="520" y="208" />
     </g>
-    <g fill="#A46D00" id="selection">
-      <rect height="1" width="8" x="2" y="9" />
-      <rect height="1" width="2" x="12.75" y="9" />
+
+
+    <g fill="url(#amber)">
+      <rect height="20" rx="10" width="120" x="294" y="236" />
+      <rect height="20" rx="10" width="120" x="610" y="236" />
     </g>
+
+
+    <g fill="#6F8FCB" fill-opacity="0.75">
+      <rect height="18" rx="9" width="200" x="240" y="290" />
+      <rect height="18" rx="9" width="140" x="240" y="334" />
+      <rect height="18" rx="9" width="180" x="240" y="434" />
+      <rect height="18" rx="9" width="110" x="240" y="478" />
+      <rect height="18" rx="9" width="160" x="240" y="522" />
+      <rect height="18" rx="9" width="130" x="240" y="566" />
+      <g fill-opacity="0.45">
+        <rect height="18" rx="9" width="28" x="452" y="290" />
+        <rect height="18" rx="9" width="28" x="452" y="334" />
+        <rect height="18" rx="9" width="28" x="452" y="434" />
+        <rect height="18" rx="9" width="28" x="452" y="478" />
+        <rect height="18" rx="9" width="28" x="452" y="522" />
+        <rect height="18" rx="9" width="28" x="452" y="566" />
+      </g>
+      <rect height="18" rx="9" width="200" x="556" y="290" />
+      <rect height="18" rx="9" width="140" x="556" y="334" />
+      <rect fill-opacity="0.45" height="18" rx="9" width="28" x="768" y="290" />
+      <rect fill-opacity="0.45" height="18" rx="9" width="28" x="768" y="334" />
+    </g>
+
+
+    <g filter="url(#glow)">
+      <rect fill="url(#amber)" height="44" rx="14" width="264" x="222" y="370" />
+    </g>
+    <rect fill="#7A3E00" fill-opacity="0.55" height="18" rx="9" width="190" x="240" y="383" />
+    <rect fill="#7A3E00" fill-opacity="0.4" height="18" rx="9" width="24" x="446" y="383" />
+
+
+    <g fill="#FFFFFF" fill-opacity="0.06">
+      <rect height="56" rx="20" width="300" x="204" y="648" />
+      <rect height="56" rx="20" width="300" x="520" y="648" />
+    </g>
+    <g fill="#6F8FCB" fill-opacity="0.7">
+      <rect height="18" rx="9" width="140" x="232" y="667" />
+      <rect height="18" rx="9" width="56" x="420" y="667" />
+      <rect height="18" rx="9" width="140" x="548" y="667" />
+      <rect height="18" rx="9" width="56" x="736" y="667" />
+    </g>
+
   </g>
 
-  <g id="status">
-    <rect fill="url(#panelGrad)" height="3" width="14.5" x="1" y="24" />
-    <rect fill="url(#panelGrad)" height="3" width="14.5" x="16.5" y="24" />
-    <g fill="#3C5684">
-      <rect height="1" width="7" x="2" y="25" />
-      <rect height="1" width="3" x="11.5" y="25" />
-      <rect height="1" width="7" x="17.5" y="25" />
-      <rect height="1" width="3" x="27" y="25" />
-    </g>
-  </g>
 
-  <g fill="#1A2B4E" id="keybar">
-    <rect height="3" width="4" x="1" y="28" />
-    <rect height="3" width="4" x="6.2" y="28" />
-    <rect height="3" width="4" x="11.4" y="28" />
-    <rect height="3" width="4" x="16.6" y="28" />
-    <rect height="3" width="4" x="21.8" y="28" />
-    <rect height="3" width="4" x="27" y="28" />
+  <g fill="url(#key)" filter="url(#soft)">
+    <path
+      d="M188.00,764 H262.67 A16,16 0 0 1 278.67,780 V812 A16,16 0 0 1 262.67,828 H220.00 A48,48 0 0 1 172.00,780 V780 A16,16 0 0 1 188.00,764 Z" />
+    <path
+      d="M302.67,764 H377.33 A16,16 0 0 1 393.33,780 V812 A16,16 0 0 1 377.33,828 H302.67 A16,16 0 0 1 286.67,812 V780 A16,16 0 0 1 302.67,764 Z" />
+    <path
+      d="M417.33,764 H492.00 A16,16 0 0 1 508.00,780 V812 A16,16 0 0 1 492.00,828 H417.33 A16,16 0 0 1 401.33,812 V780 A16,16 0 0 1 417.33,764 Z" />
+    <path
+      d="M532.00,764 H606.67 A16,16 0 0 1 622.67,780 V812 A16,16 0 0 1 606.67,828 H532.00 A16,16 0 0 1 516.00,812 V780 A16,16 0 0 1 532.00,764 Z" />
+    <path
+      d="M646.67,764 H721.33 A16,16 0 0 1 737.33,780 V812 A16,16 0 0 1 721.33,828 H646.67 A16,16 0 0 1 630.67,812 V780 A16,16 0 0 1 646.67,764 Z" />
+    <path
+      d="M761.33,764 H836.00 A16,16 0 0 1 852.00,780 V780 A48,48 0 0 1 804.00,828 H761.33 A16,16 0 0 1 745.33,812 V780 A16,16 0 0 1 761.33,764 Z" />
   </g>
-
+  <g fill="none" stroke="#FFFFFF" stroke-opacity="0.16" stroke-width="2">
+    <path
+      d="M188.00,765 H262.67 A15,15 0 0 1 277.67,780 V812 A15,15 0 0 1 262.67,827 H220.00 A47,47 0 0 1 173.00,780 V780 A15,15 0 0 1 188.00,765 Z" />
+    <path
+      d="M302.67,765 H377.33 A15,15 0 0 1 392.33,780 V812 A15,15 0 0 1 377.33,827 H302.67 A15,15 0 0 1 287.67,812 V780 A15,15 0 0 1 302.67,765 Z" />
+    <path
+      d="M417.33,765 H492.00 A15,15 0 0 1 507.00,780 V812 A15,15 0 0 1 492.00,827 H417.33 A15,15 0 0 1 402.33,812 V780 A15,15 0 0 1 417.33,765 Z" />
+    <path
+      d="M532.00,765 H606.67 A15,15 0 0 1 621.67,780 V812 A15,15 0 0 1 606.67,827 H532.00 A15,15 0 0 1 517.00,812 V780 A15,15 0 0 1 532.00,765 Z" />
+    <path
+      d="M646.67,765 H721.33 A15,15 0 0 1 736.33,780 V812 A15,15 0 0 1 721.33,827 H646.67 A15,15 0 0 1 631.67,812 V780 A15,15 0 0 1 646.67,765 Z" />
+    <path
+      d="M761.33,765 H836.00 A15,15 0 0 1 851.00,780 V780 A47,47 0 0 1 804.00,827 H761.33 A15,15 0 0 1 746.33,812 V780 A15,15 0 0 1 761.33,765 Z" />
+  </g>
 </svg>

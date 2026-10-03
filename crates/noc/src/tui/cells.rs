@@ -126,6 +126,23 @@ fn take_width(chars: impl Iterator<Item = char>, limit: usize) -> (String, usize
     (taken, used)
 }
 
+/// `text` cut in two at `at` cells; a wide character across the cut becomes a space on either
+/// side, so that both halves keep their widths.
+pub(crate) fn split(text: &str, at: usize) -> (String, String) {
+    let (mut head, head_width) = take_width(text.chars(), at);
+    let mut rest = text[head.len()..].chars();
+    let mut tail = String::new();
+    if head_width < at {
+        head.push_str(&" ".repeat(at - head_width));
+        if let Some(c) = rest.next() {
+            let cut = c.width().unwrap_or(0);
+            tail.push_str(&" ".repeat((head_width + cut).saturating_sub(at)));
+        }
+    }
+    tail.extend(rest);
+    (head, tail)
+}
+
 /// `bytes` with a comma between each group of three digits, as mc shows the size of marked
 /// files.
 pub(crate) fn grouped(bytes: u64) -> String {
@@ -205,6 +222,18 @@ mod tests {
         assert_eq!(fit("ab", 5, Align::Right), "   ab");
         assert_eq!(fit("ab", 5, Align::Center), " ab  ");
         assert_eq!(fit("abcde", 5, Align::Left), "abcde");
+    }
+
+    #[test]
+    fn split_keeps_the_widths_of_both_halves() {
+        assert_eq!(split("abcdef", 2), ("ab".to_owned(), "cdef".to_owned()));
+        assert_eq!(split("ab", 3), ("ab ".to_owned(), String::new()));
+        assert_eq!(
+            split("a文b", 2),
+            ("a ".to_owned(), " b".to_owned()),
+            "a wide character across the cut leaves a blank on either side"
+        );
+        assert_eq!(split("文b", 2), ("文".to_owned(), "b".to_owned()));
     }
 
     #[test]

@@ -26,6 +26,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   of a marker in front of it, so names line up with the other rows.
 - `noc ls` without a location prints the mount points of the volumes, then the hosts as
   `host:`.
+- The lines between a panel's columns run down the whole listing, not only along its rows, meet
+  the frame above and the line below with `╤` and `┴` (`┬` and `┴` on single borders), and stay
+  in the frame's color on the background of the cursor and of marked rows, without their
+  underline. In the root, the line between free space and size also cuts the `SFTP` row and the
+  host addresses.
 
 - The project is renamed from sftp-tui to Noon Commander and grows into a full terminal file
   manager for local and SFTP file operations ([ADR 0005](docs/adr/0005-rename-to-noon-commander.md)).

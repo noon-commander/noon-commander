@@ -10,7 +10,7 @@ use jiff::tz::TimeZone;
 use noc_vfs::{DirEntry, Location, RemotePath, Space, Volume};
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::Style;
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Block;
 
@@ -233,6 +233,9 @@ pub(crate) struct Panel {
     /// What quick search has matched so far, while it runs.
     search: Option<String>,
     error: Option<String>,
+    /// Where the lines between columns ran at the last render, so that they can be joined to
+    /// a top of the frame drawn again over the panel's.
+    column_lines: Vec<u16>,
 }
 
 impl Panel {
@@ -268,6 +271,7 @@ impl Panel {
             pending: None,
             search: None,
             error: None,
+            column_lines: Vec::new(),
         };
         let request = panel.open(location, Focus::First);
         (panel, request)
@@ -293,6 +297,7 @@ impl Panel {
             pending: None,
             search: None,
             error: None,
+            column_lines: Vec::new(),
         };
         let request = self
             .pending
@@ -859,6 +864,7 @@ impl Panel {
             .border_style(theme.panel_border);
         let inner = block.inner(area);
         frame.render_widget(block, area);
+        self.column_lines.clear();
         if inner.height < 3 || inner.width < 2 {
             return;
         }
@@ -895,6 +901,14 @@ impl Panel {
         }
 
         self.render_separator(frame, area, inner.bottom() - 2, theme);
+        self.column_lines = columns
+            .lines()
+            .into_iter()
+            .filter_map(|offset| u16::try_from(offset).ok())
+            .filter(|offset| *offset < inner.width)
+            .map(|offset| inner.x + offset)
+            .collect();
+        self.render_column_lines(frame, area, inner, theme);
         let mut status_style = Style::new();
         let status = if let Some(text) = &self.search {
             status_style = theme.quick_search;
@@ -967,6 +981,44 @@ impl Panel {
         );
     }
 
+    /// The lines between columns, down from the header to the line above the status line, in
+    /// the color of the frame on the background of the rows they cross, so that the cursor and
+    /// marks run across them; never underlined, which would cut them. Joined to the frame where
+    /// its line runs, not where the title or the total of the marked entries cuts into it.
+    fn render_column_lines(&self, frame: &mut Frame<'_>, area: Rect, inner: Rect, theme: &Theme) {
+        let color = theme.panel_border.fg.unwrap_or(Color::Reset);
+        let (_, bottom) = theme.column_tees();
+        let buffer = frame.buffer_mut();
+        for &x in &self.column_lines {
+            for y in inner.y..inner.bottom() - 2 {
+                if let Some(cell) = buffer.cell_mut((x, y)) {
+                    cell.set_char('│').set_fg(color);
+                    cell.modifier.remove(Modifier::UNDERLINED | Modifier::BOLD);
+                }
+            }
+            if let Some(cell) = buffer.cell_mut((x, inner.bottom() - 2))
+                && cell.symbol() == "─"
+            {
+                cell.set_char(bottom);
+            }
+        }
+        self.join_columns(frame, area, theme);
+    }
+
+    /// Joins the lines between columns to the top of the frame, `area`, drawn again over the
+    /// panel's, as the tabs do; where it shows a title or tabs, the line stops short of it.
+    pub(crate) fn join_columns(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
+        let (top, _) = theme.column_tees();
+        let buffer = frame.buffer_mut();
+        for &x in &self.column_lines {
+            if let Some(cell) = buffer.cell_mut((x, area.y))
+                && matches!(cell.symbol(), "═" | "─")
+            {
+                cell.set_char(top);
+            }
+        }
+    }
+
     /// The free space and size of the directory's file system, on the bottom of the frame at
     /// the right, as in mc; left out when unknown or when it does not fit.
     fn render_space(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
@@ -1016,6 +1068,28 @@ enum Columns {
 }
 
 impl Columns {
+    /// Where the lines between columns run, in cells from the left of the rows; the rows leave
+    /// a blank there for them.
+    fn lines(self) -> Vec<usize> {
+        match self {
+            Self::Dir(columns) => {
+                let mut lines = Vec::new();
+                if columns.size {
+                    lines.push(columns.name);
+                }
+                if columns.time {
+                    lines.push(columns.name + 1 + SIZE_WIDTH);
+                }
+                lines
+            }
+            Self::Root(columns) if columns.numbers => {
+                vec![columns.name, columns.name + 1 + SIZE_WIDTH]
+            }
+            Self::Root(_) => Vec::new(),
+            Self::Hosts(columns) => columns.address.map(|_| columns.name).into_iter().collect(),
+        }
+    }
+
     /// The column titles; an arrow marks the one a directory is sorted by, and its direction.
     fn header(self, sort: Sort) -> String {
         match self {
@@ -1222,15 +1296,15 @@ impl DirColumns {
         }
     }
 
-    /// The name cell, and the other cells with their separators.
+    /// The name cell, and the other cells with the blanks the lines between them go on.
     fn join(self, name: &str, size: &str, time: &str, align: [Align; 3]) -> (String, String) {
         let mut rest = String::new();
         if self.size {
-            rest.push('│');
+            rest.push(' ');
             rest.push_str(&cells::fit(size, SIZE_WIDTH, align[1]));
         }
         if self.time {
-            rest.push('│');
+            rest.push(' ');
             rest.push_str(&cells::fit(time, MTIME_WIDTH, align[2]));
         }
         (cells::fit(name, self.name, align[0]), rest)
@@ -1261,24 +1335,29 @@ impl RootColumns {
         }
     }
 
-    /// The name cell, and the free space and size cells with their separators.
+    /// The name cell, and the free space and size cells with the blanks the lines between
+    /// them go on.
     fn join(self, name: &str, free: &str, size: &str, align: [Align; 2]) -> (String, String) {
         let mut rest = String::new();
         if self.numbers {
-            rest.push('│');
+            rest.push(' ');
             rest.push_str(&cells::fit(free, SIZE_WIDTH, align[1]));
-            rest.push('│');
+            rest.push(' ');
             rest.push_str(&cells::fit(size, SIZE_WIDTH, align[1]));
         }
         (cells::fit(name, self.name, align[0]), rest)
     }
 
-    /// The name cell, and `text` across the cells of the numbers.
+    /// The name cell, and `text` across the cells of the numbers, which the line between them
+    /// cuts in two.
     fn join_wide(self, name: &str, text: &str, align: Align) -> (String, String) {
         let mut rest = String::new();
         if self.numbers {
-            rest.push('│');
-            rest.push_str(&cells::fit(text, 2 * SIZE_WIDTH + 1, align));
+            let (free, size) = cells::split(&cells::fit(text, 2 * SIZE_WIDTH, align), SIZE_WIDTH);
+            rest.push(' ');
+            rest.push_str(&free);
+            rest.push(' ');
+            rest.push_str(&size);
         }
         (cells::fit(name, self.name, Align::Left), rest)
     }
@@ -1314,11 +1393,11 @@ impl HostColumns {
         }
     }
 
-    /// The name cell, and the address cell with its separator.
+    /// The name cell, and the address cell with the blank the line before it goes on.
     fn join(self, name: &str, address: &str, align: [Align; 2]) -> (String, String) {
         let mut rest = String::new();
         if let Some(width) = self.address {
-            rest.push('│');
+            rest.push(' ');
             rest.push_str(&cells::fit(address, width, align[1]));
         }
         (cells::fit(name, self.name, align[0]), rest)
@@ -2475,6 +2554,66 @@ mod tests {
         assert!(lines[9].starts_with("\"├────"), "{text}");
         assert!(lines[11].starts_with("\"└"), "{text}");
         assert!(!text.contains(['═', '║', '╟']), "{text}");
+        assert_eq!(lines[0].matches('┬').count(), 2, "{text}");
+        assert_eq!(lines[9].matches('┴').count(), 2, "{text}");
+    }
+
+    #[test]
+    fn column_lines_run_down_the_whole_listing_and_join_the_frame() {
+        let mut panel = loaded("/srv", vec![entry("only.txt", FileKind::File, 1)]);
+        let text = draw(&mut panel, 40, 10, true).to_string();
+        let lines: Vec<&str> = text.lines().collect();
+        let column = |line: &str| line.chars().nth(19);
+        assert_eq!(column(lines[0]), Some('╤'), "{text}");
+        for line in &lines[1..7] {
+            assert_eq!(column(line), Some('│'), "below the rows too: {text}");
+        }
+        assert_eq!(column(lines[7]), Some('┴'), "{text}");
+        assert_eq!(
+            column(lines[8]),
+            Some(' '),
+            "not across the status line: {text}"
+        );
+    }
+
+    #[test]
+    fn column_lines_take_the_background_of_the_cursor_and_marks() {
+        let mut panel = loaded("/srv", listing());
+        panel.handle(Action::End);
+        panel.handle(Action::MarkUp);
+        let hosts = |_: &str| HostState::default();
+        let theme = Theme::mc_classic();
+        // Row 7 is under the cursor, row 8 marked; a line runs between name and size.
+        for (active, cursor) in [(true, Color::Cyan), (false, Color::DarkGray)] {
+            let terminal = render_themed(
+                &mut panel,
+                (40, 12),
+                active,
+                &hosts,
+                Decor::new(false),
+                &theme,
+            );
+            let buffer = terminal.backend().buffer();
+            for (y, bg) in [(6, Color::Blue), (7, cursor), (8, Color::Blue)] {
+                let cell = &buffer[(18, y)];
+                assert_eq!(cell.symbol(), "│");
+                assert_eq!((cell.fg, cell.bg), (Color::Gray, bg), "row {y}, {active}");
+                assert_eq!(buffer[(17, y)].bg, bg, "row {y}, {active}: as the row");
+                assert!(
+                    !cell.modifier.contains(Modifier::UNDERLINED),
+                    "row {y}, {active}: the mark's underline stops at the line"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn column_lines_leave_the_title_whole() {
+        let mut panel = loaded("/srv/some-directory", listing());
+        let text = draw(&mut panel, 40, 12, true).to_string();
+        let top = text.lines().next().unwrap_or_default();
+        assert!(top.contains(" /srv/some-directory "), "{text}");
+        assert_eq!(top.matches('╤').count(), 1, "only past the title: {text}");
     }
 
     #[test]

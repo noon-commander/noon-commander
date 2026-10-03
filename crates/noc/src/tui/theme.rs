@@ -422,6 +422,15 @@ impl Theme {
         }
     }
 
+    /// Where a line between columns meets the top of the frame and the single line above the
+    /// status line: `╤` and `┴` on a double frame.
+    pub(crate) fn column_tees(&self) -> (char, char) {
+        match self.borders {
+            Borders::Double => ('╤', '┴'),
+            Borders::Single => ('┬', '┴'),
+        }
+    }
+
     /// The style of an entry's name by its kind, as mc highlights files.
     pub(crate) fn entry(&self, entry: &DirEntry) -> Style {
         match entry.metadata.kind {

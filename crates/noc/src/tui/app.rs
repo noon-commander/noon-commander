@@ -3249,7 +3249,10 @@ fn render_side(
             bar.render_line(frame, line);
             tabs::join_frame(frame, area, view.theme);
         }
-        None if tabs.len() > 1 => bar.render_frame(frame, area),
+        None if tabs.len() > 1 => {
+            bar.render_frame(frame, area);
+            tabs.active().panel.join_columns(frame, area, view.theme);
+        }
         None => {}
     }
 }
@@ -6450,6 +6453,25 @@ mod tests {
             .draw(|frame| app.render(frame, now, &TimeZone::UTC))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn tabs_in_the_frame_keep_the_column_lines_joined_to_it() {
+        let mut config = config();
+        config.ui.tab_bar = TabBar::Frame;
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config);
+        answer(&mut app, effects, &Listing::Dir(vec![dir("docs")]));
+        app.handle(action(Action::NewTab));
+        let mut terminal = Terminal::new(TestBackend::new(100, 6)).unwrap();
+        let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        terminal
+            .draw(|frame| app.render(frame, now, &TimeZone::UTC))
+            .unwrap();
+        let text = terminal.backend().to_string();
+        let top = text.lines().next().unwrap_or_default();
+        let left: String = top.chars().skip(1).take(50).collect();
+        assert!(left.contains(" 1 srv ═ 2 /srv "), "{text}");
+        assert_eq!(left.matches('╤').count(), 2, "{text}");
     }
 
     #[test]

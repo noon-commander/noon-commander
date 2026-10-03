@@ -102,15 +102,15 @@ menu-filter = Filter: { $text }
 menu-nothing = Nothing matches.
 
 ## The pull-down menu of F9 (src/tui/pulldown), as mc's. Prefix: pulldown-. An & marks the
-## letter that runs a command while its menu is open; letters must differ within a menu, and
-## && stands for &.
+## letter that opens a menu from the bar, or runs a command while its menu is open; letters
+## must differ on the bar and within a menu, and && stands for &.
 
 # The menu bar. Left and Right act on the panel drawn on that side.
-pulldown-left = Left
-pulldown-file = File
-pulldown-command = Command
-pulldown-options = Options
-pulldown-right = Right
+pulldown-left = &Left
+pulldown-file = &File
+pulldown-command = &Command
+pulldown-options = &Options
+pulldown-right = &Right
 # Left and Right.
 pulldown-location = Change &location…
 pulldown-sort-name = Sort by &name
@@ -295,7 +295,8 @@ help-pulldown-left = The menu to the left
 help-pulldown-right = The menu to the right
 help-pulldown-home = The first command
 help-pulldown-end = The last command
-help-pulldown-run = Run the command
+help-pulldown-run = Open the menu, or run the command
+help-pulldown-close = Close the menu, then the menu bar
 help-search-back = Take back the last character
 help-search-end = End the search
 help-dialog-up = Previous button; in this help, one line up
@@ -320,7 +321,7 @@ help-field-delete-to-end = Delete to the end
 help-note-esc = Esc 1 … Esc 0 stand for F1 … F10, and Esc followed by a key for Alt and the key, for terminals without them. A lone Esc acts after a second; Esc Esc at once.
 help-note-typing = Typing in a panel starts quick search.
 help-note-menu = Typing in the location menu filters it; 1 … 9 and 0 open the first ten rows while the filter is empty.
-help-note-pulldown = In the pull-down menu, the highlighted letter of a command runs it.
+help-note-pulldown = In the pull-down menu, the highlighted letter of a menu opens it, and that of a command runs it. The menu opens again where it closed.
 
 ## Host settings, F4 on a host (src/tui/app), saved to hosts.toml. Prefix: host-.
 

@@ -469,6 +469,8 @@ pub(crate) struct App {
     menu_listings: u64,
     /// The pull-down menu of F9, over the panels and under the windows and dialogs.
     pulldown: Option<PullDown>,
+    /// Where the pull-down menu was when it closed, to open it there again.
+    pulldown_place: Option<pulldown::Place>,
     /// The Configuration dialog, over the panels and the menus, under the other windows and
     /// the dialogs.
     configuration: Option<Configuration>,
@@ -533,6 +535,7 @@ impl App {
             menu: None,
             menu_listings: 0,
             pulldown: None,
+            pulldown_place: None,
             configuration: None,
             home: home.to_path_buf(),
             root_title: fl!("root-title"),
@@ -932,10 +935,15 @@ impl App {
         }
     }
 
-    /// Opens the pull-down menu at the menu of the active panel.
+    /// Opens the pull-down menu where it was when it closed; the first time, on the bar at the
+    /// menu of the active panel.
     fn open_pulldown(&mut self) {
-        let mut pulldown = PullDown::new(self.active, self.swapped);
-        pulldown.start(&|command| self.command_status(command));
+        let pulldown = PullDown::new(
+            self.active,
+            self.swapped,
+            self.pulldown_place.as_ref(),
+            &|command| self.command_status(command),
+        );
         self.pulldown = Some(pulldown);
     }
 
@@ -949,8 +957,14 @@ impl App {
                 self.pulldown = Some(pulldown);
                 Vec::new()
             }
-            PullDownEvent::Closed => Vec::new(),
-            PullDownEvent::Run(command) => self.run(command),
+            PullDownEvent::Closed => {
+                self.pulldown_place = Some(pulldown.place().clone());
+                Vec::new()
+            }
+            PullDownEvent::Run(command) => {
+                self.pulldown_place = Some(pulldown.place().clone());
+                self.run(command)
+            }
         }
     }
 
@@ -4908,6 +4922,9 @@ mod tests {
         assert_eq!(app.context(), Context::PullDown);
         let text = screen_of(&mut app, 20);
         assert!(text.contains("Left     File"), "{text}");
+        assert!(!text.contains("Change location…"), "the bar alone: {text}");
+        app.handle(action(Action::Down));
+        let text = screen_of(&mut app, 20);
         assert!(
             line_with(&text, "Change location…").contains("Alt-F2"),
             "{text}"
@@ -4933,35 +4950,40 @@ mod tests {
         assert_eq!(app.left.sort_action(), Action::SortBySize);
         assert_eq!(app.right.sort_action(), Action::SortByName);
         assert_eq!(app.active, Side::Right);
+
+        // F9 opens it again where it closed, on the command that ran.
         app.handle(action(Action::PullDown));
-        app.handle(action(Action::Right));
         let text = screen_of(&mut app, 20);
         assert!(text.contains("* Sort by size"), "{text}");
+        app.handle(action(Action::Confirm));
+        assert_eq!(app.left.sort_action(), Action::SortBySize, "reversed");
 
         // Options: the hidden files, in both panels.
-        for _ in 0..3 {
-            app.handle(action(Action::Right));
-        }
+        app.handle(action(Action::PullDown));
+        app.handle(action(Action::Cancel));
+        assert!(app.handle(Resolved::Insert('o')).is_empty());
         assert!(screen_of(&mut app, 20).contains("x Show hidden files"));
         app.handle(Resolved::Insert('h'));
         assert!(!app.config.ui.show_hidden);
 
-        // Commands that cannot run do nothing, and Esc closes the menu.
+        // Commands that cannot run do nothing; Esc goes back to the bar, then closes it.
         app.handle(action(Action::PullDown));
-        app.handle(action(Action::Right));
-        app.handle(action(Action::Right));
+        app.handle(action(Action::Left));
+        app.handle(action(Action::Left));
         assert!(
             app.handle(Resolved::Insert('k')).is_empty(),
             "nothing chosen"
         );
         assert!(app.pulldown.is_some());
         app.handle(action(Action::Cancel));
+        assert!(app.pulldown.is_some());
+        app.handle(action(Action::Cancel));
         assert!(app.pulldown.is_none());
 
         // A command that opens something: the location menu of the panel on its side.
         app.handle(action(Action::PullDown));
-        app.handle(action(Action::Right));
-        let effects = app.handle(action(Action::Confirm));
+        app.handle(Resolved::Insert('l'));
+        let effects = app.handle(Resolved::Insert('l'));
         assert!(matches!(&effects[..], [Effect::ListPlaces { .. }]));
         assert_eq!(app.menu.as_ref().map(LocationMenu::side), Some(Side::Left));
     }
@@ -4969,8 +4991,7 @@ mod tests {
     /// Opens Options → Configuration… through F9.
     fn open_configuration(app: &mut App) {
         app.handle(action(Action::PullDown));
-        app.handle(action(Action::Left));
-        app.handle(action(Action::Left));
+        app.handle(Resolved::Insert('o'));
         assert!(app.handle(Resolved::Insert('c')).is_empty());
         assert!(app.configuration.is_some());
     }
@@ -5103,6 +5124,7 @@ mod tests {
         assert!(lines[0].contains("Left     File"), "{text}");
         assert!(lines[1].contains('╔'), "the panels start below it: {text}");
         app.handle(action(Action::PullDown));
+        app.handle(action(Action::Down));
         assert!(screen_of(&mut app, 20).contains("Change location…"));
     }
 

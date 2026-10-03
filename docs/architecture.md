@@ -172,7 +172,8 @@ terminals whose Alt-F1 never arrives, such as macOS Terminal without Option as M
 
 ### Pull-down menu
 
-F9 (`Esc 9`) opens mc's menu bar with the menu of the active panel open:
+F9 (`Esc 9`) opens mc's menu bar, as Far does: the first time, the bar alone with the menu of
+the active panel selected; later, where it was when it closed. An open menu:
 
 ```text
   Left     File     Command     Options     Right                       2 jobs 37%
@@ -199,9 +200,14 @@ F9 (`Esc 9`) opens mc's menu bar with the menu of the active panel open:
   it in the active panel's context (`Keymap::key`); Left and Right show sort and rescan keys
   only for the active panel, as keys act there. Commands that cannot run now are dimmed, and
   the cursor skips them.
-- Left and Right move between menus, round the bar; Up and Down move round a menu; Home and
-  End go to its first and last command; Enter or the command's highlighted letter (`&` in the
-  Fluent messages) runs it; Esc, F9, or F10 closes the menu. Running a command closes it first.
+- On the bar, Left and Right select the next menu, round the bar; Enter, Up, Down, or the
+  menu's highlighted letter (`&` in the Fluent messages) opens it. In an open menu, Left and
+  Right open the next one; Up and Down move round it; Home and End go to its first and last
+  command; Enter or the command's highlighted letter runs it. Esc, F9, or F10 goes back to the
+  bar, and closes the bar from there. Running a command closes it first.
+- The app keeps the menu's `Place` when it closes: the selected menu, whether it was open, and
+  the cursor of each menu. F9 opens it there again, so F9 Enter repeats the last command; a
+  command that cannot run now passes the cursor on to the next one.
 - `ui.menu_bar` decides where the bar is: `on-demand` (the default) draws it over the top line
   of the panels only while a menu is open, as Far does; `always` keeps it above the panels, as
   mc does, which takes a row from them. The jobs indicator sits at the right end of that row.

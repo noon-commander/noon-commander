@@ -2,6 +2,10 @@
 //! and the commands of the one that is open. Left and Right act on the panel drawn on that
 //! side; the others do what their keys do. Each command shows the key that does the same, from
 //! the keymap, and has a letter that runs it while its menu is open.
+//!
+//! As in Far Manager, F9 opens the bar alone, where each menu's letter opens it, and Esc in an
+//! open menu goes back to the bar. The menu remembers where it was when it closed, and opens
+//! there again.
 
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -129,7 +133,7 @@ enum Entry {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Menu {
-    title: String,
+    title: Label,
     entries: Vec<Entry>,
 }
 
@@ -142,18 +146,26 @@ impl Menu {
     }
 }
 
-/// The open menu bar, and the command under the cursor in the open menu.
+/// The open menu bar, the menu selected on it, and the command under the cursor in each menu.
 #[derive(Debug)]
 pub(crate) struct PullDown {
     menus: Vec<Menu>,
-    /// The open menu.
+    place: Place,
+}
+
+/// Where the pull-down menu is: kept when it closes, for F9 to open it there again.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Place {
+    /// The menu selected on the bar.
     selected: usize,
-    /// The entry under the cursor in it.
-    cursor: usize,
+    /// Whether that menu is open below its title, or only the bar is.
+    open: bool,
+    /// The entry under the cursor in each menu.
+    cursors: Vec<usize>,
 }
 
 /// The titles of the menu bar, left to right.
-fn titles() -> [String; 5] {
+fn titles() -> [Label; 5] {
     [
         fl!("pulldown-left"),
         fl!("pulldown-file"),
@@ -161,10 +173,11 @@ fn titles() -> [String; 5] {
         fl!("pulldown-options"),
         fl!("pulldown-right"),
     ]
+    .map(|title| Label::parse(&title))
 }
 
 /// The menu of a panel: the panel on `side`, which is drawn under its title.
-fn panel_menu(title: String, side: Side) -> Menu {
+fn panel_menu(title: Label, side: Side) -> Menu {
     let item = |text: String, command, mark| {
         Entry::Item(Item {
             label: Label::parse(&text),
@@ -202,7 +215,7 @@ fn panel_menu(title: String, side: Side) -> Menu {
 }
 
 /// A menu of commands that act as their keys do; `None` is a separator.
-fn plain_menu(title: String, items: Vec<Option<(String, Action)>>) -> Menu {
+fn plain_menu(title: Label, items: Vec<Option<(String, Action)>>) -> Menu {
     let entries = items
         .into_iter()
         .map(|item| match item {
@@ -222,7 +235,7 @@ fn plain_menu(title: String, items: Vec<Option<(String, Action)>>) -> Menu {
 }
 
 /// Options: the Configuration dialog, then settings that switch at once.
-fn options_menu(title: String) -> Menu {
+fn options_menu(title: Label) -> Menu {
     let mut menu = plain_menu(
         title,
         vec![None, Some((fl!("pulldown-hidden"), Action::ToggleHidden))],
@@ -239,9 +252,15 @@ fn options_menu(title: String) -> Menu {
 }
 
 impl PullDown {
-    /// The menu bar, with the menu of the `active` panel open; `swapped` panels are drawn on
-    /// each other's sides, and Left and Right go with where they are drawn.
-    pub(crate) fn new(active: Side, swapped: bool) -> Self {
+    /// The menu bar at `place`, where it was when it closed; the first time, with the menu of
+    /// the `active` panel selected and none open. `swapped` panels are drawn on each other's
+    /// sides, and Left and Right go with where they are drawn.
+    pub(crate) fn new(
+        active: Side,
+        swapped: bool,
+        place: Option<&Place>,
+        status: &dyn Fn(Command) -> Status,
+    ) -> Self {
         let [left, file, command, options, right] = titles();
         let (on_left, on_right) = if swapped {
             (Side::Right, Side::Left)
@@ -295,15 +314,36 @@ impl PullDown {
         } else {
             menus.len() - 1
         };
-        Self {
-            menus,
-            selected,
-            cursor: 0,
+        let place = place
+            .filter(|place| place.selected < menus.len() && place.cursors.len() == menus.len())
+            .cloned()
+            .unwrap_or_else(|| Place {
+                selected,
+                open: false,
+                cursors: vec![0; menus.len()],
+            });
+        let mut pulldown = Self { menus, place };
+        if pulldown.place.open {
+            pulldown.open(pulldown.place.selected, status);
         }
+        pulldown
+    }
+
+    /// Where the menu is now, to open it there again.
+    pub(crate) fn place(&self) -> &Place {
+        &self.place
     }
 
     fn menu(&self) -> &Menu {
-        &self.menus[self.selected]
+        &self.menus[self.place.selected]
+    }
+
+    fn cursor(&self) -> usize {
+        self.place.cursors[self.place.selected]
+    }
+
+    fn set_cursor(&mut self, cursor: usize) {
+        self.place.cursors[self.place.selected] = cursor;
     }
 
     /// The first entry from `start`, forward or back round the menu, that is a command that
@@ -330,20 +370,28 @@ impl PullDown {
             })
     }
 
-    /// Opens the menu `index`, with the cursor on its first command that runs now.
+    /// Opens the menu `index` below its title, with the cursor where it was in that menu, or
+    /// on the next command that runs now.
+    fn open(&mut self, index: usize, status: &dyn Fn(Command) -> Status) {
+        self.place.selected = index;
+        self.place.open = true;
+        let cursor = self.cursor();
+        self.set_cursor(self.next_enabled(cursor, true, status).unwrap_or(cursor));
+    }
+
+    /// Selects the menu `index` on the bar, and opens it if a menu is open.
     fn select(&mut self, index: usize, status: &dyn Fn(Command) -> Status) {
-        self.selected = index;
-        self.cursor = self.next_enabled(0, true, status).unwrap_or(0);
+        if self.place.open {
+            self.open(index, status);
+        } else {
+            self.place.selected = index;
+        }
     }
 
-    /// Puts the cursor on the first command that runs now, as when the menu opens.
-    pub(crate) fn start(&mut self, status: &dyn Fn(Command) -> Status) {
-        self.select(self.selected, status);
-    }
-
-    /// Takes a key: Left and Right open the next menu, round the bar; Up and Down move to the
-    /// next command that runs now, round the menu; Enter or a command's letter runs it; Esc
-    /// closes the menu.
+    /// Takes a key. On the bar, Left and Right select the next menu, round the bar, and Enter,
+    /// Up, Down, or a menu's letter opens it. In an open menu, Left and Right open the next
+    /// menu; Up and Down move to the next command that runs now, round the menu; Enter or a
+    /// command's letter runs it; Esc goes back to the bar, and closes the menu bar from there.
     pub(crate) fn handle(
         &mut self,
         input: Resolved,
@@ -351,53 +399,68 @@ impl PullDown {
     ) -> PullDownEvent {
         let count = self.menus.len();
         let entries = self.menu().entries.len();
+        let selected = self.place.selected;
         match input {
             Resolved::Insert(c) => {
                 let lower = c.to_lowercase().next().unwrap_or(c);
-                let found = self.menu().entries.iter().find_map(|entry| match entry {
-                    Entry::Item(item)
-                        if item.label.hotkey.is_some_and(|(_, key)| key == lower)
-                            && status(item.command).enabled =>
-                    {
-                        Some(item.command)
+                let has = |label: &Label| label.hotkey.is_some_and(|(_, key)| key == lower);
+                if !self.place.open {
+                    if let Some(index) = self.menus.iter().position(|menu| has(&menu.title)) {
+                        self.open(index, status);
                     }
-                    Entry::Item(_) | Entry::Separator => None,
-                });
-                if let Some(command) = found {
+                    return PullDownEvent::Pending;
+                }
+                let found = self
+                    .menu()
+                    .entries
+                    .iter()
+                    .enumerate()
+                    .find_map(|(index, entry)| match entry {
+                        Entry::Item(item) if has(&item.label) && status(item.command).enabled => {
+                            Some((index, item.command))
+                        }
+                        Entry::Item(_) | Entry::Separator => None,
+                    });
+                if let Some((index, command)) = found {
+                    self.set_cursor(index);
                     return PullDownEvent::Run(command);
                 }
             }
             Resolved::Action(action) => match action {
-                Action::Left => self.select((self.selected + count - 1) % count, status),
-                Action::Right => self.select((self.selected + 1) % count, status),
+                Action::Left => self.select((selected + count - 1) % count, status),
+                Action::Right => self.select((selected + 1) % count, status),
+                Action::Up | Action::Down | Action::Confirm if !self.place.open => {
+                    self.open(selected, status);
+                }
                 Action::Up => {
-                    let start = (self.cursor + entries - 1) % entries;
-                    self.cursor = self
-                        .next_enabled(start, false, status)
-                        .unwrap_or(self.cursor);
+                    let start = (self.cursor() + entries - 1) % entries;
+                    let cursor = self.next_enabled(start, false, status);
+                    self.set_cursor(cursor.unwrap_or(self.cursor()));
                 }
                 Action::Down => {
-                    let start = (self.cursor + 1) % entries;
-                    self.cursor = self
-                        .next_enabled(start, true, status)
-                        .unwrap_or(self.cursor);
+                    let start = (self.cursor() + 1) % entries;
+                    let cursor = self.next_enabled(start, true, status);
+                    self.set_cursor(cursor.unwrap_or(self.cursor()));
                 }
                 Action::Home => {
-                    self.cursor = self.next_enabled(0, true, status).unwrap_or(self.cursor);
+                    self.place.open = true;
+                    let cursor = self.next_enabled(0, true, status);
+                    self.set_cursor(cursor.unwrap_or(self.cursor()));
                 }
                 Action::End => {
+                    self.place.open = true;
                     let last = entries.saturating_sub(1);
-                    self.cursor = self
-                        .next_enabled(last, false, status)
-                        .unwrap_or(self.cursor);
+                    let cursor = self.next_enabled(last, false, status);
+                    self.set_cursor(cursor.unwrap_or(self.cursor()));
                 }
                 Action::Confirm => {
-                    if let Some(item) = self.menu().item(self.cursor)
+                    if let Some(item) = self.menu().item(self.cursor())
                         && status(item.command).enabled
                     {
                         return PullDownEvent::Run(item.command);
                     }
                 }
+                Action::Cancel if self.place.open => self.place.open = false,
                 Action::Cancel => return PullDownEvent::Closed,
                 _ => {}
             },
@@ -405,8 +468,9 @@ impl PullDown {
         PullDownEvent::Pending
     }
 
-    /// Draws the bar on `bar` with the open menu's title selected, and the menu below it,
-    /// within `screen`. `icons` picks the marks: `•` and `✓`, or `*` and `x` as mc's.
+    /// Draws the bar on `bar` with the selected menu's title set apart, and that menu below it
+    /// if it is open, within `screen`. `icons` picks the marks: `•` and `✓`, or `*` and `x` as
+    /// mc's.
     pub(crate) fn render(
         &self,
         frame: &mut Frame<'_>,
@@ -415,9 +479,12 @@ impl PullDown {
         icons: bool,
         status: &dyn Fn(Command) -> Status,
     ) {
-        let titles: Vec<&str> = self.menus.iter().map(|menu| menu.title.as_str()).collect();
-        let starts = render_bar(frame, bar, theme, &titles, Some(self.selected));
-        let x = starts.get(self.selected).copied().unwrap_or(bar.x);
+        let titles: Vec<&Label> = self.menus.iter().map(|menu| &menu.title).collect();
+        let starts = render_bar(frame, bar, theme, &titles, Some(self.place.selected));
+        if !self.place.open {
+            return;
+        }
+        let x = starts.get(self.place.selected).copied().unwrap_or(bar.x);
         let below = Rect::new(
             screen.x,
             bar.bottom(),
@@ -508,7 +575,7 @@ impl PullDown {
             }
             let y = rows.y + offset;
             if let (Entry::Item(item), Some(status)) = (entry, status) {
-                let line = item_line(item, status, index == self.cursor, room, theme, marks);
+                let line = item_line(item, status, index == self.cursor(), room, theme, marks);
                 frame.render_widget(line, Rect::new(rows.x, y, rows.width, 1));
             } else {
                 let line = format!("{left_tee}{}{right_tee}", "─".repeat(room));
@@ -555,17 +622,17 @@ fn item_line(
 /// Draws the menu bar of F9 on `area` while no menu is open, as `ui.menu_bar` keeps it.
 pub(crate) fn render_idle(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
     let titles = titles();
-    let titles: Vec<&str> = titles.iter().map(String::as_str).collect();
+    let titles: Vec<&Label> = titles.iter().collect();
     render_bar(frame, area, theme, &titles, None);
 }
 
-/// Draws the bar: `titles` from the left, the one at `selected` set apart. Returns the column
-/// each title starts at.
+/// Draws the bar: `titles` from the left, the one at `selected` set apart, with their letters
+/// while a menu bar is open. Returns the column each title starts at.
 fn render_bar(
     frame: &mut Frame<'_>,
     area: Rect,
     theme: &Theme,
-    titles: &[&str],
+    titles: &[&Label],
     selected: Option<usize>,
 ) -> Vec<u16> {
     if area.height == 0 {
@@ -576,6 +643,7 @@ fn render_bar(
     } else {
         theme.menu_bar_inactive
     };
+    let hotkey = selected.map(|_| theme.menu_hotkey);
     let row = Rect::new(area.x, area.y, area.width, 1);
     frame.render_widget(
         Line::styled(" ".repeat(usize::from(area.width)), style),
@@ -585,8 +653,7 @@ fn render_bar(
     // As mc spaces them: two cells before the first title, and between titles.
     let mut x = area.x.saturating_add(1);
     for (index, title) in titles.iter().enumerate() {
-        let text = format!(" {title} ");
-        let width = u16::try_from(cells::width(&text)).unwrap_or(u16::MAX);
+        let width = u16::try_from(cells::width(&title.text) + 2).unwrap_or(u16::MAX);
         starts.push(x + 1);
         let shown = if selected == Some(index) {
             theme.menu_bar_selected
@@ -594,12 +661,15 @@ fn render_bar(
             style
         };
         let room = area.right().saturating_sub(x);
-        if room > 0 {
-            let fitted = cells::fit(&text, usize::from(width.min(room)), Align::Left);
-            frame.render_widget(
-                Line::styled(fitted, shown),
-                Rect::new(x, area.y, width.min(room), 1),
-            );
+        if room >= width {
+            let mut spans = vec![Span::styled(" ", shown)];
+            spans.extend(title.spans(shown, hotkey));
+            spans.push(Span::styled(" ", shown));
+            frame.render_widget(Line::from(spans), Rect::new(x, area.y, width, 1));
+        } else if room > 0 {
+            let text = format!(" {} ", title.text);
+            let fitted = cells::fit(&text, usize::from(room), Align::Left);
+            frame.render_widget(Line::styled(fitted, shown), Rect::new(x, area.y, room, 1));
         }
         x = x.saturating_add(width).saturating_add(3);
     }
@@ -633,14 +703,16 @@ mod tests {
         Resolved::Action(action)
     }
 
+    /// The menu bar at the `active` panel's menu, opened.
     fn open(active: Side) -> PullDown {
-        let mut menu = PullDown::new(active, false);
-        menu.start(&status);
+        let mut menu = PullDown::new(active, false, None, &status);
+        assert!(!menu.place.open, "the bar alone");
+        menu.handle(action(Action::Down), &status);
         menu
     }
 
     fn chosen(menu: &PullDown) -> Option<Command> {
-        menu.menu().item(menu.cursor).map(|item| item.command)
+        menu.menu().item(menu.cursor()).map(|item| item.command)
     }
 
     #[test]
@@ -665,15 +737,25 @@ mod tests {
 
     #[test]
     fn every_command_has_a_letter_of_its_own_in_its_menu() {
-        let menu = PullDown::new(Side::Left, false);
+        let menu = PullDown::new(Side::Left, false, None, &status);
+        let titles: HashSet<_> = menu
+            .menus
+            .iter()
+            .filter_map(|each| each.title.hotkey.map(|(_, letter)| letter))
+            .collect();
+        assert_eq!(titles.len(), menu.menus.len(), "a letter for each menu");
         for each in &menu.menus {
             let mut letters = HashSet::new();
             for entry in &each.entries {
                 if let Entry::Item(item) = entry {
                     let (_, letter) = item.label.hotkey.unwrap_or_else(|| {
-                        panic!("{:?} in {} has no letter", item.label.text, each.title)
+                        panic!("{:?} in {} has no letter", item.label.text, each.title.text)
                     });
-                    assert!(letters.insert(letter), "{letter} twice in {}", each.title);
+                    assert!(
+                        letters.insert(letter),
+                        "{letter} twice in {}",
+                        each.title.text
+                    );
                 }
             }
         }
@@ -682,15 +764,15 @@ mod tests {
     #[test]
     fn opens_at_the_active_panel_and_follows_where_panels_are_drawn() {
         let left = open(Side::Left);
-        assert_eq!(left.selected, 0);
+        assert_eq!(left.place.selected, 0);
         assert_eq!(chosen(&left), Some(Command::Location(Side::Left)));
         let right = open(Side::Right);
-        assert_eq!(right.selected, 4);
+        assert_eq!(right.place.selected, 4);
         assert_eq!(chosen(&right), Some(Command::Location(Side::Right)));
         // Swapped, the right panel is drawn on the left, under Left.
-        let mut swapped = PullDown::new(Side::Right, true);
-        swapped.start(&status);
-        assert_eq!(swapped.selected, 0);
+        let mut swapped = PullDown::new(Side::Right, true, None, &status);
+        swapped.handle(action(Action::Confirm), &status);
+        assert_eq!(swapped.place.selected, 0);
         assert_eq!(chosen(&swapped), Some(Command::Location(Side::Right)));
     }
 
@@ -701,10 +783,11 @@ mod tests {
             menu.handle(action(Action::Left), &status),
             PullDownEvent::Pending
         );
-        assert_eq!(menu.selected, 4, "round the bar");
+        assert_eq!(menu.place.selected, 4, "round the bar");
+        assert!(menu.place.open, "opens the next menu");
         menu.handle(action(Action::Right), &status);
         menu.handle(action(Action::Right), &status);
-        assert_eq!(menu.menu().title, "File");
+        assert_eq!(menu.menu().title.text, "File");
         assert_eq!(chosen(&menu), Some(Command::Do(Action::View)));
         for _ in 0..5 {
             menu.handle(action(Action::Down), &status);
@@ -730,8 +813,80 @@ mod tests {
         );
         assert_eq!(
             menu.handle(action(Action::Cancel), &status),
+            PullDownEvent::Pending,
+            "back to the bar"
+        );
+        assert!(!menu.place.open);
+        assert_eq!(
+            menu.handle(action(Action::Cancel), &status),
             PullDownEvent::Closed
         );
+    }
+
+    #[test]
+    fn on_the_bar_keys_select_menus_and_letters_open_them() {
+        let mut menu = PullDown::new(Side::Left, false, None, &status);
+        menu.handle(action(Action::Right), &status);
+        assert_eq!((menu.place.selected, menu.place.open), (1, false));
+        menu.handle(action(Action::Left), &status);
+        menu.handle(action(Action::Left), &status);
+        assert_eq!((menu.place.selected, menu.place.open), (4, false));
+        assert_eq!(
+            menu.handle(Resolved::Insert('x'), &status),
+            PullDownEvent::Pending,
+            "Exit is in a menu that is not open"
+        );
+        assert_eq!(
+            menu.handle(Resolved::Insert('O'), &status),
+            PullDownEvent::Pending
+        );
+        assert_eq!(menu.menu().title.text, "Options");
+        assert!(menu.place.open);
+        assert_eq!(chosen(&menu), Some(Command::Configuration));
+        menu.handle(action(Action::Cancel), &status);
+        menu.handle(action(Action::Confirm), &status);
+        assert!(menu.place.open, "Enter opens the menu");
+    }
+
+    #[test]
+    fn opens_again_where_it_closed() {
+        let mut menu = open(Side::Left);
+        menu.handle(action(Action::Right), &status);
+        menu.handle(action(Action::Down), &status);
+        menu.handle(action(Action::Down), &status);
+        assert_eq!(chosen(&menu), Some(Command::Do(Action::Copy)));
+        menu.handle(action(Action::Right), &status);
+        menu.handle(action(Action::Down), &status);
+        assert_eq!(chosen(&menu), Some(Command::Do(Action::SwapPanels)));
+        assert_eq!(
+            menu.handle(action(Action::Confirm), &status),
+            PullDownEvent::Run(Command::Do(Action::SwapPanels))
+        );
+        // The active panel does not matter once the menu has a place.
+        let mut again = PullDown::new(Side::Right, false, Some(menu.place()), &status);
+        assert_eq!(again.menu().title.text, "Command");
+        assert!(again.place.open);
+        assert_eq!(chosen(&again), Some(Command::Do(Action::SwapPanels)));
+        again.handle(action(Action::Left), &status);
+        assert_eq!(
+            chosen(&again),
+            Some(Command::Do(Action::Copy)),
+            "each menu keeps its command"
+        );
+        // A letter puts the cursor on its command; one that cannot run now is passed by.
+        again.handle(action(Action::Up), &status);
+        assert_eq!(chosen(&again), Some(Command::Do(Action::Edit)));
+        again.handle(Resolved::Insert('m'), &status);
+        assert_eq!(chosen(&again), Some(Command::Do(Action::Mkdir)));
+        let mut place = again.place().clone();
+        place.cursors[1] = 5;
+        let third = PullDown::new(Side::Left, false, Some(&place), &status);
+        assert_eq!(chosen(&third), Some(Command::Do(Action::Select)));
+        // Closed from the bar, it opens on the bar.
+        again.handle(action(Action::Cancel), &status);
+        again.handle(action(Action::Cancel), &status);
+        let bar = PullDown::new(Side::Left, false, Some(again.place()), &status);
+        assert_eq!((bar.place.selected, bar.place.open), (1, false));
     }
 
     #[test]
@@ -775,6 +930,29 @@ mod tests {
         let mut menu = open(Side::Left);
         menu.handle(action(Action::Right), &status);
         insta::assert_snapshot!(draw(&menu, &Theme::terminal()));
+    }
+
+    #[test]
+    fn draws_the_bar_alone_with_the_letters_of_the_menus() {
+        let menu = PullDown::new(Side::Left, false, None, &status);
+        let theme = Theme::mc_classic();
+        let text = draw(&menu, &theme);
+        assert!(!text.contains('╔'), "{text}");
+        let mut terminal = Terminal::new(TestBackend::new(64, 3)).unwrap();
+        terminal
+            .draw(|frame| {
+                let bar = Rect::new(0, 0, frame.area().width, 1);
+                menu.render(frame, (bar, frame.area()), &theme, false, &status);
+            })
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let at = |x: u16| buffer[(x, 0)].clone();
+        // `  Left     File`: L and F are the letters.
+        assert_eq!(at(2).symbol(), "L");
+        assert_eq!(at(2).fg, ratatui::style::Color::LightYellow);
+        assert_ne!(at(3).fg, ratatui::style::Color::LightYellow);
+        assert_eq!(at(11).symbol(), "F");
+        assert_eq!(at(11).fg, ratatui::style::Color::LightYellow);
     }
 
     #[test]

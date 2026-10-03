@@ -17,13 +17,16 @@
 set -eu
 
 if [ -n "${FAKE_SSH_LOG:-}" ]; then
-    # One write per record, so records of concurrent invocations do not interleave.
+    # One write per record, so records of concurrent invocations do not interleave: the
+    # printf of macOS's /bin/sh writes line by line, while cat copies the here-document whole.
     record=
     for arg in "$@"; do
         record="$record$arg
 "
     done
-    printf '%s--end--\n' "$record" >>"$FAKE_SSH_LOG"
+    cat >>"$FAKE_SSH_LOG" <<EOF
+${record}--end--
+EOF
 fi
 if [ -n "${FAKE_SSH_PIDS:-}" ]; then
     echo $$ >>"$FAKE_SSH_PIDS"

@@ -9,13 +9,16 @@
 set -eu
 
 if [ -n "${FAKE_ZOXIDE_LOG:-}" ]; then
-    # One write per record, so records of concurrent invocations do not interleave.
+    # One write per record, so records of concurrent invocations do not interleave: the
+    # printf of macOS's /bin/sh writes line by line, while cat copies the here-document whole.
     record=
     for arg in "$@"; do
         record="$record$arg
 "
     done
-    printf '%s--end--\n' "$record" >>"$FAKE_ZOXIDE_LOG"
+    cat >>"$FAKE_ZOXIDE_LOG" <<EOF
+${record}--end--
+EOF
 fi
 
 if [ -n "${FAKE_ZOXIDE_HANG:-}" ]; then

@@ -1,0 +1,14 @@
+# Dependabot keeps the actions in .github/workflows/ up to date: they are pinned to commit
+# hashes, with the version in a comment, and Dependabot moves both together.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # A release has a week to be found out before it is proposed.
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns: ["*"]

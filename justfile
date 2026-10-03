@@ -41,6 +41,10 @@ snap-stale:
 md:
     markdownlint-cli2 "**/*.md" "#target"
 
+# Find misspelled words in code and docs, with typos.toml (needs typos)
+typos:
+    typos
+
 # Lint the shell scripts, found by their shebang (needs shellcheck)
 sh:
     #!/usr/bin/env bash

@@ -3,7 +3,8 @@
 Instructions for AI coding agents (and humans) working on Noon Commander.
 
 **English only.** All code, comments, docstrings, commit messages, TODO notes, log messages, and
-test descriptions must be written in English. No exceptions.
+test descriptions must be written in English. No exceptions. `just typos` checks the spelling;
+a word it gets wrong goes to `typos.toml`, with a comment if the reason is not obvious.
 
 ## Project
 

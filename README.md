@@ -78,13 +78,14 @@ Non-goals: forwarding of any kind, a built-in SSH implementation, a password man
   [resvg](https://github.com/linebender/resvg) renders the logo,
   [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) checks licenses and advisories,
   [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2) checks the Markdown files,
-  [ShellCheck](https://www.shellcheck.net) checks the shell scripts, and
-  [cargo-insta](https://insta.rs) reviews the UI snapshots:
+  [ShellCheck](https://www.shellcheck.net) checks the shell scripts,
+  [cargo-insta](https://insta.rs) reviews the UI snapshots, and
+  [typos](https://github.com/crate-ci/typos) finds misspelled words:
 
   ```sh
-  brew install just resvg cargo-deny markdownlint-cli2 shellcheck cargo-insta
+  brew install just resvg cargo-deny markdownlint-cli2 shellcheck cargo-insta typos-cli
   # or, on any platform (ShellCheck from your package manager):
-  cargo install just resvg cargo-deny cargo-insta --locked
+  cargo install just resvg cargo-deny cargo-insta typos-cli --locked
   npm install --global markdownlint-cli2
   ```
 
@@ -144,6 +145,7 @@ The project's tasks live in the [`justfile`](justfile)
 | `just snap-stale` | Fail if a snapshot file has no test left (needs cargo-insta) |
 | `just msrv` | Build with the oldest supported Rust, as CI does (needs rustup) |
 | `just md` | Lint the Markdown files with `.markdownlint.yaml` (needs markdownlint-cli2) |
+| `just typos` | Find misspelled words in code and docs; exceptions go to `typos.toml` (needs typos) |
 | `just sh` | Lint the shell scripts, such as the fake `ssh` of the tests (needs shellcheck) |
 | `just logo` | Render the PNGs of `assets/icons/logo.svg`, without metadata (needs resvg) |
 

@@ -1,0 +1,18 @@
+# typos configuration: https://github.com/crate-ci/typos/blob/master/docs/reference.md
+
+[default]
+extend-ignore-re = [
+    # Fluent messages mark the hotkey with `&` inside a word, as in `Chec&ksums`.
+    "\\w+&\\w+",
+    # Byte and Unicode escapes after a word in tests of non-UTF-8 names, as in `caf\xe9`.
+    "\\w+\\\\[xu]",
+]
+
+[default.extend-identifiers]
+PNGs = "PNGs"
+
+[default.extend-words]
+ratatui = "ratatui"
+# Test inputs: a string that must not match, and a prefix typed into a menu.
+ba = "ba"
+hom = "hom"

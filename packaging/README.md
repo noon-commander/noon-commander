@@ -17,6 +17,7 @@ named `noon-commander`; `noc` is the binary inside them.
 3. Commit, then tag and push:
 
    ```sh
+   git commit -am "chore(release): bump version to X.Y.Z"
    git tag -s vX.Y.Z -m "Noon Commander X.Y.Z"
    git push origin vX.Y.Z
    ```

@@ -37,6 +37,29 @@ build *args:
 release *args:
     cargo build --release --locked -p noc {{ args }}
 
+# Commit the version bump, sign a tag for it, and push both, which starts release.yml (ADR 0014)
+[confirm("Commit, tag, and push this release?")]
+release-tag version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version={{ quote(version) }}
+    cargo_version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)
+    if [[ $version != "$cargo_version" ]]; then
+        echo "Cargo.toml has version $cargo_version, not $version" >&2
+        exit 1
+    fi
+    if ! grep -qF "## [$version] - " CHANGELOG.md; then
+        echo "CHANGELOG.md has no section for $version" >&2
+        exit 1
+    fi
+    if [[ $(git branch --show-current) != main ]]; then
+        echo "Releases are tagged on main" >&2
+        exit 1
+    fi
+    git commit -m "chore(release): bump version to $version" -- Cargo.toml Cargo.lock CHANGELOG.md
+    git tag -s "v$version" -m "Noon Commander $version"
+    git push --atomic origin HEAD "v$version"
+
 # Run noc from the sources; arguments go to noc
 run *args:
     cargo run -p noc -- {{ args }}

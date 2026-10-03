@@ -14,13 +14,16 @@ named `noon-commander`; `noc` is the binary inside them.
 1. Set `version` in the root `Cargo.toml`.
 2. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and start a new,
    empty `## [Unreleased]` above it.
-3. Commit, then tag and push:
+3. Commit, tag, and push, after a question:
 
    ```sh
-   git commit -am "chore(release): bump version to X.Y.Z"
-   git tag -s vX.Y.Z -m "Noon Commander X.Y.Z"
-   git push origin vX.Y.Z
+   just release-tag X.Y.Z
    ```
+
+   It checks the version in `Cargo.toml`, the section in `CHANGELOG.md`, and that the branch
+   is `main`, then commits `Cargo.toml`, `Cargo.lock`, and `CHANGELOG.md` as
+   `chore(release): bump version to X.Y.Z`, signs the tag `vX.Y.Z`, and pushes the branch and
+   the tag together.
 
 The tag must be annotated and signed with a key added to GitHub as a signing key, or the
 workflow stops before it builds anything.

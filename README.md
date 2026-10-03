@@ -170,6 +170,7 @@ The project's tasks live in the [`justfile`](justfile)
 | `just build` | Build the workspace for development |
 | `just release` | Build the optimized binary into `target/release/noc` |
 | `just run` | Run `noc` from the sources; arguments go to `noc` |
+| `just release-tag X.Y.Z` | Commit the version bump, sign the tag, and push them, which starts a release ([packaging/README.md](packaging/README.md#making-a-release)) |
 | `just test` | Tests with and without the forwarding feature |
 | `just snap` | Run the tests and review the UI snapshots that changed (needs cargo-insta) |
 | `just snap-stale` | Fail if a snapshot file has no test left (needs cargo-insta) |

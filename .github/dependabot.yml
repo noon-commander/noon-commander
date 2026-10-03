@@ -1,5 +1,6 @@
-# Dependabot keeps the actions in .github/workflows/ up to date: they are pinned to commit
-# hashes, with the version in a comment, and Dependabot moves both together.
+# Dependabot keeps CI's pinned dependencies up to date: the actions in .github/workflows/,
+# pinned to commit hashes with the version in a comment, and markdownlint-cli2 with its
+# package-lock.json. The tools CI builds with `cargo install` are pinned in ci.yml by hand.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -11,4 +12,13 @@ updates:
       default-days: 7
     groups:
       github-actions:
+        patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /.github/markdownlint
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      markdownlint:
         patterns: ["*"]

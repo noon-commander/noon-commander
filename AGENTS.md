@@ -136,7 +136,9 @@ a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on th
 ## Testing
 
 - Unit tests live next to the code in `#[cfg(test)] mod tests`.
-- UI: `insta` snapshots on ratatui's `TestBackend`; review with `cargo insta review`.
+- UI: `insta` snapshots on ratatui's `TestBackend`; review with `just snap`
+  (`cargo insta review`). After renaming or removing a snapshot test, `just snap-stale` finds
+  the snapshot files left behind.
 - SFTP backends run against the local `sftp-server` (`/usr/libexec/sftp-server` on macOS) over
   pipes, with no network.
 - ssh orchestration tests set `ssh.program` to `crates/noc-ssh/tests/support/fake-ssh`, a

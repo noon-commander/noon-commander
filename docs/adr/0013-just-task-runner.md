@@ -19,7 +19,8 @@ renderer: a library in an `xtask` crate, or a command-line program.
 - `just` runs the project's tasks from a `justfile` at the root: `fmt`, `clippy`, `test`,
   `deny`, `check` (all of them, with `cargo fmt --check`, so it changes no files), `msrv`, `md`
   (markdownlint-cli2 with `.markdownlint.yaml`), `sh` (ShellCheck on every tracked script with a
-  `sh`, `bash`, or `dash` shebang), and `logo`. `msrv` is not part of `check`: it
+  `sh`, `bash`, or `dash` shebang), `snap` and `snap-stale` (cargo-insta: review the changed
+  UI snapshots, find the ones no test uses), and `logo`. `msrv` is not part of `check`: it
   needs rustup and the oldest supported toolchain, which a Homebrew Rust lacks; CI checks the
   MSRV either way. `make` brings tabs, `.PHONY`, and an old GNU make on macOS; `cargo-make` is
   heavy for a handful of commands; an `xtask` crate would wrap each cargo command in Rust code.

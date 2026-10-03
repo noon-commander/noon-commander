@@ -29,6 +29,14 @@ test:
 deny:
     cargo deny check
 
+# Run the tests and review the changed UI snapshots (needs cargo-insta)
+snap:
+    cargo insta test --workspace --review
+
+# Fail if a snapshot file has no test left (needs cargo-insta)
+snap-stale:
+    cargo insta test --workspace --unreferenced=reject
+
 # Lint the Markdown files with .markdownlint.yaml (needs markdownlint-cli2)
 md:
     markdownlint-cli2 "**/*.md" "#target"

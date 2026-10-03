@@ -78,12 +78,13 @@ Non-goals: forwarding of any kind, a built-in SSH implementation, a password man
   [resvg](https://github.com/linebender/resvg) renders the logo,
   [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) checks licenses and advisories,
   [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2) checks the Markdown files,
-  and [ShellCheck](https://www.shellcheck.net) checks the shell scripts:
+  [ShellCheck](https://www.shellcheck.net) checks the shell scripts, and
+  [cargo-insta](https://insta.rs) reviews the UI snapshots:
 
   ```sh
-  brew install just resvg cargo-deny markdownlint-cli2 shellcheck
+  brew install just resvg cargo-deny markdownlint-cli2 shellcheck cargo-insta
   # or, on any platform (ShellCheck from your package manager):
-  cargo install just resvg cargo-deny --locked
+  cargo install just resvg cargo-deny cargo-insta --locked
   npm install --global markdownlint-cli2
   ```
 
@@ -139,6 +140,8 @@ The project's tasks live in the [`justfile`](justfile)
 | `just check` | Formatting, clippy, tests, and cargo-deny: everything that must pass; changes no files |
 | `just fmt` | Format the code |
 | `just test` | Tests with and without the forwarding feature |
+| `just snap` | Run the tests and review the UI snapshots that changed (needs cargo-insta) |
+| `just snap-stale` | Fail if a snapshot file has no test left (needs cargo-insta) |
 | `just msrv` | Build with the oldest supported Rust, as CI does (needs rustup) |
 | `just md` | Lint the Markdown files with `.markdownlint.yaml` (needs markdownlint-cli2) |
 | `just sh` | Lint the shell scripts, such as the fake `ssh` of the tests (needs shellcheck) |

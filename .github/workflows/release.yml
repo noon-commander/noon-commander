@@ -149,3 +149,50 @@ jobs:
       - run: gh release edit "$TAG" --draft=false
         env:
           GH_TOKEN: ${{ github.token }}
+
+  homebrew:
+    name: update the Homebrew tap
+    needs: publish
+    runs-on: ubuntu-latest
+    # The app's client ID and private key live only in this environment.
+    environment: release
+    permissions:
+      contents: read # read the formula template
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Render the formula
+        run: |
+          sed -e "s|@REPOSITORY@|$GH_REPO|g" -e "s/@VERSION@/${TAG#v}/g" \
+            -e "s/@SHA256_ARM@/$SHA256_ARM/g" \
+            -e "s/@SHA256_INTEL@/$SHA256_INTEL/g" "packaging/homebrew/$PACKAGE.rb.in" \
+            >"$RUNNER_TEMP/$PACKAGE.rb"
+          if grep -n '@[A-Z0-9_]*@' "$RUNNER_TEMP/$PACKAGE.rb"; then
+            echo "::error::The formula has placeholders left"
+            exit 1
+          fi
+        env:
+          SHA256_ARM: ${{ needs.publish.outputs.sha256-arm }}
+          SHA256_INTEL: ${{ needs.publish.outputs.sha256-intel }}
+      - id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.TAP_APP_CLIENT_ID }}
+          private-key: ${{ secrets.TAP_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: homebrew-tap
+          permission-contents: write
+      # The commit goes through the API with no author or committer: only then does GitHub sign
+      # it for the app, so it shows as verified. A push from here would be unsigned.
+      - name: Commit the formula to the tap
+        run: |
+          api="repos/$GITHUB_REPOSITORY_OWNER/homebrew-tap/contents/Formula/$PACKAGE.rb"
+          set -- --method PUT "$api" -f message="$PACKAGE ${TAG#v}" \
+            -f content="$(base64 -w 0 "$RUNNER_TEMP/$PACKAGE.rb")"
+          if sha=$(gh api "$api" --jq .sha 2>/dev/null); then
+            set -- "$@" -f sha="$sha"
+          fi
+          gh api "$@" --silent
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}

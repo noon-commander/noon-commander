@@ -24,13 +24,17 @@ renderer: a library in an `xtask` crate, or a command-line program.
   `sh`, `bash`, or `dash` shebang), `snap` and `snap-stale` (cargo-insta: review the changed
   UI snapshots, find the ones no test uses), `typos` (spelling, with exceptions in
   `typos.toml`), `unused` (cargo-shear: dependencies no crate uses, also in
-  `[workspace.dependencies]`), `toml` and `toml-fmt` (taplo), `gha` (actionlint on the
-  workflows), `outdated` (`cargo upgrade --dry-run` from cargo-edit for `Cargo.toml`,
+  `[workspace.dependencies]`), `toml` and `toml-fmt` (taplo), `gha` (actionlint and
+  zizmor on the workflows), `outdated` (`cargo upgrade --dry-run` from cargo-edit for `Cargo.toml`,
   `cargo update --dry-run` for `Cargo.lock`), and `logo`. `msrv` is not part of `check`: it
   needs rustup and the oldest supported toolchain, which a Homebrew Rust lacks; CI checks the
-  MSRV either way. `make` brings tabs,
-  `.PHONY`, and an old GNU make on macOS; `cargo-make` is heavy for a handful of commands; an
-  `xtask` crate would wrap each cargo command in Rust code.
+  MSRV either way. `make` brings tabs, `.PHONY`, and an old GNU make on macOS; `cargo-make` is
+  heavy for a handful of commands; an `xtask` crate would wrap each cargo command in Rust code.
+- The workflows pin every action to a commit hash, with its version in a comment, and check out
+  without keeping the token (`persist-credentials: false`): a moved tag cannot run new code in
+  CI. Dependabot (`.github/dependabot.yml`) proposes new hashes weekly, a week after a release.
+  `dtolnay/rust-toolchain` is pinned on `master` and told the toolchain with `toolchain:`, since
+  its branch names are toolchains.
 - The logo is rendered by the `resvg` program. The workspace gets no new crate and no new
   dependencies, so `deny.toml` and the MSRV are untouched.
 - The PNGs are defined in the `justfile`, each with a name and a size, and `just logo` renders
@@ -45,4 +49,5 @@ renderer: a library in an `xtask` crate, or a command-line program.
   commands still work without them.
 - CI keeps its own jobs and does not use `just`; nothing checks that the PNGs match the SVG, so
   `just logo` is run by hand after the SVG changes.
+- A new action is added pinned to a hash, or `just gha` fails.
 - The resvg version is not pinned, so a newer resvg may render slightly different pixels.

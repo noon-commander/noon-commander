@@ -63,9 +63,10 @@ outdated:
     cargo upgrade --dry-run --incompatible allow
     cargo update --dry-run --verbose
 
-# Lint the GitHub Actions workflows (needs actionlint)
+# Lint the GitHub Actions workflows and audit their security (needs actionlint and zizmor)
 gha:
     actionlint
+    zizmor --offline --quiet .github/
 
 # Lint the shell scripts, found by their shebang (needs shellcheck)
 sh:

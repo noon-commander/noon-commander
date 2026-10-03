@@ -1380,6 +1380,7 @@ mod tests {
             .arg(dir)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
+            .stderr(Stdio::null())
             .kill_on_drop(true)
             .spawn()
             .unwrap();

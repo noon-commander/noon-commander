@@ -58,6 +58,11 @@ toml:
 toml-fmt:
     RUST_LOG=warn taplo fmt
 
+# Show newer dependency versions for Cargo.toml and Cargo.lock; changes no files (needs cargo-edit)
+outdated:
+    cargo upgrade --dry-run --incompatible allow
+    cargo update --dry-run --verbose
+
 # Lint the GitHub Actions workflows (needs actionlint)
 gha:
     actionlint

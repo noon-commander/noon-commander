@@ -16,13 +16,13 @@ renderer: a library in an `xtask` crate, or a command-line program.
 
 ## Decision
 
-- `just` runs the project's tasks from a `justfile` at the root: `fmt`, `clippy`, `test`,
-  `deny`, `check` (all of them, with `cargo fmt --check`, so it changes no files), `lint` (the
+- `just` runs the project's tasks from a `justfile` at the root: `build`, `release` (the
+  optimized `noc`, with `--locked`), `run`, `fmt`, `clippy`, `test`, `deny`, `check` (`fmt`,
+  `clippy`, `test`, and `deny`, with `cargo fmt --check`, so it changes no files), `lint` (the
   checks below of everything but the Rust code), `all` (`check`, `lint`, and `snap-stale`),
-  `msrv`, `md`
-  (markdownlint-cli2 with `.markdownlint.yaml`), `sh` (ShellCheck on every tracked script with a
-  `sh`, `bash`, or `dash` shebang), `snap` and `snap-stale` (cargo-insta: review the changed
-  UI snapshots, find the ones no test uses), `typos` (spelling, with exceptions in
+  `msrv`, `md` (markdownlint-cli2 with `.markdownlint.yaml`), `sh` (ShellCheck on every tracked
+  script with a `sh`, `bash`, or `dash` shebang), `snap` and `snap-stale` (cargo-insta: review
+  the changed UI snapshots, find the ones no test uses), `typos` (spelling, with exceptions in
   `typos.toml`), `unused` (cargo-shear: dependencies no crate uses, also in
   `[workspace.dependencies]`), `toml` and `toml-fmt` (taplo), `gha` (actionlint and
   zizmor on the workflows), `outdated` (`cargo upgrade --dry-run` from cargo-edit for `Cargo.toml`,
@@ -38,11 +38,11 @@ renderer: a library in an `xtask` crate, or a command-line program.
   `pedantic`, so these code smells fail it too.
 - CI runs the recipes of the `justfile`, so it checks what `just check` and `just lint` check
   locally. Its jobs stay apart to run in parallel: rustfmt, clippy and tests per feature set
-  (`clippy-with` and `test-with`, with `--locked`), MSRV, cargo-deny, and lint. The tools are
-  built with `cargo install` at versions pinned in `ci.yml`, and rust-cache keeps them;
-  actionlint comes from `go install`, and markdownlint-cli2 from `npm ci` with its own
-  `package-lock.json` in `.github/markdownlint/`, which Dependabot updates. ShellCheck comes
-  with the runner. cargo-deny-action is gone.
+  (`clippy-with` and `test-with`, with `--locked`), the release build, MSRV, cargo-deny, and
+  lint. The tools are built with `cargo install` at versions pinned in `ci.yml`, and
+  rust-cache keeps them; actionlint comes from `go install`, and markdownlint-cli2 from
+  `npm ci` with its own `package-lock.json` in `.github/markdownlint/`, which Dependabot
+  updates. ShellCheck comes with the runner. cargo-deny-action is gone.
 - The logo is rendered by the `resvg` program. The workspace gets no new crate and no new
   dependencies, so `deny.toml` and the MSRV are untouched.
 - The PNGs are defined in the `justfile`, each with a name and a size, and `just logo` renders

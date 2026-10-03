@@ -107,6 +107,9 @@ cargo build --release
 ./target/release/noc
 ```
 
+With [just](https://github.com/casey/just), `just release` builds the same binary and `just run`
+starts a development build; arguments after it go to `noc`, as in `just run --version`.
+
 The version line shows the compile-time features, e.g. `noc 0.1.0 (-forwarding)`.
 
 ### Install
@@ -150,6 +153,9 @@ The project's tasks live in the [`justfile`](justfile)
 | `just lint` | Markdown, shell scripts, spelling, TOML, workflows, and unused dependencies |
 | `just all` | `check`, `lint`, and `snap-stale`: every check there is |
 | `just fmt` | Format the code |
+| `just build` | Build the workspace for development |
+| `just release` | Build the optimized binary into `target/release/noc` |
+| `just run` | Run `noc` from the sources; arguments go to `noc` |
 | `just test` | Tests with and without the forwarding feature |
 | `just snap` | Run the tests and review the UI snapshots that changed (needs cargo-insta) |
 | `just snap-stale` | Fail if a snapshot file has no test left (needs cargo-insta) |

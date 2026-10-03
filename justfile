@@ -29,6 +29,18 @@ test *args: (test-with "" args) (test-with "forwarding" args)
 test-with features *args:
     cargo test --workspace {{ args }} {{ if features == "" { "" } else { "--features " + features } }}
 
+# Build the workspace for development; extra arguments go to cargo
+build *args:
+    cargo build --workspace {{ args }}
+
+# Build the optimized noc binary into target/release/noc; extra arguments go to cargo
+release *args:
+    cargo build --release --locked -p noc {{ args }}
+
+# Run noc from the sources; arguments go to noc
+run *args:
+    cargo run -p noc -- {{ args }}
+
 # License, advisory, and ban checks (needs cargo-deny)
 deny:
     cargo deny check

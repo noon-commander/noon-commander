@@ -57,25 +57,24 @@ volume could not be unmounted.
 `noc-vfs` turns into a file system; `Session::close` shuts down; `cleanup_stale` removes
 leftovers of crashed instances.
 
-The `Vfs` trait of `noc-vfs`, implemented by `LocalFs` and `SftpFs`, lists directories,
-reads metadata with and without following symlinks, tells the size and free space of the file
-system that holds a path (`None` from an SFTP server without `statvfs@openssh.com`),
-canonicalizes paths, creates and removes
-directories, removes files, renames, reads and makes symlinks (their targets stored as given,
-never resolved), sets permissions and modification times, and reads and writes files as chunks (`FileReader`, `FileWriter`, whose `finish` reports errors that only
-show when a file is closed). Over SFTP, reads and writes of a file keep 64 requests of 32 KiB
-in flight, as `sftp(1)` does, so a long round trip does not idle the link; a read that comes
-back short is asked again for the rest. Symlinks go to the server in OpenSSH's argument order
-(target first), which the client uses and which differs from the protocol draft; a server
-that follows the draft would store them the other way round. Its futures are cancel-safe: a dropped one leaks
-nothing, though a change already sent may still happen. Errors are typed, and the UI words
-them: not found, permission denied, already exists, or the error of the OS or the server.
-SFTP v3 has no code for a name that is taken, so `SftpFs` reports a plain failure to create
-or rename as `AlreadyExists` when something has that name. `rename` replaces an existing file
-where that takes one step: locally, and over SFTP with `posix-rename@openssh.com`. SFTP keeps
-times as whole seconds from 1970 to 2106 and sets the access time with the modification
-time, so the access time becomes the current time on both backends. Local times are set by
-path (`utimensat`), since opening a FIFO would block.
+The `Vfs` trait of `noc-vfs`, implemented by `LocalFs` and `SftpFs`, lists directories, reads
+metadata with and without following symlinks, tells the size and free space of the file system that
+holds a path (`None` from an SFTP server without `statvfs@openssh.com`), canonicalizes paths,
+creates and removes directories, removes files, renames, reads and makes symlinks (their targets
+stored as given, never resolved), sets permissions and modification times, and reads and writes
+files as chunks (`FileReader`, `FileWriter`, whose `finish` reports errors that only show when a
+file is closed). Over SFTP, reads and writes of a file keep 64 requests of 32 KiB in flight, as
+`sftp(1)` does, so a long round trip does not idle the link; a read that comes back short is asked
+again for the rest. Symlinks go to the server in OpenSSH's argument order (target first), which the
+client uses and which differs from the protocol draft; a server that follows the draft would store
+them the other way round. Its futures are cancel-safe: a dropped one leaks nothing, though a change
+already sent may still happen. Errors are typed, and the UI words them: not found, permission
+denied, already exists, or the error of the OS or the server. SFTP v3 has no code for a name that is
+taken, so `SftpFs` reports a plain failure to create or rename as `AlreadyExists` when something has
+that name. `rename` replaces an existing file where that takes one step: locally, and over SFTP with
+`posix-rename@openssh.com`. SFTP keeps times as whole seconds from 1970 to 2106 and sets the access
+time with the modification time, so the access time becomes the current time on both backends. Local
+times are set by path (`utimensat`), since opening a FIFO would block.
 
 Every ssh command line is assembled in `noc-ssh`, in this order: program → forced options →
 `ssh.args` → role options → `--` → destination. Per-host options belong in ssh_config
@@ -103,12 +102,12 @@ row, the hosts from the ssh config ([ADR 0006](adr/0006-virtual-root-with-volume
  1Help 2Menu 3View 4Edit 5Copy 6RenMov 7Mkdir 8Delete 9PullDn 10Quit
 ```
 
-- The root is titled with the name of the machine. `Home` comes first and opens the home
-  directory, with the space of the volume that holds it; the status line shows its path. The
-  volumes follow, the system volume (`/`) on top and the others by mount point, named by their label or else their mount point, with
-  their free space and size; the status line shows a volume's mount point and file system.
-  Every volume opens at its mount point, the system volume at `/`, so `..` from `/` and Enter
-  lead back where the panel was.
+- The root is titled with the name of the machine. `Home` comes first and opens the home directory,
+  with the space of the volume that holds it; the status line shows its path. The volumes follow,
+  the system volume (`/`) on top and the others by mount point, named by their label or else their
+  mount point, with their free space and size; the status line shows a volume's mount point and file
+  system. Every volume opens at its mount point, the system volume at `/`, so `..` from `/` and
+  Enter lead back where the panel was.
 - Below the volumes, `SFTP` opens the list of hosts, and the hosts that are connected or
   connecting follow it, so that they stay one keystroke away.
 - `..` follows paths, as in mc: from `/Volumes/USB` to `/Volumes`; from a local `/` to the root,
@@ -151,9 +150,9 @@ row, the hosts from the ssh config ([ADR 0006](adr/0006-virtual-root-with-volume
 
 ### Location menu
 
-Alt-F1 and Alt-F2, as Far Manager's menus to change drives, open a menu over the left or the
-right panel with the same places: the home directory, the volumes, then every host (Ctrl-X 1 and Ctrl-X 2 too, for
-terminals whose Alt-F1 never arrives, such as macOS Terminal without Option as Meta).
+Alt-F1 and Alt-F2, as Far Manager's menus to change drives, open a menu over the left or the right
+panel with the same places: the home directory, the volumes, then every host (Ctrl-X 1 and Ctrl-X 2
+too, for terminals whose Alt-F1 never arrives, such as macOS Terminal without Option as Meta).
 
 ```text
  ╔════════════════════ Left ════════════════════╗
@@ -468,13 +467,13 @@ file; without it, the target is written directly. Either way, a file that does n
 (an error, Skip, or cancellation) is removed; written directly over an existing file, that
 file is gone too.
 
-When the name of a file or symlink is taken, the job sends `Exists` with the metadata of both,
-for sizes and times, and waits for a `Conflict`: Overwrite, Skip, Overwrite all, Skip all,
-Overwrite older (every later one that is older than its source; unknown times keep the
-target), or Abort. With `overwrite`, the job replaces without asking, as when an edited
-file goes back where it came from. A directory where a file would go is a failure, not a question. A symlink
-in the way is removed first, so that a file written directly never goes through it; renaming
-replaces it anyway. Without `posix-rename`, the target is removed before the rename.
+When the name of a file or symlink is taken, the job sends `Exists` with the metadata of both, for
+sizes and times, and waits for a `Conflict`: Overwrite, Skip, Overwrite all, Skip all, Overwrite
+older (every later one that is older than its source; unknown times keep the target), or Abort. With
+`overwrite`, the job replaces without asking, as when an edited file goes back where it came from. A
+directory where a file would go is a failure, not a question. A symlink in the way is removed first,
+so that a file written directly never goes through it; renaming replaces it anyway. Without
+`posix-rename`, the target is removed before the rename.
 
 Moving places sources as copying does. Between file systems (local and a host, or two
 hosts), it is a copy with `remove_sources`: each file or symlink goes from the source once
@@ -702,44 +701,43 @@ remember_dir = true              # reopen the last directory of this session
   identity when swapped (only where they are drawn changes), so a listing still in flight
   reaches the panel that asked for it. Sort order and errors go with the panel; mc keeps the
   sort order on its side.
-- **Quick search.** Ctrl-S / Alt-S as in mc, or, since there is no command line, typing in a
-  panel (unless `ui.type_to_search` is off) starts quick search: the cursor jumps to the first name from where it is that starts with
-  the text, ignoring case, and a character that matches nothing is dropped, as in mc. Ctrl-S
-  again finds the next match, round to the top; Backspace takes a character back; Esc ends the
-  search, and any other key ends it and then does what it does. While it runs, every
-  character is text, even one that a panel binds, such as `*`. The root and the list of hosts
-  search the names they show: volume labels, labels, or aliases. Long names lose their middle, marked
-  with `~`. Names are shown terminal-safe: control and bidi characters become `?`. Listings
-  run in background tasks; a reply carries the generation of its request, so a stale one is
+- **Quick search.** Ctrl-S / Alt-S as in mc, or, since there is no command line, typing in a panel
+  (unless `ui.type_to_search` is off) starts quick search: the cursor jumps to the first name from
+  where it is that starts with the text, ignoring case, and a character that matches nothing is
+  dropped, as in mc. Ctrl-S again finds the next match, round to the top; Backspace takes a
+  character back; Esc ends the search, and any other key ends it and then does what it does. While
+  it runs, every character is text, even one that a panel binds, such as `*`. The root and the list
+  of hosts search the names they show: volume labels, labels, or aliases. Long names lose their
+  middle, marked with `~`. Names are shown terminal-safe: control and bidi characters become `?`.
+  Listings run in background tasks; a reply carries the generation of its request, so a stale one is
   dropped. If a directory cannot be read, the panel stays where it was and says why below the
-  listing. Going up puts the cursor on the directory just left. A panel shows a `Location`, so
-  the [virtual root](#virtual-root) and the list of hosts are kinds of listing too.
+  listing. Going up puts the cursor on the directory just left. A panel shows a `Location`, so the
+  [virtual root](#virtual-root) and the list of hosts are kinds of listing too.
 - **Keymap.** Keys map to `Action`s per context (`panel`, `root`, `quick_search`, `menu`,
   `pull_down`, `dialog`, `dialog_input`, `viewer`). Each context falls back along a chain, for
   example the root and quick search to the panel; the first context that knows a key sequence
-  decides, except that a sequence it only starts does what a later context binds it to.
-  Bindings are key sequences matched by prefix with a 1-second timeout, so a vim preset
-  (`g g`, `d d`) can follow the default mc preset. As in mc, `Esc` in a panel waits for the
-  next key: `Esc 1` … `Esc 0` stand for F1 … F10, `Esc` followed by a character stands for Alt
-  and that character, for terminals whose Alt key sends nothing, and `Esc` alone cancels once
-  the timeout passes (`Esc Esc` at once). An `Esc` and a quick next key arrive as Alt and that
-  key, so there an unbound Alt and a character count as `Esc` and the character. In dialogs,
-  quick search, and the menus `Esc` acts at once. Keys are written with `crokey`
-  names. User overrides in `keymap.toml` are planned for M4. The F-key bar is generated from the active keymap, and so
-  is the help screen (F1): the keys of each context, with what they do, for what the app can
-  do already; a prompt from ssh shows over it.
+  decides, except that a sequence it only starts does what a later context binds it to. Bindings are
+  key sequences matched by prefix with a 1-second timeout, so a vim preset (`g g`, `d d`) can follow
+  the default mc preset. As in mc, `Esc` in a panel waits for the next key: `Esc 1` … `Esc 0` stand
+  for F1 … F10, `Esc` followed by a character stands for Alt and that character, for terminals whose
+  Alt key sends nothing, and `Esc` alone cancels once the timeout passes (`Esc Esc` at once). An
+  `Esc` and a quick next key arrive as Alt and that key, so there an unbound Alt and a character
+  count as `Esc` and the character. In dialogs, quick search, and the menus `Esc` acts at once. Keys
+  are written with `crokey` names. User overrides in `keymap.toml` are planned for M4. The F-key bar
+  is generated from the active keymap, and so is the help screen (F1): the keys of each context,
+  with what they do, for what the app can do already; a prompt from ssh shows over it.
 - **Dialogs.** Modal and centered over the panels, with mc-style buttons: `[< OK >]` marks the
-  default one, and a line across the dialog (`╟───╢`, or `├───┤` with single lines) sets the
-  buttons apart from what is above them, in every dialog and window. A dialog has a message, radio buttons (`(*)` on the chosen one), text fields,
-  check boxes, and buttons, each optional but the buttons; ssh's prompts and the app's own questions are the same kind of dialog, and
-  each one in the queue knows where its answer goes. Keys go to the first dialog in the queue
-  (contexts `dialog` and `dialog_input`); Tab and the arrows move between the radio buttons,
-  the fields, the check boxes, and the buttons, Space chooses a radio button, switches a check
-  box, or presses a button, Enter presses the button with the focus (the default one from
-  elsewhere, after choosing the radio button it is on), and Esc or F10
-  cancels. In a text field every character is text, Space too. A field that opens with text
-  shows it dimmed, and typing replaces it, as in mc; an edit or a cursor move keeps it. Long
-  text scrolls to keep the cursor in view.
+  default one, and a line across the dialog (`╟───╢`, or `├───┤` with single lines) sets the buttons
+  apart from what is above them, in every dialog and window. A dialog has a message, radio buttons
+  (`(*)` on the chosen one), text fields, check boxes, and buttons, each optional but the buttons;
+  ssh's prompts and the app's own questions are the same kind of dialog, and each one in the queue
+  knows where its answer goes. Keys go to the first dialog in the queue (contexts `dialog` and
+  `dialog_input`); Tab and the arrows move between the radio buttons, the fields, the check boxes,
+  and the buttons, Space chooses a radio button, switches a check box, or presses a button, Enter
+  presses the button with the focus (the default one from elsewhere, after choosing the radio button
+  it is on), and Esc or F10 cancels. In a text field every character is text, Space too. A field
+  that opens with text shows it dimmed, and typing replaces it, as in mc; an edit or a cursor move
+  keeps it. Long text scrolls to keep the cursor in view.
 - **Text.** Fluent files under `crates/noc/i18n/`, embedded in the binary and read with
   `fl!` from `i18n-embed-fl`, which checks message IDs against `en-US` at compile time; only
   `en-US` for now. `ui.language = "auto"` follows the system locale (through `sys-locale`).

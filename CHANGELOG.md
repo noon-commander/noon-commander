@@ -74,13 +74,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   connections) and is written to `config.toml`, keeping its comments. Values are checked
   first (the extra ssh arguments as at start), and lists are typed as words, as in a shell
   ([ADR 0009](docs/adr/0009-configuration-dialog-writes-config-toml.md)).
-- F9 opens a pull-down menu, as in mc: Left and Right (location menu, sort order, rescan,
-  disconnect for the panel on that side), File, Command, and Options (hidden files). Each
-  command shows its key from the keymap and has a letter that runs it. Commands that cannot run
-  now are dimmed and skipped. As in Far Manager, F9 opens the bar first, where each menu's
-  highlighted letter opens it, Esc goes back from a menu to the bar, and the menu opens again
-  where it closed, on the last command. `ui.menu_bar = "always"` keeps the menu bar above the panels, as
-  in mc; the default `"on-demand"` shows it only while a menu is open, as in Far Manager.
+- F9 opens a pull-down menu, as in mc: Left and Right (location menu, sort order, rescan, disconnect
+  for the panel on that side), File, Command, and Options (hidden files). Each command shows its key
+  from the keymap and has a letter that runs it. Commands that cannot run now are dimmed and
+  skipped. As in Far Manager, F9 opens the bar first, where each menu's highlighted letter opens it,
+  Esc goes back from a menu to the bar, and the menu opens again where it closed, on the last
+  command. `ui.menu_bar = "always"` keeps the menu bar above the panels, as in mc; the default
+  `"on-demand"` shows it only while a menu is open, as in Far Manager.
 - Ctrl-X # computes checksums (SHA-256, SHA-512, SHA-1, MD5, or BLAKE3) of the marked files
   and directories, or the file under the cursor, as a job with progress. For one file, an
   expected checksum can be pasted, and the file under the other panel's cursor compared. The
@@ -101,8 +101,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   bottom of their frame, as mc does, such as `123G / 500G (24%)`, for local and SFTP
   directories alike.
 - Alt-F1 and Alt-F2 open a location menu over the left or the right panel, as in Far Manager
-  (Ctrl-X 1 and Ctrl-X 2 too): `Home`, the volumes, and the hosts, with `1` … `0` as hotkeys, typing to
-  filter, F8 to disconnect a host, and Ctrl-R to read them again.
+  (Ctrl-X 1 and Ctrl-X 2 too): `Home`, the volumes, and the hosts, with `1` … `0` as hotkeys,
+  typing to filter, F8 to disconnect a host, and Ctrl-R to read them again.
 - `[volumes] hide` leaves mount points out of the virtual root, by pattern.
 - Project skeleton: Cargo workspace, crate layout, CI, and documentation.
 - Configuration in `~/.config/noc/config.toml` (XDG layout on macOS too):

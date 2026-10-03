@@ -13,7 +13,8 @@
 - [x] Host discovery: scanner for `Host`, `Match`, and `Include`; lazy `ssh -G`
 - [x] Cache for `ssh -G` results, keyed by the state of the config files
 - [x] ssh argument validator and forwarding policy ([ADR 0004](adr/0004-forwarding-compile-time-feature.md))
-- [x] Master connection, SFTP channels, askpass bridge ([ADR 0002](adr/0002-controlmaster-per-host.md), [ADR 0003](adr/0003-askpass-bridge.md))
+- [x] Master connection, SFTP channels, askpass bridge
+      ([ADR 0002](adr/0002-controlmaster-per-host.md), [ADR 0003](adr/0003-askpass-bridge.md))
 - [x] `noc-vfs`: local and SFTP backends
 - [x] Debug commands: `noc hosts`, `noc ls <host>:<path>`
 - [x] Tests: local `sftp-server` over pipes, fake `ssh` program

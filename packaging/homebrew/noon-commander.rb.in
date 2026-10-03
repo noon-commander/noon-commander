@@ -1,7 +1,7 @@
 # Rendered by .github/workflows/release.yml into Formula/noon-commander.rb of the tap
 # (ADR 0014); edit this template, never the formula in the tap.
 class NoonCommander < Formula
-  desc "Two-panel terminal file manager for local and SFTP file operations"
+  desc "Terminal file manager focused on seamless local and SFTP file operations"
   homepage "https://github.com/@REPOSITORY@"
   version "@VERSION@"
   license "GPL-3.0-or-later"

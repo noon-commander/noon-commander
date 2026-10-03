@@ -92,7 +92,8 @@ a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on th
 - Edition 2024, MSRV 1.88 (`rust-version`). CI checks the MSRV, so don't use newer std APIs;
   `just msrv` checks it locally (needs rustup).
 - Dependency versions are declared once in the root `[workspace.dependencies]`; crates use
-  `name.workspace = true`. Every crate has `[lints] workspace = true`.
+  `name.workspace = true`. Every crate has `[lints] workspace = true`. A dependency that no
+  crate uses any more is removed from both places; `just unused` finds it.
 - Errors: `thiserror` enums in libraries, `color-eyre` in the binary. No `unwrap`/`expect`
   outside tests.
 - Logging: `tracing` only, written to a file in the XDG state directory (the terminal belongs to

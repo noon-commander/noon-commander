@@ -45,6 +45,10 @@ md:
 typos:
     typos
 
+# Find dependencies no crate uses, in the crates and the workspace (needs cargo-shear)
+unused:
+    cargo shear
+
 # Lint the shell scripts, found by their shebang (needs shellcheck)
 sh:
     #!/usr/bin/env bash

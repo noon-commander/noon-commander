@@ -79,13 +79,15 @@ Non-goals: forwarding of any kind, a built-in SSH implementation, a password man
   [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) checks licenses and advisories,
   [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2) checks the Markdown files,
   [ShellCheck](https://www.shellcheck.net) checks the shell scripts,
-  [cargo-insta](https://insta.rs) reviews the UI snapshots, and
-  [typos](https://github.com/crate-ci/typos) finds misspelled words:
+  [cargo-insta](https://insta.rs) reviews the UI snapshots,
+  [typos](https://github.com/crate-ci/typos) finds misspelled words, and
+  [cargo-shear](https://github.com/Boshen/cargo-shear) finds unused dependencies:
 
   ```sh
-  brew install just resvg cargo-deny markdownlint-cli2 shellcheck cargo-insta typos-cli
+  brew install just resvg cargo-deny markdownlint-cli2 shellcheck cargo-insta typos-cli \
+      cargo-shear
   # or, on any platform (ShellCheck from your package manager):
-  cargo install just resvg cargo-deny cargo-insta typos-cli --locked
+  cargo install just resvg cargo-deny cargo-insta typos-cli cargo-shear --locked
   npm install --global markdownlint-cli2
   ```
 
@@ -146,6 +148,7 @@ The project's tasks live in the [`justfile`](justfile)
 | `just msrv` | Build with the oldest supported Rust, as CI does (needs rustup) |
 | `just md` | Lint the Markdown files with `.markdownlint.yaml` (needs markdownlint-cli2) |
 | `just typos` | Find misspelled words in code and docs; exceptions go to `typos.toml` (needs typos) |
+| `just unused` | Find dependencies that no crate uses (needs cargo-shear) |
 | `just sh` | Lint the shell scripts, such as the fake `ssh` of the tests (needs shellcheck) |
 | `just logo` | Render the PNGs of `assets/icons/logo.svg`, without metadata (needs resvg) |
 

@@ -98,7 +98,10 @@ Work is done when all of them pass.
 
 - Keymap: actions per context (`panel`, `dialog`, `viewer`, `quick_search`, `menu`); bindings are
   key sequences so a vim preset can be added. The default preset is mc. The F-key bar and help
-  are generated from the active keymap.
+  are generated from the active keymap. When you add, change, or remove a binding in any preset,
+  update the `noc (default)` or `noc (vim)` column in
+  [docs/keymap-compare.md](docs/keymap-compare.md) in the same change; an action that mc and Far
+  lack gets its own row, or a `(noc)` section.
 - Text: Fluent files in `crates/noc/i18n/`, `en-US` only for now. Library errors are typed;
   the UI turns them into messages. clap `--help` output and logs stay English.
 - Icons: Nerd Fonts v3, written as literal glyphs in Rust and TOML, never as escape sequences.
@@ -150,5 +153,6 @@ scope.
 
 - Record significant decisions as ADRs in `docs/adr/` (`NNNN-title.md`: Status, Context,
   Decision, Consequences).
-- Keep `docs/architecture.md` and `docs/roadmap.md` in sync with the code.
+- Keep `docs/architecture.md`, `docs/roadmap.md`, and `docs/keymap-compare.md` in sync with the
+  code.
 - Add user-visible changes to `CHANGELOG.md` under `Unreleased`.

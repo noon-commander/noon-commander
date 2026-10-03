@@ -1,9 +1,9 @@
 # Architecture
 
-Noon Commander (`noc`) is a two-panel terminal file manager for local and SFTP file operations.
-SFTP is its foundation and the reason it exists. It never implements SSH: every connection is a
-process of the system OpenSSH client, and Noon Commander speaks the SFTP protocol over that
-process's stdin and stdout.
+Noon Commander (`noc`) is a Rust-based, two-panel terminal file manager for macOS and Linux,
+focused on seamless local and SFTP file operations. SFTP is its foundation and the reason it
+exists. It never implements SSH: every connection is a process of the system OpenSSH client, and
+Noon Commander speaks the SFTP protocol over that process's stdin and stdout.
 
 This document describes the planned design; see the [roadmap](roadmap.md) for what exists. Key
 decisions are recorded as [ADRs](adr/).

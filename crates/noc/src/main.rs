@@ -1,5 +1,5 @@
-//! Noon Commander (`noc`): a terminal file manager for local and SFTP file operations, built on
-//! the system OpenSSH client.
+//! Noon Commander (`noc`): a terminal file manager for macOS and Linux, focused on seamless local
+//! and SFTP file operations, built on the system OpenSSH client.
 
 mod cli;
 mod commands;

@@ -141,7 +141,7 @@ those tests are skipped. The full set of checks is listed in [AGENTS.md](AGENTS.
 ### Tasks
 
 The project's tasks live in the [`justfile`](justfile)
-([ADR 0013](docs/adr/0013-just-task-runner.md)):
+([ADR 0013](docs/adr/0013-just-task-runner.md)), and CI runs the same recipes:
 
 | Command | What it does |
 | --- | --- |
@@ -153,7 +153,7 @@ The project's tasks live in the [`justfile`](justfile)
 | `just test` | Tests with and without the forwarding feature |
 | `just snap` | Run the tests and review the UI snapshots that changed (needs cargo-insta) |
 | `just snap-stale` | Fail if a snapshot file has no test left (needs cargo-insta) |
-| `just msrv` | Build with the oldest supported Rust, as CI does (needs rustup) |
+| `just msrv` | Build with the oldest supported Rust (needs rustup) |
 | `just md` | Lint the Markdown files with `.markdownlint.yaml` (needs markdownlint-cli2) |
 | `just typos` | Find misspelled words in code and docs; exceptions go to `typos.toml` (needs typos) |
 | `just unused` | Find dependencies that no crate uses (needs cargo-shear) |

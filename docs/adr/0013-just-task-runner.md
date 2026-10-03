@@ -27,8 +27,8 @@ renderer: a library in an `xtask` crate, or a command-line program.
   `[workspace.dependencies]`), `toml` and `toml-fmt` (taplo), `gha` (actionlint and
   zizmor on the workflows), `outdated` (`cargo upgrade --dry-run` from cargo-edit for `Cargo.toml`,
   `cargo update --dry-run` for `Cargo.lock`), and `logo`. `msrv` is not part of `check`: it
-  needs rustup and the oldest supported toolchain, which a Homebrew Rust lacks; CI checks the
-  MSRV either way. `make` brings tabs, `.PHONY`, and an old GNU make on macOS; `cargo-make` is
+  needs rustup and the oldest supported toolchain, which a Homebrew Rust lacks; CI runs it in a
+  job of its own. `make` brings tabs, `.PHONY`, and an old GNU make on macOS; `cargo-make` is
   heavy for a handful of commands; an `xtask` crate would wrap each cargo command in Rust code.
 - The workflows pin every action to a commit hash, with its version in a comment, and check out
   without keeping the token (`persist-credentials: false`): a moved tag cannot run new code in
@@ -36,6 +36,13 @@ renderer: a library in an `xtask` crate, or a command-line program.
   Rust is installed with the runner's own rustup rather than an action, and matrix values reach
   commands through `env:`, never as `${{ }}` inside `run:`. `just gha` runs zizmor as
   `pedantic`, so these code smells fail it too.
+- CI runs the recipes of the `justfile`, so it checks what `just check` and `just lint` check
+  locally. Its jobs stay apart to run in parallel: rustfmt, clippy and tests per feature set
+  (`clippy-with` and `test-with`, with `--locked`), MSRV, cargo-deny, and lint. The tools are
+  built with `cargo install` at versions pinned in `ci.yml`, and rust-cache keeps them;
+  actionlint comes from `go install`, and markdownlint-cli2 from `npm ci` with its own
+  `package-lock.json` in `.github/markdownlint/`, which Dependabot updates. ShellCheck comes
+  with the runner. cargo-deny-action is gone.
 - The logo is rendered by the `resvg` program. The workspace gets no new crate and no new
   dependencies, so `deny.toml` and the MSRV are untouched.
 - The PNGs are defined in the `justfile`, each with a name and a size, and `just logo` renders
@@ -48,7 +55,11 @@ renderer: a library in an `xtask` crate, or a command-line program.
 
 - Contributors install `just` and `resvg` (and `cargo-deny`) to use the tasks; the plain cargo
   commands still work without them.
-- CI keeps its own jobs and does not use `just`; nothing checks that the PNGs match the SVG, so
-  `just logo` is run by hand after the SVG changes.
+- A check added to the `justfile` and called from `ci.yml` runs the same in both places; a
+  command written into `ci.yml` by hand would drift from the local one.
+- The first run of each CI job builds its tools, a few minutes; later runs take them from the
+  cache. The tool versions in `ci.yml` are raised by hand; `just outdated` does not see them.
+- Nothing checks that the PNGs match the SVG, so `just logo` is run by hand after the SVG
+  changes.
 - A new action is added pinned to a hash, or `just gha` fails.
 - The resvg version is not pinned, so a newer resvg may render slightly different pixels.

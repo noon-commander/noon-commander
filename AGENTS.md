@@ -55,18 +55,16 @@ crates contain no UI code and no user-facing text.
 ## Commands
 
 ```sh
-cargo fmt --all
-cargo clippy --workspace --all-targets -- -D warnings
-cargo clippy --workspace --all-targets --features forwarding -- -D warnings
-cargo test --workspace
-cargo test --workspace --features forwarding
-cargo deny check
+just check   # rustfmt, clippy and tests with and without forwarding, cargo-deny
+just lint    # Markdown, shell scripts, spelling, TOML, workflows, unused dependencies
+just all     # check, lint, and stale snapshots
+just fmt     # format the code
 ```
 
-Work is done when all of them pass. `just check` runs them all, with `cargo fmt --all --check` so
-that it changes no files; `just fmt` formats. The tasks live in the `justfile` ([ADR 0013](docs/adr/0013-just-task-runner.md)).
-`just lint` checks Markdown, shell scripts, spelling, TOML, workflows, and unused dependencies;
-`just all` runs `check`, `lint`, and `snap-stale`. Run `just all` before committing.
+Work is done when `just check` passes; it changes no files. Run `just all` before committing.
+The tasks live in the `justfile` ([ADR 0013](docs/adr/0013-just-task-runner.md)), and CI runs the
+same recipes: a new check is added there as a recipe and called from `ci.yml`, never written into
+`ci.yml` as a raw command.
 
 After changing `assets/icons/logo.svg`, run `just logo` (needs `resvg`) to render the PNGs again;
 a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on the command line.
@@ -156,9 +154,9 @@ a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on th
 
 ## Platforms
 
-macOS first: all development and CI run there. Linux is a target, so keep code portable (Unix
-APIs via `rustix`, nothing macOS-specific outside `cfg(target_os = "macos")`). Windows is out of
-scope.
+macOS first: all development and the Rust jobs of CI run there. Linux is a target, so keep code
+portable (Unix APIs via `rustix`, nothing macOS-specific outside `cfg(target_os = "macos")`).
+Windows is out of scope.
 
 ## Git
 

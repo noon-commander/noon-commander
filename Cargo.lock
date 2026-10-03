@@ -1462,6 +1462,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "noc-tools"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
 name = "noc-vfs"
 version = "0.1.0"
 dependencies = [

@@ -2,6 +2,9 @@
 
 Instructions for AI coding agents (and humans) working on Noon Commander.
 
+**English only.** All code, comments, docstrings, commit messages, TODO notes, log messages, and
+test descriptions must be written in English. No exceptions.
+
 ## Project
 
 Noon Commander (binary `noc`) is a Midnight Commander-style, two-panel terminal file manager for

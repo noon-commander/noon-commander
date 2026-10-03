@@ -1,49 +1,94 @@
 <?xml version="1.0" encoding="utf-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" height="1024" viewBox="0 0 1024 1024" width="1024">
-  <title>Noon Commander - base icon</title>
+<svg xmlns="http://www.w3.org/2000/svg" height="1024" viewBox="0 0 32 32" width="1024">
+  <title>Noon Commander</title>
 
   <defs>
-    <linearGradient id="bg" x1="0" x2="0" y1="0" y2="1">
-      <stop offset="0" stop-color="#FFF6E4" />
-      <stop offset="1" stop-color="#F6E3BF" />
+    <linearGradient id="frameGrad" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#FFB833" />
+      <stop offset="1" stop-color="#E8780F" />
     </linearGradient>
-    <radialGradient cx="0.5" cy="0.5" id="glow" r="0.5">
-      <stop offset="0" stop-color="#FFD27A" stop-opacity="0.9" />
-      <stop offset="1" stop-color="#FFD27A" stop-opacity="0" />
+    <linearGradient id="panelGrad" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#223860" />
+      <stop offset="1" stop-color="#132040" />
+    </linearGradient>
+    <linearGradient id="rayGrad" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#FFF3C4" />
+      <stop offset="1" stop-color="#FFF3C4" stop-opacity="0" />
+    </linearGradient>
+    <radialGradient cx="0.5" cy="0.5" id="glowGrad" r="0.5">
+      <stop offset="0" stop-color="#FFF6D6" stop-opacity="0.95" />
+      <stop offset="1" stop-color="#FFF6D6" stop-opacity="0" />
     </radialGradient>
-    <linearGradient id="panel" x1="0" x2="0" y1="0" y2="1">
-      <stop offset="0" stop-color="#1F3358" />
-      <stop offset="1" stop-color="#14223F" />
-    </linearGradient>
-    <linearGradient id="ray" x1="0" x2="0" y1="0" y2="1">
-      <stop offset="0" stop-color="#FFC24A" />
-      <stop offset="1" stop-color="#FFC24A" stop-opacity="0" />
-    </linearGradient>
   </defs>
 
-  <g id="background">
-    <rect fill="url(#bg)" height="1024" width="1024" />
-    <circle cx="512" cy="210" fill="url(#glow)" r="200" />
+  <g id="frame">
+    <rect fill="url(#frameGrad)" height="32" width="32" />
+    <circle cx="16" cy="2.5" fill="url(#glowGrad)" r="5" />
   </g>
 
-  <g id="glyph">
-    <g fill="url(#panel)" id="panels">
-      <rect height="580" rx="44" width="292" x="196" y="260" />
-      <rect height="580" rx="44" width="292" x="536" y="260" />
+  <g fill="url(#panelGrad)" id="panels">
+    <rect height="22" width="9" x="1" y="1" />
+    <rect height="22" width="3" x="11" y="1" />
+    <rect height="22" width="9" x="18" y="1" />
+    <rect height="22" width="3" x="28" y="1" />
+  </g>
+
+  <g id="content">
+    <g fill="#FFC24A" id="headers">
+      <rect height="1" width="5" x="3" y="2" />
+      <rect height="1" width="2" x="11.5" y="2" />
+      <rect height="1" width="5" x="20" y="2" />
+      <rect height="1" width="2" x="28.5" y="2" />
     </g>
     <g fill="#3C5684" id="file-rows">
-      <rect height="26" rx="13" width="204" x="240" y="330" />
-      <rect height="26" rx="13" width="160" x="240" y="390" />
-      <rect height="26" rx="13" width="140" x="240" y="510" />
-      <rect height="26" rx="13" width="204" x="580" y="330" />
-      <rect height="26" rx="13" width="150" x="580" y="390" />
+      <rect height="1" width="7" x="2" y="5" />
+      <rect height="1" width="5" x="2" y="7" />
+      <rect height="1" width="6" x="2" y="11" />
+      <rect height="1" width="4" x="2" y="13" />
+      <rect height="1" width="6" x="2" y="15" />
+      <rect height="1" width="5" x="2" y="17" />
+      <rect height="1" width="2" x="11.5" y="5" />
+      <rect height="1" width="2" x="11.5" y="7" />
+      <rect height="1" width="2" x="11.5" y="11" />
+      <rect height="1" width="2" x="11.5" y="13" />
+      <rect height="1" width="2" x="11.5" y="15" />
+      <rect height="1" width="2" x="11.5" y="17" />
+      <rect height="1" width="7" x="19" y="5" />
+      <rect height="1" width="5" x="19" y="7" />
+      <rect height="1" width="2" x="28.5" y="5" />
+      <rect height="1" width="2" x="28.5" y="7" />
     </g>
-    <rect fill="#FFC24A" height="42" id="selection" rx="21" width="232" x="226" y="442" />
-    <g id="noon">
-      <rect fill="url(#ray)" height="684" rx="8" width="16" x="504" y="166" />
-      <circle cx="512" cy="184" fill="#FFB52E" r="44" />
+    <g fill="#FFC24A" id="selection">
+      <rect height="1" width="7" x="2" y="9" />
+      <rect height="1" width="2" x="11.5" y="9" />
     </g>
-    <path d="M682 750 V570 M616 634 L682 568 L748 634" fill="none" id="transfer-arrow"
-      stroke="#FFC24A" stroke-linecap="round" stroke-linejoin="round" stroke-width="34" />
   </g>
+
+  <g id="status">
+    <rect fill="url(#panelGrad)" height="3" width="13" x="1" y="24" />
+    <rect fill="url(#panelGrad)" height="3" width="13" x="18" y="24" />
+    <g fill="#3C5684">
+      <rect height="1" width="6" x="2" y="25" />
+      <rect height="1" width="3" x="10" y="25" />
+      <rect height="1" width="6" x="19" y="25" />
+      <rect height="1" width="3" x="27" y="25" />
+    </g>
+  </g>
+
+  <g fill="#1A2B4E" id="keybar">
+    <rect height="3" width="4" x="1" y="28" />
+    <rect height="3" width="4" x="6.2" y="28" />
+    <rect height="3" width="4" x="11.4" y="28" />
+    <rect height="3" width="4" x="16.6" y="28" />
+    <rect height="3" width="4" x="21.8" y="28" />
+    <rect height="3" width="4" x="27" y="28" />
+  </g>
+
+  <g id="noon">
+    <rect fill="url(#rayGrad)" height="20" width="1" x="15.5" y="3" />
+    <circle cx="16" cy="2.5" fill="#FFFBEA" r="1.6" />
+  </g>
+
+  <path d="M22.5 19.5V11.5M19.5 14.5L22.5 11.5L25.5 14.5" fill="none" id="transfer-arrow"
+    stroke="#FFC24A" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" />
 </svg>

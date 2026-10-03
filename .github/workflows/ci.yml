@@ -15,6 +15,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
 
 jobs:
   fmt:
@@ -24,10 +25,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
-        with:
-          toolchain: stable
-          components: rustfmt
+      - name: Install Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --no-self-update
+          rustup default stable
       - run: cargo fmt --all --check
 
   clippy:
@@ -40,19 +41,21 @@ jobs:
           - name: default
             features: ""
           - name: forwarding
-            features: --features forwarding
+            features: forwarding
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
-        with:
-          toolchain: stable
-          components: clippy
+      - name: Install Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy --no-self-update
+          rustup default stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: ${{ matrix.name }}
-      - run: cargo clippy --workspace --all-targets --locked ${{ matrix.features }} -- -D warnings
+      - run: cargo clippy --workspace --all-targets --locked ${FEATURES:+--features "$FEATURES"} -- -D warnings
+        env:
+          FEATURES: ${{ matrix.features }}
 
   test:
     name: test (${{ matrix.name }})
@@ -64,18 +67,21 @@ jobs:
           - name: default
             features: ""
           - name: forwarding
-            features: --features forwarding
+            features: forwarding
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
-        with:
-          toolchain: stable
+      - name: Install Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: ${{ matrix.name }}
-      - run: cargo test --workspace --locked ${{ matrix.features }}
+      - run: cargo test --workspace --locked ${FEATURES:+--features "$FEATURES"}
+        env:
+          FEATURES: ${{ matrix.features }}
 
   msrv:
     name: MSRV (1.88)
@@ -84,9 +90,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
-        with:
-          toolchain: "1.88"
+      - name: Install Rust 1.88
+        run: |
+          rustup toolchain install 1.88 --profile minimal --no-self-update
+          rustup default 1.88
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo check --workspace --all-targets --all-features --locked
 

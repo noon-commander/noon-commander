@@ -41,6 +41,14 @@ deny = [
     { crate = "russh", reason = "Noon Commander drives the system OpenSSH client, see docs/adr/0001" },
     { crate = "ssh2", reason = "Noon Commander drives the system OpenSSH client, see docs/adr/0001" },
 ]
+# Duplicates pulled in by up-to-date dependencies; drop an entry once cargo-deny reports it unused.
+skip = [
+    { crate = "hashbrown@0.16.1", reason = "kasuari (via ratatui-core) has not moved to hashbrown 0.17" },
+    { crate = "syn@2.0.119", reason = "the ecosystem is still migrating to syn 3" },
+    { crate = "thiserror@1.0.69", reason = "i18n-embed and i18n-config still use thiserror 1" },
+    { crate = "thiserror-impl@1.0.69", reason = "i18n-embed and i18n-config still use thiserror 1" },
+    { crate = "toml@0.5.11", reason = "find-crate 0.6 (via i18n-embed-fl) uses toml 0.5" },
+]
 
 [sources]
 unknown-registry = "deny"

@@ -75,12 +75,13 @@ Non-goals: forwarding of any kind, a built-in SSH implementation, a password man
   Ubuntu) or `base-devel` (Arch) on Linux.
 - OpenSSH 8.7 or newer at runtime (`ssh -V`).
 - Development tools (optional): [just](https://github.com/casey/just) runs the project's tasks,
-  and [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) checks licenses and advisories:
+  [resvg](https://github.com/linebender/resvg) renders the logo, and
+  [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) checks licenses and advisories:
 
   ```sh
-  brew install just cargo-deny
+  brew install just resvg cargo-deny
   # or, on any platform:
-  cargo install just cargo-deny --locked
+  cargo install just resvg cargo-deny --locked
   ```
 
 ### Build and run
@@ -134,6 +135,11 @@ The project's tasks live in the [`justfile`](justfile)
 | `just` | List the tasks |
 | `just check` | Format, clippy, tests, and cargo-deny: everything that must pass |
 | `just test` | Tests with and without the forwarding feature |
+| `just logo` | Render the PNGs of `assets/icons/logo.svg`, without metadata (needs resvg) |
+
+`just logo` renders every PNG listed in the `logo` recipe, for now
+`assets/icons/logo-github.png` (512 × 512, the GitHub avatar). To add one, add a
+`(_logo-png "name" "size")` to that recipe.
 
 ## Configuration
 

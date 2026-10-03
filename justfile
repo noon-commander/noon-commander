@@ -1,5 +1,7 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
+logo_svg := "assets/icons/logo.svg"
+
 # Show available recipes
 default:
     @just --list
@@ -24,3 +26,9 @@ deny:
 
 # Everything that must pass before work is done
 check: fmt clippy test deny
+
+# Render every predefined PNG from the logo (needs resvg)
+logo: (_logo-png "github" "512")
+
+_logo-png name size:
+    resvg --width {{size}} --height {{size}} {{logo_svg}} assets/icons/logo-{{name}}.png

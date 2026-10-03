@@ -65,6 +65,9 @@ cargo deny check    # brew install cargo-deny
 Work is done when all of them pass. `just check` runs them all (`brew install just`); the tasks
 live in the `justfile` ([ADR 0013](docs/adr/0013-just-task-runner.md)).
 
+After changing `assets/icons/logo.svg`, run `just logo` (needs `resvg`) to render the PNGs again;
+a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on the command line.
+
 ## Hard rules
 
 - No forwarding by default. Forwarding code may exist only behind the `forwarding` feature,

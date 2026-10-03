@@ -74,6 +74,14 @@ Non-goals: forwarding of any kind, a built-in SSH implementation, a password man
 - A C toolchain for linking: `xcode-select --install` on macOS, or `build-essential` (Debian,
   Ubuntu) or `base-devel` (Arch) on Linux.
 - OpenSSH 8.7 or newer at runtime (`ssh -V`).
+- Development tools (optional): [just](https://github.com/casey/just) runs the project's tasks,
+  and [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) checks licenses and advisories:
+
+  ```sh
+  brew install just cargo-deny
+  # or, on any platform:
+  cargo install just cargo-deny --locked
+  ```
 
 ### Build and run
 
@@ -108,12 +116,24 @@ cargo build --release --features forwarding
 
 ```sh
 cargo test --workspace
+just test    # with and without the forwarding feature
 ```
 
 The SFTP tests run against the local `sftp-server` over pipes, with no network and no real
 `ssh`. If it is not in a standard location (`/usr/libexec/sftp-server` on macOS,
 `/usr/lib/openssh/sftp-server` on Debian and Ubuntu), set `SFTP_SERVER` to its path; otherwise
 those tests are skipped. The full set of checks is listed in [AGENTS.md](AGENTS.md#commands).
+
+### Tasks
+
+The project's tasks live in the [`justfile`](justfile)
+([ADR 0013](docs/adr/0013-just-task-runner.md)):
+
+| Command | What it does |
+| --- | --- |
+| `just` | List the tasks |
+| `just check` | Format, clippy, tests, and cargo-deny: everything that must pass |
+| `just test` | Tests with and without the forwarding feature |
 
 ## Configuration
 

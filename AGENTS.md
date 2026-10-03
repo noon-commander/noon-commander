@@ -62,7 +62,8 @@ cargo test --workspace --features forwarding
 cargo deny check    # brew install cargo-deny
 ```
 
-Work is done when all of them pass.
+Work is done when all of them pass. `just check` runs them all (`brew install just`); the tasks
+live in the `justfile` ([ADR 0013](docs/adr/0013-just-task-runner.md)).
 
 ## Hard rules
 

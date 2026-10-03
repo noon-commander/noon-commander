@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" height="1024" viewBox="0 0 32 32" width="1024">
+  <title>Noon Commander</title>
+
+  <defs>
+    <linearGradient id="frameGrad" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#996400" />
+      <stop offset="1" stop-color="#743C08" />
+    </linearGradient>
+    <linearGradient id="panelGrad" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#223860" />
+      <stop offset="1" stop-color="#132040" />
+    </linearGradient>
+  </defs>
+
+  <g id="frame">
+    <rect fill="url(#frameGrad)" height="32" width="32" />
+  </g>
+
+  <g fill="url(#panelGrad)" id="panels">
+    <rect height="22" width="14.5" x="1" y="1" />
+    <rect height="22" width="14.5" x="16.5" y="1" />
+  </g>
+
+
+  <g fill="#A46D00" id="monogram">
+    <g id="letter-n">
+      <rect height="2" width="2" x="3.25" y="5" />
+      <rect height="2" width="2" x="11.25" y="5" />
+      <rect height="2" width="2" x="3.25" y="7" />
+      <rect height="2" width="2" x="11.25" y="7" />
+      <rect height="2" width="2" x="3.25" y="9" />
+      <rect height="2" width="2" x="5.25" y="9" />
+      <rect height="2" width="2" x="11.25" y="9" />
+      <rect height="2" width="2" x="3.25" y="11" />
+      <rect height="2" width="2" x="7.25" y="11" />
+      <rect height="2" width="2" x="11.25" y="11" />
+      <rect height="2" width="2" x="3.25" y="13" />
+      <rect height="2" width="2" x="9.25" y="13" />
+      <rect height="2" width="2" x="11.25" y="13" />
+      <rect height="2" width="2" x="3.25" y="15" />
+      <rect height="2" width="2" x="11.25" y="15" />
+      <rect height="2" width="2" x="3.25" y="17" />
+      <rect height="2" width="2" x="11.25" y="17" />
+    </g>
+    <g id="letter-c">
+      <rect height="2" width="2" x="20.75" y="5" />
+      <rect height="2" width="2" x="22.75" y="5" />
+      <rect height="2" width="2" x="24.75" y="5" />
+      <rect height="2" width="2" x="18.75" y="7" />
+      <rect height="2" width="2" x="26.75" y="7" />
+      <rect height="2" width="2" x="18.75" y="9" />
+      <rect height="2" width="2" x="18.75" y="11" />
+      <rect height="2" width="2" x="18.75" y="13" />
+      <rect height="2" width="2" x="18.75" y="15" />
+      <rect height="2" width="2" x="26.75" y="15" />
+      <rect height="2" width="2" x="20.75" y="17" />
+      <rect height="2" width="2" x="22.75" y="17" />
+      <rect height="2" width="2" x="24.75" y="17" />
+    </g>
+  </g>
+
+  <g id="status">
+    <rect fill="url(#panelGrad)" height="3" width="14.5" x="1" y="24" />
+    <rect fill="url(#panelGrad)" height="3" width="14.5" x="16.5" y="24" />
+    <g fill="#3C5684">
+      <rect height="1" width="7" x="2" y="25" />
+      <rect height="1" width="3" x="11.5" y="25" />
+      <rect height="1" width="7" x="17.5" y="25" />
+      <rect height="1" width="3" x="27" y="25" />
+    </g>
+  </g>
+
+  <g fill="#1A2B4E" id="keybar">
+    <rect height="3" width="4" x="1" y="28" />
+    <rect height="3" width="4" x="6.2" y="28" />
+    <rect height="3" width="4" x="11.4" y="28" />
+    <rect height="3" width="4" x="16.6" y="28" />
+    <rect height="3" width="4" x="21.8" y="28" />
+    <rect height="3" width="4" x="27" y="28" />
+  </g>
+
+</svg>

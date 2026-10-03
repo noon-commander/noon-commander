@@ -1,0 +1,6 @@
+line-length:
+  line_length: 100
+  code_blocks: false
+  tables: false
+fenced-code-language: false
+no-inline-html: false

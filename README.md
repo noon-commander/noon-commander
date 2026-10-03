@@ -100,7 +100,7 @@ Non-goals: forwarding of any kind, a built-in SSH implementation, a password man
 ### Build and run
 
 ```sh
-git clone https://github.com/0ldkettle/noon-commander.git
+git clone https://github.com/noon-commander/noon-commander.git
 cd noon-commander
 cargo build --release
 ./target/release/noc --version

@@ -1,6 +1,7 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 logo_svg := "assets/icons/logo.svg"
+msrv := `sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml`
 
 # Show available recipes
 default:
@@ -27,6 +28,11 @@ test:
 # License, advisory, and ban checks (needs cargo-deny)
 deny:
     cargo deny check
+
+# Build with the oldest supported Rust, as CI does (needs rustup)
+msrv:
+    @command -v rustup >/dev/null || { echo "just msrv needs rustup: https://rustup.rs" >&2; exit 1; }
+    rustup run {{msrv}} cargo check --workspace --all-targets --all-features --locked
 
 # Everything that must pass before work is done; changes no files
 check: fmt-check clippy test deny

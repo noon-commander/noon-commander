@@ -136,6 +136,7 @@ The project's tasks live in the [`justfile`](justfile)
 | `just check` | Formatting, clippy, tests, and cargo-deny: everything that must pass; changes no files |
 | `just fmt` | Format the code |
 | `just test` | Tests with and without the forwarding feature |
+| `just msrv` | Build with the oldest supported Rust, as CI does (needs rustup) |
 | `just logo` | Render the PNGs of `assets/icons/logo.svg`, without metadata (needs resvg) |
 
 `just logo` renders every PNG listed in the `logo` recipe, for now

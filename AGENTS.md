@@ -88,7 +88,8 @@ a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on th
 
 ## Code conventions
 
-- Edition 2024, MSRV 1.88 (`rust-version`). CI checks the MSRV, so don't use newer std APIs.
+- Edition 2024, MSRV 1.88 (`rust-version`). CI checks the MSRV, so don't use newer std APIs;
+  `just msrv` checks it locally (needs rustup).
 - Dependency versions are declared once in the root `[workspace.dependencies]`; crates use
   `name.workspace = true`. Every crate has `[lints] workspace = true`.
 - Errors: `thiserror` enums in libraries, `color-eyre` in the binary. No `unwrap`/`expect`

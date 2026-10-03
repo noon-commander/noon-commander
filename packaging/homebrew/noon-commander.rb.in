@@ -3,19 +3,17 @@
 class NoonCommander < Formula
   desc "Terminal file manager focused on seamless local and SFTP file operations"
   homepage "https://github.com/@REPOSITORY@"
-  version "@VERSION@"
-  license "GPL-3.0-or-later"
-
-  depends_on :macos
-
-  on_arm do
+  # Homebrew allows no `url` in `on_arm` or `on_intel` blocks.
+  if Hardware::CPU.intel?
+    url "https://github.com/@REPOSITORY@/releases/download/v@VERSION@/noon-commander-@VERSION@-x86_64-apple-darwin.tar.gz"
+    sha256 "@SHA256_INTEL@"
+  else
     url "https://github.com/@REPOSITORY@/releases/download/v@VERSION@/noon-commander-@VERSION@-aarch64-apple-darwin.tar.gz"
     sha256 "@SHA256_ARM@"
   end
-  on_intel do
-    url "https://github.com/@REPOSITORY@/releases/download/v@VERSION@/noon-commander-@VERSION@-x86_64-apple-darwin.tar.gz"
-    sha256 "@SHA256_INTEL@"
-  end
+  license "GPL-3.0-or-later"
+
+  depends_on :macos
 
   def install
     bin.install "noc"

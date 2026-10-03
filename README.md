@@ -133,7 +133,8 @@ The project's tasks live in the [`justfile`](justfile)
 | Command | What it does |
 | --- | --- |
 | `just` | List the tasks |
-| `just check` | Format, clippy, tests, and cargo-deny: everything that must pass |
+| `just check` | Formatting, clippy, tests, and cargo-deny: everything that must pass; changes no files |
+| `just fmt` | Format the code |
 | `just test` | Tests with and without the forwarding feature |
 | `just logo` | Render the PNGs of `assets/icons/logo.svg`, without metadata (needs resvg) |
 

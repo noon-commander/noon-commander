@@ -10,6 +10,10 @@ default:
 fmt:
     cargo fmt --all
 
+# Fail if the code is not formatted, without changing it
+fmt-check:
+    cargo fmt --all --check
+
 # Clippy with and without the forwarding feature
 clippy:
     cargo clippy --workspace --all-targets -- -D warnings
@@ -24,8 +28,8 @@ test:
 deny:
     cargo deny check
 
-# Everything that must pass before work is done
-check: fmt clippy test deny
+# Everything that must pass before work is done; changes no files
+check: fmt-check clippy test deny
 
 # Render every predefined PNG from the logo (needs resvg)
 logo: (_logo-png "github" "512")

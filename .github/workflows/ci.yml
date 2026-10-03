@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # release.yml runs every check on the tag before it publishes.
+  workflow_call:
 
 permissions:
   contents: read

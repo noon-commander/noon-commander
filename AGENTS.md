@@ -64,7 +64,10 @@ just fmt     # format the code
 Work is done when `just check` passes; it changes no files. Run `just all` before committing.
 The tasks live in the `justfile` ([ADR 0013](docs/adr/0013-just-task-runner.md)), and CI runs the
 same recipes: a new check is added there as a recipe and called from `ci.yml`, never written into
-`ci.yml` as a raw command.
+`ci.yml` as a raw command. Releases are the exception: `release.yml` builds them from a signed
+`v*` tag with its steps written out, and only there; package templates live in `packaging/`
+([ADR 0014](docs/adr/0014-release-workflow-and-homebrew-tap.md)). Packages are named
+`noon-commander`; `noc` is only the binary.
 
 After changing `assets/icons/logo.svg`, run `just logo` (needs `resvg`) to render the PNGs again;
 a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on the command line.

@@ -62,4 +62,6 @@ renderer: a library in an `xtask` crate, or a command-line program.
 - Nothing checks that the PNGs match the SVG, so `just logo` is run by hand after the SVG
   changes.
 - A new action is added pinned to a hash, or `just gha` fails.
+- Releases are the exception: `release.yml` writes its steps out, since nobody builds a release
+  locally ([ADR 0014](0014-release-workflow-and-homebrew-tap.md)).
 - The resvg version is not pinned, so a newer resvg may render slightly different pixels.

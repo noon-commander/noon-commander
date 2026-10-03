@@ -1,0 +1,151 @@
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]*"]
+
+permissions: {}
+
+# ci.yml, called below, takes `Release-<ref>` as its group, since a called workflow sees the
+# caller's name; groups ignore case, so this one is named apart, or the two would wait on each other.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+# Releases are built only here, so the steps live in this workflow rather than in the justfile
+# (ADR 0014). The build has no rust-cache: release binaries never come from a cache that
+# another run could have written.
+#
+# Packages are named after the project, `noon-commander`; `noc` is only the binary inside them.
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  PACKAGE: noon-commander
+  GH_REPO: ${{ github.repository }}
+  TAG: ${{ github.ref_name }}
+
+jobs:
+  ci:
+    name: CI
+    permissions:
+      contents: read # ci.yml checks out the code
+    # actionlint 1.7.12 does not know the `$/` form yet; the job checks nothing out before this.
+    uses: ./.github/workflows/ci.yml # zizmor: ignore[self-repository]
+
+  draft:
+    name: draft release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the draft release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check the tag against Cargo.toml
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::Tag $TAG does not match version $version in Cargo.toml"
+            exit 1
+          fi
+      - name: Check that the tag is signed
+        run: |
+          object=$(gh api "repos/$GH_REPO/git/ref/tags/$TAG" --jq '"\(.object.type) \(.object.sha)"')
+          if [ "${object% *}" != tag ]; then
+            echo "::error::$TAG is a lightweight tag; create it with git tag -s"
+            exit 1
+          fi
+          verification=$(gh api "repos/$GH_REPO/git/tags/${object#* }" \
+            --jq '"\(.verification.verified) \(.verification.reason)"')
+          if [ "${verification% *}" != true ]; then
+            echo "::error::The signature of $TAG is not verified: ${verification#* }"
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Take the release notes from CHANGELOG.md
+        run: |
+          awk -v version="${TAG#v}" '
+            /^## / { if (found) exit; found = index($0, "## [" version "]") == 1; next }
+            found
+          ' CHANGELOG.md >"$RUNNER_TEMP/notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"; then
+            echo "::error::CHANGELOG.md has no section for ${TAG#v}"
+            exit 1
+          fi
+      - name: Create the draft release
+        run: >-
+          gh release create "$TAG" --draft --verify-tag --title "Noon Commander ${TAG#v}"
+          --notes-file "$RUNNER_TEMP/notes.md"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  build:
+    name: build (${{ matrix.target }})
+    needs: draft
+    runs-on: macos-latest
+    permissions:
+      contents: write # upload the tarball to the draft release
+      id-token: write # a Sigstore certificate for the attestation
+      attestations: write # store the attestation
+    strategy:
+      matrix:
+        target: [aarch64-apple-darwin, x86_64-apple-darwin]
+    env:
+      TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --target "$TARGET" --no-self-update
+          rustup default stable
+      - run: cargo build --release --locked -p noc --target "$TARGET"
+      # COPYFILE_DISABLE and --no-mac-metadata keep macOS extended attributes out of the tarball.
+      - name: Pack the tarball
+        run: |
+          name="$PACKAGE-${TAG#v}-$TARGET"
+          mkdir -p "dist/$name"
+          cp "target/$TARGET/release/noc" LICENSE README.md CHANGELOG.md "dist/$name/"
+          COPYFILE_DISABLE=1 tar -C dist --no-mac-metadata --uid 0 --gid 0 --uname root \
+            --gname wheel -czf "dist/$name.tar.gz" "$name"
+          (cd dist && shasum -a 256 "$name.tar.gz" >"$name.tar.gz.sha256")
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/*.tar.gz
+      - run: gh release upload "$TAG" dist/*.tar.gz dist/*.tar.gz.sha256
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  publish:
+    name: publish release
+    needs: [ci, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # read the draft release and publish it
+      attestations: read # verify the attestations of the tarballs
+    outputs:
+      sha256-arm: ${{ steps.verify.outputs.sha256-arm }}
+      sha256-intel: ${{ steps.verify.outputs.sha256-intel }}
+    steps:
+      - name: Verify the tarballs and their attestations
+        id: verify
+        run: |
+          cd "$RUNNER_TEMP"
+          gh release download "$TAG" --pattern '*.tar.gz'
+          for target in aarch64-apple-darwin x86_64-apple-darwin; do
+            file="$PACKAGE-${TAG#v}-$target.tar.gz"
+            gh attestation verify "$file" --repo "$GH_REPO" --source-ref "$GITHUB_REF" \
+              --signer-workflow "$GH_REPO/.github/workflows/release.yml"
+            sha256=$(sha256sum "$file" | cut -d ' ' -f 1)
+            case $target in
+              aarch64-*) echo "sha256-arm=$sha256" >>"$GITHUB_OUTPUT" ;;
+              x86_64-*) echo "sha256-intel=$sha256" >>"$GITHUB_OUTPUT" ;;
+            esac
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: gh release edit "$TAG" --draft=false
+        env:
+          GH_TOKEN: ${{ github.token }}

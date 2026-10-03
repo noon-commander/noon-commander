@@ -59,12 +59,11 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo clippy --workspace --all-targets --features forwarding -- -D warnings
 cargo test --workspace
 cargo test --workspace --features forwarding
-cargo deny check    # brew install cargo-deny
+cargo deny check
 ```
 
-Work is done when all of them pass. `just check` runs them all (`brew install just`), with
-`cargo fmt --all --check` so that it changes no files; `just fmt` formats. The tasks live in the
-`justfile` ([ADR 0013](docs/adr/0013-just-task-runner.md)).
+Work is done when all of them pass. `just check` runs them all, with `cargo fmt --all --check` so
+that it changes no files; `just fmt` formats. The tasks live in the `justfile` ([ADR 0013](docs/adr/0013-just-task-runner.md)).
 
 After changing `assets/icons/logo.svg`, run `just logo` (needs `resvg`) to render the PNGs again;
 a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on the command line.

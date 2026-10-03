@@ -3,6 +3,7 @@
 mod app;
 mod cd;
 mod cells;
+mod complete;
 mod configuration;
 mod decor;
 mod describe;
@@ -96,6 +97,11 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
         Done::HostSaved(result) => tasks.run(app.host_saved(result)),
         Done::ConfigSaved(result) => app.config_saved(result),
         Done::Jumps { generation, result } => app.jumps(generation, result),
+        Done::Names {
+            generation,
+            entries,
+            hosts,
+        } => app.names(generation, entries, &hosts),
         Done::Written { location, result } => tasks.run(app.written(&location, result)),
     }
 }

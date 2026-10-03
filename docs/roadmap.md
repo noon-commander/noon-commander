@@ -89,6 +89,7 @@
       something go to it, `[zoxide]`; external programs live in `noc-tools`
       ([ADR 0012](adr/0012-external-tools-and-zoxide.md))
 - [x] Quick cd (Alt-C), as in mc, with `~`, `..`, `-`, and `host:path`
+- [x] Tab completion of paths in Quick cd, F5, F6, and F7, with a list of choices
 - [ ] Bookmarks and history
 - [ ] chmod and symlinks
 - [ ] Mouse support

@@ -300,7 +300,7 @@ impl Keymap {
 }
 
 /// The bindings of the mc preset, by context.
-fn mc_presets() -> [(Context, Preset); 9] {
+fn mc_presets() -> [(Context, Preset); 11] {
     use Action::{
         Backspace, Cancel, Confirm, Disconnect, Down, EditHost, End, Help, Home, Left, NextField,
         PageDown, PageUp, PrevField, Quit, Redraw, Right, Toggle, ToggleWrap, Up,
@@ -351,6 +351,8 @@ fn mc_presets() -> [(Context, Preset); 9] {
         (Context::Jump, JUMP),
         (Context::PullDown, PULL_DOWN),
         (Context::DialogInput, TEXT_FIELD),
+        (Context::PathInput, PATH_FIELD),
+        (Context::Completion, COMPLETION),
     ]
 }
 
@@ -444,6 +446,24 @@ const TEXT_FIELD: Preset = &[
     (Action::Delete, &["delete"]),
     (Action::DeleteToStart, &["ctrl-u"]),
     (Action::DeleteToEnd, &["ctrl-k"]),
+];
+
+/// The bindings of path fields in the mc preset, on top of the text field's: Tab completes, as
+/// in a shell; Shift-Tab and Down still leave the field.
+const PATH_FIELD: Preset = &[(Action::Complete, &["tab"])];
+
+/// The bindings of the list of completions in the mc preset; other keys close it and go to the
+/// field.
+const COMPLETION: Preset = &[
+    (Action::Up, &["up"]),
+    (Action::Down, &["down"]),
+    (Action::PageUp, &["pageup"]),
+    (Action::PageDown, &["pagedown"]),
+    (Action::Home, &["home"]),
+    (Action::End, &["end"]),
+    (Action::Complete, &["tab"]),
+    (Action::Confirm, &["enter"]),
+    (Action::Cancel, &["esc"]),
 ];
 
 /// The location menu's bindings in the mc preset; characters filter it.
@@ -1018,6 +1038,44 @@ mod tests {
                 Resolved::Action(Action::Down),
                 Resolved::Action(Action::Backspace),
                 Resolved::Action(Action::Confirm),
+                Resolved::Action(Action::Cancel),
+            ]
+        );
+    }
+
+    #[test]
+    fn tab_completes_in_path_fields_and_moves_in_the_list() {
+        let keymap = Keymap::mc();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(
+                &keymap,
+                &mut state,
+                Context::PathInput,
+                &["tab", "backtab", "down", "ctrl-u", "a", "esc"]
+            ),
+            [
+                Resolved::Action(Action::Complete),
+                Resolved::Action(Action::PrevField),
+                Resolved::Action(Action::Down),
+                Resolved::Action(Action::DeleteToStart),
+                Resolved::Insert('a'),
+                Resolved::Action(Action::Cancel),
+            ]
+        );
+        assert_eq!(
+            feed(
+                &keymap,
+                &mut state,
+                Context::Completion,
+                &["tab", "home", "enter", "backspace", "b", "esc"]
+            ),
+            [
+                Resolved::Action(Action::Complete),
+                Resolved::Action(Action::Home),
+                Resolved::Action(Action::Confirm),
+                Resolved::Action(Action::Backspace),
+                Resolved::Insert('b'),
                 Resolved::Action(Action::Cancel),
             ]
         );

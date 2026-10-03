@@ -30,13 +30,27 @@ pub(crate) fn target(
     if text == "-" {
         return previous.cloned();
     }
-    if let Location::Remote { host, path } = Location::parse(text) {
-        return Some(remote(&host, &RemotePath::default(), path.as_bytes()));
+    Some(directory(text, here, home, |_| true))
+}
+
+/// The directory that `text` names from `here`, as [`target`] reads it, for completion: the
+/// empty text is `here` itself (the home directory from the volumes and hosts), and `host:`
+/// starts a host only where `is_host` takes it; else the text is a local name with a colon.
+pub(crate) fn directory(
+    text: &str,
+    here: &Location,
+    home: &Path,
+    is_host: impl Fn(&str) -> bool,
+) -> Location {
+    if let Location::Remote { host, path } = Location::parse(text)
+        && is_host(&host)
+    {
+        return remote(&host, &RemotePath::default(), path.as_bytes());
     }
     match here {
-        Location::Remote { host, path } => Some(remote(host, path, text.as_bytes())),
-        Location::Local(dir) => Some(Location::Local(local(dir, home, text))),
-        Location::Root | Location::Sftp => Some(Location::Local(local(home, home, text))),
+        Location::Remote { host, path } => remote(host, path, text.as_bytes()),
+        Location::Local(dir) => Location::Local(local(dir, home, text)),
+        Location::Root | Location::Sftp => Location::Local(local(home, home, text)),
     }
 }
 
@@ -191,6 +205,26 @@ mod tests {
         assert_eq!(cd("src", &Location::Root), Some(local_at("/home/me/src")));
         assert_eq!(cd("/tmp", &Location::Sftp), Some(local_at("/tmp")));
         assert_eq!(cd("web:", &Location::Root), Some(remote_at("web", "")));
+    }
+
+    #[test]
+    fn directories_for_completion_take_only_the_hosts_they_are_told() {
+        let here = local_at("/srv");
+        let home = Path::new(HOME);
+        assert_eq!(directory("", &here, home, |_| true), here);
+        assert_eq!(
+            directory("", &Location::Root, home, |_| true),
+            local_at(HOME)
+        );
+        assert_eq!(
+            directory("web:/var/", &here, home, |host| host == "web"),
+            remote_at("web", "/var")
+        );
+        assert_eq!(
+            directory("db:x/", &here, home, |host| host == "web"),
+            local_at("/srv/db:x")
+        );
+        assert_eq!(directory("a/../", &here, home, |_| false), here);
     }
 
     #[test]

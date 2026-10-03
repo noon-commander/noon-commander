@@ -47,6 +47,8 @@ impl Help {
             (Context::PullDown, fl!("help-pulldown")),
             (Context::Dialog, fl!("help-dialogs")),
             (Context::DialogInput, fl!("help-text-fields")),
+            (Context::PathInput, fl!("help-path-fields")),
+            (Context::Completion, fl!("help-completion")),
             (Context::Viewer, fl!("help-viewer")),
         ];
         let mut entries = Vec::new();
@@ -198,8 +200,11 @@ fn describe(context: Context, action: Action) -> Option<String> {
     // Lists of rows, where the arrows move the cursor.
     let rows = matches!(
         context,
-        Context::Panel | Context::Viewer | Context::Menu | Context::Jump
+        Context::Panel | Context::Viewer | Context::Menu | Context::Jump | Context::Completion
     );
+    if let Some(text) = describe_completion(context, action) {
+        return Some(text);
+    }
     let text = match (context, action) {
         (_, Action::Up) if rows => fl!("help-row-up"),
         (_, Action::Down) if rows => fl!("help-row-down"),
@@ -294,6 +299,20 @@ fn describe(context: Context, action: Action) -> Option<String> {
     Some(text)
 }
 
+/// What `action` does in path fields and the list of completions, beyond moving the cursor.
+fn describe_completion(context: Context, action: Action) -> Option<String> {
+    let text = match (context, action) {
+        (Context::Completion, Action::Home) => fl!("help-first-row"),
+        (Context::Completion, Action::End) => fl!("help-last-row"),
+        (Context::PathInput, Action::Complete) => fl!("help-complete"),
+        (Context::Completion, Action::Complete) => fl!("help-complete-next"),
+        (Context::Completion, Action::Confirm) => fl!("help-complete-take"),
+        (Context::Completion, Action::Cancel) => fl!("help-complete-close"),
+        _ => return None,
+    };
+    Some(text)
+}
+
 #[cfg(test)]
 mod tests {
     use ratatui::Terminal;
@@ -355,6 +374,8 @@ mod tests {
                 "Pull-down menu",
                 "Dialogs and help",
                 "Text fields",
+                "Path fields",
+                "Completion list",
                 "Viewer"
             ]
         );

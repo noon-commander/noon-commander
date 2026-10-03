@@ -1,6 +1,7 @@
 //! Modal dialogs: prompts from ssh (passwords and passphrases, host keys, confirmations, and
 //! notices) and the app's own questions.
 
+use std::cell::Cell;
 use std::fmt;
 
 use noc_ssh::askpass::PromptKind;
@@ -331,6 +332,10 @@ pub(crate) struct Dialog {
     width: u16,
     /// Drawn in the colors of errors.
     error: bool,
+    /// Its first field holds a path, which Tab completes.
+    completes: bool,
+    /// Where its first field was drawn last, for the list of completions under it.
+    field_area: Cell<Option<Rect>>,
 }
 
 impl Dialog {
@@ -452,7 +457,50 @@ impl Dialog {
             focus: Focus::Button(0),
             width: MAX_WIDTH,
             error: false,
+            completes: false,
+            field_area: Cell::new(None),
         }
+    }
+
+    /// The same dialog, with a path in its first field, which Tab completes.
+    pub(crate) fn with_completion(mut self) -> Self {
+        self.completes = true;
+        self
+    }
+
+    /// Whether the first field has the focus and holds a path that Tab completes.
+    pub(crate) fn completes(&self) -> bool {
+        self.completes && self.focus == Focus::Field(0)
+    }
+
+    /// Where the first field was drawn last.
+    pub(crate) fn field_area(&self) -> Option<Rect> {
+        self.field_area.get()
+    }
+
+    /// The text of the first field before its cursor, and after it.
+    pub(crate) fn around_cursor(&self) -> (&str, &str) {
+        match self.fields.first() {
+            Some(LabelledField { field, .. }) if !field.secret => {
+                field.text.split_at(field.offset(field.cursor))
+            }
+            _ => ("", ""),
+        }
+    }
+
+    /// Replaces the text of the first field before its cursor with `before`, keeping what is
+    /// after it, with the cursor after `before`.
+    pub(crate) fn replace_before_cursor(&mut self, before: &str) {
+        let Some(LabelledField { field, .. }) = self.fields.first_mut() else {
+            return;
+        };
+        if field.secret {
+            return;
+        }
+        let after = field.text[field.offset(field.cursor)..].to_owned();
+        *field.text = format!("{before}{after}");
+        field.cursor = before.chars().count();
+        field.fresh = false;
     }
 
     /// The same dialog with `message` above the rest.
@@ -524,9 +572,11 @@ impl Dialog {
         self.checks.get(index).is_some_and(|check| check.on)
     }
 
-    /// The keymap context for the next key: `DialogInput` while a text field has the focus.
+    /// The keymap context for the next key: `DialogInput` while a text field has the focus,
+    /// `PathInput` in a field that completes paths.
     pub(crate) fn context(&self) -> Context {
         match self.focus {
+            Focus::Field(0) if self.completes => Context::PathInput,
             Focus::Field(_) => Context::DialogInput,
             Focus::Choice(_) | Focus::Check(_) | Focus::Button(_) => Context::Dialog,
         }
@@ -666,6 +716,9 @@ impl Dialog {
             };
             let text = cells::fit(&text, room, cells::Align::Left);
             frame.render_widget(Line::styled(text, style), row(index));
+            if number == 0 {
+                self.field_area.set(Some(row(index)));
+            }
             if self.focus == Focus::Field(number) {
                 let column = u16::try_from(column).unwrap_or(0);
                 frame.set_cursor_position(Position::new(inner.x + column, inner.y + index));

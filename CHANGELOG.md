@@ -40,6 +40,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Tab completes paths in Quick cd, F5, F6, and F7, as in bash: one match goes in, several as
+  far as they agree, and another Tab lists them under the field to choose one. Directories,
+  files for F5 and F6, and hosts before a `:`, locally and on connected hosts.
 - Quick cd, Alt-C, as in mc: type a path as for `cd` in a shell (relative, `/…`, `~`, `..`,
   `-` for the directory before, or `host:path`) and the active panel opens it; F9 → Command
   has it too.

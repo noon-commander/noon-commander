@@ -233,6 +233,25 @@ and `~` is the remote home. From the volumes and hosts, relative paths start at 
 directory. `cd ..` puts the cursor on the directory left, as Ctrl-PgUp does; a path that is not
 there leaves the panel where it is, with the reason below the listing. It is in F9 → Command.
 
+### Completion
+
+Tab completes the path before the cursor in the fields of Quick cd, F5, F6, and F7, as bash
+does (keymap context `path_input`), from a listing of the directory it names, read as the
+dialog reads its text:
+
+- The last part, after the last `/`, is completed. One match goes in, with `/` after a
+  directory and `:` after a host; several go in as far as they agree, and a Tab that gets no
+  further lists them under the field (context `completion`): arrows and Tab choose, Enter
+  takes one, Esc closes the list, and any other key closes it and goes to the field.
+- Names that start with a dot count only after a typed dot. Case counts, unless nothing
+  matches with it. Names that are not UTF-8 or hold control characters cannot be typed and
+  are left out.
+- Quick cd and F7 offer directories and links to them; F5 and F6 files too. Before a `:`,
+  Quick cd offers every host of the ssh config, F5 and F6 the connected ones, F7 none.
+- Local directories are read in the background, remote ones through the session of their
+  host; a host that is not connected offers nothing, and a Tab never connects. Each listing
+  has a generation, and a reply for text that changed since is dropped.
+
 ### zoxide
 
 [zoxide](https://github.com/ajeetdsouza/zoxide) ranks the directories the user works in

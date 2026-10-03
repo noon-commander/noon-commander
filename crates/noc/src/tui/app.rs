@@ -19,6 +19,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::cd;
 use super::cells::{self, Align};
+use super::complete::{self, Candidate, Choices, ChoicesEvent, Kind, Offer, Outcome};
 use super::configuration::Configuration;
 use super::decor::Decor;
 use super::dialog::{Ask, Button, Dialog, DialogEvent, Reply};
@@ -147,6 +148,15 @@ pub(crate) enum Effect {
         keywords: Vec<String>,
         exclude: Option<PathBuf>,
     },
+    /// List the names in `dir`, through `host` if it is remote, and, with `hosts`, the hosts of
+    /// the ssh config, for completion, and pass them to [`App::names`]. Without `dir`, only the
+    /// hosts.
+    ListNames {
+        generation: u64,
+        dir: Option<Location>,
+        host: Option<HostHandle>,
+        hosts: bool,
+    },
     /// Use `config` for new connections and listings, write to the config file the settings
     /// that differ between `old`, what the dialog showed, and `new`, both as the file writes
     /// them, and report to [`App::config_saved`].
@@ -271,6 +281,31 @@ enum Purpose {
     Quit,
     /// Something to read, such as an error.
     Info,
+}
+
+/// Which hosts a path field takes before a `:`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FieldHosts {
+    /// Every host of the ssh config, which Quick cd connects to.
+    All,
+    /// The hosts that are connected, as the targets of F5 and F6.
+    Connected,
+    /// None: F7 makes local or remote directories by name only.
+    None,
+}
+
+/// A Tab in the path field of the dialog in front: what it waits for, then the list it shows.
+#[derive(Debug)]
+struct Completing {
+    generation: u64,
+    /// The text before the cursor at the Tab; a reply for other text is dropped.
+    before: String,
+    split: complete::Split,
+    offer: Offer,
+    hosts: FieldHosts,
+    /// The hosts that were connected at the Tab.
+    connected: Vec<String>,
+    choices: Option<Choices>,
 }
 
 /// What a job does.
@@ -488,6 +523,10 @@ pub(crate) struct App {
     menu: Option<LocationMenu>,
     /// The generation of the last listing for the menu.
     menu_listings: u64,
+    /// Tab completion in the dialog in front.
+    completion: Option<Completing>,
+    /// The generation of the last listing for completion.
+    completions: u64,
     /// The zoxide window of Alt-Z, over the panels and under the dialogs.
     jump: Option<JumpMenu>,
     /// The generation of the last query for the zoxide window.
@@ -569,6 +608,8 @@ impl App {
             help: None,
             menu: None,
             menu_listings: 0,
+            completion: None,
+            completions: 0,
             jump: None,
             jump_queries: 0,
             pulldown: None,
@@ -653,7 +694,15 @@ impl App {
     /// Where keys go now.
     pub(crate) fn context(&self) -> Context {
         if let Some(open) = self.dialogs.front() {
-            open.dialog.context()
+            let listing = self
+                .completion
+                .as_ref()
+                .is_some_and(|completing| completing.choices.is_some());
+            if listing && open.dialog.completes() {
+                Context::Completion
+            } else {
+                open.dialog.context()
+            }
         } else if self.menu.is_some() {
             Context::Menu
         } else if self.jump.is_some() {
@@ -1059,8 +1108,38 @@ impl App {
         Vec::new()
     }
 
-    /// Gives a key to the dialog in front, and does what it was for once it closes.
+    /// Gives a key to the dialog in front, and does what it was for once it closes. In a path
+    /// field, Tab completes, and the list of completions takes the keys while it shows.
     fn handle_dialog(&mut self, input: Resolved) -> Vec<Effect> {
+        if let Some(completing) = &mut self.completion
+            && let Some(choices) = &mut completing.choices
+        {
+            let event = match input {
+                Resolved::Action(action) => choices.handle(action),
+                Resolved::Insert(_) => ChoicesEvent::Passed,
+            };
+            match event {
+                ChoicesEvent::Pending => return Vec::new(),
+                ChoicesEvent::Closed => {
+                    self.completion = None;
+                    return Vec::new();
+                }
+                ChoicesEvent::Chosen(text) => {
+                    let before = format!("{}{text}", completing.split.dir);
+                    self.completion = None;
+                    if let Some(open) = self.dialogs.front_mut() {
+                        open.dialog.replace_before_cursor(&before);
+                    }
+                    return Vec::new();
+                }
+                ChoicesEvent::Passed => {}
+            }
+        }
+        if input == Resolved::Action(Action::Complete) {
+            return self.complete();
+        }
+        // Any other key makes a completion on its way too late.
+        self.completion = None;
         let Some(open) = self.dialogs.front_mut() else {
             return Vec::new();
         };
@@ -1108,6 +1187,121 @@ impl App {
                 menu.reload(generation);
                 vec![Effect::ListPlaces { generation }]
             }
+        }
+    }
+
+    /// What the path field of a dialog for `purpose` completes: in which panel, what it takes,
+    /// and which hosts.
+    fn completion_of(purpose: &Purpose) -> Option<(PanelId, Offer, FieldHosts)> {
+        match purpose {
+            Purpose::QuickCd { panel } => Some((*panel, Offer::Dirs, FieldHosts::All)),
+            Purpose::Transfer { panel, .. } => Some((*panel, Offer::Any, FieldHosts::Connected)),
+            Purpose::Mkdir { panel } => Some((*panel, Offer::Dirs, FieldHosts::None)),
+            _ => None,
+        }
+    }
+
+    /// Completes the path before the cursor in the field of the dialog in front: lists the
+    /// directory it is in, read as that dialog reads its text, and the hosts it may name.
+    fn complete(&mut self) -> Vec<Effect> {
+        let Some(open) = self.dialogs.front_mut() else {
+            return Vec::new();
+        };
+        if !open.dialog.completes() {
+            return Vec::new();
+        }
+        let Some((panel, offer, hosts)) = Self::completion_of(&open.purpose) else {
+            return Vec::new();
+        };
+        let before = open.dialog.around_cursor().0.to_owned();
+        if before == "~" {
+            open.dialog.replace_before_cursor("~/");
+            return Vec::new();
+        }
+        let connected: Vec<String> = self
+            .hosts
+            .iter()
+            .filter(|(_, state)| matches!(state, Host::Connected { .. }))
+            .map(|(host, _)| host.clone())
+            .collect();
+        let is_host = |host: &str| match hosts {
+            FieldHosts::All => true,
+            FieldHosts::Connected => connected.iter().any(|known| known == host),
+            FieldHosts::None => false,
+        };
+        let split = complete::split(&before, is_host);
+        let Some(shown) = self.panel_of(panel) else {
+            return Vec::new();
+        };
+        let dir = cd::directory(&split.dir, shown.location(), &self.home, is_host);
+        // A host that is not connected has nothing to list.
+        let host = self.handle_for(&dir).unwrap_or(None);
+        let list_hosts = split.hosts && hosts == FieldHosts::All;
+        self.completions += 1;
+        let generation = self.completions;
+        self.completion = Some(Completing {
+            generation,
+            before,
+            split,
+            offer,
+            hosts,
+            connected,
+            choices: None,
+        });
+        vec![Effect::ListNames {
+            generation,
+            dir: Some(dir),
+            host,
+            hosts: list_hosts,
+        }]
+    }
+
+    /// Takes the result of an [`Effect::ListNames`]: one match goes in the field, several go
+    /// in as far as they agree, or show in a list when they agree no further.
+    pub(crate) fn names(
+        &mut self,
+        generation: u64,
+        entries: Result<Vec<(Vec<u8>, bool)>, String>,
+        hosts: &[String],
+    ) {
+        let Some(completing) = &mut self.completion else {
+            return;
+        };
+        if completing.generation != generation || completing.choices.is_some() {
+            return;
+        }
+        let Some(open) = self
+            .dialogs
+            .front_mut()
+            .filter(|open| open.dialog.around_cursor().0 == completing.before)
+        else {
+            self.completion = None;
+            return;
+        };
+        let entries = entries.unwrap_or_else(|reason| {
+            tracing::debug!(%reason, "cannot list names to complete");
+            Vec::new()
+        });
+        let mut candidates = complete::from_names(entries, completing.offer);
+        if completing.split.hosts {
+            let aliases = match completing.hosts {
+                FieldHosts::All => hosts,
+                FieldHosts::Connected => &completing.connected[..],
+                FieldHosts::None => &[],
+            };
+            candidates.extend(aliases.iter().map(|alias| Candidate {
+                name: alias.clone(),
+                kind: Kind::Host,
+            }));
+        }
+        match complete::complete(&completing.split.prefix, candidates) {
+            Outcome::Nothing => self.completion = None,
+            Outcome::Insert(text) => {
+                let before = format!("{}{text}", completing.split.dir);
+                self.completion = None;
+                open.dialog.replace_before_cursor(&before);
+            }
+            Outcome::List(items) => completing.choices = Some(Choices::new(items)),
         }
     }
 
@@ -1851,7 +2045,8 @@ impl App {
             let preserve = (fl!("copy-preserve"), self.copy_choices.preserve);
             (fl!("copy-title"), vec![preserve])
         };
-        let dialog = Dialog::form(&title, &message, &text, &checks, COPY_DIALOG_WIDTH);
+        let dialog =
+            Dialog::form(&title, &message, &text, &checks, COPY_DIALOG_WIDTH).with_completion();
         let panel = self.shown(self.active);
         self.dialogs.push_back(Open {
             dialog,
@@ -2484,7 +2679,7 @@ impl App {
     /// Opens the dialog of Quick cd, Alt-C, for the active panel, as in mc.
     fn ask_cd(&mut self) {
         let (title, prompt) = (fl!("cd-title"), fl!("cd-prompt"));
-        let dialog = Dialog::form(&title, &prompt, "", &[], MKDIR_DIALOG_WIDTH);
+        let dialog = Dialog::form(&title, &prompt, "", &[], MKDIR_DIALOG_WIDTH).with_completion();
         let panel = self.shown(self.active);
         self.dialogs.push_back(Open {
             dialog,
@@ -2520,7 +2715,8 @@ impl App {
             .map(|name| String::from_utf8_lossy(name).into_owned())
             .unwrap_or_default();
         let (title, prompt) = (fl!("mkdir-title"), fl!("mkdir-prompt"));
-        let dialog = Dialog::form(&title, &prompt, &name, &[], MKDIR_DIALOG_WIDTH);
+        let dialog =
+            Dialog::form(&title, &prompt, &name, &[], MKDIR_DIALOG_WIDTH).with_completion();
         let panel = self.shown(self.active);
         self.dialogs.push_back(Open {
             dialog,
@@ -3182,6 +3378,12 @@ impl App {
         }
         if let Some(open) = self.dialogs.front() {
             open.dialog.render(frame, panels, &self.theme);
+            if let Some(completing) = &mut self.completion
+                && let Some(choices) = &mut completing.choices
+                && let Some(field) = open.dialog.field_area()
+            {
+                choices.render(frame, field, panels, &self.theme);
+            }
         }
     }
 
@@ -3935,7 +4137,7 @@ mod tests {
         app.active = Side::Left;
 
         app.handle(action(Action::Mkdir));
-        assert_eq!(app.context(), Context::DialogInput);
+        assert_eq!(app.context(), Context::PathInput);
         let text = screen(&mut app);
         assert!(text.contains("Create a new directory"), "{text}");
         assert!(text.contains("Enter directory name:"), "{text}");
@@ -6753,7 +6955,7 @@ mod tests {
     /// Types `text` into Quick cd in the active panel and presses Enter.
     fn quick_cd(app: &mut App, text: &str) -> Vec<Effect> {
         assert!(app.handle(action(Action::QuickCd)).is_empty());
-        assert_eq!(app.context(), Context::DialogInput);
+        assert_eq!(app.context(), Context::PathInput);
         type_text(app, text);
         app.handle(action(Action::Confirm))
     }
@@ -6834,5 +7036,135 @@ mod tests {
         assert_eq!(app.panel(Side::Left).location(), &local("/srv"), "it stays");
         let text = screen(&mut app);
         assert!(text.contains("Cannot open /nowhere"), "{text}");
+    }
+
+    /// The listing that a Tab asks for: its generation, directory, host, and whether it wants
+    /// the hosts of the ssh config.
+    fn names_request(effects: &[Effect]) -> (u64, Location, bool, bool) {
+        match effects {
+            [
+                Effect::ListNames {
+                    generation,
+                    dir: Some(dir),
+                    host,
+                    hosts,
+                },
+            ] => (*generation, dir.clone(), host.is_some(), *hosts),
+            other => panic!("expected a listing of names, got {other:?}"),
+        }
+    }
+
+    /// Entries as [`Done::Names`] has them.
+    fn names_of(entries: &[(&str, bool)]) -> Vec<(Vec<u8>, bool)> {
+        entries
+            .iter()
+            .map(|(name, dir)| (name.as_bytes().to_vec(), *dir))
+            .collect()
+    }
+
+    fn field(app: &App) -> String {
+        let (before, after) = app.dialogs.front().unwrap().dialog.around_cursor();
+        format!("{before}|{after}")
+    }
+
+    #[test]
+    fn tab_completes_quick_cd_from_the_directory_typed() {
+        let mut app = loaded();
+        app.handle(action(Action::QuickCd));
+        type_text(&mut app, "left/pr");
+        let (generation, dir, through, hosts) =
+            names_request(&app.handle(action(Action::Complete)));
+        assert_eq!((dir, through, hosts), (local("/srv/left"), false, false));
+        let entries = [
+            ("project-a", true),
+            ("project-b", true),
+            ("press.txt", false),
+        ];
+        app.names(generation, Ok(names_of(&entries)), &[]);
+        assert_eq!(
+            field(&app),
+            "left/project-|",
+            "as far as they agree; no files"
+        );
+
+        // A Tab that gets no further lists them; arrows choose, Enter takes one.
+        let (generation, ..) = names_request(&app.handle(action(Action::Complete)));
+        app.names(generation, Ok(names_of(&entries)), &[]);
+        assert_eq!(app.context(), Context::Completion);
+        let text = screen_of(&mut app, 20);
+        assert!(
+            text.contains("project-a/") && text.contains("project-b/"),
+            "{text}"
+        );
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Confirm));
+        assert_eq!(app.context(), Context::PathInput);
+        assert_eq!(field(&app), "left/project-b/|");
+
+        // Typing closes the list and edits the field.
+        let (generation, ..) = names_request(&app.handle(action(Action::Complete)));
+        app.names(generation, Ok(names_of(&[("x", true), ("y", true)])), &[]);
+        assert_eq!(app.context(), Context::Completion);
+        app.handle(Resolved::Insert('x'));
+        assert_eq!(app.context(), Context::PathInput);
+        assert_eq!(field(&app), "left/project-b/x|");
+
+        // A reply to text that changed since is dropped.
+        let (generation, ..) = names_request(&app.handle(action(Action::Complete)));
+        app.handle(action(Action::Backspace));
+        app.names(generation, Ok(names_of(&[("xyz", true)])), &[]);
+        assert_eq!(field(&app), "left/project-b/|");
+    }
+
+    #[test]
+    fn quick_cd_completes_hosts_and_home() {
+        let mut app = loaded();
+        app.handle(action(Action::QuickCd));
+        type_text(&mut app, "~");
+        assert!(app.handle(action(Action::Complete)).is_empty());
+        assert_eq!(field(&app), "~/|");
+        app.handle(action(Action::DeleteToStart));
+        type_text(&mut app, "we");
+        let (generation, dir, _, hosts) = names_request(&app.handle(action(Action::Complete)));
+        assert_eq!((dir, hosts), (local("/srv"), true));
+        app.names(
+            generation,
+            Ok(names_of(&[("left", true)])),
+            &["web".to_owned(), "db".to_owned()],
+        );
+        assert_eq!(field(&app), "web:|");
+        // On a host that is not connected, there is nothing to read.
+        type_text(&mut app, "/v");
+        let (_, dir, through, hosts) = names_request(&app.handle(action(Action::Complete)));
+        assert_eq!((dir, through, hosts), (remote("web", "/"), false, false));
+    }
+
+    #[test]
+    fn f5_completes_files_and_connected_hosts_and_f7_takes_no_hosts() {
+        // The left panel is on web, at /home/deploy, with its cursor on notes.
+        let (mut app, _) = on_a_host();
+        app.handle(action(Action::Copy));
+        app.handle(action(Action::DeleteToStart));
+        type_text(&mut app, "w");
+        let (generation, _, _, hosts) = names_request(&app.handle(action(Action::Complete)));
+        assert!(!hosts, "F5 knows the connected hosts itself");
+        app.names(generation, Ok(names_of(&[("x", false)])), &[]);
+        assert_eq!(field(&app), "web:|");
+        type_text(&mut app, "no");
+        let (generation, dir, through, _) = names_request(&app.handle(action(Action::Complete)));
+        assert_eq!((dir, through), (remote("web", ""), true));
+        app.names(generation, Ok(names_of(&[("notes", false)])), &[]);
+        assert_eq!(field(&app), "web:notes|");
+        app.handle(action(Action::Cancel));
+
+        app.handle(action(Action::Mkdir));
+        app.handle(action(Action::DeleteToStart));
+        type_text(&mut app, "web:x/");
+        let (_, dir, ..) = names_request(&app.handle(action(Action::Complete)));
+        assert_eq!(
+            dir,
+            remote("web", "/home/deploy/web:x"),
+            "F7 names no hosts"
+        );
     }
 }

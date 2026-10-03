@@ -106,6 +106,13 @@ pub(crate) enum Done {
     HostSaved(Result<Arc<Hosts>, String>),
     /// The settings of [`Effect::SaveConfig`] are written, or why not.
     ConfigSaved(Result<(), String>),
+    /// The names of the [`Effect::ListNames`] `generation`: each with whether it is a
+    /// directory, or why there are none; and the aliases of the hosts.
+    Names {
+        generation: u64,
+        entries: Result<Vec<(Vec<u8>, bool)>, String>,
+        hosts: Vec<String>,
+    },
     /// zoxide's answer to the [`Effect::ZoxideQuery`] `generation`, or why there is none.
     Jumps {
         generation: u64,
@@ -312,6 +319,12 @@ impl Tasks {
                 Effect::ZoxideAdd(dir) => {
                     let _ = self.zoxide_adds.send(dir);
                 }
+                Effect::ListNames {
+                    generation,
+                    dir,
+                    host,
+                    hosts,
+                } => self.list_names(generation, dir, host, hosts),
                 Effect::ZoxideQuery {
                     generation,
                     keywords,
@@ -352,6 +365,38 @@ impl Tasks {
     /// the changes before.
     fn save_config(&self, old: Config, new: Config) {
         let _ = self.config_saves.send((old, new));
+    }
+
+    /// Lists the names in `dir` and, with `hosts`, the hosts of the ssh config, for completion.
+    /// A remote directory is read through the session of its host; with no host to read it
+    /// through, it holds nothing.
+    fn list_names(
+        &self,
+        generation: u64,
+        dir: Option<Location>,
+        host: Option<HostHandle>,
+        hosts: bool,
+    ) {
+        let context = Arc::clone(&self.context);
+        let done = self.done.clone();
+        tokio::spawn(async move {
+            let entries = names_in(dir, host);
+            let aliases = async {
+                if !hosts {
+                    return Vec::new();
+                }
+                tokio::task::spawn_blocking(move || root::read_hosts(&context))
+                    .await
+                    .map(|hosts| hosts.into_iter().map(|host| host.alias).collect())
+                    .unwrap_or_default()
+            };
+            let (entries, hosts) = tokio::join!(entries, aliases);
+            let _ = done.send(Done::Names {
+                generation,
+                entries,
+                hosts,
+            });
+        });
     }
 
     /// Asks zoxide for the directories that match `keywords`, without `exclude`; a query that
@@ -626,6 +671,41 @@ fn save_configs(
         }
     });
     sender
+}
+
+/// The names in `dir`, each with whether it is a directory, read through `host` if it is
+/// remote; nothing without a host to read it through, and in the root.
+async fn names_in(
+    dir: Option<Location>,
+    host: Option<HostHandle>,
+) -> Result<Vec<(Vec<u8>, bool)>, String> {
+    let entries = match dir {
+        Some(Location::Local(path)) => LocalFs.list_dir(&path).await,
+        Some(Location::Remote { path, .. }) => {
+            let Some(Some(fs)) = share(host).await else {
+                return Ok(Vec::new());
+            };
+            // The empty path is the home directory, where the session starts.
+            let path = if path.as_bytes().is_empty() {
+                RemotePath::from(".")
+            } else {
+                path
+            };
+            fs.list_dir(&path).await
+        }
+        Some(Location::Root | Location::Sftp) | None => return Ok(Vec::new()),
+    };
+    entries
+        .map(|entries| {
+            entries
+                .into_iter()
+                .map(|entry| {
+                    let dir = entry.is_dir_like();
+                    (entry.name, dir)
+                })
+                .collect()
+        })
+        .map_err(|error| describe::vfs_error(&error))
 }
 
 /// Starts the task that adds directories to zoxide, one after another, so that no two zoxide
@@ -1453,6 +1533,33 @@ mod tests {
         assert_eq!(opened(&plain, &fs, Some(&gone)).await, Ok(text(&root)));
         let missing = task(&root, Some("missing"));
         assert!(opened(&missing, &fs, None).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn names_to_complete_tell_directories_and_links_to_them() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir(tmp.path().join("dir")).unwrap();
+        std::fs::write(tmp.path().join("file"), "").unwrap();
+        std::os::unix::fs::symlink("dir", tmp.path().join("link")).unwrap();
+        let dir = Some(Location::Local(tmp.path().to_path_buf()));
+        let mut names = names_in(dir, None).await.unwrap();
+        names.sort();
+        assert_eq!(
+            names,
+            [
+                (b"dir".to_vec(), true),
+                (b"file".to_vec(), false),
+                (b"link".to_vec(), true)
+            ]
+        );
+        let missing = Some(Location::Local(tmp.path().join("gone")));
+        assert!(names_in(missing, None).await.is_err());
+        let remote = Location::Remote {
+            host: "web".to_owned(),
+            path: RemotePath::from("/srv"),
+        };
+        assert_eq!(names_in(Some(remote), None).await, Ok(Vec::new()));
+        assert_eq!(names_in(Some(Location::Root), None).await, Ok(Vec::new()));
     }
 
     #[tokio::test]

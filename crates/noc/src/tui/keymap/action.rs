@@ -20,6 +20,10 @@ pub(crate) enum Context {
     Dialog,
     /// A dialog whose focus is on a text field; falls back to `Dialog`.
     DialogInput,
+    /// A text field for a path, which Tab completes; falls back to `DialogInput`.
+    PathInput,
+    /// The list of completions under a path field; keys it does not bind go to the field.
+    Completion,
     /// The viewer of F3.
     Viewer,
 }
@@ -34,6 +38,13 @@ impl Context {
             // Dialogs are modal: panel keys do nothing while one is open.
             Self::Dialog => &[Self::Dialog],
             Self::DialogInput => &[Self::DialogInput, Self::Dialog],
+            Self::PathInput => &[Self::PathInput, Self::DialogInput, Self::Dialog],
+            Self::Completion => &[
+                Self::Completion,
+                Self::PathInput,
+                Self::DialogInput,
+                Self::Dialog,
+            ],
             Self::Viewer => &[Self::Viewer],
             // Menus are modal too.
             Self::Menu => &[Self::Menu],
@@ -55,7 +66,13 @@ impl Context {
     pub(crate) fn text_first(self) -> bool {
         matches!(
             self,
-            Self::QuickSearch | Self::DialogInput | Self::Menu | Self::Jump | Self::PullDown
+            Self::QuickSearch
+                | Self::DialogInput
+                | Self::PathInput
+                | Self::Completion
+                | Self::Menu
+                | Self::Jump
+                | Self::PullDown
         )
     }
 
@@ -67,6 +84,8 @@ impl Context {
                 | Self::Root
                 | Self::QuickSearch
                 | Self::DialogInput
+                | Self::PathInput
+                | Self::Completion
                 | Self::Menu
                 | Self::Jump
                 | Self::PullDown
@@ -181,6 +200,8 @@ pub(crate) enum Action {
     DeleteToStart,
     /// Deletes from the cursor to the end of the text field.
     DeleteToEnd,
+    /// Completes the path in a text field; in the list of completions, the next one.
+    Complete,
     /// Accepts the dialog, or activates the focused button.
     Confirm,
     /// Switches the focused check box, or presses the focused button.
@@ -253,6 +274,7 @@ impl Action {
         Self::Delete,
         Self::DeleteToStart,
         Self::DeleteToEnd,
+        Self::Complete,
         Self::Confirm,
         Self::Toggle,
         Self::Cancel,

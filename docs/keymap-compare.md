@@ -266,6 +266,7 @@ sequence. Sections marked (noc) exist only in noc.
 | Paste                         | —              | —         | Ctrl+Y                      | Shift+Ins                         |
 | Input line history            | —              | —         | Alt+H                       | Ctrl+Up<br>Ctrl+Down (in dialogs) |
 | Previous / next history entry | —              | —         | Alt+P / Alt+N               | —                                 |
+| Complete path (path fields)   | Tab            | —         | Alt+Tab                     | —                                 |
 
 ## Menus and dialogs
 
@@ -537,6 +538,20 @@ sequence. Sections marked (noc) exist only in noc.
 | Disconnect host                    | F8            | —         | —   | —   |
 | Reread volumes and hosts           | Ctrl+R        | —         | —   | —   |
 | Close                              | Esc<br>F10    | —         | —   | —   |
+
+## Completion list (noc)
+
+Under a path field (Quick cd, F5, F6, F7) after a Tab that gets no further.
+
+| Action                           | noc (default) | noc (vim) | mc  | far |
+| -------------------------------- | ------------- | --------- | --- | --- |
+| Previous / next choice           | Up / Down     | —         | —   | —   |
+| Next choice, round               | Tab           | —         | —   | —   |
+| Page up / down                   | PgUp / PgDn   | —         | —   | —   |
+| First / last choice              | Home / End    | —         | —   | —   |
+| Put the choice in the field      | Enter         | —         | —   | —   |
+| Close                            | Esc           | —         | —   | —   |
+| Close and edit the field         | Other keys    | —         | —   | —   |
 
 ## zoxide window (noc)
 

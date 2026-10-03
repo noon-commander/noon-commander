@@ -60,6 +60,20 @@ Non-goals: forwarding of any kind, a built-in SSH implementation, a password man
 - OpenSSH 8.7 or newer: check with `ssh -V`.
 - Rust 1.88 or newer to build from source.
 
+## Installing
+
+On macOS, with [Homebrew](https://brew.sh):
+
+```sh
+brew install noon-commander/tap/noon-commander
+```
+
+The [releases](https://github.com/noon-commander/noon-commander/releases) also have tarballs
+for Apple Silicon and Intel Macs, each with a build provenance attestation that
+`gh attestation verify` checks ([packaging/README.md](packaging/README.md#checking-a-download)).
+The binaries are not notarized, so macOS blocks `noc` from a tarball downloaded with a browser
+until `xattr -d com.apple.quarantine noc` removes the mark; Homebrew sets none.
+
 ## Building
 
 ### Prerequisites

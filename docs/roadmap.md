@@ -88,6 +88,9 @@
 - [x] zoxide: Alt-Z jumps to the directories it ranks; directories where the user did
       something go to it, `[zoxide]`; external programs live in `noc-tools`
       ([ADR 0012](adr/0012-external-tools-and-zoxide.md))
+- [x] Release workflow from signed tags: macOS binaries for arm64 and x86_64 with build
+      provenance attestations, and a Homebrew tap
+      ([ADR 0014](adr/0014-release-workflow-and-homebrew-tap.md))
 - [x] Quick cd (Alt-C), as in mc, with `~`, `..`, `-`, and `host:path`
 - [x] Tab completion of paths in Quick cd, F5, F6, and F7, with a list of choices
 - [ ] Bookmarks and history
@@ -109,7 +112,7 @@
   or with `ssh -t` over the host's master connection. It reuses the suspend/resume mechanism from
   F4. Variant B, a persistent mc-style subshell, may come later.
 - vim keymap preset.
-- Linux: CI job and packages (AUR, deb).
+- Linux: CI job, release binaries, and packages (AUR, deb).
 - Translations.
 - Clipboard fallback where OSC 52 does not work (macOS Terminal, blocked multiplexers): a
   desktop helper (`pbcopy`, `wl-copy`, `xclip`) when Noon Commander runs on the desktop,
@@ -120,7 +123,6 @@
   OpenSSH's server has no SFTP `check-file` extension.
 - CRC32, for `.sfv` files.
 - Resumable transfers.
-- Release binaries and a Homebrew tap.
 - Watch for volumes that are mounted or unmounted (DiskArbitration on macOS, `poll` on
   `/proc/self/mountinfo` on Linux) instead of reading them on each listing; eject from the root.
 - Plugins for other backends as rows of the virtual root.

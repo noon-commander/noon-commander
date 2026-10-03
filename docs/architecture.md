@@ -810,3 +810,22 @@ remember_dir = true              # reopen the last directory of this session
   icons, mc's markers: `/` directory, `~` link to a directory, `@` link, `!` broken link, `*`
   executable, `|` FIFO, `=` socket, `-` character device, `+` block device and volume; the
   home directory is `~`, and the list of hosts `/`, as it opens like a directory.
+
+## Releases
+
+A signed tag `vX.Y.Z` starts `.github/workflows/release.yml`, the only place where releases
+are built ([ADR 0014](adr/0014-release-workflow-and-homebrew-tap.md)):
+
+```text
+ci (ci.yml on the tag) ─────────────────────┐
+draft ──► build (aarch64, x86_64 macOS) ────┴──► publish ──► homebrew
+```
+
+- `draft` checks the tag against `Cargo.toml` and its signature, takes the notes from
+  `CHANGELOG.md`, and creates a draft release.
+- `build` compiles `noc` for each target without a cache, packs
+  `noon-commander-X.Y.Z-<target>.tar.gz`, attests its build provenance, and uploads it.
+- `publish` verifies the tarballs' attestations and publishes the draft once CI and every
+  build passed.
+- `homebrew` renders `packaging/homebrew/noon-commander.rb.in` and commits it to
+  `noon-commander/homebrew-tap` through the API as a GitHub App, so GitHub signs the commit.

@@ -40,6 +40,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Releases: signed tags build macOS binaries for Apple Silicon and Intel, with build provenance
+  attestations (`gh attestation verify`), and a Homebrew tap:
+  `brew install noon-commander/tap/noon-commander`
+  ([ADR 0014](docs/adr/0014-release-workflow-and-homebrew-tap.md)).
 - Tab completes paths in Quick cd, F5, F6, and F7, as in bash: one match goes in, several as
   far as they agree, and another Tab lists them under the field to choose one. Directories,
   files for F5 and F6, and hosts before a `:`, locally and on connected hosts.

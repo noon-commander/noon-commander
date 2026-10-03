@@ -33,8 +33,9 @@ renderer: a library in an `xtask` crate, or a command-line program.
 - The workflows pin every action to a commit hash, with its version in a comment, and check out
   without keeping the token (`persist-credentials: false`): a moved tag cannot run new code in
   CI. Dependabot (`.github/dependabot.yml`) proposes new hashes weekly, a week after a release.
-  `dtolnay/rust-toolchain` is pinned on `master` and told the toolchain with `toolchain:`, since
-  its branch names are toolchains.
+  Rust is installed with the runner's own rustup rather than an action, and matrix values reach
+  commands through `env:`, never as `${{ }}` inside `run:`. `just gha` runs zizmor as
+  `pedantic`, so these code smells fail it too.
 - The logo is rendered by the `resvg` program. The workspace gets no new crate and no new
   dependencies, so `deny.toml` and the MSRV are untouched.
 - The PNGs are defined in the `justfile`, each with a name and a size, and `just logo` renders

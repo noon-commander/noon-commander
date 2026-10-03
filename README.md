@@ -160,7 +160,7 @@ The project's tasks live in the [`justfile`](justfile)
 | `just toml` | Check that the TOML files are valid and formatted (needs taplo) |
 | `just toml-fmt` | Format the TOML files, keeping their comments (needs taplo) |
 | `just outdated` | Show newer versions of the dependencies, without changing anything (needs cargo-edit) |
-| `just gha` | Lint the GitHub Actions workflows and audit their security (needs actionlint, zizmor) |
+| `just gha` | Lint the GitHub Actions workflows and audit their security, pedantically (needs actionlint, zizmor) |
 | `just sh` | Lint the shell scripts, such as the fake `ssh` of the tests (needs shellcheck) |
 | `just logo` | Render the PNGs of `assets/icons/logo.svg`, without metadata (needs resvg) |
 

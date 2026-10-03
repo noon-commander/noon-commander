@@ -530,6 +530,13 @@ remember_dir = true              # reopen the last directory of this session
   and an arrow in the header marks the order. Directories stay first. Names that start with a
   dot are shown unless `ui.show_hidden` is off; Alt-. switches them in both panels, as in mc.
   Sorting and hiding keep the cursor on its entry.
+- **The cursor of the inactive panel.** Unlike mc, the inactive panel shows where its cursor
+  is (the checksum comparison reads the file there): its row gets a background of its own
+  under the row's colors, which stay (a mark too). The theme sets it as `cursor_inactive`:
+  the dark gray of the 16 colors in `mc-classic`, dimmed reverse video in `terminal`, the
+  dialogs' `surface0` in the Catppuccin themes, and in the Noon themes the text fields' blue
+  (`#2D4672`) in `noon-dark`, as the dialogs' one is a single step of gray above the panels in
+  256 colors, and the dialogs' blue-gray (`#E8ECF4`) in `noon-light`.
 - **Free space.** As in mc, the bottom of a panel's frame shows the free space and size of the
   file system that holds the directory, and the share that is free: `123G / 500G (24%)`. It is
   read with every listing, so it changes when a job reads the panel again or on Ctrl-R; a panel
@@ -690,12 +697,13 @@ remember_dir = true              # reopen the last directory of this session
   `en-US` for now. `ui.language = "auto"` follows the system locale (through `sys-locale`).
   Arguments are inserted without Unicode isolation marks, which terminals would show.
 - **Themes.** Built in: `mc-classic`, the colors of mc's default skin (blue panels, a cyan
-  cursor that replaces the row's colors, yellow headers; directories white, executables green,
-  broken links red, devices magenta; gray dialogs with mc's shadow; a black-and-cyan F-key
-  bar; red error dialogs); `terminal`, the terminal's own colors with reverse video;
-  `noon-dark` and `noon-light`, the colors of the logo (`assets/icons/logo.svg`); and
-  `catppuccin-mocha` and `catppuccin-latte`, the dark and light flavors of
-  [Catppuccin](https://catppuccin.com) ([ADR 0010](adr/0010-truecolor-themes.md)).
+  cursor that replaces the row's colors, a dark gray one under them in the inactive panel,
+  yellow headers; directories white, executables green, broken links red, devices magenta; gray
+  dialogs with mc's shadow; a black-and-cyan F-key bar; red error dialogs); `terminal`, the
+  terminal's own colors with reverse video; `noon-dark` and `noon-light`, the colors of the
+  logo (`assets/icons/logo.svg`); and `catppuccin-mocha` and `catppuccin-latte`, the dark and
+  light flavors of [Catppuccin](https://catppuccin.com)
+  ([ADR 0010](adr/0010-truecolor-themes.md)).
   `ui.theme` picks one; an unknown name is an error. `mc-classic` uses the 16 ANSI colors, so
   the terminal's palette decides its shades. The Catppuccin themes are built by one function
   from a palette of named colors, so both flavors give each color the same role: panels on

@@ -21,6 +21,9 @@ pub(crate) struct Theme {
     pub(crate) header: Style,
     /// The row under the cursor in the active panel; replaces the entry style.
     pub(crate) cursor: Style,
+    /// The row under the cursor in the inactive panel: a background, drawn under the colors of
+    /// the row, which keeps them.
+    pub(crate) cursor_inactive: Style,
     /// A marked row, and the total of the marked entries.
     pub(crate) marked: Style,
     /// A marked row under the cursor.
@@ -167,6 +170,8 @@ impl Theme {
             panel_title_active: on(Color::Black, Color::Cyan),
             header: on(Color::LightYellow, Color::Blue),
             cursor: on(Color::Black, Color::Cyan),
+            // The only one of the 16 colors that stands out from blue and keeps the names'.
+            cursor_inactive: Style::new().bg(Color::DarkGray),
             marked: on(Color::LightYellow, Color::Blue).underlined(),
             marked_cursor: on(Color::LightYellow, Color::Cyan).underlined(),
             quick_search: on(Color::Black, Color::Cyan),
@@ -229,6 +234,7 @@ impl Theme {
             panel_title_active: reversed,
             header: plain,
             cursor: reversed,
+            cursor_inactive: reversed.dim(),
             // Not bold as in mc: that is what directories are.
             marked: Style::new().underlined(),
             marked_cursor: reversed.underlined(),
@@ -288,6 +294,7 @@ impl Theme {
             panel_title_active: cursor,
             header: on(p.lavender, p.base),
             cursor,
+            cursor_inactive: Style::new().bg(p.surface0),
             marked: on(p.mauve, p.base).underlined(),
             marked_cursor: on(p.base, p.mauve).underlined(),
             quick_search: cursor,
@@ -348,6 +355,7 @@ impl Theme {
             panel_title_active: cursor,
             header: on(p.accent, p.panel).bold(),
             cursor,
+            cursor_inactive: Style::new().bg(p.cursor_inactive),
             marked: on(p.mark, p.panel).underlined(),
             marked_cursor: on(p.panel, p.mark).underlined(),
             quick_search: cursor,
@@ -563,6 +571,8 @@ struct Noon {
     surface: Color,
     /// Text fields.
     field: Color,
+    /// Behind the row under the cursor in the inactive panel.
+    cursor_inactive: Color,
     /// Panel frames.
     line: Color,
     faint: Color,
@@ -592,6 +602,8 @@ impl Noon {
         panel: Color::from_u32(0x001a_2b4e),
         surface: Color::from_u32(0x0022_3860),
         field: Color::from_u32(0x002d_4672),
+        // `surface` is a single step of gray above `panel` in 256 colors.
+        cursor_inactive: Color::from_u32(0x002d_4672),
         line: Color::from_u32(0x005a_72a0),
         faint: Color::from_u32(0x0070_84ab),
         muted: Color::from_u32(0x00a3_b0c8),
@@ -613,6 +625,7 @@ impl Noon {
         panel: Color::from_u32(0x00ff_fbea),
         surface: Color::from_u32(0x00e8_ecf4),
         field: Color::from_u32(0x00ff_ffff),
+        cursor_inactive: Color::from_u32(0x00e8_ecf4),
         line: Color::from_u32(0x008c_9bbb),
         faint: Color::from_u32(0x006f_7c99),
         muted: Color::from_u32(0x004f_5e80),
@@ -636,6 +649,7 @@ impl Noon {
             panel: indexed(self.panel),
             surface: indexed(self.surface),
             field: indexed(self.field),
+            cursor_inactive: indexed(self.cursor_inactive),
             line: indexed(self.line),
             faint: indexed(self.faint),
             muted: indexed(self.muted),
@@ -743,6 +757,21 @@ mod tests {
             theme.dialog_host_status(HostStatus::Connected).fg,
             Some(Color::Green)
         );
+    }
+
+    #[test]
+    fn the_inactive_cursor_stands_out_from_the_panel() {
+        for name in Theme::NAMES {
+            for depth in [ColorDepth::TrueColor, ColorDepth::Indexed] {
+                let theme = Theme::by_name(name, depth).unwrap();
+                let row = theme.panel.patch(theme.cursor_inactive);
+                assert!(row != theme.panel, "{name} {depth:?}");
+                assert_eq!(
+                    theme.cursor_inactive.fg, None,
+                    "{name}: keeps the names' colors"
+                );
+            }
+        }
     }
 
     #[test]

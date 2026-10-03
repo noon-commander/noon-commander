@@ -887,21 +887,9 @@ impl Panel {
         frame.render_widget(header, line(inner.y));
         for (screen_row, index) in (self.offset..self.rows()).take(list_height).enumerate() {
             let Some(row) = self.row(index) else { break };
-            let mut text = columns.row(row, view);
-            // The cursor and marks replace the colors of the row, as in mc.
             let marked = matches!(row, Row::Entry(entry) if self.marked.contains(&entry.name));
-            let style = match (active && index == self.cursor, marked) {
-                (true, true) => Some(theme.marked_cursor),
-                (true, false) => Some(theme.cursor),
-                (false, true) => Some(theme.marked),
-                (false, false) => None,
-            };
-            if let Some(style) = style {
-                for span in &mut text.spans {
-                    span.style = Style::new();
-                }
-                text = text.style(style);
-            }
+            let cursor = (index == self.cursor).then_some(active);
+            let text = row_style(columns.row(row, view), cursor, marked, theme);
             let y = inner.y + 1 + u16::try_from(screen_row).unwrap_or(u16::MAX);
             frame.render_widget(text, line(y));
         }
@@ -1415,6 +1403,33 @@ pub(crate) fn location_text(location: &Location) -> String {
     }
 }
 
+/// `text` as a row under the cursor, `Some(true)` in the active panel, and `marked`. The cursor
+/// and marks replace the colors of the row, as in mc; the cursor of the inactive panel only puts
+/// a background under them.
+fn row_style(
+    mut text: Line<'static>,
+    cursor: Option<bool>,
+    marked: bool,
+    theme: &Theme,
+) -> Line<'static> {
+    let style = match (cursor == Some(true), marked) {
+        (true, true) => Some(theme.marked_cursor),
+        (true, false) => Some(theme.cursor),
+        (false, true) => Some(theme.marked),
+        (false, false) => None,
+    };
+    if let Some(style) = style {
+        for span in &mut text.spans {
+            span.style = Style::new();
+        }
+        text = text.style(style);
+    }
+    if cursor == Some(false) {
+        text = text.patch_style(theme.cursor_inactive);
+    }
+    text
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::{Duration, UNIX_EPOCH};
@@ -1423,6 +1438,7 @@ mod tests {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
     use ratatui::layout::Position;
+    use ratatui::style::Color;
 
     use super::*;
 
@@ -2677,7 +2693,8 @@ mod tests {
     }
 
     #[test]
-    fn the_cursor_shows_only_in_the_active_panel_and_stays_on_screen() {
+    fn the_inactive_panel_shows_its_cursor_faintly_and_on_screen() {
+        use ratatui::style::Modifier;
         let many: Vec<DirEntry> = (0..30)
             .map(|index| entry(&format!("file{index:02}"), FileKind::File, 1))
             .collect();
@@ -2685,17 +2702,60 @@ mod tests {
         panel.handle(Action::End);
         let backend = draw(&mut panel, 40, 10, false);
         assert!(panel.offset > 0, "scrolled to the cursor");
-        let text = backend.to_string();
-        assert!(text.contains("file29"), "{text}");
-        let reversed = backend
-            .buffer()
-            .content()
-            .iter()
-            .filter(|cell| cell.modifier.contains(ratatui::style::Modifier::REVERSED))
-            .count();
-        assert_eq!(
-            reversed, 0,
-            "an inactive panel shows no cursor or title highlight"
+        let buffer = backend.buffer();
+        let row_of = |text: &str| {
+            (0..buffer.area.height).find(|&y| {
+                let line: String = (0..buffer.area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect();
+                line.contains(text)
+            })
+        };
+        let cursor_row = row_of("file29").unwrap();
+        for y in 0..buffer.area.height {
+            for x in 0..buffer.area.width {
+                let modifier = buffer[(x, y)].modifier;
+                let on_cursor = y == cursor_row && x > 0 && x < buffer.area.width - 1;
+                assert_eq!(
+                    modifier.contains(Modifier::REVERSED | Modifier::DIM),
+                    on_cursor,
+                    "({x}, {y}): only the cursor's row, dimmed, and no title highlight"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_inactive_cursor_keeps_the_colors_of_the_names() {
+        let mut panel = loaded(
+            "/srv",
+            vec![
+                entry("docs", FileKind::Dir, 0),
+                entry("notes", FileKind::File, 1),
+            ],
         );
+        panel.handle(Action::Down);
+        let theme = Theme::mc_classic();
+        let terminal = render_themed(
+            &mut panel,
+            (40, 8),
+            false,
+            &|_| HostState::default(),
+            Decor::new(false),
+            &theme,
+        );
+        let buffer = terminal.backend().buffer();
+        let (width, height) = (buffer.area.width, buffer.area.height);
+        let (x, y) = (0..height)
+            .find_map(|y| {
+                let line: String = (0..width).map(|x| buffer[(x, y)].symbol()).collect();
+                let x = line[..line.find("docs")?].chars().count();
+                Some((u16::try_from(x).ok()?, y))
+            })
+            .unwrap();
+        let cell = &buffer[(x, y)];
+        assert_eq!(cell.fg, Color::White, "the directory's color");
+        assert_eq!(cell.bg, Color::DarkGray, "the inactive cursor's background");
+        assert_eq!(buffer[(x, y + 1)].bg, Color::Blue, "the next row is plain");
     }
 }

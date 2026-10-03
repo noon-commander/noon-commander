@@ -41,6 +41,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   order, and hidden tabs read their directories again when they show. `ui.tab_bar` puts them
   on a line above the panels (`"line"`, the default) or in the panel's frame (`"frame"`)
   ([ADR 0011](docs/adr/0011-tabs-per-panel.md)).
+- The inactive panel shows its cursor: a background of its own under the row, which keeps the
+  colors of the names; dark gray in `mc-classic`, dimmed reverse video in `terminal`.
 - Noon themes in the colors of the logo: `[ui] theme = "noon-dark"`, navy panels, and
   `"noon-light"`, cream panels with navy text; both with a gold cursor and an amber menu bar,
   brighter in `noon-light`, and F-key numbers in gold on a dark key bar. Like the Catppuccin

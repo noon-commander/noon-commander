@@ -17,11 +17,11 @@ renderer: a library in an `xtask` crate, or a command-line program.
 ## Decision
 
 - `just` runs the project's tasks from a `justfile` at the root: `fmt`, `clippy`, `test`,
-  `deny`, `check` (all of them, with `cargo fmt --check`, so it changes no files), `msrv`, and
-  `logo`. `msrv` is not part of `check`: it needs rustup and the oldest supported toolchain,
-  which a Homebrew Rust lacks; CI checks the MSRV either way.
-  `make` brings tabs, `.PHONY`, and an old GNU make on macOS; `cargo-make` is heavy for a
-  handful of commands; an `xtask` crate would wrap each cargo command in Rust code.
+  `deny`, `check` (all of them, with `cargo fmt --check`, so it changes no files), `msrv`, `md`
+  (markdownlint-cli2 with `.markdownlint.yaml`), and `logo`. `msrv` is not part of `check`: it
+  needs rustup and the oldest supported toolchain, which a Homebrew Rust lacks; CI checks the
+  MSRV either way. `make` brings tabs, `.PHONY`, and an old GNU make on macOS; `cargo-make` is
+  heavy for a handful of commands; an `xtask` crate would wrap each cargo command in Rust code.
 - The logo is rendered by the `resvg` program. The workspace gets no new crate and no new
   dependencies, so `deny.toml` and the MSRV are untouched.
 - The PNGs are defined in the `justfile`, each with a name and a size, and `just logo` renders

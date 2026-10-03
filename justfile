@@ -29,6 +29,10 @@ test:
 deny:
     cargo deny check
 
+# Lint the Markdown files with .markdownlint.yaml (needs markdownlint-cli2)
+md:
+    markdownlint-cli2 "**/*.md" "#target"
+
 # Build with the oldest supported Rust, as CI does (needs rustup)
 msrv:
     @command -v rustup >/dev/null || { echo "just msrv needs rustup: https://rustup.rs" >&2; exit 1; }

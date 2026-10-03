@@ -165,3 +165,4 @@ scope.
 - Keep `docs/architecture.md`, `docs/roadmap.md`, and `docs/keymap-compare.md` in sync with the
   code.
 - Add user-visible changes to `CHANGELOG.md` under `Unreleased`.
+- Markdown follows `.markdownlint.yaml` (lines up to 100 characters); `just md` checks it.

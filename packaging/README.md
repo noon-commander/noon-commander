@@ -7,6 +7,7 @@ named `noon-commander`; `noc` is the binary inside them.
 | Path | What it is |
 | --- | --- |
 | `homebrew/noon-commander.rb.in` | The Homebrew formula, rendered into `Formula/noon-commander.rb` of the tap |
+| `tarball/README.md` | The README of the release tarball, for users rather than contributors |
 
 ## Making a release
 

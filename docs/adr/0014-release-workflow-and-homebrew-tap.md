@@ -30,8 +30,9 @@ a contributor run the same checks. A release is not a check: nobody builds one l
   that a release binary never comes from a cache another run wrote. The draft is published
   only when the checks and every build passed.
 - Packages are named after the project, `noon-commander`. A tarball,
-  `noon-commander-X.Y.Z-<target>.tar.gz`, holds `noc`, `LICENSE`, `README.md`, and `CHANGELOG.md`,
-   with its SHA-256 next to it.
+  `noon-commander-X.Y.Z-<target>.tar.gz`, holds `noc`, `LICENSE`, `CHANGELOG.md`, and a
+  `README.md` of its own for users (`packaging/tarball/README.md`), since the repository's one
+  is written for contributors. Its SHA-256 lies next to it.
 - Each tarball gets a build provenance attestation (`actions/attest`, SLSA provenance signed
   through Sigstore with the workflow's OIDC identity, no keys to keep). Before the draft is
   published, the workflow downloads the tarballs and verifies their attestations against this

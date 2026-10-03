@@ -107,7 +107,8 @@ jobs:
         run: |
           name="$PACKAGE-${TAG#v}-$TARGET"
           mkdir -p "dist/$name"
-          cp "target/$TARGET/release/noc" LICENSE README.md CHANGELOG.md "dist/$name/"
+          cp "target/$TARGET/release/noc" LICENSE CHANGELOG.md packaging/tarball/README.md \
+            "dist/$name/"
           COPYFILE_DISABLE=1 tar -C dist --no-mac-metadata --uid 0 --gid 0 --uname root \
             --gname wheel -czf "dist/$name.tar.gz" "$name"
           (cd dist && shasum -a 256 "$name.tar.gz" >"$name.tar.gz.sha256")

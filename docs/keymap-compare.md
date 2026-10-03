@@ -67,23 +67,24 @@ sequence. Sections marked (noc) exist only in noc.
 
 ## General commands
 
-| Action                                             | noc (default) | noc (vim) | mc                                    | far            |
-| -------------------------------------------------- | ------------- | --------- | ------------------------------------- | -------------- |
-| Repaint screen                                     | Ctrl+L        | —         | Ctrl+L                                | —              |
-| Show command output / user screen                  | —             | —         | Ctrl+O                                | Ctrl+O         |
-| Temporarily show user screen (while held)          | —             | —         | —                                     | Ctrl+Alt+Shift |
-| Quick cd                                           | —             | —         | Alt+C                                 | —              |
-| External panelize                                  | —             | —         | Ctrl+X !                              | —              |
-| Add current directory to hotlist / folder shortcut | —             | —         | Ctrl+X h                              | Ctrl+Shift+0…9 |
-| Go to directory from hotlist / folder shortcut     | —             | —         | Ctrl+\ (list)                         | RightCtrl+0…9  |
-| Change panel charset                               | —             | —         | Alt+E                                 | —              |
-| Toggle panel split (vertical/horizontal)           | —             | —         | Alt+,                                 | —              |
-| Change window size                                 | —             | —         | —                                     | Alt+F9         |
-| Task list                                          | —             | —         | —                                     | Ctrl+W         |
-| Background jobs                                    | Ctrl+X j      | —         | —                                     | —              |
-| Screen grabber                                     | —             | —         | —                                     | Alt+Ins        |
-| Record keyboard macro                              | —             | —         | Ctrl+R (in editor)                    | Ctrl+.         |
-| Run macro                                          | —             | —         | Ctrl+A, then assigned key (in editor) | —              |
+| Action                                             | noc (default)     | noc (vim) | mc                                    | far            |
+| -------------------------------------------------- | ----------------- | --------- | ------------------------------------- | -------------- |
+| Repaint screen                                     | Ctrl+L            | —         | Ctrl+L                                | —              |
+| Show command output / user screen                  | —                 | —         | Ctrl+O                                | Ctrl+O         |
+| Temporarily show user screen (while held)          | —                 | —         | —                                     | Ctrl+Alt+Shift |
+| Quick cd                                           | —                 | —         | Alt+C                                 | —              |
+| Jump to a directory zoxide ranks                   | Alt+Z<br>Ctrl+X z | —         | —                                     | —              |
+| External panelize                                  | —                 | —         | Ctrl+X !                              | —              |
+| Add current directory to hotlist / folder shortcut | —                 | —         | Ctrl+X h                              | Ctrl+Shift+0…9 |
+| Go to directory from hotlist / folder shortcut     | —                 | —         | Ctrl+\ (list)                         | RightCtrl+0…9  |
+| Change panel charset                               | —                 | —         | Alt+E                                 | —              |
+| Toggle panel split (vertical/horizontal)           | —                 | —         | Alt+,                                 | —              |
+| Change window size                                 | —                 | —         | —                                     | Alt+F9         |
+| Task list                                          | —                 | —         | —                                     | Ctrl+W         |
+| Background jobs                                    | Ctrl+X j          | —         | —                                     | —              |
+| Screen grabber                                     | —                 | —         | —                                     | Alt+Ins        |
+| Record keyboard macro                              | —                 | —         | Ctrl+R (in editor)                    | Ctrl+.         |
+| Run macro                                          | —                 | —         | Ctrl+A, then assigned key (in editor) | —              |
 
 ## History
 
@@ -535,6 +536,18 @@ sequence. Sections marked (noc) exist only in noc.
 | Remove last filter character       | Backspace     | —         | —   | —   |
 | Disconnect host                    | F8            | —         | —   | —   |
 | Reread volumes and hosts           | Ctrl+R        | —         | —   | —   |
+| Close                              | Esc<br>F10    | —         | —   | —   |
+
+## zoxide window (noc)
+
+| Action                             | noc (default) | noc (vim) | mc  | far |
+| ---------------------------------- | ------------- | --------- | --- | --- |
+| Previous / next directory          | Up / Down     | —         | —   | —   |
+| Page up / down                     | PgUp / PgDn   | —         | —   | —   |
+| First / last directory             | Home / End    | —         | —   | —   |
+| Open in the active panel           | Enter         | —         | —   | —   |
+| Open by number (no keywords)       | 1…9, 0        | —         | —   | —   |
+| Remove last keyword character      | Backspace     | —         | —   | —   |
 | Close                              | Esc<br>F10    | —         | —   | —   |
 
 ## Pull-down menu (noc)

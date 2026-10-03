@@ -45,6 +45,8 @@ enum Key {
     Multiplex,
     HideHosts,
     HideVolumes,
+    ZoxideRecord,
+    ZoxideProgram,
 }
 
 /// A value and how it is edited.
@@ -185,6 +187,14 @@ impl Setting {
             Key::Multiplex => ssh.multiplex = self.on(),
             Key::HideHosts => config.discovery.hide = split_words(text),
             Key::HideVolumes => config.volumes.hide = split_words(text),
+            Key::ZoxideRecord => config.zoxide.record = self.on(),
+            Key::ZoxideProgram => {
+                let program = text.trim();
+                if program.is_empty() {
+                    return Err(fl!("config-zoxide-program-empty"));
+                }
+                config.zoxide.program = PathBuf::from(program);
+            }
         }
         Ok(())
     }
@@ -322,6 +332,7 @@ impl Configuration {
                 transfers(config),
                 ssh(config, home),
                 volumes(config),
+                zoxide(config, home),
             ],
             category: 0,
             focus: Focus::Settings,
@@ -895,6 +906,33 @@ fn volumes(config: &Config) -> Category {
     }
 }
 
+/// zoxide, `[zoxide]`.
+fn zoxide(config: &Config, home: &Path) -> Category {
+    let zoxide = &config.zoxide;
+    Category {
+        icon: "󰥨",
+        title: fl!("config-zoxide"),
+        settings: vec![
+            Setting::new(
+                Key::ZoxideRecord,
+                (
+                    fl!("config-zoxide-record"),
+                    fl!("config-zoxide-record-hint"),
+                ),
+                Value::Toggle(zoxide.record),
+            ),
+            Setting::new(
+                Key::ZoxideProgram,
+                (
+                    fl!("config-zoxide-program"),
+                    fl!("config-zoxide-program-hint"),
+                ),
+                path_text(&zoxide.program, home),
+            ),
+        ],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use ratatui::Terminal;
@@ -1029,6 +1067,11 @@ mod tests {
         dialog.handle(action(Action::DeleteToStart));
         category(&mut dialog, 3);
         typed(&mut dialog, "/mnt/*");
+        category(&mut dialog, 4);
+        dialog.handle(action(Action::Toggle));
+        dialog.handle(action(Action::Down));
+        dialog.handle(action(Action::DeleteToStart));
+        typed(&mut dialog, "~/.cargo/bin/zoxide");
         assert!(dialog.handle(action(Action::Cancel)).closed);
         let mut expected = Config::default();
         expected.ui.language = "de".to_owned();
@@ -1043,16 +1086,19 @@ mod tests {
         expected.ssh.multiplex = false;
         expected.discovery.hide = Vec::new();
         expected.volumes.hide = vec!["/mnt/*".to_owned()];
+        expected.zoxide.record = false;
+        expected.zoxide.program = PathBuf::from("~/.cargo/bin/zoxide");
         assert_eq!(dialog.applied, expected);
     }
 
     #[test]
     fn an_invalid_text_keeps_the_cursor_and_says_why() {
-        let cases: [(usize, usize, &str, &str); 4] = [
+        let cases: [(usize, usize, &str, &str); 5] = [
             (0, 0, "?", "is not auto or a language tag"),
             (1, 1, "x", "is not a number of jobs"),
             (2, 2, "-F other_config", "Invalid extra ssh arguments"),
-            (2, 0, "", "cannot be empty"),
+            (2, 0, "", "The ssh program cannot be empty"),
+            (4, 1, " ", "The zoxide program cannot be empty"),
         ];
         for (index, row, text, message) in cases {
             let mut dialog = dialog();

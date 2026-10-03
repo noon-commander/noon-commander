@@ -84,6 +84,9 @@
 - [x] Tabs: each panel has its own (Ctrl-X T, Ctrl-X W, Alt-Left/Right, Ctrl-X Tab), on a line
       above the panels or in their frames, `ui.tab_bar`
       ([ADR 0011](adr/0011-tabs-per-panel.md))
+- [x] zoxide: Alt-Z jumps to the directories it ranks; directories where the user did
+      something go to it, `[zoxide]`; external programs live in `noc-tools`
+      ([ADR 0012](adr/0012-external-tools-and-zoxide.md))
 - [ ] Bookmarks and history
 - [ ] chmod and symlinks
 - [ ] Mouse support
@@ -118,4 +121,6 @@
 - Watch for volumes that are mounted or unmounted (DiskArbitration on macOS, `poll` on
   `/proc/self/mountinfo` on Linux) instead of reading them on each listing; eject from the root.
 - Plugins for other backends as rows of the virtual root.
+- zoxide on a host, over its master connection, for remote directories; it runs remote
+  commands, which needs an ADR, as checksums on the server do.
 - Anything behind the `forwarding` feature ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)).

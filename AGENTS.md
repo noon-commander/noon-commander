@@ -46,9 +46,10 @@ credentials; editing `~/.ssh/*`.
 | `crates/noc-ssh` | Host discovery, `ssh -G`, argument validation, forwarding policy, ControlMaster, SFTP channels, askpass bridge |
 | `crates/noc-vfs` | `Vfs` trait and backends (local, SFTP), mounted volumes |
 | `crates/noc-ops` | Job engine: copy, move, delete, mkdir, checksums; progress, cancellation, conflicts |
+| `crates/noc-tools` | External programs other than ssh: zoxide, the editor |
 
-Dependencies point one way: `config ← ssh ← vfs ← ops ← noc`. Library crates contain no UI
-code and no user-facing text.
+Dependencies point one way: `config ← ssh ← vfs ← ops ← noc`, and `tools ← noc`. Library
+crates contain no UI code and no user-facing text.
 
 ## Commands
 
@@ -70,7 +71,8 @@ Work is done when all of them pass.
   `policy::SFTP_CHANNEL_OPTIONS`.
 - Never add an SSH implementation (`russh`, `ssh2`, `libssh2-sys`); `deny.toml` bans them.
 - Spawn `ssh` only from `noc-ssh`: never through `sh -c`, always with `--` before the
-  destination.
+  destination. Spawn every other program only from `noc-tools` (ADR 0012): never through a
+  shell, with `--` before paths, killed on drop; tests use a fake program.
 - User-supplied ssh arguments must pass the validator (ADR 0004). Unknown flags are errors.
 - Never pass `StrictHostKeyChecking=no` and never write to `~/.ssh/`.
 - No blocking I/O in async code; use `spawn_blocking`. Remote operations must be cancel-safe
@@ -135,6 +137,8 @@ Work is done when all of them pass.
 - ssh orchestration tests set `ssh.program` to `crates/noc-ssh/tests/support/fake-ssh`, a
   POSIX shell script that emulates `-V`, `-G`, `-M`, `-O`, and `-s … sftp` (served by the local
   `sftp-server`) and logs its command lines. Keep it in sync with the flags we pass.
+- zoxide tests use `crates/noc-tools/tests/support/fake-zoxide` the same way; tests never touch
+  the real zoxide database.
 - Tests must not touch the real `~/.ssh` or XDG directories; use temporary directories.
 
 ## Platforms

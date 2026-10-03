@@ -43,6 +43,7 @@ impl Help {
             (Context::Root, fl!("help-root")),
             (Context::QuickSearch, fl!("help-quick-search")),
             (Context::Menu, fl!("help-menu")),
+            (Context::Jump, fl!("help-jump")),
             (Context::PullDown, fl!("help-pulldown")),
             (Context::Dialog, fl!("help-dialogs")),
             (Context::DialogInput, fl!("help-text-fields")),
@@ -68,6 +69,7 @@ impl Help {
         }
         entries.push(Entry::Blank);
         entries.push(Entry::Note(fl!("help-note-menu")));
+        entries.push(Entry::Note(fl!("help-note-jump")));
         entries.push(Entry::Note(fl!("help-note-pulldown")));
         entries.push(Entry::Note(fl!("help-note-esc")));
         if type_to_search {
@@ -193,15 +195,18 @@ fn key_lines(keys: &str, width: usize) -> Vec<String> {
 /// What `action` does in `context`; `None` for what the app cannot do yet, which the help
 /// leaves out.
 fn describe(context: Context, action: Action) -> Option<String> {
+    // Lists of rows, where the arrows move the cursor.
+    let rows = matches!(
+        context,
+        Context::Panel | Context::Viewer | Context::Menu | Context::Jump
+    );
     let text = match (context, action) {
-        (Context::Panel | Context::Viewer | Context::Menu, Action::Up) => fl!("help-row-up"),
-        (Context::Panel | Context::Viewer | Context::Menu, Action::Down) => fl!("help-row-down"),
-        (Context::Panel | Context::Viewer | Context::Menu, Action::PageUp) => fl!("help-page-up"),
-        (Context::Panel | Context::Viewer | Context::Menu, Action::PageDown) => {
-            fl!("help-page-down")
-        }
-        (Context::Panel | Context::Menu, Action::Home) => fl!("help-first-row"),
-        (Context::Panel | Context::Menu, Action::End) => fl!("help-last-row"),
+        (_, Action::Up) if rows => fl!("help-row-up"),
+        (_, Action::Down) if rows => fl!("help-row-down"),
+        (_, Action::PageUp) if rows => fl!("help-page-up"),
+        (_, Action::PageDown) if rows => fl!("help-page-down"),
+        (Context::Panel | Context::Menu | Context::Jump, Action::Home) => fl!("help-first-row"),
+        (Context::Panel | Context::Menu | Context::Jump, Action::End) => fl!("help-last-row"),
         (Context::Panel, Action::Enter) => fl!("help-enter"),
         (Context::Panel, Action::Mark) => fl!("help-mark"),
         (Context::Panel, Action::MarkUp) => fl!("help-mark-up"),
@@ -231,6 +236,7 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::Checksum) => fl!("help-checksum"),
         (Context::Panel, Action::LocationMenuLeft) => fl!("help-menu-left"),
         (Context::Panel, Action::LocationMenuRight) => fl!("help-menu-right"),
+        (Context::Panel, Action::Jump) => fl!("help-jump-open"),
         (Context::Panel, Action::NewTab) => fl!("help-new-tab"),
         (Context::Panel, Action::CloseTab) => fl!("help-close-tab"),
         (Context::Panel, Action::NextTab) => fl!("help-next-tab"),
@@ -244,7 +250,8 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Menu, Action::Confirm) => fl!("help-menu-open"),
         (Context::Menu, Action::Backspace) => fl!("help-menu-back"),
         (Context::Menu, Action::Reload) => fl!("help-menu-reload"),
-        (Context::Menu, Action::Cancel) => fl!("help-menu-close"),
+        (Context::Menu | Context::Jump, Action::Cancel) => fl!("help-menu-close"),
+        (Context::Jump, Action::Confirm) => fl!("help-jump-go"),
         (Context::PullDown, Action::Cancel) => fl!("help-pulldown-close"),
         (Context::Panel, Action::PullDown) => fl!("help-pulldown-open"),
         (Context::PullDown, Action::Up) => fl!("help-pulldown-up"),
@@ -254,7 +261,7 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::PullDown, Action::Home) => fl!("help-pulldown-home"),
         (Context::PullDown, Action::End) => fl!("help-pulldown-end"),
         (Context::PullDown, Action::Confirm) => fl!("help-pulldown-run"),
-        (Context::QuickSearch, Action::Backspace) => fl!("help-search-back"),
+        (Context::QuickSearch | Context::Jump, Action::Backspace) => fl!("help-search-back"),
         (Context::QuickSearch, Action::Cancel) => fl!("help-search-end"),
         (Context::Dialog, Action::Up) => fl!("help-dialog-up"),
         (Context::Dialog, Action::Down) => fl!("help-dialog-down"),
@@ -343,6 +350,7 @@ mod tests {
                 "Volumes and hosts",
                 "Quick search",
                 "Location menu",
+                "zoxide",
                 "Pull-down menu",
                 "Dialogs and help",
                 "Text fields",

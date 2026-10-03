@@ -35,6 +35,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- zoxide: Alt-Z (or Ctrl-X Z) opens a window of the directories zoxide ranks highest for the
+  keywords you type, as `z` picks them in a shell, and Enter opens one in the active panel;
+  it is in F9 → Command too. A local directory goes to zoxide once you do something in it:
+  copy, move, or delete from it, copy into it, make a directory, view or edit a file, take
+  checksums, or jump there; passing through does not count. `[zoxide] record` turns that off
+  and `program` names zoxide; both are in Options → Configuration
+  ([ADR 0012](docs/adr/0012-external-tools-and-zoxide.md)).
 - Tabs: each panel has its own. Ctrl-X T opens a new tab on the same directory, Ctrl-X W closes
   it, Alt-Right and Alt-Left (or Ctrl-X N and Ctrl-X P) switch between them, and Ctrl-X Tab
   lists them; Left and Right in F9 have them too. Every tab keeps its cursor, marks, and sort

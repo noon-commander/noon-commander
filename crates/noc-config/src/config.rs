@@ -29,6 +29,29 @@ pub struct Config {
     pub ui: UiConfig,
     /// `[transfer]`: how files are copied.
     pub transfer: TransferConfig,
+    /// `[zoxide]`: the directories zoxide ranks, for jumping to them.
+    pub zoxide: ZoxideConfig,
+}
+
+/// The `[zoxide]` section.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ZoxideConfig {
+    /// The zoxide program: a name looked up in `PATH`, or a path. Default: `zoxide`.
+    pub program: PathBuf,
+    /// Whether local directories where the user did something, such as copy, delete, or view a
+    /// file, are added to zoxide; merely passing through does not count. Nothing happens
+    /// without zoxide. Default: `true`.
+    pub record: bool,
+}
+
+impl Default for ZoxideConfig {
+    fn default() -> Self {
+        Self {
+            program: PathBuf::from("zoxide"),
+            record: true,
+        }
+    }
 }
 
 /// The `[transfer]` section.
@@ -218,13 +241,14 @@ impl Config {
         })
     }
 
-    /// Expands a leading `~` or `~/` to `home` in [`SshConfig::program`] and
-    /// [`SshConfig::config_file`]. `~user` is left alone.
+    /// Expands a leading `~` or `~/` to `home` in [`SshConfig::program`],
+    /// [`SshConfig::config_file`], and [`ZoxideConfig::program`]. `~user` is left alone.
     pub fn expand_tilde(&mut self, home: &Path) {
         expand_tilde_in(&mut self.ssh.program, home);
         if let Some(config_file) = &mut self.ssh.config_file {
             expand_tilde_in(config_file, home);
         }
+        expand_tilde_in(&mut self.zoxide.program, home);
     }
 }
 
@@ -257,7 +281,7 @@ mod tests {
 
     use super::{
         Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, SshConfig, TabBar,
-        TransferConfig, UiConfig, VolumesConfig,
+        TransferConfig, UiConfig, VolumesConfig, ZoxideConfig,
     };
     use crate::{ConfigError, write_default_config};
 
@@ -304,6 +328,10 @@ mod tests {
         [transfer]
         atomic_upload = false
         parallel_jobs = 4
+
+        [zoxide]
+        program = "/opt/homebrew/bin/zoxide"
+        record = false
     "#;
 
     fn full() -> Config {
@@ -334,6 +362,10 @@ mod tests {
                 atomic_upload: false,
                 parallel_jobs: NonZeroUsize::new(4).unwrap(),
             },
+            zoxide: ZoxideConfig {
+                program: PathBuf::from("/opt/homebrew/bin/zoxide"),
+                record: false,
+            },
         }
     }
 
@@ -358,6 +390,8 @@ mod tests {
         assert_eq!(config.ui.tab_bar, TabBar::Line);
         assert!(config.transfer.atomic_upload);
         assert_eq!(config.transfer.parallel_jobs.get(), 2);
+        assert_eq!(config.zoxide.program, Path::new("zoxide"));
+        assert!(config.zoxide.record);
     }
 
     #[test]
@@ -446,8 +480,13 @@ mod tests {
         let mut config = full();
         config.ssh.program = PathBuf::from("~/bin/ssh");
         config.ssh.config_file = Some(PathBuf::from("~/.ssh/work_config"));
+        config.zoxide.program = PathBuf::from("~/.cargo/bin/zoxide");
         config.expand_tilde(Path::new("/home/u"));
         assert_eq!(config.ssh.program.as_os_str(), "/home/u/bin/ssh");
+        assert_eq!(
+            config.zoxide.program.as_os_str(),
+            "/home/u/.cargo/bin/zoxide"
+        );
         assert_eq!(
             config.ssh.config_file.as_deref().map(Path::as_os_str),
             Some(OsStr::new("/home/u/.ssh/work_config"))
@@ -460,6 +499,10 @@ mod tests {
                     program: PathBuf::from("/home/u/bin/ssh"),
                     config_file: Some(PathBuf::from("/home/u/.ssh/work_config")),
                     ..full().ssh
+                },
+                zoxide: ZoxideConfig {
+                    program: PathBuf::from("/home/u/.cargo/bin/zoxide"),
+                    ..full().zoxide
                 },
                 ..full()
             }
@@ -517,6 +560,8 @@ mod tests {
         assert!(table["ui"].get("type_to_search").is_some());
         assert!(table["ui"].get("menu_bar").is_some());
         assert!(table["ui"].get("tab_bar").is_some());
+        assert!(table["zoxide"].get("program").is_some());
+        assert!(table["zoxide"].get("record").is_some());
     }
 
     #[test]

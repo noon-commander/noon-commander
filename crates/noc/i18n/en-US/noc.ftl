@@ -101,6 +101,17 @@ menu-filter = Filter: { $text }
 # When the filter leaves no row.
 menu-nothing = Nothing matches.
 
+## The zoxide window of Alt-Z (src/tui/jump): the directories zoxide ranks highest for the
+## keywords typed, as `z` picks them in a shell. Prefix: jump-.
+
+jump-title = zoxide
+# The first line: the keywords typed, separated by spaces.
+jump-keywords = Jump to: { $text }
+# When zoxide lists no directory.
+jump-nothing = zoxide knows no directory that matches. It learns the directories you work in.
+# The zoxide program is not there.
+jump-not-installed = zoxide is not installed: cannot run { $program }. Get it from https://github.com/ajeetdsouza/zoxide, or set its path in Options → Configuration.
+
 ## Tabs (src/tui/tabs, src/tui/app). Prefix: tabs-. Each side has tabs of its own.
 
 # Title of the list of a panel's tabs, Ctrl-X Tab; each row is the tab's number and where it is.
@@ -146,6 +157,8 @@ pulldown-quick-search = &Quick search
 pulldown-swap = S&wap panels
 pulldown-other-open = &Open in the other panel
 pulldown-other-sync = &This directory in the other panel
+# Opens the zoxide window.
+pulldown-jump = &Jump to a directory (zoxide)…
 pulldown-jobs = &Background jobs…
 pulldown-edit-host = Edit &host settings…
 pulldown-disconnect-host = &Disconnect host
@@ -211,6 +224,13 @@ config-hide-hosts-hint = Hosts from ssh_config to leave out, as patterns with * 
 config-volumes = Volumes
 config-hide-volumes = Hidden volumes
 config-hide-volumes-hint = Mount points to leave out of the root, as patterns with * and ?, separated by spaces. The system volume always shows.
+# Settings of zoxide, [zoxide].
+config-zoxide = zoxide
+config-zoxide-record = Record directories
+config-zoxide-record-hint = Add a local directory to zoxide once you copy, delete, view, or edit something there; passing through does not count.
+config-zoxide-program = Program
+config-zoxide-program-hint = The zoxide program: a name in PATH, or a path. Alt-Z jumps to the directories it ranks.
+config-zoxide-program-empty = The zoxide program cannot be empty.
 # After the hint of a setting that the running Noon Commander cannot change.
 config-restart = Takes effect after a restart.
 # The reason names the file.
@@ -246,6 +266,7 @@ help-title = Help
 help-panels = Panels
 help-root = Volumes and hosts
 help-menu = Location menu
+help-jump = zoxide
 help-pulldown = Pull-down menu
 help-quick-search = Quick search
 help-dialogs = Dialogs and help
@@ -292,6 +313,8 @@ help-jobs = The running jobs: bring one to the front, or abort it
 help-checksum = Checksums of the marked files, or the one under the cursor
 help-menu-left = Change the left panel's location: a volume or a host
 help-menu-right = Change the right panel's location: a volume or a host
+help-jump-open = Jump to a directory that zoxide ranks, in this panel
+help-jump-go = Open the directory in the active panel
 help-new-tab = A new tab in this panel, on the same directory
 help-close-tab = Close this tab; the last one stays
 help-next-tab = The next tab in this panel
@@ -339,6 +362,7 @@ help-field-delete-to-end = Delete to the end
 help-note-esc = Esc 1 … Esc 0 stand for F1 … F10, and Esc followed by a key for Alt and the key, for terminals without them. A lone Esc acts after a second; Esc Esc at once.
 help-note-typing = Typing in a panel starts quick search.
 help-note-menu = Typing in the location menu filters it; 1 … 9 and 0 open the first ten rows while the filter is empty.
+help-note-jump = Typing in the zoxide window gives it keywords, as z does in a shell; 1 … 9 and 0 open the first ten rows while there are none.
 help-note-pulldown = In the pull-down menu, the highlighted letter of a menu opens it, and that of a command runs it. The menu opens again where it closed.
 
 ## Host settings, F4 on a host (src/tui/app), saved to hosts.toml. Prefix: host-.

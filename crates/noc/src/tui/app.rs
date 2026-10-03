@@ -9,6 +9,7 @@ use std::time::{Instant, SystemTime};
 use jiff::tz::TimeZone;
 use noc_config::{Config, HostConfig, Hosts, MenuBar, SftpHost, TabBar, UiConfig};
 use noc_ops::{Algorithm, Conflict, CopyOptions, Decision, Sum};
+use noc_tools::zoxide::Scored;
 use noc_vfs::{FileKind, Location, Metadata, RemotePath};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -22,6 +23,7 @@ use super::decor::Decor;
 use super::dialog::{Ask, Button, Dialog, DialogEvent, Reply};
 use super::help::Help;
 use super::jobs::{JobsEvent, JobsList, Row};
+use super::jump::{JumpEvent, JumpMenu};
 use super::keymap::{Action, Context, Keymap, Resolved};
 use super::menu::{LocationMenu, MenuEvent};
 use super::panel::{
@@ -134,6 +136,15 @@ pub(crate) enum Effect {
     SaveHost {
         name: String,
         host: Option<HostConfig>,
+    },
+    /// Add the local directory to zoxide, after the ones before; failures only go to the log.
+    ZoxideAdd(PathBuf),
+    /// Ask zoxide for the directories that match `keywords`, without `exclude`, and pass them
+    /// to [`App::jumps`].
+    ZoxideQuery {
+        generation: u64,
+        keywords: Vec<String>,
+        exclude: Option<PathBuf>,
     },
     /// Use `config` for new connections and listings, write to the config file the settings
     /// that differ between `old`, what the dialog showed, and `new`, both as the file writes
@@ -472,6 +483,10 @@ pub(crate) struct App {
     menu: Option<LocationMenu>,
     /// The generation of the last listing for the menu.
     menu_listings: u64,
+    /// The zoxide window of Alt-Z, over the panels and under the dialogs.
+    jump: Option<JumpMenu>,
+    /// The generation of the last query for the zoxide window.
+    jump_queries: u64,
     /// The pull-down menu of F9, over the panels and under the windows and dialogs.
     pulldown: Option<PullDown>,
     /// Where the pull-down menu was when it closed, to open it there again.
@@ -548,6 +563,8 @@ impl App {
             help: None,
             menu: None,
             menu_listings: 0,
+            jump: None,
+            jump_queries: 0,
             pulldown: None,
             pulldown_place: None,
             configuration: None,
@@ -619,6 +636,8 @@ impl App {
             open.dialog.context()
         } else if self.menu.is_some() {
             Context::Menu
+        } else if self.jump.is_some() {
+            Context::Jump
         } else if !self.results.is_empty()
             || self.in_front().is_some()
             || self.jobs_list.is_some()
@@ -900,6 +919,9 @@ impl App {
         if self.menu.is_some() {
             return Some(self.handle_menu(input));
         }
+        if self.jump.is_some() {
+            return Some(self.handle_jump(input));
+        }
         if self.handle_results(input) || self.handle_job(input) || self.handle_jobs_list(input) {
             return Some(Vec::new());
         }
@@ -1004,6 +1026,7 @@ impl App {
             Action::EditHost => self.ask_edit_host(),
             Action::LocationMenuLeft => return self.open_menu(Side::Left),
             Action::LocationMenuRight => return self.open_menu(Side::Right),
+            Action::Jump => return self.open_jump(),
             Action::PullDown => self.open_pulldown(),
             _ => {
                 let id = self.shown(self.active);
@@ -1065,6 +1088,91 @@ impl App {
                 vec![Effect::ListPlaces { generation }]
             }
         }
+    }
+
+    /// Opens the zoxide window for the active panel, and asks zoxide for its best directories.
+    fn open_jump(&mut self) -> Vec<Effect> {
+        let exclude = match self.panel(self.active).location() {
+            Location::Local(path) => Some(path.clone()),
+            Location::Root | Location::Sftp | Location::Remote { .. } => None,
+        };
+        self.jump = Some(JumpMenu::new(self.home.clone(), exclude, 0));
+        self.query_jump()
+    }
+
+    /// Asks zoxide for the directories that match the keywords of the zoxide window.
+    fn query_jump(&mut self) -> Vec<Effect> {
+        let Some(jump) = &mut self.jump else {
+            return Vec::new();
+        };
+        self.jump_queries += 1;
+        let generation = self.jump_queries;
+        jump.wait(generation);
+        vec![Effect::ZoxideQuery {
+            generation,
+            keywords: jump.keywords(),
+            exclude: jump.exclude().map(Path::to_path_buf),
+        }]
+    }
+
+    /// Gives a key to the zoxide window: the directory it opens goes to the active panel, and
+    /// counts in zoxide, as `z` counts it.
+    fn handle_jump(&mut self, input: Resolved) -> Vec<Effect> {
+        let Some(jump) = &mut self.jump else {
+            return Vec::new();
+        };
+        match jump.handle(input) {
+            JumpEvent::Pending => Vec::new(),
+            JumpEvent::Closed => {
+                self.jump = None;
+                Vec::new()
+            }
+            JumpEvent::Query => self.query_jump(),
+            JumpEvent::Open(path) => {
+                self.jump = None;
+                let id = self.shown(self.active);
+                let record = self.config.zoxide.record;
+                if let Some(tab) = self.tab_mut(id) {
+                    tab.arriving = record.then(|| path.clone());
+                }
+                let mut effects = self.go(id, Destination::to(Location::Local(path.clone())));
+                if record {
+                    effects.push(Effect::ZoxideAdd(path));
+                }
+                effects
+            }
+        }
+    }
+
+    /// Takes the result of an [`Effect::ZoxideQuery`].
+    pub(crate) fn jumps(&mut self, generation: u64, result: Result<Vec<Scored>, String>) {
+        if let Some(jump) = &mut self.jump {
+            jump.found(generation, result);
+        }
+    }
+
+    /// The user did something in `dir`, such as copy from it: a local directory that a panel
+    /// shows goes to zoxide, once a visit (`zoxide.record`). Directories that no panel shows,
+    /// such as a target typed in a dialog, and passing through, do not count.
+    fn note(&mut self, dir: &Location) -> Vec<Effect> {
+        let Location::Local(path) = dir else {
+            return Vec::new();
+        };
+        if !self.config.zoxide.record {
+            return Vec::new();
+        }
+        let mut counted = false;
+        for side in Side::BOTH {
+            let tab = self.tabs_mut(side).active_mut();
+            if tab.panel.location() == dir && !tab.noted {
+                tab.noted = true;
+                counted = true;
+            }
+        }
+        if !counted {
+            return Vec::new();
+        }
+        vec![Effect::ZoxideAdd(path.clone())]
     }
 
     /// Opens the pull-down menu where it was when it closed; the first time, on the bar at the
@@ -1215,6 +1323,7 @@ impl App {
                         .host_under_cursor()
                         .is_some_and(|host| self.hosts.contains_key(host)),
                     Action::QuickSearch
+                    | Action::Jump
                     | Action::SwapPanels
                     | Action::OtherPanelOpen
                     | Action::OtherPanelSync
@@ -1411,12 +1520,15 @@ impl App {
             location: location.clone(),
             cancel: cancel.clone(),
         });
-        vec![Effect::Read {
+        let dir = self.panel(side).location().clone();
+        let mut effects = vec![Effect::Read {
             id,
             location,
             host,
             cancel,
-        }]
+        }];
+        effects.extend(self.note(&dir));
+        effects
     }
 
     /// Edits the file under the cursor of the active panel with F4: a local one where it is, a
@@ -1433,12 +1545,14 @@ impl App {
         };
         let Location::Remote { host, .. } = &location else {
             if let Location::Local(path) = location {
+                let noted = self.note(&dir);
                 self.editing = Some(Editing {
                     file: path.clone(),
                     remote: None,
                     dir,
                 });
                 self.edit_now = Some(path);
+                return noted;
             }
             return Vec::new();
         };
@@ -1639,6 +1753,7 @@ impl App {
             Location::Root | Location::Sftp | Location::Local(_) => None,
         };
         let targets = names.iter().filter_map(|name| child(&dir, name)).collect();
+        let noted = self.note(&dir);
         self.last_job += 1;
         let id = self.last_job;
         let cancel = CancellationToken::new();
@@ -1649,7 +1764,9 @@ impl App {
             host,
             cancel,
         };
-        self.launch(job, effect)
+        let mut effects = self.launch(job, effect);
+        effects.extend(noted);
+        effects
     }
 
     /// Starts `job` with `effect`, or lets it wait while as many jobs run as
@@ -1776,6 +1893,9 @@ impl App {
             self.show_error(&error(fl!("error-connection-closed")));
             return Vec::new();
         };
+        // The source, and the target if a panel shows it.
+        let mut noted = self.note(&dir);
+        noted.extend(self.note(&target));
         self.last_job += 1;
         let id = self.last_job;
         let cancel = CancellationToken::new();
@@ -1797,7 +1917,9 @@ impl App {
             options,
             cancel,
         };
-        self.launch(job, effect)
+        let mut effects = self.launch(job, effect);
+        effects.extend(noted);
+        effects
     }
 
     /// Asks what to do about a taken name in the copy job `id`, as mc does: in red, with the
@@ -2097,6 +2219,7 @@ impl App {
             }
             targets.push((group, handle));
         }
+        let noted = self.note(&dir);
         self.last_job += 1;
         let id = self.last_job;
         let cancel = CancellationToken::new();
@@ -2115,7 +2238,9 @@ impl App {
             algorithm,
             cancel,
         };
-        self.launch(job, effect)
+        let mut effects = self.launch(job, effect);
+        effects.extend(noted);
+        effects
     }
 
     /// Opens the window with the checksums of the job `id`; an aborted job has none to show,
@@ -2351,8 +2476,16 @@ impl App {
         });
     }
 
-    /// Makes the directory at `location` for `panel`, in the background.
-    fn create_dir(&self, panel: PanelId, location: Location) -> Vec<Effect> {
+    /// Makes the directory at `location` for `panel`, in the background; that counts as work
+    /// in the panel's directory.
+    fn create_dir(&mut self, panel: PanelId, location: Location) -> Vec<Effect> {
+        let noted = match self.panel_of(panel) {
+            Some(shown) => {
+                let dir = shown.location().clone();
+                self.note(&dir)
+            }
+            None => Vec::new(),
+        };
         let host = match &location {
             Location::Remote { host, .. } => match self.hosts.get(host) {
                 Some(Host::Connected { handle, .. }) => Some(handle.clone()),
@@ -2360,11 +2493,13 @@ impl App {
             },
             Location::Root | Location::Sftp | Location::Local(_) => None,
         };
-        vec![Effect::CreateDir {
+        let mut effects = vec![Effect::CreateDir {
             panel,
             location,
             host,
-        }]
+        }];
+        effects.extend(noted);
+        effects
     }
 
     /// Takes the result of an [`Effect::CreateDir`]: panels on the directory it is in read it
@@ -2726,11 +2861,19 @@ impl App {
         result: Result<Listed, String>,
     ) {
         self.sync_connected();
-        let Some(panel) = self.panel_of_mut(panel) else {
+        let Some(tab) = self.tab_mut(panel) else {
             return;
         };
-        panel.listed(generation, result);
-        if let Location::Remote { host, path } = panel.location().clone()
+        let before = tab.panel.location().clone();
+        tab.panel.listed(generation, result);
+        let location = tab.panel.location().clone();
+        if location != before {
+            // A new visit, which counts in zoxide again; a jump counted already.
+            let arriving = tab.arriving.take();
+            tab.noted =
+                matches!(&location, Location::Local(path) if arriving.as_ref() == Some(path));
+        }
+        if let Location::Remote { host, path } = location
             && !path.as_bytes().is_empty()
         {
             self.last_dirs.insert(host, path);
@@ -2964,6 +3107,9 @@ impl App {
                     Side::Right => right,
                 };
                 menu.render(frame, area, &self.theme, self.decor, &hosts, self.tick);
+            }
+            if let Some(jump) = &mut self.jump {
+                jump.render(frame, panels, &self.theme);
             }
         }
         if let Some(configuration) = &mut self.configuration {
@@ -3275,7 +3421,7 @@ mod tests {
 
     use std::sync::mpsc;
 
-    use noc_config::TransferConfig;
+    use noc_config::{TransferConfig, ZoxideConfig};
     use noc_ssh::askpass::PromptKind;
     use noc_vfs::{DirEntry, FileKind, Metadata, RemotePath};
     use ratatui::Terminal;
@@ -3308,12 +3454,44 @@ mod tests {
         entry
     }
 
-    /// Settings with mc's markers in the interface.
+    /// Settings with mc's markers in the interface, and without zoxide, which tests of its
+    /// own turn on.
     fn config() -> Config {
         Config {
             ui: ui(),
+            zoxide: ZoxideConfig {
+                record: false,
+                ..ZoxideConfig::default()
+            },
             ..Config::default()
         }
+    }
+
+    /// Settings that record directories in zoxide.
+    fn with_zoxide() -> Config {
+        Config {
+            zoxide: ZoxideConfig::default(),
+            ..config()
+        }
+    }
+
+    /// The directories `effects` add to zoxide.
+    fn zoxide_adds(effects: &[Effect]) -> Vec<PathBuf> {
+        effects
+            .iter()
+            .filter_map(|effect| match effect {
+                Effect::ZoxideAdd(dir) => Some(dir.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The effects but those for zoxide.
+    fn without_zoxide(effects: Vec<Effect>) -> Vec<Effect> {
+        effects
+            .into_iter()
+            .filter(|effect| !matches!(effect, Effect::ZoxideAdd(_)))
+            .collect()
     }
 
     /// Settings with mc's markers, which read better in tests than icons.
@@ -5324,7 +5502,7 @@ mod tests {
             },
             Config {
                 ui: ui(),
-                ..Config::default()
+                ..self::config()
             },
             "only the interface"
         );
@@ -6254,5 +6432,209 @@ mod tests {
             .draw(|frame| app.render(frame, now, &TimeZone::UTC))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
+    }
+
+    /// An app on `/srv`, which holds `sub` and `notes`, that records directories in zoxide.
+    fn recording() -> App {
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &with_zoxide());
+        answer(
+            &mut app,
+            effects,
+            &Listing::Dir(vec![dir("sub"), file("notes", 12)]),
+        );
+        app
+    }
+
+    #[test]
+    fn work_in_a_directory_counts_in_zoxide_once_a_visit() {
+        let mut app = recording();
+        // Passing through does not count.
+        app.handle(action(Action::Down));
+        let effects = app.handle(action(Action::Enter));
+        assert_eq!(zoxide_adds(&effects), [] as [PathBuf; 0]);
+        answer(&mut app, effects, &Listing::Dir(vec![file("a", 1)]));
+        let effects = app.handle(action(Action::Parent));
+        assert_eq!(zoxide_adds(&effects), [] as [PathBuf; 0]);
+        answer(
+            &mut app,
+            effects,
+            &Listing::Dir(vec![dir("sub"), file("notes", 12)]),
+        );
+        // Viewing a file does, once.
+        app.handle(action(Action::End));
+        let effects = app.handle(action(Action::View));
+        assert_eq!(zoxide_adds(&effects), [PathBuf::from("/srv")]);
+        app.handle(action(Action::Quit));
+        let effects = app.handle(action(Action::Edit));
+        assert_eq!(zoxide_adds(&effects), [] as [PathBuf; 0], "once a visit");
+        app.edited(Ok(false));
+        // Reading the directory again is the same visit.
+        let effects = app.handle(action(Action::Reload));
+        answer(
+            &mut app,
+            effects,
+            &Listing::Dir(vec![dir("sub"), file("notes", 12)]),
+        );
+        app.handle(action(Action::End));
+        let effects = app.handle(action(Action::View));
+        assert_eq!(zoxide_adds(&effects), [] as [PathBuf; 0]);
+        app.handle(action(Action::Quit));
+        // Coming back is a new visit.
+        app.handle(action(Action::Home));
+        app.handle(action(Action::Down));
+        let effects = app.handle(action(Action::Enter));
+        answer(&mut app, effects, &Listing::Dir(vec![file("a", 1)]));
+        let effects = app.handle(action(Action::Parent));
+        answer(
+            &mut app,
+            effects,
+            &Listing::Dir(vec![dir("sub"), file("notes", 12)]),
+        );
+        app.handle(action(Action::End));
+        let effects = app.handle(action(Action::Edit));
+        assert_eq!(zoxide_adds(&effects), [PathBuf::from("/srv")]);
+    }
+
+    #[test]
+    fn jobs_count_their_source_and_a_target_a_panel_shows() {
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &with_zoxide());
+        answer(
+            &mut app,
+            effects,
+            &Listing::Dir(vec![dir("left"), dir("right")]),
+        );
+        app.active = Side::Right;
+        app.handle(action(Action::End));
+        let effects = app.handle(action(Action::Enter));
+        answer(&mut app, effects, &Listing::Dir(vec![file("old", 1)]));
+        app.active = Side::Left;
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Copy));
+        let effects = app.handle(action(Action::Confirm));
+        assert_eq!(
+            zoxide_adds(&effects),
+            [PathBuf::from("/srv"), PathBuf::from("/srv/right")]
+        );
+        copy_job(without_zoxide(effects));
+        // A typed target that no panel shows does not count; the source did already.
+        app.handle(action(Action::Copy));
+        app.handle(action(Action::DeleteToStart));
+        type_text(&mut app, "/tmp");
+        let effects = app.handle(action(Action::Confirm));
+        assert_eq!(zoxide_adds(&effects), [] as [PathBuf; 0]);
+        // Delete, F7, and checksums count in the other panel.
+        app.active = Side::Right;
+        app.handle(action(Action::End));
+        app.handle(action(Action::Checksum));
+        let effects = app.handle(action(Action::Confirm));
+        assert_eq!(
+            zoxide_adds(&effects),
+            [] as [PathBuf; 0],
+            "counted as the target"
+        );
+    }
+
+    #[test]
+    fn mkdir_and_delete_count_and_remote_directories_never_do() {
+        let mut app = recording();
+        app.handle(action(Action::Mkdir));
+        app.handle(action(Action::DeleteToStart));
+        type_text(&mut app, "new");
+        let effects = app.handle(action(Action::Confirm));
+        assert_eq!(zoxide_adds(&effects), [PathBuf::from("/srv")]);
+
+        let mut app = recording();
+        app.handle(action(Action::End));
+        app.handle(action(Action::Delete));
+        let effects = app.handle(action(Action::Confirm));
+        assert_eq!(zoxide_adds(&effects), [PathBuf::from("/srv")]);
+
+        let mut app = recording();
+        app.config.zoxide.record = false;
+        app.handle(action(Action::End));
+        let effects = app.handle(action(Action::View));
+        assert_eq!(zoxide_adds(&effects), [] as [PathBuf; 0], "record is off");
+
+        let mut app = at_root();
+        app.config.zoxide.record = true;
+        let hosts = app.panel(Side::Left).location().clone();
+        assert_eq!(zoxide_adds(&app.note(&hosts)), [] as [PathBuf; 0]);
+        let mut app = on_a_host().0;
+        app.config.zoxide.record = true;
+        let here = app.panel(app.active).location().clone();
+        assert!(matches!(here, Location::Remote { .. }), "{here:?}");
+        assert_eq!(zoxide_adds(&app.note(&here)), [] as [PathBuf; 0]);
+    }
+
+    #[test]
+    fn alt_z_asks_zoxide_and_jumps_in_the_active_panel() {
+        let mut app = recording();
+        app.active = Side::Right;
+        let effects = app.handle(action(Action::Jump));
+        let [
+            Effect::ZoxideQuery {
+                generation: first,
+                keywords,
+                exclude,
+            },
+        ] = &effects[..]
+        else {
+            panic!("expected a query, got {effects:?}");
+        };
+        assert_eq!(keywords, &[] as &[String]);
+        assert_eq!(exclude.as_deref(), Some(Path::new("/srv")));
+        assert_eq!(app.context(), Context::Jump);
+        app.handle(Resolved::Insert('s'));
+        let effects = app.handle(Resolved::Insert('c'));
+        let [
+            Effect::ZoxideQuery {
+                generation,
+                keywords,
+                ..
+            },
+        ] = &effects[..]
+        else {
+            panic!("expected a query, got {effects:?}");
+        };
+        assert_eq!(keywords, &["sc".to_owned()]);
+        let found = |paths: &[&str]| {
+            Ok(paths
+                .iter()
+                .map(|path| Scored {
+                    score: 1.0,
+                    path: PathBuf::from(path),
+                })
+                .collect())
+        };
+        app.jumps(*first, found(&["/stale"]));
+        app.jumps(*generation, found(&["/home/me/src", "/opt/scripts"]));
+        let text = screen_of(&mut app, 12);
+        assert!(text.contains("Jump to: sc"), "{text}");
+        assert!(
+            text.contains("~/src") && text.contains("/opt/scripts") && !text.contains("/stale"),
+            "{text}"
+        );
+        app.handle(action(Action::Down));
+        let effects = app.handle(action(Action::Confirm));
+        assert_eq!(app.context(), Context::Panel);
+        assert_eq!(zoxide_adds(&effects), [PathBuf::from("/opt/scripts")]);
+        let effects = without_zoxide(effects);
+        let [Effect::List { panel, request, .. }] = &effects[..] else {
+            panic!("expected a listing, got {effects:?}");
+        };
+        assert_eq!(panel.side, Side::Right, "the active panel");
+        assert_eq!(request.location, local("/opt/scripts"));
+        answer(&mut app, effects, &Listing::Dir(vec![file("run", 1)]));
+        // The jump counted the visit.
+        app.handle(action(Action::End));
+        let effects = app.handle(action(Action::View));
+        assert_eq!(zoxide_adds(&effects), [] as [PathBuf; 0]);
+        app.handle(action(Action::Quit));
+        // Esc closes the window; so does a failed query, after saying why.
+        app.handle(action(Action::Jump));
+        app.jumps(app.jump_queries, Err("zoxide is not installed".to_owned()));
+        assert!(screen_of(&mut app, 12).contains("zoxide is not installed"));
+        app.handle(action(Action::Cancel));
+        assert_eq!(app.context(), Context::Panel);
     }
 }

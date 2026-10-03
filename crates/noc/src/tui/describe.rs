@@ -3,6 +3,7 @@
 use std::error::Error;
 
 use noc_ssh::SshError;
+use noc_tools::ToolError;
 use noc_vfs::VfsError;
 
 use crate::i18n::fl;
@@ -46,6 +47,18 @@ pub(crate) fn ssh_error(error: &SshError) -> Option<String> {
         other => chain(other),
     };
     Some(text)
+}
+
+/// Why zoxide gave no answer: it is not installed, or its own last words.
+pub(crate) fn zoxide_error(error: &ToolError) -> String {
+    match error {
+        ToolError::Spawn { program, .. } if error.is_not_found() => fl!(
+            "jump-not-installed",
+            program = program.display().to_string()
+        ),
+        ToolError::Failed { stderr, .. } if !stderr.is_empty() => stderr.clone(),
+        other => chain(other),
+    }
 }
 
 /// An error and its sources, joined by `: `.
@@ -125,6 +138,32 @@ mod tests {
             Some("cannot run /no/ssh: entity not found")
         );
         assert_eq!(ssh_error(&SshError::Cancelled), None);
+    }
+
+    #[test]
+    fn describes_zoxide_errors() {
+        let missing = ToolError::Spawn {
+            program: PathBuf::from("zoxide"),
+            source: io::ErrorKind::NotFound.into(),
+        };
+        assert!(
+            zoxide_error(&missing).starts_with("zoxide is not installed: cannot run zoxide."),
+            "{}",
+            zoxide_error(&missing)
+        );
+        let failed = ToolError::Failed {
+            program: PathBuf::from("zoxide"),
+            status: ExitStatus::from_raw(1 << 8),
+            stderr: "zoxide: unable to create data directory".to_owned(),
+        };
+        assert_eq!(
+            zoxide_error(&failed),
+            "zoxide: unable to create data directory"
+        );
+        let slow = ToolError::Timeout {
+            program: PathBuf::from("zoxide"),
+        };
+        assert_eq!(zoxide_error(&slow), "zoxide did not finish in time");
     }
 
     #[test]

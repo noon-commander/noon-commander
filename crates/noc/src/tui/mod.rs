@@ -8,6 +8,7 @@ mod describe;
 mod dialog;
 mod help;
 mod jobs;
+mod jump;
 mod keymap;
 mod menu;
 mod panel;
@@ -93,6 +94,7 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
         } => tasks.run(app.closed(&host, connection, reason.as_deref())),
         Done::HostSaved(result) => tasks.run(app.host_saved(result)),
         Done::ConfigSaved(result) => app.config_saved(result),
+        Done::Jumps { generation, result } => app.jumps(generation, result),
         Done::Written { location, result } => tasks.run(app.written(&location, result)),
     }
 }

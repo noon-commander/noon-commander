@@ -2,7 +2,7 @@
 //! shows them on a line above its panel, or in the top of the panel's frame (`ui.tab_bar`).
 
 use std::os::unix::ffi::OsStrExt as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use noc_vfs::Location;
 use ratatui::Frame;
@@ -31,6 +31,11 @@ pub(crate) struct Tab {
     /// What the tab shows changed while it was hidden; it is read again when it shows, so
     /// that hidden tabs cost no listings.
     pub(crate) stale: bool,
+    /// The directory the tab shows went to zoxide since the tab came there, so that it counts
+    /// once a visit.
+    pub(crate) noted: bool,
+    /// A directory the tab jumps to through zoxide, which already counted it.
+    pub(crate) arriving: Option<PathBuf>,
 }
 
 impl Tab {
@@ -39,6 +44,8 @@ impl Tab {
             id,
             panel,
             stale: false,
+            noted: false,
+            arriving: None,
         }
     }
 }

@@ -17,12 +17,13 @@ use noc_ssh::askpass::{AskpassEnv, AskpassEvent, AskpassServer};
 use noc_ssh::resolve::resolve;
 use noc_ssh::version::check_version;
 use noc_ssh::{CachedHost, ChannelProcess, Session, SftpChannel, SshError, Target, cleanup_stale};
+use noc_tools::zoxide::Scored;
 use noc_vfs::{
     FileReader as _, FileWriter as _, LocalFs, Location, Metadata, RemotePath, SftpFs, Space, Vfs,
     VfsError, VfsPath as _,
 };
 use tokio::sync::{Mutex, mpsc, oneshot};
-use tokio::task::JoinSet;
+use tokio::task::{AbortHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 
 use super::app::Effect;
@@ -105,6 +106,11 @@ pub(crate) enum Done {
     HostSaved(Result<Arc<Hosts>, String>),
     /// The settings of [`Effect::SaveConfig`] are written, or why not.
     ConfigSaved(Result<(), String>),
+    /// zoxide's answer to the [`Effect::ZoxideQuery`] `generation`, or why there is none.
+    Jumps {
+        generation: u64,
+        result: Result<Vec<Scored>, String>,
+    },
 }
 
 /// A report from a job, with its paths as locations and its errors in words.
@@ -186,6 +192,10 @@ pub(crate) struct Tasks {
     /// Changes to the config file, which one task writes in turn, so that a change never
     /// overtakes the one before it.
     config_saves: mpsc::UnboundedSender<(Config, Config)>,
+    /// Directories for zoxide, which one task adds in turn.
+    zoxide_adds: mpsc::UnboundedSender<PathBuf>,
+    /// The zoxide query in flight; a newer one replaces it.
+    zoxide_query: Option<AbortHandle>,
 }
 
 impl Tasks {
@@ -197,6 +207,7 @@ impl Tasks {
             tracing::warn!(%reason, "cannot prepare for ssh connections");
         }
         let config_saves = save_configs(context.config_file.clone(), done.clone());
+        let zoxide_adds = add_to_zoxide(Arc::clone(&context));
         Self {
             context,
             done,
@@ -205,6 +216,8 @@ impl Tasks {
             jobs: JoinSet::new(),
             cache: Arc::new(Mutex::new(())),
             config_saves,
+            zoxide_adds,
+            zoxide_query: None,
         }
     }
 
@@ -288,6 +301,14 @@ impl Tasks {
                     stop,
                 } => self.connect(host, connection, stop),
                 Effect::SaveHost { name, host } => self.save_host(name, host),
+                Effect::ZoxideAdd(dir) => {
+                    let _ = self.zoxide_adds.send(dir);
+                }
+                Effect::ZoxideQuery {
+                    generation,
+                    keywords,
+                    exclude,
+                } => self.query_zoxide(generation, keywords, exclude),
                 Effect::SaveConfig { old, new, config } => {
                     self.context.set_config(*config);
                     self.save_config(*old, *new);
@@ -323,6 +344,24 @@ impl Tasks {
     /// the changes before.
     fn save_config(&self, old: Config, new: Config) {
         let _ = self.config_saves.send((old, new));
+    }
+
+    /// Asks zoxide for the directories that match `keywords`, without `exclude`; a query that
+    /// is still running is dropped, which stops zoxide.
+    fn query_zoxide(&mut self, generation: u64, keywords: Vec<String>, exclude: Option<PathBuf>) {
+        if let Some(previous) = self.zoxide_query.take() {
+            previous.abort();
+        }
+        let zoxide = self.context.zoxide();
+        let done = self.done.clone();
+        let task = tokio::spawn(async move {
+            let result = zoxide
+                .query(&keywords, exclude.as_deref())
+                .await
+                .map_err(|error| describe::zoxide_error(&error));
+            let _ = done.send(Done::Jumps { generation, result });
+        });
+        self.zoxide_query = Some(task.abort_handle());
     }
 
     /// Writes the settings of the host `name` to `hosts.toml` and reads them all again.
@@ -575,6 +614,36 @@ fn save_configs(
             };
             if done.send(Done::ConfigSaved(result)).is_err() {
                 break;
+            }
+        }
+    });
+    sender
+}
+
+/// Starts the task that adds directories to zoxide, one after another, so that no two zoxide
+/// processes write its database at once; returns where to send them. Failures only go to the
+/// log; a missing zoxide goes there once, and is not tried again until `zoxide.program`
+/// changes.
+fn add_to_zoxide(context: Arc<Context>) -> mpsc::UnboundedSender<PathBuf> {
+    let (sender, mut dirs) = mpsc::unbounded_channel::<PathBuf>();
+    tokio::spawn(async move {
+        let mut missing: Option<PathBuf> = None;
+        while let Some(dir) = dirs.recv().await {
+            let zoxide = context.zoxide();
+            if missing.as_deref() == Some(zoxide.program()) {
+                continue;
+            }
+            match zoxide.add(&dir).await {
+                Ok(()) => {}
+                Err(error) if error.is_not_found() => {
+                    let program = zoxide.program().display().to_string();
+                    tracing::info!(%program, "zoxide is not installed; directories are not recorded");
+                    missing = Some(zoxide.program().to_path_buf());
+                }
+                Err(error) => {
+                    let error = describe::chain(&error);
+                    tracing::debug!(dir = %dir.display(), %error, "cannot add to zoxide");
+                }
             }
         }
     });

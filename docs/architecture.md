@@ -18,12 +18,18 @@ crates/
 ├── noc-ssh/       host discovery, ssh -G, argument validation, forwarding policy,
 │                  ControlMaster, SFTP channels, askpass bridge
 ├── noc-vfs/       Vfs trait: local and SFTP backends, mounted volumes
-└── noc-ops/       job engine: copy, move, delete, mkdir, checksums; progress, cancellation, conflicts
+├── noc-ops/       job engine: copy, move, delete, mkdir, checksums; progress, cancellation, conflicts
+└── noc-tools/     external programs other than ssh: zoxide, the editor
 ```
 
-Dependencies point one way: `config ← ssh ← vfs ← ops ← noc`. Library crates contain no UI
-code and no user-facing text; they return typed errors and events, and the UI turns them into
-messages.
+Dependencies point one way: `config ← ssh ← vfs ← ops ← noc`, and `tools ← noc`. Library
+crates contain no UI code and no user-facing text; they return typed errors and events, and the
+UI turns them into messages.
+
+ssh runs only from `noc-ssh`, and every other program only from `noc-tools`
+([ADR 0012](adr/0012-external-tools-and-zoxide.md)): without a shell, with `--` before paths,
+without input for background ones, and killed when their future is dropped or they time out.
+A program that is not installed is told apart from one that fails.
 
 ## Processes
 
@@ -193,7 +199,8 @@ the active panel selected; later, where it was when it closed. An open menu:
 - Left and Right act on the panel drawn on that side, after Ctrl-U too: its location menu,
   sort order (`•` marks the current one), Rescan, Disconnect while it shows a host, and its
   [tabs](#tabs): New tab, Close tab, and Tab list…. File
-  has F3 … F8, `+`, `-`, `*`, Checksums, and Exit; Command has quick search, the other-panel
+  has F3 … F8, `+`, `-`, `*`, Checksums, and Exit; Command has quick search, the
+  [zoxide](#zoxide) window, the other-panel
   commands, the jobs, host settings and disconnect for the host under the cursor, help, and
   redraw; Options has Configuration… and Show hidden files (`✓` while on). Without icons, the
   marks are `*` and `x`.
@@ -213,6 +220,34 @@ the active panel selected; later, where it was when it closed. An open menu:
   of the panels only while a menu is open, as Far does; `always` keeps it above the panels, as
   mc does, which takes a row from them. The jobs indicator sits at the right end of that row.
 - The menu is modal (keymap context `pull_down`); letters are text there, so they are hotkeys.
+
+### zoxide
+
+[zoxide](https://github.com/ajeetdsouza/zoxide) ranks the directories the user works in
+([ADR 0012](adr/0012-external-tools-and-zoxide.md)). Alt-Z (Ctrl-X Z) opens a window of its
+best directories, which Enter opens in the active panel:
+
+```text
+╔═════════════════════════════ zoxide ═════════════════════════════╗
+║ Jump to: src                                                     ║
+║ ──────────────────────────────────────────────────────────────── ║
+║ 1 ~/src/noc                                                 56.0 ║
+║ 2 /srv/www/src                                              12.5 ║
+╚══════════════════════════════════════════════════════════════════╝
+```
+
+- Typing gives zoxide keywords, as `z foo bar` in a shell; each change asks
+  `zoxide query --list --score --exclude <dir> -- <keywords>` again, leaving out the panel's
+  directory, and a query still running is dropped. While nothing is typed, `1` … `9` and `0`
+  open the first ten rows. Directories under the home directory show from `~`.
+- A local directory goes to zoxide (`zoxide add -- <dir>`) once the user does something in it,
+  at most once a visit: a copy, move, or delete from it, a copy or move into it when a panel
+  shows it, F7, F3 or F4 on a file, checksums, or a jump there. Passing through, marking,
+  searching, sorting, and Ctrl-R do not count. Each tab remembers whether its visit counted;
+  going to another directory starts a new one. One task adds them in turn, so no two zoxide
+  processes write its database at once.
+- `zoxide.record` turns recording off; without zoxide the window says it is not installed,
+  and recording is logged once and stops until `zoxide.program` changes.
 
 ### Tabs
 
@@ -269,6 +304,7 @@ settings window: there is no OK or Cancel, and every change takes effect as it i
   ║  󰓡 Transfers │ Theme              < mc-classic >               █ ║
   ║  󰣀 SSH       │ Borders            < Double ═ ║ ╔ >             ░ ║
   ║  󰋊 Volumes   │ Icons              [x]                          ░ ║
+  ║  󰥨 zoxide    │ Show hidden files  [x]                          ░ ║
   ╟──────────────┴───────────────────────────────────────────────────╢
   ║ A language tag, such as en-US, or auto for the system locale.    ║
   ║ Takes effect after a restart.                                    ║
@@ -279,7 +315,7 @@ settings window: there is no OK or Cancel, and every change takes effect as it i
   the settings of the chosen one are on the right: check boxes `[x]`, choices `< … >`, and
   text fields. Every option of `config.toml` is there, so that nobody has to edit the file:
   Interface (`[ui]`), Transfers (`[transfer]`), SSH (`[ssh]` and the hidden hosts of
-  `[discovery]`), and Volumes (`[volumes]`).
+  `[discovery]`), Volumes (`[volumes]`), and zoxide (`[zoxide]`).
 - Paths under the home directory show from `~`, and are written as typed. Lists, such as
   `ssh.args` and the hidden hosts and volumes, are words separated by spaces, as a shell
   reads them: `"…"` around a word with spaces, `\` before a character to take it as it is.
@@ -500,6 +536,10 @@ tab_bar = "line"                 # tabs on a line above the panels; "frame": in 
 [transfer]
 atomic_upload = true             # copies go to a hidden temporary name, then are renamed
 parallel_jobs = 2                # jobs that run at once; later ones wait; F4 never waits
+
+[zoxide]
+program = "zoxide"               # name in PATH or a path
+record = true                    # add directories where the user did something
 ```
 
 Preserving attributes is a choice in the copy dialog, as in mc, not a setting.

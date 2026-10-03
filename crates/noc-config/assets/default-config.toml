@@ -73,4 +73,13 @@ atomic_upload = true
 # with F4 never waits. At least 1.
 parallel_jobs = 2
 
+[zoxide]
+# zoxide (https://github.com/ajeetdsouza/zoxide) ranks the directories you use; Alt-Z jumps to
+# them. A name looked up in PATH, or a path; a leading ~/ stands for the home directory.
+program = "zoxide"
+# Add a local directory to zoxide once you do something in it: copy, move, or delete from it,
+# copy into it, make a directory, view or edit a file, take checksums, or jump there. Passing
+# through does not count. Nothing happens without zoxide.
+record = true
+
 # Per-host settings (labels, start directories) live in hosts.toml next to this file.

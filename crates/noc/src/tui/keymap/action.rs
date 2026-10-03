@@ -10,6 +10,8 @@ pub(crate) enum Context {
     Root,
     /// The location menu of Alt-F1 and Alt-F2, which has a filter.
     Menu,
+    /// The zoxide window of Alt-Z, which takes keywords.
+    Jump,
     /// The pull-down menu of F9, whose commands have letters.
     PullDown,
     /// Quick search in the active panel. Keys it does not bind fall through to the panel.
@@ -35,6 +37,7 @@ impl Context {
             Self::Viewer => &[Self::Viewer],
             // Menus are modal too.
             Self::Menu => &[Self::Menu],
+            Self::Jump => &[Self::Jump],
             Self::PullDown => &[Self::PullDown],
         }
     }
@@ -48,11 +51,11 @@ impl Context {
 
     /// Whether every character is text, even one that a fallback context binds: in quick
     /// search, `*` is part of a name, not a command; in a text field, Space is a space; in the
-    /// menu, digits are hotkeys and letters filter; in the pull-down menu, letters run commands.
+    /// menus, digits are hotkeys and letters filter; in the pull-down menu, letters run commands.
     pub(crate) fn text_first(self) -> bool {
         matches!(
             self,
-            Self::QuickSearch | Self::DialogInput | Self::Menu | Self::PullDown
+            Self::QuickSearch | Self::DialogInput | Self::Menu | Self::Jump | Self::PullDown
         )
     }
 
@@ -65,6 +68,7 @@ impl Context {
                 | Self::QuickSearch
                 | Self::DialogInput
                 | Self::Menu
+                | Self::Jump
                 | Self::PullDown
         )
     }
@@ -134,6 +138,8 @@ pub(crate) enum Action {
     LocationMenuLeft,
     /// Opens the location menu of the right panel.
     LocationMenuRight,
+    /// Opens the zoxide window, to jump to a directory zoxide ranks.
+    Jump,
     /// Opens the pull-down menu, at the menu of the active panel.
     PullDown,
     /// Opens a new tab in the panel, on the same location.
@@ -224,6 +230,7 @@ impl Action {
         Self::OtherPanelSync,
         Self::LocationMenuLeft,
         Self::LocationMenuRight,
+        Self::Jump,
         Self::PullDown,
         Self::NewTab,
         Self::CloseTab,

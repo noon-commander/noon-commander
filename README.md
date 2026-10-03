@@ -26,6 +26,8 @@ operations. The command is `noc`.
   Manager.
 - **Tabs in each panel.** Keep several directories and servers open on each side, and switch
   between them with Alt-Left and Alt-Right.
+- **zoxide built in.** Alt-Z jumps to the directories [zoxide](https://github.com/ajeetdsouza/zoxide)
+  ranks, and the directories you work in from Noon Commander count there too.
 
 ## Philosophy
 

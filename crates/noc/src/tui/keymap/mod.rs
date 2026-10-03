@@ -300,7 +300,7 @@ impl Keymap {
 }
 
 /// The bindings of the mc preset, by context.
-fn mc_presets() -> [(Context, Preset); 8] {
+fn mc_presets() -> [(Context, Preset); 9] {
     use Action::{
         Backspace, Cancel, Confirm, Disconnect, Down, EditHost, End, Help, Home, Left, NextField,
         PageDown, PageUp, PrevField, Quit, Redraw, Right, Toggle, ToggleWrap, Up,
@@ -348,6 +348,7 @@ fn mc_presets() -> [(Context, Preset); 8] {
             ],
         ),
         (Context::Menu, MENU),
+        (Context::Jump, JUMP),
         (Context::PullDown, PULL_DOWN),
         (Context::DialogInput, TEXT_FIELD),
     ]
@@ -357,10 +358,10 @@ fn mc_presets() -> [(Context, Preset); 8] {
 const PANEL: Preset = {
     use Action::{
         Cancel, Checksum, CloseTab, Copy, Delete, Down, Edit, End, Enter, Help, Home, InvertMarks,
-        Jobs, LocationMenuLeft, LocationMenuRight, Mark, MarkUp, Mkdir, Move, NewTab, NextTab,
-        OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent, PrevTab, PullDown, QuickSearch,
-        Quit, Redraw, Reload, Select, SortByExtension, SortByName, SortBySize, SortByTime,
-        SwapPanels, SwitchPanel, TabList, ToggleHidden, Unselect, Up, View,
+        Jobs, Jump, LocationMenuLeft, LocationMenuRight, Mark, MarkUp, Mkdir, Move, NewTab,
+        NextTab, OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent, PrevTab, PullDown,
+        QuickSearch, Quit, Redraw, Reload, Select, SortByExtension, SortByName, SortBySize,
+        SortByTime, SwapPanels, SwitchPanel, TabList, ToggleHidden, Unselect, Up, View,
     };
     &[
         (Up, &["up", "ctrl-p"]),
@@ -406,6 +407,8 @@ const PANEL: Preset = {
         // never arrives, such as macOS Terminal without Option as Meta.
         (LocationMenuLeft, &["alt-f1", "ctrl-x 1"]),
         (LocationMenuRight, &["alt-f2", "ctrl-x 2"]),
+        // Not in mc: zoxide's `z`. Ctrl-X Z where Alt never arrives.
+        (Jump, &["alt-z", "ctrl-x z"]),
         // Not in mc. Ctrl-T marks and terminals rarely pass Ctrl-Tab, so tabs live under
         // Ctrl-X; Alt-Left and Alt-Right where the terminal sends them.
         (NewTab, &["ctrl-x t"]),
@@ -453,6 +456,19 @@ const MENU: Preset = &[
     (Action::Backspace, &["backspace"]),
     (Action::Disconnect, &["f8"]),
     (Action::Reload, &["ctrl-r"]),
+    (Action::Cancel, &["esc", "f10"]),
+];
+
+/// The zoxide window's bindings in the mc preset; characters are keywords.
+const JUMP: Preset = &[
+    (Action::Up, &["up"]),
+    (Action::Down, &["down"]),
+    (Action::PageUp, &["pageup"]),
+    (Action::PageDown, &["pagedown"]),
+    (Action::Home, &["home"]),
+    (Action::End, &["end"]),
+    (Action::Confirm, &["enter"]),
+    (Action::Backspace, &["backspace"]),
     (Action::Cancel, &["esc", "f10"]),
 ];
 
@@ -632,9 +648,13 @@ mod tests {
             feed(&keymap, &mut state, Context::Panel, &["alt-."]),
             actions(&[Action::ToggleHidden])
         );
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Panel, &["esc", "z"]),
+            actions(&[Action::Jump])
+        );
         // An unbound Alt combination types nothing.
-        assert_eq!(feed(&keymap, &mut state, Context::Panel, &["esc", "z"]), []);
-        assert_eq!(feed(&keymap, &mut state, Context::Panel, &["alt-z"]), []);
+        assert_eq!(feed(&keymap, &mut state, Context::Panel, &["esc", "q"]), []);
+        assert_eq!(feed(&keymap, &mut state, Context::Panel, &["alt-q"]), []);
         assert_eq!(state.deadline(), None);
     }
 
@@ -963,6 +983,42 @@ mod tests {
         menu[7] = Some(Action::Disconnect);
         menu[9] = Some(Action::Cancel);
         assert_eq!(keymap.fkeys(Context::Menu), menu);
+    }
+
+    #[test]
+    fn the_zoxide_window_opens_with_alt_z_or_ctrl_x_z_and_takes_keywords() {
+        let keymap = Keymap::mc();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(
+                &keymap,
+                &mut state,
+                Context::Panel,
+                &["alt-z", "ctrl-x", "z"]
+            ),
+            actions(&[Action::Jump, Action::Jump])
+        );
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Root, &["alt-z"]),
+            actions(&[Action::Jump])
+        );
+        assert_eq!(
+            feed(
+                &keymap,
+                &mut state,
+                Context::Jump,
+                &["1", "s", "space", "down", "backspace", "enter", "f8", "esc"]
+            ),
+            [
+                Resolved::Insert('1'),
+                Resolved::Insert('s'),
+                Resolved::Insert(' '),
+                Resolved::Action(Action::Down),
+                Resolved::Action(Action::Backspace),
+                Resolved::Action(Action::Confirm),
+                Resolved::Action(Action::Cancel),
+            ]
+        );
     }
 
     #[test]

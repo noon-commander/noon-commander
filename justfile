@@ -49,6 +49,15 @@ typos:
 unused:
     cargo shear
 
+# Check the TOML files: valid, and formatted as taplo.toml says (needs taplo)
+toml:
+    RUST_LOG=warn taplo lint
+    RUST_LOG=warn taplo fmt --check
+
+# Format the TOML files, keeping their comments (needs taplo)
+toml-fmt:
+    RUST_LOG=warn taplo fmt
+
 # Lint the shell scripts, found by their shebang (needs shellcheck)
 sh:
     #!/usr/bin/env bash

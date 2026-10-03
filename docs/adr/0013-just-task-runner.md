@@ -22,10 +22,11 @@ renderer: a library in an `xtask` crate, or a command-line program.
   `sh`, `bash`, or `dash` shebang), `snap` and `snap-stale` (cargo-insta: review the changed
   UI snapshots, find the ones no test uses), `typos` (spelling, with exceptions in
   `typos.toml`), `unused` (cargo-shear: dependencies no crate uses, also in
-  `[workspace.dependencies]`), and `logo`. `msrv` is not part of `check`: it
-  needs rustup and the oldest supported toolchain, which a Homebrew Rust lacks; CI checks the
-  MSRV either way. `make` brings tabs, `.PHONY`, and an old GNU make on macOS; `cargo-make` is
-  heavy for a handful of commands; an `xtask` crate would wrap each cargo command in Rust code.
+  `[workspace.dependencies]`), `toml` and `toml-fmt` (taplo), and `logo`. `msrv` is not part of
+  `check`: it needs rustup and the oldest supported toolchain, which a Homebrew Rust lacks; CI
+  checks the MSRV either way. `make` brings tabs, `.PHONY`, and an old GNU make on macOS;
+  `cargo-make` is heavy for a handful of commands; an `xtask` crate would wrap each cargo command
+  in Rust code.
 - The logo is rendered by the `resvg` program. The workspace gets no new crate and no new
   dependencies, so `deny.toml` and the MSRV are untouched.
 - The PNGs are defined in the `justfile`, each with a name and a size, and `just logo` renders

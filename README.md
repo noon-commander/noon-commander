@@ -80,14 +80,15 @@ Non-goals: forwarding of any kind, a built-in SSH implementation, a password man
   [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2) checks the Markdown files,
   [ShellCheck](https://www.shellcheck.net) checks the shell scripts,
   [cargo-insta](https://insta.rs) reviews the UI snapshots,
-  [typos](https://github.com/crate-ci/typos) finds misspelled words, and
-  [cargo-shear](https://github.com/Boshen/cargo-shear) finds unused dependencies:
+  [typos](https://github.com/crate-ci/typos) finds misspelled words,
+  [cargo-shear](https://github.com/Boshen/cargo-shear) finds unused dependencies, and
+  [taplo](https://taplo.tamasfe.dev) checks and formats the TOML files:
 
   ```sh
   brew install just resvg cargo-deny markdownlint-cli2 shellcheck cargo-insta typos-cli \
-      cargo-shear
+      cargo-shear taplo
   # or, on any platform (ShellCheck from your package manager):
-  cargo install just resvg cargo-deny cargo-insta typos-cli cargo-shear --locked
+  cargo install just resvg cargo-deny cargo-insta typos-cli cargo-shear taplo-cli --locked
   npm install --global markdownlint-cli2
   ```
 
@@ -149,6 +150,8 @@ The project's tasks live in the [`justfile`](justfile)
 | `just md` | Lint the Markdown files with `.markdownlint.yaml` (needs markdownlint-cli2) |
 | `just typos` | Find misspelled words in code and docs; exceptions go to `typos.toml` (needs typos) |
 | `just unused` | Find dependencies that no crate uses (needs cargo-shear) |
+| `just toml` | Check that the TOML files are valid and formatted (needs taplo) |
+| `just toml-fmt` | Format the TOML files, keeping their comments (needs taplo) |
 | `just sh` | Lint the shell scripts, such as the fake `ssh` of the tests (needs shellcheck) |
 | `just logo` | Render the PNGs of `assets/icons/logo.svg`, without metadata (needs resvg) |
 

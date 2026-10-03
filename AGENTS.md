@@ -94,6 +94,7 @@ a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on th
 - Dependency versions are declared once in the root `[workspace.dependencies]`; crates use
   `name.workspace = true`. Every crate has `[lints] workspace = true`. A dependency that no
   crate uses any more is removed from both places; `just unused` finds it.
+- TOML files are formatted by taplo; `just toml`; checks them and `just toml-fmt` formats them.
 - Errors: `thiserror` enums in libraries, `color-eyre` in the binary. No `unwrap`/`expect`
   outside tests.
 - Logging: `tracing` only, written to a file in the XDG state directory (the terminal belongs to

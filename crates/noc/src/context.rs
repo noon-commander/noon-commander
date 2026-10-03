@@ -95,6 +95,8 @@ impl Context {
             config_file: ssh.config_file.clone(),
             args: ssh.args.clone(),
             multiplex: ssh.multiplex,
+            // The working directory follows the active panel; ssh must not hold it.
+            work_dir: Some(self.paths.home.clone()),
         }
     }
 

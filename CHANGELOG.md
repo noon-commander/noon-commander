@@ -35,6 +35,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- The working directory of the process follows the active panel: it changes to the local
+  directory the panel opens, and to the other panel's directory on Tab. A remote panel or the
+  virtual root leaves it where it was. The editor of F4 starts there; ssh always runs in the
+  home directory, so that an open connection never keeps a volume from unmounting.
 - zoxide: Alt-Z (or Ctrl-X Z) opens a window of the directories zoxide ranks highest for the
   keywords you type, as `z` picks them in a shell, and Enter opens one in the active panel;
   it is in F9 → Command too. A local directory goes to zoxide once you do something in it:

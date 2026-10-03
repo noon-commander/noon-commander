@@ -469,6 +469,8 @@ pub(crate) struct App {
     editing: Option<Editing>,
     /// A file for the event loop to open in the editor.
     edit_now: Option<PathBuf>,
+    /// The working directory last handed to the event loop.
+    work_dir: Option<PathBuf>,
     /// Where copies of remote files for the editor go.
     runtime_dir: PathBuf,
     /// The id of the last job started.
@@ -556,6 +558,7 @@ impl App {
             viewing: None,
             editing: None,
             edit_now: None,
+            work_dir: None,
             runtime_dir: std::env::temp_dir(),
             last_job: 0,
             parallel_jobs: transfer.parallel_jobs.get(),
@@ -602,6 +605,20 @@ impl App {
     /// A file to open in the editor now, with the screen handed over; resets the request.
     pub(crate) fn take_edit(&mut self) -> Option<PathBuf> {
         self.edit_now.take()
+    }
+
+    /// The directory of the active panel if it is local and new since the last call: the
+    /// working directory of the process follows it. A remote panel or the root leaves the
+    /// working directory where it was.
+    pub(crate) fn take_work_dir(&mut self) -> Option<PathBuf> {
+        let Location::Local(dir) = self.panel(self.active).location() else {
+            return None;
+        };
+        if self.work_dir.as_ref() == Some(dir) {
+            return None;
+        }
+        self.work_dir = Some(dir.clone());
+        self.work_dir.clone()
     }
 
     /// Uses `hosts`, the settings from `hosts.toml`.
@@ -3646,6 +3663,43 @@ mod tests {
 
         app.handle(action(Action::SwitchPanel));
         assert_eq!(app.active, Side::Left);
+    }
+
+    #[test]
+    fn the_work_dir_follows_the_local_directory_of_the_active_panel() {
+        let mut app = loaded();
+        assert_eq!(app.take_work_dir(), Some(PathBuf::from("/srv")));
+        assert_eq!(app.take_work_dir(), None, "only when it changes");
+
+        app.handle(action(Action::Down));
+        let effects = app.handle(action(Action::Enter));
+        assert_eq!(app.take_work_dir(), None, "not before the listing arrives");
+        answer(&mut app, effects, &Listing::Dir(Vec::new()));
+        assert_eq!(app.take_work_dir(), Some(PathBuf::from("/srv/left")));
+
+        app.handle(action(Action::SwitchPanel));
+        assert_eq!(app.take_work_dir(), Some(PathBuf::from("/srv")));
+        app.handle(action(Action::SwitchPanel));
+        assert_eq!(app.take_work_dir(), Some(PathBuf::from("/srv/left")));
+
+        let mut app = at_root();
+        app.take_work_dir();
+        let effects = enter_host(&mut app, Side::Left, 1);
+        let Effect::Connect { connection, .. } = one(effects) else {
+            panic!("expected a connection");
+        };
+        let (handle, _requests) = HostHandle::channel();
+        let effects = app.connected("web", connection, handle);
+        answer(&mut app, effects, &Listing::Dir(Vec::new()));
+        assert!(matches!(
+            app.panel(Side::Left).location(),
+            Location::Remote { .. }
+        ));
+        assert_eq!(
+            app.take_work_dir(),
+            None,
+            "a remote panel keeps the last one"
+        );
     }
 
     /// The titles of the panels drawn on the left and on the right.

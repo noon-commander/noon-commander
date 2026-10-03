@@ -25,6 +25,9 @@ pub struct SshSettings {
     pub args: Vec<String>,
     /// One `ControlMaster` connection per host instead of one connection per channel.
     pub multiplex: bool,
+    /// The working directory of every ssh process; `None` keeps the one of this process. A
+    /// long-lived master or channel holds its directory, whose volume then cannot be unmounted.
+    pub work_dir: Option<PathBuf>,
 }
 
 impl Default for SshSettings {
@@ -34,6 +37,7 @@ impl Default for SshSettings {
             config_file: None,
             args: Vec::new(),
             multiplex: true,
+            work_dir: None,
         }
     }
 }
@@ -193,6 +197,9 @@ fn base_command(settings: &SshSettings) -> Command {
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    if let Some(dir) = &settings.work_dir {
+        command.current_dir(dir);
+    }
     detach_from_terminal(&mut command);
     command
 }
@@ -336,5 +343,29 @@ mod tests {
             Err(SshError::InvalidDestination(_))
         ));
         assert!(Target::new("web").validate(&settings).is_ok());
+    }
+
+    #[test]
+    fn ssh_runs_in_the_work_dir_if_there_is_one() {
+        let path = Path::new("/run/1/abcd");
+        let inherited = control_command(&SshSettings::default(), path, "exit");
+        assert_eq!(inherited.as_std().get_current_dir(), None);
+
+        let settings = SshSettings {
+            work_dir: Some(PathBuf::from("/home/me")),
+            ..settings()
+        };
+        let commands = [
+            session_command(&settings, &target(), Role::Resolve, None),
+            session_command(&settings, &target(), Role::DirectSftp, None),
+            control_command(&settings, path, "exit"),
+            version_command(&settings),
+        ];
+        for command in commands {
+            assert_eq!(
+                command.as_std().get_current_dir(),
+                Some(Path::new("/home/me"))
+            );
+        }
     }
 }

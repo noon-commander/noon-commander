@@ -46,7 +46,10 @@ ssh -F /dev/null -S <sock> -O exit -- noc                             # disconne
 
 The SFTP protocol client is `openssh-sftp-client`, whose `Sftp::new` works over the pipes of any
 child process. Every ssh child runs in its own session (`setsid`), without a controlling
-terminal, so it can neither read from nor draw on the TUI's terminal.
+terminal, so it can neither read from nor draw on the TUI's terminal. ssh runs in the home
+directory (`SshSettings::work_dir`), not in the working directory of the process, which
+follows the active panel: a long-lived master or channel would hold that directory, and its
+volume could not be unmounted.
 
 `noc-ssh` API in short: `version::check_version` runs `ssh -V`; `resolve::resolve` runs
 `ssh -G`; `Session::connect` starts the master (or nothing, without multiplexing);
@@ -417,6 +420,11 @@ noc config paths       show the files and directories in use
   the program reaches Noon Commander too, so the SIGINT stream is made anew; SIGTERM and SIGHUP
   wait until the program ends. ssh children are in sessions of their own and see none of
   it.
+- The working directory of the process follows the active panel: after each turn of the
+  event loop, a local directory the active panel now shows (once its listing arrived)
+  goes to a task that `chdir`s to it in `spawn_blocking`, the latest of the waiting ones only.
+  A remote panel or the virtual root leaves it where it was. Programs that the app starts,
+  such as the editor, inherit it.
 
 ## File operations
 

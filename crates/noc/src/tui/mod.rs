@@ -124,18 +124,14 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     let context = Arc::new(context);
     let (done_tx, mut done) = mpsc::unbounded_channel();
     let mut tasks = Tasks::start(Arc::clone(&context), done_tx).await;
-    let (mut app, effects) = App::new(&start, &context.paths.home, &context.config());
-    app.set_color_depth(theme::ColorDepth::detect());
-    app.set_time_zone(tz.clone());
-    if let Some(name) = host_name() {
-        app.set_root_title(name);
-    }
-    app.set_runtime_dir(context.paths.runtime_dir.clone());
-    app.set_hosts(context.hosts());
+    let (mut app, effects) = start_app(&context, &start, &tz);
     tasks.run(effects);
     let result = loop {
         if app.quits() {
             break Ok(());
+        }
+        if let Some(dir) = app.take_work_dir() {
+            tasks.change_work_dir(dir);
         }
         if let Some(file) = app.take_edit() {
             // The editor gets every key. A stream's reader holds crossterm's input lock while it
@@ -213,6 +209,20 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     app.disconnect_all();
     tasks.shutdown().await;
     result
+}
+
+/// The app with both panels on `start`, set up for this terminal and machine, and the work
+/// it asks for first.
+fn start_app(context: &Context, start: &Path, tz: &TimeZone) -> (App, Vec<app::Effect>) {
+    let (mut app, effects) = App::new(start, &context.paths.home, &context.config());
+    app.set_color_depth(theme::ColorDepth::detect());
+    app.set_time_zone(tz.clone());
+    if let Some(name) = host_name() {
+        app.set_root_title(name);
+    }
+    app.set_runtime_dir(context.paths.runtime_dir.clone());
+    app.set_hosts(context.hosts());
+    (app, effects)
 }
 
 /// The name of this machine without its domain, for the title of the virtual root.

@@ -196,6 +196,8 @@ pub(crate) struct Tasks {
     zoxide_adds: mpsc::UnboundedSender<PathBuf>,
     /// The zoxide query in flight; a newer one replaces it.
     zoxide_query: Option<AbortHandle>,
+    /// New working directories for the process, which one task changes to in turn.
+    work_dirs: mpsc::UnboundedSender<PathBuf>,
 }
 
 impl Tasks {
@@ -218,7 +220,13 @@ impl Tasks {
             config_saves,
             zoxide_adds,
             zoxide_query: None,
+            work_dirs: change_work_dirs(),
         }
+    }
+
+    /// Makes `dir` the working directory of the process, after the changes before.
+    pub(crate) fn change_work_dir(&self, dir: PathBuf) {
+        let _ = self.work_dirs.send(dir);
     }
 
     pub(crate) fn run(&mut self, effects: Vec<Effect>) {
@@ -644,6 +652,30 @@ fn add_to_zoxide(context: Arc<Context>) -> mpsc::UnboundedSender<PathBuf> {
                     let error = describe::chain(&error);
                     tracing::debug!(dir = %dir.display(), %error, "cannot add to zoxide");
                 }
+            }
+        }
+    });
+    sender
+}
+
+/// Starts the task that changes the working directory of the process, one change after
+/// another, so that the last one wins; returns where to send them. `chdir` can hang on a
+/// network volume, so it runs off the event loop. Failures only go to the log: the directory
+/// may be gone by now.
+fn change_work_dirs() -> mpsc::UnboundedSender<PathBuf> {
+    let (sender, mut dirs) = mpsc::unbounded_channel::<PathBuf>();
+    tokio::spawn(async move {
+        while let Some(mut dir) = dirs.recv().await {
+            // Only the latest of the waiting ones matters.
+            while let Ok(newer) = dirs.try_recv() {
+                dir = newer;
+            }
+            let changed = tokio::task::spawn_blocking(move || {
+                std::env::set_current_dir(&dir).map_err(|error| (dir, error))
+            })
+            .await;
+            if let Ok(Err((dir, error))) = changed {
+                tracing::debug!(dir = %dir.display(), %error, "cannot change the working directory");
             }
         }
     });

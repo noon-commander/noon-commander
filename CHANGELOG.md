@@ -40,6 +40,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Quick cd, Alt-C, as in mc: type a path as for `cd` in a shell (relative, `/…`, `~`, `..`,
+  `-` for the directory before, or `host:path`) and the active panel opens it; F9 → Command
+  has it too.
 - The working directory of the process follows the active panel: it changes to the local
   directory the panel opens, and to the other panel's directory on Tab. A remote panel or the
   virtual root leaves it where it was. The editor of F4 starts there; ssh always runs in the

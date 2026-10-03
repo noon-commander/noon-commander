@@ -724,6 +724,15 @@ impl Panel {
         }
     }
 
+    /// `location`, with the cursor on the directory the panel shows if `location` is its
+    /// parent, as `..` puts it; else on its first row.
+    pub(crate) fn destination(&self, location: Location) -> Destination {
+        match self.parent_destination() {
+            Some(parent) if parent.location == location => parent,
+            _ => Destination::to(location),
+        }
+    }
+
     /// What the cursor is on.
     fn focus(&self) -> Focus {
         match self.row(self.cursor) {

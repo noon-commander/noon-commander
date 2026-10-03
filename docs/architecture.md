@@ -201,8 +201,8 @@ the active panel selected; later, where it was when it closed. An open menu:
 - Left and Right act on the panel drawn on that side, after Ctrl-U too: its location menu,
   sort order (`•` marks the current one), Rescan, Disconnect while it shows a host, and its
   [tabs](#tabs): New tab, Close tab, and Tab list…. File
-  has F3 … F8, `+`, `-`, `*`, Checksums, and Exit; Command has quick search, the
-  [zoxide](#zoxide) window, the other-panel
+  has F3 … F8, `+`, `-`, `*`, Checksums, and Exit; Command has quick search,
+  [Quick cd](#quick-cd), the [zoxide](#zoxide) window, the other-panel
   commands, the jobs, host settings and disconnect for the host under the cursor, help, and
   redraw; Options has Configuration… and Show hidden files (`✓` while on). Without icons, the
   marks are `*` and `x`.
@@ -222,6 +222,16 @@ the active panel selected; later, where it was when it closed. An open menu:
   of the panels only while a menu is open, as Far does; `always` keeps it above the panels, as
   mc does, which takes a row from them. The jobs indicator sits at the right end of that row.
 - The menu is modal (keymap context `pull_down`); letters are text there, so they are hotkeys.
+
+### Quick cd
+
+Alt-C (`Esc C`), as mc's Quick cd, asks for a path and opens it in the active panel, as `cd`
+in a shell reads it: relative to the panel's directory, `/…` absolute, `~` and `~/…` the home
+directory, `..` and `.` resolved by name, `-` the directory the tab showed before, and
+`host:path` on a host, scp-style, which connects to it if needed. On a host, paths stay on it
+and `~` is the remote home. From the volumes and hosts, relative paths start at the home
+directory. `cd ..` puts the cursor on the directory left, as Ctrl-PgUp does; a path that is not
+there leaves the panel where it is, with the reason below the listing. It is in F9 → Command.
 
 ### zoxide
 

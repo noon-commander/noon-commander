@@ -17,6 +17,7 @@ use ratatui::text::{Line, Span};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
+use super::cd;
 use super::cells::{self, Align};
 use super::configuration::Configuration;
 use super::decor::Decor;
@@ -264,6 +265,8 @@ enum Purpose {
     },
     /// The list of the tabs on `side`: OK shows the one chosen.
     TabList { side: Side },
+    /// Quick cd in `panel`: OK opens the path typed there.
+    QuickCd { panel: PanelId },
     /// F10 while jobs run: Yes quits and stops them.
     Quit,
     /// Something to read, such as an error.
@@ -1044,6 +1047,7 @@ impl App {
             Action::LocationMenuLeft => return self.open_menu(Side::Left),
             Action::LocationMenuRight => return self.open_menu(Side::Right),
             Action::Jump => return self.open_jump(),
+            Action::QuickCd => self.ask_cd(),
             Action::PullDown => self.open_pulldown(),
             _ => {
                 let id = self.shown(self.active);
@@ -1341,6 +1345,7 @@ impl App {
                         .is_some_and(|host| self.hosts.contains_key(host)),
                     Action::QuickSearch
                     | Action::Jump
+                    | Action::QuickCd
                     | Action::SwapPanels
                     | Action::OtherPanelOpen
                     | Action::OtherPanelSync
@@ -1492,9 +1497,11 @@ impl App {
                     return self.revealed(side);
                 }
             }
+            Purpose::QuickCd { panel } if ok => return self.cd(panel, dialog.text()),
             Purpose::Quit => self.quit = event == DialogEvent::Pressed(Button::Yes),
             Purpose::EditHost { .. }
             | Purpose::TabList { .. }
+            | Purpose::QuickCd { .. }
             | Purpose::Checksum { .. }
             | Purpose::SaveSums { .. }
             | Purpose::OverwriteSums { .. }
@@ -2474,6 +2481,34 @@ impl App {
         }
     }
 
+    /// Opens the dialog of Quick cd, Alt-C, for the active panel, as in mc.
+    fn ask_cd(&mut self) {
+        let (title, prompt) = (fl!("cd-title"), fl!("cd-prompt"));
+        let dialog = Dialog::form(&title, &prompt, "", &[], MKDIR_DIALOG_WIDTH);
+        let panel = self.shown(self.active);
+        self.dialogs.push_back(Open {
+            dialog,
+            purpose: Purpose::QuickCd { panel },
+        });
+    }
+
+    /// Sends `panel` where `cd <text>` leads from its directory. A path that is not there
+    /// leaves the panel where it is and says why, as any listing does.
+    fn cd(&mut self, panel: PanelId, text: &str) -> Vec<Effect> {
+        let Some(tab) = self.tabs(panel.side).get(panel.tab) else {
+            return Vec::new();
+        };
+        let here = tab.panel.location();
+        let Some(location) = cd::target(text, here, &self.home, tab.previous.as_ref()) else {
+            return Vec::new();
+        };
+        if location == *here {
+            return Vec::new();
+        }
+        let destination = tab.panel.destination(location);
+        self.go(panel, destination)
+    }
+
     /// Opens the dialog of F7 for the active panel, with the name under the cursor, as in mc.
     fn ask_mkdir(&mut self) {
         let panel = self.panel(self.active);
@@ -2885,6 +2920,7 @@ impl App {
         tab.panel.listed(generation, result);
         let location = tab.panel.location().clone();
         if location != before {
+            tab.previous = Some(before);
             // A new visit, which counts in zoxide again; a jump counted already.
             let arriving = tab.arriving.take();
             tab.noted =
@@ -6712,5 +6748,91 @@ mod tests {
         assert!(screen_of(&mut app, 12).contains("zoxide is not installed"));
         app.handle(action(Action::Cancel));
         assert_eq!(app.context(), Context::Panel);
+    }
+
+    /// Types `text` into Quick cd in the active panel and presses Enter.
+    fn quick_cd(app: &mut App, text: &str) -> Vec<Effect> {
+        assert!(app.handle(action(Action::QuickCd)).is_empty());
+        assert_eq!(app.context(), Context::DialogInput);
+        type_text(app, text);
+        app.handle(action(Action::Confirm))
+    }
+
+    #[test]
+    fn alt_c_goes_where_cd_would_and_back_with_a_dash() {
+        let mut app = loaded();
+        let text = {
+            app.handle(action(Action::QuickCd));
+            let text = screen_of(&mut app, 16);
+            app.handle(action(Action::Cancel));
+            text
+        };
+        assert!(text.contains("Quick cd") && text.contains("cd"), "{text}");
+
+        let effects = quick_cd(&mut app, "left/../right/./x");
+        let [Effect::List { request, .. }] = &effects[..] else {
+            panic!("expected a listing, got {effects:?}");
+        };
+        assert_eq!(request.location, local("/srv/right/x"));
+        answer(&mut app, effects, &Listing::Dir(vec![file("a", 1)]));
+        assert_eq!(app.panel(Side::Left).location(), &local("/srv/right/x"));
+
+        // `..` puts the cursor on where the panel was, as Ctrl-PgUp does.
+        let effects = quick_cd(&mut app, "..");
+        answer(
+            &mut app,
+            effects,
+            &Listing::Dir(vec![dir("w"), dir("x"), dir("y")]),
+        );
+        assert_eq!(app.panel(Side::Left).name_under_cursor(), Some(&b"x"[..]));
+
+        // `-` goes back, and back again.
+        let effects = quick_cd(&mut app, "-");
+        let [Effect::List { request, .. }] = &effects[..] else {
+            panic!("expected a listing, got {effects:?}");
+        };
+        assert_eq!(request.location, local("/srv/right/x"));
+        answer(&mut app, effects, &Listing::Dir(Vec::new()));
+        let effects = quick_cd(&mut app, "-");
+        answer(&mut app, effects, &Listing::Dir(Vec::new()));
+        assert_eq!(app.panel(Side::Left).location(), &local("/srv/right"));
+
+        // `~`, an empty line, and where the panel is already.
+        let [Effect::List { request, .. }] = &quick_cd(&mut app, "~/src")[..] else {
+            panic!("expected a listing");
+        };
+        assert_eq!(request.location, local("/home/me/src"));
+        app.panel_mut(Side::Left).cancel();
+        assert!(quick_cd(&mut app, "").is_empty());
+        assert!(quick_cd(&mut app, ".").is_empty());
+        assert_eq!(app.context(), Context::Panel);
+    }
+
+    #[test]
+    fn alt_c_opens_hosts_and_a_path_that_is_not_there_says_so() {
+        let mut app = loaded();
+        let effects = quick_cd(&mut app, "web:/var/log");
+        let [Effect::Connect { host, .. }] = &effects[..] else {
+            panic!("expected a connection, got {effects:?}");
+        };
+        assert_eq!(host, "web");
+        assert_eq!(
+            app.panel(Side::Left).pending_request().map(|r| r.location),
+            Some(remote("web", "/var/log"))
+        );
+
+        let mut app = loaded();
+        let effects = quick_cd(&mut app, "/nowhere");
+        let [Effect::List { panel, request, .. }] = &effects[..] else {
+            panic!("expected a listing, got {effects:?}");
+        };
+        app.listed(
+            *panel,
+            request.generation,
+            Err("no such file or directory".to_owned()),
+        );
+        assert_eq!(app.panel(Side::Left).location(), &local("/srv"), "it stays");
+        let text = screen(&mut app);
+        assert!(text.contains("Cannot open /nowhere"), "{text}");
     }
 }

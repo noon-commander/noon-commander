@@ -36,6 +36,8 @@ pub(crate) struct Tab {
     pub(crate) noted: bool,
     /// A directory the tab jumps to through zoxide, which already counted it.
     pub(crate) arriving: Option<PathBuf>,
+    /// What the tab showed before it went where it is, for `cd -`.
+    pub(crate) previous: Option<Location>,
 }
 
 impl Tab {
@@ -46,6 +48,7 @@ impl Tab {
             stale: false,
             noted: false,
             arriving: None,
+            previous: None,
         }
     }
 }

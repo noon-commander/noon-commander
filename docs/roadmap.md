@@ -88,6 +88,7 @@
 - [x] zoxide: Alt-Z jumps to the directories it ranks; directories where the user did
       something go to it, `[zoxide]`; external programs live in `noc-tools`
       ([ADR 0012](adr/0012-external-tools-and-zoxide.md))
+- [x] Quick cd (Alt-C), as in mc, with `~`, `..`, `-`, and `host:path`
 - [ ] Bookmarks and history
 - [ ] chmod and symlinks
 - [ ] Mouse support

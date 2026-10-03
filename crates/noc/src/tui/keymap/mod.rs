@@ -360,8 +360,8 @@ const PANEL: Preset = {
         Cancel, Checksum, CloseTab, Copy, Delete, Down, Edit, End, Enter, Help, Home, InvertMarks,
         Jobs, Jump, LocationMenuLeft, LocationMenuRight, Mark, MarkUp, Mkdir, Move, NewTab,
         NextTab, OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent, PrevTab, PullDown,
-        QuickSearch, Quit, Redraw, Reload, Select, SortByExtension, SortByName, SortBySize,
-        SortByTime, SwapPanels, SwitchPanel, TabList, ToggleHidden, Unselect, Up, View,
+        QuickCd, QuickSearch, Quit, Redraw, Reload, Select, SortByExtension, SortByName,
+        SortBySize, SortByTime, SwapPanels, SwitchPanel, TabList, ToggleHidden, Unselect, Up, View,
     };
     &[
         (Up, &["up", "ctrl-p"]),
@@ -409,6 +409,8 @@ const PANEL: Preset = {
         (LocationMenuRight, &["alt-f2", "ctrl-x 2"]),
         // Not in mc: zoxide's `z`. Ctrl-X Z where Alt never arrives.
         (Jump, &["alt-z", "ctrl-x z"]),
+        // mc's Quick cd; Esc C where Alt never arrives.
+        (QuickCd, &["alt-c"]),
         // Not in mc. Ctrl-T marks and terminals rarely pass Ctrl-Tab, so tabs live under
         // Ctrl-X; Alt-Left and Alt-Right where the terminal sends them.
         (NewTab, &["ctrl-x t"]),
@@ -1018,6 +1020,20 @@ mod tests {
                 Resolved::Action(Action::Confirm),
                 Resolved::Action(Action::Cancel),
             ]
+        );
+    }
+
+    #[test]
+    fn quick_cd_opens_with_alt_c_or_esc_c() {
+        let keymap = Keymap::mc();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Panel, &["alt-c", "esc", "c"]),
+            actions(&[Action::QuickCd, Action::QuickCd])
+        );
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Root, &["alt-c"]),
+            actions(&[Action::QuickCd])
         );
     }
 

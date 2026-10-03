@@ -72,7 +72,7 @@ sequence. Sections marked (noc) exist only in noc.
 | Repaint screen                                     | Ctrl+L            | —         | Ctrl+L                                | —              |
 | Show command output / user screen                  | —                 | —         | Ctrl+O                                | Ctrl+O         |
 | Temporarily show user screen (while held)          | —                 | —         | —                                     | Ctrl+Alt+Shift |
-| Quick cd                                           | —                 | —         | Alt+C                                 | —              |
+| Quick cd                                           | Alt+C             | —         | Alt+C                                 | —              |
 | Jump to a directory zoxide ranks                   | Alt+Z<br>Ctrl+X z | —         | —                                     | —              |
 | External panelize                                  | —                 | —         | Ctrl+X !                              | —              |
 | Add current directory to hotlist / folder shortcut | —                 | —         | Ctrl+X h                              | Ctrl+Shift+0…9 |

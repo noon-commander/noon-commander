@@ -309,6 +309,7 @@ impl PullDown {
                 command,
                 vec![
                     Some((fl!("pulldown-quick-search"), Action::QuickSearch)),
+                    Some((fl!("pulldown-quick-cd"), Action::QuickCd)),
                     Some((fl!("pulldown-jump"), Action::Jump)),
                     None,
                     Some((fl!("pulldown-swap"), Action::SwapPanels)),
@@ -874,6 +875,8 @@ mod tests {
         menu.handle(action(Action::Down), &status);
         assert_eq!(chosen(&menu), Some(Command::Do(Action::Copy)));
         menu.handle(action(Action::Right), &status);
+        menu.handle(action(Action::Down), &status);
+        assert_eq!(chosen(&menu), Some(Command::Do(Action::QuickCd)));
         menu.handle(action(Action::Down), &status);
         assert_eq!(chosen(&menu), Some(Command::Do(Action::Jump)));
         menu.handle(action(Action::Down), &status);

@@ -140,6 +140,8 @@ pub(crate) enum Action {
     LocationMenuRight,
     /// Opens the zoxide window, to jump to a directory zoxide ranks.
     Jump,
+    /// Asks for a path, as `cd` in a shell takes it, and opens it in the panel.
+    QuickCd,
     /// Opens the pull-down menu, at the menu of the active panel.
     PullDown,
     /// Opens a new tab in the panel, on the same location.
@@ -231,6 +233,7 @@ impl Action {
         Self::LocationMenuLeft,
         Self::LocationMenuRight,
         Self::Jump,
+        Self::QuickCd,
         Self::PullDown,
         Self::NewTab,
         Self::CloseTab,

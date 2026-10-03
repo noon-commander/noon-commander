@@ -1,6 +1,7 @@
 //! The terminal user interface: two panels over the local file system and SFTP hosts.
 
 mod app;
+mod cd;
 mod cells;
 mod configuration;
 mod decor;

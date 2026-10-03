@@ -157,6 +157,7 @@ pulldown-quick-search = &Quick search
 pulldown-swap = S&wap panels
 pulldown-other-open = &Open in the other panel
 pulldown-other-sync = &This directory in the other panel
+pulldown-quick-cd = Quick &cd…
 # Opens the zoxide window.
 pulldown-jump = &Jump to a directory (zoxide)…
 pulldown-jobs = &Background jobs…
@@ -313,6 +314,7 @@ help-jobs = The running jobs: bring one to the front, or abort it
 help-checksum = Checksums of the marked files, or the one under the cursor
 help-menu-left = Change the left panel's location: a volume or a host
 help-menu-right = Change the right panel's location: a volume or a host
+help-quick-cd = Quick cd: type a path as for cd, with ~, .., -, or host:path
 help-jump-open = Jump to a directory that zoxide ranks, in this panel
 help-jump-go = Open the directory in the active panel
 help-new-tab = A new tab in this panel, on the same directory
@@ -387,6 +389,12 @@ pattern-unselect = Unselect
 # Check boxes: leave directories alone; tell upper and lower case apart.
 pattern-files-only = Files only
 pattern-case-sensitive = Case sensitive
+
+## Quick cd, Alt-C (src/tui/app, src/tui/cd). Prefix: cd-. As in mc.
+
+cd-title = Quick cd
+# Above the field: a path as cd takes it in a shell.
+cd-prompt = cd
 
 ## Making directories, F7 (src/tui/app). Prefix: mkdir-. As in mc.
 

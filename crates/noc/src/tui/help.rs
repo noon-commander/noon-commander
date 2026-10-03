@@ -237,6 +237,7 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::LocationMenuLeft) => fl!("help-menu-left"),
         (Context::Panel, Action::LocationMenuRight) => fl!("help-menu-right"),
         (Context::Panel, Action::Jump) => fl!("help-jump-open"),
+        (Context::Panel, Action::QuickCd) => fl!("help-quick-cd"),
         (Context::Panel, Action::NewTab) => fl!("help-new-tab"),
         (Context::Panel, Action::CloseTab) => fl!("help-close-tab"),
         (Context::Panel, Action::NextTab) => fl!("help-next-tab"),

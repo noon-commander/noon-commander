@@ -302,66 +302,11 @@ impl Keymap {
 /// The bindings of the mc preset, by context.
 fn mc_presets() -> [(Context, Preset); 8] {
     use Action::{
-        Backspace, Cancel, Checksum, Confirm, Copy, Delete, Disconnect, Down, Edit, EditHost, End,
-        Enter, Help, Home, InvertMarks, Jobs, Left, LocationMenuLeft, LocationMenuRight, Mark,
-        MarkUp, Mkdir, Move, NextField, OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent,
-        PrevField, PullDown, QuickSearch, Quit, Redraw, Reload, Right, Select, SortByExtension,
-        SortByName, SortBySize, SortByTime, SwapPanels, SwitchPanel, Toggle, ToggleHidden,
-        ToggleWrap, Unselect, Up, View,
+        Backspace, Cancel, Confirm, Disconnect, Down, EditHost, End, Help, Home, Left, NextField,
+        PageDown, PageUp, PrevField, Quit, Redraw, Right, Toggle, ToggleWrap, Up,
     };
     [
-        (
-            Context::Panel,
-            &[
-                (Up, &["up", "ctrl-p"]),
-                (Down, &["down", "ctrl-n"]),
-                (PageUp, &["pageup", "alt-v"]),
-                (PageDown, &["pagedown", "ctrl-v"]),
-                (Home, &["home"]),
-                (End, &["end"]),
-                (Enter, &["enter"]),
-                (Mark, &["insert", "ctrl-t", "shift-down"]),
-                (MarkUp, &["shift-up"]),
-                // mc takes `+`, `-`, `\`, and `*` as commands while its command line is
-                // empty.
-                (Select, &["+", "alt-+"]),
-                (Unselect, &["-", "\\", "alt--"]),
-                (InvertMarks, &["*", "alt-*"]),
-                (Parent, &["ctrl-pageup"]),
-                (SwitchPanel, &["tab"]),
-                (SwapPanels, &["ctrl-u"]),
-                (OtherPanelOpen, &["alt-o"]),
-                (OtherPanelSync, &["alt-i"]),
-                (Reload, &["ctrl-r"]),
-                (Cancel, &["esc", "esc esc"]),
-                (ToggleHidden, &["alt-."]),
-                // mc leaves sorting to its menu; these are Far Manager's keys. macOS takes
-                // them for keyboard navigation unless those shortcuts are turned off.
-                (SortByName, &["ctrl-f3"]),
-                (SortByExtension, &["ctrl-f4"]),
-                (SortByTime, &["ctrl-f5"]),
-                (SortBySize, &["ctrl-f6"]),
-                (QuickSearch, &["ctrl-s", "alt-s"]),
-                (Help, &["f1"]),
-                (View, &["f3"]),
-                (Edit, &["f4"]),
-                (Copy, &["f5"]),
-                (Move, &["f6"]),
-                (Mkdir, &["f7"]),
-                // In text fields, Delete deletes a character.
-                (Delete, &["f8", "delete"]),
-                (Jobs, &["ctrl-x j"]),
-                // Not in mc; `#` for a hash.
-                (Checksum, &["ctrl-x #"]),
-                // Far Manager's menus to change drives. Ctrl-X 1 and 2 are for terminals whose
-                // Alt-F1 never arrives, such as macOS Terminal without Option as Meta.
-                (LocationMenuLeft, &["alt-f1", "ctrl-x 1"]),
-                (LocationMenuRight, &["alt-f2", "ctrl-x 2"]),
-                (PullDown, &["f9"]),
-                (Quit, &["f10"]),
-                (Redraw, &["ctrl-l"]),
-            ],
-        ),
+        (Context::Panel, PANEL),
         (Context::Root, &[(EditHost, &["f4"]), (Disconnect, &["f8"])]),
         (
             Context::QuickSearch,
@@ -407,6 +352,72 @@ fn mc_presets() -> [(Context, Preset); 8] {
         (Context::DialogInput, TEXT_FIELD),
     ]
 }
+
+/// The panels' bindings in the mc preset.
+const PANEL: Preset = {
+    use Action::{
+        Cancel, Checksum, CloseTab, Copy, Delete, Down, Edit, End, Enter, Help, Home, InvertMarks,
+        Jobs, LocationMenuLeft, LocationMenuRight, Mark, MarkUp, Mkdir, Move, NewTab, NextTab,
+        OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent, PrevTab, PullDown, QuickSearch,
+        Quit, Redraw, Reload, Select, SortByExtension, SortByName, SortBySize, SortByTime,
+        SwapPanels, SwitchPanel, TabList, ToggleHidden, Unselect, Up, View,
+    };
+    &[
+        (Up, &["up", "ctrl-p"]),
+        (Down, &["down", "ctrl-n"]),
+        (PageUp, &["pageup", "alt-v"]),
+        (PageDown, &["pagedown", "ctrl-v"]),
+        (Home, &["home"]),
+        (End, &["end"]),
+        (Enter, &["enter"]),
+        (Mark, &["insert", "ctrl-t", "shift-down"]),
+        (MarkUp, &["shift-up"]),
+        // mc takes `+`, `-`, `\`, and `*` as commands while its command line is empty.
+        (Select, &["+", "alt-+"]),
+        (Unselect, &["-", "\\", "alt--"]),
+        (InvertMarks, &["*", "alt-*"]),
+        (Parent, &["ctrl-pageup"]),
+        (SwitchPanel, &["tab"]),
+        (SwapPanels, &["ctrl-u"]),
+        (OtherPanelOpen, &["alt-o"]),
+        (OtherPanelSync, &["alt-i"]),
+        (Reload, &["ctrl-r"]),
+        (Cancel, &["esc", "esc esc"]),
+        (ToggleHidden, &["alt-."]),
+        // mc leaves sorting to its menu; these are Far Manager's keys. macOS takes them for
+        // keyboard navigation unless those shortcuts are turned off.
+        (SortByName, &["ctrl-f3"]),
+        (SortByExtension, &["ctrl-f4"]),
+        (SortByTime, &["ctrl-f5"]),
+        (SortBySize, &["ctrl-f6"]),
+        (QuickSearch, &["ctrl-s", "alt-s"]),
+        (Help, &["f1"]),
+        (View, &["f3"]),
+        (Edit, &["f4"]),
+        (Copy, &["f5"]),
+        (Move, &["f6"]),
+        (Mkdir, &["f7"]),
+        // In text fields, Delete deletes a character.
+        (Delete, &["f8", "delete"]),
+        (Jobs, &["ctrl-x j"]),
+        // Not in mc; `#` for a hash.
+        (Checksum, &["ctrl-x #"]),
+        // Far Manager's menus to change drives. Ctrl-X 1 and 2 are for terminals whose Alt-F1
+        // never arrives, such as macOS Terminal without Option as Meta.
+        (LocationMenuLeft, &["alt-f1", "ctrl-x 1"]),
+        (LocationMenuRight, &["alt-f2", "ctrl-x 2"]),
+        // Not in mc. Ctrl-T marks and terminals rarely pass Ctrl-Tab, so tabs live under
+        // Ctrl-X; Alt-Left and Alt-Right where the terminal sends them.
+        (NewTab, &["ctrl-x t"]),
+        (CloseTab, &["ctrl-x w"]),
+        (NextTab, &["alt-right", "ctrl-x n"]),
+        (PrevTab, &["alt-left", "ctrl-x p"]),
+        (TabList, &["ctrl-x tab"]),
+        (PullDown, &["f9"]),
+        (Quit, &["f10"]),
+        (Redraw, &["ctrl-l"]),
+    ]
+};
 
 /// The pull-down menu's bindings in the mc preset; letters run the commands that have them.
 const PULL_DOWN: Preset = &[
@@ -858,6 +869,47 @@ mod tests {
         assert_eq!(
             feed(&keymap, &mut state, Context::Panel, &["ctrl-x", "#"]),
             actions(&[Action::Checksum])
+        );
+    }
+
+    #[test]
+    fn tabs_live_under_ctrl_x_and_alt_arrows() {
+        let keymap = Keymap::mc();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(
+                &keymap,
+                &mut state,
+                Context::Panel,
+                &[
+                    "ctrl-x",
+                    "t",
+                    "ctrl-x",
+                    "w",
+                    "ctrl-x",
+                    "n",
+                    "ctrl-x",
+                    "p",
+                    "ctrl-x",
+                    "tab",
+                    "alt-right",
+                    "alt-left"
+                ]
+            ),
+            actions(&[
+                Action::NewTab,
+                Action::CloseTab,
+                Action::NextTab,
+                Action::PrevTab,
+                Action::TabList,
+                Action::NextTab,
+                Action::PrevTab
+            ])
+        );
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Root, &["ctrl-x", "t"]),
+            actions(&[Action::NewTab]),
+            "in the root too"
         );
     }
 

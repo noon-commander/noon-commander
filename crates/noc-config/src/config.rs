@@ -75,6 +75,8 @@ pub struct UiConfig {
     pub type_to_search: bool,
     /// When the menu bar of F9 shows. Default: `on-demand`.
     pub menu_bar: MenuBar,
+    /// Where a panel with more than one tab shows them. Default: `line`.
+    pub tab_bar: TabBar,
 }
 
 impl Default for UiConfig {
@@ -87,6 +89,7 @@ impl Default for UiConfig {
             show_hidden: true,
             type_to_search: true,
             menu_bar: MenuBar::default(),
+            tab_bar: TabBar::default(),
         }
     }
 }
@@ -111,6 +114,18 @@ pub enum MenuBar {
     OnDemand,
     /// Always, above the panels, as in mc.
     Always,
+}
+
+/// Where a panel with more than one tab shows them: `ui.tab_bar`. A panel with one tab shows
+/// none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TabBar {
+    /// On a line of its own above the panel, as in Total Commander.
+    #[default]
+    Line,
+    /// In the top line of the panel's frame, in place of its title; it takes no room.
+    Frame,
 }
 
 /// The `[ssh]` section.
@@ -241,8 +256,8 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, SshConfig, TransferConfig,
-        UiConfig, VolumesConfig,
+        Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, SshConfig, TabBar,
+        TransferConfig, UiConfig, VolumesConfig,
     };
     use crate::{ConfigError, write_default_config};
 
@@ -284,6 +299,7 @@ mod tests {
         show_hidden = false
         type_to_search = false
         menu_bar = "always"
+        tab_bar = "frame"
 
         [transfer]
         atomic_upload = false
@@ -312,6 +328,7 @@ mod tests {
                 show_hidden: false,
                 type_to_search: false,
                 menu_bar: MenuBar::Always,
+                tab_bar: TabBar::Frame,
             },
             transfer: TransferConfig {
                 atomic_upload: false,
@@ -338,6 +355,7 @@ mod tests {
         assert!(config.ui.show_hidden);
         assert!(config.ui.type_to_search);
         assert_eq!(config.ui.menu_bar, MenuBar::OnDemand);
+        assert_eq!(config.ui.tab_bar, TabBar::Line);
         assert!(config.transfer.atomic_upload);
         assert_eq!(config.transfer.parallel_jobs.get(), 2);
     }
@@ -498,6 +516,7 @@ mod tests {
         assert!(table["ui"].get("show_hidden").is_some());
         assert!(table["ui"].get("type_to_search").is_some());
         assert!(table["ui"].get("menu_bar").is_some());
+        assert!(table["ui"].get("tab_bar").is_some());
     }
 
     #[test]

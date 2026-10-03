@@ -27,7 +27,8 @@ const KEY_GAP: usize = 2;
 pub(crate) enum Command {
     /// What the action does in the active panel, as its key does.
     Do(Action),
-    /// What the action does in the panel on that side: sorting or reading it again.
+    /// What the action does in the panel on that side: sorting, reading it again, or its
+    /// tabs.
     On(Side, Action),
     /// Opens the location menu of the panel on that side.
     Location(Side),
@@ -208,6 +209,22 @@ fn panel_menu(title: Label, side: Side) -> Menu {
             item(
                 fl!("pulldown-disconnect-panel"),
                 Command::DisconnectPanel(side),
+                Mark::None,
+            ),
+            Entry::Separator,
+            item(
+                fl!("pulldown-new-tab"),
+                Command::On(side, Action::NewTab),
+                Mark::None,
+            ),
+            item(
+                fl!("pulldown-close-tab"),
+                Command::On(side, Action::CloseTab),
+                Mark::None,
+            ),
+            item(
+                fl!("pulldown-tab-list"),
+                Command::On(side, Action::TabList),
                 Mark::None,
             ),
         ],

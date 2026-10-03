@@ -35,6 +35,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Tabs: each panel has its own. Ctrl-X T opens a new tab on the same directory, Ctrl-X W closes
+  it, Alt-Right and Alt-Left (or Ctrl-X N and Ctrl-X P) switch between them, and Ctrl-X Tab
+  lists them; Left and Right in F9 have them too. Every tab keeps its cursor, marks, and sort
+  order, and hidden tabs read their directories again when they show. `ui.tab_bar` puts them
+  on a line above the panels (`"line"`, the default) or in the panel's frame (`"frame"`)
+  ([ADR 0011](docs/adr/0011-tabs-per-panel.md)).
 - Catppuccin themes in 24-bit color: `[ui] theme = "catppuccin-mocha"`, dark, and
   `"catppuccin-latte"`, light, with the same colors for the same things in both. Where
   `COLORTERM` is not `truecolor` or `24bit`, they use the nearest of the 256 colors

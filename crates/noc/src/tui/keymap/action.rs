@@ -136,6 +136,16 @@ pub(crate) enum Action {
     LocationMenuRight,
     /// Opens the pull-down menu, at the menu of the active panel.
     PullDown,
+    /// Opens a new tab in the panel, on the same location.
+    NewTab,
+    /// Closes the panel's tab; the last one stays.
+    CloseTab,
+    /// Shows the panel's next tab, round.
+    NextTab,
+    /// Shows the panel's previous tab, round.
+    PrevTab,
+    /// Lists the panel's tabs to choose one.
+    TabList,
     /// Reads the directory, or the volumes and hosts, again.
     Reload,
     /// Shows or hides files whose names start with a dot, in both panels.
@@ -215,6 +225,11 @@ impl Action {
         Self::LocationMenuLeft,
         Self::LocationMenuRight,
         Self::PullDown,
+        Self::NewTab,
+        Self::CloseTab,
+        Self::NextTab,
+        Self::PrevTab,
+        Self::TabList,
         Self::Reload,
         Self::ToggleHidden,
         Self::SortByName,

@@ -101,6 +101,11 @@ menu-filter = Filter: { $text }
 # When the filter leaves no row.
 menu-nothing = Nothing matches.
 
+## Tabs (src/tui/tabs, src/tui/app). Prefix: tabs-. Each side has tabs of its own.
+
+# Title of the list of a panel's tabs, Ctrl-X Tab; each row is the tab's number and where it is.
+tabs-title = Tabs
+
 ## The pull-down menu of F9 (src/tui/pulldown), as mc's. Prefix: pulldown-. An & marks the
 ## letter that opens a menu from the bar, or runs a command while its menu is open; letters
 ## must differ on the bar and within a menu, and && stands for &.
@@ -120,6 +125,10 @@ pulldown-sort-size = Sort by si&ze
 pulldown-rescan = &Rescan
 # Closes the connection of the host the panel shows.
 pulldown-disconnect-panel = &Disconnect
+# Tabs of the panel.
+pulldown-new-tab = Ne&w tab
+pulldown-close-tab = &Close tab
+pulldown-tab-list = Tab l&ist…
 # File.
 pulldown-view = &View
 pulldown-edit = &Edit
@@ -172,6 +181,10 @@ config-menu-bar = Menu bar
 config-menu-bar-hint = When the menu bar of F9 shows.
 config-menu-bar-on-demand = While a menu is open
 config-menu-bar-always = Always
+config-tab-bar = Tab bar
+config-tab-bar-hint = Where a panel with more than one tab shows them.
+config-tab-bar-line = A line above the panel
+config-tab-bar-frame = In the panel's frame
 # Settings of copying and moving, [transfer].
 config-transfers = Transfers
 config-atomic-upload = Atomic copies
@@ -279,6 +292,11 @@ help-jobs = The running jobs: bring one to the front, or abort it
 help-checksum = Checksums of the marked files, or the one under the cursor
 help-menu-left = Change the left panel's location: a volume or a host
 help-menu-right = Change the right panel's location: a volume or a host
+help-new-tab = A new tab in this panel, on the same directory
+help-close-tab = Close this tab; the last one stays
+help-next-tab = The next tab in this panel
+help-prev-tab = The previous tab in this panel
+help-tab-list = The tabs of this panel, to choose one
 help-help = This help
 help-quit = Quit
 help-redraw = Redraw the screen

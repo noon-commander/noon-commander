@@ -25,11 +25,12 @@ use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
-use super::app::{Effect, Side};
+use super::app::Effect;
 use super::describe;
 use super::dialog::{Ask, Reply};
 use super::panel::{ListRequest, Listed, Listing};
 use super::root;
+use super::tabs::PanelId;
 use crate::context::Context;
 use crate::i18n::fl;
 
@@ -47,7 +48,7 @@ const CHANNEL_EXIT_WAIT: Duration = Duration::from_secs(1);
 #[derive(Debug)]
 pub(crate) enum Done {
     Listed {
-        side: Side,
+        panel: PanelId,
         generation: u64,
         result: Result<Listed, String>,
     },
@@ -65,7 +66,7 @@ pub(crate) enum Done {
     },
     /// The directory of [`Effect::CreateDir`] was made, or why not.
     Created {
-        side: Side,
+        panel: PanelId,
         location: Location,
         result: Result<(), String>,
     },
@@ -141,12 +142,12 @@ pub(crate) enum JobEvent {
     Finished { complete: bool },
 }
 
-/// Work for the task of a connected host, for the panel on a side.
+/// Work for the task of a connected host, for a panel.
 #[derive(Debug)]
 pub(crate) enum HostRequest {
-    List(Side, ListRequest),
+    List(PanelId, ListRequest),
     /// Makes the directory at `path`.
-    CreateDir(Side, RemotePath),
+    CreateDir(PanelId, RemotePath),
     /// Runs the delete job `id` on `paths` until `cancel`.
     Delete {
         id: u64,
@@ -211,24 +212,24 @@ impl Tasks {
         for effect in effects {
             match effect {
                 Effect::List {
-                    side,
+                    panel,
                     request,
                     host: Some(handle),
                 } => {
                     // If the host's task has ended, its `Closed` report is on its way.
-                    let _ = handle.0.send(HostRequest::List(side, request));
+                    let _ = handle.0.send(HostRequest::List(panel, request));
                 }
                 Effect::List {
-                    side,
+                    panel,
                     request,
                     host: None,
-                } => self.list(side, request),
+                } => self.list(panel, request),
                 Effect::ListPlaces { generation } => self.list_places(generation),
                 Effect::CreateDir {
-                    side,
+                    panel,
                     location,
                     host,
-                } => self.create_dir(side, location, host),
+                } => self.create_dir(panel, location, host),
                 Effect::Discard(path) => {
                     tokio::spawn(async move {
                         if let Err(error) = tokio::fs::remove_file(&path).await {
@@ -354,14 +355,14 @@ impl Tasks {
     }
 
     /// Lists the virtual root, the hosts, or a local directory here.
-    fn list(&self, side: Side, request: ListRequest) {
+    fn list(&self, panel: PanelId, request: ListRequest) {
         let context = Arc::clone(&self.context);
         let done = self.done.clone();
         tokio::spawn(async move {
             let generation = request.generation;
             let result = list(context, request.location).await;
             let _ = done.send(Done::Listed {
-                side,
+                panel,
                 generation,
                 result,
             });
@@ -387,10 +388,10 @@ impl Tasks {
     }
 
     /// Makes a local directory here, or passes a remote one to the task of its host.
-    fn create_dir(&self, side: Side, location: Location, host: Option<HostHandle>) {
+    fn create_dir(&self, panel: PanelId, location: Location, host: Option<HostHandle>) {
         match (&location, host) {
             (Location::Remote { path, .. }, Some(handle)) => {
-                let _ = handle.0.send(HostRequest::CreateDir(side, path.clone()));
+                let _ = handle.0.send(HostRequest::CreateDir(panel, path.clone()));
             }
             (Location::Local(path), _) => {
                 let path = path.clone();
@@ -401,7 +402,7 @@ impl Tasks {
                         .await
                         .map_err(|error| describe::vfs_error(&error));
                     let _ = done.send(Done::Created {
-                        side,
+                        panel,
                         location,
                         result,
                     });
@@ -410,7 +411,7 @@ impl Tasks {
             (Location::Root | Location::Sftp | Location::Remote { .. }, _) => {
                 let result = Err(fl!("error-connection-closed"));
                 let _ = self.done.send(Done::Created {
-                    side,
+                    panel,
                     location,
                     result,
                 });
@@ -1134,11 +1135,11 @@ impl HostTask {
         let reason = loop {
             tokio::select! {
                 Some(request) = incoming.recv() => match request {
-                    HostRequest::List(side, request) => {
-                        running.push(Box::pin(self.list(&fs, side, request)));
+                    HostRequest::List(panel, request) => {
+                        running.push(Box::pin(self.list(&fs, panel, request)));
                     }
-                    HostRequest::CreateDir(side, path) => {
-                        running.push(Box::pin(self.create_dir(&fs, side, path)));
+                    HostRequest::CreateDir(panel, path) => {
+                        running.push(Box::pin(self.create_dir(&fs, panel, path)));
                     }
                     HostRequest::Delete { id, paths, cancel } => {
                         let host = self.host.clone();
@@ -1182,7 +1183,7 @@ impl HostTask {
         reason
     }
 
-    async fn create_dir(&self, fs: &SftpFs, side: Side, path: RemotePath) -> Done {
+    async fn create_dir(&self, fs: &SftpFs, panel: PanelId, path: RemotePath) -> Done {
         let result = fs
             .create_dir(&path)
             .await
@@ -1192,7 +1193,7 @@ impl HostTask {
             path,
         };
         Done::Created {
-            side,
+            panel,
             location,
             result,
         }
@@ -1201,7 +1202,7 @@ impl HostTask {
     /// Lists a remote directory. The empty path is where the host opens: the directory to
     /// resume, if it is still there, else its `start_dir`, else the remote home directory; the
     /// reply names it as an absolute path.
-    async fn list(&self, fs: &SftpFs, side: Side, request: ListRequest) -> Done {
+    async fn list(&self, fs: &SftpFs, panel: PanelId, request: ListRequest) -> Done {
         let result = async {
             let Location::Remote { path, .. } = &request.location else {
                 return Err(fl!("error-connection-closed"));
@@ -1228,7 +1229,7 @@ impl HostTask {
         }
         .await;
         Done::Listed {
-            side,
+            panel,
             generation: request.generation,
             result,
         }
@@ -1315,7 +1316,11 @@ mod tests {
             },
             resume: resume.map(|path| RemotePath::from(path.to_str().unwrap())),
         };
-        let Done::Listed { result, .. } = task.list(fs, Side::Left, request).await else {
+        let panel = PanelId {
+            side: super::super::app::Side::Left,
+            tab: 1,
+        };
+        let Done::Listed { result, .. } = task.list(fs, panel, request).await else {
             panic!("expected a listing");
         };
         result.map(|listed| match listed.location {

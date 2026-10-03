@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 
 use jiff::tz::TimeZone;
-use noc_config::{Config, HostConfig, Hosts, MenuBar, SftpHost, UiConfig};
+use noc_config::{Config, HostConfig, Hosts, MenuBar, SftpHost, TabBar, UiConfig};
 use noc_ops::{Algorithm, Conflict, CopyOptions, Decision, Sum};
 use noc_vfs::{FileKind, Location, Metadata, RemotePath};
 use ratatui::Frame;
@@ -31,6 +31,7 @@ use super::pattern::Pattern;
 use super::progress::{Counts, JobButton, JobView};
 use super::pulldown::{self, Command, PullDown, PullDownEvent, Status};
 use super::sums::{Mark, SumRow, SumsButton, SumsEvent, SumsWindow, Verdict};
+use super::tabs::{self, Bar, PanelId, Tab, Tabs};
 use super::tasks::{HostHandle, JobEvent};
 use super::theme::{ColorDepth, Theme};
 use super::viewer::Viewer;
@@ -63,7 +64,7 @@ pub(crate) enum Effect {
     /// List a location and pass the result to [`App::listed`]. Remote locations go to the task
     /// of their host.
     List {
-        side: Side,
+        panel: PanelId,
         request: ListRequest,
         host: Option<HostHandle>,
     },
@@ -82,7 +83,7 @@ pub(crate) enum Effect {
     /// Make the directory at `location` and report to [`App::created`]. Remote ones go to the
     /// task of their host.
     CreateDir {
-        side: Side,
+        panel: PanelId,
         location: Location,
         host: Option<HostHandle>,
     },
@@ -180,6 +181,7 @@ const MKDIR_DIALOG_WIDTH: u16 = 60;
 const COPY_DIALOG_WIDTH: u16 = 70;
 const HOST_DIALOG_WIDTH: u16 = 70;
 const CHECKSUM_DIALOG_WIDTH: u16 = 70;
+const TAB_DIALOG_WIDTH: u16 = 70;
 /// The fields of the dialog of F4 on a host.
 const HOST_LABEL: usize = 0;
 const HOST_START_DIR: usize = 1;
@@ -196,18 +198,17 @@ struct Open {
 enum Purpose {
     /// A prompt from ssh, or a notice, which has no `reply`.
     Ssh { id: u64, reply: Option<Reply> },
-    /// `+` (`mark`) or `-` in the panel on `side`.
-    Pattern { side: Side, mark: bool },
-    /// F7 in the panel on `side`.
-    Mkdir { side: Side },
+    /// `+` (`mark`) or `-` in `panel`.
+    Pattern { panel: PanelId, mark: bool },
+    /// F7 in `panel`.
+    Mkdir { panel: PanelId },
     /// F8 in a panel on `dir`, for the entries `names`.
     Delete { dir: Location, names: Vec<Vec<u8>> },
-    /// F5 or F6 (by `kind`) in the panel on `side`, which shows `dir`, for the entries
-    /// `names`. The field opened with `offered`, the text for the other panel's location, if
-    /// it shows one.
+    /// F5 or F6 (by `kind`) in `panel`, which shows `dir`, for the entries `names`. The field
+    /// opened with `offered`, the text for the other panel's location, if it shows one.
     Transfer {
         kind: JobKind,
-        side: Side,
+        panel: PanelId,
         dir: Location,
         names: Vec<Vec<u8>>,
         offered: Option<(String, Location)>,
@@ -250,6 +251,8 @@ enum Purpose {
         location: Location,
         bytes: Vec<u8>,
     },
+    /// The list of the tabs on `side`: OK shows the one chosen.
+    TabList { side: Side },
     /// F10 while jobs run: Yes quits and stops them.
     Quit,
     /// Something to read, such as an error.
@@ -406,8 +409,10 @@ impl Default for PatternOptions {
 /// What the TUI shows and whether it keeps running.
 #[derive(Debug)]
 pub(crate) struct App {
-    left: Panel,
-    right: Panel,
+    left: Tabs,
+    right: Tabs,
+    /// The number of the last tab opened.
+    last_tab: u64,
     active: Side,
     /// The right panel is drawn on the left.
     swapped: bool,
@@ -495,9 +500,18 @@ impl App {
         };
         let (left, left_request) = panel();
         let (right, right_request) = panel();
+        let left_id = PanelId {
+            side: Side::Left,
+            tab: 1,
+        };
+        let right_id = PanelId {
+            side: Side::Right,
+            tab: 2,
+        };
         let mut app = Self {
-            left,
-            right,
+            left: Tabs::new(Tab::new(left_id, left)),
+            right: Tabs::new(Tab::new(right_id, right)),
+            last_tab: 2,
             active: Side::Left,
             swapped: false,
             hosts: HashMap::new(),
@@ -543,8 +557,8 @@ impl App {
             quit: false,
             redraw: false,
         };
-        let mut effects = app.route(Side::Left, left_request);
-        effects.extend(app.route(Side::Right, right_request));
+        let mut effects = app.route(left_id, left_request);
+        effects.extend(app.route(right_id, right_request));
         (app, effects)
     }
 
@@ -751,18 +765,131 @@ impl App {
         });
     }
 
-    fn panel(&self, side: Side) -> &Panel {
+    fn tabs(&self, side: Side) -> &Tabs {
         match side {
             Side::Left => &self.left,
             Side::Right => &self.right,
         }
     }
 
-    fn panel_mut(&mut self, side: Side) -> &mut Panel {
+    fn tabs_mut(&mut self, side: Side) -> &mut Tabs {
         match side {
             Side::Left => &mut self.left,
             Side::Right => &mut self.right,
         }
+    }
+
+    /// The panel of the tab that shows on `side`.
+    fn panel(&self, side: Side) -> &Panel {
+        &self.tabs(side).active().panel
+    }
+
+    fn panel_mut(&mut self, side: Side) -> &mut Panel {
+        &mut self.tabs_mut(side).active_mut().panel
+    }
+
+    /// The panel that shows on `side`.
+    fn shown(&self, side: Side) -> PanelId {
+        self.tabs(side).active().id
+    }
+
+    fn is_shown(&self, id: PanelId) -> bool {
+        self.shown(id.side) == id
+    }
+
+    fn tab_mut(&mut self, id: PanelId) -> Option<&mut Tab> {
+        self.tabs_mut(id.side).get_mut(id.tab)
+    }
+
+    /// The panel `id`, unless its tab was closed.
+    fn panel_of(&self, id: PanelId) -> Option<&Panel> {
+        self.tabs(id.side).get(id.tab).map(|tab| &tab.panel)
+    }
+
+    fn panel_of_mut(&mut self, id: PanelId) -> Option<&mut Panel> {
+        self.tab_mut(id).map(|tab| &mut tab.panel)
+    }
+
+    /// Every panel, shown or not.
+    fn panel_ids(&self) -> Vec<PanelId> {
+        Side::BOTH
+            .iter()
+            .flat_map(|&side| self.tabs(side).iter().map(|tab| tab.id))
+            .collect()
+    }
+
+    fn panels_mut(&mut self) -> impl Iterator<Item = &mut Panel> {
+        self.left
+            .iter_mut()
+            .chain(self.right.iter_mut())
+            .map(|tab| &mut tab.panel)
+    }
+
+    /// Does what a tab action does on `side`.
+    fn tab_action(&mut self, side: Side, action: Action) -> Vec<Effect> {
+        match action {
+            Action::NewTab => return self.new_tab(side),
+            Action::CloseTab => {
+                if self.tabs_mut(side).close().is_some() {
+                    return self.revealed(side);
+                }
+            }
+            Action::NextTab | Action::PrevTab => {
+                self.panel_mut(side).end_search();
+                if self.tabs_mut(side).step(action == Action::NextTab) {
+                    return self.revealed(side);
+                }
+            }
+            Action::TabList => self.ask_tab(side),
+            _ => {}
+        }
+        Vec::new()
+    }
+
+    /// Opens a tab on `side` after the one that shows, on the same location, and shows it.
+    fn new_tab(&mut self, side: Side) -> Vec<Effect> {
+        self.panel_mut(side).end_search();
+        let (panel, request) = self.panel(side).duplicate();
+        self.last_tab += 1;
+        let id = PanelId {
+            side,
+            tab: self.last_tab,
+        };
+        self.tabs_mut(side).push(Tab::new(id, panel));
+        request.map_or_else(Vec::new, |request| self.route(id, request))
+    }
+
+    /// The tab that shows on `side` now reads its location again if it changed while hidden.
+    fn revealed(&mut self, side: Side) -> Vec<Effect> {
+        let tab = self.tabs_mut(side).active_mut();
+        if !std::mem::take(&mut tab.stale) {
+            return Vec::new();
+        }
+        let id = tab.id;
+        let here = tab.panel.here();
+        let request = tab.panel.go(here);
+        self.route(id, request)
+    }
+
+    /// Lists the tabs on `side`, where they are, to choose one.
+    fn ask_tab(&mut self, side: Side) {
+        let tabs = self.tabs(side);
+        let choices = tabs
+            .iter()
+            .enumerate()
+            .map(|(index, tab)| {
+                let title = tabs::title(tab.panel.location(), &self.root_title);
+                format!("{} {title}", index + 1)
+            })
+            .collect();
+        let buttons = vec![Button::Ok, Button::Cancel];
+        let title = fl!("tabs-title");
+        let dialog = Dialog::fields(&title, &[], &[], buttons, TAB_DIALOG_WIDTH)
+            .with_choices(choices, tabs.index());
+        self.dialogs.push_back(Open {
+            dialog,
+            purpose: Purpose::TabList { side },
+        });
     }
 
     /// Gives a key to what is over the panels, front first, if anything is.
@@ -839,23 +966,28 @@ impl App {
                 self.help = Some(Help::new(&self.keymap, self.config.ui.type_to_search));
             }
             Action::SwitchPanel => self.active = self.active.other(),
+            Action::NewTab
+            | Action::CloseTab
+            | Action::NextTab
+            | Action::PrevTab
+            | Action::TabList => return self.tab_action(self.active, action),
             // The active panel moves to the other side and stays active, as in mc.
             Action::SwapPanels => self.swapped = !self.swapped,
             Action::OtherPanelOpen => {
                 if let Some(destination) = self.panel_mut(self.active).for_other_panel() {
-                    return self.go(self.active.other(), destination);
+                    return self.go(self.shown(self.active.other()), destination);
                 }
             }
             Action::OtherPanelSync => {
                 let here = self.panel(self.active).here();
-                return self.go(self.active.other(), here);
+                return self.go(self.shown(self.active.other()), here);
             }
-            // As in mc, for both panels.
+            // As in mc, for both panels, and in every tab.
             Action::ToggleHidden => {
                 self.config.ui.show_hidden = !self.config.ui.show_hidden;
-                for side in Side::BOTH {
-                    let show = self.config.ui.show_hidden;
-                    self.panel_mut(side).set_show_hidden(show);
+                let show = self.config.ui.show_hidden;
+                for panel in self.panels_mut() {
+                    panel.set_show_hidden(show);
                 }
             }
             Action::Mkdir => self.ask_mkdir(),
@@ -874,9 +1006,9 @@ impl App {
             Action::LocationMenuRight => return self.open_menu(Side::Right),
             Action::PullDown => self.open_pulldown(),
             _ => {
-                let side = self.active;
-                if let Some(request) = self.panel_mut(side).handle(action) {
-                    return self.open(side, request);
+                let id = self.shown(self.active);
+                if let Some(request) = self.panel_mut(id.side).handle(action) {
+                    return self.open(id, request);
                 }
             }
         }
@@ -923,7 +1055,7 @@ impl App {
                 let side = menu.side();
                 self.menu = None;
                 self.active = side;
-                self.go(side, Destination::to(location))
+                self.go(self.shown(side), Destination::to(location))
             }
             MenuEvent::Disconnect(host) => self.disconnect(&host),
             MenuEvent::Reload => {
@@ -972,8 +1104,16 @@ impl App {
     fn run(&mut self, command: Command) -> Vec<Effect> {
         match command {
             Command::Do(action) => self.handle(Resolved::Action(action)),
+            Command::On(
+                side,
+                action @ (Action::NewTab
+                | Action::CloseTab
+                | Action::NextTab
+                | Action::PrevTab
+                | Action::TabList),
+            ) => self.tab_action(side, action),
             Command::On(side, action) => match self.panel_mut(side).handle(action) {
-                Some(request) => self.open(side, request),
+                Some(request) => self.open(self.shown(side), request),
                 None => Vec::new(),
             },
             Command::Location(side) => self.open_menu(side),
@@ -1019,8 +1159,9 @@ impl App {
         self.theme = theme_of(ui, self.color_depth);
         self.decor = Decor::new(ui.icons);
         if ui.show_hidden != self.config.ui.show_hidden {
-            for side in Side::BOTH {
-                self.panel_mut(side).set_show_hidden(ui.show_hidden);
+            let show = ui.show_hidden;
+            for panel in self.panels_mut() {
+                panel.set_show_hidden(show);
             }
         }
         self.copy_choices.atomic = config.transfer.atomic_upload;
@@ -1085,7 +1226,12 @@ impl App {
                 key: self.keymap.key(context, action),
             },
             Command::On(side, action) => Status {
-                enabled: true,
+                enabled: match action {
+                    Action::CloseTab | Action::NextTab | Action::PrevTab => {
+                        self.tabs(side).len() > 1
+                    }
+                    _ => true,
+                },
                 checked: self.panel(side).sort_action() == action,
                 // Keys act on the active panel only.
                 key: (side == self.active)
@@ -1124,8 +1270,8 @@ impl App {
     /// Hosts that are connected or connecting, which the virtual root shows again.
     fn sync_connected(&mut self) {
         let connected: HashSet<String> = self.hosts.keys().cloned().collect();
-        for side in Side::BOTH {
-            self.panel_mut(side).set_connected(connected.clone());
+        for panel in self.panels_mut() {
+            panel.set_connected(connected.clone());
         }
     }
 
@@ -1143,10 +1289,11 @@ impl App {
                     reply.send(dialog.answer(event));
                 }
             }
-            Purpose::Pattern { side, mark } if ok => self.mark_matching(side, mark, dialog),
-            Purpose::Mkdir { side } if ok && !dialog.text().is_empty() => {
-                if let Some(location) = self.panel(side).resolve(dialog.text()) {
-                    return self.create_dir(side, location);
+            Purpose::Pattern { panel, mark } if ok => self.mark_matching(panel, mark, dialog),
+            Purpose::Mkdir { panel } if ok && !dialog.text().is_empty() => {
+                let resolved = self.panel_of(panel).and_then(|p| p.resolve(dialog.text()));
+                if let Some(location) = resolved {
+                    return self.create_dir(panel, location);
                 }
             }
             Purpose::Delete { dir, names } if event == DialogEvent::Pressed(Button::Yes) => {
@@ -1154,7 +1301,7 @@ impl App {
             }
             Purpose::Transfer {
                 kind,
-                side,
+                panel,
                 dir,
                 names,
                 offered,
@@ -1164,7 +1311,7 @@ impl App {
                 }
                 let target = match offered {
                     Some((text, location)) if text == dialog.text() => Some(location),
-                    _ => self.resolve_target(side, dialog.text()),
+                    _ => self.resolve_target(panel, dialog.text()),
                 };
                 if let Some(target) = target {
                     return self.start_transfer(kind, dir, &names, target);
@@ -1213,8 +1360,15 @@ impl App {
             } if event == DialogEvent::Pressed(Button::Yes) => {
                 return self.write_sums(window, location, bytes, true);
             }
+            Purpose::TabList { side } if ok => {
+                self.panel_mut(side).end_search();
+                if self.tabs_mut(side).select(dialog.chosen()) {
+                    return self.revealed(side);
+                }
+            }
             Purpose::Quit => self.quit = event == DialogEvent::Pressed(Button::Yes),
             Purpose::EditHost { .. }
+            | Purpose::TabList { .. }
             | Purpose::Checksum { .. }
             | Purpose::SaveSums { .. }
             | Purpose::OverwriteSums { .. }
@@ -1238,7 +1392,7 @@ impl App {
             .and_then(|entry| child(panel.location(), &entry.name));
         let Some(location) = file else {
             if let Some(request) = self.panel_mut(side).handle(Action::Enter) {
-                return self.open(side, request);
+                return self.open(self.shown(side), request);
             }
             return Vec::new();
         };
@@ -1557,12 +1711,12 @@ impl App {
             (fl!("copy-title"), vec![preserve])
         };
         let dialog = Dialog::form(&title, &message, &text, &checks, COPY_DIALOG_WIDTH);
-        let side = self.active;
+        let panel = self.shown(self.active);
         self.dialogs.push_back(Open {
             dialog,
             purpose: Purpose::Transfer {
                 kind,
-                side,
+                panel,
                 dir,
                 names,
                 offered,
@@ -1571,8 +1725,8 @@ impl App {
     }
 
     /// Where a typed target points: `host:path` on a host the app knows, or a path from the
-    /// directory of the panel on `side`.
-    fn resolve_target(&self, side: Side, text: &str) -> Option<Location> {
+    /// directory of `panel`.
+    fn resolve_target(&self, panel: PanelId, text: &str) -> Option<Location> {
         if text.is_empty() {
             return None;
         }
@@ -1581,7 +1735,7 @@ impl App {
         {
             return Some(Location::Remote { host, path });
         }
-        self.panel(side).resolve(text)
+        self.panel_of(panel)?.resolve(text)
     }
 
     /// Starts copying or moving `names` from `dir` to `target`, and shows its progress; a
@@ -1801,15 +1955,24 @@ impl App {
         }
     }
 
-    /// Reads `dir` again in the panels that show it, with their cursors where they were.
+    /// Reads `dir` again in the panels that show it, with their cursors where they were;
+    /// hidden tabs read it once they show.
     fn reload(&mut self, dir: &Location) -> Vec<Effect> {
         let mut effects = Vec::new();
-        for side in Side::BOTH {
-            let panel = self.panel_mut(side);
-            if panel.location() == dir {
-                let here = panel.here();
-                let request = panel.go(here);
-                effects.extend(self.route(side, request));
+        for id in self.panel_ids() {
+            let shown = self.is_shown(id);
+            let Some(tab) = self.tab_mut(id) else {
+                continue;
+            };
+            if tab.panel.location() != dir {
+                continue;
+            }
+            if shown {
+                let here = tab.panel.here();
+                let request = tab.panel.go(here);
+                effects.extend(self.route(id, request));
+            } else {
+                tab.stale = true;
             }
         }
         effects
@@ -2181,15 +2344,15 @@ impl App {
             .unwrap_or_default();
         let (title, prompt) = (fl!("mkdir-title"), fl!("mkdir-prompt"));
         let dialog = Dialog::form(&title, &prompt, &name, &[], MKDIR_DIALOG_WIDTH);
-        let side = self.active;
+        let panel = self.shown(self.active);
         self.dialogs.push_back(Open {
             dialog,
-            purpose: Purpose::Mkdir { side },
+            purpose: Purpose::Mkdir { panel },
         });
     }
 
-    /// Makes the directory at `location` for the panel on `side`, in the background.
-    fn create_dir(&self, side: Side, location: Location) -> Vec<Effect> {
+    /// Makes the directory at `location` for `panel`, in the background.
+    fn create_dir(&self, panel: PanelId, location: Location) -> Vec<Effect> {
         let host = match &location {
             Location::Remote { host, .. } => match self.hosts.get(host) {
                 Some(Host::Connected { handle, .. }) => Some(handle.clone()),
@@ -2198,17 +2361,18 @@ impl App {
             Location::Root | Location::Sftp | Location::Local(_) => None,
         };
         vec![Effect::CreateDir {
-            side,
+            panel,
             location,
             host,
         }]
     }
 
     /// Takes the result of an [`Effect::CreateDir`]: panels on the directory it is in read it
-    /// again, the one that asked with the cursor on it; an error shows in a dialog.
+    /// again, the one that asked with the cursor on it, and hidden tabs once they show; an
+    /// error shows in a dialog.
     pub(crate) fn created(
         &mut self,
-        side: Side,
+        panel: PanelId,
         location: &Location,
         result: Result<(), String>,
     ) -> Vec<Effect> {
@@ -2221,19 +2385,26 @@ impl App {
         let parent = location.parent();
         let name = file_name(location);
         let mut effects = Vec::new();
-        for panel_side in Side::BOTH {
-            let panel = self.panel_mut(panel_side);
-            if *panel.location() != parent {
+        for id in self.panel_ids() {
+            let shown = self.is_shown(id);
+            let Some(tab) = self.tab_mut(id) else {
+                continue;
+            };
+            if *tab.panel.location() != parent {
                 continue;
             }
             let request = match &name {
-                Some(name) if panel_side == side => panel.reload_onto(name.clone()),
+                Some(name) if id == panel => tab.panel.reload_onto(name.clone()),
+                _ if !shown => {
+                    tab.stale = true;
+                    continue;
+                }
                 _ => {
-                    let here = panel.here();
-                    panel.go(here)
+                    let here = tab.panel.here();
+                    tab.panel.go(here)
                 }
             };
-            effects.extend(self.route(panel_side, request));
+            effects.extend(self.route(id, request));
         }
         effects
     }
@@ -2263,16 +2434,16 @@ impl App {
             (fl!("pattern-case-sensitive"), options.case_sensitive),
         ];
         let dialog = Dialog::form(&title, "", &options.pattern, &checks, PATTERN_DIALOG_WIDTH);
-        let side = self.active;
+        let panel = self.shown(self.active);
         self.dialogs.push_back(Open {
             dialog,
-            purpose: Purpose::Pattern { side, mark },
+            purpose: Purpose::Pattern { panel, mark },
         });
     }
 
     /// Marks, or unmarks, what the dialog of `+` or `-` asked for. An empty pattern does
     /// nothing.
-    fn mark_matching(&mut self, side: Side, mark: bool, dialog: &Dialog) {
+    fn mark_matching(&mut self, panel: PanelId, mark: bool, dialog: &Dialog) {
         if dialog.text().is_empty() {
             return;
         }
@@ -2289,10 +2460,12 @@ impl App {
             }
         };
         let pattern = Pattern::new(&fold(&options.pattern));
-        self.panel_mut(side).mark_where(mark, |entry| {
-            !(options.files_only && entry.is_dir_like())
-                && pattern.matches(&fold(&entry.display_name()))
-        });
+        if let Some(panel) = self.panel_of_mut(panel) {
+            panel.mark_where(mark, |entry| {
+                !(options.files_only && entry.is_dir_like())
+                    && pattern.matches(&fold(&entry.display_name()))
+            });
+        }
         self.pattern_options = options;
     }
 
@@ -2389,15 +2562,18 @@ impl App {
         }
     }
 
-    /// Sends the panel on `side` to `destination`.
-    fn go(&mut self, side: Side, destination: Destination) -> Vec<Effect> {
-        let request = self.panel_mut(side).go(destination);
-        self.open(side, request)
+    /// Sends `panel` to `destination`.
+    fn go(&mut self, panel: PanelId, destination: Destination) -> Vec<Effect> {
+        let Some(shown) = self.panel_of_mut(panel) else {
+            return Vec::new();
+        };
+        let request = shown.go(destination);
+        self.open(panel, request)
     }
 
-    /// Sends a new request of the panel on `side`. Opening a host sends the other panel to
-    /// the host's `other_dir`, if it has one.
-    fn open(&mut self, side: Side, request: ListRequest) -> Vec<Effect> {
+    /// Sends a new request of `panel`. Opening a host sends the panel that shows on the other
+    /// side to the host's `other_dir`, if it has one.
+    fn open(&mut self, panel: PanelId, request: ListRequest) -> Vec<Effect> {
         let other_dir = match &request.location {
             Location::Remote { host, path } if path.as_bytes().is_empty() => self
                 .host_settings
@@ -2406,12 +2582,13 @@ impl App {
                 .and_then(|dir| noc_config::local_dir(dir, &self.home)),
             _ => None,
         };
-        let mut effects = self.route(side, request);
+        let mut effects = self.route(panel, request);
         if let Some(dir) = other_dir {
+            let other = panel.side.other();
             let request = self
-                .panel_mut(side.other())
+                .panel_mut(other)
                 .go(Destination::to(Location::Local(dir)));
-            effects.extend(self.route(side.other(), request));
+            effects.extend(self.route(self.shown(other), request));
         }
         effects
     }
@@ -2419,7 +2596,7 @@ impl App {
     /// Sends a panel's request where it can be answered. A host that is not connected gets
     /// connected first; its panels' requests go out once it is. Opening a host with
     /// `remember_dir` resumes its last directory.
-    fn route(&mut self, side: Side, mut request: ListRequest) -> Vec<Effect> {
+    fn route(&mut self, panel: PanelId, mut request: ListRequest) -> Vec<Effect> {
         if let Location::Remote { host, path } = &request.location
             && path.as_bytes().is_empty()
             && self
@@ -2431,7 +2608,7 @@ impl App {
         }
         let Location::Remote { host, .. } = &request.location else {
             return vec![Effect::List {
-                side,
+                panel,
                 request,
                 host: None,
             }];
@@ -2440,7 +2617,7 @@ impl App {
             Some(Host::Connected { handle, .. }) => {
                 let host = Some(handle.clone());
                 vec![Effect::List {
-                    side,
+                    panel,
                     request,
                     host,
                 }]
@@ -2477,9 +2654,9 @@ impl App {
             state.stop();
             let host = host.clone();
             self.hosts.remove(&host);
-            for side in Side::BOTH {
-                if waits_for(self.panel(side), &host) {
-                    self.panel_mut(side).cancel();
+            for panel in self.panels_mut() {
+                if waits_for(panel, &host) {
+                    panel.cancel();
                 }
             }
         }
@@ -2506,14 +2683,16 @@ impl App {
         };
         state.stop();
         let mut effects = Vec::new();
-        for side in Side::BOTH {
-            let panel = self.panel_mut(side);
+        for id in self.panel_ids() {
+            let Some(panel) = self.panel_of_mut(id) else {
+                continue;
+            };
             if matches!(state, Host::Connecting { .. }) {
                 if waits_for(panel, host) {
                     panel.cancel();
                 }
             } else if let Some(request) = panel.leave_host(host, None) {
-                effects.extend(self.route(side, request));
+                effects.extend(self.route(id, request));
             }
         }
         self.sync_connected();
@@ -2540,13 +2719,21 @@ impl App {
     }
 
     /// Takes the result of an [`Effect::List`].
-    pub(crate) fn listed(&mut self, side: Side, generation: u64, result: Result<Listed, String>) {
+    pub(crate) fn listed(
+        &mut self,
+        panel: PanelId,
+        generation: u64,
+        result: Result<Listed, String>,
+    ) {
         self.sync_connected();
-        self.panel_mut(side).listed(generation, result);
-        if let Location::Remote { host, path } = self.panel(side).location()
+        let Some(panel) = self.panel_of_mut(panel) else {
+            return;
+        };
+        panel.listed(generation, result);
+        if let Location::Remote { host, path } = panel.location().clone()
             && !path.as_bytes().is_empty()
         {
-            self.last_dirs.insert(host.clone(), path.clone());
+            self.last_dirs.insert(host, path);
         }
     }
 
@@ -2574,11 +2761,12 @@ impl App {
             handle,
         };
         let mut effects = Vec::new();
-        for side in Side::BOTH {
-            if let Some(request) = self.panel(side).pending_request()
-                && waits_for(self.panel(side), host)
+        for id in self.panel_ids() {
+            if let Some(panel) = self.panel_of(id)
+                && let Some(request) = panel.pending_request()
+                && waits_for(panel, host)
             {
-                effects.extend(self.route(side, request));
+                effects.extend(self.route(id, request));
             }
         }
         effects
@@ -2619,8 +2807,10 @@ impl App {
             }
         }
         effects.extend(self.start_queued());
-        for side in Side::BOTH {
-            let panel = self.panel_mut(side);
+        for id in self.panel_ids() {
+            let Some(panel) = self.panel_of_mut(id) else {
+                continue;
+            };
             match (&state, reason) {
                 (Host::Connecting { .. }, Some(reason)) => {
                     if let Some(request) = panel.pending_request()
@@ -2636,7 +2826,7 @@ impl App {
                 }
                 (Host::Connected { .. }, _) => {
                     if let Some(request) = panel.leave_host(host, reason) {
-                        effects.extend(self.route(side, request));
+                        effects.extend(self.route(id, request));
                     }
                 }
             }
@@ -2720,10 +2910,7 @@ impl App {
             height: 1.min(frame.area().height),
             ..menu_bar
         };
-        let [mut left, mut right] = Layout::horizontal([Constraint::Fill(1); 2]).areas(panels);
-        if self.swapped {
-            std::mem::swap(&mut left, &mut right);
-        }
+        let [(left_bar, left), (right_bar, right)] = self.panel_areas(panels);
         self.sync_connected();
         let active = self.active;
         let states: HashMap<String, HostState> = self
@@ -2746,9 +2933,13 @@ impl App {
         if let Some(viewing) = &mut self.viewing {
             viewing.viewer.render(frame, panels, &self.theme);
         } else {
-            self.left.render(frame, left, active == Side::Left, &view);
-            self.right
-                .render(frame, right, active == Side::Right, &view);
+            let sides = [
+                (&mut self.left, left_bar, left, active == Side::Left),
+                (&mut self.right, right_bar, right, active == Side::Right),
+            ];
+            for (tabs, line, area, focused) in sides {
+                render_side(frame, tabs, (line, area), focused, &view, &self.home);
+            }
         }
         self.render_fkeys(frame, key_bar);
         if always {
@@ -2793,6 +2984,30 @@ impl App {
         if let Some(open) = self.dialogs.front() {
             open.dialog.render(frame, panels, &self.theme);
         }
+    }
+
+    /// Where the panels go in `area`, left side first, each with the line of its tabs if
+    /// `ui.tab_bar` puts them on one. Both sides keep their panels level: a line of tabs above
+    /// one goes above the other too.
+    fn panel_areas(&self, area: Rect) -> [(Option<Rect>, Rect); 2] {
+        let [mut left, mut right] = Layout::horizontal([Constraint::Fill(1); 2]).areas(area);
+        if self.swapped {
+            std::mem::swap(&mut left, &mut right);
+        }
+        let lines =
+            self.config.ui.tab_bar == TabBar::Line && (self.left.len() > 1 || self.right.len() > 1);
+        [left, right].map(|area| {
+            if !lines || area.height < 2 {
+                return (None, area);
+            }
+            let line = Rect { height: 1, ..area };
+            let below = Rect {
+                y: area.y + 1,
+                height: area.height - 1,
+                ..area
+            };
+            (Some(line), below)
+        })
     }
 
     /// The jobs in the background at the top right of `area`, where Far has its clock: how
@@ -2845,6 +3060,31 @@ impl App {
             ]);
             frame.render_widget(line, *slot);
         }
+    }
+}
+
+/// Draws the tab that shows of `tabs` in `area`, and its tabs on `line` if there is one, else
+/// in its frame if it has more than one.
+fn render_side(
+    frame: &mut Frame<'_>,
+    tabs: &mut Tabs,
+    (line, area): (Option<Rect>, Rect),
+    focused: bool,
+    view: &View<'_>,
+    home: &Path,
+) {
+    tabs.active_mut().panel.render(frame, area, focused, view);
+    let names = tabs.names(view.root_title, home, line.is_none());
+    let bar = Bar {
+        names: &names,
+        active: tabs.index(),
+        focused,
+        theme: view.theme,
+    };
+    match line {
+        Some(line) => bar.render_line(frame, line),
+        None if tabs.len() > 1 => bar.render_frame(frame, area),
+        None => {}
     }
 }
 
@@ -3105,13 +3345,13 @@ mod tests {
     /// Answers every listing in `effects` with `listing`, from where it was asked for.
     fn answer(app: &mut App, effects: Vec<Effect>, listing: &Listing) {
         for effect in effects {
-            let Effect::List { side, request, .. } = effect else {
+            let Effect::List { panel, request, .. } = effect else {
                 panic!("expected a listing, got {effect:?}");
             };
             let location = request.location;
             let listing = listing.clone();
             app.listed(
-                side,
+                panel,
                 request.generation,
                 Ok(Listed {
                     location,
@@ -3189,8 +3429,8 @@ mod tests {
             .iter()
             .map(|effect| match effect {
                 Effect::List {
-                    side, host: None, ..
-                } => *side,
+                    panel, host: None, ..
+                } => panel.side,
                 other => panic!("unexpected {other:?}"),
             })
             .collect();
@@ -3201,14 +3441,24 @@ mod tests {
     fn keys_go_to_the_active_panel_and_tab_switches_it() {
         let mut app = loaded();
         app.handle(action(Action::Down));
-        let Effect::List { side, request, .. } = one(app.handle(action(Action::Enter))) else {
+        let Effect::List {
+            panel: PanelId { side, .. },
+            request,
+            ..
+        } = one(app.handle(action(Action::Enter)))
+        else {
             panic!("expected a listing");
         };
         assert_eq!((side, request.location), (Side::Left, local("/srv/left")));
 
         assert!(app.handle(action(Action::SwitchPanel)).is_empty());
         app.handle(action(Action::End));
-        let Effect::List { side, request, .. } = one(app.handle(action(Action::Enter))) else {
+        let Effect::List {
+            panel: PanelId { side, .. },
+            request,
+            ..
+        } = one(app.handle(action(Action::Enter)))
+        else {
             panic!("expected a listing");
         };
         assert_eq!((side, request.location), (Side::Right, local("/srv/right")));
@@ -3229,7 +3479,12 @@ mod tests {
     fn ctrl_u_swaps_where_the_panels_are_and_replies_follow_them() {
         let mut app = loaded();
         app.handle(action(Action::Down));
-        let Effect::List { side, request, .. } = one(app.handle(action(Action::Enter))) else {
+        let Effect::List {
+            panel: PanelId { side, .. },
+            request,
+            ..
+        } = one(app.handle(action(Action::Enter)))
+        else {
             panic!("expected a listing");
         };
         assert!(app.handle(action(Action::SwapPanels)).is_empty());
@@ -3238,7 +3493,7 @@ mod tests {
         let location = request.location.clone();
         let listing = Listing::Dir(vec![dir("inner")]);
         app.listed(
-            side,
+            app.shown(side),
             request.generation,
             Ok(Listed {
                 location,
@@ -3262,19 +3517,19 @@ mod tests {
     fn alt_o_and_alt_i_send_the_other_panel_here() {
         let mut app = loaded();
         app.handle(action(Action::Down));
-        let Effect::List { side, request, .. } = one(app.handle(action(Action::OtherPanelOpen)))
+        let Effect::List { panel, request, .. } = one(app.handle(action(Action::OtherPanelOpen)))
         else {
             panic!("expected a listing");
         };
         assert_eq!(
-            (side, &request.location),
+            (panel.side, &request.location),
             (Side::Right, &local("/srv/left"))
         );
         assert_eq!(app.active, Side::Left);
         answer(
             &mut app,
             vec![Effect::List {
-                side,
+                panel,
                 request,
                 host: None,
             }],
@@ -3282,7 +3537,14 @@ mod tests {
         );
 
         let effects = app.handle(action(Action::OtherPanelSync));
-        let [Effect::List { side, request, .. }] = &effects[..] else {
+        let [
+            Effect::List {
+                panel: PanelId { side, .. },
+                request,
+                ..
+            },
+        ] = &effects[..]
+        else {
             panic!("expected a listing, got {effects:?}");
         };
         assert_eq!((*side, &request.location), (Side::Right, &local("/srv")));
@@ -3312,7 +3574,10 @@ mod tests {
         assert!(matches!(
             &effects[..],
             [Effect::List {
-                side: Side::Right,
+                panel: PanelId {
+                    side: Side::Right,
+                    ..
+                },
                 ..
             }]
         ));
@@ -3377,13 +3642,13 @@ mod tests {
     }
 
     /// The only effect, which must make a directory: where, and through which host.
-    fn create_dir(effects: Vec<Effect>) -> (Side, Location, Option<HostHandle>) {
+    fn create_dir(effects: Vec<Effect>) -> (PanelId, Location, Option<HostHandle>) {
         match one(effects) {
             Effect::CreateDir {
-                side,
+                panel,
                 location,
                 host,
-            } => (side, location, host),
+            } => (panel, location, host),
             other => panic!("expected a new directory, got {other:?}"),
         }
     }
@@ -3401,19 +3666,23 @@ mod tests {
         assert!(text.contains("Create a new directory"), "{text}");
         assert!(text.contains("Enter directory name:"), "{text}");
         type_text(&mut app, "new");
-        let (side, location, host) = create_dir(app.handle(action(Action::Confirm)));
+        let (panel, location, host) = create_dir(app.handle(action(Action::Confirm)));
         assert_eq!(
-            (side, &location, host.is_none()),
+            (panel.side, &location, host.is_none()),
             (Side::Left, &local("/srv/new"), true)
         );
 
         // Both panels show /srv and read it again; the one that asked lands on the directory.
-        let effects = app.created(side, &location, Ok(()));
+        let effects = app.created(panel, &location, Ok(()));
         assert_eq!(effects.len(), 2);
         let listing = Listing::Dir(vec![dir("left"), dir("new"), dir("right")]);
         answer(&mut app, effects, &listing);
-        assert_eq!(app.left.name_under_cursor(), Some(&b"new"[..]));
-        assert_eq!(app.right.name_under_cursor(), Some(&b"right"[..]), "stays");
+        assert_eq!(app.panel(Side::Left).name_under_cursor(), Some(&b"new"[..]));
+        assert_eq!(
+            app.panel(Side::Right).name_under_cursor(),
+            Some(&b"right"[..]),
+            "stays"
+        );
 
         // The name under the cursor is filled in, and typing replaces it.
         app.handle(action(Action::Mkdir));
@@ -3438,7 +3707,7 @@ mod tests {
     fn a_directory_that_cannot_be_made_is_an_error_dialog() {
         let mut app = loaded();
         let effects = app.created(
-            Side::Left,
+            app.shown(Side::Left),
             &local("/srv/left"),
             Err("already exists".into()),
         );
@@ -3454,7 +3723,10 @@ mod tests {
         assert_eq!(app.context(), Context::Panel);
 
         // A directory elsewhere reads no panel again.
-        assert!(app.created(Side::Left, &local("/tmp/x"), Ok(())).is_empty());
+        assert!(
+            app.created(app.shown(Side::Left), &local("/tmp/x"), Ok(()))
+                .is_empty()
+        );
     }
 
     #[test]
@@ -3476,7 +3748,7 @@ mod tests {
         let location = remote("web", "/home/deploy");
         let listing = Listing::Dir(Vec::new());
         app.listed(
-            Side::Left,
+            app.shown(Side::Left),
             generation,
             Ok(Listed {
                 location,
@@ -4149,7 +4421,7 @@ mod tests {
         let location = remote("web", "/home/deploy");
         let listing = Listing::Dir(Vec::new());
         app.listed(
-            Side::Right,
+            app.shown(Side::Right),
             generation,
             Ok(Listed {
                 location,
@@ -4269,7 +4541,7 @@ mod tests {
         let location = remote("web", "/home/deploy");
         let listing = Listing::Dir(vec![file("notes", 12)]);
         app.listed(
-            Side::Left,
+            app.shown(Side::Left),
             generation,
             Ok(Listed {
                 location,
@@ -4440,7 +4712,12 @@ mod tests {
     fn replies_reach_their_own_panel() {
         let mut app = loaded();
         app.handle(action(Action::Down));
-        let Effect::List { side, request, .. } = one(app.handle(action(Action::Enter))) else {
+        let Effect::List {
+            panel: PanelId { side, .. },
+            request,
+            ..
+        } = one(app.handle(action(Action::Enter)))
+        else {
             panic!("expected a listing");
         };
         let reply = |listing| {
@@ -4452,12 +4729,12 @@ mod tests {
             })
         };
         app.listed(
-            side.other(),
+            app.shown(side.other()),
             request.generation,
             reply(Listing::Dir(Vec::new())),
         );
         app.listed(
-            side,
+            app.shown(side),
             request.generation,
             reply(Listing::Dir(vec![dir("deeper")])),
         );
@@ -4492,7 +4769,7 @@ mod tests {
             .iter()
             .map(|effect| match effect {
                 Effect::List {
-                    side,
+                    panel: PanelId { side, .. },
                     request,
                     host: Some(_),
                 } => {
@@ -4530,7 +4807,7 @@ mod tests {
             listing: Listing::Dir(vec![dir("app")]),
             space: None,
         };
-        app.listed(side, request.generation, Ok(listed));
+        app.listed(app.shown(side), request.generation, Ok(listed));
         request
     }
 
@@ -4546,7 +4823,9 @@ mod tests {
         let [
             Effect::Connect { connection, .. },
             Effect::List {
-                side: Side::Right,
+                panel: PanelId {
+                    side: Side::Right, ..
+                },
                 request,
                 host: None,
             },
@@ -4595,7 +4874,7 @@ mod tests {
                 listing: Listing::Dir(Vec::new()),
                 space: None,
             };
-            app.listed(Side::Left, request.generation, Ok(listed));
+            app.listed(app.shown(Side::Left), request.generation, Ok(listed));
 
             let effects = app.disconnect("web");
             answer(&mut app, effects, &Listing::Hosts(Vec::new()));
@@ -4769,7 +5048,14 @@ mod tests {
         assert!(screen(&mut app).contains("www"));
 
         let effects = app.closed("web", connection, Some("Broken pipe"));
-        let [Effect::List { side, request, .. }] = &effects[..] else {
+        let [
+            Effect::List {
+                panel: PanelId { side, .. },
+                request,
+                ..
+            },
+        ] = &effects[..]
+        else {
             panic!("expected the list of hosts, got {effects:?}");
         };
         assert_eq!((*side, &request.location), (Side::Left, &Location::Sftp));
@@ -4803,7 +5089,7 @@ mod tests {
         app.active = Side::Right;
         app.handle(action(Action::Down));
         let Effect::List {
-            side,
+            panel: PanelId { side, .. },
             request,
             host: None,
         } = one(app.handle(action(Action::Disconnect)))
@@ -4879,7 +5165,12 @@ mod tests {
         );
         // Panel keys do nothing while it is open.
         assert!(app.handle(action(Action::SwitchPanel)).is_empty());
-        let Effect::List { side, request, .. } = one(app.handle(Resolved::Insert('3'))) else {
+        let Effect::List {
+            panel: PanelId { side, .. },
+            request,
+            ..
+        } = one(app.handle(Resolved::Insert('3')))
+        else {
             panic!("expected a listing");
         };
         assert_eq!(
@@ -4947,8 +5238,8 @@ mod tests {
         );
         assert!(app.handle(Resolved::Insert('z')).is_empty());
         assert!(app.pulldown.is_none(), "a command closes the menu");
-        assert_eq!(app.left.sort_action(), Action::SortBySize);
-        assert_eq!(app.right.sort_action(), Action::SortByName);
+        assert_eq!(app.panel(Side::Left).sort_action(), Action::SortBySize);
+        assert_eq!(app.panel(Side::Right).sort_action(), Action::SortByName);
         assert_eq!(app.active, Side::Right);
 
         // F9 opens it again where it closed, on the command that ran.
@@ -4956,7 +5247,11 @@ mod tests {
         let text = screen_of(&mut app, 20);
         assert!(text.contains("* Sort by size"), "{text}");
         app.handle(action(Action::Confirm));
-        assert_eq!(app.left.sort_action(), Action::SortBySize, "reversed");
+        assert_eq!(
+            app.panel(Side::Left).sort_action(),
+            Action::SortBySize,
+            "reversed"
+        );
 
         // Options: the hidden files, in both panels.
         app.handle(action(Action::PullDown));
@@ -5031,6 +5326,7 @@ mod tests {
             "only the interface"
         );
         app.handle(action(Action::End));
+        app.handle(action(Action::Up));
         let effects = app.handle(action(Action::Toggle));
         assert_eq!(app.config.ui.menu_bar, MenuBar::Always);
         let [Effect::SaveConfig { old, .. }] = &effects[..] else {
@@ -5105,7 +5401,10 @@ mod tests {
             effects[1..].iter().any(|effect| matches!(
                 effect,
                 Effect::List {
-                    side: Side::Left,
+                    panel: PanelId {
+                        side: Side::Left,
+                        ..
+                    },
                     ..
                 }
             )),
@@ -5744,5 +6043,192 @@ mod tests {
             sums_file(&lines),
             b"01  plain\n\\02  two\\nlines\\\\x\n".to_vec()
         );
+    }
+
+    /// The tab numbers on `side`, and the one that shows.
+    fn tab_numbers(app: &App, side: Side) -> (Vec<u64>, u64) {
+        let tabs = app.tabs(side);
+        let numbers = tabs.iter().map(|tab| tab.id.tab).collect();
+        (numbers, tabs.active().id.tab)
+    }
+
+    #[test]
+    fn a_new_tab_shows_the_same_directory_at_once_and_closes_again() {
+        let mut app = loaded();
+        app.handle(action(Action::End));
+        assert!(
+            app.handle(action(Action::NewTab)).is_empty(),
+            "no listing needed"
+        );
+        assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3], 3));
+        assert_eq!(
+            app.panel(Side::Left).name_under_cursor(),
+            Some(&b"right"[..])
+        );
+        let text = screen(&mut app);
+        assert!(text.contains(" 1 srv │ 2 srv "), "{text}");
+        assert!(
+            text.contains("╔ /srv ═"),
+            "the title keeps the whole path: {text}"
+        );
+
+        // Each tab keeps its own cursor.
+        app.handle(action(Action::Home));
+        app.handle(action(Action::PrevTab));
+        assert_eq!(
+            app.panel(Side::Left).name_under_cursor(),
+            Some(&b"right"[..])
+        );
+        app.handle(action(Action::NextTab));
+        assert_eq!(app.panel(Side::Left).name_under_cursor(), None, "on ..");
+        assert_eq!(tab_numbers(&app, Side::Right), (vec![2], 2), "its own tabs");
+
+        assert!(app.handle(action(Action::CloseTab)).is_empty());
+        assert_eq!(tab_numbers(&app, Side::Left), (vec![1], 1));
+        app.handle(action(Action::CloseTab));
+        assert_eq!(
+            tab_numbers(&app, Side::Left),
+            (vec![1], 1),
+            "the last one stays"
+        );
+        assert!(!screen(&mut app).contains(" 1 srv "), "one tab has no bar");
+    }
+
+    #[test]
+    fn listings_reach_hidden_tabs_and_closed_tabs_drop_them() {
+        let mut app = loaded();
+        app.handle(action(Action::Down));
+        let first = one(app.handle(action(Action::Enter)));
+        // The new tab waits for the same directory, with its own request.
+        let second = one(app.handle(action(Action::NewTab)));
+        let (&Effect::List { panel: one_id, .. }, &Effect::List { panel: two_id, .. }) =
+            (&first, &second)
+        else {
+            panic!("expected listings");
+        };
+        assert_ne!(one_id, two_id);
+        assert_eq!(app.shown(Side::Left), two_id);
+        answer(&mut app, vec![first], &Listing::Dir(vec![dir("inner")]));
+        assert_eq!(
+            app.panel_of(one_id).map(Panel::location),
+            Some(&local("/srv/left")),
+            "the hidden tab took its listing"
+        );
+        assert_eq!(
+            app.panel(Side::Left).location(),
+            &local("/srv"),
+            "still waits"
+        );
+
+        app.handle(action(Action::CloseTab));
+        answer(&mut app, vec![second], &Listing::Dir(Vec::new()));
+        assert_eq!(app.shown(Side::Left), one_id);
+        assert!(screen(&mut app).contains("inner"));
+    }
+
+    #[test]
+    fn hidden_tabs_read_their_directory_again_once_they_show() {
+        let mut app = loaded();
+        app.handle(action(Action::NewTab));
+        let effects = app.reload(&local("/srv"));
+        let shown: Vec<PanelId> = effects
+            .iter()
+            .map(|effect| match effect {
+                Effect::List { panel, .. } => *panel,
+                other => panic!("unexpected {other:?}"),
+            })
+            .collect();
+        assert_eq!(shown, [app.shown(Side::Left), app.shown(Side::Right)]);
+        answer(&mut app, effects, &Listing::Dir(vec![dir("left")]));
+
+        let effects = app.handle(action(Action::PrevTab));
+        let [Effect::List { panel, request, .. }] = &effects[..] else {
+            panic!("expected a listing, got {effects:?}");
+        };
+        assert_eq!(
+            (panel.tab, &request.location),
+            (1, &local("/srv")),
+            "the hidden one, now"
+        );
+        answer(&mut app, effects, &Listing::Dir(vec![dir("left")]));
+        assert!(
+            app.handle(action(Action::NextTab)).is_empty(),
+            "read already"
+        );
+    }
+
+    #[test]
+    fn disconnecting_sends_hidden_tabs_on_the_host_back_too() {
+        let mut app = at_root();
+        let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
+            panic!("expected a connection");
+        };
+        connect_web(&mut app, Side::Left, connection, "/var/www");
+        app.handle(action(Action::NewTab));
+        app.handle(action(Action::PrevTab));
+        let effects = app.disconnect("web");
+        let tabs: Vec<u64> = effects
+            .iter()
+            .map(|effect| match effect {
+                Effect::List { panel, request, .. } => {
+                    assert_eq!(request.location, Location::Sftp);
+                    panel.tab
+                }
+                other => panic!("unexpected {other:?}"),
+            })
+            .collect();
+        assert_eq!(tabs.len(), 2, "both tabs on web: {effects:?}");
+    }
+
+    #[test]
+    fn the_list_of_tabs_shows_the_one_chosen() {
+        let mut app = loaded();
+        app.handle(action(Action::NewTab));
+        app.handle(action(Action::Down));
+        let effects = app.handle(action(Action::Enter));
+        answer(&mut app, effects, &Listing::Dir(Vec::new()));
+        app.handle(action(Action::TabList));
+        let text = screen_of(&mut app, 16);
+        assert!(text.contains("Tabs"), "{text}");
+        assert!(
+            text.contains("1 /srv") && text.contains("2 /srv/left"),
+            "{text}"
+        );
+        app.handle(action(Action::Up));
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3], 1));
+    }
+
+    #[test]
+    fn tabs_go_in_the_frame_where_the_config_says() {
+        let mut config = config();
+        config.ui.tab_bar = TabBar::Frame;
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config);
+        answer(&mut app, effects, &Listing::Dir(vec![dir("docs")]));
+        app.handle(action(Action::Down));
+        let effects = app.handle(action(Action::Enter));
+        answer(&mut app, effects, &Listing::Dir(Vec::new()));
+        app.handle(action(Action::NewTab));
+        let mut terminal = Terminal::new(TestBackend::new(60, 6)).unwrap();
+        let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        terminal
+            .draw(|frame| app.render(frame, now, &TimeZone::UTC))
+            .unwrap();
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn the_panel_menus_open_and_close_tabs_on_their_side() {
+        let mut app = loaded();
+        assert!(app.run(Command::On(Side::Right, Action::NewTab)).is_empty());
+        assert_eq!(tab_numbers(&app, Side::Right), (vec![2, 3], 3));
+        assert_eq!(app.active, Side::Left, "the keys stay");
+        let status = app.command_status(Command::On(Side::Left, Action::CloseTab));
+        assert!(!status.enabled, "one tab on the left");
+        let status = app.command_status(Command::On(Side::Right, Action::CloseTab));
+        assert!(status.enabled);
+        assert_eq!(status.key, None, "keys act on the active panel");
+        app.run(Command::On(Side::Right, Action::CloseTab));
+        assert_eq!(tab_numbers(&app, Side::Right), (vec![2], 2));
     }
 }

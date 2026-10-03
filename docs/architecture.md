@@ -191,7 +191,8 @@ the active panel selected; later, where it was when it closed. An open menu:
 ```
 
 - Left and Right act on the panel drawn on that side, after Ctrl-U too: its location menu,
-  sort order (`•` marks the current one), Rescan, and Disconnect while it shows a host. File
+  sort order (`•` marks the current one), Rescan, Disconnect while it shows a host, and its
+  [tabs](#tabs): New tab, Close tab, and Tab list…. File
   has F3 … F8, `+`, `-`, `*`, Checksums, and Exit; Command has quick search, the other-panel
   commands, the jobs, host settings and disconnect for the host under the cursor, help, and
   redraw; Options has Configuration… and Show hidden files (`✓` while on). Without icons, the
@@ -212,6 +213,42 @@ the active panel selected; later, where it was when it closed. An open menu:
   of the panels only while a menu is open, as Far does; `always` keeps it above the panels, as
   mc does, which takes a row from them. The jobs indicator sits at the right end of that row.
 - The menu is modal (keymap context `pull_down`); letters are text there, so they are hotkeys.
+
+### Tabs
+
+Each side has tabs of its own ([ADR 0011](adr/0011-tabs-per-panel.md)). A side with more than
+one shows them, numbered, on a line above the panels (`ui.tab_bar = "line"`, the default):
+
+```text
+ 1 src │ 2 noon │ 3 web:log              1 ~
+╔ /Users/me/projects/noon ══════════╗╔ /Users/me ═══════════════════════╗
+```
+
+or in the top line of the panel's frame, in place of its title (`"frame"`), which costs no
+row and names the tab that shows by its whole location:
+
+```text
+╔ 1 src ═ 2 /Users/me/projects/noon ═ 3 web:log ═╗
+```
+
+- A tab is a whole `Panel` (listing, cursor, marks, sort order, quick search), so switching
+  shows it at once. Hidden tabs list nothing: when a job or F7 changes a directory that a
+  hidden tab shows, the tab is marked stale and reads it again when it shows.
+- Ctrl-X T opens a new tab after the one that shows, on the same directory with the same
+  listing and cursor, without marks; Ctrl-X W closes the tab that shows (the last one stays),
+  and the next one shows. Alt-Right and Alt-Left, or Ctrl-X N and Ctrl-X P, go round the tabs;
+  Ctrl-X Tab lists them, with their whole locations, to choose one. Left and Right in F9 do
+  the same for the panel on that side.
+- Names on the line of tabs are brief: the last component of a directory, `~` for the home
+  directory, `host:name` on a host, and the host alone in its start directory. When they do
+  not fit, the names of hidden tabs shrink first, then the one that shows, and then tabs far
+  from it are left out.
+- Panels are named by a `PanelId`, their side and tab number, which is never used again.
+  Listings, new directories, and the dialogs of `+`, `-`, F5, F6, and F7 carry it, so a reply
+  reaches the tab that asked even after a switch, and one for a closed tab is dropped. What
+  acts on the other side (Alt-O, Alt-I, F5's target, `other_dir`) acts on the tab that shows
+  there. Disconnecting or losing a host sends every tab on it back to the list of hosts.
+- Ctrl-U swaps the sides with their tabs. Alt-. and the settings apply to every tab.
 
 ### Configuration dialog
 
@@ -451,6 +488,7 @@ icons = true                     # Nerd Font icons; false: mc's markers (/ * @ ~
 show_hidden = true               # names that start with a dot; Alt-. switches while running
 type_to_search = true            # typing in a panel starts quick search; false: only Ctrl-S
 menu_bar = "on-demand"           # the F9 menu bar while a menu is open; "always": above the panels
+tab_bar = "line"                 # tabs on a line above the panels; "frame": in the panel's frame
 
 [transfer]
 atomic_upload = true             # copies go to a hidden temporary name, then are renamed

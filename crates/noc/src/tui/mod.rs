@@ -17,6 +17,7 @@ mod pulldown;
 mod root;
 mod scrollbar;
 mod sums;
+mod tabs;
 mod tasks;
 mod theme;
 mod viewer;
@@ -58,16 +59,16 @@ pub(crate) fn theme_names() -> &'static [&'static str] {
 fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
     match done {
         Done::Listed {
-            side,
+            panel,
             generation,
             result,
-        } => app.listed(side, generation, result),
+        } => app.listed(panel, generation, result),
         Done::Places { generation, result } => app.places(generation, result),
         Done::Created {
-            side,
+            panel,
             location,
             result,
-        } => tasks.run(app.created(side, &location, result)),
+        } => tasks.run(app.created(panel, &location, result)),
         Done::Job { id, event } => tasks.run(app.job_event(id, event)),
         Done::Read { id, result } => app.read(id, result),
         Done::Connected {

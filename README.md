@@ -24,6 +24,8 @@ operations. The command is `noc`.
 - **Every disk and server in one place.** The virtual root lists the mounted volumes and all
   hosts from your ssh config; Alt-F1 and Alt-F2 switch a panel to any of them, as in Far
   Manager.
+- **Tabs in each panel.** Keep several directories and servers open on each side, and switch
+  between them with Alt-Left and Alt-Right.
 
 ## Philosophy
 

@@ -6,7 +6,7 @@
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
-use noc_config::{Borders, Config, MenuBar};
+use noc_config::{Borders, Config, MenuBar, TabBar};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::text::{Line, Span};
@@ -36,6 +36,7 @@ enum Key {
     ShowHidden,
     TypeToSearch,
     MenuBar,
+    TabBar,
     AtomicUpload,
     ParallelJobs,
     SshProgram,
@@ -147,6 +148,12 @@ impl Setting {
                 ui.menu_bar = match text {
                     "always" => MenuBar::Always,
                     _ => MenuBar::OnDemand,
+                };
+            }
+            Key::TabBar => {
+                ui.tab_bar = match text {
+                    "frame" => TabBar::Frame,
+                    _ => TabBar::Line,
                 };
             }
             Key::AtomicUpload => transfer.atomic_upload = self.on(),
@@ -729,6 +736,10 @@ fn interface(config: &Config, themes: &[&str]) -> Category {
         MenuBar::OnDemand => "on-demand",
         MenuBar::Always => "always",
     };
+    let tab_bar = match ui.tab_bar {
+        TabBar::Line => "line",
+        TabBar::Frame => "frame",
+    };
     Category {
         icon: "󰍹",
         title: fl!("config-interface"),
@@ -784,6 +795,17 @@ fn interface(config: &Config, themes: &[&str]) -> Category {
                         ("always", fl!("config-menu-bar-always")),
                     ],
                     menu_bar,
+                ),
+            ),
+            Setting::new(
+                Key::TabBar,
+                (fl!("config-tab-bar"), fl!("config-tab-bar-hint")),
+                choice(
+                    &[
+                        ("line", fl!("config-tab-bar-line")),
+                        ("frame", fl!("config-tab-bar-frame")),
+                    ],
+                    tab_bar,
                 ),
             ),
         ],
@@ -1013,7 +1035,7 @@ mod tests {
         expected.ui.theme = "terminal".to_owned();
         expected.ui.borders = Borders::Single;
         expected.ui.icons = false;
-        expected.ui.menu_bar = MenuBar::Always;
+        expected.ui.tab_bar = TabBar::Frame;
         expected.transfer.atomic_upload = false;
         expected.transfer.parallel_jobs = NonZeroUsize::new(4).unwrap();
         expected.ssh.config_file = Some(PathBuf::from("~/.ssh/work"));

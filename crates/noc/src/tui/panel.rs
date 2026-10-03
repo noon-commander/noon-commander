@@ -273,6 +273,34 @@ impl Panel {
         (panel, request)
     }
 
+    /// A panel that shows what this one shows, sorted the same way and with the cursor on
+    /// the same row, but without marks; and the request it waits for, if this one waits.
+    pub(crate) fn duplicate(&self) -> (Self, Option<ListRequest>) {
+        let mut panel = Self {
+            location: self.location.clone(),
+            listing: self.listing.clone(),
+            space: self.space,
+            shown: self.shown.clone(),
+            connected: self.connected.clone(),
+            sort: self.sort,
+            show_hidden: self.show_hidden,
+            marked: HashSet::new(),
+            home: self.home.clone(),
+            cursor: self.cursor,
+            offset: self.offset,
+            page: self.page,
+            generation: 0,
+            pending: None,
+            search: None,
+            error: None,
+        };
+        let request = self
+            .pending
+            .as_ref()
+            .map(|pending| panel.open(pending.location.clone(), pending.focus.clone()));
+        (panel, request)
+    }
+
     fn open(&mut self, location: Location, focus: Focus) -> ListRequest {
         self.generation += 1;
         self.error = None;

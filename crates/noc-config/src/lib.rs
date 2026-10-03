@@ -13,8 +13,8 @@ mod paths;
 mod write;
 
 pub use config::{
-    Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, SshConfig, TransferConfig, UiConfig,
-    VolumesConfig, write_default_config,
+    Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, SshConfig, TabBar, TransferConfig,
+    UiConfig, VolumesConfig, write_default_config,
 };
 pub use edit::save_config;
 pub use error::ConfigError;

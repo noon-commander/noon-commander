@@ -80,10 +80,13 @@
 - [ ] More built-in dark and light pairs from the same palette roles: Gruvbox (dark/light),
       Rosé Pine (main/dawn), Tokyo Night (night/day), Solarized (dark/light)
 - [ ] User themes and keymap overrides
+- [x] Tabs: each panel has its own (Ctrl-X T, Ctrl-X W, Alt-Left/Right, Ctrl-X Tab), on a line
+      above the panels or in their frames, `ui.tab_bar`
+      ([ADR 0011](adr/0011-tabs-per-panel.md))
 - [ ] Bookmarks and history
 - [ ] chmod and symlinks
 - [ ] Mouse support
-- [ ] Restore panel state on start
+- [ ] Restore panel state on start, with the tabs
 
 ## Known issues
 

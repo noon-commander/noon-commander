@@ -1402,6 +1402,7 @@ dependencies = [
  "noc-config",
  "noc-ops",
  "noc-ssh",
+ "noc-tools",
  "noc-vfs",
  "ratatui",
  "rust-embed",

@@ -31,6 +31,8 @@ use color_eyre::eyre::{Result, bail};
 use crossterm::event::{Event, EventStream, KeyEventKind};
 use futures_util::StreamExt as _;
 use jiff::tz::TimeZone;
+use noc_tools::ToolError;
+use noc_tools::editor::Editor;
 use ratatui::DefaultTerminal;
 use ratatui::backend::{Backend as _, ClearType};
 use ratatui::widgets::Clear;
@@ -227,18 +229,16 @@ async fn edit(file: &Path) -> Result<bool, String> {
         .await
         .map(stamp)
         .map_err(|error| error.to_string())?;
-    let command = editor();
-    let status = tokio::process::Command::new(&command[0])
-        .args(&command[1..])
-        .arg(file)
-        .status()
-        .await;
-    if let Err(error) = status {
-        let program = command[0].clone();
+    let editor = Editor::from_env();
+    if let Err(error) = editor.edit(file).await {
+        let reason = match &error {
+            ToolError::Spawn { source, .. } => source.to_string(),
+            other => describe::chain(other),
+        };
         return Err(fl!(
             "edit-cannot-run",
-            program = program,
-            reason = error.to_string()
+            program = editor.program().display().to_string(),
+            reason = reason
         ));
     }
     let after = tokio::fs::metadata(file)
@@ -246,21 +246,6 @@ async fn edit(file: &Path) -> Result<bool, String> {
         .map(stamp)
         .map_err(|error| error.to_string())?;
     Ok(before != after)
-}
-
-/// The editor: `$VISUAL`, else `$EDITOR`, else `vi`, split at spaces, as in `code -w`.
-fn editor() -> Vec<String> {
-    ["VISUAL", "EDITOR"]
-        .iter()
-        .filter_map(|name| std::env::var(name).ok())
-        .map(|value| {
-            value
-                .split_whitespace()
-                .map(str::to_owned)
-                .collect::<Vec<_>>()
-        })
-        .find(|words| !words.is_empty())
-        .unwrap_or_else(|| vec!["vi".to_owned()])
 }
 
 /// Hands the terminal over to another program as the shell has it: with the cursor, on the

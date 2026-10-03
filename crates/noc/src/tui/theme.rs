@@ -130,6 +130,8 @@ impl Theme {
     pub(crate) const NAMES: &'static [&'static str] = &[
         "mc-classic",
         "terminal",
+        "noon-dark",
+        "noon-light",
         "catppuccin-mocha",
         "catppuccin-latte",
     ];
@@ -140,9 +142,15 @@ impl Theme {
             ColorDepth::TrueColor => palette,
             ColorDepth::Indexed => palette.indexed(),
         };
+        let noon = |noon: Noon| match depth {
+            ColorDepth::TrueColor => noon,
+            ColorDepth::Indexed => noon.indexed(),
+        };
         match name {
             "mc-classic" => Some(Self::mc_classic()),
             "terminal" => Some(Self::terminal()),
+            "noon-dark" => Some(Self::noon(&noon(Noon::DARK))),
+            "noon-light" => Some(Self::noon(&noon(Noon::LIGHT))),
             "catppuccin-mocha" => Some(Self::catppuccin(&palette(Palette::MOCHA))),
             "catppuccin-latte" => Some(Self::catppuccin(&palette(Palette::LATTE))),
             _ => None,
@@ -325,6 +333,66 @@ impl Theme {
         }
     }
 
+    /// The colors of the logo in the variant `p`: a gold cursor and an amber menu bar and F-key
+    /// numbers, as the logo's selection and frame, with cream text in the dark variant and navy
+    /// in the light one, where they are brighter; navy panels in the dark variant, cream ones
+    /// with navy text in the light one.
+    fn noon(p: &Noon) -> Self {
+        let on = |fg: Color, bg: Color| Style::new().fg(fg).bg(bg);
+        let fg = |fg: Color| Style::new().fg(fg);
+        let cursor = on(p.ink, p.sun);
+        let bar = on(p.ink, p.amber);
+        Self {
+            panel: on(p.text, p.panel),
+            panel_border: on(p.line, p.panel),
+            panel_title_active: cursor,
+            header: on(p.accent, p.panel).bold(),
+            cursor,
+            marked: on(p.mark, p.panel).underlined(),
+            marked_cursor: on(p.panel, p.mark).underlined(),
+            quick_search: cursor,
+            file: fg(p.text),
+            directory: fg(p.bright).bold(),
+            executable: fg(p.green),
+            symlink: fg(p.teal),
+            stale_link: fg(p.red),
+            device: fg(p.pink),
+            special: fg(p.faint),
+            host_idle: fg(p.faint),
+            host_connecting: fg(p.accent),
+            host_connected: fg(p.green),
+            host_failed: fg(p.red),
+            address: fg(p.muted),
+            dialog_host: [fg(p.muted), fg(p.accent), fg(p.green), fg(p.red)],
+            fkey_number: bar,
+            fkey_label: on(p.text, p.deep),
+            menu_bar: bar,
+            menu_bar_selected: on(p.text, p.surface),
+            menu_bar_inactive: bar,
+            menu: on(p.text, p.surface),
+            menu_selected: cursor,
+            // Without a color of its own: an accent would not show on the selected command.
+            menu_hotkey: Style::new().bold().underlined(),
+            menu_disabled: fg(p.muted),
+            dialog: on(p.text, p.surface),
+            dialog_title: on(p.accent, p.surface).bold(),
+            dialog_button: on(p.text, p.surface),
+            dialog_button_focused: cursor,
+            dialog_input: on(p.text, p.field),
+            dialog_input_fresh: on(p.muted, p.field),
+            gauge: on(p.accent, p.surface),
+            error_dialog: on(p.panel, p.red),
+            error_title: on(p.panel, p.red).bold(),
+            error_button_focused: on(p.text, p.surface),
+            tab: on(p.muted, p.deep),
+            tab_active: on(p.text, p.panel).bold(),
+            tab_active_idle: on(p.muted, p.panel),
+            tab_number: fg(p.accent),
+            shadow: Some(on(p.faint, p.deep)),
+            borders: Borders::default(),
+        }
+    }
+
     /// This theme framed with `borders`, from `ui.borders`.
     pub(crate) fn with_borders(self, borders: Borders) -> Self {
         Self { borders, ..self }
@@ -485,6 +553,107 @@ impl Palette {
     }
 }
 
+/// The colors of the Noon themes, from the logo (`assets/icons/logo.svg`), by role.
+#[derive(Debug, Clone, Copy)]
+struct Noon {
+    /// Behind the others: the F-key labels, the line of tabs, the shadow.
+    deep: Color,
+    panel: Color,
+    /// Dialogs and menus.
+    surface: Color,
+    /// Text fields.
+    field: Color,
+    /// Panel frames.
+    line: Color,
+    faint: Color,
+    muted: Color,
+    text: Color,
+    /// Directories.
+    bright: Color,
+    /// The cursor, as the logo's selection; twice as light in the light variant.
+    sun: Color,
+    /// The menu bar and the F-key numbers, as the logo's frame; twice as light in the light
+    /// variant.
+    amber: Color,
+    /// Text on `sun` and `amber`: cream in the dark variant, navy in the light one.
+    ink: Color,
+    /// Headers, titles, and connecting hosts: a gold that reads on `panel` and `surface`.
+    accent: Color,
+    mark: Color,
+    green: Color,
+    teal: Color,
+    red: Color,
+    pink: Color,
+}
+
+impl Noon {
+    const DARK: Self = Self {
+        deep: Color::from_u32(0x000e_1a36),
+        panel: Color::from_u32(0x001a_2b4e),
+        surface: Color::from_u32(0x0022_3860),
+        field: Color::from_u32(0x002d_4672),
+        line: Color::from_u32(0x005a_72a0),
+        faint: Color::from_u32(0x0070_84ab),
+        muted: Color::from_u32(0x00a3_b0c8),
+        text: Color::from_u32(0x00e2_e6ee),
+        bright: Color::from_u32(0x00ff_fbea),
+        sun: Color::from_u32(0x00a4_6d00),
+        amber: Color::from_u32(0x0099_6400),
+        ink: Color::from_u32(0x00ff_fbea),
+        accent: Color::from_u32(0x00ff_c24a),
+        mark: Color::from_u32(0x00ff_9447),
+        green: Color::from_u32(0x009b_d67e),
+        teal: Color::from_u32(0x006c_cfd6),
+        red: Color::from_u32(0x00f2_6b5e),
+        pink: Color::from_u32(0x00e5_9ae0),
+    };
+
+    const LIGHT: Self = Self {
+        deep: Color::from_u32(0x00cf_d7e6),
+        panel: Color::from_u32(0x00ff_fbea),
+        surface: Color::from_u32(0x00e8_ecf4),
+        field: Color::from_u32(0x00ff_ffff),
+        line: Color::from_u32(0x008c_9bbb),
+        faint: Color::from_u32(0x006f_7c99),
+        muted: Color::from_u32(0x004f_5e80),
+        text: Color::from_u32(0x0026_375c),
+        bright: Color::from_u32(0x0013_2040),
+        sun: Color::from_u32(0x00ff_c24a),
+        amber: Color::from_u32(0x00ff_b833),
+        ink: Color::from_u32(0x0013_2040),
+        accent: Color::from_u32(0x00a3_5400),
+        mark: Color::from_u32(0x00c4_501a),
+        green: Color::from_u32(0x003a_8a2c),
+        teal: Color::from_u32(0x000f_7c88),
+        red: Color::from_u32(0x00c4_2b3a),
+        pink: Color::from_u32(0x00a8_439a),
+    };
+
+    /// The nearest colors of the 256-color palette, for terminals without 24-bit color.
+    fn indexed(self) -> Self {
+        Self {
+            deep: indexed(self.deep),
+            panel: indexed(self.panel),
+            surface: indexed(self.surface),
+            field: indexed(self.field),
+            line: indexed(self.line),
+            faint: indexed(self.faint),
+            muted: indexed(self.muted),
+            text: indexed(self.text),
+            bright: indexed(self.bright),
+            sun: indexed(self.sun),
+            amber: indexed(self.amber),
+            ink: indexed(self.ink),
+            accent: indexed(self.accent),
+            mark: indexed(self.mark),
+            green: indexed(self.green),
+            teal: indexed(self.teal),
+            red: indexed(self.red),
+            pink: indexed(self.pink),
+        }
+    }
+}
+
 /// The nearest color to `color` in the 6×6×6 cube or the gray ramp of the 256-color palette.
 /// The 16 colors below them are left out: the terminal's palette decides those.
 fn indexed(color: Color) -> Color {
@@ -603,6 +772,45 @@ mod tests {
     }
 
     #[test]
+    fn noon_variants_take_the_logo_colors() {
+        let theme = |name| Theme::by_name(name, ColorDepth::TrueColor).unwrap();
+        let (dark, light) = (theme("noon-dark"), theme("noon-light"));
+        assert_eq!(dark.panel.bg, Some(Color::Rgb(0x1a, 0x2b, 0x4e)));
+        assert_eq!(light.panel.bg, Some(Color::Rgb(0xff, 0xfb, 0xea)));
+        assert_eq!(dark.cursor.bg, Some(Color::Rgb(0xa4, 0x6d, 0x00)));
+        assert_eq!(light.cursor.bg, Some(Color::Rgb(0xff, 0xc2, 0x4a)));
+        assert_eq!(
+            dark.menu_bar_inactive.bg,
+            Some(Color::Rgb(0x99, 0x64, 0x00))
+        );
+        assert_eq!(
+            light.menu_bar_inactive.bg,
+            Some(Color::Rgb(0xff, 0xb8, 0x33))
+        );
+        for theme in [&dark, &light] {
+            assert_ne!(theme.panel.bg, theme.dialog.bg);
+            assert_ne!(theme.dialog.bg, theme.dialog_input.bg);
+        }
+        for depth in [ColorDepth::TrueColor, ColorDepth::Indexed] {
+            for name in ["noon-dark", "noon-light"] {
+                let theme = Theme::by_name(name, depth).unwrap();
+                let fg = |style: Style| style.fg;
+                let kinds = [
+                    fg(theme.directory),
+                    fg(theme.executable),
+                    fg(theme.symlink),
+                    fg(theme.stale_link),
+                    fg(theme.device),
+                    fg(theme.marked),
+                ];
+                for (index, kind) in kinds.iter().enumerate() {
+                    assert!(!kinds[index + 1..].contains(kind), "{name}: {kind:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn rgb_comes_down_to_the_256_color_palette() {
         assert_eq!(indexed(Color::Rgb(0, 0, 0)), Color::Indexed(16));
         assert_eq!(indexed(Color::Rgb(255, 0, 0)), Color::Indexed(196));
@@ -610,7 +818,12 @@ mod tests {
         assert_eq!(indexed(Color::Rgb(0x1e, 0x1e, 0x2e)), Color::Indexed(235));
         assert_eq!(indexed(Color::Rgb(0x89, 0xb4, 0xfa)), Color::Indexed(111));
         assert_eq!(indexed(Color::Blue), Color::Blue);
-        for name in ["catppuccin-mocha", "catppuccin-latte"] {
+        for name in [
+            "catppuccin-mocha",
+            "catppuccin-latte",
+            "noon-dark",
+            "noon-light",
+        ] {
             let theme = Theme::by_name(name, ColorDepth::Indexed).unwrap();
             let layers = [
                 theme.panel.bg,
@@ -620,7 +833,7 @@ mod tests {
             ];
             for (index, layer) in layers.iter().enumerate() {
                 assert!(
-                    matches!(layer, Some(Color::Indexed(232..))),
+                    matches!(layer, Some(Color::Indexed(16..))),
                     "{name}: {layer:?}"
                 );
                 assert!(!layers[index + 1..].contains(layer), "{name}: {layer:?}");

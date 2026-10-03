@@ -77,6 +77,7 @@
 - [x] Catppuccin themes in 24-bit color, Mocha and Latte, with the nearest of 256 colors
       where `COLORTERM` does not announce 24-bit color
       ([ADR 0010](adr/0010-truecolor-themes.md))
+- [x] Noon themes from the logo's colors, dark and light (`noon-dark`, `noon-light`)
 - [ ] More built-in dark and light pairs from the same palette roles: Gruvbox (dark/light),
       Rosé Pine (main/dawn), Tokyo Night (night/day), Solarized (dark/light)
 - [ ] User themes and keymap overrides

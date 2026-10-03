@@ -489,7 +489,7 @@ hide = ["/Volumes/Backup*"]      # mount points to leave out of the root; never 
 
 [ui]
 language = "auto"                # or a language tag such as "en-US"; others fall back to it
-theme = "mc-classic"             # "terminal", "catppuccin-mocha", or "catppuccin-latte"
+theme = "mc-classic"             # "terminal", "noon-dark", "noon-light", "catppuccin-mocha", …
 borders = "double"               # frames of panels and dialogs: ═ ║ ╔; "single": ─ │ ┌
 icons = true                     # Nerd Font icons; false: mc's markers (/ * @ ~ …)
 show_hidden = true               # names that start with a dot; Alt-. switches while running
@@ -692,7 +692,8 @@ remember_dir = true              # reopen the last directory of this session
 - **Themes.** Built in: `mc-classic`, the colors of mc's default skin (blue panels, a cyan
   cursor that replaces the row's colors, yellow headers; directories white, executables green,
   broken links red, devices magenta; gray dialogs with mc's shadow; a black-and-cyan F-key
-  bar; red error dialogs); `terminal`, the terminal's own colors with reverse video; and
+  bar; red error dialogs); `terminal`, the terminal's own colors with reverse video;
+  `noon-dark` and `noon-light`, the colors of the logo (`assets/icons/logo.svg`); and
   `catppuccin-mocha` and `catppuccin-latte`, the dark and light flavors of
   [Catppuccin](https://catppuccin.com) ([ADR 0010](adr/0010-truecolor-themes.md)).
   `ui.theme` picks one; an unknown name is an error. `mc-classic` uses the 16 ANSI colors, so
@@ -702,10 +703,18 @@ remember_dir = true              # reopen the last directory of this session
   idle menu bar on `mantle`, the F-key numbers and the shadow on `crust`; a `blue` cursor, the
   active panel's title, and focused buttons; `lavender` headers, `mauve` marks and dialog
   titles; directories `blue`, executables `green`, symlinks `teal`, broken links `red`,
-  devices `pink`; hosts `overlay1`, `yellow`, `green`, `red` by state. Their colors are 24-bit
-  RGB where `COLORTERM` is `truecolor` or `24bit`; elsewhere each is the nearest of the 6×6×6
-  cube and the gray ramp of the 256-color palette, never the 16 colors below them, which the
-  terminal's palette redefines. User themes in `themes/` are planned for M4.
+  devices `pink`; hosts `overlay1`, `yellow`, `green`, `red` by state. The Noon themes are
+  built the same way from a palette of roles taken from the logo: the cursor, the active
+  panel's title, and focused buttons are on the logo's gold (`#A46D00`), and the menu bar and
+  the F-key numbers on its amber frame (`#996400`), with cream text; `noon-dark` has the logo's
+  navy panels and dialogs a shade lighter, cream directories, and bright gold headers
+  (`#FFC24A`), which read better on navy; `noon-light` has cream panels (`#FFFBEA`) with navy
+  text, pale blue-gray dialogs, the gold and the amber twice as light (`#FFC24A`, `#FFB833`)
+  with navy text, and a dark amber for headers, which the bright gold is too pale for on cream.
+  These themes are 24-bit RGB where `COLORTERM` is `truecolor` or `24bit`; elsewhere each is
+  the nearest of the 6×6×6 cube and the gray ramp of the 256-color palette, never the 16 colors
+  below them, which the terminal's palette redefines. User themes in `themes/` are planned for
+  M4.
   Panels and dialogs are framed with double lines unless `ui.borders` is `single`; as in mc,
   a dialog leaves a blank cell between its frame and its edge, which gives way on a screen too
   small for it.

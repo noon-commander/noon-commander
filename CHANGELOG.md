@@ -41,6 +41,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   order, and hidden tabs read their directories again when they show. `ui.tab_bar` puts them
   on a line above the panels (`"line"`, the default) or in the panel's frame (`"frame"`)
   ([ADR 0011](docs/adr/0011-tabs-per-panel.md)).
+- Noon themes in the colors of the logo: `[ui] theme = "noon-dark"`, navy panels, and
+  `"noon-light"`, cream panels with navy text; both with a gold cursor and an amber menu bar
+  and F-key numbers, brighter in `noon-light`. Like the Catppuccin themes, they fall back to 256 colors.
 - Catppuccin themes in 24-bit color: `[ui] theme = "catppuccin-mocha"`, dark, and
   `"catppuccin-latte"`, light, with the same colors for the same things in both. Where
   `COLORTERM` is not `truecolor` or `24bit`, they use the nearest of the 256 colors

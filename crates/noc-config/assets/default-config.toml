@@ -42,8 +42,9 @@ hide = []
 # far; other languages fall back to it.
 language = "auto"
 # Colors: "mc-classic" (blue panels, as Midnight Commander), "terminal" (the terminal's own),
-# "catppuccin-mocha" (dark), or "catppuccin-latte" (light). The Catppuccin themes use 24-bit
-# color where COLORTERM says the terminal has it, else the nearest of 256 colors.
+# "noon-dark" and "noon-light" (the logo's navy, gold, and amber), "catppuccin-mocha" (dark), or
+# "catppuccin-latte" (light). All but the first two use 24-bit color where COLORTERM says the
+# terminal has it, else the nearest of 256 colors.
 theme = "mc-classic"
 # Frames of panels and dialogs: "double" (═ ║ ╔, as Midnight Commander) or "single" (─ │ ┌).
 borders = "double"

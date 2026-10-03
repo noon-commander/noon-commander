@@ -15,15 +15,19 @@ fmt:
 fmt-check:
     cargo fmt --all --check
 
-# Clippy with and without the forwarding feature
-clippy:
-    cargo clippy --workspace --all-targets -- -D warnings
-    cargo clippy --workspace --all-targets --features forwarding -- -D warnings
+# Clippy with and without the forwarding feature; extra arguments go to cargo, as --locked in CI
+clippy *args: (clippy-with "" args) (clippy-with "forwarding" args)
 
-# Tests with and without the forwarding feature
-test:
-    cargo test --workspace
-    cargo test --workspace --features forwarding
+# Clippy with the given features ("" for none)
+clippy-with features *args:
+    cargo clippy --workspace --all-targets {{ args }} {{ if features == "" { "" } else { "--features " + features } }} -- -D warnings
+
+# Tests with and without the forwarding feature; extra arguments go to cargo
+test *args: (test-with "" args) (test-with "forwarding" args)
+
+# Tests with the given features ("" for none)
+test-with features *args:
+    cargo test --workspace {{ args }} {{ if features == "" { "" } else { "--features " + features } }}
 
 # License, advisory, and ban checks (needs cargo-deny)
 deny:

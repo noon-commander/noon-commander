@@ -146,6 +146,8 @@ The project's tasks live in the [`justfile`](justfile)
 | --- | --- |
 | `just` | List the tasks |
 | `just check` | Formatting, clippy, tests, and cargo-deny: everything that must pass; changes no files |
+| `just lint` | Markdown, shell scripts, spelling, TOML, workflows, and unused dependencies |
+| `just all` | `check`, `lint`, and `snap-stale`: every check there is |
 | `just fmt` | Format the code |
 | `just test` | Tests with and without the forwarding feature |
 | `just snap` | Run the tests and review the UI snapshots that changed (needs cargo-insta) |

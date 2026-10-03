@@ -86,6 +86,12 @@ msrv:
 # Everything that must pass before work is done; changes no files
 check: fmt-check clippy test deny
 
+# The fast checks of everything but the Rust code; changes no files
+lint: md sh typos toml gha unused
+
+# check, lint, and stale snapshots; changes no files
+all: check lint snap-stale
+
 # Render every predefined PNG from the logo (needs resvg)
 logo: (_logo-png "github" "512")
 

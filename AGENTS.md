@@ -65,6 +65,8 @@ cargo deny check
 
 Work is done when all of them pass. `just check` runs them all, with `cargo fmt --all --check` so
 that it changes no files; `just fmt` formats. The tasks live in the `justfile` ([ADR 0013](docs/adr/0013-just-task-runner.md)).
+`just lint` checks Markdown, shell scripts, spelling, TOML, workflows, and unused dependencies;
+`just all` runs `check`, `lint`, and `snap-stale`. Run `just all` before committing.
 
 After changing `assets/icons/logo.svg`, run `just logo` (needs `resvg`) to render the PNGs again;
 a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on the command line.

@@ -17,7 +17,9 @@ renderer: a library in an `xtask` crate, or a command-line program.
 ## Decision
 
 - `just` runs the project's tasks from a `justfile` at the root: `fmt`, `clippy`, `test`,
-  `deny`, `check` (all of them, with `cargo fmt --check`, so it changes no files), `msrv`, `md`
+  `deny`, `check` (all of them, with `cargo fmt --check`, so it changes no files), `lint` (the
+  checks below of everything but the Rust code), `all` (`check`, `lint`, and `snap-stale`),
+  `msrv`, `md`
   (markdownlint-cli2 with `.markdownlint.yaml`), `sh` (ShellCheck on every tracked script with a
   `sh`, `bash`, or `dash` shebang), `snap` and `snap-stale` (cargo-insta: review the changed
   UI snapshots, find the ones no test uses), `typos` (spelling, with exceptions in

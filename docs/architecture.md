@@ -705,16 +705,16 @@ remember_dir = true              # reopen the last directory of this session
   titles; directories `blue`, executables `green`, symlinks `teal`, broken links `red`,
   devices `pink`; hosts `overlay1`, `yellow`, `green`, `red` by state. The Noon themes are
   built the same way from a palette of roles taken from the logo: the cursor, the active
-  panel's title, and focused buttons are on the logo's gold (`#A46D00`), and the menu bar and
-  the F-key numbers on its amber frame (`#996400`), with cream text; `noon-dark` has the logo's
-  navy panels and dialogs a shade lighter, cream directories, and bright gold headers
-  (`#FFC24A`), which read better on navy; `noon-light` has cream panels (`#FFFBEA`) with navy
-  text, pale blue-gray dialogs, the gold and the amber twice as light (`#FFC24A`, `#FFB833`)
-  with navy text, and a dark amber for headers, which the bright gold is too pale for on cream.
-  These themes are 24-bit RGB where `COLORTERM` is `truecolor` or `24bit`; elsewhere each is
-  the nearest of the 6×6×6 cube and the gray ramp of the 256-color palette, never the 16 colors
-  below them, which the terminal's palette redefines. User themes in `themes/` are planned for
-  M4.
+  panel's title, and focused buttons are on the logo's gold (`#A46D00`), and the menu bar on
+  its amber frame (`#996400`), with cream text; the F-key bar is dark, its numbers bold in the
+  color of the headers; `noon-dark` has the logo's navy panels and dialogs a shade lighter,
+  cream directories, and bright gold headers (`#FFC24A`), which read better on navy;
+  `noon-light` has cream panels (`#FFFBEA`) with navy text, pale blue-gray dialogs, the gold
+  and the amber twice as light (`#FFC24A`, `#FFB833`) with navy text, and a dark amber for
+  headers, which the bright gold is too pale for on cream. These themes are 24-bit RGB where
+  `COLORTERM` is `truecolor` or `24bit`; elsewhere each is the nearest of the 6×6×6 cube and
+  the gray ramp of the 256-color palette, never the 16 colors below them, which the terminal's
+  palette redefines. User themes in `themes/` are planned for M4.
   Panels and dialogs are framed with double lines unless `ui.borders` is `single`; as in mc,
   a dialog leaves a blank cell between its frame and its edge, which gives way on a screen too
   small for it.

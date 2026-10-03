@@ -333,8 +333,8 @@ impl Theme {
         }
     }
 
-    /// The colors of the logo in the variant `p`: a gold cursor and an amber menu bar and F-key
-    /// numbers, as the logo's selection and frame, with cream text in the dark variant and navy
+    /// The colors of the logo in the variant `p`: a gold cursor and an amber menu bar, as the
+    /// logo's selection and frame, with cream text in the dark variant and navy
     /// in the light one, where they are brighter; navy panels in the dark variant, cream ones
     /// with navy text in the light one.
     fn noon(p: &Noon) -> Self {
@@ -364,7 +364,7 @@ impl Theme {
             host_failed: fg(p.red),
             address: fg(p.muted),
             dialog_host: [fg(p.muted), fg(p.accent), fg(p.green), fg(p.red)],
-            fkey_number: bar,
+            fkey_number: on(p.accent, p.deep).bold(),
             fkey_label: on(p.text, p.deep),
             menu_bar: bar,
             menu_bar_selected: on(p.text, p.surface),
@@ -556,7 +556,7 @@ impl Palette {
 /// The colors of the Noon themes, from the logo (`assets/icons/logo.svg`), by role.
 #[derive(Debug, Clone, Copy)]
 struct Noon {
-    /// Behind the others: the F-key labels, the line of tabs, the shadow.
+    /// Behind the others: the F-key bar, the line of tabs, the shadow.
     deep: Color,
     panel: Color,
     /// Dialogs and menus.
@@ -572,12 +572,12 @@ struct Noon {
     bright: Color,
     /// The cursor, as the logo's selection; twice as light in the light variant.
     sun: Color,
-    /// The menu bar and the F-key numbers, as the logo's frame; twice as light in the light
-    /// variant.
+    /// The menu bar, as the logo's frame; twice as light in the light variant.
     amber: Color,
     /// Text on `sun` and `amber`: cream in the dark variant, navy in the light one.
     ink: Color,
-    /// Headers, titles, and connecting hosts: a gold that reads on `panel` and `surface`.
+    /// Headers, titles, the F-key numbers, and connecting hosts: a gold that reads on `panel`,
+    /// `surface`, and `deep`.
     accent: Color,
     mark: Color,
     green: Color,

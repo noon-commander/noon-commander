@@ -144,6 +144,7 @@ a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on th
   `sftp-server`) and logs its command lines. Keep it in sync with the flags we pass.
 - zoxide tests use `crates/noc-tools/tests/support/fake-zoxide` the same way; tests never touch
   the real zoxide database.
+- Shell scripts are POSIX `sh` and pass ShellCheck; `just sh` finds them by their shebang.
 - Tests must not touch the real `~/.ssh` or XDG directories; use temporary directories.
 
 ## Platforms

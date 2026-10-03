@@ -33,6 +33,17 @@ deny:
 md:
     markdownlint-cli2 "**/*.md" "#target"
 
+# Lint the shell scripts, found by their shebang (needs shellcheck)
+sh:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    scripts=()
+    while IFS= read -r -d '' file; do
+        IFS= read -r line < "$file" || true
+        [[ $line =~ ^\#!.*[/[:space:]](sh|bash|dash)$ ]] && scripts+=("$file")
+    done < <(git ls-files -z)
+    shellcheck "${scripts[@]}"
+
 # Build with the oldest supported Rust, as CI does (needs rustup)
 msrv:
     @command -v rustup >/dev/null || { echo "just msrv needs rustup: https://rustup.rs" >&2; exit 1; }

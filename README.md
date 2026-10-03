@@ -76,12 +76,13 @@ Non-goals: forwarding of any kind, a built-in SSH implementation, a password man
 - OpenSSH 8.7 or newer at runtime (`ssh -V`).
 - Development tools (optional): [just](https://github.com/casey/just) runs the project's tasks,
   [resvg](https://github.com/linebender/resvg) renders the logo,
-  [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) checks licenses and advisories, and
-  [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2) checks the Markdown files:
+  [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) checks licenses and advisories,
+  [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2) checks the Markdown files,
+  and [ShellCheck](https://www.shellcheck.net) checks the shell scripts:
 
   ```sh
-  brew install just resvg cargo-deny markdownlint-cli2
-  # or, on any platform:
+  brew install just resvg cargo-deny markdownlint-cli2 shellcheck
+  # or, on any platform (ShellCheck from your package manager):
   cargo install just resvg cargo-deny --locked
   npm install --global markdownlint-cli2
   ```
@@ -140,6 +141,7 @@ The project's tasks live in the [`justfile`](justfile)
 | `just test` | Tests with and without the forwarding feature |
 | `just msrv` | Build with the oldest supported Rust, as CI does (needs rustup) |
 | `just md` | Lint the Markdown files with `.markdownlint.yaml` (needs markdownlint-cli2) |
+| `just sh` | Lint the shell scripts, such as the fake `ssh` of the tests (needs shellcheck) |
 | `just logo` | Render the PNGs of `assets/icons/logo.svg`, without metadata (needs resvg) |
 
 `just logo` renders every PNG listed in the `logo` recipe, for now

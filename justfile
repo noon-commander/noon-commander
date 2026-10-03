@@ -58,6 +58,10 @@ toml:
 toml-fmt:
     RUST_LOG=warn taplo fmt
 
+# Lint the GitHub Actions workflows (needs actionlint)
+gha:
+    actionlint
+
 # Lint the shell scripts, found by their shebang (needs shellcheck)
 sh:
     #!/usr/bin/env bash

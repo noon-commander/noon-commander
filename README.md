@@ -81,15 +81,17 @@ Non-goals: forwarding of any kind, a built-in SSH implementation, a password man
   [ShellCheck](https://www.shellcheck.net) checks the shell scripts,
   [cargo-insta](https://insta.rs) reviews the UI snapshots,
   [typos](https://github.com/crate-ci/typos) finds misspelled words,
-  [cargo-shear](https://github.com/Boshen/cargo-shear) finds unused dependencies, and
-  [taplo](https://taplo.tamasfe.dev) checks and formats the TOML files:
+  [cargo-shear](https://github.com/Boshen/cargo-shear) finds unused dependencies,
+  [taplo](https://taplo.tamasfe.dev) checks and formats the TOML files, and
+  [actionlint](https://github.com/rhysd/actionlint) checks the GitHub Actions workflows:
 
   ```sh
   brew install just resvg cargo-deny markdownlint-cli2 shellcheck cargo-insta typos-cli \
-      cargo-shear taplo
+      cargo-shear taplo actionlint
   # or, on any platform (ShellCheck from your package manager):
   cargo install just resvg cargo-deny cargo-insta typos-cli cargo-shear taplo-cli --locked
   npm install --global markdownlint-cli2
+  go install github.com/rhysd/actionlint/cmd/actionlint@latest
   ```
 
 ### Build and run
@@ -152,6 +154,7 @@ The project's tasks live in the [`justfile`](justfile)
 | `just unused` | Find dependencies that no crate uses (needs cargo-shear) |
 | `just toml` | Check that the TOML files are valid and formatted (needs taplo) |
 | `just toml-fmt` | Format the TOML files, keeping their comments (needs taplo) |
+| `just gha` | Lint the GitHub Actions workflows (needs actionlint) |
 | `just sh` | Lint the shell scripts, such as the fake `ssh` of the tests (needs shellcheck) |
 | `just logo` | Render the PNGs of `assets/icons/logo.svg`, without metadata (needs resvg) |
 

@@ -220,8 +220,8 @@ Each side has tabs of its own ([ADR 0011](adr/0011-tabs-per-panel.md)). A side w
 one shows them, numbered, on a line above the panels (`ui.tab_bar = "line"`, the default):
 
 ```text
- 1 src │ 2 noon │ 3 web:log              1 ~
-╔ /Users/me/projects/noon ══════════╗╔ /Users/me ═══════════════════════╗
+║ 1 src │ 2 noon │ 3 web:log          ║║ 1 ~                              ║
+╠ /Users/me/projects/noon ══════════╣╠ /Users/me ═══════════════════════╣
 ```
 
 or in the top line of the panel's frame, in place of its title (`"frame"`), which costs no
@@ -240,14 +240,21 @@ row and names the tab that shows by its whole location:
   Ctrl-X Tab lists them, with their whole locations, to choose one. Left and Right in F9 do
   the same for the panel on that side.
 - Names on the line of tabs are brief: the last component of a directory, `~` for the home
-  directory, `host:name` on a host, and the host alone in its start directory. When they do
-  not fit, the names of hidden tabs shrink first, then the one that shows, and then tabs far
-  from it are left out.
+  directory, `host:name` on a host, and the host alone in its start directory. The frame's
+  verticals close each side's line, and its top corners become tees (`╠`, `╣`) that join it,
+  so the two sides stay apart. When the tabs do not fit, the names of hidden
+  tabs shrink first, then the one that shows, none below eight cells; then tabs far from it
+  are left out, and `‹` and `›` say so.
 - Panels are named by a `PanelId`, their side and tab number, which is never used again.
   Listings, new directories, and the dialogs of `+`, `-`, F5, F6, and F7 carry it, so a reply
   reaches the tab that asked even after a switch, and one for a closed tab is dropped. What
   acts on the other side (Alt-O, Alt-I, F5's target, `other_dir`) acts on the tab that shows
   there. Disconnecting or losing a host sends every tab on it back to the list of hosts.
+- Tabs look like tabs: the line is dark (`tab`: gray on black in mc-classic, as the F-key
+  bar; `crust` in Catppuccin; dim text in `terminal`), and the tab that shows takes the
+  panel's colors as if it grew out of it (`tab_active`), with its number in an accent on the
+  side that has the keys (`tab_number`) and plainer on the other (`tab_active_idle`). Tabs in
+  the frame take the same styles, with the frame's line between them.
 - Ctrl-U swaps the sides with their tabs. Alt-. and the settings apply to every tab.
 
 ### Configuration dialog

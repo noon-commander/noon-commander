@@ -83,6 +83,15 @@ pub(crate) struct Theme {
     pub(crate) error_dialog: Style,
     pub(crate) error_title: Style,
     pub(crate) error_button_focused: Style,
+    /// Tabs: the line of tabs, the tabs that do not show, and what parts them; tabs drawn
+    /// in a panel's frame take it too.
+    pub(crate) tab: Style,
+    /// The tab that shows, in the panel's colors as if it grew out of it, on the side with the
+    /// keys and on the other side.
+    pub(crate) tab_active: Style,
+    pub(crate) tab_active_idle: Style,
+    /// Drawn over `tab_active`: the number of the tab that shows on the side with the keys.
+    pub(crate) tab_number: Style,
     /// What mc draws to the right of and below a dialog; `None` draws nothing.
     pub(crate) shadow: Option<Style>,
     /// The lines that frame panels and dialogs.
@@ -192,6 +201,11 @@ impl Theme {
             error_dialog: on(Color::White, Color::Red),
             error_title: on(Color::LightYellow, Color::Red),
             error_button_focused: on(Color::Black, Color::Gray),
+            // Dark, as the F-key bar below the panels.
+            tab: on(Color::Gray, Color::Black),
+            tab_active: on(Color::White, Color::Blue).bold(),
+            tab_active_idle: on(Color::Gray, Color::Blue),
+            tab_number: fg(Color::LightYellow),
             shadow: Some(on(Color::DarkGray, Color::Black)),
             borders: Borders::default(),
         }
@@ -245,6 +259,10 @@ impl Theme {
             error_dialog: plain,
             error_title: plain.bold(),
             error_button_focused: reversed,
+            tab: plain.dim(),
+            tab_active: plain.bold().underlined(),
+            tab_active_idle: plain.bold(),
+            tab_number: plain,
             shadow: None,
             borders: Borders::default(),
         }
@@ -298,6 +316,10 @@ impl Theme {
             error_dialog: on(p.base, p.red),
             error_title: on(p.base, p.red),
             error_button_focused: on(p.text, p.surface0),
+            tab: on(p.overlay1, p.crust),
+            tab_active: on(p.text, p.base).bold(),
+            tab_active_idle: on(p.subtext0, p.base),
+            tab_number: fg(p.blue),
             shadow: Some(on(p.overlay0, p.crust)),
             borders: Borders::default(),
         }

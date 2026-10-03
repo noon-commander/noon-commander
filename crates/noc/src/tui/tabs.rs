@@ -7,8 +7,8 @@ use std::path::Path;
 use noc_vfs::Location;
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::Style;
-use ratatui::text::Line;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::BorderType;
 
 use super::app::Side;
 use super::cells::{self, Align};
@@ -188,39 +188,91 @@ pub(crate) struct Bar<'a> {
 }
 
 impl Bar<'_> {
-    /// The style of the tab that shows; the others take the panel's or the frame's.
-    fn active_style(&self) -> Style {
-        if self.focused {
-            self.theme.panel_title_active
-        } else {
-            self.theme.header
-        }
+    /// Draws the tab `index` as ` label ` at `x` in `area`'s line: the one that shows in the
+    /// panel's colors, its number in an accent on the side with the keys, the others as tabs
+    /// that do not show. Returns where it ends.
+    fn draw_tab(
+        &self,
+        frame: &mut Frame<'_>,
+        x: u16,
+        area: Rect,
+        (index, label): (usize, &str),
+    ) -> u16 {
+        let theme = self.theme;
+        let (style, number) = match (index == self.active, self.focused) {
+            (true, true) => (theme.tab_active, theme.tab_active.patch(theme.tab_number)),
+            (true, false) => (theme.tab_active_idle, theme.tab_active_idle),
+            (false, _) => (theme.tab, theme.tab),
+        };
+        let (digits, name) = label.split_once(' ').unwrap_or((label, ""));
+        let line = Line::from(vec![
+            Span::styled(" ", style),
+            Span::styled(digits.to_owned(), number),
+            Span::styled(format!(" {name} "), style),
+        ]);
+        let width = u16::try_from(line.width()).unwrap_or(u16::MAX);
+        let width = width.min(area.right().saturating_sub(x));
+        frame.render_widget(line, Rect::new(x, area.y, width, 1));
+        x + width
     }
 
-    /// The tabs on a line of their own, `area`, between bars.
+    /// The tabs on a line of their own, `area`, with a bar between them, between the frame's
+    /// verticals above its corners; `‹` and `›` say that tabs are left out before or after the
+    /// ones shown.
     pub(crate) fn render_line(&self, frame: &mut Frame<'_>, area: Rect) {
         let theme = self.theme;
         frame.render_widget(
-            Line::styled(" ".repeat(usize::from(area.width)), theme.panel),
+            Line::styled(" ".repeat(usize::from(area.width)), theme.tab),
             area,
         );
-        let room = usize::from(area.width);
-        let mut x = area.x;
-        for (position, (index, label)) in fit(self.names, self.active, room).into_iter().enumerate()
-        {
+        if area.width < 2 {
+            return;
+        }
+        let edge = area.right() - 1;
+        let vertical = match theme.border_type() {
+            BorderType::Double => "║",
+            _ => "│",
+        };
+        for x in [area.x, edge] {
+            frame.render_widget(
+                Line::styled(vertical, theme.panel_border),
+                Rect::new(x, area.y, 1, 1),
+            );
+        }
+        let inside = Rect::new(area.x + 1, area.y, area.width - 2, 1);
+        let room = usize::from(inside.width);
+        let mut shown = fit(self.names, self.active, room);
+        let more = |shown: &[(usize, String)]| {
+            let before = shown.first().is_some_and(|(index, _)| *index > 0);
+            let after = shown
+                .last()
+                .is_some_and(|(index, _)| index + 1 < self.names.len());
+            (before, after)
+        };
+        if more(&shown) != (false, false) {
+            shown = fit(self.names, self.active, room.saturating_sub(2));
+        }
+        let (before, after) = more(&shown);
+        let mark = |frame: &mut Frame<'_>, x: u16, text: &str| {
+            frame.render_widget(
+                Line::styled(text.to_owned(), theme.tab),
+                Rect::new(x, area.y, 1, 1),
+            );
+        };
+        let mut x = inside.x;
+        if before {
+            mark(frame, x, "‹");
+            x += 1;
+        }
+        for (position, (index, label)) in shown.into_iter().enumerate() {
             if position > 0 {
-                frame.render_widget(
-                    Line::styled("│", theme.panel_border),
-                    Rect::new(x, area.y, 1, 1),
-                );
+                mark(frame, x, "│");
                 x += 1;
             }
-            let style = if index == self.active {
-                self.active_style()
-            } else {
-                theme.panel
-            };
-            x = draw_segment(frame, x, area, &label, style);
+            x = self.draw_tab(frame, x, inside, (index, &label));
+        }
+        if after && inside.width > 0 {
+            mark(frame, inside.right() - 1, "›");
         }
     }
 
@@ -235,7 +287,7 @@ impl Bar<'_> {
         let line = Rect::new(area.x + 1, area.y, area.width - 3, 1);
         // The title of the panel's frame goes, and the line comes back in its place.
         let horizontal = match self.theme.border_type() {
-            ratatui::widgets::BorderType::Double => "═",
+            BorderType::Double => "═",
             _ => "─",
         };
         frame.render_widget(
@@ -248,36 +300,41 @@ impl Bar<'_> {
             if position > 0 {
                 x += 1;
             }
-            let style = if index == self.active {
-                self.active_style()
-            } else {
-                self.theme.panel_border
-            };
-            x = draw_segment(frame, x, line, &label, style);
+            x = self.draw_tab(frame, x, line, (index, &label));
         }
     }
 }
 
-/// Draws ` label ` at `x` in `area`'s line; returns where it ends.
-fn draw_segment(frame: &mut Frame<'_>, x: u16, area: Rect, label: &str, style: Style) -> u16 {
-    let text = format!(" {label} ");
-    let width = u16::try_from(cells::width(&text)).unwrap_or(u16::MAX);
-    let width = width.min(area.right().saturating_sub(x));
-    frame.render_widget(Line::styled(text, style), Rect::new(x, area.y, width, 1));
-    x + width
+/// Joins the top corners of a panel's frame, `area`, to the verticals of the line of tabs
+/// above it: `╠` and `╣`, or `├` and `┤`.
+pub(crate) fn join_frame(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
+    if area.width < 2 || area.height == 0 {
+        return;
+    }
+    let (left, right) = match theme.border_type() {
+        BorderType::Double => ("╠", "╣"),
+        _ => ("├", "┤"),
+    };
+    for (x, tee) in [(area.x, left), (area.right() - 1, right)] {
+        frame.render_widget(
+            Line::styled(tee, theme.panel_border),
+            Rect::new(x, area.y, 1, 1),
+        );
+    }
 }
 
+/// Names of tabs shrink to no fewer cells, so that they still say where the tabs are.
+const LEAST: usize = 8;
+
 /// The tabs that fit in `room` cells, by index, each as ` number name ` with a cell between
-/// them: the names of hidden tabs shrink first, the widest first, down to two cells, then the
-/// name of the tab that shows; then tabs far from it are left out.
+/// them: the names of hidden tabs shrink first, the widest first, then the name of the tab
+/// that shows, but none below [`LEAST`] cells; then tabs far from it are left out.
 fn fit(names: &[String], active: usize, room: usize) -> Vec<(usize, String)> {
-    /// A character and the `~` that stands for the rest.
-    const LEAST: usize = 2;
     if names.is_empty() {
         return Vec::new();
     }
     let active = active.min(names.len() - 1);
-    let mut widths: Vec<usize> = names.iter().map(|name| cells::width(name)).collect();
+    let whole: Vec<usize> = names.iter().map(|name| cells::width(name)).collect();
     // ` number name `.
     let segment =
         |widths: &[usize], index: usize| (index + 1).to_string().len() + widths[index] + 3;
@@ -288,14 +345,22 @@ fn fit(names: &[String], active: usize, room: usize) -> Vec<(usize, String)> {
             .sum::<usize>()
             + shown.len().saturating_sub(1)
     };
+    // Shrinks the names of `shown` from their whole widths until they fit, or cannot shrink.
+    let shrink = |shown: &[usize]| {
+        let mut widths = whole.clone();
+        while width(&widths, shown) > room {
+            let widest = shown
+                .iter()
+                .copied()
+                .filter(|&index| widths[index] > LEAST)
+                .max_by_key(|&index| (index != active, widths[index]));
+            let Some(widest) = widest else { break };
+            widths[widest] -= 1;
+        }
+        widths
+    };
     let all: Vec<usize> = (0..names.len()).collect();
-    while width(&widths, &all) > room {
-        let widest = (0..names.len())
-            .filter(|&index| widths[index] > LEAST)
-            .max_by_key(|&index| (index != active, widths[index]));
-        let Some(widest) = widest else { break };
-        widths[widest] -= 1;
-    }
+    let mut widths = shrink(&all);
     let mut shown = vec![active];
     let (mut before, mut after) = (active, active + 1);
     loop {
@@ -321,6 +386,10 @@ fn fit(names: &[String], active: usize, room: usize) -> Vec<(usize, String)> {
         if !grew {
             break;
         }
+    }
+    // Names that shrank so that every tab might fit get back what the tabs left out leave.
+    if shown.len() < names.len() {
+        widths = shrink(&shown);
     }
     shown
         .into_iter()
@@ -364,39 +433,79 @@ mod tests {
 
     #[test]
     fn fits_hidden_tabs_first_then_drops_far_tabs() {
-        let names = labels(&["src", "/Users/me/projects/noon", "~"]);
+        let names = labels(&["projects", "documents-archive", "/Users/me/projects/noon"]);
         let texts = |fitted: Vec<(usize, String)>| -> Vec<String> {
             fitted.into_iter().map(|(_, text)| text).collect()
         };
         assert_eq!(
-            texts(fit(&names, 1, 50)),
-            ["1 src", "2 /Users/me/projects/noon", "3 ~"]
+            texts(fit(&names, 2, 62)),
+            [
+                "1 projects",
+                "2 documents-archive",
+                "3 /Users/me/projects/noon"
+            ]
         );
-        // ` 1 s~ │ 2 /Users/me/projects/noon │ 3 ~ `: 40 cells.
         assert_eq!(
-            texts(fit(&names, 1, 40)),
-            ["1 s~", "2 /Users/me/projects/noon", "3 ~"]
+            texts(fit(&names, 2, 55)),
+            ["1 projects", "2 docum~hive", "3 /Users/me/projects/noon"],
+            "a hidden tab first"
         );
-        let narrow = texts(fit(&names, 1, 30));
-        assert_eq!(narrow[0], "1 s~");
-        assert_eq!(narrow[2], "3 ~");
-        assert!(
-            narrow[1].starts_with("2 /Use") && narrow[1].ends_with("noon"),
-            "{narrow:?}"
+        assert_eq!(
+            texts(fit(&names, 2, 45)),
+            ["1 projects", "2 docu~ive", "3 /Users/~ts/noon"],
+            "then the one that shows, but no name below eight cells"
         );
-        assert_eq!(cells::width(&narrow[1]), 30 - 6 - 5 - 2 - 2, "{narrow:?}");
-        // Too narrow for all: the active one stays, with neighbours that fit.
-        let many: Vec<String> = (1..=9).map(|n| format!("dir{n}")).collect();
-        let fitted = fit(&many, 8, 20);
-        let shown: Vec<usize> = fitted.iter().map(|(index, _)| *index).collect();
-        assert_eq!(shown.last(), Some(&8), "{fitted:?}");
-        let width: usize = fitted
-            .iter()
-            .map(|(_, label)| cells::width(label) + 2)
-            .sum::<usize>()
-            + fitted.len()
-            - 1;
-        assert!(width <= 20, "{fitted:?}");
+        assert_eq!(
+            texts(fit(&names, 2, 30)),
+            ["2 docu~ive", "3 /Users~s/noon"],
+            "then tabs far from the one that shows go"
+        );
+        assert_eq!(texts(fit(&labels(&["~", "srv"]), 0, 4)), ["1 ~"]);
+    }
+
+    #[test]
+    fn the_tab_that_shows_takes_the_panel_colors_on_a_dark_line() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        use ratatui::style::Color;
+
+        let theme = Theme::mc_classic();
+        let names = labels(&["src", "noon"]);
+        let draw = |focused: bool, in_frame: bool| {
+            let mut terminal = Terminal::new(TestBackend::new(30, 1)).unwrap();
+            let bar = Bar {
+                names: &names,
+                active: 1,
+                focused,
+                theme: &theme,
+            };
+            terminal
+                .draw(|frame| {
+                    if in_frame {
+                        bar.render_frame(frame, frame.area());
+                    } else {
+                        bar.render_line(frame, frame.area());
+                    }
+                })
+                .unwrap();
+            terminal.backend().buffer().clone()
+        };
+        let line = draw(true, false);
+        let cell = |x: u16| line.cell((x, 0)).unwrap().clone();
+        // `║ 1 src │ 2 noon             ║`
+        assert_eq!(cell(0).symbol(), "║");
+        assert_eq!(cell(0).bg, Color::Blue, "the frame's vertical");
+        assert_eq!((cell(2).symbol(), cell(2).bg), ("1", Color::Black));
+        assert_eq!((cell(8).symbol(), cell(8).fg), ("│", Color::Gray));
+        assert_eq!((cell(10).symbol(), cell(10).fg), ("2", Color::LightYellow));
+        assert_eq!((cell(12).symbol(), cell(12).bg), ("n", Color::Blue));
+        assert_eq!(cell(20).bg, Color::Black, "the rest of the line");
+        let idle = draw(false, false);
+        assert_eq!(idle.cell((10, 0)).unwrap().fg, Color::Gray, "no accent");
+        // In the frame, the line of the frame runs between them.
+        let framed = draw(true, true);
+        assert_eq!(framed.cell((2, 0)).unwrap().bg, Color::Black);
+        assert_eq!(framed.cell((10, 0)).unwrap().bg, Color::Blue);
     }
 
     #[test]

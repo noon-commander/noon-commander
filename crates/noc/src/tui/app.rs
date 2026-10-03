@@ -3063,8 +3063,8 @@ impl App {
     }
 }
 
-/// Draws the tab that shows of `tabs` in `area`, and its tabs on `line` if there is one, else
-/// in its frame if it has more than one.
+/// Draws the tab that shows of `tabs` in `area`, and its tabs on `line` if there is one, its
+/// frame joined to it, else in its frame if it has more than one; `focused` if the side has the keys.
 fn render_side(
     frame: &mut Frame<'_>,
     tabs: &mut Tabs,
@@ -3082,7 +3082,10 @@ fn render_side(
         theme: view.theme,
     };
     match line {
-        Some(line) => bar.render_line(frame, line),
+        Some(line) => {
+            bar.render_line(frame, line);
+            tabs::join_frame(frame, area, view.theme);
+        }
         None if tabs.len() > 1 => bar.render_frame(frame, area),
         None => {}
     }
@@ -6068,8 +6071,8 @@ mod tests {
         let text = screen(&mut app);
         assert!(text.contains(" 1 srv │ 2 srv "), "{text}");
         assert!(
-            text.contains("╔ /srv ═"),
-            "the title keeps the whole path: {text}"
+            text.contains("╠ /srv ═"),
+            "the title keeps the whole path, under tees that join the line: {text}"
         );
 
         // Each tab keeps its own cursor.
@@ -6230,5 +6233,26 @@ mod tests {
         assert_eq!(status.key, None, "keys act on the active panel");
         app.run(Command::On(Side::Right, Action::CloseTab));
         assert_eq!(tab_numbers(&app, Side::Right), (vec![2], 2));
+    }
+
+    #[test]
+    fn a_line_of_many_tabs_parts_the_sides_and_marks_those_left_out() {
+        let mut app = loaded();
+        for _ in 0..6 {
+            app.handle(action(Action::NewTab));
+        }
+        app.active = Side::Right;
+        for _ in 0..6 {
+            app.handle(action(Action::NewTab));
+        }
+        for _ in 0..3 {
+            app.handle(action(Action::PrevTab));
+        }
+        let mut terminal = Terminal::new(TestBackend::new(80, 4)).unwrap();
+        let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        terminal
+            .draw(|frame| app.render(frame, now, &TimeZone::UTC))
+            .unwrap();
+        insta::assert_snapshot!(terminal.backend());
     }
 }

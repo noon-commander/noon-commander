@@ -1,0 +1,8 @@
+---
+source: crates/noc/src/tui/app.rs
+expression: terminal.backend()
+---
+"║‹ 4 srv │ 5 srv │ 6 srv │ 7 srv       ║║‹ 3 srv │ 4 srv │ 5 srv │ 6 srv      ›║"
+"╠ /srv ════════════════════════════════╣╠ /srv ════════════════════════════════╣"
+"╚══════════════════════════════════════╝╚══════════════════════════════════════╝"
+"1Help   2       3View   4Edit   5Copy   6RenMov 7Mkdir  8Delete 9PullDn 10Quit  "

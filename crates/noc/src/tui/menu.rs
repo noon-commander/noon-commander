@@ -322,11 +322,12 @@ impl LocationMenu {
             "menu-filter",
             text = cells::sanitize(self.filter.as_bytes())
         );
+        // Right after the text, spaces typed last included.
+        let column = u16::try_from(cells::width(&filter)).unwrap_or(u16::MAX);
         let filter = cells::fit(&filter, width, Align::Left);
-        let column = u16::try_from(cells::width(filter.trim_end())).unwrap_or(0);
         frame.render_widget(Line::styled(filter, theme.dialog), line(0));
         frame.set_cursor_position(Position::new(
-            (inner.x + column + 1).min(inner.right() - 1),
+            inner.x.saturating_add(column).min(inner.right() - 1),
             inner.y,
         ));
         frame.render_widget(Line::styled("─".repeat(width), theme.dialog), line(1));
@@ -737,6 +738,31 @@ mod tests {
         );
         assert_eq!(colors(11), (Color::Red, Color::Gray), "failed");
         assert_eq!(buffer[(5, 10)].symbol(), "󰒋");
+    }
+
+    #[test]
+    fn the_cursor_stands_right_after_the_filter() {
+        let mut menu = menu_at(Location::Root);
+        let mut terminal = Terminal::new(TestBackend::new(50, 14)).unwrap();
+        let hosts = |_: &str| HostState::default();
+        let mut cursor_after = |menu: &mut LocationMenu, text: &str| {
+            typed(menu, text);
+            terminal
+                .draw(|frame| {
+                    let theme = Theme::terminal();
+                    menu.render(frame, frame.area(), &theme, Decor::new(false), &hosts, 0);
+                })
+                .unwrap();
+            terminal.get_cursor_position().unwrap()
+        };
+        let empty = cursor_after(&mut menu, "");
+        let typed = cursor_after(&mut menu, "pr");
+        assert_eq!(typed.x, empty.x + 2);
+        assert_eq!(
+            cursor_after(&mut menu, " ").x,
+            empty.x + 3,
+            "after a space too"
+        );
     }
 
     #[test]

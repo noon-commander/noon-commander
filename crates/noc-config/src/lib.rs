@@ -4,12 +4,15 @@
 //! `config.toml`, [`Hosts`] the schema of `hosts.toml`, and [`DEFAULT_CONFIG`] and
 //! [`DEFAULT_HOSTS`] are the commented templates that `noc config init` writes.
 //! [`save_config`] and [`save_host`] change the files for the TUI, keeping their comments.
+//! [`Workspaces`] is the schema of `workspaces.toml`, the saved tabs of both panels, which
+//! [`save_workspace`], [`remove_workspace`], and [`rename_workspace`] write whole.
 
 mod config;
 mod edit;
 mod error;
 mod hosts;
 mod paths;
+mod workspaces;
 mod write;
 
 pub use config::{
@@ -22,6 +25,10 @@ pub use hosts::{
     DEFAULT_HOSTS, HostConfig, Hosts, SftpHost, local_dir, save_host, write_default_hosts,
 };
 pub use paths::Paths;
+pub use workspaces::{
+    PanelSide, Place, SavedTab, SortBy, Workspace, Workspaces, remove_workspace, rename_workspace,
+    save_workspace,
+};
 
 /// The application name, also used for its directories.
 pub const APP_NAME: &str = "noc";

@@ -102,7 +102,7 @@ pub(crate) struct View<'a> {
 
 /// What a directory is sorted by. Directories always come first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SortKey {
+pub(crate) enum SortKey {
     Name,
     Extension,
     Time,
@@ -186,6 +186,17 @@ impl Destination {
             focus: Focus::First,
         }
     }
+
+    /// `location`, with the cursor on `name`: a host's alias in the virtual root and the list
+    /// of hosts, else an entry's name; on the first row if it is not there.
+    pub(crate) fn onto(location: Location, name: &str) -> Self {
+        let focus = if location.is_virtual() {
+            Focus::Host(name.to_owned())
+        } else {
+            Focus::Name(name.as_bytes().to_vec())
+        };
+        Self { location, focus }
+    }
 }
 
 /// A row of the listing.
@@ -244,6 +255,17 @@ impl Panel {
     /// `home`, which `~` in dialogs stands for too; `show_hidden` shows names that start with a
     /// dot.
     pub(crate) fn new(location: Location, home: PathBuf, show_hidden: bool) -> (Self, ListRequest) {
+        Self::at(Destination::to(location), home, show_hidden)
+    }
+
+    /// A panel for `destination`, with the cursor where it says once the listing arrives, and
+    /// the request for that listing.
+    pub(crate) fn at(
+        destination: Destination,
+        home: PathBuf,
+        show_hidden: bool,
+    ) -> (Self, ListRequest) {
+        let Destination { location, focus } = destination;
         let listing = match location {
             Location::Root => Listing::Root {
                 volumes: Vec::new(),
@@ -274,7 +296,7 @@ impl Panel {
             error: None,
             column_lines: Vec::new(),
         };
-        let request = panel.open(location, Focus::First);
+        let request = panel.open(location, focus);
         (panel, request)
     }
 
@@ -753,6 +775,17 @@ impl Panel {
         self.rearrange();
     }
 
+    /// What the panel is sorted by, and whether the order is reversed.
+    pub(crate) fn sort_order(&self) -> (SortKey, bool) {
+        (self.sort.key, self.sort.descending)
+    }
+
+    /// Sorts by `key`, reversed if `descending`.
+    pub(crate) fn set_sort_order(&mut self, key: SortKey, descending: bool) {
+        self.sort = Sort { key, descending };
+        self.rearrange();
+    }
+
     /// Goes to `destination`; returns the listing to request.
     pub(crate) fn go(&mut self, destination: Destination) -> ListRequest {
         self.open(destination.location, destination.focus)
@@ -764,6 +797,22 @@ impl Panel {
             location: self.location.clone(),
             focus: self.focus(),
         }
+    }
+
+    /// Where the panel is going, as a workspace saves it: the location it waits for, else the
+    /// one it shows; and the name the cursor is on, or goes to, there: an entry's name or a
+    /// host's alias.
+    pub(crate) fn heading(&self) -> (Location, Option<Vec<u8>>) {
+        let (location, focus) = match &self.pending {
+            Some(pending) => (pending.location.clone(), pending.focus.clone()),
+            None => (self.location.clone(), self.focus()),
+        };
+        let name = match focus {
+            Focus::Name(name) | Focus::Near { name, .. } => Some(name),
+            Focus::Host(alias) => Some(alias.into_bytes()),
+            Focus::First | Focus::Volume(_) | Focus::Sftp | Focus::Home => None,
+        };
+        (location, name)
     }
 
     /// `location`, with the cursor on the directory the panel shows if `location` is its

@@ -524,6 +524,26 @@ sequence. Sections marked (noc) exist only in noc.
 | Next tab | | Alt+Right<br>Ctrl+X n | — | — | — |
 | Previous tab | | Alt+Left<br>Ctrl+X p | — | — | — |
 | Tab list | | Ctrl+X Tab | — | — | — |
+| Workspaces window | | Alt+W | — | — | — |
+| Save the tabs of both panels as a workspace | | Alt+Shift+W | — | — | — |
+
+## Workspaces window (noc)
+
+Alt+W, or F9 → Workspace → Workspace list…; F9 → Workspace lists the first ten too, by their
+digits.
+
+| Action | Status | noc (default) | noc (vim) | mc | far |
+| --- | --- | --- | --- | --- | --- |
+| Save the tabs of both panels as a new workspace | | Insert | — | — | — |
+| Previous / next workspace | | Up / Down | — | — | — |
+| Page up / down | | PgUp / PgDn | — | — | — |
+| First / last workspace | | Home / End | — | — | — |
+| Restore (replace the tabs of both panels) | | Enter | — | — | — |
+| Restore by number (empty filter) | | 1…9, 0 | — | — | — |
+| Remove last filter character | | Backspace | — | — | — |
+| Rename | | F6 | — | — | — |
+| Delete | | F8<br>Delete | — | — | — |
+| Close | | Esc<br>F10 | — | — | — |
 
 ## Location menu (noc)
 

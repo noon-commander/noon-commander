@@ -2,7 +2,7 @@
 source: crates/noc/src/tui/pulldown.rs
 expression: "draw(&menu, &Theme::terminal())"
 ---
-"  Left     File     Command     Options     Right               "
+"  Left     File     Command     Options     Workspace     Right "
 "          ╔══════════════════════════════╗                      "
 "          ║   View                    F3 ║                      "
 "          ║   Edit                       ║                      "

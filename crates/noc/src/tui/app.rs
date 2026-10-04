@@ -7,7 +7,10 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 
 use jiff::tz::TimeZone;
-use noc_config::{Config, HostConfig, Hosts, MenuBar, SftpHost, TabBar, UiConfig};
+use noc_config::{
+    Config, HostConfig, Hosts, MenuBar, PanelSide, SftpHost, TabBar, UiConfig, Workspace,
+    Workspaces,
+};
 use noc_ops::{Algorithm, Conflict, CopyOptions, Decision, Sum};
 use noc_tools::zoxide::Scored;
 use noc_vfs::{FileKind, Location, Metadata, RemotePath};
@@ -39,6 +42,7 @@ use super::sums::{Mark, SumRow, SumsButton, SumsEvent, SumsWindow, Verdict};
 use super::tabs::{self, Bar, PanelId, Tab, Tabs};
 use super::tasks::{HostHandle, JobEvent};
 use super::theme::{ColorDepth, Theme};
+use super::workspaces::{self, WorkspacesEvent, WorkspacesWindow};
 use crate::i18n::fl;
 
 /// One of the two panels, named by the side it starts on. Ctrl-U swaps where the panels are
@@ -165,6 +169,24 @@ pub(crate) enum Effect {
         new: Box<Config>,
         config: Box<Config>,
     },
+    /// Read or change `workspaces.toml`, after the changes before, and report to
+    /// [`App::workspaces`].
+    Workspaces(WorkspaceChange),
+}
+
+/// What to do with `workspaces.toml`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum WorkspaceChange {
+    /// Read it.
+    Load,
+    /// Save a workspace, in place of the one with its name if there is one.
+    Save(Workspace),
+    Remove(String),
+    /// Rename `from`, in its place, replacing another workspace named `to`.
+    Rename {
+        from: String,
+        to: String,
+    },
 }
 
 /// A host that is connected or on its way. `connection` tells attempts apart, so that reports
@@ -204,6 +226,7 @@ const COPY_DIALOG_WIDTH: u16 = 70;
 const HOST_DIALOG_WIDTH: u16 = 70;
 const CHECKSUM_DIALOG_WIDTH: u16 = 70;
 const TAB_DIALOG_WIDTH: u16 = 70;
+const WORKSPACE_DIALOG_WIDTH: u16 = 60;
 /// The fields of the dialog of F4 on a host.
 const HOST_LABEL: usize = 0;
 const HOST_START_DIR: usize = 1;
@@ -277,10 +300,28 @@ enum Purpose {
     TabList { side: Side },
     /// Quick cd in `panel`: OK opens the path typed there.
     QuickCd { panel: PanelId },
+    /// A question about workspaces.
+    Workspace(WorkspaceQuestion),
     /// F10 while jobs run: Yes quits and stops them.
     Quit,
     /// Something to read, such as an error.
     Info,
+}
+
+/// What a dialog about workspaces is for.
+#[derive(Debug)]
+enum WorkspaceQuestion {
+    /// Alt-Shift-W, or Insert in the window: OK saves the tabs of both panels under the name
+    /// typed.
+    Save,
+    /// The name typed for `workspace` is taken: Yes saves it in place of that one.
+    Replace { workspace: Workspace },
+    /// F6 in the window of the workspaces: OK renames `from` to the name typed.
+    Rename { from: String },
+    /// The new name of `from` is taken: Yes renames it, and the other one goes.
+    RenameOver { from: String, to: String },
+    /// F8 in the window of the workspaces: Yes deletes `name`.
+    Delete { name: String },
 }
 
 /// Which hosts a path field takes before a `:`.
@@ -539,6 +580,12 @@ pub(crate) struct App {
     /// The Configuration dialog, over the panels and the menus, under the other windows and
     /// the dialogs.
     configuration: Option<Configuration>,
+    /// The saved workspaces, as `workspaces.toml` held them last.
+    workspaces: Workspaces,
+    /// The workspace restored or saved last, which the dialog of Alt-Shift-W offers.
+    workspace: Option<String>,
+    /// The window of the saved workspaces, over the panels and under the dialogs.
+    workspaces_window: Option<WorkspacesWindow>,
     /// The home directory, the first row of the location menu.
     home: PathBuf,
     /// The title of the virtual root: the name of this machine.
@@ -616,6 +663,9 @@ impl App {
             pulldown: None,
             pulldown_place: None,
             configuration: None,
+            workspaces: Workspaces::default(),
+            workspace: None,
+            workspaces_window: None,
             home: home.to_path_buf(),
             root_title: fl!("root-title"),
             keymap: Keymap::mc(),
@@ -708,6 +758,8 @@ impl App {
             Context::Menu
         } else if self.jump.is_some() {
             Context::Jump
+        } else if self.workspaces_window.is_some() {
+            Context::Workspaces
         } else if !self.results.is_empty()
             || self.in_front().is_some()
             || self.jobs_list.is_some()
@@ -739,6 +791,14 @@ impl App {
 
     /// Whether the app does something for `action` now; the F-key bar shows only those.
     fn supports(&self, action: Action) -> bool {
+        if self.context() == Context::Workspaces {
+            // F6 and F8 rename and delete the workspace under the cursor.
+            let chosen = self
+                .workspaces_window
+                .as_ref()
+                .is_some_and(WorkspacesWindow::has_chosen);
+            return action == Action::Cancel || chosen;
+        }
         match action {
             Action::Help
             | Action::Quit
@@ -954,13 +1014,23 @@ impl App {
         request.map_or_else(Vec::new, |request| self.route(id, request))
     }
 
-    /// The tab that shows on `side` now reads its location again if it changed while hidden.
+    /// The tab that shows on `side` now asks for its first listing if a workspace restored it
+    /// hidden, or reads its location again if it changed while hidden.
     fn revealed(&mut self, side: Side) -> Vec<Effect> {
         let tab = self.tabs_mut(side).active_mut();
+        let id = tab.id;
+        if let Some(request) = tab.deferred.take()
+            && tab
+                .panel
+                .pending_request()
+                .is_some_and(|pending| pending.generation == request.generation)
+        {
+            tab.stale = false;
+            return self.route(id, request);
+        }
         if !std::mem::take(&mut tab.stale) {
             return Vec::new();
         }
-        let id = tab.id;
         let here = tab.panel.here();
         let request = tab.panel.go(here);
         self.route(id, request)
@@ -997,6 +1067,9 @@ impl App {
         }
         if self.jump.is_some() {
             return Some(self.handle_jump(input));
+        }
+        if self.workspaces_window.is_some() {
+            return Some(self.handle_workspaces(input));
         }
         if self.handle_results(input) || self.handle_job(input) || self.handle_jobs_list(input) {
             return Some(Vec::new());
@@ -1108,6 +1181,8 @@ impl App {
             Action::LocationMenuRight => return self.open_menu(Side::Right),
             Action::Jump => return self.open_jump(),
             Action::QuickCd => self.ask_cd(),
+            Action::SaveWorkspace => self.ask_save_workspace(true),
+            Action::Workspaces => self.open_workspaces(),
             Action::PullDown => self.open_pulldown(),
             _ => {
                 let id = self.shown(self.active);
@@ -1198,6 +1273,261 @@ impl App {
                 let generation = self.menu_listings;
                 menu.reload(generation);
                 vec![Effect::ListPlaces { generation }]
+            }
+        }
+    }
+
+    /// Asks for a name, and saves the tabs of both panels under it; it offers the name of the
+    /// workspace restored or saved last if `again`, else none, for a new one.
+    fn ask_save_workspace(&mut self, again: bool) {
+        let name = match &self.workspace {
+            Some(name) if again => name.clone(),
+            _ => String::new(),
+        };
+        let (title, prompt) = (fl!("workspaces-save-title"), fl!("workspaces-save-prompt"));
+        let dialog = Dialog::form(&title, &prompt, &name, &[], WORKSPACE_DIALOG_WIDTH);
+        self.dialogs.push_back(Open {
+            dialog,
+            purpose: Purpose::Workspace(WorkspaceQuestion::Save),
+        });
+    }
+
+    /// Saves the tabs of both panels under `name`, the text of the dialog of Alt-Shift-W. A name
+    /// that another workspace has asks first; that of the workspace restored or saved last
+    /// does not, as saving it again is what the dialog offers.
+    fn save_workspace_as(&mut self, name: &str) -> Vec<Effect> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Vec::new();
+        }
+        let workspace = self.workspace_named(name.to_owned());
+        if self.workspaces.get(name).is_some() && self.workspace.as_deref() != Some(name) {
+            let message = fl!(
+                "workspaces-replace",
+                name = cells::sanitize(name.as_bytes())
+            );
+            let buttons = vec![Button::Yes, Button::No];
+            let title = fl!("workspaces-replace-title");
+            let dialog = Dialog::question(&title, &message, buttons, 0, false);
+            self.dialogs.push_back(Open {
+                dialog,
+                purpose: Purpose::Workspace(WorkspaceQuestion::Replace { workspace }),
+            });
+            return Vec::new();
+        }
+        self.save_workspace(workspace)
+    }
+
+    fn save_workspace(&mut self, workspace: Workspace) -> Vec<Effect> {
+        self.workspace = Some(workspace.name.clone());
+        if let Some(window) = &mut self.workspaces_window {
+            window.focus(&workspace.name);
+        }
+        vec![Effect::Workspaces(WorkspaceChange::Save(workspace))]
+    }
+
+    /// The tabs of both panels, as a workspace named `name`.
+    fn workspace_named(&self, name: String) -> Workspace {
+        let saved = |side: Side| {
+            let tabs = self.tabs(side);
+            // One tab needs no mark of the one that shows.
+            let several = tabs.len() > 1;
+            tabs.iter()
+                .enumerate()
+                .map(|(index, tab)| {
+                    let current = several && index == tabs.index();
+                    workspaces::saved_tab(&tab.panel, current, &self.home)
+                })
+                .collect()
+        };
+        Workspace {
+            name,
+            active: match self.active {
+                Side::Left => PanelSide::Left,
+                Side::Right => PanelSide::Right,
+            },
+            left: saved(Side::Left),
+            right: saved(Side::Right),
+        }
+    }
+
+    /// Replaces the tabs of both panels with those of the workspace `name`. The tabs that show
+    /// list their locations at once, the others once they show; the tabs that close take
+    /// their marks with them.
+    fn restore_workspace(&mut self, name: &str) -> Vec<Effect> {
+        let Some(workspace) = self.workspaces.get(name).cloned() else {
+            let name = cells::sanitize(name.as_bytes());
+            self.show_error(&fl!("workspaces-gone", name = name));
+            return Vec::new();
+        };
+        let show_hidden = self.config.ui.show_hidden;
+        let mut effects = Vec::new();
+        for (side, saved) in [
+            (Side::Left, &workspace.left),
+            (Side::Right, &workspace.right),
+        ] {
+            let current = workspaces::current_of(saved);
+            let mut tabs = Vec::with_capacity(saved.len());
+            let mut first = None;
+            for (index, saved) in saved.iter().enumerate() {
+                let (panel, request) = workspaces::restored_panel(saved, &self.home, show_hidden);
+                self.last_tab += 1;
+                let id = PanelId {
+                    side,
+                    tab: self.last_tab,
+                };
+                let mut tab = Tab::new(id, panel);
+                if index == current {
+                    first = Some((id, request));
+                } else {
+                    // Should the request be lost on the way, the tab reads its location then.
+                    tab.stale = true;
+                    tab.deferred = Some(request);
+                }
+                tabs.push(tab);
+            }
+            // `workspaces.toml` holds no side without tabs.
+            if let Some(tabs) = Tabs::of(tabs, current) {
+                *self.tabs_mut(side) = tabs;
+            }
+            if let Some((id, request)) = first {
+                effects.extend(self.route(id, request));
+            }
+        }
+        self.active = match workspace.active {
+            PanelSide::Left => Side::Left,
+            PanelSide::Right => Side::Right,
+        };
+        self.workspace = Some(workspace.name);
+        self.sync_connected();
+        effects
+    }
+
+    /// Opens the window of the saved workspaces.
+    fn open_workspaces(&mut self) {
+        let rows = workspaces::Row::all(&self.workspaces);
+        let window = WorkspacesWindow::new(rows, self.config.ui.fuzzy_search);
+        self.workspaces_window = Some(window);
+    }
+
+    /// Gives a key to the window of the saved workspaces: a restored one closes it; saving,
+    /// renaming, and deleting ask in a dialog over it.
+    fn handle_workspaces(&mut self, input: Resolved) -> Vec<Effect> {
+        let Some(window) = &mut self.workspaces_window else {
+            return Vec::new();
+        };
+        match window.handle(input) {
+            WorkspacesEvent::Pending => {}
+            WorkspacesEvent::Closed => self.workspaces_window = None,
+            WorkspacesEvent::Save => self.ask_save_workspace(false),
+            WorkspacesEvent::Restore(name) => {
+                self.workspaces_window = None;
+                return self.restore_workspace(&name);
+            }
+            WorkspacesEvent::Rename(from) => {
+                let shown = cells::sanitize(from.as_bytes());
+                let title = fl!("workspaces-rename-title");
+                let prompt = fl!("workspaces-rename-prompt", name = shown);
+                let dialog = Dialog::form(&title, &prompt, &from, &[], WORKSPACE_DIALOG_WIDTH);
+                self.dialogs.push_back(Open {
+                    dialog,
+                    purpose: Purpose::Workspace(WorkspaceQuestion::Rename { from }),
+                });
+            }
+            WorkspacesEvent::Delete(name) => {
+                let shown = cells::sanitize(name.as_bytes());
+                let message = fl!("workspaces-delete", name = shown);
+                let buttons = vec![Button::Yes, Button::No];
+                let title = fl!("workspaces-delete-title");
+                let dialog = Dialog::question(&title, &message, buttons, 0, true);
+                self.dialogs.push_back(Open {
+                    dialog,
+                    purpose: Purpose::Workspace(WorkspaceQuestion::Delete { name }),
+                });
+            }
+        }
+        Vec::new()
+    }
+
+    /// Renames the workspace `from` to `to`, the text of the dialog of F6; a name that another
+    /// workspace has asks first.
+    fn rename_workspace(&mut self, from: String, to: &str) -> Vec<Effect> {
+        let to = to.trim();
+        if to.is_empty() || to == from {
+            return Vec::new();
+        }
+        if self.workspaces.get(to).is_some() {
+            let message = fl!(
+                "workspaces-rename-replace",
+                name = cells::sanitize(to.as_bytes())
+            );
+            let buttons = vec![Button::Yes, Button::No];
+            let title = fl!("workspaces-rename-title");
+            let dialog = Dialog::question(&title, &message, buttons, 1, false);
+            let to = to.to_owned();
+            self.dialogs.push_back(Open {
+                dialog,
+                purpose: Purpose::Workspace(WorkspaceQuestion::RenameOver { from, to }),
+            });
+            return Vec::new();
+        }
+        self.renamed(from, to.to_owned())
+    }
+
+    fn renamed(&mut self, from: String, to: String) -> Vec<Effect> {
+        if self.workspace.as_ref() == Some(&from) {
+            self.workspace = Some(to.clone());
+        } else if self.workspace.as_ref() == Some(&to) {
+            self.workspace = None;
+        }
+        vec![Effect::Workspaces(WorkspaceChange::Rename { from, to })]
+    }
+
+    fn delete_workspace(&mut self, name: String) -> Vec<Effect> {
+        if self.workspace.as_ref() == Some(&name) {
+            self.workspace = None;
+        }
+        vec![Effect::Workspaces(WorkspaceChange::Remove(name))]
+    }
+
+    /// Does what a dialog about workspaces was for, once `event` closed it with `text` in its
+    /// field.
+    fn workspace_dialog_closed(
+        &mut self,
+        text: &str,
+        question: WorkspaceQuestion,
+        event: DialogEvent,
+    ) -> Vec<Effect> {
+        let ok = event == DialogEvent::Pressed(Button::Ok);
+        let yes = event == DialogEvent::Pressed(Button::Yes);
+        match question {
+            WorkspaceQuestion::Save if ok => self.save_workspace_as(text),
+            WorkspaceQuestion::Replace { workspace } if yes => self.save_workspace(workspace),
+            WorkspaceQuestion::Rename { from } if ok => self.rename_workspace(from, text),
+            WorkspaceQuestion::RenameOver { from, to } if yes => self.renamed(from, to),
+            WorkspaceQuestion::Delete { name } if yes => self.delete_workspace(name),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Takes the end of an [`Effect::Workspaces`]: the workspaces as `workspaces.toml` holds
+    /// them now, or why it could not be read, or changed if `changed`.
+    pub(crate) fn workspaces_changed(&mut self, changed: bool, result: Result<Workspaces, String>) {
+        match result {
+            Ok(workspaces) => {
+                self.workspaces = workspaces;
+                if let Some(window) = &mut self.workspaces_window {
+                    window.set_rows(workspaces::Row::all(&self.workspaces));
+                }
+            }
+            Err(reason) => {
+                let reason = cells::sanitize(reason.as_bytes());
+                let message = if changed {
+                    fl!("workspaces-save-error", reason = reason)
+                } else {
+                    fl!("workspaces-load-error", reason = reason)
+                };
+                self.show_error(&message);
             }
         }
     }
@@ -1411,6 +1741,7 @@ impl App {
             self.active,
             self.swapped,
             self.pulldown_place.as_ref(),
+            &workspaces::names(&self.workspaces),
             &|command| self.command_status(command),
         );
         self.pulldown = Some(pulldown);
@@ -1465,6 +1796,13 @@ impl App {
                 self.configuration = Some(configuration);
                 Vec::new()
             }
+            Command::Workspace(index) => match self.workspaces.workspaces.get(index) {
+                Some(workspace) => {
+                    let name = workspace.name.clone();
+                    self.restore_workspace(&name)
+                }
+                None => Vec::new(),
+            },
         }
     }
 
@@ -1558,6 +1896,8 @@ impl App {
                     | Action::OtherPanelOpen
                     | Action::OtherPanelSync
                     | Action::Jobs
+                    | Action::SaveWorkspace
+                    | Action::Workspaces
                     | Action::ToggleHidden => true,
                     _ => self.supports(action),
                 },
@@ -1595,6 +1935,15 @@ impl App {
             Command::Configuration => Status {
                 enabled: true,
                 ..Status::default()
+            },
+            Command::Workspace(index) => Status {
+                enabled: true,
+                checked: self
+                    .workspaces
+                    .workspaces
+                    .get(index)
+                    .is_some_and(|workspace| self.workspace.as_ref() == Some(&workspace.name)),
+                key: None,
             },
         }
     }
@@ -1658,25 +2007,11 @@ impl App {
             }
             Purpose::Failure { job, reply } => {
                 self.answered(job);
-                let decision = match event {
-                    DialogEvent::Pressed(Button::Skip) => Decision::Skip,
-                    DialogEvent::Pressed(Button::SkipAll) => Decision::SkipAll,
-                    DialogEvent::Pressed(Button::Retry) => Decision::Retry,
-                    _ => Decision::Abort,
-                };
-                let _ = reply.send(decision);
+                let _ = reply.send(decision_of(event));
             }
             Purpose::Conflict { job, reply } => {
                 self.answered(job);
-                let conflict = match event {
-                    DialogEvent::Pressed(Button::Yes) => Conflict::Overwrite,
-                    DialogEvent::Pressed(Button::No) => Conflict::Skip,
-                    DialogEvent::Pressed(Button::All) => Conflict::OverwriteAll,
-                    DialogEvent::Pressed(Button::KeepAll) => Conflict::SkipAll,
-                    DialogEvent::Pressed(Button::Older) => Conflict::OverwriteOlder,
-                    _ => Conflict::Abort,
-                };
-                let _ = reply.send(conflict);
+                let _ = reply.send(conflict_of(event));
             }
             Purpose::EditHost { name, old, .. } if ok => {
                 return save_host(name, old.as_ref(), dialog);
@@ -1706,6 +2041,9 @@ impl App {
                 }
             }
             Purpose::QuickCd { panel } if ok => return self.cd(panel, dialog.text()),
+            Purpose::Workspace(question) => {
+                return self.workspace_dialog_closed(dialog.text(), question, event);
+            }
             Purpose::Quit => self.quit = event == DialogEvent::Pressed(Button::Yes),
             Purpose::EditHost { .. }
             | Purpose::TabList { .. }
@@ -3166,9 +3504,11 @@ impl App {
         };
         let mut effects = Vec::new();
         for id in self.panel_ids() {
-            if let Some(panel) = self.panel_of(id)
-                && let Some(request) = panel.pending_request()
-                && waits_for(panel, host)
+            // A tab that a workspace restored hidden asks once it shows.
+            if let Some(tab) = self.tabs(id.side).get(id.tab)
+                && tab.deferred.is_none()
+                && let Some(request) = tab.panel.pending_request()
+                && waits_for(&tab.panel, host)
             {
                 effects.extend(self.route(id, request));
             }
@@ -3377,6 +3717,15 @@ impl App {
                 jump.render(frame, panels, &self.theme);
             }
         }
+        self.render_windows(frame, panels);
+    }
+
+    /// The windows over `panels`, those in front last: the workspaces, the Configuration
+    /// dialog, the help, the jobs, the checksums, and the dialogs.
+    fn render_windows(&mut self, frame: &mut Frame<'_>, panels: Rect) {
+        if let Some(window) = &mut self.workspaces_window {
+            window.render(frame, panels, &self.theme);
+        }
         if let Some(configuration) = &mut self.configuration {
             configuration.render(frame, panels, &self.theme);
         }
@@ -3462,11 +3811,15 @@ impl App {
     /// The F-key bar: ten equal slots, each the key number and the label of its action.
     fn render_fkeys(&self, frame: &mut Frame<'_>, area: Rect) {
         let slots = Layout::horizontal([Constraint::Fill(1); 10]).split(area);
-        let actions = self.keymap.fkeys(self.context());
+        let context = self.context();
+        let actions = self.keymap.fkeys(context);
         for (number, (slot, action)) in (1..).zip(slots.iter().zip(actions)) {
             let label = action
                 .filter(|action| self.supports(*action))
-                .and_then(fkey_label)
+                .and_then(|action| match (context, action) {
+                    (Context::Workspaces, Action::Move) => Some(fl!("fkey-rename")),
+                    _ => fkey_label(action),
+                })
                 .unwrap_or_default();
             let number = number.to_string();
             // The label's color fills its slot, as in mc.
@@ -3533,6 +3886,28 @@ fn theme_of(ui: &UiConfig, depth: ColorDepth) -> Theme {
     Theme::by_name(&ui.theme, depth)
         .unwrap_or_else(Theme::mc_classic)
         .with_borders(ui.borders)
+}
+
+/// What a job does after a failure, by the button `event` pressed.
+fn decision_of(event: DialogEvent) -> Decision {
+    match event {
+        DialogEvent::Pressed(Button::Skip) => Decision::Skip,
+        DialogEvent::Pressed(Button::SkipAll) => Decision::SkipAll,
+        DialogEvent::Pressed(Button::Retry) => Decision::Retry,
+        _ => Decision::Abort,
+    }
+}
+
+/// What a copy does with a taken name, by the button `event` pressed.
+fn conflict_of(event: DialogEvent) -> Conflict {
+    match event {
+        DialogEvent::Pressed(Button::Yes) => Conflict::Overwrite,
+        DialogEvent::Pressed(Button::No) => Conflict::Skip,
+        DialogEvent::Pressed(Button::All) => Conflict::OverwriteAll,
+        DialogEvent::Pressed(Button::KeepAll) => Conflict::SkipAll,
+        DialogEvent::Pressed(Button::Older) => Conflict::OverwriteOlder,
+        _ => Conflict::Abort,
+    }
 }
 
 /// Saves what the dialog of F4 on the host `name` holds, if it changed anything.
@@ -6705,6 +7080,313 @@ mod tests {
         app.handle(action(Action::Up));
         assert!(app.handle(action(Action::Confirm)).is_empty());
         assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3], 1));
+    }
+
+    /// Saves the tabs of both panels as `name` with Alt-Shift-W, and returns what is saved.
+    fn save_as(app: &mut App, name: &str) -> Workspace {
+        assert!(app.handle(action(Action::SaveWorkspace)).is_empty());
+        app.handle(action(Action::DeleteToStart));
+        typed(app, name);
+        let Effect::Workspaces(WorkspaceChange::Save(workspace)) =
+            one(app.handle(action(Action::Confirm)))
+        else {
+            panic!("expected a workspace to save");
+        };
+        workspace
+    }
+
+    /// `workspaces.toml` holds `saved` now.
+    fn holds(app: &mut App, saved: &[Workspace]) {
+        let workspaces = Workspaces {
+            workspaces: saved.to_vec(),
+        };
+        app.workspaces_changed(true, Ok(workspaces));
+    }
+
+    /// A workspace: on the left `~/src`, sorted by time, with the cursor on `notes`, then `web:/var/www`,
+    /// which shows; on the right the root, which has the keys.
+    fn noon() -> Workspace {
+        use noc_config::{Place, SavedTab, SortBy};
+
+        let tab = |place: Place| SavedTab {
+            place,
+            sort: SortBy::Name,
+            descending: false,
+            cursor: None,
+            current: false,
+        };
+        Workspace {
+            name: "noon".to_owned(),
+            active: PanelSide::Right,
+            left: vec![
+                SavedTab {
+                    sort: SortBy::Time,
+                    descending: true,
+                    cursor: Some("notes".to_owned()),
+                    ..tab(Place::Local("~/src".to_owned()))
+                },
+                SavedTab {
+                    current: true,
+                    ..tab(Place::Remote {
+                        host: "web".to_owned(),
+                        path: "/var/www".to_owned(),
+                    })
+                },
+            ],
+            right: vec![tab(Place::Root)],
+        }
+    }
+
+    #[test]
+    fn alt_shift_w_saves_the_tabs_of_both_panels_under_a_name() {
+        use noc_config::{Place, SortBy};
+
+        let mut app = loaded();
+        app.handle(action(Action::Down));
+        app.handle(action(Action::SortBySize));
+        app.handle(action(Action::NewTab));
+        app.handle(action(Action::PrevTab));
+        app.handle(action(Action::SwitchPanel));
+        let workspace = save_as(&mut app, " noon ");
+        assert_eq!(workspace.name, "noon", "without the spaces around it");
+        assert_eq!(workspace.active, PanelSide::Right);
+        let left = &workspace.left;
+        assert_eq!(left.len(), 2);
+        assert_eq!(left[0].place, Place::Local("/srv".to_owned()));
+        assert_eq!(left[0].cursor.as_deref(), Some("left"));
+        assert_eq!((left[0].sort, left[0].descending), (SortBy::Size, true));
+        assert!(left[0].current && !left[1].current);
+        assert!(!workspace.right[0].current, "one tab needs no mark");
+        assert_eq!(app.workspace.as_deref(), Some("noon"));
+
+        // Its name comes back, and saving it again asks nothing.
+        holds(&mut app, &[workspace]);
+        app.handle(action(Action::SaveWorkspace));
+        let text = screen_of(&mut app, 16);
+        assert!(
+            text.contains("Save workspace") && text.contains("noon"),
+            "{text}"
+        );
+        assert!(matches!(
+            one(app.handle(action(Action::Confirm))),
+            Effect::Workspaces(WorkspaceChange::Save(_))
+        ));
+        // An empty name saves nothing.
+        app.handle(action(Action::SaveWorkspace));
+        app.handle(action(Action::DeleteToStart));
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+    }
+
+    #[test]
+    fn the_name_of_another_workspace_asks_before_replacing_it() {
+        let mut app = loaded();
+        holds(&mut app, &[noon()]);
+        app.handle(action(Action::SaveWorkspace));
+        typed(&mut app, "noon");
+        assert!(app.handle(action(Action::Confirm)).is_empty(), "asks first");
+        assert!(screen_of(&mut app, 16).contains("Replace it"));
+        let Effect::Workspaces(WorkspaceChange::Save(workspace)) =
+            one(app.handle(action(Action::Confirm)))
+        else {
+            panic!("expected a workspace to save");
+        };
+        assert_eq!(
+            workspace.right[0].place,
+            noc_config::Place::Local("/srv".to_owned())
+        );
+    }
+
+    #[test]
+    fn restoring_replaces_every_tab_and_hidden_ones_list_when_they_show() {
+        let mut app = loaded();
+        app.handle(action(Action::NewTab));
+        holds(&mut app, &[noon()]);
+        let effects = app.restore_workspace("noon");
+        // The tab that shows on the left waits for web; the hidden one lists nothing yet.
+        let [
+            Effect::Connect { connection, .. },
+            Effect::List {
+                panel: right,
+                request,
+                host: None,
+            },
+        ] = &effects[..]
+        else {
+            panic!("unexpected {effects:?}");
+        };
+        assert_eq!(right.side, Side::Right);
+        assert_eq!(request.location, Location::Root);
+        assert_eq!(app.active, Side::Right);
+        assert_eq!(tab_numbers(&app, Side::Left), (vec![4, 5], 5), "new tabs");
+        assert_eq!(app.panel(Side::Left).location(), &remote("web", "/var/www"));
+        assert_eq!(app.workspace.as_deref(), Some("noon"));
+
+        // web connects: only the tab that shows lists.
+        let (handle, _requests) = HostHandle::channel();
+        let effects = app.connected("web", *connection, handle);
+        let [Effect::List { panel, .. }] = &effects[..] else {
+            panic!("expected one listing, got {effects:?}");
+        };
+        assert_eq!(panel.tab, 5);
+
+        // The hidden one asks once it shows, sorted and with its cursor as saved.
+        app.active = Side::Left;
+        let effects = app.handle(action(Action::PrevTab));
+        let [Effect::List { panel, request, .. }] = &effects[..] else {
+            panic!("expected a listing, got {effects:?}");
+        };
+        assert_eq!((panel.tab, &request.location), (4, &local("/home/me/src")));
+        answer(
+            &mut app,
+            effects,
+            &Listing::Dir(vec![dir("a"), dir("notes"), dir("z")]),
+        );
+        assert_eq!(
+            app.panel(Side::Left).name_under_cursor(),
+            Some(&b"notes"[..])
+        );
+        assert_eq!(
+            app.panel(Side::Left).sort_action(),
+            Action::SortByTime,
+            "sorted as saved"
+        );
+        assert!(
+            app.handle(action(Action::NextTab)).is_empty()
+                && app.handle(action(Action::PrevTab)).is_empty(),
+            "listed once"
+        );
+    }
+
+    #[test]
+    fn a_workspace_gone_meanwhile_says_so() {
+        let mut app = loaded();
+        assert!(app.restore_workspace("noon").is_empty());
+        assert!(screen_of(&mut app, 16).contains("is not saved any more"));
+    }
+
+    #[test]
+    fn f9_lists_the_workspaces_and_restores_one_by_its_digit() {
+        let mut app = loaded();
+        let mut other = noon();
+        other.name = "photos".to_owned();
+        holds(&mut app, &[other, noon()]);
+        app.handle(action(Action::PullDown));
+        app.handle(Resolved::Insert('w'));
+        let text = screen_of(&mut app, 16);
+        assert!(
+            text.contains("Save workspace…")
+                && text.contains("1 photos")
+                && text.contains("2 noon"),
+            "{text}"
+        );
+        let effects = app.handle(Resolved::Insert('2'));
+        assert!(!effects.is_empty());
+        assert_eq!(app.workspace.as_deref(), Some("noon"));
+        app.handle(action(Action::PullDown));
+        assert!(
+            screen_of(&mut app, 16).contains("* 2 noon"),
+            "the one restored last"
+        );
+    }
+
+    #[test]
+    fn the_workspaces_window_saves_restores_renames_and_deletes() {
+        let mut app = loaded();
+        let mut photos = noon();
+        photos.name = "photos".to_owned();
+        holds(&mut app, &[noon(), photos]);
+        app.workspace = Some("noon".to_owned());
+        assert!(app.handle(action(Action::Workspaces)).is_empty());
+        assert_eq!(app.context(), Context::Workspaces);
+
+        // Insert saves the tabs as a new workspace: the name starts empty.
+        app.handle(action(Action::SaveWorkspace));
+        assert_eq!(app.context(), Context::DialogInput);
+        typed(&mut app, "srv");
+        let effects = app.handle(action(Action::Confirm));
+        let [Effect::Workspaces(WorkspaceChange::Save(saved))] = &effects[..] else {
+            panic!("unexpected {effects:?}");
+        };
+        assert_eq!(saved.name, "srv");
+        let mut photos = noon();
+        photos.name = "photos".to_owned();
+        holds(&mut app, &[noon(), photos, saved.clone()]);
+        assert_eq!(app.context(), Context::Workspaces, "still open");
+        assert!(
+            matches!(
+                &app.handle(action(Action::Confirm))[..],
+                [Effect::List { .. }, ..]
+            ),
+            "the cursor went to the new one, which restores at once"
+        );
+        assert_eq!(app.workspace.as_deref(), Some("srv"));
+        app.workspace = Some("noon".to_owned());
+        holds(
+            &mut app,
+            &[noon(), {
+                let mut photos = noon();
+                photos.name = "photos".to_owned();
+                photos
+            }],
+        );
+        app.open_workspaces();
+        let text = screen_of(&mut app, 16);
+        assert!(
+            text.contains("Workspaces") && text.contains("3 tabs"),
+            "{text}"
+        );
+        assert!(
+            text.contains("6Rename") && text.contains("8Delete"),
+            "{text}"
+        );
+
+        // F6: a new name in place; the one restored last follows it.
+        app.handle(action(Action::Move));
+        app.handle(action(Action::DeleteToStart));
+        typed(&mut app, "noc");
+        let effects = app.handle(action(Action::Confirm));
+        let [Effect::Workspaces(WorkspaceChange::Rename { from, to })] = &effects[..] else {
+            panic!("unexpected {effects:?}");
+        };
+        assert_eq!((from.as_str(), to.as_str()), ("noon", "noc"));
+        assert_eq!(app.workspace.as_deref(), Some("noc"));
+        let mut renamed = noon();
+        renamed.name = "noc".to_owned();
+        let mut photos = noon();
+        photos.name = "photos".to_owned();
+        holds(&mut app, &[renamed, photos]);
+
+        // F6 to the name of another one asks first, No by default.
+        app.handle(action(Action::Move));
+        app.handle(action(Action::DeleteToStart));
+        typed(&mut app, "photos");
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        assert!(app.handle(action(Action::Confirm)).is_empty(), "No");
+
+        // F8 asks, Yes by default.
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        assert!(screen_of(&mut app, 16).contains("Delete workspace \"photos\"?"));
+        let effects = app.handle(action(Action::Confirm));
+        assert!(
+            matches!(&effects[..], [Effect::Workspaces(WorkspaceChange::Remove(name))] if name == "photos"),
+            "{effects:?}"
+        );
+
+        // Enter restores and closes the window.
+        app.handle(action(Action::Home));
+        assert!(!app.handle(action(Action::Confirm)).is_empty());
+        assert!(app.workspaces_window.is_none());
+    }
+
+    #[test]
+    fn a_file_that_cannot_be_read_or_written_says_why() {
+        let mut app = loaded();
+        app.workspaces_changed(false, Err("invalid workspace".to_owned()));
+        assert!(screen_of(&mut app, 16).contains("Cannot read the workspaces"));
+        app.handle(action(Action::Confirm));
+        app.workspaces_changed(true, Err("cannot write".to_owned()));
+        assert!(screen_of(&mut app, 16).contains("Cannot save the workspaces"));
     }
 
     #[test]

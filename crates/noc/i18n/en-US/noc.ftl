@@ -13,6 +13,8 @@ fkey-edit = Edit
 fkey-wrap = Wrap
 fkey-copy = Copy
 fkey-move = RenMov
+# Renames a workspace.
+fkey-rename = Rename
 fkey-mkdir = Mkdir
 fkey-delete = Delete
 fkey-quit = Quit
@@ -117,6 +119,42 @@ jump-not-installed = zoxide is not installed: cannot run { $program }. Get it fr
 # Title of the list of a panel's tabs, Ctrl-X Tab; each row is the tab's number and where it is.
 tabs-title = Tabs
 
+## Workspaces (src/tui/workspaces, src/tui/app): the tabs of both panels, saved under a name in
+## workspaces.toml. Prefix: workspaces-.
+
+# The window of Alt-W, F9 → Workspace → Workspace list….
+workspaces-title = Workspaces
+# The first line: what was typed to filter the window.
+workspaces-filter = Filter: { $text }
+# When no workspace is saved yet.
+workspaces-none = No workspace is saved yet. Insert here, or Alt-Shift-W in a panel, saves the tabs of both panels under a name.
+# When the filter leaves no row.
+workspaces-nothing = Nothing matches.
+# Right of a workspace: how many tabs it has, in both panels together.
+workspaces-tabs = { $count ->
+        [one] 1 tab
+       *[other] { $count } tabs
+    }
+# The dialog of Alt-Shift-W, and of Insert in the window.
+workspaces-save-title = Save workspace
+workspaces-save-prompt = Save the tabs of both panels as:
+# The name of an existing workspace was typed.
+workspaces-replace-title = Replace workspace
+workspaces-replace = Workspace "{ $name }" exists. Replace it with the tabs of both panels?
+# F6 in the window.
+workspaces-rename-title = Rename workspace
+workspaces-rename-prompt = New name for "{ $name }":
+# The new name is that of another workspace.
+workspaces-rename-replace = Workspace "{ $name }" exists. Replace it?
+# F8 in the window.
+workspaces-delete-title = Delete workspace
+workspaces-delete = Delete workspace "{ $name }"? Its tabs stay as they are.
+# A workspace chosen in the menu was removed meanwhile, by another Noon Commander.
+workspaces-gone = Workspace "{ $name }" is not saved any more.
+# The reason names the file.
+workspaces-save-error = Cannot save the workspaces: { $reason }
+workspaces-load-error = Cannot read the workspaces: { $reason }
+
 ## The pull-down menu of F9 (src/tui/pulldown), as mc's. Prefix: pulldown-. An & marks the
 ## letter that opens a menu from the bar, or runs a command while its menu is open; letters
 ## must differ on the bar and within a menu, and && stands for &.
@@ -126,6 +164,7 @@ pulldown-left = &Left
 pulldown-file = &File
 pulldown-command = &Command
 pulldown-options = &Options
+pulldown-workspace = &Workspace
 pulldown-right = &Right
 # Left and Right.
 pulldown-location = Change &location…
@@ -168,6 +207,11 @@ pulldown-redraw = Red&raw screen
 # Options.
 pulldown-configuration = &Configuration…
 pulldown-hidden = Show &hidden files
+# Workspace. Below these come the saved workspaces, which restore; the first ten have the
+# digits 1 … 9 and 0 as their letters, so these two must not use a digit.
+pulldown-save-workspace = &Save workspace…
+# Opens the window of the saved workspaces, to restore, rename, or delete them.
+pulldown-workspace-list = Workspace &list…
 
 ## The Configuration dialog, Options → Configuration… (src/tui/configuration): the settings of
 ## config.toml by category. Prefix: config-. Each setting has a name and a hint, a line shown
@@ -192,7 +236,7 @@ config-show-hidden-hint = Names that begin with a dot; Alt-. switches them.
 config-type-to-search = Type to search
 config-type-to-search-hint = Typing in a panel starts quick search; otherwise only Ctrl-S does.
 config-fuzzy-search = Fuzzy search
-config-fuzzy-search-hint = Quick search, the location menu, and the zoxide window match as fzf does: the letters typed in order, best matches first.
+config-fuzzy-search-hint = Quick search, the location menu, and the zoxide and Workspaces windows match as fzf does: the letters typed in order, best matches first.
 config-menu-bar = Menu bar
 config-menu-bar-hint = When the menu bar of F9 shows.
 config-menu-bar-on-demand = While a menu is open
@@ -270,6 +314,7 @@ help-panels = Panels
 help-root = Volumes and hosts
 help-menu = Location menu
 help-jump = zoxide
+help-workspaces = Workspaces
 help-pulldown = Pull-down menu
 help-quick-search = Quick search
 help-dialogs = Dialogs and help
@@ -330,6 +375,13 @@ help-close-tab = Close this tab; the last one stays
 help-next-tab = The next tab in this panel
 help-prev-tab = The previous tab in this panel
 help-tab-list = The tabs of this panel, to choose one
+help-save-workspace = Save the tabs of both panels as a workspace
+help-workspaces-open = The saved workspaces: restore, rename, or delete one
+help-workspaces-save = Save the tabs of both panels as a new workspace
+help-workspaces-restore = Replace the tabs of both panels with the workspace's
+help-workspaces-rename = Rename the workspace
+help-workspaces-delete = Delete the workspace
+help-workspaces-close = Close the window
 help-help = This help
 help-quit = Quit
 help-redraw = Redraw the screen
@@ -339,7 +391,7 @@ help-menu-open = Open the volume or host in the panel
 help-menu-back = Take back the last character of the filter
 help-menu-reload = Read the volumes and hosts again
 help-menu-close = Close the menu
-help-pulldown-open = The pull-down menu: Left, File, Command, Options, Right
+help-pulldown-open = The pull-down menu: Left, File, Command, Options, Workspace, Right
 help-pulldown-up = The command above
 help-pulldown-down = The command below
 help-pulldown-left = The menu to the left
@@ -374,7 +426,8 @@ help-note-typing = Typing in a panel starts quick search.
 help-note-menu = Typing in the location menu filters it; 1 … 9 and 0 open the first ten rows while the filter is empty.
 help-note-jump = Typing in the zoxide window gives it keywords, as z does in a shell; 1 … 9 and 0 open the first ten rows while there are none.
 help-note-jump-fuzzy = Typing in the zoxide window filters its directories; 1 … 9 and 0 open the first ten rows while nothing is typed.
-help-note-fuzzy = Quick search, the location menu, and the zoxide window match as fzf does: the letters typed in order, not necessarily together, best match first. Words separated by spaces must all match; 'word matches as it is, ^word at the start, word$ at the end, and !word where it is not.
+help-note-fuzzy = Quick search, the location menu, the zoxide window, and the Workspaces window match as fzf does: the letters typed in order, not necessarily together, best match first. Words separated by spaces must all match; 'word matches as it is, ^word at the start, word$ at the end, and !word where it is not.
+help-note-workspaces = A workspace holds the tabs of both panels: where each is, its sort order, and the row under its cursor. Alt-W and F9 → Workspace list them; restoring one replaces every tab.
 help-note-pulldown = In the pull-down menu, the highlighted letter of a menu opens it, and that of a command runs it. The menu opens again where it closed.
 
 ## Host settings, F4 on a host (src/tui/app), saved to hosts.toml. Prefix: host-.

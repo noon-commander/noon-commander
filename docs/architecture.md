@@ -202,7 +202,7 @@ F9 (`Esc 9`) opens mc's menu bar, as Far does: the first time, the bar alone wit
 the active panel selected; later, where it was when it closed. An open menu:
 
 ```text
-  Left     File     Command     Options     Right                       2 jobs 37%
+  Left     File     Command     Options     Workspace     Right         2 jobs 37%
  ╔══════════════════════════════╗
  ║   Change location…    Alt-F1 ║
  ╟──────────────────────────────╢
@@ -222,8 +222,10 @@ the active panel selected; later, where it was when it closed. An open menu:
   has F3 … F8, `+`, `-`, `*`, Checksums, and Exit; Command has quick search,
   [Quick cd](#quick-cd), the [zoxide](#zoxide) window, the other-panel
   commands, the jobs, host settings and disconnect for the host under the cursor, help, and
-  redraw; Options has Configuration… and Show hidden files (`✓` while on). Without icons, the
-  marks are `*` and `x`.
+  redraw; Options has Configuration… and Show hidden files (`✓` while on); Workspace has Save
+  workspace…, Workspace list…, and the saved [workspaces](#workspaces), with digits as their
+  letters. Without icons, the marks are `*` and `x`. A menu taller than the screen scrolls
+  with the cursor.
 - Commands do what their keys do, through the same `Action`s. Each shows the key that does
   it in the active panel's context (`Keymap::key`); Left and Right show sort and rescan keys
   only for the active panel, as keys act there. Commands that cannot run now are dimmed, and
@@ -304,10 +306,10 @@ best directories, which Enter opens in the active panel:
 
 ### Fuzzy search
 
-Quick search, the filter of the location menu, and the zoxide window match what is typed as
-fzf does while `ui.fuzzy_search` is on, which it is by default
-([ADR 0016](adr/0016-fuzzy-search.md)). `tui/fuzzy.rs` wraps `nucleo-matcher`, Helix's port
-of fzf's algorithm:
+Quick search, the filter of the location menu, the zoxide window, and the Workspaces window
+match what is typed as fzf does while `ui.fuzzy_search` is on, which it is by default
+([ADR 0016](adr/0016-fuzzy-search.md)). `tui/fuzzy.rs` wraps `nucleo-matcher`, Helix's port of
+fzf's algorithm:
 
 - The letters typed must come in order, not necessarily together: `cfg` finds `config.rs`.
   Runs of them, and letters that start a word (after a space, `/`, or punctuation, or a
@@ -364,6 +366,41 @@ row and names the tab that shows by its whole location:
   side that has the keys (`tab_number`) and plainer on the other (`tab_active_idle`). Tabs in
   the frame take the same styles, with the frame's line between them.
 - Ctrl-U swaps the sides with their tabs. Alt-. and the settings apply to every tab.
+
+### Workspaces
+
+A workspace is the tabs of both panels, saved under a name
+([ADR 0017](adr/0017-workspaces.md)): for each side its tabs in order, each with its location,
+sort order, and the name under its cursor, and the tab that shows; and the side with the keys.
+
+- Alt-Shift-W (`Esc Shift-W`), or F9 → Workspace → Save workspace…, asks for a name, offering
+  that of the workspace restored or saved last, and saves the tabs under it; the name of
+  another workspace asks before replacing it. A location that `workspaces.toml` cannot hold,
+  such as a name that is not UTF-8, is saved as the nearest directory above it.
+- Alt-W (`Esc W`), or F9 → Workspace → Workspace list…, opens a window of the saved
+  workspaces with a filter, which matches as [fzf](#fuzzy-search) does with
+  `ui.fuzzy_search` (keymap context `workspaces`): Enter restores, Insert saves the tabs as a
+  new workspace, starting with an empty name, F6 renames, F8 deletes after a question, and
+  digits restore while the filter is empty. A workspace just saved there gets the cursor.
+
+  ```text
+  ╔═══════════════════════ Workspaces ═══════════════════════╗
+  ║ Filter:                                                  ║
+  ║ ──────────────────────────────────────────────────────── ║
+  ║ 1 noon                                            3 tabs ║
+  ║ 2 deploy                                          2 tabs ║
+  ╚══════════════════════════════════════════════════════════╝
+  ```
+
+- F9 → Workspace lists the saved workspaces below its two commands, the first ten with
+  `1` … `9` and `0`, and marks the one restored or saved last; choosing one restores it.
+- Restoring replaces every tab of both panels with new ones (new `PanelId`s, so replies for the
+  old tabs are dropped). The tab that shows on each side lists its location at once, connecting
+  to its host if needed; a hidden one keeps its first request and sends it when it shows, so
+  only the hosts that show connect. The cursor goes to the saved name once the listing arrives.
+- `noc-config` owns `workspaces.toml`; one task reads and changes it in turn, and each change
+  reads the file again first, so another Noon Commander's changes are kept. The app reads it
+  at start, and takes the workspaces back after each change.
 
 ### Configuration dialog
 
@@ -577,7 +614,7 @@ variables:
 | Purpose | Path |
 | --- | --- |
 | Settings, keymap, themes | `~/.config/noc/` (`config.toml`, `hosts.toml`, `keymap.toml`, `themes/`) |
-| Data (bookmarks) | `~/.local/share/noc/` |
+| Data (workspaces, bookmarks) | `~/.local/share/noc/` (`workspaces.toml`) |
 | State (history, last directories, logs) | `~/.local/state/noc/` |
 | Cache (`ssh -G` results) | `~/.cache/noc/` |
 | Runtime (control sockets, askpass socket, F4 temp files) | `$XDG_RUNTIME_DIR/noc/` or `$TMPDIR/noc-$UID/`, mode 0700 |
@@ -636,6 +673,30 @@ label = "Prod"
 start_dir = "/var/www"           # opened on connect instead of the remote home
 other_dir = "~/projects/site"    # the other panel opens it with the host; / or ~/ for now
 remember_dir = true              # reopen the last directory of this session
+```
+
+Workspaces live in `workspaces.toml` in the data directory ([ADR 0017](adr/0017-workspaces.md)).
+Noon Commander writes the whole file on each change, behind a header that says so; unknown keys,
+a blank or repeated name, a side without tabs, or two current tabs on a side are errors, and a
+file with one is left alone.
+
+```toml
+[[workspace]]
+name = "noon"
+active = "right"                 # the side with the keys
+
+[[workspace.left]]
+location = "~/src/noon"          # root, sftp, /…, ~, ~/…, or host:path
+cursor = "Cargo.toml"            # the entry, or host alias, under the cursor
+current = true                   # the tab that shows; else the first
+
+[[workspace.left]]
+location = "web:/var/www"
+sort = "time"                    # name (the default), extension, time, size
+descending = true
+
+[[workspace.right]]
+location = "root"
 ```
 
 ## UI

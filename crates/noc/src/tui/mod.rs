@@ -24,6 +24,7 @@ mod sums;
 mod tabs;
 mod tasks;
 mod theme;
+mod workspaces;
 
 use std::io::{self, IsTerminal as _};
 use std::path::{Path, PathBuf};
@@ -96,6 +97,7 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
         } => tasks.run(app.closed(&host, connection, reason.as_deref())),
         Done::HostSaved(result) => tasks.run(app.host_saved(result)),
         Done::ConfigSaved(result) => app.config_saved(result),
+        Done::Workspaces { changed, result } => app.workspaces_changed(changed, result),
         Done::Jumps { generation, result } => app.jumps(generation, result),
         Done::Names {
             generation,
@@ -219,9 +221,10 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
 }
 
 /// The app with both panels on `start`, set up for this terminal and machine, and the work
-/// it asks for first.
+/// it asks for first, the saved workspaces among it.
 fn start_app(context: &Context, start: &Path, tz: &TimeZone) -> (App, Vec<app::Effect>) {
-    let (mut app, effects) = App::new(start, &context.paths.home, &context.config());
+    let (mut app, mut effects) = App::new(start, &context.paths.home, &context.config());
+    effects.push(app::Effect::Workspaces(app::WorkspaceChange::Load));
     app.set_color_depth(theme::ColorDepth::detect());
     app.set_time_zone(tz.clone());
     if let Some(name) = host_name() {

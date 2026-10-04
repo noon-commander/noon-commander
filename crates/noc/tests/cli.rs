@@ -253,6 +253,7 @@ fn config_paths_follow_xdg_variables() {
     let text = stdout(&output);
     assert!(text.contains(sandbox.path("config/noc/config.toml").to_str().unwrap()));
     assert!(text.contains(sandbox.path("config/noc/hosts.toml").to_str().unwrap()));
+    assert!(text.contains(sandbox.path("data/noc/workspaces.toml").to_str().unwrap()));
     assert!(text.contains(sandbox.runtime.path().join("noc").to_str().unwrap()));
 }
 

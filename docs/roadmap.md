@@ -95,6 +95,10 @@
 - [x] Tab completion of paths in Quick cd, F5, F6, and F7, with a list of choices
 - [x] Fuzzy search as fzf does it in quick search, the location menu, and the zoxide window,
       `ui.fuzzy_search` ([ADR 0016](adr/0016-fuzzy-search.md))
+- [x] Workspaces: the tabs of both panels saved under a name (Alt-Shift-W), restored from
+      F9 → Workspace or their window (Alt-W), which also saves, renames, and deletes them;
+      `workspaces.toml`
+      ([ADR 0017](adr/0017-workspaces.md))
 - [ ] Bookmarks and history
 - [ ] chmod and symlinks
 - [ ] Mouse support

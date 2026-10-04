@@ -1,5 +1,5 @@
-//! Matching what is typed as fzf does, for quick search, the location menu, and the zoxide
-//! window while `ui.fuzzy_search` is on (ADR 0016).
+//! Matching what is typed as fzf does, for quick search, the location menu, and the zoxide and
+//! Workspaces windows while `ui.fuzzy_search` is on (ADR 0016).
 //!
 //! The characters typed must come in a text in order, not necessarily together; runs of them,
 //! and those that start a word (after a space, a `/`, or punctuation, or a capital after a

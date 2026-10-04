@@ -17,7 +17,7 @@ pub struct Paths {
     /// Settings, keymap, and themes: `$XDG_CONFIG_HOME/noc`, by default
     /// `~/.config/noc`.
     pub config_dir: PathBuf,
-    /// Bookmarks: `$XDG_DATA_HOME/noc`, by default `~/.local/share/noc`.
+    /// Bookmarks and workspaces: `$XDG_DATA_HOME/noc`, by default `~/.local/share/noc`.
     pub data_dir: PathBuf,
     /// History, last directories, and logs: `$XDG_STATE_HOME/noc`, by default
     /// `~/.local/state/noc`.
@@ -87,6 +87,11 @@ impl Paths {
     /// `--config` moves both.
     pub fn hosts_file(config_file: &Path) -> PathBuf {
         config_file.with_file_name("hosts.toml")
+    }
+
+    /// The saved workspaces: `workspaces.toml` in [`data_dir`](Self::data_dir).
+    pub fn workspaces_file(&self) -> PathBuf {
+        self.data_dir.join("workspaces.toml")
     }
 
     /// Creates [`runtime_dir`](Self::runtime_dir) with mode 0700 if it is missing, and checks
@@ -174,6 +179,10 @@ mod tests {
         assert_eq!(
             paths.config_file().as_os_str(),
             "/home/u/.config/noc/config.toml"
+        );
+        assert_eq!(
+            paths.workspaces_file().as_os_str(),
+            "/home/u/.local/share/noc/workspaces.toml"
         );
     }
 

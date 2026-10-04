@@ -36,6 +36,13 @@ pub enum ConfigError {
         host: String,
         reason: String,
     },
+    /// A workspace in `workspaces.toml` breaks a rule the schema cannot express.
+    #[error("invalid workspace {workspace:?} in {path}: {reason}")]
+    InvalidWorkspace {
+        path: PathBuf,
+        workspace: String,
+        reason: String,
+    },
     /// A file to edit, `config.toml` or `hosts.toml`, is not valid TOML, so it is not changed.
     #[error("cannot edit {path}")]
     Edit {
@@ -120,6 +127,14 @@ mod tests {
                     reason: "it is a symbolic link".to_owned(),
                 },
                 "unsafe runtime directory /tmp/noc-501: it is a symbolic link",
+            ),
+            (
+                ConfigError::InvalidWorkspace {
+                    path: PathBuf::from("/data/noc/workspaces.toml"),
+                    workspace: "noon".to_owned(),
+                    reason: "`left` has no tabs".to_owned(),
+                },
+                "invalid workspace \"noon\" in /data/noc/workspaces.toml: `left` has no tabs",
             ),
         ];
         for (error, message) in cases {

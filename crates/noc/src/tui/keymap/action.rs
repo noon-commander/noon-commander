@@ -12,6 +12,8 @@ pub(crate) enum Context {
     Menu,
     /// The zoxide window of Alt-Z, which takes keywords.
     Jump,
+    /// The window of the saved workspaces, which has a filter.
+    Workspaces,
     /// The pull-down menu of F9, whose commands have letters.
     PullDown,
     /// Quick search in the active panel. Keys it does not bind fall through to the panel.
@@ -49,6 +51,7 @@ impl Context {
             // Menus are modal too.
             Self::Menu => &[Self::Menu],
             Self::Jump => &[Self::Jump],
+            Self::Workspaces => &[Self::Workspaces],
             Self::PullDown => &[Self::PullDown],
         }
     }
@@ -72,6 +75,7 @@ impl Context {
                 | Self::Completion
                 | Self::Menu
                 | Self::Jump
+                | Self::Workspaces
                 | Self::PullDown
         )
     }
@@ -88,6 +92,7 @@ impl Context {
                 | Self::Completion
                 | Self::Menu
                 | Self::Jump
+                | Self::Workspaces
                 | Self::PullDown
         )
     }
@@ -173,6 +178,10 @@ pub(crate) enum Action {
     PrevTab,
     /// Lists the panel's tabs to choose one.
     TabList,
+    /// Asks for a name and saves the tabs of both panels as a workspace.
+    SaveWorkspace,
+    /// Opens the window of the saved workspaces.
+    Workspaces,
     /// Reads the directory, or the volumes and hosts, again.
     Reload,
     /// Shows or hides files whose names start with a dot, in both panels.
@@ -261,6 +270,8 @@ impl Action {
         Self::NextTab,
         Self::PrevTab,
         Self::TabList,
+        Self::SaveWorkspace,
+        Self::Workspaces,
         Self::Reload,
         Self::ToggleHidden,
         Self::SortByName,

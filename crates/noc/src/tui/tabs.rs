@@ -12,7 +12,7 @@ use ratatui::widgets::BorderType;
 
 use super::app::Side;
 use super::cells::{self, Align};
-use super::panel::{Panel, location_text};
+use super::panel::{ListRequest, Panel, location_text};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -31,6 +31,9 @@ pub(crate) struct Tab {
     /// What the tab shows changed while it was hidden; it is read again when it shows, so
     /// that hidden tabs cost no listings.
     pub(crate) stale: bool,
+    /// The first listing of a tab that a workspace restored hidden, which it asks for when it
+    /// shows, unless it got it meanwhile.
+    pub(crate) deferred: Option<ListRequest>,
     /// The directory the tab shows went to zoxide since the tab came there, so that it counts
     /// once a visit.
     pub(crate) noted: bool,
@@ -46,6 +49,7 @@ impl Tab {
             id,
             panel,
             stale: false,
+            deferred: None,
             noted: false,
             arriving: None,
             previous: None,
@@ -66,6 +70,16 @@ impl Tabs {
             tabs: vec![tab],
             active: 0,
         }
+    }
+
+    /// `tabs`, of which the one at `active` shows, or the last if there are fewer; `None`
+    /// without tabs.
+    pub(crate) fn of(tabs: Vec<Tab>, active: usize) -> Option<Self> {
+        let last = tabs.len().checked_sub(1)?;
+        Some(Self {
+            tabs,
+            active: active.min(last),
+        })
     }
 
     pub(crate) fn active(&self) -> &Tab {

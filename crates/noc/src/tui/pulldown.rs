@@ -1,7 +1,9 @@
-//! The pull-down menu of F9, as in mc: a bar of menus (Left, File, Command, Options, Right),
-//! and the commands of the one that is open. Left and Right act on the panel drawn on that
-//! side; the others do what their keys do. Each command shows the key that does the same, from
-//! the keymap, and has a letter that runs it while its menu is open.
+//! The pull-down menu of F9, as in mc: a bar of menus (Left, File, Command, Options,
+//! Workspace, Right), and the commands of the one that is open. Left and Right act on the
+//! panel drawn on that side; the others do what their keys do. Each command shows the key that
+//! does the same, from the keymap, and has a letter that runs it while its menu is open. The
+//! Workspace menu lists the saved workspaces too, the first ten with a digit; a menu taller
+//! than the screen scrolls with the cursor.
 //!
 //! As in Far Manager, F9 opens the bar alone, where each menu's letter opens it, and Esc in an
 //! open menu goes back to the bar. The menu remembers where it was when it closed, and opens
@@ -36,6 +38,8 @@ pub(crate) enum Command {
     DisconnectPanel(Side),
     /// Opens the Configuration dialog.
     Configuration,
+    /// Restores the saved workspace at this index in the Workspace menu.
+    Workspace(usize),
 }
 
 /// What the app says about a command now.
@@ -166,15 +170,58 @@ pub(crate) struct Place {
 }
 
 /// The titles of the menu bar, left to right.
-fn titles() -> [Label; 5] {
+fn titles() -> [Label; 6] {
     [
         fl!("pulldown-left"),
         fl!("pulldown-file"),
         fl!("pulldown-command"),
         fl!("pulldown-options"),
+        fl!("pulldown-workspace"),
         fl!("pulldown-right"),
     ]
     .map(|title| Label::parse(&title))
+}
+
+/// Cells a workspace's name takes at most in the Workspace menu.
+const WORKSPACE_NAME_WIDTH: usize = 40;
+
+/// Workspace: save the tabs of both panels, open the list of the saved workspaces, then the
+/// saved `workspaces`, which restore; the first ten have the digits `1` … `9` and `0`, and
+/// the one restored or saved last a mark.
+fn workspace_menu(title: Label, workspaces: &[String]) -> Menu {
+    let item = |text: String, command, mark| {
+        Entry::Item(Item {
+            label: Label::parse(&text),
+            command,
+            mark,
+        })
+    };
+    let mut entries = vec![
+        item(
+            fl!("pulldown-save-workspace"),
+            Command::Do(Action::SaveWorkspace),
+            Mark::None,
+        ),
+        item(
+            fl!("pulldown-workspace-list"),
+            Command::Do(Action::Workspaces),
+            Mark::None,
+        ),
+    ];
+    if !workspaces.is_empty() {
+        entries.push(Entry::Separator);
+    }
+    for (index, name) in workspaces.iter().enumerate() {
+        let name = cells::sanitize(name.as_bytes());
+        let width = cells::width(&name).min(WORKSPACE_NAME_WIDTH);
+        let name = cells::fit(&name, width, Align::Left).replace('&', "&&");
+        let text = match index {
+            0..=9 => format!("&{} {name}", (index + 1) % 10),
+            _ => format!("  {name}"),
+        };
+        entries.push(item(text, Command::Workspace(index), Mark::Radio));
+    }
+    Menu { title, entries }
 }
 
 /// The menu of a panel: the panel on `side`, which is drawn under its title.
@@ -271,14 +318,16 @@ fn options_menu(title: Label) -> Menu {
 impl PullDown {
     /// The menu bar at `place`, where it was when it closed; the first time, with the menu of
     /// the `active` panel selected and none open. `swapped` panels are drawn on each other's
-    /// sides, and Left and Right go with where they are drawn.
+    /// sides, and Left and Right go with where they are drawn. The Workspace menu lists the
+    /// saved `workspaces`.
     pub(crate) fn new(
         active: Side,
         swapped: bool,
         place: Option<&Place>,
+        workspaces: &[String],
         status: &dyn Fn(Command) -> Status,
     ) -> Self {
-        let [left, file, command, options, right] = titles();
+        let [left, file, command, options, workspace, right] = titles();
         let (on_left, on_right) = if swapped {
             (Side::Right, Side::Left)
         } else {
@@ -326,6 +375,7 @@ impl PullDown {
                 ],
             ),
             options_menu(options),
+            workspace_menu(workspace, workspaces),
             panel_menu(right, on_right),
         ];
         let selected = if active == on_left {
@@ -333,7 +383,7 @@ impl PullDown {
         } else {
             menus.len() - 1
         };
-        let place = place
+        let mut place = place
             .filter(|place| place.selected < menus.len() && place.cursors.len() == menus.len())
             .cloned()
             .unwrap_or_else(|| Place {
@@ -341,6 +391,10 @@ impl PullDown {
                 open: false,
                 cursors: vec![0; menus.len()],
             });
+        // The Workspace menu may have fewer rows than when it closed.
+        for (cursor, menu) in place.cursors.iter_mut().zip(&menus) {
+            *cursor = (*cursor).min(menu.entries.len().saturating_sub(1));
+        }
         let mut pulldown = Self { menus, place };
         if pulldown.place.open {
             pulldown.open(pulldown.place.selected, status);
@@ -585,14 +639,22 @@ impl PullDown {
         let room = usize::from(rows.width);
         let (left_tee, right_tee) = theme.tees();
         let marks = if icons { ('•', '✓') } else { ('*', 'x') };
-        for (index, (entry, status)) in menu.entries.iter().zip(&statuses).enumerate() {
-            let Ok(offset) = u16::try_from(index) else {
+        // A menu taller than the screen shows the rows down to the cursor.
+        let page = usize::from(rows.height);
+        let first = (self.cursor() + 1).saturating_sub(page);
+        for (line, (index, (entry, status))) in menu
+            .entries
+            .iter()
+            .zip(&statuses)
+            .enumerate()
+            .skip(first)
+            .take(page)
+            .enumerate()
+        {
+            let Ok(line) = u16::try_from(line) else {
                 break;
             };
-            if offset >= rows.height {
-                break;
-            }
-            let y = rows.y + offset;
+            let y = rows.y + line;
             if let (Entry::Item(item), Some(status)) = (entry, status) {
                 let line = item_line(item, status, index == self.cursor(), room, theme, marks);
                 frame.render_widget(line, Rect::new(rows.x, y, rows.width, 1));
@@ -724,7 +786,7 @@ mod tests {
 
     /// The menu bar at the `active` panel's menu, opened.
     fn open(active: Side) -> PullDown {
-        let mut menu = PullDown::new(active, false, None, &status);
+        let mut menu = PullDown::new(active, false, None, &[], &status);
         assert!(!menu.place.open, "the bar alone");
         menu.handle(action(Action::Down), &status);
         menu
@@ -756,7 +818,8 @@ mod tests {
 
     #[test]
     fn every_command_has_a_letter_of_its_own_in_its_menu() {
-        let menu = PullDown::new(Side::Left, false, None, &status);
+        let names: Vec<String> = (1..=10).map(|index| format!("w{index}")).collect();
+        let menu = PullDown::new(Side::Left, false, None, &names, &status);
         let titles: HashSet<_> = menu
             .menus
             .iter()
@@ -786,10 +849,10 @@ mod tests {
         assert_eq!(left.place.selected, 0);
         assert_eq!(chosen(&left), Some(Command::Location(Side::Left)));
         let right = open(Side::Right);
-        assert_eq!(right.place.selected, 4);
+        assert_eq!(right.place.selected, 5);
         assert_eq!(chosen(&right), Some(Command::Location(Side::Right)));
         // Swapped, the right panel is drawn on the left, under Left.
-        let mut swapped = PullDown::new(Side::Right, true, None, &status);
+        let mut swapped = PullDown::new(Side::Right, true, None, &[], &status);
         swapped.handle(action(Action::Confirm), &status);
         assert_eq!(swapped.place.selected, 0);
         assert_eq!(chosen(&swapped), Some(Command::Location(Side::Right)));
@@ -802,7 +865,7 @@ mod tests {
             menu.handle(action(Action::Left), &status),
             PullDownEvent::Pending
         );
-        assert_eq!(menu.place.selected, 4, "round the bar");
+        assert_eq!(menu.place.selected, 5, "round the bar");
         assert!(menu.place.open, "opens the next menu");
         menu.handle(action(Action::Right), &status);
         menu.handle(action(Action::Right), &status);
@@ -844,12 +907,12 @@ mod tests {
 
     #[test]
     fn on_the_bar_keys_select_menus_and_letters_open_them() {
-        let mut menu = PullDown::new(Side::Left, false, None, &status);
+        let mut menu = PullDown::new(Side::Left, false, None, &[], &status);
         menu.handle(action(Action::Right), &status);
         assert_eq!((menu.place.selected, menu.place.open), (1, false));
         menu.handle(action(Action::Left), &status);
         menu.handle(action(Action::Left), &status);
-        assert_eq!((menu.place.selected, menu.place.open), (4, false));
+        assert_eq!((menu.place.selected, menu.place.open), (5, false));
         assert_eq!(
             menu.handle(Resolved::Insert('x'), &status),
             PullDownEvent::Pending,
@@ -886,7 +949,7 @@ mod tests {
             PullDownEvent::Run(Command::Do(Action::SwapPanels))
         );
         // The active panel does not matter once the menu has a place.
-        let mut again = PullDown::new(Side::Right, false, Some(menu.place()), &status);
+        let mut again = PullDown::new(Side::Right, false, Some(menu.place()), &[], &status);
         assert_eq!(again.menu().title.text, "Command");
         assert!(again.place.open);
         assert_eq!(chosen(&again), Some(Command::Do(Action::SwapPanels)));
@@ -903,12 +966,12 @@ mod tests {
         assert_eq!(chosen(&again), Some(Command::Do(Action::Mkdir)));
         let mut place = again.place().clone();
         place.cursors[1] = 5;
-        let third = PullDown::new(Side::Left, false, Some(&place), &status);
+        let third = PullDown::new(Side::Left, false, Some(&place), &[], &status);
         assert_eq!(chosen(&third), Some(Command::Do(Action::Select)));
         // Closed from the bar, it opens on the bar.
         again.handle(action(Action::Cancel), &status);
         again.handle(action(Action::Cancel), &status);
-        let bar = PullDown::new(Side::Left, false, Some(again.place()), &status);
+        let bar = PullDown::new(Side::Left, false, Some(again.place()), &[], &status);
         assert_eq!((bar.place.selected, bar.place.open), (1, false));
     }
 
@@ -957,7 +1020,7 @@ mod tests {
 
     #[test]
     fn draws_the_bar_alone_with_the_letters_of_the_menus() {
-        let menu = PullDown::new(Side::Left, false, None, &status);
+        let menu = PullDown::new(Side::Left, false, None, &[], &status);
         let theme = Theme::mc_classic();
         let text = draw(&menu, &theme);
         assert!(!text.contains('╔'), "{text}");
@@ -988,5 +1051,75 @@ mod tests {
             lines[1].trim_end().trim_end_matches('"').ends_with('╗'),
             "the frame reaches the right edge: {text}"
         );
+    }
+
+    /// The Workspace menu, open, with `count` workspaces named `w1`, `w2`, ….
+    fn workspace_menu(count: usize) -> PullDown {
+        let names: Vec<String> = (1..=count).map(|index| format!("w{index}")).collect();
+        let mut menu = PullDown::new(Side::Left, false, None, &names, &status);
+        menu.handle(Resolved::Insert('w'), &status);
+        assert_eq!(menu.menu().title.text, "Workspace");
+        menu
+    }
+
+    #[test]
+    fn the_workspace_menu_saves_lists_and_restores_by_digit() {
+        let mut menu = workspace_menu(12);
+        assert_eq!(chosen(&menu), Some(Command::Do(Action::SaveWorkspace)));
+        assert_eq!(
+            menu.handle(Resolved::Insert('2'), &status),
+            PullDownEvent::Run(Command::Workspace(1))
+        );
+        assert_eq!(
+            menu.handle(Resolved::Insert('0'), &status),
+            PullDownEvent::Run(Command::Workspace(9)),
+            "0 for the tenth"
+        );
+        assert_eq!(
+            menu.handle(Resolved::Insert('l'), &status),
+            PullDownEvent::Run(Command::Do(Action::Workspaces))
+        );
+        let labels: Vec<&str> = menu
+            .menu()
+            .entries
+            .iter()
+            .filter_map(|entry| match entry {
+                Entry::Item(item) => Some(item.label.text.as_str()),
+                Entry::Separator => None,
+            })
+            .collect();
+        assert_eq!(labels[2], "1 w1");
+        assert_eq!(labels[11], "0 w10");
+        assert_eq!(labels[12], "  w11", "no digit left");
+        let empty = workspace_menu(0);
+        assert_eq!(empty.menu().entries.len(), 2, "no separator without any");
+    }
+
+    #[test]
+    fn a_workspace_menu_taller_than_the_screen_scrolls_to_the_cursor() {
+        let mut menu = workspace_menu(30);
+        menu.handle(action(Action::End), &status);
+        assert_eq!(chosen(&menu), Some(Command::Workspace(29)));
+        let text = draw(&menu, &Theme::terminal());
+        assert!(
+            text.contains("w30") && !text.contains("Save workspace"),
+            "{text}"
+        );
+        // Fewer workspaces than where the cursor was: it stays in the menu.
+        let names = ["w1".to_owned()];
+        let again = PullDown::new(Side::Left, false, Some(menu.place()), &names, &status);
+        assert_eq!(chosen(&again), Some(Command::Workspace(0)));
+    }
+
+    #[test]
+    fn names_with_ampersands_keep_them_and_no_letter() {
+        let names = ["R&D".to_owned()];
+        let menu = PullDown::new(Side::Left, false, None, &names, &status);
+        let menu = &menu.menus[4];
+        let Some(Entry::Item(item)) = menu.entries.last() else {
+            panic!("{menu:?}");
+        };
+        assert_eq!(item.label.text, "1 R&D");
+        assert_eq!(item.label.hotkey, Some((0, '1')));
     }
 }

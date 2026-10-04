@@ -8,7 +8,10 @@ use std::time::Duration;
 
 use futures_util::StreamExt as _;
 use futures_util::stream::FuturesUnordered;
-use noc_config::{Config, ConfigError, HostConfig, Hosts, save_config, save_host};
+use noc_config::{
+    Config, ConfigError, HostConfig, Hosts, Workspaces, remove_workspace, rename_workspace,
+    save_config, save_host, save_workspace,
+};
 use noc_ops::{
     Algorithm, Checksum, Conflict, CopyOptions, Decision, Endpoint, Event, Files, Outcome,
     Reporter, Sum,
@@ -27,7 +30,7 @@ use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::task::{AbortHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 
-use super::app::Effect;
+use super::app::{Effect, WorkspaceChange};
 use super::describe;
 use super::dialog::{Ask, Reply};
 use super::panel::{ListRequest, Listed, Listing};
@@ -104,6 +107,12 @@ pub(crate) enum Done {
     HostSaved(Result<Arc<Hosts>, String>),
     /// The settings of [`Effect::SaveConfig`] are written, or why not.
     ConfigSaved(Result<(), String>),
+    /// The workspaces as `workspaces.toml` holds them after an [`Effect::Workspaces`], or why
+    /// it could not be read, or changed if `changed`.
+    Workspaces {
+        changed: bool,
+        result: Result<Workspaces, String>,
+    },
     /// The names of the [`Effect::ListNames`] `generation`: each with whether it is a
     /// directory, or why there are none; and the aliases of the hosts.
     Names {
@@ -197,6 +206,8 @@ pub(crate) struct Tasks {
     /// Changes to the config file, which one task writes in turn, so that a change never
     /// overtakes the one before it.
     config_saves: mpsc::UnboundedSender<(Config, Config)>,
+    /// Reads and changes of `workspaces.toml`, which one task makes in turn.
+    workspace_changes: mpsc::UnboundedSender<WorkspaceChange>,
     /// Directories for zoxide, which one task adds in turn.
     zoxide_adds: mpsc::UnboundedSender<PathBuf>,
     /// The zoxide query in flight; a newer one replaces it.
@@ -214,6 +225,7 @@ impl Tasks {
             tracing::warn!(%reason, "cannot prepare for ssh connections");
         }
         let config_saves = save_configs(context.config_file.clone(), done.clone());
+        let workspace_changes = change_workspaces(context.paths.workspaces_file(), done.clone());
         let zoxide_adds = add_to_zoxide(Arc::clone(&context));
         Self {
             context,
@@ -223,6 +235,7 @@ impl Tasks {
             jobs: JoinSet::new(),
             cache: Arc::new(Mutex::new(())),
             config_saves,
+            workspace_changes,
             zoxide_adds,
             zoxide_query: None,
             work_dirs: change_work_dirs(),
@@ -332,6 +345,7 @@ impl Tasks {
                     self.context.set_config(*config);
                     self.save_config(*old, *new);
                 }
+                Effect::Workspaces(change) => self.change_workspaces(change),
             }
         }
     }
@@ -363,6 +377,11 @@ impl Tasks {
     /// the changes before.
     fn save_config(&self, old: Config, new: Config) {
         let _ = self.config_saves.send((old, new));
+    }
+
+    /// Reads or changes `workspaces.toml`, after the changes before.
+    fn change_workspaces(&self, change: WorkspaceChange) {
+        let _ = self.workspace_changes.send(change);
     }
 
     /// Lists the names in `dir` and, with `hosts`, the hosts of the ssh config, for completion.
@@ -664,6 +683,36 @@ fn save_configs(
                 Err(error) => Err(error.to_string()),
             };
             if done.send(Done::ConfigSaved(result)).is_err() {
+                break;
+            }
+        }
+    });
+    sender
+}
+
+/// Starts the task that reads and changes `workspaces.toml` at `path`, in the order the
+/// changes come, and reports each to `done`.
+fn change_workspaces(
+    path: PathBuf,
+    done: mpsc::UnboundedSender<Done>,
+) -> mpsc::UnboundedSender<WorkspaceChange> {
+    let (sender, mut receiver) = mpsc::unbounded_channel::<WorkspaceChange>();
+    tokio::spawn(async move {
+        while let Some(change) = receiver.recv().await {
+            let path = path.clone();
+            let changed = change != WorkspaceChange::Load;
+            let result = tokio::task::spawn_blocking(move || match change {
+                WorkspaceChange::Load => Workspaces::load(&path),
+                WorkspaceChange::Save(workspace) => save_workspace(&path, &workspace),
+                WorkspaceChange::Remove(name) => remove_workspace(&path, &name),
+                WorkspaceChange::Rename { from, to } => rename_workspace(&path, &from, &to),
+            })
+            .await;
+            let result = match result {
+                Ok(result) => result.map_err(|error| describe::chain(&error)),
+                Err(error) => Err(error.to_string()),
+            };
+            if done.send(Done::Workspaces { changed, result }).is_err() {
                 break;
             }
         }

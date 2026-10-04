@@ -212,7 +212,7 @@ fn set(table: &mut dyn TableLike, key: &str, value: Option<Value>) {
 }
 
 /// The text of the file at `path`, or `None` if there is none.
-fn read(path: &Path) -> Result<Option<String>, ConfigError> {
+pub(crate) fn read(path: &Path) -> Result<Option<String>, ConfigError> {
     match fs::read_to_string(path) {
         Ok(text) => Ok(Some(text)),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),

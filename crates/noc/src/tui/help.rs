@@ -44,6 +44,7 @@ impl Help {
             (Context::QuickSearch, fl!("help-quick-search")),
             (Context::Menu, fl!("help-menu")),
             (Context::Jump, fl!("help-jump")),
+            (Context::Workspaces, fl!("help-workspaces")),
             (Context::PullDown, fl!("help-pulldown")),
             (Context::Dialog, fl!("help-dialogs")),
             (Context::DialogInput, fl!("help-text-fields")),
@@ -77,6 +78,7 @@ impl Help {
         } else {
             entries.push(Entry::Note(fl!("help-note-jump")));
         }
+        entries.push(Entry::Note(fl!("help-note-workspaces")));
         entries.push(Entry::Note(fl!("help-note-pulldown")));
         entries.push(Entry::Note(fl!("help-note-esc")));
         if type_to_search {
@@ -202,19 +204,13 @@ fn key_lines(keys: &str, width: usize) -> Vec<String> {
 /// What `action` does in `context`; `None` for what the app cannot do yet, which the help
 /// leaves out.
 fn describe(context: Context, action: Action) -> Option<String> {
-    // Lists of rows, where the arrows move the cursor.
-    let rows = matches!(
-        context,
-        Context::Panel | Context::Viewer | Context::Menu | Context::Jump | Context::Completion
-    );
-    if let Some(text) = describe_completion(context, action) {
+    if let Some(text) = describe_rows(context, action)
+        .or_else(|| describe_completion(context, action))
+        .or_else(|| describe_workspaces(context, action))
+    {
         return Some(text);
     }
     let text = match (context, action) {
-        (_, Action::Up) if rows => fl!("help-row-up"),
-        (_, Action::Down) if rows => fl!("help-row-down"),
-        (_, Action::PageUp) if rows => fl!("help-page-up"),
-        (_, Action::PageDown) if rows => fl!("help-page-down"),
         (Context::Panel | Context::Menu | Context::Jump, Action::Home) => fl!("help-first-row"),
         (Context::Panel | Context::Menu | Context::Jump, Action::End) => fl!("help-last-row"),
         (Context::Panel, Action::Enter) => fl!("help-enter"),
@@ -253,6 +249,8 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::NextTab) => fl!("help-next-tab"),
         (Context::Panel, Action::PrevTab) => fl!("help-prev-tab"),
         (Context::Panel, Action::TabList) => fl!("help-tab-list"),
+        (Context::Panel, Action::SaveWorkspace) => fl!("help-save-workspace"),
+        (Context::Panel, Action::Workspaces) => fl!("help-workspaces-open"),
         (Context::Panel | Context::Viewer, Action::Help) => fl!("help-help"),
         (Context::Panel, Action::Quit) => fl!("help-quit"),
         (Context::Panel | Context::Viewer, Action::Redraw) => fl!("help-redraw"),
@@ -299,6 +297,46 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Viewer, Action::Right) => fl!("help-viewer-right"),
         (Context::Viewer, Action::ToggleWrap) => fl!("help-viewer-wrap"),
         (Context::Viewer, Action::Quit) => fl!("help-viewer-quit"),
+        _ => return None,
+    };
+    Some(text)
+}
+
+/// What the arrows and the page keys do in lists of rows.
+fn describe_rows(context: Context, action: Action) -> Option<String> {
+    let rows = matches!(
+        context,
+        Context::Panel
+            | Context::Viewer
+            | Context::Menu
+            | Context::Jump
+            | Context::Workspaces
+            | Context::Completion
+    );
+    let text = match action {
+        Action::Up if rows => fl!("help-row-up"),
+        Action::Down if rows => fl!("help-row-down"),
+        Action::PageUp if rows => fl!("help-page-up"),
+        Action::PageDown if rows => fl!("help-page-down"),
+        _ => return None,
+    };
+    Some(text)
+}
+
+/// What `action` does in the window of the saved workspaces, beyond moving the cursor.
+fn describe_workspaces(context: Context, action: Action) -> Option<String> {
+    if context != Context::Workspaces {
+        return None;
+    }
+    let text = match action {
+        Action::Home => fl!("help-first-row"),
+        Action::End => fl!("help-last-row"),
+        Action::SaveWorkspace => fl!("help-workspaces-save"),
+        Action::Confirm => fl!("help-workspaces-restore"),
+        Action::Backspace => fl!("help-menu-back"),
+        Action::Move => fl!("help-workspaces-rename"),
+        Action::Delete => fl!("help-workspaces-delete"),
+        Action::Cancel => fl!("help-workspaces-close"),
         _ => return None,
     };
     Some(text)
@@ -376,6 +414,7 @@ mod tests {
                 "Quick search",
                 "Location menu",
                 "zoxide",
+                "Workspaces",
                 "Pull-down menu",
                 "Dialogs and help",
                 "Text fields",

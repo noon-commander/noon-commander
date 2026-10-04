@@ -300,7 +300,7 @@ impl Keymap {
 }
 
 /// The bindings of the mc preset, by context.
-fn mc_presets() -> [(Context, Preset); 11] {
+fn mc_presets() -> [(Context, Preset); 12] {
     use Action::{
         Backspace, Cancel, Confirm, Disconnect, Down, EditHost, End, Help, Home, Left, NextField,
         PageDown, PageUp, PrevField, Quit, Redraw, Right, Toggle, ToggleWrap, Up,
@@ -349,6 +349,7 @@ fn mc_presets() -> [(Context, Preset); 11] {
         ),
         (Context::Menu, MENU),
         (Context::Jump, JUMP),
+        (Context::Workspaces, WORKSPACES),
         (Context::PullDown, PULL_DOWN),
         (Context::DialogInput, TEXT_FIELD),
         (Context::PathInput, PATH_FIELD),
@@ -362,8 +363,9 @@ const PANEL: Preset = {
         Cancel, Checksum, CloseTab, Copy, Delete, Down, Edit, End, Enter, Help, Home, InvertMarks,
         Jobs, Jump, LocationMenuLeft, LocationMenuRight, Mark, MarkUp, Mkdir, Move, NewTab,
         NextTab, OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent, PrevTab, PullDown,
-        QuickCd, QuickSearch, Quit, Redraw, Reload, Select, SortByExtension, SortByName,
-        SortBySize, SortByTime, SwapPanels, SwitchPanel, TabList, ToggleHidden, Unselect, Up, View,
+        QuickCd, QuickSearch, Quit, Redraw, Reload, SaveWorkspace, Select, SortByExtension,
+        SortByName, SortBySize, SortByTime, SwapPanels, SwitchPanel, TabList, ToggleHidden,
+        Unselect, Up, View, Workspaces,
     };
     &[
         (Up, &["up", "ctrl-p"]),
@@ -420,6 +422,10 @@ const PANEL: Preset = {
         (NextTab, &["alt-right", "ctrl-x n"]),
         (PrevTab, &["alt-left", "ctrl-x p"]),
         (TabList, &["ctrl-x tab"]),
+        // Not in mc: W for workspaces, and Shift saves the tabs of both panels as one. Esc W
+        // and Esc Shift-W where Alt never arrives.
+        (Workspaces, &["alt-w"]),
+        (SaveWorkspace, &["alt-shift-w"]),
         (PullDown, &["f9"]),
         (Quit, &["f10"]),
         (Redraw, &["ctrl-l"]),
@@ -491,6 +497,24 @@ const JUMP: Preset = &[
     (Action::End, &["end"]),
     (Action::Confirm, &["enter"]),
     (Action::Backspace, &["backspace"]),
+    (Action::Cancel, &["esc", "f10"]),
+];
+
+/// The bindings of the window of the saved workspaces in the mc preset; characters filter it.
+/// Insert adds one, as in Far's menus; F6 renames and F8 deletes, as they rename and delete
+/// files.
+const WORKSPACES: Preset = &[
+    (Action::SaveWorkspace, &["insert"]),
+    (Action::Up, &["up"]),
+    (Action::Down, &["down"]),
+    (Action::PageUp, &["pageup"]),
+    (Action::PageDown, &["pagedown"]),
+    (Action::Home, &["home"]),
+    (Action::End, &["end"]),
+    (Action::Confirm, &["enter"]),
+    (Action::Backspace, &["backspace"]),
+    (Action::Move, &["f6"]),
+    (Action::Delete, &["f8", "delete"]),
     (Action::Cancel, &["esc", "f10"]),
 ];
 
@@ -953,6 +977,67 @@ mod tests {
             actions(&[Action::NewTab]),
             "in the root too"
         );
+    }
+
+    #[test]
+    fn alt_w_lists_workspaces_alt_shift_w_saves_and_the_window_takes_insert_f6_and_f8() {
+        let keymap = Keymap::mc();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(
+                &keymap,
+                &mut state,
+                Context::Panel,
+                &["alt-w", "esc", "w", "alt-shift-w", "esc", "shift-w"]
+            ),
+            actions(&[
+                Action::Workspaces,
+                Action::Workspaces,
+                Action::SaveWorkspace,
+                Action::SaveWorkspace
+            ])
+        );
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Root, &["alt-w"]),
+            actions(&[Action::Workspaces])
+        );
+        // Some terminals send an uppercase letter with Alt but without Shift.
+        let upper = KeyEvent::new(KeyCode::Char('W'), KeyModifiers::ALT);
+        assert_eq!(
+            keymap.feed(&mut state, Context::Panel, upper, Instant::now()),
+            actions(&[Action::SaveWorkspace])
+        );
+        assert!(
+            !feed(&keymap, &mut state, Context::Panel, &["ctrl-x", "s"])
+                .contains(&Resolved::Action(Action::SaveWorkspace)),
+            "left for mc's symbolic links"
+        );
+        assert_eq!(
+            feed(
+                &keymap,
+                &mut state,
+                Context::Workspaces,
+                &[
+                    "2", "n", "space", "down", "enter", "insert", "f6", "f8", "esc"
+                ]
+            ),
+            [
+                Resolved::Insert('2'),
+                Resolved::Insert('n'),
+                Resolved::Insert(' '),
+                Resolved::Action(Action::Down),
+                Resolved::Action(Action::Confirm),
+                Resolved::Action(Action::SaveWorkspace),
+                Resolved::Action(Action::Move),
+                Resolved::Action(Action::Delete),
+                Resolved::Action(Action::Cancel),
+            ]
+        );
+        let mut window = [None; 10];
+        window[5] = Some(Action::Move);
+        window[7] = Some(Action::Delete);
+        window[9] = Some(Action::Cancel);
+        assert_eq!(keymap.fkeys(Context::Workspaces), window);
     }
 
     #[test]

@@ -11,6 +11,8 @@ operations. The command is `noc`.
 
 <br clear="right">
 
+![A local project in the left panel and the host prod-web over SFTP in the right one](assets/screenshots/panels.png)
+
 ## Why
 
 - **Two panels and mc keys.** Copy, move, rename, view, and delete files on your machine, between

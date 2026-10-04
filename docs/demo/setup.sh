@@ -84,7 +84,9 @@ nas backup nas.home.arpa 2222 Backups'
     done
 } >"$home/.config/noc/hosts.toml"
 
-cat >"$home/.config/noc/config.toml" <<EOF
+# settings THEME: the settings of the demo with the colors THEME.
+settings() {
+    cat <<EOF
 # Settings of the Noon Commander demo, written by docs/demo/setup.sh.
 
 [ssh]
@@ -95,9 +97,14 @@ config_file = "$dir/ssh_config"
 hide = ["/Volumes/*", "/System/Volumes/*"]
 
 [ui]
-# Its own colors, so that the terminal's palette does not change them.
-theme = "noon-dark"
+theme = "$1"
 EOF
+}
+
+# noon-dark has colors of its own, so that the terminal's palette does not change them. The
+# other themes get a file each, for `noc --config`; hosts.toml next to it serves them all.
+settings noon-dark >"$home/.config/noc/config.toml"
+settings mc-classic >"$home/.config/noc/mc-classic.toml"
 
 # The $ in single quotes is for the written script.
 # shellcheck disable=SC2016

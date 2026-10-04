@@ -13,6 +13,10 @@ operations. The command is `noc`.
 
 ![A local project in the left panel and the host prod-web over SFTP in the right one](assets/screenshots/panels.png)
 
+The same panels in the theme `mc-classic`, with the blue of Midnight Commander:
+
+![The same two panels in the blue theme mc-classic](assets/screenshots/panels-mc-classic.png)
+
 ## Why
 
 - **Two panels and mc keys.** Copy, move, rename, view, and delete files on your machine, between

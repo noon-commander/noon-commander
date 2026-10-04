@@ -81,5 +81,5 @@ must_use_candidate = "allow"
 
 [profile.release]
 codegen-units = 1
-lto = "thin"
+lto = "fat"
 strip = true

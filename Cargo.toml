@@ -13,6 +13,7 @@ repository = "https://github.com/noon-commander/noon-commander"
 noc-config = { path = "crates/noc-config" }
 noc-ops = { path = "crates/noc-ops" }
 noc-ssh = { path = "crates/noc-ssh" }
+noc-text = { path = "crates/noc-text" }
 noc-tools = { path = "crates/noc-tools" }
 noc-vfs = { path = "crates/noc-vfs" }
 

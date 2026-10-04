@@ -1402,6 +1402,7 @@ dependencies = [
  "noc-config",
  "noc-ops",
  "noc-ssh",
+ "noc-text",
  "noc-tools",
  "noc-vfs",
  "ratatui",
@@ -1460,6 +1461,13 @@ dependencies = [
  "tokio-util",
  "tracing",
  "zeroize",
+]
+
+[[package]]
+name = "noc-text"
+version = "0.1.0"
+dependencies = [
+ "unicode-width",
 ]
 
 [[package]]

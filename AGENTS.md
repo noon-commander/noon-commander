@@ -48,9 +48,18 @@ credentials; editing `~/.ssh/*`.
 | `crates/noc-vfs` | `Vfs` trait and backends (local, SFTP), mounted volumes |
 | `crates/noc-ops` | Job engine: copy, move, delete, mkdir, checksums; progress, cancellation, conflicts |
 | `crates/noc-tools` | External programs other than ssh: zoxide, the editor |
+| `crates/noc-text` | Terminal-safe text: sanitizing, widths in cells, fitting, wrapping |
+| `crates/noc-viewer` | The F3 viewer: reading through the `Vfs`, scrolling, wrapping; its own Fluent text |
 
-Dependencies point one way: `config ← ssh ← vfs ← ops ← noc`, and `tools ← noc`. Library
-crates contain no UI code and no user-facing text.
+`noc-config`, `noc-ssh`, `noc-vfs`, `noc-tools`, and `noc-text` depend on no other `noc-*`
+crate; `noc-ops` depends on `noc-vfs`; `noc-viewer` on `noc-vfs` and `noc-text`; the binary on
+all of them. Dependencies point one way, toward the binary. Library crates contain no UI code
+and no user-facing text, except `noc-viewer`, a piece of the UI that knows nothing of the
+keymap, the theme, or the app ([ADR 0015](docs/adr/0015-viewer-and-text-crates.md)).
+
+There is no `core` or `utils` crate. Code that two crates need goes into a crate of its own
+topic, as terminal-safe text went into `noc-text`, once the second one needs it; until then it
+stays where it is used.
 
 ## Commands
 
@@ -115,8 +124,10 @@ a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on th
   update the `noc (default)` or `noc (vim)` column in
   [docs/keymap-compare.md](docs/keymap-compare.md) in the same change; an action that mc and Far
   lack gets its own row, or a `(noc)` section.
-- Text: Fluent files in `crates/noc/i18n/`, `en-US` only for now. Library errors are typed;
-  the UI turns them into messages. clap `--help` output and logs stay English.
+- Text: Fluent files in `crates/noc/i18n/`, and the viewer's own in `crates/noc-viewer/i18n/`;
+  `en-US` only for now. A crate with text of its own has its own loader, and
+  `noc::i18n::select` selects its language too. Library errors are typed; the UI turns them
+  into messages. clap `--help` output and logs stay English.
 - Icons: Nerd Fonts v3, written as literal glyphs in Rust and TOML, never as escape sequences.
   Icons are optional (`ui.icons`, on by default); without them use mc markers: `/` directory,
   `*` executable, `@` symlink, `~` symlink to a directory.

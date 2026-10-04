@@ -19,12 +19,27 @@ crates/
 │                  ControlMaster, SFTP channels, askpass bridge
 ├── noc-vfs/       Vfs trait: local and SFTP backends, mounted volumes
 ├── noc-ops/       job engine: copy, move, delete, mkdir, checksums; progress, cancellation, conflicts
-└── noc-tools/     external programs other than ssh: zoxide, the editor
+├── noc-tools/     external programs other than ssh: zoxide, the editor
+├── noc-text/      terminal-safe text: sanitizing, widths in cells, fitting, wrapping
+└── noc-viewer/    the F3 viewer: reading through the Vfs, scrolling, wrapping; its own text
 ```
 
-Dependencies point one way: `config ← ssh ← vfs ← ops ← noc`, and `tools ← noc`. Library
-crates contain no UI code and no user-facing text; they return typed errors and events, and the
-UI turns them into messages.
+Dependencies point one way, toward the binary:
+
+```text
+noc-config  noc-ssh  noc-tools  noc-text  noc-vfs    no other noc-* crate
+noc-ops     → noc-vfs
+noc-viewer  → noc-vfs, noc-text
+noc         → all of them
+```
+
+Library crates contain no UI code and no user-facing text; they return typed errors and events,
+and the UI turns them into messages. `noc-viewer` is the exception
+([ADR 0015](adr/0015-viewer-and-text-crates.md)): a piece of the UI, with Fluent text of its own,
+that knows nothing of the keymap, the theme, or the app. The app maps its keys to the viewer's
+commands, gives it the styles of its theme, reads the file with `noc_viewer::read_start` in a
+task of its own, and closes the viewer itself. Code that two crates need goes into a crate of
+its own topic, such as `noc-text`, rather than into a common `core` crate.
 
 ssh runs only from `noc-ssh`, and every other program only from `noc-tools`
 ([ADR 0012](adr/0012-external-tools-and-zoxide.md)): without a shell, with `--` before paths,
@@ -654,8 +669,9 @@ remember_dir = true              # reopen the last directory of this session
   When the job ends, panels on the target, its parent, and the source directory read them
   again.
 - **F3 views** the file under the cursor, as mc does (on a directory it opens it): the
-  viewer takes the screen, with the path and the position (first line, lines, and how far
-  the last line on screen is) on top, and its own F-key bar. It reads the first 16 MiB,
+  viewer (`noc-viewer`) takes the screen, with the path and the position (first line, lines,
+  and how far the last line on screen is) on top, and its own F-key bar. It reads the first
+  16 MiB,
   locally or through the host's shared session, in the background (closing the viewer stops
   that), and says so when the file is longer. Text is UTF-8 with invalid bytes replaced,
   tabs go to stops of 8, `\r\n` ends lines, and control characters are shown safely. Long

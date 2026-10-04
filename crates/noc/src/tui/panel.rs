@@ -16,6 +16,7 @@ use ratatui::widgets::Block;
 
 use super::cells::{self, Align, MTIME_WIDTH};
 use super::decor::Decor;
+use super::fuzzy::Fuzzy;
 use super::keymap::Action;
 use super::root::{RootHost, volume_name, volume_of};
 use super::theme::Theme;
@@ -528,25 +529,52 @@ impl Panel {
         self.search.is_some()
     }
 
-    /// Starts quick search, or jumps to the next match while it runs.
-    pub(crate) fn search_next(&mut self) {
-        match &self.search {
-            None => self.search = Some(String::new()),
-            Some(text) => {
-                let text = text.clone();
-                if let Some(row) = self.find(&text, self.cursor + 1) {
-                    self.cursor = row;
-                }
-            }
+    /// Starts quick search, or jumps to the next match while it runs: the next one down, round
+    /// to the top; `fuzzy` (`ui.fuzzy_search`), the next best, round to the best.
+    pub(crate) fn search_next(&mut self, fuzzy: bool) {
+        let Some(text) = &self.search else {
+            self.search = Some(String::new());
+            return;
+        };
+        let next = if fuzzy {
+            let ranked = self.ranked(text);
+            let at = ranked.iter().position(|&(row, _)| row == self.cursor);
+            let next = at.map_or(0, |at| (at + 1) % ranked.len());
+            ranked.get(next).map(|&(row, _)| row)
+        } else {
+            self.find(text, self.cursor + 1)
+        };
+        if let Some(row) = next {
+            self.cursor = row;
         }
     }
 
-    /// Adds `c` to quick search, starting it if needed, and moves the cursor to the first match
-    /// from where it is. As in mc, a character that nothing matches is dropped.
-    pub(crate) fn search_type(&mut self, c: char) {
+    /// Adds `c` to quick search, starting it if needed, and moves the cursor to the first name
+    /// from where it is that starts with the text, ignoring case; `fuzzy` (`ui.fuzzy_search`),
+    /// to the best match as fzf ranks them, the first from where it is if several are as good.
+    /// As in mc, a character that nothing matches is dropped.
+    pub(crate) fn search_type(&mut self, c: char, fuzzy: bool) {
         let mut text = self.search.clone().unwrap_or_default();
-        text.extend(c.to_lowercase());
-        if let Some(row) = self.find(&text, self.cursor) {
+        let found = if fuzzy {
+            // Smart case needs the capitals.
+            text.push(c);
+            // Spaces match everything; only between words do they mean something.
+            if text.trim().is_empty() && self.search.is_none() {
+                return;
+            }
+            let ranked = self.ranked(&text);
+            let best = ranked.first().map(|&(_, score)| score);
+            let rows = self.rows().max(1);
+            ranked
+                .iter()
+                .take_while(|&&(_, score)| Some(score) == best)
+                .map(|&(row, _)| row)
+                .min_by_key(|&row| (row + rows - self.cursor) % rows)
+        } else {
+            text.extend(c.to_lowercase());
+            self.find(&text, self.cursor)
+        };
+        if let Some(row) = found {
             self.cursor = row;
             self.search = Some(text);
         }
@@ -568,17 +596,31 @@ impl Panel {
     fn find(&self, text: &str, start: usize) -> Option<usize> {
         let rows = self.rows();
         (start..rows).chain(0..start.min(rows)).find(|&index| {
-            let name = match self.row(index) {
-                Some(Row::Entry(entry)) => entry.display_name().to_lowercase(),
-                Some(Row::Host(host)) => {
-                    host.label.as_deref().unwrap_or(&host.alias).to_lowercase()
-                }
-                Some(Row::Volume(volume)) => volume_name(volume).to_lowercase(),
-                Some(Row::Home) => fl!("root-home").to_lowercase(),
-                Some(Row::Sftp) => fl!("root-sftp").to_lowercase(),
-                Some(Row::Parent) | None => return false,
-            };
-            name.starts_with(text)
+            self.search_name(index)
+                .is_some_and(|name| name.to_lowercase().starts_with(text))
+        })
+    }
+
+    /// The rows whose names match `text` as fzf matches it, with their scores, best first;
+    /// rows as good keep their order. `..` never matches.
+    fn ranked(&self, text: &str) -> Vec<(usize, u32)> {
+        let mut fuzzy = Fuzzy::names(text);
+        let mut ranked: Vec<(usize, u32)> = (0..self.rows())
+            .filter_map(|index| Some((index, fuzzy.score(&self.search_name(index)?)?)))
+            .collect();
+        ranked.sort_by_key(|&(_, score)| std::cmp::Reverse(score));
+        ranked
+    }
+
+    /// The name that quick search finds a row by: the name it shows.
+    fn search_name(&self, index: usize) -> Option<String> {
+        Some(match self.row(index)? {
+            Row::Entry(entry) => entry.display_name().into_owned(),
+            Row::Host(host) => host.label.as_deref().unwrap_or(&host.alias).to_owned(),
+            Row::Volume(volume) => volume_name(volume),
+            Row::Home => fl!("root-home"),
+            Row::Sftp => fl!("root-sftp"),
+            Row::Parent => return None,
         })
     }
 
@@ -1863,18 +1905,18 @@ mod tests {
     #[test]
     fn quick_search_finds_name_prefixes_from_the_cursor() {
         let mut panel = loaded("/srv", listing());
-        panel.search_type('b');
+        panel.search_type('b', false);
         assert!(panel.searching());
         assert_eq!(under_cursor(&panel), "Beta", "case does not matter");
-        panel.search_type('I');
+        panel.search_type('I', false);
         assert_eq!(under_cursor(&panel), "bin");
-        panel.search_type('x');
+        panel.search_type('x', false);
         assert_eq!(panel.search.as_deref(), Some("bi"), "a miss is dropped");
         panel.search_back();
         assert_eq!(under_cursor(&panel), "bin", "the cursor stays");
-        panel.search_next();
+        panel.search_next(false);
         assert_eq!(under_cursor(&panel), "Beta", "round to the top");
-        panel.search_type('e');
+        panel.search_type('e', false);
         let hosts = |_: &str| HostState::default();
         let mut terminal = render_with(&mut panel, (40, 6), true, &hosts, Decor::new(false));
         assert!(terminal.backend().to_string().contains("║Search: be"));
@@ -1887,10 +1929,10 @@ mod tests {
         panel.end_search();
         assert!(!panel.searching());
         // A character that starts no match starts no search.
-        panel.search_type('q');
+        panel.search_type('q', false);
         assert!(!panel.searching());
         // Opening another directory ends a search.
-        panel.search_type('b');
+        panel.search_type('b', false);
         panel.handle(Action::Reload);
         assert!(!panel.searching());
     }
@@ -1898,22 +1940,75 @@ mod tests {
     #[test]
     fn quick_search_finds_hosts_by_the_name_shown() {
         let mut root = root();
-        root.search_type('u');
+        root.search_type('u', false);
         assert_eq!(under_cursor(&root), "USB", "volumes by their labels");
         root.end_search();
-        root.search_type('s');
+        root.search_type('s', false);
         assert_eq!(under_cursor(&root), "share");
-        root.search_type('f');
+        root.search_type('f', false);
         assert_eq!(under_cursor(&root), "<sftp>");
 
         let mut panel = sftp();
-        panel.search_type('p');
+        panel.search_type('p', false);
         assert_eq!(under_cursor(&panel), "web", "labelled Prod");
-        panel.search_next();
+        panel.search_next(false);
         assert_eq!(under_cursor(&panel), "web", "the only match");
         panel.end_search();
-        panel.search_type('s');
+        panel.search_type('s', false);
         assert_eq!(under_cursor(&panel), "staging");
+    }
+
+    #[test]
+    fn fuzzy_quick_search_goes_to_the_best_match_and_on_to_the_next_best() {
+        let mut panel = loaded(
+            "/srv",
+            ["Cargo.toml", "config.rs", "cfg-if", "notes", "x.cfg"]
+                .map(|name| entry(name, FileKind::File, 1))
+                .into(),
+        );
+        for c in "cfg".chars() {
+            panel.search_type(c, true);
+        }
+        assert_eq!(under_cursor(&panel), "cfg-if", "together, at the start");
+        panel.search_next(true);
+        assert_eq!(under_cursor(&panel), "x.cfg", "together");
+        panel.search_next(true);
+        assert_eq!(under_cursor(&panel), "config.rs", "apart");
+        panel.search_next(true);
+        assert_eq!(under_cursor(&panel), "cfg-if", "round to the best");
+        panel.search_type('q', true);
+        assert_eq!(panel.search.as_deref(), Some("cfg"), "a miss is dropped");
+        panel.search_back();
+        panel.search_back();
+        panel.search_back();
+        panel.search_type('C', true);
+        assert_eq!(
+            under_cursor(&panel),
+            "Cargo.toml",
+            "case counts with a capital"
+        );
+        panel.end_search();
+
+        let mut panel = loaded(
+            "/srv",
+            ["bar", "bat", "baz"]
+                .map(|name| entry(name, FileKind::File, 1))
+                .into(),
+        );
+        panel.handle(Action::End);
+        panel.search_type('b', true);
+        assert_eq!(
+            under_cursor(&panel),
+            "baz",
+            "as good: the first from the cursor"
+        );
+        panel.search_type(' ', true);
+        assert_eq!(under_cursor(&panel), "baz", "a space stays");
+        panel.end_search();
+        panel.search_type('x', true);
+        assert!(!panel.searching(), "no match, no search");
+        panel.search_type(' ', true);
+        assert!(!panel.searching(), "nor from a space");
     }
 
     #[test]

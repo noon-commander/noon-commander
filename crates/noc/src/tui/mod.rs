@@ -8,6 +8,7 @@ mod configuration;
 mod decor;
 mod describe;
 mod dialog;
+mod fuzzy;
 mod help;
 mod jobs;
 mod jump;

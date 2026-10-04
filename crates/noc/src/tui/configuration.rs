@@ -35,6 +35,7 @@ enum Key {
     Icons,
     ShowHidden,
     TypeToSearch,
+    FuzzySearch,
     MenuBar,
     TabBar,
     AtomicUpload,
@@ -146,6 +147,7 @@ impl Setting {
             Key::Icons => ui.icons = self.on(),
             Key::ShowHidden => ui.show_hidden = self.on(),
             Key::TypeToSearch => ui.type_to_search = self.on(),
+            Key::FuzzySearch => ui.fuzzy_search = self.on(),
             Key::MenuBar => {
                 ui.menu_bar = match text {
                     "always" => MenuBar::Always,
@@ -796,6 +798,11 @@ fn interface(config: &Config, themes: &[&str]) -> Category {
                     fl!("config-type-to-search-hint"),
                 ),
                 Value::Toggle(ui.type_to_search),
+            ),
+            Setting::new(
+                Key::FuzzySearch,
+                (fl!("config-fuzzy-search"), fl!("config-fuzzy-search-hint")),
+                Value::Toggle(ui.fuzzy_search),
             ),
             Setting::new(
                 Key::MenuBar,

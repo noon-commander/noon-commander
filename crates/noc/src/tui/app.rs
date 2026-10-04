@@ -839,6 +839,12 @@ impl App {
         self.jobs.iter().find(|job| !job.background)
     }
 
+    /// The help screen, for the keymap and the settings.
+    fn help_screen(&self) -> Help {
+        let ui = &self.config.ui;
+        Help::new(&self.keymap, ui.type_to_search, ui.fuzzy_search)
+    }
+
     /// Quits, after asking if jobs would stop.
     fn ask_quit(&mut self) {
         if self.jobs.is_empty() {
@@ -1019,12 +1025,16 @@ impl App {
         if let Some(effects) = self.handle_over(input) {
             return effects;
         }
-        let type_to_search = self.config.ui.type_to_search;
+        let UiConfig {
+            type_to_search,
+            fuzzy_search,
+            ..
+        } = self.config.ui;
         let panel = self.panel_mut(self.active);
         let action = match input {
             Resolved::Insert(c) => {
                 if type_to_search || panel.searching() {
-                    panel.search_type(c);
+                    panel.search_type(c, fuzzy_search);
                 }
                 return Vec::new();
             }
@@ -1034,7 +1044,7 @@ impl App {
                     return Vec::new();
                 }
                 Action::QuickSearch => {
-                    panel.search_next();
+                    panel.search_next(fuzzy_search);
                     return Vec::new();
                 }
                 Action::Cancel => {
@@ -1050,12 +1060,12 @@ impl App {
             Resolved::Action(action) => action,
         };
         match action {
-            Action::QuickSearch => self.panel_mut(self.active).search_next(),
+            Action::QuickSearch => self.panel_mut(self.active).search_next(fuzzy_search),
             Action::Quit => self.ask_quit(),
             Action::Jobs => self.jobs_list = Some(JobsList::default()),
             Action::Redraw => self.redraw = true,
             Action::Help => {
-                self.help = Some(Help::new(&self.keymap, self.config.ui.type_to_search));
+                self.help = Some(self.help_screen());
             }
             Action::SwitchPanel => self.active = self.active.other(),
             Action::NewTab
@@ -1159,7 +1169,8 @@ impl App {
         self.menu_listings += 1;
         let generation = self.menu_listings;
         let current = self.panel(side).location().clone();
-        let menu = LocationMenu::new(side, current, self.home.clone(), generation);
+        let menu = LocationMenu::new(side, current, self.home.clone(), generation)
+            .fuzzy(self.config.ui.fuzzy_search);
         self.menu = Some(menu);
         vec![Effect::ListPlaces { generation }]
     }
@@ -1306,13 +1317,15 @@ impl App {
         }
     }
 
-    /// Opens the zoxide window for the active panel, and asks zoxide for its best directories.
+    /// Opens the zoxide window for the active panel, and asks zoxide for its best directories;
+    /// with `ui.fuzzy_search`, for all of them, which the window filters itself.
     fn open_jump(&mut self) -> Vec<Effect> {
         let exclude = match self.panel(self.active).location() {
             Location::Local(path) => Some(path.clone()),
             Location::Root | Location::Sftp | Location::Remote { .. } => None,
         };
-        self.jump = Some(JumpMenu::new(self.home.clone(), exclude, 0));
+        let jump = JumpMenu::new(self.home.clone(), exclude, 0).fuzzy(self.config.ui.fuzzy_search);
+        self.jump = Some(jump);
         self.query_jump()
     }
 
@@ -1907,7 +1920,7 @@ impl App {
         };
         match action {
             Action::Help => {
-                self.help = Some(Help::new(&self.keymap, self.config.ui.type_to_search));
+                self.help = Some(self.help_screen());
             }
             Action::Redraw => self.redraw = true,
             Action::Quit | Action::Cancel => self.close_viewer(),
@@ -6902,6 +6915,8 @@ mod tests {
     #[test]
     fn alt_z_asks_zoxide_and_jumps_in_the_active_panel() {
         let mut app = recording();
+        // zoxide matches the keywords.
+        app.config.ui.fuzzy_search = false;
         app.active = Side::Right;
         let effects = app.handle(action(Action::Jump));
         let [
@@ -6969,6 +6984,68 @@ mod tests {
         assert!(screen_of(&mut app, 12).contains("zoxide is not installed"));
         app.handle(action(Action::Cancel));
         assert_eq!(app.context(), Context::Panel);
+    }
+
+    #[test]
+    fn with_fuzzy_search_the_zoxide_window_asks_once_and_filters_as_fzf() {
+        let mut app = recording();
+        let effects = app.handle(action(Action::Jump));
+        let [
+            Effect::ZoxideQuery {
+                generation,
+                keywords,
+                ..
+            },
+        ] = &effects[..]
+        else {
+            panic!("expected a query, got {effects:?}");
+        };
+        assert_eq!(keywords, &[] as &[String], "for every directory");
+        let found = ["/srv/scripts/c", "/home/me/work/src", "/opt/www"]
+            .iter()
+            .map(|path| Scored {
+                score: 1.0,
+                path: PathBuf::from(path),
+            })
+            .collect();
+        app.jumps(*generation, Ok(found));
+        for c in "src".chars() {
+            assert!(app.handle(Resolved::Insert(c)).is_empty(), "no query");
+        }
+        let text = screen_of(&mut app, 12);
+        assert!(
+            text.contains("~/work/src") && text.contains("/srv/scripts/c") && !text.contains("www"),
+            "{text}"
+        );
+        let effects = without_zoxide(app.handle(action(Action::Confirm)));
+        let [Effect::List { request, .. }] = &effects[..] else {
+            panic!("expected a listing, got {effects:?}");
+        };
+        assert_eq!(
+            request.location,
+            local("/home/me/work/src"),
+            "the best match"
+        );
+    }
+
+    #[test]
+    fn quick_search_is_fuzzy_unless_turned_off() {
+        let mut app = loaded();
+        app.handle(Resolved::Insert('r'));
+        app.handle(Resolved::Insert('t'));
+        assert!(screen(&mut app).contains("Search: rt"));
+        let Effect::List { request, .. } = one(app.handle(action(Action::Enter))) else {
+            panic!("expected a listing");
+        };
+        assert_eq!(request.location, local("/srv/right"));
+
+        app.config.ui.fuzzy_search = false;
+        app.handle(Resolved::Insert('r'));
+        app.handle(Resolved::Insert('t'));
+        assert!(
+            screen(&mut app).contains("Search: r") && !screen(&mut app).contains("Search: rt"),
+            "names must start with the text"
+        );
     }
 
     /// Types `text` into Quick cd in the active panel and presses Enter.

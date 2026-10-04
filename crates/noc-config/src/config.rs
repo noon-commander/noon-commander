@@ -79,6 +79,8 @@ impl Default for TransferConfig {
 /// The `[ui]` section. Values are checked by the TUI, which knows its languages.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
+// Each bool is a switch of its own in `config.toml`, not a state.
+#[allow(clippy::struct_excessive_bools)]
 pub struct UiConfig {
     /// Interface language as a language tag such as `en-US`, or `auto` for the system locale.
     /// Default: `auto`.
@@ -96,6 +98,11 @@ pub struct UiConfig {
     /// Whether typing in a panel starts quick search; otherwise only Ctrl-S and Alt-S do, as
     /// in mc. Default: `true`.
     pub type_to_search: bool,
+    /// Whether quick search, the location menu, and the zoxide window match what is typed as
+    /// fzf does: its characters in order, not necessarily together, best matches first.
+    /// Otherwise names must start with it in quick search and contain it in the location menu,
+    /// and zoxide matches it as keywords. Default: `true`.
+    pub fuzzy_search: bool,
     /// When the menu bar of F9 shows. Default: `on-demand`.
     pub menu_bar: MenuBar,
     /// Where a panel with more than one tab shows them. Default: `line`.
@@ -111,6 +118,7 @@ impl Default for UiConfig {
             icons: true,
             show_hidden: true,
             type_to_search: true,
+            fuzzy_search: true,
             menu_bar: MenuBar::default(),
             tab_bar: TabBar::default(),
         }
@@ -322,6 +330,7 @@ mod tests {
         icons = false
         show_hidden = false
         type_to_search = false
+        fuzzy_search = false
         menu_bar = "always"
         tab_bar = "frame"
 
@@ -355,6 +364,7 @@ mod tests {
                 icons: false,
                 show_hidden: false,
                 type_to_search: false,
+                fuzzy_search: false,
                 menu_bar: MenuBar::Always,
                 tab_bar: TabBar::Frame,
             },
@@ -386,6 +396,7 @@ mod tests {
         assert!(config.ui.icons);
         assert!(config.ui.show_hidden);
         assert!(config.ui.type_to_search);
+        assert!(config.ui.fuzzy_search);
         assert_eq!(config.ui.menu_bar, MenuBar::OnDemand);
         assert_eq!(config.ui.tab_bar, TabBar::Line);
         assert!(config.transfer.atomic_upload);
@@ -558,6 +569,7 @@ mod tests {
         assert!(table["ui"].get("icons").is_some());
         assert!(table["ui"].get("show_hidden").is_some());
         assert!(table["ui"].get("type_to_search").is_some());
+        assert!(table["ui"].get("fuzzy_search").is_some());
         assert!(table["ui"].get("menu_bar").is_some());
         assert!(table["ui"].get("tab_bar").is_some());
         assert!(table["zoxide"].get("program").is_some());

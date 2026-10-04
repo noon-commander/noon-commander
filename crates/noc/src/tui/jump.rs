@@ -1,5 +1,6 @@
 //! The zoxide window of Alt-Z: the directories zoxide ranks highest for the keywords typed,
-//! best first, as `z foo bar` picks them in a shell. Enter opens one in the active panel;
+//! best first, as `z foo bar` picks them in a shell; or, with `ui.fuzzy_search`, all of them,
+//! filtered and ranked by what is typed as fzf does. Enter opens one in the active panel;
 //! while nothing is typed, `1` … `9` and `0` open the first ten rows.
 
 use std::os::unix::ffi::OsStrExt as _;
@@ -12,6 +13,7 @@ use ratatui::text::Line;
 
 use super::cells::{self, Align};
 use super::dialog::{Colors, draw_box};
+use super::fuzzy::Fuzzy;
 use super::keymap::{Action, Resolved};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -42,7 +44,13 @@ pub(crate) struct JumpMenu {
     /// Of the query the window waits for; an answer to an older one is dropped.
     generation: u64,
     keywords: String,
+    /// The window asks zoxide once for every directory and filters them itself, as fzf does
+    /// (`ui.fuzzy_search`), instead of asking zoxide for each change of the keywords.
+    fuzzy: bool,
+    /// zoxide's answer, best first.
     found: Vec<Scored>,
+    /// The rows: indices into `found` of the directories that match, best first.
+    rows: Vec<usize>,
     /// `true` once the first answer arrived.
     loaded: bool,
     error: Option<String>,
@@ -61,7 +69,9 @@ impl JumpMenu {
             exclude,
             generation,
             keywords: String::new(),
+            fuzzy: false,
             found: Vec::new(),
+            rows: Vec::new(),
             loaded: false,
             error: None,
             cursor: 0,
@@ -70,8 +80,19 @@ impl JumpMenu {
         }
     }
 
-    /// The keywords typed, as zoxide takes them: separated by spaces.
+    /// The same window, which filters zoxide's directories as fzf does if `fuzzy`
+    /// (`ui.fuzzy_search`).
+    pub(crate) fn fuzzy(mut self, fuzzy: bool) -> Self {
+        self.fuzzy = fuzzy;
+        self
+    }
+
+    /// The keywords to ask zoxide for: those typed, separated by spaces; none, for every
+    /// directory, if the window filters them itself.
     pub(crate) fn keywords(&self) -> Vec<String> {
+        if self.fuzzy {
+            return Vec::new();
+        }
         self.keywords
             .split_whitespace()
             .map(str::to_owned)
@@ -94,8 +115,6 @@ impl JumpMenu {
             return;
         }
         self.loaded = true;
-        self.cursor = 0;
-        self.offset = 0;
         match result {
             Ok(found) => {
                 self.found = found;
@@ -106,24 +125,51 @@ impl JumpMenu {
                 self.error = Some(cells::sanitize(reason.as_bytes()));
             }
         }
+        self.refilter();
+    }
+
+    /// Picks the rows again, with the cursor on the best: every directory zoxide found; if the
+    /// window filters them itself, those that match the keywords as fzf matches a path, best
+    /// first, and those as good in zoxide's order.
+    fn refilter(&mut self) {
+        self.cursor = 0;
+        self.offset = 0;
+        if !self.fuzzy {
+            self.rows = (0..self.found.len()).collect();
+            return;
+        }
+        let mut fuzzy = Fuzzy::paths(&self.keywords);
+        let mut scored: Vec<(usize, u32)> = self
+            .found
+            .iter()
+            .enumerate()
+            .filter_map(|(index, found)| Some((index, fuzzy.score(&self.shown(&found.path))?)))
+            .collect();
+        scored.sort_by_key(|&(_, score)| std::cmp::Reverse(score));
+        self.rows = scored.into_iter().map(|(index, _)| index).collect();
+    }
+
+    /// The directory on `row`.
+    fn row(&self, row: usize) -> Option<&Scored> {
+        self.found.get(*self.rows.get(row)?)
     }
 
     /// Takes a key: arrows move, Enter opens, a digit opens its row while nothing is typed,
     /// other characters are keywords, Backspace takes one back, and Esc closes the window.
     pub(crate) fn handle(&mut self, input: Resolved) -> JumpEvent {
-        let last = self.found.len().saturating_sub(1);
+        let last = self.rows.len().saturating_sub(1);
         let page = self.page.max(1);
         match input {
             Resolved::Insert(c) if self.keywords.is_empty() && c.is_ascii_digit() => {
                 let digit = c.to_digit(10).map_or(0, |digit| digit as usize);
-                return match self.found.get((digit + 9) % 10) {
+                return match self.row((digit + 9) % 10) {
                     Some(scored) => JumpEvent::Open(scored.path.clone()),
                     None => JumpEvent::Pending,
                 };
             }
             Resolved::Insert(c) => {
                 self.keywords.push(c);
-                return JumpEvent::Query;
+                return self.changed();
             }
             Resolved::Action(action) => match action {
                 Action::Up => self.cursor = self.cursor.saturating_sub(1),
@@ -134,11 +180,11 @@ impl JumpMenu {
                 Action::End => self.cursor = last,
                 Action::Backspace => {
                     if self.keywords.pop().is_some() {
-                        return JumpEvent::Query;
+                        return self.changed();
                     }
                 }
                 Action::Confirm => {
-                    if let Some(scored) = self.found.get(self.cursor) {
+                    if let Some(scored) = self.row(self.cursor) {
                         return JumpEvent::Open(scored.path.clone());
                     }
                 }
@@ -147,6 +193,16 @@ impl JumpMenu {
             },
         }
         JumpEvent::Pending
+    }
+
+    /// The keywords changed: the window filters zoxide's directories again, or asks zoxide.
+    fn changed(&mut self) -> JumpEvent {
+        if self.fuzzy {
+            self.refilter();
+            JumpEvent::Pending
+        } else {
+            JumpEvent::Query
+        }
     }
 
     /// A directory as the window shows it: under the home directory, from `~`.
@@ -166,7 +222,7 @@ impl JumpMenu {
     }
 
     fn draw(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) -> (usize, usize, usize) {
-        let rows = u16::try_from(self.found.len().max(1))
+        let rows = u16::try_from(self.rows.len().max(1))
             .unwrap_or(u16::MAX)
             .min(MAX_ROWS);
         let colors = Colors::of(theme, false);
@@ -198,7 +254,7 @@ impl JumpMenu {
             Some(fl!("panel-loading"))
         } else if let Some(error) = &self.error {
             Some(error.clone())
-        } else if self.found.is_empty() {
+        } else if self.rows.is_empty() {
             Some(fl!("jump-nothing"))
         } else {
             None
@@ -209,13 +265,13 @@ impl JumpMenu {
             }
             return (page, self.cursor, self.offset);
         }
-        let cursor = self.cursor.min(self.found.len() - 1);
+        let cursor = self.cursor.min(self.rows.len() - 1);
         let offset = self
             .offset
             .min(cursor)
             .max((cursor + 1).saturating_sub(page));
-        let scores: Vec<String> = self
-            .found
+        let found: Vec<&Scored> = self.rows.iter().map(|&index| &self.found[index]).collect();
+        let scores: Vec<String> = found
             .iter()
             .map(|scored| format!("{:.1}", scored.score))
             .collect();
@@ -223,14 +279,7 @@ impl JumpMenu {
         // A hotkey, a space, the directory, a space, the score.
         let path_width = width.saturating_sub(score_width + 3);
         let hotkeys = self.keywords.is_empty();
-        for (index, (row, scored)) in self
-            .found
-            .iter()
-            .enumerate()
-            .skip(offset)
-            .take(page)
-            .enumerate()
-        {
+        for (index, (row, scored)) in found.iter().enumerate().skip(offset).take(page).enumerate() {
             let hotkey = match row {
                 0..=9 if hotkeys => {
                     char::from_digit(u32::try_from((row + 1) % 10).unwrap_or(0), 10).unwrap_or(' ')
@@ -328,6 +377,35 @@ mod tests {
         );
         menu.found(1, Ok(Vec::new()));
         assert_eq!(press(&mut menu, Action::Confirm), JumpEvent::Pending);
+    }
+
+    #[test]
+    fn fuzzy_keywords_filter_without_asking_zoxide() {
+        let mut menu = JumpMenu::new(PathBuf::from("/home/me"), None, 1).fuzzy(true);
+        menu.found(1, Ok(found()));
+        assert_eq!(menu.keywords(), [] as [String; 0]);
+        for c in "dl".chars() {
+            assert_eq!(menu.handle(Resolved::Insert(c)), JumpEvent::Pending);
+        }
+        assert_eq!(menu.keywords(), [] as [String; 0], "zoxide gets none");
+        assert_eq!(
+            press(&mut menu, Action::Confirm),
+            JumpEvent::Open(PathBuf::from("/home/me/Downloads/a b"))
+        );
+        assert_eq!(press(&mut menu, Action::Backspace), JumpEvent::Pending);
+        assert_eq!(press(&mut menu, Action::Backspace), JumpEvent::Pending);
+        assert_eq!(menu.rows.len(), 4, "every directory again");
+        menu.handle(Resolved::Insert('~'));
+        assert_eq!(
+            menu.rows.len(),
+            3,
+            "the paths as the window shows them, from ~"
+        );
+        assert_eq!(
+            press(&mut menu, Action::Confirm),
+            JumpEvent::Open(PathBuf::from("/home/me/src/noc")),
+            "as good: in zoxide's order"
+        );
     }
 
     #[test]

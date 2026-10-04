@@ -93,6 +93,8 @@
       ([ADR 0014](adr/0014-release-workflow-and-homebrew-tap.md))
 - [x] Quick cd (Alt-C), as in mc, with `~`, `..`, `-`, and `host:path`
 - [x] Tab completion of paths in Quick cd, F5, F6, and F7, with a list of choices
+- [x] Fuzzy search as fzf does it in quick search, the location menu, and the zoxide window,
+      `ui.fuzzy_search` ([ADR 0016](adr/0016-fuzzy-search.md))
 - [ ] Bookmarks and history
 - [ ] chmod and symlinks
 - [ ] Mouse support

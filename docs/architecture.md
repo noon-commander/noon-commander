@@ -187,9 +187,12 @@ too, for terminals whose Alt-F1 never arrives, such as macOS Terminal without Op
   whichever is nearer, or on its host. Enter
   opens the row in that panel, which becomes active; while the filter is empty, `1` … `9` and
   `0` open the first ten rows.
-- Typing filters the rows by name, mount point, alias, and address, ignoring case; Backspace
-  takes a character back. F8 disconnects the host under the cursor, Ctrl-R reads the volumes
-  and hosts again, and Esc or F10 closes the menu.
+- Typing filters the rows by name, mount point, alias, and address. With `ui.fuzzy_search`
+  (the default) it matches them as [fzf](#fuzzy-search) does, and the cursor goes to the best
+  row; otherwise a row's text must contain the filter, ignoring case, and the cursor goes to
+  the first. The rows keep their order either way. Backspace takes a character back. F8
+  disconnects the host under the cursor, Ctrl-R reads the volumes and hosts again, and Esc or
+  F10 closes the menu.
 - The menu is modal (keymap context `menu`) and lists the root in the background; its listing
   carries a generation of its own, so a stale one is dropped.
 
@@ -282,10 +285,14 @@ best directories, which Enter opens in the active panel:
 ╚══════════════════════════════════════════════════════════════════╝
 ```
 
-- Typing gives zoxide keywords, as `z foo bar` in a shell; each change asks
-  `zoxide query --list --score --exclude <dir> -- <keywords>` again, leaving out the panel's
-  directory, and a query still running is dropped. While nothing is typed, `1` … `9` and `0`
-  open the first ten rows. Directories under the home directory show from `~`.
+- With `ui.fuzzy_search` (the default), the window asks
+  `zoxide query --list --score --exclude <dir> --` once, for every directory but the panel's,
+  and typing filters them as [fzf](#fuzzy-search) does, best match first and those as good in
+  zoxide's order, as `zi` does with fzf. Otherwise typing gives zoxide keywords, as
+  `z foo bar` in a shell; each change asks
+  `zoxide query --list --score --exclude <dir> -- <keywords>` again, and a query still running
+  is dropped. While nothing is typed, `1` … `9` and `0` open the first ten rows. Directories
+  under the home directory show from `~`, and fuzzy search matches them as shown.
 - A local directory goes to zoxide (`zoxide add -- <dir>`) once the user does something in it,
   at most once a visit: a copy, move, or delete from it, a copy or move into it when a panel
   shows it, F7, F3 or F4 on a file, checksums, or a jump there. Passing through, marking,
@@ -294,6 +301,26 @@ best directories, which Enter opens in the active panel:
   processes write its database at once.
 - `zoxide.record` turns recording off; without zoxide the window says it is not installed,
   and recording is logged once and stops until `zoxide.program` changes.
+
+### Fuzzy search
+
+Quick search, the filter of the location menu, and the zoxide window match what is typed as
+fzf does while `ui.fuzzy_search` is on, which it is by default
+([ADR 0016](adr/0016-fuzzy-search.md)). `tui/fuzzy.rs` wraps `nucleo-matcher`, Helix's port
+of fzf's algorithm:
+
+- The letters typed must come in order, not necessarily together: `cfg` finds `config.rs`.
+  Runs of them, and letters that start a word (after a space, `/`, or punctuation, or a
+  capital after a small letter), score higher; in the zoxide window, after `/` most.
+- Words separated by spaces must all match, in any order. As in fzf's extended search,
+  `'word` matches as it is, `^word` at the start, `word$` at the end, and `!word` only where
+  it is not; `\` takes a space or one of these as it is.
+- Case counts only once the text has a capital letter; letters with accents match those
+  without.
+- Lists keep their order, and the cursor goes to the best match; the zoxide window, whose
+  order is zoxide's rank, sorts by the match instead, and keeps zoxide's order among matches
+  as good.
+- Tab completion in path fields still completes the start of a name.
 
 ### Tabs
 
@@ -581,6 +608,7 @@ borders = "double"               # frames of panels and dialogs: ═ ║ ╔; "s
 icons = true                     # Nerd Font icons; false: mc's markers (/ * @ ~ …)
 show_hidden = true               # names that start with a dot; Alt-. switches while running
 type_to_search = true            # typing in a panel starts quick search; false: only Ctrl-S
+fuzzy_search = true              # quick search and filters match as fzf; false: literally
 menu_bar = "on-demand"           # the F9 menu bar while a menu is open; "always": above the panels
 tab_bar = "line"                 # tabs on a line above the panels; "frame": in the panel's frame
 
@@ -747,9 +775,12 @@ remember_dir = true              # reopen the last directory of this session
   reaches the panel that asked for it. Sort order and errors go with the panel; mc keeps the
   sort order on its side.
 - **Quick search.** Ctrl-S / Alt-S as in mc, or, since there is no command line, typing in a panel
-  (unless `ui.type_to_search` is off) starts quick search: the cursor jumps to the first name from
-  where it is that starts with the text, ignoring case, and a character that matches nothing is
-  dropped, as in mc. Ctrl-S again finds the next match, round to the top; Backspace takes a
+  (unless `ui.type_to_search` is off) starts quick search: with `ui.fuzzy_search` (the default)
+  the cursor jumps to the best match as [fzf](#fuzzy-search) ranks it, the first from where it
+  is of those as good, and Ctrl-S again to the next best, round to the best; otherwise to the
+  first name from where it is that starts with the text, ignoring case, and Ctrl-S to the next
+  one, round to the top. Either way a character that matches nothing is dropped, as in mc, and
+  the listing keeps its order. Backspace takes a
   character back; Esc ends the search, and any other key ends it and then does what it does. While
   it runs, every character is text, even one that a panel binds, such as `*`. The root and the list
   of hosts search the names they show: volume labels, labels, or aliases. Long names lose their

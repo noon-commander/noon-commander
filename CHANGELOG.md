@@ -7,6 +7,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Fuzzy search, as fzf does it: quick search, the filter of the location menu, and the zoxide
+  window find `config.rs` from `cfg`, best match first, with fzf's `'`, `^`, `$`, and `!`.
+  On by default; `ui.fuzzy_search = false`, or Fuzzy search in Options → Configuration,
+  brings back literal matching.
+
 ### Changed
 
 - Release builds use full link-time optimization, which makes the `noc` binary about 6% smaller.

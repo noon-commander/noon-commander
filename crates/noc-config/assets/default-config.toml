@@ -55,6 +55,12 @@ icons = true
 show_hidden = true
 # Typing in a panel starts quick search. When off, only Ctrl-S and Alt-S do, as in mc.
 type_to_search = true
+# Quick search, the filter of the location menu (Alt-F1, Alt-F2), and the zoxide window
+# (Alt-Z) match what is typed as fzf does: its characters in order, not necessarily together,
+# best matches first; words separated by spaces must all match, and fzf's ' ^ $ ! work. When
+# off, quick search finds names that start with the text, the location menu those that contain
+# it, and zoxide matches it as keywords, as z does.
+fuzzy_search = true
 # The menu bar of F9 (Left, File, Command, Options, Right): "on-demand" shows it only while a
 # menu is open, over the panels, as Far Manager does; "always" keeps it above the panels, as
 # Midnight Commander does.

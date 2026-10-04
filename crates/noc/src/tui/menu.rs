@@ -14,6 +14,7 @@ use super::app::Side;
 use super::cells::{self, Align};
 use super::decor::Decor;
 use super::dialog::{Colors, draw_box};
+use super::fuzzy::Fuzzy;
 use super::keymap::{Action, Resolved};
 use super::panel::{HostState, Listed, Listing};
 use super::root::{RootHost, volume_name, volume_of};
@@ -71,6 +72,11 @@ pub(crate) struct LocationMenu {
     loaded: bool,
     error: Option<String>,
     filter: String,
+    /// The filter matches as fzf does: `ui.fuzzy_search`.
+    fuzzy: bool,
+    /// How well each row, shown or not, matches the filter, higher for better; `None` hides
+    /// it.
+    matches: Vec<Option<u32>>,
     /// The row under the cursor, among those the filter shows.
     cursor: usize,
     /// First line on screen, and lines on screen at the last render.
@@ -92,10 +98,20 @@ impl LocationMenu {
             loaded: false,
             error: None,
             filter: String::new(),
+            fuzzy: false,
+            // The home directory, before the listing.
+            matches: vec![Some(0)],
             cursor: 0,
             offset: 0,
             page: 1,
         }
+    }
+
+    /// The same menu, whose filter matches as fzf does if `fuzzy` (`ui.fuzzy_search`).
+    pub(crate) fn fuzzy(mut self, fuzzy: bool) -> Self {
+        self.fuzzy = fuzzy;
+        self.refilter();
+        self
     }
 
     /// The panel the menu is for.
@@ -122,6 +138,7 @@ impl LocationMenu {
                 self.volumes = volumes;
                 self.hosts = hosts;
                 self.error = None;
+                self.refilter();
                 let items = self.items();
                 let keep =
                     chosen.and_then(|chosen| items.iter().position(|item| key(*item) == chosen));
@@ -163,37 +180,53 @@ impl LocationMenu {
         position.unwrap_or(0)
     }
 
-    /// The rows the filter shows: the home directory, the volumes, then the hosts.
+    /// Every row, shown or not: the home directory, the volumes, then the hosts.
+    fn all_items(&self) -> impl Iterator<Item = Item<'_>> {
+        let space = volume_of(&self.volumes, &self.home).and_then(|volume| volume.space);
+        std::iter::once(Item::Home(&self.home, space))
+            .chain(self.volumes.iter().map(Item::Volume))
+            .chain(self.hosts.iter().map(Item::Host))
+    }
+
+    /// Matches the rows against the filter again. A row shows if one of its texts (name,
+    /// mount point; alias, label, address) contains the filter, ignoring case; `fuzzy`, if
+    /// they match it as fzf matches a line.
+    fn refilter(&mut self) {
+        self.matches = if self.fuzzy {
+            let mut fuzzy = Fuzzy::names(&self.filter);
+            self.all_items()
+                .map(|item| fuzzy.score(&texts(item).join(" ")))
+                .collect()
+        } else {
+            let filter = self.filter.to_lowercase();
+            self.all_items()
+                .map(|item| {
+                    texts(item)
+                        .iter()
+                        .any(|text| text.to_lowercase().contains(&filter))
+                        .then_some(0)
+                })
+                .collect()
+        };
+    }
+
+    /// The rows the filter shows, in their order.
     fn items(&self) -> Vec<Item<'_>> {
-        let filter = self.filter.to_lowercase();
-        let has = |text: &str| text.to_lowercase().contains(&filter);
-        let home = (filter.is_empty()
-            || has(&fl!("root-home"))
-            || has(&self.home.to_string_lossy()))
-        .then(|| {
-            let space = volume_of(&self.volumes, &self.home).and_then(|volume| volume.space);
-            Item::Home(&self.home, space)
-        });
-        let volumes = self
-            .volumes
+        self.all_items()
+            .zip(&self.matches)
+            .filter_map(|(item, score)| score.map(|_| item))
+            .collect()
+    }
+
+    /// The row to put the cursor on after the filter changed: the first of those that match
+    /// best. Without `fuzzy`, all match as well, so it is the first.
+    fn best_row(&self) -> usize {
+        let shown: Vec<u32> = self.matches.iter().flatten().copied().collect();
+        let best = shown.iter().max();
+        shown
             .iter()
-            .filter(|volume| {
-                filter.is_empty()
-                    || has(&volume_name(volume))
-                    || has(&volume.mount_point.to_string_lossy())
-            })
-            .map(Item::Volume);
-        let hosts = self
-            .hosts
-            .iter()
-            .filter(|host| {
-                filter.is_empty()
-                    || has(&host.alias)
-                    || host.label.as_deref().is_some_and(has)
-                    || host.address.as_deref().is_some_and(has)
-            })
-            .map(Item::Host);
-        home.into_iter().chain(volumes).chain(hosts).collect()
+            .position(|score| Some(score) == best)
+            .unwrap_or(0)
     }
 
     /// The row under the cursor.
@@ -232,7 +265,8 @@ impl LocationMenu {
             }
             Resolved::Insert(c) => {
                 self.filter.push(c);
-                self.cursor = 0;
+                self.refilter();
+                self.cursor = self.best_row();
             }
             Resolved::Action(action) => match action {
                 Action::Up => self.cursor = self.cursor.saturating_sub(1),
@@ -243,7 +277,8 @@ impl LocationMenu {
                 Action::End => self.cursor = last,
                 Action::Backspace => {
                     self.filter.pop();
-                    self.cursor = 0;
+                    self.refilter();
+                    self.cursor = self.best_row();
                 }
                 Action::Confirm => {
                     return match self.chosen() {
@@ -453,6 +488,26 @@ impl Look<'_> {
         }
         spans.push(Span::raw(format!(" {info}")));
         Line::from(spans).style(self.theme.dialog)
+    }
+}
+
+/// What the filter finds a row by.
+fn texts(item: Item<'_>) -> Vec<String> {
+    match item {
+        Item::Home(home, _) => vec![fl!("root-home"), home.to_string_lossy().into_owned()],
+        Item::Volume(volume) => vec![
+            volume_name(volume),
+            volume.mount_point.to_string_lossy().into_owned(),
+        ],
+        Item::Host(host) => [
+            Some(&host.alias),
+            host.label.as_ref(),
+            host.address.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        .cloned()
+        .collect(),
     }
 }
 
@@ -673,6 +728,45 @@ mod tests {
         assert_eq!(press(&mut menu, Action::Confirm), MenuEvent::Pending);
         let text = draw(&mut menu, 12);
         assert!(text.contains("Nothing matches"), "{text}");
+    }
+
+    #[test]
+    fn a_fuzzy_filter_keeps_the_order_and_puts_the_cursor_on_the_best() {
+        let mut menu = LocationMenu::new(Side::Left, Location::Root, PathBuf::from("/Users/me"), 1)
+            .fuzzy(true);
+        menu.listed(1, Ok(listing()));
+        typed(&mut menu, "pxy");
+        let keys: Vec<Key> = menu.items().into_iter().map(key).collect();
+        assert_eq!(
+            keys,
+            [Key::Host("proxy".to_owned())],
+            "the letters in order, not together"
+        );
+        for _ in 0..3 {
+            press(&mut menu, Action::Backspace);
+        }
+        typed(&mut menu, "sh");
+        let keys: Vec<Key> = menu.items().into_iter().map(key).collect();
+        assert_eq!(
+            keys,
+            [
+                Key::Volume(PathBuf::from("/")),
+                Key::Volume(PathBuf::from("/Volumes/share"))
+            ],
+            "Macintosh HD, and share"
+        );
+        assert_eq!(
+            menu.chosen().map(key),
+            Some(Key::Volume(PathBuf::from("/Volumes/share"))),
+            "the start of a word beats the end of one"
+        );
+        typed(&mut menu, " !hd");
+        let keys: Vec<Key> = menu.items().into_iter().map(key).collect();
+        assert_eq!(
+            keys,
+            [Key::Volume(PathBuf::from("/Volumes/share"))],
+            "fzf's extended search"
+        );
     }
 
     #[test]

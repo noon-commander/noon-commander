@@ -191,6 +191,8 @@ config-show-hidden = Show hidden files
 config-show-hidden-hint = Names that begin with a dot; Alt-. switches them.
 config-type-to-search = Type to search
 config-type-to-search-hint = Typing in a panel starts quick search; otherwise only Ctrl-S does.
+config-fuzzy-search = Fuzzy search
+config-fuzzy-search-hint = Quick search, the location menu, and the zoxide window match as fzf does: the letters typed in order, best matches first.
 config-menu-bar = Menu bar
 config-menu-bar-hint = When the menu bar of F9 shows.
 config-menu-bar-on-demand = While a menu is open
@@ -371,6 +373,8 @@ help-note-esc = Esc 1 … Esc 0 stand for F1 … F10, and Esc followed by a key 
 help-note-typing = Typing in a panel starts quick search.
 help-note-menu = Typing in the location menu filters it; 1 … 9 and 0 open the first ten rows while the filter is empty.
 help-note-jump = Typing in the zoxide window gives it keywords, as z does in a shell; 1 … 9 and 0 open the first ten rows while there are none.
+help-note-jump-fuzzy = Typing in the zoxide window filters its directories; 1 … 9 and 0 open the first ten rows while nothing is typed.
+help-note-fuzzy = Quick search, the location menu, and the zoxide window match as fzf does: the letters typed in order, not necessarily together, best match first. Words separated by spaces must all match; 'word matches as it is, ^word at the start, word$ at the end, and !word where it is not.
 help-note-pulldown = In the pull-down menu, the highlighted letter of a menu opens it, and that of a command runs it. The menu opens again where it closed.
 
 ## Host settings, F4 on a host (src/tui/app), saved to hosts.toml. Prefix: host-.

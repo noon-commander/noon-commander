@@ -25,6 +25,7 @@ futures-util.workspace = true
 i18n-embed.workspace = true
 i18n-embed-fl.workspace = true
 jiff.workspace = true
+nucleo-matcher.workspace = true
 ratatui.workspace = true
 rust-embed.workspace = true
 rustix = { workspace = true, features = ["system", "termios"] }

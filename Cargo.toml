@@ -16,6 +16,7 @@ noc-ssh = { path = "crates/noc-ssh" }
 noc-text = { path = "crates/noc-text" }
 noc-tools = { path = "crates/noc-tools" }
 noc-vfs = { path = "crates/noc-vfs" }
+noc-viewer = { path = "crates/noc-viewer" }
 
 blake3 = "1.8"
 bytes = "1"

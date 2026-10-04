@@ -35,6 +35,7 @@ noc-ops.workspace = true
 noc-text.workspace = true
 noc-tools.workspace = true
 noc-vfs.workspace = true
+noc-viewer.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true

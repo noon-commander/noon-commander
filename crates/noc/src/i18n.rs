@@ -32,19 +32,26 @@ pub(crate) fn is_valid_language(language: &str) -> bool {
     language == "auto" || language.parse::<LanguageIdentifier>().is_ok()
 }
 
-/// Selects the UI language; `auto` follows the system locale. Languages without translations
-/// fall back to English. Call it before the first message is shown.
+/// Selects the UI language, of the app and of the crates with text of their own; `auto`
+/// follows the system locale. Languages without translations fall back to English. Call it
+/// before the first message is shown.
 pub(crate) fn select(language: &str) {
-    select_into(&LOADER, language);
+    let requested = requested(language);
+    select_into(&LOADER, &requested);
+    noc_viewer::select_language(&requested);
 }
 
-fn select_into(loader: &FluentLanguageLoader, language: &str) {
-    let requested = if language == "auto" {
+/// The languages `ui.language` asks for, the most wanted first.
+fn requested(language: &str) -> Vec<LanguageIdentifier> {
+    if language == "auto" {
         DesktopLanguageRequester::requested_languages()
     } else {
         language.parse().into_iter().collect()
-    };
-    match i18n_embed::select(loader, &Localizations, &requested) {
+    }
+}
+
+fn select_into(loader: &FluentLanguageLoader, requested: &[LanguageIdentifier]) {
+    match i18n_embed::select(loader, &Localizations, requested) {
         Ok(selected) => tracing::debug!(?requested, ?selected, "UI language"),
         Err(error) => tracing::warn!(%error, "cannot load the UI language"),
     }
@@ -93,7 +100,7 @@ mod tests {
     fn unknown_languages_fall_back_to_english() {
         for language in ["fr-FR", "en-US", "auto"] {
             let loader: FluentLanguageLoader = fluent_language_loader!();
-            select_into(&loader, language);
+            select_into(&loader, &requested(language));
             assert_eq!(
                 i18n_embed_fl::fl!(loader, "fkey-quit"),
                 "Quit",

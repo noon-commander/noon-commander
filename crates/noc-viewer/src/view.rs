@@ -1,17 +1,42 @@
-//! The viewer of F3: a file's text, scrolled, with long lines wrapped or cut.
+//! The viewer on screen: a file's text, scrolled, with long lines wrapped or cut.
 
+use noc_text::Align;
 use ratatui::Frame;
 use ratatui::layout::Rect;
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use unicode_width::UnicodeWidthChar as _;
 
-use super::cells::{self, Align};
-use super::keymap::Action;
-use super::theme::Theme;
 use crate::i18n::fl;
+use crate::text::{cut, lines_of, rows};
 
-/// Columns between tab stops.
-const TAB: usize = 8;
+/// What the viewer is asked to do. The app maps its keys to these; closing the viewer is the
+/// app's own business.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Command {
+    Up,
+    Down,
+    PageUp,
+    PageDown,
+    /// The start of the file, and the first column.
+    Home,
+    /// The end of the file at the bottom of the screen.
+    End,
+    /// One column left, when lines are cut.
+    Left,
+    /// One column right, when lines are cut.
+    Right,
+    /// Wraps long lines, or cuts them.
+    ToggleWrap,
+}
+
+/// The colors of the viewer, from the app's theme.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Styles {
+    /// The title line: the path and the position.
+    pub header: Style,
+    /// The text, and the screen behind it.
+    pub text: Style,
+}
 
 #[derive(Debug)]
 enum State {
@@ -27,8 +52,7 @@ enum State {
 /// A file on screen. Its position is a line and a row within it, so that wrapping takes
 /// only the lines in view, whatever the size of the file.
 #[derive(Debug)]
-pub(crate) struct Viewer {
-    id: u64,
+pub struct Viewer {
     title: String,
     state: State,
     /// The first line on screen, and its first row there.
@@ -42,10 +66,10 @@ pub(crate) struct Viewer {
 }
 
 impl Viewer {
-    /// The viewer `id` of the file `title`, while it loads.
-    pub(crate) fn new(id: u64, title: String) -> Self {
+    /// The viewer of the file `title`, while it loads. The title is shown as it is, so it
+    /// must be terminal-safe.
+    pub fn new(title: String) -> Self {
         Self {
-            id,
             title,
             state: State::Loading,
             top: (0, 0),
@@ -56,12 +80,8 @@ impl Viewer {
         }
     }
 
-    pub(crate) fn id(&self) -> u64 {
-        self.id
-    }
-
     /// Shows `bytes`, the start of the file if `truncated`.
-    pub(crate) fn show(&mut self, bytes: &[u8], truncated: bool) {
+    pub fn show(&mut self, bytes: &[u8], truncated: bool) {
         self.state = State::Text {
             lines: lines_of(bytes),
             truncated,
@@ -69,29 +89,27 @@ impl Viewer {
         self.top = (0, 0);
     }
 
-    /// Scrolls, or switches wrapping; `true` when the viewer should close.
-    pub(crate) fn handle(&mut self, action: Action) -> bool {
-        match action {
-            Action::Up => self.up(1),
-            Action::Down => self.down(1),
-            Action::PageUp => self.up(self.page),
-            Action::PageDown => self.down(self.page),
-            Action::Home => {
+    /// Scrolls, or switches wrapping.
+    pub fn handle(&mut self, command: Command) {
+        match command {
+            Command::Up => self.up(1),
+            Command::Down => self.down(1),
+            Command::PageUp => self.up(self.page),
+            Command::PageDown => self.down(self.page),
+            Command::Home => {
                 self.top = (0, 0);
                 self.column = 0;
             }
-            Action::End => self.top = self.last_top(),
-            Action::Left => self.column = self.column.saturating_sub(1),
-            Action::Right if !self.wrap => self.column += 1,
-            Action::ToggleWrap => {
+            Command::End => self.top = self.last_top(),
+            Command::Left => self.column = self.column.saturating_sub(1),
+            Command::Right if !self.wrap => self.column += 1,
+            Command::Right => {}
+            Command::ToggleWrap => {
                 self.wrap = !self.wrap;
                 self.top.1 = 0;
                 self.column = 0;
             }
-            Action::Quit | Action::Cancel => return true,
-            _ => {}
         }
-        false
     }
 
     fn lines(&self) -> &[String] {
@@ -158,7 +176,7 @@ impl Viewer {
     }
 
     /// Draws the viewer over `area`: a title line, then the text.
-    pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
+    pub fn render(&mut self, frame: &mut Frame<'_>, area: Rect, styles: &Styles) {
         if area.height < 2 || area.width == 0 {
             return;
         }
@@ -167,11 +185,11 @@ impl Viewer {
         // The width may have changed since the position was taken.
         self.top.1 = self.top.1.min(self.rows_of(self.top.0).saturating_sub(1));
         let row = |index: u16| Rect::new(area.x, area.y + index, area.width, 1);
-        frame.render_widget(Line::styled(self.header(), theme.cursor), row(0));
+        frame.render_widget(Line::styled(self.header(), styles.header), row(0));
         let text_area = Rect::new(area.x, area.y + 1, area.width, area.height - 1);
-        frame.buffer_mut().set_style(text_area, theme.panel);
+        frame.buffer_mut().set_style(text_area, styles.text);
         if matches!(self.state, State::Loading) {
-            frame.render_widget(Line::raw(fl!("panel-loading")), row(1));
+            frame.render_widget(Line::raw(fl!("viewer-loading")), row(1));
             return;
         }
         let mut position = self.top;
@@ -218,82 +236,10 @@ impl Viewer {
             }
         }
         let position = format!(" {position} ");
-        let room = width.saturating_sub(cells::width(&position));
-        let title = cells::fit(&format!(" {}", self.title), room, Align::Left);
+        let room = width.saturating_sub(noc_text::width(&position));
+        let title = noc_text::fit(&format!(" {}", self.title), room, Align::Left);
         title + &position
     }
-}
-
-/// The lines of `bytes`, as UTF-8 with invalid bytes replaced: `\r\n` ends a line too, tabs
-/// go to the next stop, and what a terminal would act on is shown safely.
-fn lines_of(bytes: &[u8]) -> Vec<String> {
-    let text = String::from_utf8_lossy(bytes);
-    let text = text.strip_suffix('\n').unwrap_or(&text);
-    text.split('\n')
-        .map(|line| {
-            let line = line.strip_suffix('\r').unwrap_or(line);
-            let mut expanded = String::with_capacity(line.len());
-            let mut column = 0;
-            for c in line.chars() {
-                if c == '\t' {
-                    let spaces = TAB - column % TAB;
-                    expanded.extend(std::iter::repeat_n(' ', spaces));
-                    column += spaces;
-                } else {
-                    expanded.push(c);
-                    column += c.width().unwrap_or(0);
-                }
-            }
-            cells::sanitize(expanded.as_bytes())
-        })
-        .collect()
-}
-
-/// `line` in rows of at most `width` cells, broken anywhere, as mc wraps; at least one row,
-/// and at least one character in each.
-fn rows(line: &str, width: usize) -> Vec<&str> {
-    let width = width.max(1);
-    let mut rows = Vec::new();
-    let (mut start, mut used) = (0, 0);
-    for (index, c) in line.char_indices() {
-        let char_width = c.width().unwrap_or(0);
-        if used + char_width > width && index > start {
-            rows.push(&line[start..index]);
-            (start, used) = (index, 0);
-        }
-        used += char_width;
-    }
-    rows.push(&line[start..]);
-    rows
-}
-
-/// The cells `skip` … `skip + width` of `line`; a wide character cut in two shows as a space.
-fn cut(line: &str, skip: usize, width: usize) -> String {
-    let mut text = String::new();
-    let (mut column, mut used) = (0, 0);
-    for c in line.chars() {
-        let char_width = c.width().unwrap_or(0);
-        let start = column;
-        column += char_width;
-        if column <= skip {
-            continue;
-        }
-        let shown = if start < skip {
-            column - skip
-        } else {
-            char_width
-        };
-        if used + shown > width {
-            break;
-        }
-        if shown < char_width {
-            text.push_str(&" ".repeat(shown));
-        } else {
-            text.push(c);
-        }
-        used += shown;
-    }
-    text
 }
 
 #[cfg(test)]
@@ -306,7 +252,7 @@ mod tests {
     fn draw(viewer: &mut Viewer, width: u16, height: u16) -> String {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         terminal
-            .draw(|frame| viewer.render(frame, frame.area(), &Theme::terminal()))
+            .draw(|frame| viewer.render(frame, frame.area(), &Styles::default()))
             .unwrap();
         terminal.backend().to_string()
     }
@@ -321,38 +267,8 @@ mod tests {
     }
 
     #[test]
-    fn makes_lines_safe_and_expands_tabs() {
-        let lines = lines_of(b"a\tb\r\nwide\xe6\x96\x87\tx\n\x1b[2Jbad \xff\n\n");
-        assert_eq!(
-            lines,
-            ["a       b", "wide文  x", "?[2Jbad \u{fffd}", ""],
-            "one line per newline, the last ending none"
-        );
-        assert_eq!(lines_of(b""), [""]);
-    }
-
-    #[test]
-    fn wraps_and_cuts_by_cells() {
-        assert_eq!(rows("abcdefg", 3), ["abc", "def", "g"]);
-        assert_eq!(rows("", 3), [""]);
-        assert_eq!(rows("文文文", 5), ["文文", "文"]);
-        assert_eq!(
-            rows("文", 1),
-            ["文"],
-            "a character wider than a row gets one"
-        );
-        assert_eq!(cut("abcdef", 2, 3), "cde");
-        assert_eq!(
-            cut("文文文", 1, 4),
-            " 文",
-            "a cut half is a space, and what does not fit is left out"
-        );
-        assert_eq!(cut("ab", 5, 3), "");
-    }
-
-    #[test]
     fn scrolls_within_the_text() {
-        let mut viewer = Viewer::new(1, "/srv/log".to_owned());
+        let mut viewer = Viewer::new("/srv/log".to_owned());
         assert!(draw(&mut viewer, 30, 6).contains("Loading"));
         viewer.show(&numbered(20), false);
         let top = draw(&mut viewer, 30, 6);
@@ -360,22 +276,20 @@ mod tests {
         assert!(top.contains("1/20 25%"), "{top}");
         assert!(top.contains("line 5") && !top.contains("line 6"), "{top}");
 
-        viewer.handle(Action::PageDown);
+        viewer.handle(Command::PageDown);
         assert!(draw(&mut viewer, 30, 6).contains("line 6"));
-        viewer.handle(Action::End);
+        viewer.handle(Command::End);
         let end = draw(&mut viewer, 30, 6);
         assert!(end.contains("16/20 100%"), "{end}");
-        viewer.handle(Action::Down);
+        viewer.handle(Command::Down);
         assert_eq!(draw(&mut viewer, 30, 6), end, "no further than the end");
-        viewer.handle(Action::Home);
+        viewer.handle(Command::Home);
         assert!(draw(&mut viewer, 30, 6).contains("1/20"));
-        assert!(viewer.handle(Action::Quit));
-        assert!(viewer.handle(Action::Cancel));
     }
 
     #[test]
     fn wraps_long_lines_and_scrolls_sideways_without() {
-        let mut viewer = Viewer::new(1, "f".to_owned());
+        let mut viewer = Viewer::new("f".to_owned());
         let long: String = ('a'..='z').cycle().take(50).collect();
         viewer.show(format!("{long}\nshort\n").as_bytes(), false);
         let wrapped = draw(&mut viewer, 20, 6);
@@ -384,18 +298,23 @@ mod tests {
         // end is at the bottom.
         let small = |viewer: &mut Viewer| draw(viewer, 20, 4);
         small(&mut viewer);
-        viewer.handle(Action::Down);
-        viewer.handle(Action::Down);
+        viewer.handle(Command::Down);
+        viewer.handle(Command::Down);
         let text = small(&mut viewer);
         assert!(text.contains("short"), "{text}");
         assert!(text.contains("\"uvwxyzabcdefghijklmn\""), "{text}");
-        viewer.handle(Action::Up);
+        viewer.handle(Command::Up);
         assert!(small(&mut viewer).contains("\"abcdefghijklmnopqrst\""));
 
-        viewer.handle(Action::ToggleWrap);
-        viewer.handle(Action::Home);
-        viewer.handle(Action::Right);
-        viewer.handle(Action::Right);
+        viewer.handle(Command::Right);
+        assert!(
+            small(&mut viewer).contains("\"abcdefghijklmnopqrst\""),
+            "wrapped lines do not scroll sideways"
+        );
+        viewer.handle(Command::ToggleWrap);
+        viewer.handle(Command::Home);
+        viewer.handle(Command::Right);
+        viewer.handle(Command::Right);
         let cut = draw(&mut viewer, 20, 6);
         assert!(cut.contains("\"cdefghijklmnopqrstuv\""), "{cut}");
         assert!(cut.contains("ort"), "{cut}");
@@ -403,7 +322,7 @@ mod tests {
 
     #[test]
     fn says_when_it_shows_only_the_start() {
-        let mut viewer = Viewer::new(1, "big".to_owned());
+        let mut viewer = Viewer::new("big".to_owned());
         viewer.show(&numbered(3), true);
         let text = draw(&mut viewer, 60, 6);
         assert!(text.contains("of the first 16 MiB"), "{text}");

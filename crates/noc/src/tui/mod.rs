@@ -23,7 +23,6 @@ mod sums;
 mod tabs;
 mod tasks;
 mod theme;
-mod viewer;
 
 use std::io::{self, IsTerminal as _};
 use std::path::{Path, PathBuf};

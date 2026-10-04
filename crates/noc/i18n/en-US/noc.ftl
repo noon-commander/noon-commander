@@ -539,13 +539,8 @@ checksum-saved = Saved to { $path }.
 checksum-exists = { $path } is there already. Overwrite it?
 checksum-save-error = Cannot save { $path }: { $reason }
 
-## The viewer, F3 (src/tui/viewer). Prefix: viewer-. As in mc.
+## The viewer, F3 (src/tui/app). Prefix: viewer-. Its own text is in crates/noc-viewer.
 
-# Right of the title: the first line on screen, the lines, and how far the last one on screen
-# is.
-viewer-position = { $line }/{ $lines } { $percent }%
-# The same, when only the start of a long file was read.
-viewer-truncated = { $position } of the first 16 MiB
 viewer-error = Cannot view { $path }: { $reason }
 
 ## Editing, F4 (src/tui). Prefix: edit-. The editor of $VISUAL or $EDITOR, or vi.

@@ -1405,6 +1405,7 @@ dependencies = [
  "noc-text",
  "noc-tools",
  "noc-vfs",
+ "noc-viewer",
  "ratatui",
  "rust-embed",
  "rustix",
@@ -1491,6 +1492,23 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "noc-viewer"
+version = "0.1.0"
+dependencies = [
+ "i18n-embed",
+ "i18n-embed-fl",
+ "insta",
+ "noc-text",
+ "noc-vfs",
+ "ratatui",
+ "rust-embed",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "unicode-width",
 ]
 
 [[package]]

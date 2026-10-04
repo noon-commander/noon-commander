@@ -1,0 +1,27 @@
+[package]
+name = "noc-viewer"
+description = "The file viewer of Noon Commander: text read through the Vfs, scrolled, wrapped or cut"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+i18n-embed.workspace = true
+i18n-embed-fl.workspace = true
+noc-text.workspace = true
+noc-vfs.workspace = true
+ratatui.workspace = true
+rust-embed.workspace = true
+tracing.workspace = true
+unicode-width.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

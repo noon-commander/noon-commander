@@ -19,9 +19,10 @@ use noc_ssh::version::check_version;
 use noc_ssh::{CachedHost, ChannelProcess, Session, SftpChannel, SshError, Target, cleanup_stale};
 use noc_tools::zoxide::Scored;
 use noc_vfs::{
-    FileReader as _, FileWriter as _, LocalFs, Location, Metadata, RemotePath, SftpFs, Space, Vfs,
-    VfsError, VfsPath as _,
+    FileWriter as _, LocalFs, Location, Metadata, RemotePath, SftpFs, Space, Vfs, VfsError,
+    VfsPath as _,
 };
+use noc_viewer::read_start;
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::task::{AbortHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
@@ -34,9 +35,6 @@ use super::root;
 use super::tabs::PanelId;
 use crate::context::Context;
 use crate::i18n::fl;
-
-/// Bytes of a file the viewer reads.
-pub(crate) const VIEW_LIMIT: usize = 16 * 1024 * 1024;
 
 /// How long quitting waits for connections to shut down.
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
@@ -1006,7 +1004,8 @@ async fn write_all<V: Vfs>(
     writer.finish().await
 }
 
-/// The start of the file at `location`, up to [`VIEW_LIMIT`], and whether there is more.
+/// The start of the file at `location`, up to [`noc_viewer::LIMIT`], and whether there is
+/// more.
 async fn read(location: Location, host: Option<HostHandle>) -> Result<(Vec<u8>, bool), String> {
     let result = match (location, share(host).await) {
         (Location::Local(path), _) => read_start(&LocalFs, &path).await,
@@ -1014,20 +1013,6 @@ async fn read(location: Location, host: Option<HostHandle>) -> Result<(Vec<u8>, 
         _ => return Err(fl!("error-connection-closed")),
     };
     result.map_err(|error| describe::vfs_error(&error))
-}
-
-async fn read_start<V: Vfs>(vfs: &V, path: &V::Path) -> Result<(Vec<u8>, bool), VfsError> {
-    let mut reader = vfs.open_file(path).await?;
-    let mut bytes = Vec::new();
-    while let Some(chunk) = reader.read().await? {
-        bytes.extend_from_slice(&chunk);
-        if bytes.len() >= VIEW_LIMIT {
-            let more = bytes.len() > VIEW_LIMIT || reader.read().await?.is_some();
-            bytes.truncate(VIEW_LIMIT);
-            return Ok((bytes, more));
-        }
-    }
-    Ok((bytes, false))
 }
 
 /// The session of a connected host, from its task; `None` if the host is gone.

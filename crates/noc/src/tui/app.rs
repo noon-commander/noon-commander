@@ -11,6 +11,7 @@ use noc_config::{Config, HostConfig, Hosts, MenuBar, SftpHost, TabBar, UiConfig}
 use noc_ops::{Algorithm, Conflict, CopyOptions, Decision, Sum};
 use noc_tools::zoxide::Scored;
 use noc_vfs::{FileKind, Location, Metadata, RemotePath};
+use noc_viewer::{Command as ViewerCommand, Styles as ViewerStyles, Viewer};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::text::{Line, Span};
@@ -38,7 +39,6 @@ use super::sums::{Mark, SumRow, SumsButton, SumsEvent, SumsWindow, Verdict};
 use super::tabs::{self, Bar, PanelId, Tab, Tabs};
 use super::tasks::{HostHandle, JobEvent};
 use super::theme::{ColorDepth, Theme};
-use super::viewer::Viewer;
 use crate::i18n::fl;
 
 /// One of the two panels, named by the side it starts on. Ctrl-U swaps where the panels are
@@ -419,9 +419,10 @@ impl Job {
     }
 }
 
-/// The viewer on screen, and what stops it loading.
+/// The viewer on screen, the read it waits for, and what stops it loading.
 #[derive(Debug)]
 struct Viewing {
+    id: u64,
     viewer: Viewer,
     location: Location,
     cancel: CancellationToken,
@@ -1734,7 +1735,8 @@ impl App {
         let id = self.last_job;
         let cancel = CancellationToken::new();
         self.viewing = Some(Viewing {
-            viewer: Viewer::new(id, location_text(&location)),
+            id,
+            viewer: Viewer::new(location_text(&location)),
             location: location.clone(),
             cancel: cancel.clone(),
         });
@@ -1884,11 +1886,7 @@ impl App {
     /// Takes what [`Effect::Read`] read for the viewer `id`; an error closes the viewer and
     /// shows why.
     pub(crate) fn read(&mut self, id: u64, result: Result<(Vec<u8>, bool), String>) {
-        let Some(viewing) = self
-            .viewing
-            .as_mut()
-            .filter(|viewing| viewing.viewer.id() == id)
-        else {
+        let Some(viewing) = self.viewing.as_mut().filter(|viewing| viewing.id == id) else {
             return;
         };
         match result {
@@ -1912,11 +1910,12 @@ impl App {
                 self.help = Some(Help::new(&self.keymap, self.config.ui.type_to_search));
             }
             Action::Redraw => self.redraw = true,
+            Action::Quit | Action::Cancel => self.close_viewer(),
             action => {
                 if let Some(viewing) = &mut self.viewing
-                    && viewing.viewer.handle(action)
+                    && let Some(command) = viewer_command(action)
                 {
-                    self.close_viewer();
+                    viewing.viewer.handle(command);
                 }
             }
         }
@@ -3323,7 +3322,11 @@ impl App {
             tz,
         };
         if let Some(viewing) = &mut self.viewing {
-            viewing.viewer.render(frame, panels, &self.theme);
+            let styles = ViewerStyles {
+                header: self.theme.cursor,
+                text: self.theme.panel,
+            };
+            viewing.viewer.render(frame, panels, &styles);
         } else {
             let sides = [
                 (&mut self.left, left_bar, left, active == Side::Left),
@@ -3493,6 +3496,22 @@ fn render_side(
         }
         None => {}
     }
+}
+
+/// What the viewer does for `action`, if anything.
+fn viewer_command(action: Action) -> Option<ViewerCommand> {
+    Some(match action {
+        Action::Up => ViewerCommand::Up,
+        Action::Down => ViewerCommand::Down,
+        Action::PageUp => ViewerCommand::PageUp,
+        Action::PageDown => ViewerCommand::PageDown,
+        Action::Home => ViewerCommand::Home,
+        Action::End => ViewerCommand::End,
+        Action::Left => ViewerCommand::Left,
+        Action::Right => ViewerCommand::Right,
+        Action::ToggleWrap => ViewerCommand::ToggleWrap,
+        _ => return None,
+    })
 }
 
 /// The theme that `ui` picks, in the colors of `depth`. `ui.theme` was checked when the config

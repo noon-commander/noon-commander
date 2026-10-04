@@ -1,5 +1,5 @@
 ---
-source: crates/noc/src/tui/viewer.rs
+source: crates/noc-viewer/src/view.rs
 expression: wrapped
 ---
 " f         1/2 100% "

@@ -132,6 +132,13 @@ lint: md sh typos toml gha unused
 # check, lint, and stale snapshots; changes no files
 all: check lint snap-stale
 
+# Take the screenshots of docs/demo/*.tape with made-up files and hosts (needs vhs, a Nerd Font)
+demo:
+    cargo build -p noc
+    docs/demo/setup.sh
+    mkdir -p assets/screenshots
+    for tape in docs/demo/*.tape; do vhs "$tape"; done
+
 # Render every predefined PNG from the logo (needs resvg)
 logo: (_logo-png "github" "512")
 

@@ -98,17 +98,20 @@ until `xattr -d com.apple.quarantine noc` removes the mark; Homebrew sets none.
   [cargo-shear](https://github.com/Boshen/cargo-shear) finds unused dependencies,
   [taplo](https://taplo.tamasfe.dev) checks and formats the TOML files,
   [actionlint](https://github.com/rhysd/actionlint) checks the GitHub Actions workflows,
-  [zizmor](https://docs.zizmor.sh) audits their security, and
-  [cargo-edit](https://github.com/killercup/cargo-edit) shows newer dependency versions:
+  [zizmor](https://docs.zizmor.sh) audits their security,
+  [cargo-edit](https://github.com/killercup/cargo-edit) shows newer dependency versions, and
+  [VHS](https://github.com/charmbracelet/vhs) takes the screenshots (only for `just demo`; it
+  needs ttyd and ffmpeg, and a [Nerd Font](https://www.nerdfonts.com) for the icons):
 
   ```sh
   brew install just resvg cargo-deny markdownlint-cli2 shellcheck cargo-insta typos-cli \
-      cargo-shear taplo actionlint zizmor cargo-edit
-  # or, on any platform (ShellCheck from your package manager):
+      cargo-shear taplo actionlint zizmor cargo-edit vhs
+  # or, on any platform (ShellCheck, ttyd, and ffmpeg from your package manager):
   cargo install just resvg cargo-deny cargo-insta typos-cli cargo-shear taplo-cli zizmor \
       cargo-edit --locked
   npm install --global markdownlint-cli2
   go install github.com/rhysd/actionlint/cmd/actionlint@latest
+  go install github.com/charmbracelet/vhs@latest
   ```
 
 ### Build and run
@@ -184,10 +187,18 @@ The project's tasks live in the [`justfile`](justfile)
 | `just gha` | Lint the GitHub Actions workflows and audit their security, pedantically (needs actionlint, zizmor) |
 | `just sh` | Lint the shell scripts, such as the fake `ssh` of the tests (needs shellcheck) |
 | `just logo` | Render the PNGs of `assets/icons/logo.svg`, without metadata (needs resvg) |
+| `just demo` | Take the screenshots of `docs/demo/*.tape` in a made-up home with made-up hosts (needs vhs) |
 
 `just logo` renders every PNG listed in the `logo` recipe, for now
 `assets/icons/logo-github.png` (512 × 512, the GitHub avatar). To add one, add a
 `(_logo-png "name" "size")` to that recipe.
+
+`just demo` builds `noc`, makes a world for it in `/tmp/noc-demo` with
+[`docs/demo/setup.sh`](docs/demo/setup.sh), and plays every `docs/demo/*.tape` in VHS, which
+writes the screenshots to `assets/screenshots/`. That world has its own home directory, settings,
+and `ssh_config`, and a fake `ssh` that serves the made-up hosts from local directories, so no
+real file, host, or name shows. The paths in the panel titles still show where it lives. The tapes
+use the font SauceCodePro Nerd Font Mono; with another one, change `Set FontFamily`.
 
 ## Configuration
 

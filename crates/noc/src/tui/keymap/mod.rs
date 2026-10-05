@@ -313,51 +313,53 @@ impl Keymap {
 
 /// The bindings of the mc preset, by context.
 fn mc_presets() -> [(Context, Preset); 16] {
-    use Action::{
-        Backspace, Cancel, Confirm, Disconnect, Down, EditHost, End, Help, Home, Left, NextField,
-        PageDown, PageUp, PrevField, Quit, Redraw, Right, Toggle, ToggleWrap, Up,
-    };
     [
         (Context::Panel, PANEL),
-        (Context::Root, &[(EditHost, &["f4"]), (Disconnect, &["f8"])]),
+        (
+            Context::Root,
+            &[(Action::EditHost, &["f4"]), (Action::Disconnect, &["f8"])],
+        ),
         (
             Context::QuickSearch,
-            &[(Backspace, &["backspace"]), (Cancel, &["esc"])],
+            &[
+                (Action::Backspace, &["backspace"]),
+                (Action::Cancel, &["esc"]),
+            ],
         ),
         (Context::Rename, RENAME),
         (
             Context::Dialog,
             &[
-                (Up, &["up"]),
-                (Down, &["down"]),
-                (Left, &["left"]),
-                (Right, &["right"]),
-                (PageUp, &["pageup"]),
-                (PageDown, &["pagedown"]),
-                (Home, &["home"]),
-                (End, &["end"]),
-                (NextField, &["tab"]),
-                (PrevField, &["backtab"]),
-                (Confirm, &["enter"]),
-                (Toggle, &["space"]),
-                (Cancel, &["esc", "f10"]),
+                (Action::Up, &["up"]),
+                (Action::Down, &["down"]),
+                (Action::Left, &["left"]),
+                (Action::Right, &["right"]),
+                (Action::PageUp, &["pageup"]),
+                (Action::PageDown, &["pagedown"]),
+                (Action::Home, &["home"]),
+                (Action::End, &["end"]),
+                (Action::NextField, &["tab"]),
+                (Action::PrevField, &["backtab"]),
+                (Action::Confirm, &["enter"]),
+                (Action::Toggle, &["space"]),
+                (Action::Cancel, &["esc", "f10"]),
             ],
         ),
         (
             Context::Viewer,
             &[
-                (Up, &["up", "k", "y", "ctrl-p"]),
-                (Down, &["down", "j", "e", "enter", "ctrl-n"]),
-                (PageUp, &["pageup", "b", "alt-v", "backspace"]),
-                (PageDown, &["pagedown", "space", "f", "ctrl-v"]),
-                (Home, &["home", "g", "ctrl-home"]),
-                (End, &["end", "shift-g", "ctrl-end"]),
-                (Left, &["left", "h"]),
-                (Right, &["right", "l"]),
-                (ToggleWrap, &["f2"]),
-                (Help, &["f1"]),
-                (Quit, &["f3", "f10", "q", "esc"]),
-                (Redraw, &["ctrl-l"]),
+                (Action::Up, &["up", "k", "y", "ctrl-p"]),
+                (Action::Down, &["down", "j", "e", "enter", "ctrl-n"]),
+                (Action::PageUp, &["pageup", "b", "alt-v", "backspace"]),
+                (Action::PageDown, &["pagedown", "space", "f", "ctrl-v"]),
+                (Action::Home, &["home", "g", "ctrl-home"]),
+                (Action::End, &["end", "shift-g", "ctrl-end"]),
+                (Action::Left, &["left", "h"]),
+                (Action::Right, &["right", "l"]),
+                (Action::ToggleWrap, &["f2"]),
+                (Action::Help, &["f1"]),
+                (Action::Quit, &["f3", "f10", "q", "esc"]),
+                (Action::Redraw, &["ctrl-l"]),
             ],
         ),
         (Context::Menu, MENU),
@@ -369,94 +371,84 @@ fn mc_presets() -> [(Context, Preset); 16] {
         (Context::Completion, COMPLETION),
         (Context::CommandLine, COMMAND_LINE),
         (Context::History, HISTORY),
-        (Context::UserScreen, &[(Cancel, &["ctrl-o", "esc"])]),
+        (Context::UserScreen, &[(Action::Cancel, &["ctrl-o", "esc"])]),
     ]
 }
 
 /// The panels' bindings in the mc preset.
-const PANEL: Preset = {
-    use Action::{
-        Cancel, Checksum, CloseTab, Command, CommandHistory, Copy, Delete, Down, Edit, End, Enter,
-        Help, Home, InvertMarks, Jobs, Jump, LocationMenuLeft, LocationMenuRight, Mark, MarkUp,
-        Mkdir, Move, NewTab, NextTab, OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent,
-        PrevTab, PullDown, QuickCd, QuickSearch, Quit, Redraw, Reload, Rename, SaveWorkspace,
-        Select, Shell, SortByExtension, SortByName, SortBySize, SortByTime, SwapPanels,
-        SwitchPanel, TabList, ToggleHidden, Unselect, Up, UserScreen, View, Workspaces,
-    };
-    &[
-        (Up, &["up", "ctrl-p"]),
-        (Down, &["down", "ctrl-n"]),
-        (PageUp, &["pageup", "alt-v"]),
-        (PageDown, &["pagedown", "ctrl-v"]),
-        (Home, &["home"]),
-        (End, &["end"]),
-        (Enter, &["enter"]),
-        (Mark, &["insert", "ctrl-t", "shift-down"]),
-        (MarkUp, &["shift-up"]),
-        // mc takes `+`, `-`, `\`, and `*` as commands while its command line is empty.
-        (Select, &["+", "alt-+"]),
-        (Unselect, &["-", "\\", "alt--"]),
-        (InvertMarks, &["*", "alt-*"]),
-        (Parent, &["ctrl-pageup"]),
-        (SwitchPanel, &["tab"]),
-        (SwapPanels, &["ctrl-u"]),
-        (OtherPanelOpen, &["alt-o"]),
-        (OtherPanelSync, &["alt-i"]),
-        (Reload, &["ctrl-r"]),
-        (Cancel, &["esc", "esc esc"]),
-        (ToggleHidden, &["alt-."]),
-        // mc leaves sorting to its menu; these are Far Manager's keys. macOS takes them for
-        // keyboard navigation unless those shortcuts are turned off.
-        (SortByName, &["ctrl-f3"]),
-        (SortByExtension, &["ctrl-f4"]),
-        (SortByTime, &["ctrl-f5"]),
-        (SortBySize, &["ctrl-f6"]),
-        (QuickSearch, &["ctrl-s", "alt-s"]),
-        // Not in mc, whose command line takes what is typed (ADR 0019).
-        (Shell, &["!"]),
-        (Command, &[":"]),
-        // mc's: the command line, with its history.
-        (CommandHistory, &["alt-h"]),
-        // mc's and Far's: the output of commands.
-        (UserScreen, &["ctrl-o"]),
-        (Help, &["f1"]),
-        (View, &["f3"]),
-        (Edit, &["f4"]),
-        (Copy, &["f5"]),
-        (Move, &["f6"]),
-        // mc's Shift+F6 asks for a new name in a dialog; here the name is edited in its row.
-        // Terminals without Shift+F6 send F16.
-        (Rename, &["shift-f6", "f16"]),
-        (Mkdir, &["f7"]),
-        // In text fields, Delete deletes a character.
-        (Delete, &["f8", "delete"]),
-        (Jobs, &["ctrl-x j"]),
-        // Not in mc; `#` for a hash.
-        (Checksum, &["ctrl-x #"]),
-        // Far Manager's menus to change drives. Ctrl+x 1 and 2 are for terminals whose Alt+F1
-        // never arrives, such as macOS Terminal without Option as Meta.
-        (LocationMenuLeft, &["alt-f1", "ctrl-x 1"]),
-        (LocationMenuRight, &["alt-f2", "ctrl-x 2"]),
-        // Not in mc: zoxide's `z`. Ctrl+x z where Alt never arrives.
-        (Jump, &["alt-z", "ctrl-x z"]),
-        // mc's Quick cd; Esc c where Alt never arrives.
-        (QuickCd, &["alt-c"]),
-        // Not in mc. Ctrl+t marks and terminals rarely pass Ctrl+Tab, so tabs live under
-        // Ctrl+x; Alt+Left and Alt+Right where the terminal sends them.
-        (NewTab, &["ctrl-x t"]),
-        (CloseTab, &["ctrl-x w"]),
-        (NextTab, &["alt-right", "ctrl-x n"]),
-        (PrevTab, &["alt-left", "ctrl-x p"]),
-        (TabList, &["ctrl-x tab"]),
-        // Not in mc: W for workspaces, and Shift saves the tabs of both panels as one. Esc w
-        // and Esc W where Alt never arrives.
-        (Workspaces, &["alt-w"]),
-        (SaveWorkspace, &["alt-shift-w"]),
-        (PullDown, &["f9"]),
-        (Quit, &["f10"]),
-        (Redraw, &["ctrl-l"]),
-    ]
-};
+const PANEL: Preset = &[
+    (Action::Up, &["up", "ctrl-p"]),
+    (Action::Down, &["down", "ctrl-n"]),
+    (Action::PageUp, &["pageup", "alt-v"]),
+    (Action::PageDown, &["pagedown", "ctrl-v"]),
+    (Action::Home, &["home"]),
+    (Action::End, &["end"]),
+    (Action::Enter, &["enter"]),
+    (Action::Mark, &["insert", "ctrl-t", "shift-down"]),
+    (Action::MarkUp, &["shift-up"]),
+    // mc takes `+`, `-`, `\`, and `*` as commands while its command line is empty.
+    (Action::Select, &["+", "alt-+"]),
+    (Action::Unselect, &["-", "\\", "alt--"]),
+    (Action::InvertMarks, &["*", "alt-*"]),
+    (Action::Parent, &["ctrl-pageup"]),
+    (Action::SwitchPanel, &["tab"]),
+    (Action::SwapPanels, &["ctrl-u"]),
+    (Action::OtherPanelOpen, &["alt-o"]),
+    (Action::OtherPanelSync, &["alt-i"]),
+    (Action::Reload, &["ctrl-r"]),
+    (Action::Cancel, &["esc", "esc esc"]),
+    (Action::ToggleHidden, &["alt-."]),
+    // mc leaves sorting to its menu; these are Far Manager's keys. macOS takes them for
+    // keyboard navigation unless those shortcuts are turned off.
+    (Action::SortByName, &["ctrl-f3"]),
+    (Action::SortByExtension, &["ctrl-f4"]),
+    (Action::SortByTime, &["ctrl-f5"]),
+    (Action::SortBySize, &["ctrl-f6"]),
+    (Action::QuickSearch, &["ctrl-s", "alt-s"]),
+    // Not in mc, whose command line takes what is typed (ADR 0019).
+    (Action::Shell, &["!"]),
+    (Action::Command, &[":"]),
+    // mc's: the command line, with its history.
+    (Action::CommandHistory, &["alt-h"]),
+    // mc's and Far's: the output of commands.
+    (Action::UserScreen, &["ctrl-o"]),
+    (Action::Help, &["f1"]),
+    (Action::View, &["f3"]),
+    (Action::Edit, &["f4"]),
+    (Action::Copy, &["f5"]),
+    (Action::Move, &["f6"]),
+    // mc's Shift+F6 asks for a new name in a dialog; here the name is edited in its row.
+    // Terminals without Shift+F6 send F16.
+    (Action::Rename, &["shift-f6", "f16"]),
+    (Action::Mkdir, &["f7"]),
+    // In text fields, Delete deletes a character.
+    (Action::Delete, &["f8", "delete"]),
+    (Action::Jobs, &["ctrl-x j"]),
+    // Not in mc; `#` for a hash.
+    (Action::Checksum, &["ctrl-x #"]),
+    // Far Manager's menus to change drives. Ctrl+x 1 and 2 are for terminals whose Alt+F1
+    // never arrives, such as macOS Terminal without Option as Meta.
+    (Action::LocationMenuLeft, &["alt-f1", "ctrl-x 1"]),
+    (Action::LocationMenuRight, &["alt-f2", "ctrl-x 2"]),
+    // Not in mc: zoxide's `z`. Ctrl+x z where Alt never arrives.
+    (Action::Jump, &["alt-z", "ctrl-x z"]),
+    // mc's Quick cd; Esc c where Alt never arrives.
+    (Action::QuickCd, &["alt-c"]),
+    // Not in mc. Ctrl+t marks and terminals rarely pass Ctrl+Tab, so tabs live under
+    // Ctrl+x; Alt+Left and Alt+Right where the terminal sends them.
+    (Action::NewTab, &["ctrl-x t"]),
+    (Action::CloseTab, &["ctrl-x w"]),
+    (Action::NextTab, &["alt-right", "ctrl-x n"]),
+    (Action::PrevTab, &["alt-left", "ctrl-x p"]),
+    (Action::TabList, &["ctrl-x tab"]),
+    // Not in mc: W for workspaces, and Shift saves the tabs of both panels as one. Esc w
+    // and Esc W where Alt never arrives.
+    (Action::Workspaces, &["alt-w"]),
+    (Action::SaveWorkspace, &["alt-shift-w"]),
+    (Action::PullDown, &["f9"]),
+    (Action::Quit, &["f10"]),
+    (Action::Redraw, &["ctrl-l"]),
+];
 
 /// The panels' bindings in the vim preset.
 const VIM_PANEL: Preset = &[

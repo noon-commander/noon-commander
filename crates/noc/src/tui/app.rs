@@ -24,7 +24,7 @@ use tokio_util::sync::CancellationToken;
 use super::cd;
 use super::cells::{self, Align};
 use super::complete::{self, Candidate, Choices, ChoicesEvent, Kind, Offer, Outcome};
-use super::configuration::Configuration;
+use super::configuration::{ConfigEvent, Configuration};
 use super::decor::Decor;
 use super::dialog::{Ask, Button, Dialog, DialogEvent, Reply};
 use super::help::Help;
@@ -871,7 +871,7 @@ impl App {
                 return Vec::new();
             }
             Front::Panels => {}
-            _ => return Vec::new(),
+            _ => return self.pointer_window(pointer),
         }
         if self.panel(self.active).renaming() {
             return Vec::new();
@@ -912,6 +912,79 @@ impl App {
         }
     }
 
+    /// The key that a step of the wheel stands for in windows and lists, and how many times:
+    /// Up or Down by `ui.wheel` lines, or a page up or down.
+    fn wheel_keys(&self, press: Press) -> Option<(Action, u8)> {
+        let down = match press {
+            Press::WheelUp => false,
+            Press::WheelDown => true,
+            Press::Click | Press::DoubleClick | Press::RightClick => return None,
+        };
+        Some(match (self.config.ui.wheel, down) {
+            (Wheel::Lines(count), false) => (Action::Up, count),
+            (Wheel::Lines(count), true) => (Action::Down, count),
+            (Wheel::Page, false) => (Action::PageUp, 1),
+            (Wheel::Page, true) => (Action::PageDown, 1),
+        })
+    }
+
+    /// Gives the keys of a step of the wheel to what is in front.
+    fn wheel(&mut self, (action, count): (Action, u8)) -> Vec<Effect> {
+        let mut effects = Vec::new();
+        for _ in 0..count {
+            effects.extend(self.handle(Resolved::Action(action)));
+        }
+        effects
+    }
+
+    /// Gives a press of the mouse to the window or menu in front. The wheel moves its cursor
+    /// as Up and Down do, or scrolls the help; but not in a job's window, where they move
+    /// between the buttons. A click does what the window says, often by the key it stands
+    /// for.
+    fn pointer_window(&mut self, pointer: Pointer) -> Vec<Effect> {
+        let front = self.front();
+        if let Some(keys) = self.wheel_keys(pointer.press) {
+            return if front == Front::Job {
+                Vec::new()
+            } else {
+                self.wheel(keys)
+            };
+        }
+        let action = match front {
+            Front::Menu => self.menu.as_mut().and_then(|menu| menu.pointer(pointer)),
+            Front::Jump => self.jump.as_mut().and_then(|jump| jump.pointer(pointer)),
+            Front::Workspaces => self
+                .workspaces_window
+                .as_mut()
+                .and_then(|window| window.pointer(pointer)),
+            Front::Results(_) => self
+                .results
+                .front_mut()
+                .and_then(|results| results.window.pointer(pointer)),
+            Front::Job => self
+                .jobs
+                .iter_mut()
+                .find(|job| !job.background)
+                .and_then(|job| job.view.pointer(pointer)),
+            Front::JobsList => {
+                let rows = self.job_rows();
+                let list = self.jobs_list.as_mut();
+                list.and_then(|list| list.pointer(pointer, &rows))
+            }
+            Front::Configuration => {
+                let Some(configuration) = &mut self.configuration else {
+                    return Vec::new();
+                };
+                let event = configuration.pointer(pointer);
+                return self.configuration_event(event);
+            }
+            Front::Dialog(_) | Front::Help | Front::PullDown | Front::Viewer | Front::Panels => {
+                None
+            }
+        };
+        action.map_or_else(Vec::new, |action| self.handle(Resolved::Action(action)))
+    }
+
     /// Scrolls the viewer by a step of the wheel, if `press` is one.
     fn wheel_viewer(&mut self, press: Press) {
         let Some(viewing) = &mut self.viewing else {
@@ -933,8 +1006,22 @@ impl App {
     }
 
     /// Gives a press of the mouse to the dialog in front, and does what it was for if it
-    /// closes. A list of completions under its field goes.
+    /// closes; or to the list of completions under its field, which goes at a press outside
+    /// it.
     fn pointer_dialog(&mut self, pointer: Pointer) -> Vec<Effect> {
+        let wheel = self.wheel_keys(pointer.press);
+        if let Some(completing) = &mut self.completion
+            && let Some(choices) = &mut completing.choices
+            && choices.contains(pointer.at)
+        {
+            if let Some(keys) = wheel {
+                return self.wheel(keys);
+            }
+            return match choices.pointer(pointer) {
+                Some(action) => self.handle(Resolved::Action(action)),
+                None => Vec::new(),
+            };
+        }
         self.completion = None;
         let Some(open) = self.dialogs.front_mut() else {
             return Vec::new();
@@ -2071,6 +2158,11 @@ impl App {
             return Vec::new();
         };
         let event = configuration.handle(input);
+        self.configuration_event(event)
+    }
+
+    /// Closes the Configuration dialog if `event` closes it, and applies the change it made.
+    fn configuration_event(&mut self, event: ConfigEvent) -> Vec<Effect> {
         if event.closed {
             self.configuration = None;
         }
@@ -4925,23 +5017,8 @@ mod tests {
         terminal
             .draw(|frame| app.render(frame, now, &TimeZone::UTC))
             .unwrap();
-        let buffer = terminal.backend().buffer();
-        for y in 0..buffer.area.height {
-            let line: Vec<&str> = (0..buffer.area.width)
-                .map(|x| buffer[(x, y)].symbol())
-                .collect();
-            let chars: Vec<char> = text.chars().collect();
-            let found = line.windows(chars.len()).position(|cells| {
-                cells
-                    .iter()
-                    .zip(&chars)
-                    .all(|(cell, c)| cell.starts_with(*c))
-            });
-            if let Some(x) = found {
-                return (u16::try_from(x).unwrap(), y);
-            }
-        }
-        panic!("no {text:?} on the screen");
+        let at = super::super::mouse::find(terminal.backend().buffer(), text);
+        (at.x, at.y)
     }
 
     #[test]
@@ -4969,6 +5046,49 @@ mod tests {
         let (x, y) = find(&mut app, "Configuration");
         press(&mut app, Press::Click, x, y);
         assert!(app.configuration.is_some());
+    }
+
+    #[test]
+    fn the_mouse_chooses_in_menus_and_presses_the_buttons_of_windows() {
+        let mut app = loaded();
+        open_menu(&mut app, Action::LocationMenuRight);
+        let (x, y) = find(&mut app, "USB");
+        press(&mut app, Press::Click, x, y);
+        assert!(app.menu.is_some(), "a click puts the cursor on the row");
+        let Effect::List { panel, request, .. } = one(press(&mut app, Press::DoubleClick, x, y))
+        else {
+            panic!("expected a listing");
+        };
+        assert_eq!(
+            (panel.side, request.location),
+            (Side::Right, local("/Volumes/USB"))
+        );
+        assert!(app.menu.is_none());
+        open_menu(&mut app, Action::LocationMenuRight);
+        screen_of(&mut app, 12);
+        press(&mut app, Press::Click, 10, 3);
+        assert!(app.menu.is_none(), "a click outside closes the menu");
+        assert_eq!(app.active, Side::Right, "and does nothing else");
+
+        // A job in front goes behind the panels, then the list of jobs aborts it.
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        let (_, _, _, cancel) = delete_job(app.handle(action(Action::Confirm)));
+        let (x, y) = find(&mut app, "Background");
+        press(&mut app, Press::WheelDown, x, y);
+        press(&mut app, Press::Click, x, y);
+        assert!(app.in_front().is_none());
+        app.handle(action(Action::Jobs));
+        let (x, y) = find(&mut app, "Abort");
+        press(&mut app, Press::Click, x, y);
+        assert!(cancel.is_cancelled());
+
+        // The wheel scrolls the help.
+        app.handle(action(Action::Cancel));
+        app.handle(action(Action::Help));
+        let before = screen_of(&mut app, 12);
+        press(&mut app, Press::WheelDown, 80, 5);
+        assert_ne!(screen_of(&mut app, 12), before);
     }
 
     #[test]

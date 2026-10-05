@@ -3,6 +3,7 @@
 //! renames, and deletes them. Typing filters the window; while the filter is empty, `1` … `9`
 //! and `0` restore the first ten rows.
 
+use std::cell::RefCell;
 use std::path::Path;
 
 use noc_config::{Place, SavedTab, SortBy, Workspace, Workspaces};
@@ -12,9 +13,10 @@ use ratatui::layout::{Position, Rect};
 use ratatui::text::Line;
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, draw_box};
+use super::dialog::{Colors, draw_box, frame_around};
 use super::fuzzy::Fuzzy;
 use super::keymap::{Action, Resolved};
+use super::mouse::{Drawn, Pointer};
 use super::panel::{Destination, Panel, SortKey};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -78,6 +80,8 @@ pub(crate) struct WorkspacesWindow {
     /// First row on screen, and rows on screen at the last render.
     offset: usize,
     page: usize,
+    /// Where the last render drew it, for the mouse.
+    drawn: RefCell<Drawn>,
 }
 
 impl WorkspacesWindow {
@@ -92,6 +96,7 @@ impl WorkspacesWindow {
             wanted: None,
             offset: 0,
             page: 1,
+            drawn: RefCell::default(),
         };
         window.refilter();
         window
@@ -209,6 +214,14 @@ impl WorkspacesWindow {
         WorkspacesEvent::Pending
     }
 
+    /// Takes a press of the mouse, where the window was drawn last: a click puts the cursor on
+    /// a row, and returns the key that a double click on one, or a click outside the window,
+    /// stands for: Enter or Esc.
+    pub(crate) fn pointer(&mut self, pointer: Pointer) -> Option<Action> {
+        let drawn = self.drawn.borrow().clone();
+        drawn.menu_press(pointer, &mut self.cursor)
+    }
+
     /// Draws the window centered over `area`, the panels: the filter, then the workspaces,
     /// scrolled to the cursor.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
@@ -225,6 +238,11 @@ impl WorkspacesWindow {
         // Borders, the filter, the line under it, the rows.
         let size = (WIDTH, rows.saturating_add(4));
         let inner = draw_box(frame, area, size, &fl!("workspaces-title"), colors, theme);
+        let mut drawn = self.drawn.borrow_mut();
+        *drawn = Drawn {
+            frame: frame_around(inner),
+            ..Drawn::default()
+        };
         if inner.height < 3 || inner.width < 4 {
             return (self.page, self.cursor, self.offset);
         }
@@ -297,6 +315,7 @@ impl WorkspacesWindow {
             let text = Line::styled(format!("{hotkey} {name} {count}"), style);
             let y = u16::try_from(index + 2).unwrap_or(u16::MAX);
             frame.render_widget(text, line(y));
+            drawn.rows.push((row, line(y)));
         }
         (page, cursor, offset)
     }

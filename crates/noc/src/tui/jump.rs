@@ -3,6 +3,7 @@
 //! filtered and ranked by what is typed as fzf does. Enter opens one in the active panel;
 //! while nothing is typed, `1` … `9` and `0` open the first ten rows.
 
+use std::cell::RefCell;
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 
@@ -12,9 +13,10 @@ use ratatui::layout::{Position, Rect};
 use ratatui::text::Line;
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, draw_box};
+use super::dialog::{Colors, draw_box, frame_around};
 use super::fuzzy::Fuzzy;
 use super::keymap::{Action, Resolved};
+use super::mouse::{Drawn, Pointer};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -59,6 +61,8 @@ pub(crate) struct JumpMenu {
     /// First row on screen, and rows on screen at the last render.
     offset: usize,
     page: usize,
+    /// Where the last render drew it, for the mouse.
+    drawn: RefCell<Drawn>,
 }
 
 impl JumpMenu {
@@ -77,6 +81,7 @@ impl JumpMenu {
             cursor: 0,
             offset: 0,
             page: 1,
+            drawn: RefCell::default(),
         }
     }
 
@@ -195,6 +200,14 @@ impl JumpMenu {
         JumpEvent::Pending
     }
 
+    /// Takes a press of the mouse, where the window was drawn last: a click puts the cursor on
+    /// a row, and returns the key that a double click on one, or a click outside the window,
+    /// stands for: Enter or Esc.
+    pub(crate) fn pointer(&mut self, pointer: Pointer) -> Option<Action> {
+        let drawn = self.drawn.borrow().clone();
+        drawn.menu_press(pointer, &mut self.cursor)
+    }
+
     /// The keywords changed: the window filters zoxide's directories again, or asks zoxide.
     fn changed(&mut self) -> JumpEvent {
         if self.fuzzy {
@@ -229,6 +242,11 @@ impl JumpMenu {
         // Borders, the keywords, the line under them, the rows.
         let size = (WIDTH, rows.saturating_add(4));
         let inner = draw_box(frame, area, size, &fl!("jump-title"), colors, theme);
+        let mut drawn = self.drawn.borrow_mut();
+        *drawn = Drawn {
+            frame: frame_around(inner),
+            ..Drawn::default()
+        };
         if inner.height < 3 || inner.width < 4 {
             return (self.page, self.cursor, self.offset);
         }
@@ -296,6 +314,7 @@ impl JumpMenu {
             let text = Line::styled(format!("{hotkey} {path} {score}"), style);
             let y = u16::try_from(index + 2).unwrap_or(u16::MAX);
             frame.render_widget(text, line(y));
+            drawn.rows.push((row, line(y)));
         }
         (page, cursor, offset)
     }

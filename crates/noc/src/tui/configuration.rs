@@ -14,6 +14,7 @@ use ratatui::text::{Line, Span};
 use super::cells::{self, Align};
 use super::dialog::{Colors, Field, draw_box, draw_separator};
 use super::keymap::{Action, Context, Resolved};
+use super::mouse::{Pointer, Press};
 use super::scrollbar;
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -254,6 +255,16 @@ pub(crate) struct Configuration {
     applied: Config,
     /// Why the text field under the cursor cannot be applied, shown in place of its hint.
     error: Option<String>,
+    /// Where the last render drew the categories and the settings, for the mouse.
+    drawn: Drawn,
+}
+
+/// Where the categories and the settings were drawn.
+#[derive(Debug, Default)]
+struct Drawn {
+    categories: Vec<Rect>,
+    /// The settings shown, by their rows: each row, and its value.
+    settings: Vec<(usize, Rect, Rect)>,
 }
 
 /// The values of a choice with their texts; `current` is chosen, and added if it is not
@@ -353,6 +364,7 @@ impl Configuration {
             icons,
             applied: config.clone(),
             error: None,
+            drawn: Drawn::default(),
         };
         if let Ok(applied) = dialog.config() {
             dialog.applied = applied;
@@ -563,6 +575,73 @@ impl Configuration {
         event
     }
 
+    /// Takes a press of the mouse, where the dialog was drawn last. A click on a category shows
+    /// its settings; one on a setting puts the cursor there, and on its value switches a check
+    /// box, picks the next choice (the one before at `<`), or puts the cursor in the text where
+    /// clicked. Leaving a text field applies it, as a key that leaves it does, and one that
+    /// holds something invalid keeps the cursor.
+    pub(crate) fn pointer(&mut self, pointer: Pointer) -> ConfigEvent {
+        let Pointer { press, at } = pointer;
+        let mut event = ConfigEvent::default();
+        if !matches!(press, Press::Click | Press::DoubleClick) {
+            return event;
+        }
+        let category = self
+            .drawn
+            .categories
+            .iter()
+            .position(|row| row.contains(at));
+        let setting = self
+            .drawn
+            .settings
+            .iter()
+            .find(|(_, row, _)| row.contains(at))
+            .map(|(index, _, value)| (*index, *value));
+        if category.is_none() && setting.is_none() {
+            return event;
+        }
+        let stays =
+            self.focus == Focus::Settings && setting.is_some_and(|(row, _)| row == self.row);
+        if self.field_mut().is_some() && !stays {
+            match self.apply() {
+                Ok(change) => event.change = change,
+                Err(()) => return event,
+            }
+        }
+        if let Some(index) = category {
+            self.focus = Focus::Sidebar;
+            self.choose_category(index);
+            return event;
+        }
+        let Some((row, value)) = setting else {
+            return event;
+        };
+        self.focus = Focus::Settings;
+        self.row = row;
+        if !value.contains(at) {
+            return event;
+        }
+        let column = usize::from(at.x - value.x);
+        let Some(setting) = self.setting_mut() else {
+            return event;
+        };
+        if let Value::Text { field, .. } = &mut setting.value {
+            field.click(column, usize::from(value.width));
+            return event;
+        }
+        if matches!(setting.value, Value::Toggle(_)) {
+            setting.toggle();
+        } else {
+            setting.cycle(column > 0);
+        }
+        let change = self.apply().unwrap_or_default();
+        event.change = match (event.change, change) {
+            (Some((old, _)), Some((_, new))) => Some((old, new)),
+            (before, change) => change.or(before),
+        };
+        event
+    }
+
     /// Draws the dialog centered in `area`, with the terminal cursor in a focused text field.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let colors = Colors::of(theme, false);
@@ -571,6 +650,7 @@ impl Configuration {
             HEIGHT.min(area.height.saturating_sub(2)),
         );
         let inner = draw_box(frame, area, size, &fl!("config-title"), colors, theme);
+        self.drawn = Drawn::default();
         // The body, a line, and two lines of hint.
         if inner.height < HINT_ROWS + 2 || inner.width < 20 {
             return;
@@ -620,7 +700,7 @@ impl Configuration {
 
     /// The categories down the left of `body`; returns where they are.
     fn render_sidebar(
-        &self,
+        &mut self,
         frame: &mut Frame<'_>,
         body: Rect,
         theme: &Theme,
@@ -655,10 +735,9 @@ impl Configuration {
                 (false, _) => theme.dialog,
             };
             let text = cells::fit(name, usize::from(width), Align::Left);
-            frame.render_widget(
-                Line::styled(text, style),
-                Rect::new(area.x, area.y + y, width, 1),
-            );
+            let row = Rect::new(area.x, area.y + y, width, 1);
+            frame.render_widget(Line::styled(text, style), row);
+            self.drawn.categories.push(row);
         }
         area
     }
@@ -693,6 +772,7 @@ impl Configuration {
             .min(room / 2);
         let value_width = room.saturating_sub(label_width + LABEL_GAP);
         let mut cursor = None;
+        let mut drawn = Vec::new();
         for (index, setting) in self
             .settings()
             .iter()
@@ -733,13 +813,19 @@ impl Configuration {
                     Span::styled(cells::fit(&text, value_width, Align::Left), style)
                 }
             };
+            let x = area.x + u16::try_from(label_width + LABEL_GAP).unwrap_or(0);
+            let value_cells = u16::try_from(value.width()).unwrap_or(0);
+            let row = Rect::new(area.x, y, area.width.saturating_sub(2), 1);
             let line =
                 Line::from(vec![Span::styled(label, label_style), value]).style(theme.dialog);
-            frame.render_widget(line, Rect::new(area.x, y, area.width.saturating_sub(2), 1));
+            frame.render_widget(line, row);
+            let value = Rect::new(x, y, value_cells, 1).intersection(row);
+            drawn.push((index, row, value));
         }
         if let Some(position) = cursor {
             frame.set_cursor_position(position);
         }
+        self.drawn.settings = drawn;
     }
 }
 
@@ -1072,6 +1158,57 @@ mod tests {
         let event = dialog.handle(action(Action::Cancel));
         assert!(event.closed);
         assert_eq!(event.change.unwrap().1.transfer.parallel_jobs.get(), 3);
+    }
+
+    /// Presses the mouse on the first cell of `text`, with `offset` cells more, where `dialog`
+    /// is drawn at 76 by 20.
+    fn press_on(dialog: &mut Configuration, text: &str, offset: u16) -> ConfigEvent {
+        let mut terminal = Terminal::new(TestBackend::new(76, 20)).unwrap();
+        terminal
+            .draw(|frame| dialog.render(frame, frame.area(), &Theme::terminal()))
+            .unwrap();
+        let mut at = super::super::mouse::find(terminal.backend().buffer(), text);
+        at.x += offset;
+        dialog.pointer(Pointer {
+            press: Press::Click,
+            at,
+        })
+    }
+
+    #[test]
+    fn the_mouse_picks_categories_and_changes_settings() {
+        let mut dialog = dialog();
+        assert_eq!(
+            press_on(&mut dialog, "Transfers", 0),
+            ConfigEvent::default()
+        );
+        assert_eq!((dialog.category, dialog.focus), (1, Focus::Sidebar));
+        assert_eq!(
+            press_on(&mut dialog, "Parallel jobs", 0),
+            ConfigEvent::default()
+        );
+        assert_eq!((dialog.row, dialog.focus), (1, Focus::Settings));
+        // On a text field, the cursor goes where clicked: before the `2`, at column 15.
+        press_on(&mut dialog, "Parallel jobs", 15);
+        typed(&mut dialog, "1");
+        // Leaving it applies it; on the value of a check box, the click switches it too.
+        let (old, new) = press_on(&mut dialog, "[x]", 0).change.unwrap();
+        assert_eq!(old.transfer.parallel_jobs.get(), 2);
+        assert_eq!(new.transfer.parallel_jobs.get(), 12);
+        assert!(!new.transfer.atomic_upload);
+        assert_eq!(dialog.row, 0);
+        // On its name, a click only puts the cursor there.
+        assert_eq!(
+            press_on(&mut dialog, "Parallel jobs", 0),
+            ConfigEvent::default()
+        );
+        assert_eq!(dialog.row, 1);
+
+        category(&mut dialog, 0);
+        let (_, new) = press_on(&mut dialog, "< mc-classic >", 3).change.unwrap();
+        assert_eq!(new.ui.theme, "terminal", "the next choice");
+        let (_, new) = press_on(&mut dialog, "< terminal >", 0).change.unwrap();
+        assert_eq!(new.ui.theme, "mc-classic", "the one before at `<`");
     }
 
     #[test]

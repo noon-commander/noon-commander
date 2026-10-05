@@ -53,7 +53,20 @@ presses, releases, drags, moves, and the wheel, but no double clicks.
   click ran a command of the menu or pressed a button that closed a dialog, the second click
   does nothing, rather than open what is under it. Dialogs get an id for this, so that one
   that takes the place of another is not the same.
-- The other windows and lists take the mouse in a later step.
+- In the other windows and menus (the location menu, the zoxide and Workspaces windows, the
+  checksums, a job's window, the list of jobs, the help, and the list of completions) the
+  wheel stands for Up and Down, or PageUp and PageDown, and goes to them as those keys do;
+  it scrolls the help, and does nothing in a job's window, where those keys move between the
+  buttons. A click on a row puts the cursor there, a double click on a row of a menu opens it
+  as Enter does, and a click on a button presses it. A click outside a menu or the list of
+  completions closes it, as in mc; outside a window with buttons it does nothing.
+- Widgets turn a press into what they draw: they move their own cursor or focus, and return
+  the key the press stands for, such as Enter or Esc, which `App` hands to them as if typed.
+  So the mouse reuses what the keys do, and no window has a second way to open or close.
+- In the Configuration dialog a click on a category shows its settings; on a setting it puts
+  the cursor there, and on its value switches a check box, picks the next choice (the one
+  before at `<`), or puts the cursor in the text. Leaving a text field applies it, as a key
+  that leaves it does.
 
 ## Consequences
 

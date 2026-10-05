@@ -2,6 +2,7 @@
 //! directory, the volumes, and the SFTP hosts, for one panel. Typing filters it; while the filter is empty,
 //! `1` … `9` and `0` open the first ten rows.
 
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
 use noc_vfs::{Location, Space, Volume};
@@ -13,9 +14,10 @@ use ratatui::text::{Line, Span};
 use super::app::Side;
 use super::cells::{self, Align};
 use super::decor::Decor;
-use super::dialog::{Colors, draw_box};
+use super::dialog::{Colors, draw_box, frame_around};
 use super::fuzzy::Fuzzy;
 use super::keymap::{Action, Resolved};
+use super::mouse::{Drawn, Pointer};
 use super::panel::{HostState, Listed, Listing};
 use super::root::{RootHost, volume_name, volume_of};
 use super::theme::Theme;
@@ -82,6 +84,8 @@ pub(crate) struct LocationMenu {
     /// First line on screen, and lines on screen at the last render.
     offset: usize,
     page: usize,
+    /// Where the last render drew it, for the mouse.
+    drawn: RefCell<Drawn>,
 }
 
 impl LocationMenu {
@@ -104,6 +108,7 @@ impl LocationMenu {
             cursor: 0,
             offset: 0,
             page: 1,
+            drawn: RefCell::default(),
         }
     }
 
@@ -299,6 +304,14 @@ impl LocationMenu {
         MenuEvent::Pending
     }
 
+    /// Takes a press of the mouse, where the menu was drawn last: a click puts the cursor on
+    /// a row, and returns the key that a double click on one, or a click outside the menu,
+    /// stands for: Enter or Esc.
+    pub(crate) fn pointer(&mut self, pointer: Pointer) -> Option<Action> {
+        let drawn = self.drawn.borrow().clone();
+        drawn.menu_press(pointer, &mut self.cursor)
+    }
+
     /// The lines: the rows the filter shows, with a heading above the hosts.
     fn lines(items: &[Item<'_>]) -> Vec<Shown> {
         let mut lines = Vec::with_capacity(items.len() + 1);
@@ -347,6 +360,11 @@ impl LocationMenu {
         // Borders, the filter, the line under it, the rows.
         let size = (WIDTH, shown.saturating_add(4));
         let inner = draw_box(frame, area, size, &title, colors, theme);
+        let mut drawn = self.drawn.borrow_mut();
+        *drawn = Drawn {
+            frame: frame_around(inner),
+            ..Drawn::default()
+        };
         if inner.height < 3 || inner.width < 4 {
             return (self.page, self.cursor, self.offset);
         }
@@ -425,6 +443,7 @@ impl LocationMenu {
                         }
                         _ => ' ',
                     };
+                    drawn.rows.push((row, line(y)));
                     look.line(items[row], hotkey, row == cursor, (name_width, info_width))
                 }
             };

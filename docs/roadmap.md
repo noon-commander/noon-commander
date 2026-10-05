@@ -103,10 +103,8 @@
       ([ADR 0017](adr/0017-workspaces.md))
 - [ ] Bookmarks and history
 - [ ] chmod and symlinks
-- [ ] Mouse support ([ADR 0018](adr/0018-mouse-support.md)):
-  - [x] Panels, tabs, the F-key bar, and the viewer; `ui.mouse` and `ui.wheel`
-  - [x] The pull-down menu and dialogs
-  - [ ] The other windows and lists, and the Configuration dialog
+- [x] Mouse support ([ADR 0018](adr/0018-mouse-support.md)): panels, tabs, the F-key bar, the
+      viewer, the pull-down menu, dialogs, and every window; `ui.mouse` and `ui.wheel`
 - [ ] Restore panel state on start, with the tabs
 
 ## Known issues

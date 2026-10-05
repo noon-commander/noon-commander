@@ -542,6 +542,9 @@ sequence. Sections marked (noc) exist only in noc.
 | Dialog: press a button, switch a check box, choose a radio button | | Click | — | Click | Click |
 | Dialog: put the cursor in a text field | | Click | — | Click | Click |
 | Dialog: choose a radio button and press the default button | | Double click | — | — | — |
+| Menu or list in a window: move the cursor / open the row | | Click / Double click | — | Click / Double click | Click / Double click |
+| Close a menu or the list of completions | | Click outside it | — | Click outside it | Click outside it |
+| Scroll a menu, a list, or the help | | Wheel | — | Wheel | Wheel |
 
 ## Workspaces window (noc)
 

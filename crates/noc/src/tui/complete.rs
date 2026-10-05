@@ -4,13 +4,14 @@
 //! and a Tab that gets no further lists them, to choose one.
 
 use ratatui::Frame;
-use ratatui::layout::Rect;
+use ratatui::layout::{Position, Rect};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, BorderType, Borders, Clear};
 
 use super::cells::{self, Align};
 use super::dialog::Colors;
 use super::keymap::Action;
+use super::mouse::{Drawn, Pointer};
 use super::theme::Theme;
 
 /// Rows the list of choices shows at most.
@@ -188,6 +189,8 @@ pub(crate) struct Choices {
     items: Vec<Candidate>,
     cursor: usize,
     offset: usize,
+    /// Where the last render drew it, for the mouse.
+    drawn: Drawn,
 }
 
 /// What a key did to the list.
@@ -207,6 +210,7 @@ impl Choices {
             items,
             cursor: 0,
             offset: 0,
+            drawn: Drawn::default(),
         }
     }
 
@@ -240,6 +244,17 @@ impl Choices {
         ChoicesEvent::Pending
     }
 
+    /// Whether the list was drawn over `at`.
+    pub(crate) fn contains(&self, at: Position) -> bool {
+        self.drawn.frame.contains(at)
+    }
+
+    /// Takes a press of the mouse on the list: a click puts the cursor on a row, and a double
+    /// click returns Enter, which takes it.
+    pub(crate) fn pointer(&mut self, pointer: Pointer) -> Option<Action> {
+        self.drawn.menu_press(pointer, &mut self.cursor)
+    }
+
     /// Draws the list in a frame under `field`, or above it where there is no room below,
     /// within `area`.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, field: Rect, area: Rect, theme: &Theme) {
@@ -259,9 +274,11 @@ impl Choices {
             .saturating_add(2)
             .min(area.right().saturating_sub(x));
         let outer = Rect::new(x, y, width, height);
+        self.drawn = Drawn::default();
         if outer.height < 3 || outer.width < 4 {
             return;
         }
+        self.drawn.frame = outer;
         frame.render_widget(Clear, outer);
         let block = Block::new()
             .borders(Borders::ALL)
@@ -291,10 +308,9 @@ impl Choices {
                 theme.dialog
             };
             let y = inner.y + u16::try_from(index).unwrap_or(0);
-            frame.render_widget(
-                Line::styled(text, style),
-                Rect::new(inner.x, y, inner.width, 1),
-            );
+            let line = Rect::new(inner.x, y, inner.width, 1);
+            frame.render_widget(Line::styled(text, style), line);
+            self.drawn.rows.push((row, line));
         }
     }
 }

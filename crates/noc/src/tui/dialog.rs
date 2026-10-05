@@ -245,7 +245,7 @@ impl Field {
 
     /// Puts the cursor at `column` of the `room` cells the field was drawn in, as a click does;
     /// the text stays, as after a move of the cursor.
-    fn click(&mut self, column: usize, room: usize) {
+    pub(crate) fn click(&mut self, column: usize, room: usize) {
         let (first, shown, _) = self.window(room);
         let mut used = 0;
         let before = shown
@@ -965,6 +965,16 @@ pub(crate) fn draw_separator(
     frame.render_widget(Line::styled(line, colors.body), row);
 }
 
+/// The frame around `inner`, the room inside a box that [`draw_box`] drew.
+pub(crate) fn frame_around(inner: Rect) -> Rect {
+    Rect::new(
+        inner.x.saturating_sub(2),
+        inner.y.saturating_sub(1),
+        inner.width.saturating_add(4),
+        inner.height.saturating_add(2),
+    )
+}
+
 /// Draws an empty dialog box centered in `area`: a frame of `size` in the theme's lines with
 /// its title bold in the middle, a blank cell around it where there is room, and mc's shadow. Returns the room
 /// inside, one column in from the frame on either side.
@@ -1321,21 +1331,7 @@ mod tests {
     /// Presses the mouse on the first cell of `text` where `dialog` is drawn at 40 by 12.
     fn press_on(dialog: &mut Dialog, press: Press, text: &str) -> DialogEvent {
         let terminal = draw(dialog, 40, 12);
-        let buffer = terminal.backend().buffer();
-        let lines: Vec<String> = (0..buffer.area.height)
-            .map(|y| {
-                (0..buffer.area.width)
-                    .map(|x| buffer[(x, y)].symbol().to_owned())
-                    .collect()
-            })
-            .collect();
-        let (y, x) = lines
-            .iter()
-            .enumerate()
-            .find_map(|(y, line)| Some((y, line.find(text)?)))
-            .unwrap_or_else(|| panic!("no {text:?} in {lines:#?}"));
-        let x = lines[y][..x].chars().count();
-        let at = Position::new(u16::try_from(x).unwrap(), u16::try_from(y).unwrap());
+        let at = super::super::mouse::find(terminal.backend().buffer(), text);
         dialog.pointer(Pointer { press, at })
     }
 

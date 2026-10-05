@@ -1,5 +1,6 @@
 //! The window of a running job: what it does, where it is, a gauge, and its time and speed.
 
+use std::cell::RefCell;
 use std::time::{Duration, Instant};
 
 use ratatui::Frame;
@@ -7,8 +8,9 @@ use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, button_line, draw_box, draw_separator};
+use super::dialog::{Colors, button_line, button_spots, draw_box, draw_separator, frame_around};
 use super::keymap::{Action, Resolved};
+use super::mouse::{Drawn, Pointer};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -117,6 +119,8 @@ pub(crate) struct JobView {
     clock: Stopwatch,
     buttons: Vec<JobButton>,
     focus: usize,
+    /// Where the last render drew it, for the mouse.
+    drawn: RefCell<Drawn>,
 }
 
 impl JobView {
@@ -130,6 +134,7 @@ impl JobView {
             clock: Stopwatch::default(),
             buttons: vec![JobButton::Background, JobButton::Abort],
             focus: 0,
+            drawn: RefCell::default(),
         }
     }
 
@@ -269,6 +274,13 @@ impl JobView {
         }
     }
 
+    /// Takes a press of the mouse, where the window was drawn last: a click on a button
+    /// returns Enter, which presses it.
+    pub(crate) fn pointer(&mut self, pointer: Pointer) -> Option<Action> {
+        let drawn = self.drawn.borrow().clone();
+        drawn.button_press(pointer, &mut self.focus)
+    }
+
     /// Shows that the job was asked to stop.
     pub(crate) fn abort(&mut self) {
         self.aborting = true;
@@ -331,7 +343,18 @@ impl JobView {
                 JobButton::Abort => fl!("dialog-abort"),
             })
             .collect();
-        put(6, button_line(&labels, 0, Some(self.focus), colors));
+        let buttons = button_line(&labels, 0, Some(self.focus), colors);
+        let row = Rect::new(inner.x, inner.y + 6, inner.width, 1);
+        *self.drawn.borrow_mut() = Drawn {
+            frame: frame_around(inner),
+            rows: Vec::new(),
+            buttons: if inner.height > 6 {
+                button_spots(&buttons, row)
+            } else {
+                Vec::new()
+            },
+        };
+        put(6, buttons);
         if inner.height > 6 {
             draw_separator(frame, inner, inner.y + 5, colors, theme);
         }

@@ -885,17 +885,20 @@ location = "root"
   captures the mouse while it is on and turns crossterm's events into `Pointer`s
   (`tui/mouse.rs`): a click, a double click (the same cell within 400 ms), a right click, or a
   step of the wheel; moves and drags are dropped without a redraw. Rendering records where the
-  F-key slots, the panels, their rows, and the tabs were drawn, and `App::pointer` looks there,
-  front first, as keys go: a window or a menu over the panels keeps the mouse from them. A click
-  on an F-key slot presses its key; in a panel a click moves the cursor and gives the panel the
-  keys, a double click does what Enter does, a right click marks the row as in mc and Far, and the
-  wheel scrolls the panel under it, by `ui.wheel` lines or a page; a click on a tab shows it.
-  In the viewer the wheel scrolls. In the pull-down menu a click opens a menu or runs a
-  command, and a click outside closes it; in a dialog a click chooses, puts the cursor in a
-  field, switches a check box, or presses a button. A double click counts only if its first
-  click left the same thing in front, so one that closed a menu or a dialog does not reach
-  the panel under it. While the mouse is captured, the terminal selects text with
-  a modifier held: Shift in most terminals, Option in iTerm2.
+  F-key slots, the panels, their rows, the tabs, the menu bar, and each window's rows and
+  buttons were drawn (`mouse::Drawn`), and `App::pointer` looks there, front first, as keys
+  go. A click on an F-key slot presses its key; in a panel a click moves the cursor and gives
+  the panel the keys, a double click does what Enter does, a right click marks the row as in
+  mc and Far, and the wheel scrolls the panel under it, by `ui.wheel` lines or a page; a click
+  on a tab shows it, and in the viewer the wheel scrolls. In the pull-down menu a click opens
+  a menu or runs a command; in a dialog a click chooses, puts the cursor in a field, switches
+  a check box, or presses a button. Other windows and menus take the wheel as Up and Down, a
+  click on a row or a button, and in menus a double click that opens and a click outside
+  that closes. Widgets move their own cursor or focus and return the key a press stands for,
+  which they then take as if typed, so the mouse reuses what the keys do. A double click
+  counts only if its first click left the same thing in front, so one that closed a menu or
+  a dialog does not reach what is under it. While the mouse is captured, the terminal selects
+  text with a modifier held: Shift in most terminals, Option in iTerm2.
 - **Dialogs.** Modal and centered over the panels, with mc-style buttons: `[< OK >]` marks the
   default one, and a line across the dialog (`╟───╢`, or `├───┤` with single lines) sets the buttons
   apart from what is above them, in every dialog and window. A dialog has a message, radio buttons

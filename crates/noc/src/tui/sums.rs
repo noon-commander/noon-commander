@@ -1,14 +1,17 @@
 //! The window with the checksums a job found: the full checksum of the selected file, whether
 //! it matches what was expected or the other file, and buttons to copy or save them.
 
+use std::cell::RefCell;
+
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, button_line, draw_box, draw_separator};
+use super::dialog::{Colors, button_line, button_spots, draw_box, draw_separator, frame_around};
 use super::keymap::{Action, Resolved};
+use super::mouse::{Drawn, Pointer, Press};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -91,6 +94,8 @@ pub(crate) struct SumsWindow {
     status: Option<String>,
     buttons: Vec<SumsButton>,
     focus: usize,
+    /// Where the last render drew it, for the mouse.
+    drawn: RefCell<Drawn>,
 }
 
 impl SumsWindow {
@@ -109,6 +114,7 @@ impl SumsWindow {
             status: None,
             buttons,
             focus: 0,
+            drawn: RefCell::default(),
         }
     }
 
@@ -148,6 +154,19 @@ impl SumsWindow {
         SumsEvent::Pending
     }
 
+    /// Takes a press of the mouse, where the window was drawn last: a click chooses a file, and
+    /// one on a button returns Enter, which presses it.
+    pub(crate) fn pointer(&mut self, pointer: Pointer) -> Option<Action> {
+        let drawn = self.drawn.borrow().clone();
+        if let Some(row) = drawn.row_at(pointer.at) {
+            if matches!(pointer.press, Press::Click | Press::DoubleClick) {
+                self.selected = row;
+            }
+            return None;
+        }
+        drawn.button_press(pointer, &mut self.focus)
+    }
+
     /// Draws the window centered in `area`: the list of files if there are several, then the
     /// selected one with its whole checksum, the verdict, and the buttons.
     pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
@@ -155,9 +174,12 @@ impl SumsWindow {
         let width = WIDTH.min(area.width.saturating_sub(4)).max(20);
         let room = usize::from(width.saturating_sub(4)).max(1);
         let mut lines: Vec<Line<'static>> = Vec::new();
+        // The files of the list, by their lines.
+        let mut listed = Vec::new();
         if self.rows.len() > 1 {
             let shown = self.rows.len().min(LIST_ROWS);
             let top = (self.selected + 1).saturating_sub(shown);
+            listed.extend(top..top + shown);
             for (index, row) in self.rows.iter().enumerate().skip(top).take(shown) {
                 let text = cells::fit(&list_line(row), room, Align::Left);
                 let style = if index == self.selected {
@@ -193,17 +215,28 @@ impl SumsWindow {
         // Borders, the lines, a line, the buttons.
         let inner = draw_box(frame, area, (width, height + 2), &self.title, colors, theme);
         let visible = usize::from(inner.height.saturating_sub(2));
+        let mut drawn = Drawn {
+            frame: frame_around(inner),
+            ..Drawn::default()
+        };
         for (index, line) in lines.into_iter().take(visible).enumerate() {
             let y = inner.y + u16::try_from(index).unwrap_or(0);
-            frame.render_widget(line, Rect::new(inner.x, y, inner.width, 1));
+            let row = Rect::new(inner.x, y, inner.width, 1);
+            frame.render_widget(line, row);
+            if let Some(file) = listed.get(index) {
+                drawn.rows.push((*file, row));
+            }
         }
         if inner.height >= 2 {
             let labels: Vec<String> = self.buttons.iter().map(|button| button.label()).collect();
             let buttons = button_line(&labels, 0, Some(self.focus), colors);
             let y = inner.bottom() - 1;
             draw_separator(frame, inner, y - 1, colors, theme);
-            frame.render_widget(buttons, Rect::new(inner.x, y, inner.width, 1));
+            let row = Rect::new(inner.x, y, inner.width, 1);
+            drawn.buttons = button_spots(&buttons, row);
+            frame.render_widget(buttons, row);
         }
+        *self.drawn.borrow_mut() = drawn;
     }
 }
 

@@ -1,13 +1,16 @@
 //! The list of jobs, as mc's Background jobs (Ctrl-X J): how far each is, with buttons that
 //! bring the selected one to the front or abort it.
 
+use std::cell::RefCell;
+
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::text::Line;
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, button_line, draw_box, draw_separator};
+use super::dialog::{Colors, button_line, button_spots, draw_box, draw_separator, frame_around};
 use super::keymap::{Action, Resolved};
+use super::mouse::{Drawn, Pointer, Press};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -61,6 +64,8 @@ pub(crate) struct JobsList {
     row: usize,
     /// The button with the focus.
     focus: usize,
+    /// Where the last render drew it, for the mouse.
+    drawn: RefCell<Drawn>,
 }
 
 impl JobsList {
@@ -107,6 +112,19 @@ impl JobsList {
         JobsEvent::Pending
     }
 
+    /// Takes a press of the mouse, where the list was drawn last: a click chooses a job, and one
+    /// on a button returns Enter, which presses it.
+    pub(crate) fn pointer(&mut self, pointer: Pointer, rows: &[Row]) -> Option<Action> {
+        let drawn = self.drawn.borrow().clone();
+        if let Some(index) = drawn.row_at(pointer.at) {
+            if matches!(pointer.press, Press::Click | Press::DoubleClick) {
+                self.select(rows, index);
+            }
+            return None;
+        }
+        drawn.button_press(pointer, &mut self.focus)
+    }
+
     /// Draws the list centered in `area`: a row for each job, scrolled to the selected one.
     pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, rows: &[Row]) {
         let colors = Colors::of(theme, false);
@@ -125,6 +143,10 @@ impl JobsList {
             let none = cells::fit(&fl!("jobs-none"), width, Align::Left);
             frame.render_widget(Line::raw(none), line(0));
         }
+        let mut drawn = Drawn {
+            frame: frame_around(inner),
+            ..Drawn::default()
+        };
         let index = self.index(rows);
         let top = (index + 1).saturating_sub(visible);
         for (shown, (number, row)) in rows.iter().enumerate().skip(top).take(visible).enumerate() {
@@ -142,14 +164,18 @@ impl JobsList {
                 Line::raw(text)
             };
             frame.render_widget(text, line(shown));
+            drawn.rows.push((number, line(shown)));
         }
         if inner.height >= 2 {
             let labels = [fl!("jobs-show"), fl!("dialog-abort"), fl!("dialog-ok")];
             let buttons = button_line(&labels, 0, Some(self.focus), colors);
             let y = inner.bottom() - 1;
             draw_separator(frame, inner, y - 1, colors, theme);
-            frame.render_widget(buttons, Rect::new(inner.x, y, inner.width, 1));
+            let row = Rect::new(inner.x, y, inner.width, 1);
+            drawn.buttons = button_spots(&buttons, row);
+            frame.render_widget(buttons, row);
         }
+        *self.drawn.borrow_mut() = drawn;
     }
 }
 

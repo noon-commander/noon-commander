@@ -32,6 +32,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Typing in a panel no longer starts quick search; Ctrl-S or Alt-S do, as in mc. The setting
+  `ui.type_to_search` and its row in Options → Configuration are gone; remove the key from
+  `config.toml`. `!` and `:` will open a command line for shell commands.
 - Release builds use full link-time optimization, which makes the `noc` binary about 6% smaller.
 
 ## [0.1.0] - 2026-10-03

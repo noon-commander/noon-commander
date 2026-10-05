@@ -106,6 +106,7 @@
 - [x] Mouse support ([ADR 0018](adr/0018-mouse-support.md)): panels, tabs, the F-key bar, the
       viewer, the pull-down menu, dialogs, and every window; `ui.mouse` and `ui.wheel`
 - [ ] Restore panel state on start, with the tabs
+- [x] Typing in a panel no longer starts quick search; `ui.type_to_search` is gone
 - [ ] Shell command line ([ADR 0019](adr/0019-shell-command-line.md)): `!` (and `:!`) runs a
       command in the panel's directory, locally or on its host over the master connection;
       several lines (Shift-Enter, Ctrl-J, `\` Enter), bracketed paste, Ctrl-X Ctrl-E in

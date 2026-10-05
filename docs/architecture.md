@@ -518,15 +518,14 @@ noc config paths       show the files and directories in use
 - The terminal is restored on every exit: a guard leaves raw mode and the alternate screen when
   the TUI returns or fails, ratatui's panic hook does it before a panic message, and SIGTERM,
   SIGHUP, and SIGINT end the event loop like a quit.
-- Another program (the editor of F4; the Ctrl-O console later) gets the terminal as the shell
-  would give it: the event loop shows the cursor, leaves the alternate screen and raw mode,
-  and drops its `EventStream` first. The stream's reader thread holds crossterm's input lock
-  while it waits, and a new stream takes that lock, so the old one must go before the
-  program starts, or its reader eats the first key, and the new one is made after it. The
-  loop waits for the program, then takes the terminal back and draws everything. Ctrl-C in
-  the program reaches Noon Commander too, so the SIGINT stream is made anew; SIGTERM and SIGHUP
-  wait until the program ends. ssh children are in sessions of their own and see none of
-  it.
+- Another program (the editor of F4; shell commands and the Ctrl-O console later) gets the terminal
+  as the shell would give it: the event loop shows the cursor, leaves the alternate screen and raw
+  mode, and drops its `EventStream` first. The stream's reader thread holds crossterm's input lock
+  while it waits, and a new stream takes that lock, so the old one must go before the program
+  starts, or its reader eats the first key, and the new one is made after it. The loop waits for the
+  program, then takes the terminal back and draws everything. Ctrl-C in the program reaches Noon
+  Commander too, so the SIGINT stream is made anew; SIGTERM and SIGHUP wait until the program ends.
+  ssh children are in sessions of their own and see none of it.
 - The working directory of the process follows the active panel: after each turn of the
   event loop, a local directory the active panel now shows (once its listing arrived)
   goes to a task that `chdir`s to it in `spawn_blocking`, the latest of the waiting ones only.
@@ -649,7 +648,6 @@ theme = "mc-classic"             # "terminal", "noon-dark", "noon-light", "catpp
 borders = "double"               # frames of panels and dialogs: ═ ║ ╔; "single": ─ │ ┌
 icons = true                     # Nerd Font icons; false: mc's markers (/ * @ ~ …)
 show_hidden = true               # names that start with a dot; Alt-. switches while running
-type_to_search = true            # typing in a panel starts quick search; false: only Ctrl-S
 fuzzy_search = true              # quick search and filters match as fzf; false: literally
 menu_bar = "on-demand"           # the F9 menu bar while a menu is open; "always": above the panels
 tab_bar = "line"                 # tabs on a line above the panels; "frame": in the panel's frame
@@ -743,7 +741,7 @@ location = "root"
   for the next character as it is; the whole name must match, and what does not parse is
   literal. mc's regular expressions are left out. The dialog opens with the last pattern
   (`*` at first) and options. `+`, `-`, `\`, and `*` are commands, as in mc with an empty
-  command line, so typing them does not start quick search.
+  command line.
 - **F7 makes a directory**, as in mc: the dialog opens with the name under the cursor, which
   typing replaces. The name may be a relative path, an absolute one, or start with `~` for the
   home directory (the remote one on a host; `\~` for a name that starts with `~`); missing
@@ -853,21 +851,21 @@ location = "root"
   identity when swapped (only where they are drawn changes), so a listing still in flight
   reaches the panel that asked for it. Sort order and errors go with the panel; mc keeps the
   sort order on its side.
-- **Quick search.** Ctrl-S / Alt-S as in mc, or, since there is no command line, typing in a panel
-  (unless `ui.type_to_search` is off) starts quick search: with `ui.fuzzy_search` (the default)
-  the cursor jumps to the best match as [fzf](#fuzzy-search) ranks it, the first from where it
-  is of those as good, and Ctrl-S again to the next best, round to the best; otherwise to the
-  first name from where it is that starts with the text, ignoring case, and Ctrl-S to the next
-  one, round to the top. Either way a character that matches nothing is dropped, as in mc, and
-  the listing keeps its order. Backspace takes a
-  character back; Esc ends the search, and any other key ends it and then does what it does. While
-  it runs, every character is text, even one that a panel binds, such as `*`. The root and the list
-  of hosts search the names they show: volume labels, labels, or aliases. Long names lose their
-  middle, marked with `~`. Names are shown terminal-safe: control and bidi characters become `?`.
-  Listings run in background tasks; a reply carries the generation of its request, so a stale one is
-  dropped. If a directory cannot be read, the panel stays where it was and says why below the
-  listing. Going up puts the cursor on the directory just left. A panel shows a `Location`, so the
-  [virtual root](#virtual-root) and the list of hosts are kinds of listing too.
+- **Quick search.** Ctrl-S / Alt-S start quick search, as in mc; typing in a panel does nothing,
+  since `!` and `:` will open a [command line](adr/0019-shell-command-line.md). With
+  `ui.fuzzy_search` (the default) the cursor jumps to the best match as [fzf](#fuzzy-search) ranks
+  it, the first from where it is of those as good, and Ctrl-S again to the next best, round to the
+  best; otherwise to the first name from where it is that starts with the text, ignoring case, and
+  Ctrl-S to the next one, round to the top. Either way a character that matches nothing is dropped,
+  as in mc, and the listing keeps its order. Backspace takes a character back; Esc ends the search,
+  and any other key ends it and then does what it does. While it runs, every character is text, even
+  one that a panel binds, such as `*`. The root and the list of hosts search the names they show:
+  volume labels, labels, or aliases. Long names lose their middle, marked with `~`. Names are shown
+  terminal-safe: control and bidi characters become `?`. Listings run in background tasks; a reply
+  carries the generation of its request, so a stale one is dropped. If a directory cannot be read,
+  the panel stays where it was and says why below the listing. Going up puts the cursor on the
+  directory just left. A panel shows a `Location`, so the [virtual root](#virtual-root) and the list
+  of hosts are kinds of listing too.
 - **Keymap.** Keys map to `Action`s per context (`panel`, `root`, `quick_search`, `menu`,
   `pull_down`, `dialog`, `dialog_input`, `viewer`). Each context falls back along a chain, for
   example the root and quick search to the panel; the first context that knows a key sequence

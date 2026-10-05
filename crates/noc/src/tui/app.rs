@@ -1232,8 +1232,7 @@ impl App {
 
     /// The help screen, for the keymap and the settings.
     fn help_screen(&self) -> Help {
-        let ui = &self.config.ui;
-        Help::new(&self.keymap, ui.type_to_search, ui.fuzzy_search)
+        Help::new(&self.keymap, self.config.ui.fuzzy_search)
     }
 
     /// Quits, after asking if jobs would stop.
@@ -1432,15 +1431,11 @@ impl App {
         if self.panel(self.active).renaming() {
             return self.handle_rename(input);
         }
-        let UiConfig {
-            type_to_search,
-            fuzzy_search,
-            ..
-        } = self.config.ui;
+        let fuzzy_search = self.config.ui.fuzzy_search;
         let panel = self.panel_mut(self.active);
         let action = match input {
             Resolved::Insert(c) => {
-                if type_to_search || panel.searching() {
+                if panel.searching() {
                     panel.search_type(c, fuzzy_search);
                 }
                 return Vec::new();
@@ -7308,8 +7303,15 @@ mod tests {
     }
 
     #[test]
-    fn typing_searches_and_other_keys_end_the_search() {
+    fn ctrl_s_searches_and_other_keys_end_the_search() {
         let mut app = loaded();
+        assert!(app.handle(Resolved::Insert('r')).is_empty());
+        assert_eq!(
+            app.context(),
+            Context::Panel,
+            "typing does nothing, as in mc"
+        );
+        app.handle(action(Action::QuickSearch));
         assert!(app.handle(Resolved::Insert('r')).is_empty());
         assert_eq!(app.context(), Context::QuickSearch);
         assert!(screen(&mut app).contains("Search: r"));
@@ -7332,36 +7334,6 @@ mod tests {
         assert!(screen(&mut app).contains("Search: "));
         assert!(app.handle(action(Action::Cancel)).is_empty());
         assert_eq!(app.context(), Context::Panel, "Esc ends it");
-    }
-
-    #[test]
-    fn without_type_to_search_only_ctrl_s_searches() {
-        let ui = UiConfig {
-            type_to_search: false,
-            ..ui()
-        };
-        let (mut app, effects) = App::new(
-            Path::new("/srv"),
-            Path::new("/home/me"),
-            &Config { ui, ..config() },
-        );
-        answer(
-            &mut app,
-            effects,
-            &Listing::Dir(vec![dir("left"), dir("right")]),
-        );
-        app.handle(Resolved::Insert('r'));
-        assert_eq!(
-            app.context(),
-            Context::Panel,
-            "typing does nothing, as in mc"
-        );
-        app.handle(action(Action::QuickSearch));
-        app.handle(Resolved::Insert('r'));
-        assert!(
-            screen(&mut app).contains("Search: r"),
-            "but goes into a search"
-        );
     }
 
     #[test]
@@ -8546,6 +8518,7 @@ mod tests {
     #[test]
     fn quick_search_is_fuzzy_unless_turned_off() {
         let mut app = loaded();
+        app.handle(action(Action::QuickSearch));
         app.handle(Resolved::Insert('r'));
         app.handle(Resolved::Insert('t'));
         assert!(screen(&mut app).contains("Search: rt"));
@@ -8555,6 +8528,7 @@ mod tests {
         assert_eq!(request.location, local("/srv/right"));
 
         app.config.ui.fuzzy_search = false;
+        app.handle(action(Action::QuickSearch));
         app.handle(Resolved::Insert('r'));
         app.handle(Resolved::Insert('t'));
         assert!(

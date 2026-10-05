@@ -217,7 +217,7 @@ yet.
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Start quick search | | Ctrl+S<br>Alt+S<br>Typing (ui.type_to_search) | — | Ctrl+S<br>Alt+S | Alt+letters<br>Alt+Shift+letters |
+| Start quick search | | Ctrl+S<br>Alt+S | — | Ctrl+S<br>Alt+S | Alt+letters<br>Alt+Shift+letters |
 | Next match | | Ctrl+S<br>Alt+S | — | Ctrl+S | Ctrl+Enter |
 | Previous match | | — | — | — | Ctrl+Shift+Enter |
 | Search with previous pattern | | — | — | Ctrl+S Ctrl+S | — |

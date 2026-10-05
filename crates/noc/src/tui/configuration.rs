@@ -35,7 +35,6 @@ enum Key {
     Borders,
     Icons,
     ShowHidden,
-    TypeToSearch,
     FuzzySearch,
     Mouse,
     Wheel,
@@ -149,7 +148,6 @@ impl Setting {
             }
             Key::Icons => ui.icons = self.on(),
             Key::ShowHidden => ui.show_hidden = self.on(),
-            Key::TypeToSearch => ui.type_to_search = self.on(),
             Key::FuzzySearch => ui.fuzzy_search = self.on(),
             Key::Mouse => ui.mouse = self.on(),
             Key::Wheel => {
@@ -876,14 +874,6 @@ fn interface(config: &Config, themes: &[&str]) -> Category {
             Value::Toggle(ui.show_hidden),
         ),
         Setting::new(
-            Key::TypeToSearch,
-            (
-                fl!("config-type-to-search"),
-                fl!("config-type-to-search-hint"),
-            ),
-            Value::Toggle(ui.type_to_search),
-        ),
-        Setting::new(
             Key::FuzzySearch,
             (fl!("config-fuzzy-search"), fl!("config-fuzzy-search-hint")),
             Value::Toggle(ui.fuzzy_search),
@@ -1221,7 +1211,7 @@ mod tests {
         dialog.handle(action(Action::Toggle));
         dialog.handle(action(Action::Down));
         dialog.handle(action(Action::Toggle));
-        for _ in 0..4 {
+        for _ in 0..3 {
             dialog.handle(action(Action::Down));
         }
         dialog.handle(action(Action::Toggle));
@@ -1276,8 +1266,8 @@ mod tests {
     fn an_invalid_text_keeps_the_cursor_and_says_why() {
         let cases: [(usize, usize, &str, &str); 7] = [
             (0, 0, "?", "is not auto or a language tag"),
-            (0, 8, "0", "is not a step of the wheel"),
-            (0, 8, "pages", "is not a step of the wheel"),
+            (0, 7, "0", "is not a step of the wheel"),
+            (0, 7, "pages", "is not a step of the wheel"),
             (1, 1, "x", "is not a number of jobs"),
             (2, 2, "-F other_config", "Invalid extra ssh arguments"),
             (2, 0, "", "The ssh program cannot be empty"),

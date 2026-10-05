@@ -95,9 +95,6 @@ pub struct UiConfig {
     pub icons: bool,
     /// Whether panels start out showing files whose names begin with a dot. Default: `true`.
     pub show_hidden: bool,
-    /// Whether typing in a panel starts quick search; otherwise only Ctrl-S and Alt-S do, as
-    /// in mc. Default: `true`.
-    pub type_to_search: bool,
     /// Whether quick search, the location menu, and the zoxide window match what is typed as
     /// fzf does: its characters in order, not necessarily together, best matches first.
     /// Otherwise names must start with it in quick search and contain it in the location menu,
@@ -122,7 +119,6 @@ impl Default for UiConfig {
             borders: Borders::default(),
             icons: true,
             show_hidden: true,
-            type_to_search: true,
             fuzzy_search: true,
             menu_bar: MenuBar::default(),
             tab_bar: TabBar::default(),
@@ -427,7 +423,6 @@ mod tests {
         borders = "single"
         icons = false
         show_hidden = false
-        type_to_search = false
         fuzzy_search = false
         menu_bar = "always"
         tab_bar = "frame"
@@ -463,7 +458,6 @@ mod tests {
                 borders: Borders::Single,
                 icons: false,
                 show_hidden: false,
-                type_to_search: false,
                 fuzzy_search: false,
                 menu_bar: MenuBar::Always,
                 tab_bar: TabBar::Frame,
@@ -497,7 +491,6 @@ mod tests {
         assert_eq!(config.ui.borders, Borders::Double);
         assert!(config.ui.icons);
         assert!(config.ui.show_hidden);
-        assert!(config.ui.type_to_search);
         assert!(config.ui.fuzzy_search);
         assert_eq!(config.ui.menu_bar, MenuBar::OnDemand);
         assert_eq!(config.ui.tab_bar, TabBar::Line);
@@ -688,7 +681,6 @@ mod tests {
         assert!(table["ui"].get("borders").is_some());
         assert!(table["ui"].get("icons").is_some());
         assert!(table["ui"].get("show_hidden").is_some());
-        assert!(table["ui"].get("type_to_search").is_some());
         assert!(table["ui"].get("fuzzy_search").is_some());
         assert!(table["ui"].get("menu_bar").is_some());
         assert!(table["ui"].get("tab_bar").is_some());

@@ -53,8 +53,6 @@ borders = "double"
 icons = true
 # Show files whose names begin with a dot. Alt-. switches it while Noon Commander runs.
 show_hidden = true
-# Typing in a panel starts quick search. When off, only Ctrl-S and Alt-S do, as in mc.
-type_to_search = true
 # Quick search, the filter of the location menu (Alt-F1, Alt-F2), and the zoxide window
 # (Alt-Z) match what is typed as fzf does: its characters in order, not necessarily together,
 # best matches first; words separated by spaces must all match, and fzf's ' ^ $ ! work. When

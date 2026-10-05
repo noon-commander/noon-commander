@@ -35,9 +35,9 @@ pub(crate) struct Help {
 }
 
 impl Help {
-    /// The keys `keymap` binds to what the app can do, by context. `type_to_search` adds a
-    /// note on typing in panels, and `fuzzy_search` one on matching as fzf does.
-    pub(crate) fn new(keymap: &Keymap, type_to_search: bool, fuzzy_search: bool) -> Self {
+    /// The keys `keymap` binds to what the app can do, by context. `fuzzy_search` adds a note
+    /// on matching as fzf does.
+    pub(crate) fn new(keymap: &Keymap, fuzzy_search: bool) -> Self {
         let sections = [
             (Context::Panel, fl!("help-panels")),
             (Context::Root, fl!("help-root")),
@@ -82,9 +82,6 @@ impl Help {
         entries.push(Entry::Note(fl!("help-note-workspaces")));
         entries.push(Entry::Note(fl!("help-note-pulldown")));
         entries.push(Entry::Note(fl!("help-note-esc")));
-        if type_to_search {
-            entries.push(Entry::Note(fl!("help-note-typing")));
-        }
         Self {
             entries,
             offset: 0,
@@ -395,7 +392,7 @@ mod tests {
 
     #[test]
     fn lists_what_the_app_can_do_by_context() {
-        let help = Help::new(&Keymap::mc(), true, true);
+        let help = Help::new(&Keymap::mc(), true);
         let has = |keys: &str, text: &str| {
             help.entries.contains(&Entry::Keys {
                 keys: keys.to_owned(),
@@ -451,17 +448,11 @@ mod tests {
         );
         assert_eq!(
             help.entries.last(),
-            Some(&Entry::Note(fl!("help-note-typing")))
+            Some(&Entry::Note(fl!("help-note-esc")))
         );
-        let without_typing = Help::new(&Keymap::mc(), false, true);
-        assert!(matches!(
-            without_typing.entries.last(),
-            Some(Entry::Note(_))
-        ));
-        assert_ne!(without_typing.entries.last(), help.entries.last());
         let fuzzy = Entry::Note(fl!("help-note-fuzzy"));
         assert!(help.entries.contains(&fuzzy));
-        let keywords = Help::new(&Keymap::mc(), true, false);
+        let keywords = Help::new(&Keymap::mc(), false);
         assert!(!keywords.entries.contains(&fuzzy));
         assert!(
             keywords
@@ -483,14 +474,14 @@ mod tests {
 
     #[test]
     fn scrolls_within_its_rows_and_closes() {
-        let mut help = Help::new(&Keymap::mc(), true, true);
+        let mut help = Help::new(&Keymap::mc(), true);
         let top = draw(&mut help, 60, 12);
         assert!(top.contains("Panels"), "{top}");
         assert!(!help.handle(action(Action::PageDown)));
         assert_ne!(draw(&mut help, 60, 12), top);
         help.handle(action(Action::End));
         let bottom = draw(&mut help, 60, 12);
-        assert!(bottom.contains("Typing in a panel"), "{bottom}");
+        assert!(bottom.contains("A lone Esc acts"), "{bottom}");
         help.handle(action(Action::Down));
         assert_eq!(draw(&mut help, 60, 12), bottom, "no further than the end");
         help.handle(action(Action::Home));
@@ -501,7 +492,7 @@ mod tests {
 
     #[test]
     fn draws_keys_and_what_they_do() {
-        let mut help = Help::new(&Keymap::mc(), true, true);
+        let mut help = Help::new(&Keymap::mc(), true);
         insta::assert_snapshot!(draw(&mut help, 70, 16));
     }
 }

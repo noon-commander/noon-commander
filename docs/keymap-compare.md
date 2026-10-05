@@ -187,7 +187,7 @@ sequence. Sections marked (noc) exist only in noc.
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Select/deselect file | | Insert<br>Ctrl+T<br>Shift+Down<br>Shift+Up (moves up) | — | Insert<br>Ctrl+T | Ins<br>Shift+cursor keys<br>Right mouse click |
+| Select/deselect file | | Insert<br>Ctrl+T<br>Shift+Down<br>Shift+Up (moves up)<br>Right mouse click | — | Insert<br>Ctrl+T<br>Right mouse click | Ins<br>Shift+cursor keys<br>Right mouse click |
 | Select group | | +<br>Alt++ | — | +<br>Alt++ (alternate_plus_minus) | Gray + |
 | Deselect group | | -<br>\\<br>Alt+- | — | \\<br>Alt+- (alternate_plus_minus) | Gray - |
 | Invert selection | | \*<br>Alt+\* (files only) | — | \*<br>Alt+\* (alternate_plus_minus) | Gray * |
@@ -526,6 +526,17 @@ sequence. Sections marked (noc) exist only in noc.
 | Tab list | | Ctrl+X Tab | — | — | — |
 | Workspaces window | | Alt+W | — | — | — |
 | Save the tabs of both panels as a workspace | | Alt+Shift+W | — | — | — |
+
+## Mouse
+
+| Action | Status | noc (default) | noc (vim) | mc | far |
+| --- | --- | --- | --- | --- | --- |
+| Move the cursor to a row, activate the panel | | Click | — | Click | Click |
+| Open the row (as Enter) | | Double click | — | Double click | Double click |
+| Mark the row, cursor stays on it | | Right click | — | Right click | Right click |
+| Scroll a panel or the viewer | | Wheel | — | Wheel | Wheel |
+| Press an F key | | Click on the F-key bar | — | Click on the button bar | Click on the key bar |
+| Show a tab | | Click on the tab | — | — | — |
 
 ## Workspaces window (noc)
 

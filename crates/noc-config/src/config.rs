@@ -107,6 +107,11 @@ pub struct UiConfig {
     pub menu_bar: MenuBar,
     /// Where a panel with more than one tab shows them. Default: `line`.
     pub tab_bar: TabBar,
+    /// Whether the mouse clicks and scrolls; the terminal then selects text only with a
+    /// modifier, such as Shift or Option. Default: `true`.
+    pub mouse: bool,
+    /// How far the mouse wheel scrolls. Default: `3` lines.
+    pub wheel: Wheel,
 }
 
 impl Default for UiConfig {
@@ -121,7 +126,100 @@ impl Default for UiConfig {
             fuzzy_search: true,
             menu_bar: MenuBar::default(),
             tab_bar: TabBar::default(),
+            mouse: true,
+            wheel: Wheel::default(),
         }
+    }
+}
+
+/// How far a step of the mouse wheel scrolls: `ui.wheel`, a number of lines or `"page"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wheel {
+    /// So many lines, from 1 to [`Wheel::MAX_LINES`].
+    Lines(u8),
+    /// A page, as the keys `PageUp` and `PageDown` move.
+    Page,
+}
+
+impl Wheel {
+    /// The most lines a step scrolls.
+    pub const MAX_LINES: u8 = 20;
+
+    /// The value of `ui.wheel` in `text`: a number of lines, or `page`.
+    pub fn parse(text: &str) -> Option<Self> {
+        if text == "page" {
+            return Some(Self::Page);
+        }
+        let lines = text.parse::<u8>().ok()?;
+        (1..=Self::MAX_LINES)
+            .contains(&lines)
+            .then_some(Self::Lines(lines))
+    }
+}
+
+impl Default for Wheel {
+    fn default() -> Self {
+        Self::Lines(3)
+    }
+}
+
+impl std::fmt::Display for Wheel {
+    /// As `config.toml` writes it, without quotes.
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Lines(lines) => write!(formatter, "{lines}"),
+            Self::Page => formatter.write_str("page"),
+        }
+    }
+}
+
+impl Serialize for Wheel {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Lines(lines) => serializer.serialize_u8(*lines),
+            Self::Page => serializer.serialize_str("page"),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Wheel {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = Wheel;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(
+                    formatter,
+                    "a number of lines from 1 to {}, or \"page\"",
+                    Wheel::MAX_LINES
+                )
+            }
+
+            fn visit_i64<E: serde::de::Error>(self, value: i64) -> Result<Wheel, E> {
+                u8::try_from(value)
+                    .ok()
+                    .filter(|lines| (1..=Wheel::MAX_LINES).contains(lines))
+                    .map(Wheel::Lines)
+                    .ok_or_else(|| E::invalid_value(serde::de::Unexpected::Signed(value), &self))
+            }
+
+            fn visit_u64<E: serde::de::Error>(self, value: u64) -> Result<Wheel, E> {
+                i64::try_from(value)
+                    .map_err(|_| E::invalid_value(serde::de::Unexpected::Unsigned(value), &self))
+                    .and_then(|value| self.visit_i64(value))
+            }
+
+            fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Wheel, E> {
+                match value {
+                    "page" => Ok(Wheel::Page),
+                    _ => Err(E::invalid_value(serde::de::Unexpected::Str(value), &self)),
+                }
+            }
+        }
+
+        deserializer.deserialize_any(Visitor)
     }
 }
 
@@ -289,7 +387,7 @@ mod tests {
 
     use super::{
         Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, SshConfig, TabBar,
-        TransferConfig, UiConfig, VolumesConfig, ZoxideConfig,
+        TransferConfig, UiConfig, VolumesConfig, Wheel, ZoxideConfig,
     };
     use crate::{ConfigError, write_default_config};
 
@@ -333,6 +431,8 @@ mod tests {
         fuzzy_search = false
         menu_bar = "always"
         tab_bar = "frame"
+        mouse = false
+        wheel = "page"
 
         [transfer]
         atomic_upload = false
@@ -367,6 +467,8 @@ mod tests {
                 fuzzy_search: false,
                 menu_bar: MenuBar::Always,
                 tab_bar: TabBar::Frame,
+                mouse: false,
+                wheel: Wheel::Page,
             },
             transfer: TransferConfig {
                 atomic_upload: false,
@@ -399,6 +501,8 @@ mod tests {
         assert!(config.ui.fuzzy_search);
         assert_eq!(config.ui.menu_bar, MenuBar::OnDemand);
         assert_eq!(config.ui.tab_bar, TabBar::Line);
+        assert!(config.ui.mouse);
+        assert_eq!(config.ui.wheel, Wheel::Lines(3));
         assert!(config.transfer.atomic_upload);
         assert_eq!(config.transfer.parallel_jobs.get(), 2);
         assert_eq!(config.zoxide.program, Path::new("zoxide"));
@@ -409,6 +513,22 @@ mod tests {
     fn at_least_one_job_runs() {
         let error = toml::from_str::<Config>("[transfer]\nparallel_jobs = 0").unwrap_err();
         assert!(error.to_string().contains("nonzero"), "{error}");
+    }
+
+    #[test]
+    fn the_wheel_scrolls_lines_or_a_page() {
+        let wheel = |text: &str| parse(&format!("[ui]\nwheel = {text}")).ui.wheel;
+        assert_eq!(wheel("1"), Wheel::Lines(1));
+        assert_eq!(wheel("20"), Wheel::Lines(20));
+        assert_eq!(wheel("\"page\""), Wheel::Page);
+        for text in ["0", "21", "-1", "\"lines\"", "2.5", "true"] {
+            assert_parse_error(&format!("[ui]\nwheel = {text}"));
+        }
+        assert_eq!(Wheel::parse("page"), Some(Wheel::Page));
+        assert_eq!(Wheel::parse("5"), Some(Wheel::Lines(5)));
+        assert_eq!(Wheel::parse("0"), None);
+        assert_eq!(Wheel::Lines(7).to_string(), "7");
+        assert_eq!(Wheel::Page.to_string(), "page");
     }
 
     #[test]
@@ -572,6 +692,8 @@ mod tests {
         assert!(table["ui"].get("fuzzy_search").is_some());
         assert!(table["ui"].get("menu_bar").is_some());
         assert!(table["ui"].get("tab_bar").is_some());
+        assert!(table["ui"].get("mouse").is_some());
+        assert!(table["ui"].get("wheel").is_some());
         assert!(table["zoxide"].get("program").is_some());
         assert!(table["zoxide"].get("record").is_some());
     }

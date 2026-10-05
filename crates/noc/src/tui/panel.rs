@@ -7,9 +7,10 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 
 use jiff::tz::TimeZone;
+use noc_config::Wheel;
 use noc_vfs::{DirEntry, Location, RemotePath, Space, Volume};
 use ratatui::Frame;
-use ratatui::layout::Rect;
+use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear};
@@ -248,6 +249,8 @@ pub(crate) struct Panel {
     offset: usize,
     /// Rows on screen at the last render.
     page: usize,
+    /// Where the rows were at the last render, for the mouse.
+    list: Rect,
     generation: u64,
     pending: Option<Pending>,
     /// What quick search has matched so far, while it runs.
@@ -300,6 +303,7 @@ impl Panel {
             cursor: 0,
             offset: 0,
             page: 1,
+            list: Rect::default(),
             generation: 0,
             pending: None,
             search: None,
@@ -327,6 +331,7 @@ impl Panel {
             cursor: self.cursor,
             offset: self.offset,
             page: self.page,
+            list: Rect::default(),
             generation: 0,
             pending: None,
             search: None,
@@ -1032,6 +1037,7 @@ impl Panel {
         let inner = block.inner(area);
         frame.render_widget(block, area);
         self.column_lines.clear();
+        self.list = Rect::default();
         if inner.height < 3 || inner.width < 2 {
             return;
         }
@@ -1039,6 +1045,7 @@ impl Panel {
         let width = usize::from(inner.width);
         let list_height = usize::from(inner.height - 3);
         self.page = list_height;
+        self.list = Rect::new(inner.x, inner.y + 1, inner.width, inner.height - 3);
         self.scroll(list_height);
 
         let columns = self.columns(width, hosts);
@@ -1266,6 +1273,53 @@ impl Panel {
             Line::styled(text, theme.panel),
             Rect::new(x, area.bottom() - 1, width, 1),
         );
+    }
+
+    /// The row at `at` on screen at the last render, if there is one there.
+    fn row_at(&self, at: Position) -> Option<usize> {
+        if !self.list.contains(at) {
+            return None;
+        }
+        let row = self.offset + usize::from(at.y - self.list.y);
+        (row < self.rows()).then_some(row)
+    }
+
+    /// Puts the cursor on the row at `at`, as a click does; whether there is one there.
+    pub(crate) fn click(&mut self, at: Position) -> bool {
+        let row = self.row_at(at);
+        if let Some(row) = row {
+            self.cursor = row;
+        }
+        row.is_some()
+    }
+
+    /// Puts the cursor on the row at `at` and marks or unmarks it, as a right click does in
+    /// Far; the cursor stays there.
+    pub(crate) fn mark_at(&mut self, at: Position) {
+        if self.click(at) {
+            self.toggle_mark();
+        }
+    }
+
+    /// Scrolls by `step` of the mouse wheel, down or up, without moving the cursor while it
+    /// stays on screen.
+    pub(crate) fn wheel(&mut self, step: Wheel, down: bool) {
+        let page = self.page.max(1);
+        let rows = match step {
+            Wheel::Lines(lines) => usize::from(lines),
+            Wheel::Page => page,
+        };
+        let last = self.rows().saturating_sub(1);
+        self.offset = if down {
+            (self.offset + rows).min(self.rows().saturating_sub(page))
+        } else {
+            self.offset.saturating_sub(rows)
+        };
+        self.cursor = self
+            .cursor
+            .max(self.offset)
+            .min(self.offset + page - 1)
+            .min(last);
     }
 
     /// Keeps the cursor within the rows and on screen.

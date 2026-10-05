@@ -68,6 +68,12 @@ menu_bar = "on-demand"
 # Where a panel with more than one tab (Ctrl-X T) shows them: "line" on a line of its own above
 # the panels, or "frame" in the top of the panel's frame, in place of its title.
 tab_bar = "line"
+# The mouse: a click moves the cursor, a double click opens, a right click marks, and the wheel
+# scrolls; the F-key bar and the tabs take clicks too. While it is on, the terminal selects
+# text only with a modifier held: Shift in most terminals, Option in iTerm2.
+mouse = true
+# How far a step of the mouse wheel scrolls: a number of lines from 1 to 20, or "page".
+wheel = 3
 
 [transfer]
 # Write each copy under a hidden temporary name next to its target and rename it when it is

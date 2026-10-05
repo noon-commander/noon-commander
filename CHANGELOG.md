@@ -9,6 +9,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- The mouse: a click in a panel moves the cursor there, a double click opens, a right click
+  marks the row as in mc and Far, and the wheel scrolls the panel or the viewer under it; the F-key
+  bar and the tabs take clicks too. It is on by default; `ui.mouse = false`, or Mouse in
+  Options → Configuration, turns it off, and `ui.wheel` sets how far the wheel scrolls: a
+  number of lines (3) or `"page"`. While it is on, the terminal selects text with Shift held,
+  or Option in iTerm2.
 - Workspaces: Alt-Shift-W saves the tabs of both panels under a name, with their sort orders
   and the rows under their cursors, and restoring one replaces every tab. Alt-W, or
   F9 → Workspace → Workspace list…, opens their window, which filters them; Enter restores,

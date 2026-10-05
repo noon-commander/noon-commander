@@ -881,6 +881,17 @@ location = "root"
   are written with `crokey` names. User overrides in `keymap.toml` are planned for M4. The F-key bar
   is generated from the active keymap, and so is the help screen (F1): the keys of each context,
   with what they do, for what the app can do already; a prompt from ssh shows over it.
+- **Mouse.** On by default (`ui.mouse`; [ADR 0018](adr/0018-mouse-support.md)). The event loop
+  captures the mouse while it is on and turns crossterm's events into `Pointer`s
+  (`tui/mouse.rs`): a click, a double click (the same cell within 400 ms), a right click, or a
+  step of the wheel; moves and drags are dropped without a redraw. Rendering records where the
+  F-key slots, the panels, their rows, and the tabs were drawn, and `App::pointer` looks there,
+  front first, as keys go: a window or a menu over the panels keeps the mouse from them. A click
+  on an F-key slot presses its key; in a panel a click moves the cursor and gives the panel the
+  keys, a double click does what Enter does, a right click marks the row as in mc and Far, and the
+  wheel scrolls the panel under it, by `ui.wheel` lines or a page; a click on a tab shows it.
+  In the viewer the wheel scrolls. While the mouse is captured, the terminal selects text with
+  a modifier held: Shift in most terminals, Option in iTerm2.
 - **Dialogs.** Modal and centered over the panels, with mc-style buttons: `[< OK >]` marks the
   default one, and a line across the dialog (`╟───╢`, or `├───┤` with single lines) sets the buttons
   apart from what is above them, in every dialog and window. A dialog has a message, radio buttons

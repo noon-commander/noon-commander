@@ -6,7 +6,7 @@
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
-use noc_config::{Borders, Config, MenuBar, TabBar};
+use noc_config::{Borders, Config, MenuBar, TabBar, UiConfig, Wheel};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::text::{Line, Span};
@@ -36,6 +36,8 @@ enum Key {
     ShowHidden,
     TypeToSearch,
     FuzzySearch,
+    Mouse,
+    Wheel,
     MenuBar,
     TabBar,
     AtomicUpload,
@@ -148,6 +150,13 @@ impl Setting {
             Key::ShowHidden => ui.show_hidden = self.on(),
             Key::TypeToSearch => ui.type_to_search = self.on(),
             Key::FuzzySearch => ui.fuzzy_search = self.on(),
+            Key::Mouse => ui.mouse = self.on(),
+            Key::Wheel => {
+                ui.wheel = Wheel::parse(text.trim()).ok_or_else(|| {
+                    let text = cells::sanitize(text.as_bytes());
+                    fl!("config-wheel-invalid", text = text, most = Wheel::MAX_LINES)
+                })?;
+            }
             Key::MenuBar => {
                 ui.menu_bar = match text {
                     "always" => MenuBar::Always,
@@ -745,6 +754,75 @@ fn interface(config: &Config, themes: &[&str]) -> Category {
         Borders::Double => "double",
         Borders::Single => "single",
     };
+    let mut settings = vec![
+        Setting {
+            restart: true,
+            ..Setting::new(
+                Key::Language,
+                (fl!("config-language"), fl!("config-language-hint")),
+                text(&ui.language),
+            )
+        },
+        Setting::new(
+            Key::Theme,
+            (fl!("config-theme"), fl!("config-theme-hint")),
+            choice(&themes, &ui.theme),
+        ),
+        Setting::new(
+            Key::Borders,
+            (fl!("config-borders"), fl!("config-borders-hint")),
+            choice(
+                &[
+                    ("double", fl!("config-borders-double")),
+                    ("single", fl!("config-borders-single")),
+                ],
+                borders,
+            ),
+        ),
+        Setting::new(
+            Key::Icons,
+            (fl!("config-icons"), fl!("config-icons-hint")),
+            Value::Toggle(ui.icons),
+        ),
+        Setting::new(
+            Key::ShowHidden,
+            (fl!("config-show-hidden"), fl!("config-show-hidden-hint")),
+            Value::Toggle(ui.show_hidden),
+        ),
+        Setting::new(
+            Key::TypeToSearch,
+            (
+                fl!("config-type-to-search"),
+                fl!("config-type-to-search-hint"),
+            ),
+            Value::Toggle(ui.type_to_search),
+        ),
+        Setting::new(
+            Key::FuzzySearch,
+            (fl!("config-fuzzy-search"), fl!("config-fuzzy-search-hint")),
+            Value::Toggle(ui.fuzzy_search),
+        ),
+        Setting::new(
+            Key::Mouse,
+            (fl!("config-mouse"), fl!("config-mouse-hint")),
+            Value::Toggle(ui.mouse),
+        ),
+        Setting::new(
+            Key::Wheel,
+            (fl!("config-wheel"), fl!("config-wheel-hint")),
+            text(&ui.wheel.to_string()),
+        ),
+    ];
+    settings.extend(bars(ui));
+    Category {
+        icon: "󰍹",
+        title: fl!("config-interface"),
+        settings,
+    }
+}
+
+/// The settings of the menu bar and the tab bar.
+fn bars(ui: &UiConfig) -> [Setting; 2] {
     let menu_bar = match ui.menu_bar {
         MenuBar::OnDemand => "on-demand",
         MenuBar::Always => "always",
@@ -753,81 +831,30 @@ fn interface(config: &Config, themes: &[&str]) -> Category {
         TabBar::Line => "line",
         TabBar::Frame => "frame",
     };
-    Category {
-        icon: "󰍹",
-        title: fl!("config-interface"),
-        settings: vec![
-            Setting {
-                restart: true,
-                ..Setting::new(
-                    Key::Language,
-                    (fl!("config-language"), fl!("config-language-hint")),
-                    text(&ui.language),
-                )
-            },
-            Setting::new(
-                Key::Theme,
-                (fl!("config-theme"), fl!("config-theme-hint")),
-                choice(&themes, &ui.theme),
+    [
+        Setting::new(
+            Key::MenuBar,
+            (fl!("config-menu-bar"), fl!("config-menu-bar-hint")),
+            choice(
+                &[
+                    ("on-demand", fl!("config-menu-bar-on-demand")),
+                    ("always", fl!("config-menu-bar-always")),
+                ],
+                menu_bar,
             ),
-            Setting::new(
-                Key::Borders,
-                (fl!("config-borders"), fl!("config-borders-hint")),
-                choice(
-                    &[
-                        ("double", fl!("config-borders-double")),
-                        ("single", fl!("config-borders-single")),
-                    ],
-                    borders,
-                ),
+        ),
+        Setting::new(
+            Key::TabBar,
+            (fl!("config-tab-bar"), fl!("config-tab-bar-hint")),
+            choice(
+                &[
+                    ("line", fl!("config-tab-bar-line")),
+                    ("frame", fl!("config-tab-bar-frame")),
+                ],
+                tab_bar,
             ),
-            Setting::new(
-                Key::Icons,
-                (fl!("config-icons"), fl!("config-icons-hint")),
-                Value::Toggle(ui.icons),
-            ),
-            Setting::new(
-                Key::ShowHidden,
-                (fl!("config-show-hidden"), fl!("config-show-hidden-hint")),
-                Value::Toggle(ui.show_hidden),
-            ),
-            Setting::new(
-                Key::TypeToSearch,
-                (
-                    fl!("config-type-to-search"),
-                    fl!("config-type-to-search-hint"),
-                ),
-                Value::Toggle(ui.type_to_search),
-            ),
-            Setting::new(
-                Key::FuzzySearch,
-                (fl!("config-fuzzy-search"), fl!("config-fuzzy-search-hint")),
-                Value::Toggle(ui.fuzzy_search),
-            ),
-            Setting::new(
-                Key::MenuBar,
-                (fl!("config-menu-bar"), fl!("config-menu-bar-hint")),
-                choice(
-                    &[
-                        ("on-demand", fl!("config-menu-bar-on-demand")),
-                        ("always", fl!("config-menu-bar-always")),
-                    ],
-                    menu_bar,
-                ),
-            ),
-            Setting::new(
-                Key::TabBar,
-                (fl!("config-tab-bar"), fl!("config-tab-bar-hint")),
-                choice(
-                    &[
-                        ("line", fl!("config-tab-bar-line")),
-                        ("frame", fl!("config-tab-bar-frame")),
-                    ],
-                    tab_bar,
-                ),
-            ),
-        ],
-    }
+        ),
+    ]
 }
 
 /// Transfers, `[transfer]`.
@@ -1057,6 +1084,14 @@ mod tests {
         dialog.handle(action(Action::Toggle));
         dialog.handle(action(Action::Down));
         dialog.handle(action(Action::Toggle));
+        for _ in 0..4 {
+            dialog.handle(action(Action::Down));
+        }
+        dialog.handle(action(Action::Toggle));
+        dialog.handle(action(Action::Down));
+        dialog.handle(action(Action::DeleteToStart));
+        typed(&mut dialog, "page");
+        dialog.handle(action(Action::Down));
         dialog.handle(action(Action::End));
         dialog.handle(action(Action::Left));
         category(&mut dialog, 1);
@@ -1086,6 +1121,8 @@ mod tests {
         expected.ui.borders = Borders::Single;
         expected.ui.icons = false;
         expected.ui.tab_bar = TabBar::Frame;
+        expected.ui.mouse = false;
+        expected.ui.wheel = Wheel::Page;
         expected.transfer.atomic_upload = false;
         expected.transfer.parallel_jobs = NonZeroUsize::new(4).unwrap();
         expected.ssh.config_file = Some(PathBuf::from("~/.ssh/work"));
@@ -1100,8 +1137,10 @@ mod tests {
 
     #[test]
     fn an_invalid_text_keeps_the_cursor_and_says_why() {
-        let cases: [(usize, usize, &str, &str); 5] = [
+        let cases: [(usize, usize, &str, &str); 7] = [
             (0, 0, "?", "is not auto or a language tag"),
+            (0, 8, "0", "is not a step of the wheel"),
+            (0, 8, "pages", "is not a step of the wheel"),
             (1, 1, "x", "is not a number of jobs"),
             (2, 2, "-F other_config", "Invalid extra ssh arguments"),
             (2, 0, "", "The ssh program cannot be empty"),

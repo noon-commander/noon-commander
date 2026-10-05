@@ -14,6 +14,7 @@ mod jobs;
 mod jump;
 mod keymap;
 mod menu;
+mod mouse;
 mod panel;
 mod pattern;
 mod progress;
@@ -32,7 +33,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
 use color_eyre::eyre::{Result, bail};
-use crossterm::event::{Event, EventStream, KeyEventKind};
+use crossterm::event::{
+    DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyEventKind, MouseEvent,
+};
 use futures_util::StreamExt as _;
 use jiff::tz::TimeZone;
 use noc_tools::ToolError;
@@ -45,6 +48,7 @@ use tokio::sync::mpsc;
 
 use app::App;
 use keymap::KeyState;
+use mouse::Clicks;
 use tasks::{Done, Tasks};
 
 use crate::context::Context;
@@ -132,10 +136,16 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     let tz = tokio::task::spawn_blocking(TimeZone::system).await?;
     let restore = Restore;
     let mut terminal = ratatui::try_init()?;
+    release_mouse_on_panic();
     let mut events = EventStream::new();
     let mut spinner = tokio::time::interval(SPINNER_FRAME);
     spinner.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut keys = KeyState::default();
+    let mut clicks = Clicks::default();
+    // The mouse is captured; `ui.mouse` may change while the app runs.
+    let mut mouse = false;
+    // The last event changed nothing, so the screen stays as it is.
+    let mut idle = false;
     let context = Arc::new(context);
     let (done_tx, mut done) = mpsc::unbounded_channel();
     let mut tasks = Tasks::start(Arc::clone(&context), done_tx).await;
@@ -153,6 +163,8 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
             // waits, and a new stream takes that lock, so the old one goes first; the new one
             // reads nothing until it is polled.
             drop(events);
+            // The next turn captures the mouse again.
+            mouse = false;
             let result = match suspend(&mut terminal) {
                 Ok(()) => edit(&file).await,
                 Err(error) => Err(error.to_string()),
@@ -170,18 +182,13 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
             tasks.run(app.edited(result));
             continue;
         }
-        if app.take_redraw()
-            && let Err(error) = repaint(&mut terminal)
-        {
-            break Err(error.into());
-        }
-        if let Some(text) = app.take_clipboard()
-            && let Err(error) = copy_to_clipboard(&mut terminal, &text)
-        {
+        if let Err(error) = take_terminal_requests(&mut terminal, &mut app, &mut mouse) {
             break Err(error.into());
         }
         let now = SystemTime::now();
-        if let Err(error) = terminal.draw(|frame| app.render(frame, now, &tz)) {
+        if !std::mem::take(&mut idle)
+            && let Err(error) = terminal.draw(|frame| app.render(frame, now, &tz))
+        {
             break Err(error.into());
         }
         let deadline = keys.deadline();
@@ -192,6 +199,9 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
                     for input in app.keymap().feed(&mut keys, context, key, Instant::now()) {
                         tasks.run(app.handle(input));
                     }
+                }
+                Some(Ok(Event::Mouse(event))) => {
+                    idle = !take_mouse(&mut app, &mut tasks, &mut clicks, &mut keys, event);
                 }
                 // Resizes and other events only need a redraw.
                 Some(Ok(_)) => {}
@@ -276,9 +286,10 @@ async fn edit(file: &Path) -> Result<bool, String> {
     Ok(before != after)
 }
 
-/// Hands the terminal over to another program as the shell has it: with the cursor, on the
-/// main screen, and out of raw mode.
+/// Hands the terminal over to another program as the shell has it: with the cursor and the
+/// mouse, on the main screen, and out of raw mode.
 fn suspend(terminal: &mut DefaultTerminal) -> io::Result<()> {
+    capture_mouse(false)?;
     terminal.show_cursor()?;
     crossterm::execute!(io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
     crossterm::terminal::disable_raw_mode()
@@ -290,6 +301,63 @@ fn resume(terminal: &mut DefaultTerminal) -> io::Result<()> {
     crossterm::terminal::enable_raw_mode()?;
     crossterm::execute!(io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
     repaint(terminal)
+}
+
+/// Does what the app asks of the terminal: a full redraw, text for the clipboard, and
+/// capturing the mouse or releasing it, as `ui.mouse` says; `mouse` is whether it is
+/// captured.
+fn take_terminal_requests(
+    terminal: &mut DefaultTerminal,
+    app: &mut App,
+    mouse: &mut bool,
+) -> io::Result<()> {
+    if app.take_redraw() {
+        repaint(terminal)?;
+    }
+    if let Some(text) = app.take_clipboard() {
+        copy_to_clipboard(terminal, &text)?;
+    }
+    if app.mouse() != *mouse {
+        *mouse = app.mouse();
+        capture_mouse(*mouse)?;
+    }
+    Ok(())
+}
+
+/// Hands `event` to the app if it is a press; whether it was. Moves of the mouse come all the
+/// time and do nothing. A press ends a key sequence.
+fn take_mouse(
+    app: &mut App,
+    tasks: &mut Tasks,
+    clicks: &mut Clicks,
+    keys: &mut KeyState,
+    event: MouseEvent,
+) -> bool {
+    let Some(pointer) = clicks.pointer(event, Instant::now()) else {
+        return false;
+    };
+    *keys = KeyState::default();
+    tasks.run(app.pointer(pointer));
+    true
+}
+
+/// Releases the mouse on a panic: the hook of `ratatui::try_init`, which this one calls,
+/// restores the terminal but leaves the mouse captured.
+fn release_mouse_on_panic() {
+    let hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = capture_mouse(false);
+        hook(info);
+    }));
+}
+
+/// Has the terminal report the mouse, or stop.
+fn capture_mouse(on: bool) -> io::Result<()> {
+    if on {
+        crossterm::execute!(io::stdout(), EnableMouseCapture)
+    } else {
+        crossterm::execute!(io::stdout(), DisableMouseCapture)
+    }
 }
 
 /// Makes the next draw write every cell. Unlike `Terminal::clear`, this does not ask the
@@ -320,12 +388,13 @@ async fn sleep_until(deadline: Option<Instant>) {
     }
 }
 
-/// Leaves raw mode and the alternate screen however [`run`] ends. Panics are covered by the
-/// hook that `ratatui::try_init` installs.
+/// Releases the mouse and leaves raw mode and the alternate screen however [`run`] ends.
+/// Panics are covered by the hook that `ratatui::try_init` installs, and the one around it.
 struct Restore;
 
 impl Drop for Restore {
     fn drop(&mut self) {
+        let _ = capture_mouse(false);
         ratatui::restore();
     }
 }

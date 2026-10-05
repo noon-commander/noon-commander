@@ -8,7 +8,7 @@ use std::time::{Instant, SystemTime};
 
 use jiff::tz::TimeZone;
 use noc_config::{
-    Config, HostConfig, Hosts, MenuBar, PanelSide, SftpHost, TabBar, UiConfig, Workspace,
+    Config, HostConfig, Hosts, MenuBar, PanelSide, SftpHost, TabBar, UiConfig, Wheel, Workspace,
     Workspaces,
 };
 use noc_ops::{Algorithm, Conflict, CopyOptions, Decision, Sum};
@@ -16,7 +16,7 @@ use noc_tools::zoxide::Scored;
 use noc_vfs::{FileKind, Location, Metadata, RemotePath};
 use noc_viewer::{Command as ViewerCommand, Styles as ViewerStyles, Viewer};
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::text::{Line, Span};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
@@ -32,6 +32,7 @@ use super::jobs::{JobsEvent, JobsList, Row};
 use super::jump::{JumpEvent, JumpMenu};
 use super::keymap::{Action, Context, Keymap, Resolved};
 use super::menu::{LocationMenu, MenuEvent};
+use super::mouse::{Pointer, Press};
 use super::panel::{
     Destination, HostState, HostStatus, ListRequest, Listed, Panel, View, child, location_text,
 };
@@ -607,8 +608,22 @@ pub(crate) struct App {
     /// The title of the virtual root: the name of this machine.
     root_title: String,
     keymap: Keymap,
+    /// Where the last render drew what the mouse can press.
+    spots: Spots,
     quit: bool,
     redraw: bool,
+}
+
+/// What the mouse can press, where the last render drew it.
+#[derive(Debug, Default)]
+struct Spots {
+    /// The slots of the F-key bar, F1 first.
+    fkeys: Vec<Rect>,
+    /// The panel on each side with the line of its tabs, if it has one; none while the viewer
+    /// shows.
+    sides: Vec<(Side, Rect)>,
+    /// The tabs shown, by side and index.
+    tabs: Vec<(Side, usize, Rect)>,
 }
 
 impl App {
@@ -685,6 +700,7 @@ impl App {
             home: home.to_path_buf(),
             root_title: fl!("root-title"),
             keymap: Keymap::mc(),
+            spots: Spots::default(),
             quit: false,
             redraw: false,
         };
@@ -756,6 +772,115 @@ impl App {
     /// What turns keys into actions.
     pub(crate) fn keymap(&self) -> &Keymap {
         &self.keymap
+    }
+
+    /// Whether the mouse is on: `ui.mouse`.
+    pub(crate) fn mouse(&self) -> bool {
+        self.config.ui.mouse
+    }
+
+    /// Takes a press of the mouse at a cell, as the last render drew the screen: the F-key bar
+    /// presses its keys, and in the panels a click moves the cursor, a double click opens, a
+    /// right click marks, and the wheel scrolls.
+    pub(crate) fn pointer(&mut self, pointer: Pointer) -> Vec<Effect> {
+        if !self.config.ui.mouse {
+            return Vec::new();
+        }
+        let Pointer { press, at } = pointer;
+        if let Some(slot) = self.spots.fkeys.iter().position(|slot| slot.contains(at)) {
+            // The second click of a double click would press the key again.
+            let action = self.fkey_actions().into_iter().nth(slot).flatten();
+            return match action {
+                Some((action, _)) if press == Press::Click => self.handle(Resolved::Action(action)),
+                _ => Vec::new(),
+            };
+        }
+        if self.covered() {
+            return Vec::new();
+        }
+        if let Some(viewing) = &mut self.viewing {
+            let (lines, page) = match press {
+                Press::WheelUp => (ViewerCommand::Up, ViewerCommand::PageUp),
+                Press::WheelDown => (ViewerCommand::Down, ViewerCommand::PageDown),
+                Press::Click | Press::DoubleClick | Press::RightClick => return Vec::new(),
+            };
+            match self.config.ui.wheel {
+                Wheel::Lines(count) => {
+                    for _ in 0..count {
+                        viewing.viewer.handle(lines);
+                    }
+                }
+                Wheel::Page => viewing.viewer.handle(page),
+            }
+            return Vec::new();
+        }
+        if self.panel(self.active).renaming() {
+            return Vec::new();
+        }
+        let Some(side) = self
+            .spots
+            .sides
+            .iter()
+            .find(|(_, area)| area.contains(at))
+            .map(|(side, _)| *side)
+        else {
+            return Vec::new();
+        };
+        match press {
+            Press::WheelUp | Press::WheelDown => {
+                let step = self.config.ui.wheel;
+                self.panel_mut(side).wheel(step, press == Press::WheelDown);
+                Vec::new()
+            }
+            Press::Click | Press::DoubleClick | Press::RightClick => {
+                self.click_panel(side, press, at)
+            }
+        }
+    }
+
+    /// Whether a window or a menu is over the panels or the viewer.
+    fn covered(&self) -> bool {
+        !self.dialogs.is_empty()
+            || self.menu.is_some()
+            || self.jump.is_some()
+            || self.workspaces_window.is_some()
+            || !self.results.is_empty()
+            || self.in_front().is_some()
+            || self.jobs_list.is_some()
+            || self.help.is_some()
+            || self.configuration.is_some()
+            || self.pulldown.is_some()
+    }
+
+    /// A click on the panel on `side`, at `at`: on a tab, it shows that tab; on a row, it puts
+    /// the cursor there, and opens the row on a double click or marks it on a right click.
+    /// Either way the side gets the keys, and quick search ends, as at a key of its own.
+    fn click_panel(&mut self, side: Side, press: Press, at: Position) -> Vec<Effect> {
+        self.panel_mut(self.active).end_search();
+        self.active = side;
+        let tab = self
+            .spots
+            .tabs
+            .iter()
+            .find(|(tab_side, _, area)| *tab_side == side && area.contains(at))
+            .map(|(_, index, _)| *index);
+        if let Some(index) = tab {
+            if press == Press::Click && self.tabs_mut(side).select(index) {
+                return self.revealed(side);
+            }
+            return Vec::new();
+        }
+        let panel = self.panel_mut(side);
+        match press {
+            Press::RightClick => panel.mark_at(at),
+            Press::DoubleClick if panel.click(at) => {
+                return self.handle(Resolved::Action(Action::Enter));
+            }
+            _ => {
+                panel.click(at);
+            }
+        }
+        Vec::new()
     }
 
     /// Where keys go now.
@@ -3811,6 +3936,7 @@ impl App {
     /// Two panels side by side above the F-key bar; the menu bar of F9 above them with
     /// `ui.menu_bar`, else over their top line while a menu is open.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, now: SystemTime, tz: &TimeZone) {
+        self.spots = Spots::default();
         let always = self.config.ui.menu_bar == MenuBar::Always;
         let bar_height = u16::from(always);
         let [menu_bar, panels, key_bar] = Layout::vertical([
@@ -3851,14 +3977,19 @@ impl App {
             viewing.viewer.render(frame, panels, &styles);
         } else {
             let sides = [
-                (&mut self.left, left_bar, left, active == Side::Left),
-                (&mut self.right, right_bar, right, active == Side::Right),
+                (Side::Left, &mut self.left, left_bar, left),
+                (Side::Right, &mut self.right, right_bar, right),
             ];
-            for (tabs, line, area, focused) in sides {
-                render_side(frame, tabs, (line, area), focused, &view, &self.home);
+            for (side, tabs, line, area) in sides {
+                let focused = active == side;
+                let spots = render_side(frame, tabs, (line, area), focused, &view, &self.home);
+                let whole = line.map_or(area, |line| line.union(area));
+                self.spots.sides.push((side, whole));
+                let tabs = spots.into_iter().map(|(index, spot)| (side, index, spot));
+                self.spots.tabs.extend(tabs);
             }
         }
-        self.render_fkeys(frame, key_bar);
+        self.spots.fkeys = self.render_fkeys(frame, key_bar);
         if always {
             pulldown::render_idle(frame, menu_bar, &self.theme);
         }
@@ -3977,19 +4108,27 @@ impl App {
         frame.render_widget(Line::styled(text, self.theme.panel_title_active), row);
     }
 
-    /// The F-key bar: ten equal slots, each the key number and the label of its action.
-    fn render_fkeys(&self, frame: &mut Frame<'_>, area: Rect) {
-        let slots = Layout::horizontal([Constraint::Fill(1); 10]).split(area);
+    /// What F1 … F10 do now, each with its label on the F-key bar; `None` for a key that does
+    /// nothing.
+    fn fkey_actions(&self) -> [Option<(Action, String)>; 10] {
         let context = self.context();
-        let actions = self.keymap.fkeys(context);
+        self.keymap.fkeys(context).map(|action| {
+            let action = action.filter(|action| self.supports(*action))?;
+            let label = match (context, action) {
+                (Context::Workspaces, Action::Move) => Some(fl!("fkey-rename")),
+                _ => fkey_label(action),
+            }?;
+            Some((action, label))
+        })
+    }
+
+    /// The F-key bar: ten equal slots, each the key number and the label of its action.
+    /// Returns the slots.
+    fn render_fkeys(&self, frame: &mut Frame<'_>, area: Rect) -> Vec<Rect> {
+        let slots = Layout::horizontal([Constraint::Fill(1); 10]).split(area);
+        let actions = self.fkey_actions();
         for (number, (slot, action)) in (1..).zip(slots.iter().zip(actions)) {
-            let label = action
-                .filter(|action| self.supports(*action))
-                .and_then(|action| match (context, action) {
-                    (Context::Workspaces, Action::Move) => Some(fl!("fkey-rename")),
-                    _ => fkey_label(action),
-                })
-                .unwrap_or_default();
+            let label = action.map(|(_, label)| label).unwrap_or_default();
             let number = number.to_string();
             // The label's color fills its slot, as in mc.
             let room = usize::from(slot.width).saturating_sub(number.len());
@@ -3999,11 +4138,13 @@ impl App {
             ]);
             frame.render_widget(line, *slot);
         }
+        slots.to_vec()
     }
 }
 
 /// Draws the tab that shows of `tabs` in `area`, and its tabs on `line` if there is one, its
 /// frame joined to it, else in its frame if it has more than one; `focused` if the side has the keys.
+/// Returns where each tab shown is, by its index.
 fn render_side(
     frame: &mut Frame<'_>,
     tabs: &mut Tabs,
@@ -4011,7 +4152,7 @@ fn render_side(
     focused: bool,
     view: &View<'_>,
     home: &Path,
-) {
+) -> Vec<(usize, Rect)> {
     tabs.active_mut().panel.render(frame, area, focused, view);
     let names = tabs.names(view.root_title, home, line.is_none());
     let bar = Bar {
@@ -4022,14 +4163,16 @@ fn render_side(
     };
     match line {
         Some(line) => {
-            bar.render_line(frame, line);
+            let spots = bar.render_line(frame, line);
             tabs::join_frame(frame, area, view.theme);
+            spots
         }
         None if tabs.len() > 1 => {
-            bar.render_frame(frame, area);
+            let spots = bar.render_frame(frame, area);
             tabs.active().panel.join_columns(frame, area, view.theme);
+            spots
         }
-        None => {}
+        None => Vec::new(),
     }
 }
 
@@ -4517,6 +4660,151 @@ mod tests {
             None,
             "a remote panel keeps the last one"
         );
+    }
+
+    /// Presses the mouse at column `x` and row `y` of the screen last drawn.
+    fn press(app: &mut App, press: Press, x: u16, y: u16) -> Vec<Effect> {
+        let at = Position::new(x, y);
+        app.pointer(Pointer { press, at })
+    }
+
+    fn cursor_name(app: &App, side: Side) -> String {
+        let name = app.panel(side).name_under_cursor().unwrap_or_default();
+        String::from_utf8_lossy(name).into_owned()
+    }
+
+    fn chosen_names(app: &App, side: Side) -> Vec<String> {
+        let chosen = app.panel(side).chosen();
+        let names = chosen.iter().map(|entry| &entry.name);
+        names
+            .map(|name| String::from_utf8_lossy(name).into_owned())
+            .collect()
+    }
+
+    // On a screen 160 wide and 12 high, the left panel takes columns 0 … 79 and the right one
+    // 80 … 159; their rows start on line 2, under the frame and the header, and six fit.
+    // The F-key bar is the last line, in slots 16 wide.
+
+    #[test]
+    fn a_click_moves_the_cursor_and_a_double_click_opens() {
+        let mut app = loaded();
+        screen_of(&mut app, 12);
+        assert!(press(&mut app, Press::Click, 90, 3).is_empty());
+        assert_eq!(app.active, Side::Right, "the clicked panel gets the keys");
+        assert_eq!(cursor_name(&app, Side::Right), "left");
+        let Effect::List { panel, request, .. } = one(press(&mut app, Press::DoubleClick, 90, 3))
+        else {
+            panic!("expected a listing");
+        };
+        assert_eq!(
+            (panel.side, request.location),
+            (Side::Right, local("/srv/left"))
+        );
+
+        // Below the last row the panel only gets the keys.
+        app.active = Side::Left;
+        press(&mut app, Press::Click, 90, 8);
+        assert_eq!(app.active, Side::Right);
+        assert_eq!(cursor_name(&app, Side::Right), "left");
+        assert!(press(&mut app, Press::DoubleClick, 90, 8).is_empty());
+    }
+
+    #[test]
+    fn a_right_click_marks_the_row_and_leaves_the_cursor_on_it() {
+        let mut app = loaded();
+        screen_of(&mut app, 12);
+        press(&mut app, Press::RightClick, 10, 4);
+        press(&mut app, Press::RightClick, 10, 3);
+        assert_eq!(cursor_name(&app, Side::Left), "left");
+        assert_eq!(chosen_names(&app, Side::Left), ["left", "right"]);
+        press(&mut app, Press::RightClick, 10, 3);
+        assert_eq!(cursor_name(&app, Side::Left), "left");
+        assert_eq!(chosen_names(&app, Side::Left), ["right"]);
+        press(&mut app, Press::RightClick, 10, 2);
+        assert_eq!(
+            chosen_names(&app, Side::Left),
+            ["right"],
+            "`..` takes no mark"
+        );
+    }
+
+    #[test]
+    fn the_wheel_scrolls_the_panel_under_it() {
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
+        let files = (0..20).map(|n| file(&format!("f{n:02}"), 1)).collect();
+        answer(&mut app, effects, &Listing::Dir(files));
+        screen_of(&mut app, 12);
+        press(&mut app, Press::WheelDown, 90, 5);
+        assert_eq!(app.active, Side::Left, "the wheel does not take the keys");
+        assert_eq!(
+            cursor_name(&app, Side::Right),
+            "f02",
+            "on the first row shown"
+        );
+        assert_eq!(cursor_name(&app, Side::Left), "");
+        screen_of(&mut app, 12);
+        press(&mut app, Press::WheelUp, 90, 5);
+        assert_eq!(cursor_name(&app, Side::Right), "f02", "still on screen");
+        for _ in 0..10 {
+            press(&mut app, Press::WheelDown, 90, 5);
+        }
+        assert_eq!(
+            cursor_name(&app, Side::Right),
+            "f14",
+            "on the first row of the last page"
+        );
+
+        app.config.ui.wheel = Wheel::Page;
+        screen_of(&mut app, 12);
+        press(&mut app, Press::WheelUp, 90, 5);
+        screen_of(&mut app, 12);
+        assert_eq!(
+            cursor_name(&app, Side::Right),
+            "f13",
+            "on the last row a page up"
+        );
+    }
+
+    #[test]
+    fn the_f_key_bar_presses_its_keys_where_they_do_something() {
+        let mut app = loaded();
+        screen_of(&mut app, 12);
+        press(&mut app, Press::DoubleClick, 100, 11);
+        assert!(app.dialogs.is_empty(), "a double click is no second press");
+        press(&mut app, Press::Click, 100, 11);
+        assert_eq!(app.context(), Context::PathInput, "F7 asks for a name");
+        press(&mut app, Press::Click, 90, 3);
+        assert_eq!(
+            app.active,
+            Side::Left,
+            "a dialog keeps the panels from the mouse"
+        );
+        screen_of(&mut app, 12);
+        // F10 cancels in a dialog.
+        press(&mut app, Press::Click, 150, 11);
+        assert!(app.dialogs.is_empty());
+
+        app.config.ui.mouse = false;
+        press(&mut app, Press::Click, 100, 11);
+        press(&mut app, Press::Click, 90, 3);
+        assert!(app.dialogs.is_empty());
+        assert_eq!(app.active, Side::Left, "the mouse is off");
+    }
+
+    #[test]
+    fn a_click_on_a_tab_shows_it() {
+        for tab_bar in [TabBar::Line, TabBar::Frame] {
+            let mut app = loaded();
+            app.config.ui.tab_bar = tab_bar;
+            app.handle(action(Action::NewTab));
+            app.handle(action(Action::SwitchPanel));
+            assert_eq!(app.tabs(Side::Left).index(), 1);
+            screen_of(&mut app, 12);
+            // ` 1 srv ` from column 1 of the line, or after the frame's corner.
+            press(&mut app, Press::Click, 3, 0);
+            assert_eq!(app.tabs(Side::Left).index(), 0, "{tab_bar:?}");
+            assert_eq!(app.active, Side::Left);
+        }
     }
 
     /// The titles of the panels drawn on the left and on the right.

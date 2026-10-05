@@ -242,15 +242,16 @@ impl Bar<'_> {
 
     /// The tabs on a line of their own, `area`, with a bar between them, between the frame's
     /// verticals above its corners; `‹` and `›` say that tabs are left out before or after the
-    /// ones shown.
-    pub(crate) fn render_line(&self, frame: &mut Frame<'_>, area: Rect) {
+    /// ones shown. Returns where each tab shown is, by its index, for the mouse.
+    pub(crate) fn render_line(&self, frame: &mut Frame<'_>, area: Rect) -> Vec<(usize, Rect)> {
         let theme = self.theme;
         frame.render_widget(
             Line::styled(" ".repeat(usize::from(area.width)), theme.tab),
             area,
         );
+        let mut spots = Vec::new();
         if area.width < 2 {
-            return;
+            return spots;
         }
         let edge = area.right() - 1;
         let vertical = match theme.border_type() {
@@ -293,20 +294,24 @@ impl Bar<'_> {
                 mark(frame, x, "│");
                 x += 1;
             }
+            let start = x;
             x = self.draw_tab(frame, x, inside, (index, &label));
+            spots.push((index, Rect::new(start, area.y, x - start, 1)));
         }
         if after && inside.width > 0 {
             mark(frame, inside.right() - 1, "›");
         }
+        spots
     }
 
     /// The tabs in the top line of a panel's frame, `area`, over its title; the frame's line
-    /// runs between them.
-    pub(crate) fn render_frame(&self, frame: &mut Frame<'_>, area: Rect) {
+    /// runs between them. Returns where each tab shown is, by its index, for the mouse.
+    pub(crate) fn render_frame(&self, frame: &mut Frame<'_>, area: Rect) -> Vec<(usize, Rect)> {
         // Where the title goes: after the left corner, before a line and the right corner.
         let room = usize::from(area.width.saturating_sub(3));
+        let mut spots = Vec::new();
         if room == 0 || area.height == 0 {
-            return;
+            return spots;
         }
         let line = Rect::new(area.x + 1, area.y, area.width - 3, 1);
         // The title of the panel's frame goes, and the line comes back in its place.
@@ -324,8 +329,11 @@ impl Bar<'_> {
             if position > 0 {
                 x += 1;
             }
+            let start = x;
             x = self.draw_tab(frame, x, line, (index, &label));
+            spots.push((index, Rect::new(start, area.y, x - start, 1)));
         }
+        spots
     }
 }
 
@@ -505,11 +513,11 @@ mod tests {
             };
             terminal
                 .draw(|frame| {
-                    if in_frame {
-                        bar.render_frame(frame, frame.area());
+                    let _ = if in_frame {
+                        bar.render_frame(frame, frame.area())
                     } else {
-                        bar.render_line(frame, frame.area());
-                    }
+                        bar.render_line(frame, frame.area())
+                    };
                 })
                 .unwrap();
             terminal.backend().buffer().clone()

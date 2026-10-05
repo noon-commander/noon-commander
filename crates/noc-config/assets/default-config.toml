@@ -46,6 +46,8 @@ language = "auto"
 # "catppuccin-latte" (light). All but the first two use 24-bit color where COLORTERM says the
 # terminal has it, else the nearest of 256 colors.
 theme = "mc-classic"
+# Keys: "default", modelled on Midnight Commander.
+keymap = "default"
 # Frames of panels and dialogs: "double" (═ ║ ╔, as Midnight Commander) or "single" (─ │ ┌).
 borders = "double"
 # Nerd Font icons in front of names; needs a Nerd Font in the terminal. Without them, mc's

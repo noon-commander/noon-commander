@@ -59,6 +59,14 @@ impl Context {
                 crate::tui::theme_names().join(", ")
             );
         }
+        if !crate::tui::is_valid_keymap(&config.ui.keymap) {
+            bail!(
+                "invalid `ui.keymap` in {}: `{}` is not one of {}",
+                config_path.display(),
+                config.ui.keymap,
+                crate::tui::keymap_names().join(", ")
+            );
+        }
         let hosts = Hosts::load(&Paths::hosts_file(config_path))?;
         Ok(Self::new(paths, config, config_path.to_path_buf(), hosts))
     }

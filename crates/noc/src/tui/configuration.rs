@@ -32,6 +32,7 @@ const HINT_ROWS: u16 = 2;
 enum Key {
     Language,
     Theme,
+    Keymap,
     Borders,
     Icons,
     ShowHidden,
@@ -143,6 +144,7 @@ impl Setting {
                 language.clone_into(&mut ui.language);
             }
             Key::Theme => text.clone_into(&mut ui.theme),
+            Key::Keymap => text.clone_into(&mut ui.keymap),
             Key::Borders => {
                 ui.borders = match text {
                     "single" => Borders::Single,
@@ -360,12 +362,12 @@ fn join_words(words: &[String]) -> String {
 
 impl Configuration {
     /// The dialog with the settings `config` has, which shows paths under `home` from `~`;
-    /// `themes` are the themes to choose from, and `icons` puts the categories' icons in front
-    /// of their names.
-    pub(crate) fn new(config: &Config, home: &Path, themes: &[&str], icons: bool) -> Self {
+    /// `presets` are the themes and the keymaps to choose from, and `icons` puts the
+    /// categories' icons in front of their names.
+    pub(crate) fn new(config: &Config, home: &Path, presets: Presets<'_>, icons: bool) -> Self {
         let mut dialog = Self {
             categories: vec![
-                interface(config, themes),
+                interface(config, presets),
                 transfers(config),
                 ssh(config, home),
                 volumes(config),
@@ -845,13 +847,20 @@ impl Configuration {
     }
 }
 
-/// Interface, `[ui]`.
-fn interface(config: &Config, themes: &[&str]) -> Category {
-    let ui = &config.ui;
-    let themes: Vec<(&str, String)> = themes
+/// The names of the built-in themes and keymaps.
+pub(crate) type Presets<'a> = (&'a [&'a str], &'a [&'a str]);
+
+/// Choices whose text is their value, as the names of presets are.
+fn names<'a>(names: &[&'a str]) -> Vec<(&'a str, String)> {
+    names
         .iter()
         .map(|name| (*name, (*name).to_owned()))
-        .collect();
+        .collect()
+}
+
+/// Interface, `[ui]`.
+fn interface(config: &Config, (themes, keymaps): Presets<'_>) -> Category {
+    let ui = &config.ui;
     let borders = match ui.borders {
         Borders::Double => "double",
         Borders::Single => "single",
@@ -868,7 +877,12 @@ fn interface(config: &Config, themes: &[&str]) -> Category {
         Setting::new(
             Key::Theme,
             (fl!("config-theme"), fl!("config-theme-hint")),
-            choice(&themes, &ui.theme),
+            choice(&names(themes), &ui.theme),
+        ),
+        Setting::new(
+            Key::Keymap,
+            (fl!("config-keymap"), fl!("config-keymap-hint")),
+            choice(&names(keymaps), &ui.keymap),
         ),
         Setting::new(
             Key::Borders,
@@ -1107,7 +1121,7 @@ mod tests {
 
     use super::*;
 
-    const THEMES: &[&str] = &["mc-classic", "terminal"];
+    const PRESETS: Presets<'static> = (&["mc-classic", "terminal"], &["default", "vim"]);
 
     fn action(action: Action) -> Resolved {
         Resolved::Action(action)
@@ -1116,7 +1130,7 @@ mod tests {
     const HOME: &str = "/home/me";
 
     fn dialog_of(config: &Config) -> Configuration {
-        Configuration::new(config, Path::new(HOME), THEMES, false)
+        Configuration::new(config, Path::new(HOME), PRESETS, false)
     }
 
     fn dialog() -> Configuration {
@@ -1178,7 +1192,9 @@ mod tests {
             (old.ui.theme.as_str(), new.ui.theme.as_str()),
             ("mc-classic", "terminal")
         );
-        dialog.handle(action(Action::Down));
+        for _ in 0..2 {
+            dialog.handle(action(Action::Down));
+        }
         let (old, new) = dialog.handle(action(Action::Confirm)).change.unwrap();
         assert_eq!(old.ui.theme, "terminal", "the change before counts");
         assert_eq!(
@@ -1280,6 +1296,8 @@ mod tests {
         dialog.handle(action(Action::Toggle));
         dialog.handle(action(Action::Down));
         dialog.handle(action(Action::Toggle));
+        dialog.handle(action(Action::Down));
+        dialog.handle(action(Action::Toggle));
         for _ in 0..3 {
             dialog.handle(action(Action::Down));
         }
@@ -1315,6 +1333,7 @@ mod tests {
         let mut expected = Config::default();
         expected.ui.language = "de".to_owned();
         expected.ui.theme = "terminal".to_owned();
+        expected.ui.keymap = "vim".to_owned();
         expected.ui.borders = Borders::Single;
         expected.ui.icons = false;
         expected.ui.tab_bar = TabBar::Frame;
@@ -1337,8 +1356,8 @@ mod tests {
     fn an_invalid_text_keeps_the_cursor_and_says_why() {
         let cases: [(usize, usize, &str, &str); 8] = [
             (0, 0, "?", "is not auto or a language tag"),
-            (0, 7, "0", "is not a step of the wheel"),
-            (0, 7, "pages", "is not a step of the wheel"),
+            (0, 8, "0", "is not a step of the wheel"),
+            (0, 8, "pages", "is not a step of the wheel"),
             (1, 1, "x", "is not a number of jobs"),
             (2, 2, "-F other_config", "Invalid extra ssh arguments"),
             (2, 0, "", "The ssh program cannot be empty"),
@@ -1409,7 +1428,7 @@ mod tests {
         let mut dialog = self::dialog();
         dialog.handle(action(Action::Left));
         assert_eq!(dialog.focus, Focus::Settings);
-        for _ in 0..3 {
+        for _ in 0..4 {
             dialog.handle(action(Action::Down));
         }
         dialog.handle(action(Action::Left));
@@ -1442,7 +1461,7 @@ mod tests {
 
     #[test]
     fn draws_the_categories_and_the_settings() {
-        let mut dialog = Configuration::new(&Config::default(), Path::new(HOME), THEMES, true);
+        let mut dialog = Configuration::new(&Config::default(), Path::new(HOME), PRESETS, true);
         dialog.handle(action(Action::Down));
         insta::assert_snapshot!(draw(&mut dialog, 72, 16));
     }

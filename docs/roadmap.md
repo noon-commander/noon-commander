@@ -119,6 +119,7 @@
       Ctrl-R) for one host or all; `shell.history_size`, `history.toml` in the state directory
 - [x] Terminal title: the active panel's directory, the terminal's own title back on quitting;
       `ui.terminal_title`
+- [x] Keymap presets by name, chosen as themes are: `ui.keymap`, only `default` so far
 
 ## Known issues
 
@@ -130,8 +131,8 @@
 
 ## Backlog
 
-- vim keymap preset: only the keys differ; `:` and `!` open the command line as in the default
-  preset.
+- vim keymap preset, `ui.keymap = "vim"`: only the keys differ; `:` and `!` open the command line
+  as in the default preset.
 - Commands of Noon Commander after `:` (`:!` runs a shell command already).
 - Linux: CI job, release binaries, and packages (AUR, deb).
 - Translations.

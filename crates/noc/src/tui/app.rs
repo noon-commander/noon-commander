@@ -766,7 +766,8 @@ impl App {
             workspaces_window: None,
             home: home.to_path_buf(),
             root_title: fl!("root-title"),
-            keymap: Keymap::mc(),
+            // `ui.keymap` was checked when the config was loaded.
+            keymap: keymap_of(ui),
             spots: Spots::default(),
             clicked: None,
             quit: false,
@@ -2243,8 +2244,12 @@ impl App {
             },
             Command::Configuration => {
                 let icons = self.decor.icons();
-                let configuration =
-                    Configuration::new(&self.config, &self.home, Theme::NAMES, icons);
+                let configuration = Configuration::new(
+                    &self.config,
+                    &self.home,
+                    (Theme::NAMES, Keymap::NAMES),
+                    icons,
+                );
                 self.configuration = Some(configuration);
                 Vec::new()
             }
@@ -2287,8 +2292,10 @@ impl App {
         let mut config = new.clone();
         config.expand_tilde(&self.home);
         let ui = &config.ui;
-        // The dialog offers only the built-in themes and those `ui.theme` names.
+        // The dialog offers only the built-in themes and keymaps, and those that `ui.theme`
+        // and `ui.keymap` name.
         self.theme = theme_of(ui, self.color_depth);
+        self.keymap = keymap_of(ui);
         self.decor = Decor::new(ui.icons);
         if ui.show_hidden != self.config.ui.show_hidden {
             let show = ui.show_hidden;
@@ -4813,6 +4820,11 @@ fn theme_of(ui: &UiConfig, depth: ColorDepth) -> Theme {
     Theme::by_name(&ui.theme, depth)
         .unwrap_or_else(Theme::mc_classic)
         .with_borders(ui.borders)
+}
+
+/// The keymap that `ui` names, or the default one.
+fn keymap_of(ui: &UiConfig) -> Keymap {
+    Keymap::by_name(&ui.keymap).unwrap_or_else(Keymap::mc)
 }
 
 /// What a job does after a failure, by the button `event` pressed.

@@ -123,6 +123,8 @@ pub struct UiConfig {
     /// A built-in color theme: `mc-classic`, `terminal`, `noon-dark`, `noon-light`,
     /// `catppuccin-mocha`, or `catppuccin-latte`. Default: `mc-classic`.
     pub theme: String,
+    /// The built-in keymap: `default`, modelled on Midnight Commander. Default: `default`.
+    pub keymap: String,
     /// The lines that frame panels and dialogs. Default: `double`.
     pub borders: Borders,
     /// Whether names get Nerd Font icons; otherwise mc's type markers (`/`, `*`, `@`, …).
@@ -154,6 +156,7 @@ impl Default for UiConfig {
         Self {
             language: "auto".to_owned(),
             theme: "mc-classic".to_owned(),
+            keymap: "default".to_owned(),
             borders: Borders::default(),
             icons: true,
             show_hidden: true,
@@ -459,6 +462,7 @@ mod tests {
         [ui]
         language = "de-DE"
         theme = "terminal"
+        keymap = "vim"
         borders = "single"
         icons = false
         show_hidden = false
@@ -499,6 +503,7 @@ mod tests {
             ui: UiConfig {
                 language: "de-DE".to_owned(),
                 theme: "terminal".to_owned(),
+                keymap: "vim".to_owned(),
                 borders: Borders::Single,
                 icons: false,
                 show_hidden: false,
@@ -537,6 +542,7 @@ mod tests {
         );
         assert_eq!(config.ui.language, "auto");
         assert_eq!(config.ui.theme, "mc-classic");
+        assert_eq!(config.ui.keymap, "default");
         assert_eq!(config.ui.borders, Borders::Double);
         assert!(config.ui.icons);
         assert!(config.ui.show_hidden);
@@ -730,6 +736,7 @@ mod tests {
         assert!(table["volumes"].get("hide").is_some());
         assert!(table["ui"].get("language").is_some());
         assert!(table["ui"].get("theme").is_some());
+        assert!(table["ui"].get("keymap").is_some());
         assert!(table["ui"].get("borders").is_some());
         assert!(table["ui"].get("icons").is_some());
         assert!(table["ui"].get("show_hidden").is_some());

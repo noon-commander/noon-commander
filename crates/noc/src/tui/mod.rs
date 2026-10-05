@@ -68,6 +68,15 @@ pub(crate) fn theme_names() -> &'static [&'static str] {
     theme::Theme::NAMES
 }
 
+/// Whether `name` is a built-in keymap, for `ui.keymap`; and the names there are.
+pub(crate) fn is_valid_keymap(name: &str) -> bool {
+    keymap::Keymap::by_name(name).is_some()
+}
+
+pub(crate) fn keymap_names() -> &'static [&'static str] {
+    keymap::Keymap::NAMES
+}
+
 /// Hands finished background work to the app, and runs what the app asks for next.
 fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
     match done {

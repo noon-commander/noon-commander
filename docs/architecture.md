@@ -650,6 +650,7 @@ hide = ["/Volumes/Backup*"]      # mount points to leave out of the root; never 
 [ui]
 language = "auto"                # or a language tag such as "en-US"; others fall back to it
 theme = "mc-classic"             # "terminal", "noon-dark", "noon-light", "catppuccin-mocha", …
+keymap = "default"               # the built-in keymap; only "default", modelled on mc, so far
 borders = "double"               # frames of panels and dialogs: ═ ║ ╔; "single": ─ │ ┌
 icons = true                     # Nerd Font icons; false: mc's markers (/ * @ ~ …)
 show_hidden = true               # names that start with a dot; Alt-. switches while running
@@ -930,7 +931,9 @@ location = "root"
   falls back along a chain, for example the root and quick search to the panel; the first context
   that knows a key sequence decides, except that a sequence it only starts does what a later context
   binds it to. Bindings are key sequences matched by prefix with a 1-second timeout, so a vim preset
-  (`g g`, `d d`) can follow the default mc preset. As in mc, `Esc` in a panel waits for the next
+  (`g g`, `d d`) can follow the default mc preset. `ui.keymap` names the built-in preset, as
+  `ui.theme` names the theme (`Keymap::NAMES`, `Keymap::by_name`); the Configuration dialog
+  switches it at once. As in mc, `Esc` in a panel waits for the next
   key: `Esc 1` … `Esc 0` stand for F1 … F10, `Esc` followed by a character stands for Alt and that
   character, for terminals whose Alt key sends nothing, and `Esc` alone cancels once the timeout
   passes (`Esc Esc` at once). An `Esc` and a quick next key arrive as Alt and that key, so there an

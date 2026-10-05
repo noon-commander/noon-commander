@@ -3,7 +3,8 @@
 Sources:
 
 - noc: the presets in [keymap/mod.rs](../crates/noc/src/tui/keymap/mod.rs); the default preset is
-  modelled on mc. There is no vim preset yet, so its column holds only planned keys.
+  modelled on mc, and `ui.keymap` chooses the preset. There is no vim preset yet, so its column
+  holds only planned keys.
 - [mc.1.in](https://github.com/MidnightCommander/mc/blob/master/doc/man/mc.1.in)
 - [FarEng.hlf.m4](https://github.com/FarGroup/FarManager/blob/master/far/FarEng.hlf.m4)
 

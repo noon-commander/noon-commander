@@ -1,4 +1,4 @@
-//! Key bindings: key sequences mapped to actions per context, with the mc preset.
+//! Key bindings: key sequences mapped to actions per context, with the built-in presets.
 //!
 //! A binding is a sequence of one or more key combinations, such as `f10` or `esc 0`. While the
 //! keys typed so far are the start of a longer binding, the keymap waits up to
@@ -94,6 +94,17 @@ impl KeyState {
 }
 
 impl Keymap {
+    /// The names of the built-in presets, for `ui.keymap`.
+    pub(crate) const NAMES: &'static [&'static str] = &["default"];
+
+    /// A built-in preset by name.
+    pub(crate) fn by_name(name: &str) -> Option<Self> {
+        match name {
+            "default" => Some(Self::mc()),
+            _ => None,
+        }
+    }
+
     /// The default preset, modelled on Midnight Commander. `Esc` followed by a digit stands for
     /// the F-key, for terminals that lack them.
     pub(crate) fn mc() -> Self {
@@ -1443,27 +1454,30 @@ mod tests {
     }
 
     #[test]
-    fn the_preset_covers_every_action_and_has_no_conflicts() {
-        let keymap = Keymap::mc();
-        for action in Action::ALL {
-            assert!(
-                keymap
-                    .contexts
-                    .values()
-                    .any(|bindings| bindings.0.iter().any(|(_, bound)| bound == action)),
-                "{action:?} has no key"
-            );
-        }
-        for (context, bindings) in &keymap.contexts {
-            for (index, (sequence, _)) in bindings.0.iter().enumerate() {
+    fn every_preset_covers_every_action_and_has_no_conflicts() {
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            for action in Action::ALL {
                 assert!(
-                    !bindings.0[..index]
-                        .iter()
-                        .any(|(other, _)| other == sequence),
-                    "{sequence:?} is bound twice in {context:?}"
+                    keymap
+                        .contexts
+                        .values()
+                        .any(|bindings| bindings.0.iter().any(|(_, bound)| bound == action)),
+                    "{name}: {action:?} has no key"
                 );
             }
+            for (context, bindings) in &keymap.contexts {
+                for (index, (sequence, _)) in bindings.0.iter().enumerate() {
+                    assert!(
+                        !bindings.0[..index]
+                            .iter()
+                            .any(|(other, _)| other == sequence),
+                        "{name}: {sequence:?} is bound twice in {context:?}"
+                    );
+                }
+            }
         }
+        assert!(Keymap::by_name("emacs").is_none());
     }
 
     #[test]

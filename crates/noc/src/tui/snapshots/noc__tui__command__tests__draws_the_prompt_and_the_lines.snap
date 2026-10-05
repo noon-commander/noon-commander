@@ -1,0 +1,7 @@
+---
+source: crates/noc/src/tui/command.rs
+expression: "draw(&mut line, \"~/src/noc $ \", 24)"
+---
+"~/src/noc $ tar czf a.tg"
+"z \                     "
+">   src docs            "

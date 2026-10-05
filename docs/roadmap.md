@@ -107,10 +107,11 @@
       viewer, the pull-down menu, dialogs, and every window; `ui.mouse` and `ui.wheel`
 - [ ] Restore panel state on start, with the tabs
 - [x] Typing in a panel no longer starts quick search; `ui.type_to_search` is gone
-- [ ] Shell command line ([ADR 0019](adr/0019-shell-command-line.md)): `!` (and `:!`) runs a
-      command in the panel's directory, locally or on its host over the master connection;
-      several lines (Shift-Enter, Ctrl-J, `\` Enter), bracketed paste, Ctrl-X Ctrl-E in
-      `$EDITOR`
+- [x] Shell command line ([ADR 0019](adr/0019-shell-command-line.md)): `!` (and `:!`) runs a
+      command in a local panel's directory; several lines (Ctrl-J, `\` Enter)
+- [ ] Shell command line on hosts, over the master connection (`ssh -t`)
+- [ ] Shell command line: Shift-Enter (kitty keyboard protocol), bracketed paste, Ctrl-X
+      Ctrl-E in `$EDITOR`
 - [ ] Command history per host: Up/Down (Alt-P/Alt-N) for the panel's host, a window (Alt-H,
       Ctrl-R) for one host or all; `shell.history_size`
 

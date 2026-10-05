@@ -3,6 +3,7 @@
 mod app;
 mod cd;
 mod cells;
+mod command;
 mod complete;
 mod configuration;
 mod decor;
@@ -40,6 +41,7 @@ use futures_util::StreamExt as _;
 use jiff::tz::TimeZone;
 use noc_tools::ToolError;
 use noc_tools::editor::Editor;
+use noc_tools::shell::Shell;
 use ratatui::DefaultTerminal;
 use ratatui::backend::{Backend as _, ClearType};
 use ratatui::widgets::Clear;
@@ -158,28 +160,26 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
         if let Some(dir) = app.take_work_dir() {
             tasks.change_work_dir(dir);
         }
-        if let Some(file) = app.take_edit() {
-            // The editor gets every key. A stream's reader holds crossterm's input lock while it
-            // waits, and a new stream takes that lock, so the old one goes first; the new one
-            // reads nothing until it is polled.
-            drop(events);
+        let handover = match app.take_edit() {
+            Some(file) => Some(Handover::Edit(file)),
+            None => app.take_run().map(Handover::Run),
+        };
+        if let Some(handover) = handover {
             // The next turn captures the mouse again.
             mouse = false;
-            let result = match suspend(&mut terminal) {
-                Ok(()) => edit(&file).await,
-                Err(error) => Err(error.to_string()),
+            let (fresh, effects) = hand_over(&mut terminal, events, &mut app, handover).await;
+            events = fresh;
+            let effects = match effects {
+                Ok(effects) => effects,
+                Err(error) => break Err(error.into()),
             };
-            events = EventStream::new();
-            if let Err(error) = resume(&mut terminal) {
-                break Err(error.into());
-            }
-            // Ctrl-C in the editor reached Noon Commander too; forget it.
+            // Ctrl-C in the program reached Noon Commander too; forget it.
             match signal(SignalKind::interrupt()) {
                 Ok(fresh) => interrupt = fresh,
                 Err(error) => break Err(error.into()),
             }
             keys = KeyState::default();
-            tasks.run(app.edited(result));
+            tasks.run(effects);
             continue;
         }
         if let Err(error) = take_terminal_requests(&mut terminal, &mut app, &mut mouse) {
@@ -284,6 +284,96 @@ async fn edit(file: &Path) -> Result<bool, String> {
         .map(stamp)
         .map_err(|error| error.to_string())?;
     Ok(before != after)
+}
+
+/// A program that gets the terminal, with the panels hidden.
+enum Handover {
+    /// The editor of F4, on a local file.
+    Edit(PathBuf),
+    /// A shell command of the command line.
+    Run(command::Run),
+}
+
+/// Hands the terminal to the program of `handover`, takes it back, and returns what the app
+/// does next, with a new stream of events in place of `events`.
+async fn hand_over(
+    terminal: &mut DefaultTerminal,
+    events: EventStream,
+    app: &mut App,
+    handover: Handover,
+) -> (EventStream, io::Result<Vec<app::Effect>>) {
+    // The program gets every key. A stream's reader holds crossterm's input lock while it
+    // waits, and a new stream takes that lock, so the old one goes first; the new one reads
+    // nothing until it is polled.
+    drop(events);
+    let suspended = suspend(terminal).map_err(|error| error.to_string());
+    let (events, effects) = match handover {
+        Handover::Edit(file) => {
+            let result = match suspended {
+                Ok(()) => edit(&file).await,
+                Err(error) => Err(error),
+            };
+            (EventStream::new(), app.edited(result))
+        }
+        Handover::Run(run) => {
+            let result = match suspended {
+                Ok(()) => run_command(&run).await,
+                Err(error) => Err(error),
+            };
+            let mut events = EventStream::new();
+            // What the command printed stays on screen until a key.
+            if result.is_ok() {
+                wait_for_key(&mut events).await;
+            }
+            (events, app.ran(result))
+        }
+    };
+    (events, resume(terminal).map(|()| effects))
+}
+
+/// Runs the shell command of `run`, with the terminal handed over; then says how it ended if
+/// it failed, asks for a key, and puts the terminal in raw mode to read it. Fails if the shell
+/// could not run.
+async fn run_command(run: &command::Run) -> Result<(), String> {
+    use std::io::Write as _;
+    use std::os::unix::process::ExitStatusExt as _;
+
+    let shell = Shell::from_env();
+    let status = shell.run(&run.dir, &run.command).await.map_err(|error| {
+        let reason = match &error {
+            ToolError::Spawn { source, .. } => source.to_string(),
+            other => describe::chain(other),
+        };
+        let program = shell.program().display().to_string();
+        fl!("command-error", program = program, reason = reason)
+    })?;
+    let mut out = io::stdout();
+    let ending = if let Some(code) = status.code().filter(|&code| code != 0) {
+        Some(fl!("command-exit-code", code = code))
+    } else {
+        status
+            .signal()
+            .map(|signal| fl!("command-signal", signal = signal))
+    };
+    // The panels are hidden: this goes where the command printed, as a shell would say it.
+    if let Some(ending) = ending {
+        let _ = writeln!(out, "{ending}");
+    }
+    let _ = write!(out, "{}", fl!("command-press-key"));
+    let _ = out.flush();
+    crossterm::terminal::enable_raw_mode().map_err(|error| error.to_string())
+}
+
+/// Waits for a key press; or for the end of the input, or an error, which the event loop meets
+/// again.
+async fn wait_for_key(events: &mut EventStream) {
+    while let Some(Ok(event)) = events.next().await {
+        if let Event::Key(key) = event
+            && key.kind == KeyEventKind::Press
+        {
+            return;
+        }
+    }
 }
 
 /// Hands the terminal over to another program as the shell has it: with the cursor and the

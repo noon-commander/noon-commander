@@ -300,7 +300,7 @@ impl Keymap {
 }
 
 /// The bindings of the mc preset, by context.
-fn mc_presets() -> [(Context, Preset); 13] {
+fn mc_presets() -> [(Context, Preset); 14] {
     use Action::{
         Backspace, Cancel, Confirm, Disconnect, Down, EditHost, End, Help, Home, Left, NextField,
         PageDown, PageUp, PrevField, Quit, Redraw, Right, Toggle, ToggleWrap, Up,
@@ -355,18 +355,19 @@ fn mc_presets() -> [(Context, Preset); 13] {
         (Context::DialogInput, TEXT_FIELD),
         (Context::PathInput, PATH_FIELD),
         (Context::Completion, COMPLETION),
+        (Context::CommandLine, COMMAND_LINE),
     ]
 }
 
 /// The panels' bindings in the mc preset.
 const PANEL: Preset = {
     use Action::{
-        Cancel, Checksum, CloseTab, Copy, Delete, Down, Edit, End, Enter, Help, Home, InvertMarks,
-        Jobs, Jump, LocationMenuLeft, LocationMenuRight, Mark, MarkUp, Mkdir, Move, NewTab,
-        NextTab, OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent, PrevTab, PullDown,
-        QuickCd, QuickSearch, Quit, Redraw, Reload, Rename, SaveWorkspace, Select, SortByExtension,
-        SortByName, SortBySize, SortByTime, SwapPanels, SwitchPanel, TabList, ToggleHidden,
-        Unselect, Up, View, Workspaces,
+        Cancel, Checksum, CloseTab, Command, Copy, Delete, Down, Edit, End, Enter, Help, Home,
+        InvertMarks, Jobs, Jump, LocationMenuLeft, LocationMenuRight, Mark, MarkUp, Mkdir, Move,
+        NewTab, NextTab, OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent, PrevTab,
+        PullDown, QuickCd, QuickSearch, Quit, Redraw, Reload, Rename, SaveWorkspace, Select, Shell,
+        SortByExtension, SortByName, SortBySize, SortByTime, SwapPanels, SwitchPanel, TabList,
+        ToggleHidden, Unselect, Up, View, Workspaces,
     };
     &[
         (Up, &["up", "ctrl-p"]),
@@ -397,6 +398,9 @@ const PANEL: Preset = {
         (SortByTime, &["ctrl-f5"]),
         (SortBySize, &["ctrl-f6"]),
         (QuickSearch, &["ctrl-s", "alt-s"]),
+        // Not in mc, whose command line takes what is typed (ADR 0019).
+        (Shell, &["!"]),
+        (Command, &[":"]),
         (Help, &["f1"]),
         (View, &["f3"]),
         (Edit, &["f4"]),
@@ -468,6 +472,24 @@ const RENAME: Preset = &[
     (Action::Delete, &["delete"]),
     (Action::DeleteToStart, &["ctrl-u"]),
     (Action::DeleteToEnd, &["ctrl-k"]),
+    (Action::Confirm, &["enter"]),
+    (Action::Cancel, &["esc"]),
+];
+
+/// The bindings of the command line of `!` and `:` in the mc preset. Ctrl-J arrives as LF where
+/// Enter arrives as CR, so it starts a new line in every terminal.
+const COMMAND_LINE: Preset = &[
+    (Action::Left, &["left"]),
+    (Action::Right, &["right"]),
+    (Action::Up, &["up"]),
+    (Action::Down, &["down"]),
+    (Action::Home, &["home", "ctrl-a"]),
+    (Action::End, &["end", "ctrl-e"]),
+    (Action::Backspace, &["backspace"]),
+    (Action::Delete, &["delete"]),
+    (Action::DeleteToStart, &["ctrl-u"]),
+    (Action::DeleteToEnd, &["ctrl-k"]),
+    (Action::NewLine, &["ctrl-j"]),
     (Action::Confirm, &["enter"]),
     (Action::Cancel, &["esc"]),
 ];
@@ -1299,6 +1321,32 @@ mod tests {
         assert_eq!(
             feed(&keymap, &mut state, Context::DialogInput, &["0"]),
             [Resolved::Insert('0')]
+        );
+    }
+
+    #[test]
+    fn bang_and_colon_open_the_command_line_where_every_character_is_text() {
+        let keymap = Keymap::mc();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Panel, &["!", ":"]),
+            actions(&[Action::Shell, Action::Command])
+        );
+        assert_eq!(
+            feed(
+                &keymap,
+                &mut state,
+                Context::CommandLine,
+                &["!", "*", "space", "ctrl-j", "enter", "f5", "tab", "esc"]
+            ),
+            [
+                Resolved::Insert('!'),
+                Resolved::Insert('*'),
+                Resolved::Insert(' '),
+                Resolved::Action(Action::NewLine),
+                Resolved::Action(Action::Confirm),
+                Resolved::Action(Action::Cancel),
+            ]
         );
     }
 

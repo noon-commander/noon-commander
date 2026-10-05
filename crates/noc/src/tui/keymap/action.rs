@@ -31,6 +31,8 @@ pub(crate) enum Context {
     Completion,
     /// The viewer of F3.
     Viewer,
+    /// The command line of `!` and `:`. Keys it does not bind do nothing.
+    CommandLine,
 }
 
 impl Context {
@@ -52,6 +54,7 @@ impl Context {
                 Self::Dialog,
             ],
             Self::Viewer => &[Self::Viewer],
+            Self::CommandLine => &[Self::CommandLine],
             // Menus are modal too.
             Self::Menu => &[Self::Menu],
             Self::Jump => &[Self::Jump],
@@ -75,6 +78,7 @@ impl Context {
             self,
             Self::QuickSearch
                 | Self::Rename
+                | Self::CommandLine
                 | Self::DialogInput
                 | Self::PathInput
                 | Self::Completion
@@ -93,6 +97,7 @@ impl Context {
                 | Self::Root
                 | Self::QuickSearch
                 | Self::Rename
+                | Self::CommandLine
                 | Self::DialogInput
                 | Self::PathInput
                 | Self::Completion
@@ -204,6 +209,13 @@ pub(crate) enum Action {
     SortBySize,
     /// Starts quick search, or jumps to the next match.
     QuickSearch,
+    /// Opens the command line for a shell command.
+    Shell,
+    /// Opens the command line for a command of Noon Commander, of which `!` runs a shell
+    /// command.
+    Command,
+    /// Starts a new line in the command.
+    NewLine,
     /// Closes the connection to the host under the cursor, or stops connecting to it.
     Disconnect,
     /// Edits the settings of the host under the cursor.
@@ -288,6 +300,9 @@ impl Action {
         Self::SortByTime,
         Self::SortBySize,
         Self::QuickSearch,
+        Self::Shell,
+        Self::Command,
+        Self::NewLine,
         Self::Disconnect,
         Self::EditHost,
         Self::Backspace,

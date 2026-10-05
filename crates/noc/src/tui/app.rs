@@ -17,12 +17,14 @@ use noc_vfs::{FileKind, Location, Metadata, RemotePath};
 use noc_viewer::{Command as ViewerCommand, Styles as ViewerStyles, Viewer};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
 use super::cd;
 use super::cells::{self, Align};
+use super::command::{self, CommandEvent, CommandLine, Run};
 use super::complete::{self, Candidate, Choices, ChoicesEvent, Kind, Offer, Outcome};
 use super::configuration::{ConfigEvent, Configuration};
 use super::decor::Decor;
@@ -566,6 +568,10 @@ pub(crate) struct App {
     editing: Option<Editing>,
     /// A file for the event loop to open in the editor.
     edit_now: Option<PathBuf>,
+    /// The command line of `!` and `:`, above the F-key bar.
+    command_line: Option<CommandLine>,
+    /// A shell command for the event loop to run.
+    run_now: Option<Run>,
     /// The working directory last handed to the event loop.
     work_dir: Option<PathBuf>,
     /// Where copies of remote files for the editor go.
@@ -702,6 +708,8 @@ impl App {
             viewing: None,
             editing: None,
             edit_now: None,
+            command_line: None,
+            run_now: None,
             work_dir: None,
             runtime_dir: std::env::temp_dir(),
             last_job: 0,
@@ -756,6 +764,11 @@ impl App {
     /// A file to open in the editor now, with the screen handed over; resets the request.
     pub(crate) fn take_edit(&mut self) -> Option<PathBuf> {
         self.edit_now.take()
+    }
+
+    /// A shell command to run now, with the screen handed over; resets the request.
+    pub(crate) fn take_run(&mut self) -> Option<Run> {
+        self.run_now.take()
     }
 
     /// The directory of the active panel if it is local and new since the last call: the
@@ -873,7 +886,7 @@ impl App {
             Front::Panels => {}
             _ => return self.pointer_window(pointer),
         }
-        if self.panel(self.active).renaming() {
+        if self.panel(self.active).renaming() || self.command_line.is_some() {
             return Vec::new();
         }
         if let Some(index) = self
@@ -1100,6 +1113,8 @@ impl App {
             Context::PullDown
         } else if self.viewing.is_some() {
             Context::Viewer
+        } else if self.command_line.is_some() {
+            Context::CommandLine
         } else if self.panel(self.active).renaming() {
             Context::Rename
         } else if self.panel(self.active).searching() {
@@ -1428,6 +1443,9 @@ impl App {
         if let Some(effects) = self.handle_over(input) {
             return effects;
         }
+        if self.command_line.is_some() {
+            return self.handle_command_line(input);
+        }
         if self.panel(self.active).renaming() {
             return self.handle_rename(input);
         }
@@ -1463,6 +1481,8 @@ impl App {
         };
         match action {
             Action::QuickSearch => self.panel_mut(self.active).search_next(fuzzy_search),
+            Action::Shell => self.open_command_line(command::Kind::Shell),
+            Action::Command => self.open_command_line(command::Kind::Noc),
             Action::Quit => self.ask_quit(),
             Action::Jobs => self.jobs_list = Some(JobsList::default()),
             Action::Redraw => self.redraw = true,
@@ -2578,6 +2598,88 @@ impl App {
             },
             cancel,
         }]
+    }
+
+    /// Opens the command line, in a local panel; remote ones come later.
+    fn open_command_line(&mut self, kind: command::Kind) {
+        if matches!(self.panel(self.active).location(), Location::Local(_)) {
+            self.command_line = Some(CommandLine::new(kind));
+        }
+    }
+
+    /// Gives a key to the command line: Enter hands its command to the event loop, to run in
+    /// the active panel's directory.
+    fn handle_command_line(&mut self, input: Resolved) -> Vec<Effect> {
+        let Some(line) = &mut self.command_line else {
+            return Vec::new();
+        };
+        match line.handle(input) {
+            CommandEvent::None => Vec::new(),
+            CommandEvent::Close => {
+                self.command_line = None;
+                Vec::new()
+            }
+            CommandEvent::Unknown(text) => {
+                let text = cells::sanitize(text.as_bytes());
+                self.show_error(&fl!("command-unknown", command = text));
+                Vec::new()
+            }
+            CommandEvent::Run(command) => {
+                self.command_line = None;
+                let dir = self.panel(self.active).location().clone();
+                let Location::Local(path) = &dir else {
+                    return Vec::new();
+                };
+                self.run_now = Some(Run {
+                    dir: path.clone(),
+                    command,
+                });
+                self.note(&dir)
+            }
+        }
+    }
+
+    /// Takes the end of a shell command, or why the shell could not run; both panels read
+    /// their directories again, as in mc, since the command may have changed anything.
+    pub(crate) fn ran(&mut self, result: Result<(), String>) -> Vec<Effect> {
+        if let Err(reason) = result {
+            self.show_error(&cells::sanitize(reason.as_bytes()));
+        }
+        let mut dirs: Vec<Location> = Vec::new();
+        for side in [self.active, self.active.other()] {
+            let dir = self.panel(side).location().clone();
+            if !dirs.contains(&dir) {
+                dirs.push(dir);
+            }
+        }
+        dirs.iter().flat_map(|dir| self.reload(dir)).collect()
+    }
+
+    /// What starts the command line: `:` for commands of Noon Commander; for a shell command,
+    /// the panel's directory, with `~` for the home directory and its middle cut if it would
+    /// take more than a third of `width`, and `$`.
+    fn command_prompt(&self, width: u16) -> String {
+        let Some(line) = &self.command_line else {
+            return String::new();
+        };
+        if line.kind() == command::Kind::Noc {
+            return ":".to_owned();
+        }
+        let dir = match self.panel(self.active).location() {
+            Location::Local(path) => match path.strip_prefix(&self.home) {
+                Ok(rest) if rest.as_os_str().is_empty() => "~".to_owned(),
+                Ok(rest) => format!("~/{}", cells::sanitize(rest.as_os_str().as_bytes())),
+                Err(_) => cells::sanitize(path.as_os_str().as_bytes()),
+            },
+            other => location_text(other),
+        };
+        let room = usize::from(width / 3).max(1);
+        let dir = if cells::width(&dir) > room {
+            cells::fit(&dir, room, Align::Left)
+        } else {
+            dir
+        };
+        format!("{dir} $ ")
     }
 
     /// Says that the edited copy of `path` could not go back, and where it stays.
@@ -4137,12 +4239,19 @@ impl App {
         self.spots = Spots::default();
         let always = self.config.ui.menu_bar == MenuBar::Always;
         let bar_height = u16::from(always);
-        let [menu_bar, panels, key_bar] = Layout::vertical([
+        let screen = frame.area();
+        let prompt = self.command_prompt(screen.width);
+        let line_height = self
+            .command_line
+            .as_ref()
+            .map_or(0, |line| line.height(&prompt, screen.width, screen.height));
+        let [menu_bar, panels, command_line, key_bar] = Layout::vertical([
             Constraint::Length(bar_height),
             Constraint::Fill(1),
+            Constraint::Length(line_height),
             Constraint::Length(1),
         ])
-        .areas(frame.area());
+        .areas(screen);
         let menu_bar = Rect {
             height: 1.min(frame.area().height),
             ..menu_bar
@@ -4188,6 +4297,10 @@ impl App {
             }
         }
         self.spots.fkeys = self.render_fkeys(frame, key_bar);
+        let focused = self.context() == Context::CommandLine;
+        if let Some(line) = &mut self.command_line {
+            line.render(frame, command_line, &prompt, Style::default(), focused);
+        }
         if always {
             self.spots.menu_bar = pulldown::render_idle(frame, menu_bar, &self.theme);
         }
@@ -8513,6 +8626,66 @@ mod tests {
             local("/home/me/work/src"),
             "the best match"
         );
+    }
+
+    #[test]
+    fn bang_runs_a_shell_command_in_the_panels_directory() {
+        let mut app = loaded();
+        assert!(app.handle(action(Action::Shell)).is_empty());
+        assert_eq!(app.context(), Context::CommandLine);
+        type_text(&mut app, "make");
+        app.handle(action(Action::NewLine));
+        type_text(&mut app, "ls");
+        let text = screen_of(&mut app, 10);
+        assert!(
+            text.contains("/srv $ make") && text.contains("> ls"),
+            "{text}"
+        );
+        assert!(without_zoxide(app.handle(action(Action::Confirm))).is_empty());
+        assert_eq!(app.context(), Context::Panel);
+        assert_eq!(
+            app.take_run(),
+            Some(Run {
+                dir: PathBuf::from("/srv"),
+                command: "make\nls".to_owned()
+            })
+        );
+        assert_eq!(app.take_run(), None);
+        let effects = app.ran(Ok(()));
+        assert_eq!(effects.len(), 2, "both panels read /srv again");
+        app.ran(Err("cannot run /bin/nosh".to_owned()));
+        assert!(screen_of(&mut app, 12).contains("cannot run /bin/nosh"));
+    }
+
+    #[test]
+    fn colon_needs_a_bang_and_the_root_has_no_command_line() {
+        let mut app = loaded();
+        app.handle(action(Action::Command));
+        assert!(screen(&mut app).contains(':'));
+        type_text(&mut app, "q");
+        app.handle(action(Action::Confirm));
+        assert!(screen_of(&mut app, 12).contains("Unknown command: q"));
+        app.handle(action(Action::Confirm));
+        assert_eq!(app.context(), Context::CommandLine, "the line stays");
+        app.handle(action(Action::Cancel));
+        assert_eq!(app.context(), Context::Panel);
+        let mut root = at_root();
+        root.handle(action(Action::Shell));
+        assert_eq!(root.context(), Context::Root);
+    }
+
+    #[test]
+    fn the_prompt_shows_the_directory_with_a_tilde_for_home() {
+        let (mut app, _) = App::new(
+            Path::new("/home/me/src/noc"),
+            Path::new("/home/me"),
+            &config(),
+        );
+        app.handle(action(Action::Shell));
+        assert_eq!(app.command_prompt(80), "~/src/noc $ ");
+        assert_eq!(app.command_prompt(18), "~/s~oc $ ", "a third of the width");
+        app.command_line = Some(CommandLine::new(command::Kind::Noc));
+        assert_eq!(app.command_prompt(80), ":");
     }
 
     #[test]

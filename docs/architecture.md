@@ -19,7 +19,7 @@ crates/
 │                  ControlMaster, SFTP channels, askpass bridge
 ├── noc-vfs/       Vfs trait: local and SFTP backends, mounted volumes
 ├── noc-ops/       job engine: copy, move, rename, delete, mkdir, checksums; progress, cancellation, conflicts
-├── noc-tools/     external programs other than ssh: zoxide, the editor
+├── noc-tools/     external programs other than ssh: zoxide, the editor, the shell
 ├── noc-text/      terminal-safe text: sanitizing, widths in cells, fitting, wrapping
 └── noc-viewer/    the F3 viewer: reading through the Vfs, scrolling, wrapping; its own text
 ```
@@ -44,7 +44,9 @@ its own topic, such as `noc-text`, rather than into a common `core` crate.
 ssh runs only from `noc-ssh`, and every other program only from `noc-tools`
 ([ADR 0012](adr/0012-external-tools-and-zoxide.md)): without a shell, with `--` before paths,
 without input for background ones, and killed when their future is dropped or they time out.
-A program that is not installed is told apart from one that fails.
+A program that is not installed is told apart from one that fails. The shell of the command
+line is the one program started through a shell, since the command is the user's
+([ADR 0019](adr/0019-shell-command-line.md)).
 
 ## Processes
 
@@ -518,14 +520,14 @@ noc config paths       show the files and directories in use
 - The terminal is restored on every exit: a guard leaves raw mode and the alternate screen when
   the TUI returns or fails, ratatui's panic hook does it before a panic message, and SIGTERM,
   SIGHUP, and SIGINT end the event loop like a quit.
-- Another program (the editor of F4; shell commands and the Ctrl-O console later) gets the terminal
-  as the shell would give it: the event loop shows the cursor, leaves the alternate screen and raw
-  mode, and drops its `EventStream` first. The stream's reader thread holds crossterm's input lock
-  while it waits, and a new stream takes that lock, so the old one must go before the program
-  starts, or its reader eats the first key, and the new one is made after it. The loop waits for the
-  program, then takes the terminal back and draws everything. Ctrl-C in the program reaches Noon
-  Commander too, so the SIGINT stream is made anew; SIGTERM and SIGHUP wait until the program ends.
-  ssh children are in sessions of their own and see none of it.
+- Another program (the editor of F4, a command of the command line; the Ctrl-O console later) gets
+  the terminal as the shell would give it: the event loop shows the cursor, leaves the alternate
+  screen and raw mode, and drops its `EventStream` first. The stream's reader thread holds
+  crossterm's input lock while it waits, and a new stream takes that lock, so the old one must go
+  before the program starts, or its reader eats the first key, and the new one is made after it. The
+  loop waits for the program, then takes the terminal back and draws everything. Ctrl-C in the
+  program reaches Noon Commander too, so the SIGINT stream is made anew; SIGTERM and SIGHUP wait
+  until the program ends. ssh children are in sessions of their own and see none of it.
 - The working directory of the process follows the active panel: after each turn of the
   event loop, a local directory the active panel now shows (once its listing arrived)
   goes to a task that `chdir`s to it in `spawn_blocking`, the latest of the waiting ones only.
@@ -852,7 +854,7 @@ location = "root"
   reaches the panel that asked for it. Sort order and errors go with the panel; mc keeps the
   sort order on its side.
 - **Quick search.** Ctrl-S / Alt-S start quick search, as in mc; typing in a panel does nothing,
-  since `!` and `:` will open a [command line](adr/0019-shell-command-line.md). With
+  since `!` and `:` open the [command line](#command-line-of--and-). With
   `ui.fuzzy_search` (the default) the cursor jumps to the best match as [fzf](#fuzzy-search) ranks
   it, the first from where it is of those as good, and Ctrl-S again to the next best, round to the
   best; otherwise to the first name from where it is that starts with the text, ignoring case, and
@@ -866,9 +868,22 @@ location = "root"
   the panel stays where it was and says why below the listing. Going up puts the cursor on the
   directory just left. A panel shows a `Location`, so the [virtual root](#virtual-root) and the list
   of hosts are kinds of listing too.
-- **Keymap.** Keys map to `Action`s per context (`panel`, `root`, `quick_search`, `menu`,
-  `pull_down`, `dialog`, `dialog_input`, `viewer`). Each context falls back along a chain, for
-  example the root and quick search to the panel; the first context that knows a key sequence
+- <a id="command-line-of--and-"></a>**Command line of `!` and `:`**
+  ([ADR 0019](adr/0019-shell-command-line.md)). In a local panel, `!` opens a line above the
+  F-key bar for a shell command, after a prompt with the panel's directory (`~` for home, its
+  middle cut past a third of the width); `:` opens it for commands of Noon Commander, of which
+  `!command` is the only one so far. Every character is text there. Ctrl-J, or Enter after an
+  odd number of `\` at the end of a line, starts a new line, marked `>`; long lines wrap, and the
+  line grows up to a third of the screen and ten rows, then scrolls to the cursor. Up and Down
+  move between lines, Home and End (Ctrl-A, Ctrl-E) go to the ends of the line. Enter hands the
+  command to the event loop, which suspends the TUI as for F4 and runs it with `noc-tools`'
+  `Shell`: `$SHELL -c <command>` (`/bin/sh` without `$SHELL`) in the panel's directory, the
+  command in one argument as typed. Afterwards it says how a failed command ended, waits for a
+  key in raw mode, and takes the terminal back; both panels read their directories again, as
+  in mc. Esc, or Backspace on an empty line, closes the line.
+- **Keymap.** Keys map to `Action`s per context (`panel`, `root`, `quick_search`, `command_line`,
+  `menu`, `pull_down`, `dialog`, `dialog_input`, `viewer`). Each context falls back along a chain,
+  for example the root and quick search to the panel; the first context that knows a key sequence
   decides, except that a sequence it only starts does what a later context binds it to. Bindings are
   key sequences matched by prefix with a 1-second timeout, so a vim preset (`g g`, `d d`) can follow
   the default mc preset. As in mc, `Esc` in a panel waits for the next key: `Esc 1` … `Esc 0` stand

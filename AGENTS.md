@@ -47,7 +47,7 @@ credentials; editing `~/.ssh/*`.
 | `crates/noc-ssh` | Host discovery, `ssh -G`, argument validation, forwarding policy, ControlMaster, SFTP channels, askpass bridge |
 | `crates/noc-vfs` | `Vfs` trait and backends (local, SFTP), mounted volumes |
 | `crates/noc-ops` | Job engine: copy, move, delete, mkdir, checksums; progress, cancellation, conflicts |
-| `crates/noc-tools` | External programs other than ssh: zoxide, the editor |
+| `crates/noc-tools` | External programs other than ssh: zoxide, the editor, the shell of `!` |
 | `crates/noc-text` | Terminal-safe text: sanitizing, widths in cells, fitting, wrapping |
 | `crates/noc-viewer` | The F3 viewer: reading through the `Vfs`, scrolling, wrapping; its own Fluent text |
 
@@ -89,7 +89,8 @@ a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on th
 - Never add an SSH implementation (`russh`, `ssh2`, `libssh2-sys`); `deny.toml` bans them.
 - Spawn `ssh` only from `noc-ssh`: never through `sh -c`, always with `--` before the
   destination. Spawn every other program only from `noc-tools` (ADR 0012): never through a
-  shell, with `--` before paths, killed on drop; tests use a fake program.
+  shell, with `--` before paths, killed on drop; tests use a fake program. The one exception
+  is the command line's `$SHELL -c`, whose command is the user's (ADR 0019).
 - User-supplied ssh arguments must pass the validator (ADR 0004). Unknown flags are errors.
 - Never pass `StrictHostKeyChecking=no` and never write to `~/.ssh/`.
 - No blocking I/O in async code; use `spawn_blocking`. Remote operations must be cancel-safe

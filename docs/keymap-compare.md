@@ -229,12 +229,14 @@ yet.
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Open the command line for a shell command | planned | ! | ! | Typing | Typing |
-| Open the command line for noc commands (only `:!cmd` so far) | planned | : | : | — | — |
-| Run the command | planned | Enter | Enter | Enter | Enter |
-| New line in the command | planned | Shift+Enter<br>Ctrl+J<br>\\ Enter | Shift+Enter<br>Ctrl+J<br>\\ Enter | — | — |
+| Open the command line for a shell command | | ! | ! | Typing | Typing |
+| Open the command line for noc commands (only `:!cmd` so far) | | : | : | — | — |
+| Run the command | | Enter | Enter | Enter | Enter |
+| New line in the command | | Ctrl+J<br>\\ Enter | Ctrl+J<br>\\ Enter | — | — |
+| New line in the command (kitty keyboard protocol) | planned | Shift+Enter | Shift+Enter | — | — |
 | Edit the command in $EDITOR | planned | Ctrl+X Ctrl+E | Ctrl+X Ctrl+E | — | — |
-| Close the command line | planned | Esc<br>Backspace (empty) | Esc<br>Backspace (empty) | — | Esc |
+| Close the command line | | Esc<br>Backspace (empty) | Esc<br>Backspace (empty) | — | Esc |
+| Line above / below in the command | | Up / Down | Up / Down | — | — |
 | Insert current file name | | — | — | Alt+Enter<br>Ctrl+Enter | Ctrl+J<br>Ctrl+Enter |
 | Insert file name from passive panel | | — | — | — | Ctrl+Shift+Enter |
 | Insert full name of current file | | — | — | Ctrl+Shift+Enter | Ctrl+F |

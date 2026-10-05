@@ -43,6 +43,7 @@ impl Help {
             (Context::Root, fl!("help-root")),
             (Context::QuickSearch, fl!("help-quick-search")),
             (Context::Rename, fl!("help-renaming")),
+            (Context::CommandLine, fl!("help-command-line")),
             (Context::Menu, fl!("help-menu")),
             (Context::Jump, fl!("help-jump")),
             (Context::Workspaces, fl!("help-workspaces")),
@@ -80,6 +81,7 @@ impl Help {
             entries.push(Entry::Note(fl!("help-note-jump")));
         }
         entries.push(Entry::Note(fl!("help-note-workspaces")));
+        entries.push(Entry::Note(fl!("help-note-command")));
         entries.push(Entry::Note(fl!("help-note-pulldown")));
         entries.push(Entry::Note(fl!("help-note-esc")));
         Self {
@@ -205,6 +207,7 @@ fn describe(context: Context, action: Action) -> Option<String> {
     if let Some(text) = describe_rows(context, action)
         .or_else(|| describe_completion(context, action))
         .or_else(|| describe_workspaces(context, action))
+        .or_else(|| describe_command_line(context, action))
         .or_else(|| describe_field(context, action))
     {
         return Some(text);
@@ -231,6 +234,8 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::SortByTime) => fl!("help-sort-time"),
         (Context::Panel, Action::SortBySize) => fl!("help-sort-size"),
         (Context::Panel, Action::QuickSearch) => fl!("help-quick-search-start"),
+        (Context::Panel, Action::Shell) => fl!("help-shell"),
+        (Context::Panel, Action::Command) => fl!("help-command"),
         (Context::Panel, Action::View) => fl!("help-view"),
         (Context::Panel, Action::Edit) => fl!("help-edit"),
         (Context::Panel, Action::Copy) => fl!("help-copy"),
@@ -296,20 +301,46 @@ fn describe(context: Context, action: Action) -> Option<String> {
     Some(text)
 }
 
-/// What keys do in text fields, and in the field of an entry renamed in its row.
+/// What keys do on the command line that they do not in other text fields.
+fn describe_command_line(context: Context, action: Action) -> Option<String> {
+    if context != Context::CommandLine {
+        return None;
+    }
+    let text = match action {
+        Action::Up => fl!("help-command-up"),
+        Action::Down => fl!("help-command-down"),
+        Action::Home => fl!("help-command-home"),
+        Action::End => fl!("help-command-end"),
+        Action::Backspace => fl!("help-command-backspace"),
+        Action::DeleteToStart => fl!("help-command-delete-to-start"),
+        Action::DeleteToEnd => fl!("help-command-delete-to-end"),
+        Action::NewLine => fl!("help-command-new-line"),
+        Action::Confirm => fl!("help-command-run"),
+        Action::Cancel => fl!("help-command-close"),
+        _ => return None,
+    };
+    Some(text)
+}
+
+/// What keys do in text fields, in the field of an entry renamed in its row, and on the
+/// command line, whose lines have keys of their own.
 fn describe_field(context: Context, action: Action) -> Option<String> {
-    if !matches!(context, Context::DialogInput | Context::Rename) {
+    if !matches!(
+        context,
+        Context::DialogInput | Context::Rename | Context::CommandLine
+    ) {
         return None;
     }
     let text = match (context, action) {
+        (Context::Rename | Context::CommandLine, Action::Left) => fl!("help-field-left"),
+        (Context::Rename | Context::CommandLine, Action::Right) => fl!("help-field-right"),
+        (_, Action::Delete) => fl!("help-field-delete"),
+        (Context::CommandLine, _) => return None,
         (_, Action::Home) => fl!("help-field-home"),
         (_, Action::End) => fl!("help-field-end"),
         (_, Action::Backspace) => fl!("help-field-backspace"),
-        (_, Action::Delete) => fl!("help-field-delete"),
         (_, Action::DeleteToStart) => fl!("help-field-delete-to-start"),
         (_, Action::DeleteToEnd) => fl!("help-field-delete-to-end"),
-        (Context::Rename, Action::Left) => fl!("help-field-left"),
-        (Context::Rename, Action::Right) => fl!("help-field-right"),
         (Context::Rename, Action::Confirm) => fl!("help-rename-confirm"),
         (Context::Rename, Action::Cancel) => fl!("help-rename-cancel"),
         _ => return None,
@@ -417,6 +448,7 @@ mod tests {
             [
                 "Swap the panels",
                 "Delete to the start",
+                "Delete to the start of the line",
                 "Delete to the start"
             ]
         );
@@ -435,6 +467,7 @@ mod tests {
                 "Volumes and hosts",
                 "Quick search",
                 "Renaming in place",
+                "Command line",
                 "Location menu",
                 "zoxide",
                 "Workspaces",

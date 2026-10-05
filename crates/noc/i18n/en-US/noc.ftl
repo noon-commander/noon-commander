@@ -325,6 +325,7 @@ help-workspaces = Workspaces
 help-pulldown = Pull-down menu
 help-quick-search = Quick search
 help-renaming = Renaming in place
+help-command-line = Command line
 help-dialogs = Dialogs and help
 help-text-fields = Text fields
 help-path-fields = Path fields
@@ -365,6 +366,8 @@ help-sort-extension = Sort by extension; again: reverse
 help-sort-time = Sort by modification time, newest first; again: reverse
 help-sort-size = Sort by size, largest first; again: reverse
 help-quick-search-start = Quick search; again: the next match
+help-shell = Open the command line for a shell command, run in this directory
+help-command = Open the command line for a command of Noon Commander; :!command runs a shell command
 help-view = View the file under the cursor; on a directory, open it
 help-edit = Edit the file under the cursor in $VISUAL or $EDITOR
 help-copy = Copy the marked entries, or the one under the cursor
@@ -434,12 +437,23 @@ help-field-left = One character left
 help-field-right = One character right
 help-rename-confirm = Rename to the name typed
 help-rename-cancel = Keep the name as it was
+help-command-up = The line above, in a command of several lines
+help-command-down = The line below, in a command of several lines
+help-command-home = Start of the line
+help-command-end = End of the line
+help-command-delete-to-start = Delete to the start of the line
+help-command-delete-to-end = Delete to the end of the line
+help-command-backspace = Delete the character before the cursor; on an empty line, close it
+help-command-new-line = A new line in the command
+help-command-run = Run the command; after a \ at the end of the line, a new line
+help-command-close = Close the command line
 help-note-esc = Esc 1 … Esc 0 stand for F1 … F10, and Esc followed by a key for Alt and the key, for terminals without them. A lone Esc acts after a second; Esc Esc at once.
 help-note-menu = Typing in the location menu filters it; 1 … 9 and 0 open the first ten rows while the filter is empty.
 help-note-jump = Typing in the zoxide window gives it keywords, as z does in a shell; 1 … 9 and 0 open the first ten rows while there are none.
 help-note-jump-fuzzy = Typing in the zoxide window filters its directories; 1 … 9 and 0 open the first ten rows while nothing is typed.
 help-note-fuzzy = Quick search, the location menu, the zoxide window, and the Workspaces window match as fzf does: the letters typed in order, not necessarily together, best match first. Words separated by spaces must all match; 'word matches as it is, ^word at the start, word$ at the end, and !word where it is not.
 help-note-workspaces = A workspace holds the tabs of both panels: where each is, its sort order, and the row under its cursor. Alt-W and F9 → Workspace list them; restoring one replaces every tab.
+help-note-command = ! opens the command line, and : too, for commands of Noon Commander, of which :!command is the only one so far. A command runs with the terminal, in the panel's directory, then a key brings the panels back; cd and export last only as long as the command.
 help-note-pulldown = In the pull-down menu, the highlighted letter of a menu opens it, and that of a command runs it. The menu opens again where it closed.
 
 ## Host settings, F4 on a host (src/tui/app), saved to hosts.toml. Prefix: host-.
@@ -631,3 +645,14 @@ edit-error = Cannot edit { $path }: { $reason }
 edit-kept = The changes to { $path } did not go back; they are in { $copy }
 # Why the editor did not run.
 edit-cannot-run = cannot run { $program }: { $reason }
+
+## The command line of ! and : (src/tui). Prefix: command-. Commands run in $SHELL, or /bin/sh.
+
+# A command after : that Noon Commander does not have.
+command-unknown = Unknown command: { $command }. :!command runs a shell command.
+# The shell did not start.
+command-error = Cannot run { $program }: { $reason }
+# Printed in the terminal after a command, with the panels hidden.
+command-exit-code = The command exited with { $code }.
+command-signal = The command was ended by signal { $signal }.
+command-press-key = Press any key to return to Noon Commander.

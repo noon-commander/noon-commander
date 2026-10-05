@@ -105,7 +105,7 @@
 - [ ] chmod and symlinks
 - [ ] Mouse support ([ADR 0018](adr/0018-mouse-support.md)):
   - [x] Panels, tabs, the F-key bar, and the viewer; `ui.mouse` and `ui.wheel`
-  - [ ] The pull-down menu and dialogs
+  - [x] The pull-down menu and dialogs
   - [ ] The other windows and lists, and the Configuration dialog
 - [ ] Restore panel state on start, with the tabs
 

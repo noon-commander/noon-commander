@@ -537,6 +537,11 @@ sequence. Sections marked (noc) exist only in noc.
 | Scroll a panel or the viewer | | Wheel | — | Wheel | Wheel |
 | Press an F key | | Click on the F-key bar | — | Click on the button bar | Click on the key bar |
 | Show a tab | | Click on the tab | — | — | — |
+| Open a menu of the menu bar / run a command | | Click | — | Click | Click |
+| Close the menu bar | | Click outside it | — | Click outside it | Click outside it |
+| Dialog: press a button, switch a check box, choose a radio button | | Click | — | Click | Click |
+| Dialog: put the cursor in a text field | | Click | — | Click | Click |
+| Dialog: choose a radio button and press the default button | | Double click | — | — | — |
 
 ## Workspaces window (noc)
 

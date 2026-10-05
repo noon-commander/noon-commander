@@ -41,7 +41,19 @@ presses, releases, drags, moves, and the wheel, but no double clicks.
   the active one, and keeps its cursor on screen. A click on a tab shows it. Clicks end quick
   search, as a key of the panel's own would, and do nothing while a name is edited in its row.
 - In the viewer the wheel scrolls as Up and Down, or PageUp and PageDown.
-- The pull-down menu, dialogs, and the other windows take the mouse in later steps.
+- In the pull-down menu, a click on a title opens its menu, or closes it if it is the one
+  open; a click on a command runs it if it runs now; the wheel moves the cursor; and a click
+  outside the bar and the menu closes the menu bar, as in mc. With `ui.menu_bar = "always"`, a
+  click on a title of the idle bar opens that menu.
+- In a dialog, a click chooses a radio button, puts the cursor in a text field where it was
+  clicked (the text stays, as after a move of the cursor), switches a check box, or presses a
+  button; a double click on a radio button also presses the default button, as Enter does
+  there. A click outside the dialog does nothing: it is modal.
+- A double click counts only if its first click left the same thing in front: when the first
+  click ran a command of the menu or pressed a button that closed a dialog, the second click
+  does nothing, rather than open what is under it. Dialogs get an id for this, so that one
+  that takes the place of another is not the same.
+- The other windows and lists take the mouse in a later step.
 
 ## Consequences
 

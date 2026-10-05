@@ -9,6 +9,8 @@
 //! open menu goes back to the bar. The menu remembers where it was when it closed, and opens
 //! there again.
 
+use std::cell::RefCell;
+
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
@@ -18,6 +20,7 @@ use ratatui::widgets::{Block, Clear};
 use super::app::Side;
 use super::cells::{self, Align};
 use super::keymap::{Action, Resolved};
+use super::mouse::{Pointer, Press};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -156,6 +159,19 @@ impl Menu {
 pub(crate) struct PullDown {
     menus: Vec<Menu>,
     place: Place,
+    /// Where the last render drew it, for the mouse.
+    drawn: RefCell<Drawn>,
+}
+
+/// Where the menu bar and the open menu were drawn.
+#[derive(Debug, Default)]
+struct Drawn {
+    /// The titles on the bar.
+    titles: Vec<Rect>,
+    /// The open menu with its frame.
+    menu: Rect,
+    /// Its rows shown, by the index of their entries.
+    rows: Vec<(usize, Rect)>,
 }
 
 /// Where the pull-down menu is: kept when it closes, for F9 to open it there again.
@@ -396,7 +412,11 @@ impl PullDown {
         for (cursor, menu) in place.cursors.iter_mut().zip(&menus) {
             *cursor = (*cursor).min(menu.entries.len().saturating_sub(1));
         }
-        let mut pulldown = Self { menus, place };
+        let mut pulldown = Self {
+            menus,
+            place,
+            drawn: RefCell::default(),
+        };
         if pulldown.place.open {
             pulldown.open(pulldown.place.selected, status);
         }
@@ -451,6 +471,63 @@ impl PullDown {
         self.place.open = true;
         let cursor = self.cursor();
         self.set_cursor(self.next_enabled(cursor, true, status).unwrap_or(cursor));
+    }
+
+    /// Opens the menu `index` below its title, as a click on the title of an idle menu bar
+    /// does.
+    pub(crate) fn open_menu(&mut self, index: usize, status: &dyn Fn(Command) -> Status) {
+        if index < self.menus.len() {
+            self.open(index, status);
+        }
+    }
+
+    /// Takes a press of the mouse, where the menu was drawn last. A click on a title opens its
+    /// menu, or closes the one open there; a click on a command runs it, if it runs now; the
+    /// wheel moves the cursor in the open menu; and a click elsewhere closes the menu bar.
+    pub(crate) fn pointer(
+        &mut self,
+        pointer: Pointer,
+        status: &dyn Fn(Command) -> Status,
+    ) -> PullDownEvent {
+        let Pointer { press, at } = pointer;
+        let (title, in_menu, row) = {
+            let drawn = self.drawn.borrow();
+            let title = drawn.titles.iter().position(|title| title.contains(at));
+            let row = drawn.rows.iter().find(|(_, row)| row.contains(at));
+            (title, drawn.menu.contains(at), row.map(|(index, _)| *index))
+        };
+        if let Some(index) = title {
+            if press == Press::Click {
+                if self.place.open && self.place.selected == index {
+                    self.place.open = false;
+                } else {
+                    self.open(index, status);
+                }
+            }
+            return PullDownEvent::Pending;
+        }
+        if in_menu {
+            return match press {
+                Press::WheelUp => self.handle(Resolved::Action(Action::Up), status),
+                Press::WheelDown => self.handle(Resolved::Action(Action::Down), status),
+                Press::Click | Press::DoubleClick => {
+                    let item = row.and_then(|index| Some((index, self.menu().item(index)?)));
+                    match item {
+                        Some((index, item)) if status(item.command).enabled => {
+                            let command = item.command;
+                            self.set_cursor(index);
+                            PullDownEvent::Run(command)
+                        }
+                        _ => PullDownEvent::Pending,
+                    }
+                }
+                Press::RightClick => PullDownEvent::Pending,
+            };
+        }
+        match press {
+            Press::Click | Press::RightClick => PullDownEvent::Closed,
+            Press::DoubleClick | Press::WheelUp | Press::WheelDown => PullDownEvent::Pending,
+        }
     }
 
     /// Selects the menu `index` on the bar, and opens it if a menu is open.
@@ -554,11 +631,17 @@ impl PullDown {
         status: &dyn Fn(Command) -> Status,
     ) {
         let titles: Vec<&Label> = self.menus.iter().map(|menu| &menu.title).collect();
-        let starts = render_bar(frame, bar, theme, &titles, Some(self.place.selected));
+        let spots = render_bar(frame, bar, theme, &titles, Some(self.place.selected));
+        let x = spots
+            .get(self.place.selected)
+            .map_or(bar.x, |title| title.x + 1);
+        *self.drawn.borrow_mut() = Drawn {
+            titles: spots,
+            ..Drawn::default()
+        };
         if !self.place.open {
             return;
         }
-        let x = starts.get(self.place.selected).copied().unwrap_or(bar.x);
         let below = Rect::new(
             screen.x,
             bar.bottom(),
@@ -622,6 +705,8 @@ impl PullDown {
             .max(area.x)
             .min(area.right().saturating_sub(width));
         let outer = Rect::new(x, area.y, width, height);
+        let mut drawn = self.drawn.borrow_mut();
+        drawn.menu = outer;
         frame.render_widget(Clear, outer);
         if let Some(shadow) = theme.shadow {
             let right = Rect::new(outer.right(), outer.y + 1, 2, outer.height);
@@ -658,7 +743,9 @@ impl PullDown {
             let y = rows.y + line;
             if let (Entry::Item(item), Some(status)) = (entry, status) {
                 let line = item_line(item, status, index == self.cursor(), room, theme, marks);
-                frame.render_widget(line, Rect::new(rows.x, y, rows.width, 1));
+                let row = Rect::new(rows.x, y, rows.width, 1);
+                frame.render_widget(line, row);
+                drawn.rows.push((index, row));
             } else {
                 let line = format!("{left_tee}{}{right_tee}", "─".repeat(room));
                 let row = Rect::new(outer.x, y, outer.width, 1);
@@ -702,21 +789,22 @@ fn item_line(
 }
 
 /// Draws the menu bar of F9 on `area` while no menu is open, as `ui.menu_bar` keeps it.
-pub(crate) fn render_idle(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
+/// Returns where each title is.
+pub(crate) fn render_idle(frame: &mut Frame<'_>, area: Rect, theme: &Theme) -> Vec<Rect> {
     let titles = titles();
     let titles: Vec<&Label> = titles.iter().collect();
-    render_bar(frame, area, theme, &titles, None);
+    render_bar(frame, area, theme, &titles, None)
 }
 
 /// Draws the bar: `titles` from the left, the one at `selected` set apart, with their letters
-/// while a menu bar is open. Returns the column each title starts at.
+/// while a menu bar is open. Returns where each title is, with a cell on either side.
 fn render_bar(
     frame: &mut Frame<'_>,
     area: Rect,
     theme: &Theme,
     titles: &[&Label],
     selected: Option<usize>,
-) -> Vec<u16> {
+) -> Vec<Rect> {
     if area.height == 0 {
         return Vec::new();
     }
@@ -731,18 +819,18 @@ fn render_bar(
         Line::styled(" ".repeat(usize::from(area.width)), style),
         row,
     );
-    let mut starts = Vec::with_capacity(titles.len());
+    let mut spots = Vec::with_capacity(titles.len());
     // As mc spaces them: two cells before the first title, and between titles.
     let mut x = area.x.saturating_add(1);
     for (index, title) in titles.iter().enumerate() {
         let width = u16::try_from(cells::width(&title.text) + 2).unwrap_or(u16::MAX);
-        starts.push(x + 1);
+        let room = area.right().saturating_sub(x);
+        spots.push(Rect::new(x, area.y, width.min(room), 1));
         let shown = if selected == Some(index) {
             theme.menu_bar_selected
         } else {
             style
         };
-        let room = area.right().saturating_sub(x);
         if room >= width {
             let mut spans = vec![Span::styled(" ", shown)];
             spans.extend(title.spans(shown, hotkey));
@@ -755,7 +843,7 @@ fn render_bar(
         }
         x = x.saturating_add(width).saturating_add(3);
     }
-    starts
+    spots
 }
 
 #[cfg(test)]
@@ -1010,6 +1098,48 @@ mod tests {
             })
             .unwrap();
         terminal.backend().to_string()
+    }
+
+    fn press(menu: &mut PullDown, press: Press, x: u16, y: u16) -> PullDownEvent {
+        draw(menu, &Theme::terminal());
+        let at = ratatui::layout::Position::new(x, y);
+        menu.pointer(Pointer { press, at }, &status)
+    }
+
+    #[test]
+    fn the_mouse_opens_menus_and_runs_commands() {
+        // On the 64 columns of `draw`: ` File ` takes columns 10 … 15, and its menu's rows
+        // start on line 2, View first.
+        let mut menu = PullDown::new(Side::Left, false, None, &[], &status);
+        assert_eq!(
+            press(&mut menu, Press::Click, 12, 0),
+            PullDownEvent::Pending
+        );
+        assert_eq!(menu.menu().title.text, "File");
+        assert!(menu.place.open);
+        assert_eq!(
+            press(&mut menu, Press::Click, 14, 8),
+            PullDownEvent::Pending,
+            "Delete cannot run"
+        );
+        press(&mut menu, Press::WheelDown, 14, 8);
+        assert_eq!(chosen(&menu), Some(Command::Do(Action::Edit)));
+        assert_eq!(
+            press(&mut menu, Press::Click, 14, 7),
+            PullDownEvent::Run(Command::Do(Action::Mkdir))
+        );
+        assert_eq!(chosen(&menu), Some(Command::Do(Action::Mkdir)));
+        // The title of the open menu closes it, and another title opens its own.
+        press(&mut menu, Press::Click, 12, 0);
+        assert!(!menu.place.open);
+        press(&mut menu, Press::Click, 21, 0);
+        assert_eq!(menu.menu().title.text, "Command");
+        assert!(menu.place.open);
+        assert_eq!(
+            press(&mut menu, Press::Click, 60, 15),
+            PullDownEvent::Closed,
+            "a click elsewhere closes it"
+        );
     }
 
     #[test]

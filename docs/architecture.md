@@ -890,7 +890,11 @@ location = "root"
   on an F-key slot presses its key; in a panel a click moves the cursor and gives the panel the
   keys, a double click does what Enter does, a right click marks the row as in mc and Far, and the
   wheel scrolls the panel under it, by `ui.wheel` lines or a page; a click on a tab shows it.
-  In the viewer the wheel scrolls. While the mouse is captured, the terminal selects text with
+  In the viewer the wheel scrolls. In the pull-down menu a click opens a menu or runs a
+  command, and a click outside closes it; in a dialog a click chooses, puts the cursor in a
+  field, switches a check box, or presses a button. A double click counts only if its first
+  click left the same thing in front, so one that closed a menu or a dialog does not reach
+  the panel under it. While the mouse is captured, the terminal selects text with
   a modifier held: Shift in most terminals, Option in iTerm2.
 - **Dialogs.** Modal and centered over the panels, with mc-style buttons: `[< OK >]` marks the
   default one, and a line across the dialog (`╟───╢`, or `├───┤` with single lines) sets the buttons

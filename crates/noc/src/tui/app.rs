@@ -610,6 +610,9 @@ pub(crate) struct App {
     keymap: Keymap,
     /// Where the last render drew what the mouse can press.
     spots: Spots,
+    /// What was in front after the last click, if that click left it there: a double click
+    /// counts only then.
+    clicked: Option<Front>,
     quit: bool,
     redraw: bool,
 }
@@ -624,6 +627,26 @@ struct Spots {
     sides: Vec<(Side, Rect)>,
     /// The tabs shown, by side and index.
     tabs: Vec<(Side, usize, Rect)>,
+    /// The titles of the menu bar that `ui.menu_bar` keeps.
+    menu_bar: Vec<Rect>,
+}
+
+/// What is in front, and takes the mouse.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Front {
+    /// The dialog in front, by its id.
+    Dialog(u64),
+    Menu,
+    Jump,
+    Workspaces,
+    Results(usize),
+    Job,
+    JobsList,
+    Help,
+    Configuration,
+    PullDown,
+    Viewer,
+    Panels,
 }
 
 impl App {
@@ -701,6 +724,7 @@ impl App {
             root_title: fl!("root-title"),
             keymap: Keymap::mc(),
             spots: Spots::default(),
+            clicked: None,
             quit: false,
             redraw: false,
         };
@@ -779,13 +803,57 @@ impl App {
         self.config.ui.mouse
     }
 
-    /// Takes a press of the mouse at a cell, as the last render drew the screen: the F-key bar
-    /// presses its keys, and in the panels a click moves the cursor, a double click opens, a
-    /// right click marks, and the wheel scrolls.
+    /// Takes a press of the mouse at a cell, as the last render drew the screen. What is in
+    /// front takes it, as it takes keys.
     pub(crate) fn pointer(&mut self, pointer: Pointer) -> Vec<Effect> {
         if !self.config.ui.mouse {
             return Vec::new();
         }
+        let front = self.front();
+        // A first click that closed a menu or a dialog, or opened one, leaves the second click
+        // of a double click nothing to do.
+        if pointer.press == Press::DoubleClick && self.clicked != Some(front) {
+            return Vec::new();
+        }
+        let effects = self.route_pointer(pointer);
+        self.clicked = (pointer.press == Press::Click && self.front() == front).then_some(front);
+        effects
+    }
+
+    /// What is in front, in the order [`handle_over`](Self::handle_over) gives keys.
+    fn front(&self) -> Front {
+        if let Some(open) = self.dialogs.front() {
+            Front::Dialog(open.dialog.id())
+        } else if self.menu.is_some() {
+            Front::Menu
+        } else if self.jump.is_some() {
+            Front::Jump
+        } else if self.workspaces_window.is_some() {
+            Front::Workspaces
+        } else if !self.results.is_empty() {
+            Front::Results(self.results.len())
+        } else if self.in_front().is_some() {
+            Front::Job
+        } else if self.jobs_list.is_some() {
+            Front::JobsList
+        } else if self.help.is_some() {
+            Front::Help
+        } else if self.configuration.is_some() {
+            Front::Configuration
+        } else if self.pulldown.is_some() {
+            Front::PullDown
+        } else if self.viewing.is_some() {
+            Front::Viewer
+        } else {
+            Front::Panels
+        }
+    }
+
+    /// The F-key bar presses its keys; then what is in front takes the press: a dialog, the
+    /// pull-down menu, the viewer, the menu bar that `ui.menu_bar` keeps, or the panels, where
+    /// a click moves the cursor, a double click opens, a right click marks, and the wheel
+    /// scrolls.
+    fn route_pointer(&mut self, pointer: Pointer) -> Vec<Effect> {
         let Pointer { press, at } = pointer;
         if let Some(slot) = self.spots.fkeys.iter().position(|slot| slot.contains(at)) {
             // The second click of a double click would press the key again.
@@ -795,26 +863,32 @@ impl App {
                 _ => Vec::new(),
             };
         }
-        if self.covered() {
-            return Vec::new();
-        }
-        if let Some(viewing) = &mut self.viewing {
-            let (lines, page) = match press {
-                Press::WheelUp => (ViewerCommand::Up, ViewerCommand::PageUp),
-                Press::WheelDown => (ViewerCommand::Down, ViewerCommand::PageDown),
-                Press::Click | Press::DoubleClick | Press::RightClick => return Vec::new(),
-            };
-            match self.config.ui.wheel {
-                Wheel::Lines(count) => {
-                    for _ in 0..count {
-                        viewing.viewer.handle(lines);
-                    }
-                }
-                Wheel::Page => viewing.viewer.handle(page),
+        match self.front() {
+            Front::Dialog(_) => return self.pointer_dialog(pointer),
+            Front::PullDown => return self.pointer_pulldown(pointer),
+            Front::Viewer => {
+                self.wheel_viewer(press);
+                return Vec::new();
             }
-            return Vec::new();
+            Front::Panels => {}
+            _ => return Vec::new(),
         }
         if self.panel(self.active).renaming() {
+            return Vec::new();
+        }
+        if let Some(index) = self
+            .spots
+            .menu_bar
+            .iter()
+            .position(|title| title.contains(at))
+        {
+            if press == Press::Click {
+                self.open_pulldown();
+                if let Some(mut pulldown) = self.pulldown.take() {
+                    pulldown.open_menu(index, &|command| self.command_status(command));
+                    self.pulldown = Some(pulldown);
+                }
+            }
             return Vec::new();
         }
         let Some(side) = self
@@ -838,18 +912,44 @@ impl App {
         }
     }
 
-    /// Whether a window or a menu is over the panels or the viewer.
-    fn covered(&self) -> bool {
-        !self.dialogs.is_empty()
-            || self.menu.is_some()
-            || self.jump.is_some()
-            || self.workspaces_window.is_some()
-            || !self.results.is_empty()
-            || self.in_front().is_some()
-            || self.jobs_list.is_some()
-            || self.help.is_some()
-            || self.configuration.is_some()
-            || self.pulldown.is_some()
+    /// Scrolls the viewer by a step of the wheel, if `press` is one.
+    fn wheel_viewer(&mut self, press: Press) {
+        let Some(viewing) = &mut self.viewing else {
+            return;
+        };
+        let (lines, page) = match press {
+            Press::WheelUp => (ViewerCommand::Up, ViewerCommand::PageUp),
+            Press::WheelDown => (ViewerCommand::Down, ViewerCommand::PageDown),
+            Press::Click | Press::DoubleClick | Press::RightClick => return,
+        };
+        match self.config.ui.wheel {
+            Wheel::Lines(count) => {
+                for _ in 0..count {
+                    viewing.viewer.handle(lines);
+                }
+            }
+            Wheel::Page => viewing.viewer.handle(page),
+        }
+    }
+
+    /// Gives a press of the mouse to the dialog in front, and does what it was for if it
+    /// closes. A list of completions under its field goes.
+    fn pointer_dialog(&mut self, pointer: Pointer) -> Vec<Effect> {
+        self.completion = None;
+        let Some(open) = self.dialogs.front_mut() else {
+            return Vec::new();
+        };
+        let event = open.dialog.pointer(pointer);
+        self.dialog_event(event)
+    }
+
+    /// Gives a press of the mouse to the pull-down menu; a command closes it, then runs.
+    fn pointer_pulldown(&mut self, pointer: Pointer) -> Vec<Effect> {
+        let Some(mut pulldown) = self.pulldown.take() else {
+            return Vec::new();
+        };
+        let event = pulldown.pointer(pointer, &|command| self.command_status(command));
+        self.pulldown_event(pulldown, event)
     }
 
     /// A click on the panel on `side`, at `at`: on a tab, it shows that tab; on a row, it puts
@@ -1378,6 +1478,11 @@ impl App {
             return Vec::new();
         };
         let event = open.dialog.handle(input);
+        self.dialog_event(event)
+    }
+
+    /// Does what the dialog in front was for, if `event` closes it.
+    fn dialog_event(&mut self, event: DialogEvent) -> Vec<Effect> {
         if event == DialogEvent::Pending || self.keeps_open(event) {
             return Vec::new();
         }
@@ -1900,7 +2005,13 @@ impl App {
         let Some(mut pulldown) = self.pulldown.take() else {
             return Vec::new();
         };
-        match pulldown.handle(input, &|command| self.command_status(command)) {
+        let event = pulldown.handle(input, &|command| self.command_status(command));
+        self.pulldown_event(pulldown, event)
+    }
+
+    /// Keeps the pull-down menu open after `event`, or closes it and runs its command.
+    fn pulldown_event(&mut self, pulldown: PullDown, event: PullDownEvent) -> Vec<Effect> {
+        match event {
             PullDownEvent::Pending => {
                 self.pulldown = Some(pulldown);
                 Vec::new()
@@ -3991,7 +4102,7 @@ impl App {
         }
         self.spots.fkeys = self.render_fkeys(frame, key_bar);
         if always {
-            pulldown::render_idle(frame, menu_bar, &self.theme);
+            self.spots.menu_bar = pulldown::render_idle(frame, menu_bar, &self.theme);
         }
         if let Some(pulldown) = &self.pulldown {
             let screen = Rect {
@@ -4805,6 +4916,77 @@ mod tests {
             assert_eq!(app.tabs(Side::Left).index(), 0, "{tab_bar:?}");
             assert_eq!(app.active, Side::Left);
         }
+    }
+
+    /// Draws `app` 160 by 12 and finds where `text` starts on the screen.
+    fn find(app: &mut App, text: &str) -> (u16, u16) {
+        let mut terminal = Terminal::new(TestBackend::new(160, 12)).unwrap();
+        let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        terminal
+            .draw(|frame| app.render(frame, now, &TimeZone::UTC))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        for y in 0..buffer.area.height {
+            let line: Vec<&str> = (0..buffer.area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect();
+            let chars: Vec<char> = text.chars().collect();
+            let found = line.windows(chars.len()).position(|cells| {
+                cells
+                    .iter()
+                    .zip(&chars)
+                    .all(|(cell, c)| cell.starts_with(*c))
+            });
+            if let Some(x) = found {
+                return (u16::try_from(x).unwrap(), y);
+            }
+        }
+        panic!("no {text:?} on the screen");
+    }
+
+    #[test]
+    fn the_mouse_runs_commands_of_the_pull_down_menu() {
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
+        let dirs = (0..20).map(|n| dir(&format!("d{n:02}"))).collect();
+        answer(&mut app, effects, &Listing::Dir(dirs));
+        let (x, y) = find(&mut app, "PullDn");
+        press(&mut app, Press::Click, x, y);
+        assert_eq!(app.context(), Context::PullDown);
+        let (x, y) = find(&mut app, "Command");
+        press(&mut app, Press::Click, x, y);
+        let (x, y) = find(&mut app, "Swap panels");
+        assert!(press(&mut app, Press::Click, x, y).is_empty());
+        assert!(app.swapped);
+        assert!(app.pulldown.is_none());
+        // The second click of a double click lands on a directory, which it does not open.
+        assert!(press(&mut app, Press::DoubleClick, x, y).is_empty());
+        assert_eq!(cursor_name(&app, Side::Left), "");
+
+        // A menu bar that stays opens a menu at a click on its title.
+        app.config.ui.menu_bar = MenuBar::Always;
+        let (x, y) = find(&mut app, "Options");
+        press(&mut app, Press::Click, x, y);
+        let (x, y) = find(&mut app, "Configuration");
+        press(&mut app, Press::Click, x, y);
+        assert!(app.configuration.is_some());
+    }
+
+    #[test]
+    fn the_mouse_answers_dialogs() {
+        let mut app = loaded();
+        let (x, y) = find(&mut app, "Mkdir");
+        press(&mut app, Press::Click, x, y);
+        assert_eq!(app.dialogs.len(), 1);
+        let (x, y) = find(&mut app, "Cancel");
+        let (panel_x, panel_y) = (90, 3);
+        press(&mut app, Press::Click, panel_x, panel_y);
+        assert_eq!(
+            app.active,
+            Side::Left,
+            "the dialog keeps the panels from the mouse"
+        );
+        press(&mut app, Press::Click, x, y);
+        assert!(app.dialogs.is_empty());
     }
 
     /// The titles of the panels drawn on the left and on the right.

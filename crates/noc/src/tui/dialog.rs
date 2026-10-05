@@ -1,9 +1,10 @@
 //! Modal dialogs: prompts from ssh (passwords and passphrases, host keys, confirmations, and
 //! notices) and the app's own questions.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::fmt;
 use std::ops::Range;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use noc_ssh::askpass::PromptKind;
 use ratatui::Frame;
@@ -17,6 +18,7 @@ use zeroize::Zeroizing;
 
 use super::cells;
 use super::keymap::{Action, Context, Resolved};
+use super::mouse::{Pointer, Press};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -27,6 +29,9 @@ const SECRET_CAPACITY: usize = 1024;
 const MAX_WIDTH: u16 = 76;
 /// Cells between a dialog's frame and its edge, as mc leaves them.
 const MARGIN: u16 = 1;
+
+/// The id of the last dialog made.
+static LAST_ID: AtomicU64 = AtomicU64::new(0);
 
 /// Sends the answer to a prompt back to ssh; `None` declines it.
 pub(crate) struct Reply(Box<dyn FnOnce(Option<SecretString>) + Send>);
@@ -238,6 +243,23 @@ impl Field {
         true
     }
 
+    /// Puts the cursor at `column` of the `room` cells the field was drawn in, as a click does;
+    /// the text stays, as after a move of the cursor.
+    fn click(&mut self, column: usize, room: usize) {
+        let (first, shown, _) = self.window(room);
+        let mut used = 0;
+        let before = shown
+            .chars()
+            .take_while(|&c| {
+                used += c.width().unwrap_or(0);
+                used <= column
+            })
+            .count();
+        self.cursor = (first + before).min(self.chars());
+        self.fresh = false;
+        self.selected = None;
+    }
+
     /// What fits in `room` cells, as shown (stars for a secret), from where the cursor stays
     /// on screen, and the cursor's column in it.
     pub(crate) fn visible(&self, room: usize) -> (String, usize) {
@@ -371,6 +393,8 @@ pub(crate) enum DialogEvent {
 /// the fields, and the check boxes once it closes.
 #[derive(Debug)]
 pub(crate) struct Dialog {
+    /// Tells this dialog from one that takes its place.
+    id: u64,
     title: String,
     message: String,
     /// Radio buttons, as mc draws them: `(*)` on the chosen one.
@@ -391,6 +415,8 @@ pub(crate) struct Dialog {
     completes: bool,
     /// Where its first field was drawn last, for the list of completions under it.
     field_area: Cell<Option<Rect>>,
+    /// Where each choice, field, check box, and button was drawn last, for the mouse.
+    spots: RefCell<Vec<(Focus, Rect)>>,
 }
 
 impl Dialog {
@@ -501,6 +527,7 @@ impl Dialog {
 
     fn new(title: &str, message: &str, buttons: Vec<Button>) -> Self {
         Self {
+            id: LAST_ID.fetch_add(1, Ordering::Relaxed) + 1,
             title: cells::sanitize(title.as_bytes()),
             message: message.trim_end().to_owned(),
             choices: Vec::new(),
@@ -514,7 +541,13 @@ impl Dialog {
             error: false,
             completes: false,
             field_area: Cell::new(None),
+            spots: RefCell::new(Vec::new()),
         }
+    }
+
+    /// Tells this dialog from every other one.
+    pub(crate) fn id(&self) -> u64 {
+        self.id
     }
 
     /// The same dialog, with a path in its first field, which Tab completes.
@@ -695,6 +728,45 @@ impl Dialog {
         }
     }
 
+    /// Takes a press of the mouse, where the dialog was drawn last: a click chooses a choice,
+    /// puts the cursor in a field, switches a check box, or presses a button. A double click
+    /// on a choice presses the default button too, as Enter does there.
+    pub(crate) fn pointer(&mut self, pointer: Pointer) -> DialogEvent {
+        let Pointer { press, at } = pointer;
+        let spot = self
+            .spots
+            .borrow()
+            .iter()
+            .find(|(_, area)| area.contains(at))
+            .copied();
+        let Some((focus, area)) = spot else {
+            return DialogEvent::Pending;
+        };
+        if !matches!(press, Press::Click | Press::DoubleClick) {
+            return DialogEvent::Pending;
+        }
+        self.focus = focus;
+        match focus {
+            Focus::Choice(index) => {
+                self.chosen = index;
+                if press == Press::DoubleClick {
+                    return DialogEvent::Pressed(self.buttons[self.default]);
+                }
+            }
+            Focus::Field(index) => {
+                if let Some(LabelledField { field, .. }) = self.fields.get_mut(index) {
+                    let column = usize::from(at.x - area.x);
+                    field.click(column, usize::from(area.width));
+                }
+            }
+            Focus::Check(index) => self.checks[index].on = !self.checks[index].on,
+            // The first click pressed it.
+            Focus::Button(_) if press == Press::DoubleClick => {}
+            Focus::Button(index) => return DialogEvent::Pressed(self.buttons[index]),
+        }
+        DialogEvent::Pending
+    }
+
     /// Moves the focus through the choices, the fields, the check boxes, and the buttons,
     /// round.
     fn move_focus(&mut self, forward: bool) {
@@ -729,6 +801,8 @@ impl Dialog {
         let size = (width, height + 4);
         let inner = draw_box(frame, area, size, &self.title, colors, theme);
         let row = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
+        let mut spots = self.spots.borrow_mut();
+        spots.clear();
         let mut index = 0;
         for line in &lines {
             if index >= inner.height {
@@ -750,6 +824,7 @@ impl Dialog {
                 colors.body
             };
             frame.render_widget(Line::from(Span::styled(text, style)), row(index));
+            spots.push((Focus::Choice(number), row(index)));
             index += 1;
         }
         for (number, LabelledField { label, field }) in self.fields.iter().enumerate() {
@@ -772,6 +847,7 @@ impl Dialog {
             };
             let text = cells::fit(&text, room, cells::Align::Left);
             frame.render_widget(Line::styled(text, style), row(index));
+            spots.push((Focus::Field(number), row(index)));
             if number == 0 {
                 self.field_area.set(Some(row(index)));
             }
@@ -793,6 +869,7 @@ impl Dialog {
                 colors.body
             };
             frame.render_widget(Line::from(Span::styled(text, style)), row(index));
+            spots.push((Focus::Check(number), row(index)));
             index += 1;
         }
         if index + 1 < inner.height {
@@ -803,6 +880,8 @@ impl Dialog {
                 Focus::Choice(_) | Focus::Field(_) | Focus::Check(_) => None,
             };
             let line = button_line(&labels, self.default, focus, colors);
+            let buttons = button_spots(&line, row(index + 1));
+            spots.extend((0..).map(Focus::Button).zip(buttons));
             frame.render_widget(line, row(index + 1));
         }
     }
@@ -834,6 +913,34 @@ pub(crate) fn button_line(
         spans.push(Span::styled(text, style));
     }
     Line::from(spans).centered()
+}
+
+/// Where the buttons of `line`, from [`button_line`], are when it is drawn on `area`, which
+/// centers it.
+pub(crate) fn button_spots(line: &Line<'_>, area: Rect) -> Vec<Rect> {
+    let width = |span: &Span<'_>| i32::try_from(span.width()).unwrap_or(i32::MAX);
+    let total = line.spans.iter().map(width).sum::<i32>();
+    // Ratatui centers a line that does not fit by cutting as much off either side.
+    let mut x = i32::from(area.x) + (i32::from(area.width) - total).div_euclid(2);
+    if total > i32::from(area.width) {
+        x = i32::from(area.x) - (total - i32::from(area.width)) / 2;
+    }
+    let mut spots = Vec::new();
+    // Buttons and the spaces between them take turns.
+    for (index, span) in line.spans.iter().enumerate() {
+        let start = x;
+        x += width(span);
+        if index % 2 == 1 {
+            continue;
+        }
+        let left = start.max(i32::from(area.x));
+        let right = x.min(i32::from(area.right()));
+        let (Ok(left), Ok(right)) = (u16::try_from(left), u16::try_from(right)) else {
+            continue;
+        };
+        spots.push(Rect::new(left, area.y, right.saturating_sub(left), 1));
+    }
+    spots
 }
 
 /// Draws a line across a dialog whose room inside is `inner`, on its row `y`, joined to the
@@ -1209,6 +1316,74 @@ mod tests {
             parts(&field, 5),
             ([String::new(), "ghij".to_owned(), ".".to_owned()], 4)
         );
+    }
+
+    /// Presses the mouse on the first cell of `text` where `dialog` is drawn at 40 by 12.
+    fn press_on(dialog: &mut Dialog, press: Press, text: &str) -> DialogEvent {
+        let terminal = draw(dialog, 40, 12);
+        let buffer = terminal.backend().buffer();
+        let lines: Vec<String> = (0..buffer.area.height)
+            .map(|y| {
+                (0..buffer.area.width)
+                    .map(|x| buffer[(x, y)].symbol().to_owned())
+                    .collect()
+            })
+            .collect();
+        let (y, x) = lines
+            .iter()
+            .enumerate()
+            .find_map(|(y, line)| Some((y, line.find(text)?)))
+            .unwrap_or_else(|| panic!("no {text:?} in {lines:#?}"));
+        let x = lines[y][..x].chars().count();
+        let at = Position::new(u16::try_from(x).unwrap(), u16::try_from(y).unwrap());
+        dialog.pointer(Pointer { press, at })
+    }
+
+    #[test]
+    fn the_mouse_switches_check_boxes_edits_fields_and_presses_buttons() {
+        let mut dialog = form();
+        assert_eq!(
+            press_on(&mut dialog, Press::Click, "Files only"),
+            DialogEvent::Pending
+        );
+        assert!(dialog.checked(0));
+        assert_eq!(dialog.focus, Focus::Check(0));
+        press_on(&mut dialog, Press::Click, "*");
+        assert_eq!(dialog.focus, Focus::Field(0));
+        dialog.handle(Resolved::Insert('x'));
+        assert_eq!(
+            dialog.text(),
+            "x*",
+            "the text stays and the cursor is where clicked"
+        );
+        assert_eq!(
+            press_on(&mut dialog, Press::DoubleClick, "Cancel"),
+            DialogEvent::Pending,
+            "the first click pressed it"
+        );
+        assert_eq!(
+            press_on(&mut dialog, Press::Click, "Cancel"),
+            DialogEvent::Pressed(Button::Cancel)
+        );
+        assert_eq!(
+            press_on(&mut dialog, Press::Click, "OK"),
+            DialogEvent::Pressed(Button::Ok)
+        );
+    }
+
+    #[test]
+    fn a_double_click_on_a_choice_chooses_it_and_confirms() {
+        let choices = vec!["one".to_owned(), "two".to_owned()];
+        let mut dialog = Dialog::fields("Pick", &[], &[], vec![Button::Ok, Button::Cancel], 40)
+            .with_choices(choices, 0);
+        press_on(&mut dialog, Press::Click, "two");
+        assert_eq!((dialog.chosen(), dialog.focus), (1, Focus::Choice(1)));
+        press_on(&mut dialog, Press::Click, "one");
+        assert_eq!(
+            press_on(&mut dialog, Press::DoubleClick, "two"),
+            DialogEvent::Pressed(Button::Ok)
+        );
+        assert_eq!(dialog.chosen(), 1);
     }
 
     #[test]

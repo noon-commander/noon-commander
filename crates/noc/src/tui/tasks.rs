@@ -9,8 +9,8 @@ use std::time::Duration;
 use futures_util::StreamExt as _;
 use futures_util::stream::FuturesUnordered;
 use noc_config::{
-    Config, ConfigError, HostConfig, Hosts, Workspaces, remove_workspace, rename_workspace,
-    save_config, save_host, save_workspace,
+    Config, ConfigError, History, HistoryEntry, HostConfig, Hosts, Workspaces, add_command,
+    remove_command, remove_workspace, rename_workspace, save_config, save_host, save_workspace,
 };
 use noc_ops::{
     Algorithm, Checksum, Conflict, CopyOptions, Decision, Endpoint, Event, Files, Outcome,
@@ -30,7 +30,7 @@ use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::task::{AbortHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 
-use super::app::{Effect, WorkspaceChange};
+use super::app::{Effect, HistoryChange, WorkspaceChange};
 use super::describe;
 use super::dialog::{Ask, Reply};
 use super::panel::{ListRequest, Listed, Listing};
@@ -120,6 +120,9 @@ pub(crate) enum Done {
         changed: bool,
         result: Result<Workspaces, String>,
     },
+    /// The commands of `history.toml`, oldest first, after a change, or why it could not be
+    /// read or written.
+    History(Result<Vec<HistoryEntry>, String>),
     /// The names of the [`Effect::ListNames`] `generation`: each with whether it is a
     /// directory, or why there are none; and the aliases of the hosts.
     Names {
@@ -222,6 +225,8 @@ pub(crate) struct Tasks {
     config_saves: mpsc::UnboundedSender<(Config, Config)>,
     /// Reads and changes of `workspaces.toml`, which one task makes in turn.
     workspace_changes: mpsc::UnboundedSender<WorkspaceChange>,
+    /// Reads and changes of `history.toml`, which one task makes in turn.
+    history_changes: mpsc::UnboundedSender<HistoryChange>,
     /// Directories for zoxide, which one task adds in turn.
     zoxide_adds: mpsc::UnboundedSender<PathBuf>,
     /// The zoxide query in flight; a newer one replaces it.
@@ -240,6 +245,7 @@ impl Tasks {
         }
         let config_saves = save_configs(context.config_file.clone(), done.clone());
         let workspace_changes = change_workspaces(context.paths.workspaces_file(), done.clone());
+        let history_changes = change_history(context.paths.history_file(), done.clone());
         let zoxide_adds = add_to_zoxide(Arc::clone(&context));
         Self {
             context,
@@ -250,6 +256,7 @@ impl Tasks {
             cache: Arc::new(Mutex::new(())),
             config_saves,
             workspace_changes,
+            history_changes,
             zoxide_adds,
             zoxide_query: None,
             work_dirs: change_work_dirs(),
@@ -354,6 +361,9 @@ impl Tasks {
                     self.save_config(*old, *new);
                 }
                 Effect::Workspaces(change) => self.change_workspaces(change),
+                Effect::History(change) => {
+                    let _ = self.history_changes.send(change);
+                }
             }
         }
     }
@@ -767,6 +777,38 @@ fn change_workspaces(
                 Err(error) => Err(error.to_string()),
             };
             if done.send(Done::Workspaces { changed, result }).is_err() {
+                break;
+            }
+        }
+    });
+    sender
+}
+
+/// Starts the task that reads and changes `history.toml` at `path`, in the order the changes
+/// come, and reports each to `done`.
+fn change_history(
+    path: PathBuf,
+    done: mpsc::UnboundedSender<Done>,
+) -> mpsc::UnboundedSender<HistoryChange> {
+    let (sender, mut receiver) = mpsc::unbounded_channel::<HistoryChange>();
+    tokio::spawn(async move {
+        while let Some(change) = receiver.recv().await {
+            let path = path.clone();
+            let result = tokio::task::spawn_blocking(move || match change {
+                HistoryChange::Load => History::load(&path),
+                HistoryChange::Add { entry, size } => add_command(&path, &entry, size),
+                HistoryChange::Remove { host, command } => {
+                    remove_command(&path, host.as_deref(), &command)
+                }
+            })
+            .await;
+            let result = match result {
+                Ok(result) => result
+                    .map(|history| history.commands)
+                    .map_err(|error| describe::chain(&error)),
+                Err(error) => Err(error.to_string()),
+            };
+            if done.send(Done::History(result)).is_err() {
                 break;
             }
         }

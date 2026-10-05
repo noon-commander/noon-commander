@@ -92,4 +92,10 @@ program = "zoxide"
 # through does not count. Nothing happens without zoxide.
 record = true
 
+[shell]
+# How many commands of the command line (! and :) history.toml in the state directory keeps,
+# of all hosts together; each is kept with the host it ran on. 0 keeps none, and a command
+# that starts with a space is never kept.
+history_size = 500
+
 # Per-host settings (labels, start directories) live in hosts.toml next to this file.

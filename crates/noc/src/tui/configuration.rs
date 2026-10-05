@@ -50,6 +50,7 @@ enum Key {
     HideVolumes,
     ZoxideRecord,
     ZoxideProgram,
+    HistorySize,
 }
 
 /// A value and how it is edited.
@@ -205,6 +206,12 @@ impl Setting {
                 }
                 config.zoxide.program = PathBuf::from(program);
             }
+            Key::HistorySize => {
+                config.shell.history_size = text.trim().parse().map_err(|_| {
+                    let text = cells::sanitize(text.as_bytes());
+                    fl!("config-history-size-invalid", text = text)
+                })?;
+            }
         }
         Ok(())
     }
@@ -353,6 +360,7 @@ impl Configuration {
                 ssh(config, home),
                 volumes(config),
                 zoxide(config, home),
+                shell(config),
             ],
             category: 0,
             focus: Focus::Settings,
@@ -1043,6 +1051,19 @@ fn zoxide(config: &Config, home: &Path) -> Category {
     }
 }
 
+/// Command line, `[shell]`.
+fn shell(config: &Config) -> Category {
+    Category {
+        icon: "",
+        title: fl!("config-shell"),
+        settings: vec![Setting::new(
+            Key::HistorySize,
+            (fl!("config-history-size"), fl!("config-history-size-hint")),
+            text(&config.shell.history_size.to_string()),
+        )],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use ratatui::Terminal;
@@ -1264,7 +1285,7 @@ mod tests {
 
     #[test]
     fn an_invalid_text_keeps_the_cursor_and_says_why() {
-        let cases: [(usize, usize, &str, &str); 7] = [
+        let cases: [(usize, usize, &str, &str); 8] = [
             (0, 0, "?", "is not auto or a language tag"),
             (0, 7, "0", "is not a step of the wheel"),
             (0, 7, "pages", "is not a step of the wheel"),
@@ -1272,6 +1293,7 @@ mod tests {
             (2, 2, "-F other_config", "Invalid extra ssh arguments"),
             (2, 0, "", "The ssh program cannot be empty"),
             (4, 1, " ", "The zoxide program cannot be empty"),
+            (5, 0, "-1", "is not a number of commands"),
         ];
         for (index, row, text, message) in cases {
             let mut dialog = dialog();

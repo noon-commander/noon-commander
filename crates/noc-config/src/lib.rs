@@ -6,21 +6,25 @@
 //! [`save_config`] and [`save_host`] change the files for the TUI, keeping their comments.
 //! [`Workspaces`] is the schema of `workspaces.toml`, the saved tabs of both panels, which
 //! [`save_workspace`], [`remove_workspace`], and [`rename_workspace`] write whole.
+//! [`History`] is the schema of `history.toml`, the commands of the command line, which
+//! [`add_command`] and [`remove_command`] write whole.
 
 mod config;
 mod edit;
 mod error;
+mod history;
 mod hosts;
 mod paths;
 mod workspaces;
 mod write;
 
 pub use config::{
-    Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, SshConfig, TabBar, TransferConfig,
-    UiConfig, VolumesConfig, Wheel, ZoxideConfig, write_default_config,
+    Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, ShellConfig, SshConfig, TabBar,
+    TransferConfig, UiConfig, VolumesConfig, Wheel, ZoxideConfig, write_default_config,
 };
 pub use edit::save_config;
 pub use error::ConfigError;
+pub use history::{History, HistoryEntry, add_command, remove_command};
 pub use hosts::{
     DEFAULT_HOSTS, HostConfig, Hosts, SftpHost, local_dir, save_host, write_default_hosts,
 };

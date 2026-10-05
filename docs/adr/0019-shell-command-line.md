@@ -86,7 +86,8 @@ point.
   Configuration dialog.
 - **Up and Down in the line (Alt-P and Alt-N as in mc) go through the history of the panel's
   host only**, so a command typed for one machine does not come up on another.
-- **The history window (Alt-H as in mc, Ctrl-R as in bash)** looks like the zoxide and
+- **The history window (Alt-H as in mc, Ctrl-R as in bash, on the line; Alt-H in a panel
+  opens the line with it)** looks like the zoxide and
   Workspaces windows. Typing filters it as quick search matches. Each row shows the host, the
   directory, and the first line of the command, with `…` and `+N` for the lines after it; the
   whole command of the row under the cursor shows below the list. The panel's host is

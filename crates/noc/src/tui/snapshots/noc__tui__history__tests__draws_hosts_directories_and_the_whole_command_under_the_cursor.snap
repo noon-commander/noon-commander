@@ -1,0 +1,20 @@
+---
+source: crates/noc/src/tui/history.rs
+expression: draw(&mut window)
+---
+"                                                                                "
+"                                                                                "
+"  ╔════════════════════════════ Command history ═════════════════════════════╗  "
+"  ║ Filter:                                             all hosts ⇄ this one ║  "
+"  ║ ──────────────────────────────────────────────────────────────────────── ║  "
+"  ║  local /home/me/src/noc   cargo test -p noc-ops                          ║  "
+"  ║  Site  /var/log           for f in *.log; do …                       +2  ║  "
+"  ║  Site  /var/www/app       tail -f log/production.log                     ║  "
+"  ║  local /home/me/src/noc   make                                           ║  "
+"  ║ ──────────────────────────────────────────────────────────────────────── ║  "
+"  ║ for f in *.log; do                                                       ║  "
+"  ║   gzip "$f"                                                              ║  "
+"  ║ done                                                                     ║  "
+"  ╚══════════════════════════════════════════════════════════════════════════╝  "
+"                                                                                "
+"                                                                                "

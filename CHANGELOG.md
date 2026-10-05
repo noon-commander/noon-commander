@@ -9,6 +9,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Command history: each command of the command line is kept in `history.toml` in the state
+  directory (`~/.local/state/noc/`), with the host it ran on. Up on the first line of the
+  command line, or Alt-P, brings back the commands of the panel's host, and Down, or Alt-N,
+  goes forward to what was typed. Alt-H or Ctrl-R on the line, or Alt-H in a panel, opens a
+  window of the history that typing filters: Tab shows every host, Enter puts the command on
+  the line without running it, its prompt standing out if it ran on another host, and Delete
+  removes it. `shell.history_size` (500, as bash's `HISTSIZE`, or Command line → History size
+  in Options → Configuration) sets how many commands are kept; a command that starts with a
+  space is never kept.
 - Input for the command line: Shift-Enter starts a new line where the terminal speaks the
   kitty keyboard protocol, which Noon Commander now asks for where the terminal has it; Ctrl-X
   Ctrl-E opens the command in `$VISUAL` or `$EDITOR` and brings back what the editor left,

@@ -8,8 +8,8 @@ use std::time::{Instant, SystemTime};
 
 use jiff::tz::TimeZone;
 use noc_config::{
-    Config, HostConfig, Hosts, MenuBar, PanelSide, SftpHost, TabBar, UiConfig, Wheel, Workspace,
-    Workspaces,
+    Config, HistoryEntry, HostConfig, Hosts, MenuBar, PanelSide, SftpHost, TabBar, UiConfig, Wheel,
+    Workspace, Workspaces,
 };
 use noc_ops::{Algorithm, Conflict, CopyOptions, Decision, Sum};
 use noc_tools::zoxide::Scored;
@@ -30,6 +30,7 @@ use super::configuration::{ConfigEvent, Configuration};
 use super::decor::Decor;
 use super::dialog::{Ask, Button, Dialog, DialogEvent, Reply};
 use super::help::Help;
+use super::history::{HistoryEvent, HistoryWindow};
 use super::jobs::{JobsEvent, JobsList, Row};
 use super::jump::{JumpEvent, JumpMenu};
 use super::keymap::{Action, Context, Keymap, Resolved};
@@ -184,6 +185,23 @@ pub(crate) enum Effect {
     /// Read or change `workspaces.toml`, after the changes before, and report to
     /// [`App::workspaces`].
     Workspaces(WorkspaceChange),
+    /// Read or change `history.toml`, after the changes before, and report to
+    /// [`App::history_changed`].
+    History(HistoryChange),
+}
+
+/// What to do with `history.toml`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum HistoryChange {
+    /// Read it.
+    Load,
+    /// Add a command as the newest, keeping the newest `size`.
+    Add { entry: HistoryEntry, size: usize },
+    /// Remove `command` on `host`.
+    Remove {
+        host: Option<String>,
+        command: String,
+    },
 }
 
 /// What to do with `workspaces.toml`.
@@ -572,6 +590,10 @@ pub(crate) struct App {
     command_line: Option<CommandLine>,
     /// A shell command for the event loop to run.
     run_now: Option<Run>,
+    /// The commands of the command line, oldest first, as `history.toml` held them last.
+    history: Vec<HistoryEntry>,
+    /// The window of the command history, over the panels and under the dialogs.
+    history_window: Option<HistoryWindow>,
     /// A file for the event loop to open in the editor with the command line's text, which
     /// comes back to the line.
     command_edit: Option<(PathBuf, String)>,
@@ -648,6 +670,7 @@ enum Front {
     Menu,
     Jump,
     Workspaces,
+    History,
     Results(usize),
     Job,
     JobsList,
@@ -713,6 +736,8 @@ impl App {
             edit_now: None,
             command_line: None,
             run_now: None,
+            history: Vec::new(),
+            history_window: None,
             command_edit: None,
             work_dir: None,
             runtime_dir: std::env::temp_dir(),
@@ -889,6 +914,8 @@ impl App {
             Front::Jump
         } else if self.workspaces_window.is_some() {
             Front::Workspaces
+        } else if self.history_window.is_some() {
+            Front::History
         } else if !self.results.is_empty() {
             Front::Results(self.results.len())
         } else if self.in_front().is_some() {
@@ -1014,6 +1041,10 @@ impl App {
             Front::Jump => self.jump.as_mut().and_then(|jump| jump.pointer(pointer)),
             Front::Workspaces => self
                 .workspaces_window
+                .as_mut()
+                .and_then(|window| window.pointer(pointer)),
+            Front::History => self
+                .history_window
                 .as_mut()
                 .and_then(|window| window.pointer(pointer)),
             Front::Results(_) => self
@@ -1147,6 +1178,8 @@ impl App {
             Context::Jump
         } else if self.workspaces_window.is_some() {
             Context::Workspaces
+        } else if self.history_window.is_some() {
+            Context::History
         } else if !self.results.is_empty()
             || self.in_front().is_some()
             || self.jobs_list.is_some()
@@ -1462,6 +1495,9 @@ impl App {
         if self.workspaces_window.is_some() {
             return Some(self.handle_workspaces(input));
         }
+        if self.history_window.is_some() {
+            return Some(self.handle_history(input));
+        }
         if self.handle_results(input) || self.handle_job(input) || self.handle_jobs_list(input) {
             return Some(Vec::new());
         }
@@ -1495,40 +1531,17 @@ impl App {
         if self.panel(self.active).renaming() {
             return self.handle_rename(input);
         }
-        let fuzzy_search = self.config.ui.fuzzy_search;
-        let panel = self.panel_mut(self.active);
-        let action = match input {
-            Resolved::Insert(c) => {
-                if panel.searching() {
-                    panel.search_type(c, fuzzy_search);
-                }
-                return Vec::new();
-            }
-            Resolved::Action(action) if panel.searching() => match action {
-                Action::Backspace => {
-                    panel.search_back();
-                    return Vec::new();
-                }
-                Action::QuickSearch => {
-                    panel.search_next(fuzzy_search);
-                    return Vec::new();
-                }
-                Action::Cancel => {
-                    panel.end_search();
-                    return Vec::new();
-                }
-                // Any other key ends the search, then does what it does.
-                _ => {
-                    panel.end_search();
-                    action
-                }
-            },
-            Resolved::Action(action) => action,
+        let Some(action) = self.search_key(input) else {
+            return Vec::new();
         };
         match action {
-            Action::QuickSearch => self.panel_mut(self.active).search_next(fuzzy_search),
-            Action::Shell => self.open_command_line(command::Kind::Shell),
-            Action::Command => self.open_command_line(command::Kind::Noc),
+            Action::QuickSearch => {
+                let fuzzy_search = self.config.ui.fuzzy_search;
+                self.panel_mut(self.active).search_next(fuzzy_search);
+            }
+            Action::Shell | Action::Command | Action::CommandHistory => {
+                self.open_command_line(action);
+            }
             Action::Quit => self.ask_quit(),
             Action::Jobs => self.jobs_list = Some(JobsList::default()),
             Action::Redraw => self.redraw = true,
@@ -1588,6 +1601,41 @@ impl App {
             }
         }
         Vec::new()
+    }
+
+    /// Gives a key to quick search in the active panel, if it runs; the action that the panel
+    /// does next, if any. Characters go nowhere else: typing in a panel does nothing.
+    fn search_key(&mut self, input: Resolved) -> Option<Action> {
+        let fuzzy_search = self.config.ui.fuzzy_search;
+        let panel = self.panel_mut(self.active);
+        match input {
+            Resolved::Insert(c) => {
+                if panel.searching() {
+                    panel.search_type(c, fuzzy_search);
+                }
+                None
+            }
+            Resolved::Action(action) if panel.searching() => match action {
+                Action::Backspace => {
+                    panel.search_back();
+                    None
+                }
+                Action::QuickSearch => {
+                    panel.search_next(fuzzy_search);
+                    None
+                }
+                Action::Cancel => {
+                    panel.end_search();
+                    None
+                }
+                // Any other key ends the search, then does what it does.
+                _ => {
+                    panel.end_search();
+                    Some(action)
+                }
+            },
+            Resolved::Action(action) => Some(action),
+        }
     }
 
     /// Gives a key to the dialog in front, and does what it was for once it closes. In a path
@@ -2646,8 +2694,15 @@ impl App {
         }]
     }
 
-    /// Opens the command line, in a panel on a local directory or on one of a connected host.
-    fn open_command_line(&mut self, kind: command::Kind) {
+    /// Opens the command line for `action`: `!` for a shell command, `:` for commands of Noon
+    /// Commander, Alt-H with the window of the history; in a panel on a local directory or on
+    /// one of a connected host.
+    fn open_command_line(&mut self, action: Action) {
+        let kind = if action == Action::Command {
+            command::Kind::Noc
+        } else {
+            command::Kind::Shell
+        };
         let opens = match self.panel(self.active).location() {
             Location::Local(_) => true,
             Location::Remote { host, .. } => {
@@ -2657,6 +2712,9 @@ impl App {
         };
         if opens {
             self.command_line = Some(CommandLine::new(kind));
+            if action == Action::CommandHistory {
+                self.open_history();
+            }
         }
     }
 
@@ -2666,10 +2724,32 @@ impl App {
         let Some(line) = &mut self.command_line else {
             return Vec::new();
         };
-        match line.handle(input) {
+        let event = line.handle(input);
+        match event {
             CommandEvent::None => Vec::new(),
             CommandEvent::Close => {
                 self.command_line = None;
+                Vec::new()
+            }
+            CommandEvent::Older | CommandEvent::Newer => {
+                let host = match self.panel(self.active).location() {
+                    Location::Remote { host, .. } => Some(host.as_str()),
+                    _ => None,
+                };
+                let commands: Vec<&str> = self
+                    .history
+                    .iter()
+                    .rev()
+                    .filter(|entry| entry.host.as_deref() == host)
+                    .map(|entry| entry.command.as_str())
+                    .collect();
+                if let Some(line) = &mut self.command_line {
+                    line.browse(event == CommandEvent::Older, &commands);
+                }
+                Vec::new()
+            }
+            CommandEvent::History => {
+                self.open_history();
                 Vec::new()
             }
             CommandEvent::Edit => {
@@ -2700,8 +2780,117 @@ impl App {
                     }
                     Location::Root | Location::Sftp => return Vec::new(),
                 };
+                let mut effects = self.remember(&dir, &command);
                 self.run_now = Some(Run { place, command });
-                self.note(&dir)
+                effects.extend(self.note(&dir));
+                effects
+            }
+        }
+    }
+
+    /// Opens the window of the command history over the command line, if it is open.
+    fn open_history(&mut self) {
+        if self.command_line.is_none() {
+            return;
+        }
+        let here = match self.panel(self.active).location() {
+            Location::Remote { host, .. } => Some(host.clone()),
+            _ => None,
+        };
+        let labels = self
+            .history
+            .iter()
+            .filter_map(|entry| entry.host.as_deref())
+            .filter_map(|host| {
+                let label = self.host_settings.get(host).and_then(HostConfig::label)?;
+                Some((host.to_owned(), label.to_owned()))
+            })
+            .collect();
+        let fuzzy = self.config.ui.fuzzy_search;
+        self.history_window = Some(HistoryWindow::new(&self.history, here, labels, fuzzy));
+    }
+
+    /// Gives a key to the window of the command history: a command it takes goes on the command
+    /// line, which shows whether it ran on another host; Delete removes one.
+    fn handle_history(&mut self, input: Resolved) -> Vec<Effect> {
+        let Some(window) = &mut self.history_window else {
+            return Vec::new();
+        };
+        match window.handle(input) {
+            HistoryEvent::Pending => Vec::new(),
+            HistoryEvent::Closed => {
+                self.history_window = None;
+                Vec::new()
+            }
+            HistoryEvent::Take { command, host } => {
+                self.history_window = None;
+                let here = match self.panel(self.active).location() {
+                    Location::Remote { host, .. } => Some(host.as_str()),
+                    _ => None,
+                };
+                let foreign = host.as_deref() != here;
+                if let Some(line) = &mut self.command_line {
+                    line.take(&command, foreign);
+                }
+                Vec::new()
+            }
+            HistoryEvent::Delete { command, host } => {
+                self.history
+                    .retain(|entry| !entry.is(host.as_deref(), &command));
+                window.set_history(&self.history);
+                vec![Effect::History(HistoryChange::Remove { host, command })]
+            }
+        }
+    }
+
+    /// Keeps `command`, run in `dir`, as the newest in the history, here and in `history.toml`;
+    /// not if it starts with a space, as bash's `HISTCONTROL=ignorespace`, or while
+    /// `shell.history_size` is 0.
+    fn remember(&mut self, dir: &Location, command: &str) -> Vec<Effect> {
+        let size = self.config.shell.history_size;
+        if size == 0 || command.starts_with(' ') {
+            return Vec::new();
+        }
+        let (host, dir) = match dir {
+            Location::Local(path) => (None, path.to_string_lossy().into_owned()),
+            Location::Remote { host, path } => (
+                Some(host.clone()),
+                String::from_utf8_lossy(path.as_bytes()).into_owned(),
+            ),
+            Location::Root | Location::Sftp => return Vec::new(),
+        };
+        let time = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map_or(0, |elapsed| {
+                i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX)
+            });
+        let entry = HistoryEntry {
+            command: command.to_owned(),
+            host,
+            dir,
+            time,
+        };
+        self.history
+            .retain(|kept| !kept.is(entry.host.as_deref(), &entry.command));
+        self.history.push(entry.clone());
+        let excess = self.history.len().saturating_sub(size);
+        self.history.drain(..excess);
+        vec![Effect::History(HistoryChange::Add { entry, size })]
+    }
+
+    /// Takes the commands as `history.toml` holds them after a change, or why it could not
+    /// be read or written.
+    pub(crate) fn history_changed(&mut self, result: Result<Vec<HistoryEntry>, String>) {
+        match result {
+            Ok(history) => {
+                self.history = history;
+                if let Some(window) = &mut self.history_window {
+                    window.set_history(&self.history);
+                }
+            }
+            Err(reason) => {
+                let reason = cells::sanitize(reason.as_bytes());
+                self.show_error(&fl!("history-error", reason = reason));
             }
         }
     }
@@ -4414,6 +4603,9 @@ impl App {
     /// dialog, the help, the jobs, the checksums, and the dialogs.
     fn render_windows(&mut self, frame: &mut Frame<'_>, panels: Rect) {
         if let Some(window) = &mut self.workspaces_window {
+            window.render(frame, panels, &self.theme);
+        }
+        if let Some(window) = &mut self.history_window {
             window.render(frame, panels, &self.theme);
         }
         if let Some(configuration) = &mut self.configuration {
@@ -8755,7 +8947,11 @@ mod tests {
             text.contains("/srv $ make") && text.contains("> ls"),
             "{text}"
         );
-        assert!(without_zoxide(app.handle(action(Action::Confirm))).is_empty());
+        let effects = without_zoxide(app.handle(action(Action::Confirm)));
+        assert!(
+            matches!(&effects[..], [Effect::History(HistoryChange::Add { .. })]),
+            "{effects:?}"
+        );
         assert_eq!(app.context(), Context::Panel);
         let Some(Run {
             place: Place::Local(dir),
@@ -8790,6 +8986,116 @@ mod tests {
         let mut root = at_root();
         root.handle(action(Action::Shell));
         assert_eq!(root.context(), Context::Root);
+    }
+
+    /// Runs `command` from the command line of the active panel.
+    fn run(app: &mut App, command: &str) -> Vec<Effect> {
+        app.handle(action(Action::Shell));
+        type_text(app, command);
+        let effects = without_zoxide(app.handle(action(Action::Confirm)));
+        app.take_run();
+        effects
+    }
+
+    #[test]
+    fn commands_go_to_the_history_of_their_host_but_not_after_a_space() {
+        let mut app = loaded();
+        let effects = run(&mut app, "make");
+        let [Effect::History(HistoryChange::Add { entry, size: 500 })] = &effects[..] else {
+            panic!("expected the command to be kept, got {effects:?}");
+        };
+        assert_eq!(
+            (
+                entry.command.as_str(),
+                entry.host.as_deref(),
+                entry.dir.as_str()
+            ),
+            ("make", None, "/srv")
+        );
+        run(&mut app, "ls");
+        assert!(run(&mut app, " secret").is_empty(), "a space keeps it out");
+        // A command of another host does not come up here.
+        app.history_changed(Ok(vec![
+            entry.clone(),
+            HistoryEntry {
+                command: "uptime".to_owned(),
+                host: Some("web".to_owned()),
+                ..entry.clone()
+            },
+            HistoryEntry {
+                command: "ls".to_owned(),
+                ..entry.clone()
+            },
+        ]));
+        app.handle(action(Action::Shell));
+        type_text(&mut app, "dr");
+        app.handle(action(Action::Up));
+        assert_eq!(app.command_line.as_ref().map(CommandLine::text), Some("ls"));
+        app.handle(action(Action::Up));
+        assert_eq!(
+            app.command_line.as_ref().map(CommandLine::text),
+            Some("make")
+        );
+        app.handle(action(Action::Up));
+        assert_eq!(
+            app.command_line.as_ref().map(CommandLine::text),
+            Some("make")
+        );
+        app.handle(action(Action::NewerCommand));
+        app.handle(action(Action::NewerCommand));
+        assert_eq!(app.command_line.as_ref().map(CommandLine::text), Some("dr"));
+        app.handle(action(Action::Cancel));
+
+        app.config.shell.history_size = 0;
+        assert!(run(&mut app, "make").is_empty(), "no history at all");
+        app.history_changed(Err("history.toml: invalid".to_owned()));
+        assert!(screen_of(&mut app, 12).contains("Cannot keep the command history"));
+    }
+
+    #[test]
+    fn alt_h_takes_a_command_from_the_history_window_and_delete_removes_one() {
+        let mut app = loaded();
+        let entry = |command: &str, host: Option<&str>| HistoryEntry {
+            command: command.to_owned(),
+            host: host.map(str::to_owned),
+            dir: "/srv".to_owned(),
+            time: 0,
+        };
+        app.history_changed(Ok(vec![entry("make", None), entry("uptime", Some("web"))]));
+        app.handle(action(Action::CommandHistory));
+        assert_eq!(
+            app.context(),
+            Context::History,
+            "Alt-H opens the line and the window"
+        );
+        let text = screen_of(&mut app, 16);
+        assert!(text.contains("make") && !text.contains("uptime"), "{text}");
+        app.handle(action(Action::NextField));
+        app.handle(action(Action::Home));
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        assert_eq!(app.context(), Context::CommandLine);
+        assert_eq!(
+            app.command_line.as_ref().map(CommandLine::text),
+            Some("uptime"),
+            "it is put on the line, not run"
+        );
+        assert!(app.take_run().is_none());
+
+        app.handle(action(Action::CommandHistory));
+        let effects = app.handle(action(Action::Delete));
+        let [
+            Effect::History(HistoryChange::Remove {
+                host: None,
+                command,
+            }),
+        ] = &effects[..]
+        else {
+            panic!("expected a removal, got {effects:?}");
+        };
+        assert_eq!(command, "make");
+        assert_eq!(app.history.len(), 1);
+        app.handle(action(Action::Cancel));
+        assert_eq!(app.context(), Context::CommandLine);
     }
 
     #[test]

@@ -31,6 +31,23 @@ pub struct Config {
     pub transfer: TransferConfig,
     /// `[zoxide]`: the directories zoxide ranks, for jumping to them.
     pub zoxide: ZoxideConfig,
+    /// `[shell]`: the command line of `!` and `:`.
+    pub shell: ShellConfig,
+}
+
+/// The `[shell]` section.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ShellConfig {
+    /// How many commands of the command line `history.toml` keeps, of all hosts together; `0`
+    /// keeps none. Default: `500`, as bash's `HISTSIZE`.
+    pub history_size: usize,
+}
+
+impl Default for ShellConfig {
+    fn default() -> Self {
+        Self { history_size: 500 }
+    }
 }
 
 /// The `[zoxide]` section.
@@ -382,7 +399,7 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, SshConfig, TabBar,
+        Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, ShellConfig, SshConfig, TabBar,
         TransferConfig, UiConfig, VolumesConfig, Wheel, ZoxideConfig,
     };
     use crate::{ConfigError, write_default_config};
@@ -436,6 +453,9 @@ mod tests {
         [zoxide]
         program = "/opt/homebrew/bin/zoxide"
         record = false
+
+        [shell]
+        history_size = 50
     "#;
 
     fn full() -> Config {
@@ -472,6 +492,7 @@ mod tests {
                 program: PathBuf::from("/opt/homebrew/bin/zoxide"),
                 record: false,
             },
+            shell: ShellConfig { history_size: 50 },
         }
     }
 
@@ -500,6 +521,7 @@ mod tests {
         assert_eq!(config.transfer.parallel_jobs.get(), 2);
         assert_eq!(config.zoxide.program, Path::new("zoxide"));
         assert!(config.zoxide.record);
+        assert_eq!(config.shell.history_size, 500);
     }
 
     #[test]
@@ -688,6 +710,7 @@ mod tests {
         assert!(table["ui"].get("wheel").is_some());
         assert!(table["zoxide"].get("program").is_some());
         assert!(table["zoxide"].get("record").is_some());
+        assert!(table["shell"].get("history_size").is_some());
     }
 
     #[test]

@@ -11,6 +11,7 @@ mod describe;
 mod dialog;
 mod fuzzy;
 mod help;
+mod history;
 mod jobs;
 mod jump;
 mod keymap;
@@ -104,6 +105,7 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
         Done::HostSaved(result) => tasks.run(app.host_saved(result)),
         Done::ConfigSaved(result) => app.config_saved(result),
         Done::Workspaces { changed, result } => app.workspaces_changed(changed, result),
+        Done::History(result) => app.history_changed(result),
         Done::Jumps { generation, result } => app.jumps(generation, result),
         Done::Names {
             generation,
@@ -238,6 +240,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
 fn start_app(context: &Context, start: &Path, tz: &TimeZone) -> (App, Vec<app::Effect>) {
     let (mut app, mut effects) = App::new(start, &context.paths.home, &context.config());
     effects.push(app::Effect::Workspaces(app::WorkspaceChange::Load));
+    effects.push(app::Effect::History(app::HistoryChange::Load));
     app.set_color_depth(theme::ColorDepth::detect());
     app.set_time_zone(tz.clone());
     if let Some(name) = host_name() {

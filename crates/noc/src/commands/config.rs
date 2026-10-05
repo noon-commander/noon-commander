@@ -23,10 +23,12 @@ pub(super) fn init(path: &Path, force: bool) -> Result<ExitCode> {
 pub(super) fn paths(paths: &Paths, config_file: &Path) -> ExitCode {
     let hosts_file = Paths::hosts_file(config_file);
     let workspaces_file = paths.workspaces_file();
+    let history_file = paths.history_file();
     let rows = [
         ("config file", config_file),
         ("hosts file", &hosts_file),
         ("workspaces", &workspaces_file),
+        ("history", &history_file),
         ("config", &paths.config_dir),
         ("data", &paths.data_dir),
         ("state, logs", &paths.state_dir),

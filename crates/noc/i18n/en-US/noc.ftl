@@ -285,6 +285,10 @@ config-zoxide-record-hint = Add a local directory to zoxide once you copy, delet
 config-zoxide-program = Program
 config-zoxide-program-hint = The zoxide program: a name in PATH, or a path. Alt-Z jumps to the directories it ranks.
 config-zoxide-program-empty = The zoxide program cannot be empty.
+config-shell = Command line
+config-history-size = History size
+config-history-size-hint = How many commands of ! and : the history keeps, of all hosts together; 0 keeps none.
+config-history-size-invalid = "{ $text }" is not a number of commands: it takes a whole number, 0 or more.
 # After the hint of a setting that the running Noon Commander cannot change.
 config-restart = Takes effect after a restart.
 # The reason names the file.
@@ -322,6 +326,10 @@ help-root = Volumes and hosts
 help-menu = Location menu
 help-jump = zoxide
 help-workspaces = Workspaces
+help-history = Command history
+help-history-hosts = The commands of the panel's host, or of all hosts
+help-history-take = Put the command on the command line, without running it
+help-history-delete = Remove the command from the history
 help-pulldown = Pull-down menu
 help-quick-search = Quick search
 help-renaming = Renaming in place
@@ -437,8 +445,11 @@ help-field-left = One character left
 help-field-right = One character right
 help-rename-confirm = Rename to the name typed
 help-rename-cancel = Keep the name as it was
-help-command-up = The line above, in a command of several lines
-help-command-down = The line below, in a command of several lines
+help-command-up = The line above; from the first line, the command before in the history of the panel's host
+help-command-down = The line below; from the last line, the command after in the history
+help-command-older = The command before in the history of the panel's host
+help-command-newer = The command after in the history; after the last, what was typed
+help-command-history = The command history: filter it, and take a command of this host or another
 help-command-home = Start of the line
 help-command-end = End of the line
 help-command-delete-to-start = Delete to the start of the line
@@ -657,5 +668,18 @@ command-error = Cannot run { $program }: { $reason }
 command-exit-code = The command exited with { $code }.
 command-signal = The command was ended by signal { $signal }.
 command-press-key = Press any key to return to Noon Commander.
+# The window of the command history, Alt-H or Ctrl-R on the command line.
+history-title = Command history
+# The filter, at the top.
+history-filter = Filter: { $text }
+# Which commands the window shows; Tab switches.
+history-this-host = { $host } ⇄ all
+history-all-hosts = all hosts ⇄ this one
+# The host of commands that ran on this machine.
+history-local = local
+history-none = No commands yet. Commands run with ! and : come here.
+history-nothing = No command matches.
+# history.toml could not be read or written; the reason names the file.
+history-error = Cannot keep the command history: { $reason }
 # The command could not go to the editor of Ctrl-X Ctrl-E, or come back.
 command-edit-error = Cannot edit the command: { $reason }

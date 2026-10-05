@@ -300,7 +300,7 @@ impl Keymap {
 }
 
 /// The bindings of the mc preset, by context.
-fn mc_presets() -> [(Context, Preset); 14] {
+fn mc_presets() -> [(Context, Preset); 15] {
     use Action::{
         Backspace, Cancel, Confirm, Disconnect, Down, EditHost, End, Help, Home, Left, NextField,
         PageDown, PageUp, PrevField, Quit, Redraw, Right, Toggle, ToggleWrap, Up,
@@ -356,18 +356,19 @@ fn mc_presets() -> [(Context, Preset); 14] {
         (Context::PathInput, PATH_FIELD),
         (Context::Completion, COMPLETION),
         (Context::CommandLine, COMMAND_LINE),
+        (Context::History, HISTORY),
     ]
 }
 
 /// The panels' bindings in the mc preset.
 const PANEL: Preset = {
     use Action::{
-        Cancel, Checksum, CloseTab, Command, Copy, Delete, Down, Edit, End, Enter, Help, Home,
-        InvertMarks, Jobs, Jump, LocationMenuLeft, LocationMenuRight, Mark, MarkUp, Mkdir, Move,
-        NewTab, NextTab, OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent, PrevTab,
-        PullDown, QuickCd, QuickSearch, Quit, Redraw, Reload, Rename, SaveWorkspace, Select, Shell,
-        SortByExtension, SortByName, SortBySize, SortByTime, SwapPanels, SwitchPanel, TabList,
-        ToggleHidden, Unselect, Up, View, Workspaces,
+        Cancel, Checksum, CloseTab, Command, CommandHistory, Copy, Delete, Down, Edit, End, Enter,
+        Help, Home, InvertMarks, Jobs, Jump, LocationMenuLeft, LocationMenuRight, Mark, MarkUp,
+        Mkdir, Move, NewTab, NextTab, OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent,
+        PrevTab, PullDown, QuickCd, QuickSearch, Quit, Redraw, Reload, Rename, SaveWorkspace,
+        Select, Shell, SortByExtension, SortByName, SortBySize, SortByTime, SwapPanels,
+        SwitchPanel, TabList, ToggleHidden, Unselect, Up, View, Workspaces,
     };
     &[
         (Up, &["up", "ctrl-p"]),
@@ -401,6 +402,8 @@ const PANEL: Preset = {
         // Not in mc, whose command line takes what is typed (ADR 0019).
         (Shell, &["!"]),
         (Command, &[":"]),
+        // mc's: the command line, with its history.
+        (CommandHistory, &["alt-h"]),
         (Help, &["f1"]),
         (View, &["f3"]),
         (Edit, &["f4"]),
@@ -492,8 +495,28 @@ const COMMAND_LINE: Preset = &[
     (Action::DeleteToEnd, &["ctrl-k"]),
     (Action::NewLine, &["ctrl-j", "shift-enter"]),
     (Action::EditCommand, &["ctrl-x ctrl-e"]),
+    (Action::OlderCommand, &["alt-p"]),
+    (Action::NewerCommand, &["alt-n"]),
+    // mc's Alt-H, and bash's Ctrl-R.
+    (Action::CommandHistory, &["alt-h", "ctrl-r"]),
     (Action::Confirm, &["enter"]),
     (Action::Cancel, &["esc"]),
+];
+
+/// The bindings of the window of the command history in the mc preset; characters filter it,
+/// and Tab switches between the panel's host and all hosts.
+const HISTORY: Preset = &[
+    (Action::Up, &["up"]),
+    (Action::Down, &["down"]),
+    (Action::PageUp, &["pageup"]),
+    (Action::PageDown, &["pagedown"]),
+    (Action::Home, &["home"]),
+    (Action::End, &["end"]),
+    (Action::NextField, &["tab"]),
+    (Action::Confirm, &["enter"]),
+    (Action::Backspace, &["backspace"]),
+    (Action::Delete, &["delete"]),
+    (Action::Cancel, &["esc", "f10"]),
 ];
 
 /// The bindings of path fields in the mc preset, on top of the text field's: Tab completes, as

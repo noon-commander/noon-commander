@@ -7,7 +7,7 @@ use noc_vfs::RemotePath;
 
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
-use ratatui::style::Style;
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Block;
 use unicode_width::UnicodeWidthChar as _;
@@ -44,6 +44,12 @@ pub(crate) enum CommandEvent {
     Unknown(String),
     /// Opens the command in the editor.
     Edit,
+    /// Shows the command before in the history.
+    Older,
+    /// Shows the command after in the history.
+    Newer,
+    /// Opens the window of the command history.
+    History,
 }
 
 /// A shell command for the event loop to run, and where.
@@ -69,6 +75,13 @@ pub(crate) struct CommandLine {
     cursor: usize,
     /// The first row shown, when the command has more rows than fit.
     scroll: usize,
+    /// The command of the history shown, counted from the newest, and what was typed before
+    /// going through the history, which comes back after the newest.
+    browsing: Option<usize>,
+    draft: String,
+    /// The command came from the history of another host: the prompt stands out until the
+    /// next key, so that it is clear where the command will run.
+    foreign: bool,
 }
 
 /// A row of the command line as drawn: the prompt or the mark of a continued line, if it
@@ -86,7 +99,44 @@ impl CommandLine {
             text: String::new(),
             cursor: 0,
             scroll: 0,
+            browsing: None,
+            draft: String::new(),
+            foreign: false,
         }
+    }
+
+    /// Puts `command`, from the window of the history, on the line in place of what was
+    /// typed; `foreign` if it ran on another host.
+    pub(crate) fn take(&mut self, command: &str, foreign: bool) {
+        self.set_text(command);
+        self.browsing = None;
+        self.foreign = foreign;
+    }
+
+    /// Shows the command before in `commands`, the history of the panel's host newest first,
+    /// or the one after; after the newest, what was typed. The cursor goes to the end, so
+    /// that Up goes through the lines of a command before the commands before it.
+    pub(crate) fn browse(&mut self, older: bool, commands: &[&str]) {
+        let next = match (self.browsing, older) {
+            (None, true) => 0,
+            (Some(index), true) => index + 1,
+            (None, false) => return,
+            (Some(0), false) => {
+                self.browsing = None;
+                let draft = std::mem::take(&mut self.draft);
+                self.set_text(&draft);
+                return;
+            }
+            (Some(index), false) => index - 1,
+        };
+        let Some(command) = commands.get(next) else {
+            return;
+        };
+        if self.browsing.is_none() {
+            self.draft = self.text.clone();
+        }
+        self.browsing = Some(next);
+        self.set_text(command);
     }
 
     pub(crate) fn kind(&self) -> Kind {
@@ -154,6 +204,7 @@ impl CommandLine {
 
     /// Takes a key.
     pub(crate) fn handle(&mut self, input: Resolved) -> CommandEvent {
+        self.foreign = false;
         let action = match input {
             Resolved::Insert(c) => {
                 self.insert(c);
@@ -168,8 +219,13 @@ impl CommandLine {
             Action::Right => self.cursor = (self.cursor + 1).min(length),
             Action::Home => self.cursor = start,
             Action::End => self.cursor = end,
+            Action::Up if start == 0 => return CommandEvent::Older,
+            Action::Down if end == length => return CommandEvent::Newer,
             Action::Up => self.move_line(false),
             Action::Down => self.move_line(true),
+            Action::CommandHistory => return CommandEvent::History,
+            Action::OlderCommand => return CommandEvent::Older,
+            Action::NewerCommand => return CommandEvent::Newer,
             Action::Backspace if self.text.is_empty() => return CommandEvent::Close,
             Action::Backspace if self.cursor > 0 => self.remove(self.cursor - 1, self.cursor),
             Action::Delete if self.cursor < length => self.remove(self.cursor, self.cursor + 1),
@@ -316,9 +372,14 @@ impl CommandLine {
         }
         self.scroll = self.scroll.min(rows.len().saturating_sub(height));
         frame.render_widget(Block::default().style(style), area);
+        let lead = if self.foreign {
+            style.add_modifier(Modifier::REVERSED)
+        } else {
+            style
+        };
         for (index, shown) in rows.into_iter().skip(self.scroll).take(height).enumerate() {
             let y = area.y + u16::try_from(index).unwrap_or(u16::MAX);
-            let line = Line::from(vec![Span::raw(shown.lead), Span::raw(shown.text)]);
+            let line = Line::from(vec![Span::styled(shown.lead, lead), Span::raw(shown.text)]);
             frame.render_widget(line.style(style), Rect::new(area.x, y, area.width, 1));
         }
         if focused {
@@ -463,6 +524,32 @@ mod tests {
         line.set_text("make\n  && ls\n\n");
         assert_eq!(line.text(), "make\n  && ls");
         assert_eq!(line.cursor, 12);
+    }
+
+    #[test]
+    fn up_and_down_go_through_the_history_from_the_first_and_last_lines() {
+        let history = ["ls", "make\ntest"];
+        let mut line = shell("draft");
+        assert_eq!(press(&mut line, Action::Up), CommandEvent::Older);
+        line.browse(true, &history);
+        assert_eq!(line.text(), "ls");
+        line.browse(true, &history);
+        assert_eq!(line.text(), "make\ntest");
+        line.browse(true, &history);
+        assert_eq!(line.text(), "make\ntest", "the oldest stays");
+        // The cursor is at the end: Up goes through the lines first, Down goes on at once.
+        assert_eq!(press(&mut line, Action::Up), CommandEvent::None);
+        assert_eq!(press(&mut line, Action::Up), CommandEvent::Older);
+        assert_eq!(press(&mut line, Action::Down), CommandEvent::None);
+        assert_eq!(press(&mut line, Action::Down), CommandEvent::Newer);
+        line.browse(false, &history);
+        assert_eq!(line.text(), "ls");
+        line.browse(false, &history);
+        assert_eq!(line.text(), "draft", "what was typed comes back");
+        line.browse(false, &history);
+        assert_eq!(line.text(), "draft");
+        assert_eq!(press(&mut line, Action::OlderCommand), CommandEvent::Older);
+        assert_eq!(press(&mut line, Action::NewerCommand), CommandEvent::Newer);
     }
 
     #[test]

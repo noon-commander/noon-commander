@@ -47,6 +47,7 @@ impl Help {
             (Context::Menu, fl!("help-menu")),
             (Context::Jump, fl!("help-jump")),
             (Context::Workspaces, fl!("help-workspaces")),
+            (Context::History, fl!("help-history")),
             (Context::PullDown, fl!("help-pulldown")),
             (Context::Dialog, fl!("help-dialogs")),
             (Context::DialogInput, fl!("help-text-fields")),
@@ -208,6 +209,7 @@ fn describe(context: Context, action: Action) -> Option<String> {
         .or_else(|| describe_completion(context, action))
         .or_else(|| describe_workspaces(context, action))
         .or_else(|| describe_command_line(context, action))
+        .or_else(|| describe_history(context, action))
         .or_else(|| describe_field(context, action))
     {
         return Some(text);
@@ -236,6 +238,7 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::QuickSearch) => fl!("help-quick-search-start"),
         (Context::Panel, Action::Shell) => fl!("help-shell"),
         (Context::Panel, Action::Command) => fl!("help-command"),
+        (Context::Panel, Action::CommandHistory) => fl!("help-command-history"),
         (Context::Panel, Action::View) => fl!("help-view"),
         (Context::Panel, Action::Edit) => fl!("help-edit"),
         (Context::Panel, Action::Copy) => fl!("help-copy"),
@@ -301,6 +304,24 @@ fn describe(context: Context, action: Action) -> Option<String> {
     Some(text)
 }
 
+/// What keys do in the window of the command history.
+fn describe_history(context: Context, action: Action) -> Option<String> {
+    if context != Context::History {
+        return None;
+    }
+    let text = match action {
+        Action::Home => fl!("help-first-row"),
+        Action::End => fl!("help-last-row"),
+        Action::NextField => fl!("help-history-hosts"),
+        Action::Confirm => fl!("help-history-take"),
+        Action::Backspace => fl!("help-menu-back"),
+        Action::Delete => fl!("help-history-delete"),
+        Action::Cancel => fl!("help-workspaces-close"),
+        _ => return None,
+    };
+    Some(text)
+}
+
 /// What keys do on the command line that they do not in other text fields.
 fn describe_command_line(context: Context, action: Action) -> Option<String> {
     if context != Context::CommandLine {
@@ -316,6 +337,9 @@ fn describe_command_line(context: Context, action: Action) -> Option<String> {
         Action::DeleteToEnd => fl!("help-command-delete-to-end"),
         Action::NewLine => fl!("help-command-new-line"),
         Action::EditCommand => fl!("help-command-edit"),
+        Action::OlderCommand => fl!("help-command-older"),
+        Action::NewerCommand => fl!("help-command-newer"),
+        Action::CommandHistory => fl!("help-command-history"),
         Action::Confirm => fl!("help-command-run"),
         Action::Cancel => fl!("help-command-close"),
         _ => return None,
@@ -358,6 +382,7 @@ fn describe_rows(context: Context, action: Action) -> Option<String> {
             | Context::Menu
             | Context::Jump
             | Context::Workspaces
+            | Context::History
             | Context::Completion
     );
     let text = match action {
@@ -472,6 +497,7 @@ mod tests {
                 "Location menu",
                 "zoxide",
                 "Workspaces",
+                "Command history",
                 "Pull-down menu",
                 "Dialogs and help",
                 "Text fields",

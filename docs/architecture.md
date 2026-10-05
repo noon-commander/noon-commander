@@ -624,7 +624,7 @@ variables:
 | --- | --- |
 | Settings, keymap, themes | `~/.config/noc/` (`config.toml`, `hosts.toml`, `keymap.toml`, `themes/`) |
 | Data (workspaces, bookmarks) | `~/.local/share/noc/` (`workspaces.toml`) |
-| State (history, last directories, logs) | `~/.local/state/noc/` |
+| State (`history.toml`, last directories, logs) | `~/.local/state/noc/` |
 | Cache (`ssh -G` results) | `~/.cache/noc/` |
 | Runtime (control sockets, askpass socket, F4 temp files) | `$XDG_RUNTIME_DIR/noc/` or `$TMPDIR/noc-$UID/`, mode 0700 |
 
@@ -664,6 +664,9 @@ parallel_jobs = 2                # jobs that run at once; later ones wait; F4 ne
 [zoxide]
 program = "zoxide"               # name in PATH or a path
 record = true                    # add directories where the user did something
+
+[shell]
+history_size = 500               # commands of ! and : in history.toml, of all hosts together
 ```
 
 Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
@@ -895,7 +898,18 @@ location = "root"
   without line breaks; panels, the pull-down menu, dialogs' buttons, and the viewer ignore it.
   Ctrl-X Ctrl-E writes the command to a file in the private runtime directory, runs the editor on it
   as F4 does, and puts what it left back into the line, without the line breaks at its end; the file
-  goes afterwards.
+  goes afterwards. Each command that ran, unless it starts with a space, goes to `history.toml` in
+  the state directory with its host (the alias; none for a local one), directory, and time:
+  `noc-config`'s `add_command` reads the file again, replaces the same command on the same host,
+  keeps the newest `shell.history_size`, and writes it whole and atomically, mode 0600; one task
+  makes the changes in turn, and the app keeps the commands in memory. Up on the first line of a
+  command, or Alt-P, goes back through the commands of the panel's host, and Down on the last line,
+  or Alt-N, forward to what was typed. Alt-H or Ctrl-R on the line, or Alt-H in a panel, opens the
+  window of the history (`tui/history.rs`): the commands of the panel's host, or of all of them
+  after Tab, newest first, filtered as quick search matches, each with its host's label or alias,
+  its directory, and its first line, and the whole command under the cursor below; Enter puts it on
+  the line, with the prompt reversed until the next key if it ran on another host, and Delete
+  removes it.
 - **Keymap.** Keys map to `Action`s per context (`panel`, `root`, `quick_search`, `command_line`,
   `menu`, `pull_down`, `dialog`, `dialog_input`, `viewer`). Each context falls back along a chain,
   for example the root and quick search to the panel; the first context that knows a key sequence

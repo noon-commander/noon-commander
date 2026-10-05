@@ -33,6 +33,8 @@ pub(crate) enum Context {
     Viewer,
     /// The command line of `!` and `:`. Keys it does not bind do nothing.
     CommandLine,
+    /// The window of the command history, which has a filter.
+    History,
 }
 
 impl Context {
@@ -55,6 +57,7 @@ impl Context {
             ],
             Self::Viewer => &[Self::Viewer],
             Self::CommandLine => &[Self::CommandLine],
+            Self::History => &[Self::History],
             // Menus are modal too.
             Self::Menu => &[Self::Menu],
             Self::Jump => &[Self::Jump],
@@ -85,6 +88,7 @@ impl Context {
                 | Self::Menu
                 | Self::Jump
                 | Self::Workspaces
+                | Self::History
                 | Self::PullDown
         )
     }
@@ -104,6 +108,7 @@ impl Context {
                 | Self::Menu
                 | Self::Jump
                 | Self::Workspaces
+                | Self::History
                 | Self::PullDown
         )
     }
@@ -218,6 +223,12 @@ pub(crate) enum Action {
     NewLine,
     /// Opens the command in the editor of `$VISUAL` or `$EDITOR`; what it leaves comes back.
     EditCommand,
+    /// The command before in the history of the panel's host.
+    OlderCommand,
+    /// The command after in the history of the panel's host.
+    NewerCommand,
+    /// Opens the window of the command history.
+    CommandHistory,
     /// Closes the connection to the host under the cursor, or stops connecting to it.
     Disconnect,
     /// Edits the settings of the host under the cursor.
@@ -306,6 +317,9 @@ impl Action {
         Self::Command,
         Self::NewLine,
         Self::EditCommand,
+        Self::OlderCommand,
+        Self::NewerCommand,
+        Self::CommandHistory,
         Self::Disconnect,
         Self::EditHost,
         Self::Backspace,

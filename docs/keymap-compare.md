@@ -91,9 +91,9 @@ yet.
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Command history (list) | planned | Alt+H<br>Ctrl+R | Alt+H<br>Ctrl+R | Alt+H | Alt+F8 |
-| Previous command (the panel's host) | planned | Up<br>Alt+P | Up<br>Alt+P | Alt+P | Ctrl+E |
-| Next command (the panel's host) | planned | Down<br>Alt+N | Down<br>Alt+N | Alt+N | Ctrl+X |
+| Command history (list) | | Alt+H<br>Ctrl+R (command line) | Alt+H<br>Ctrl+R (command line) | Alt+H | Alt+F8 |
+| Previous command (the panel's host) | | Up (first line)<br>Alt+P | Up (first line)<br>Alt+P | Alt+P | Ctrl+E |
+| Next command (the panel's host) | | Down (last line)<br>Alt+N | Down (last line)<br>Alt+N | Alt+N | Ctrl+X |
 | Directory history (list) | | — | — | Alt+Shift+h<br>Alt+H (uppercase) | Alt+F12 |
 | Previous directory in history | | — | — | Alt+Y | — |
 | Next directory in history | | — | — | Alt+U | — |
@@ -101,11 +101,11 @@ yet.
 | History menu: re-run command / open item | | — | — | — | Enter |
 | History menu: run in separate window | | — | — | — | Shift+Enter |
 | History menu: run as administrator | | — | — | — | Ctrl+Alt+Enter |
-| History menu: put into command line | planned | Enter | Enter | — | Ctrl+Enter |
+| History menu: put into command line | | Enter | Enter | — | Ctrl+Enter |
 | Folder history menu: go to on passive panel | | — | — | — | Ctrl+Shift+Enter |
 | History menu: clear history | | — | — | — | Del |
-| History menu: delete current item | planned | Delete | Delete | — | Shift+Del |
-| Command history menu: this host / all hosts | planned | Tab | Tab | — | — |
+| History menu: delete current item | | Delete | Delete | — | Shift+Del |
+| Command history menu: this host / all hosts | | Tab | Tab | — | — |
 | History menu: lock/unlock item | | — | — | — | Ins |
 | History menu: refresh (remove unavailable) | | — | — | — | Ctrl+R |
 | History menu: copy item to clipboard | | — | — | — | Ctrl+C<br>Ctrl+Ins |

@@ -94,6 +94,11 @@ impl Paths {
         self.data_dir.join("workspaces.toml")
     }
 
+    /// The commands of the command line: `history.toml` in [`state_dir`](Self::state_dir).
+    pub fn history_file(&self) -> PathBuf {
+        self.state_dir.join("history.toml")
+    }
+
     /// Creates [`runtime_dir`](Self::runtime_dir) with mode 0700 if it is missing, and checks
     /// that it is a private directory of the user: a real directory, not a symbolic link,
     /// owned by the user, and closed to group and others.
@@ -183,6 +188,10 @@ mod tests {
         assert_eq!(
             paths.workspaces_file().as_os_str(),
             "/home/u/.local/share/noc/workspaces.toml"
+        );
+        assert_eq!(
+            paths.history_file().as_os_str(),
+            "/home/u/.local/state/noc/history.toml"
         );
     }
 

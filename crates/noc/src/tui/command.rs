@@ -231,7 +231,6 @@ impl CommandLine {
             Action::CommandHistory => return CommandEvent::History,
             Action::OlderCommand => return CommandEvent::Older,
             Action::NewerCommand => return CommandEvent::Newer,
-            Action::Backspace if self.text.is_empty() => return CommandEvent::Close,
             Action::Backspace if self.cursor > 0 => self.remove(self.cursor - 1, self.cursor),
             Action::Delete if self.cursor < length => self.remove(self.cursor, self.cursor + 1),
             Action::DeleteToStart => self.remove(start, self.cursor),
@@ -512,10 +511,15 @@ mod tests {
     }
 
     #[test]
-    fn esc_or_backspace_on_an_empty_line_closes_it() {
+    fn only_esc_closes_the_line() {
         let mut line = shell("x");
         assert_eq!(press(&mut line, Action::Backspace), CommandEvent::None);
-        assert_eq!(press(&mut line, Action::Backspace), CommandEvent::Close);
+        assert_eq!(
+            press(&mut line, Action::Backspace),
+            CommandEvent::None,
+            "Backspace on an empty line keeps it open"
+        );
+        assert_eq!(line.text(), "");
         assert_eq!(press(&mut shell("x"), Action::Cancel), CommandEvent::Close);
     }
 

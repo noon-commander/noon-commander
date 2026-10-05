@@ -32,10 +32,11 @@ point.
   mode. `ui.type_to_search` is removed, with no compatibility for it; quick search starts with
   Ctrl-S or Alt-S.
 - **The line is hidden until opened**, in both presets, by the same keys: `!` opens it for a
-  shell command; `:` opens it for commands of Noon Commander, of which there is only `:!cmd`
-  for now, the same as `!`. `:` is kept for those commands, so that adding them later breaks
-  nothing. Esc, or Backspace on an empty line, closes it. mc and Far bind neither key in a
-  panel. The keymap is all that differs between the presets.
+  shell command; `:` opens it for commands of Noon Commander, of which there is only `:!cmd` for
+  now, the same as `!`. `:` is kept for those commands, so that adding them later breaks
+  nothing. Esc closes it; Backspace on an empty line does not, so that deleting too far keeps it
+  open. mc and Far bind neither key in a panel. The keymap is all that differs between the
+  presets.
 - **The line shows where the command runs**: a prompt with the host's label or alias (none
   for a local panel) and the panel's directory, shortened from the start as paths in panels
   are, then `$`. Lines after the first start with `>`. Text is shown terminal-safe through

@@ -6,7 +6,7 @@
 use std::fmt::Write as _;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::process::ExitStatus;
+use std::process::{ExitStatus, Stdio};
 use std::time::Duration;
 
 use noc_ssh::askpass::AskpassServer;
@@ -251,6 +251,65 @@ async fn multiplexes_sftp_channels_over_one_master() {
     );
     assert_eq!(fake.invocations().last().unwrap()[..2], ["-F", "/dev/null"]);
     assert!(fake.pids().into_iter().all(is_gone));
+}
+
+#[tokio::test]
+async fn runs_a_command_in_a_directory_over_the_master() {
+    let fake = Fake::new(&[]);
+    let dir = fake.root.path().join("it's here");
+    std::fs::create_dir(&dir).unwrap();
+    let session = fake.connect(&fake.settings).await.unwrap();
+    let mut command = session
+        .command_in(b"it's here", "pwd -P > out\necho done >> out")
+        .unwrap();
+    let status = command.stdin(Stdio::null()).status().await.unwrap();
+    assert!(status.success());
+    let out = std::fs::read_to_string(dir.join("out")).unwrap();
+    let real = dir.canonicalize().unwrap();
+    assert_eq!(out, format!("{}\ndone\n", real.display()));
+
+    let invocations = fake.invocations();
+    let control_path = value_after(&invocations[0], "-S").unwrap();
+    let ran = &invocations[1];
+    assert_eq!(value_after(ran, "-S"), Some(control_path));
+    for option in ["RequestTTY=yes", "RemoteCommand=none", "ControlMaster=no"] {
+        assert!(contains_pair(ran, "-o", option), "{option}");
+    }
+    // The log has a line for each line of the remote command.
+    let tail = [
+        "--",
+        "web",
+        "cd -- 'it'\\''s here' || exit",
+        "pwd -P > out",
+        "echo done >> out",
+    ];
+    assert!(ran.ends_with(&tail.map(String::from)), "{ran:?}");
+
+    // A failed cd runs nothing; the home directory needs none.
+    let mut missing = session.command_in(b"gone", "touch made").unwrap();
+    let status = missing.stdin(Stdio::null()).status().await.unwrap();
+    assert!(!status.success());
+    assert!(!fake.root.path().join("made").exists());
+    let mut home = session.command_in(b"", "touch made").unwrap();
+    assert!(home.status().await.unwrap().success());
+    assert!(fake.root.path().join("made").exists());
+    session.close().await;
+    assert!(matches!(
+        session_after_close(&fake).await.command_in(b"", "true"),
+        Err(SshError::Disconnected { .. })
+    ));
+}
+
+/// A session whose master has gone away.
+async fn session_after_close(fake: &Fake) -> Session {
+    let session = fake.connect(&fake.settings).await.unwrap();
+    for pid in fake.pids() {
+        let _ = kill_process(pid, Signal::TERM);
+    }
+    tokio::time::timeout(Duration::from_secs(10), session.closed())
+        .await
+        .unwrap();
+    session
 }
 
 #[tokio::test]

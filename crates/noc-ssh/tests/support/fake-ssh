@@ -9,7 +9,7 @@
 #   FAKE_SSH_FAIL         fail authentication with this message
 #   FAKE_SSH_HANG         never finish authentication
 #   FAKE_SSH_USER, FAKE_SSH_HOSTNAME, FAKE_SSH_PORT   values printed by `ssh -G`
-#   FAKE_SSH_ROOT         start directory of sftp-server (default: $HOME)
+#   FAKE_SSH_ROOT         start directory of sftp-server and of remote commands (default: $HOME)
 #   FAKE_SSH_SFTP_SERVER  sftp-server binary (default: /usr/libexec/sftp-server)
 #
 # Like a real master, `ssh -M` creates its control socket only after authentication; here it
@@ -32,12 +32,6 @@ if [ -n "${FAKE_SSH_PIDS:-}" ]; then
     echo $$ >>"$FAKE_SSH_PIDS"
 fi
 
-# Noon Commander must start ssh without a controlling terminal (ADR 0003).
-if (: </dev/tty) 2>/dev/null; then
-    echo "fake-ssh: started with a controlling terminal" >&2
-    exit 3
-fi
-
 mode=session sock='' control='' subsystem=no
 while [ $# -gt 0 ]; do
     case $1 in
@@ -58,6 +52,15 @@ while [ $# -gt 0 ]; do
     shift
 done
 dest=${1:-}
+
+# Noon Commander must start ssh without a controlling terminal (ADR 0003), except for a
+# command of the command line, which gets the terminal (ADR 0019).
+if [ $# -lt 2 ] || [ "$subsystem" = yes ] || [ "$mode" != session ] || [ -n "$control" ]; then
+    if (: </dev/tty) 2>/dev/null; then
+        echo "fake-ssh: started with a controlling terminal" >&2
+        exit 3
+    fi
+fi
 
 authenticate() {
     if [ -n "${FAKE_SSH_HANG:-}" ]; then
@@ -127,6 +130,21 @@ if [ "$subsystem" = yes ] && [ "${2:-}" = sftp ]; then
         authenticate
     fi
     exec "${FAKE_SSH_SFTP_SERVER:-/usr/libexec/sftp-server}" -d "${FAKE_SSH_ROOT:-$HOME}"
+fi
+
+if [ "$subsystem" = no ] && [ $# -ge 2 ]; then
+    if [ -n "$sock" ]; then
+        if [ ! -e "$sock" ]; then
+            echo "Control socket connect($sock): No such file or directory" >&2
+            exit 255
+        fi
+    else
+        authenticate
+    fi
+    # Like sshd: the command, its words joined by spaces, runs in the user's shell at home.
+    shift
+    cd "${FAKE_SSH_ROOT:-$HOME}"
+    exec /bin/sh -c "$*"
 fi
 
 echo "fake-ssh: unsupported invocation" >&2

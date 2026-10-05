@@ -4,7 +4,8 @@
 //! options → `--` → destination. ssh keeps the first value it sees for an option, so `-o`
 //! values in user arguments cannot override forced options.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
+use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
@@ -77,6 +78,11 @@ pub(crate) enum Role<'a> {
     MuxSftp { control_path: &'a Path },
     /// An SFTP channel with its own connection.
     DirectSftp,
+    /// A command of the command line, with the terminal, over the master if there is one.
+    Command {
+        control_path: Option<&'a Path>,
+        command: &'a OsStr,
+    },
 }
 
 pub(crate) fn arguments(settings: &SshSettings, target: &Target, role: Role<'_>) -> Vec<OsString> {
@@ -103,11 +109,19 @@ pub(crate) fn arguments(settings: &SshSettings, target: &Target, role: Role<'_>)
             argv.extend(["-T", "-s"].map(OsString::from));
         }
         Role::DirectSftp => argv.extend(["-T", "-s"].map(OsString::from)),
+        Role::Command { control_path, .. } => {
+            if let Some(control_path) = control_path {
+                argv.push("-S".into());
+                argv.push(control_path.into());
+            }
+        }
     }
     argv.push("--".into());
     argv.push((&target.destination).into());
-    if matches!(role, Role::MuxSftp { .. } | Role::DirectSftp) {
-        argv.push("sftp".into());
+    match role {
+        Role::MuxSftp { .. } | Role::DirectSftp => argv.push("sftp".into()),
+        Role::Command { command, .. } => argv.push(command.into()),
+        Role::Resolve | Role::Master { .. } => {}
     }
     argv
 }
@@ -127,6 +141,11 @@ fn forced_options(role: Role<'_>) -> Vec<(&'static str, &'static str)> {
         ],
         Role::DirectSftp => &[
             policy::SFTP_CHANNEL_OPTIONS,
+            policy::PROCESS_OPTIONS,
+            policy::session_options(),
+        ],
+        Role::Command { .. } => &[
+            policy::COMMAND_OPTIONS,
             policy::PROCESS_OPTIONS,
             policy::session_options(),
         ],
@@ -157,7 +176,7 @@ pub(crate) fn session_command(
         Role::Resolve => {
             command.stdout(Stdio::piped());
         }
-        Role::Master { .. } => {}
+        Role::Master { .. } | Role::Command { .. } => {}
         Role::MuxSftp { .. } | Role::DirectSftp => {
             command.stdin(Stdio::piped()).stdout(Stdio::piped());
         }
@@ -166,6 +185,49 @@ pub(crate) fn session_command(
         askpass.apply(&mut command);
     }
     command
+}
+
+/// `ssh` running a command of the command line: unlike every other ssh child it keeps this
+/// process's terminal, which the caller hands over, since the command needs it; ssh asks there
+/// too, if it has to (ADR 0019).
+pub(crate) fn command_command(
+    settings: &SshSettings,
+    target: &Target,
+    control_path: Option<&Path>,
+    remote: &OsStr,
+) -> Command {
+    let mut command = Command::new(&settings.program);
+    let role = Role::Command {
+        control_path,
+        command: remote,
+    };
+    command
+        .args(arguments(settings, target, role))
+        .kill_on_drop(true);
+    if let Some(dir) = &settings.work_dir {
+        command.current_dir(dir);
+    }
+    command
+}
+
+/// What the host's shell runs for `command` in `dir`: a `cd` to the directory quoted for a
+/// POSIX shell, unless it is empty, the home directory where ssh starts; then the command as
+/// typed, on lines of its own, so that a failed `cd` runs none of it.
+pub(crate) fn remote_command(dir: &[u8], command: &str) -> OsString {
+    let mut text = Vec::new();
+    if !dir.is_empty() {
+        text.extend_from_slice(b"cd -- '");
+        for &byte in dir {
+            if byte == b'\'' {
+                text.extend_from_slice(b"'\\''");
+            } else {
+                text.push(byte);
+            }
+        }
+        text.extend_from_slice(b"' || exit\n");
+    }
+    text.extend_from_slice(command.as_bytes());
+    OsStr::from_bytes(&text).to_owned()
 }
 
 /// `ssh -V`.
@@ -329,6 +391,48 @@ mod tests {
             assert!(forced.iter().any(|forced| forced == key), "{key} missing");
         }
         assert!(argv.ends_with(&tail(&["-T", "-s", "--", "web", "sftp"])));
+    }
+
+    #[test]
+    fn a_command_keeps_its_text_after_the_destination() {
+        let path = Path::new("/run/1/abcd");
+        let remote = OsStr::new("ls -l");
+        let argv = strings(&arguments(
+            &settings(),
+            &target(),
+            Role::Command {
+                control_path: Some(path),
+                command: remote,
+            },
+        ));
+        let mut expected = options(policy::COMMAND_OPTIONS);
+        expected.extend(options(policy::PROCESS_OPTIONS));
+        expected.extend(options(policy::session_options()));
+        expected.extend(tail(&["-S", "/run/1/abcd", "--", "web", "ls -l"]));
+        assert_eq!(argv, expected);
+        let direct = strings(&arguments(
+            &settings(),
+            &target(),
+            Role::Command {
+                control_path: None,
+                command: remote,
+            },
+        ));
+        assert!(direct.ends_with(&tail(&["--", "web", "ls -l"])));
+        assert!(!direct.iter().any(|arg| arg == "-S"));
+    }
+
+    #[test]
+    fn the_remote_command_changes_to_the_quoted_directory_first() {
+        assert_eq!(
+            remote_command(b"/srv/it's here", "make\nls"),
+            OsStr::new("cd -- '/srv/it'\\''s here' || exit\nmake\nls")
+        );
+        assert_eq!(remote_command(b"", "uptime"), OsStr::new("uptime"));
+        assert_eq!(
+            remote_command(b"caf\xe9", "ls").as_bytes(),
+            b"cd -- 'caf\xe9' || exit\nls"
+        );
     }
 
     #[test]

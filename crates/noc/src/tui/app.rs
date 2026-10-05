@@ -24,7 +24,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::cd;
 use super::cells::{self, Align};
-use super::command::{self, CommandEvent, CommandLine, Run};
+use super::command::{self, CommandEvent, CommandLine, Place, Run};
 use super::complete::{self, Candidate, Choices, ChoicesEvent, Kind, Offer, Outcome};
 use super::configuration::{ConfigEvent, Configuration};
 use super::decor::Decor;
@@ -2600,9 +2600,16 @@ impl App {
         }]
     }
 
-    /// Opens the command line, in a local panel; remote ones come later.
+    /// Opens the command line, in a panel on a local directory or on one of a connected host.
     fn open_command_line(&mut self, kind: command::Kind) {
-        if matches!(self.panel(self.active).location(), Location::Local(_)) {
+        let opens = match self.panel(self.active).location() {
+            Location::Local(_) => true,
+            Location::Remote { host, .. } => {
+                matches!(self.hosts.get(host), Some(Host::Connected { .. }))
+            }
+            Location::Root | Location::Sftp => false,
+        };
+        if opens {
             self.command_line = Some(CommandLine::new(kind));
         }
     }
@@ -2627,13 +2634,21 @@ impl App {
             CommandEvent::Run(command) => {
                 self.command_line = None;
                 let dir = self.panel(self.active).location().clone();
-                let Location::Local(path) = &dir else {
-                    return Vec::new();
+                let place = match &dir {
+                    Location::Local(path) => Place::Local(path.clone()),
+                    Location::Remote { host, path } => {
+                        let Some(Host::Connected { handle, .. }) = self.hosts.get(host) else {
+                            self.show_error(&fl!("error-connection-closed"));
+                            return Vec::new();
+                        };
+                        Place::Remote {
+                            handle: handle.clone(),
+                            dir: path.clone(),
+                        }
+                    }
+                    Location::Root | Location::Sftp => return Vec::new(),
                 };
-                self.run_now = Some(Run {
-                    dir: path.clone(),
-                    command,
-                });
+                self.run_now = Some(Run { place, command });
                 self.note(&dir)
             }
         }
@@ -2656,8 +2671,9 @@ impl App {
     }
 
     /// What starts the command line: `:` for commands of Noon Commander; for a shell command,
-    /// the panel's directory, with `~` for the home directory and its middle cut if it would
-    /// take more than a third of `width`, and `$`.
+    /// the panel's directory, with `~` for the home directory, or `host:path` with the host's
+    /// label if it has one, its middle cut if it would take more than a third of `width`, and
+    /// `$`.
     fn command_prompt(&self, width: u16) -> String {
         let Some(line) = &self.command_line else {
             return String::new();
@@ -2671,6 +2687,17 @@ impl App {
                 Ok(rest) => format!("~/{}", cells::sanitize(rest.as_os_str().as_bytes())),
                 Err(_) => cells::sanitize(path.as_os_str().as_bytes()),
             },
+            Location::Remote { host, path } => {
+                let label = self
+                    .host_settings
+                    .get(host)
+                    .and_then(HostConfig::label)
+                    .unwrap_or(host);
+                location_text(&Location::Remote {
+                    host: label.to_owned(),
+                    path: path.clone(),
+                })
+            }
             other => location_text(other),
         };
         let room = usize::from(width / 3).max(1);
@@ -6601,6 +6628,41 @@ mod tests {
     }
 
     #[test]
+    fn bang_runs_a_command_on_the_host_of_the_panel() {
+        let mut app = at_root();
+        let site = SftpHost {
+            label: Some("Site".to_owned()),
+            ..SftpHost::default()
+        };
+        with_host(&mut app, "web", site);
+        let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
+            panic!("expected a connection");
+        };
+        connect_web(&mut app, Side::Left, connection, "/var/www");
+        app.handle(action(Action::Shell));
+        type_text(&mut app, "ls");
+        let text = screen_of(&mut app, 10);
+        assert!(text.contains("Site:/var/www $ ls"), "{text}");
+        app.handle(action(Action::Confirm));
+        let Some(Run {
+            place: Place::Remote { dir, .. },
+            command,
+        }) = app.take_run()
+        else {
+            panic!("expected a remote command");
+        };
+        assert_eq!((dir.as_bytes(), command.as_str()), (&b"/var/www"[..], "ls"));
+        let effects = app.ran(Ok(()));
+        assert!(
+            effects.iter().any(|effect| matches!(
+                effect,
+                Effect::List { request, host: Some(_), .. } if request.location == remote("web", "/var/www")
+            )),
+            "{effects:?}"
+        );
+    }
+
+    #[test]
     fn remember_dir_resumes_the_last_directory_of_the_session() {
         for remember_dir in [true, false] {
             let mut app = at_root();
@@ -8643,14 +8705,18 @@ mod tests {
         );
         assert!(without_zoxide(app.handle(action(Action::Confirm))).is_empty());
         assert_eq!(app.context(), Context::Panel);
+        let Some(Run {
+            place: Place::Local(dir),
+            command,
+        }) = app.take_run()
+        else {
+            panic!("expected a local command");
+        };
         assert_eq!(
-            app.take_run(),
-            Some(Run {
-                dir: PathBuf::from("/srv"),
-                command: "make\nls".to_owned()
-            })
+            (dir.as_path(), command.as_str()),
+            (Path::new("/srv"), "make\nls")
         );
-        assert_eq!(app.take_run(), None);
+        assert!(app.take_run().is_none());
         let effects = app.ran(Ok(()));
         assert_eq!(effects.len(), 2, "both panels read /srv again");
         app.ran(Err("cannot run /bin/nosh".to_owned()));

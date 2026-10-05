@@ -57,13 +57,16 @@ socket ([ADR 0002](adr/0002-controlmaster-per-host.md)):
 ssh <master options> -M -N -S <sock> -o ControlPersist=no -- <alias>  # authenticates once
 ssh <channel options> -S <sock> -T -s -- <alias> sftp                 # panel channel
 ssh <channel options> -S <sock> -T -s -- <alias> sftp                 # transfer channels
+ssh <command options> -S <sock> -- <alias> 'cd -- <dir> || exit⏎<cmd>' # command line
 ssh -S <sock> -t -- <alias> 'cd <dir> && exec $SHELL -l'              # console (backlog)
 ssh -F /dev/null -S <sock> -O exit -- noc                             # disconnect
 ```
 
 The SFTP protocol client is `openssh-sftp-client`, whose `Sftp::new` works over the pipes of any
 child process. Every ssh child runs in its own session (`setsid`), without a controlling
-terminal, so it can neither read from nor draw on the TUI's terminal. ssh runs in the home
+terminal, so it can neither read from nor draw on the TUI's terminal; the one exception is a
+command of the [command line](#command-line-of--and-), which gets the terminal with the panels
+hidden. ssh runs in the home
 directory (`SshSettings::work_dir`), not in the working directory of the process, which
 follows the active panel: a long-lived master or channel would hold that directory, and its
 volume could not be unmounted.
@@ -868,19 +871,21 @@ location = "root"
   the panel stays where it was and says why below the listing. Going up puts the cursor on the
   directory just left. A panel shows a `Location`, so the [virtual root](#virtual-root) and the list
   of hosts are kinds of listing too.
-- <a id="command-line-of--and-"></a>**Command line of `!` and `:`**
-  ([ADR 0019](adr/0019-shell-command-line.md)). In a local panel, `!` opens a line above the
-  F-key bar for a shell command, after a prompt with the panel's directory (`~` for home, its
-  middle cut past a third of the width); `:` opens it for commands of Noon Commander, of which
-  `!command` is the only one so far. Every character is text there. Ctrl-J, or Enter after an
-  odd number of `\` at the end of a line, starts a new line, marked `>`; long lines wrap, and the
-  line grows up to a third of the screen and ten rows, then scrolls to the cursor. Up and Down
-  move between lines, Home and End (Ctrl-A, Ctrl-E) go to the ends of the line. Enter hands the
-  command to the event loop, which suspends the TUI as for F4 and runs it with `noc-tools`'
-  `Shell`: `$SHELL -c <command>` (`/bin/sh` without `$SHELL`) in the panel's directory, the
-  command in one argument as typed. Afterwards it says how a failed command ended, waits for a
-  key in raw mode, and takes the terminal back; both panels read their directories again, as
-  in mc. Esc, or Backspace on an empty line, closes the line.
+- <a id="command-line-of--and-"></a>**Command line of `!` and `:`** ([ADR
+  0019](adr/0019-shell-command-line.md)). In a local panel, `!` opens a line above the F-key bar for
+  a shell command, after a prompt with the panel's directory (`~` for home, its middle cut past a
+  third of the width); `:` opens it for commands of Noon Commander, of which `!command` is the only
+  one so far. In a panel on a connected host the prompt starts with the host's label or alias. Every
+  character is text there. Ctrl-J, or Enter after an odd number of `\` at the end of a line, starts
+  a new line, marked `>`; long lines wrap, and the line grows up to a third of the screen and ten
+  rows, then scrolls to the cursor. Up and Down move between lines, Home and End (Ctrl-A, Ctrl-E) go
+  to the ends of the line. Enter hands the command to the event loop, which suspends the TUI as for
+  F4 and runs it with `noc-tools`' `Shell`: `$SHELL -c <command>` (`/bin/sh` without `$SHELL`) in
+  the panel's directory, the command in one argument as typed. On a host, the host's task builds the
+  ssh command from its session (`Session::command_in`) and the event loop runs it with the terminal:
+  over the master, with `cd -- '<dir>' || exit` before the command. Afterwards it says how a failed
+  command ended, waits for a key in raw mode, and takes the terminal back; both panels read their
+  directories again, as in mc. Esc, or Backspace on an empty line, closes the line.
 - **Keymap.** Keys map to `Action`s per context (`panel`, `root`, `quick_search`, `command_line`,
   `menu`, `pull_down`, `dialog`, `dialog_input`, `viewer`). Each context falls back along a chain,
   for example the root and quick search to the panel; the first context that knows a key sequence

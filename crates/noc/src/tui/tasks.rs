@@ -184,6 +184,13 @@ pub(crate) enum HostRequest {
     /// Shares the host's SFTP session, for a job that runs elsewhere, such as a copy between
     /// two hosts.
     Share(oneshot::Sender<Arc<SftpFs>>),
+    /// The ssh command that runs `command` in `dir` on the host, for the event loop to start
+    /// with the terminal handed over, or why there is none.
+    Command {
+        dir: RemotePath,
+        command: String,
+        reply: oneshot::Sender<Result<tokio::process::Command, String>>,
+    },
 }
 
 /// Passes requests to the task of a connected host.
@@ -1127,6 +1134,24 @@ async fn rename(
     }
 }
 
+/// The ssh command that runs `command` in `dir` on the host of `handle`, over its connection,
+/// or why there is none.
+pub(crate) async fn remote_command(
+    handle: &HostHandle,
+    dir: RemotePath,
+    command: String,
+) -> Result<tokio::process::Command, String> {
+    let (reply, answer) = oneshot::channel();
+    let request = HostRequest::Command {
+        dir,
+        command,
+        reply,
+    };
+    let closed = || fl!("error-connection-closed");
+    handle.0.send(request).map_err(|_| closed())?;
+    answer.await.map_err(|_| closed())?
+}
+
 /// The start of the file at `location`, up to [`noc_viewer::LIMIT`], and whether there is
 /// more.
 async fn read(location: Location, host: Option<HostHandle>) -> Result<(Vec<u8>, bool), String> {
@@ -1441,6 +1466,13 @@ impl HostTask {
                     }
                     HostRequest::Share(reply) => {
                         let _ = reply.send(Arc::clone(&fs));
+                    }
+                    HostRequest::Command { dir, command, reply } => {
+                        let built = session.command_in(dir.as_bytes(), &command).map_err(|error| {
+                            describe::ssh_error(&error)
+                                .unwrap_or_else(|| fl!("error-connection-closed"))
+                        });
+                        let _ = reply.send(built);
                     }
                 },
                 Some(done) = running.next() => {

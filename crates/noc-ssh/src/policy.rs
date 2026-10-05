@@ -40,6 +40,17 @@ pub const MASTER_OPTIONS: &[(&str, &str)] = &[
     ("RequestTTY", "no"),
 ];
 
+/// Options forced on a command of the command line, which runs on the host with the terminal
+/// (ADR 0019): the user's command, not a `RemoteCommand` from the config; a terminal for it;
+/// no `LocalCommand`; and never a master of its own. [`PROCESS_OPTIONS`] and
+/// [`session_options`] apply too.
+pub const COMMAND_OPTIONS: &[(&str, &str)] = &[
+    ("PermitLocalCommand", "no"),
+    ("RemoteCommand", "none"),
+    ("RequestTTY", "yes"),
+    ("ControlMaster", "no"),
+];
+
 /// Options forced on the master connection and the console when forwarding is compiled out.
 pub const NO_FORWARDING_OPTIONS: &[(&str, &str)] = &[
     ("ClearAllForwardings", "yes"),
@@ -49,7 +60,8 @@ pub const NO_FORWARDING_OPTIONS: &[(&str, &str)] = &[
     ("GSSAPIDelegateCredentials", "no"),
 ];
 
-/// Forwarding-related options this build forces on the master connection and the console.
+/// Forwarding-related options this build forces on the master connection, the console, and
+/// commands of the command line.
 pub const fn session_options() -> &'static [(&'static str, &'static str)] {
     if FORWARDING_ENABLED {
         &[]

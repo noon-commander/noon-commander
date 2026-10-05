@@ -148,8 +148,9 @@ a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on th
   every host at startup.
 - Minimum OpenSSH is 8.7: `SSH_ASKPASS_REQUIRE` (8.4) and the `StdinNull` and
   `ForkAfterAuthentication` keywords (8.7), which Noon Commander forces off.
-- Every ssh child runs in its own session (`setsid`), without a controlling terminal; prompts go
-  through the askpass bridge. `ssh -O` commands use `-F /dev/null`.
+- Every ssh child runs in its own session (`setsid`), without a controlling terminal, except the
+  command line's, which gets the terminal (ADR 0019); prompts go through the askpass bridge.
+  `ssh -O` commands use `-F /dev/null`.
 
 ## Testing
 
@@ -159,9 +160,10 @@ a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on th
   the snapshot files left behind.
 - SFTP backends run against the local `sftp-server` (`/usr/libexec/sftp-server` on macOS) over
   pipes, with no network.
-- ssh orchestration tests set `ssh.program` to `crates/noc-ssh/tests/support/fake-ssh`, a
-  POSIX shell script that emulates `-V`, `-G`, `-M`, `-O`, and `-s … sftp` (served by the local
-  `sftp-server`) and logs its command lines. Keep it in sync with the flags we pass.
+- ssh orchestration tests set `ssh.program` to `crates/noc-ssh/tests/support/fake-ssh`, a POSIX
+  shell script that emulates `-V`, `-G`, `-M`, `-O`, `-s … sftp` (served by the local
+  `sftp-server`), and remote commands, and logs its command lines. Keep it in sync with the flags we
+  pass.
 - zoxide tests use `crates/noc-tools/tests/support/fake-zoxide` the same way; tests never touch
   the real zoxide database.
 - Shell scripts are POSIX `sh` and pass ShellCheck; `just sh` finds them by their shebang.

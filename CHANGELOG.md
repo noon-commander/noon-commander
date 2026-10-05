@@ -9,11 +9,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- A command line for shell commands: `!` opens it in a local panel, and so does `:`, for
-  commands of Noon Commander, of which `:!command` is the only one so far. The prompt shows the
-  panel's directory. Ctrl-J, or a `\` at the end of the line, starts a new line, and the line
-  grows up to a third of the screen; Enter runs the command in `$SHELL` (or `/bin/sh`) in the
-  panel's directory with the panels hidden, says how it failed, and a key brings the panels
+- A command line for shell commands: `!` opens it in a panel, and so does `:`, for commands of Noon
+  Commander, of which `:!command` is the only one so far. The prompt shows the panel's directory,
+  with the host's label or alias on a host, where the command runs over the host's connection with a
+  terminal of its own. Ctrl-J, or a `\` at the end of the line, starts a new line, and the line
+  grows up to a third of the screen; Enter runs the command in the panel's directory, locally in
+  `$SHELL` (or `/bin/sh`), with the panels hidden, says how it failed, and a key brings the panels
   back, which read their directories again. Esc, or Backspace on an empty line, closes it.
 - The mouse: a click in a panel moves the cursor there, a double click opens, a right click
   marks the row as in mc and Far, and the wheel scrolls the panel or the viewer under it. The

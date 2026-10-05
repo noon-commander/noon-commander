@@ -57,17 +57,22 @@ point.
   F4 does, in a temporary file. What the editor leaves goes back into the line and does not
   run.
 - **Running suspends the TUI** as F4 does: the terminal goes back to the shell, the command
-  runs with it, and a key returns to the panels, as mc does without a subshell. The panel then
-  reads its directory again.
+  runs with it, and a key returns to the panels, as mc does without a subshell. Both panels
+  then read their directories again.
   - Local panel: `$SHELL -c <command>` (`/bin/sh` without `$SHELL`), started from `noc-tools`
     in the panel's directory, not through a second shell. The command is the one argument of
     `-c`; nothing of Noon Commander's is put into its text.
-  - Panel on a host: `ssh -t` over the host's master connection, built in `noc-ssh` in the
-    usual order (program → forced options → `ssh.args` → role options → `--` → destination),
-    with `cd -- <directory> && <command>` as the remote command and the directory quoted for
-    a POSIX shell. Unlike every other ssh child, it keeps the terminal, since the command
-    needs it; with the master in place it asks nothing. With `ssh.multiplex = false` it
-    authenticates on its own, and ssh asks in the terminal.
+  - Panel on a host: ssh over the host's master connection (`-S`), built in `noc-ssh` in the
+    usual order (program → forced options → `ssh.args` → role options → `--` → destination
+    → remote command). The remote command is `cd -- '<directory>' || exit`, the directory
+    quoted for a POSIX shell, then the command on lines of its own, so that a failed `cd`
+    runs none of it; the home directory needs no `cd`. The forced options are
+    `policy::COMMAND_OPTIONS` (`RequestTTY=yes`, `RemoteCommand=none`, `ControlMaster=no`,
+    `PermitLocalCommand=no`), `PROCESS_OPTIONS`, and `session_options()`. Unlike every other
+    ssh child, it keeps the terminal and runs in no session of its own, since the command
+    needs the terminal; with the master in place it asks nothing. With
+    `ssh.multiplex = false` it authenticates on its own, and ssh asks in the terminal. The
+    host's task builds the command from its session, and the event loop starts it.
   - This is the one exception to ADR 0012's rule against starting programs through a shell.
 - **History is one list, and each entry belongs to a host.** It is kept in a file in the
   state directory (`~/.local/state/noc/`). An entry holds the whole command, its lines

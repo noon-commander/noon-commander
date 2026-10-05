@@ -3,6 +3,8 @@
 
 use std::path::PathBuf;
 
+use noc_vfs::RemotePath;
+
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::Style;
@@ -12,6 +14,7 @@ use unicode_width::UnicodeWidthChar as _;
 
 use super::cells;
 use super::keymap::{Action, Resolved};
+use super::tasks::HostHandle;
 
 /// Rows the command line takes at most, however tall the screen.
 const MAX_ROWS: u16 = 10;
@@ -42,10 +45,17 @@ pub(crate) enum CommandEvent {
 }
 
 /// A shell command for the event loop to run, and where.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub(crate) struct Run {
-    pub(crate) dir: PathBuf,
+    pub(crate) place: Place,
     pub(crate) command: String,
+}
+
+/// Where a command runs: in a local directory, or in a directory on a connected host.
+#[derive(Debug)]
+pub(crate) enum Place {
+    Local(PathBuf),
+    Remote { handle: HostHandle, dir: RemotePath },
 }
 
 /// The text of the command line and its cursor.

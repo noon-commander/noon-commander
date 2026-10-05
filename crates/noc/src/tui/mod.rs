@@ -317,7 +317,7 @@ async fn hand_over(
         }
         Handover::Run(run) => {
             let result = match suspended {
-                Ok(()) => run_command(&run).await,
+                Ok(()) => run_command(run).await,
                 Err(error) => Err(error),
             };
             let mut events = EventStream::new();
@@ -331,22 +331,35 @@ async fn hand_over(
     (events, resume(terminal).map(|()| effects))
 }
 
-/// Runs the shell command of `run`, with the terminal handed over; then says how it ended if
-/// it failed, asks for a key, and puts the terminal in raw mode to read it. Fails if the shell
-/// could not run.
-async fn run_command(run: &command::Run) -> Result<(), String> {
+/// Runs the shell command of `run`, with the terminal handed over: locally in `$SHELL`, or on
+/// its host through ssh over the host's connection. Then says how it ended if it failed, asks
+/// for a key, and puts the terminal in raw mode to read it. Fails if it could not start.
+async fn run_command(run: command::Run) -> Result<(), String> {
     use std::io::Write as _;
     use std::os::unix::process::ExitStatusExt as _;
 
-    let shell = Shell::from_env();
-    let status = shell.run(&run.dir, &run.command).await.map_err(|error| {
-        let reason = match &error {
-            ToolError::Spawn { source, .. } => source.to_string(),
-            other => describe::chain(other),
-        };
-        let program = shell.program().display().to_string();
-        fl!("command-error", program = program, reason = reason)
-    })?;
+    let command::Run { place, command } = run;
+    let status = match place {
+        command::Place::Local(dir) => {
+            let shell = Shell::from_env();
+            shell.run(&dir, &command).await.map_err(|error| {
+                let reason = match &error {
+                    ToolError::Spawn { source, .. } => source.to_string(),
+                    other => describe::chain(other),
+                };
+                let program = shell.program().display().to_string();
+                fl!("command-error", program = program, reason = reason)
+            })?
+        }
+        command::Place::Remote { handle, dir } => {
+            let mut ssh = tasks::remote_command(&handle, dir, command).await?;
+            let program = ssh.as_std().get_program().to_string_lossy().into_owned();
+            ssh.status().await.map_err(|error| {
+                let reason = error.to_string();
+                fl!("command-error", program = program, reason = reason)
+            })?
+        }
+    };
     let mut out = io::stdout();
     let ending = if let Some(code) = status.code().filter(|&code| code != 0) {
         Some(fl!("command-exit-code", code = code))

@@ -8,12 +8,14 @@ use std::time::Duration;
 
 use rustix::process::{Pid, Signal, kill_process, kill_process_group};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout};
+use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::askpass::AskpassEnv;
-use crate::command::{Role, SshSettings, Target, control_command, session_command};
+use crate::command::{
+    Role, SshSettings, Target, command_command, control_command, remote_command, session_command,
+};
 use crate::error::SshError;
 use crate::runtime::{self, CONTROL_PREFIX, MAX_CONTROL_PATH_LEN};
 
@@ -211,6 +213,28 @@ impl Session {
             stdout,
             process: ChannelProcess { child, stderr },
         })
+    }
+
+    /// An ssh command that runs `command`, as typed, on the host in `dir` (the home directory
+    /// if empty), over the master if there is one. The caller starts it with the terminal
+    /// handed over, since the command gets a terminal of its own there (ADR 0019).
+    pub fn command_in(&self, dir: &[u8], command: &str) -> Result<Command, SshError> {
+        let control_path = match &self.master {
+            Some(master) if master.exited.is_cancelled() => {
+                return Err(SshError::Disconnected {
+                    stderr: master.stderr.text(),
+                });
+            }
+            Some(master) => Some(master.control_path.as_path()),
+            None => None,
+        };
+        let remote = remote_command(dir, command);
+        Ok(command_command(
+            &self.settings,
+            &self.target,
+            control_path,
+            &remote,
+        ))
     }
 
     /// Shuts the master connection down gracefully (`ssh -O exit`), killing it if needed.

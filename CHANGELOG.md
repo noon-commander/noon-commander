@@ -67,6 +67,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `ui.type_to_search` and its row in Options → Configuration are gone; remove the key from
   `config.toml`. `!` and `:` will open a command line for shell commands.
 - Release builds use full link-time optimization, which makes the `noc` binary about 6% smaller.
+- The title of a panel, and the list of tabs (Ctrl-X Tab), show the home directory as `~`: `~/src`
+  rather than `/Users/me/src`.
 
 ## [0.1.0] - 2026-10-03
 

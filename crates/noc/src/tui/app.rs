@@ -37,7 +37,8 @@ use super::keymap::{Action, Context, Keymap, Resolved};
 use super::menu::{LocationMenu, MenuEvent};
 use super::mouse::{Pointer, Press};
 use super::panel::{
-    Destination, HostState, HostStatus, ListRequest, Listed, Panel, View, child, location_text,
+    Destination, HostState, HostStatus, ListRequest, Listed, Panel, View, child, home_text,
+    location_text,
 };
 use super::pattern::Pattern;
 use super::progress::{Counts, JobButton, JobView};
@@ -1462,7 +1463,7 @@ impl App {
             .iter()
             .enumerate()
             .map(|(index, tab)| {
-                let title = tabs::title(tab.panel.location(), &self.root_title);
+                let title = tabs::title(tab.panel.location(), &self.root_title, &self.home);
                 format!("{} {title}", index + 1)
             })
             .collect();
@@ -2963,11 +2964,7 @@ impl App {
     /// the host's label if it has one.
     fn active_place(&self) -> String {
         match self.panel(self.active).location() {
-            Location::Local(path) => match path.strip_prefix(&self.home) {
-                Ok(rest) if rest.as_os_str().is_empty() => "~".to_owned(),
-                Ok(rest) => format!("~/{}", cells::sanitize(rest.as_os_str().as_bytes())),
-                Err(_) => cells::sanitize(path.as_os_str().as_bytes()),
-            },
+            Location::Local(path) => home_text(path, &self.home),
             Location::Remote { host, path } => {
                 let label = self
                     .host_settings

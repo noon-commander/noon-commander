@@ -12,7 +12,7 @@ use ratatui::widgets::BorderType;
 
 use super::app::Side;
 use super::cells::{self, Align};
-use super::panel::{ListRequest, Panel, location_text};
+use super::panel::{ListRequest, Panel, home_text, location_text};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -161,7 +161,7 @@ impl Tabs {
             .map(|(index, tab)| {
                 let location = tab.panel.location();
                 if full && index == self.active {
-                    title(location, root_title)
+                    title(location, root_title, home)
                 } else {
                     short_name(location, root_title, home)
                 }
@@ -170,10 +170,11 @@ impl Tabs {
     }
 }
 
-/// Where a panel is, as its title shows it.
-pub(crate) fn title(location: &Location, root_title: &str) -> String {
+/// Where a panel is, as its title shows it, with `~` for the home directory `home`.
+pub(crate) fn title(location: &Location, root_title: &str, home: &Path) -> String {
     match location {
         Location::Root => cells::sanitize(root_title.as_bytes()),
+        Location::Local(path) => home_text(path, home),
         _ => location_text(location),
     }
 }

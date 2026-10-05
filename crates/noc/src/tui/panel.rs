@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use jiff::tz::TimeZone;
@@ -1015,8 +1015,9 @@ impl Panel {
     ) {
         let hosts = view.hosts;
         let theme = view.theme;
-        let mut title = match self.location {
+        let mut title = match &self.location {
             Location::Root => cells::sanitize(view.root_title.as_bytes()),
+            Location::Local(path) => home_text(path, &self.home),
             _ => location_text(&self.location),
         };
         let room = usize::from(area.width.saturating_sub(4));
@@ -1755,6 +1756,17 @@ pub(crate) fn location_text(location: &Location) -> String {
             }
             cells::sanitize(&text)
         }
+    }
+}
+
+/// A local directory as titles show it: with `~` for the home directory `home`.
+pub(crate) fn home_text(path: &Path, home: &Path) -> String {
+    match path.strip_prefix(home) {
+        // A home directory of `/` would put `~` before every path.
+        _ if home.parent().is_none() => cells::sanitize(path.as_os_str().as_bytes()),
+        Ok(rest) if rest.as_os_str().is_empty() => "~".to_owned(),
+        Ok(rest) => format!("~/{}", cells::sanitize(rest.as_os_str().as_bytes())),
+        Err(_) => cells::sanitize(path.as_os_str().as_bytes()),
     }
 }
 
@@ -2617,6 +2629,17 @@ mod tests {
         let request = panel.handle(Action::Enter).unwrap();
         answer(&mut panel, &request, Listing::Dir(listing()));
         assert!(panel.marked.is_empty(), "another directory starts unmarked");
+    }
+
+    #[test]
+    fn titles_put_a_tilde_for_the_home_directory() {
+        let home = Path::new(HOME);
+        let text = |path: &str| home_text(Path::new(path), home);
+        assert_eq!(text(HOME), "~");
+        assert_eq!(text("/home/me/src"), "~/src");
+        assert_eq!(text("/home/meow"), "/home/meow", "not inside home");
+        assert_eq!(text("/srv"), "/srv");
+        assert_eq!(home_text(Path::new("/srv"), Path::new("/")), "/srv");
     }
 
     #[test]

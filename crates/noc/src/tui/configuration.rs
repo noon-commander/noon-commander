@@ -1062,7 +1062,7 @@ fn zoxide(config: &Config, home: &Path) -> Category {
 /// Command line, `[shell]`.
 fn shell(config: &Config) -> Category {
     Category {
-        icon: "",
+        icon: "󰆍",
         title: fl!("config-shell"),
         settings: vec![
             Setting::new(
@@ -1246,6 +1246,18 @@ mod tests {
         assert_eq!(new.ui.theme, "terminal", "the next choice");
         let (_, new) = press_on(&mut dialog, "< terminal >", 0).change.unwrap();
         assert_eq!(new.ui.theme, "mc-classic", "the one before at `<`");
+    }
+
+    #[test]
+    fn every_category_has_an_icon() {
+        for category in &dialog().categories {
+            assert_eq!(
+                category.icon.chars().count(),
+                1,
+                "{} has no single Nerd Font glyph",
+                category.title
+            );
+        }
     }
 
     #[test]

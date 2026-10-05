@@ -42,6 +42,8 @@ pub(crate) enum CommandEvent {
     Run(String),
     /// Says that Noon Commander has no such command; the line stays.
     Unknown(String),
+    /// Opens the command in the editor.
+    Edit,
 }
 
 /// A shell command for the event loop to run, and where.
@@ -89,6 +91,26 @@ impl CommandLine {
 
     pub(crate) fn kind(&self) -> Kind {
         self.kind
+    }
+
+    /// The command as typed.
+    pub(crate) fn text(&self) -> &str {
+        &self.text
+    }
+
+    /// Replaces the command with `text`, such as what the editor left, without the line breaks
+    /// at its end, and puts the cursor after it.
+    pub(crate) fn set_text(&mut self, text: &str) {
+        self.text = clean(text.trim_end_matches(['\n', '\r']));
+        self.cursor = self.text.chars().count();
+    }
+
+    /// Puts pasted `text` at the cursor as it is, line breaks included; nothing runs.
+    pub(crate) fn paste(&mut self, text: &str) {
+        let text = clean(text);
+        let offset = self.offset(self.cursor);
+        self.text.insert_str(offset, &text);
+        self.cursor += text.chars().count();
     }
 
     fn chars(&self) -> Vec<char> {
@@ -157,6 +179,7 @@ impl CommandLine {
                 self.remove(cursor, end);
             }
             Action::NewLine => self.insert('\n'),
+            Action::EditCommand => return CommandEvent::Edit,
             Action::Confirm => return self.confirm(end),
             Action::Cancel => return CommandEvent::Close,
             _ => {}
@@ -309,8 +332,22 @@ impl CommandLine {
     }
 }
 
-/// `c` as the line shows it: a control character, which could move the cursor, as `?`.
+/// `text` with its line breaks as `\n`, and without control characters other than line breaks
+/// and tabs.
+fn clean(text: &str) -> String {
+    text.replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .chars()
+        .filter(|&c| !c.is_control() || c == '\n' || c == '\t')
+        .collect()
+}
+
+/// `c` as the line shows it: a tab as a space, and another control character, which could move
+/// the cursor, as `?`.
 fn shown(c: char) -> char {
+    if c == '\t' {
+        return ' ';
+    }
     let mut bytes = [0; 4];
     cells::sanitize(c.encode_utf8(&mut bytes).as_bytes())
         .chars()
@@ -414,6 +451,18 @@ mod tests {
         assert_eq!(press(&mut line, Action::Backspace), CommandEvent::None);
         assert_eq!(press(&mut line, Action::Backspace), CommandEvent::Close);
         assert_eq!(press(&mut shell("x"), Action::Cancel), CommandEvent::Close);
+    }
+
+    #[test]
+    fn pasted_text_goes_in_whole_and_never_runs() {
+        let mut line = shell("echo ");
+        press(&mut line, Action::Left);
+        line.paste("a\r\nb\rc\u{1b}[2J\td");
+        assert_eq!(line.text(), "echoa\nb\nc[2J\td ");
+        assert_eq!(line.cursor, 14, "after the pasted text");
+        line.set_text("make\n  && ls\n\n");
+        assert_eq!(line.text(), "make\n  && ls");
+        assert_eq!(line.cursor, 12);
     }
 
     #[test]

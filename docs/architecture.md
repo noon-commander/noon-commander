@@ -885,7 +885,17 @@ location = "root"
   ssh command from its session (`Session::command_in`) and the event loop runs it with the terminal:
   over the master, with `cd -- '<dir>' || exit` before the command. Afterwards it says how a failed
   command ended, waits for a key in raw mode, and takes the terminal back; both panels read their
-  directories again, as in mc. Esc, or Backspace on an empty line, closes the line.
+  directories again, as in mc. Esc, or Backspace on an empty line, closes the line. Shift-Enter
+  starts a new line too where the terminal speaks the kitty keyboard protocol: at start the event
+  loop asks for it with `supports_keyboard_enhancement` (in `spawn_blocking`, before the stream of
+  events takes crossterm's reader) and then pushes `DISAMBIGUATE_ESCAPE_CODES`; it pops them, and
+  turns bracketed paste off, whenever another program gets the terminal, on exit, and on a panic.
+  With bracketed paste a paste arrives as one event: the command line takes it whole, line breaks
+  included, and runs nothing; text fields, quick search, and the menus' filters take its characters
+  without line breaks; panels, the pull-down menu, dialogs' buttons, and the viewer ignore it.
+  Ctrl-X Ctrl-E writes the command to a file in the private runtime directory, runs the editor on it
+  as F4 does, and puts what it left back into the line, without the line breaks at its end; the file
+  goes afterwards.
 - **Keymap.** Keys map to `Action`s per context (`panel`, `root`, `quick_search`, `command_line`,
   `menu`, `pull_down`, `dialog`, `dialog_input`, `viewer`). Each context falls back along a chain,
   for example the root and quick search to the panel; the first context that knows a key sequence

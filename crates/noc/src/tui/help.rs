@@ -315,6 +315,7 @@ fn describe_command_line(context: Context, action: Action) -> Option<String> {
         Action::DeleteToStart => fl!("help-command-delete-to-start"),
         Action::DeleteToEnd => fl!("help-command-delete-to-end"),
         Action::NewLine => fl!("help-command-new-line"),
+        Action::EditCommand => fl!("help-command-edit"),
         Action::Confirm => fl!("help-command-run"),
         Action::Cancel => fl!("help-command-close"),
         _ => return None,

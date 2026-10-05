@@ -216,6 +216,8 @@ pub(crate) enum Action {
     Command,
     /// Starts a new line in the command.
     NewLine,
+    /// Opens the command in the editor of `$VISUAL` or `$EDITOR`; what it leaves comes back.
+    EditCommand,
     /// Closes the connection to the host under the cursor, or stops connecting to it.
     Disconnect,
     /// Edits the settings of the host under the cursor.
@@ -303,6 +305,7 @@ impl Action {
         Self::Shell,
         Self::Command,
         Self::NewLine,
+        Self::EditCommand,
         Self::Disconnect,
         Self::EditHost,
         Self::Backspace,

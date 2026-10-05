@@ -572,6 +572,9 @@ pub(crate) struct App {
     command_line: Option<CommandLine>,
     /// A shell command for the event loop to run.
     run_now: Option<Run>,
+    /// A file for the event loop to open in the editor with the command line's text, which
+    /// comes back to the line.
+    command_edit: Option<(PathBuf, String)>,
     /// The working directory last handed to the event loop.
     work_dir: Option<PathBuf>,
     /// Where copies of remote files for the editor go.
@@ -710,6 +713,7 @@ impl App {
             edit_now: None,
             command_line: None,
             run_now: None,
+            command_edit: None,
             work_dir: None,
             runtime_dir: std::env::temp_dir(),
             last_job: 0,
@@ -764,6 +768,48 @@ impl App {
     /// A file to open in the editor now, with the screen handed over; resets the request.
     pub(crate) fn take_edit(&mut self) -> Option<PathBuf> {
         self.edit_now.take()
+    }
+
+    /// A file to write the command line's text to and open in the editor now, with the screen
+    /// handed over, and the text; resets the request.
+    pub(crate) fn take_command_edit(&mut self) -> Option<(PathBuf, String)> {
+        self.command_edit.take()
+    }
+
+    /// Takes what the editor left of the command, or why it could not run.
+    pub(crate) fn command_edited(&mut self, result: Result<String, String>) {
+        match result {
+            Ok(text) => {
+                if let Some(line) = &mut self.command_line {
+                    line.set_text(&text);
+                }
+            }
+            Err(reason) => self.show_error(&cells::sanitize(reason.as_bytes())),
+        }
+    }
+
+    /// Takes pasted text: the command line gets all of it, line breaks included, and runs
+    /// nothing; other places that take text get its characters but the line breaks; panels and
+    /// menus whose keys are commands take none of it.
+    pub(crate) fn paste(&mut self, text: &str) -> Vec<Effect> {
+        match self.context() {
+            Context::CommandLine => {
+                if let Some(line) = &mut self.command_line {
+                    line.paste(text);
+                }
+                Vec::new()
+            }
+            Context::Panel
+            | Context::Root
+            | Context::PullDown
+            | Context::Dialog
+            | Context::Viewer => Vec::new(),
+            _ => text
+                .chars()
+                .filter(|c| !c.is_control())
+                .flat_map(|c| self.handle(Resolved::Insert(c)))
+                .collect(),
+        }
     }
 
     /// A shell command to run now, with the screen handed over; resets the request.
@@ -2624,6 +2670,12 @@ impl App {
             CommandEvent::None => Vec::new(),
             CommandEvent::Close => {
                 self.command_line = None;
+                Vec::new()
+            }
+            CommandEvent::Edit => {
+                let name = format!("command-{}.sh", std::process::id());
+                let text = line.text().to_owned();
+                self.command_edit = Some((self.runtime_dir.join(name), text));
                 Vec::new()
             }
             CommandEvent::Unknown(text) => {
@@ -8738,6 +8790,45 @@ mod tests {
         let mut root = at_root();
         root.handle(action(Action::Shell));
         assert_eq!(root.context(), Context::Root);
+    }
+
+    #[test]
+    fn pasted_text_never_runs_and_panels_ignore_it() {
+        let mut app = loaded();
+        assert!(app.paste("+*!\r").is_empty());
+        assert_eq!(app.context(), Context::Panel, "no key of the panel ran");
+        app.handle(action(Action::Shell));
+        app.paste("make\nls\n");
+        assert_eq!(app.context(), Context::CommandLine, "nothing ran");
+        assert_eq!(
+            app.command_line.as_ref().map(CommandLine::text),
+            Some("make\nls\n")
+        );
+        app.handle(action(Action::Cancel));
+        app.handle(action(Action::QuickSearch));
+        app.paste("ri\nght");
+        assert!(screen(&mut app).contains("Search: right"));
+    }
+
+    #[test]
+    fn ctrl_x_ctrl_e_edits_the_command_and_brings_it_back() {
+        let mut app = loaded();
+        app.set_runtime_dir(PathBuf::from("/run/noc"));
+        app.handle(action(Action::Shell));
+        type_text(&mut app, "ls");
+        assert!(app.handle(action(Action::EditCommand)).is_empty());
+        let (file, text) = app.take_command_edit().unwrap();
+        assert!(file.starts_with("/run/noc"), "{file:?}");
+        assert_eq!(text, "ls");
+        assert!(app.take_command_edit().is_none());
+        app.command_edited(Ok("ls -l \\\n  /tmp\n".to_owned()));
+        assert_eq!(
+            app.command_line.as_ref().map(CommandLine::text),
+            Some("ls -l \\\n  /tmp")
+        );
+        assert_eq!(app.context(), Context::CommandLine, "it does not run");
+        app.command_edited(Err("Cannot edit the command: gone".to_owned()));
+        assert!(screen_of(&mut app, 12).contains("Cannot edit the command: gone"));
     }
 
     #[test]

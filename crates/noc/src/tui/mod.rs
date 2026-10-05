@@ -45,7 +45,7 @@ use noc_tools::shell::Shell;
 use ratatui::DefaultTerminal;
 use ratatui::backend::{Backend as _, ClearType};
 use ratatui::widgets::Clear;
-use tokio::signal::unix::{SignalKind, signal};
+use tokio::signal::unix::{Signal, SignalKind, signal};
 use tokio::sync::mpsc;
 
 use app::App;
@@ -136,9 +136,10 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     let mut interrupt = signal(SignalKind::interrupt())?;
     // Reads /etc/localtime.
     let tz = tokio::task::spawn_blocking(TimeZone::system).await?;
-    let restore = Restore;
+    let restore = Restore::default();
     let mut terminal = ratatui::try_init()?;
     release_mouse_on_panic();
+    let modes = Modes::start(&restore).await?;
     let mut events = EventStream::new();
     let mut spinner = tokio::time::interval(SPINNER_FRAME);
     spinner.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -160,24 +161,19 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
         if let Some(dir) = app.take_work_dir() {
             tasks.change_work_dir(dir);
         }
-        let handover = match app.take_edit() {
-            Some(file) => Some(Handover::Edit(file)),
-            None => app.take_run().map(Handover::Run),
-        };
-        if let Some(handover) = handover {
+        if let Some(handover) = Handover::take(&mut app) {
             // The next turn captures the mouse again.
             mouse = false;
-            let (fresh, effects) = hand_over(&mut terminal, events, &mut app, handover).await;
+            let (fresh, after) =
+                hand_over((&mut terminal, modes), events, &mut app, handover).await;
             events = fresh;
-            let effects = match effects {
-                Ok(effects) => effects,
+            let effects = match after {
+                Ok((effects, fresh)) => {
+                    interrupt = fresh;
+                    effects
+                }
                 Err(error) => break Err(error.into()),
             };
-            // Ctrl-C in the program reached Noon Commander too; forget it.
-            match signal(SignalKind::interrupt()) {
-                Ok(fresh) => interrupt = fresh,
-                Err(error) => break Err(error.into()),
-            }
             keys = KeyState::default();
             tasks.run(effects);
             continue;
@@ -200,6 +196,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
                         tasks.run(app.handle(input));
                     }
                 }
+                Some(Ok(Event::Paste(text))) => tasks.run(app.paste(&text)),
                 Some(Ok(Event::Mouse(event))) => {
                     idle = !take_mouse(&mut app, &mut tasks, &mut clicks, &mut keys, event);
                 }
@@ -290,23 +287,71 @@ async fn edit(file: &Path) -> Result<bool, String> {
 enum Handover {
     /// The editor of F4, on a local file.
     Edit(PathBuf),
+    /// The editor on the command line's text, written to `file`.
+    EditCommand { file: PathBuf, text: String },
     /// A shell command of the command line.
     Run(command::Run),
 }
 
+impl Handover {
+    /// What the app asks to hand the terminal to now, if anything.
+    fn take(app: &mut App) -> Option<Self> {
+        if let Some(file) = app.take_edit() {
+            Some(Self::Edit(file))
+        } else if let Some((file, text)) = app.take_command_edit() {
+            Some(Self::EditCommand { file, text })
+        } else {
+            app.take_run().map(Self::Run)
+        }
+    }
+}
+
+/// Runs the editor on `text`, in `file`, which goes afterwards, and returns what it left
+/// there, or why the editor could not run.
+async fn edit_command(file: &Path, text: &str) -> Result<String, String> {
+    let failed = |reason: String| fl!("command-edit-error", reason = reason);
+    let mut contents = text.to_owned();
+    contents.push('\n');
+    tokio::fs::write(file, contents)
+        .await
+        .map_err(|error| failed(error.to_string()))?;
+    let editor = Editor::from_env();
+    let edited = match editor.edit(file).await {
+        Ok(_) => tokio::fs::read(file)
+            .await
+            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+            .map_err(|error| failed(error.to_string())),
+        Err(error) => {
+            let reason = match &error {
+                ToolError::Spawn { source, .. } => source.to_string(),
+                other => describe::chain(other),
+            };
+            let program = editor.program().display().to_string();
+            Err(failed(fl!(
+                "edit-cannot-run",
+                program = program,
+                reason = reason
+            )))
+        }
+    };
+    let _ = tokio::fs::remove_file(file).await;
+    edited
+}
+
 /// Hands the terminal to the program of `handover`, takes it back, and returns what the app
-/// does next, with a new stream of events in place of `events`.
+/// does next and a new stream of SIGINT, since Ctrl-C in the program reached Noon Commander
+/// too, with a new stream of events in place of `events`.
 async fn hand_over(
-    terminal: &mut DefaultTerminal,
+    (terminal, modes): (&mut DefaultTerminal, Modes),
     events: EventStream,
     app: &mut App,
     handover: Handover,
-) -> (EventStream, io::Result<Vec<app::Effect>>) {
+) -> (EventStream, io::Result<(Vec<app::Effect>, Signal)>) {
     // The program gets every key. A stream's reader holds crossterm's input lock while it
     // waits, and a new stream takes that lock, so the old one goes first; the new one reads
     // nothing until it is polled.
     drop(events);
-    let suspended = suspend(terminal).map_err(|error| error.to_string());
+    let suspended = suspend(terminal, modes).map_err(|error| error.to_string());
     let (events, effects) = match handover {
         Handover::Edit(file) => {
             let result = match suspended {
@@ -314,6 +359,14 @@ async fn hand_over(
                 Err(error) => Err(error),
             };
             (EventStream::new(), app.edited(result))
+        }
+        Handover::EditCommand { file, text } => {
+            let result = match suspended {
+                Ok(()) => edit_command(&file, &text).await,
+                Err(error) => Err(error),
+            };
+            app.command_edited(result);
+            (EventStream::new(), Vec::new())
         }
         Handover::Run(run) => {
             let result = match suspended {
@@ -328,7 +381,8 @@ async fn hand_over(
             (events, app.ran(result))
         }
     };
-    (events, resume(terminal).map(|()| effects))
+    let after = resume(terminal, modes).and_then(|()| signal(SignalKind::interrupt()));
+    (events, after.map(|interrupt| (effects, interrupt)))
 }
 
 /// Runs the shell command of `run`, with the terminal handed over: locally in `$SHELL`, or on
@@ -391,7 +445,8 @@ async fn wait_for_key(events: &mut EventStream) {
 
 /// Hands the terminal over to another program as the shell has it: with the cursor and the
 /// mouse, on the main screen, and out of raw mode.
-fn suspend(terminal: &mut DefaultTerminal) -> io::Result<()> {
+fn suspend(terminal: &mut DefaultTerminal, modes: Modes) -> io::Result<()> {
+    modes.leave()?;
     capture_mouse(false)?;
     terminal.show_cursor()?;
     crossterm::execute!(io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
@@ -400,10 +455,57 @@ fn suspend(terminal: &mut DefaultTerminal) -> io::Result<()> {
 
 /// Takes the terminal back after a program had it: raw mode, the alternate screen, and a
 /// full redraw; the next draw hides the cursor.
-fn resume(terminal: &mut DefaultTerminal) -> io::Result<()> {
+fn resume(terminal: &mut DefaultTerminal, modes: Modes) -> io::Result<()> {
     crossterm::terminal::enable_raw_mode()?;
     crossterm::execute!(io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
+    modes.enter()?;
     repaint(terminal)
+}
+
+/// What the TUI asks of the terminal while it has it: bracketed paste, so that pasted text
+/// arrives whole and never as keys that run something; and, where the terminal speaks it, the
+/// kitty keyboard protocol, which tells Shift-Enter from Enter (ADR 0019).
+#[derive(Debug, Clone, Copy, Default)]
+struct Modes {
+    keyboard: bool,
+}
+
+impl Modes {
+    /// Asks the terminal whether it speaks the kitty keyboard protocol, through crossterm's
+    /// reader, before a stream of events takes it; then puts it in the modes, which `restore`
+    /// turns off again.
+    async fn start(restore: &Restore) -> Result<Self> {
+        let keyboard = tokio::task::spawn_blocking(|| {
+            crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false)
+        })
+        .await?;
+        let modes = Self { keyboard };
+        modes.enter()?;
+        restore.modes.set(modes);
+        Ok(modes)
+    }
+
+    fn enter(self) -> io::Result<()> {
+        use crossterm::event::{
+            EnableBracketedPaste, KeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+        };
+
+        crossterm::execute!(io::stdout(), EnableBracketedPaste)?;
+        if self.keyboard {
+            let flags = KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES;
+            crossterm::execute!(io::stdout(), PushKeyboardEnhancementFlags(flags))?;
+        }
+        Ok(())
+    }
+
+    fn leave(self) -> io::Result<()> {
+        use crossterm::event::{DisableBracketedPaste, PopKeyboardEnhancementFlags};
+
+        if self.keyboard {
+            crossterm::execute!(io::stdout(), PopKeyboardEnhancementFlags)?;
+        }
+        crossterm::execute!(io::stdout(), DisableBracketedPaste)
+    }
 }
 
 /// Does what the app asks of the terminal: a full redraw, text for the clipboard, and
@@ -444,12 +546,14 @@ fn take_mouse(
     true
 }
 
-/// Releases the mouse on a panic: the hook of `ratatui::try_init`, which this one calls,
-/// restores the terminal but leaves the mouse captured.
+/// Releases the mouse and the modes on a panic: the hook of `ratatui::try_init`, which this
+/// one calls, restores the terminal but leaves them on. Both are harmless to turn off when they
+/// are not on.
 fn release_mouse_on_panic() {
     let hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let _ = capture_mouse(false);
+        let _ = Modes { keyboard: true }.leave();
         hook(info);
     }));
 }
@@ -493,11 +597,16 @@ async fn sleep_until(deadline: Option<Instant>) {
 
 /// Releases the mouse and leaves raw mode and the alternate screen however [`run`] ends.
 /// Panics are covered by the hook that `ratatui::try_init` installs, and the one around it.
-struct Restore;
+#[derive(Default)]
+struct Restore {
+    /// The modes the terminal is in.
+    modes: std::cell::Cell<Modes>,
+}
 
 impl Drop for Restore {
     fn drop(&mut self) {
         let _ = capture_mouse(false);
+        let _ = self.modes.get().leave();
         ratatui::restore();
     }
 }

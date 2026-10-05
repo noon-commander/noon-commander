@@ -9,6 +9,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Input for the command line: Shift-Enter starts a new line where the terminal speaks the
+  kitty keyboard protocol, which Noon Commander now asks for where the terminal has it; Ctrl-X
+  Ctrl-E opens the command in `$VISUAL` or `$EDITOR` and brings back what the editor left,
+  without running it; and pasted text arrives whole through bracketed paste, so a pasted line
+  break never runs a command. Text fields and quick search take pasted text without its line
+  breaks, and panels ignore it rather than take its characters as keys.
 - A command line for shell commands: `!` opens it in a panel, and so does `:`, for commands of Noon
   Commander, of which `:!command` is the only one so far. The prompt shows the panel's directory,
   with the host's label or alias on a host, where the command runs over the host's connection with a

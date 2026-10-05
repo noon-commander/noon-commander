@@ -444,7 +444,8 @@ help-command-end = End of the line
 help-command-delete-to-start = Delete to the start of the line
 help-command-delete-to-end = Delete to the end of the line
 help-command-backspace = Delete the character before the cursor; on an empty line, close it
-help-command-new-line = A new line in the command
+help-command-new-line = A new line in the command; Shift-Enter where the terminal tells it from Enter
+help-command-edit = Edit the command in $VISUAL or $EDITOR; it comes back without running
 help-command-run = Run the command; after a \ at the end of the line, a new line
 help-command-close = Close the command line
 help-note-esc = Esc 1 … Esc 0 stand for F1 … F10, and Esc followed by a key for Alt and the key, for terminals without them. A lone Esc acts after a second; Esc Esc at once.
@@ -656,3 +657,5 @@ command-error = Cannot run { $program }: { $reason }
 command-exit-code = The command exited with { $code }.
 command-signal = The command was ended by signal { $signal }.
 command-press-key = Press any key to return to Noon Commander.
+# The command could not go to the editor of Ctrl-X Ctrl-E, or come back.
+command-edit-error = Cannot edit the command: { $reason }

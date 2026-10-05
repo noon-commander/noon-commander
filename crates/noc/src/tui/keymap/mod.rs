@@ -477,7 +477,8 @@ const RENAME: Preset = &[
 ];
 
 /// The bindings of the command line of `!` and `:` in the mc preset. Ctrl-J arrives as LF where
-/// Enter arrives as CR, so it starts a new line in every terminal.
+/// Enter arrives as CR, so it starts a new line in every terminal; Shift-Enter does where the
+/// terminal speaks the kitty keyboard protocol. Ctrl-X Ctrl-E edits the command, as in bash.
 const COMMAND_LINE: Preset = &[
     (Action::Left, &["left"]),
     (Action::Right, &["right"]),
@@ -489,7 +490,8 @@ const COMMAND_LINE: Preset = &[
     (Action::Delete, &["delete"]),
     (Action::DeleteToStart, &["ctrl-u"]),
     (Action::DeleteToEnd, &["ctrl-k"]),
-    (Action::NewLine, &["ctrl-j"]),
+    (Action::NewLine, &["ctrl-j", "shift-enter"]),
+    (Action::EditCommand, &["ctrl-x ctrl-e"]),
     (Action::Confirm, &["enter"]),
     (Action::Cancel, &["esc"]),
 ];
@@ -1337,13 +1339,29 @@ mod tests {
                 &keymap,
                 &mut state,
                 Context::CommandLine,
-                &["!", "*", "space", "ctrl-j", "enter", "f5", "tab", "esc"]
+                &[
+                    "!",
+                    "*",
+                    "space",
+                    "ctrl-j",
+                    "shift-enter",
+                    "ctrl-x",
+                    "ctrl-e",
+                    "ctrl-e",
+                    "enter",
+                    "f5",
+                    "tab",
+                    "esc"
+                ]
             ),
             [
                 Resolved::Insert('!'),
                 Resolved::Insert('*'),
                 Resolved::Insert(' '),
                 Resolved::Action(Action::NewLine),
+                Resolved::Action(Action::NewLine),
+                Resolved::Action(Action::EditCommand),
+                Resolved::Action(Action::End),
                 Resolved::Action(Action::Confirm),
                 Resolved::Action(Action::Cancel),
             ]

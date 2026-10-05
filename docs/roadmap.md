@@ -110,7 +110,7 @@
 - [x] Shell command line ([ADR 0019](adr/0019-shell-command-line.md)): `!` (and `:!`) runs a
       command in a local panel's directory; several lines (Ctrl-J, `\` Enter)
 - [x] Shell command line on hosts, over the master connection, with a terminal
-- [ ] Shell command line: Shift-Enter (kitty keyboard protocol), bracketed paste, Ctrl-X
+- [x] Shell command line: Shift-Enter (kitty keyboard protocol), bracketed paste, Ctrl-X
       Ctrl-E in `$EDITOR`
 - [ ] Command history per host: Up/Down (Alt-P/Alt-N) for the panel's host, a window (Alt-H,
       Ctrl-R) for one host or all; `shell.history_size`

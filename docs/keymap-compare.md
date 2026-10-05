@@ -233,8 +233,8 @@ yet.
 | Open the command line for noc commands (only `:!cmd` so far) | | : | : | — | — |
 | Run the command | | Enter | Enter | Enter | Enter |
 | New line in the command | | Ctrl+J<br>\\ Enter | Ctrl+J<br>\\ Enter | — | — |
-| New line in the command (kitty keyboard protocol) | planned | Shift+Enter | Shift+Enter | — | — |
-| Edit the command in $EDITOR | planned | Ctrl+X Ctrl+E | Ctrl+X Ctrl+E | — | — |
+| New line in the command (kitty keyboard protocol) | | Shift+Enter | Shift+Enter | — | — |
+| Edit the command in $EDITOR | | Ctrl+X Ctrl+E | Ctrl+X Ctrl+E | — | — |
 | Close the command line | | Esc<br>Backspace (empty) | Esc<br>Backspace (empty) | — | Esc |
 | Line above / below in the command | | Up / Down | Up / Down | — | — |
 | Insert current file name | | — | — | Alt+Enter<br>Ctrl+Enter | Ctrl+J<br>Ctrl+Enter |

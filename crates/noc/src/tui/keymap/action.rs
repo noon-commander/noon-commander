@@ -35,6 +35,9 @@ pub(crate) enum Context {
     CommandLine,
     /// The window of the command history, which has a filter.
     History,
+    /// The terminal's own screen, with the output of commands, in place of the panels; only
+    /// the keys that go back to the panels do anything.
+    UserScreen,
 }
 
 impl Context {
@@ -58,6 +61,7 @@ impl Context {
             Self::Viewer => &[Self::Viewer],
             Self::CommandLine => &[Self::CommandLine],
             Self::History => &[Self::History],
+            Self::UserScreen => &[Self::UserScreen],
             // Menus are modal too.
             Self::Menu => &[Self::Menu],
             Self::Jump => &[Self::Jump],
@@ -229,6 +233,8 @@ pub(crate) enum Action {
     NewerCommand,
     /// Opens the window of the command history.
     CommandHistory,
+    /// Shows the terminal's own screen, with the output of commands, in place of the panels.
+    UserScreen,
     /// Closes the connection to the host under the cursor, or stops connecting to it.
     Disconnect,
     /// Edits the settings of the host under the cursor.
@@ -320,6 +326,7 @@ impl Action {
         Self::OlderCommand,
         Self::NewerCommand,
         Self::CommandHistory,
+        Self::UserScreen,
         Self::Disconnect,
         Self::EditHost,
         Self::Backspace,

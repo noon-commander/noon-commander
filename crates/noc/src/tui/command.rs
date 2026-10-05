@@ -3,6 +3,7 @@
 
 use std::path::PathBuf;
 
+use noc_config::Pause;
 use noc_vfs::RemotePath;
 
 use ratatui::Frame;
@@ -57,6 +58,10 @@ pub(crate) enum CommandEvent {
 pub(crate) struct Run {
     pub(crate) place: Place,
     pub(crate) command: String,
+    /// What the terminal shows before the command, as a shell would.
+    pub(crate) prompt: String,
+    /// Whether its output waits for a key: `shell.pause`.
+    pub(crate) pause: Pause,
 }
 
 /// Where a command runs: in a local directory, or in a directory on a connected host.

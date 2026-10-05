@@ -9,6 +9,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Ctrl-O shows the output of commands in place of the panels, as in mc and Far, in the panels and on
+  the command line; Ctrl-O or Esc brings the panels back. Each command now shows after its prompt,
+  its output ends on a line of its own, and the line that asks for a key stands out and gives way to
+  `[exit N]`, bold and red, after a command that failed. `shell.pause` (Wait after a command in
+  Options → Configuration) says when the output waits for a key: `always`, `on-error`, or `never`.
 - Command history: each command of the command line is kept in `history.toml` in the state
   directory (`~/.local/state/noc/`), with the host it ran on. Up on the first line of the
   command line, or Alt-P, brings back the commands of the panel's host, and Down, or Alt-N,

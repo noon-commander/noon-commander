@@ -112,6 +112,9 @@
 - [x] Shell command line on hosts, over the master connection, with a terminal
 - [x] Shell command line: Shift-Enter (kitty keyboard protocol), bracketed paste, Ctrl-X
       Ctrl-E in `$EDITOR`
+- [x] Ctrl-O shows the output of commands in place of the panels; each command shows after its
+      prompt, its output ends on a line of its own, and a failure leaves `[exit N]`;
+      `shell.pause`. `! $SHELL` gives an interactive shell, so there is no console of its own
 - [x] Command history per host: Up/Down (Alt-P/Alt-N) for the panel's host, a window (Alt-H,
       Ctrl-R) for one host or all; `shell.history_size`, `history.toml` in the state directory
 
@@ -125,9 +128,6 @@
 
 ## Backlog
 
-- Console (Ctrl-O): suspend the TUI and run `$SHELL` in the panel's directory, locally or with
-  `ssh -t` over the host's master connection, as the command line runs a command. There is no
-  persistent mc-style subshell ([ADR 0019](adr/0019-shell-command-line.md)).
 - vim keymap preset: only the keys differ; `:` and `!` open the command line as in the default
   preset.
 - Commands of Noon Commander after `:` (`:!` runs a shell command already).

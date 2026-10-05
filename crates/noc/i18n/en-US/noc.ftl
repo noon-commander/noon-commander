@@ -286,6 +286,11 @@ config-zoxide-program = Program
 config-zoxide-program-hint = The zoxide program: a name in PATH, or a path. Alt-Z jumps to the directories it ranks.
 config-zoxide-program-empty = The zoxide program cannot be empty.
 config-shell = Command line
+config-pause = Wait after a command
+config-pause-hint = When the output of a command stays on screen until a key; Ctrl-O shows it again either way.
+config-pause-always = Always
+config-pause-on-error = When it fails
+config-pause-never = Never
 config-history-size = History size
 config-history-size-hint = How many commands of ! and : the history keeps, of all hosts together; 0 keeps none.
 config-history-size-invalid = "{ $text }" is not a number of commands: it takes a whole number, 0 or more.
@@ -449,6 +454,7 @@ help-command-up = The line above; from the first line, the command before in the
 help-command-down = The line below; from the last line, the command after in the history
 help-command-older = The command before in the history of the panel's host
 help-command-newer = The command after in the history; after the last, what was typed
+help-user-screen = The output of commands, in place of the panels; Ctrl-O or Esc brings them back
 help-command-history = The command history: filter it, and take a command of this host or another
 help-command-home = Start of the line
 help-command-end = End of the line
@@ -668,6 +674,9 @@ command-error = Cannot run { $program }: { $reason }
 command-exit-code = The command exited with { $code }.
 command-signal = The command was ended by signal { $signal }.
 command-press-key = Press any key to return to Noon Commander.
+# Stays on the screen after a command that failed, after the key it waited for.
+command-exit-mark = [exit { $code }]
+command-signal-mark = [signal { $signal }]
 # The window of the command history, Alt-H or Ctrl-R on the command line.
 history-title = Command history
 # The filter, at the top.

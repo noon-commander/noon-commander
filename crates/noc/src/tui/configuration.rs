@@ -6,7 +6,7 @@
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
-use noc_config::{Borders, Config, MenuBar, TabBar, UiConfig, Wheel};
+use noc_config::{Borders, Config, MenuBar, Pause, TabBar, UiConfig, Wheel};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::text::{Line, Span};
@@ -51,6 +51,7 @@ enum Key {
     ZoxideRecord,
     ZoxideProgram,
     HistorySize,
+    Pause,
 }
 
 /// A value and how it is edited.
@@ -205,6 +206,13 @@ impl Setting {
                     return Err(fl!("config-zoxide-program-empty"));
                 }
                 config.zoxide.program = PathBuf::from(program);
+            }
+            Key::Pause => {
+                config.shell.pause = match text {
+                    "on-error" => Pause::OnError,
+                    "never" => Pause::Never,
+                    _ => Pause::Always,
+                };
             }
             Key::HistorySize => {
                 config.shell.history_size = text.trim().parse().map_err(|_| {
@@ -1056,11 +1064,29 @@ fn shell(config: &Config) -> Category {
     Category {
         icon: "",
         title: fl!("config-shell"),
-        settings: vec![Setting::new(
-            Key::HistorySize,
-            (fl!("config-history-size"), fl!("config-history-size-hint")),
-            text(&config.shell.history_size.to_string()),
-        )],
+        settings: vec![
+            Setting::new(
+                Key::Pause,
+                (fl!("config-pause"), fl!("config-pause-hint")),
+                choice(
+                    &[
+                        ("always", fl!("config-pause-always")),
+                        ("on-error", fl!("config-pause-on-error")),
+                        ("never", fl!("config-pause-never")),
+                    ],
+                    match config.shell.pause {
+                        Pause::Always => "always",
+                        Pause::OnError => "on-error",
+                        Pause::Never => "never",
+                    },
+                ),
+            ),
+            Setting::new(
+                Key::HistorySize,
+                (fl!("config-history-size"), fl!("config-history-size-hint")),
+                text(&config.shell.history_size.to_string()),
+            ),
+        ],
     }
 }
 
@@ -1293,7 +1319,7 @@ mod tests {
             (2, 2, "-F other_config", "Invalid extra ssh arguments"),
             (2, 0, "", "The ssh program cannot be empty"),
             (4, 1, " ", "The zoxide program cannot be empty"),
-            (5, 0, "-1", "is not a number of commands"),
+            (5, 1, "-1", "is not a number of commands"),
         ];
         for (index, row, text, message) in cases {
             let mut dialog = dialog();

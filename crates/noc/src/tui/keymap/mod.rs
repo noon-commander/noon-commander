@@ -300,7 +300,7 @@ impl Keymap {
 }
 
 /// The bindings of the mc preset, by context.
-fn mc_presets() -> [(Context, Preset); 15] {
+fn mc_presets() -> [(Context, Preset); 16] {
     use Action::{
         Backspace, Cancel, Confirm, Disconnect, Down, EditHost, End, Help, Home, Left, NextField,
         PageDown, PageUp, PrevField, Quit, Redraw, Right, Toggle, ToggleWrap, Up,
@@ -357,6 +357,7 @@ fn mc_presets() -> [(Context, Preset); 15] {
         (Context::Completion, COMPLETION),
         (Context::CommandLine, COMMAND_LINE),
         (Context::History, HISTORY),
+        (Context::UserScreen, &[(Cancel, &["ctrl-o", "esc"])]),
     ]
 }
 
@@ -368,7 +369,7 @@ const PANEL: Preset = {
         Mkdir, Move, NewTab, NextTab, OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent,
         PrevTab, PullDown, QuickCd, QuickSearch, Quit, Redraw, Reload, Rename, SaveWorkspace,
         Select, Shell, SortByExtension, SortByName, SortBySize, SortByTime, SwapPanels,
-        SwitchPanel, TabList, ToggleHidden, Unselect, Up, View, Workspaces,
+        SwitchPanel, TabList, ToggleHidden, Unselect, Up, UserScreen, View, Workspaces,
     };
     &[
         (Up, &["up", "ctrl-p"]),
@@ -404,6 +405,8 @@ const PANEL: Preset = {
         (Command, &[":"]),
         // mc's: the command line, with its history.
         (CommandHistory, &["alt-h"]),
+        // mc's and Far's: the output of commands.
+        (UserScreen, &["ctrl-o"]),
         (Help, &["f1"]),
         (View, &["f3"]),
         (Edit, &["f4"]),
@@ -499,6 +502,7 @@ const COMMAND_LINE: Preset = &[
     (Action::NewerCommand, &["alt-n"]),
     // mc's Alt-H, and bash's Ctrl-R.
     (Action::CommandHistory, &["alt-h", "ctrl-r"]),
+    (Action::UserScreen, &["ctrl-o"]),
     (Action::Confirm, &["enter"]),
     (Action::Cancel, &["esc"]),
 ];
@@ -1388,6 +1392,25 @@ mod tests {
                 Resolved::Action(Action::Confirm),
                 Resolved::Action(Action::Cancel),
             ]
+        );
+    }
+
+    #[test]
+    fn only_ctrl_o_and_esc_leave_the_output_of_commands() {
+        let keymap = Keymap::mc();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Panel, &["ctrl-o"]),
+            actions(&[Action::UserScreen])
+        );
+        assert_eq!(
+            feed(
+                &keymap,
+                &mut state,
+                Context::UserScreen,
+                &["a", "enter", "f10", "ctrl-o", "esc"]
+            ),
+            actions(&[Action::Cancel, Action::Cancel])
         );
     }
 

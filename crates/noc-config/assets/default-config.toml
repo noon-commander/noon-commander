@@ -97,5 +97,8 @@ record = true
 # of all hosts together; each is kept with the host it ran on. 0 keeps none, and a command
 # that starts with a space is never kept.
 history_size = 500
+# When the output of a command stays on screen until a key: "always", "on-error" (after a
+# command that failed), or "never". Ctrl-O shows it again later either way.
+pause = "always"
 
 # Per-host settings (labels, start directories) live in hosts.toml next to this file.

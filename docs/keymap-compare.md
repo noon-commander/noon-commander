@@ -71,7 +71,7 @@ yet.
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
 | Repaint screen | | Ctrl+L | — | Ctrl+L | — |
-| Show command output / user screen | | — | — | Ctrl+O | Ctrl+O |
+| Show command output / user screen | | Ctrl+O (back: Ctrl+O, Esc) | — | Ctrl+O | Ctrl+O |
 | Temporarily show user screen (while held) | | — | — | — | Ctrl+Alt+Shift |
 | Quick cd | | Alt+C | — | Alt+C | — |
 | Jump to a directory zoxide ranks | | Alt+Z<br>Ctrl+X z | — | — | — |
@@ -124,7 +124,7 @@ yet.
 | Info panel | | — | — | Ctrl+X i (on other panel) | Ctrl+L |
 | Quick view panel | | — | — | Ctrl+X q (on other panel) | Ctrl+Q |
 | Folder tree | | — | — | — | Ctrl+T |
-| Hide/show both panels | | — | — | Ctrl+O | Ctrl+O |
+| Hide/show both panels | | Ctrl+O | — | Ctrl+O | Ctrl+O |
 | Hide/show inactive panel | | — | — | — | Ctrl+P |
 | Hide/show left panel | | — | — | — | Ctrl+F1 |
 | Hide/show right panel | | — | — | — | Ctrl+F2 |

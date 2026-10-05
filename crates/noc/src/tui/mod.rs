@@ -17,6 +17,7 @@ mod jump;
 mod keymap;
 mod menu;
 mod mouse;
+mod output;
 mod panel;
 mod pattern;
 mod progress;
@@ -42,14 +43,13 @@ use futures_util::StreamExt as _;
 use jiff::tz::TimeZone;
 use noc_tools::ToolError;
 use noc_tools::editor::Editor;
-use noc_tools::shell::Shell;
 use ratatui::DefaultTerminal;
 use ratatui::backend::{Backend as _, ClearType};
 use ratatui::widgets::Clear;
 use tokio::signal::unix::{Signal, SignalKind, signal};
 use tokio::sync::mpsc;
 
-use app::App;
+use app::{App, Handover};
 use keymap::KeyState;
 use mouse::Clicks;
 use tasks::{Done, Tasks};
@@ -163,7 +163,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
         if let Some(dir) = app.take_work_dir() {
             tasks.change_work_dir(dir);
         }
-        if let Some(handover) = Handover::take(&mut app) {
+        if let Some(handover) = app.take_handover() {
             // The next turn captures the mouse again.
             mouse = false;
             let (fresh, after) =
@@ -286,29 +286,6 @@ async fn edit(file: &Path) -> Result<bool, String> {
     Ok(before != after)
 }
 
-/// A program that gets the terminal, with the panels hidden.
-enum Handover {
-    /// The editor of F4, on a local file.
-    Edit(PathBuf),
-    /// The editor on the command line's text, written to `file`.
-    EditCommand { file: PathBuf, text: String },
-    /// A shell command of the command line.
-    Run(command::Run),
-}
-
-impl Handover {
-    /// What the app asks to hand the terminal to now, if anything.
-    fn take(app: &mut App) -> Option<Self> {
-        if let Some(file) = app.take_edit() {
-            Some(Self::Edit(file))
-        } else if let Some((file, text)) = app.take_command_edit() {
-            Some(Self::EditCommand { file, text })
-        } else {
-            app.take_run().map(Self::Run)
-        }
-    }
-}
-
 /// Runs the editor on `text`, in `file`, which goes afterwards, and returns what it left
 /// there, or why the editor could not run.
 async fn edit_command(file: &Path, text: &str) -> Result<String, String> {
@@ -373,77 +350,28 @@ async fn hand_over(
         }
         Handover::Run(run) => {
             let result = match suspended {
-                Ok(()) => run_command(run).await,
+                Ok(()) => output::run_command(run).await,
                 Err(error) => Err(error),
             };
             let mut events = EventStream::new();
-            // What the command printed stays on screen until a key.
-            if result.is_ok() {
-                wait_for_key(&mut events).await;
+            if let Ok(ran) = &result
+                && ran.waits
+            {
+                output::wait_for_key(&mut events).await;
+                output::after_key(ran);
             }
-            (events, app.ran(result))
+            (events, app.ran(result.map(drop)))
+        }
+        Handover::UserScreen => {
+            let mut events = EventStream::new();
+            if suspended.is_ok() && crossterm::terminal::enable_raw_mode().is_ok() {
+                output::wait_to_go_back(&mut events, app.keymap()).await;
+            }
+            (events, Vec::new())
         }
     };
     let after = resume(terminal, modes).and_then(|()| signal(SignalKind::interrupt()));
     (events, after.map(|interrupt| (effects, interrupt)))
-}
-
-/// Runs the shell command of `run`, with the terminal handed over: locally in `$SHELL`, or on
-/// its host through ssh over the host's connection. Then says how it ended if it failed, asks
-/// for a key, and puts the terminal in raw mode to read it. Fails if it could not start.
-async fn run_command(run: command::Run) -> Result<(), String> {
-    use std::io::Write as _;
-    use std::os::unix::process::ExitStatusExt as _;
-
-    let command::Run { place, command } = run;
-    let status = match place {
-        command::Place::Local(dir) => {
-            let shell = Shell::from_env();
-            shell.run(&dir, &command).await.map_err(|error| {
-                let reason = match &error {
-                    ToolError::Spawn { source, .. } => source.to_string(),
-                    other => describe::chain(other),
-                };
-                let program = shell.program().display().to_string();
-                fl!("command-error", program = program, reason = reason)
-            })?
-        }
-        command::Place::Remote { handle, dir } => {
-            let mut ssh = tasks::remote_command(&handle, dir, command).await?;
-            let program = ssh.as_std().get_program().to_string_lossy().into_owned();
-            ssh.status().await.map_err(|error| {
-                let reason = error.to_string();
-                fl!("command-error", program = program, reason = reason)
-            })?
-        }
-    };
-    let mut out = io::stdout();
-    let ending = if let Some(code) = status.code().filter(|&code| code != 0) {
-        Some(fl!("command-exit-code", code = code))
-    } else {
-        status
-            .signal()
-            .map(|signal| fl!("command-signal", signal = signal))
-    };
-    // The panels are hidden: this goes where the command printed, as a shell would say it.
-    if let Some(ending) = ending {
-        let _ = writeln!(out, "{ending}");
-    }
-    let _ = write!(out, "{}", fl!("command-press-key"));
-    let _ = out.flush();
-    crossterm::terminal::enable_raw_mode().map_err(|error| error.to_string())
-}
-
-/// Waits for a key press; or for the end of the input, or an error, which the event loop meets
-/// again.
-async fn wait_for_key(events: &mut EventStream) {
-    while let Some(Ok(event)) = events.next().await {
-        if let Event::Key(key) = event
-            && key.kind == KeyEventKind::Press
-        {
-            return;
-        }
-    }
 }
 
 /// Hands the terminal over to another program as the shell has it: with the cursor and the

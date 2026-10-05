@@ -190,6 +190,19 @@ pub(crate) enum Effect {
     History(HistoryChange),
 }
 
+/// What the event loop hands the terminal to, with the panels hidden.
+#[derive(Debug)]
+pub(crate) enum Handover {
+    /// The editor of F4, on a local file.
+    Edit(PathBuf),
+    /// The editor on the command line's text, written to `file`; what it leaves comes back.
+    EditCommand { file: PathBuf, text: String },
+    /// A shell command of the command line.
+    Run(Run),
+    /// Nothing: the terminal's own screen shows, with the output of commands, until Ctrl-O.
+    UserScreen,
+}
+
 /// What to do with `history.toml`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum HistoryChange {
@@ -584,19 +597,14 @@ pub(crate) struct App {
     /// Instead of the panels.
     viewing: Option<Viewing>,
     editing: Option<Editing>,
-    /// A file for the event loop to open in the editor.
-    edit_now: Option<PathBuf>,
+    /// What the event loop is to hand the terminal to next.
+    handover: Option<Handover>,
     /// The command line of `!` and `:`, above the F-key bar.
     command_line: Option<CommandLine>,
-    /// A shell command for the event loop to run.
-    run_now: Option<Run>,
     /// The commands of the command line, oldest first, as `history.toml` held them last.
     history: Vec<HistoryEntry>,
     /// The window of the command history, over the panels and under the dialogs.
     history_window: Option<HistoryWindow>,
-    /// A file for the event loop to open in the editor with the command line's text, which
-    /// comes back to the line.
-    command_edit: Option<(PathBuf, String)>,
     /// The working directory last handed to the event loop.
     work_dir: Option<PathBuf>,
     /// Where copies of remote files for the editor go.
@@ -733,12 +741,10 @@ impl App {
             jobs: Vec::new(),
             viewing: None,
             editing: None,
-            edit_now: None,
+            handover: None,
             command_line: None,
-            run_now: None,
             history: Vec::new(),
             history_window: None,
-            command_edit: None,
             work_dir: None,
             runtime_dir: std::env::temp_dir(),
             last_job: 0,
@@ -790,15 +796,9 @@ impl App {
         self.runtime_dir = dir;
     }
 
-    /// A file to open in the editor now, with the screen handed over; resets the request.
-    pub(crate) fn take_edit(&mut self) -> Option<PathBuf> {
-        self.edit_now.take()
-    }
-
-    /// A file to write the command line's text to and open in the editor now, with the screen
-    /// handed over, and the text; resets the request.
-    pub(crate) fn take_command_edit(&mut self) -> Option<(PathBuf, String)> {
-        self.command_edit.take()
+    /// What to hand the terminal to now, with the panels hidden; resets the request.
+    pub(crate) fn take_handover(&mut self) -> Option<Handover> {
+        self.handover.take()
     }
 
     /// Takes what the editor left of the command, or why it could not run.
@@ -835,11 +835,6 @@ impl App {
                 .flat_map(|c| self.handle(Resolved::Insert(c)))
                 .collect(),
         }
-    }
-
-    /// A shell command to run now, with the screen handed over; resets the request.
-    pub(crate) fn take_run(&mut self) -> Option<Run> {
-        self.run_now.take()
     }
 
     /// The directory of the active panel if it is local and new since the last call: the
@@ -1542,6 +1537,7 @@ impl App {
             Action::Shell | Action::Command | Action::CommandHistory => {
                 self.open_command_line(action);
             }
+            Action::UserScreen => self.handover = Some(Handover::UserScreen),
             Action::Quit => self.ask_quit(),
             Action::Jobs => self.jobs_list = Some(JobsList::default()),
             Action::Redraw => self.redraw = true,
@@ -2588,7 +2584,7 @@ impl App {
                     remote: None,
                     dir,
                 });
-                self.edit_now = Some(path);
+                self.handover = Some(Handover::Edit(path));
                 return noted;
             }
             return Vec::new();
@@ -2721,6 +2717,10 @@ impl App {
     /// Gives a key to the command line: Enter hands its command to the event loop, to run in
     /// the active panel's directory.
     fn handle_command_line(&mut self, input: Resolved) -> Vec<Effect> {
+        if input == Resolved::Action(Action::UserScreen) {
+            self.handover = Some(Handover::UserScreen);
+            return Vec::new();
+        }
         let Some(line) = &mut self.command_line else {
             return Vec::new();
         };
@@ -2755,7 +2755,8 @@ impl App {
             CommandEvent::Edit => {
                 let name = format!("command-{}.sh", std::process::id());
                 let text = line.text().to_owned();
-                self.command_edit = Some((self.runtime_dir.join(name), text));
+                let file = self.runtime_dir.join(name);
+                self.handover = Some(Handover::EditCommand { file, text });
                 Vec::new()
             }
             CommandEvent::Unknown(text) => {
@@ -2781,7 +2782,12 @@ impl App {
                     Location::Root | Location::Sftp => return Vec::new(),
                 };
                 let mut effects = self.remember(&dir, &command);
-                self.run_now = Some(Run { place, command });
+                self.handover = Some(Handover::Run(Run {
+                    place,
+                    command,
+                    prompt: self.shell_prompt(u16::MAX),
+                    pause: self.config.shell.pause,
+                }));
                 effects.extend(self.note(&dir));
                 effects
             }
@@ -2922,6 +2928,13 @@ impl App {
         if line.kind() == command::Kind::Noc {
             return ":".to_owned();
         }
+        self.shell_prompt(width)
+    }
+
+    /// The prompt of a shell command in the active panel: its directory, with `~` for the home
+    /// directory, or `host:path` with the host's label if it has one, its middle cut if it
+    /// would take more than a third of `width`, and `$`.
+    fn shell_prompt(&self, width: u16) -> String {
         let dir = match self.panel(self.active).location() {
             Location::Local(path) => match path.strip_prefix(&self.home) {
                 Ok(rest) if rest.as_os_str().is_empty() => "~".to_owned(),
@@ -3351,7 +3364,10 @@ impl App {
     fn follow_up(&mut self, then: Then, complete: bool) -> Vec<Effect> {
         match (then, complete) {
             (Then::Edit, true) => {
-                self.edit_now = self.editing.as_ref().map(|editing| editing.file.clone());
+                self.handover = self
+                    .editing
+                    .as_ref()
+                    .map(|editing| Handover::Edit(editing.file.clone()));
                 Vec::new()
             }
             (Then::Edit, false) => self
@@ -5046,6 +5062,41 @@ mod tests {
     }
 
     /// The effects but those for zoxide.
+    impl App {
+        /// The file the editor of F4 is to open now, if that is what comes next.
+        fn take_edit(&mut self) -> Option<PathBuf> {
+            match self.handover.take() {
+                Some(Handover::Edit(file)) => Some(file),
+                other => {
+                    self.handover = other;
+                    None
+                }
+            }
+        }
+
+        /// The command line's text for the editor now, and its file.
+        fn take_command_edit(&mut self) -> Option<(PathBuf, String)> {
+            match self.handover.take() {
+                Some(Handover::EditCommand { file, text }) => Some((file, text)),
+                other => {
+                    self.handover = other;
+                    None
+                }
+            }
+        }
+
+        /// The shell command to run now.
+        fn take_run(&mut self) -> Option<Run> {
+            match self.handover.take() {
+                Some(Handover::Run(run)) => Some(run),
+                other => {
+                    self.handover = other;
+                    None
+                }
+            }
+        }
+    }
+
     fn without_zoxide(effects: Vec<Effect>) -> Vec<Effect> {
         effects
             .into_iter()
@@ -6891,6 +6942,7 @@ mod tests {
         let Some(Run {
             place: Place::Remote { dir, .. },
             command,
+            ..
         }) = app.take_run()
         else {
             panic!("expected a remote command");
@@ -8956,13 +9008,15 @@ mod tests {
         let Some(Run {
             place: Place::Local(dir),
             command,
+            prompt,
+            ..
         }) = app.take_run()
         else {
             panic!("expected a local command");
         };
         assert_eq!(
-            (dir.as_path(), command.as_str()),
-            (Path::new("/srv"), "make\nls")
+            (dir.as_path(), command.as_str(), prompt.as_str()),
+            (Path::new("/srv"), "make\nls", "/srv $ ")
         );
         assert!(app.take_run().is_none());
         let effects = app.ran(Ok(()));
@@ -9096,6 +9150,22 @@ mod tests {
         assert_eq!(app.history.len(), 1);
         app.handle(action(Action::Cancel));
         assert_eq!(app.context(), Context::CommandLine);
+    }
+
+    #[test]
+    fn ctrl_o_shows_the_output_from_a_panel_and_the_command_line() {
+        let mut app = loaded();
+        app.handle(action(Action::UserScreen));
+        assert!(matches!(app.take_handover(), Some(Handover::UserScreen)));
+        app.handle(action(Action::Shell));
+        type_text(&mut app, "ls");
+        app.handle(action(Action::UserScreen));
+        assert!(matches!(app.take_handover(), Some(Handover::UserScreen)));
+        assert_eq!(
+            app.command_line.as_ref().map(CommandLine::text),
+            Some("ls"),
+            "the line stays as it was"
+        );
     }
 
     #[test]

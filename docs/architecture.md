@@ -667,6 +667,7 @@ record = true                    # add directories where the user did something
 
 [shell]
 history_size = 500               # commands of ! and : in history.toml, of all hosts together
+pause = "always"                 # output waits for a key: "always", "on-error", or "never"
 ```
 
 Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
@@ -886,20 +887,26 @@ location = "root"
   F4 and runs it with `noc-tools`' `Shell`: `$SHELL -c <command>` (`/bin/sh` without `$SHELL`) in
   the panel's directory, the command in one argument as typed. On a host, the host's task builds the
   ssh command from its session (`Session::command_in`) and the event loop runs it with the terminal:
-  over the master, with `cd -- '<dir>' || exit` before the command. Afterwards it says how a failed
-  command ended, waits for a key in raw mode, and takes the terminal back; both panels read their
-  directories again, as in mc. Esc, or Backspace on an empty line, closes the line. Shift-Enter
-  starts a new line too where the terminal speaks the kitty keyboard protocol: at start the event
-  loop asks for it with `supports_keyboard_enhancement` (in `spawn_blocking`, before the stream of
-  events takes crossterm's reader) and then pushes `DISAMBIGUATE_ESCAPE_CODES`; it pops them, and
-  turns bracketed paste off, whenever another program gets the terminal, on exit, and on a panic.
-  With bracketed paste a paste arrives as one event: the command line takes it whole, line breaks
-  included, and runs nothing; text fields, quick search, and the menus' filters take its characters
-  without line breaks; panels, the pull-down menu, dialogs' buttons, and the viewer ignore it.
-  Ctrl-X Ctrl-E writes the command to a file in the private runtime directory, runs the editor on it
-  as F4 does, and puts what it left back into the line, without the line breaks at its end; the file
-  goes afterwards. Each command that ran, unless it starts with a space, goes to `history.toml` in
-  the state directory with its host (the alias; none for a local one), directory, and time:
+  over the master, with `cd -- '<dir>' || exit` before the command. `tui/output.rs` shows the
+  command after its prompt first, bold, and afterwards ends its output on a line of its own as zsh
+  does (a dim `⏎`, spaces to the last column, `\r`, a cleared line); then a line in reverse video
+  asks for a key, with the exit status of a failure, unless `shell.pause` says not to wait, and
+  after the key `[exit N]` takes its place for a command that failed. The event loop then takes the
+  terminal back; both panels read their directories again, as in mc. Esc, or Backspace on an empty
+  line, closes the line. Ctrl-O, in the panels or on the line, hands the terminal over without a
+  program: its own screen shows, with the output of the commands, until a key that the `user_screen`
+  context binds to Cancel (Ctrl-O, Esc). Shift-Enter starts a new line too where the terminal speaks
+  the kitty keyboard protocol: at start the event loop asks for it with
+  `supports_keyboard_enhancement` (in `spawn_blocking`, before the stream of events takes
+  crossterm's reader) and then pushes `DISAMBIGUATE_ESCAPE_CODES`; it pops them, and turns bracketed
+  paste off, whenever another program gets the terminal, on exit, and on a panic. With bracketed
+  paste a paste arrives as one event: the command line takes it whole, line breaks included, and
+  runs nothing; text fields, quick search, and the menus' filters take its characters without line
+  breaks; panels, the pull-down menu, dialogs' buttons, and the viewer ignore it. Ctrl-X Ctrl-E
+  writes the command to a file in the private runtime directory, runs the editor on it as F4 does,
+  and puts what it left back into the line, without the line breaks at its end; the file goes
+  afterwards. Each command that ran, unless it starts with a space, goes to `history.toml` in the
+  state directory with its host (the alias; none for a local one), directory, and time:
   `noc-config`'s `add_command` reads the file again, replaces the same command on the same host,
   keeps the newest `shell.history_size`, and writes it whole and atomically, mode 0600; one task
   makes the changes in turn, and the app keeps the commands in memory. Up on the first line of a
@@ -911,18 +918,19 @@ location = "root"
   the line, with the prompt reversed until the next key if it ran on another host, and Delete
   removes it.
 - **Keymap.** Keys map to `Action`s per context (`panel`, `root`, `quick_search`, `command_line`,
-  `menu`, `pull_down`, `dialog`, `dialog_input`, `viewer`). Each context falls back along a chain,
-  for example the root and quick search to the panel; the first context that knows a key sequence
-  decides, except that a sequence it only starts does what a later context binds it to. Bindings are
-  key sequences matched by prefix with a 1-second timeout, so a vim preset (`g g`, `d d`) can follow
-  the default mc preset. As in mc, `Esc` in a panel waits for the next key: `Esc 1` … `Esc 0` stand
-  for F1 … F10, `Esc` followed by a character stands for Alt and that character, for terminals whose
-  Alt key sends nothing, and `Esc` alone cancels once the timeout passes (`Esc Esc` at once). An
-  `Esc` and a quick next key arrive as Alt and that key, so there an unbound Alt and a character
-  count as `Esc` and the character. In dialogs, quick search, and the menus `Esc` acts at once. Keys
-  are written with `crokey` names. User overrides in `keymap.toml` are planned for M4. The F-key bar
-  is generated from the active keymap, and so is the help screen (F1): the keys of each context,
-  with what they do, for what the app can do already; a prompt from ssh shows over it.
+  `history`, `user_screen`, `menu`, `pull_down`, `dialog`, `dialog_input`, `viewer`). Each context
+  falls back along a chain, for example the root and quick search to the panel; the first context
+  that knows a key sequence decides, except that a sequence it only starts does what a later context
+  binds it to. Bindings are key sequences matched by prefix with a 1-second timeout, so a vim preset
+  (`g g`, `d d`) can follow the default mc preset. As in mc, `Esc` in a panel waits for the next
+  key: `Esc 1` … `Esc 0` stand for F1 … F10, `Esc` followed by a character stands for Alt and that
+  character, for terminals whose Alt key sends nothing, and `Esc` alone cancels once the timeout
+  passes (`Esc Esc` at once). An `Esc` and a quick next key arrive as Alt and that key, so there an
+  unbound Alt and a character count as `Esc` and the character. In dialogs, quick search, and the
+  menus `Esc` acts at once. Keys are written with `crokey` names. User overrides in `keymap.toml`
+  are planned for M4. The F-key bar is generated from the active keymap, and so is the help screen
+  (F1): the keys of each context, with what they do, for what the app can do already; a prompt from
+  ssh shows over it.
 - **Mouse.** On by default (`ui.mouse`; [ADR 0018](adr/0018-mouse-support.md)). The event loop
   captures the mouse while it is on and turns crossterm's events into `Pointer`s
   (`tui/mouse.rs`): a click, a double click (the same cell within 400 ms), a right click, or a

@@ -61,6 +61,21 @@ point.
 - **Running suspends the TUI** as F4 does: the terminal goes back to the shell, the command
   runs with it, and a key returns to the panels, as mc does without a subshell. Both panels
   then read their directories again.
+  - The command shows first after its prompt, bold, as a shell shows what was typed. Its
+    output then ends on a line of its own without asking the terminal where the cursor is, as
+    zsh does: a dim `⏎`, spaces up to the last column, a carriage return, and a cleared line.
+  - A line in reverse video asks for the key, with the exit status of a command that failed.
+    After the key it goes, and `[exit N]` (or `[signal N]`), bold and red in the terminal's
+    own palette, stays in its place, so that the screen keeps prompt, command, output, and
+    failures in order.
+  - `shell.pause` says when that line waits: `always` (the default, as mc), `on-error`, or
+    `never`; without the wait, a failure still leaves its mark. It has its row in the
+    Configuration dialog.
+- **Ctrl-O shows that screen** in place of the panels, as in mc and Far: the terminal's own
+  screen, with the output of the commands run so far. Only Ctrl-O and Esc bring the panels
+  back; other keys do nothing, so that none runs anything by accident. It works in the panels
+  and on the command line, which stays as it was. There is no console of its own: `! $SHELL`,
+  or `! bash -l` on a host, gives an interactive shell in the panel's directory.
   - Local panel: `$SHELL -c <command>` (`/bin/sh` without `$SHELL`), started from `noc-tools`
     in the panel's directory, not through a second shell. The command is the one argument of
     `-c`; nothing of Noon Commander's is put into its text.

@@ -42,12 +42,30 @@ pub struct ShellConfig {
     /// How many commands of the command line `history.toml` keeps, of all hosts together; `0`
     /// keeps none. Default: `500`, as bash's `HISTSIZE`.
     pub history_size: usize,
+    /// When the output of a command stays on screen until a key. Default: `always`.
+    pub pause: Pause,
 }
 
 impl Default for ShellConfig {
     fn default() -> Self {
-        Self { history_size: 500 }
+        Self {
+            history_size: 500,
+            pause: Pause::default(),
+        }
     }
+}
+
+/// When the output of a command of the command line stays on screen until a key, instead of
+/// the panels coming back at once: `shell.pause`. Ctrl-O shows the output later either way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Pause {
+    /// After every command, as mc without a subshell.
+    #[default]
+    Always,
+    /// After a command that failed.
+    OnError,
+    Never,
 }
 
 /// The `[zoxide]` section.
@@ -399,8 +417,8 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, ShellConfig, SshConfig, TabBar,
-        TransferConfig, UiConfig, VolumesConfig, Wheel, ZoxideConfig,
+        Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, Pause, ShellConfig, SshConfig,
+        TabBar, TransferConfig, UiConfig, VolumesConfig, Wheel, ZoxideConfig,
     };
     use crate::{ConfigError, write_default_config};
 
@@ -456,6 +474,7 @@ mod tests {
 
         [shell]
         history_size = 50
+        pause = "on-error"
     "#;
 
     fn full() -> Config {
@@ -492,7 +511,10 @@ mod tests {
                 program: PathBuf::from("/opt/homebrew/bin/zoxide"),
                 record: false,
             },
-            shell: ShellConfig { history_size: 50 },
+            shell: ShellConfig {
+                history_size: 50,
+                pause: Pause::OnError,
+            },
         }
     }
 
@@ -522,6 +544,7 @@ mod tests {
         assert_eq!(config.zoxide.program, Path::new("zoxide"));
         assert!(config.zoxide.record);
         assert_eq!(config.shell.history_size, 500);
+        assert_eq!(config.shell.pause, Pause::Always);
     }
 
     #[test]
@@ -711,6 +734,7 @@ mod tests {
         assert!(table["zoxide"].get("program").is_some());
         assert!(table["zoxide"].get("record").is_some());
         assert!(table["shell"].get("history_size").is_some());
+        assert!(table["shell"].get("pause").is_some());
     }
 
     #[test]

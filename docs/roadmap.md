@@ -27,7 +27,7 @@
 - [x] Opening hosts: background connect (Esc stops it), remote listings, `start_dir`, lost
       connections
 - [x] Disconnect, `ssh -G` on connect, connection state in the root
-- [x] Sorting (Ctrl-F3 … Ctrl-F6) and hidden files (`ui.show_hidden`, Alt-.)
+- [x] Sorting (Ctrl+F3 … Ctrl+F6) and hidden files (`ui.show_hidden`, Alt+.)
 - [x] Quick search
 - [x] Keymap engine with the mc preset
 - [x] Nerd Font icons and mc markers
@@ -38,9 +38,9 @@
 
 ## M3: File operations (done)
 
-- [x] Panel actions that the keymap binds already: Ctrl-U swaps the panels, Alt-O opens the
-      directory under the cursor in the other panel, Alt-I shows this directory there
-- [x] Marks: Insert or Ctrl-T, Shift-Up/Down, `*`; their total below the listing
+- [x] Panel actions that the keymap binds already: Ctrl+u swaps the panels, Alt+o opens the
+      directory under the cursor in the other panel, Alt+i shows this directory there
+- [x] Marks: Insert or Ctrl+t, Shift+Up/Down, `*`; their total below the listing
 - [x] `+` and `-` mark and unmark by pattern
 - [x] VFS: create and remove directories, remove files, rename, set permissions and times
 - [x] F7 mkdir
@@ -55,17 +55,17 @@
 - [x] F4 edit via `$EDITOR` (suspends and resumes the TUI)
 - [x] Background jobs: the Background button, an indicator, a question on quit
 - [x] Job queue: `[transfer] parallel_jobs`
-- [x] A list of jobs (Ctrl-X J)
+- [x] A list of jobs (Ctrl+x j)
 
 ## M4: Polish (current)
 
 - [x] Virtual root of mounted volumes and a list of SFTP hosts, with the connected hosts in the
       root; `[volumes] hide` ([ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md))
-- [x] Location menu: Alt-F1, Alt-F2 (Ctrl-X 1, Ctrl-X 2), with a filter and hotkeys
+- [x] Location menu: Alt+F1, Alt+F2 (Ctrl+x 1, Ctrl+x 2), with a filter and hotkeys
 - [x] Host settings in `hosts.toml`, typed and edited with F4 on a host: `other_dir`,
       `remember_dir` ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md))
 - [x] Clipboard through OSC 52 ([ADR 0008](adr/0008-clipboard-through-osc-52.md))
-- [x] Checksums (Ctrl-X #): SHA-256, SHA-512, SHA-1, MD5, BLAKE3 of files and trees, an
+- [x] Checksums (Ctrl+x #): SHA-256, SHA-512, SHA-1, MD5, BLAKE3 of files and trees, an
       expected checksum, comparison with the file in the other panel, Copy and Save
 - [ ] Verify files of checksums (`*.sha256`, `SHA256SUMS`, `*.md5`, `*.sfv`): `OK`, `FAILED`,
       and missing, with a total
@@ -82,23 +82,23 @@
 - [ ] More built-in dark and light pairs from the same palette roles: Gruvbox (dark/light),
       Rosé Pine (main/dawn), Tokyo Night (night/day), Solarized (dark/light)
 - [ ] User themes and keymap overrides
-- [x] Tabs: each panel has its own (Ctrl-X T, Ctrl-X W, Alt-Left/Right, Ctrl-X Tab), on a line
+- [x] Tabs: each panel has its own (Ctrl+x t, Ctrl+x w, Alt+Left/Right, Ctrl+x Tab), on a line
       above the panels or in their frames, `ui.tab_bar`
       ([ADR 0011](adr/0011-tabs-per-panel.md))
-- [x] zoxide: Alt-Z jumps to the directories it ranks; directories where the user did
+- [x] zoxide: Alt+z jumps to the directories it ranks; directories where the user did
       something go to it, `[zoxide]`; external programs live in `noc-tools`
       ([ADR 0012](adr/0012-external-tools-and-zoxide.md))
 - [x] Release workflow from signed tags: macOS binaries for arm64 and x86_64 with build
       provenance attestations, and a Homebrew tap
       ([ADR 0014](adr/0014-release-workflow-and-homebrew-tap.md))
-- [x] Quick cd (Alt-C), as in mc, with `~`, `..`, `-`, and `host:path`
+- [x] Quick cd (Alt+c), as in mc, with `~`, `..`, `-`, and `host:path`
 - [x] Tab completion of paths in Quick cd, F5, F6, and F7, with a list of choices
-- [x] Shift-F6 renames the entry under the cursor in its row, with the name but the last
+- [x] Shift+F6 renames the entry under the cursor in its row, with the name but the last
       extension selected
 - [x] Fuzzy search as fzf does it in quick search, the location menu, and the zoxide window,
       `ui.fuzzy_search` ([ADR 0016](adr/0016-fuzzy-search.md))
-- [x] Workspaces: the tabs of both panels saved under a name (Alt-Shift-W), restored from
-      F9 → Workspace or their window (Alt-W), which also saves, renames, and deletes them;
+- [x] Workspaces: the tabs of both panels saved under a name (Alt+W), restored from
+      F9 → Workspace or their window (Alt+w), which also saves, renames, and deletes them;
       `workspaces.toml`
       ([ADR 0017](adr/0017-workspaces.md))
 - [ ] Bookmarks and history
@@ -108,15 +108,15 @@
 - [ ] Restore panel state on start, with the tabs
 - [x] Typing in a panel no longer starts quick search; `ui.type_to_search` is gone
 - [x] Shell command line ([ADR 0019](adr/0019-shell-command-line.md)): `!` (and `:!`) runs a
-      command in a local panel's directory; several lines (Ctrl-J, `\` Enter)
+      command in a local panel's directory; several lines (Ctrl+j, `\` Enter)
 - [x] Shell command line on hosts, over the master connection, with a terminal
-- [x] Shell command line: Shift-Enter (kitty keyboard protocol), bracketed paste, Ctrl-X
-      Ctrl-E in `$EDITOR`
-- [x] Ctrl-O shows the output of commands in place of the panels; each command shows after its
+- [x] Shell command line: Shift+Enter (kitty keyboard protocol), bracketed paste, Ctrl+x
+      Ctrl+e in `$EDITOR`
+- [x] Ctrl+o shows the output of commands in place of the panels; each command shows after its
       prompt, its output ends on a line of its own, and a failure leaves `[exit N]`;
       `shell.pause`. `! $SHELL` gives an interactive shell, so there is no console of its own
-- [x] Command history per host: Up/Down (Alt-P/Alt-N) for the panel's host, a window (Alt-H,
-      Ctrl-R) for one host or all; `shell.history_size`, `history.toml` in the state directory
+- [x] Command history per host: Up/Down (Alt+p/Alt+n) for the panel's host, a window (Alt+h,
+      Ctrl+r) for one host or all; `shell.history_size`, `history.toml` in the state directory
 - [x] Terminal title: the active panel's directory, the terminal's own title back on quitting;
       `ui.terminal_title`
 - [x] Keymap presets by name, chosen as themes are: `ui.keymap`, `default` and `vim`

@@ -52,7 +52,7 @@ pub(crate) struct Status {
     pub(crate) enabled: bool,
     /// Whether its mark shows: the sort order of the panel, or a setting that is on.
     pub(crate) checked: bool,
-    /// The keys that do the same, such as `Ctrl-F3`.
+    /// The keys that do the same, such as `Ctrl+F3`.
     pub(crate) key: Option<String>,
 }
 
@@ -863,7 +863,7 @@ mod tests {
             checked: matches!(command, Command::On(_, Action::SortByName)),
             key: match command {
                 Command::Do(Action::View) => Some("F3".to_owned()),
-                Command::Do(Action::Checksum) => Some("Ctrl-x #".to_owned()),
+                Command::Do(Action::Checksum) => Some("Ctrl+x #".to_owned()),
                 _ => None,
             },
         }

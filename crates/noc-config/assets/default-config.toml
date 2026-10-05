@@ -53,10 +53,10 @@ borders = "double"
 # Nerd Font icons in front of names; needs a Nerd Font in the terminal. Without them, mc's
 # markers: / directory, * executable, @ symlink, ~ symlink to a directory.
 icons = true
-# Show files whose names begin with a dot. Alt-. switches it while Noon Commander runs.
+# Show files whose names begin with a dot. Alt+. switches it while Noon Commander runs.
 show_hidden = true
-# Quick search, the filter of the location menu (Alt-F1, Alt-F2), and the zoxide window
-# (Alt-Z) match what is typed as fzf does: its characters in order, not necessarily together,
+# Quick search, the filter of the location menu (Alt+F1, Alt+F2), and the zoxide window
+# (Alt+z) match what is typed as fzf does: its characters in order, not necessarily together,
 # best matches first; words separated by spaces must all match, and fzf's ' ^ $ ! work. When
 # off, quick search finds names that start with the text, the location menu those that contain
 # it, and zoxide matches it as keywords, as z does.
@@ -65,7 +65,7 @@ fuzzy_search = true
 # menu is open, over the panels, as Far Manager does; "always" keeps it above the panels, as
 # Midnight Commander does.
 menu_bar = "on-demand"
-# Where a panel with more than one tab (Ctrl-X T) shows them: "line" on a line of its own above
+# Where a panel with more than one tab (Ctrl+x t) shows them: "line" on a line of its own above
 # the panels, or "frame" in the top of the panel's frame, in place of its title.
 tab_bar = "line"
 # The mouse: a click moves the cursor, a double click opens, a right click marks, and the wheel
@@ -89,7 +89,7 @@ atomic_upload = true
 parallel_jobs = 2
 
 [zoxide]
-# zoxide (https://github.com/ajeetdsouza/zoxide) ranks the directories you use; Alt-Z jumps to
+# zoxide (https://github.com/ajeetdsouza/zoxide) ranks the directories you use; Alt+z jumps to
 # them. A name looked up in PATH, or a path; a leading ~/ stands for the home directory.
 program = "zoxide"
 # Add a local directory to zoxide once you do something in it: copy, move, or delete from it,
@@ -103,7 +103,7 @@ record = true
 # that starts with a space is never kept.
 history_size = 500
 # When the output of a command stays on screen until a key: "always", "on-error" (after a
-# command that failed), or "never". Ctrl-O shows it again later either way.
+# command that failed), or "never". Ctrl+o shows it again later either way.
 pause = "always"
 
 # Per-host settings (labels, start directories) live in hosts.toml next to this file.

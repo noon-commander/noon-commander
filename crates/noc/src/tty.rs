@@ -66,7 +66,7 @@ impl Tty {
         let mut reader = &self.reader;
         loop {
             match reader.read(&mut buffer[..]) {
-                // Ctrl-D at the start of a line.
+                // Ctrl+d at the start of a line.
                 Ok(0) => return Err(io::ErrorKind::UnexpectedEof.into()),
                 Ok(read) => {
                     line.extend_from_slice(&buffer[..read]);

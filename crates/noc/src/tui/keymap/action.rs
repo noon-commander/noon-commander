@@ -8,9 +8,9 @@ pub(crate) enum Context {
     Panel,
     /// A panel on the virtual root or the list of hosts; falls back to `Panel`.
     Root,
-    /// The location menu of Alt-F1 and Alt-F2, which has a filter.
+    /// The location menu of Alt+F1 and Alt+F2, which has a filter.
     Menu,
-    /// The zoxide window of Alt-Z, which takes keywords.
+    /// The zoxide window of Alt+z, which takes keywords.
     Jump,
     /// The window of the saved workspaces, which has a filter.
     Workspaces,

@@ -1,5 +1,5 @@
 //! Workspaces: the tabs of both panels, saved under a name in `workspaces.toml` (ADR 0017),
-//! and their window, Alt-W or F9 → Workspace → Workspace list…, which saves, restores,
+//! and their window, Alt+w or F9 → Workspace → Workspace list…, which saves, restores,
 //! renames, and deletes them. Typing filters the window; while the filter is empty, `1` … `9`
 //! and `0` restore the first ten rows.
 

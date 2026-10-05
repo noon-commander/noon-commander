@@ -50,7 +50,7 @@ use super::theme::{ColorDepth, Theme};
 use super::workspaces::{self, WorkspacesEvent, WorkspacesWindow};
 use crate::i18n::fl;
 
-/// One of the two panels, named by the side it starts on. Ctrl-U swaps where the panels are
+/// One of the two panels, named by the side it starts on. Ctrl+u swaps where the panels are
 /// drawn, not who they are, so replies to requests in flight still reach the panel that asked.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Side {
@@ -200,7 +200,7 @@ pub(crate) enum Handover {
     EditCommand { file: PathBuf, text: String },
     /// A shell command of the command line.
     Run(Run),
-    /// Nothing: the terminal's own screen shows, with the output of commands, until Ctrl-O.
+    /// Nothing: the terminal's own screen shows, with the output of commands, until Ctrl+o.
     UserScreen,
 }
 
@@ -362,7 +362,7 @@ enum Purpose {
 /// What a dialog about workspaces is for.
 #[derive(Debug)]
 enum WorkspaceQuestion {
-    /// Alt-Shift-W, or Insert in the window: OK saves the tabs of both panels under the name
+    /// Alt+W, or Insert in the window: OK saves the tabs of both panels under the name
     /// typed.
     Save,
     /// The name typed for `workspace` is taken: Yes saves it in place of that one.
@@ -560,7 +560,7 @@ pub(crate) struct App {
     swapped: bool,
     hosts: HashMap<String, Host>,
     connections: u64,
-    /// The settings, with `~` expanded; `ui.show_hidden` follows Alt-.
+    /// The settings, with `~` expanded; `ui.show_hidden` follows Alt+.
     config: Config,
     decor: Decor,
     theme: Theme,
@@ -618,7 +618,7 @@ pub(crate) struct App {
     jobs_list: Option<JobsList>,
     /// Over the panels, under the dialogs.
     help: Option<Help>,
-    /// The location menu of Alt-F1 or Alt-F2, over the panels and under the dialogs.
+    /// The location menu of Alt+F1 or Alt+F2, over the panels and under the dialogs.
     menu: Option<LocationMenu>,
     /// The generation of the last listing for the menu.
     menu_listings: u64,
@@ -626,7 +626,7 @@ pub(crate) struct App {
     completion: Option<Completing>,
     /// The generation of the last listing for completion.
     completions: u64,
-    /// The zoxide window of Alt-Z, over the panels and under the dialogs.
+    /// The zoxide window of Alt+z, over the panels and under the dialogs.
     jump: Option<JumpMenu>,
     /// The generation of the last query for the zoxide window.
     jump_queries: u64,
@@ -639,7 +639,7 @@ pub(crate) struct App {
     configuration: Option<Configuration>,
     /// The saved workspaces, as `workspaces.toml` held them last.
     workspaces: Workspaces,
-    /// The workspace restored or saved last, which the dialog of Alt-Shift-W offers.
+    /// The workspace restored or saved last, which the dialog of Alt+W offers.
     workspace: Option<String>,
     /// The window of the saved workspaces, over the panels and under the dialogs.
     workspaces_window: Option<WorkspacesWindow>,
@@ -1739,7 +1739,7 @@ impl App {
         });
     }
 
-    /// Saves the tabs of both panels under `name`, the text of the dialog of Alt-Shift-W. A name
+    /// Saves the tabs of both panels under `name`, the text of the dialog of Alt+W. A name
     /// that another workspace has asks first; that of the workspace restored or saved last
     /// does not, as saving it again is what the dialog offers.
     fn save_workspace_as(&mut self, name: &str) -> Vec<Effect> {
@@ -2699,7 +2699,7 @@ impl App {
     }
 
     /// Opens the command line for `action`: `!` for a shell command, `:` for commands of Noon
-    /// Commander, Alt-H with the window of the history; in a panel on a local directory or on
+    /// Commander, Alt+h with the window of the history; in a panel on a local directory or on
     /// one of a connected host.
     fn open_command_line(&mut self, action: Action) {
         let kind = if action == Action::Command {
@@ -3788,7 +3788,7 @@ impl App {
         }
     }
 
-    /// Opens the dialog of Quick cd, Alt-C, for the active panel, as in mc.
+    /// Opens the dialog of Quick cd, Alt+c, for the active panel, as in mc.
     fn ask_cd(&mut self) {
         let (title, prompt) = (fl!("cd-title"), fl!("cd-prompt"));
         let dialog = Dialog::form(&title, &prompt, "", &[], MKDIR_DIALOG_WIDTH).with_completion();
@@ -3910,7 +3910,7 @@ impl App {
         effects
     }
 
-    /// Starts renaming the entry under the cursor of the active panel in its row, as Shift-F6;
+    /// Starts renaming the entry under the cursor of the active panel in its row, as Shift+F6;
     /// a name that is not UTF-8 cannot be edited, which an error says.
     fn start_rename(&mut self) {
         let panel = self.panel_mut(self.active);
@@ -5657,7 +5657,7 @@ mod tests {
         assert_eq!(
             app.panel(Side::Right).here(),
             app.panel(Side::Left).here(),
-            "on the row Alt-O moved on to"
+            "on the row Alt+o moved on to"
         );
 
         // A host opens in the other panel once it is connected.
@@ -7354,11 +7354,11 @@ mod tests {
         app.handle(action(Action::Down));
         let text = screen_of(&mut app, 20);
         assert!(
-            line_with(&text, "Change location…").contains("Alt-F2"),
+            line_with(&text, "Change location…").contains("Alt+F2"),
             "{text}"
         );
         assert!(
-            line_with(&text, "Sort by size").contains("Ctrl-F6"),
+            line_with(&text, "Sort by size").contains("Ctrl+F6"),
             "keys show for the active panel: {text}"
         );
         assert!(
@@ -7370,7 +7370,7 @@ mod tests {
         app.handle(action(Action::Right));
         let text = screen_of(&mut app, 20);
         assert!(
-            !line_with(&text, "Sort by size").contains("Ctrl-F6"),
+            !line_with(&text, "Sort by size").contains("Ctrl+F6"),
             "{text}"
         );
         assert!(app.handle(Resolved::Insert('z')).is_empty());
@@ -7581,7 +7581,7 @@ mod tests {
         app.handle(action(Action::End));
         assert!(app.handle(action(Action::Disconnect)).is_empty());
         assert!(!app.hosts.contains_key("db"), "stopped connecting");
-        // Ctrl-R asks again; the earlier listing no longer counts.
+        // Ctrl+r asks again; the earlier listing no longer counts.
         let effects = app.handle(action(Action::Reload));
         assert!(matches!(
             &effects[..],
@@ -7827,7 +7827,7 @@ mod tests {
         assert_eq!(
             app.context(),
             Context::QuickSearch,
-            "Ctrl-S starts an empty search"
+            "Ctrl+s starts an empty search"
         );
         app.handle(Resolved::Insert('l'));
         app.handle(action(Action::Backspace));
@@ -8313,7 +8313,7 @@ mod tests {
         assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3], 1));
     }
 
-    /// Saves the tabs of both panels as `name` with Alt-Shift-W, and returns what is saved.
+    /// Saves the tabs of both panels as `name` with Alt+W, and returns what is saved.
     fn save_as(app: &mut App, name: &str) -> Workspace {
         assert!(app.handle(action(Action::SaveWorkspace)).is_empty());
         app.handle(action(Action::DeleteToStart));
@@ -9149,7 +9149,7 @@ mod tests {
         assert_eq!(
             app.context(),
             Context::History,
-            "Alt-H opens the line and the window"
+            "Alt+h opens the line and the window"
         );
         let text = screen_of(&mut app, 16);
         assert!(text.contains("make") && !text.contains("uptime"), "{text}");
@@ -9324,7 +9324,7 @@ mod tests {
         answer(&mut app, effects, &Listing::Dir(vec![file("a", 1)]));
         assert_eq!(app.panel(Side::Left).location(), &local("/srv/right/x"));
 
-        // `..` puts the cursor on where the panel was, as Ctrl-PgUp does.
+        // `..` puts the cursor on where the panel was, as Ctrl+PgUp does.
         let effects = quick_cd(&mut app, "..");
         answer(
             &mut app,

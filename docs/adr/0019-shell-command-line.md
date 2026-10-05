@@ -7,7 +7,7 @@
 
 mc and Far keep a command line under the panels: typing goes into it, and Enter runs the line
 in the panel's directory through a persistent subshell. Noon Commander has no command line,
-and so typing in a panel started quick search (`ui.type_to_search`). The backlog had a Ctrl-O
+and so typing in a panel started quick search (`ui.type_to_search`). The backlog had a Ctrl+o
 console that suspends the TUI and starts `$SHELL`, and a persistent subshell as a later
 variant.
 
@@ -30,7 +30,7 @@ point.
   its own and ends; nothing of it, such as `cd` or `export`, outlives it.
 - **Typing in a panel does nothing**, as in mc with an empty command line and in vim's normal
   mode. `ui.type_to_search` is removed, with no compatibility for it; quick search starts with
-  Ctrl-S or Alt-S.
+  Ctrl+s or Alt+s.
 - **The line is hidden until opened**, in both presets, by the same keys: `!` opens it for a
   shell command; `:` opens it for commands of Noon Commander, of which there is only `:!cmd` for
   now, the same as `!`. `:` is kept for those commands, so that adding them later breaks
@@ -41,13 +41,13 @@ point.
   for a local panel) and the panel's directory, shortened from the start as paths in panels
   are, then `$`. Lines after the first start with `>`. Text is shown terminal-safe through
   `noc-text`.
-- **A command may span lines.** Shift-Enter, Ctrl-J, or a `\` at the end of the line followed
-  by Enter start a new line; Enter runs the command. Ctrl-J arrives as LF where Enter arrives
-  as CR, so it works in every terminal. Shift-Enter needs the kitty keyboard protocol: the
+- **A command may span lines.** Shift+Enter, Ctrl+j, or a `\` at the end of the line followed
+  by Enter start a new line; Enter runs the command. Ctrl+j arrives as LF where Enter arrives
+  as CR, so it works in every terminal. Shift+Enter needs the kitty keyboard protocol: the
   event loop asks for its first level, `DISAMBIGUATE_ESCAPE_CODES`, only where
   `supports_keyboard_enhancement()` finds it, and gives it up whenever another program gets
   the terminal. At that level printable keys, Enter, and Tab still arrive as before, and
-  crossterm reports the rest (Esc, Alt and Ctrl with a key, Shift-Tab as BackTab) as the same
+  crossterm reports the rest (Esc, Alt and Ctrl with a key, Shift+Tab as BackTab) as the same
   events, so the keymap needs nothing of its own for it; `Esc` simply no longer merges with
   the next key into Alt.
 - **The line grows with its text**, wrapped lines included, up to a third of the screen and
@@ -56,7 +56,7 @@ point.
   and from the first or the last one go through the history, as fish and zsh do.
 - **Pasted text never runs.** Bracketed paste (crossterm's `Event::Paste`) puts what is pasted
   into the line as it is, line breaks included; only Enter runs it.
-- **Ctrl-X Ctrl-E opens the command in `$EDITOR`**, as in bash and zsh, through `noc-tools` as
+- **Ctrl+x Ctrl+e opens the command in `$EDITOR`**, as in bash and zsh, through `noc-tools` as
   F4 does, in a temporary file. What the editor leaves goes back into the line and does not
   run.
 - **Running suspends the TUI** as F4 does: the terminal goes back to the shell, the command
@@ -72,8 +72,8 @@ point.
   - `shell.pause` says when that line waits: `always` (the default, as mc), `on-error`, or
     `never`; without the wait, a failure still leaves its mark. It has its row in the
     Configuration dialog.
-- **Ctrl-O shows that screen** in place of the panels, as in mc and Far: the terminal's own
-  screen, with the output of the commands run so far. Only Ctrl-O and Esc bring the panels
+- **Ctrl+o shows that screen** in place of the panels, as in mc and Far: the terminal's own
+  screen, with the output of the commands run so far. Only Ctrl+o and Esc bring the panels
   back; other keys do nothing, so that none runs anything by accident. It works in the panels
   and on the command line, which stays as it was. There is no console of its own: `! $SHELL`,
   or `! bash -l` on a host, gives an interactive shell in the panel's directory.
@@ -100,9 +100,9 @@ point.
   `HISTCONTROL=ignorespace`, since commands may hold secrets. `shell.history_size` sets how
   many entries are kept in all, 500 by default as bash's `HISTSIZE`; it has its row in the
   Configuration dialog.
-- **Up and Down in the line (Alt-P and Alt-N as in mc) go through the history of the panel's
+- **Up and Down in the line (Alt+p and Alt+n as in mc) go through the history of the panel's
   host only**, so a command typed for one machine does not come up on another.
-- **The history window (Alt-H as in mc, Ctrl-R as in bash, on the line; Alt-H in a panel
+- **The history window (Alt+h as in mc, Ctrl+r as in bash, on the line; Alt+h in a panel
   opens the line with it)** looks like the zoxide and
   Workspaces windows. Typing filters it as quick search matches. Each row shows the host, the
   directory, and the first line of the command, with `…` and `+N` for the lines after it; the
@@ -123,7 +123,7 @@ point.
 - Commands that change the shell's state (`cd`, `export`, `source`) do nothing lasting; the
   help says so.
 - The kitty keyboard protocol is asked for only at its first level, which leaves the keys the
-  keymap knows as they were; where a terminal lacks it, Ctrl-J and `\` Enter still give a new
+  keymap knows as they were; where a terminal lacks it, Ctrl+j and `\` Enter still give a new
   line.
 - Remote commands run with the user's ssh setup and the host's shell; Noon Commander quotes
   only the directory and passes the command as written.

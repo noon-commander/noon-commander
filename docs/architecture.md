@@ -145,7 +145,7 @@ row, the hosts from the ssh config ([ADR 0006](adr/0006-virtual-root-with-volume
 - Hosts come in config order, named by their `label` from `hosts.toml` if set (the status line shows
   the alias), with the address cached from an earlier `ssh -G`. The root and the list of hosts
   are listed like directories, in background tasks that read the volumes, scan the ssh config,
-  and load the cache, so Ctrl-R reads them again.
+  and load the cache, so Ctrl+r reads them again.
 - Entering a host connects in the background (the status line says so; Esc stops it) and opens,
   shown as an absolute path, the last directory shown on it in this session if `remember_dir`
   is set and the directory is still there, else the configured `start_dir`, else the remote home
@@ -170,9 +170,9 @@ row, the hosts from the ssh config ([ADR 0006](adr/0006-virtual-root-with-volume
 
 ### Location menu
 
-Alt-F1 and Alt-F2, as Far Manager's menus to change drives, open a menu over the left or the right
-panel with the same places: the home directory, the volumes, then every host (Ctrl-X 1 and Ctrl-X 2
-too, for terminals whose Alt-F1 never arrives, such as macOS Terminal without Option as Meta).
+Alt+F1 and Alt+F2, as Far Manager's menus to change drives, open a menu over the left or the right
+panel with the same places: the home directory, the volumes, then every host (Ctrl+x 1 and Ctrl+x 2
+too, for terminals whose Alt+F1 never arrives, such as macOS Terminal without Option as Meta).
 
 ```text
  ╔════════════════════ Left ════════════════════╗
@@ -196,7 +196,7 @@ too, for terminals whose Alt-F1 never arrives, such as macOS Terminal without Op
   (the default) it matches them as [fzf](#fuzzy-search) does, and the cursor goes to the best
   row; otherwise a row's text must contain the filter, ignoring case, and the cursor goes to
   the first. The rows keep their order either way. Backspace takes a character back. F8
-  disconnects the host under the cursor, Ctrl-R reads the volumes and hosts again, and Esc or
+  disconnects the host under the cursor, Ctrl+r reads the volumes and hosts again, and Esc or
   F10 closes the menu.
 - The menu is modal (keymap context `menu`) and lists the root in the background; its listing
   carries a generation of its own, so a stale one is dropped.
@@ -209,19 +209,19 @@ the active panel selected; later, where it was when it closed. An open menu:
 ```text
   Left     File     Command     Options     Workspace     Right         2 jobs 37%
  ╔══════════════════════════════╗
- ║   Change location…    Alt-F1 ║
+ ║   Change location…    Alt+F1 ║
  ╟──────────────────────────────╢
- ║ • Sort by name       Ctrl-F3 ║
- ║   Sort by extension  Ctrl-F4 ║
- ║   Sort by time       Ctrl-F5 ║
- ║   Sort by size       Ctrl-F6 ║
+ ║ • Sort by name       Ctrl+F3 ║
+ ║   Sort by extension  Ctrl+F4 ║
+ ║   Sort by time       Ctrl+F5 ║
+ ║   Sort by size       Ctrl+F6 ║
  ╟──────────────────────────────╢
- ║   Rescan              Ctrl-r ║
+ ║   Rescan              Ctrl+r ║
  ║   Disconnect                 ║
  ╚══════════════════════════════╝
 ```
 
-- Left and Right act on the panel drawn on that side, after Ctrl-U too: its location menu,
+- Left and Right act on the panel drawn on that side, after Ctrl+u too: its location menu,
   sort order (`•` marks the current one), Rescan, Disconnect while it shows a host, and its
   [tabs](#tabs): New tab, Close tab, and Tab list…. File
   has F3 … F8, `+`, `-`, `*`, Checksums, and Exit; Command has quick search,
@@ -250,12 +250,12 @@ the active panel selected; later, where it was when it closed. An open menu:
 
 ### Quick cd
 
-Alt-C (`Esc C`), as mc's Quick cd, asks for a path and opens it in the active panel, as `cd`
+Alt+c (`Esc c`), as mc's Quick cd, asks for a path and opens it in the active panel, as `cd`
 in a shell reads it: relative to the panel's directory, `/…` absolute, `~` and `~/…` the home
 directory, `..` and `.` resolved by name, `-` the directory the tab showed before, and
 `host:path` on a host, scp-style, which connects to it if needed. On a host, paths stay on it
 and `~` is the remote home. From the volumes and hosts, relative paths start at the home
-directory. `cd ..` puts the cursor on the directory left, as Ctrl-PgUp does; a path that is not
+directory. `cd ..` puts the cursor on the directory left, as Ctrl+PgUp does; a path that is not
 there leaves the panel where it is, with the reason below the listing. It is in F9 → Command.
 
 ### Completion
@@ -280,7 +280,7 @@ dialog reads its text:
 ### zoxide
 
 [zoxide](https://github.com/ajeetdsouza/zoxide) ranks the directories the user works in
-([ADR 0012](adr/0012-external-tools-and-zoxide.md)). Alt-Z (Ctrl-X Z) opens a window of its
+([ADR 0012](adr/0012-external-tools-and-zoxide.md)). Alt+z (Ctrl+x z) opens a window of its
 best directories, which Enter opens in the active panel:
 
 ```text
@@ -303,7 +303,7 @@ best directories, which Enter opens in the active panel:
 - A local directory goes to zoxide (`zoxide add -- <dir>`) once the user does something in it,
   at most once a visit: a copy, move, or delete from it, a copy or move into it when a panel
   shows it, F7, F3 or F4 on a file, checksums, or a jump there. Passing through, marking,
-  searching, sorting, and Ctrl-R do not count. Each tab remembers whether its visit counted;
+  searching, sorting, and Ctrl+r do not count. Each tab remembers whether its visit counted;
   going to another directory starts a new one. One task adds them in turn, so no two zoxide
   processes write its database at once.
 - `zoxide.record` turns recording off; without zoxide the window says it is not installed,
@@ -349,10 +349,10 @@ row and names the tab that shows by its whole location:
 - A tab is a whole `Panel` (listing, cursor, marks, sort order, quick search), so switching
   shows it at once. Hidden tabs list nothing: when a job or F7 changes a directory that a
   hidden tab shows, the tab is marked stale and reads it again when it shows.
-- Ctrl-X T opens a new tab after the one that shows, on the same directory with the same
-  listing and cursor, without marks; Ctrl-X W closes the tab that shows (the last one stays),
-  and the next one shows. Alt-Right and Alt-Left, or Ctrl-X N and Ctrl-X P, go round the tabs;
-  Ctrl-X Tab lists them, with their whole locations, to choose one. Left and Right in F9 do
+- Ctrl+x t opens a new tab after the one that shows, on the same directory with the same
+  listing and cursor, without marks; Ctrl+x w closes the tab that shows (the last one stays),
+  and the next one shows. Alt+Right and Alt+Left, or Ctrl+x n and Ctrl+x p, go round the tabs;
+  Ctrl+x Tab lists them, with their whole locations, to choose one. Left and Right in F9 do
   the same for the panel on that side.
 - Names on the line of tabs are brief: the last component of a directory, `~` for the home
   directory, `host:name` on a host, and the host alone in its start directory. The frame's
@@ -363,14 +363,14 @@ row and names the tab that shows by its whole location:
 - Panels are named by a `PanelId`, their side and tab number, which is never used again.
   Listings, new directories, and the dialogs of `+`, `-`, F5, F6, and F7 carry it, so a reply
   reaches the tab that asked even after a switch, and one for a closed tab is dropped. What
-  acts on the other side (Alt-O, Alt-I, F5's target, `other_dir`) acts on the tab that shows
+  acts on the other side (Alt+o, Alt+i, F5's target, `other_dir`) acts on the tab that shows
   there. Disconnecting or losing a host sends every tab on it back to the list of hosts.
 - Tabs look like tabs: the line is dark (`tab`: gray on black in mc-classic, as the F-key
   bar; `crust` in Catppuccin; dim text in `terminal`), and the tab that shows takes the
   panel's colors as if it grew out of it (`tab_active`), with its number in an accent on the
   side that has the keys (`tab_number`) and plainer on the other (`tab_active_idle`). Tabs in
   the frame take the same styles, with the frame's line between them.
-- Ctrl-U swaps the sides with their tabs. Alt-. and the settings apply to every tab.
+- Ctrl+u swaps the sides with their tabs. Alt+. and the settings apply to every tab.
 
 ### Workspaces
 
@@ -378,11 +378,11 @@ A workspace is the tabs of both panels, saved under a name
 ([ADR 0017](adr/0017-workspaces.md)): for each side its tabs in order, each with its location,
 sort order, and the name under its cursor, and the tab that shows; and the side with the keys.
 
-- Alt-Shift-W (`Esc Shift-W`), or F9 → Workspace → Save workspace…, asks for a name, offering
+- Alt+W (`Esc W`), or F9 → Workspace → Save workspace…, asks for a name, offering
   that of the workspace restored or saved last, and saves the tabs under it; the name of
   another workspace asks before replacing it. A location that `workspaces.toml` cannot hold,
   such as a name that is not UTF-8, is saved as the nearest directory above it.
-- Alt-W (`Esc W`), or F9 → Workspace → Workspace list…, opens a window of the saved
+- Alt+w (`Esc w`), or F9 → Workspace → Workspace list…, opens a window of the saved
   workspaces with a filter, which matches as [fzf](#fuzzy-search) does with
   `ui.fuzzy_search` (keymap context `workspaces`): Enter restores, Insert saves the tabs as a
   new workspace, starting with an empty name, F6 renames, F8 deletes after a question, and
@@ -523,12 +523,12 @@ noc config paths       show the files and directories in use
 - The terminal is restored on every exit: a guard leaves raw mode and the alternate screen when
   the TUI returns or fails, ratatui's panic hook does it before a panic message, and SIGTERM,
   SIGHUP, and SIGINT end the event loop like a quit.
-- Another program (the editor of F4, a command of the command line; the Ctrl-O console later) gets
+- Another program (the editor of F4, a command of the command line; the Ctrl+o console later) gets
   the terminal as the shell would give it: the event loop shows the cursor, leaves the alternate
   screen and raw mode, and drops its `EventStream` first. The stream's reader thread holds
   crossterm's input lock while it waits, and a new stream takes that lock, so the old one must go
   before the program starts, or its reader eats the first key, and the new one is made after it. The
-  loop waits for the program, then takes the terminal back and draws everything. Ctrl-C in the
+  loop waits for the program, then takes the terminal back and draws everything. Ctrl+c in the
   program reaches Noon Commander too, so the SIGINT stream is made anew; SIGTERM and SIGHUP wait
   until the program ends. ssh children are in sessions of their own and see none of it.
 - The working directory of the process follows the active panel: after each turn of the
@@ -653,7 +653,7 @@ theme = "mc-classic"             # "terminal", "noon-dark", "noon-light", "catpp
 keymap = "default"               # modelled on mc, or "vim"
 borders = "double"               # frames of panels and dialogs: ═ ║ ╔; "single": ─ │ ┌
 icons = true                     # Nerd Font icons; false: mc's markers (/ * @ ~ …)
-show_hidden = true               # names that start with a dot; Alt-. switches while running
+show_hidden = true               # names that start with a dot; Alt+. switches while running
 fuzzy_search = true              # quick search and filters match as fzf; false: literally
 menu_bar = "on-demand"           # the F9 menu bar while a menu is open; "always": above the panels
 tab_bar = "line"                 # tabs on a line above the panels; "frame": in the panel's frame
@@ -718,11 +718,11 @@ location = "root"
 - **Panels.** Each panel lists a directory with `..` first, then directories, then files, by
   name ignoring case; columns are name, size, and modification time (local time, `ls -l`
   style), and narrow panels drop the time, then the size. Each panel has its own sort order:
-  name, extension, modification time, or size (Far's Ctrl-F3 … Ctrl-F6, as mc binds none;
+  name, extension, modification time, or size (Far's Ctrl+F3 … Ctrl+F6, as mc binds none;
   macOS keeps them for keyboard navigation unless that is turned off in its settings);
   time and size start newest and largest first, the same key again reverses, ties go by name,
   and an arrow in the header marks the order. Directories stay first. Names that start with a
-  dot are shown unless `ui.show_hidden` is off; Alt-. switches them in both panels, as in mc.
+  dot are shown unless `ui.show_hidden` is off; Alt+. switches them in both panels, as in mc.
   Sorting and hiding keep the cursor on its entry.
 - **The cursor of the inactive panel.** Unlike mc, the inactive panel shows where its cursor
   is (the checksum comparison reads the file there): its row gets a background of its own
@@ -733,20 +733,20 @@ location = "root"
   256 colors, and the dialogs' blue-gray (`#E8ECF4`) in `noon-light`.
 - **Free space.** As in mc, the bottom of a panel's frame shows the free space and size of the
   file system that holds the directory, and the share that is free: `123G / 500G (24%)`. It is
-  read with every listing, so it changes when a job reads the panel again or on Ctrl-R; a panel
+  read with every listing, so it changes when a job reads the panel again or on Ctrl+r; a panel
   on another directory of the same file system keeps what it read last. Locally it waits at
   most as long as a volume of the virtual root, so a dead network mount leaves it out; over
   SFTP it needs the `statvfs@openssh.com` extension, which OpenSSH's server has. A file system
   that reports no size, or a panel too narrow for it, shows none.
-- **Marks.** As in mc: Insert or Ctrl-T marks the entry under the cursor, or unmarks it, and
-  moves down (Shift-Down too, Shift-Up moves up); `*` (or Alt-*) inverts the marks on files,
+- **Marks.** As in mc: Insert or Ctrl+t marks the entry under the cursor, or unmarks it, and
+  moves down (Shift+Down too, Shift+Up moves up); `*` (or Alt+*) inverts the marks on files,
   leaving directories as they are; `..`, volumes, and hosts cannot be marked.
   Marked rows are underlined, and yellow in mc-classic (bold, which mc uses without colors, is
   for directories); the line below the listing shows the size of the marked files and how
   many entries are marked, such as `12,345 B in 3 files`. Marks are names, so they
-  survive sorting and Ctrl-R (for names still there); another directory starts unmarked, and
+  survive sorting and Ctrl+r (for names still there); another directory starts unmarked, and
   entries that get hidden lose their marks, so that no operation acts on what is not shown.
-  `+` (or Alt-+) marks and `-` (or `\`, Alt--) unmarks the names that match a shell pattern,
+  `+` (or Alt++) marks and `-` (or `\`, Alt+-) unmarks the names that match a shell pattern,
   in a dialog with mc's options: Files only (off) and Case sensitive (on). Patterns are read
   as mc reads them: `*`, `?`, `[a-z]` (`[!…]` or `[^…]` outside the set), `{a,b}`, and `\`
   for the next character as it is; the whole name must match, and what does not parse is
@@ -797,7 +797,7 @@ location = "root"
   (`move_within`); between the local file system and a host, or two hosts, it copies and
   removes each source once all of it is copied. Its window says Moving; when it ends, the
   panels on both sides read their directories again.
-- **Shift-F6 (F16) renames in place** the entry under the cursor, not the marked ones: its
+- **Shift+F6 (F16) renames in place** the entry under the cursor, not the marked ones: its
   row becomes a text field from the name on, over the size and time columns, with all of a
   file's name but its last extension selected (a directory, a dotfile, or a name that ends
   with a dot, whole); typing replaces the selection, and moving lets it go. Enter renames,
@@ -823,7 +823,7 @@ location = "root"
   behind the panels, which take the keys again, and Esc aborts, as in mc. As many jobs run
   at once as `transfer.parallel_jobs` says (2); a later one waits, in front or behind, and
   starts when one ends, the oldest first. Abort takes a waiting job away at once. The jobs
-  of F4 never wait, but count while they run. Ctrl-X J lists the jobs, as mc's Background
+  of F4 never wait, but count while they run. Ctrl+x j lists the jobs, as mc's Background
   jobs: a row for each, with what it does, how far it is (a percentage, `counting`,
   `waiting`, or `aborting`), and the entry at hand, and Show (the default), Abort, and OK.
   Show brings the selected job to the front, in its window; the selection follows its job
@@ -834,7 +834,7 @@ location = "root"
   does not open in the middle of other work. F10 asks before quitting while jobs run;
   quitting stops them and waits up to five seconds, so that a copy removes its unfinished
   file before the connections close.
-- **Checksums.** Ctrl-X # (not in mc) asks for an algorithm (radio buttons, the last one
+- **Checksums.** Ctrl+x # (not in mc) asks for an algorithm (radio buttons, the last one
   chosen first, SHA-256 at first) for the marked entries, or the one under the cursor; files
   in directories count. For one file, the dialog has a field for the checksum it should have,
   pasted from a download page or a line of `sha256sum` (the first word counts, in any case);
@@ -862,19 +862,19 @@ location = "root"
   saves the terminal's own on xterm's stack of titles (`CSI 22 t`) and takes it back from
   there (`CSI 23 t`) on quitting and before handing the terminal to another program, which
   gets the shell's title and may set its own.
-- **The other panel.** As in mc: Ctrl-U swaps the panels, and the active one stays active on
-  the other side; Alt-O opens the directory or host under the cursor in the other panel (from
-  a file, the parent directory with the cursor on this one) and moves the cursor down; Alt-I
+- **The other panel.** As in mc: Ctrl+u swaps the panels, and the active one stays active on
+  the other side; Alt+o opens the directory or host under the cursor in the other panel (from
+  a file, the parent directory with the cursor on this one) and moves the cursor down; Alt+i
   shows this directory in the other panel with the cursor on the same name. Panels keep their
   identity when swapped (only where they are drawn changes), so a listing still in flight
   reaches the panel that asked for it. Sort order and errors go with the panel; mc keeps the
   sort order on its side.
-- **Quick search.** Ctrl-S / Alt-S start quick search, as in mc; typing in a panel does nothing,
+- **Quick search.** Ctrl+s / Alt+s start quick search, as in mc; typing in a panel does nothing,
   since `!` and `:` open the [command line](#command-line-of--and-). With
   `ui.fuzzy_search` (the default) the cursor jumps to the best match as [fzf](#fuzzy-search) ranks
-  it, the first from where it is of those as good, and Ctrl-S again to the next best, round to the
+  it, the first from where it is of those as good, and Ctrl+s again to the next best, round to the
   best; otherwise to the first name from where it is that starts with the text, ignoring case, and
-  Ctrl-S to the next one, round to the top. Either way a character that matches nothing is dropped,
+  Ctrl+s to the next one, round to the top. Either way a character that matches nothing is dropped,
   as in mc, and the listing keeps its order. Backspace takes a character back; Esc ends the search,
   and any other key ends it and then does what it does. While it runs, every character is text, even
   one that a panel binds, such as `*`. The root and the list of hosts search the names they show:
@@ -889,9 +889,9 @@ location = "root"
   a shell command, after a prompt with the panel's directory (`~` for home, its middle cut past a
   third of the width); `:` opens it for commands of Noon Commander, of which `!command` is the only
   one so far. In a panel on a connected host the prompt starts with the host's label or alias. Every
-  character is text there. Ctrl-J, or Enter after an odd number of `\` at the end of a line, starts
+  character is text there. Ctrl+j, or Enter after an odd number of `\` at the end of a line, starts
   a new line, marked `>`; long lines wrap, and the line grows up to a third of the screen and ten
-  rows, then scrolls to the cursor. Up and Down move between lines, Home and End (Ctrl-A, Ctrl-E) go
+  rows, then scrolls to the cursor. Up and Down move between lines, Home and End (Ctrl+a, Ctrl+e) go
   to the ends of the line. Enter hands the command to the event loop, which suspends the TUI as for
   F4 and runs it with `noc-tools`' `Shell`: `$SHELL -c <command>` (`/bin/sh` without `$SHELL`) in
   the panel's directory, the command in one argument as typed. On a host, the host's task builds the
@@ -902,16 +902,16 @@ location = "root"
   asks for a key, with the exit status of a failure, unless `shell.pause` says not to wait, and
   after the key `[exit N]` takes its place for a command that failed. The event loop then takes the
   terminal back; both panels read their directories again, as in mc. Esc closes the line; Backspace
-  on an empty line does not. Ctrl-O, in the panels or on the line, hands the terminal over without a
+  on an empty line does not. Ctrl+o, in the panels or on the line, hands the terminal over without a
   program: its own screen shows, with the output of the commands, until a key that the `user_screen`
-  context binds to Cancel (Ctrl-O, Esc). Shift-Enter starts a new line too where the terminal speaks
+  context binds to Cancel (Ctrl+o, Esc). Shift+Enter starts a new line too where the terminal speaks
   the kitty keyboard protocol: at start the event loop asks for it with
   `supports_keyboard_enhancement` (in `spawn_blocking`, before the stream of events takes
   crossterm's reader) and then pushes `DISAMBIGUATE_ESCAPE_CODES`; it pops them, and turns bracketed
   paste off, whenever another program gets the terminal, on exit, and on a panic. With bracketed
   paste a paste arrives as one event: the command line takes it whole, line breaks included, and
   runs nothing; text fields, quick search, and the menus' filters take its characters without line
-  breaks; panels, the pull-down menu, dialogs' buttons, and the viewer ignore it. Ctrl-X Ctrl-E
+  breaks; panels, the pull-down menu, dialogs' buttons, and the viewer ignore it. Ctrl+x Ctrl+e
   writes the command to a file in the private runtime directory, runs the editor on it as F4 does,
   and puts what it left back into the line, without the line breaks at its end; the file goes
   afterwards. Each command that ran, unless it starts with a space, goes to `history.toml` in the
@@ -919,8 +919,8 @@ location = "root"
   `noc-config`'s `add_command` reads the file again, replaces the same command on the same host,
   keeps the newest `shell.history_size`, and writes it whole and atomically, mode 0600; one task
   makes the changes in turn, and the app keeps the commands in memory. Up on the first line of a
-  command, or Alt-P, goes back through the commands of the panel's host, and Down on the last line,
-  or Alt-N, forward to what was typed. Alt-H or Ctrl-R on the line, or Alt-H in a panel, opens the
+  command, or Alt+p, goes back through the commands of the panel's host, and Down on the last line,
+  or Alt+n, forward to what was typed. Alt+h or Ctrl+r on the line, or Alt+h in a panel, opens the
   window of the history (`tui/history.rs`): the commands of the panel's host, or of all of them
   after Tab, newest first, filtered as quick search matches, each with its host's label or alias,
   its directory, and its first line, and the whole command under the cursor below; Enter puts it on

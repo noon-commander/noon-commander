@@ -101,7 +101,7 @@ root-free = Free
 # Column header: user@hostname:port from ssh -G.
 root-address = Address
 
-## The location menu of Alt-F1 and Alt-F2 (src/tui/menu), as Far Manager's menu to change
+## The location menu of Alt+F1 and Alt+F2 (src/tui/menu), as Far Manager's menu to change
 ## drives. Prefix: menu-.
 
 # Titles: the panel the menu changes.
@@ -112,7 +112,7 @@ menu-filter = Filter: { $text }
 # When the filter leaves no row.
 menu-nothing = Nothing matches.
 
-## The zoxide window of Alt-Z (src/tui/jump): the directories zoxide ranks highest for the
+## The zoxide window of Alt+z (src/tui/jump): the directories zoxide ranks highest for the
 ## keywords typed, as `z` picks them in a shell. Prefix: jump-.
 
 jump-title = zoxide
@@ -125,18 +125,18 @@ jump-not-installed = zoxide is not installed: cannot run { $program }. Get it fr
 
 ## Tabs (src/tui/tabs, src/tui/app). Prefix: tabs-. Each side has tabs of its own.
 
-# Title of the list of a panel's tabs, Ctrl-X Tab; each row is the tab's number and where it is.
+# Title of the list of a panel's tabs, Ctrl+x Tab; each row is the tab's number and where it is.
 tabs-title = Tabs
 
 ## Workspaces (src/tui/workspaces, src/tui/app): the tabs of both panels, saved under a name in
 ## workspaces.toml. Prefix: workspaces-.
 
-# The window of Alt-W, F9 → Workspace → Workspace list….
+# The window of Alt+w, F9 → Workspace → Workspace list….
 workspaces-title = Workspaces
 # The first line: what was typed to filter the window.
 workspaces-filter = Filter: { $text }
 # When no workspace is saved yet.
-workspaces-none = No workspace is saved yet. Insert here, or Alt-Shift-W in a panel, saves the tabs of both panels under a name.
+workspaces-none = No workspace is saved yet. Insert here, or Alt+W in a panel, saves the tabs of both panels under a name.
 # When the filter leaves no row.
 workspaces-nothing = Nothing matches.
 # Right of a workspace: how many tabs it has, in both panels together.
@@ -144,7 +144,7 @@ workspaces-tabs = { $count ->
         [one] 1 tab
        *[other] { $count } tabs
     }
-# The dialog of Alt-Shift-W, and of Insert in the window.
+# The dialog of Alt+W, and of Insert in the window.
 workspaces-save-title = Save workspace
 workspaces-save-prompt = Save the tabs of both panels as:
 # The name of an existing workspace was typed.
@@ -193,7 +193,7 @@ pulldown-view = &View
 pulldown-edit = &Edit
 pulldown-copy = &Copy
 pulldown-move = &Rename/Move
-# Shift-F6: the new name is typed in the entry's row.
+# Shift+F6: the new name is typed in the entry's row.
 pulldown-rename = Re&name in place
 pulldown-mkdir = &Mkdir
 pulldown-delete = &Delete
@@ -245,7 +245,7 @@ config-borders-single = Single ─ │ ┌
 config-icons = Icons
 config-icons-hint = Nerd Font icons in front of names; without them, mc's markers.
 config-show-hidden = Show hidden files
-config-show-hidden-hint = Names that begin with a dot; Alt-. switches them.
+config-show-hidden-hint = Names that begin with a dot; Alt+. switches them.
 config-fuzzy-search = Fuzzy search
 config-fuzzy-search-hint = Quick search, the location menu, and the zoxide and Workspaces windows match as fzf does: the letters typed in order, best matches first.
 config-mouse = Mouse
@@ -294,11 +294,11 @@ config-zoxide = zoxide
 config-zoxide-record = Record directories
 config-zoxide-record-hint = Add a local directory to zoxide once you copy, delete, view, or edit something there; passing through does not count.
 config-zoxide-program = Program
-config-zoxide-program-hint = The zoxide program: a name in PATH, or a path. Alt-Z jumps to the directories it ranks.
+config-zoxide-program-hint = The zoxide program: a name in PATH, or a path. Alt+z jumps to the directories it ranks.
 config-zoxide-program-empty = The zoxide program cannot be empty.
 config-shell = Command line
 config-pause = Wait after a command
-config-pause-hint = When the output of a command stays on screen until a key; Ctrl-O shows it again either way.
+config-pause-hint = When the output of a command stays on screen until a key; Ctrl+o shows it again either way.
 config-pause-always = Always
 config-pause-on-error = When it fails
 config-pause-never = Never
@@ -465,14 +465,14 @@ help-command-up = The line above; from the first line, the command before in the
 help-command-down = The line below; from the last line, the command after in the history
 help-command-older = The command before in the history of the panel's host
 help-command-newer = The command after in the history; after the last, what was typed
-help-user-screen = The output of commands, in place of the panels; Ctrl-O or Esc brings them back
+help-user-screen = The output of commands, in place of the panels; Ctrl+o or Esc brings them back
 help-command-history = The command history: filter it, and take a command of this host or another
 help-command-home = Start of the line
 help-command-end = End of the line
 help-command-delete-to-start = Delete to the start of the line
 help-command-delete-to-end = Delete to the end of the line
 help-command-backspace = Delete the character before the cursor
-help-command-new-line = A new line in the command; Shift-Enter where the terminal tells it from Enter
+help-command-new-line = A new line in the command; Shift+Enter where the terminal tells it from Enter
 help-command-edit = Edit the command in $VISUAL or $EDITOR; it comes back without running
 help-command-run = Run the command; after a \ at the end of the line, a new line
 help-command-close = Close the command line
@@ -481,7 +481,7 @@ help-note-menu = Typing in the location menu filters it; 1 … 9 and 0 open the 
 help-note-jump = Typing in the zoxide window gives it keywords, as z does in a shell; 1 … 9 and 0 open the first ten rows while there are none.
 help-note-jump-fuzzy = Typing in the zoxide window filters its directories; 1 … 9 and 0 open the first ten rows while nothing is typed.
 help-note-fuzzy = Quick search, the location menu, the zoxide window, and the Workspaces window match as fzf does: the letters typed in order, not necessarily together, best match first. Words separated by spaces must all match; 'word matches as it is, ^word at the start, word$ at the end, and !word where it is not.
-help-note-workspaces = A workspace holds the tabs of both panels: where each is, its sort order, and the row under its cursor. Alt-W and F9 → Workspace list them; restoring one replaces every tab.
+help-note-workspaces = A workspace holds the tabs of both panels: where each is, its sort order, and the row under its cursor. Alt+w and F9 → Workspace list them; restoring one replaces every tab.
 help-note-command = ! opens the command line, and : too, for commands of Noon Commander, of which :!command is the only one so far. A command runs with the terminal, in the panel's directory, then a key brings the panels back; cd and export last only as long as the command.
 help-note-pulldown = In the pull-down menu, the highlighted letter of a menu opens it, and that of a command runs it. The menu opens again where it closed.
 
@@ -508,7 +508,7 @@ pattern-unselect = Unselect
 pattern-files-only = Files only
 pattern-case-sensitive = Case sensitive
 
-## Quick cd, Alt-C (src/tui/app, src/tui/cd). Prefix: cd-. As in mc.
+## Quick cd, Alt+c (src/tui/app, src/tui/cd). Prefix: cd-. As in mc.
 
 cd-title = Quick cd
 # Above the field: a path as cd takes it in a shell.
@@ -541,7 +541,7 @@ job-speed = { $size }/s
 # While a job waits for others to finish, as transfer.parallel_jobs allows.
 job-waiting = Waiting for other jobs to finish…
 
-## The list of jobs, Ctrl-X J (src/tui/jobs), as mc's Background jobs. Prefix: jobs-.
+## The list of jobs, Ctrl+x j (src/tui/jobs), as mc's Background jobs. Prefix: jobs-.
 
 jobs-title = Jobs
 jobs-none = No jobs are running.
@@ -604,7 +604,7 @@ move-many = Move { $count } files and directories to:
 move-moving = Moving
 move-error = Cannot move to { $path }: { $reason }
 
-## Renaming in place, Shift-F6 (src/tui/app, src/tui/tasks). Prefix: rename-.
+## Renaming in place, Shift+F6 (src/tui/app, src/tui/tasks). Prefix: rename-.
 
 rename-error = Cannot rename { $path }: { $reason }
 # The new name is a file's: the question whether to rename over it, which removes that file.
@@ -622,7 +622,7 @@ transfer-same = the source and the target are the same
 # The target is in a source directory.
 transfer-into-itself = it is in { $path }
 
-## Checksums, Ctrl-X # (src/tui/app, src/tui/sums). Prefix: checksum-.
+## Checksums, Ctrl+x # (src/tui/app, src/tui/sums). Prefix: checksum-.
 
 checksum-title = Checksum
 # Above the algorithms. Directories count with the files in them.
@@ -688,7 +688,7 @@ command-press-key = Press any key to return to Noon Commander.
 # Stays on the screen after a command that failed, after the key it waited for.
 command-exit-mark = [exit { $code }]
 command-signal-mark = [signal { $signal }]
-# The window of the command history, Alt-H or Ctrl-R on the command line.
+# The window of the command history, Alt+h or Ctrl+r on the command line.
 history-title = Command history
 # The filter, at the top.
 history-filter = Filter: { $text }
@@ -701,5 +701,5 @@ history-none = No commands yet. Commands run with ! and : come here.
 history-nothing = No command matches.
 # history.toml could not be read or written; the reason names the file.
 history-error = Cannot keep the command history: { $reason }
-# The command could not go to the editor of Ctrl-X Ctrl-E, or come back.
+# The command could not go to the editor of Ctrl+x Ctrl+e, or come back.
 command-edit-error = Cannot edit the command: { $reason }

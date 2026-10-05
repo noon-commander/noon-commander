@@ -6,7 +6,7 @@
 ## Context
 
 Three places take text that picks from a list: quick search in a panel, the filter of the
-location menu (Alt-F1, Alt-F2), and the keywords of the zoxide window (Alt-Z). Each matched in
+location menu (Alt+F1, Alt+F2), and the keywords of the zoxide window (Alt+z). Each matched in
 its own literal way: quick search took names that start with the text, as mc does; the
 location menu took rows whose texts contain it; the zoxide window passed it to zoxide, whose
 keywords must appear in order with the last one in the last component of the path.
@@ -31,7 +31,7 @@ it does not rank items for a program that draws them itself.
   those without. Off, each place matches as it did.
 - The code lives in `crates/noc/src/tui/fuzzy.rs`; no other crate needs it.
 - Quick search keeps the order of the listing and puts the cursor on the best match; of
-  matches as good, the first from where the cursor is, as mc goes from there. Ctrl-S goes to
+  matches as good, the first from where the cursor is, as mc goes from there. Ctrl+s goes to
   the next best, round to the best. A character that nothing matches is still dropped.
 - The location menu keeps its order too, the home directory, the volumes, then the hosts,
   and puts the cursor on the best row. A row's texts (name and mount point; alias, label,

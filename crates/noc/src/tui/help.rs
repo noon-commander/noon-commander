@@ -180,7 +180,7 @@ impl Help {
     }
 }
 
-/// `keys`, a list such as `Insert, Ctrl-t`, in lines of at most `width` cells, broken after
+/// `keys`, a list such as `Insert, Ctrl+t`, in lines of at most `width` cells, broken after
 /// the commas. A single key wider than that gets a line of its own.
 fn key_lines(keys: &str, width: usize) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
@@ -460,14 +460,14 @@ mod tests {
         };
         assert!(has("F10", "Quit"));
         assert!(has("F8", "Disconnect the host under the cursor"));
-        assert!(has("Ctrl-s, Alt-s", "Quick search; again: the next match"));
+        assert!(has("Ctrl+s, Alt+s", "Quick search; again: the next match"));
         assert!(has("Esc, F10", "Cancel, or close this help"));
         // One key, two meanings.
         let ctrl_u: Vec<&str> = help
             .entries
             .iter()
             .filter_map(|entry| match entry {
-                Entry::Keys { keys, text } if keys == "Ctrl-u" => Some(text.as_str()),
+                Entry::Keys { keys, text } if keys == "Ctrl+u" => Some(text.as_str()),
                 _ => None,
             })
             .collect();
@@ -526,10 +526,10 @@ mod tests {
     #[test]
     fn long_lists_of_keys_go_on_to_the_next_lines() {
         assert_eq!(key_lines("F10", 16), ["F10"]);
-        assert_eq!(key_lines("PageDown, Ctrl-v", 16), ["PageDown, Ctrl-v"]);
+        assert_eq!(key_lines("PgDn, Ctrl+v", 16), ["PgDn, Ctrl+v"]);
         assert_eq!(
-            key_lines("Insert, Ctrl-t, Shift-Down", 16),
-            ["Insert, Ctrl-t,", "Shift-Down"]
+            key_lines("Insert, Ctrl+t, Shift+Down", 16),
+            ["Insert, Ctrl+t,", "Shift+Down"]
         );
         assert_eq!(key_lines("Esc, Esc Esc", 4), ["Esc,", "Esc Esc"]);
     }

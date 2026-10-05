@@ -10,7 +10,7 @@ directory, then every host from the ssh config. Now that Noon Commander is a ful
 ([ADR 0005](0005-rename-to-noon-commander.md)), the root has to show the mounted volumes
 (external disks, disk images, network shares) as well. More backends may follow behind the `Vfs`
 trait, and long ssh configs would push the volumes off the screen. Far Manager users also expect
-a quick menu to change a panel's drive (Alt-F1, Alt-F2) that lists the same places.
+a quick menu to change a panel's drive (Alt+F1, Alt+F2) that lists the same places.
 
 Finding the volumes and how big they are touches the file systems themselves: `statfs` on a dead
 NFS or SMB mount can block in the kernel forever.
@@ -37,7 +37,7 @@ NFS or SMB mount can block in the kernel forever.
   on a thread of its own, awaited for at most 500 ms; a volume that does not answer is listed
   without them and is not asked again until the earlier call returns. `[volumes] hide` leaves
   out mount points by pattern.
-- Alt-F1 and Alt-F2 (and Ctrl-X 1, Ctrl-X 2, for terminals without them) open a location menu
+- Alt+F1 and Alt+F2 (and Ctrl+x 1, Ctrl+x 2, for terminals without them) open a location menu
   over the left or right panel: `Home`, the volumes, then every host, with `1` … `0` as hotkeys while
   its filter is empty and typing to filter. It reads the same listing as the root.
 
@@ -49,6 +49,6 @@ NFS or SMB mount can block in the kernel forever.
   and the connected hosts in the root make up for it.
 - A dead network mount makes a listing of the root wait up to 500 ms, once; after that it is
   skipped until it answers.
-- Volumes are read when the root or the menu is listed (and on Ctrl-R), not watched; a disk
+- Volumes are read when the root or the menu is listed (and on Ctrl+r), not watched; a disk
   that is plugged in shows up on the next listing.
 - The F9 pull-down menu offers the location menu too, as Left and Right → Change location.

@@ -14,7 +14,7 @@ Such a layout is more than a bookmark, which names one directory, and different 
 the panels on start, which brings back the last state without a name. It names a set of tabs
 that the user chose.
 
-Where to choose one was open: the location menus of Alt-F1 and Alt-F2 already list where a
+Where to choose one was open: the location menus of Alt+F1 and Alt+F2 already list where a
 panel can go, but a workspace changes both panels, so a row in the menu of one panel would
 act on the other too.
 
@@ -33,11 +33,11 @@ act on the other too.
   or `~/…` (directories under the home directory are written from `~`, so a workspace moves
   with the home directory), or `host:path`. A location that this cannot hold, such as a name
   that is not UTF-8, is saved as the nearest directory above it that it can.
-- Alt-W opens the window of the saved workspaces, and Alt-Shift-W saves the tabs of both panels
+- Alt+w opens the window of the saved workspaces, and Alt+W saves the tabs of both panels
   as one. mc's panels bind neither; Far's take Alt and a letter for quick search, which Noon
-  Commander starts by typing or with Ctrl-S. Ctrl-X S was the first choice, but mc makes a
+  Commander starts by typing or with Ctrl+s. Ctrl+x s was the first choice, but mc makes a
   symbolic link with it, which Noon Commander will do too. Where Alt never arrives,
-  `Esc W` and `Esc Shift-W` do the same, as for Alt-C and Alt-Z.
+  `Esc w` and `Esc W` do the same, as for Alt+c and Alt+z.
 - Saving asks for a name, offering that of the workspace restored or saved last, and saves the
   tabs of both panels under it. Another workspace's name asks before replacing it.
 - The window has a filter, as the zoxide window has (keymap context `workspaces`): Enter

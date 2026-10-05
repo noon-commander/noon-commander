@@ -1,4 +1,4 @@
-//! The zoxide window of Alt-Z: the directories zoxide ranks highest for the keywords typed,
+//! The zoxide window of Alt+z: the directories zoxide ranks highest for the keywords typed,
 //! best first, as `z foo bar` picks them in a shell; or, with `ui.fuzzy_search`, all of them,
 //! filtered and ranked by what is typed as fzf does. Enter opens one in the active panel;
 //! while nothing is typed, `1` … `9` and `0` open the first ten rows.

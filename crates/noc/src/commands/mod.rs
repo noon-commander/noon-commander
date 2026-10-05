@@ -13,7 +13,7 @@ use noc_ssh::discovery::Discovery;
 use crate::cli::{Cli, Command, ConfigCommand};
 use crate::context::{Context, describe};
 
-/// Exit code after Ctrl-C, as shells report a process killed by SIGINT.
+/// Exit code after Ctrl+c, as shells report a process killed by SIGINT.
 const INTERRUPTED: u8 = 130;
 
 pub(crate) async fn run(cli: Cli) -> Result<ExitCode> {

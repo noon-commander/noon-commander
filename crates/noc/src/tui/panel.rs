@@ -911,7 +911,7 @@ impl Panel {
         }
     }
 
-    /// What Alt-O opens in the other panel, as in mc: the directory or host under the cursor,
+    /// What Alt+o opens in the other panel, as in mc: the directory or host under the cursor,
     /// or, for a file, the parent directory with the cursor on this one. The cursor moves on
     /// to the next row.
     pub(crate) fn for_other_panel(&mut self) -> Option<Destination> {

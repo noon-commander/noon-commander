@@ -140,7 +140,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     if !io::stdout().is_terminal() {
         bail!("the TUI needs a terminal; in scripts, use the subcommands (`noc --help`)");
     }
-    // Raw mode turns Ctrl-C into a key, but these can still come from elsewhere, such as `kill`
+    // Raw mode turns Ctrl+c into a key, but these can still come from elsewhere, such as `kill`
     // or a closed terminal window; quitting through them restores the terminal.
     let mut terminate = signal(SignalKind::terminate())?;
     let mut hangup = signal(SignalKind::hangup())?;
@@ -328,7 +328,7 @@ async fn edit_command(file: &Path, text: &str) -> Result<String, String> {
 }
 
 /// Hands the terminal to the program of `handover`, takes it back, and returns what the app
-/// does next and a new stream of SIGINT, since Ctrl-C in the program reached Noon Commander
+/// does next and a new stream of SIGINT, since Ctrl+c in the program reached Noon Commander
 /// too, with a new stream of events in place of `events`. The program gets the mouse and the
 /// terminal's own title, and may set one of its own; the next turn of the event loop takes
 /// both again.
@@ -411,7 +411,7 @@ fn resume(terminal: &mut DefaultTerminal, modes: Modes) -> io::Result<()> {
 
 /// What the TUI asks of the terminal while it has it: bracketed paste, so that pasted text
 /// arrives whole and never as keys that run something; and, where the terminal speaks it, the
-/// kitty keyboard protocol, which tells Shift-Enter from Enter (ADR 0019).
+/// kitty keyboard protocol, which tells Shift+Enter from Enter (ADR 0019).
 #[derive(Debug, Clone, Copy, Default)]
 struct Modes {
     keyboard: bool,

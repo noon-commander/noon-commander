@@ -125,6 +125,12 @@ a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on th
   update the `noc (default)` or `noc (vim)` column in
   [docs/keymap-compare.md](docs/keymap-compare.md) in the same change; an action that mc and Far
   lack gets its own row, or a `(noc)` section.
+- Keys in text (the help, menus, Fluent files, docs, comments) are written one way, the way
+  `keymap::describe` writes them and as [docs/keymap-compare.md](docs/keymap-compare.md)
+  explains: letters lowercase, after a modifier too (`Ctrl+l`); an uppercase letter is Shift
+  and the letter (`G`, `Alt+W`); `Shift+` only before keys that are not letters (`Shift+F6`);
+  sequences apart (`Ctrl+x t`, `Z Z`); `PgUp`, `PgDn`, `Delete`, `Insert`, `Backspace`. Keys in
+  presets and `config.toml` stay in crokey's syntax (`ctrl-x t`, `shift-z`).
 - Text: Fluent files in `crates/noc/i18n/`, and the viewer's own in `crates/noc-viewer/i18n/`;
   `en-US` only for now. A crate with text of its own has its own loader, and
   `noc::i18n::select` selects its language too. Library errors are typed; the UI turns them

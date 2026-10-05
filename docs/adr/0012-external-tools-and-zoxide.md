@@ -38,7 +38,7 @@ and left. Recording each of them would bury the directories the user works in.
   it; F3 or F4 on a file in it; checksums of its files; or a jump to it. Entering, leaving,
   marking, searching, sorting, and reading it again do not count. A visit ends when the panel
   goes to another directory. Remote directories never count: zoxide ranks local paths.
-- Alt-Z (Ctrl-X Z, Esc Z) opens a window of zoxide's best directories for the keywords typed,
+- Alt+z (Ctrl+x z, Esc z) opens a window of zoxide's best directories for the keywords typed,
   asking zoxide again on each change, and opens the chosen one in the active panel. The
   matching is zoxide's own, so it ranks as `z` does in the shell.
 - `[zoxide]` in `config.toml` has `program` and `record`, which defaults to on: without zoxide

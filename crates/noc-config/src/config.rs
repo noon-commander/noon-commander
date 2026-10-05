@@ -56,7 +56,7 @@ impl Default for ShellConfig {
 }
 
 /// When the output of a command of the command line stays on screen until a key, instead of
-/// the panels coming back at once: `shell.pause`. Ctrl-O shows the output later either way.
+/// the panels coming back at once: `shell.pause`. Ctrl+o shows the output later either way.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Pause {

@@ -1,4 +1,4 @@
-//! Quick cd, Alt-C, as in mc: a path typed as for `cd` in a shell, read from the directory of
+//! Quick cd, Alt+c, as in mc: a path typed as for `cd` in a shell, read from the directory of
 //! the active panel.
 
 use std::path::{Component, Path, PathBuf};

@@ -1,4 +1,4 @@
-//! The window of the command history, Alt-H or Ctrl-R on the command line (ADR 0019): the
+//! The window of the command history, Alt+h or Ctrl+r on the command line (ADR 0019): the
 //! commands of the panel's host, or of all hosts, newest first, each with its host and
 //! directory, and the whole command under the cursor below them. Typing filters it; Enter puts
 //! the command on the command line, without running it.

@@ -1,4 +1,4 @@
-//! The location menu of Alt-F1 and Alt-F2, as Far Manager's menu to change drives: the home
+//! The location menu of Alt+F1 and Alt+F2, as Far Manager's menu to change drives: the home
 //! directory, the volumes, and the SFTP hosts, for one panel. Typing filters it; while the filter is empty,
 //! `1` … `9` and `0` open the first ten rows.
 

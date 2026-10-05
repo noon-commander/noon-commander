@@ -255,10 +255,9 @@ impl Keymap {
     }
 
     /// The actions `context` binds itself, in the order of the preset, each with its keys as
-    /// text such as `Ctrl-r, Alt-s`, for the help screen. The `Esc 1` … `Esc 0` aliases are
+    /// text such as `Ctrl+r, Alt+s`, for the help screen. The `Esc 1` … `Esc 0` aliases are
     /// left out; the help explains them once.
     pub(crate) fn help(&self, context: Context) -> Vec<(Action, String)> {
-        let format = crokey::KeyCombinationFormat::default();
         let mut rows: Vec<(Action, String)> = Vec::new();
         let Some(bindings) = self.contexts.get(&context) else {
             return rows;
@@ -267,11 +266,7 @@ impl Keymap {
             if is_esc_digit(sequence) {
                 continue;
             }
-            let keys = sequence
-                .iter()
-                .map(|key| format.to_string(*key))
-                .collect::<Vec<_>>()
-                .join(" ");
+            let keys = describe(sequence);
             match rows.iter_mut().find(|(bound, _)| bound == action) {
                 Some((_, text)) => {
                     text.push_str(", ");
@@ -284,9 +279,8 @@ impl Keymap {
     }
 
     /// The first key sequence along `context`'s chain that does `action` there, as text such as
-    /// `Ctrl-F3`, for the pull-down menu. `Esc 1` … `Esc 0` count only where nothing else does.
+    /// `Ctrl+F3`, for the pull-down menu. `Esc 1` … `Esc 0` count only where nothing else does.
     pub(crate) fn key(&self, context: Context, action: Action) -> Option<String> {
-        let format = crokey::KeyCombinationFormat::default();
         let does = |sequence: &[KeyCombination]| match self.lookup(context, sequence) {
             Lookup::Exact(bound) | Lookup::Prefix(Some(bound)) => bound == action,
             Lookup::Prefix(None) | Lookup::Unknown => false,
@@ -301,13 +295,7 @@ impl Keymap {
         let (aliases, keys): (Vec<&Sequence>, Vec<&Sequence>) =
             sequences.partition(|sequence| is_esc_digit(sequence));
         let sequence = keys.first().or(aliases.first())?;
-        Some(
-            sequence
-                .iter()
-                .map(|key| format.to_string(*key))
-                .collect::<Vec<_>>()
-                .join(" "),
-        )
+        Some(describe(sequence))
     }
 
     /// The actions on F1 … F10 in `context`'s chain, for the F-key bar.
@@ -436,8 +424,8 @@ const PANEL: Preset = {
         (Edit, &["f4"]),
         (Copy, &["f5"]),
         (Move, &["f6"]),
-        // mc's Shift-F6 asks for a new name in a dialog; here the name is edited in its row.
-        // Terminals without Shift-F6 send F16.
+        // mc's Shift+F6 asks for a new name in a dialog; here the name is edited in its row.
+        // Terminals without Shift+F6 send F16.
         (Rename, &["shift-f6", "f16"]),
         (Mkdir, &["f7"]),
         // In text fields, Delete deletes a character.
@@ -445,23 +433,23 @@ const PANEL: Preset = {
         (Jobs, &["ctrl-x j"]),
         // Not in mc; `#` for a hash.
         (Checksum, &["ctrl-x #"]),
-        // Far Manager's menus to change drives. Ctrl-X 1 and 2 are for terminals whose Alt-F1
+        // Far Manager's menus to change drives. Ctrl+x 1 and 2 are for terminals whose Alt+F1
         // never arrives, such as macOS Terminal without Option as Meta.
         (LocationMenuLeft, &["alt-f1", "ctrl-x 1"]),
         (LocationMenuRight, &["alt-f2", "ctrl-x 2"]),
-        // Not in mc: zoxide's `z`. Ctrl-X Z where Alt never arrives.
+        // Not in mc: zoxide's `z`. Ctrl+x z where Alt never arrives.
         (Jump, &["alt-z", "ctrl-x z"]),
-        // mc's Quick cd; Esc C where Alt never arrives.
+        // mc's Quick cd; Esc c where Alt never arrives.
         (QuickCd, &["alt-c"]),
-        // Not in mc. Ctrl-T marks and terminals rarely pass Ctrl-Tab, so tabs live under
-        // Ctrl-X; Alt-Left and Alt-Right where the terminal sends them.
+        // Not in mc. Ctrl+t marks and terminals rarely pass Ctrl+Tab, so tabs live under
+        // Ctrl+x; Alt+Left and Alt+Right where the terminal sends them.
         (NewTab, &["ctrl-x t"]),
         (CloseTab, &["ctrl-x w"]),
         (NextTab, &["alt-right", "ctrl-x n"]),
         (PrevTab, &["alt-left", "ctrl-x p"]),
         (TabList, &["ctrl-x tab"]),
-        // Not in mc: W for workspaces, and Shift saves the tabs of both panels as one. Esc W
-        // and Esc Shift-W where Alt never arrives.
+        // Not in mc: W for workspaces, and Shift saves the tabs of both panels as one. Esc w
+        // and Esc W where Alt never arrives.
         (Workspaces, &["alt-w"]),
         (SaveWorkspace, &["alt-shift-w"]),
         (PullDown, &["f9"]),
@@ -514,9 +502,9 @@ const RENAME: Preset = &[
     (Action::Cancel, &["esc"]),
 ];
 
-/// The bindings of the command line of `!` and `:` in the mc preset. Ctrl-J arrives as LF where
-/// Enter arrives as CR, so it starts a new line in every terminal; Shift-Enter does where the
-/// terminal speaks the kitty keyboard protocol. Ctrl-X Ctrl-E edits the command, as in bash.
+/// The bindings of the command line of `!` and `:` in the mc preset. Ctrl+j arrives as LF where
+/// Enter arrives as CR, so it starts a new line in every terminal; Shift+Enter does where the
+/// terminal speaks the kitty keyboard protocol. Ctrl+x Ctrl+e edits the command, as in bash.
 const COMMAND_LINE: Preset = &[
     (Action::Left, &["left"]),
     (Action::Right, &["right"]),
@@ -532,7 +520,7 @@ const COMMAND_LINE: Preset = &[
     (Action::EditCommand, &["ctrl-x ctrl-e"]),
     (Action::OlderCommand, &["alt-p"]),
     (Action::NewerCommand, &["alt-n"]),
-    // mc's Alt-H, and bash's Ctrl-R.
+    // mc's Alt+h, and bash's Ctrl+r.
     (Action::CommandHistory, &["alt-h", "ctrl-r"]),
     (Action::UserScreen, &["ctrl-o"]),
     (Action::Confirm, &["enter"]),
@@ -556,7 +544,7 @@ const HISTORY: Preset = &[
 ];
 
 /// The bindings of path fields in the mc preset, on top of the text field's: Tab completes, as
-/// in a shell; Shift-Tab and Down still leave the field.
+/// in a shell; Shift+Tab and Down still leave the field.
 const PATH_FIELD: Preset = &[(Action::Complete, &["tab"])];
 
 /// The bindings of the list of completions in the mc preset; other keys close it and go to the
@@ -618,6 +606,64 @@ const WORKSPACES: Preset = &[
     (Action::Delete, &["f8", "delete"]),
     (Action::Cancel, &["esc", "f10"]),
 ];
+
+/// A key sequence as the help, the menus, and the docs write it: modifiers as `Ctrl+`, `Alt+`,
+/// and `Shift+`, letters in lowercase and in uppercase for Shift and the letter, symbols as they
+/// are typed, and the keys of a sequence apart, as in `Ctrl+x t` or `Z Z`.
+fn describe(sequence: &[KeyCombination]) -> String {
+    sequence
+        .iter()
+        .map(|key| describe_key(*key))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn describe_key(key: KeyCombination) -> String {
+    let mut shift = key.modifiers.contains(KeyModifiers::SHIFT);
+    let names: Vec<String> = key
+        .codes
+        .iter()
+        .map(|code| match *code {
+            KeyCode::Char(' ') => "Space".to_owned(),
+            KeyCode::Char(c) if c.is_alphabetic() => {
+                let letter = if shift || c.is_uppercase() {
+                    c.to_uppercase().collect()
+                } else {
+                    c.to_lowercase().collect()
+                };
+                shift = false;
+                letter
+            }
+            KeyCode::Char(c) => {
+                shift = false;
+                c.to_string()
+            }
+            KeyCode::BackTab => {
+                shift = true;
+                "Tab".to_owned()
+            }
+            KeyCode::PageUp => "PgUp".to_owned(),
+            KeyCode::PageDown => "PgDn".to_owned(),
+            KeyCode::F(number) => format!("F{number}"),
+            other => format!("{other:?}"),
+        })
+        .collect();
+    let mut text = String::new();
+    for (modifier, name) in [
+        (KeyModifiers::CONTROL, "Ctrl+"),
+        (KeyModifiers::ALT, "Alt+"),
+        (KeyModifiers::SUPER, "Cmd+"),
+    ] {
+        if key.modifiers.contains(modifier) {
+            text.push_str(name);
+        }
+    }
+    if shift {
+        text.push_str("Shift+");
+    }
+    text.push_str(&names.join("+"));
+    text
+}
 
 const ESC: KeyCombination = KeyCombination::one_key(KeyCode::Esc, KeyModifiers::NONE);
 
@@ -841,7 +887,7 @@ mod tests {
 
     #[test]
     fn alt_and_a_digit_stand_for_esc_and_the_digit() {
-        // What `Esc 0` typed quickly, or Alt-0 where Alt sends Esc, arrives as.
+        // What `Esc 0` typed quickly, or Alt+0 where Alt sends Esc, arrives as.
         let keymap = Keymap::mc();
         let mut state = KeyState::default();
         assert_eq!(
@@ -910,7 +956,7 @@ mod tests {
         assert_eq!(
             feed(&keymap, &mut state, Context::Panel, &["esc", "*"]),
             actions(&[Action::InvertMarks]),
-            "Esc * is Alt-*"
+            "Esc * is Alt+*"
         );
         assert_eq!(
             feed(
@@ -1354,11 +1400,11 @@ mod tests {
         assert_eq!(key(Context::Panel, Action::View).as_deref(), Some("F3"));
         assert_eq!(
             key(Context::Panel, Action::QuickSearch).as_deref(),
-            Some("Ctrl-s")
+            Some("Ctrl+s")
         );
         assert_eq!(
             key(Context::Panel, Action::Checksum).as_deref(),
-            Some("Ctrl-x #")
+            Some("Ctrl+x #")
         );
         assert_eq!(key(Context::Panel, Action::Disconnect), None);
         // In the root F8 disconnects, so Delete has only its own key there.
@@ -1444,6 +1490,32 @@ mod tests {
             ),
             actions(&[Action::Cancel, Action::Cancel])
         );
+    }
+
+    #[test]
+    fn describes_keys_as_the_docs_write_them() {
+        let described = |keys: &str| describe(&parse_sequence(keys).unwrap());
+        for (keys, text) in [
+            ("ctrl-r", "Ctrl+r"),
+            ("alt-shift-w", "Alt+W"),
+            ("shift-g", "G"),
+            ("shift-z shift-z", "Z Z"),
+            ("ctrl-x t", "Ctrl+x t"),
+            ("shift-f6", "Shift+F6"),
+            ("shift-down", "Shift+Down"),
+            ("backtab", "Shift+Tab"),
+            ("pageup", "PgUp"),
+            ("pagedown", "PgDn"),
+            ("space", "Space"),
+            ("alt-.", "Alt+."),
+            ("alt-+", "Alt++"),
+            ("esc esc", "Esc Esc"),
+            ("ctrl-f3", "Ctrl+F3"),
+        ] {
+            assert_eq!(described(keys), text, "{keys}");
+        }
+        let typed = KeyCombination::from(KeyEvent::new(KeyCode::Char('*'), KeyModifiers::SHIFT));
+        assert_eq!(describe(&[typed]), "*", "a symbol as it is typed");
     }
 
     #[test]
@@ -1579,10 +1651,10 @@ mod tests {
                 .find(|(bound, _)| *bound == action)
                 .map(|(_, keys)| keys.as_str())
         };
-        assert_eq!(keys(Action::Up), Some("Up, Ctrl-p"));
+        assert_eq!(keys(Action::Up), Some("Up, Ctrl+p"));
         assert_eq!(keys(Action::Quit), Some("F10"));
         assert_eq!(keys(Action::Cancel), Some("Esc, Esc Esc"));
-        assert_eq!(keys(Action::SortByName), Some("Ctrl-F3"));
+        assert_eq!(keys(Action::SortByName), Some("Ctrl+F3"));
         assert_eq!(panel[0].0, Action::Up, "in the order of the preset");
         assert_eq!(
             keymap.help(Context::Root),

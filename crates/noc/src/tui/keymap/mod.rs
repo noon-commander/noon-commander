@@ -95,12 +95,13 @@ impl KeyState {
 
 impl Keymap {
     /// The names of the built-in presets, for `ui.keymap`.
-    pub(crate) const NAMES: &'static [&'static str] = &["default"];
+    pub(crate) const NAMES: &'static [&'static str] = &["default", "vim"];
 
     /// A built-in preset by name.
     pub(crate) fn by_name(name: &str) -> Option<Self> {
         match name {
             "default" => Some(Self::mc()),
+            "vim" => Some(Self::vim()),
             _ => None,
         }
     }
@@ -108,7 +109,19 @@ impl Keymap {
     /// The default preset, modelled on Midnight Commander. `Esc` followed by a digit stands for
     /// the F-key, for terminals that lack them.
     pub(crate) fn mc() -> Self {
-        let presets = mc_presets();
+        Self::of(&mc_presets())
+    }
+
+    /// The vim preset: panels of its own, and the mc preset's other contexts.
+    fn vim() -> Self {
+        let presets = mc_presets().map(|(context, bindings)| match context {
+            Context::Panel => (context, VIM_PANEL),
+            _ => (context, bindings),
+        });
+        Self::of(&presets)
+    }
+
+    fn of(presets: &[(Context, Preset)]) -> Self {
         let mut contexts = HashMap::new();
         for (context, bindings) in presets {
             let bindings = bindings
@@ -126,7 +139,7 @@ impl Keymap {
             } else {
                 bindings
             };
-            contexts.insert(context, Bindings(bindings));
+            contexts.insert(*context, Bindings(bindings));
         }
         Self { contexts }
     }
@@ -456,6 +469,14 @@ const PANEL: Preset = {
         (Redraw, &["ctrl-l"]),
     ]
 };
+
+/// The panels' bindings in the vim preset.
+const VIM_PANEL: Preset = &[
+    (Action::Shell, &["!"]),
+    (Action::Command, &[":"]),
+    (Action::PullDown, &["f9"]),
+    (Action::Quit, &["f10", "shift-z shift-z"]),
+];
 
 /// The pull-down menu's bindings in the mc preset; letters run the commands that have them.
 const PULL_DOWN: Preset = &[
@@ -1454,18 +1475,23 @@ mod tests {
     }
 
     #[test]
-    fn every_preset_covers_every_action_and_has_no_conflicts() {
+    fn the_default_preset_covers_every_action() {
+        let keymap = Keymap::mc();
+        for action in Action::ALL {
+            assert!(
+                keymap
+                    .contexts
+                    .values()
+                    .any(|bindings| bindings.0.iter().any(|(_, bound)| bound == action)),
+                "{action:?} has no key"
+            );
+        }
+    }
+
+    #[test]
+    fn no_preset_binds_a_key_twice() {
         for name in Keymap::NAMES {
             let keymap = Keymap::by_name(name).unwrap();
-            for action in Action::ALL {
-                assert!(
-                    keymap
-                        .contexts
-                        .values()
-                        .any(|bindings| bindings.0.iter().any(|(_, bound)| bound == action)),
-                    "{name}: {action:?} has no key"
-                );
-            }
             for (context, bindings) in &keymap.contexts {
                 for (index, (sequence, _)) in bindings.0.iter().enumerate() {
                     assert!(
@@ -1478,6 +1504,47 @@ mod tests {
             }
         }
         assert!(Keymap::by_name("emacs").is_none());
+    }
+
+    #[test]
+    fn the_vim_panels_open_the_command_line_and_the_menu_and_quit() {
+        let vim = Keymap::by_name("vim").unwrap();
+        let panel: Vec<Action> = vim
+            .help(Context::Panel)
+            .into_iter()
+            .map(|(action, _)| action)
+            .collect();
+        assert_eq!(
+            panel,
+            [
+                Action::Shell,
+                Action::Command,
+                Action::PullDown,
+                Action::Quit
+            ]
+        );
+        let mut fkeys = [None; 10];
+        fkeys[8] = Some(Action::PullDown);
+        fkeys[9] = Some(Action::Quit);
+        assert_eq!(vim.fkeys(Context::Panel), fkeys);
+        let mut keys = KeyState::default();
+        let now = Instant::now();
+        for (key, action) in [('!', Action::Shell), (':', Action::Command)] {
+            let event = KeyEvent::from(KeyCode::Char(key));
+            assert_eq!(
+                vim.feed(&mut keys, Context::Panel, event, now),
+                [Resolved::Action(action)]
+            );
+        }
+        // A character that no binding claims, which a panel takes for nothing.
+        let event = KeyEvent::from(KeyCode::Char('j'));
+        assert_eq!(
+            vim.feed(&mut keys, Context::Panel, event, now),
+            [Resolved::Insert('j')]
+        );
+        for context in [Context::Dialog, Context::CommandLine, Context::Viewer] {
+            assert_eq!(vim.help(context), Keymap::mc().help(context), "{context:?}");
+        }
     }
 
     #[test]

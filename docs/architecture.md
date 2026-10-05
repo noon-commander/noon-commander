@@ -650,7 +650,7 @@ hide = ["/Volumes/Backup*"]      # mount points to leave out of the root; never 
 [ui]
 language = "auto"                # or a language tag such as "en-US"; others fall back to it
 theme = "mc-classic"             # "terminal", "noon-dark", "noon-light", "catppuccin-mocha", …
-keymap = "default"               # the built-in keymap; only "default", modelled on mc, so far
+keymap = "default"               # modelled on mc, or "vim"
 borders = "double"               # frames of panels and dialogs: ═ ║ ╔; "single": ─ │ ┌
 icons = true                     # Nerd Font icons; false: mc's markers (/ * @ ~ …)
 show_hidden = true               # names that start with a dot; Alt-. switches while running
@@ -933,15 +933,15 @@ location = "root"
   binds it to. Bindings are key sequences matched by prefix with a 1-second timeout, so a vim preset
   (`g g`, `d d`) can follow the default mc preset. `ui.keymap` names the built-in preset, as
   `ui.theme` names the theme (`Keymap::NAMES`, `Keymap::by_name`); the Configuration dialog
-  switches it at once. As in mc, `Esc` in a panel waits for the next
-  key: `Esc 1` … `Esc 0` stand for F1 … F10, `Esc` followed by a character stands for Alt and that
-  character, for terminals whose Alt key sends nothing, and `Esc` alone cancels once the timeout
-  passes (`Esc Esc` at once). An `Esc` and a quick next key arrive as Alt and that key, so there an
-  unbound Alt and a character count as `Esc` and the character. In dialogs, quick search, and the
-  menus `Esc` acts at once. Keys are written with `crokey` names. User overrides in `keymap.toml`
-  are planned for M4. The F-key bar is generated from the active keymap, and so is the help screen
-  (F1): the keys of each context, with what they do, for what the app can do already; a prompt from
-  ssh shows over it.
+  switches it at once. The vim preset has panels of its own and the mc preset's other contexts.
+  As in mc, `Esc` in a panel waits for the next key: `Esc 1` … `Esc 0` stand for F1 … F10, `Esc`
+  followed by a character stands for Alt and that character, for terminals whose Alt key sends
+  nothing, and `Esc` alone cancels once the timeout passes (`Esc Esc` at once). An `Esc` and a quick
+  next key arrive as Alt and that key, so there an unbound Alt and a character count as `Esc` and
+  the character. In dialogs, quick search, and the menus `Esc` acts at once. Keys are written with
+  `crokey` names. User overrides in `keymap.toml` are planned for M4. The F-key bar is generated
+  from the active keymap, and so is the help screen (F1): the keys of each context, with what they
+  do, for what the app can do already; a prompt from ssh shows over it.
 - **Mouse.** On by default (`ui.mouse`; [ADR 0018](adr/0018-mouse-support.md)). The event loop
   captures the mouse while it is on and turns crossterm's events into `Pointer`s
   (`tui/mouse.rs`): a click, a double click (the same cell within 400 ms), a right click, or a

@@ -123,7 +123,8 @@ pub struct UiConfig {
     /// A built-in color theme: `mc-classic`, `terminal`, `noon-dark`, `noon-light`,
     /// `catppuccin-mocha`, or `catppuccin-latte`. Default: `mc-classic`.
     pub theme: String,
-    /// The built-in keymap: `default`, modelled on Midnight Commander. Default: `default`.
+    /// The built-in keymap: `default`, modelled on Midnight Commander, or `vim`.
+    /// Default: `default`.
     pub keymap: String,
     /// The lines that frame panels and dialogs. Default: `double`.
     pub borders: Borders,

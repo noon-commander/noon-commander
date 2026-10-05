@@ -117,6 +117,8 @@
       `shell.pause`. `! $SHELL` gives an interactive shell, so there is no console of its own
 - [x] Command history per host: Up/Down (Alt-P/Alt-N) for the panel's host, a window (Alt-H,
       Ctrl-R) for one host or all; `shell.history_size`, `history.toml` in the state directory
+- [x] Terminal title: the active panel's directory, the terminal's own title back on quitting;
+      `ui.terminal_title`
 
 ## Known issues
 

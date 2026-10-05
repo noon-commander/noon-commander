@@ -656,6 +656,7 @@ show_hidden = true               # names that start with a dot; Alt-. switches w
 fuzzy_search = true              # quick search and filters match as fzf; false: literally
 menu_bar = "on-demand"           # the F9 menu bar while a menu is open; "always": above the panels
 tab_bar = "line"                 # tabs on a line above the panels; "frame": in the panel's frame
+terminal_title = true            # the window's title shows the active panel's directory
 
 [transfer]
 atomic_upload = true             # copies go to a hidden temporary name, then are renamed
@@ -853,6 +854,13 @@ location = "root"
   over ssh too. Nothing tells whether it did, so the UI says the text was sent to the
   terminal's clipboard. Noon Commander never reads the clipboard
   ([ADR 0008](adr/0008-clipboard-through-osc-52.md)).
+- **Terminal title.** With `ui.terminal_title` (the default) the event loop titles the
+  terminal's window or tab with OSC 0 between frames: the active panel's directory as the
+  prompt of the command line shows it (`~/src — noc`, `host:path` with the host's label), or
+  the name of the machine in the root, sanitized like every name. Before the first title it
+  saves the terminal's own on xterm's stack of titles (`CSI 22 t`) and takes it back from
+  there (`CSI 23 t`) on quitting and before handing the terminal to another program, which
+  gets the shell's title and may set its own.
 - **The other panel.** As in mc: Ctrl-U swaps the panels, and the active one stays active on
   the other side; Alt-O opens the directory or host under the cursor in the other panel (from
   a file, the parent directory with the cursor on this one) and moves the cursor down; Alt-I

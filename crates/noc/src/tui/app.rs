@@ -2935,7 +2935,34 @@ impl App {
     /// directory, or `host:path` with the host's label if it has one, its middle cut if it
     /// would take more than a third of `width`, and `$`.
     fn shell_prompt(&self, width: u16) -> String {
-        let dir = match self.panel(self.active).location() {
+        let dir = self.active_place();
+        let room = usize::from(width / 3).max(1);
+        let dir = if cells::width(&dir) > room {
+            cells::fit(&dir, room, Align::Left)
+        } else {
+            dir
+        };
+        format!("{dir} $ ")
+    }
+
+    /// The title of the terminal's window or tab while `ui.terminal_title` is on: where the
+    /// active panel is, as the prompt of a shell command shows it, or the name of this machine
+    /// in the virtual root.
+    pub(crate) fn terminal_title(&self) -> Option<String> {
+        if !self.config.ui.terminal_title {
+            return None;
+        }
+        let place = match self.panel(self.active).location() {
+            Location::Root => cells::sanitize(self.root_title.as_bytes()),
+            _ => self.active_place(),
+        };
+        Some(fl!("terminal-title", place = place))
+    }
+
+    /// The directory of the active panel, with `~` for the home directory, or `host:path` with
+    /// the host's label if it has one.
+    fn active_place(&self) -> String {
+        match self.panel(self.active).location() {
             Location::Local(path) => match path.strip_prefix(&self.home) {
                 Ok(rest) if rest.as_os_str().is_empty() => "~".to_owned(),
                 Ok(rest) => format!("~/{}", cells::sanitize(rest.as_os_str().as_bytes())),
@@ -2953,14 +2980,7 @@ impl App {
                 })
             }
             other => location_text(other),
-        };
-        let room = usize::from(width / 3).max(1);
-        let dir = if cells::width(&dir) > room {
-            cells::fit(&dir, room, Align::Left)
-        } else {
-            dir
-        };
-        format!("{dir} $ ")
+        }
     }
 
     /// Says that the edited copy of `path` could not go back, and where it stays.
@@ -9219,6 +9239,31 @@ mod tests {
         assert_eq!(app.command_prompt(18), "~/s~oc $ ", "a third of the width");
         app.command_line = Some(CommandLine::new(command::Kind::Noc));
         assert_eq!(app.command_prompt(80), ":");
+    }
+
+    #[test]
+    fn the_terminal_title_shows_the_active_panel_unless_turned_off() {
+        let (mut app, _) = App::new(
+            Path::new("/home/me/src/noc"),
+            Path::new("/home/me"),
+            &config(),
+        );
+        assert_eq!(app.terminal_title().as_deref(), Some("~/src/noc — noc"));
+        app.config.ui.terminal_title = false;
+        assert_eq!(app.terminal_title(), None);
+
+        let (mut app, effects) = App::new(Path::new("/"), Path::new("/home/me"), &config());
+        answer(&mut app, effects, &Listing::Dir(Vec::new()));
+        assert_eq!(app.terminal_title().as_deref(), Some("/ — noc"));
+        app.set_root_title("mac\x1b".to_owned());
+        let effects = app.handle(action(Action::Parent));
+        let root = Listing::Root {
+            volumes: Vec::new(),
+            hosts: Vec::new(),
+        };
+        answer(&mut app, effects, &root);
+        assert_eq!(app.panel(app.active).location(), &Location::Root);
+        assert_eq!(app.terminal_title().as_deref(), Some("mac? — noc"));
     }
 
     #[test]

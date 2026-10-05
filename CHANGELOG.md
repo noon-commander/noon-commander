@@ -9,6 +9,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- The terminal's window or tab is titled with the active panel's directory, as the prompt of the
+  command line shows it (`~/src — noc`, or `host:path`), and gets its own title back when Noon
+  Commander quits or hands the terminal to a command, where the terminal keeps a stack of titles.
+  `ui.terminal_title` (Terminal title in Options → Configuration) turns it off.
 - Ctrl-O shows the output of commands in place of the panels, as in mc and Far, in the panels and on
   the command line; Ctrl-O or Esc brings the panels back. Each command now shows after its prompt,
   its output ends on a line of its own, and the line that asks for a key stands out and gives way to

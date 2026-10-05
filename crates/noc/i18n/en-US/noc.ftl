@@ -27,6 +27,13 @@ fkey-cancel = Cancel
 # Opens the pull-down menu.
 fkey-pulldown = PullDn
 
+## The title of the terminal's window or tab (src/tui/app), with ui.terminal_title. Prefix:
+## terminal-.
+
+# Where the active panel is: a directory with ~ for home, host:path, or the name of the machine
+# in the root. noc is the program's name, not to be translated.
+terminal-title = { $place } — noc
+
 ## Panels (src/tui/panel). Prefixes: panel-, error-.
 
 # Column headers.
@@ -244,6 +251,8 @@ config-mouse-hint = Clicks move the cursor, open, and mark, and the wheel scroll
 config-wheel = Mouse wheel
 config-wheel-hint = How far a step of the wheel scrolls: a number of lines, or page.
 config-wheel-invalid = "{ $text }" is not a step of the wheel: it takes a number of lines from 1 to { $most }, or page.
+config-terminal-title = Terminal title
+config-terminal-title-hint = The title of the terminal's window or tab shows the active panel's directory.
 config-menu-bar = Menu bar
 config-menu-bar-hint = When the menu bar of F9 shows.
 config-menu-bar-on-demand = While a menu is open

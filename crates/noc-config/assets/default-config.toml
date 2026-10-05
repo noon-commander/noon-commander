@@ -72,6 +72,9 @@ tab_bar = "line"
 mouse = true
 # How far a step of the mouse wheel scrolls: a number of lines from 1 to 20, or "page".
 wheel = 3
+# Title the terminal's window or tab with the active panel's directory, such as "~/src — noc",
+# and give the terminal its own title back on quitting, where it keeps a stack of titles.
+terminal_title = true
 
 [transfer]
 # Write each copy under a hidden temporary name next to its target and rename it when it is

@@ -38,6 +38,7 @@ enum Key {
     FuzzySearch,
     Mouse,
     Wheel,
+    TerminalTitle,
     MenuBar,
     TabBar,
     AtomicUpload,
@@ -158,6 +159,7 @@ impl Setting {
                     fl!("config-wheel-invalid", text = text, most = Wheel::MAX_LINES)
                 })?;
             }
+            Key::TerminalTitle => ui.terminal_title = self.on(),
             Key::MenuBar => {
                 ui.menu_bar = match text {
                     "always" => MenuBar::Always,
@@ -904,6 +906,14 @@ fn interface(config: &Config, themes: &[&str]) -> Category {
             (fl!("config-wheel"), fl!("config-wheel-hint")),
             text(&ui.wheel.to_string()),
         ),
+        Setting::new(
+            Key::TerminalTitle,
+            (
+                fl!("config-terminal-title"),
+                fl!("config-terminal-title-hint"),
+            ),
+            Value::Toggle(ui.terminal_title),
+        ),
     ];
     settings.extend(bars(ui));
     Category {
@@ -1278,6 +1288,7 @@ mod tests {
         dialog.handle(action(Action::DeleteToStart));
         typed(&mut dialog, "page");
         dialog.handle(action(Action::Down));
+        dialog.handle(action(Action::Toggle));
         dialog.handle(action(Action::End));
         dialog.handle(action(Action::Left));
         category(&mut dialog, 1);
@@ -1309,6 +1320,7 @@ mod tests {
         expected.ui.tab_bar = TabBar::Frame;
         expected.ui.mouse = false;
         expected.ui.wheel = Wheel::Page;
+        expected.ui.terminal_title = false;
         expected.transfer.atomic_upload = false;
         expected.transfer.parallel_jobs = NonZeroUsize::new(4).unwrap();
         expected.ssh.config_file = Some(PathBuf::from("~/.ssh/work"));

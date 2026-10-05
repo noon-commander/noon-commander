@@ -144,6 +144,9 @@ pub struct UiConfig {
     pub mouse: bool,
     /// How far the mouse wheel scrolls. Default: `3` lines.
     pub wheel: Wheel,
+    /// Whether the terminal's window or tab is titled with the active panel's directory while
+    /// Noon Commander runs. Default: `true`.
+    pub terminal_title: bool,
 }
 
 impl Default for UiConfig {
@@ -159,6 +162,7 @@ impl Default for UiConfig {
             tab_bar: TabBar::default(),
             mouse: true,
             wheel: Wheel::default(),
+            terminal_title: true,
         }
     }
 }
@@ -463,6 +467,7 @@ mod tests {
         tab_bar = "frame"
         mouse = false
         wheel = "page"
+        terminal_title = false
 
         [transfer]
         atomic_upload = false
@@ -502,6 +507,7 @@ mod tests {
                 tab_bar: TabBar::Frame,
                 mouse: false,
                 wheel: Wheel::Page,
+                terminal_title: false,
             },
             transfer: TransferConfig {
                 atomic_upload: false,
@@ -539,6 +545,7 @@ mod tests {
         assert_eq!(config.ui.tab_bar, TabBar::Line);
         assert!(config.ui.mouse);
         assert_eq!(config.ui.wheel, Wheel::Lines(3));
+        assert!(config.ui.terminal_title);
         assert!(config.transfer.atomic_upload);
         assert_eq!(config.transfer.parallel_jobs.get(), 2);
         assert_eq!(config.zoxide.program, Path::new("zoxide"));
@@ -731,6 +738,7 @@ mod tests {
         assert!(table["ui"].get("tab_bar").is_some());
         assert!(table["ui"].get("mouse").is_some());
         assert!(table["ui"].get("wheel").is_some());
+        assert!(table["ui"].get("terminal_title").is_some());
         assert!(table["zoxide"].get("program").is_some());
         assert!(table["zoxide"].get("record").is_some());
         assert!(table["shell"].get("history_size").is_some());

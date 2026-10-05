@@ -141,14 +141,15 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     let restore = Restore::default();
     let mut terminal = ratatui::try_init()?;
     release_mouse_on_panic();
-    let modes = Modes::start(&restore).await?;
+    let mut asked = Asked {
+        modes: Modes::start(&restore).await?,
+        ..Asked::default()
+    };
     let mut events = EventStream::new();
     let mut spinner = tokio::time::interval(SPINNER_FRAME);
     spinner.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut keys = KeyState::default();
     let mut clicks = Clicks::default();
-    // The mouse is captured; `ui.mouse` may change while the app runs.
-    let mut mouse = false;
     // The last event changed nothing, so the screen stays as it is.
     let mut idle = false;
     let context = Arc::new(context);
@@ -164,10 +165,8 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
             tasks.change_work_dir(dir);
         }
         if let Some(handover) = app.take_handover() {
-            // The next turn captures the mouse again.
-            mouse = false;
             let (fresh, after) =
-                hand_over((&mut terminal, modes), events, &mut app, handover).await;
+                hand_over((&mut terminal, &mut asked), events, &mut app, handover).await;
             events = fresh;
             let effects = match after {
                 Ok((effects, fresh)) => {
@@ -180,7 +179,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
             tasks.run(effects);
             continue;
         }
-        if let Err(error) = take_terminal_requests(&mut terminal, &mut app, &mut mouse) {
+        if let Err(error) = take_terminal_requests(&mut terminal, &mut app, &mut asked) {
             break Err(error.into());
         }
         let now = SystemTime::now();
@@ -226,6 +225,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
         }
     };
     // The terminal comes back first, so a slow shutdown does not look like a hang.
+    let _ = asked.title.show(None);
     drop(terminal);
     drop(restore);
     app.stop_jobs();
@@ -320,9 +320,11 @@ async fn edit_command(file: &Path, text: &str) -> Result<String, String> {
 
 /// Hands the terminal to the program of `handover`, takes it back, and returns what the app
 /// does next and a new stream of SIGINT, since Ctrl-C in the program reached Noon Commander
-/// too, with a new stream of events in place of `events`.
+/// too, with a new stream of events in place of `events`. The program gets the mouse and the
+/// terminal's own title, and may set one of its own; the next turn of the event loop takes
+/// both again.
 async fn hand_over(
-    (terminal, modes): (&mut DefaultTerminal, Modes),
+    (terminal, asked): (&mut DefaultTerminal, &mut Asked),
     events: EventStream,
     app: &mut App,
     handover: Handover,
@@ -331,7 +333,12 @@ async fn hand_over(
     // waits, and a new stream takes that lock, so the old one goes first; the new one reads
     // nothing until it is polled.
     drop(events);
-    let suspended = suspend(terminal, modes).map_err(|error| error.to_string());
+    asked.mouse = false;
+    let suspended = asked
+        .title
+        .show(None)
+        .and_then(|()| suspend(terminal, asked.modes))
+        .map_err(|error| error.to_string());
     let (events, effects) = match handover {
         Handover::Edit(file) => {
             let result = match suspended {
@@ -370,7 +377,7 @@ async fn hand_over(
             (events, Vec::new())
         }
     };
-    let after = resume(terminal, modes).and_then(|()| signal(SignalKind::interrupt()));
+    let after = resume(terminal, asked.modes).and_then(|()| signal(SignalKind::interrupt()));
     (events, after.map(|interrupt| (effects, interrupt)))
 }
 
@@ -439,13 +446,23 @@ impl Modes {
     }
 }
 
-/// Does what the app asks of the terminal: a full redraw, text for the clipboard, and
-/// capturing the mouse or releasing it, as `ui.mouse` says; `mouse` is whether it is
-/// captured.
+/// What the TUI has asked of the terminal beyond the screen; `ui.mouse` and
+/// `ui.terminal_title` may change while the app runs.
+#[derive(Debug, Default)]
+struct Asked {
+    modes: Modes,
+    /// The mouse is captured.
+    mouse: bool,
+    title: Title,
+}
+
+/// Does what the app asks of the terminal: a full redraw, text for the clipboard, capturing
+/// the mouse or releasing it, as `ui.mouse` says, and the window's title, as
+/// `ui.terminal_title` says.
 fn take_terminal_requests(
     terminal: &mut DefaultTerminal,
     app: &mut App,
-    mouse: &mut bool,
+    asked: &mut Asked,
 ) -> io::Result<()> {
     if app.take_redraw() {
         repaint(terminal)?;
@@ -453,11 +470,51 @@ fn take_terminal_requests(
     if let Some(text) = app.take_clipboard() {
         copy_to_clipboard(terminal, &text)?;
     }
-    if app.mouse() != *mouse {
-        *mouse = app.mouse();
-        capture_mouse(*mouse)?;
+    if app.mouse() != asked.mouse {
+        asked.mouse = app.mouse();
+        capture_mouse(asked.mouse)?;
     }
-    Ok(())
+    asked.title.show(app.terminal_title())
+}
+
+/// The title that Noon Commander gave the terminal's window or tab, if it gave one.
+///
+/// Before its first title it saves the terminal's own on the terminal's stack of titles (xterm's
+/// `CSI 22 t`, which most terminals have), and takes it back from there (`CSI 23 t`) when it
+/// stops titling, so the shell gets its title back. A terminal without the stack ignores both,
+/// and keeps the last title until something else sets one.
+#[derive(Debug, Default)]
+struct Title {
+    shown: Option<String>,
+}
+
+impl Title {
+    const PUSH: &str = "\x1b[22;0t";
+    const POP: &str = "\x1b[23;0t";
+
+    /// Titles the window with `title`, or gives the terminal its own title back for `None`.
+    fn show(&mut self, title: Option<String>) -> io::Result<()> {
+        self.write(&mut io::stdout(), title)
+    }
+
+    /// Writes to `out` what changes the title to `title`. The title is terminal-safe text,
+    /// which holds no control character that could end the sequence.
+    fn write(&mut self, out: &mut impl io::Write, title: Option<String>) -> io::Result<()> {
+        use crossterm::style::Print;
+        use crossterm::terminal::SetTitle;
+
+        if self.shown == title {
+            return Ok(());
+        }
+        match (&self.shown, &title) {
+            (None, Some(text)) => crossterm::execute!(out, Print(Self::PUSH), SetTitle(text))?,
+            (Some(_), Some(text)) => crossterm::execute!(out, SetTitle(text))?,
+            (Some(_), None) => crossterm::execute!(out, Print(Self::POP))?,
+            (None, None) => {}
+        }
+        self.shown = title;
+        Ok(())
+    }
 }
 
 /// Hands `event` to the app if it is a press; whether it was. Moves of the mouse come all the
@@ -539,5 +596,34 @@ impl Drop for Restore {
         let _ = capture_mouse(false);
         let _ = self.modes.get().leave();
         ratatui::restore();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn written(title: &mut Title, text: Option<&str>) -> String {
+        let mut out = Vec::new();
+        title.write(&mut out, text.map(str::to_owned)).unwrap();
+        String::from_utf8(out).unwrap()
+    }
+
+    #[test]
+    fn the_title_saves_the_terminals_own_and_gives_it_back() {
+        let mut title = Title::default();
+        assert_eq!(written(&mut title, None), "", "nothing to give back");
+        assert_eq!(
+            written(&mut title, Some("~ — noc")),
+            "\x1b[22;0t\x1b]0;~ — noc\x07"
+        );
+        assert_eq!(written(&mut title, Some("~ — noc")), "", "unchanged");
+        assert_eq!(
+            written(&mut title, Some("~/src — noc")),
+            "\x1b]0;~/src — noc\x07",
+            "saved once"
+        );
+        assert_eq!(written(&mut title, None), "\x1b[23;0t");
+        assert_eq!(written(&mut title, None), "", "given back once");
     }
 }

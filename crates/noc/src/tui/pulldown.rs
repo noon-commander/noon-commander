@@ -342,6 +342,7 @@ impl PullDown {
                     Some((fl!("pulldown-edit"), Action::Edit)),
                     Some((fl!("pulldown-copy"), Action::Copy)),
                     Some((fl!("pulldown-move"), Action::Move)),
+                    Some((fl!("pulldown-rename"), Action::Rename)),
                     Some((fl!("pulldown-mkdir"), Action::Mkdir)),
                     Some((fl!("pulldown-delete"), Action::Delete)),
                     None,
@@ -871,7 +872,7 @@ mod tests {
         menu.handle(action(Action::Right), &status);
         assert_eq!(menu.menu().title.text, "File");
         assert_eq!(chosen(&menu), Some(Command::Do(Action::View)));
-        for _ in 0..5 {
+        for _ in 0..6 {
             menu.handle(action(Action::Down), &status);
         }
         assert_eq!(
@@ -965,7 +966,7 @@ mod tests {
         again.handle(Resolved::Insert('m'), &status);
         assert_eq!(chosen(&again), Some(Command::Do(Action::Mkdir)));
         let mut place = again.place().clone();
-        place.cursors[1] = 5;
+        place.cursors[1] = 6;
         let third = PullDown::new(Side::Left, false, Some(&place), &[], &status);
         assert_eq!(chosen(&third), Some(Command::Do(Action::Select)));
         // Closed from the bar, it opens on the bar.

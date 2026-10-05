@@ -12,10 +12,11 @@ use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Block;
+use ratatui::widgets::{Block, Clear};
 
 use super::cells::{self, Align, MTIME_WIDTH};
 use super::decor::Decor;
+use super::dialog::Field;
 use super::fuzzy::Fuzzy;
 use super::keymap::Action;
 use super::root::{RootHost, volume_name, volume_of};
@@ -214,6 +215,13 @@ enum Row<'a> {
     Host(&'a RootHost),
 }
 
+/// An entry renamed in its row: its name, and the field with the new one.
+#[derive(Debug)]
+struct Renaming {
+    name: Vec<u8>,
+    field: Field,
+}
+
 /// One listing with a cursor.
 #[derive(Debug)]
 pub(crate) struct Panel {
@@ -244,6 +252,8 @@ pub(crate) struct Panel {
     pending: Option<Pending>,
     /// What quick search has matched so far, while it runs.
     search: Option<String>,
+    /// The entry under the cursor, while its name is edited in its row.
+    renaming: Option<Renaming>,
     error: Option<String>,
     /// Where the lines between columns ran at the last render, so that they can be joined to
     /// a top of the frame drawn again over the panel's.
@@ -293,6 +303,7 @@ impl Panel {
             generation: 0,
             pending: None,
             search: None,
+            renaming: None,
             error: None,
             column_lines: Vec::new(),
         };
@@ -319,6 +330,7 @@ impl Panel {
             generation: 0,
             pending: None,
             search: None,
+            renaming: None,
             error: None,
             column_lines: Vec::new(),
         };
@@ -333,6 +345,9 @@ impl Panel {
         self.generation += 1;
         self.error = None;
         self.search = None;
+        if location != self.location {
+            self.renaming = None;
+        }
         self.pending = Some(Pending {
             generation: self.generation,
             location: location.clone(),
@@ -363,6 +378,7 @@ impl Panel {
                 // Reading the same directory again keeps the marks on names still there.
                 if location != self.location {
                     self.marked.clear();
+                    self.renaming = None;
                 }
                 self.location = location;
                 self.listing = listing;
@@ -379,6 +395,7 @@ impl Panel {
                         Focus::Near { row, .. } => row.min(rows.saturating_sub(1)),
                         _ => 0,
                     });
+                self.keep_renaming();
             }
             Err(reason) => {
                 let shown = match (&pending.location, &self.location) {
@@ -455,6 +472,56 @@ impl Panel {
         self.cursor = (0..rows)
             .find(|&row| self.row(row).is_some_and(|row| focus.matches(row)))
             .unwrap_or_else(|| self.cursor.min(rows.saturating_sub(1)));
+        self.keep_renaming();
+    }
+
+    /// Keeps the cursor on the entry being renamed, or stops renaming it once it is not shown.
+    fn keep_renaming(&mut self) {
+        let Some(renaming) = &self.renaming else {
+            return;
+        };
+        let row = (0..self.rows()).find(|&index| {
+            matches!(self.row(index), Some(Row::Entry(entry)) if entry.name == renaming.name)
+        });
+        match row {
+            Some(row) => self.cursor = row,
+            None => self.renaming = None,
+        }
+    }
+
+    /// Starts renaming the entry under the cursor in its row: the field holds its name, with
+    /// all but the last extension of a file selected. `false` on `..`, volumes, and hosts, and
+    /// for a name that is not UTF-8, which the field could not give back.
+    pub(crate) fn start_rename(&mut self) -> bool {
+        let Some(entry) = self.entry_under_cursor() else {
+            return false;
+        };
+        let Ok(text) = std::str::from_utf8(&entry.name) else {
+            return false;
+        };
+        let field = Field::selecting(text, stem_chars(text, entry.is_dir_like()));
+        self.renaming = Some(Renaming {
+            name: entry.name.clone(),
+            field,
+        });
+        self.search = None;
+        true
+    }
+
+    /// Whether an entry is being renamed.
+    pub(crate) fn renaming(&self) -> bool {
+        self.renaming.is_some()
+    }
+
+    /// The field with the new name, while an entry is being renamed.
+    pub(crate) fn rename_field(&mut self) -> Option<&mut Field> {
+        self.renaming.as_mut().map(|renaming| &mut renaming.field)
+    }
+
+    /// Stops renaming: the name of the entry, and the text of the field.
+    pub(crate) fn end_rename(&mut self) -> Option<(Vec<u8>, String)> {
+        let renaming = self.renaming.take()?;
+        Some((renaming.name, renaming.field.text().to_owned()))
     }
 
     /// Sorts a directory listing and picks the entries to show, or the connected hosts in the
@@ -974,20 +1041,7 @@ impl Panel {
         self.page = list_height;
         self.scroll(list_height);
 
-        let columns = match &self.listing {
-            Listing::Dir(_) => Columns::Dir(DirColumns::for_width(width)),
-            Listing::Root {
-                volumes,
-                hosts: listed,
-            } => Columns::Root(RootColumns {
-                home: volume_of(volumes, &self.home).and_then(|volume| volume.space),
-                ..RootColumns::for_width(width, listed.len())
-            }),
-            Listing::Hosts(listed) => {
-                let addresses = listed.iter().map(|host| address(host, hosts));
-                Columns::Hosts(HostColumns::for_width(width, addresses))
-            }
-        };
+        let columns = self.columns(width, hosts);
         let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
         let header = Line::styled(columns.header(self.sort), theme.header);
         frame.render_widget(header, line(inner.y));
@@ -1009,8 +1063,11 @@ impl Panel {
             .map(|offset| inner.x + offset)
             .collect();
         self.render_column_lines(frame, area, inner, theme);
+        self.render_rename(frame, inner, list_height, active, view);
         let mut status_style = Style::new();
-        let status = if let Some(text) = &self.search {
+        let status = if let Some(renaming) = &self.renaming {
+            fl!("panel-rename", name = cells::sanitize(&renaming.name))
+        } else if let Some(text) = &self.search {
             status_style = theme.quick_search;
             let status = fl!("panel-search", text = cells::sanitize(text.as_bytes()));
             if active {
@@ -1042,6 +1099,71 @@ impl Panel {
         };
         let status = cells::fit(&status, width, Align::Left);
         frame.render_widget(Line::styled(status, status_style), line(inner.bottom() - 1));
+    }
+
+    /// The columns of the listing in `width` cells.
+    fn columns(&self, width: usize, hosts: &dyn Fn(&str) -> HostState) -> Columns {
+        match &self.listing {
+            Listing::Dir(_) => Columns::Dir(DirColumns::for_width(width)),
+            Listing::Root {
+                volumes,
+                hosts: listed,
+            } => Columns::Root(RootColumns {
+                home: volume_of(volumes, &self.home).and_then(|volume| volume.space),
+                ..RootColumns::for_width(width, listed.len())
+            }),
+            Listing::Hosts(listed) => {
+                let addresses = listed.iter().map(|host| address(host, hosts));
+                Columns::Hosts(HostColumns::for_width(width, addresses))
+            }
+        }
+    }
+
+    /// The field of the entry being renamed, over its row from the name on, in the colors of a
+    /// dialog's text field, with the selection in reverse.
+    fn render_rename(
+        &self,
+        frame: &mut Frame<'_>,
+        inner: Rect,
+        list_height: usize,
+        active: bool,
+        view: &View<'_>,
+    ) {
+        let Some(renaming) = &self.renaming else {
+            return;
+        };
+        let Some(Row::Entry(entry)) = self.row(self.cursor) else {
+            return;
+        };
+        let Some(screen_row) = self
+            .cursor
+            .checked_sub(self.offset)
+            .filter(|&row| row < list_height)
+        else {
+            return;
+        };
+        let prefix = cells::width(&view.decor.entry(entry));
+        let prefix = u16::try_from(prefix).unwrap_or(u16::MAX);
+        if prefix.saturating_add(1) >= inner.width {
+            return;
+        }
+        let y = inner.y + 1 + u16::try_from(screen_row).unwrap_or(u16::MAX);
+        let area = Rect::new(inner.x + prefix, y, inner.width - prefix, 1);
+        let theme = view.theme;
+        let ([before, selected, after], column) =
+            renaming.field.visible_parts(usize::from(area.width));
+        let line = Line::from(vec![
+            Span::raw(before),
+            Span::styled(selected, selection(theme.dialog_input)),
+            Span::raw(after),
+        ])
+        .style(theme.dialog_input);
+        frame.render_widget(Clear, area);
+        frame.render_widget(line, area);
+        if active {
+            let column = u16::try_from(column).unwrap_or(u16::MAX);
+            frame.set_cursor_position((area.x.saturating_add(column).min(area.right() - 1), y));
+        }
     }
 
     /// The status line on a volume: its mount point, and its file system.
@@ -1579,6 +1701,33 @@ pub(crate) fn location_text(location: &Location) -> String {
             }
             cells::sanitize(&text)
         }
+    }
+}
+
+/// `style` for selected text: its colors swapped, or else reversed.
+fn selection(style: Style) -> Style {
+    match (style.fg, style.bg) {
+        (Some(fg), Some(bg)) => style.fg(bg).bg(fg),
+        _ if style.add_modifier.contains(Modifier::REVERSED) => {
+            style.remove_modifier(Modifier::REVERSED)
+        }
+        _ => style.add_modifier(Modifier::REVERSED),
+    }
+}
+
+/// Characters of `name` that renaming selects: a directory's whole name; a file's name
+/// without its last extension, unless that would leave nothing, as for `.profile`, or the name
+/// ends with the dot.
+fn stem_chars(name: &str, dir: bool) -> usize {
+    let whole = name.chars().count();
+    if dir {
+        return whole;
+    }
+    match name.rfind('.') {
+        Some(dot) if !name[..dot].trim_start_matches('.').is_empty() && dot + 1 < name.len() => {
+            name[..dot].chars().count()
+        }
+        _ => whole,
     }
 }
 
@@ -3049,5 +3198,125 @@ mod tests {
         assert_eq!(cell.fg, Color::White, "the directory's color");
         assert_eq!(cell.bg, Color::DarkGray, "the inactive cursor's background");
         assert_eq!(buffer[(x, y + 1)].bg, Color::Blue, "the next row is plain");
+    }
+
+    fn rename_listing() -> Vec<DirEntry> {
+        vec![
+            entry("report.final.pdf", FileKind::File, 10),
+            entry("docs", FileKind::Dir, 4096),
+            entry(".profile", FileKind::File, 1),
+            entry("notes", FileKind::File, 1),
+        ]
+    }
+
+    fn cursor_to(panel: &mut Panel, name: &str) {
+        panel.cursor = names(panel).iter().position(|shown| shown == name).unwrap();
+    }
+
+    /// The selected text of the field, and all of it.
+    fn rename_field(panel: &mut Panel) -> (String, String) {
+        let field = panel.rename_field().unwrap();
+        let ([_, selected, _], _) = field.visible_parts(80);
+        (selected, field.text().to_owned())
+    }
+
+    #[test]
+    fn renaming_selects_all_but_the_last_extension_of_a_file() {
+        assert_eq!(stem_chars("report.final.pdf", false), 12);
+        assert_eq!(stem_chars("archive.tar.gz", false), 11);
+        assert_eq!(stem_chars("notes", false), 5);
+        assert_eq!(stem_chars(".profile", false), 8, "a dotfile is all name");
+        assert_eq!(stem_chars(".config.toml", false), 7);
+        assert_eq!(stem_chars("odd.", false), 4, "no extension after the dot");
+        assert_eq!(stem_chars("photos.d", true), 8, "a directory is all name");
+        assert_eq!(stem_chars("файл.txt", false), 4, "characters, not bytes");
+
+        let mut panel = loaded("/srv", rename_listing());
+        assert!(!panel.start_rename(), "not on `..`");
+        cursor_to(&mut panel, "report.final.pdf");
+        assert!(panel.start_rename());
+        assert!(panel.renaming());
+        assert_eq!(
+            rename_field(&mut panel),
+            ("report.final".to_owned(), "report.final.pdf".to_owned())
+        );
+        let field = panel.rename_field().unwrap();
+        for c in "summary".chars() {
+            field.insert(c);
+        }
+        assert_eq!(
+            panel.end_rename(),
+            Some((b"report.final.pdf".to_vec(), "summary.pdf".to_owned()))
+        );
+        assert!(!panel.renaming());
+
+        let odd = DirEntry {
+            name: b"a\xffb".to_vec(),
+            ..entry("x", FileKind::File, 1)
+        };
+        let mut odd = loaded("/srv", vec![odd]);
+        odd.cursor = 1;
+        assert!(
+            !odd.start_rename(),
+            "the field could not give the name back"
+        );
+    }
+
+    #[test]
+    fn renaming_follows_its_entry_and_ends_when_it_goes() {
+        let mut panel = loaded("/srv", rename_listing());
+        cursor_to(&mut panel, "notes");
+        assert!(panel.start_rename());
+        panel.rename_field().unwrap().insert('x');
+
+        let request = panel.handle(Action::Reload).unwrap();
+        let mut more = rename_listing();
+        more.push(entry("a-new-one", FileKind::File, 1));
+        answer(&mut panel, &request, Listing::Dir(more));
+        assert_eq!(under_cursor(&panel), "notes", "the cursor stays on it");
+        assert_eq!(rename_field(&mut panel).1, "x", "and so does the text");
+
+        let request = panel.handle(Action::Reload).unwrap();
+        answer(&mut panel, &request, Listing::Dir(listing()));
+        assert!(!panel.renaming(), "the entry is gone");
+
+        let mut panel = loaded("/srv", rename_listing());
+        cursor_to(&mut panel, ".profile");
+        assert!(panel.start_rename());
+        panel.set_show_hidden(false);
+        assert!(!panel.renaming(), "the entry is hidden");
+
+        let mut panel = loaded("/srv", rename_listing());
+        cursor_to(&mut panel, "docs");
+        assert!(panel.start_rename());
+        assert_eq!(rename_field(&mut panel).0, "docs");
+        panel.go(Destination::to(local("/")));
+        assert!(!panel.renaming(), "the panel goes elsewhere");
+    }
+
+    #[test]
+    fn draws_the_name_being_renamed_over_its_row() {
+        let mut panel = loaded("/srv", rename_listing());
+        cursor_to(&mut panel, "report.final.pdf");
+        assert!(panel.start_rename());
+        let terminal = render_with(
+            &mut panel,
+            (40, 9),
+            true,
+            &|_| HostState::default(),
+            Decor::new(false),
+        );
+        insta::assert_snapshot!(terminal.backend());
+        let buffer = terminal.backend().buffer();
+        let y = 1 + 1 + u16::try_from(panel.cursor - panel.offset).unwrap();
+        // After the marker, the selection, then the extension and the rest of the row, which
+        // the size and time columns no longer cut.
+        let reversed = |x: u16| buffer[(x, y)].modifier.contains(Modifier::REVERSED);
+        assert!(!reversed(2), "the selection is not reversed in the field");
+        assert!(!reversed(13));
+        assert!(reversed(14), "the extension is not selected");
+        assert!(reversed(38), "the field runs to the end of the row");
+        assert_eq!(buffer[(30, y)].symbol(), " ", "no line between columns");
+        assert_eq!(terminal.backend().cursor_position(), (14, y).into());
     }
 }

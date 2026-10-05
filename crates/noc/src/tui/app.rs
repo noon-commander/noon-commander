@@ -95,6 +95,15 @@ pub(crate) enum Effect {
         location: Location,
         host: Option<HostHandle>,
     },
+    /// Rename `from` to `to`, a new name in the same directory, over a file there if
+    /// `replace`, through `host` if it is remote, and report to [`App::entry_renamed`].
+    Rename {
+        panel: PanelId,
+        from: Location,
+        to: Location,
+        replace: bool,
+        host: Option<HostHandle>,
+    },
     /// Run the delete job `id` on `targets`, which are all local or all on the host of `host`,
     /// and report to [`App::job_event`]; `cancel` stops it.
     Delete {
@@ -249,6 +258,13 @@ enum Purpose {
     Mkdir { panel: PanelId },
     /// F8 in a panel on `dir`, for the entries `names`.
     Delete { dir: Location, names: Vec<Vec<u8>> },
+    /// The new name of `from`, which `panel` renamed in its row, is `to`, a file's: Yes
+    /// renames it, and the file goes.
+    RenameOver {
+        panel: PanelId,
+        from: Location,
+        to: Location,
+    },
     /// F5 or F6 (by `kind`) in `panel`, which shows `dir`, for the entries `names`. The field
     /// opened with `offered`, the text for the other panel's location, if it shows one.
     Transfer {
@@ -772,6 +788,8 @@ impl App {
             Context::PullDown
         } else if self.viewing.is_some() {
             Context::Viewer
+        } else if self.panel(self.active).renaming() {
+            Context::Rename
         } else if self.panel(self.active).searching() {
             Context::QuickSearch
         } else {
@@ -810,6 +828,7 @@ impl App {
             | Action::Delete
             | Action::Copy
             | Action::Move
+            | Action::Rename
             | Action::View
             | Action::Edit => !self.panel(self.active).shows_root(),
             Action::ToggleWrap => self.viewing.is_some(),
@@ -1098,6 +1117,9 @@ impl App {
         if let Some(effects) = self.handle_over(input) {
             return effects;
         }
+        if self.panel(self.active).renaming() {
+            return self.handle_rename(input);
+        }
         let UiConfig {
             type_to_search,
             fuzzy_search,
@@ -1172,6 +1194,7 @@ impl App {
             Action::Edit => return self.edit(),
             Action::Copy => self.ask_transfer(JobKind::Copy),
             Action::Move => self.ask_transfer(JobKind::Move),
+            Action::Rename => self.start_rename(),
             Action::Select => self.ask_pattern(true),
             Action::Unselect => self.ask_pattern(false),
             Action::Cancel => self.cancel(self.active),
@@ -2034,6 +2057,11 @@ impl App {
             } if event == DialogEvent::Pressed(Button::Yes) => {
                 return self.write_sums(window, location, bytes, true);
             }
+            Purpose::RenameOver { panel, from, to }
+                if event == DialogEvent::Pressed(Button::Yes) =>
+            {
+                return self.rename_entry(panel, from, to, true);
+            }
             Purpose::TabList { side } if ok => {
                 self.panel_mut(side).end_search();
                 if self.tabs_mut(side).select(dialog.chosen()) {
@@ -2051,6 +2079,7 @@ impl App {
             | Purpose::Checksum { .. }
             | Purpose::SaveSums { .. }
             | Purpose::OverwriteSums { .. }
+            | Purpose::RenameOver { .. }
             | Purpose::Pattern { .. }
             | Purpose::Mkdir { .. }
             | Purpose::Delete { .. }
@@ -3115,6 +3144,12 @@ impl App {
             self.show_error(&fl!("mkdir-error", path = path, reason = reason));
             return Vec::new();
         }
+        self.show_new(panel, location)
+    }
+
+    /// Panels on the directory that holds the new `location` read it again, `panel` with the
+    /// cursor on it, and hidden tabs once they show.
+    fn show_new(&mut self, panel: PanelId, location: &Location) -> Vec<Effect> {
         let parent = location.parent();
         let name = file_name(location);
         let mut effects = Vec::new();
@@ -3140,6 +3175,140 @@ impl App {
             effects.extend(self.route(id, request));
         }
         effects
+    }
+
+    /// Starts renaming the entry under the cursor of the active panel in its row, as Shift-F6;
+    /// a name that is not UTF-8 cannot be edited, which an error says.
+    fn start_rename(&mut self) {
+        let panel = self.panel_mut(self.active);
+        if panel.start_rename() {
+            return;
+        }
+        let invalid = panel
+            .name_under_cursor()
+            .filter(|name| std::str::from_utf8(name).is_err())
+            .map(cells::sanitize);
+        if let Some(name) = invalid {
+            self.show_error(&fl!("rename-not-utf8", name = name));
+        }
+    }
+
+    /// Gives a key to the field of the entry renamed in the active panel: Enter renames it,
+    /// Esc leaves it as it was, and other keys edit the name.
+    fn handle_rename(&mut self, input: Resolved) -> Vec<Effect> {
+        let panel = self.panel_mut(self.active);
+        match input {
+            Resolved::Action(Action::Confirm) => return self.confirm_rename(),
+            Resolved::Action(Action::Cancel) => {
+                panel.end_rename();
+            }
+            Resolved::Insert(c) => {
+                if let Some(field) = panel.rename_field() {
+                    field.insert(c);
+                }
+            }
+            Resolved::Action(action) => {
+                if let Some(field) = panel.rename_field() {
+                    field.edit(action);
+                }
+            }
+        }
+        Vec::new()
+    }
+
+    /// Renames the entry renamed in the active panel to the name in its field. An empty or
+    /// unchanged name leaves it as it was; one that cannot name an entry in the directory
+    /// shows an error, and the field stays for another try.
+    fn confirm_rename(&mut self) -> Vec<Effect> {
+        let id = self.shown(self.active);
+        let Some(text) = self
+            .panel_mut(self.active)
+            .rename_field()
+            .map(|field| field.text().to_owned())
+        else {
+            return Vec::new();
+        };
+        if text == "." || text == ".." || text.contains(['/', '\0']) {
+            let name = cells::sanitize(text.as_bytes());
+            self.show_error(&fl!("rename-invalid", name = name));
+            return Vec::new();
+        }
+        let panel = self.panel_mut(self.active);
+        let Some((name, _)) = panel.end_rename() else {
+            return Vec::new();
+        };
+        if text.is_empty() || text.as_bytes() == name {
+            return Vec::new();
+        }
+        let dir = panel.location().clone();
+        match (child(&dir, &name), child(&dir, text.as_bytes())) {
+            (Some(from), Some(to)) => self.rename_entry(id, from, to, false),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Renames `from` to `to` for `panel`, in the background, over a file there if `replace`;
+    /// that counts as work in the directory.
+    fn rename_entry(
+        &mut self,
+        panel: PanelId,
+        from: Location,
+        to: Location,
+        replace: bool,
+    ) -> Vec<Effect> {
+        let Ok(host) = self.handle_for(&from) else {
+            let path = location_text(&from);
+            let reason = fl!("error-connection-closed");
+            self.show_error(&fl!("rename-error", path = path, reason = reason));
+            return Vec::new();
+        };
+        let noted = self.note(&from.parent());
+        let mut effects = vec![Effect::Rename {
+            panel,
+            from,
+            to,
+            replace,
+            host,
+        }];
+        effects.extend(noted);
+        effects
+    }
+
+    /// Takes the result of an [`Effect::Rename`]: panels on the directory read it again, the
+    /// one that renamed with the cursor on the new name. A file with that name asks whether to
+    /// rename over it; an error shows in a dialog.
+    pub(crate) fn entry_renamed(
+        &mut self,
+        panel: PanelId,
+        from: &Location,
+        to: &Location,
+        result: Result<(), Option<String>>,
+    ) -> Vec<Effect> {
+        match result {
+            Ok(()) => self.show_new(panel, to),
+            Err(None) => {
+                let name = file_name(to).unwrap_or_default();
+                let message = fl!("rename-exists", name = cells::sanitize(&name));
+                let buttons = vec![Button::Yes, Button::No];
+                let title = fl!("copy-exists-title");
+                let dialog = Dialog::question(&title, &message, buttons, 1, true);
+                self.dialogs.push_back(Open {
+                    dialog,
+                    purpose: Purpose::RenameOver {
+                        panel,
+                        from: from.clone(),
+                        to: to.clone(),
+                    },
+                });
+                Vec::new()
+            }
+            Err(Some(reason)) => {
+                let path = location_text(from);
+                let reason = cells::sanitize(reason.as_bytes());
+                self.show_error(&fl!("rename-error", path = path, reason = reason));
+                Vec::new()
+            }
+        }
     }
 
     /// Shows `message` in an error dialog.
@@ -7560,6 +7729,80 @@ mod tests {
             [] as [PathBuf; 0],
             "counted as the target"
         );
+    }
+
+    #[test]
+    fn shift_f6_renames_in_the_row_and_asks_before_replacing_a_file() {
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
+        let listing = Listing::Dir(vec![file("report.pdf", 1), file("taken.pdf", 2)]);
+        answer(&mut app, effects, &listing);
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Rename));
+        assert_eq!(app.context(), Context::Rename);
+        assert!(screen(&mut app).contains("Rename: report.pdf"));
+        type_text(&mut app, "taken");
+        let rename = one(app.handle(action(Action::Confirm)));
+        let Effect::Rename {
+            panel,
+            from,
+            to,
+            replace: false,
+            host: None,
+        } = rename
+        else {
+            panic!("expected a rename, got {rename:?}");
+        };
+        assert_eq!(
+            (&from, &to),
+            (&local("/srv/report.pdf"), &local("/srv/taken.pdf"))
+        );
+        assert_eq!(app.context(), Context::Panel, "the field is gone");
+
+        // A file has the name: No is the default; Left goes to Yes.
+        assert!(app.entry_renamed(panel, &from, &to, Err(None)).is_empty());
+        assert!(screen(&mut app).contains("\"taken.pdf\" is there already."));
+        app.handle(action(Action::Left));
+        let again = one(app.handle(action(Action::Confirm)));
+        assert!(
+            matches!(&again, Effect::Rename { replace: true, to: target, .. } if *target == to),
+            "{again:?}"
+        );
+        let effects = app.entry_renamed(panel, &from, &to, Ok(()));
+        assert_eq!(effects.len(), 2, "both panels show the directory");
+        answer(&mut app, effects, &Listing::Dir(vec![file("taken.pdf", 1)]));
+        assert_eq!(
+            app.panel(Side::Left).name_under_cursor(),
+            Some(&b"taken.pdf"[..])
+        );
+
+        let effects = app.entry_renamed(panel, &from, &to, Err(Some("no space".to_owned())));
+        assert!(effects.is_empty());
+        assert!(screen(&mut app).contains("Cannot rename /srv/report.pdf: no space"));
+        app.handle(action(Action::Confirm));
+
+        // A slash would move it: the error goes, and the field stays.
+        app.handle(action(Action::Rename));
+        type_text(&mut app, "a/b");
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        assert!(screen(&mut app).contains("\"a/b.pdf\" cannot be a name"));
+        app.handle(action(Action::Confirm));
+        assert_eq!(app.context(), Context::Rename);
+        app.handle(action(Action::Cancel));
+        assert_eq!(app.context(), Context::Panel);
+
+        // The same name, or none, renames nothing.
+        app.handle(action(Action::Rename));
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        app.handle(action(Action::Rename));
+        app.handle(action(Action::End));
+        app.handle(action(Action::DeleteToStart));
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        assert_eq!(app.context(), Context::Panel);
+
+        // Not on `..`.
+        app.handle(action(Action::Home));
+        app.handle(action(Action::Rename));
+        assert_eq!(app.context(), Context::Panel);
     }
 
     #[test]

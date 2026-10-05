@@ -28,7 +28,7 @@ sequence. Sections marked (noc) exist only in noc.
 | Copy | | F5 | — | F5 | F5 |
 | Copy current file (ignoring selection) | | — | — | F15 | Shift+F5 |
 | Rename/move | | F6 | — | F6 | F6 |
-| Rename/move current file | | — | — | F16 | Shift+F6 |
+| Rename/move current file | | Shift+F6<br>F16 (rename in its row) | — | F16 | Shift+F6 |
 | Make directory | | F7 | — | F7 | F7 |
 | Delete | | F8<br>Delete | — | F8 | F8 |
 | Disconnect host (virtual root, host list) | | F8 | — | — | — |
@@ -584,6 +584,16 @@ Under a path field (Quick cd, F5, F6, F7) after a Tab that gets no further.
 | Open by number (no keywords) | | 1…9, 0 | — | — | — |
 | Remove last keyword character | | Backspace | — | — | — |
 | Close | | Esc<br>F10 | — | — | — |
+
+## Renaming in place (noc)
+
+Shift+F6 edits the name in the entry's row; the keys of input lines edit it, and others do
+nothing.
+
+| Action | Status | noc (default) | noc (vim) | mc | far |
+| --- | --- | --- | --- | --- | --- |
+| Rename to the name typed | | Enter | — | — | — |
+| Keep the name | | Esc | — | — | — |
 
 ## Pull-down menu (noc)
 

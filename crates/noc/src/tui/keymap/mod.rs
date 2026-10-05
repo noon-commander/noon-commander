@@ -300,7 +300,7 @@ impl Keymap {
 }
 
 /// The bindings of the mc preset, by context.
-fn mc_presets() -> [(Context, Preset); 12] {
+fn mc_presets() -> [(Context, Preset); 13] {
     use Action::{
         Backspace, Cancel, Confirm, Disconnect, Down, EditHost, End, Help, Home, Left, NextField,
         PageDown, PageUp, PrevField, Quit, Redraw, Right, Toggle, ToggleWrap, Up,
@@ -312,6 +312,7 @@ fn mc_presets() -> [(Context, Preset); 12] {
             Context::QuickSearch,
             &[(Backspace, &["backspace"]), (Cancel, &["esc"])],
         ),
+        (Context::Rename, RENAME),
         (
             Context::Dialog,
             &[
@@ -363,7 +364,7 @@ const PANEL: Preset = {
         Cancel, Checksum, CloseTab, Copy, Delete, Down, Edit, End, Enter, Help, Home, InvertMarks,
         Jobs, Jump, LocationMenuLeft, LocationMenuRight, Mark, MarkUp, Mkdir, Move, NewTab,
         NextTab, OtherPanelOpen, OtherPanelSync, PageDown, PageUp, Parent, PrevTab, PullDown,
-        QuickCd, QuickSearch, Quit, Redraw, Reload, SaveWorkspace, Select, SortByExtension,
+        QuickCd, QuickSearch, Quit, Redraw, Reload, Rename, SaveWorkspace, Select, SortByExtension,
         SortByName, SortBySize, SortByTime, SwapPanels, SwitchPanel, TabList, ToggleHidden,
         Unselect, Up, View, Workspaces,
     };
@@ -401,6 +402,9 @@ const PANEL: Preset = {
         (Edit, &["f4"]),
         (Copy, &["f5"]),
         (Move, &["f6"]),
+        // mc's Shift-F6 asks for a new name in a dialog; here the name is edited in its row.
+        // Terminals without Shift-F6 send F16.
+        (Rename, &["shift-f6", "f16"]),
         (Mkdir, &["f7"]),
         // In text fields, Delete deletes a character.
         (Delete, &["f8", "delete"]),
@@ -452,6 +456,20 @@ const TEXT_FIELD: Preset = &[
     (Action::Delete, &["delete"]),
     (Action::DeleteToStart, &["ctrl-u"]),
     (Action::DeleteToEnd, &["ctrl-k"]),
+];
+
+/// The bindings of the name field of an entry renamed in its row, in the mc preset.
+const RENAME: Preset = &[
+    (Action::Left, &["left"]),
+    (Action::Right, &["right"]),
+    (Action::Home, &["home", "ctrl-a"]),
+    (Action::End, &["end", "ctrl-e"]),
+    (Action::Backspace, &["backspace"]),
+    (Action::Delete, &["delete"]),
+    (Action::DeleteToStart, &["ctrl-u"]),
+    (Action::DeleteToEnd, &["ctrl-k"]),
+    (Action::Confirm, &["enter"]),
+    (Action::Cancel, &["esc"]),
 ];
 
 /// The bindings of path fields in the mc preset, on top of the text field's: Tab completes, as
@@ -618,6 +636,40 @@ mod tests {
 
     fn actions(actions: &[Action]) -> Vec<Resolved> {
         actions.iter().copied().map(Resolved::Action).collect()
+    }
+
+    #[test]
+    fn shift_f6_renames_in_the_row_where_only_field_keys_act() {
+        let keymap = Keymap::mc();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Panel, &["shift-f6", "f16"]),
+            actions(&[Action::Rename, Action::Rename])
+        );
+        assert_eq!(
+            feed(
+                &keymap,
+                &mut state,
+                Context::Rename,
+                &["ctrl-u", "left", "enter", "esc"]
+            ),
+            actions(&[
+                Action::DeleteToStart,
+                Action::Left,
+                Action::Confirm,
+                Action::Cancel
+            ])
+        );
+        assert_eq!(
+            feed(
+                &keymap,
+                &mut state,
+                Context::Rename,
+                &["*", "+", "f5", "tab", "up"]
+            ),
+            [Resolved::Insert('*'), Resolved::Insert('+')],
+            "panel keys do nothing"
+        );
     }
 
     #[test]

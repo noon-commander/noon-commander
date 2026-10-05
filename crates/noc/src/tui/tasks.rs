@@ -14,7 +14,7 @@ use noc_config::{
 };
 use noc_ops::{
     Algorithm, Checksum, Conflict, CopyOptions, Decision, Endpoint, Event, Files, Outcome,
-    Reporter, Sum,
+    RenameError, Reporter, Sum,
 };
 use noc_ssh::askpass::{AskpassEnv, AskpassEvent, AskpassServer};
 use noc_ssh::resolve::resolve;
@@ -22,8 +22,8 @@ use noc_ssh::version::check_version;
 use noc_ssh::{CachedHost, ChannelProcess, Session, SftpChannel, SshError, Target, cleanup_stale};
 use noc_tools::zoxide::Scored;
 use noc_vfs::{
-    FileWriter as _, LocalFs, Location, Metadata, RemotePath, SftpFs, Space, Vfs, VfsError,
-    VfsPath as _,
+    FileKind, FileWriter as _, LocalFs, Location, Metadata, RemotePath, SftpFs, Space, Vfs,
+    VfsError, VfsPath as _,
 };
 use noc_viewer::read_start;
 use tokio::sync::{Mutex, mpsc, oneshot};
@@ -96,6 +96,13 @@ pub(crate) enum Done {
         host: String,
         connection: u64,
         reason: Option<String>,
+    },
+    /// The entry of [`Effect::Rename`] is renamed, or why not: `None` if a file has the name.
+    Renamed {
+        panel: PanelId,
+        from: Location,
+        to: Location,
+        result: Result<(), Option<String>>,
     },
     /// The file of [`Effect::WriteFile`] is written, or why not: `None` if the name is taken.
     Written {
@@ -269,6 +276,13 @@ impl Tasks {
                     location,
                     host,
                 } => self.create_dir(panel, location, host),
+                Effect::Rename {
+                    panel,
+                    from,
+                    to,
+                    replace,
+                    host,
+                } => self.rename(panel, from, to, replace, host),
                 Effect::Discard(path) => {
                     tokio::spawn(async move {
                         if let Err(error) = tokio::fs::remove_file(&path).await {
@@ -295,20 +309,7 @@ impl Tasks {
                     hosts,
                     options,
                     cancel,
-                } => {
-                    let done = self.done.clone();
-                    self.reap_jobs();
-                    self.jobs.spawn(async move {
-                        let job = CopyJob {
-                            id,
-                            options,
-                            cancel,
-                            done: &done,
-                        };
-                        let finished = job.run(sources, target, hosts).await;
-                        let _ = done.send(finished);
-                    });
-                }
+                } => self.copy(id, sources, target, hosts, options, cancel),
                 Effect::Checksum {
                     id,
                     targets,
@@ -348,6 +349,52 @@ impl Tasks {
                 Effect::Workspaces(change) => self.change_workspaces(change),
             }
         }
+    }
+
+    /// Runs the copy or move job `id` in a task of its own.
+    fn copy(
+        &mut self,
+        id: u64,
+        sources: Vec<Location>,
+        target: Location,
+        hosts: (Option<HostHandle>, Option<HostHandle>),
+        options: CopyOptions,
+        cancel: CancellationToken,
+    ) {
+        let done = self.done.clone();
+        self.reap_jobs();
+        self.jobs.spawn(async move {
+            let job = CopyJob {
+                id,
+                options,
+                cancel,
+                done: &done,
+            };
+            let finished = job.run(sources, target, hosts).await;
+            let _ = done.send(finished);
+        });
+    }
+
+    /// Renames `from` to `to` in a task of its own, through the session of `host` if they are
+    /// remote.
+    fn rename(
+        &self,
+        panel: PanelId,
+        from: Location,
+        to: Location,
+        replace: bool,
+        host: Option<HostHandle>,
+    ) {
+        let done = self.done.clone();
+        tokio::spawn(async move {
+            let result = rename(&from, &to, replace, host).await;
+            let _ = done.send(Done::Renamed {
+                panel,
+                from,
+                to,
+                result,
+            });
+        });
     }
 
     /// Starts the task of `host`, which connects to it, and finds its address.
@@ -1051,6 +1098,33 @@ async fn write_all<V: Vfs>(
     let mut writer = vfs.create_file(path, replace).await?;
     writer.write(bytes).await?;
     writer.finish().await
+}
+
+/// Renames `from` to `to`, in the same directory; `Err(None)` if a file has the name and not
+/// `replace`.
+async fn rename(
+    from: &Location,
+    to: &Location,
+    replace: bool,
+    host: Option<HostHandle>,
+) -> Result<(), Option<String>> {
+    let result = match (from, to, share(host).await) {
+        (Location::Local(from), Location::Local(to), _) => {
+            noc_ops::rename(&LocalFs, from, to, replace).await
+        }
+        (
+            Location::Remote { path: from, .. },
+            Location::Remote { path: to, .. },
+            Some(Some(fs)),
+        ) => noc_ops::rename(&*fs, from, to, replace).await,
+        _ => return Err(Some(fl!("error-connection-closed"))),
+    };
+    match result {
+        Ok(()) => Ok(()),
+        Err(RenameError::Exists(FileKind::Dir)) => Err(Some(fl!("rename-dir-exists"))),
+        Err(RenameError::Exists(_)) => Err(None),
+        Err(RenameError::Vfs(error)) => Err(Some(describe::vfs_error(&error))),
+    }
 }
 
 /// The start of the file at `location`, up to [`noc_viewer::LIMIT`], and whether there is

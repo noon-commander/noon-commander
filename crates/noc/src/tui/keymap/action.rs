@@ -18,6 +18,9 @@ pub(crate) enum Context {
     PullDown,
     /// Quick search in the active panel. Keys it does not bind fall through to the panel.
     QuickSearch,
+    /// The name field of the entry being renamed in its panel row. Keys it does not bind do
+    /// nothing.
+    Rename,
     /// A dialog whose focus is on a button or a list.
     Dialog,
     /// A dialog whose focus is on a text field; falls back to `Dialog`.
@@ -37,6 +40,7 @@ impl Context {
             Self::Panel => &[Self::Panel],
             Self::Root => &[Self::Root, Self::Panel],
             Self::QuickSearch => &[Self::QuickSearch, Self::Panel],
+            Self::Rename => &[Self::Rename],
             // Dialogs are modal: panel keys do nothing while one is open.
             Self::Dialog => &[Self::Dialog],
             Self::DialogInput => &[Self::DialogInput, Self::Dialog],
@@ -70,6 +74,7 @@ impl Context {
         matches!(
             self,
             Self::QuickSearch
+                | Self::Rename
                 | Self::DialogInput
                 | Self::PathInput
                 | Self::Completion
@@ -87,6 +92,7 @@ impl Context {
             Self::Panel
                 | Self::Root
                 | Self::QuickSearch
+                | Self::Rename
                 | Self::DialogInput
                 | Self::PathInput
                 | Self::Completion
@@ -137,6 +143,8 @@ pub(crate) enum Action {
     Copy,
     /// Asks where to, and moves or renames the marked entries or the one under the cursor.
     Move,
+    /// Renames the entry under the cursor in its row.
+    Rename,
     /// Asks for a name and makes a directory.
     Mkdir,
     /// Asks for an algorithm, and computes the checksums of the marked files or the one under
@@ -250,6 +258,7 @@ impl Action {
         Self::Edit,
         Self::Copy,
         Self::Move,
+        Self::Rename,
         Self::Mkdir,
         Self::Checksum,
         Self::Jobs,

@@ -105,6 +105,12 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
             hosts,
         } => app.names(generation, entries, &hosts),
         Done::Written { location, result } => tasks.run(app.written(&location, result)),
+        Done::Renamed {
+            panel,
+            from,
+            to,
+            result,
+        } => tasks.run(app.entry_renamed(panel, &from, &to, result)),
     }
 }
 

@@ -1,0 +1,13 @@
+---
+source: crates/noc/src/tui/panel.rs
+expression: terminal.backend()
+---
+"╔ /srv ═══════════╤═══════╤════════════╗"
+"║      ↑Name      │ Size  │Modify time ║"
+"║/docs            │    DIR│Nov 14 21:13║"
+"║ .profile        │      1│Nov 14 21:13║"
+"║ notes           │      1│Nov 14 21:13║"
+"║ report.final.pdf                     ║"
+"╟─────────────────┴───────┴────────────╢"
+"║Rename: report.final.pdf              ║"
+"╚══════════════════════════════════════╝"

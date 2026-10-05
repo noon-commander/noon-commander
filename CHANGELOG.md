@@ -19,6 +19,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   window find `config.rs` from `cfg`, best match first, with fzf's `'`, `^`, `$`, and `!`.
   On by default; `ui.fuzzy_search = false`, or Fuzzy search in Options → Configuration,
   brings back literal matching.
+- Shift-F6 (or F16, and F9 → File → Rename in place) renames the entry under the cursor in
+  its row: the name is selected but for the last extension, Enter renames, and Esc keeps the
+  name. A taken file name asks before it is replaced; a directory's is never replaced.
 
 ### Changed
 

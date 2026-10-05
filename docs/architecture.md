@@ -18,7 +18,7 @@ crates/
 ├── noc-ssh/       host discovery, ssh -G, argument validation, forwarding policy,
 │                  ControlMaster, SFTP channels, askpass bridge
 ├── noc-vfs/       Vfs trait: local and SFTP backends, mounted volumes
-├── noc-ops/       job engine: copy, move, delete, mkdir, checksums; progress, cancellation, conflicts
+├── noc-ops/       job engine: copy, move, rename, delete, mkdir, checksums; progress, cancellation, conflicts
 ├── noc-tools/     external programs other than ssh: zoxide, the editor
 ├── noc-text/      terminal-safe text: sanitizing, widths in cells, fitting, wrapping
 └── noc-viewer/    the F3 viewer: reading through the Vfs, scrolling, wrapping; its own text
@@ -555,6 +555,11 @@ time left from both. The job's window times only work: its stopwatch starts with
 `Progress` and stands from a `Failed` or `Exists` question until the answer, including while
 the question waits behind other dialogs.
 
+Renaming one entry in its directory (`rename`) is no job: one call with no progress, which
+the UI runs like a new directory, through the host's shared session (`Arc<SftpFs>`) for a
+remote one. It returns `RenameError::Exists` with the kind of a taken name, and replaces a
+file there only when asked.
+
 Deleting counts the entries first, so that progress has a total, then removes the deepest
 first. Listings report symlinks without following them, so a link goes and its target stays.
 A directory in which something stays (skipped, or unreadable) is left alone without asking
@@ -783,6 +788,19 @@ location = "root"
   (`move_within`); between the local file system and a host, or two hosts, it copies and
   removes each source once all of it is copied. Its window says Moving; when it ends, the
   panels on both sides read their directories again.
+- **Shift-F6 (F16) renames in place** the entry under the cursor, not the marked ones: its
+  row becomes a text field from the name on, over the size and time columns, with all of a
+  file's name but its last extension selected (a directory, a dotfile, or a name that ends
+  with a dot, whole); typing replaces the selection, and moving lets it go. Enter renames,
+  Esc keeps the name, and other panel keys do nothing (`Context::Rename`); the status line
+  shows the old name. An empty or unchanged name renames nothing; one with `/` or NUL, or
+  `.` or `..`, is an error and the field stays. A name that is not UTF-8 cannot be edited,
+  which an error says: F6 renames it. `noc_ops::rename` checks the new name first: a
+  directory's is an error, a file's asks in a red question with No as the default, and a name
+  the file system takes for the entry itself, differing only in case or normalization and
+  not listed byte for byte, renames it. Without `posix-rename` the file there goes first. A
+  reload keeps the field on its entry; the field goes with the entry or when the panel goes
+  elsewhere.
 - **F8 (or Delete) deletes** the marked entries, or the one under the cursor, after a red
   question with Yes as the default, as in mc: `Delete file "x"?`, `Delete directory "x" and
   everything in it?`, or `Delete 3 files and directories?`. mc asks a second time before it

@@ -42,6 +42,7 @@ impl Help {
             (Context::Panel, fl!("help-panels")),
             (Context::Root, fl!("help-root")),
             (Context::QuickSearch, fl!("help-quick-search")),
+            (Context::Rename, fl!("help-renaming")),
             (Context::Menu, fl!("help-menu")),
             (Context::Jump, fl!("help-jump")),
             (Context::Workspaces, fl!("help-workspaces")),
@@ -207,6 +208,7 @@ fn describe(context: Context, action: Action) -> Option<String> {
     if let Some(text) = describe_rows(context, action)
         .or_else(|| describe_completion(context, action))
         .or_else(|| describe_workspaces(context, action))
+        .or_else(|| describe_field(context, action))
     {
         return Some(text);
     }
@@ -236,6 +238,7 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::Edit) => fl!("help-edit"),
         (Context::Panel, Action::Copy) => fl!("help-copy"),
         (Context::Panel, Action::Move) => fl!("help-move"),
+        (Context::Panel, Action::Rename) => fl!("help-rename"),
         (Context::Panel, Action::Mkdir) => fl!("help-mkdir"),
         (Context::Panel, Action::Delete) => fl!("help-delete"),
         (Context::Panel, Action::Jobs) => fl!("help-jobs"),
@@ -285,18 +288,33 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Dialog, Action::Confirm) => fl!("help-confirm"),
         (Context::Dialog, Action::Toggle) => fl!("help-toggle"),
         (Context::Dialog, Action::Cancel) => fl!("help-dialog-cancel"),
-        (Context::DialogInput, Action::Home) => fl!("help-field-home"),
-        (Context::DialogInput, Action::End) => fl!("help-field-end"),
-        (Context::DialogInput, Action::Backspace) => fl!("help-field-backspace"),
-        (Context::DialogInput, Action::Delete) => fl!("help-field-delete"),
-        (Context::DialogInput, Action::DeleteToStart) => fl!("help-field-delete-to-start"),
-        (Context::DialogInput, Action::DeleteToEnd) => fl!("help-field-delete-to-end"),
         (Context::Viewer, Action::Home) => fl!("help-viewer-top"),
         (Context::Viewer, Action::End) => fl!("help-viewer-end"),
         (Context::Viewer, Action::Left) => fl!("help-viewer-left"),
         (Context::Viewer, Action::Right) => fl!("help-viewer-right"),
         (Context::Viewer, Action::ToggleWrap) => fl!("help-viewer-wrap"),
         (Context::Viewer, Action::Quit) => fl!("help-viewer-quit"),
+        _ => return None,
+    };
+    Some(text)
+}
+
+/// What keys do in text fields, and in the field of an entry renamed in its row.
+fn describe_field(context: Context, action: Action) -> Option<String> {
+    if !matches!(context, Context::DialogInput | Context::Rename) {
+        return None;
+    }
+    let text = match (context, action) {
+        (_, Action::Home) => fl!("help-field-home"),
+        (_, Action::End) => fl!("help-field-end"),
+        (_, Action::Backspace) => fl!("help-field-backspace"),
+        (_, Action::Delete) => fl!("help-field-delete"),
+        (_, Action::DeleteToStart) => fl!("help-field-delete-to-start"),
+        (_, Action::DeleteToEnd) => fl!("help-field-delete-to-end"),
+        (Context::Rename, Action::Left) => fl!("help-field-left"),
+        (Context::Rename, Action::Right) => fl!("help-field-right"),
+        (Context::Rename, Action::Confirm) => fl!("help-rename-confirm"),
+        (Context::Rename, Action::Cancel) => fl!("help-rename-cancel"),
         _ => return None,
     };
     Some(text)
@@ -397,7 +415,14 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert_eq!(ctrl_u, ["Swap the panels", "Delete to the start"]);
+        assert_eq!(
+            ctrl_u,
+            [
+                "Swap the panels",
+                "Delete to the start",
+                "Delete to the start"
+            ]
+        );
         let headings: Vec<&str> = help
             .entries
             .iter()
@@ -412,6 +437,7 @@ mod tests {
                 "Panels",
                 "Volumes and hosts",
                 "Quick search",
+                "Renaming in place",
                 "Location menu",
                 "zoxide",
                 "Workspaces",

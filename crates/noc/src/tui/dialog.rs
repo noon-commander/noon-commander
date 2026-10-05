@@ -3,6 +3,7 @@
 
 use std::cell::Cell;
 use std::fmt;
+use std::ops::Range;
 
 use noc_ssh::askpass::PromptKind;
 use ratatui::Frame;
@@ -115,6 +116,9 @@ pub(crate) struct Field {
     secret: bool,
     /// Still the text the dialog opened with: typing replaces it, as in mc.
     fresh: bool,
+    /// Characters that typing, Backspace, and Delete replace, as in a desktop text field;
+    /// moving the cursor lets them go.
+    selected: Option<Range<usize>>,
 }
 
 impl Field {
@@ -124,6 +128,7 @@ impl Field {
             cursor: 0,
             secret: true,
             fresh: false,
+            selected: None,
         }
     }
 
@@ -134,6 +139,20 @@ impl Field {
             cursor: text.chars().count(),
             secret: false,
             fresh: !text.is_empty(),
+            selected: None,
+        }
+    }
+
+    /// A plain field that opens with `text`, its first `selected` characters selected and the
+    /// cursor after them.
+    pub(crate) fn selecting(text: &str, selected: usize) -> Self {
+        let selected = selected.min(text.chars().count());
+        Self {
+            text: Zeroizing::new(text.to_owned()),
+            cursor: selected,
+            secret: false,
+            fresh: false,
+            selected: (selected > 0).then_some(0..selected),
         }
     }
 
@@ -164,6 +183,7 @@ impl Field {
             self.text.clear();
             self.cursor = 0;
         }
+        self.remove_selected();
         // Growing would copy the secret to new memory and leave the old one unwiped.
         if self.secret && self.text.len() + c.len_utf8() > self.text.capacity() {
             return;
@@ -179,8 +199,21 @@ impl Field {
         self.text.replace_range(start..end, "");
     }
 
+    /// Removes the selected characters, if any, and leaves the cursor where they were.
+    fn remove_selected(&mut self) -> bool {
+        let Some(selected) = self.selected.take() else {
+            return false;
+        };
+        self.remove(selected.start, selected.end);
+        self.cursor = selected.start;
+        true
+    }
+
     /// Edits the text; `false` if `action` is not an edit.
     pub(crate) fn edit(&mut self, action: Action) -> bool {
+        if matches!(action, Action::Backspace | Action::Delete) && self.remove_selected() {
+            return true;
+        }
         let chars = self.chars();
         match action {
             Action::Left => self.cursor = self.cursor.saturating_sub(1),
@@ -201,12 +234,33 @@ impl Field {
             _ => return false,
         }
         self.fresh = false;
+        self.selected = None;
         true
     }
 
     /// What fits in `room` cells, as shown (stars for a secret), from where the cursor stays
     /// on screen, and the cursor's column in it.
     pub(crate) fn visible(&self, room: usize) -> (String, usize) {
+        let (_, shown, column) = self.window(room);
+        (shown, column)
+    }
+
+    /// What [`visible`](Self::visible) shows, cut in three: before the selection, the selection,
+    /// and after it; and the cursor's column.
+    pub(crate) fn visible_parts(&self, room: usize) -> ([String; 3], usize) {
+        let (first, shown, column) = self.window(room);
+        let chars: Vec<char> = shown.chars().collect();
+        let (start, end) = self.selected.as_ref().map_or((0, 0), |selected| {
+            let clamp = |index: usize| index.saturating_sub(first).min(chars.len());
+            (clamp(selected.start), clamp(selected.end))
+        });
+        let part = |range: Range<usize>| chars[range].iter().collect::<String>();
+        let parts = [part(0..start), part(start..end), part(end..chars.len())];
+        (parts, column)
+    }
+
+    /// The first character shown, what fits from there, and the cursor's column.
+    fn window(&self, room: usize) -> (usize, String, usize) {
         let chars: Vec<char> = if self.secret {
             vec!['*'; self.chars()]
         } else {
@@ -228,7 +282,8 @@ impl Field {
                 used <= room
             })
             .collect();
-        (cells::sanitize(shown.as_bytes()), column)
+        // Character for character: `shown` is UTF-8, and only control characters change.
+        (first, cells::sanitize(shown.as_bytes()), column)
     }
 }
 
@@ -501,6 +556,7 @@ impl Dialog {
         *field.text = format!("{before}{after}");
         field.cursor = before.chars().count();
         field.fresh = false;
+        field.selected = None;
     }
 
     /// The same dialog with `message` above the rest.
@@ -1117,6 +1173,42 @@ mod tests {
             secret.insert(c);
         }
         assert_eq!(secret.visible(4), ("***".to_owned(), 3));
+    }
+
+    #[test]
+    fn typing_replaces_the_selection_and_moving_lets_it_go() {
+        let parts = |field: &Field, room| field.visible_parts(room);
+        let mut field = Field::selecting("report.pdf", 6);
+        assert_eq!(
+            parts(&field, 20),
+            ([String::new(), "report".to_owned(), ".pdf".to_owned()], 6)
+        );
+        for c in "notes".chars() {
+            field.insert(c);
+        }
+        assert_eq!((field.text(), field.cursor), ("notes.pdf", 5));
+        assert_eq!(parts(&field, 20).0[1], "", "nothing is selected any more");
+
+        let mut field = Field::selecting("report.pdf", 6);
+        assert!(field.edit(Action::Backspace));
+        assert_eq!((field.text(), field.cursor), (".pdf", 0));
+
+        let mut field = Field::selecting("report.pdf", 6);
+        assert!(field.edit(Action::End));
+        field.insert('x');
+        assert_eq!(field.text(), "report.pdfx");
+
+        let mut field = Field::selecting("report.pdf", 6);
+        assert!(field.edit(Action::Left));
+        field.insert('x');
+        assert_eq!(field.text(), "reporxt.pdf");
+
+        // Scrolled: the selection is cut where the window starts.
+        let field = Field::selecting("abcdefghij.txt", 10);
+        assert_eq!(
+            parts(&field, 5),
+            ([String::new(), "ghij".to_owned(), ".".to_owned()], 4)
+        );
     }
 
     #[test]

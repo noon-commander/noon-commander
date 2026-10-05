@@ -40,6 +40,8 @@ panel-up-dir = UP--DIR
 panel-dir = DIR
 # Status line during quick search: what was typed so far.
 panel-search = Search: { $text }
+# Status line while the entry under the cursor is renamed in its row: its name until now.
+panel-rename = Rename: { $name }
 # Status line while a directory is read.
 panel-loading = Loading…
 # Status line while the panel waits for a connection to a host; Esc stops it.
@@ -184,6 +186,8 @@ pulldown-view = &View
 pulldown-edit = &Edit
 pulldown-copy = &Copy
 pulldown-move = &Rename/Move
+# Shift-F6: the new name is typed in the entry's row.
+pulldown-rename = Re&name in place
 pulldown-mkdir = &Mkdir
 pulldown-delete = &Delete
 pulldown-select = &Select group…
@@ -317,6 +321,7 @@ help-jump = zoxide
 help-workspaces = Workspaces
 help-pulldown = Pull-down menu
 help-quick-search = Quick search
+help-renaming = Renaming in place
 help-dialogs = Dialogs and help
 help-text-fields = Text fields
 help-path-fields = Path fields
@@ -361,6 +366,7 @@ help-view = View the file under the cursor; on a directory, open it
 help-edit = Edit the file under the cursor in $VISUAL or $EDITOR
 help-copy = Copy the marked entries, or the one under the cursor
 help-move = Move or rename the marked entries, or the one under the cursor
+help-rename = Rename the entry under the cursor in its row
 help-mkdir = Make a directory
 help-delete = Delete the marked entries, or the one under the cursor
 help-jobs = The running jobs: bring one to the front, or abort it
@@ -421,6 +427,10 @@ help-field-backspace = Delete the character before the cursor
 help-field-delete = Delete the character at the cursor
 help-field-delete-to-start = Delete to the start
 help-field-delete-to-end = Delete to the end
+help-field-left = One character left
+help-field-right = One character right
+help-rename-confirm = Rename to the name typed
+help-rename-cancel = Keep the name as it was
 help-note-esc = Esc 1 … Esc 0 stand for F1 … F10, and Esc followed by a key for Alt and the key, for terminals without them. A lone Esc acts after a second; Esc Esc at once.
 help-note-typing = Typing in a panel starts quick search.
 help-note-menu = Typing in the location menu filters it; 1 … 9 and 0 open the first ten rows while the filter is empty.
@@ -548,6 +558,18 @@ move-one = Move "{ $name }" to:
 move-many = Move { $count } files and directories to:
 move-moving = Moving
 move-error = Cannot move to { $path }: { $reason }
+
+## Renaming in place, Shift-F6 (src/tui/app, src/tui/tasks). Prefix: rename-.
+
+rename-error = Cannot rename { $path }: { $reason }
+# The new name is a file's: the question whether to rename over it, which removes that file.
+rename-exists =
+    "{ $name }" is there already.
+    Overwrite it?
+rename-dir-exists = a directory has that name
+# A name with a slash, or . or ..: renaming only gives a new name in the same directory.
+rename-invalid = "{ $name }" cannot be a name: renaming does not move
+rename-not-utf8 = "{ $name }" cannot be edited: the name is not valid UTF-8; F6 can rename it
 
 ## Why a copy or a move cannot start (src/tui/app). Prefix: transfer-.
 

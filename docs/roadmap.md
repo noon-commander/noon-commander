@@ -106,6 +106,12 @@
 - [x] Mouse support ([ADR 0018](adr/0018-mouse-support.md)): panels, tabs, the F-key bar, the
       viewer, the pull-down menu, dialogs, and every window; `ui.mouse` and `ui.wheel`
 - [ ] Restore panel state on start, with the tabs
+- [ ] Shell command line ([ADR 0019](adr/0019-shell-command-line.md)): `!` (and `:!`) runs a
+      command in the panel's directory, locally or on its host over the master connection;
+      several lines (Shift-Enter, Ctrl-J, `\` Enter), bracketed paste, Ctrl-X Ctrl-E in
+      `$EDITOR`
+- [ ] Command history per host: Up/Down (Alt-P/Alt-N) for the panel's host, a window (Alt-H,
+      Ctrl-R) for one host or all; `shell.history_size`
 
 ## Known issues
 
@@ -117,10 +123,12 @@
 
 ## Backlog
 
-- Console (Ctrl-O), variant A: suspend the TUI and run `$SHELL` in the panel's directory, locally
-  or with `ssh -t` over the host's master connection. It reuses the suspend/resume mechanism from
-  F4. Variant B, a persistent mc-style subshell, may come later.
-- vim keymap preset.
+- Console (Ctrl-O): suspend the TUI and run `$SHELL` in the panel's directory, locally or with
+  `ssh -t` over the host's master connection, as the command line runs a command. There is no
+  persistent mc-style subshell ([ADR 0019](adr/0019-shell-command-line.md)).
+- vim keymap preset: only the keys differ; `:` and `!` open the command line as in the default
+  preset.
+- Commands of Noon Commander after `:` (`:!` runs a shell command already).
 - Linux: CI job, release binaries, and packages (AUR, deb).
 - Translations.
 - Clipboard fallback where OSC 52 does not work (macOS Terminal, blocked multiplexers): a

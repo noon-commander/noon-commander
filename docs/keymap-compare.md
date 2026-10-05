@@ -3,13 +3,14 @@
 Sources:
 
 - noc: the presets in [keymap/mod.rs](../crates/noc/src/tui/keymap/mod.rs); the default preset is
-  modelled on mc. There is no vim preset yet, so its column is empty.
+  modelled on mc. There is no vim preset yet, so its column holds only planned keys.
 - [mc.1.in](https://github.com/MidnightCommander/mc/blob/master/doc/man/mc.1.in)
 - [FarEng.hlf.m4](https://github.com/FarGroup/FarManager/blob/master/far/FarEng.hlf.m4)
 
 "—" — not bound in noc, or not documented in the source. mc notation normalized to
 `Ctrl+`/`Alt+`/`Shift+`; mc and noc letters are lowercase unless noted. `Ctrl+X l` is a key
-sequence. Sections marked (noc) exist only in noc.
+sequence. Sections marked (noc) exist only in noc. Status "planned": decided in an ADR, not bound
+yet.
 
 ## Function keys and file operations
 
@@ -90,9 +91,9 @@ sequence. Sections marked (noc) exist only in noc.
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Command history (list) | | — | — | Alt+H | Alt+F8 |
-| Previous command | | — | — | Alt+P | Ctrl+E |
-| Next command | | — | — | Alt+N | Ctrl+X |
+| Command history (list) | planned | Alt+H<br>Ctrl+R | Alt+H<br>Ctrl+R | Alt+H | Alt+F8 |
+| Previous command (the panel's host) | planned | Up<br>Alt+P | Up<br>Alt+P | Alt+P | Ctrl+E |
+| Next command (the panel's host) | planned | Down<br>Alt+N | Down<br>Alt+N | Alt+N | Ctrl+X |
 | Directory history (list) | | — | — | Alt+Shift+h<br>Alt+H (uppercase) | Alt+F12 |
 | Previous directory in history | | — | — | Alt+Y | — |
 | Next directory in history | | — | — | Alt+U | — |
@@ -100,10 +101,11 @@ sequence. Sections marked (noc) exist only in noc.
 | History menu: re-run command / open item | | — | — | — | Enter |
 | History menu: run in separate window | | — | — | — | Shift+Enter |
 | History menu: run as administrator | | — | — | — | Ctrl+Alt+Enter |
-| History menu: put into command line | | — | — | — | Ctrl+Enter |
+| History menu: put into command line | planned | Enter | Enter | — | Ctrl+Enter |
 | Folder history menu: go to on passive panel | | — | — | — | Ctrl+Shift+Enter |
 | History menu: clear history | | — | — | — | Del |
-| History menu: delete current item | | — | — | — | Shift+Del |
+| History menu: delete current item | planned | Delete | Delete | — | Shift+Del |
+| Command history menu: this host / all hosts | planned | Tab | Tab | — | — |
 | History menu: lock/unlock item | | — | — | — | Ins |
 | History menu: refresh (remove unavailable) | | — | — | — | Ctrl+R |
 | History menu: copy item to clipboard | | — | — | — | Ctrl+C<br>Ctrl+Ins |
@@ -227,6 +229,12 @@ sequence. Sections marked (noc) exist only in noc.
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
+| Open the command line for a shell command | planned | ! | ! | Typing | Typing |
+| Open the command line for noc commands (only `:!cmd` so far) | planned | : | : | — | — |
+| Run the command | planned | Enter | Enter | Enter | Enter |
+| New line in the command | planned | Shift+Enter<br>Ctrl+J<br>\\ Enter | Shift+Enter<br>Ctrl+J<br>\\ Enter | — | — |
+| Edit the command in $EDITOR | planned | Ctrl+X Ctrl+E | Ctrl+X Ctrl+E | — | — |
+| Close the command line | planned | Esc<br>Backspace (empty) | Esc<br>Backspace (empty) | — | Esc |
 | Insert current file name | | — | — | Alt+Enter<br>Ctrl+Enter | Ctrl+J<br>Ctrl+Enter |
 | Insert file name from passive panel | | — | — | — | Ctrl+Shift+Enter |
 | Insert full name of current file | | — | — | Ctrl+Shift+Enter | Ctrl+F |

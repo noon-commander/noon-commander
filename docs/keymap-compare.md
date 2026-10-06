@@ -2,8 +2,9 @@
 
 Sources:
 
-- noc: the presets in [keymap/mod.rs](../crates/noc/src/tui/keymap/mod.rs); the default preset is
-  modelled on mc, and `ui.keymap` chooses the preset.
+- noc: the presets in [keymap/default.rs](../crates/noc/src/tui/keymap/default.rs) and
+  [keymap/vim.rs](../crates/noc/src/tui/keymap/vim.rs); the default preset is modelled on mc,
+  `ui.keymap` chooses the preset, and `noc keymap diff` compares them.
 - [mc.1.in](https://github.com/MidnightCommander/mc/blob/master/doc/man/mc.1.in)
 - [FarEng.hlf.m4](https://github.com/FarGroup/FarManager/blob/master/far/FarEng.hlf.m4)
 

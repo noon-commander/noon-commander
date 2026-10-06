@@ -269,6 +269,29 @@ pub(crate) enum Action {
 }
 
 #[cfg(test)]
+impl Context {
+    /// Every context, in declaration order.
+    pub(crate) const ALL: &'static [Self] = &[
+        Self::Panel,
+        Self::Root,
+        Self::Menu,
+        Self::Jump,
+        Self::Workspaces,
+        Self::PullDown,
+        Self::QuickSearch,
+        Self::Rename,
+        Self::Dialog,
+        Self::DialogInput,
+        Self::PathInput,
+        Self::Completion,
+        Self::Viewer,
+        Self::CommandLine,
+        Self::History,
+        Self::UserScreen,
+    ];
+}
+
+#[cfg(test)]
 impl Action {
     /// Every action, in declaration order.
     pub(crate) const ALL: &'static [Self] = &[

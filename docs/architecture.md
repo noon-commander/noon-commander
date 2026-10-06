@@ -933,7 +933,10 @@ location = "root"
   binds it to. Bindings are key sequences matched by prefix with a 1-second timeout, so a vim preset
   (`g g`, `d d`) can follow the default mc preset. `ui.keymap` names the built-in preset, as
   `ui.theme` names the theme (`Keymap::NAMES`, `Keymap::by_name`); the Configuration dialog
-  switches it at once. The vim preset has panels of its own and the mc preset's other contexts.
+  switches it at once. Each preset is a module of its own, `tui/keymap/default.rs` and
+  `tui/keymap/vim.rs`: each context with its actions, and each action with its key sequences, in
+  the order the help lists them. Both list every context in the same order; the vim preset has
+  panels, dialogs, and a viewer of its own.
   As in mc, `Esc` in a panel waits for the next key: `Esc 1` … `Esc 0` stand for F1 … F10, `Esc`
   followed by a character stands for Alt and that character, for terminals whose Alt key sends
   nothing, and `Esc` alone cancels once the timeout passes (`Esc Esc` at once). An `Esc` and a quick

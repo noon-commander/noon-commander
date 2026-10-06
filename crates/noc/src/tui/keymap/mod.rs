@@ -472,14 +472,14 @@ const VIM_PANEL: Preset = &[
 
 /// The bindings of dialogs in the vim preset.
 const VIM_DIALOG: Preset = &[
-    (Action::Up, &["up"]),
-    (Action::Down, &["down"]),
+    (Action::Up, &["k", "up"]),
+    (Action::Down, &["j", "down"]),
     (Action::Left, &["left"]),
     (Action::Right, &["right"]),
     (Action::PageUp, &["pageup"]),
     (Action::PageDown, &["pagedown"]),
-    (Action::Home, &["home"]),
-    (Action::End, &["end"]),
+    (Action::Home, &["g g", "home"]),
+    (Action::End, &["shift-g", "end"]),
     (Action::NextField, &["tab"]),
     (Action::PrevField, &["backtab"]),
     (Action::Confirm, &["enter"]),

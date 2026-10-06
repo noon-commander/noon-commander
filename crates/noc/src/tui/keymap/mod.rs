@@ -112,10 +112,13 @@ impl Keymap {
         Self::of(&mc_presets())
     }
 
-    /// The vim preset: panels of its own, and the mc preset's other contexts.
+    /// The vim preset: panels, dialogs, and the viewer of its own, and the mc preset's other
+    /// contexts.
     fn vim() -> Self {
         let presets = mc_presets().map(|(context, bindings)| match context {
             Context::Panel => (context, VIM_PANEL),
+            Context::Dialog => (context, VIM_DIALOG),
+            Context::Viewer => (context, VIM_VIEWER),
             _ => (context, bindings),
         });
         Self::of(&presets)
@@ -455,7 +458,49 @@ const VIM_PANEL: Preset = &[
     (Action::Shell, &["!"]),
     (Action::Command, &[":"]),
     (Action::PullDown, &["f9"]),
-    (Action::Quit, &["f10", "shift-z shift-z"]),
+    (Action::Help, &["g ?", "f1"]),
+    (Action::Up, &["k", "up"]),
+    (Action::Down, &["j", "down"]),
+    (Action::Home, &["g g", "home"]),
+    (Action::End, &["shift-g", "end"]),
+    (Action::Enter, &["l", "enter"]),
+    // netrw's and vinegar's `-`, next to `h`.
+    (Action::Parent, &["h", "-"]),
+    (Action::Quit, &["shift-z shift-z", "f10"]),
+    (Action::Redraw, &["ctrl-l"]),
+];
+
+/// The bindings of dialogs in the vim preset.
+const VIM_DIALOG: Preset = &[
+    (Action::Up, &["up"]),
+    (Action::Down, &["down"]),
+    (Action::Left, &["left"]),
+    (Action::Right, &["right"]),
+    (Action::PageUp, &["pageup"]),
+    (Action::PageDown, &["pagedown"]),
+    (Action::Home, &["home"]),
+    (Action::End, &["end"]),
+    (Action::NextField, &["tab"]),
+    (Action::PrevField, &["backtab"]),
+    (Action::Confirm, &["enter"]),
+    (Action::Toggle, &["space"]),
+    (Action::Cancel, &["esc", "ctrl-c", "f10"]),
+];
+
+/// The viewer's bindings in the vim preset.
+const VIM_VIEWER: Preset = &[
+    (Action::Up, &["k", "ctrl-p", "up"]),
+    (Action::Down, &["j", "ctrl-n", "down", "enter"]),
+    (Action::PageUp, &["ctrl-b", "pageup"]),
+    (Action::PageDown, &["ctrl-f", "pagedown"]),
+    (Action::Home, &["g g", "home"]),
+    (Action::End, &["shift-g", "end"]),
+    (Action::Left, &["h", "left"]),
+    (Action::Right, &["l", "right"]),
+    (Action::ToggleWrap, &["f2"]),
+    (Action::Help, &["g ?", "f1"]),
+    (Action::Quit, &["f3", "f10", "q", "esc"]),
+    (Action::Redraw, &["ctrl-l"]),
 ];
 
 /// The pull-down menu's bindings in the mc preset; letters run the commands that have them.
@@ -1584,31 +1629,147 @@ mod tests {
                 Action::Shell,
                 Action::Command,
                 Action::PullDown,
+                Action::Help,
+                Action::Up,
+                Action::Down,
+                Action::Home,
+                Action::End,
+                Action::Enter,
+                Action::Parent,
                 Action::Quit
             ]
         );
         let mut fkeys = [None; 10];
+        fkeys[0] = Some(Action::Help);
         fkeys[8] = Some(Action::PullDown);
         fkeys[9] = Some(Action::Quit);
         assert_eq!(vim.fkeys(Context::Panel), fkeys);
-        let mut keys = KeyState::default();
-        let now = Instant::now();
-        for (key, action) in [('!', Action::Shell), (':', Action::Command)] {
-            let event = KeyEvent::from(KeyCode::Char(key));
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&vim, &mut state, Context::Panel, &["!", ":", "g", "?"]),
+            actions(&[Action::Shell, Action::Command, Action::Help])
+        );
+        // A character that no binding claims, which a panel takes for nothing.
+        assert_eq!(
+            feed(&vim, &mut state, Context::Panel, &["x"]),
+            [Resolved::Insert('x')]
+        );
+        assert_eq!(
+            vim.help(Context::CommandLine),
+            Keymap::mc().help(Context::CommandLine)
+        );
+    }
+
+    #[test]
+    fn j_and_k_move_down_and_up_in_vim() {
+        let vim = Keymap::by_name("vim").unwrap();
+        for context in [
+            Context::Panel,
+            Context::Root,
+            Context::Dialog,
+            Context::Viewer,
+        ] {
+            let mut state = KeyState::default();
             assert_eq!(
-                vim.feed(&mut keys, Context::Panel, event, now),
-                [Resolved::Action(action)]
+                feed(&vim, &mut state, context, &["j", "k"]),
+                actions(&[Action::Down, Action::Up]),
+                "{context:?}"
             );
         }
-        // A character that no binding claims, which a panel takes for nothing.
-        let event = KeyEvent::from(KeyCode::Char('j'));
-        assert_eq!(
-            vim.feed(&mut keys, Context::Panel, event, now),
-            [Resolved::Insert('j')]
-        );
-        for context in [Context::Dialog, Context::CommandLine, Context::Viewer] {
-            assert_eq!(vim.help(context), Keymap::mc().help(context), "{context:?}");
+        // Where letters are text or filter a list, they stay text.
+        for context in [Context::DialogInput, Context::Menu, Context::QuickSearch] {
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&vim, &mut state, context, &["j", "k"]),
+                [Resolved::Insert('j'), Resolved::Insert('k')],
+                "{context:?}"
+            );
         }
+    }
+
+    #[test]
+    fn l_opens_the_entry_under_the_cursor_in_vim() {
+        let vim = Keymap::by_name("vim").unwrap();
+        for context in [Context::Panel, Context::Root] {
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&vim, &mut state, context, &["l", "enter"]),
+                actions(&[Action::Enter, Action::Enter]),
+                "{context:?}"
+            );
+        }
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&vim, &mut state, Context::QuickSearch, &["l"]),
+            [Resolved::Insert('l')],
+            "a letter of the name searched for"
+        );
+    }
+
+    #[test]
+    fn h_and_minus_go_to_the_parent_directory_in_vim() {
+        let vim = Keymap::by_name("vim").unwrap();
+        for context in [Context::Panel, Context::Root] {
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&vim, &mut state, context, &["h", "-"]),
+                actions(&[Action::Parent, Action::Parent]),
+                "{context:?}"
+            );
+        }
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&vim, &mut state, Context::QuickSearch, &["h", "-"]),
+            [Resolved::Insert('h'), Resolved::Insert('-')],
+            "characters of the name searched for"
+        );
+    }
+
+    #[test]
+    fn g_g_and_shift_g_go_to_the_first_and_the_last_row_in_vim() {
+        let vim = Keymap::by_name("vim").unwrap();
+        for context in [
+            Context::Panel,
+            Context::Root,
+            Context::Dialog,
+            Context::Viewer,
+        ] {
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&vim, &mut state, context, &["g", "g", "shift-g"]),
+                actions(&[Action::Home, Action::End]),
+                "{context:?}"
+            );
+            // A lone `g` waits for its second key, then does nothing.
+            let now = Instant::now();
+            assert_eq!(vim.feed(&mut state, context, key("g"), now), []);
+            assert_eq!(
+                vim.expire(&mut state, now + SEQUENCE_TIMEOUT),
+                [],
+                "{context:?}"
+            );
+        }
+        // Where letters are text, they stay text.
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(
+                &vim,
+                &mut state,
+                Context::DialogInput,
+                &["g", "g", "shift-g"]
+            ),
+            [
+                Resolved::Insert('g'),
+                Resolved::Insert('g'),
+                Resolved::Insert('G')
+            ]
+        );
+        assert_eq!(
+            vim.help(Context::Viewer)
+                .into_iter()
+                .find(|(action, _)| *action == Action::Home),
+            Some((Action::Home, "g g, Home".to_owned()))
+        );
     }
 
     #[test]

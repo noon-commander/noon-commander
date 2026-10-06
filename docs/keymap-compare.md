@@ -30,39 +30,38 @@ Status, of noc as a whole:
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | :-: | --- | --- | --- | --- |
-| Help | ⏳ | F1 | — | F1 | F1 |
+| Help | ✅ | F1 | g ?<br>F1 | F1 | F1 |
 | User menu | ⏳ | — | — | F2 | F2 |
-| View file | ⏳ | F3 | — | F3 | F3<br>Numpad5<br>Ctrl+Shift+F3 (always internal) |
+| View file | ⏳ | F3 | i<br>F3 | F3 | F3<br>Numpad5<br>Ctrl+Shift+F3 (always internal) |
 | View without preprocessing | ⏳ | — | — | F13 | — |
 | Alternative (external/internal) viewer | ⏳ | — | — | — | Alt+F3 |
 | Filtered view (command output) | ⏳ | — | — | Alt+! | — |
-| Edit file | ⏳ | F4 | — | F4 | F4<br>Ctrl+Shift+F4 (always internal) |
-| Edit host settings (virtual root, host list) | ⏳ | F4 | — | — | — |
+| Edit file | ⏳ | F4 | e<br>F4 | F4 | F4<br>Ctrl+Shift+F4 (always internal) |
 | Alternative (external/internal) editor | ⏳ | — | — | — | Alt+F4 |
 | Edit new file | ⏳ | — | — | F14 | Shift+F4 |
-| Copy | ⏳ | F5 | — | F5 | F5 |
+| Copy | ⏳ | F5 | y y<br>F5 | F5 | F5 |
 | Copy current file (ignoring selection) | ⏳ | — | — | F15 | Shift+F5 |
-| Rename/move | ⏳ | F6 | — | F6 | F6 |
-| Rename/move current file | ⏳ | Shift+F6<br>F16 (rename in its row) | — | F16 | Shift+F6 |
-| Make directory | ⏳ | F7 | — | F7 | F7 |
-| Delete | ⏳ | F8<br>Delete | — | F8 | F8 |
-| Disconnect host (virtual root, host list) | ⏳ | F8 | — | — | — |
+| Rename/move | ⏳ | F6 | d d<br>F6 | F6 | F6 |
+| Rename/move current file | ⏳ | Shift+F6<br>F16 (rename in its row) | c w<br>Shift+F6<br>F16 (rename in its row) | F16 | Shift+F6 |
+| Make directory | ⏳ | F7 | F7 | F7 | F7 |
+| Delete | ⏳ | F8<br>Delete | D D<br>F8<br>Delete | F8 | F8 |
+| Disconnect host (virtual root, host list) | ⏳ | F8 | D D<br>F8 | — | — |
 | Delete only the file under cursor | ⏳ | — | — | — | Shift+F8 |
 | Delete bypassing Recycle Bin | ⏳ | — | — | — | Shift+Delete |
 | Wipe | ⏳ | — | — | — | Alt+Delete |
-| Abort copy/delete | ⏳ | Esc<br>F10 | — | Ctrl+c<br>Esc | — |
+| Abort copy/delete | ⏳ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | Ctrl+c<br>Esc | — |
 | Copy/move in background (in dialog) | ⏳ | — | — | Alt+b | — |
-| Menu bar | ⏳ | F9 | — | F9 | F9 |
-| Quit | ⏳ | F10 | — | F10 | F10 |
-| Quit without changing to last directory (shell wrapper) | ⏳ | — | — | Shift+F10 | — |
-| F1…F10 on terminals without function keys | ⏳ | Esc, then 1…9, 0 (in panels) | — | Esc, then 1…9, 0 | — |
-| Alt+key on terminals without Alt | ⏳ | Esc, then the key (in panels) | — | Esc, then the key | — |
+| Menu bar | ✅ | F9 | F9 | F9 | F9 |
+| Quit | ✅ | F10 | Z Z<br>F10 | F10 | F10 |
+| Quit without changing to last directory (shell wrapper) | ⏳ | — | Z Q | Shift+F10 | — |
+| F1…F10 on terminals without function keys | ⏳ | Esc, then 1…9, 0 (in panels) | Esc, then 1…9, 0 (in panels) | Esc, then 1…9, 0 | — |
+| Alt+key on terminals without Alt | ⏳ | Esc, then the key (in panels) | Esc, then the key (in panels) | Esc, then the key | — |
 | Plugin commands | ⏳ | — | — | — | F11 |
 | Plugin configuration | ⏳ | — | — | — | Alt+Shift+F9 |
 | Save setup | ⏳ | — | — | — | Shift+F9 |
 | Repeat last menu item | ⏳ | — | — | — | Shift+F10 |
-| Change drive in left panel | ⏳ | Alt+F1<br>Ctrl+x 1 | — | — | Alt+F1 |
-| Change drive in right panel | ⏳ | Alt+F2<br>Ctrl+x 2 | — | — | Alt+F2 |
+| Change drive in left panel | ⏳ | Alt+F1<br>Ctrl+x 1 | Alt+F1 | — | Alt+F1 |
+| Change drive in right panel | ⏳ | Alt+F2<br>Ctrl+x 2 | Alt+F2 | — | Alt+F2 |
 | Print files | ⏳ | — | — | — | Alt+F5 |
 | Create link | ⏳ | — | — | Ctrl+x l (hard)<br>Ctrl+x s (absolute symlink)<br>Ctrl+x v (relative symlink) | Alt+F6 |
 | Find file | ⏳ | — | — | Alt+? | Alt+F7 |
@@ -70,13 +69,13 @@ Status, of noc as a whole:
 | File permissions/attributes | ⏳ | — | — | Ctrl+x c (chmod) | Ctrl+a |
 | Change owner (chown) | ⏳ | — | — | Ctrl+x o | — |
 | File system attributes (chattr) | ⏳ | — | — | Ctrl+x e | — |
-| Checksums | ⏳ | Ctrl+x # | — | — | — |
+| Checksums | ⏳ | Ctrl+x # | Ctrl+x # | — | — |
 | Apply command to selected files | ⏳ | — | — | — | Ctrl+g |
 | Describe selected files | ⏳ | — | — | — | Ctrl+z |
 | Add files to archive | ⏳ | — | — | — | Shift+F1 |
 | Extract files from archive | ⏳ | — | — | — | Shift+F2 |
 | Archive commands | ⏳ | — | — | — | Shift+F3 |
-| Execute / change directory / enter archive | ⏳ | Enter (directories and hosts) | — | Enter | Enter |
+| Execute / change directory / enter archive | ✅ | Enter | l<br>Enter | Enter | Enter |
 | Execute in separate window | ⏳ | — | — | — | Shift+Enter |
 | Run as administrator | ⏳ | — | — | — | Ctrl+Alt+Enter |
 
@@ -84,11 +83,11 @@ Status, of noc as a whole:
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Repaint screen | ⏳ | Ctrl+l | — | Ctrl+l | — |
-| Show command output / user screen | ⏳ | Ctrl+o (back: Ctrl+o, Esc) | — | Ctrl+o | Ctrl+o |
+| Repaint screen | ✅ | Ctrl+l | Ctrl+l | Ctrl+l | — |
+| Show command output / user screen | ⏳ | Ctrl+o (back: Ctrl+o, Esc) | Ctrl+o (back: Ctrl+o, Esc) | Ctrl+o | Ctrl+o |
 | Temporarily show user screen (while held) | ⏳ | — | — | — | Ctrl+Alt+Shift |
-| Quick cd | ⏳ | Alt+c | — | Alt+c | — |
-| Jump to a directory zoxide ranks | ⏳ | Alt+z<br>Ctrl+x z | — | — | — |
+| Quick cd | ⏳ | Alt+c | c d | Alt+c | — |
+| Jump to a directory zoxide ranks | ⏳ | Alt+z<br>Ctrl+x z | Alt+z | — | — |
 | External panelize | ⏳ | — | — | Ctrl+x ! | — |
 | Add current directory to hotlist / folder shortcut | ⏳ | — | — | Ctrl+x h | Ctrl+Shift+0…9 |
 | Go to directory from hotlist / folder shortcut | ⏳ | — | — | Ctrl+\ (list) | RightCtrl+0…9 |
@@ -96,7 +95,7 @@ Status, of noc as a whole:
 | Toggle panel split (vertical/horizontal) | ⏳ | — | — | Alt+, | — |
 | Change window size | ⏳ | — | — | — | Alt+F9 |
 | Task list | ⏳ | — | — | — | Ctrl+w |
-| Background jobs | ⏳ | Ctrl+x j | — | — | — |
+| Background jobs | ⏳ | Ctrl+x j | w | — | — |
 | Screen grabber | ⏳ | — | — | — | Alt+Insert |
 | Record keyboard macro | ⏳ | — | — | Ctrl+r (in editor) | Ctrl+. |
 | Run macro | ⏳ | — | — | Ctrl+a, then assigned key (in editor) | — |
@@ -105,9 +104,9 @@ Status, of noc as a whole:
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Command history (list) | ⏳ | Alt+h<br>Ctrl+r (command line) | Alt+h<br>Ctrl+r (command line) | Alt+h | Alt+F8 |
-| Previous command (the panel's host) | ⏳ | Up (first line)<br>Alt+p | Up (first line)<br>Alt+p | Alt+p | Ctrl+e |
-| Next command (the panel's host) | ⏳ | Down (last line)<br>Alt+n | Down (last line)<br>Alt+n | Alt+n | Ctrl+x |
+| Command history (list) | ⏳ | Alt+h<br>Ctrl+r (command line) | q : (panel)<br>Ctrl+r (command line) | Alt+h | Alt+F8 |
+| Previous command (the panel's host) | ⏳ | Up (first line)<br>Alt+p | Up (first line)<br>Ctrl+p | Alt+p | Ctrl+e |
+| Next command (the panel's host) | ⏳ | Down (last line)<br>Alt+n | Down (last line)<br>Ctrl+n | Alt+n | Ctrl+x |
 | Directory history (list) | ⏳ | — | — | Alt+H | Alt+F12 |
 | Previous directory in history | ⏳ | — | — | Alt+y | — |
 | Next directory in history | ⏳ | — | — | Alt+u | — |
@@ -131,14 +130,14 @@ Status, of noc as a whole:
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Change active panel | ⏳ | Tab | — | Tab<br>Ctrl+i<br>Left<br>Right | Tab |
-| Swap panels | ⏳ | Ctrl+u | — | — | Ctrl+u |
-| Reread panel | ⏳ | Ctrl+r | — | — | Ctrl+r |
-| Stop loading or connecting | ⏳ | Esc<br>Esc Esc | — | — | — |
+| Change active panel | ⏳ | Tab | Tab<br>Ctrl+w w | Tab<br>Ctrl+i<br>Left<br>Right | Tab |
+| Swap panels | ⏳ | Ctrl+u | Ctrl+w x | — | Ctrl+u |
+| Reread panel | ⏳ | Ctrl+r | R | — | Ctrl+r |
+| Stop loading or connecting | ⏳ | Esc<br>Esc Esc | Esc<br>Ctrl+c | — | — |
 | Info panel | ⏳ | — | — | Ctrl+x i (on other panel) | Ctrl+l |
 | Quick view panel | ⏳ | — | — | Ctrl+x q (on other panel) | Ctrl+q |
 | Folder tree | ⏳ | — | — | — | Ctrl+t |
-| Hide/show both panels | ⏳ | Ctrl+o | — | Ctrl+o | Ctrl+o |
+| Hide/show both panels | ⏳ | Ctrl+o | Ctrl+o | Ctrl+o | Ctrl+o |
 | Hide/show inactive panel | ⏳ | — | — | — | Ctrl+p |
 | Hide/show left panel | ⏳ | — | — | — | Ctrl+F1 |
 | Hide/show right panel | ⏳ | — | — | — | Ctrl+F2 |
@@ -160,30 +159,30 @@ Status, of noc as a whole:
 | File owners view mode | ⏳ | — | — | — | LeftCtrl+8 |
 | File links view mode | ⏳ | — | — | — | LeftCtrl+9 |
 | Alternative full view mode | ⏳ | — | — | — | LeftCtrl+0 |
-| Hidden and system files | ⏳ | Alt+. | — | — | Ctrl+h |
+| Hidden and system files | ⏳ | Alt+. | z h | — | Ctrl+h |
 | Long/short names | ⏳ | — | — | — | Ctrl+n |
 | Scroll long names | ⏳ | — | — | Alt+(<br>Alt+) | Alt+Left<br>Alt+Right<br>Alt+Home<br>Alt+End |
-| Open directory under cursor on other panel | ⏳ | Alt+o | — | Alt+o | — |
-| Current directory to other panel | ⏳ | Alt+i | — | Alt+i | — |
-| Go to parent directory | ⏳ | Ctrl+PgUp | — | Ctrl+PgUp | Ctrl+PgUp |
+| Open directory under cursor on other panel | ⏳ | Alt+o | Alt+o | Alt+o | — |
+| Current directory to other panel | ⏳ | Alt+i | Alt+i | Alt+i | — |
+| Go to parent directory | ✅ | Ctrl+PgUp | h<br>- | Ctrl+PgUp | Ctrl+PgUp |
 | Enter directory / archive | ⏳ | — | — | Ctrl+PgDn | Ctrl+PgDn<br>Ctrl+Shift+PgDn (always as archive) |
 | Go to root directory | ⏳ | — | — | — | Ctrl+\ |
-| Cursor up | ⏳ | Up<br>Ctrl+p | — | Up<br>Ctrl+p | — |
-| Cursor down | ⏳ | Down<br>Ctrl+n | — | Down<br>Ctrl+n | — |
-| First entry | ⏳ | Home | — | Home<br>A1<br>Alt+< | — |
-| Last entry | ⏳ | End | — | End<br>C1<br>Alt+> | — |
-| Page down | ⏳ | PgDn<br>Ctrl+v | — | PgDn<br>Ctrl+v | — |
-| Page up | ⏳ | PgUp<br>Alt+v | — | PgUp<br>Alt+v | — |
+| Cursor up | ✅ | Up<br>Ctrl+p | k<br>Up | Up<br>Ctrl+p | — |
+| Cursor down | ✅ | Down<br>Ctrl+n | j<br>Down | Down<br>Ctrl+n | — |
+| First entry | ✅ | Home | g g<br>Home | Home<br>A1<br>Alt+< | — |
+| Last entry | ✅ | End | G<br>End | End<br>C1<br>Alt+> | — |
+| Page down | ⏳ | PgDn<br>Ctrl+v | Ctrl+f<br>PgDn | PgDn<br>Ctrl+v | — |
+| Page up | ⏳ | PgUp<br>Alt+v | Ctrl+b<br>PgUp | PgUp<br>Alt+v | — |
 | Top / middle / bottom file on screen | ⏳ | — | — | Alt+g / Alt+r / Alt+j | — |
 
 ## Sorting
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| By name | ⏳ | Ctrl+F3 | — | — | Ctrl+F3 |
-| By extension | ⏳ | Ctrl+F4 | — | — | Ctrl+F4 |
-| By write time | ⏳ | Ctrl+F5 | — | — | Ctrl+F5 |
-| By size | ⏳ | Ctrl+F6 | — | — | Ctrl+F6 |
+| By name | ⏳ | Ctrl+F3 | o n | — | Ctrl+F3 |
+| By extension | ⏳ | Ctrl+F4 | o e | — | Ctrl+F4 |
+| By write time | ⏳ | Ctrl+F5 | o m | — | Ctrl+F5 |
+| By size | ⏳ | Ctrl+F6 | o s | — | Ctrl+F6 |
 | Unsorted | ⏳ | — | — | — | Ctrl+F7 |
 | By creation time | ⏳ | — | — | — | Ctrl+F8 |
 | By access time | ⏳ | — | — | — | Ctrl+F9 |
@@ -203,10 +202,10 @@ Status, of noc as a whole:
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Select/deselect file | ⏳ | Insert<br>Ctrl+t<br>Shift+Down<br>Shift+Up (moves up)<br>Right click | — | Insert<br>Ctrl+t<br>Right click | Insert<br>Shift+cursor keys<br>Right click |
-| Select group | ⏳ | +<br>Alt++ | — | +<br>Alt++ (alternate_plus_minus) | Numpad+ |
-| Deselect group | ⏳ | -<br>\\<br>Alt+- | — | \\<br>Alt+- (alternate_plus_minus) | Numpad- |
-| Invert selection | ⏳ | \*<br>Alt+\* (files only) | — | \*<br>Alt+\* (alternate_plus_minus) | Numpad* |
+| Select/deselect file | ⏳ | Insert<br>Ctrl+t<br>Shift+Down<br>Shift+Up (moves up)<br>Right click | Space<br>Insert<br>Shift+Down<br>Shift+Up (moves up)<br>Right click | Insert<br>Ctrl+t<br>Right click | Insert<br>Shift+cursor keys<br>Right click |
+| Select group | ⏳ | +<br>Alt++ | + | +<br>Alt++ (alternate_plus_minus) | Numpad+ |
+| Deselect group | ⏳ | -<br>\\<br>Alt+- | \\ | \\<br>Alt+- (alternate_plus_minus) | Numpad- |
+| Invert selection | ⏳ | \*<br>Alt+\* (files only) | v | \*<br>Alt+\* (alternate_plus_minus) | Numpad* |
 | Select files with same extension | ⏳ | — | — | — | Ctrl+Numpad+ |
 | Deselect files with same extension | ⏳ | — | — | — | Ctrl+Numpad- |
 | Invert selection including folders | ⏳ | — | — | — | Ctrl+Numpad* |
@@ -231,25 +230,25 @@ Status, of noc as a whole:
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Start quick search | ⏳ | Ctrl+s<br>Alt+s | — | Ctrl+s<br>Alt+s | Alt+letters<br>Alt+Shift+letters |
-| Next match | ⏳ | Ctrl+s<br>Alt+s | — | Ctrl+s | Ctrl+Enter |
+| Start quick search | ⏳ | Ctrl+s<br>Alt+s | / | Ctrl+s<br>Alt+s | Alt+letters<br>Alt+Shift+letters |
+| Next match | ⏳ | Ctrl+s<br>Alt+s | Ctrl+g | Ctrl+s | Ctrl+Enter |
 | Previous match | ⏳ | — | — | — | Ctrl+Shift+Enter |
 | Search with previous pattern | ⏳ | — | — | Ctrl+s Ctrl+s | — |
-| Correct typing | ⏳ | Backspace | — | Backspace<br>Delete | — |
-| End quick search | ⏳ | Esc | — | — | — |
+| Correct typing | ⏳ | Backspace | Backspace<br>Ctrl+h | Backspace<br>Delete | — |
+| End quick search | ⏳ | Esc | Esc | — | — |
 | Paste from clipboard | ⏳ | — | — | — | Ctrl+v<br>Shift+Insert |
 
 ## Command line
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Open the command line for a shell command | ⏳ | ! | ! | Typing | Typing |
-| Open the command line for noc commands (only `:!cmd` so far) | ⏳ | : | : | — | — |
+| Open the command line for a shell command | ✅ | ! | ! | Typing | Typing |
+| Open the command line for noc commands | ✅ | : | : | — | — |
 | Run the command | ⏳ | Enter | Enter | Enter | Enter |
 | New line in the command | ⏳ | Ctrl+j<br>\\ Enter | Ctrl+j<br>\\ Enter | — | — |
 | New line in the command (kitty keyboard protocol) | ⏳ | Shift+Enter | Shift+Enter | — | — |
-| Edit the command in $EDITOR | ⏳ | Ctrl+x Ctrl+e | Ctrl+x Ctrl+e | — | — |
-| Close the command line | ⏳ | Esc | Esc | — | Esc |
+| Edit the command in $EDITOR | ⏳ | Ctrl+x Ctrl+e | Ctrl+f<br>Ctrl+x Ctrl+e | — | — |
+| Close the command line | ⏳ | Esc | Esc<br>Ctrl+c | — | Esc |
 | Line above / below in the command | ⏳ | Up / Down | Up / Down | — | — |
 | Insert current file name | ⏳ | — | — | Alt+Enter<br>Ctrl+Enter | Ctrl+j<br>Ctrl+Enter |
 | Insert file name from passive panel | ⏳ | — | — | — | Ctrl+Shift+Enter |
@@ -272,31 +271,31 @@ Status, of noc as a whole:
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Character left | ⏳ | Left | — | Ctrl+b<br>Left | Left<br>Ctrl+s |
-| Character right | ⏳ | Right | — | Ctrl+f<br>Right | Right<br>Ctrl+d |
+| Character left | ⏳ | Left | Left | Ctrl+b<br>Left | Left<br>Ctrl+s |
+| Character right | ⏳ | Right | Right | Ctrl+f<br>Right | Right<br>Ctrl+d |
 | Word left | ⏳ | — | — | Alt+b | Ctrl+Left |
 | Word right | ⏳ | — | — | Alt+f | Ctrl+Right |
-| Beginning of line | ⏳ | Home<br>Ctrl+a | — | Ctrl+a | Ctrl+Home |
-| End of line | ⏳ | End<br>Ctrl+e | — | Ctrl+e | Ctrl+End |
-| Delete character left | ⏳ | Backspace | — | Ctrl+h<br>Backspace | Backspace |
-| Delete character under cursor | ⏳ | Delete | — | Ctrl+d<br>Delete | Delete |
-| Delete word left | ⏳ | — | — | Ctrl+Alt+h<br>Alt+Backspace | Ctrl+Backspace |
+| Beginning of line | ⏳ | Home<br>Ctrl+a | Home<br>Ctrl+b | Ctrl+a | Ctrl+Home |
+| End of line | ⏳ | End<br>Ctrl+e | End<br>Ctrl+e | Ctrl+e | Ctrl+End |
+| Delete character left | ⏳ | Backspace | Backspace<br>Ctrl+h | Ctrl+h<br>Backspace | Backspace |
+| Delete character under cursor | ⏳ | Delete | Delete | Ctrl+d<br>Delete | Delete |
+| Delete word left | ⏳ | — | Ctrl+w | Ctrl+Alt+h<br>Alt+Backspace | Ctrl+Backspace |
 | Delete word right | ⏳ | — | — | — | Ctrl+Delete |
-| Delete to end of line | ⏳ | Ctrl+k | — | Ctrl+k | Ctrl+k |
-| Delete to beginning of line | ⏳ | Ctrl+u | — | — | — |
+| Delete to end of line | ⏳ | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k |
+| Delete to beginning of line | ⏳ | Ctrl+u | Ctrl+u | — | — |
 | Set mark | ⏳ | — | — | Ctrl+@ | — |
 | Cut (mark to cursor) | ⏳ | — | — | Ctrl+w | — |
 | Copy | ⏳ | — | — | Alt+w | Ctrl+Insert |
 | Paste | ⏳ | — | — | Ctrl+y | Shift+Insert |
 | Input line history | ⏳ | — | — | Alt+h | Ctrl+Up<br>Ctrl+Down (in dialogs) |
 | Previous / next history entry | ⏳ | — | — | Alt+p / Alt+n | — |
-| Complete path (path fields) | ⏳ | Tab | — | Alt+Tab | — |
+| Complete path (path fields) | ⏳ | Tab | Tab | Alt+Tab | — |
 
 ## Menus and dialogs
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Filter menu items | ⏳ | Typing (location menu) | — | — | Ctrl+Alt+f<br>RightAlt |
+| Filter menu items | ⏳ | Typing (location menu) | Typing (location menu) | — | Ctrl+Alt+f<br>RightAlt |
 | Lock filter | ⏳ | — | — | — | Ctrl+Alt+l |
 | Shift all items by 1 position | ⏳ | — | — | — | Alt+Left<br>Alt+Right |
 | Shift selected item by 1 position | ⏳ | — | — | — | Alt+Shift+Left<br>Alt+Shift+Right |
@@ -305,17 +304,17 @@ Status, of noc as a whole:
 | Align all items left / right | ⏳ | — | — | — | Alt+Home / Alt+End |
 | Align selected item left / right | ⏳ | — | — | — | Alt+Shift+Home / Alt+Shift+End |
 | Fixed menu columns | ⏳ | — | — | — | Shift+F5 |
-| Close dialog | ⏳ | Esc<br>F10 | — | Esc Esc<br>Esc (if Esc key mode is enabled) | — |
-| Next dialog item | ⏳ | Tab<br>Down<br>Right | — | — | — |
-| Previous dialog item | ⏳ | Shift+Tab<br>Up<br>Left | — | — | — |
-| Press focused button | ⏳ | Enter<br>Space | — | — | — |
-| Switch check box / choose radio button | ⏳ | Space | — | — | — |
-| List in a window (jobs, checksums): row up / down | ⏳ | Up / Down | — | — | — |
-| List in a window: page up / down | ⏳ | PgUp / PgDn | — | — | — |
-| List in a window: first / last row | ⏳ | Home / End | — | — | — |
+| Close dialog | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | Esc Esc<br>Esc (if Esc key mode is enabled) | — |
+| Next dialog item | ⏳ | Tab<br>Down<br>Right | Tab<br>j (not in a text field)<br>Down<br>Right | — | — |
+| Previous dialog item | ⏳ | Shift+Tab<br>Up<br>Left | Shift+Tab<br>k (not in a text field)<br>Up<br>Left | — | — |
+| Press focused button | ⏳ | Enter<br>Space | Enter<br>Space | — | — |
+| Switch check box / choose radio button | ⏳ | Space | Space | — | — |
+| List in a window (jobs, checksums): row up / down | ⏳ | Up / Down | k / j<br>Up / Down | — | — |
+| List in a window: page up / down | ⏳ | PgUp / PgDn | Ctrl+b / Ctrl+f<br>PgUp / PgDn | — | — |
+| List in a window: first / last row | ⏳ | Home / End | g g / G<br>Home / End | — | — |
 | Focus first dialog item | ⏳ | — | — | — | Home |
 | Focus default dialog item | ⏳ | — | — | — | PgDn<br>End |
-| Default action | ⏳ | Enter (from a text field or check box) | — | — | Ctrl+Enter |
+| Default action | ⏳ | Enter (from a text field or check box) | Enter (from a text field or check box) | — | Ctrl+Enter |
 | Move dialog | ⏳ | — | — | — | Ctrl+F5 |
 | Checkbox: on / off / undefined | ⏳ | — | — | — | Numpad+ / Numpad- / Numpad* |
 | Dialog history: clear | ⏳ | — | — | — | Delete |
@@ -336,8 +335,8 @@ Status, of noc as a whole:
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Help | ⏳ | F1 | — | F1 | F1 |
-| Toggle line wrap | ⏳ | F2 | — | F2 | F2 |
+| Help | ✅ | F1 | g ?<br>F1 | F1 | F1 |
+| Toggle line wrap | ⏳ | F2 | F2 | F2 | F2 |
 | Wrap type (by chars/words) | ⏳ | — | — | — | Shift+F2 |
 | Hex/code mode | ⏳ | — | — | F4 | F4 |
 | Select mode (text/code/dump) | ⏳ | — | — | — | Shift+F4 |
@@ -351,15 +350,15 @@ Status, of noc as a whole:
 | Raw/Parsed | ⏳ | — | — | F8 | — |
 | Format/Unformat | ⏳ | — | — | F9 | — |
 | Code page | ⏳ | — | — | Alt+e | F8 (OEM/ANSI)<br>Shift+F8 (menu) |
-| Quit | ⏳ | F3<br>F10<br>q<br>Esc | — | F10<br>Esc | F10<br>F3<br>Numpad5<br>Esc |
-| Line down | ⏳ | Down<br>j<br>e<br>Enter<br>Ctrl+n | — | Down<br>Ctrl+n | Down |
-| Line up | ⏳ | Up<br>k<br>y<br>Ctrl+p | — | Up<br>Ctrl+p | Up |
-| Page down | ⏳ | PgDn<br>Space<br>f<br>Ctrl+v | — | PgDn<br>Space<br>Ctrl+v | PgDn |
-| Page up | ⏳ | PgUp<br>b<br>Alt+v<br>Backspace | — | PgUp<br>Alt+v<br>Ctrl+b<br>b<br>Ctrl+h<br>Backspace<br>Delete | PgUp |
+| Quit | ⏳ | F3<br>F10<br>q<br>Esc | q<br>Esc<br>F3<br>F10 | F10<br>Esc | F10<br>F3<br>Numpad5<br>Esc |
+| Line down | ✅ | Down<br>j<br>e<br>Enter<br>Ctrl+n | j<br>Ctrl+n<br>Down<br>Enter | Down<br>Ctrl+n | Down |
+| Line up | ✅ | Up<br>k<br>y<br>Ctrl+p | k<br>Ctrl+p<br>Up | Up<br>Ctrl+p | Up |
+| Page down | ✅ | PgDn<br>Space<br>f<br>Ctrl+v | Ctrl+f<br>PgDn | PgDn<br>Space<br>Ctrl+v | PgDn |
+| Page up | ✅ | PgUp<br>b<br>Alt+v<br>Backspace | Ctrl+b<br>PgUp | PgUp<br>Alt+v<br>Ctrl+b<br>b<br>Ctrl+h<br>Backspace<br>Delete | PgUp |
 | Half page up / down | ⏳ | — | — | u / d | — |
-| Beginning of file | ⏳ | Home<br>g<br>Ctrl+Home | — | Home<br>A1<br>g | Home<br>Ctrl+Home |
-| End of file | ⏳ | End<br>G<br>Ctrl+End | — | End<br>C1<br>G | End<br>Ctrl+End |
-| Column left / right | ⏳ | Left / Right<br>h / l | — | — | Left / Right |
+| Beginning of file | ✅ | Home<br>g<br>Ctrl+Home | g g<br>Home | Home<br>A1<br>g | Home<br>Ctrl+Home |
+| End of file | ✅ | End<br>G<br>Ctrl+End | G<br>End | End<br>C1<br>G | End<br>Ctrl+End |
+| Column left / right | ⏳ | Left / Right<br>h / l | h / l<br>Left / Right | — | Left / Right |
 | 20 columns left / right | ⏳ | — | — | — | Ctrl+Left / Ctrl+Right |
 | Leftmost / rightmost column | ⏳ | — | — | — | Ctrl+Shift+Left / Ctrl+Shift+Right |
 | Shift characters/bytes (dump, code) | ⏳ | — | — | — | Ctrl+Left / Ctrl+Right |
@@ -371,7 +370,7 @@ Status, of noc as a whole:
 | Next file | ⏳ | — | — | Ctrl+f | Numpad+ |
 | Previous file | ⏳ | — | — | Ctrl+b | Numpad- |
 | Ruler | ⏳ | — | — | Alt+r | — |
-| Repaint screen | ⏳ | Ctrl+l | — | Ctrl+l | — |
+| Repaint screen | ✅ | Ctrl+l | Ctrl+l | Ctrl+l | — |
 | User screen | ⏳ | — | — | Ctrl+o | Ctrl+o<br>Ctrl+Alt+Shift (temporarily) |
 | Go to file in panel | ⏳ | — | — | — | Ctrl+F10 |
 | Plugin commands | ⏳ | — | — | — | F11 |
@@ -503,16 +502,16 @@ Status, of noc as a whole:
 | --- | --- | --- | --- | --- | --- |
 | Follow link | ⏳ | — | — | — | Enter |
 | Next / previous link | ⏳ | — | — | — | Tab / Shift+Tab |
-| Page forward / backward | ⏳ | PgDn / PgUp | — | Space / Backspace | — |
+| Page forward / backward | ⏳ | PgDn / PgUp | Ctrl+f / Ctrl+b<br>PgDn / PgUp | Space / Backspace | — |
 | Previous topic | ⏳ | — | — | — | Alt+F1<br>Backspace |
 | Contents | ⏳ | — | — | — | Shift+F1 |
 | Plugins help | ⏳ | — | — | — | Shift+F2 |
 | Search in help | ⏳ | — | — | — | F7 |
 | Maximize/restore window | ⏳ | — | — | — | F5 |
 | Full list of help keys | ⏳ | — | — | F1 (again) | — |
-| Line down / up | ⏳ | Down / Up | — | — | — |
-| Beginning / end | ⏳ | Home / End | — | — | — |
-| Close help | ⏳ | Esc<br>F10<br>Enter | — | — | — |
+| Line down / up | ⏳ | Down / Up | j / k<br>Down / Up | — | — |
+| Beginning / end | ⏳ | Home / End | g g / G<br>Home / End | — | — |
+| Close help | ⏳ | Esc<br>F10<br>Enter | q<br>Esc<br>F10<br>Enter | — | — |
 
 ## Screen grabber (Far)
 
@@ -543,32 +542,32 @@ Status, of noc as a whole:
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| New tab on the same location | ⏳ | Ctrl+x t | — | — | — |
-| Close tab | ⏳ | Ctrl+x w | — | — | — |
-| Next tab | ⏳ | Alt+Right<br>Ctrl+x n | — | — | — |
-| Previous tab | ⏳ | Alt+Left<br>Ctrl+x p | — | — | — |
-| Tab list | ⏳ | Ctrl+x Tab | — | — | — |
-| Workspaces window | ⏳ | Alt+w | — | — | — |
-| Save the tabs of both panels as a workspace | ⏳ | Alt+W | — | — | — |
+| New tab on the same location | ⏳ | Ctrl+x t | g n | — | — |
+| Close tab | ⏳ | Ctrl+x w | g c | — | — |
+| Next tab | ⏳ | Alt+Right<br>Ctrl+x n | g t<br>Alt+Right | — | — |
+| Previous tab | ⏳ | Alt+Left<br>Ctrl+x p | g T<br>Alt+Left | — | — |
+| Tab list | ⏳ | Ctrl+x Tab | Ctrl+x Tab | — | — |
+| Workspaces window | ⏳ | Alt+w | Alt+w | — | — |
+| Save the tabs of both panels as a workspace | ⏳ | Alt+W | Alt+W | — | — |
 
 ## Mouse
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Move the cursor to a row, activate the panel | ⏳ | Click | — | Click | Click |
-| Open the row (as Enter) | ⏳ | Double click | — | Double click | Double click |
-| Mark the row, cursor stays on it | ⏳ | Right click | — | Right click | Right click |
-| Scroll a panel or the viewer | ⏳ | Wheel | — | Wheel | Wheel |
-| Press an F key | ⏳ | Click on the F-key bar | — | Click on the button bar | Click on the key bar |
-| Show a tab | ⏳ | Click on the tab | — | — | — |
-| Open a menu of the menu bar / run a command | ⏳ | Click | — | Click | Click |
-| Close the menu bar | ⏳ | Click outside it | — | Click outside it | Click outside it |
-| Dialog: press a button, switch a check box, choose a radio button | ⏳ | Click | — | Click | Click |
-| Dialog: put the cursor in a text field | ⏳ | Click | — | Click | Click |
-| Dialog: choose a radio button and press the default button | ⏳ | Double click | — | — | — |
-| Menu or list in a window: move the cursor / open the row | ⏳ | Click / Double click | — | Click / Double click | Click / Double click |
-| Close a menu or the list of completions | ⏳ | Click outside it | — | Click outside it | Click outside it |
-| Scroll a menu, a list, or the help | ⏳ | Wheel | — | Wheel | Wheel |
+| Move the cursor to a row, activate the panel | ⏳ | Click | Click | Click | Click |
+| Open the row (as Enter) | ⏳ | Double click | Double click | Double click | Double click |
+| Mark the row, cursor stays on it | ⏳ | Right click | Right click | Right click | Right click |
+| Scroll a panel or the viewer | ⏳ | Wheel | Wheel | Wheel | Wheel |
+| Press an F key | ⏳ | Click on the F-key bar | Click on the F-key bar | Click on the button bar | Click on the key bar |
+| Show a tab | ⏳ | Click on the tab | Click on the tab | — | — |
+| Open a menu of the menu bar / run a command | ⏳ | Click | Click | Click | Click |
+| Close the menu bar | ⏳ | Click outside it | Click outside it | Click outside it | Click outside it |
+| Dialog: press a button, switch a check box, choose a radio button | ⏳ | Click | Click | Click | Click |
+| Dialog: put the cursor in a text field | ⏳ | Click | Click | Click | Click |
+| Dialog: choose a radio button and press the default button | ⏳ | Double click | Double click | — | — |
+| Menu or list in a window: move the cursor / open the row | ⏳ | Click / Double click | Click / Double click | Click / Double click | Click / Double click |
+| Close a menu or the list of completions | ⏳ | Click outside it | Click outside it | Click outside it | Click outside it |
+| Scroll a menu, a list, or the help | ⏳ | Wheel | Wheel | Wheel | Wheel |
 
 ## Workspaces window (noc)
 
@@ -577,30 +576,30 @@ digits.
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Save the tabs of both panels as a new workspace | ⏳ | Insert | — | — | — |
-| Previous / next workspace | ⏳ | Up / Down | — | — | — |
-| Page up / down | ⏳ | PgUp / PgDn | — | — | — |
-| First / last workspace | ⏳ | Home / End | — | — | — |
-| Restore (replace the tabs of both panels) | ⏳ | Enter | — | — | — |
-| Restore by number (empty filter) | ⏳ | 1…9, 0 | — | — | — |
-| Remove last filter character | ⏳ | Backspace | — | — | — |
-| Rename | ⏳ | F6 | — | — | — |
-| Delete | ⏳ | F8<br>Delete | — | — | — |
-| Close | ⏳ | Esc<br>F10 | — | — | — |
+| Save the tabs of both panels as a new workspace | ⏳ | Insert | Insert | — | — |
+| Previous / next workspace | ⏳ | Up / Down | Ctrl+p / Ctrl+n<br>Up / Down | — | — |
+| Page up / down | ⏳ | PgUp / PgDn | PgUp / PgDn | — | — |
+| First / last workspace | ⏳ | Home / End | Home / End | — | — |
+| Restore (replace the tabs of both panels) | ⏳ | Enter | Enter | — | — |
+| Restore by number (empty filter) | ⏳ | 1…9, 0 | 1…9, 0 | — | — |
+| Remove last filter character | ⏳ | Backspace | Backspace<br>Ctrl+h | — | — |
+| Rename | ⏳ | F6 | F6 | — | — |
+| Delete | ⏳ | F8<br>Delete | F8<br>Delete | — | — |
+| Close | ⏳ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
 
 ## Location menu (noc)
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Previous / next item | ⏳ | Up / Down | — | — | — |
-| Page up / down | ⏳ | PgUp / PgDn | — | — | — |
-| First / last item | ⏳ | Home / End | — | — | — |
-| Open volume or host | ⏳ | Enter | — | — | — |
-| Open item by number (empty filter) | ⏳ | 1…9, 0 | — | — | — |
-| Remove last filter character | ⏳ | Backspace | — | — | — |
-| Disconnect host | ⏳ | F8 | — | — | — |
-| Reread volumes and hosts | ⏳ | Ctrl+r | — | — | — |
-| Close | ⏳ | Esc<br>F10 | — | — | — |
+| Previous / next item | ⏳ | Up / Down | Ctrl+p / Ctrl+n<br>Up / Down | — | — |
+| Page up / down | ⏳ | PgUp / PgDn | PgUp / PgDn | — | — |
+| First / last item | ⏳ | Home / End | Home / End | — | — |
+| Open volume or host | ⏳ | Enter | Enter | — | — |
+| Open item by number (empty filter) | ⏳ | 1…9, 0 | 1…9, 0 | — | — |
+| Remove last filter character | ⏳ | Backspace | Backspace<br>Ctrl+h | — | — |
+| Disconnect host | ⏳ | F8 | F8 | — | — |
+| Reread volumes and hosts | ⏳ | Ctrl+r | Ctrl+r | — | — |
+| Close | ⏳ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
 
 ## Completion list (noc)
 
@@ -608,25 +607,25 @@ Under a path field (Quick cd, F5, F6, F7) after a Tab that gets no further.
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Previous / next choice | ⏳ | Up / Down | — | — | — |
-| Next choice, round | ⏳ | Tab | — | — | — |
-| Page up / down | ⏳ | PgUp / PgDn | — | — | — |
-| First / last choice | ⏳ | Home / End | — | — | — |
-| Put the choice in the field | ⏳ | Enter | — | — | — |
-| Close | ⏳ | Esc | — | — | — |
-| Close and edit the field | ⏳ | Other keys | — | — | — |
+| Previous / next choice | ⏳ | Up / Down | Ctrl+p / Ctrl+n<br>Up / Down | — | — |
+| Next choice, round | ⏳ | Tab | Tab | — | — |
+| Page up / down | ⏳ | PgUp / PgDn | PgUp / PgDn | — | — |
+| First / last choice | ⏳ | Home / End | Home / End | — | — |
+| Put the choice in the field | ⏳ | Enter | Ctrl+y<br>Enter | — | — |
+| Close | ⏳ | Esc | Ctrl+e<br>Esc | — | — |
+| Close and edit the field | ⏳ | Other keys | Other keys | — | — |
 
 ## zoxide window (noc)
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Previous / next directory | ⏳ | Up / Down | — | — | — |
-| Page up / down | ⏳ | PgUp / PgDn | — | — | — |
-| First / last directory | ⏳ | Home / End | — | — | — |
-| Open in the active panel | ⏳ | Enter | — | — | — |
-| Open by number (no keywords) | ⏳ | 1…9, 0 | — | — | — |
-| Remove last keyword character | ⏳ | Backspace | — | — | — |
-| Close | ⏳ | Esc<br>F10 | — | — | — |
+| Previous / next directory | ⏳ | Up / Down | Ctrl+p / Ctrl+n<br>Up / Down | — | — |
+| Page up / down | ⏳ | PgUp / PgDn | PgUp / PgDn | — | — |
+| First / last directory | ⏳ | Home / End | Home / End | — | — |
+| Open in the active panel | ⏳ | Enter | Enter | — | — |
+| Open by number (no keywords) | ⏳ | 1…9, 0 | 1…9, 0 | — | — |
+| Remove last keyword character | ⏳ | Backspace | Backspace<br>Ctrl+h | — | — |
+| Close | ⏳ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
 
 ## Renaming in place (noc)
 
@@ -635,17 +634,17 @@ nothing.
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Rename to the name typed | ⏳ | Enter | — | — | — |
-| Keep the name | ⏳ | Esc | — | — | — |
+| Rename to the name typed | ⏳ | Enter | Enter | — | — |
+| Keep the name | ⏳ | Esc | Esc<br>Ctrl+c | — | — |
 
 ## Pull-down menu (noc)
 
 | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | --- | --- | --- | --- |
-| Previous / next menu | ⏳ | Left / Right | — | — | — |
-| Previous / next command | ⏳ | Up / Down | — | — | — |
-| First command | ⏳ | Home<br>PgUp | — | — | — |
-| Last command | ⏳ | End<br>PgDn | — | — | — |
-| Open menu / run command | ⏳ | Enter | — | — | — |
-| Open menu / run command by its letter | ⏳ | Letter | — | — | — |
-| Close menu, then menu bar | ⏳ | Esc<br>F9<br>F10 | — | — | — |
+| Previous / next menu | ⏳ | Left / Right | Left / Right | — | — |
+| Previous / next command | ⏳ | Up / Down | Ctrl+p / Ctrl+n<br>Up / Down | — | — |
+| First command | ⏳ | Home<br>PgUp | Home<br>PgUp | — | — |
+| Last command | ⏳ | End<br>PgDn | End<br>PgDn | — | — |
+| Open menu / run command | ⏳ | Enter | Enter | — | — |
+| Open menu / run command by its letter | ⏳ | Letter | Letter | — | — |
+| Close menu, then menu bar | ⏳ | Esc<br>F9<br>F10 | Esc<br>F9<br>F10 | — | — |

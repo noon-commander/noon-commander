@@ -2,8 +2,8 @@
 //!
 //! Each context with its actions, and each action with its key sequences in crokey's syntax, the
 //! keys of a sequence apart; the help lists them in this order. `default.rs` has the same
-//! contexts in the same order. Where Esc waits, `esc 1` … `esc 0` stand for F1 … F10 without
-//! being written here.
+//! contexts in the same order, and `noc keymap diff` shows what differs. Where Esc waits,
+//! `esc 1` … `esc 0` stand for F1 … F10 without being written here.
 
 use super::{Action, Context, Preset};
 

@@ -127,7 +127,7 @@ a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on th
   lack gets its own row, or a `(noc)` section.
 - Presets: `crates/noc/src/tui/keymap/default.rs` and `vim.rs`, one per `ui.keymap` name. Each
   lists every context, in the same order as the other and with the same comments where they
-  agree.
+  agree. `just keymap-diff` (`noc keymap diff`) compares them action by action.
 - Keys in text (the help, menus, Fluent files, docs, comments) are written one way, the way
   `keymap::describe` writes them and as [docs/keymap-compare.md](docs/keymap-compare.md)
   explains: letters lowercase, after a modifier too (`Ctrl+l`); an uppercase letter is Shift

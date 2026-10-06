@@ -11,7 +11,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `ui.keymap` (Keymap in Options → Configuration) chooses the keymap by name, as `ui.theme`
   chooses the colors, and takes effect at once: `default`, modelled on mc, or `vim`. In the vim
-  keymap, k, j, g g, and G move in dialogs too.
+  keymap, k, j, g g, and G move in dialogs too. `noc keymap diff` compares two keymaps action by
+  action, the default and the vim one unless named: `|` where the keys differ, `<` and `>` for an
+  action only one of them binds, in color in a terminal; `--all` shows what they bind alike too.
 - The terminal's window or tab is titled with the active panel's directory, as the prompt of the
   command line shows it (`~/src — noc`, or `host:path`), and gets its own title back when Noon
   Commander quits or hands the terminal to a command, where the terminal keeps a stack of titles.

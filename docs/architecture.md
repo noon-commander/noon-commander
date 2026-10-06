@@ -498,6 +498,8 @@ noc hosts [--resolve]  hosts from ssh_config with cached addresses; --resolve ru
 noc ls [LOCATION]      a local path or host:path; without one, the mount points and hosts
 noc config init        write the commented default config.toml
 noc config paths       show the files and directories in use
+noc keymap diff [L] [R]  compare two built-in keymaps action by action, default and vim unless
+                         named; --all shows what they bind alike, --color=WHEN colors
 ```
 
 `--config FILE` replaces `~/.config/noc/config.toml`. Logs go to
@@ -936,7 +938,8 @@ location = "root"
   switches it at once. Each preset is a module of its own, `tui/keymap/default.rs` and
   `tui/keymap/vim.rs`: each context with its actions, and each action with its key sequences, in
   the order the help lists them. Both list every context in the same order; the vim preset has
-  panels, dialogs, and a viewer of its own.
+  panels, dialogs, and a viewer of its own. `noc keymap diff` (`just keymap-diff`) compares two
+  presets action by action (`tui/keymap/diff.rs`), with the keys written as the help writes them.
   As in mc, `Esc` in a panel waits for the next key: `Esc 1` … `Esc 0` stand for F1 … F10, `Esc`
   followed by a character stands for Alt and that character, for terminals whose Alt key sends
   nothing, and `Esc` alone cancels once the timeout passes (`Esc Esc` at once). An `Esc` and a quick

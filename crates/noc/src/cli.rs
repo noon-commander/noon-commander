@@ -3,7 +3,8 @@
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-use clap::{Parser, Subcommand};
+use clap::builder::PossibleValuesParser;
+use clap::{ColorChoice, Parser, Subcommand};
 
 /// Package version plus compile-time features, e.g. `0.1.0 (-forwarding)`.
 static VERSION: LazyLock<String> = LazyLock::new(|| {
@@ -46,6 +47,9 @@ pub(crate) enum Command {
     /// Manage the configuration file.
     #[command(subcommand)]
     Config(ConfigCommand),
+    /// Look at the built-in keymaps.
+    #[command(subcommand)]
+    Keymap(KeymapCommand),
 }
 
 #[derive(Debug, Subcommand)]
@@ -58,6 +62,38 @@ pub(crate) enum ConfigCommand {
     },
     /// Show the files and directories Noon Commander uses.
     Paths,
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum KeymapCommand {
+    /// Compare two built-in keymaps action by action: `|` where the keys differ, `<` for an
+    /// action only the left one binds, `>` for one only the right one binds.
+    Diff {
+        /// The keymap on the left.
+        #[arg(default_value = "default", value_parser = keymap_names())]
+        left: String,
+        /// The keymap on the right.
+        #[arg(default_value = "vim", value_parser = keymap_names())]
+        right: String,
+        /// Show the actions both bind alike too.
+        #[arg(long)]
+        all: bool,
+        /// When to color the output; `auto` colors a terminal unless `NO_COLOR` is set.
+        #[arg(
+            long,
+            value_name = "WHEN",
+            default_value = "auto",
+            num_args = 0..=1,
+            require_equals = true,
+            default_missing_value = "always"
+        )]
+        color: ColorChoice,
+    },
+}
+
+/// The names of the built-in keymaps, as the only values an argument takes.
+fn keymap_names() -> PossibleValuesParser {
+    PossibleValuesParser::new(crate::tui::keymap_names().iter().copied())
 }
 
 #[cfg(test)]

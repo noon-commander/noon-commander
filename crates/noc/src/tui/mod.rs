@@ -77,6 +77,13 @@ pub(crate) fn keymap_names() -> &'static [&'static str] {
     keymap::Keymap::NAMES
 }
 
+/// The built-in keymaps `left` and `right` compared action by action, for `noc keymap diff`;
+/// `None` if either is not one. `all` shows the actions they bind alike too, and `color` paints
+/// the differences.
+pub(crate) fn keymap_diff(left: &str, right: &str, all: bool, color: bool) -> Option<String> {
+    keymap::Diff::by_names(left, right).map(|diff| diff.render(all, color))
+}
+
 /// Hands finished background work to the app, and runs what the app asks for next.
 fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
     match done {

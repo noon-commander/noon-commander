@@ -2,6 +2,7 @@
 
 mod config;
 mod hosts;
+mod keymap;
 mod ls;
 
 use std::process::ExitCode;
@@ -10,7 +11,7 @@ use color_eyre::eyre::{Result, WrapErr as _};
 use noc_config::Paths;
 use noc_ssh::discovery::Discovery;
 
-use crate::cli::{Cli, Command, ConfigCommand};
+use crate::cli::{Cli, Command, ConfigCommand, KeymapCommand};
 use crate::context::{Context, describe};
 
 /// Exit code after Ctrl+c, as shells report a process killed by SIGINT.
@@ -33,6 +34,12 @@ pub(crate) async fn run(cli: Cli) -> Result<ExitCode> {
             let context = Context::load(paths, &config_path)?;
             hosts::run(&context, resolve).await
         }
+        Some(Command::Keymap(KeymapCommand::Diff {
+            left,
+            right,
+            all,
+            color,
+        })) => keymap::diff(&left, &right, all, color),
         Some(Command::Ls { location }) => {
             let context = Context::load(paths, &config_path)?;
             ls::run(&context, location.as_deref()).await

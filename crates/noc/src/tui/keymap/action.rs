@@ -41,6 +41,28 @@ pub(crate) enum Context {
 }
 
 impl Context {
+    /// The context's name in snake case, as `noc keymap diff` writes it.
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Panel => "panel",
+            Self::Root => "root",
+            Self::Menu => "menu",
+            Self::Jump => "jump",
+            Self::Workspaces => "workspaces",
+            Self::PullDown => "pull_down",
+            Self::QuickSearch => "quick_search",
+            Self::Rename => "rename",
+            Self::Dialog => "dialog",
+            Self::DialogInput => "dialog_input",
+            Self::PathInput => "path_input",
+            Self::Completion => "completion",
+            Self::Viewer => "viewer",
+            Self::CommandLine => "command_line",
+            Self::History => "history",
+            Self::UserScreen => "user_screen",
+        }
+    }
+
     /// This context and its fallbacks, most specific first.
     pub(crate) fn chain(self) -> &'static [Self] {
         match self {
@@ -266,6 +288,84 @@ pub(crate) enum Action {
     Quit,
     /// Redraws the whole screen.
     Redraw,
+}
+
+impl Action {
+    /// The action's name in snake case, as `noc keymap diff` writes it.
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Up => "up",
+            Self::Down => "down",
+            Self::Left => "left",
+            Self::Right => "right",
+            Self::PageUp => "page_up",
+            Self::PageDown => "page_down",
+            Self::Home => "home",
+            Self::End => "end",
+            Self::Enter => "enter",
+            Self::Mark => "mark",
+            Self::MarkUp => "mark_up",
+            Self::InvertMarks => "invert_marks",
+            Self::View => "view",
+            Self::ToggleWrap => "toggle_wrap",
+            Self::Edit => "edit",
+            Self::Copy => "copy",
+            Self::Move => "move",
+            Self::Rename => "rename",
+            Self::Mkdir => "mkdir",
+            Self::Checksum => "checksum",
+            Self::Jobs => "jobs",
+            Self::Select => "select",
+            Self::Unselect => "unselect",
+            Self::Parent => "parent",
+            Self::SwitchPanel => "switch_panel",
+            Self::SwapPanels => "swap_panels",
+            Self::OtherPanelOpen => "other_panel_open",
+            Self::OtherPanelSync => "other_panel_sync",
+            Self::LocationMenuLeft => "location_menu_left",
+            Self::LocationMenuRight => "location_menu_right",
+            Self::Jump => "jump",
+            Self::QuickCd => "quick_cd",
+            Self::PullDown => "pull_down",
+            Self::NewTab => "new_tab",
+            Self::CloseTab => "close_tab",
+            Self::NextTab => "next_tab",
+            Self::PrevTab => "prev_tab",
+            Self::TabList => "tab_list",
+            Self::SaveWorkspace => "save_workspace",
+            Self::Workspaces => "workspaces",
+            Self::Reload => "reload",
+            Self::ToggleHidden => "toggle_hidden",
+            Self::SortByName => "sort_by_name",
+            Self::SortByExtension => "sort_by_extension",
+            Self::SortByTime => "sort_by_time",
+            Self::SortBySize => "sort_by_size",
+            Self::QuickSearch => "quick_search",
+            Self::Shell => "shell",
+            Self::Command => "command",
+            Self::NewLine => "new_line",
+            Self::EditCommand => "edit_command",
+            Self::OlderCommand => "older_command",
+            Self::NewerCommand => "newer_command",
+            Self::CommandHistory => "command_history",
+            Self::UserScreen => "user_screen",
+            Self::Disconnect => "disconnect",
+            Self::EditHost => "edit_host",
+            Self::Backspace => "backspace",
+            Self::Delete => "delete",
+            Self::DeleteToStart => "delete_to_start",
+            Self::DeleteToEnd => "delete_to_end",
+            Self::Complete => "complete",
+            Self::Confirm => "confirm",
+            Self::Toggle => "toggle",
+            Self::Cancel => "cancel",
+            Self::NextField => "next_field",
+            Self::PrevField => "prev_field",
+            Self::Help => "help",
+            Self::Quit => "quit",
+            Self::Redraw => "redraw",
+        }
+    }
 }
 
 #[cfg(test)]

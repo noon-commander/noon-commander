@@ -76,6 +76,11 @@ snap:
 snap-stale:
     cargo insta test --workspace --unreferenced=reject
 
+# Compare the default and the vim keymap presets action by action; extra arguments go to
+# `noc keymap diff`, as --all, or other keymap names
+keymap-diff *args:
+    cargo run -q -p noc -- keymap diff {{ args }}
+
 # Lint the Markdown files with .markdownlint.yaml (needs markdownlint-cli2)
 md:
     markdownlint-cli2 "**/*.md" "#target"

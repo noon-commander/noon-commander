@@ -9,6 +9,7 @@
 
 mod action;
 mod default;
+mod diff;
 mod vim;
 
 use std::collections::HashMap;
@@ -18,6 +19,7 @@ use crokey::KeyCombination;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub(crate) use action::{Action, Context};
+pub(crate) use diff::Diff;
 
 /// How long a sequence such as `Esc 1` waits for its next key.
 pub(crate) const SEQUENCE_TIMEOUT: Duration = Duration::from_secs(1);

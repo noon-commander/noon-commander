@@ -1636,7 +1636,8 @@ mod tests {
                 Action::End,
                 Action::Enter,
                 Action::Parent,
-                Action::Quit
+                Action::Quit,
+                Action::Redraw
             ]
         );
         let mut fkeys = [None; 10];

@@ -172,8 +172,8 @@ pub(super) const PRESET: Preset = &[
         &[
             (Action::Up, &["up", "ctrl-p"]),
             (Action::Down, &["down", "ctrl-n"]),
-            (Action::Left, &["left"]),
-            (Action::Right, &["right"]),
+            (Action::Left, &["left", "backtab"]),
+            (Action::Right, &["right", "tab"]),
             (Action::Home, &["ctrl-b", "shift-up", "home", "pageup"]),
             (
                 Action::End,

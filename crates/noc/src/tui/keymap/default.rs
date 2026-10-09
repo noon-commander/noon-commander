@@ -213,8 +213,8 @@ pub(super) const PRESET: Preset = &[
         &[
             (Action::Up, &["up"]),
             (Action::Down, &["down"]),
-            (Action::Left, &["left"]),
-            (Action::Right, &["right"]),
+            (Action::Left, &["left", "backtab"]),
+            (Action::Right, &["right", "tab"]),
             (Action::Home, &["home", "pageup"]),
             (Action::End, &["end", "pagedown"]),
             (Action::Confirm, &["enter"]),

@@ -620,9 +620,22 @@ fn preset(name: &str) -> Option<Preset> {
 fn parse_sequence(text: &str) -> Option<Sequence> {
     let sequence: Sequence = text
         .split_whitespace()
-        .map(|key| crokey::parse(key).ok().map(KeyCombination::normalized))
+        .map(|key| {
+            crokey::parse(key)
+                .ok()
+                .map(|key| back_tab(key.normalized()))
+        })
         .collect::<Option<_>>()?;
     (!sequence.is_empty()).then_some(sequence)
+}
+
+/// Terminals send Shift+Tab as `BackTab`, never as Tab with Shift, so `shift-tab` means `backtab`.
+fn back_tab(key: KeyCombination) -> KeyCombination {
+    if key == KeyCombination::new(KeyCode::Tab, KeyModifiers::SHIFT) {
+        KeyCombination::new(KeyCode::BackTab, KeyModifiers::SHIFT)
+    } else {
+        key
+    }
 }
 
 /// The character a key types, if it types one.
@@ -1281,12 +1294,16 @@ mod tests {
                 &keymap,
                 &mut state,
                 Context::PullDown,
-                &["v", "+", "left", "pagedown", "enter", "f9", "esc"]
+                &[
+                    "v", "+", "left", "backtab", "tab", "pagedown", "enter", "f9", "esc"
+                ]
             ),
             [
                 Resolved::Insert('v'),
                 Resolved::Insert('+'),
                 Resolved::Action(Action::Left),
+                Resolved::Action(Action::Left),
+                Resolved::Action(Action::Right),
                 Resolved::Action(Action::End),
                 Resolved::Action(Action::Confirm),
                 Resolved::Action(Action::Cancel),
@@ -1294,7 +1311,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            feed(&keymap, &mut state, Context::PullDown, &["tab", "f5"]),
+            feed(&keymap, &mut state, Context::PullDown, &["insert", "f5"]),
             [],
             "the menu is modal"
         );
@@ -1720,6 +1737,8 @@ mod tests {
                     "ctrl-b",
                     "shift-down",
                     "shift-up",
+                    "tab",
+                    "backtab",
                     "ctrl-c"
                 ]
             ),
@@ -1734,8 +1753,22 @@ mod tests {
                 Resolved::Action(Action::Home),
                 Resolved::Action(Action::End),
                 Resolved::Action(Action::Home),
+                Resolved::Action(Action::Right),
+                Resolved::Action(Action::Left),
                 Resolved::Action(Action::Cancel),
             ]
+        );
+    }
+
+    #[test]
+    fn shift_tab_is_the_back_tab_terminals_send() {
+        assert_eq!(parse_sequence("shift-tab"), parse_sequence("backtab"));
+        assert_eq!(
+            parse_sequence("backtab"),
+            Some(vec![KeyCombination::from(KeyEvent::new(
+                KeyCode::BackTab,
+                KeyModifiers::SHIFT
+            ))])
         );
     }
 

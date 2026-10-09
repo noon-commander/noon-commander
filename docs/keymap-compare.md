@@ -406,13 +406,13 @@ move in it.
 | --- | --- | :-: | --- | --- | --- | --- |
 | The command above | `up` | ✅ | Up | Up<br>Ctrl+p | — | — |
 | The command below | `down` | ✅ | Down | Down<br>Ctrl+n | — | — |
-| The menu to the left | `left` | ⏳ | Left | Left | — | — |
-| The menu to the right | `right` | ⏳ | Right | Right | — | — |
+| The menu to the left | `left` | ✅ | Left<br>Shift+Tab | Left<br>Shift+Tab | — | — |
+| The menu to the right | `right` | ✅ | Right<br>Tab | Right<br>Tab | — | — |
 | The first command | `home` | ✅ | Home<br>PgUp | Ctrl+b<br>Shift+Up<br>Home<br>PgUp | — | — |
 | The last command | `end` | ✅ | End<br>PgDn | Ctrl+f<br>Shift+Down<br>Shift+Enter<br>End<br>PgDn | — | — |
 | Open the menu, or run the command | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | — |
 | Close the menu, then the menu bar | `cancel` | ✅ | Esc<br>F9<br>F10 | Esc<br>Ctrl+c<br>F9<br>F10 | — | — |
-| Open a menu or run a command by its letter | — | ⏳ | Letter | Letter | — | — |
+| Open a menu or run a command by its letter | — | ✅ | Letter | Letter | — | — |
 
 ## Text fields (`dialog_input`)
 

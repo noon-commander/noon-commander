@@ -12,13 +12,18 @@ pub(super) const PRESET: Preset = &[
     (
         Context::Panel,
         &[
-            (Action::Up, &["k", "up"]),
-            (Action::Down, &["j", "down"]),
+            (Action::Up, &["k", "up", "ctrl-p"]),
+            (Action::Down, &["j", "down", "ctrl-n"]),
+            (Action::PageUp, &["ctrl-b", "shift-up", "pageup"]),
+            (
+                Action::PageDown,
+                &["ctrl-f", "shift-down", "shift-enter", "pagedown"],
+            ),
             (Action::Home, &["g g", "home"]),
             (Action::End, &["shift-g", "end"]),
             (Action::Enter, &["l", "enter"]),
             // netrw's and vinegar's `-`, next to `h`.
-            (Action::Parent, &["h", "-"]),
+            (Action::Parent, &["h", "-", "backspace"]),
             // Not in mc, whose command line takes what is typed (ADR 0019).
             (Action::Shell, &["!"]),
             (Action::Command, &[":"]),
@@ -80,10 +85,13 @@ pub(super) const PRESET: Preset = &[
     (
         Context::Viewer,
         &[
-            (Action::Up, &["k", "ctrl-p", "up"]),
-            (Action::Down, &["j", "ctrl-n", "down", "enter"]),
-            (Action::PageUp, &["ctrl-b", "pageup"]),
-            (Action::PageDown, &["ctrl-f", "pagedown"]),
+            (Action::Up, &["k", "up", "ctrl-p"]),
+            (Action::Down, &["j", "down", "ctrl-n", "enter"]),
+            (Action::PageUp, &["ctrl-b", "shift-up", "pageup"]),
+            (
+                Action::PageDown,
+                &["ctrl-f", "shift-down", "shift-enter", "pagedown"],
+            ),
             (Action::Home, &["g g", "home"]),
             (Action::End, &["shift-g", "end"]),
             (Action::Left, &["h", "left"]),

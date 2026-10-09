@@ -34,8 +34,8 @@ Keys are written the same way in every column, whatever notation the source uses
 
 Status, of noc as a whole:
 
-- ✅ implemented: noc binds the action.
-- ⏳ not used yet: noc does not bind it, but may.
+- ✅ settled: both presets bind the action, with the keys they will keep.
+- ⏳ not settled yet: noc does not bind it yet, or its keys may still change.
 - 🚫 not needed: noc will not have it.
 
 ## Panels (`panel`)
@@ -45,19 +45,19 @@ Far have a command line under the panels that takes what is typed; noc opens one
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | :-: | --- | --- | --- | --- |
-| One row up | `up` | ✅ | Up<br>Ctrl+p | k<br>Up | Up<br>Ctrl+p | — |
-| One row down | `down` | ✅ | Down<br>Ctrl+n | j<br>Down | Down<br>Ctrl+n | — |
-| One page up | `page_up` | ⏳ | PgUp<br>Alt+v | Ctrl+b<br>PgUp | PgUp<br>Alt+v | — |
-| One page down | `page_down` | ⏳ | PgDn<br>Ctrl+v | Ctrl+f<br>PgDn | PgDn<br>Ctrl+v | — |
+| One row up | `up` | ✅ | Up<br>Ctrl+p | k<br>Up<br>Ctrl+p | Up<br>Ctrl+p | — |
+| One row down | `down` | ✅ | Down<br>Ctrl+n | j<br>Down<br>Ctrl+n | Down<br>Ctrl+n | — |
+| One page up | `page_up` | ✅ | PgUp<br>Alt+v | Ctrl+b<br>Shift+Up<br>PgUp | PgUp<br>Alt+v | — |
+| One page down | `page_down` | ✅ | PgDn<br>Ctrl+v | Ctrl+f<br>Shift+Down<br>Shift+Enter<br>PgDn | PgDn<br>Ctrl+v | — |
 | First row | `home` | ✅ | Home | g g<br>Home | Home<br>A1<br>Alt+< | — |
 | Last row | `end` | ✅ | End | G<br>End | End<br>C1<br>Alt+> | — |
-| Open the directory or host under the cursor (mc, Far: also run a program, enter an archive) | `enter` | ✅ | Enter | l<br>Enter | Enter | Enter |
-| Mark or unmark, then the next row | `mark` | ⏳ | Insert<br>Ctrl+t<br>Shift+Down | Space<br>Insert<br>Shift+Down | Insert<br>Ctrl+t | Insert<br>Shift+cursor keys |
-| Mark or unmark, then the row above | `mark_up` | ⏳ | Shift+Up | Shift+Up | — | Shift+Up |
+| Open the directory or file under the cursor | `enter` | ✅ | Enter | l<br>Enter | Enter | Enter |
+| Mark or unmark, then the next row | `mark` | ⏳ | Insert<br>Ctrl+t<br>Shift+Down | Space<br>Insert | Insert<br>Ctrl+t | Insert<br>Shift+cursor keys |
+| Mark or unmark, then the row above | `mark_up` | ⏳ | Shift+Up | — | — | Shift+Up |
 | Mark the names that match a pattern | `select` | ⏳ | +<br>Alt++ | + | +<br>Alt++ (alternate_plus_minus) | Numpad+ |
 | Unmark the names that match a pattern | `unselect` | ⏳ | -<br>\\<br>Alt+- | \\ | \\<br>Alt+- (alternate_plus_minus) | Numpad- |
 | Invert the marks on files; directories stay as they are | `invert_marks` | ⏳ | \*<br>Alt+\* | v | \*<br>Alt+\* (alternate_plus_minus) | Numpad* |
-| Parent directory; above /, the volumes and hosts | `parent` | ✅ | Ctrl+PgUp | h<br>- | Ctrl+PgUp | Ctrl+PgUp |
+| Parent directory; above /, the volumes and hosts | `parent` | ✅ | Ctrl+PgUp | h<br>-<br>Backspace | Ctrl+PgUp | Ctrl+PgUp |
 | The other panel | `switch_panel` | ⏳ | Tab | Tab<br>Ctrl+w w | Tab<br>Ctrl+i<br>Left<br>Right | Tab |
 | Swap the panels | `swap_panels` | ⏳ | Ctrl+u | Ctrl+w x | — | Ctrl+u |
 | Open the directory under the cursor in the other panel | `other_panel_open` | ⏳ | Alt+o | Alt+o | Alt+o | — |
@@ -277,10 +277,10 @@ jobs, a job, and checksums. Dialogs are modal: the panel's keys do nothing there
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | :-: | --- | --- | --- | --- |
-| One line up | `up` | ✅ | Up<br>k<br>y<br>Ctrl+p | k<br>Ctrl+p<br>Up | Up<br>Ctrl+p | Up |
-| One line down | `down` | ✅ | Down<br>j<br>e<br>Enter<br>Ctrl+n | j<br>Ctrl+n<br>Down<br>Enter | Down<br>Ctrl+n | Down |
-| One page up | `page_up` | ✅ | PgUp<br>b<br>Alt+v<br>Backspace | Ctrl+b<br>PgUp | PgUp<br>Alt+v<br>Ctrl+b<br>b<br>Ctrl+h<br>Backspace<br>Delete | PgUp |
-| One page down | `page_down` | ✅ | PgDn<br>Space<br>f<br>Ctrl+v | Ctrl+f<br>PgDn | PgDn<br>Space<br>Ctrl+v | PgDn |
+| One line up | `up` | ✅ | Up<br>k<br>y<br>Ctrl+p | k<br>Up<br>Ctrl+p | Up<br>Ctrl+p | Up |
+| One line down | `down` | ✅ | Down<br>j<br>e<br>Enter<br>Ctrl+n | j<br>Down<br>Ctrl+n<br>Enter | Down<br>Ctrl+n | Down |
+| One page up | `page_up` | ✅ | PgUp<br>b<br>Alt+v<br>Backspace | Ctrl+b<br>Shift+Up<br>PgUp | PgUp<br>Alt+v<br>Ctrl+b<br>b<br>Ctrl+h<br>Backspace<br>Delete | PgUp |
+| One page down | `page_down` | ✅ | PgDn<br>Space<br>f<br>Ctrl+v | Ctrl+f<br>Shift+Down<br>Shift+Enter<br>PgDn | PgDn<br>Space<br>Ctrl+v | PgDn |
 | The start of the file | `home` | ✅ | Home<br>g<br>Ctrl+Home | g g<br>Home | Home<br>A1<br>g | Home<br>Ctrl+Home |
 | The end of the file | `end` | ✅ | End<br>G<br>Ctrl+End | G<br>End | End<br>C1<br>G | End<br>Ctrl+End |
 | One column left, when lines are cut | `left` | ⏳ | Left<br>h | h<br>Left | — | Left |

@@ -1299,6 +1299,8 @@ mod tests {
             [
                 Action::Up,
                 Action::Down,
+                Action::PageUp,
+                Action::PageDown,
                 Action::Home,
                 Action::End,
                 Action::Enter,

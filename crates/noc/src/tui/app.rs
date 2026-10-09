@@ -1546,6 +1546,11 @@ impl App {
 
     pub(crate) fn handle(&mut self, input: Resolved) -> Vec<Effect> {
         self.sync_connected();
+        // Wherever keys go, the hints show their keys over what is in front, which stays open.
+        if input == Resolved::Action(Action::KeyHints) {
+            self.hints_asked = Some(self.context());
+            return Vec::new();
+        }
         if let Some(effects) = self.handle_over(input) {
             return effects;
         }
@@ -1573,7 +1578,6 @@ impl App {
             Action::Help => {
                 self.help = Some(self.help_screen());
             }
-            Action::KeyHints => self.hints_asked = Some(self.context()),
             Action::SwitchPanel => self.active = self.active.other(),
             Action::NewTab
             | Action::CloseTab
@@ -9335,10 +9339,30 @@ mod tests {
             text.contains("Esc closes") && text.contains("Ctrl+x") && text.contains("+10 keys"),
             "{text}"
         );
-        // A dialog in front hides them.
+        // A dialog in front hides them…
         app.handle(action(Action::Mkdir));
         app.set_hints(&keys);
         assert!(!screen_of(&mut app, 16).contains("Esc closes"));
+        // …and shows its own when asked, staying open.
+        let dialog = app.context();
+        assert_eq!(dialog, Context::PathInput);
+        assert!(app.handle(action(Action::KeyHints)).is_empty());
+        assert_eq!(app.take_hints_asked(), Some(dialog));
+        assert_eq!(app.context(), dialog);
+        app.keymap().show_hints(&mut keys, dialog);
+        app.set_hints(&keys);
+        let text = screen_of(&mut app, 16);
+        assert!(
+            text.contains("Esc closes") && text.contains("Complete the path"),
+            "{text}"
+        );
+        // So does a menu.
+        app.handle(action(Action::Cancel));
+        app.handle(action(Action::PullDown));
+        assert_eq!(app.context(), Context::PullDown);
+        app.handle(action(Action::KeyHints));
+        assert_eq!(app.take_hints_asked(), Some(Context::PullDown));
+        assert_eq!(app.context(), Context::PullDown);
     }
 
     #[test]

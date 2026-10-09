@@ -935,18 +935,20 @@ location = "root"
   its directory, and its first line, and the whole command under the cursor below; Enter puts it on
   the line, with the prompt reversed until the next key if it ran on another host, and Delete
   removes it.
-- **Keymap.** Keys map to `Action`s per context (`panel`, `root`, `quick_search`, `command_line`,
-  `history`, `user_screen`, `menu`, `pull_down`, `dialog`, `dialog_input`, `viewer`). Each context
-  falls back along a chain, for example the root and quick search to the panel; the first context
-  that knows a key sequence decides, except that a sequence it only starts does what a later context
-  binds it to. Bindings are key sequences matched by prefix with a 1-second timeout, so a vim preset
-  (`g g`, `d d`) can follow the default mc preset. `ui.keymap` names the built-in preset, as
-  `ui.theme` names the theme (`Keymap::NAMES`, `Keymap::by_name`); the Configuration dialog
-  switches it at once. Each preset is a module of its own, `tui/keymap/default.rs` and
-  `tui/keymap/vim.rs`: each context with its actions, and each action with its key sequences, in
-  the order the help lists them. Both list every context in the same order; the vim preset has
-  panels, dialogs, and a viewer of its own. `noc keymap diff` (`just keymap-diff`) compares two
-  presets action by action (`tui/keymap/diff.rs`), with the keys written as the help writes them.
+- **Keymap.** Keys map to `Action`s per context (`global`, `panel`, `root`, `quick_search`,
+  `command_line`, `history`, `user_screen`, `menu`, `pull_down`, `dialog`, `dialog_input`,
+  `viewer`). Each context falls back along a chain, for example the root and quick search to the
+  panel, and every one but `user_screen` to `global` last, whose keys do the same everywhere; the
+  first context that knows a key sequence decides, except that a sequence it only starts does what
+  a later context binds it to. Bindings are key sequences matched by prefix with a 1-second
+  timeout, so a vim preset (`g g`, `d d`) can follow the default mc preset. `ui.keymap` names the
+  built-in preset, as `ui.theme` names the theme (`Keymap::NAMES`, `Keymap::by_name`); the
+  Configuration dialog switches it at once. Each preset is a module of its own,
+  `tui/keymap/default.rs` and `tui/keymap/vim.rs`: each context with its actions, and each action
+  with its key sequences, in the order the help lists them. Both list every context in the same
+  order; the vim preset has panels, dialogs, and a viewer of its own. `noc keymap diff`
+  (`just keymap-diff`) compares two presets action by action (`tui/keymap/diff.rs`), with the
+  keys written as the help writes them.
   As in mc, `Esc` in a panel waits for the next key: `Esc 1` … `Esc 0` stand for F1 … F10, `Esc`
   followed by a character stands for Alt and that character, for terminals whose Alt key sends
   nothing, and `Esc` alone cancels once the timeout passes (`Esc Esc` at once). An `Esc` and a quick
@@ -961,7 +963,9 @@ location = "root"
   `KeyState`: with `ui.which_key` on, a sequence that does nothing alone and does not start with
   `Esc` (such as `Ctrl+x` or vim's `g`) does not time out; its hints show
   `ui.which_key_delay_ms` after its last key (`Keymap::hints_due`), and it then waits for the
-  next key. The action `key_hints` (`?` in both presets) shows every key of the context at once.
+  next key. The action `key_hints` shows every key of the context at once: `?` in the panels and
+  `Alt+/` everywhere, in both presets. The app takes it before whatever is in front, which stays
+  open under the hints.
   While hints show, the next key runs as it would have, or shows the keys that can follow it;
   `Esc` closes them and `Backspace` takes back the last key. `Esc` sequences never show hints:
   they stand for Alt and the F-keys, and a lone `Esc` acts after its timeout.

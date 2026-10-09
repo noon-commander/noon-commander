@@ -8,6 +8,15 @@
 use super::{Action, Context, Preset};
 
 pub(super) const PRESET: Preset = &[
+    // Everywhere but the output of commands: the other contexts fall back to it last.
+    (
+        Context::Global,
+        &[
+            // Not in mc or Far: the keys that can be typed now, over whatever is in front, as
+            // which-key shows them. Alt+? stays free for finding files, as in mc.
+            (Action::KeyHints, &["alt-/"]),
+        ],
+    ),
     // The panels.
     (
         Context::Panel,

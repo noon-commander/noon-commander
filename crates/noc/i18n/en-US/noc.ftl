@@ -342,6 +342,7 @@ dialog-use-current = Use current
 ## Help screen (src/tui/help). Prefix: help-. One line per key: say what it does, briefly.
 
 help-title = Help
+help-everywhere = Everywhere
 help-panels = Panels
 help-root = Volumes and hosts
 help-menu = Location menu

@@ -121,7 +121,7 @@
       `ui.terminal_title`
 - [x] Keymap presets by name, chosen as themes are: `ui.keymap`, `default` and `vim`
 - [x] Key hints, as which-key: the keys that can follow `Ctrl+x`, `g`, …, and every key of a
-      panel (`?`); `ui.which_key`, `ui.which_key_delay_ms`
+      panel (`?`) or of whatever is in front (`Alt+/`); `ui.which_key`, `ui.which_key_delay_ms`
 
 ## Known issues
 

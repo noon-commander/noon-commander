@@ -2100,6 +2100,42 @@ mod tests {
     }
 
     #[test]
+    fn alt_slash_asks_for_the_hints_everywhere_but_on_the_user_screen() {
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            for &context in Context::ALL {
+                if matches!(context, Context::Global | Context::UserScreen) {
+                    continue;
+                }
+                let mut state = KeyState::default();
+                assert_eq!(
+                    feed(&keymap, &mut state, context, &["alt-/"]),
+                    actions(&[Action::KeyHints]),
+                    "{name}: {context:?}"
+                );
+                let hints = keymap.hints(context, &[]);
+                assert!(
+                    hints.iter().any(|hint| hint.keys.ends_with("Alt+/")
+                        && hint.action == Some(Action::KeyHints)),
+                    "{name}: {context:?} hints"
+                );
+            }
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&keymap, &mut state, Context::UserScreen, &["alt-/"]),
+                [],
+                "{name}"
+            );
+            // Where Esc waits, Esc and / stand for Alt+/ too, though vim's panels search with /.
+            assert_eq!(
+                feed(&keymap, &mut state, Context::Panel, &["esc", "/"]),
+                actions(&[Action::KeyHints]),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
     fn rejects_invalid_sequences() {
         assert_eq!(parse_sequence(""), None);
         assert_eq!(parse_sequence("ctrl-"), None);

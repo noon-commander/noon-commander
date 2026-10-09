@@ -4,6 +4,9 @@
 /// context there that knows a key sequence, as a binding or as the start of one, decides.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum Context {
+    /// Keys that do the same wherever they are pressed: every context but the user screen falls
+    /// back to it last. Keys never go to it alone.
+    Global,
     /// A panel that lists a directory.
     Panel,
     /// A panel on the virtual root or the list of hosts; falls back to `Panel`.
@@ -18,8 +21,8 @@ pub(crate) enum Context {
     PullDown,
     /// Quick search in the active panel. Keys it does not bind fall through to the panel.
     QuickSearch,
-    /// The name field of the entry being renamed in its panel row. Keys it does not bind do
-    /// nothing.
+    /// The name field of the entry being renamed in its panel row. Keys it does not bind, but
+    /// the global ones, do nothing.
     Rename,
     /// A dialog whose focus is on a button or a list.
     Dialog,
@@ -31,7 +34,7 @@ pub(crate) enum Context {
     Completion,
     /// The viewer of F3.
     Viewer,
-    /// The command line of `!` and `:`. Keys it does not bind do nothing.
+    /// The command line of `!` and `:`. Keys it does not bind, but the global ones, do nothing.
     CommandLine,
     /// The window of the command history, which has a filter.
     History,
@@ -44,6 +47,7 @@ impl Context {
     /// The context's name in snake case, as `noc keymap diff` writes it.
     pub(crate) fn name(self) -> &'static str {
         match self {
+            Self::Global => "global",
             Self::Panel => "panel",
             Self::Root => "root",
             Self::Menu => "menu",
@@ -66,29 +70,37 @@ impl Context {
     /// This context and its fallbacks, most specific first.
     pub(crate) fn chain(self) -> &'static [Self] {
         match self {
-            Self::Panel => &[Self::Panel],
-            Self::Root => &[Self::Root, Self::Panel],
-            Self::QuickSearch => &[Self::QuickSearch, Self::Panel],
-            Self::Rename => &[Self::Rename],
+            Self::Global => &[Self::Global],
+            Self::Panel => &[Self::Panel, Self::Global],
+            Self::Root => &[Self::Root, Self::Panel, Self::Global],
+            Self::QuickSearch => &[Self::QuickSearch, Self::Panel, Self::Global],
+            Self::Rename => &[Self::Rename, Self::Global],
             // Dialogs are modal: panel keys do nothing while one is open.
-            Self::Dialog => &[Self::Dialog],
-            Self::DialogInput => &[Self::DialogInput, Self::Dialog],
-            Self::PathInput => &[Self::PathInput, Self::DialogInput, Self::Dialog],
+            Self::Dialog => &[Self::Dialog, Self::Global],
+            Self::DialogInput => &[Self::DialogInput, Self::Dialog, Self::Global],
+            Self::PathInput => &[
+                Self::PathInput,
+                Self::DialogInput,
+                Self::Dialog,
+                Self::Global,
+            ],
             Self::Completion => &[
                 Self::Completion,
                 Self::PathInput,
                 Self::DialogInput,
                 Self::Dialog,
+                Self::Global,
             ],
-            Self::Viewer => &[Self::Viewer],
-            Self::CommandLine => &[Self::CommandLine],
-            Self::History => &[Self::History],
+            Self::Viewer => &[Self::Viewer, Self::Global],
+            Self::CommandLine => &[Self::CommandLine, Self::Global],
+            Self::History => &[Self::History, Self::Global],
+            // The terminal's own screen: nothing of noc's draws there, the hints neither.
             Self::UserScreen => &[Self::UserScreen],
             // Menus are modal too.
-            Self::Menu => &[Self::Menu],
-            Self::Jump => &[Self::Jump],
-            Self::Workspaces => &[Self::Workspaces],
-            Self::PullDown => &[Self::PullDown],
+            Self::Menu => &[Self::Menu, Self::Global],
+            Self::Jump => &[Self::Jump, Self::Global],
+            Self::Workspaces => &[Self::Workspaces, Self::Global],
+            Self::PullDown => &[Self::PullDown, Self::Global],
         }
     }
 
@@ -379,6 +391,7 @@ impl Action {
 impl Context {
     /// Every context, in declaration order.
     pub(crate) const ALL: &'static [Self] = &[
+        Self::Global,
         Self::Panel,
         Self::Root,
         Self::Menu,

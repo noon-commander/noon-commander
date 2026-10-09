@@ -39,6 +39,18 @@ Status, of noc as a whole:
   may show planned keys, which no preset binds yet.
 - 🚫 not needed: noc will not have it.
 
+## Everywhere (`global`)
+
+Keys that do the same wherever they are pressed: in the panels, the dialogs, the menus, the
+windows, the viewer, and on the command line. Every other context falls back to this one last,
+after its own fallbacks, so a context that binds the same key itself takes it first. The output of
+commands is the exception: noc draws nothing there. Neither mc nor Far binds Alt+/; mc's Alt+?,
+which finds files, stays free for noc's Find file.
+
+| Description | Action | Status | noc (default) | noc (vim) | mc | far |
+| --- | --- | :-: | --- | --- | --- | --- |
+| The keys that can be typed now, over whatever is in front, and what they do, as which-key shows them | `key_hints` | ✅ | Alt+/ | Alt+/ | — | — |
+
 ## Panels (`panel`)
 
 A panel that lists a directory. The volumes and hosts and quick search fall back to it. mc and
@@ -225,8 +237,9 @@ to the panel.
 
 ## Renaming in place (`rename`)
 
-Shift+F6 edits the name in the entry's row; keys it does not bind do nothing. Neither mc nor Far
-renames in the row: their Shift+F6 asks in a dialog, whose keys are those of text fields.
+Shift+F6 edits the name in the entry's row; keys it does not bind, but the global ones, do
+nothing. Neither mc nor Far renames in the row: their Shift+F6 asks in a dialog, whose keys are
+those of text fields.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | :-: | --- | --- | --- | --- |
@@ -474,9 +487,9 @@ the field.
 
 ## Command line (`command_line`)
 
-`!` and `:` open it; keys it does not bind do nothing. In mc and Far the command line is always
-under the panels, so their keys here are pressed in the panels. The keys of their input lines
-that noc lacks, such as words and the clipboard, are under text fields.
+`!` and `:` open it; keys it does not bind, but the global ones, do nothing. In mc and Far the
+command line is always under the panels, so their keys here are pressed in the panels. The keys
+of their input lines that noc lacks, such as words and the clipboard, are under text fields.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | :-: | --- | --- | --- | --- |

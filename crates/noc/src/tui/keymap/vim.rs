@@ -8,6 +8,14 @@
 use super::{Action, Context, Preset};
 
 pub(super) const PRESET: Preset = &[
+    // Everywhere but the output of commands: the other contexts fall back to it last.
+    (
+        Context::Global,
+        &[
+            // The keys that can be typed now, over whatever is in front, as which-key shows them.
+            (Action::KeyHints, &["alt-/"]),
+        ],
+    ),
     // The panels.
     (
         Context::Panel,

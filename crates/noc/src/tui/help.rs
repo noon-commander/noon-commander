@@ -39,6 +39,7 @@ impl Help {
     /// on matching as fzf does.
     pub(crate) fn new(keymap: &Keymap, fuzzy_search: bool) -> Self {
         let sections = [
+            (Context::Global, fl!("help-everywhere")),
             (Context::Panel, fl!("help-panels")),
             (Context::Root, fl!("help-root")),
             (Context::QuickSearch, fl!("help-quick-search")),
@@ -262,7 +263,7 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::SaveWorkspace) => fl!("help-save-workspace"),
         (Context::Panel, Action::Workspaces) => fl!("help-workspaces-open"),
         (Context::Panel | Context::Viewer, Action::Help) => fl!("help-help"),
-        (Context::Panel, Action::KeyHints) => fl!("help-key-hints"),
+        (Context::Global | Context::Panel, Action::KeyHints) => fl!("help-key-hints"),
         (Context::Panel, Action::Quit) => fl!("help-quit"),
         (Context::Panel | Context::Viewer, Action::Redraw) => fl!("help-redraw"),
         (Context::Root | Context::Menu, Action::Disconnect) => fl!("help-disconnect"),
@@ -494,6 +495,7 @@ mod tests {
         assert_eq!(
             headings,
             [
+                "Everywhere",
                 "Panels",
                 "Volumes and hosts",
                 "Quick search",

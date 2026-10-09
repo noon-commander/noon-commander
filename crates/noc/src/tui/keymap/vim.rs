@@ -28,7 +28,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Shell, &["!"]),
             (Action::Command, &[":"]),
             (Action::Help, &["g ?", "f1"]),
-            (Action::PullDown, &["f9"]),
+            (Action::PullDown, &["g m", "f9"]),
             (Action::Quit, &["shift-z shift-z", "f10"]),
             (Action::Redraw, &["ctrl-l"]),
         ],
@@ -153,18 +153,18 @@ pub(super) const PRESET: Preset = &[
             (Action::Cancel, &["esc", "f10"]),
         ],
     ),
-    // The pull-down menu; letters run the commands that have them.
+    // The pull-down menu; letters run the commands that have them, so h, j, k, and l stay theirs.
     (
         Context::PullDown,
         &[
-            (Action::Up, &["up"]),
-            (Action::Down, &["down"]),
+            (Action::Up, &["ctrl-p", "up"]),
+            (Action::Down, &["ctrl-n", "down"]),
             (Action::Left, &["left"]),
             (Action::Right, &["right"]),
             (Action::Home, &["home", "pageup"]),
             (Action::End, &["end", "pagedown"]),
             (Action::Confirm, &["enter"]),
-            (Action::Cancel, &["esc", "f9", "f10"]),
+            (Action::Cancel, &["esc", "ctrl-c", "f9", "f10"]),
         ],
     ),
     // Text fields, on top of the dialog's.

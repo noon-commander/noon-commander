@@ -96,7 +96,7 @@ Far have a command line under the panels that takes what is typed; noc opens one
 | The tabs of this panel, to choose one | `tab_list` | ⏳ | Ctrl+x Tab | Ctrl+x Tab | — | — |
 | The saved workspaces: restore, rename, or delete one | `workspaces` | ⏳ | Alt+w | Alt+w | — | — |
 | Save the tabs of both panels as a workspace | `save_workspace` | ⏳ | Alt+W | Alt+W | — | — |
-| The pull-down menu | `pull_down` | ✅ | F9 | F9 | F9 | F9 |
+| The pull-down menu | `pull_down` | ✅ | F9 | g m<br>F9 | F9 | F9 |
 | Quit | `quit` | ✅ | F10 | Z Z<br>F10 | F10 | F10 |
 | Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | Ctrl+l | — |
 | F1…F10 on terminals without function keys | — | ⏳ | Esc, then 1…9, 0 | Esc, then 1…9, 0 | Esc, then 1…9, 0 | — |
@@ -397,7 +397,8 @@ digits. Characters filter it.
 
 ## Pull-down menu (`pull_down`)
 
-F9; the highlighted letter of a menu opens it, and that of a command runs it.
+F9, or g m in the vim keymap; the highlighted letter of a menu opens it, and that of a command
+runs it, so h, j, k, and l do not move in it.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | :-: | --- | --- | --- | --- |
@@ -408,7 +409,7 @@ F9; the highlighted letter of a menu opens it, and that of a command runs it.
 | The first command | `home` | ⏳ | Home<br>PgUp | Home<br>PgUp | — | — |
 | The last command | `end` | ⏳ | End<br>PgDn | End<br>PgDn | — | — |
 | Open the menu, or run the command | `confirm` | ⏳ | Enter | Enter | — | — |
-| Close the menu, then the menu bar | `cancel` | ⏳ | Esc<br>F9<br>F10 | Esc<br>F9<br>F10 | — | — |
+| Close the menu, then the menu bar | `cancel` | ⏳ | Esc<br>F9<br>F10 | Esc<br>Ctrl+c<br>F9<br>F10 | — | — |
 | Open a menu or run a command by its letter | — | ⏳ | Letter | Letter | — | — |
 
 ## Text fields (`dialog_input`)

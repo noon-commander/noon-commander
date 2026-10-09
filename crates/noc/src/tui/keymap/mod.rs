@@ -1447,6 +1447,33 @@ mod tests {
     }
 
     #[test]
+    fn g_m_opens_the_pull_down_menu_in_vim_and_its_letters_stay_letters() {
+        let vim = Keymap::by_name("vim").unwrap();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&vim, &mut state, Context::Panel, &["g", "m", "f9"]),
+            actions(&[Action::PullDown, Action::PullDown])
+        );
+        assert_eq!(
+            feed(
+                &vim,
+                &mut state,
+                Context::PullDown,
+                &["h", "j", "k", "l", "ctrl-n", "ctrl-p", "ctrl-c"]
+            ),
+            [
+                Resolved::Insert('h'),
+                Resolved::Insert('j'),
+                Resolved::Insert('k'),
+                Resolved::Insert('l'),
+                Resolved::Action(Action::Down),
+                Resolved::Action(Action::Up),
+                Resolved::Action(Action::Cancel),
+            ]
+        );
+    }
+
+    #[test]
     fn every_f_key_has_an_esc_digit_alias_where_esc_waits() {
         let keymap = Keymap::mc();
         for (context, bindings) in &keymap.contexts {

@@ -1748,13 +1748,14 @@ mod tests {
                 &vim,
                 &mut state,
                 Context::Menu,
-                &["ctrl-n", "ctrl-p", "ctrl-f", "ctrl-b", "ctrl-c"]
+                &["ctrl-n", "ctrl-p", "ctrl-f", "ctrl-b", "ctrl-y", "ctrl-c"]
             ),
             actions(&[
                 Action::Down,
                 Action::Up,
                 Action::PageDown,
                 Action::PageUp,
+                Action::Confirm,
                 Action::Cancel
             ])
         );

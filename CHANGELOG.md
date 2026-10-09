@@ -23,7 +23,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and first command, and Ctrl+c closes it. In its panels, Tab, Ctrl+w w, Ctrl+w Ctrl+w, and
   Ctrl+w p switch to the other panel, and Ctrl+w x swaps them, as vim's window commands do. In
   the location menu, Ctrl+n, Ctrl+p, Ctrl+f, and Ctrl+b move as in the panels, and Ctrl+c
-  closes it.
+  closes it. Ctrl+y does what Enter does in the menus, the lists, and the dialogs, as in vim's
+  pop-up menu.
   `noc keymap diff` compares two keymaps action by
   action, the default and the vim one unless named: `|` where the keys differ, `<` and `>` for an
   action only one of them binds, in color in a terminal; `--all` shows what they bind alike too.

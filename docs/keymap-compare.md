@@ -258,7 +258,7 @@ jobs, a job, and checksums. Dialogs are modal: the panel's keys do nothing there
 | In the help and lists, the last row | `end` | ⏳ | End | G<br>End | — | — |
 | Next field or button | `next_field` | ⏳ | Tab | Tab | — | — |
 | Previous field or button | `prev_field` | ⏳ | Shift+Tab | Shift+Tab | — | — |
-| Press the focused button; from a text field or a check box, the default one; close the help | `confirm` | ⏳ | Enter | Enter | — | Ctrl+Enter (default button) |
+| Press the focused button; from a text field or a check box, the default one; close the help | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | Ctrl+Enter (default button) |
 | Switch the check box, choose the radio button, or press the focused button | `toggle` | ⏳ | Space | Space | — | — |
 | Cancel; abort the job in front; close the help or the window | `cancel` | ⏳ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10<br>q (help) | Esc Esc<br>Esc (if Esc key mode is enabled)<br>Ctrl+c (abort copy/delete) | — |
 | Copy/move in background (in dialog) | — | ⏳ | — | — | Alt+b | — |
@@ -342,7 +342,7 @@ Far's menus, its drive menu among them.
 | One page down | `page_down` | ✅ | PgDn | Ctrl+f<br>Shift+Down<br>Shift+Enter<br>PgDn | — | — |
 | First item | `home` | ⏳ | Home | Home | — | — |
 | Last item | `end` | ⏳ | End | End | — | — |
-| Open the volume or host in the panel | `confirm` | ⏳ | Enter | Enter | — | — |
+| Open the volume or host in the panel | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | — |
 | Take back the last character of the filter | `backspace` | ⏳ | Backspace | Backspace<br>Ctrl+h | — | — |
 | Disconnect the host | `disconnect` | ⏳ | F8 | F8 | — | — |
 | Read the volumes and hosts again | `reload` | ⏳ | Ctrl+r | Ctrl+r | — | — |
@@ -370,7 +370,7 @@ Alt+z: the directories that zoxide ranks; characters are keywords, as z takes th
 | One page down | `page_down` | ⏳ | PgDn | PgDn | — | — |
 | First directory | `home` | ⏳ | Home | Home | — | — |
 | Last directory | `end` | ⏳ | End | End | — | — |
-| Open the directory in the active panel | `confirm` | ⏳ | Enter | Enter | — | — |
+| Open the directory in the active panel | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | — |
 | Take back the last character of the keywords | `backspace` | ⏳ | Backspace | Backspace<br>Ctrl+h | — | — |
 | Close the window | `cancel` | ⏳ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
 | Open a directory by its number (no keywords) | — | ⏳ | 1…9, 0 | 1…9, 0 | — | — |
@@ -389,7 +389,7 @@ digits. Characters filter it.
 | One page down | `page_down` | ⏳ | PgDn | PgDn | — | — |
 | First workspace | `home` | ⏳ | Home | Home | — | — |
 | Last workspace | `end` | ⏳ | End | End | — | — |
-| Restore: replace the tabs of both panels | `confirm` | ⏳ | Enter | Enter | — | — |
+| Restore: replace the tabs of both panels | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | — |
 | Take back the last character of the filter | `backspace` | ⏳ | Backspace | Backspace<br>Ctrl+h | — | — |
 | Rename the workspace | `move` | ⏳ | F6 | F6 | — | — |
 | Delete the workspace | `delete` | ⏳ | F8<br>Delete | F8<br>Delete | — | — |
@@ -410,7 +410,7 @@ move in it.
 | The menu to the right | `right` | ⏳ | Right | Right | — | — |
 | The first command | `home` | ✅ | Home<br>PgUp | Ctrl+b<br>Shift+Up<br>Home<br>PgUp | — | — |
 | The last command | `end` | ✅ | End<br>PgDn | Ctrl+f<br>Shift+Down<br>Shift+Enter<br>End<br>PgDn | — | — |
-| Open the menu, or run the command | `confirm` | ⏳ | Enter | Enter | — | — |
+| Open the menu, or run the command | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | — |
 | Close the menu, then the menu bar | `cancel` | ✅ | Esc<br>F9<br>F10 | Esc<br>Ctrl+c<br>F9<br>F10 | — | — |
 | Open a menu or run a command by its letter | — | ⏳ | Letter | Letter | — | — |
 
@@ -468,7 +468,7 @@ the field.
 | First choice | `home` | ⏳ | Home | Home | — | — |
 | Last choice | `end` | ⏳ | End | End | — | — |
 | Next choice, round | `complete` | ⏳ | Tab | Tab | — | — |
-| Put the choice in the field | `confirm` | ⏳ | Enter | Ctrl+y<br>Enter | — | — |
+| Put the choice in the field | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | — |
 | Close the list | `cancel` | ⏳ | Esc | Ctrl+e<br>Esc | — | — |
 | Close the list and edit the field | — | ⏳ | Other keys | Other keys | — | — |
 
@@ -529,7 +529,7 @@ history menus.
 | First row | `home` | ⏳ | Home | Home | — | — |
 | Last row | `end` | ⏳ | End | End | — | — |
 | The commands of the panel's host, or of all hosts | `next_field` | ⏳ | Tab | Tab | — | — |
-| Put the command on the command line, without running it | `confirm` | ⏳ | Enter | Enter | — | Ctrl+Enter |
+| Put the command on the command line, without running it | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | Ctrl+Enter |
 | Take back the last character of the filter | `backspace` | ⏳ | Backspace | Backspace | — | — |
 | Remove the command from the history | `delete` | ⏳ | Delete | Delete | — | Shift+Delete |
 | Close the window | `cancel` | ⏳ | Esc<br>F10 | Esc<br>F10 | — | — |

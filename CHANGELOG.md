@@ -9,6 +9,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Key hints, as which-key shows them: half a second after a key that starts longer sequences,
+  such as Ctrl+x, or g and Ctrl+w in the vim keymap, the keys that can follow it show at the
+  bottom of the panels with what they do, and the key waits for the next one instead of timing
+  out. ? shows every key of the panel the same way, in both keymaps. The next key
+  runs as it would have, or shows the keys that can follow it; Esc closes the hints, and
+  Backspace takes back the last key. `ui.which_key` and `ui.which_key_delay_ms` (Key hints and
+  Key hints delay in Options → Configuration) turn them off and set the delay.
 - `ui.keymap` (Keymap in Options → Configuration) chooses the keymap by name, as `ui.theme`
   chooses the colors, and takes effect at once: `default`, modelled on mc, or `vim`. In the vim
   keymap, k, j, g g, and G move in dialogs too, and g m opens the pull-down menu, as F9 does,

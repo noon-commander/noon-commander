@@ -3,8 +3,8 @@
 //! one are on the right and scroll, with a scroll bar, when they do not fit. There is no OK:
 //! every change takes effect as it is made, a text field's when the cursor leaves it.
 
-use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use noc_config::{Borders, Config, MenuBar, Pause, TabBar, UiConfig, Wheel};
 use ratatui::Frame;
@@ -40,6 +40,8 @@ enum Key {
     Mouse,
     Wheel,
     TerminalTitle,
+    Hints,
+    HintsDelay,
     MenuBar,
     TabBar,
     AtomicUpload,
@@ -162,6 +164,12 @@ impl Setting {
                 })?;
             }
             Key::TerminalTitle => ui.terminal_title = self.on(),
+            Key::Hints => ui.which_key = self.on(),
+            Key::HintsDelay => {
+                ui.which_key_delay_ms = number(text, |text| {
+                    fl!("config-which-key-delay-invalid", text = text)
+                })?;
+            }
             Key::MenuBar => {
                 ui.menu_bar = match text {
                     "always" => MenuBar::Always,
@@ -176,8 +184,7 @@ impl Setting {
             }
             Key::AtomicUpload => transfer.atomic_upload = self.on(),
             Key::ParallelJobs => {
-                transfer.parallel_jobs = text.trim().parse::<NonZeroUsize>().map_err(|_| {
-                    let text = cells::sanitize(text.as_bytes());
+                transfer.parallel_jobs = number(text, |text| {
                     fl!("config-parallel-jobs-invalid", text = text)
                 })?;
             }
@@ -219,14 +226,19 @@ impl Setting {
                 };
             }
             Key::HistorySize => {
-                config.shell.history_size = text.trim().parse().map_err(|_| {
-                    let text = cells::sanitize(text.as_bytes());
-                    fl!("config-history-size-invalid", text = text)
-                })?;
+                config.shell.history_size =
+                    number(text, |text| fl!("config-history-size-invalid", text = text))?;
             }
         }
         Ok(())
     }
+}
+
+/// `text` as a number, or the message that `invalid` gives for it, made terminal-safe.
+fn number<T: FromStr>(text: &str, invalid: impl FnOnce(String) -> String) -> Result<T, String> {
+    text.trim()
+        .parse()
+        .map_err(|_| invalid(cells::sanitize(text.as_bytes())))
 }
 
 #[derive(Debug)]
@@ -928,6 +940,19 @@ fn interface(config: &Config, (themes, keymaps): Presets<'_>) -> Category {
             ),
             Value::Toggle(ui.terminal_title),
         ),
+        Setting::new(
+            Key::Hints,
+            (fl!("config-which-key"), fl!("config-which-key-hint")),
+            Value::Toggle(ui.which_key),
+        ),
+        Setting::new(
+            Key::HintsDelay,
+            (
+                fl!("config-which-key-delay"),
+                fl!("config-which-key-delay-hint"),
+            ),
+            text(&ui.which_key_delay_ms.to_string()),
+        ),
     ];
     settings.extend(bars(ui));
     Category {
@@ -1116,6 +1141,8 @@ fn shell(config: &Config) -> Category {
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroUsize;
+
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 

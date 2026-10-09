@@ -660,6 +660,8 @@ fuzzy_search = true              # quick search and filters match as fzf; false:
 menu_bar = "on-demand"           # the F9 menu bar while a menu is open; "always": above the panels
 tab_bar = "line"                 # tabs on a line above the panels; "frame": in the panel's frame
 terminal_title = true            # the window's title shows the active panel's directory
+which_key = true                 # after Ctrl+x, g, …: the keys that can follow, as which-key
+which_key_delay_ms = 500         # how long after such a key the hints show
 
 [transfer]
 atomic_upload = true             # copies go to a hidden temporary name, then are renamed
@@ -948,6 +950,16 @@ location = "root"
   `crokey` names. User overrides in `keymap.toml` are planned for M4. The F-key bar is generated
   from the active keymap, and so is the help screen (F1): the keys of each context, with what they
   do, for what the app can do already; a prompt from ssh shows over it.
+- **Key hints.** As which-key does, the keymap lists the keys that can follow a pending sequence,
+  or every key of a context, with what the help says they do (`Keymap::hints`, drawn by
+  `tui/which_key.rs` in columns across the bottom of the panels). The event loop owns the
+  `KeyState`: with `ui.which_key` on, a sequence that does nothing alone and does not start with
+  `Esc` (such as `Ctrl+x` or vim's `g`) does not time out; its hints show
+  `ui.which_key_delay_ms` after its last key (`Keymap::hints_due`), and it then waits for the
+  next key. The action `key_hints` (`?` in both presets) shows every key of the context at once.
+  While hints show, the next key runs as it would have, or shows the keys that can follow it;
+  `Esc` closes them and `Backspace` takes back the last key. `Esc` sequences never show hints:
+  they stand for Alt and the F-keys, and a lone `Esc` acts after its timeout.
 - **Mouse.** On by default (`ui.mouse`; [ADR 0018](adr/0018-mouse-support.md)). The event loop
   captures the mouse while it is on and turns crossterm's events into `Pointer`s
   (`tui/mouse.rs`): a click, a double click (the same cell within 400 ms), a right click, or a

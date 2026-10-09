@@ -1,0 +1,18 @@
+---
+source: crates/noc/src/tui/which_key.rs
+expression: "draw(&hints, 100, 14)"
+---
+"╔══════════════════════════════════════════════ Keys ══════════════════════════════════════════════╗"
+"║ F4              Edit the sett…  -, \, Alt+- Unmark the names …  Ctrl+F6       Sort by size, l…   ║"
+"║ F8              Disconnect th…  *, Alt+*    Invert the marks …  Ctrl+s, Alt+s Quick search; a…   ║"
+"║ Up, Ctrl+p      One row up      Ctrl+PgUp   Parent directory;…  !             Open the comman…   ║"
+"║ Down, Ctrl+n    One row down    Tab         The other panel     :             Open the comman…   ║"
+"║ PgUp, Alt+v     One page up     Ctrl+u      Swap the panels     Alt+h         The command his…   ║"
+"║ PgDn, Ctrl+v    One page down   Alt+o       Open the director…  Ctrl+o        The output of c…   ║"
+"║ Home            First row       Alt+i       Show this directo…  F1            This help          ║"
+"║ End             Last row        Ctrl+r      Read the director…  ?             The keys that c…   ║"
+"║ Enter           Open the dire…  Alt+.       Show or hide name…  F3            View the file u…   ║"
+"║ Insert, Ctrl+t  Mark or unmar…  Ctrl+F3     Sort by name; aga…  F5            Copy the marked…   ║"
+"║ Shift+Up        Mark or unmar…  Ctrl+F4     Sort by extension…  F6            Move or rename …   ║"
+"║ +, Alt++        Mark the name…  Ctrl+F5     Sort by modificat…  … 15 more                        ║"
+"╚═══════════════════════════════════════════════════════════════ Esc closes, Backspace goes back ══╝"

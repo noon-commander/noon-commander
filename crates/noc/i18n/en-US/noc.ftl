@@ -255,6 +255,11 @@ config-wheel-hint = How far a step of the wheel scrolls: a number of lines, or p
 config-wheel-invalid = "{ $text }" is not a step of the wheel: it takes a number of lines from 1 to { $most }, or page.
 config-terminal-title = Terminal title
 config-terminal-title-hint = The title of the terminal's window or tab shows the active panel's directory.
+config-which-key = Key hints
+config-which-key-hint = After a key that starts longer sequences, such as Ctrl+x, show the keys that can follow it, as which-key does.
+config-which-key-delay = Key hints delay
+config-which-key-delay-hint = How long after such a key the hints show, in milliseconds.
+config-which-key-delay-invalid = "{ $text }" is not a delay: it takes a whole number of milliseconds, from 0 to 65535.
 config-menu-bar = Menu bar
 config-menu-bar-hint = When the menu bar of F9 shows.
 config-menu-bar-on-demand = While a menu is open
@@ -484,6 +489,23 @@ help-note-fuzzy = Quick search, the location menu, the zoxide window, and the Wo
 help-note-workspaces = A workspace holds the tabs of both panels: where each is, its sort order, and the row under its cursor. Alt+w and F9 → Workspace list them; restoring one replaces every tab.
 help-note-command = ! opens the command line, and : too, for commands of Noon Commander, of which :!command is the only one so far. A command runs with the terminal, in the panel's directory, then a key brings the panels back; cd and export last only as long as the command.
 help-note-pulldown = In the pull-down menu, the highlighted letter of a menu opens it, and that of a command runs it. The menu opens again where it closed.
+help-note-key-hints = After a key that starts longer sequences, such as Ctrl+x, the keys that can follow show after a moment, and wait for one; Esc closes them, and Backspace takes back the last key.
+help-key-hints = The keys that can be typed now, and what they do
+
+## Key hints, as which-key shows them (src/tui/which_key): the keys that can follow those
+## typed so far, at the bottom of the panels. Prefix: which-key-.
+
+# The title while no key is typed; otherwise it is the keys typed, such as Ctrl+x.
+which-key-title = Keys
+# After a key that starts longer sequences: how many.
+which-key-more = { $count ->
+        [one] +{ $count } key
+       *[other] +{ $count } keys
+    }
+# In the last cell, for the keys that do not fit.
+which-key-hidden = … { $count } more
+# On the bottom of the frame.
+which-key-close = Esc closes, Backspace goes back
 
 ## Host settings, F4 on a host (src/tui/app), saved to hosts.toml. Prefix: host-.
 

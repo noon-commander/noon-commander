@@ -150,6 +150,13 @@ pub struct UiConfig {
     /// Whether the terminal's window or tab is titled with the active panel's directory while
     /// Noon Commander runs. Default: `true`.
     pub terminal_title: bool,
+    /// Whether the keys that can follow a key that starts longer sequences, such as Ctrl+x,
+    /// show after [`which_key_delay_ms`](Self::which_key_delay_ms), as which-key shows them;
+    /// such a key then waits for the next one. Default: `true`.
+    pub which_key: bool,
+    /// How long after such a key the keys that can follow it show, in milliseconds.
+    /// Default: `500`.
+    pub which_key_delay_ms: u16,
 }
 
 impl Default for UiConfig {
@@ -167,6 +174,8 @@ impl Default for UiConfig {
             mouse: true,
             wheel: Wheel::default(),
             terminal_title: true,
+            which_key: true,
+            which_key_delay_ms: 500,
         }
     }
 }
@@ -473,6 +482,8 @@ mod tests {
         mouse = false
         wheel = "page"
         terminal_title = false
+        which_key = false
+        which_key_delay_ms = 200
 
         [transfer]
         atomic_upload = false
@@ -514,6 +525,8 @@ mod tests {
                 mouse: false,
                 wheel: Wheel::Page,
                 terminal_title: false,
+                which_key: false,
+                which_key_delay_ms: 200,
             },
             transfer: TransferConfig {
                 atomic_upload: false,
@@ -553,6 +566,8 @@ mod tests {
         assert!(config.ui.mouse);
         assert_eq!(config.ui.wheel, Wheel::Lines(3));
         assert!(config.ui.terminal_title);
+        assert!(config.ui.which_key);
+        assert_eq!(config.ui.which_key_delay_ms, 500);
         assert!(config.transfer.atomic_upload);
         assert_eq!(config.transfer.parallel_jobs.get(), 2);
         assert_eq!(config.zoxide.program, Path::new("zoxide"));
@@ -747,6 +762,8 @@ mod tests {
         assert!(table["ui"].get("mouse").is_some());
         assert!(table["ui"].get("wheel").is_some());
         assert!(table["ui"].get("terminal_title").is_some());
+        assert!(table["ui"].get("which_key").is_some());
+        assert!(table["ui"].get("which_key_delay_ms").is_some());
         assert!(table["zoxide"].get("program").is_some());
         assert!(table["zoxide"].get("record").is_some());
         assert!(table["shell"].get("history_size").is_some());

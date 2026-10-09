@@ -77,6 +77,12 @@ wheel = 3
 # Title the terminal's window or tab with the active panel's directory, such as "~/src — noc",
 # and give the terminal its own title back on quitting, where it keeps a stack of titles.
 terminal_title = true
+# After a key that starts longer sequences, such as Ctrl+x (or g in the vim keymap), show the
+# keys that can follow it and what they do, as which-key does; the key then waits for the next
+# one. ? shows every key of a panel either way.
+which_key = true
+# How long after such a key the keys that can follow it show, in milliseconds.
+which_key_delay_ms = 500
 
 [transfer]
 # Write each copy under a hidden temporary name next to its target and rename it when it is

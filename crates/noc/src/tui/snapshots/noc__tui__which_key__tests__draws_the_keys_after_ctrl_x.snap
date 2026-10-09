@@ -1,0 +1,16 @@
+---
+source: crates/noc/src/tui/which_key.rs
+expression: "draw(&hints, 100, 12)"
+---
+"╔═════════════════════════════════════════════ Ctrl+x ═════════════════════════════════════════════╗"
+"║ j   The running jobs: bring one to the front, or abort it                                        ║"
+"║ #   Checksums of the marked files, or the one under the cursor                                   ║"
+"║ 1   Change the left panel's location: a volume or a host                                         ║"
+"║ 2   Change the right panel's location: a volume or a host                                        ║"
+"║ z   Jump to a directory that zoxide ranks, in this panel                                         ║"
+"║ t   A new tab in this panel, on the same directory                                               ║"
+"║ w   Close this tab; the last one stays                                                           ║"
+"║ n   The next tab in this panel                                                                   ║"
+"║ p   The previous tab in this panel                                                               ║"
+"║ Tab The tabs of this panel, to choose one                                                        ║"
+"╚═══════════════════════════════════════════════════════════════ Esc closes, Backspace goes back ══╝"

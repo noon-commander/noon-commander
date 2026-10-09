@@ -6,6 +6,11 @@
 //! [`SEQUENCE_TIMEOUT`] for the next key. As in mc, a pending `Esc` followed by a character
 //! stands for Alt and that character, for terminals whose Alt key sends nothing (by default,
 //! Option on macOS).
+//!
+//! As which-key does, the keymap lists the keys that can follow a pending sequence, or every
+//! key of a context, with what they do ([`Keymap::hints`]). While the hints show, the sequence
+//! waits for its next key without a deadline; `Esc` closes them, and `Backspace` takes back the
+//! last key of the sequence.
 
 mod action;
 mod default;
@@ -87,18 +92,50 @@ pub(crate) struct KeyState {
     context: Option<Context>,
     keys: Sequence,
     deadline: Option<Instant>,
+    /// When the last key of the pending sequence came.
+    since: Option<Instant>,
+    /// The hints show: of the keys that can follow the sequence, or of every key while none is
+    /// typed.
+    hinting: bool,
 }
 
 impl KeyState {
-    /// When the pending sequence times out; `None` if no sequence is pending.
+    /// When the pending sequence times out; `None` if no sequence is pending, or while the
+    /// hints show.
     pub(crate) fn deadline(&self) -> Option<Instant> {
         self.deadline
+    }
+
+    /// The context of the keys typed last.
+    pub(crate) fn context(&self) -> Option<Context> {
+        self.context
     }
 
     fn clear(&mut self) {
         self.keys.clear();
         self.deadline = None;
+        self.since = None;
     }
+}
+
+/// A key that can be typed next, with what it does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Hint {
+    /// The key as the help writes it; keys that do the same, apart by commas.
+    pub(crate) keys: String,
+    /// What the key does; `None` for a key that only starts longer sequences.
+    pub(crate) action: Option<Action>,
+    /// How many longer sequences the key starts.
+    pub(crate) more: usize,
+}
+
+/// The hints to show: the keys typed so far, and the keys that can follow them in `context`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Hints {
+    pub(crate) context: Context,
+    /// The keys typed so far as the help writes them; `None` while none is typed.
+    pub(crate) typed: Option<String>,
+    pub(crate) rows: Vec<Hint>,
 }
 
 impl Keymap {
@@ -160,8 +197,38 @@ impl Keymap {
     }
 
     /// Feeds one key press. Returns what to do now; nothing while a sequence waits for its next
-    /// key. A change of `context` forgets a pending sequence.
+    /// key. A change of `context` forgets a pending sequence, and closes the hints.
     pub(crate) fn feed(
+        &self,
+        state: &mut KeyState,
+        context: Context,
+        event: KeyEvent,
+        now: Instant,
+    ) -> Vec<Resolved> {
+        if state.hinting && state.context == Some(context) {
+            let key = KeyCombination::from(event);
+            let mut keys = state.keys.clone();
+            keys.push(key);
+            let continues =
+                !state.keys.is_empty() && self.lookup(context, &keys) != Lookup::Unknown;
+            if !continues && key == ESC {
+                state.clear();
+                state.hinting = false;
+                return Vec::new();
+            }
+            if !continues && key == BACKSPACE && state.keys.pop().is_some() {
+                state.deadline = None;
+                return Vec::new();
+            }
+        }
+        let resolved = self.feed_key(state, context, event, now);
+        if state.keys.is_empty() {
+            state.hinting = false;
+        }
+        resolved
+    }
+
+    fn feed_key(
         &self,
         state: &mut KeyState,
         context: Context,
@@ -170,6 +237,7 @@ impl Keymap {
     ) -> Vec<Resolved> {
         if state.context != Some(context) {
             state.clear();
+            state.hinting = false;
             state.context = Some(context);
         }
         // An Esc and the key right after it reach a terminal program in one read, which
@@ -179,8 +247,8 @@ impl Keymap {
             && let Some(plain) = without_alt(event)
             && self.lookup(context, &[KeyCombination::from(event)]) == Lookup::Unknown
         {
-            let mut resolved = self.feed(state, context, KeyEvent::from(KeyCode::Esc), now);
-            resolved.extend(self.feed(state, context, plain, now));
+            let mut resolved = self.feed_key(state, context, KeyEvent::from(KeyCode::Esc), now);
+            resolved.extend(self.feed_key(state, context, plain, now));
             return resolved;
         }
         if context.text_first()
@@ -202,7 +270,12 @@ impl Keymap {
                     resolved.push(Resolved::Action(action));
                     state.clear();
                 }
-                Lookup::Prefix(_) => state.deadline = Some(now + SEQUENCE_TIMEOUT),
+                Lookup::Prefix(own) => {
+                    state.since = Some(now);
+                    // While the hints show, a sequence that does nothing alone waits.
+                    let waits = state.hinting && own.is_none() && state.keys.first() != Some(&ESC);
+                    state.deadline = (!waits).then_some(now + SEQUENCE_TIMEOUT);
+                }
                 Lookup::Unknown if state.keys.len() == 1 => {
                     if let Some(c) = text(event).filter(|_| context.accepts_text() && !alt_from_esc)
                     {
@@ -304,6 +377,127 @@ impl Keymap {
             }
         })
     }
+
+    /// When the hints of the pending sequence are due, `delay` after its last key; `None` if
+    /// they show already, or for a sequence that has none: one that does something alone, or
+    /// that starts with `Esc`, which stands for Alt and the F-keys and acts alone after its
+    /// timeout. Until then the sequence does not time out.
+    pub(crate) fn hints_due(&self, state: &KeyState, delay: Duration) -> Option<Instant> {
+        let context = state.context?;
+        let since = state.since?;
+        let hinted = !state.hinting
+            && state.keys.first().is_some_and(|key| *key != ESC)
+            && self.lookup(context, &state.keys) == Lookup::Prefix(None);
+        hinted.then_some(since + delay)
+    }
+
+    /// Shows the hints in `context`: of the keys that can follow the pending sequence, or of
+    /// every key while none is pending. They show until a key ends the sequence.
+    pub(crate) fn show_hints(&self, state: &mut KeyState, context: Context) {
+        if state.context != Some(context) {
+            state.clear();
+            state.context = Some(context);
+        }
+        state.hinting = true;
+        // A sequence that does something alone still does it when it times out.
+        if state.keys.is_empty() || self.lookup(context, &state.keys) == Lookup::Prefix(None) {
+            state.deadline = None;
+        }
+    }
+
+    /// The hints that show in `context`, if they do.
+    pub(crate) fn hints_of(&self, state: &KeyState, context: Context) -> Option<Hints> {
+        if !state.hinting || state.context != Some(context) {
+            return None;
+        }
+        let rows = self.hints(context, &state.keys);
+        let typed = (!state.keys.is_empty()).then(|| describe(&state.keys));
+        (!rows.is_empty()).then_some(Hints {
+            context,
+            typed,
+            rows,
+        })
+    }
+
+    /// The keys that can follow `prefix` in `context`'s chain, in the order of the preset, the
+    /// context's own first. Keys that do the same share a row; a key that starts longer
+    /// sequences has one of its own. Sequences that start with `Esc` are left out, and where
+    /// every character is text, so are characters that only a fallback context binds.
+    pub(crate) fn hints(&self, context: Context, prefix: &[KeyCombination]) -> Vec<Hint> {
+        let mut next: Vec<KeyCombination> = Vec::new();
+        for (sequence, _) in self.chain_bindings(context) {
+            if sequence.len() > prefix.len()
+                && sequence.starts_with(prefix)
+                && sequence.first() != Some(&ESC)
+                && let Some(key) = sequence.get(prefix.len())
+                && !next.contains(key)
+            {
+                next.push(*key);
+            }
+        }
+        let own = self.contexts.get(&context);
+        let mut hints: Vec<Hint> = Vec::new();
+        for key in next {
+            if prefix.is_empty()
+                && context.text_first()
+                && is_character(key)
+                && own.is_none_or(|own| own.lookup(&[key]) == Lookup::Unknown)
+            {
+                continue;
+            }
+            let mut keys = prefix.to_vec();
+            keys.push(key);
+            let (action, more) = match self.lookup(context, &keys) {
+                Lookup::Exact(action) => (Some(action), 0),
+                Lookup::Prefix(action) => (action, self.count_under(context, &keys)),
+                Lookup::Unknown => continue,
+            };
+            let text = describe_key(key);
+            match hints
+                .iter_mut()
+                .find(|hint| hint.more == 0 && more == 0 && hint.action == action)
+            {
+                Some(hint) => {
+                    hint.keys.push_str(", ");
+                    hint.keys.push_str(&text);
+                }
+                None => hints.push(Hint {
+                    keys: text,
+                    action,
+                    more,
+                }),
+            }
+        }
+        hints
+    }
+
+    /// The bindings of `context`'s chain, most specific first.
+    fn chain_bindings(&self, context: Context) -> impl Iterator<Item = &(Sequence, Action)> {
+        context
+            .chain()
+            .iter()
+            .filter_map(|context| self.contexts.get(context))
+            .flat_map(|bindings| &bindings.0)
+    }
+
+    /// How many sequences longer than `prefix` that start with it do something in `context`.
+    fn count_under(&self, context: Context, prefix: &[KeyCombination]) -> usize {
+        let mut counted: Vec<&Sequence> = Vec::new();
+        for (sequence, _) in self.chain_bindings(context) {
+            let does = matches!(
+                self.lookup(context, sequence),
+                Lookup::Exact(_) | Lookup::Prefix(Some(_))
+            );
+            if sequence.len() > prefix.len()
+                && sequence.starts_with(prefix)
+                && does
+                && !counted.contains(&sequence)
+            {
+                counted.push(sequence);
+            }
+        }
+        counted.len()
+    }
 }
 
 /// A key sequence as the help, the menus, and the docs write it: modifiers as `Ctrl+`, `Alt+`,
@@ -365,6 +559,7 @@ fn describe_key(key: KeyCombination) -> String {
 }
 
 const ESC: KeyCombination = KeyCombination::one_key(KeyCode::Esc, KeyModifiers::NONE);
+const BACKSPACE: KeyCombination = KeyCombination::one_key(KeyCode::Backspace, KeyModifiers::NONE);
 
 /// Whether `sequence` is `Esc` and a digit, which stands for an F-key.
 fn is_esc_digit(sequence: &[KeyCombination]) -> bool {
@@ -1310,6 +1505,7 @@ mod tests {
                 Action::Shell,
                 Action::Command,
                 Action::Help,
+                Action::KeyHints,
                 Action::PullDown,
                 Action::Quit,
                 Action::Redraw
@@ -1584,6 +1780,168 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    fn hint_keys(hints: &[Hint]) -> Vec<&str> {
+        hints.iter().map(|hint| hint.keys.as_str()).collect()
+    }
+
+    #[test]
+    fn hints_list_the_keys_that_can_follow_in_the_order_of_the_preset() {
+        let keymap = Keymap::mc();
+        let ctrl_x = parse_sequence("ctrl-x").unwrap();
+        let hints = keymap.hints(Context::Panel, &ctrl_x);
+        assert_eq!(
+            hint_keys(&hints),
+            ["j", "#", "1", "2", "z", "t", "w", "n", "p", "Tab"]
+        );
+        assert_eq!(
+            hints[0],
+            Hint {
+                keys: "j".to_owned(),
+                action: Some(Action::Jobs),
+                more: 0
+            }
+        );
+        // The root falls back to the panel.
+        assert_eq!(keymap.hints(Context::Root, &ctrl_x), hints);
+        let vim = Keymap::by_name("vim").unwrap();
+        let g = parse_sequence("g").unwrap();
+        assert_eq!(hint_keys(&vim.hints(Context::Panel, &g)), ["g", "?", "m"]);
+    }
+
+    #[test]
+    fn hints_of_every_key_share_rows_by_action_and_count_the_keys_under_a_prefix() {
+        let keymap = Keymap::mc();
+        let hints = keymap.hints(Context::Root, &[]);
+        let hint = |keys: &str| hints.iter().find(|hint| hint.keys == keys);
+        assert_eq!(
+            hint("F4").map(|hint| hint.action),
+            Some(Some(Action::EditHost)),
+            "the root's own keys first"
+        );
+        assert_eq!(hints[0].keys, "F4");
+        assert_eq!(
+            hint("Up, Ctrl+p").map(|hint| hint.action),
+            Some(Some(Action::Up))
+        );
+        assert_eq!(
+            hint("Ctrl+x"),
+            Some(&Hint {
+                keys: "Ctrl+x".to_owned(),
+                action: None,
+                more: 10
+            })
+        );
+        assert!(
+            hints.iter().all(|hint| !hint.keys.contains("Esc")),
+            "Esc closes the hints"
+        );
+        let vim = Keymap::by_name("vim").unwrap();
+        let hints = vim.hints(Context::Panel, &[]);
+        let hint = |keys: &str| hints.iter().find(|hint| hint.keys == keys).cloned();
+        assert_eq!(hint("g").map(|hint| hint.more), Some(3));
+        assert_eq!(hint("Ctrl+w").map(|hint| hint.more), Some(4));
+        assert_eq!(hint("Z").map(|hint| hint.more), Some(1));
+        // Where characters are text, the panel's are left out.
+        let search = keymap.hints(Context::QuickSearch, &[]);
+        assert!(!hint_keys(&search).contains(&"*"));
+        assert!(hint_keys(&search).contains(&"Ctrl+s, Alt+s"));
+    }
+
+    #[test]
+    fn hints_wait_for_the_next_key_which_runs_as_it_would_have() {
+        let keymap = Keymap::mc();
+        let mut state = KeyState::default();
+        let start = Instant::now();
+        let delay = Duration::from_millis(500);
+        assert_eq!(keymap.hints_due(&state, delay), None);
+        assert_eq!(
+            keymap.feed(&mut state, Context::Panel, key("ctrl-x"), start),
+            []
+        );
+        assert_eq!(keymap.hints_due(&state, delay), Some(start + delay));
+        assert_eq!(keymap.hints_of(&state, Context::Panel), None, "not yet");
+        keymap.show_hints(&mut state, Context::Panel);
+        assert_eq!(state.deadline(), None, "no timeout while they show");
+        assert_eq!(keymap.hints_due(&state, delay), None, "they show");
+        let hints = keymap.hints_of(&state, Context::Panel).unwrap();
+        assert_eq!(hints.typed.as_deref(), Some("Ctrl+x"));
+        assert_eq!(keymap.hints_of(&state, Context::Dialog), None);
+        assert_eq!(
+            keymap.feed(&mut state, Context::Panel, key("t"), start),
+            actions(&[Action::NewTab])
+        );
+        assert_eq!(keymap.hints_of(&state, Context::Panel), None, "done");
+        // Esc never has hints of its own: it acts alone after its timeout.
+        keymap.feed(&mut state, Context::Panel, key("esc"), start);
+        assert_eq!(keymap.hints_due(&state, delay), None);
+    }
+
+    #[test]
+    fn esc_closes_the_hints_and_backspace_takes_back_a_key() {
+        let keymap = Keymap::mc();
+        let mut state = KeyState::default();
+        let now = Instant::now();
+        keymap.show_hints(&mut state, Context::Panel);
+        let root = keymap.hints_of(&state, Context::Panel).unwrap();
+        assert_eq!(root.typed, None);
+        assert_eq!(
+            keymap.feed(&mut state, Context::Panel, key("ctrl-x"), now),
+            []
+        );
+        assert_eq!(state.deadline(), None, "the hints show at once");
+        assert_eq!(
+            keymap.hints_of(&state, Context::Panel).unwrap().typed,
+            Some("Ctrl+x".to_owned())
+        );
+        assert_eq!(
+            keymap.feed(&mut state, Context::Panel, key("backspace"), now),
+            []
+        );
+        assert_eq!(keymap.hints_of(&state, Context::Panel), Some(root));
+        assert_eq!(
+            keymap.feed(&mut state, Context::Panel, key("esc"), now),
+            [],
+            "no Cancel"
+        );
+        assert_eq!(keymap.hints_of(&state, Context::Panel), None);
+        assert_eq!(state.deadline(), None, "no Esc pending");
+        // A key that does something closes them too.
+        keymap.show_hints(&mut state, Context::Panel);
+        assert_eq!(
+            keymap.feed(&mut state, Context::Panel, key("f10"), now),
+            actions(&[Action::Quit])
+        );
+        assert_eq!(keymap.hints_of(&state, Context::Panel), None);
+        // Backspace with nothing typed does what it does.
+        let vim = Keymap::by_name("vim").unwrap();
+        vim.show_hints(&mut state, Context::Panel);
+        assert_eq!(
+            vim.feed(&mut state, Context::Panel, key("backspace"), now),
+            actions(&[Action::Parent])
+        );
+    }
+
+    #[test]
+    fn question_mark_asks_for_the_hints_in_both_keymaps_but_not_where_it_is_text() {
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            for context in [Context::Panel, Context::Root] {
+                let mut state = KeyState::default();
+                assert_eq!(
+                    feed(&keymap, &mut state, context, &["?"]),
+                    actions(&[Action::KeyHints]),
+                    "{name}: {context:?}"
+                );
+            }
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&keymap, &mut state, Context::QuickSearch, &["?"]),
+                [Resolved::Insert('?')],
+                "{name}"
+            );
         }
     }
 

@@ -6,6 +6,8 @@ extend-ignore-re = [
     "\\w+&\\w+",
     # Byte and Unicode escapes after a word in tests of non-UTF-8 names, as in `caf\xe9`.
     "\\w+\\\\[xu]",
+    # Words cut with `…` in snapshots, as the key hints cut text that does not fit.
+    "\\w+…",
 ]
 
 [default.extend-identifiers]

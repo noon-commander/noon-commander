@@ -35,6 +35,8 @@ pub(super) const PRESET: Preset = &[
             (Action::Shell, &["!"]),
             (Action::Command, &[":"]),
             (Action::Help, &["g ?", "f1"]),
+            // The keys that can be typed now, as which-key shows them.
+            (Action::KeyHints, &["?"]),
             (Action::PullDown, &["g m", "f9"]),
             (Action::Quit, &["shift-z shift-z", "f10"]),
             (Action::Redraw, &["ctrl-l"]),

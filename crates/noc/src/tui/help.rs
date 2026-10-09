@@ -84,6 +84,7 @@ impl Help {
         entries.push(Entry::Note(fl!("help-note-workspaces")));
         entries.push(Entry::Note(fl!("help-note-command")));
         entries.push(Entry::Note(fl!("help-note-pulldown")));
+        entries.push(Entry::Note(fl!("help-note-key-hints")));
         entries.push(Entry::Note(fl!("help-note-esc")));
         Self {
             entries,
@@ -203,8 +204,8 @@ fn key_lines(keys: &str, width: usize) -> Vec<String> {
 }
 
 /// What `action` does in `context`; `None` for what the app cannot do yet, which the help
-/// leaves out.
-fn describe(context: Context, action: Action) -> Option<String> {
+/// and the key hints leave out.
+pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
     if let Some(text) = describe_rows(context, action)
         .or_else(|| describe_completion(context, action))
         .or_else(|| describe_workspaces(context, action))
@@ -261,6 +262,7 @@ fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::SaveWorkspace) => fl!("help-save-workspace"),
         (Context::Panel, Action::Workspaces) => fl!("help-workspaces-open"),
         (Context::Panel | Context::Viewer, Action::Help) => fl!("help-help"),
+        (Context::Panel, Action::KeyHints) => fl!("help-key-hints"),
         (Context::Panel, Action::Quit) => fl!("help-quit"),
         (Context::Panel | Context::Viewer, Action::Redraw) => fl!("help-redraw"),
         (Context::Root | Context::Menu, Action::Disconnect) => fl!("help-disconnect"),

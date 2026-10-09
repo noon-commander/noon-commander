@@ -284,6 +284,9 @@ pub(crate) enum Action {
     PrevField,
     /// Shows the key bindings.
     Help,
+    /// Shows the keys that can be typed now and what they do, as which-key does: the next key
+    /// typed runs as it would have, or shows the keys that can follow it.
+    KeyHints,
     /// Quits Noon Commander.
     Quit,
     /// Redraws the whole screen.
@@ -362,6 +365,7 @@ impl Action {
             Self::NextField => "next_field",
             Self::PrevField => "prev_field",
             Self::Help => "help",
+            Self::KeyHints => "key_hints",
             Self::Quit => "quit",
             Self::Redraw => "redraw",
         }
@@ -463,6 +467,7 @@ impl Action {
         Self::NextField,
         Self::PrevField,
         Self::Help,
+        Self::KeyHints,
         Self::Quit,
         Self::Redraw,
     ];

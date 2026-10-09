@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Instant, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use jiff::tz::TimeZone;
 use noc_config::{
@@ -33,7 +33,7 @@ use super::help::Help;
 use super::history::{HistoryEvent, HistoryWindow};
 use super::jobs::{JobsEvent, JobsList, Row};
 use super::jump::{JumpEvent, JumpMenu};
-use super::keymap::{Action, Context, Keymap, Resolved};
+use super::keymap::{Action, Context, Hints, KeyState, Keymap, Resolved};
 use super::menu::{LocationMenu, MenuEvent};
 use super::mouse::{Pointer, Press};
 use super::panel::{
@@ -47,6 +47,7 @@ use super::sums::{Mark, SumRow, SumsButton, SumsEvent, SumsWindow, Verdict};
 use super::tabs::{self, Bar, PanelId, Tab, Tabs};
 use super::tasks::{HostHandle, JobEvent};
 use super::theme::{ColorDepth, Theme};
+use super::which_key;
 use super::workspaces::{self, WorkspacesEvent, WorkspacesWindow};
 use crate::i18n::fl;
 
@@ -648,6 +649,11 @@ pub(crate) struct App {
     /// The title of the virtual root: the name of this machine.
     root_title: String,
     keymap: Keymap,
+    /// The key hints, over everything at the bottom of the panels, as the event loop's key
+    /// state has them.
+    hints: Option<Hints>,
+    /// The key hints were asked for, with every key of this context.
+    hints_asked: Option<Context>,
     /// Where the last render drew what the mouse can press.
     spots: Spots,
     /// What was in front after the last click, if that click left it there: a double click
@@ -768,6 +774,8 @@ impl App {
             root_title: fl!("root-title"),
             // `ui.keymap` was checked when the config was loaded.
             keymap: keymap_of(ui),
+            hints: None,
+            hints_asked: None,
             spots: Spots::default(),
             clicked: None,
             quit: false,
@@ -877,6 +885,24 @@ impl App {
     /// What turns keys into actions.
     pub(crate) fn keymap(&self) -> &Keymap {
         &self.keymap
+    }
+
+    /// How long after a key that starts longer sequences the keys that can follow it show:
+    /// `ui.which_key_delay_ms`; `None` while `ui.which_key` is off.
+    pub(crate) fn hints_delay(&self) -> Option<Duration> {
+        let ui = &self.config.ui;
+        ui.which_key
+            .then(|| Duration::from_millis(u64::from(ui.which_key_delay_ms)))
+    }
+
+    /// The context whose every key the key hints were asked for, since the last call.
+    pub(crate) fn take_hints_asked(&mut self) -> Option<Context> {
+        self.hints_asked.take()
+    }
+
+    /// Shows the key hints that `keys` has, if any, from the next render.
+    pub(crate) fn set_hints(&mut self, keys: &KeyState) {
+        self.hints = self.keymap.hints_of(keys, self.context());
     }
 
     /// Whether the mouse is on: `ui.mouse`.
@@ -1546,6 +1572,7 @@ impl App {
             Action::Help => {
                 self.help = Some(self.help_screen());
             }
+            Action::KeyHints => self.hints_asked = Some(self.context()),
             Action::SwitchPanel => self.active = self.active.other(),
             Action::NewTab
             | Action::CloseTab
@@ -4637,6 +4664,9 @@ impl App {
             }
         }
         self.render_windows(frame, panels);
+        if let Some(hints) = &self.hints {
+            which_key::render(frame, panels, hints, &self.theme);
+        }
     }
 
     /// The windows over `panels`, those in front last: the workspaces, the Configuration
@@ -9273,6 +9303,39 @@ mod tests {
         answer(&mut app, effects, &root);
         assert_eq!(app.panel(app.active).location(), &Location::Root);
         assert_eq!(app.terminal_title().as_deref(), Some("mac? — noc"));
+    }
+
+    #[test]
+    fn key_hints_show_every_key_of_the_panel_over_it_when_asked_for() {
+        let mut app = loaded();
+        let mut keys = KeyState::default();
+        app.set_hints(&keys);
+        assert!(!screen_of(&mut app, 16).contains("Esc closes"));
+        app.handle(action(Action::KeyHints));
+        let context = app.take_hints_asked().unwrap();
+        assert_eq!(context, Context::Panel);
+        assert_eq!(app.take_hints_asked(), None, "asked once");
+        app.keymap().show_hints(&mut keys, context);
+        app.set_hints(&keys);
+        let text = screen_of(&mut app, 16);
+        assert!(
+            text.contains("Esc closes") && text.contains("Ctrl+x") && text.contains("+10 keys"),
+            "{text}"
+        );
+        // A dialog in front hides them.
+        app.handle(action(Action::Mkdir));
+        app.set_hints(&keys);
+        assert!(!screen_of(&mut app, 16).contains("Esc closes"));
+    }
+
+    #[test]
+    fn key_hints_follow_ui_which_key() {
+        let mut app = loaded();
+        assert_eq!(app.hints_delay(), Some(Duration::from_millis(500)));
+        app.config.ui.which_key_delay_ms = 0;
+        assert_eq!(app.hints_delay(), Some(Duration::ZERO));
+        app.config.ui.which_key = false;
+        assert_eq!(app.hints_delay(), None);
     }
 
     #[test]

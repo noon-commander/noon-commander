@@ -28,6 +28,7 @@ mod sums;
 mod tabs;
 mod tasks;
 mod theme;
+mod which_key;
 mod workspaces;
 
 use std::io::{self, IsTerminal as _};
@@ -199,12 +200,13 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
             break Err(error.into());
         }
         let now = SystemTime::now();
+        take_hints(&mut app, &mut keys);
         if !std::mem::take(&mut idle)
             && let Err(error) = terminal.draw(|frame| app.render(frame, now, &tz))
         {
             break Err(error.into());
         }
-        let deadline = keys.deadline();
+        let timer = key_timer(&app, &keys);
         tokio::select! {
             event = events.next() => match event {
                 Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => {
@@ -222,11 +224,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
                 Some(Err(error)) => break Err(error.into()),
                 None => break Ok(()),
             },
-            () = sleep_until(deadline) => {
-                for input in app.keymap().expire(&mut keys, Instant::now()) {
-                    tasks.run(app.handle(input));
-                }
-            }
+            () = sleep_until(timer) => key_time(&mut app, &mut tasks, &mut keys),
             Some(job) = done.recv() => {
                 // Jobs report every entry; take all that waits, then draw once.
                 take_done(&mut app, &mut tasks, job);
@@ -589,6 +587,41 @@ fn copy_to_clipboard(terminal: &mut DefaultTerminal, text: &str) -> io::Result<(
         terminal.backend_mut(),
         CopyToClipboard::to_clipboard_from(text)
     )
+}
+
+/// Shows the key hints that the app asked for, and has it draw those that `keys` has.
+fn take_hints(app: &mut App, keys: &mut KeyState) {
+    if let Some(context) = app.take_hints_asked() {
+        app.keymap().show_hints(keys, context);
+    }
+    app.set_hints(keys);
+}
+
+/// When the hints of the pending key sequence are due, while `ui.which_key` is on.
+fn hints_due(app: &App, keys: &KeyState) -> Option<Instant> {
+    app.hints_delay()
+        .and_then(|delay| app.keymap().hints_due(keys, delay))
+}
+
+/// When the pending key sequence needs [`key_time`]: when its hints are due, for one that
+/// waits for them and then for its next key; else when it times out.
+fn key_timer(app: &App, keys: &KeyState) -> Option<Instant> {
+    hints_due(app, keys).or_else(|| keys.deadline())
+}
+
+/// Shows the hints of the pending key sequence if they are due; else settles the sequence if
+/// it timed out.
+fn key_time(app: &mut App, tasks: &mut Tasks, keys: &mut KeyState) {
+    let now = Instant::now();
+    if hints_due(app, keys).is_some_and(|due| due <= now)
+        && let Some(context) = keys.context()
+    {
+        app.keymap().show_hints(keys, context);
+        return;
+    }
+    for input in app.keymap().expire(keys, now) {
+        tasks.run(app.handle(input));
+    }
 }
 
 /// Completes at `deadline`; never without one.

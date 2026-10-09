@@ -44,12 +44,16 @@ point.
 - **A command may span lines.** Shift+Enter, Ctrl+j, or a `\` at the end of the line followed
   by Enter start a new line; Enter runs the command. Ctrl+j arrives as LF where Enter arrives
   as CR, so it works in every terminal. Shift+Enter needs the kitty keyboard protocol: the
-  event loop asks for its first level, `DISAMBIGUATE_ESCAPE_CODES`, only where
-  `supports_keyboard_enhancement()` finds it, and gives it up whenever another program gets
-  the terminal. At that level printable keys, Enter, and Tab still arrive as before, and
-  crossterm reports the rest (Esc, Alt and Ctrl with a key, Shift+Tab as BackTab) as the same
-  events, so the keymap needs nothing of its own for it; `Esc` simply no longer merges with
-  the next key into Alt.
+  event loop asks for it only where `supports_keyboard_enhancement()` finds it, and gives it
+  up whenever another program gets the terminal. It asks for two flags,
+  `DISAMBIGUATE_ESCAPE_CODES` and `REPORT_ALTERNATE_KEYS`. With the first, printable keys,
+  Enter, and Tab still arrive as before, and the rest (Esc, Alt and Ctrl with a key, Shift+Tab
+  as BackTab) arrive as escape codes, of the key without Shift and with Shift as a modifier:
+  Alt++ is Alt+Shift+=, which matches no binding. The second adds the key with Shift, as the
+  keyboard layout gives it, to those escape codes and to nothing else; crossterm then reports
+  Alt++ as Alt and `+`, and Alt+Shift+w as Alt and `W`, the same events as without the
+  protocol, so the keymap needs nothing of its own for it. `Esc` simply no longer merges with
+  the next key into Alt. A terminal that lacks a flag ignores it.
 - **The line grows with its text**, wrapped lines included, up to a third of the screen and
   at most ten rows; the panels shrink to make room, and beyond that the line scrolls. There is
   no setting for its height. In a command of several lines, Up and Down move between lines,
@@ -122,8 +126,9 @@ point.
   quick search keeps them as text while it runs.
 - Commands that change the shell's state (`cd`, `export`, `source`) do nothing lasting; the
   help says so.
-- The kitty keyboard protocol is asked for only at its first level, which leaves the keys the
-  keymap knows as they were; where a terminal lacks it, Ctrl+j and `\` Enter still give a new
-  line.
+- The kitty keyboard protocol is asked for only with the flags that leave the keys the keymap
+  knows as they were; where a terminal lacks it, Ctrl+j and `\` Enter still give a new line.
+  The base layout key, which the second flag also sends and which would let Alt with a
+  Cyrillic letter match a Latin binding, is not read: crossterm ignores it.
 - Remote commands run with the user's ssh setup and the host's shell; Noon Commander quotes
   only the directory and passes the command as written.

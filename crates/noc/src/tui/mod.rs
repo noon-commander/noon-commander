@@ -416,7 +416,8 @@ fn resume(terminal: &mut DefaultTerminal, modes: Modes) -> io::Result<()> {
 
 /// What the TUI asks of the terminal while it has it: bracketed paste, so that pasted text
 /// arrives whole and never as keys that run something; and, where the terminal speaks it, the
-/// kitty keyboard protocol, which tells Shift+Enter from Enter (ADR 0019).
+/// kitty keyboard protocol, which tells Shift+Enter from Enter and reports Alt with a symbol
+/// typed with Shift, such as Alt++, as that symbol (ADR 0019).
 #[derive(Debug, Clone, Copy, Default)]
 struct Modes {
     keyboard: bool,
@@ -444,7 +445,9 @@ impl Modes {
 
         crossterm::execute!(io::stdout(), EnableBracketedPaste)?;
         if self.keyboard {
-            let flags = KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES;
+            // Without alternate keys, Alt++ arrives as Alt+Shift+= and matches no binding.
+            let flags = KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+                | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS;
             crossterm::execute!(io::stdout(), PushKeyboardEnhancementFlags(flags))?;
         }
         Ok(())

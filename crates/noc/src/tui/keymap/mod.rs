@@ -2136,6 +2136,26 @@ mod tests {
     }
 
     #[test]
+    fn alt_and_a_shifted_symbol_match_as_the_kitty_protocol_reports_alternate_keys() {
+        // With alternate keys reported, crossterm gives the symbol typed and drops the Shift.
+        let keymap = Keymap::mc();
+        let mut state = KeyState::default();
+        let now = Instant::now();
+        let mut alt = |c| {
+            let event = KeyEvent::new(KeyCode::Char(c), KeyModifiers::ALT);
+            keymap.feed(&mut state, Context::Panel, event, now)
+        };
+        assert_eq!(alt('+'), actions(&[Action::Select]));
+        assert_eq!(alt('*'), actions(&[Action::InvertMarks]));
+        assert_eq!(
+            alt('W'),
+            actions(&[Action::SaveWorkspace]),
+            "Shift comes back"
+        );
+        assert_eq!(alt('/'), actions(&[Action::KeyHints]));
+    }
+
+    #[test]
     fn rejects_invalid_sequences() {
         assert_eq!(parse_sequence(""), None);
         assert_eq!(parse_sequence("ctrl-"), None);

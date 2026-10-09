@@ -54,11 +54,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   in Options → Configuration) sets how many commands are kept; a command that starts with a
   space is never kept.
 - Input for the command line: Shift+Enter starts a new line where the terminal speaks the
-  kitty keyboard protocol, which Noon Commander now asks for where the terminal has it; Ctrl+x
-  Ctrl+e opens the command in `$VISUAL` or `$EDITOR` and brings back what the editor left,
-  without running it; and pasted text arrives whole through bracketed paste, so a pasted line
-  break never runs a command. Text fields and quick search take pasted text without its line
-  breaks, and panels ignore it rather than take its characters as keys.
+  kitty keyboard protocol, which Noon Commander now asks for where the terminal has it, with
+  the keys typed with Shift reported too, so that Alt with a symbol such as Alt++ or Alt+* still
+  does what it does elsewhere; Ctrl+x Ctrl+e opens the command in `$VISUAL` or `$EDITOR` and
+  brings back what the editor left, without running it; and pasted text arrives whole through
+  bracketed paste, so a pasted line break never runs a command. Text fields and quick search
+  take pasted text without its line breaks, and panels ignore it rather than take its
+  characters as keys.
 - A command line for shell commands: `!` opens it in a panel, and so does `:`, for commands of Noon
   Commander, of which `:!command` is the only one so far. The prompt shows the panel's directory,
   with the host's label or alias on a host, where the command runs over the host's connection with a

@@ -914,10 +914,11 @@ location = "root"
   terminal over without a program: its own screen shows, with the output of the commands, until
   a key that the `user_screen` context binds to Cancel (Ctrl+o, Esc). Shift+Enter starts a new
   line too where the terminal speaks the kitty keyboard protocol: at start the event loop asks
-  for it with
-  `supports_keyboard_enhancement` (in `spawn_blocking`, before the stream of events takes
-  crossterm's reader) and then pushes `DISAMBIGUATE_ESCAPE_CODES`; it pops them, and turns bracketed
-  paste off, whenever another program gets the terminal, on exit, and on a panic. With bracketed
+  for it with `supports_keyboard_enhancement` (in `spawn_blocking`, before the stream of events
+  takes crossterm's reader) and then pushes `DISAMBIGUATE_ESCAPE_CODES` and
+  `REPORT_ALTERNATE_KEYS`, so that Alt with a symbol typed with Shift, such as Alt++, arrives as
+  that symbol; it pops them, and turns bracketed paste off, whenever another program gets the
+  terminal, on exit, and on a panic. With bracketed
   paste a paste arrives as one event: the command line takes it whole, line breaks included, and
   runs nothing; text fields, quick search, and the menus' filters take its characters without line
   breaks; panels, the pull-down menu, dialogs' buttons, and the viewer ignore it. Ctrl+x Ctrl+e

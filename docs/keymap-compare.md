@@ -35,7 +35,8 @@ Keys are written the same way in every column, whatever notation the source uses
 Status, of noc as a whole:
 
 - ✅ settled: both presets bind the action, with the keys they will keep.
-- ⏳ not settled yet: noc does not bind it yet, or its keys may still change.
+- ⏳ not settled yet: noc does not bind it yet, or its keys may still change. Its noc columns
+  may show planned keys, which no preset binds yet.
 - 🚫 not needed: noc will not have it.
 
 ## Panels (`panel`)

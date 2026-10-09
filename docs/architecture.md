@@ -235,7 +235,7 @@ the active panel selected; later, where it was when it closed. An open menu:
   it in the active panel's context (`Keymap::key`); Left and Right show sort and rescan keys
   only for the active panel, as keys act there. Commands that cannot run now are dimmed, and
   the cursor skips them.
-- On the bar, Left and Right select the next menu, round the bar; Enter, Down, or the menu's
+- On the bar, Left and Right select the next menu, up to either end; Enter, Down, or the menu's
   highlighted letter (`&` in the Fluent messages) opens it, and Up and Home do nothing. In an
   open menu, Left and Right open the next one; Up and Down move in it and stop at its last
   command; Home and End go to its first and last command; Up or Home on the first command goes

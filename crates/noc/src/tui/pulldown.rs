@@ -555,7 +555,7 @@ impl PullDown {
         }
     }
 
-    /// Takes a key. On the bar, Left and Right select the next menu, round the bar, and Enter,
+    /// Takes a key. On the bar, Left and Right select the next menu, up to either end, and Enter,
     /// Down, or a menu's letter opens it; Up and Home do nothing there. In an open menu, Left
     /// and Right open the next menu; Up and Down move to the next command that runs now, and
     /// stop at the last one; Home goes to the first; Up or Home on the first goes back to the
@@ -596,8 +596,8 @@ impl PullDown {
                 }
             }
             Resolved::Action(action) => match action {
-                Action::Left => self.select((selected + count - 1) % count, status),
-                Action::Right => self.select((selected + 1) % count, status),
+                Action::Left => self.select(selected.saturating_sub(1), status),
+                Action::Right => self.select((selected + 1).min(count - 1), status),
                 Action::Down | Action::Confirm if !self.place.open => {
                     self.open(selected, status);
                 }
@@ -969,16 +969,19 @@ mod tests {
     }
 
     #[test]
-    fn keys_move_round_the_bar_and_down_the_menu_past_what_cannot_run() {
+    fn keys_move_along_the_bar_and_down_the_menu_past_what_cannot_run() {
         let mut menu = open(Side::Left);
         assert_eq!(
             menu.handle(action(Action::Left), &status),
             PullDownEvent::Pending
         );
-        assert_eq!(menu.place.selected, 5, "round the bar");
+        assert_eq!(menu.place.selected, 0, "Left stops at the first menu");
+        assert!(menu.place.open);
+        let mut right = open(Side::Right);
+        right.handle(action(Action::Right), &status);
+        assert_eq!(right.place.selected, 5, "Right stops at the last menu");
+        menu.handle(action(Action::Right), &status);
         assert!(menu.place.open, "opens the next menu");
-        menu.handle(action(Action::Right), &status);
-        menu.handle(action(Action::Right), &status);
         assert_eq!(menu.menu().title.text, "File");
         assert_eq!(chosen(&menu), Some(Command::Do(Action::View)));
         for _ in 0..6 {
@@ -1049,7 +1052,7 @@ mod tests {
         assert_eq!((menu.place.selected, menu.place.open), (1, false));
         menu.handle(action(Action::Left), &status);
         menu.handle(action(Action::Left), &status);
-        assert_eq!((menu.place.selected, menu.place.open), (5, false));
+        assert_eq!((menu.place.selected, menu.place.open), (0, false));
         assert_eq!(
             menu.handle(Resolved::Insert('x'), &status),
             PullDownEvent::Pending,

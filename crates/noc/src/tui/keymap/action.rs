@@ -212,6 +212,8 @@ pub(crate) enum Action {
     QuickCd,
     /// Opens the pull-down menu, at the menu of the active panel.
     PullDown,
+    /// Opens the pull-down menu on the command of it that ran last.
+    PullDownLast,
     /// Opens a new tab in the panel, on the same location.
     NewTab,
     /// Closes the panel's tab; the last one stays.
@@ -330,6 +332,7 @@ impl Action {
             Self::Jump => "jump",
             Self::QuickCd => "quick_cd",
             Self::PullDown => "pull_down",
+            Self::PullDownLast => "pull_down_last",
             Self::NewTab => "new_tab",
             Self::CloseTab => "close_tab",
             Self::NextTab => "next_tab",
@@ -432,6 +435,7 @@ impl Action {
         Self::Jump,
         Self::QuickCd,
         Self::PullDown,
+        Self::PullDownLast,
         Self::NewTab,
         Self::CloseTab,
         Self::NextTab,

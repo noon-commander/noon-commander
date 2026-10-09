@@ -1273,6 +1273,10 @@ mod tests {
             actions(&[Action::PullDown, Action::PullDown])
         );
         assert_eq!(
+            feed(&keymap, &mut state, Context::Panel, &["shift-f9", "f19"]),
+            actions(&[Action::PullDownLast, Action::PullDownLast])
+        );
+        assert_eq!(
             feed(
                 &keymap,
                 &mut state,
@@ -1507,6 +1511,7 @@ mod tests {
                 Action::Help,
                 Action::KeyHints,
                 Action::PullDown,
+                Action::PullDownLast,
                 Action::Quit,
                 Action::Redraw
             ]
@@ -1690,6 +1695,19 @@ mod tests {
             feed(
                 &vim,
                 &mut state,
+                Context::Panel,
+                &["g", "shift-m", "shift-f9", "f19"]
+            ),
+            actions(&[
+                Action::PullDownLast,
+                Action::PullDownLast,
+                Action::PullDownLast
+            ])
+        );
+        assert_eq!(
+            feed(
+                &vim,
+                &mut state,
                 Context::PullDown,
                 &[
                     "h",
@@ -1845,7 +1863,10 @@ mod tests {
         assert_eq!(keymap.hints(Context::Root, &ctrl_x), hints);
         let vim = Keymap::by_name("vim").unwrap();
         let g = parse_sequence("g").unwrap();
-        assert_eq!(hint_keys(&vim.hints(Context::Panel, &g)), ["g", "?", "m"]);
+        assert_eq!(
+            hint_keys(&vim.hints(Context::Panel, &g)),
+            ["g", "?", "m", "M"]
+        );
     }
 
     #[test]
@@ -1878,7 +1899,7 @@ mod tests {
         let vim = Keymap::by_name("vim").unwrap();
         let hints = vim.hints(Context::Panel, &[]);
         let hint = |keys: &str| hints.iter().find(|hint| hint.keys == keys).cloned();
-        assert_eq!(hint("g").map(|hint| hint.more), Some(3));
+        assert_eq!(hint("g").map(|hint| hint.more), Some(4));
         assert_eq!(hint("Ctrl+w").map(|hint| hint.more), Some(4));
         assert_eq!(hint("Z").map(|hint| hint.more), Some(1));
         // Where characters are text, the panel's are left out.

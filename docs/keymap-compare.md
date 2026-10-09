@@ -98,6 +98,7 @@ Far have a command line under the panels that takes what is typed; noc opens one
 | The saved workspaces: restore, rename, or delete one | `workspaces` | ⏳ | Alt+w | Alt+w | — | — |
 | Save the tabs of both panels as a workspace | `save_workspace` | ⏳ | Alt+W | Alt+W | — | — |
 | The pull-down menu | `pull_down` | ✅ | F9 | g m<br>F9 | F9 | F9 |
+| The pull-down menu, on the command that ran from it last | `pull_down_last` | ✅ | Shift+F9<br>F19 | g M<br>Shift+F9<br>F19 | — | Shift+F10 |
 | Quit | `quit` | ✅ | F10 | Z Z<br>F10 | F10 | F10 |
 | Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | Ctrl+l | — |
 | F1…F10 on terminals without function keys | — | ⏳ | Esc, then 1…9, 0 | Esc, then 1…9, 0 | Esc, then 1…9, 0 | — |
@@ -118,8 +119,7 @@ Far have a command line under the panels that takes what is typed; noc opens one
 | Quit without changing to last directory (shell wrapper) | — | ⏳ | — | Z Q | Shift+F10 | — |
 | Plugin commands | — | ⏳ | — | — | — | F11 |
 | Plugin configuration | — | ⏳ | — | — | — | Alt+Shift+F9 |
-| Save setup | — | ⏳ | — | — | — | Shift+F9 |
-| Repeat last menu item | — | ⏳ | — | — | — | Shift+F10 |
+| Save setup (noc: the Configuration dialog saves each change) | — | 🚫 | — | — | — | Shift+F9 |
 | Print files | — | ⏳ | — | — | — | Alt+F5 |
 | Create link | — | ⏳ | — | — | Ctrl+x l (hard)<br>Ctrl+x s (absolute symlink)<br>Ctrl+x v (relative symlink) | Alt+F6 |
 | Find file | — | ⏳ | — | — | Alt+? | Alt+F7 |
@@ -398,8 +398,9 @@ digits. Characters filter it.
 
 ## Pull-down menu (`pull_down`)
 
-F9, or g m in the vim keymap; the highlighted letter of a menu opens it, and that of a command
-runs it, so h, j, k, and l do not move in it.
+F9, or g m in the vim keymap; Shift+F9, or g M, on the command that ran from it last. The
+highlighted letter of a menu opens it, and that of a command runs it, so h, j, k, and l do not
+move in it.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | :-: | --- | --- | --- | --- |

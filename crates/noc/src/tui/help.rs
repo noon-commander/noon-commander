@@ -274,6 +274,7 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Jump, Action::Confirm) => fl!("help-jump-go"),
         (Context::PullDown, Action::Cancel) => fl!("help-pulldown-close"),
         (Context::Panel, Action::PullDown) => fl!("help-pulldown-open"),
+        (Context::Panel, Action::PullDownLast) => fl!("help-pulldown-last"),
         (Context::PullDown, Action::Up) => fl!("help-pulldown-up"),
         (Context::PullDown, Action::Down) => fl!("help-pulldown-down"),
         (Context::PullDown, Action::Left) => fl!("help-pulldown-left"),

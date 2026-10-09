@@ -433,6 +433,7 @@ help-menu-back = Take back the last character of the filter
 help-menu-reload = Read the volumes and hosts again
 help-menu-close = Close the menu
 help-pulldown-open = The pull-down menu: Left, File, Command, Options, Workspace, Right
+help-pulldown-last = The pull-down menu, on the command of it that ran last
 help-pulldown-up = The command above
 help-pulldown-down = The command below
 help-pulldown-left = The menu to the left
@@ -488,7 +489,7 @@ help-note-jump-fuzzy = Typing in the zoxide window filters its directories; 1 â€
 help-note-fuzzy = Quick search, the location menu, the zoxide window, and the Workspaces window match as fzf does: the letters typed in order, not necessarily together, best match first. Words separated by spaces must all match; 'word matches as it is, ^word at the start, word$ at the end, and !word where it is not.
 help-note-workspaces = A workspace holds the tabs of both panels: where each is, its sort order, and the row under its cursor. Alt+w and F9 â†’ Workspace list them; restoring one replaces every tab.
 help-note-command = ! opens the command line, and : too, for commands of Noon Commander, of which :!command is the only one so far. A command runs with the terminal, in the panel's directory, then a key brings the panels back; cd and export last only as long as the command.
-help-note-pulldown = In the pull-down menu, the highlighted letter of a menu opens it, and that of a command runs it. The menu opens again where it closed.
+help-note-pulldown = In the pull-down menu, the highlighted letter of a menu opens it, and that of a command runs it.
 help-note-key-hints = After a key that starts longer sequences, such as Ctrl+x, the keys that can follow show after a moment, and wait for one; Esc closes them, and Backspace takes back the last key.
 help-key-hints = The keys that can be typed now, and what they do
 

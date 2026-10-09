@@ -203,8 +203,9 @@ too, for terminals whose Alt+F1 never arrives, such as macOS Terminal without Op
 
 ### Pull-down menu
 
-F9 (`Esc 9`) opens mc's menu bar, as Far does: the first time, the bar alone with the menu of
-the active panel selected; later, where it was when it closed. An open menu:
+F9 (`Esc 9`) opens mc's menu bar, as Far does: the bar alone with the menu of the active panel
+selected. Shift+F9 (F19) opens it on the command that ran last, as Far's Shift+F10. An open
+menu:
 
 ```text
   Left     File     Command     Options     Workspace     Right         2 jobs 37%
@@ -241,9 +242,11 @@ the active panel selected; later, where it was when it closed. An open menu:
   command; Home and End go to its first and last command; Up or Home on the first command goes
   back to the bar; Enter or the command's highlighted letter runs it. Esc, F9, or F10 goes back
   to the bar, and closes the bar from there. Running a command closes it first.
-- The app keeps the menu's `Place` when it closes: the selected menu, whether it was open, and
-  the cursor of each menu. F9 opens it there again, so F9 Enter repeats the last command; a
-  command that cannot run now passes the cursor on to the next one.
+- The menu keeps nothing when it closes, and a menu opens at its first command. The app keeps
+  only the `Command` that ran last, so Shift+F9 Enter repeats it. A command on a panel stays
+  with that panel after Ctrl+u, under the other title. A command that cannot run now passes the
+  cursor on to the next one; one that is gone, such as a deleted workspace, leaves the bar as F9
+  opens it.
 - `ui.menu_bar` decides where the bar is: `on-demand` (the default) draws it over the top line
   of the panels only while a menu is open, as Far does; `always` keeps it above the panels, as
   mc does, which takes a row from them. The jobs indicator sits at the right end of that row.

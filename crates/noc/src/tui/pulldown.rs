@@ -5,9 +5,9 @@
 //! Workspace menu lists the saved workspaces too, the first ten with a digit; a menu taller
 //! than the screen scrolls with the cursor.
 //!
-//! As in Far Manager, F9 opens the bar alone, where each menu's letter opens it, and Esc in an
-//! open menu goes back to the bar. The menu remembers where it was when it closed, and opens
-//! there again.
+//! As in Far Manager, F9 opens the bar alone, at the menu of the active panel, where each menu's
+//! letter opens it, and Esc in an open menu goes back to the bar; Shift+F9 opens it on the
+//! command that ran last.
 
 use std::cell::RefCell;
 
@@ -154,11 +154,16 @@ impl Menu {
     }
 }
 
-/// The open menu bar, the menu selected on it, and the command under the cursor in each menu.
+/// The open menu bar, the menu selected on it, and the command under the cursor in that menu.
 #[derive(Debug)]
 pub(crate) struct PullDown {
     menus: Vec<Menu>,
-    place: Place,
+    /// The menu selected on the bar.
+    selected: usize,
+    /// Whether that menu is open below its title, or only the bar is.
+    open: bool,
+    /// The entry under the cursor in that menu.
+    cursor: usize,
     /// Where the last render drew it, for the mouse.
     drawn: RefCell<Drawn>,
 }
@@ -172,17 +177,6 @@ struct Drawn {
     menu: Rect,
     /// Its rows shown, by the index of their entries.
     rows: Vec<(usize, Rect)>,
-}
-
-/// Where the pull-down menu is: kept when it closes, for F9 to open it there again.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Place {
-    /// The menu selected on the bar.
-    selected: usize,
-    /// Whether that menu is open below its title, or only the bar is.
-    open: bool,
-    /// The entry under the cursor in each menu.
-    cursors: Vec<usize>,
 }
 
 /// The titles of the menu bar, left to right.
@@ -332,14 +326,15 @@ fn options_menu(title: Label) -> Menu {
 }
 
 impl PullDown {
-    /// The menu bar at `place`, where it was when it closed; the first time, with the menu of
-    /// the `active` panel selected and none open. `swapped` panels are drawn on each other's
-    /// sides, and Left and Right go with where they are drawn. The Workspace menu lists the
-    /// saved `workspaces`.
+    /// The menu bar with the menu of the `active` panel selected and none open; or, given the
+    /// command that ran `last`, its menu open on it, if the menus still have it. `swapped`
+    /// panels are drawn on each other's sides, and Left and Right go with where they are drawn,
+    /// so a command on a panel stays with that panel. The Workspace menu lists the saved
+    /// `workspaces`.
     pub(crate) fn new(
         active: Side,
         swapped: bool,
-        place: Option<&Place>,
+        last: Option<Command>,
         workspaces: &[String],
         status: &dyn Fn(Command) -> Status,
     ) -> Self {
@@ -400,44 +395,30 @@ impl PullDown {
         } else {
             menus.len() - 1
         };
-        let mut place = place
-            .filter(|place| place.selected < menus.len() && place.cursors.len() == menus.len())
-            .cloned()
-            .unwrap_or_else(|| Place {
-                selected,
-                open: false,
-                cursors: vec![0; menus.len()],
-            });
-        // The Workspace menu may have fewer rows than when it closed.
-        for (cursor, menu) in place.cursors.iter_mut().zip(&menus) {
-            *cursor = (*cursor).min(menu.entries.len().saturating_sub(1));
-        }
+        let found = last.and_then(|last| {
+            menus.iter().enumerate().find_map(|(index, menu)| {
+                let entry = menu
+                    .entries
+                    .iter()
+                    .position(|entry| matches!(entry, Entry::Item(item) if item.command == last))?;
+                Some((index, entry))
+            })
+        });
         let mut pulldown = Self {
             menus,
-            place,
+            selected,
+            open: false,
+            cursor: 0,
             drawn: RefCell::default(),
         };
-        if pulldown.place.open {
-            pulldown.open(pulldown.place.selected, status);
+        if let Some((index, entry)) = found {
+            pulldown.open_at(index, entry, status);
         }
         pulldown
     }
 
-    /// Where the menu is now, to open it there again.
-    pub(crate) fn place(&self) -> &Place {
-        &self.place
-    }
-
     fn menu(&self) -> &Menu {
-        &self.menus[self.place.selected]
-    }
-
-    fn cursor(&self) -> usize {
-        self.place.cursors[self.place.selected]
-    }
-
-    fn set_cursor(&mut self, cursor: usize) {
-        self.place.cursors[self.place.selected] = cursor;
+        &self.menus[self.selected]
     }
 
     /// The first entry from `start`, forward to the end of the menu or back to its top, that is
@@ -464,7 +445,7 @@ impl PullDown {
 
     /// The command that runs now above the cursor, or below it.
     fn step(&self, forward: bool, status: &dyn Fn(Command) -> Status) -> Option<usize> {
-        let cursor = self.cursor();
+        let cursor = self.cursor;
         if forward {
             self.next_enabled(cursor + 1, true, status)
         } else {
@@ -472,23 +453,22 @@ impl PullDown {
         }
     }
 
-    /// Opens the menu `index` below its title, with the cursor where it was in that menu, or
-    /// on the nearest command that runs now, below it first.
-    fn open(&mut self, index: usize, status: &dyn Fn(Command) -> Status) {
-        self.place.selected = index;
-        self.place.open = true;
-        let cursor = self.cursor();
+    /// Opens the menu `index` below its title, with the cursor on its `entry`, or on the
+    /// nearest command that runs now, below it first.
+    fn open_at(&mut self, index: usize, entry: usize, status: &dyn Fn(Command) -> Status) {
+        self.selected = index;
+        self.open = true;
         let nearest = self
-            .next_enabled(cursor, true, status)
-            .or_else(|| self.next_enabled(cursor, false, status));
-        self.set_cursor(nearest.unwrap_or(cursor));
+            .next_enabled(entry, true, status)
+            .or_else(|| self.next_enabled(entry, false, status));
+        self.cursor = nearest.unwrap_or(entry);
     }
 
     /// Opens the menu `index` below its title, as a click on the title of an idle menu bar
     /// does.
     pub(crate) fn open_menu(&mut self, index: usize, status: &dyn Fn(Command) -> Status) {
         if index < self.menus.len() {
-            self.open(index, status);
+            self.open_at(index, 0, status);
         }
     }
 
@@ -509,10 +489,10 @@ impl PullDown {
         };
         if let Some(index) = title {
             if press == Press::Click {
-                if self.place.open && self.place.selected == index {
-                    self.place.open = false;
+                if self.open && self.selected == index {
+                    self.open = false;
                 } else {
-                    self.open(index, status);
+                    self.open_at(index, 0, status);
                 }
             }
             return PullDownEvent::Pending;
@@ -522,7 +502,7 @@ impl PullDown {
                 // The wheel stops at the first command, where Up would leave the menu.
                 Press::WheelUp | Press::WheelDown => {
                     if let Some(cursor) = self.step(press == Press::WheelDown, status) {
-                        self.set_cursor(cursor);
+                        self.cursor = cursor;
                     }
                     PullDownEvent::Pending
                 }
@@ -531,7 +511,7 @@ impl PullDown {
                     match item {
                         Some((index, item)) if status(item.command).enabled => {
                             let command = item.command;
-                            self.set_cursor(index);
+                            self.cursor = index;
                             PullDownEvent::Run(command)
                         }
                         _ => PullDownEvent::Pending,
@@ -548,10 +528,10 @@ impl PullDown {
 
     /// Selects the menu `index` on the bar, and opens it if a menu is open.
     fn select(&mut self, index: usize, status: &dyn Fn(Command) -> Status) {
-        if self.place.open {
-            self.open(index, status);
+        if self.open {
+            self.open_at(index, 0, status);
         } else {
-            self.place.selected = index;
+            self.selected = index;
         }
     }
 
@@ -568,14 +548,14 @@ impl PullDown {
     ) -> PullDownEvent {
         let count = self.menus.len();
         let entries = self.menu().entries.len();
-        let selected = self.place.selected;
+        let selected = self.selected;
         match input {
             Resolved::Insert(c) => {
                 let lower = c.to_lowercase().next().unwrap_or(c);
                 let has = |label: &Label| label.hotkey.is_some_and(|(_, key)| key == lower);
-                if !self.place.open {
+                if !self.open {
                     if let Some(index) = self.menus.iter().position(|menu| has(&menu.title)) {
-                        self.open(index, status);
+                        self.open_at(index, 0, status);
                     }
                     return PullDownEvent::Pending;
                 }
@@ -591,48 +571,50 @@ impl PullDown {
                         Entry::Item(_) | Entry::Separator => None,
                     });
                 if let Some((index, command)) = found {
-                    self.set_cursor(index);
+                    self.cursor = index;
                     return PullDownEvent::Run(command);
                 }
             }
             Resolved::Action(action) => match action {
                 Action::Left => self.select(selected.saturating_sub(1), status),
                 Action::Right => self.select((selected + 1).min(count - 1), status),
-                Action::Down | Action::Confirm if !self.place.open => {
-                    self.open(selected, status);
+                Action::Down | Action::Confirm if !self.open => {
+                    self.open_at(selected, 0, status);
                 }
-                Action::Up | Action::Home if !self.place.open => {}
+                Action::Up | Action::Home if !self.open => {}
                 Action::Up | Action::Home if self.step(false, status).is_none() => {
-                    self.place.open = false;
+                    self.open = false;
                 }
                 Action::Up => {
                     if let Some(cursor) = self.step(false, status) {
-                        self.set_cursor(cursor);
+                        self.cursor = cursor;
                     }
                 }
                 Action::Down => {
                     if let Some(cursor) = self.step(true, status) {
-                        self.set_cursor(cursor);
+                        self.cursor = cursor;
                     }
                 }
                 Action::Home => {
                     let cursor = self.next_enabled(0, true, status);
-                    self.set_cursor(cursor.unwrap_or(self.cursor()));
+                    self.cursor = cursor.unwrap_or(self.cursor);
                 }
                 Action::End => {
-                    self.place.open = true;
+                    if !self.open {
+                        self.open_at(selected, 0, status);
+                    }
                     let last = entries.saturating_sub(1);
                     let cursor = self.next_enabled(last, false, status);
-                    self.set_cursor(cursor.unwrap_or(self.cursor()));
+                    self.cursor = cursor.unwrap_or(self.cursor);
                 }
                 Action::Confirm => {
-                    if let Some(item) = self.menu().item(self.cursor())
+                    if let Some(item) = self.menu().item(self.cursor)
                         && status(item.command).enabled
                     {
                         return PullDownEvent::Run(item.command);
                     }
                 }
-                Action::Cancel if self.place.open => self.place.open = false,
+                Action::Cancel if self.open => self.open = false,
                 Action::Cancel => return PullDownEvent::Closed,
                 _ => {}
             },
@@ -652,15 +634,13 @@ impl PullDown {
         status: &dyn Fn(Command) -> Status,
     ) {
         let titles: Vec<&Label> = self.menus.iter().map(|menu| &menu.title).collect();
-        let spots = render_bar(frame, bar, theme, &titles, Some(self.place.selected));
-        let x = spots
-            .get(self.place.selected)
-            .map_or(bar.x, |title| title.x + 1);
+        let spots = render_bar(frame, bar, theme, &titles, Some(self.selected));
+        let x = spots.get(self.selected).map_or(bar.x, |title| title.x + 1);
         *self.drawn.borrow_mut() = Drawn {
             titles: spots,
             ..Drawn::default()
         };
-        if !self.place.open {
+        if !self.open {
             return;
         }
         let below = Rect::new(
@@ -748,7 +728,7 @@ impl PullDown {
         let marks = if icons { ('•', '✓') } else { ('*', 'x') };
         // A menu taller than the screen shows the rows down to the cursor.
         let page = usize::from(rows.height);
-        let first = (self.cursor() + 1).saturating_sub(page);
+        let first = (self.cursor + 1).saturating_sub(page);
         for (line, (index, (entry, status))) in menu
             .entries
             .iter()
@@ -763,7 +743,7 @@ impl PullDown {
             };
             let y = rows.y + line;
             if let (Entry::Item(item), Some(status)) = (entry, status) {
-                let line = item_line(item, status, index == self.cursor(), room, theme, marks);
+                let line = item_line(item, status, index == self.cursor, room, theme, marks);
                 let row = Rect::new(rows.x, y, rows.width, 1);
                 frame.render_widget(line, row);
                 drawn.rows.push((index, row));
@@ -897,13 +877,13 @@ mod tests {
     /// The menu bar at the `active` panel's menu, opened.
     fn open(active: Side) -> PullDown {
         let mut menu = PullDown::new(active, false, None, &[], &status);
-        assert!(!menu.place.open, "the bar alone");
+        assert!(!menu.open, "the bar alone");
         menu.handle(action(Action::Down), &status);
         menu
     }
 
     fn chosen(menu: &PullDown) -> Option<Command> {
-        menu.menu().item(menu.cursor()).map(|item| item.command)
+        menu.menu().item(menu.cursor).map(|item| item.command)
     }
 
     #[test]
@@ -956,15 +936,15 @@ mod tests {
     #[test]
     fn opens_at_the_active_panel_and_follows_where_panels_are_drawn() {
         let left = open(Side::Left);
-        assert_eq!(left.place.selected, 0);
+        assert_eq!(left.selected, 0);
         assert_eq!(chosen(&left), Some(Command::Location(Side::Left)));
         let right = open(Side::Right);
-        assert_eq!(right.place.selected, 5);
+        assert_eq!(right.selected, 5);
         assert_eq!(chosen(&right), Some(Command::Location(Side::Right)));
         // Swapped, the right panel is drawn on the left, under Left.
         let mut swapped = PullDown::new(Side::Right, true, None, &[], &status);
         swapped.handle(action(Action::Confirm), &status);
-        assert_eq!(swapped.place.selected, 0);
+        assert_eq!(swapped.selected, 0);
         assert_eq!(chosen(&swapped), Some(Command::Location(Side::Right)));
     }
 
@@ -975,13 +955,13 @@ mod tests {
             menu.handle(action(Action::Left), &status),
             PullDownEvent::Pending
         );
-        assert_eq!(menu.place.selected, 0, "Left stops at the first menu");
-        assert!(menu.place.open);
+        assert_eq!(menu.selected, 0, "Left stops at the first menu");
+        assert!(menu.open);
         let mut right = open(Side::Right);
         right.handle(action(Action::Right), &status);
-        assert_eq!(right.place.selected, 5, "Right stops at the last menu");
+        assert_eq!(right.selected, 5, "Right stops at the last menu");
         menu.handle(action(Action::Right), &status);
-        assert!(menu.place.open, "opens the next menu");
+        assert!(menu.open, "opens the next menu");
         assert_eq!(menu.menu().title.text, "File");
         assert_eq!(chosen(&menu), Some(Command::Do(Action::View)));
         for _ in 0..6 {
@@ -1006,14 +986,11 @@ mod tests {
             menu.handle(action(Action::Up), &status),
             PullDownEvent::Pending
         );
-        assert!(
-            !menu.place.open,
-            "Up on the first command goes back to the bar"
-        );
+        assert!(!menu.open, "Up on the first command goes back to the bar");
         assert_eq!(menu.menu().title.text, "File");
         menu.handle(action(Action::Up), &status);
         menu.handle(action(Action::Home), &status);
-        assert!(!menu.place.open, "Up and Home on the bar open nothing");
+        assert!(!menu.open, "Up and Home on the bar open nothing");
         menu.handle(action(Action::Down), &status);
         assert_eq!(chosen(&menu), Some(Command::Do(Action::View)));
         menu.handle(action(Action::End), &status);
@@ -1024,10 +1001,7 @@ mod tests {
             "Home goes up"
         );
         menu.handle(action(Action::Home), &status);
-        assert!(
-            !menu.place.open,
-            "Home on the first command goes back to the bar"
-        );
+        assert!(!menu.open, "Home on the first command goes back to the bar");
         menu.handle(action(Action::Down), &status);
         assert_eq!(
             menu.handle(action(Action::Confirm), &status),
@@ -1038,7 +1012,7 @@ mod tests {
             PullDownEvent::Pending,
             "back to the bar"
         );
-        assert!(!menu.place.open);
+        assert!(!menu.open);
         assert_eq!(
             menu.handle(action(Action::Cancel), &status),
             PullDownEvent::Closed
@@ -1049,10 +1023,10 @@ mod tests {
     fn on_the_bar_keys_select_menus_and_letters_open_them() {
         let mut menu = PullDown::new(Side::Left, false, None, &[], &status);
         menu.handle(action(Action::Right), &status);
-        assert_eq!((menu.place.selected, menu.place.open), (1, false));
+        assert_eq!((menu.selected, menu.open), (1, false));
         menu.handle(action(Action::Left), &status);
         menu.handle(action(Action::Left), &status);
-        assert_eq!((menu.place.selected, menu.place.open), (0, false));
+        assert_eq!((menu.selected, menu.open), (0, false));
         assert_eq!(
             menu.handle(Resolved::Insert('x'), &status),
             PullDownEvent::Pending,
@@ -1063,56 +1037,55 @@ mod tests {
             PullDownEvent::Pending
         );
         assert_eq!(menu.menu().title.text, "Options");
-        assert!(menu.place.open);
+        assert!(menu.open);
         assert_eq!(chosen(&menu), Some(Command::Configuration));
         menu.handle(action(Action::Cancel), &status);
         menu.handle(action(Action::Confirm), &status);
-        assert!(menu.place.open, "Enter opens the menu");
+        assert!(menu.open, "Enter opens the menu");
     }
 
     #[test]
-    fn opens_again_where_it_closed() {
-        let mut menu = open(Side::Left);
-        menu.handle(action(Action::Right), &status);
-        menu.handle(action(Action::Down), &status);
-        menu.handle(action(Action::Down), &status);
-        assert_eq!(chosen(&menu), Some(Command::Do(Action::Copy)));
-        menu.handle(action(Action::Right), &status);
-        menu.handle(action(Action::Down), &status);
-        assert_eq!(chosen(&menu), Some(Command::Do(Action::QuickCd)));
-        menu.handle(action(Action::Down), &status);
-        assert_eq!(chosen(&menu), Some(Command::Do(Action::Jump)));
-        menu.handle(action(Action::Down), &status);
+    fn opens_on_the_command_that_ran_last() {
+        // The active panel does not matter then.
+        let swap = Some(Command::Do(Action::SwapPanels));
+        let mut menu = PullDown::new(Side::Right, false, swap, &[], &status);
+        assert_eq!(menu.menu().title.text, "Command");
+        assert!(menu.open);
         assert_eq!(chosen(&menu), Some(Command::Do(Action::SwapPanels)));
+        menu.handle(action(Action::Left), &status);
         assert_eq!(
-            menu.handle(action(Action::Confirm), &status),
-            PullDownEvent::Run(Command::Do(Action::SwapPanels))
+            chosen(&menu),
+            Some(Command::Do(Action::View)),
+            "another menu opens at its first command"
         );
-        // The active panel does not matter once the menu has a place.
-        let mut again = PullDown::new(Side::Right, false, Some(menu.place()), &[], &status);
-        assert_eq!(again.menu().title.text, "Command");
-        assert!(again.place.open);
-        assert_eq!(chosen(&again), Some(Command::Do(Action::SwapPanels)));
-        again.handle(action(Action::Left), &status);
-        assert_eq!(
-            chosen(&again),
-            Some(Command::Do(Action::Copy)),
-            "each menu keeps its command"
-        );
-        // A letter puts the cursor on its command; one that cannot run now is passed by.
-        again.handle(action(Action::Up), &status);
-        assert_eq!(chosen(&again), Some(Command::Do(Action::Edit)));
-        again.handle(Resolved::Insert('m'), &status);
-        assert_eq!(chosen(&again), Some(Command::Do(Action::Mkdir)));
-        let mut place = again.place().clone();
-        place.cursors[1] = 6;
-        let third = PullDown::new(Side::Left, false, Some(&place), &[], &status);
-        assert_eq!(chosen(&third), Some(Command::Do(Action::Select)));
-        // Closed from the bar, it opens on the bar.
-        again.handle(action(Action::Cancel), &status);
-        again.handle(action(Action::Cancel), &status);
-        let bar = PullDown::new(Side::Left, false, Some(again.place()), &[], &status);
-        assert_eq!((bar.place.selected, bar.place.open), (1, false));
+        // One that cannot run now is passed by.
+        let delete = Some(Command::Do(Action::Delete));
+        let menu = PullDown::new(Side::Left, false, delete, &[], &status);
+        assert_eq!(chosen(&menu), Some(Command::Do(Action::Select)));
+        // A command on a panel stays with the panel when the panels swap sides.
+        let sort = Some(Command::On(Side::Left, Action::SortBySize));
+        let menu = PullDown::new(Side::Left, true, sort, &[], &status);
+        assert_eq!(menu.menu().title.text, "Right");
+        assert_eq!(chosen(&menu), sort);
+        // Without it, the bar alone at the active panel's menu: a workspace no longer saved.
+        let gone = Some(Command::Workspace(3));
+        let names = ["w1".to_owned()];
+        let menu = PullDown::new(Side::Right, false, gone, &names, &status);
+        assert_eq!((menu.selected, menu.open), (5, false));
+        let menu = PullDown::new(Side::Left, false, None, &names, &status);
+        assert_eq!((menu.selected, menu.open), (0, false));
+    }
+
+    #[test]
+    fn end_on_the_bar_opens_the_menu_at_its_last_command() {
+        let mut menu = open(Side::Left);
+        menu.handle(action(Action::Down), &status);
+        menu.handle(action(Action::Cancel), &status);
+        menu.handle(action(Action::Right), &status);
+        menu.handle(action(Action::Right), &status);
+        menu.handle(action(Action::End), &status);
+        assert!(menu.open);
+        assert_eq!(chosen(&menu), Some(Command::Do(Action::Redraw)));
     }
 
     #[test]
@@ -1167,14 +1140,14 @@ mod tests {
             PullDownEvent::Pending
         );
         assert_eq!(menu.menu().title.text, "File");
-        assert!(menu.place.open);
+        assert!(menu.open);
         assert_eq!(
             press(&mut menu, Press::Click, 14, 8),
             PullDownEvent::Pending,
             "Delete cannot run"
         );
         press(&mut menu, Press::WheelUp, 14, 8);
-        assert!(menu.place.open, "the wheel stops at the first command");
+        assert!(menu.open, "the wheel stops at the first command");
         assert_eq!(chosen(&menu), Some(Command::Do(Action::View)));
         press(&mut menu, Press::WheelDown, 14, 8);
         assert_eq!(chosen(&menu), Some(Command::Do(Action::Edit)));
@@ -1185,10 +1158,10 @@ mod tests {
         assert_eq!(chosen(&menu), Some(Command::Do(Action::Mkdir)));
         // The title of the open menu closes it, and another title opens its own.
         press(&mut menu, Press::Click, 12, 0);
-        assert!(!menu.place.open);
+        assert!(!menu.open);
         press(&mut menu, Press::Click, 21, 0);
         assert_eq!(menu.menu().title.text, "Command");
-        assert!(menu.place.open);
+        assert!(menu.open);
         assert_eq!(
             press(&mut menu, Press::Click, 60, 15),
             PullDownEvent::Closed,
@@ -1290,10 +1263,6 @@ mod tests {
             text.contains("w30") && !text.contains("Save workspace"),
             "{text}"
         );
-        // Fewer workspaces than where the cursor was: it stays in the menu.
-        let names = ["w1".to_owned()];
-        let again = PullDown::new(Side::Left, false, Some(menu.place()), &names, &status);
-        assert_eq!(chosen(&again), Some(Command::Workspace(0)));
     }
 
     #[test]

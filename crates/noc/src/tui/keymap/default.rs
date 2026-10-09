@@ -83,6 +83,9 @@ pub(super) const PRESET: Preset = &[
             (Action::Workspaces, &["alt-w"]),
             (Action::SaveWorkspace, &["alt-shift-w"]),
             (Action::PullDown, &["f9"]),
+            // Not in mc: Far's Shift+F10, next to F9, as mc's Shift+F10 quits. Terminals without
+            // Shift+F9 send F19.
+            (Action::PullDownLast, &["shift-f9", "f19"]),
             (Action::Quit, &["f10"]),
             (Action::Redraw, &["ctrl-l"]),
         ],

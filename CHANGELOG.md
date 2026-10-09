@@ -78,6 +78,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Shift+F6 (or F16, and F9 → File → Rename in place) renames the entry under the cursor in
   its row: the name is selected but for the last extension, Enter renames, and Esc keeps the
   name. A taken file name asks before it is replaced; a directory's is never replaced.
+- Shift+F9 (or F19, and g M in the vim keymap) opens the pull-down menu on the command that ran
+  from it last, as Far's Shift+F10 does, so Shift+F9 Enter repeats it.
 
 ### Changed
 
@@ -94,6 +96,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Up and Down in the pull-down menu of F9 no longer go round it: Down stops at the last command,
   and Up on the first goes back to the menu bar, as Home there does; on the bar, Up and Home no
   longer open the menu.
+- F9 always opens the menu bar alone at the menu of the active panel, and each menu opens at its
+  first command; the menu no longer opens again where it closed.
 
 ## [0.1.0] - 2026-10-03
 

@@ -633,8 +633,8 @@ pub(crate) struct App {
     jump_queries: u64,
     /// The pull-down menu of F9, over the panels and under the windows and dialogs.
     pulldown: Option<PullDown>,
-    /// Where the pull-down menu was when it closed, to open it there again.
-    pulldown_place: Option<pulldown::Place>,
+    /// The command of the pull-down menu that ran last, for Shift+F9 to open the menu on it.
+    pulldown_last: Option<Command>,
     /// The Configuration dialog, over the panels and the menus, under the other windows and
     /// the dialogs.
     configuration: Option<Configuration>,
@@ -765,7 +765,7 @@ impl App {
             jump: None,
             jump_queries: 0,
             pulldown: None,
-            pulldown_place: None,
+            pulldown_last: None,
             configuration: None,
             workspaces: Workspaces::default(),
             workspace: None,
@@ -992,7 +992,7 @@ impl App {
             .position(|title| title.contains(at))
         {
             if press == Press::Click {
-                self.open_pulldown();
+                self.open_pulldown(false);
                 if let Some(mut pulldown) = self.pulldown.take() {
                     pulldown.open_menu(index, &|command| self.command_status(command));
                     self.pulldown = Some(pulldown);
@@ -1252,7 +1252,8 @@ impl App {
             | Action::Redraw
             | Action::Disconnect
             | Action::Cancel
-            | Action::PullDown => true,
+            | Action::PullDown
+            | Action::PullDownLast => true,
             Action::Mkdir
             | Action::Delete
             | Action::Copy
@@ -1617,7 +1618,8 @@ impl App {
             Action::QuickCd => self.ask_cd(),
             Action::SaveWorkspace => self.ask_save_workspace(true),
             Action::Workspaces => self.open_workspaces(),
-            Action::PullDown => self.open_pulldown(),
+            Action::PullDown => self.open_pulldown(false),
+            Action::PullDownLast => self.open_pulldown(true),
             _ => {
                 let id = self.shown(self.active);
                 if let Some(request) = self.panel_mut(id.side).handle(action) {
@@ -2208,13 +2210,13 @@ impl App {
         vec![Effect::ZoxideAdd(path.clone())]
     }
 
-    /// Opens the pull-down menu where it was when it closed; the first time, on the bar at the
-    /// menu of the active panel.
-    fn open_pulldown(&mut self) {
+    /// Opens the pull-down menu: the bar at the menu of the active panel, or with `last`, on
+    /// the command that ran last.
+    fn open_pulldown(&mut self, last: bool) {
         let pulldown = PullDown::new(
             self.active,
             self.swapped,
-            self.pulldown_place.as_ref(),
+            self.pulldown_last.filter(|_| last),
             &workspaces::names(&self.workspaces),
             &|command| self.command_status(command),
         );
@@ -2237,12 +2239,9 @@ impl App {
                 self.pulldown = Some(pulldown);
                 Vec::new()
             }
-            PullDownEvent::Closed => {
-                self.pulldown_place = Some(pulldown.place().clone());
-                Vec::new()
-            }
+            PullDownEvent::Closed => Vec::new(),
             PullDownEvent::Run(command) => {
-                self.pulldown_place = Some(pulldown.place().clone());
+                self.pulldown_last = Some(command);
                 self.run(command)
             }
         }
@@ -7417,8 +7416,16 @@ mod tests {
         assert_eq!(app.panel(Side::Right).sort_action(), Action::SortByName);
         assert_eq!(app.active, Side::Right);
 
-        // F9 opens it again where it closed, on the command that ran.
+        // F9 opens the bar alone again; Shift+F9, the menu on the command that ran last, even
+        // after Esc left another one.
         app.handle(action(Action::PullDown));
+        let text = screen_of(&mut app, 20);
+        assert!(!text.contains("Sort by size"), "the bar alone: {text}");
+        app.handle(Resolved::Insert('f'));
+        app.handle(action(Action::Cancel));
+        app.handle(action(Action::Cancel));
+        assert!(app.pulldown.is_none());
+        app.handle(action(Action::PullDownLast));
         let text = screen_of(&mut app, 20);
         assert!(text.contains("* Sort by size"), "{text}");
         app.handle(action(Action::Confirm));
@@ -7430,7 +7437,6 @@ mod tests {
 
         // Options: the hidden files, in both panels.
         app.handle(action(Action::PullDown));
-        app.handle(action(Action::Cancel));
         assert!(app.handle(Resolved::Insert('o')).is_empty());
         assert!(screen_of(&mut app, 20).contains("x Show hidden files"));
         app.handle(Resolved::Insert('h'));
@@ -7438,8 +7444,7 @@ mod tests {
 
         // Commands that cannot run do nothing; Esc goes back to the bar, then closes it.
         app.handle(action(Action::PullDown));
-        app.handle(action(Action::Left));
-        app.handle(action(Action::Left));
+        app.handle(Resolved::Insert('f'));
         assert!(
             app.handle(Resolved::Insert('k')).is_empty(),
             "nothing chosen"
@@ -8551,7 +8556,7 @@ mod tests {
         let effects = app.handle(Resolved::Insert('2'));
         assert!(!effects.is_empty());
         assert_eq!(app.workspace.as_deref(), Some("noon"));
-        app.handle(action(Action::PullDown));
+        app.handle(action(Action::PullDownLast));
         assert!(
             screen_of(&mut app, 16).contains("* 2 noon"),
             "the one restored last"

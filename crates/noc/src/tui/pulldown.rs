@@ -440,8 +440,8 @@ impl PullDown {
         self.place.cursors[self.place.selected] = cursor;
     }
 
-    /// The first entry from `start`, forward or back round the menu, that is a command that
-    /// runs now.
+    /// The first entry from `start`, forward to the end of the menu or back to its top, that is
+    /// a command that runs now.
     fn next_enabled(
         &self,
         start: usize,
@@ -449,28 +449,39 @@ impl PullDown {
         status: &dyn Fn(Command) -> Status,
     ) -> Option<usize> {
         let menu = self.menu();
-        let count = menu.entries.len();
-        (0..count)
-            .map(|step| {
-                if forward {
-                    (start + step) % count
-                } else {
-                    (start + count - step % count) % count
-                }
-            })
-            .find(|&index| {
-                menu.item(index)
-                    .is_some_and(|item| status(item.command).enabled)
-            })
+        let runs = |&index: &usize| {
+            menu.item(index)
+                .is_some_and(|item| status(item.command).enabled)
+        };
+        if forward {
+            (start..menu.entries.len()).find(runs)
+        } else {
+            (0..=start.min(menu.entries.len().saturating_sub(1)))
+                .rev()
+                .find(runs)
+        }
+    }
+
+    /// The command that runs now above the cursor, or below it.
+    fn step(&self, forward: bool, status: &dyn Fn(Command) -> Status) -> Option<usize> {
+        let cursor = self.cursor();
+        if forward {
+            self.next_enabled(cursor + 1, true, status)
+        } else {
+            self.next_enabled(cursor.checked_sub(1)?, false, status)
+        }
     }
 
     /// Opens the menu `index` below its title, with the cursor where it was in that menu, or
-    /// on the next command that runs now.
+    /// on the nearest command that runs now, below it first.
     fn open(&mut self, index: usize, status: &dyn Fn(Command) -> Status) {
         self.place.selected = index;
         self.place.open = true;
         let cursor = self.cursor();
-        self.set_cursor(self.next_enabled(cursor, true, status).unwrap_or(cursor));
+        let nearest = self
+            .next_enabled(cursor, true, status)
+            .or_else(|| self.next_enabled(cursor, false, status));
+        self.set_cursor(nearest.unwrap_or(cursor));
     }
 
     /// Opens the menu `index` below its title, as a click on the title of an idle menu bar
@@ -508,8 +519,13 @@ impl PullDown {
         }
         if in_menu {
             return match press {
-                Press::WheelUp => self.handle(Resolved::Action(Action::Up), status),
-                Press::WheelDown => self.handle(Resolved::Action(Action::Down), status),
+                // The wheel stops at the first command, where Up would leave the menu.
+                Press::WheelUp | Press::WheelDown => {
+                    if let Some(cursor) = self.step(press == Press::WheelDown, status) {
+                        self.set_cursor(cursor);
+                    }
+                    PullDownEvent::Pending
+                }
                 Press::Click | Press::DoubleClick => {
                     let item = row.and_then(|index| Some((index, self.menu().item(index)?)));
                     match item {
@@ -540,9 +556,11 @@ impl PullDown {
     }
 
     /// Takes a key. On the bar, Left and Right select the next menu, round the bar, and Enter,
-    /// Up, Down, or a menu's letter opens it. In an open menu, Left and Right open the next
-    /// menu; Up and Down move to the next command that runs now, round the menu; Enter or a
-    /// command's letter runs it; Esc goes back to the bar, and closes the menu bar from there.
+    /// Down, or a menu's letter opens it; Up and Home do nothing there. In an open menu, Left
+    /// and Right open the next menu; Up and Down move to the next command that runs now, and
+    /// stop at the last one; Home goes to the first; Up or Home on the first goes back to the
+    /// bar; Enter or a command's letter runs it; Esc goes back to the bar, and closes the menu
+    /// bar from there.
     pub(crate) fn handle(
         &mut self,
         input: Resolved,
@@ -580,21 +598,24 @@ impl PullDown {
             Resolved::Action(action) => match action {
                 Action::Left => self.select((selected + count - 1) % count, status),
                 Action::Right => self.select((selected + 1) % count, status),
-                Action::Up | Action::Down | Action::Confirm if !self.place.open => {
+                Action::Down | Action::Confirm if !self.place.open => {
                     self.open(selected, status);
                 }
+                Action::Up | Action::Home if !self.place.open => {}
+                Action::Up | Action::Home if self.step(false, status).is_none() => {
+                    self.place.open = false;
+                }
                 Action::Up => {
-                    let start = (self.cursor() + entries - 1) % entries;
-                    let cursor = self.next_enabled(start, false, status);
-                    self.set_cursor(cursor.unwrap_or(self.cursor()));
+                    if let Some(cursor) = self.step(false, status) {
+                        self.set_cursor(cursor);
+                    }
                 }
                 Action::Down => {
-                    let start = (self.cursor() + 1) % entries;
-                    let cursor = self.next_enabled(start, true, status);
-                    self.set_cursor(cursor.unwrap_or(self.cursor()));
+                    if let Some(cursor) = self.step(true, status) {
+                        self.set_cursor(cursor);
+                    }
                 }
                 Action::Home => {
-                    self.place.open = true;
                     let cursor = self.next_enabled(0, true, status);
                     self.set_cursor(cursor.unwrap_or(self.cursor()));
                 }
@@ -948,7 +969,7 @@ mod tests {
     }
 
     #[test]
-    fn keys_move_round_the_bar_and_the_menu_past_what_cannot_run() {
+    fn keys_move_round_the_bar_and_down_the_menu_past_what_cannot_run() {
         let mut menu = open(Side::Left);
         assert_eq!(
             menu.handle(action(Action::Left), &status),
@@ -970,14 +991,41 @@ mod tests {
         );
         menu.handle(action(Action::Up), &status);
         assert_eq!(chosen(&menu), Some(Command::Do(Action::Mkdir)));
-        menu.handle(action(Action::Home), &status);
-        menu.handle(action(Action::Up), &status);
+        menu.handle(action(Action::End), &status);
+        menu.handle(action(Action::Down), &status);
         assert_eq!(
             chosen(&menu),
             Some(Command::Do(Action::Quit)),
-            "round the menu"
+            "Down stops at the last command"
         );
         menu.handle(action(Action::Home), &status);
+        assert_eq!(
+            menu.handle(action(Action::Up), &status),
+            PullDownEvent::Pending
+        );
+        assert!(
+            !menu.place.open,
+            "Up on the first command goes back to the bar"
+        );
+        assert_eq!(menu.menu().title.text, "File");
+        menu.handle(action(Action::Up), &status);
+        menu.handle(action(Action::Home), &status);
+        assert!(!menu.place.open, "Up and Home on the bar open nothing");
+        menu.handle(action(Action::Down), &status);
+        assert_eq!(chosen(&menu), Some(Command::Do(Action::View)));
+        menu.handle(action(Action::End), &status);
+        menu.handle(action(Action::Home), &status);
+        assert_eq!(
+            chosen(&menu),
+            Some(Command::Do(Action::View)),
+            "Home goes up"
+        );
+        menu.handle(action(Action::Home), &status);
+        assert!(
+            !menu.place.open,
+            "Home on the first command goes back to the bar"
+        );
+        menu.handle(action(Action::Down), &status);
         assert_eq!(
             menu.handle(action(Action::Confirm), &status),
             PullDownEvent::Run(Command::Do(Action::View))
@@ -1122,6 +1170,9 @@ mod tests {
             PullDownEvent::Pending,
             "Delete cannot run"
         );
+        press(&mut menu, Press::WheelUp, 14, 8);
+        assert!(menu.place.open, "the wheel stops at the first command");
+        assert_eq!(chosen(&menu), Some(Command::Do(Action::View)));
         press(&mut menu, Press::WheelDown, 14, 8);
         assert_eq!(chosen(&menu), Some(Command::Do(Action::Edit)));
         assert_eq!(

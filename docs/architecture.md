@@ -235,11 +235,12 @@ the active panel selected; later, where it was when it closed. An open menu:
   it in the active panel's context (`Keymap::key`); Left and Right show sort and rescan keys
   only for the active panel, as keys act there. Commands that cannot run now are dimmed, and
   the cursor skips them.
-- On the bar, Left and Right select the next menu, round the bar; Enter, Up, Down, or the
-  menu's highlighted letter (`&` in the Fluent messages) opens it. In an open menu, Left and
-  Right open the next one; Up and Down move round it; Home and End go to its first and last
-  command; Enter or the command's highlighted letter runs it. Esc, F9, or F10 goes back to the
-  bar, and closes the bar from there. Running a command closes it first.
+- On the bar, Left and Right select the next menu, round the bar; Enter, Down, or the menu's
+  highlighted letter (`&` in the Fluent messages) opens it, and Up and Home do nothing. In an
+  open menu, Left and Right open the next one; Up and Down move in it and stop at its last
+  command; Home and End go to its first and last command; Up or Home on the first command goes
+  back to the bar; Enter or the command's highlighted letter runs it. Esc, F9, or F10 goes back
+  to the bar, and closes the bar from there. Running a command closes it first.
 - The app keeps the menu's `Place` when it closes: the selected menu, whether it was open, and
   the cursor of each menu. F9 opens it there again, so F9 Enter repeats the last command; a
   command that cannot run now passes the cursor on to the next one.

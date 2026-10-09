@@ -336,17 +336,17 @@ Far's menus, its drive menu among them.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | :-: | --- | --- | --- | --- |
-| Previous item | `up` | ⏳ | Up | Ctrl+p<br>Up | — | — |
-| Next item | `down` | ⏳ | Down | Ctrl+n<br>Down | — | — |
-| One page up | `page_up` | ⏳ | PgUp | PgUp | — | — |
-| One page down | `page_down` | ⏳ | PgDn | PgDn | — | — |
+| Previous item | `up` | ✅ | Up | Up<br>Ctrl+p | — | — |
+| Next item | `down` | ✅ | Down | Down<br>Ctrl+n | — | — |
+| One page up | `page_up` | ✅ | PgUp | Ctrl+b<br>Shift+Up<br>PgUp | — | — |
+| One page down | `page_down` | ✅ | PgDn | Ctrl+f<br>Shift+Down<br>Shift+Enter<br>PgDn | — | — |
 | First item | `home` | ⏳ | Home | Home | — | — |
 | Last item | `end` | ⏳ | End | End | — | — |
 | Open the volume or host in the panel | `confirm` | ⏳ | Enter | Enter | — | — |
 | Take back the last character of the filter | `backspace` | ⏳ | Backspace | Backspace<br>Ctrl+h | — | — |
 | Disconnect the host | `disconnect` | ⏳ | F8 | F8 | — | — |
 | Read the volumes and hosts again | `reload` | ⏳ | Ctrl+r | Ctrl+r | — | — |
-| Close the menu | `cancel` | ⏳ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
+| Close the menu | `cancel` | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
 | Filter the items | — | ⏳ | Typing | Typing | — | Ctrl+Alt+f<br>RightAlt |
 | Open an item by its number (empty filter) | — | ⏳ | 1…9, 0 | 1…9, 0 | — | — |
 | Lock filter | — | ⏳ | — | — | — | Ctrl+Alt+l |
@@ -403,14 +403,14 @@ runs it, so h, j, k, and l do not move in it.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | :-: | --- | --- | --- | --- |
-| The command above | `up` | ⏳ | Up | Ctrl+p<br>Up | — | — |
-| The command below | `down` | ⏳ | Down | Ctrl+n<br>Down | — | — |
+| The command above | `up` | ✅ | Up | Up<br>Ctrl+p | — | — |
+| The command below | `down` | ✅ | Down | Down<br>Ctrl+n | — | — |
 | The menu to the left | `left` | ⏳ | Left | Left | — | — |
 | The menu to the right | `right` | ⏳ | Right | Right | — | — |
-| The first command | `home` | ⏳ | Home<br>PgUp | Home<br>PgUp | — | — |
-| The last command | `end` | ⏳ | End<br>PgDn | End<br>PgDn | — | — |
+| The first command | `home` | ✅ | Home<br>PgUp | Ctrl+b<br>Shift+Up<br>Home<br>PgUp | — | — |
+| The last command | `end` | ✅ | End<br>PgDn | Ctrl+f<br>Shift+Down<br>Shift+Enter<br>End<br>PgDn | — | — |
 | Open the menu, or run the command | `confirm` | ⏳ | Enter | Enter | — | — |
-| Close the menu, then the menu bar | `cancel` | ⏳ | Esc<br>F9<br>F10 | Esc<br>Ctrl+c<br>F9<br>F10 | — | — |
+| Close the menu, then the menu bar | `cancel` | ✅ | Esc<br>F9<br>F10 | Esc<br>Ctrl+c<br>F9<br>F10 | — | — |
 | Open a menu or run a command by its letter | — | ⏳ | Letter | Letter | — | — |
 
 ## Text fields (`dialog_input`)

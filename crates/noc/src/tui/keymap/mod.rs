@@ -1691,7 +1691,19 @@ mod tests {
                 &vim,
                 &mut state,
                 Context::PullDown,
-                &["h", "j", "k", "l", "ctrl-n", "ctrl-p", "ctrl-c"]
+                &[
+                    "h",
+                    "j",
+                    "k",
+                    "l",
+                    "ctrl-n",
+                    "ctrl-p",
+                    "ctrl-f",
+                    "ctrl-b",
+                    "shift-down",
+                    "shift-up",
+                    "ctrl-c"
+                ]
             ),
             [
                 Resolved::Insert('h'),
@@ -1700,8 +1712,33 @@ mod tests {
                 Resolved::Insert('l'),
                 Resolved::Action(Action::Down),
                 Resolved::Action(Action::Up),
+                Resolved::Action(Action::End),
+                Resolved::Action(Action::Home),
+                Resolved::Action(Action::End),
+                Resolved::Action(Action::Home),
                 Resolved::Action(Action::Cancel),
             ]
+        );
+    }
+
+    #[test]
+    fn the_location_menu_moves_as_the_panels_do_in_vim() {
+        let vim = Keymap::by_name("vim").unwrap();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(
+                &vim,
+                &mut state,
+                Context::Menu,
+                &["ctrl-n", "ctrl-p", "ctrl-f", "ctrl-b", "ctrl-c"]
+            ),
+            actions(&[
+                Action::Down,
+                Action::Up,
+                Action::PageDown,
+                Action::PageUp,
+                Action::Cancel
+            ])
         );
     }
 

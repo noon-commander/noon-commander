@@ -19,8 +19,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `ui.keymap` (Keymap in Options → Configuration) chooses the keymap by name, as `ui.theme`
   chooses the colors, and takes effect at once: `default`, modelled on mc, or `vim`. In the vim
   keymap, k, j, g g, and G move in dialogs too, and g m opens the pull-down menu, as F9 does,
-  where Ctrl+n and Ctrl+p move and Ctrl+c closes it. In its panels, Tab, Ctrl+w w, Ctrl+w Ctrl+w,
-  and Ctrl+w p switch to the other panel, and Ctrl+w x swaps them, as vim's window commands do.
+  where Ctrl+n and Ctrl+p move, Ctrl+f and Ctrl+b, or Shift+Down and Shift+Up, go to the last
+  and first command, and Ctrl+c closes it. In its panels, Tab, Ctrl+w w, Ctrl+w Ctrl+w, and
+  Ctrl+w p switch to the other panel, and Ctrl+w x swaps them, as vim's window commands do. In
+  the location menu, Ctrl+n, Ctrl+p, Ctrl+f, and Ctrl+b move as in the panels, and Ctrl+c
+  closes it.
   `noc keymap diff` compares two keymaps action by
   action, the default and the vim one unless named: `|` where the keys differ, `<` and `>` for an
   action only one of them binds, in color in a terminal; `--all` shows what they bind alike too.

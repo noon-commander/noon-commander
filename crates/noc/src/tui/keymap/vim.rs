@@ -115,17 +115,20 @@ pub(super) const PRESET: Preset = &[
     (
         Context::Menu,
         &[
-            (Action::Up, &["up"]),
-            (Action::Down, &["down"]),
-            (Action::PageUp, &["pageup"]),
-            (Action::PageDown, &["pagedown"]),
+            (Action::Up, &["up", "ctrl-p"]),
+            (Action::Down, &["down", "ctrl-n"]),
+            (Action::PageUp, &["ctrl-b", "shift-up", "pageup"]),
+            (
+                Action::PageDown,
+                &["ctrl-f", "shift-down", "shift-enter", "pagedown"],
+            ),
             (Action::Home, &["home"]),
             (Action::End, &["end"]),
             (Action::Confirm, &["enter"]),
             (Action::Backspace, &["backspace"]),
             (Action::Disconnect, &["f8"]),
             (Action::Reload, &["ctrl-r"]),
-            (Action::Cancel, &["esc", "f10"]),
+            (Action::Cancel, &["esc", "ctrl-c", "f10"]),
         ],
     ),
     // The zoxide window; characters are keywords.
@@ -166,12 +169,15 @@ pub(super) const PRESET: Preset = &[
     (
         Context::PullDown,
         &[
-            (Action::Up, &["ctrl-p", "up"]),
-            (Action::Down, &["ctrl-n", "down"]),
+            (Action::Up, &["up", "ctrl-p"]),
+            (Action::Down, &["down", "ctrl-n"]),
             (Action::Left, &["left"]),
             (Action::Right, &["right"]),
-            (Action::Home, &["home", "pageup"]),
-            (Action::End, &["end", "pagedown"]),
+            (Action::Home, &["ctrl-b", "shift-up", "home", "pageup"]),
+            (
+                Action::End,
+                &["ctrl-f", "shift-down", "shift-enter", "end", "pagedown"],
+            ),
             (Action::Confirm, &["enter"]),
             (Action::Cancel, &["esc", "ctrl-c", "f9", "f10"]),
         ],

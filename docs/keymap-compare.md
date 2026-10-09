@@ -217,7 +217,7 @@ to the panel.
 | Description | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | :-: | --- | --- | --- | --- |
 | Take back the last character | `backspace` | ✅ | Backspace | Backspace<br>Ctrl+h | Backspace<br>Delete | — |
-| End the search | `cancel` | ⏳ | Esc | Esc | — | — |
+| End the search | `cancel` | ✅ | Esc | Esc<br>Ctrl+c | — | — |
 | Next match; the default preset leaves it to the panel | `quick_search` | ⏳ | Ctrl+s<br>Alt+s | Ctrl+g | Ctrl+s | Ctrl+Enter |
 | Previous match | — | ⏳ | — | — | — | Ctrl+Shift+Enter |
 | Search with previous pattern | — | ⏳ | — | — | Ctrl+s Ctrl+s | — |
@@ -239,7 +239,7 @@ renames in the row: their Shift+F6 asks in a dialog, whose keys are those of tex
 | Delete to the start | `delete_to_start` | ⏳ | Ctrl+u | Ctrl+u | — | — |
 | Delete to the end | `delete_to_end` | ⏳ | Ctrl+k | Ctrl+k | — | — |
 | Rename to the name typed | `confirm` | ⏳ | Enter | Enter | — | — |
-| Keep the name as it was | `cancel` | ⏳ | Esc | Esc<br>Ctrl+c | — | — |
+| Keep the name as it was | `cancel` | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
 
 ## Dialogs and help (`dialog`)
 
@@ -372,7 +372,7 @@ Alt+z: the directories that zoxide ranks; characters are keywords, as z takes th
 | Last directory | `end` | ⏳ | End | End | — | — |
 | Open the directory in the active panel | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | — |
 | Take back the last character of the keywords | `backspace` | ✅ | Backspace | Backspace<br>Ctrl+h | — | — |
-| Close the window | `cancel` | ⏳ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
+| Close the window | `cancel` | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
 | Open a directory by its number (no keywords) | — | ⏳ | 1…9, 0 | 1…9, 0 | — | — |
 
 ## Workspaces window (`workspaces`)
@@ -393,7 +393,7 @@ digits. Characters filter it.
 | Take back the last character of the filter | `backspace` | ✅ | Backspace | Backspace<br>Ctrl+h | — | — |
 | Rename the workspace | `move` | ⏳ | F6 | F6 | — | — |
 | Delete the workspace | `delete` | ⏳ | F8<br>Delete | F8<br>Delete | — | — |
-| Close the window | `cancel` | ⏳ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
+| Close the window | `cancel` | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
 | Restore a workspace by its number (empty filter) | — | ⏳ | 1…9, 0 | 1…9, 0 | — | — |
 
 ## Pull-down menu (`pull_down`)
@@ -469,7 +469,7 @@ the field.
 | Last choice | `end` | ⏳ | End | End | — | — |
 | Next choice, round | `complete` | ⏳ | Tab | Tab | — | — |
 | Put the choice in the field | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | — |
-| Close the list | `cancel` | ⏳ | Esc | Ctrl+e<br>Esc | — | — |
+| Close the list | `cancel` | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
 | Close the list and edit the field | — | ⏳ | Other keys | Other keys | — | — |
 
 ## Command line (`command_line`)
@@ -497,7 +497,7 @@ that noc lacks, such as words and the clipboard, are under text fields.
 | The command history | `command_history` | ⏳ | Alt+h<br>Ctrl+r | Ctrl+r | Alt+h | Alt+F8 |
 | The output of commands, in place of the panels | `user_screen` | ⏳ | Ctrl+o | Ctrl+o | Ctrl+o | Ctrl+o |
 | Run the command; after a \\ at the end of the line, a new line | `confirm` | ⏳ | Enter | Enter | Enter | Enter |
-| Close the command line | `cancel` | ⏳ | Esc | Esc<br>Ctrl+c | — | Esc |
+| Close the command line | `cancel` | ✅ | Esc<br>Ctrl+c<br>F10 | Esc<br>Ctrl+c<br>F10 | — | Esc |
 | Insert current file name | — | ⏳ | — | — | Alt+Enter<br>Ctrl+Enter | Ctrl+j<br>Ctrl+Enter |
 | Insert file name from passive panel | — | ⏳ | — | — | — | Ctrl+Shift+Enter |
 | Insert full name of current file | — | ⏳ | — | — | Ctrl+Shift+Enter | Ctrl+f |
@@ -532,7 +532,7 @@ history menus.
 | Put the command on the command line, without running it | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | Ctrl+Enter |
 | Take back the last character of the filter | `backspace` | ✅ | Backspace | Backspace<br>Ctrl+h | — | — |
 | Remove the command from the history | `delete` | ⏳ | Delete | Delete | — | Shift+Delete |
-| Close the window | `cancel` | ⏳ | Esc<br>F10 | Esc<br>F10 | — | — |
+| Close the window | `cancel` | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
 | Re-run command / open item | — | ⏳ | — | — | — | Enter |
 | Run in separate window | — | ⏳ | — | — | — | Shift+Enter |
 | Run as administrator | — | ⏳ | — | — | — | Ctrl+Alt+Enter |

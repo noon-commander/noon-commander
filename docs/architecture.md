@@ -909,11 +909,12 @@ location = "root"
   does (a dim `⏎`, spaces to the last column, `\r`, a cleared line); then a line in reverse video
   asks for a key, with the exit status of a failure, unless `shell.pause` says not to wait, and
   after the key `[exit N]` takes its place for a command that failed. The event loop then takes the
-  terminal back; both panels read their directories again, as in mc. Esc closes the line; Backspace
-  on an empty line does not. Ctrl+o, in the panels or on the line, hands the terminal over without a
-  program: its own screen shows, with the output of the commands, until a key that the `user_screen`
-  context binds to Cancel (Ctrl+o, Esc). Shift+Enter starts a new line too where the terminal speaks
-  the kitty keyboard protocol: at start the event loop asks for it with
+  terminal back; both panels read their directories again, as in mc. Esc, Ctrl+c, or F10 closes
+  the line; Backspace on an empty line does not. Ctrl+o, in the panels or on the line, hands the
+  terminal over without a program: its own screen shows, with the output of the commands, until
+  a key that the `user_screen` context binds to Cancel (Ctrl+o, Esc). Shift+Enter starts a new
+  line too where the terminal speaks the kitty keyboard protocol: at start the event loop asks
+  for it with
   `supports_keyboard_enhancement` (in `spawn_blocking`, before the stream of events takes
   crossterm's reader) and then pushes `DISAMBIGUATE_ESCAPE_CODES`; it pops them, and turns bracketed
   paste off, whenever another program gets the terminal, on exit, and on a panic. With bracketed

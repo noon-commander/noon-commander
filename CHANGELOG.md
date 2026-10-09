@@ -26,7 +26,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   closes it. Ctrl+y does what Enter does in the menus, the lists, and the dialogs, as in vim's
   pop-up menu, and Ctrl+h does what Backspace does wherever text is typed, and goes to the
   parent directory in the panels. In both keymaps, Ctrl+h deletes the character before the
-  cursor on the command line and in the fields of dialogs, as in mc.
+  cursor on the command line and in the fields of dialogs, as in mc. In the vim keymap, Ctrl+c
+  closes the windows and the lists and ends quick search and renaming, as Esc does. In both,
+  F10 closes the command line and the completion list and keeps the name being renamed, and
+  Ctrl+c closes the command line, as in a shell.
   `noc keymap diff` compares two keymaps action by
   action, the default and the vim one unless named: `|` where the keys differ, `<` and `>` for an
   action only one of them binds, in color in a terminal; `--all` shows what they bind alike too.

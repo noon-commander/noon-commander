@@ -116,7 +116,7 @@ pub(super) const PRESET: Preset = &[
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),
             (Action::Confirm, &["enter"]),
-            (Action::Cancel, &["esc"]),
+            (Action::Cancel, &["esc", "f10"]),
         ],
     ),
     // Dialogs whose focus is on a button or a list.
@@ -248,7 +248,7 @@ pub(super) const PRESET: Preset = &[
             (Action::End, &["end"]),
             (Action::Complete, &["tab"]),
             (Action::Confirm, &["enter"]),
-            (Action::Cancel, &["esc"]),
+            (Action::Cancel, &["esc", "f10"]),
         ],
     ),
     // The command line of `!` and `:`. Ctrl+j arrives as LF where Enter arrives as CR, so it starts
@@ -275,7 +275,7 @@ pub(super) const PRESET: Preset = &[
             (Action::CommandHistory, &["alt-h", "ctrl-r"]),
             (Action::UserScreen, &["ctrl-o"]),
             (Action::Confirm, &["enter"]),
-            (Action::Cancel, &["esc"]),
+            (Action::Cancel, &["esc", "ctrl-c", "f10"]),
         ],
     ),
     // The window of the command history; characters filter it, and Tab switches between the panel's

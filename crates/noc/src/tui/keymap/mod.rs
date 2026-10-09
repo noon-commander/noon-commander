@@ -1798,6 +1798,31 @@ mod tests {
     }
 
     #[test]
+    fn ctrl_c_and_f10_cancel_where_esc_does() {
+        let cancel = |keymap: &Keymap, context, key| {
+            let mut state = KeyState::default();
+            feed(keymap, &mut state, context, &[key]) == actions(&[Action::Cancel])
+        };
+        let mc = Keymap::mc();
+        for context in [Context::Rename, Context::Completion, Context::CommandLine] {
+            assert!(cancel(&mc, context, "f10"), "{context:?}");
+        }
+        assert!(cancel(&mc, Context::CommandLine, "ctrl-c"));
+        let vim = Keymap::by_name("vim").unwrap();
+        for context in [
+            Context::QuickSearch,
+            Context::Rename,
+            Context::Jump,
+            Context::Workspaces,
+            Context::Completion,
+            Context::CommandLine,
+            Context::History,
+        ] {
+            assert!(cancel(&vim, context, "ctrl-c"), "{context:?}");
+        }
+    }
+
+    #[test]
     fn shift_tab_is_the_back_tab_terminals_send() {
         assert_eq!(parse_sequence("shift-tab"), parse_sequence("backtab"));
         assert_eq!(

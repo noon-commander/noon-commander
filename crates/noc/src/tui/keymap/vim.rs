@@ -53,7 +53,7 @@ pub(super) const PRESET: Preset = &[
         Context::QuickSearch,
         &[
             (Action::Backspace, &["backspace", "ctrl-h"]),
-            (Action::Cancel, &["esc"]),
+            (Action::Cancel, &["esc", "ctrl-c"]),
         ],
     ),
     // The name field of an entry renamed in its row.
@@ -69,7 +69,7 @@ pub(super) const PRESET: Preset = &[
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),
             (Action::Confirm, &["enter"]),
-            (Action::Cancel, &["esc"]),
+            (Action::Cancel, &["esc", "ctrl-c", "f10"]),
         ],
     ),
     // Dialogs whose focus is on a button or a list.
@@ -144,7 +144,7 @@ pub(super) const PRESET: Preset = &[
             (Action::End, &["end"]),
             (Action::Confirm, &["ctrl-y", "enter"]),
             (Action::Backspace, &["backspace", "ctrl-h"]),
-            (Action::Cancel, &["esc", "f10"]),
+            (Action::Cancel, &["esc", "ctrl-c", "f10"]),
         ],
     ),
     // The window of the saved workspaces; characters filter it. Insert adds one, as in Far's menus;
@@ -163,7 +163,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Move, &["f6"]),
             (Action::Delete, &["f8", "delete"]),
-            (Action::Cancel, &["esc", "f10"]),
+            (Action::Cancel, &["esc", "ctrl-c", "f10"]),
         ],
     ),
     // The pull-down menu; letters run the commands that have them, so h, j, k, and l stay theirs.
@@ -210,7 +210,7 @@ pub(super) const PRESET: Preset = &[
             (Action::End, &["end"]),
             (Action::Complete, &["tab"]),
             (Action::Confirm, &["ctrl-y", "enter"]),
-            (Action::Cancel, &["esc"]),
+            (Action::Cancel, &["esc", "ctrl-c", "f10"]),
         ],
     ),
     // The command line of `!` and `:`. Ctrl+j arrives as LF where Enter arrives as CR, so it starts
@@ -237,7 +237,7 @@ pub(super) const PRESET: Preset = &[
             (Action::CommandHistory, &["alt-h", "ctrl-r"]),
             (Action::UserScreen, &["ctrl-o"]),
             (Action::Confirm, &["enter"]),
-            (Action::Cancel, &["esc"]),
+            (Action::Cancel, &["esc", "ctrl-c", "f10"]),
         ],
     ),
     // The window of the command history; characters filter it, and Tab switches between the panel's
@@ -255,7 +255,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Confirm, &["ctrl-y", "enter"]),
             (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Delete, &["delete"]),
-            (Action::Cancel, &["esc", "f10"]),
+            (Action::Cancel, &["esc", "ctrl-c", "f10"]),
         ],
     ),
     // The terminal's own screen, with the output of commands.

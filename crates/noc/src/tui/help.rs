@@ -263,7 +263,7 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::SaveWorkspace) => fl!("help-save-workspace"),
         (Context::Panel, Action::Workspaces) => fl!("help-workspaces-open"),
         (Context::Panel | Context::Viewer, Action::Help) => fl!("help-help"),
-        (Context::Global | Context::Panel, Action::KeyHints) => fl!("help-key-hints"),
+        (Context::Global, Action::KeyHints) => fl!("help-key-hints"),
         (Context::Panel, Action::Quit) => fl!("help-quit"),
         (Context::Panel | Context::Viewer, Action::Redraw) => fl!("help-redraw"),
         (Context::Root | Context::Menu, Action::Disconnect) => fl!("help-disconnect"),

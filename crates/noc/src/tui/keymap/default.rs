@@ -57,8 +57,6 @@ pub(super) const PRESET: Preset = &[
             // mc's and Far's: the output of commands.
             (Action::UserScreen, &["ctrl-o"]),
             (Action::Help, &["f1"]),
-            // Not in mc: the keys that can be typed now, as which-key shows them.
-            (Action::KeyHints, &["?"]),
             (Action::View, &["f3"]),
             (Action::Edit, &["f4"]),
             (Action::Copy, &["f5"]),

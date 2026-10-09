@@ -1526,7 +1526,6 @@ mod tests {
                 Action::Shell,
                 Action::Command,
                 Action::Help,
-                Action::KeyHints,
                 Action::PullDown,
                 Action::PullDownLast,
                 Action::Quit,
@@ -2079,27 +2078,6 @@ mod tests {
     }
 
     #[test]
-    fn question_mark_asks_for_the_hints_in_both_keymaps_but_not_where_it_is_text() {
-        for name in Keymap::NAMES {
-            let keymap = Keymap::by_name(name).unwrap();
-            for context in [Context::Panel, Context::Root] {
-                let mut state = KeyState::default();
-                assert_eq!(
-                    feed(&keymap, &mut state, context, &["?"]),
-                    actions(&[Action::KeyHints]),
-                    "{name}: {context:?}"
-                );
-            }
-            let mut state = KeyState::default();
-            assert_eq!(
-                feed(&keymap, &mut state, Context::QuickSearch, &["?"]),
-                [Resolved::Insert('?')],
-                "{name}"
-            );
-        }
-    }
-
-    #[test]
     fn alt_slash_asks_for_the_hints_everywhere_but_on_the_user_screen() {
         for name in Keymap::NAMES {
             let keymap = Keymap::by_name(name).unwrap();
@@ -2115,11 +2093,19 @@ mod tests {
                 );
                 let hints = keymap.hints(context, &[]);
                 assert!(
-                    hints.iter().any(|hint| hint.keys.ends_with("Alt+/")
-                        && hint.action == Some(Action::KeyHints)),
+                    hints
+                        .iter()
+                        .any(|hint| hint.keys == "Alt+/" && hint.action == Some(Action::KeyHints)),
                     "{name}: {context:?} hints"
                 );
             }
+            // Alt+/ is the one key for them; ? in a panel is just a character.
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&keymap, &mut state, Context::Panel, &["?"]),
+                [Resolved::Insert('?')],
+                "{name}"
+            );
             let mut state = KeyState::default();
             assert_eq!(
                 feed(&keymap, &mut state, Context::UserScreen, &["alt-/"]),

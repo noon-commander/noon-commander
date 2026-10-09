@@ -964,9 +964,9 @@ location = "root"
   `KeyState`: with `ui.which_key` on, a sequence that does nothing alone and does not start with
   `Esc` (such as `Ctrl+x` or vim's `g`) does not time out; its hints show
   `ui.which_key_delay_ms` after its last key (`Keymap::hints_due`), and it then waits for the
-  next key. The action `key_hints` shows every key of the context at once: `?` in the panels and
-  `Alt+/` everywhere, in both presets. The app takes it before whatever is in front, which stays
-  open under the hints.
+  next key. The action `key_hints` shows every key of the context at once: `Alt+/` everywhere, in
+  both presets, bound once in the `global` context. The app takes it before whatever is in front,
+  which stays open under the hints.
   While hints show, the next key runs as it would have, or shows the keys that can follow it;
   `Esc` closes them and `Backspace` takes back the last key. `Esc` sequences never show hints:
   they stand for Alt and the F-keys, and a lone `Esc` acts after its timeout.

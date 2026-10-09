@@ -88,7 +88,6 @@ Far have a command line under the panels that takes what is typed; noc opens one
 | The command history | `command_history` | ⏳ | Alt+h | q : | Alt+h | Alt+F8 |
 | The output of commands, in place of the panels (mc, Far: hide or show the panels) | `user_screen` | ⏳ | Ctrl+o | Ctrl+o | Ctrl+o | Ctrl+o |
 | Help | `help` | ✅ | F1 | g ?<br>F1 | F1 | F1 |
-| The keys that can be typed now, and what they do, as which-key shows them | `key_hints` | ✅ | ? | ? | — | — |
 | View the file under the cursor | `view` | ⏳ | F3 | i<br>F3 | F3 | F3<br>Numpad5<br>Ctrl+Shift+F3 (always internal) |
 | Edit the file under the cursor in $VISUAL or $EDITOR | `edit` | ⏳ | F4 | e<br>F4 | F4 | F4<br>Ctrl+Shift+F4 (always internal) |
 | Copy the marked entries, or the one under the cursor | `copy` | ⏳ | F5 | y y<br>F5 | F5 | F5 |

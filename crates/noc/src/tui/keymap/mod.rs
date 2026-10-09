@@ -1761,6 +1761,43 @@ mod tests {
     }
 
     #[test]
+    fn ctrl_h_takes_a_character_back_as_backspace_does() {
+        let backspace = actions(&[Action::Backspace]);
+        let mc = Keymap::mc();
+        for context in [Context::DialogInput, Context::CommandLine] {
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&mc, &mut state, context, &["ctrl-h"]),
+                backspace,
+                "{context:?}"
+            );
+        }
+        let vim = Keymap::by_name("vim").unwrap();
+        for context in [
+            Context::QuickSearch,
+            Context::Rename,
+            Context::Menu,
+            Context::Jump,
+            Context::Workspaces,
+            Context::DialogInput,
+            Context::CommandLine,
+            Context::History,
+        ] {
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&vim, &mut state, context, &["ctrl-h"]),
+                backspace,
+                "{context:?}"
+            );
+        }
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&vim, &mut state, Context::Panel, &["ctrl-h"]),
+            actions(&[Action::Parent])
+        );
+    }
+
+    #[test]
     fn shift_tab_is_the_back_tab_terminals_send() {
         assert_eq!(parse_sequence("shift-tab"), parse_sequence("backtab"));
         assert_eq!(

@@ -58,7 +58,7 @@ Far have a command line under the panels that takes what is typed; noc opens one
 | Mark the names that match a pattern | `select` | ⏳ | +<br>Alt++ | + | +<br>Alt++ (alternate_plus_minus) | Numpad+ |
 | Unmark the names that match a pattern | `unselect` | ⏳ | -<br>\\<br>Alt+- | \\ | \\<br>Alt+- (alternate_plus_minus) | Numpad- |
 | Invert the marks on files; directories stay as they are | `invert_marks` | ⏳ | \*<br>Alt+\* | v | \*<br>Alt+\* (alternate_plus_minus) | Numpad* |
-| Parent directory; above /, the volumes and hosts | `parent` | ✅ | Ctrl+PgUp | h<br>-<br>Backspace | Ctrl+PgUp | Ctrl+PgUp |
+| Parent directory; above /, the volumes and hosts | `parent` | ✅ | Ctrl+PgUp | h<br>-<br>Backspace<br>Ctrl+h | Ctrl+PgUp | Ctrl+PgUp |
 | The other panel | `switch_panel` | ✅ | Tab | Tab<br>Ctrl+w w<br>Ctrl+w Ctrl+w<br>Ctrl+w p | Tab<br>Ctrl+i<br>Left<br>Right | Tab |
 | Swap the panels | `swap_panels` | ✅ | Ctrl+u | Ctrl+w x | — | Ctrl+u |
 | Open the directory under the cursor in the other panel | `other_panel_open` | ⏳ | Alt+o | Alt+o | Alt+o | — |
@@ -216,7 +216,7 @@ to the panel.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | :-: | --- | --- | --- | --- |
-| Take back the last character | `backspace` | ⏳ | Backspace | Backspace<br>Ctrl+h | Backspace<br>Delete | — |
+| Take back the last character | `backspace` | ✅ | Backspace | Backspace<br>Ctrl+h | Backspace<br>Delete | — |
 | End the search | `cancel` | ⏳ | Esc | Esc | — | — |
 | Next match; the default preset leaves it to the panel | `quick_search` | ⏳ | Ctrl+s<br>Alt+s | Ctrl+g | Ctrl+s | Ctrl+Enter |
 | Previous match | — | ⏳ | — | — | — | Ctrl+Shift+Enter |
@@ -234,7 +234,7 @@ renames in the row: their Shift+F6 asks in a dialog, whose keys are those of tex
 | One character right | `right` | ⏳ | Right | Right | — | — |
 | Start of the text | `home` | ⏳ | Home<br>Ctrl+a | Home<br>Ctrl+b | — | — |
 | End of the text | `end` | ⏳ | End<br>Ctrl+e | End<br>Ctrl+e | — | — |
-| Delete the character before the cursor | `backspace` | ⏳ | Backspace | Backspace<br>Ctrl+h | — | — |
+| Delete the character before the cursor | `backspace` | ✅ | Backspace | Backspace<br>Ctrl+h | — | — |
 | Delete the character at the cursor | `delete` | ⏳ | Delete | Delete | — | — |
 | Delete to the start | `delete_to_start` | ⏳ | Ctrl+u | Ctrl+u | — | — |
 | Delete to the end | `delete_to_end` | ⏳ | Ctrl+k | Ctrl+k | — | — |
@@ -343,7 +343,7 @@ Far's menus, its drive menu among them.
 | First item | `home` | ⏳ | Home | Home | — | — |
 | Last item | `end` | ⏳ | End | End | — | — |
 | Open the volume or host in the panel | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | — |
-| Take back the last character of the filter | `backspace` | ⏳ | Backspace | Backspace<br>Ctrl+h | — | — |
+| Take back the last character of the filter | `backspace` | ✅ | Backspace | Backspace<br>Ctrl+h | — | — |
 | Disconnect the host | `disconnect` | ⏳ | F8 | F8 | — | — |
 | Read the volumes and hosts again | `reload` | ⏳ | Ctrl+r | Ctrl+r | — | — |
 | Close the menu | `cancel` | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
@@ -371,7 +371,7 @@ Alt+z: the directories that zoxide ranks; characters are keywords, as z takes th
 | First directory | `home` | ⏳ | Home | Home | — | — |
 | Last directory | `end` | ⏳ | End | End | — | — |
 | Open the directory in the active panel | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | — |
-| Take back the last character of the keywords | `backspace` | ⏳ | Backspace | Backspace<br>Ctrl+h | — | — |
+| Take back the last character of the keywords | `backspace` | ✅ | Backspace | Backspace<br>Ctrl+h | — | — |
 | Close the window | `cancel` | ⏳ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
 | Open a directory by its number (no keywords) | — | ⏳ | 1…9, 0 | 1…9, 0 | — | — |
 
@@ -390,7 +390,7 @@ digits. Characters filter it.
 | First workspace | `home` | ⏳ | Home | Home | — | — |
 | Last workspace | `end` | ⏳ | End | End | — | — |
 | Restore: replace the tabs of both panels | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | — |
-| Take back the last character of the filter | `backspace` | ⏳ | Backspace | Backspace<br>Ctrl+h | — | — |
+| Take back the last character of the filter | `backspace` | ✅ | Backspace | Backspace<br>Ctrl+h | — | — |
 | Rename the workspace | `move` | ⏳ | F6 | F6 | — | — |
 | Delete the workspace | `delete` | ⏳ | F8<br>Delete | F8<br>Delete | — | — |
 | Close the window | `cancel` | ⏳ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
@@ -426,7 +426,7 @@ the far column, those of Far's command line.
 | One character right, with the dialog's key | `right` | ⏳ | Right | Right | Ctrl+f<br>Right | Right<br>Ctrl+d |
 | Start of the text | `home` | ⏳ | Home<br>Ctrl+a | Home<br>Ctrl+b | Ctrl+a | Ctrl+Home |
 | End of the text | `end` | ⏳ | End<br>Ctrl+e | End<br>Ctrl+e | Ctrl+e | Ctrl+End |
-| Delete the character before the cursor | `backspace` | ⏳ | Backspace | Backspace<br>Ctrl+h | Ctrl+h<br>Backspace | Backspace |
+| Delete the character before the cursor | `backspace` | ✅ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | Ctrl+h<br>Backspace | Backspace |
 | Delete the character at the cursor | `delete` | ⏳ | Delete | Delete | Ctrl+d<br>Delete | Delete |
 | Delete to the start | `delete_to_start` | ⏳ | Ctrl+u | Ctrl+u | — | — |
 | Delete to the end | `delete_to_end` | ⏳ | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k |
@@ -486,7 +486,7 @@ that noc lacks, such as words and the clipboard, are under text fields.
 | The line below; from the last line, the command after in the history | `down` | ⏳ | Down | Down | — | — |
 | Start of the line | `home` | ⏳ | Home<br>Ctrl+a | Home<br>Ctrl+b | Ctrl+a | Ctrl+Home |
 | End of the line | `end` | ⏳ | End<br>Ctrl+e | End<br>Ctrl+e | Ctrl+e | Ctrl+End |
-| Delete the character before the cursor | `backspace` | ⏳ | Backspace | Backspace<br>Ctrl+h | Ctrl+h<br>Backspace | Backspace |
+| Delete the character before the cursor | `backspace` | ✅ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | Ctrl+h<br>Backspace | Backspace |
 | Delete the character at the cursor | `delete` | ⏳ | Delete | Delete | Ctrl+d<br>Delete | Delete |
 | Delete to the start of the line | `delete_to_start` | ⏳ | Ctrl+u | Ctrl+u | — | — |
 | Delete to the end of the line | `delete_to_end` | ⏳ | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k |
@@ -530,7 +530,7 @@ history menus.
 | Last row | `end` | ⏳ | End | End | — | — |
 | The commands of the panel's host, or of all hosts | `next_field` | ⏳ | Tab | Tab | — | — |
 | Put the command on the command line, without running it | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | Ctrl+Enter |
-| Take back the last character of the filter | `backspace` | ⏳ | Backspace | Backspace | — | — |
+| Take back the last character of the filter | `backspace` | ✅ | Backspace | Backspace<br>Ctrl+h | — | — |
 | Remove the command from the history | `delete` | ⏳ | Delete | Delete | — | Shift+Delete |
 | Close the window | `cancel` | ⏳ | Esc<br>F10 | Esc<br>F10 | — | — |
 | Re-run command / open item | — | ⏳ | — | — | — | Enter |

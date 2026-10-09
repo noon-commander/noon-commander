@@ -227,7 +227,7 @@ pub(super) const PRESET: Preset = &[
         &[
             (Action::Home, &["home", "ctrl-a"]),
             (Action::End, &["end", "ctrl-e"]),
-            (Action::Backspace, &["backspace"]),
+            (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Delete, &["delete"]),
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),
@@ -263,7 +263,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Down, &["down"]),
             (Action::Home, &["home", "ctrl-a"]),
             (Action::End, &["end", "ctrl-e"]),
-            (Action::Backspace, &["backspace"]),
+            (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Delete, &["delete"]),
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),

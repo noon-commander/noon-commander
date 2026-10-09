@@ -23,7 +23,7 @@ pub(super) const PRESET: Preset = &[
             (Action::End, &["shift-g", "end"]),
             (Action::Enter, &["l", "enter"]),
             // netrw's and vinegar's `-`, next to `h`.
-            (Action::Parent, &["h", "-", "backspace"]),
+            (Action::Parent, &["h", "-", "backspace", "ctrl-h"]),
             // vim's window commands, with Ctrl held or not; with two panels the previous window
             // is the other one.
             (
@@ -52,7 +52,7 @@ pub(super) const PRESET: Preset = &[
     (
         Context::QuickSearch,
         &[
-            (Action::Backspace, &["backspace"]),
+            (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Cancel, &["esc"]),
         ],
     ),
@@ -64,7 +64,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Right, &["right"]),
             (Action::Home, &["home", "ctrl-a"]),
             (Action::End, &["end", "ctrl-e"]),
-            (Action::Backspace, &["backspace"]),
+            (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Delete, &["delete"]),
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),
@@ -126,7 +126,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Home, &["home"]),
             (Action::End, &["end"]),
             (Action::Confirm, &["ctrl-y", "enter"]),
-            (Action::Backspace, &["backspace"]),
+            (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Disconnect, &["f8"]),
             (Action::Reload, &["ctrl-r"]),
             (Action::Cancel, &["esc", "ctrl-c", "f10"]),
@@ -143,7 +143,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Home, &["home"]),
             (Action::End, &["end"]),
             (Action::Confirm, &["ctrl-y", "enter"]),
-            (Action::Backspace, &["backspace"]),
+            (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Cancel, &["esc", "f10"]),
         ],
     ),
@@ -160,7 +160,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Home, &["home"]),
             (Action::End, &["end"]),
             (Action::Confirm, &["ctrl-y", "enter"]),
-            (Action::Backspace, &["backspace"]),
+            (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Move, &["f6"]),
             (Action::Delete, &["f8", "delete"]),
             (Action::Cancel, &["esc", "f10"]),
@@ -189,7 +189,7 @@ pub(super) const PRESET: Preset = &[
         &[
             (Action::Home, &["home", "ctrl-a"]),
             (Action::End, &["end", "ctrl-e"]),
-            (Action::Backspace, &["backspace"]),
+            (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Delete, &["delete"]),
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),
@@ -225,7 +225,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Down, &["down"]),
             (Action::Home, &["home", "ctrl-a"]),
             (Action::End, &["end", "ctrl-e"]),
-            (Action::Backspace, &["backspace"]),
+            (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Delete, &["delete"]),
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),
@@ -253,7 +253,7 @@ pub(super) const PRESET: Preset = &[
             (Action::End, &["end"]),
             (Action::NextField, &["tab"]),
             (Action::Confirm, &["ctrl-y", "enter"]),
-            (Action::Backspace, &["backspace"]),
+            (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Delete, &["delete"]),
             (Action::Cancel, &["esc", "f10"]),
         ],

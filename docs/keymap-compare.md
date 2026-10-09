@@ -59,8 +59,8 @@ Far have a command line under the panels that takes what is typed; noc opens one
 | Unmark the names that match a pattern | `unselect` | ⏳ | -<br>\\<br>Alt+- | \\ | \\<br>Alt+- (alternate_plus_minus) | Numpad- |
 | Invert the marks on files; directories stay as they are | `invert_marks` | ⏳ | \*<br>Alt+\* | v | \*<br>Alt+\* (alternate_plus_minus) | Numpad* |
 | Parent directory; above /, the volumes and hosts | `parent` | ✅ | Ctrl+PgUp | h<br>-<br>Backspace | Ctrl+PgUp | Ctrl+PgUp |
-| The other panel | `switch_panel` | ⏳ | Tab | Tab<br>Ctrl+w w | Tab<br>Ctrl+i<br>Left<br>Right | Tab |
-| Swap the panels | `swap_panels` | ⏳ | Ctrl+u | Ctrl+w x | — | Ctrl+u |
+| The other panel | `switch_panel` | ✅ | Tab | Tab<br>Ctrl+w w<br>Ctrl+w Ctrl+w<br>Ctrl+w p | Tab<br>Ctrl+i<br>Left<br>Right | Tab |
+| Swap the panels | `swap_panels` | ✅ | Ctrl+u | Ctrl+w x | — | Ctrl+u |
 | Open the directory under the cursor in the other panel | `other_panel_open` | ⏳ | Alt+o | Alt+o | Alt+o | — |
 | Show this directory in the other panel | `other_panel_sync` | ⏳ | Alt+i | Alt+i | Alt+i | — |
 | Read the directory again | `reload` | ⏳ | Ctrl+r | R | — | Ctrl+r |

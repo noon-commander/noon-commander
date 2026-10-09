@@ -24,6 +24,13 @@ pub(super) const PRESET: Preset = &[
             (Action::Enter, &["l", "enter"]),
             // netrw's and vinegar's `-`, next to `h`.
             (Action::Parent, &["h", "-", "backspace"]),
+            // vim's window commands, with Ctrl held or not; with two panels the previous window
+            // is the other one.
+            (
+                Action::SwitchPanel,
+                &["tab", "ctrl-w w", "ctrl-w ctrl-w", "ctrl-w p"],
+            ),
+            (Action::SwapPanels, &["ctrl-w x"]),
             // Not in mc, whose command line takes what is typed (ADR 0019).
             (Action::Shell, &["!"]),
             (Action::Command, &[":"]),

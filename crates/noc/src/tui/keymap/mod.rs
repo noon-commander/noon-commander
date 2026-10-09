@@ -1305,6 +1305,8 @@ mod tests {
                 Action::End,
                 Action::Enter,
                 Action::Parent,
+                Action::SwitchPanel,
+                Action::SwapPanels,
                 Action::Shell,
                 Action::Command,
                 Action::Help,
@@ -1444,6 +1446,40 @@ mod tests {
                 .find(|(action, _)| *action == Action::Home),
             Some((Action::Home, "g g, Home".to_owned()))
         );
+    }
+
+    #[test]
+    fn tab_and_ctrl_w_switch_and_swap_the_panels_in_vim() {
+        let vim = Keymap::by_name("vim").unwrap();
+        for context in [Context::Panel, Context::Root] {
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(
+                    &vim,
+                    &mut state,
+                    context,
+                    &[
+                        "tab", "ctrl-w", "w", "ctrl-w", "ctrl-w", "ctrl-w", "p", "ctrl-w", "x"
+                    ]
+                ),
+                actions(&[
+                    Action::SwitchPanel,
+                    Action::SwitchPanel,
+                    Action::SwitchPanel,
+                    Action::SwitchPanel,
+                    Action::SwapPanels,
+                ]),
+                "{context:?}"
+            );
+            // A lone Ctrl+w waits for its second key, then does nothing.
+            let now = Instant::now();
+            assert_eq!(vim.feed(&mut state, context, key("ctrl-w"), now), []);
+            assert_eq!(
+                vim.expire(&mut state, now + SEQUENCE_TIMEOUT),
+                [],
+                "{context:?}"
+            );
+        }
     }
 
     #[test]

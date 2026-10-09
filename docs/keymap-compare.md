@@ -354,8 +354,8 @@ with what Enter takes there.
 | Next item | `down` | ✅ | Down | Down<br>Ctrl+n | — | — |
 | One page up | `page_up` | ✅ | PgUp | Ctrl+b<br>Shift+Up<br>PgUp | — | — |
 | One page down | `page_down` | ✅ | PgDn | Ctrl+f<br>Shift+Down<br>Shift+Enter<br>PgDn | — | — |
-| First item | `home` | ⏳ | Home | Home | — | — |
-| Last item | `end` | ⏳ | End | End | — | — |
+| First item | `home` | ✅ | Home | Home | — | — |
+| Last item | `end` | ✅ | End | End | — | — |
 | Take the item, as the window's section says | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | — |
 | Take back the last character of the filter or the keywords | `backspace` | ✅ | Backspace | Backspace<br>Ctrl+h | — | — |
 | Close the window | `cancel` | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |

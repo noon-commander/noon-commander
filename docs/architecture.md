@@ -238,10 +238,10 @@ menu:
   the cursor skips them.
 - On the bar, Left and Right select the next menu, up to either end; Enter, Down, or the menu's
   highlighted letter (`&` in the Fluent messages) opens it, and Up and Home do nothing. In an
-  open menu, Left and Right open the next one; Up and Down move in it and stop at its last
-  command; Home and End go to its first and last command; Up or Home on the first command goes
-  back to the bar; Enter or the command's highlighted letter runs it. Esc, F9, or F10 goes back
-  to the bar, and closes the bar from there. Running a command closes it first.
+  open menu, Left and Right open the next one, and leave the last as it is; Up and Down move in
+  it and stop at its last command; Home and End go to its first and last command; Up or Home on
+  the first command goes back to the bar; Enter or the command's highlighted letter runs it.
+  Esc, F9, or F10 goes back to the bar, and closes the bar from there. Running a command closes it first.
 - The menu keeps nothing when it closes, and a menu opens at its first command. The app keeps
   only the `Command` that ran last, so Shift+F9 Enter repeats it. A command on a panel stays
   with that panel after Ctrl+u, under the other title. A command that cannot run now passes the

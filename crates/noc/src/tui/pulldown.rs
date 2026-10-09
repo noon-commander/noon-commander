@@ -526,8 +526,12 @@ impl PullDown {
         }
     }
 
-    /// Selects the menu `index` on the bar, and opens it if a menu is open.
+    /// Selects the menu `index` on the bar, and opens it if a menu is open. The menu selected
+    /// already keeps its cursor.
     fn select(&mut self, index: usize, status: &dyn Fn(Command) -> Status) {
+        if index == self.selected {
+            return;
+        }
         if self.open {
             self.open_at(index, 0, status);
         } else {
@@ -1086,6 +1090,23 @@ mod tests {
         menu.handle(action(Action::End), &status);
         assert!(menu.open);
         assert_eq!(chosen(&menu), Some(Command::Do(Action::Redraw)));
+    }
+
+    #[test]
+    fn the_open_menu_keeps_its_cursor_at_the_ends_of_the_bar() {
+        let mut menu = open(Side::Left);
+        menu.handle(action(Action::Down), &status);
+        let cursor = menu.cursor;
+        menu.handle(action(Action::Left), &status);
+        assert_eq!((menu.selected, menu.open, menu.cursor), (0, true, cursor));
+        for _ in 1..menu.menus.len() {
+            menu.handle(action(Action::Right), &status);
+        }
+        menu.handle(action(Action::Down), &status);
+        let cursor = menu.cursor;
+        menu.handle(action(Action::Right), &status);
+        assert_eq!(menu.selected, menu.menus.len() - 1);
+        assert_eq!((menu.open, menu.cursor), (true, cursor));
     }
 
     #[test]

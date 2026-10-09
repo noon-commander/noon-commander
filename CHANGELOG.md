@@ -24,8 +24,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   where Ctrl+n and Ctrl+p move, Ctrl+f and Ctrl+b, or Shift+Down and Shift+Up, go to the last
   and first command, and Ctrl+c closes it. In its panels, Tab, Ctrl+w w, Ctrl+w Ctrl+w, and
   Ctrl+w p switch to the other panel, and Ctrl+w x swaps them, as vim's window commands do. In
-  the location menu, Ctrl+n, Ctrl+p, Ctrl+f, and Ctrl+b move as in the panels, and Ctrl+c
-  closes it. Ctrl+y does what Enter does in the menus, the lists, and the dialogs, as in vim's
+  the location menu, the zoxide window, the workspaces, and the command history, Ctrl+n, Ctrl+p,
+  Ctrl+f, and Ctrl+b move as in the panels, and Ctrl+c closes them: the four share their keys in
+  both keymaps. Ctrl+y does what Enter does in the menus, the lists, and the dialogs, as in vim's
   pop-up menu, and Ctrl+h does what Backspace does wherever text is typed, and goes to the
   parent directory in the panels. In both keymaps, Ctrl+h deletes the character before the
   cursor on the command line and in the fields of dialogs, as in mc. In the vim keymap, Ctrl+c

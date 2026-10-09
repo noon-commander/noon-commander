@@ -11,11 +11,15 @@ pub(crate) enum Context {
     Panel,
     /// A panel on the virtual root or the list of hosts; falls back to `Panel`.
     Root,
-    /// The location menu of Alt+F1 and Alt+F2, which has a filter.
+    /// Keys that the windows listing items to choose from share, whose characters filter the
+    /// list: the menus, the zoxide window, the workspaces, the command history fall back to it.
+    /// Keys never go to it alone.
+    List,
+    /// The location menu of Alt+F1 and Alt+F2, which has a filter; falls back to `List`.
     Menu,
-    /// The zoxide window of Alt+z, which takes keywords.
+    /// The zoxide window of Alt+z, which takes keywords; falls back to `List`.
     Jump,
-    /// The window of the saved workspaces, which has a filter.
+    /// The window of the saved workspaces, which has a filter; falls back to `List`.
     Workspaces,
     /// The pull-down menu of F9, whose commands have letters.
     PullDown,
@@ -36,7 +40,7 @@ pub(crate) enum Context {
     Viewer,
     /// The command line of `!` and `:`. Keys it does not bind, but the global ones, do nothing.
     CommandLine,
-    /// The window of the command history, which has a filter.
+    /// The window of the command history, which has a filter; falls back to `List`.
     History,
     /// The terminal's own screen, with the output of commands, in place of the panels; only
     /// the keys that go back to the panels do anything.
@@ -50,6 +54,7 @@ impl Context {
             Self::Global => "global",
             Self::Panel => "panel",
             Self::Root => "root",
+            Self::List => "list",
             Self::Menu => "menu",
             Self::Jump => "jump",
             Self::Workspaces => "workspaces",
@@ -93,15 +98,22 @@ impl Context {
             ],
             Self::Viewer => &[Self::Viewer, Self::Global],
             Self::CommandLine => &[Self::CommandLine, Self::Global],
-            Self::History => &[Self::History, Self::Global],
             // The terminal's own screen: nothing of noc's draws there, the hints neither.
             Self::UserScreen => &[Self::UserScreen],
             // Menus are modal too.
-            Self::Menu => &[Self::Menu, Self::Global],
-            Self::Jump => &[Self::Jump, Self::Global],
-            Self::Workspaces => &[Self::Workspaces, Self::Global],
+            Self::List => &[Self::List, Self::Global],
+            Self::Menu => &[Self::Menu, Self::List, Self::Global],
+            Self::Jump => &[Self::Jump, Self::List, Self::Global],
+            Self::Workspaces => &[Self::Workspaces, Self::List, Self::Global],
+            Self::History => &[Self::History, Self::List, Self::Global],
             Self::PullDown => &[Self::PullDown, Self::Global],
         }
+    }
+
+    /// Whether the help lists this context's keys with each context that falls back to it,
+    /// where they mean what that one's window does with them, rather than apart.
+    pub(crate) fn helps_with_others(self) -> bool {
+        matches!(self, Self::List)
     }
 
     /// Whether `Esc` waits for another key, as in mc: `Esc 1` … `Esc 0` stand for F1 … F10,
@@ -394,6 +406,7 @@ impl Context {
         Self::Global,
         Self::Panel,
         Self::Root,
+        Self::List,
         Self::Menu,
         Self::Jump,
         Self::Workspaces,

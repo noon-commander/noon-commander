@@ -341,10 +341,12 @@ jobs, a job, and checksums. Dialogs are modal: the panel's keys do nothing there
 | Clear selection | — | ⏳ | — | — | — | Ctrl+u |
 | Select text manually | — | ⏳ | — | — | — | Shift+Click |
 
-## Location menu (`menu`)
+## Lists (`list`)
 
-Alt+F1 and Alt+F2: the volumes and hosts; characters filter it. The far column has the keys of
-Far's menus, its drive menu among them.
+The keys that the windows listing items to choose from share: the location menu, the zoxide
+window, the workspaces, and the command history fall back to it, and their sections list only
+the keys they add. Keys never go to it alone; the help lists its keys with each of those windows,
+with what Enter takes there.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | :-: | --- | --- | --- | --- |
@@ -354,11 +356,20 @@ Far's menus, its drive menu among them.
 | One page down | `page_down` | ✅ | PgDn | Ctrl+f<br>Shift+Down<br>Shift+Enter<br>PgDn | — | — |
 | First item | `home` | ⏳ | Home | Home | — | — |
 | Last item | `end` | ⏳ | End | End | — | — |
-| Open the volume or host in the panel | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | — |
-| Take back the last character of the filter | `backspace` | ✅ | Backspace | Backspace<br>Ctrl+h | — | — |
+| Take the item, as the window's section says | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | — |
+| Take back the last character of the filter or the keywords | `backspace` | ✅ | Backspace | Backspace<br>Ctrl+h | — | — |
+| Close the window | `cancel` | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
+
+## Location menu (`menu`)
+
+Alt+F1 and Alt+F2: the volumes and hosts; characters filter it. It falls back to `list`, whose
+Enter opens the volume or host in the panel. The far column has the keys of Far's menus, its
+drive menu among them.
+
+| Description | Action | Status | noc (default) | noc (vim) | mc | far |
+| --- | --- | :-: | --- | --- | --- | --- |
 | Disconnect the host | `disconnect` | ⏳ | F8 | F8 | — | — |
 | Read the volumes and hosts again | `reload` | ⏳ | Ctrl+r | Ctrl+r | — | — |
-| Close the menu | `cancel` | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
 | Filter the items | — | ⏳ | Typing | Typing | — | Ctrl+Alt+f<br>RightAlt |
 | Open an item by its number (empty filter) | — | ⏳ | 1…9, 0 | 1…9, 0 | — | — |
 | Lock filter | — | ⏳ | — | — | — | Ctrl+Alt+l |
@@ -373,39 +384,24 @@ Far's menus, its drive menu among them.
 ## zoxide window (`jump`)
 
 Alt+z: the directories that zoxide ranks; characters are keywords, as z takes them in a shell.
+It binds no keys of its own: it falls back to `list`, whose Enter opens the directory in the
+active panel.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | :-: | --- | --- | --- | --- |
-| Previous directory | `up` | ⏳ | Up | Ctrl+p<br>Up | — | — |
-| Next directory | `down` | ⏳ | Down | Ctrl+n<br>Down | — | — |
-| One page up | `page_up` | ⏳ | PgUp | PgUp | — | — |
-| One page down | `page_down` | ⏳ | PgDn | PgDn | — | — |
-| First directory | `home` | ⏳ | Home | Home | — | — |
-| Last directory | `end` | ⏳ | End | End | — | — |
-| Open the directory in the active panel | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | — |
-| Take back the last character of the keywords | `backspace` | ✅ | Backspace | Backspace<br>Ctrl+h | — | — |
-| Close the window | `cancel` | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
 | Open a directory by its number (no keywords) | — | ⏳ | 1…9, 0 | 1…9, 0 | — | — |
 
 ## Workspaces window (`workspaces`)
 
 Alt+w, or F9 → Workspace → Workspace list…; F9 → Workspace lists the first ten too, by their
-digits. Characters filter it.
+digits. Characters filter it. It falls back to `list`, whose Enter restores the workspace: it
+replaces the tabs of both panels.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | :-: | --- | --- | --- | --- |
 | Save the tabs of both panels as a new workspace | `save_workspace` | ⏳ | Insert | Insert | — | — |
-| Previous workspace | `up` | ⏳ | Up | Ctrl+p<br>Up | — | — |
-| Next workspace | `down` | ⏳ | Down | Ctrl+n<br>Down | — | — |
-| One page up | `page_up` | ⏳ | PgUp | PgUp | — | — |
-| One page down | `page_down` | ⏳ | PgDn | PgDn | — | — |
-| First workspace | `home` | ⏳ | Home | Home | — | — |
-| Last workspace | `end` | ⏳ | End | End | — | — |
-| Restore: replace the tabs of both panels | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | — |
-| Take back the last character of the filter | `backspace` | ✅ | Backspace | Backspace<br>Ctrl+h | — | — |
 | Rename the workspace | `move` | ⏳ | F6 | F6 | — | — |
 | Delete the workspace | `delete` | ⏳ | F8<br>Delete | F8<br>Delete | — | — |
-| Close the window | `cancel` | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
 | Restore a workspace by its number (empty filter) | — | ⏳ | 1…9, 0 | 1…9, 0 | — | — |
 
 ## Pull-down menu (`pull_down`)
@@ -529,22 +525,14 @@ of their input lines that noc lacks, such as words and the clipboard, are under 
 
 ## Command history (`history`)
 
-Alt+h in the panels and on the command line; characters filter it. Far's rows are those of its
-history menus.
+Alt+h in the panels and on the command line; characters filter it. It falls back to `list`,
+whose Enter puts the command on the command line without running it, as Ctrl+Enter does in
+Far. Far's rows are those of its history menus.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far |
 | --- | --- | :-: | --- | --- | --- | --- |
-| One row up | `up` | ⏳ | Up | Up | — | — |
-| One row down | `down` | ⏳ | Down | Down | — | — |
-| One page up | `page_up` | ⏳ | PgUp | PgUp | — | — |
-| One page down | `page_down` | ⏳ | PgDn | PgDn | — | — |
-| First row | `home` | ⏳ | Home | Home | — | — |
-| Last row | `end` | ⏳ | End | End | — | — |
 | The commands of the panel's host, or of all hosts | `next_field` | ⏳ | Tab | Tab | — | — |
-| Put the command on the command line, without running it | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | Ctrl+Enter |
-| Take back the last character of the filter | `backspace` | ✅ | Backspace | Backspace<br>Ctrl+h | — | — |
 | Remove the command from the history | `delete` | ⏳ | Delete | Delete | — | Shift+Delete |
-| Close the window | `cancel` | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
 | Re-run command / open item | — | ⏳ | — | — | — | Enter |
 | Run in separate window | — | ⏳ | — | — | — | Shift+Enter |
 | Run as administrator | — | ⏳ | — | — | — | Ctrl+Alt+Enter |

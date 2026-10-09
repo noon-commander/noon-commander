@@ -323,15 +323,26 @@ impl Keymap {
     }
 
     /// The actions `context` binds itself, in the order of the preset, each with its keys as
-    /// text such as `Ctrl+r, Alt+s`, for the help screen. The `Esc 1` … `Esc 0` aliases are
-    /// left out; the help explains them once.
+    /// text such as `Ctrl+r, Alt+s`, for the help screen; then those of the contexts it falls
+    /// back to whose keys the help lists with it, as far as they still do that here. The
+    /// `Esc 1` … `Esc 0` aliases are left out; the help explains them once.
     pub(crate) fn help(&self, context: Context) -> Vec<(Action, String)> {
         let mut rows: Vec<(Action, String)> = Vec::new();
-        let Some(bindings) = self.contexts.get(&context) else {
-            return rows;
-        };
-        for (sequence, action) in &bindings.0 {
+        let listed = context
+            .chain()
+            .iter()
+            .filter(|other| **other == context || other.helps_with_others())
+            .filter_map(|other| self.contexts.get(other))
+            .flat_map(|bindings| &bindings.0);
+        for (sequence, action) in listed {
             if is_esc_digit(sequence) {
+                continue;
+            }
+            let does = match self.lookup(context, sequence) {
+                Lookup::Exact(bound) | Lookup::Prefix(Some(bound)) => bound == *action,
+                Lookup::Prefix(None) | Lookup::Unknown => false,
+            };
+            if !does {
                 continue;
             }
             let keys = describe(sequence);
@@ -1811,6 +1822,7 @@ mod tests {
         for context in [
             Context::QuickSearch,
             Context::Rename,
+            Context::Menu,
             Context::Jump,
             Context::Workspaces,
             Context::Completion,
@@ -1853,6 +1865,42 @@ mod tests {
                 Action::Cancel
             ])
         );
+    }
+
+    #[test]
+    fn windows_that_list_items_share_the_keys_of_the_list() {
+        let windows = [
+            Context::Menu,
+            Context::Jump,
+            Context::Workspaces,
+            Context::History,
+        ];
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            let (_, bound) = preset(name)
+                .unwrap()
+                .iter()
+                .find(|(context, _)| *context == Context::List)
+                .unwrap();
+            assert!(!bound.is_empty(), "{name}");
+            for (action, keys) in *bound {
+                for keys in *keys {
+                    for context in windows {
+                        let mut state = KeyState::default();
+                        assert_eq!(
+                            feed(&keymap, &mut state, context, &[*keys]),
+                            actions(&[*action]),
+                            "{name}: `{keys}` in {context:?}"
+                        );
+                    }
+                }
+            }
+            // The help lists them with each window, after the window's own keys.
+            let list = keymap.help(Context::List);
+            for context in windows {
+                assert!(keymap.help(context).ends_with(&list), "{name}: {context:?}");
+            }
+        }
     }
 
     #[test]

@@ -118,9 +118,10 @@ pub(super) const PRESET: Preset = &[
             (Action::Redraw, &["ctrl-l"]),
         ],
     ),
-    // The location menu; characters filter it.
+    // What the windows that list items to choose from share: the location menu, the zoxide
+    // window, the workspaces, and the command history fall back to it.
     (
-        Context::Menu,
+        Context::List,
         &[
             (Action::Up, &["up", "ctrl-p"]),
             (Action::Down, &["down", "ctrl-n"]),
@@ -133,43 +134,24 @@ pub(super) const PRESET: Preset = &[
             (Action::End, &["end"]),
             (Action::Confirm, &["ctrl-y", "enter"]),
             (Action::Backspace, &["backspace", "ctrl-h"]),
-            (Action::Disconnect, &["f8"]),
-            (Action::Reload, &["ctrl-r"]),
             (Action::Cancel, &["esc", "ctrl-c", "f10"]),
         ],
     ),
-    // The zoxide window; characters are keywords.
+    // The location menu, on top of the list's; characters filter it.
     (
-        Context::Jump,
-        &[
-            (Action::Up, &["up"]),
-            (Action::Down, &["down"]),
-            (Action::PageUp, &["pageup"]),
-            (Action::PageDown, &["pagedown"]),
-            (Action::Home, &["home"]),
-            (Action::End, &["end"]),
-            (Action::Confirm, &["ctrl-y", "enter"]),
-            (Action::Backspace, &["backspace", "ctrl-h"]),
-            (Action::Cancel, &["esc", "ctrl-c", "f10"]),
-        ],
+        Context::Menu,
+        &[(Action::Disconnect, &["f8"]), (Action::Reload, &["ctrl-r"])],
     ),
-    // The window of the saved workspaces; characters filter it. Insert adds one, as in Far's menus;
-    // F6 renames and F8 deletes, as they rename and delete files.
+    // The zoxide window, on top of the list's; characters are keywords.
+    (Context::Jump, &[]),
+    // The window of the saved workspaces, on top of the list's; characters filter it. Insert adds
+    // one, as in Far's menus; F6 renames and F8 deletes, as they rename and delete files.
     (
         Context::Workspaces,
         &[
             (Action::SaveWorkspace, &["insert"]),
-            (Action::Up, &["up"]),
-            (Action::Down, &["down"]),
-            (Action::PageUp, &["pageup"]),
-            (Action::PageDown, &["pagedown"]),
-            (Action::Home, &["home"]),
-            (Action::End, &["end"]),
-            (Action::Confirm, &["ctrl-y", "enter"]),
-            (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Move, &["f6"]),
             (Action::Delete, &["f8", "delete"]),
-            (Action::Cancel, &["esc", "ctrl-c", "f10"]),
         ],
     ),
     // The pull-down menu; letters run the commands that have them, so h, j, k, and l stay theirs.
@@ -246,23 +228,11 @@ pub(super) const PRESET: Preset = &[
             (Action::Cancel, &["esc", "ctrl-c", "f10"]),
         ],
     ),
-    // The window of the command history; characters filter it, and Tab switches between the panel's
-    // host and all hosts.
+    // The window of the command history, on top of the list's; characters filter it, and Tab
+    // switches between the panel's host and all hosts.
     (
         Context::History,
-        &[
-            (Action::Up, &["up"]),
-            (Action::Down, &["down"]),
-            (Action::PageUp, &["pageup"]),
-            (Action::PageDown, &["pagedown"]),
-            (Action::Home, &["home"]),
-            (Action::End, &["end"]),
-            (Action::NextField, &["tab"]),
-            (Action::Confirm, &["ctrl-y", "enter"]),
-            (Action::Backspace, &["backspace", "ctrl-h"]),
-            (Action::Delete, &["delete"]),
-            (Action::Cancel, &["esc", "ctrl-c", "f10"]),
-        ],
+        &[(Action::NextField, &["tab"]), (Action::Delete, &["delete"])],
     ),
     // The terminal's own screen, with the output of commands.
     (Context::UserScreen, &[(Action::Cancel, &["ctrl-o", "esc"])]),

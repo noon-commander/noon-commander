@@ -937,11 +937,14 @@ location = "root"
   the line, with the prompt reversed until the next key if it ran on another host, and Delete
   removes it.
 - **Keymap.** Keys map to `Action`s per context (`global`, `panel`, `root`, `quick_search`,
-  `command_line`, `history`, `user_screen`, `menu`, `pull_down`, `dialog`, `dialog_input`,
-  `viewer`). Each context falls back along a chain, for example the root and quick search to the
-  panel, and every one but `user_screen` to `global` last, whose keys do the same everywhere; the
-  first context that knows a key sequence decides, except that a sequence it only starts does what
-  a later context binds it to. Bindings are key sequences matched by prefix with a 1-second
+  `command_line`, `history`, `user_screen`, `list`, `menu`, `jump`, `workspaces`, `pull_down`,
+  `dialog`, `dialog_input`, `viewer`). Each context falls back along a chain, for example the root
+  and quick search to the panel, the windows that list items to choose from (`menu`, `jump`,
+  `workspaces`, `history`) to `list`, which holds the keys they share, and every one but
+  `user_screen` to `global` last, whose keys do the same everywhere; the first context that knows a
+  key sequence decides, except that a sequence it only starts does what a later context binds it
+  to. The help lists the keys of `list` with each window that falls back to it, as that window
+  uses them. Bindings are key sequences matched by prefix with a 1-second
   timeout, so a vim preset (`g g`, `d d`) can follow the default mc preset. `ui.keymap` names the
   built-in preset, as `ui.theme` names the theme (`Keymap::NAMES`, `Keymap::by_name`); the
   Configuration dialog switches it at once. Each preset is a module of its own,

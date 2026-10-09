@@ -119,10 +119,10 @@ a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on th
 
 ## UI conventions
 
-- Keymap: actions per context (`panel`, `dialog`, `viewer`, `quick_search`, `menu`); bindings are
-  key sequences so a vim preset can be added. The default preset is mc. The F-key bar and help
-  are generated from the active keymap. When you add, change, or remove a binding in any preset,
-  update the `noc (default)` or `noc (vim)` column in
+- Keymap: actions per context (`panel`, `dialog`, `viewer`, `quick_search`, `location_menu`);
+  bindings are key sequences so a vim preset can be added. The default preset is mc. The F-key
+  bar and help are generated from the active keymap. When you add, change, or remove a binding
+  in any preset, update the `noc (default)` or `noc (vim)` column in
   [docs/keymap-compare.md](docs/keymap-compare.md) in the same change. Its sections are the
   contexts and its rows the actions, as `noc keymap diff` names them; an action new to a context
   gets a row in that section, among noc's actions in the order of the default preset, with mc's

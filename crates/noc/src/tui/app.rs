@@ -1196,7 +1196,7 @@ impl App {
                 open.dialog.context()
             }
         } else if self.menu.is_some() {
-            Context::Menu
+            Context::LocationMenu
         } else if self.jump.is_some() {
             Context::Jump
         } else if self.workspaces_window.is_some() {
@@ -7323,7 +7323,7 @@ mod tests {
     fn alt_f1_and_alt_f2_change_the_location_of_their_panel() {
         let mut app = loaded();
         open_menu(&mut app, Action::LocationMenuRight);
-        assert_eq!(app.context(), Context::Menu);
+        assert_eq!(app.context(), Context::LocationMenu);
         let text = screen_of(&mut app, 14);
         assert!(
             text.contains("Right") && text.contains("/Volumes/USB"),

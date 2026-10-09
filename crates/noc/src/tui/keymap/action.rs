@@ -16,7 +16,7 @@ pub(crate) enum Context {
     /// Keys never go to it alone.
     List,
     /// The location menu of Alt+F1 and Alt+F2, which has a filter; falls back to `List`.
-    Menu,
+    LocationMenu,
     /// The zoxide window of Alt+z, which takes keywords; falls back to `List`.
     Jump,
     /// The window of the saved workspaces, which has a filter; falls back to `List`.
@@ -55,7 +55,7 @@ impl Context {
             Self::Panel => "panel",
             Self::Root => "root",
             Self::List => "list",
-            Self::Menu => "menu",
+            Self::LocationMenu => "location_menu",
             Self::Jump => "jump",
             Self::Workspaces => "workspaces",
             Self::PullDown => "pull_down",
@@ -102,7 +102,7 @@ impl Context {
             Self::UserScreen => &[Self::UserScreen],
             // Menus are modal too.
             Self::List => &[Self::List, Self::Global],
-            Self::Menu => &[Self::Menu, Self::List, Self::Global],
+            Self::LocationMenu => &[Self::LocationMenu, Self::List, Self::Global],
             Self::Jump => &[Self::Jump, Self::List, Self::Global],
             Self::Workspaces => &[Self::Workspaces, Self::List, Self::Global],
             Self::History => &[Self::History, Self::List, Self::Global],
@@ -135,7 +135,7 @@ impl Context {
                 | Self::DialogInput
                 | Self::PathInput
                 | Self::Completion
-                | Self::Menu
+                | Self::LocationMenu
                 | Self::Jump
                 | Self::Workspaces
                 | Self::History
@@ -155,7 +155,7 @@ impl Context {
                 | Self::DialogInput
                 | Self::PathInput
                 | Self::Completion
-                | Self::Menu
+                | Self::LocationMenu
                 | Self::Jump
                 | Self::Workspaces
                 | Self::History
@@ -407,7 +407,7 @@ impl Context {
         Self::Panel,
         Self::Root,
         Self::List,
-        Self::Menu,
+        Self::LocationMenu,
         Self::Jump,
         Self::Workspaces,
         Self::PullDown,

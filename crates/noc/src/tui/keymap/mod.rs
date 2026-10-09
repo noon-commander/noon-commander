@@ -1175,7 +1175,7 @@ mod tests {
             feed(
                 &keymap,
                 &mut state,
-                Context::Menu,
+                Context::LocationMenu,
                 &["1", "p", "+", "space", "down", "enter", "f8", "esc"]
             ),
             [
@@ -1190,14 +1190,19 @@ mod tests {
             ]
         );
         assert_eq!(
-            feed(&keymap, &mut state, Context::Menu, &["tab", "ctrl-u", "f5"]),
+            feed(
+                &keymap,
+                &mut state,
+                Context::LocationMenu,
+                &["tab", "ctrl-u", "f5"]
+            ),
             [],
             "the menu is modal"
         );
         let mut menu = [None; 10];
         menu[7] = Some(Action::Disconnect);
         menu[9] = Some(Action::Cancel);
-        assert_eq!(keymap.fkeys(Context::Menu), menu);
+        assert_eq!(keymap.fkeys(Context::LocationMenu), menu);
     }
 
     #[test]
@@ -1581,7 +1586,11 @@ mod tests {
             );
         }
         // Where letters are text or filter a list, they stay text.
-        for context in [Context::DialogInput, Context::Menu, Context::QuickSearch] {
+        for context in [
+            Context::DialogInput,
+            Context::LocationMenu,
+            Context::QuickSearch,
+        ] {
             let mut state = KeyState::default();
             assert_eq!(
                 feed(&vim, &mut state, context, &["j", "k"]),
@@ -1786,7 +1795,7 @@ mod tests {
         for context in [
             Context::QuickSearch,
             Context::Rename,
-            Context::Menu,
+            Context::LocationMenu,
             Context::Jump,
             Context::Workspaces,
             Context::DialogInput,
@@ -1822,7 +1831,7 @@ mod tests {
         for context in [
             Context::QuickSearch,
             Context::Rename,
-            Context::Menu,
+            Context::LocationMenu,
             Context::Jump,
             Context::Workspaces,
             Context::Completion,
@@ -1853,7 +1862,7 @@ mod tests {
             feed(
                 &vim,
                 &mut state,
-                Context::Menu,
+                Context::LocationMenu,
                 &["ctrl-n", "ctrl-p", "ctrl-f", "ctrl-b", "ctrl-y", "ctrl-c"]
             ),
             actions(&[
@@ -1870,7 +1879,7 @@ mod tests {
     #[test]
     fn windows_that_list_items_share_the_keys_of_the_list() {
         let windows = [
-            Context::Menu,
+            Context::LocationMenu,
             Context::Jump,
             Context::Workspaces,
             Context::History,

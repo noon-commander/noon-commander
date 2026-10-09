@@ -181,7 +181,7 @@ pub(super) const PRESET: Preset = &[
     ),
     // The location menu, on top of the list's; characters filter it.
     (
-        Context::Menu,
+        Context::LocationMenu,
         &[(Action::Disconnect, &["f8"]), (Action::Reload, &["ctrl-r"])],
     ),
     // The zoxide window, on top of the list's; characters are keywords.

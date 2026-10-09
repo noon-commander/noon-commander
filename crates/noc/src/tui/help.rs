@@ -45,7 +45,7 @@ impl Help {
             (Context::QuickSearch, fl!("help-quick-search")),
             (Context::Rename, fl!("help-renaming")),
             (Context::CommandLine, fl!("help-command-line")),
-            (Context::Menu, fl!("help-menu")),
+            (Context::LocationMenu, fl!("help-menu")),
             (Context::Jump, fl!("help-jump")),
             (Context::Workspaces, fl!("help-workspaces")),
             (Context::History, fl!("help-history")),
@@ -209,6 +209,7 @@ fn key_lines(keys: &str, width: usize) -> Vec<String> {
 pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
     if let Some(text) = describe_rows(context, action)
         .or_else(|| describe_completion(context, action))
+        .or_else(|| describe_location_menu(context, action))
         .or_else(|| describe_workspaces(context, action))
         .or_else(|| describe_command_line(context, action))
         .or_else(|| describe_history(context, action))
@@ -217,8 +218,8 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         return Some(text);
     }
     let text = match (context, action) {
-        (Context::Panel | Context::Menu | Context::Jump, Action::Home) => fl!("help-first-row"),
-        (Context::Panel | Context::Menu | Context::Jump, Action::End) => fl!("help-last-row"),
+        (Context::Panel | Context::Jump, Action::Home) => fl!("help-first-row"),
+        (Context::Panel | Context::Jump, Action::End) => fl!("help-last-row"),
         (Context::Panel, Action::Enter) => fl!("help-enter"),
         (Context::Panel, Action::Mark) => fl!("help-mark"),
         (Context::Panel, Action::MarkUp) => fl!("help-mark-up"),
@@ -266,12 +267,9 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Global, Action::KeyHints) => fl!("help-key-hints"),
         (Context::Panel, Action::Quit) => fl!("help-quit"),
         (Context::Panel | Context::Viewer, Action::Redraw) => fl!("help-redraw"),
-        (Context::Root | Context::Menu, Action::Disconnect) => fl!("help-disconnect"),
+        (Context::Root, Action::Disconnect) => fl!("help-disconnect"),
         (Context::Root, Action::EditHost) => fl!("help-edit-host"),
-        (Context::Menu, Action::Confirm) => fl!("help-menu-open"),
-        (Context::Menu, Action::Backspace) => fl!("help-menu-back"),
-        (Context::Menu, Action::Reload) => fl!("help-menu-reload"),
-        (Context::Menu | Context::Jump, Action::Cancel) => fl!("help-menu-close"),
+        (Context::Jump, Action::Cancel) => fl!("help-menu-close"),
         (Context::Jump, Action::Confirm) => fl!("help-jump-go"),
         (Context::PullDown, Action::Cancel) => fl!("help-pulldown-close"),
         (Context::Panel, Action::PullDown) => fl!("help-pulldown-open"),
@@ -385,7 +383,7 @@ fn describe_rows(context: Context, action: Action) -> Option<String> {
         context,
         Context::Panel
             | Context::Viewer
-            | Context::Menu
+            | Context::LocationMenu
             | Context::Jump
             | Context::Workspaces
             | Context::History
@@ -396,6 +394,24 @@ fn describe_rows(context: Context, action: Action) -> Option<String> {
         Action::Down if rows => fl!("help-row-down"),
         Action::PageUp if rows => fl!("help-page-up"),
         Action::PageDown if rows => fl!("help-page-down"),
+        _ => return None,
+    };
+    Some(text)
+}
+
+/// What `action` does in the location menu, beyond moving the cursor.
+fn describe_location_menu(context: Context, action: Action) -> Option<String> {
+    if context != Context::LocationMenu {
+        return None;
+    }
+    let text = match action {
+        Action::Home => fl!("help-first-row"),
+        Action::End => fl!("help-last-row"),
+        Action::Confirm => fl!("help-menu-open"),
+        Action::Backspace => fl!("help-menu-back"),
+        Action::Disconnect => fl!("help-disconnect"),
+        Action::Reload => fl!("help-menu-reload"),
+        Action::Cancel => fl!("help-menu-close"),
         _ => return None,
     };
     Some(text)

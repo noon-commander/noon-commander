@@ -360,7 +360,7 @@ with what Enter takes there.
 | Take back the last character of the filter or the keywords | `backspace` | ✅ | Backspace | Backspace<br>Ctrl+h | — | — |
 | Close the window | `cancel` | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — |
 
-## Location menu (`menu`)
+## Location menu (`location_menu`)
 
 Alt+F1 and Alt+F2: the volumes and hosts; characters filter it. It falls back to `list`, whose
 Enter opens the volume or host in the panel. The far column has the keys of Far's menus, its

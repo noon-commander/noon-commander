@@ -142,7 +142,7 @@ always do.
 | Save the tabs of both panels as a workspace | `save_workspace` | ⏳ | Alt+W | Alt+W | — | — | — | — |
 | The pull-down menu | `pull_down` | ✅ | F9 | g m<br>F9 | F9 | F9 | — | — |
 | The pull-down menu, on the command that ran from it last | `pull_down_last` | ✅ | Shift+F9<br>F19 | g M<br>Shift+F9<br>F19 | Shift+F9 | Shift+F10 | — | — |
-| Quit | `quit` | ✅ | F10 | Q<br>Z Z<br>F10 | F10 | F10 | q | Q<br>F10 |
+| Quit | `quit` | ✅ | F10 | q<br>Z Z<br>F10 | F10 | F10 | q | Q<br>F10 |
 | Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | Ctrl+l | — | — | Ctrl+l |
 | F1…F10 on terminals without function keys | — | ⏳ | Esc, then 1…9, 0 | Esc, then 1…9, 0 | Esc, then 1…9, 0 | — | — | — |
 | Alt+key on terminals without Alt | — | ⏳ | Esc, then the key | Esc, then the key | Esc, then the key | — | — | — |
@@ -359,7 +359,7 @@ in an input box, and ranger on its console, whose keys are those of text fields.
 | Delete the character at the cursor | `delete` | ⏳ | Delete | Delete | — | — | — | — |
 | Delete to the start | `delete_to_start` | ⏳ | Ctrl+u | Ctrl+u | — | — | — | — |
 | Delete to the end | `delete_to_end` | ⏳ | Ctrl+k | Ctrl+k | — | — | — | — |
-| Rename to the name typed | `confirm` | ⏳ | Enter | Enter | — | — | — | — |
+| Rename to the name typed | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | — | — | — |
 | Keep the name as it was | `cancel` | ✅ | Esc | Esc<br>Ctrl+c | — | — | — | — |
 
 ## Dialogs and help (`dialog`)
@@ -658,7 +658,7 @@ clipboard, are under text fields, as are yazi's modes.
 | The command before in the history of the panel's host | `older_command` | ⏳ | Alt+p | Ctrl+p | Alt+p<br>Ctrl+Down | Ctrl+e | Ctrl+p | Ctrl+p |
 | The command after in the history of the panel's host | `newer_command` | ⏳ | Alt+n | Ctrl+n | Alt+n<br>Ctrl+Up | Ctrl+x | Ctrl+n | Ctrl+n |
 | The command history | `command_history` | ⏳ | Alt+h<br>Ctrl+r | Ctrl+r | Alt+h | Alt+F8 | — | — |
-| Run the command; after a \\ at the end of the line, a new line | `confirm` | ⏳ | Enter | Enter | Enter | Enter | Enter | Enter<br>Ctrl+j |
+| Run the command; after a \\ at the end of the line, a new line | `confirm` | ⏳ | Enter | Ctrl+y<br>Enter | Enter | Enter | Enter | Enter<br>Ctrl+j |
 | Close the command line | `cancel` | ✅ | Esc<br>Ctrl+c<br>F10 | Esc<br>Ctrl+c<br>F10 | — | Esc | Ctrl+c<br>Esc Esc | Esc<br>Ctrl+c<br>Ctrl+g |
 | Insert current file name | — | ⏳ | — | — | Alt+Enter<br>Ctrl+Enter | Ctrl+j<br>Ctrl+Enter | — | — |
 | Insert file name from passive panel | — | ⏳ | — | — | — | Ctrl+Shift+Enter | — | — |

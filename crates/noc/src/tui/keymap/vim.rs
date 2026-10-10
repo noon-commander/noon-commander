@@ -96,7 +96,7 @@ pub(super) const PRESET: Preset = &[
             (Action::SaveWorkspace, &["alt-shift-w"]),
             (Action::PullDown, &["g m", "f9"]), // OK1
             (Action::PullDownLast, &["g shift-m", "shift-f9", "f19"]), // OK1
-            (Action::Quit, &["shift-q", "shift-z shift-z", "f10"]), // OK1
+            (Action::Quit, &["q", "shift-z shift-z", "f10"]), // OK1
             (Action::Redraw, &["ctrl-l"]),      // OK1
         ],
     ),
@@ -131,8 +131,8 @@ pub(super) const PRESET: Preset = &[
             (Action::Delete, &["delete"]),
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),
-            (Action::Confirm, &["enter"]),
-            (Action::Cancel, &["esc", "ctrl-c"]), // OK1
+            (Action::Confirm, &["ctrl-y", "enter"]), // OK1
+            (Action::Cancel, &["esc", "ctrl-c"]),    // OK1
         ],
     ),
     // Dialogs whose focus is on a button or a list.
@@ -149,7 +149,7 @@ pub(super) const PRESET: Preset = &[
             (Action::End, &["shift-g", "end"]),
             (Action::NextField, &["tab"]),
             (Action::PrevField, &["backtab"]),
-            (Action::Confirm, &["ctrl-y", "enter"]),
+            (Action::Confirm, &["ctrl-y", "enter"]), // OK1
             (Action::Toggle, &["space"]),
             (Action::Cancel, &["esc", "ctrl-c", "f10"]), // OK1
         ],
@@ -160,21 +160,21 @@ pub(super) const PRESET: Preset = &[
     (
         Context::Viewer,
         &[
-            (Action::Up, &["k", "up", "ctrl-p"]),
-            (Action::Down, &["j", "down", "ctrl-n", "enter"]),
+            (Action::Up, &["k", "up", "ctrl-p"]),              // OK1
+            (Action::Down, &["j", "down", "ctrl-n", "enter"]), // OK1
             (Action::PageUp, &["ctrl-b", "shift-up", "pageup"]),
             (
                 Action::PageDown,
                 &["ctrl-f", "shift-down", "shift-enter", "pagedown"],
             ),
-            (Action::Home, &["g g", "home"]),
-            (Action::End, &["shift-g", "end"]),
+            (Action::Home, &["g g", "home"]),   // OK1
+            (Action::End, &["shift-g", "end"]), // OK1
             (Action::Left, &["h", "left"]),
             (Action::Right, &["l", "right"]),
             (Action::ToggleWrap, &["f2"]),
-            (Action::Help, &["g ?", "f1"]),
+            (Action::Help, &["g ?", "f1"]),             // OK1
             (Action::Quit, &["q", "esc", "f3", "f10"]), // OK1
-            (Action::Redraw, &["ctrl-l"]),
+            (Action::Redraw, &["ctrl-l"]),              // OK1
         ],
     ),
     // What the windows that list items to choose from share: the location menu, the zoxide
@@ -284,7 +284,7 @@ pub(super) const PRESET: Preset = &[
             (Action::NewerCommand, &["ctrl-n"]),
             // bash's Ctrl+r.
             (Action::CommandHistory, &["ctrl-r"]),
-            (Action::Confirm, &["enter"]),
+            (Action::Confirm, &["ctrl-y", "enter"]),
             (Action::Cancel, &["esc", "ctrl-c", "f10"]), // OK1
         ],
     ),

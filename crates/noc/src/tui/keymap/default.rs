@@ -123,8 +123,8 @@ pub(super) const PRESET: Preset = &[
             (Action::Delete, &["delete"]),
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),
-            (Action::Confirm, &["enter"]),
-            (Action::Cancel, &["esc"]), // OK1
+            (Action::Confirm, &["enter"]), // OK1
+            (Action::Cancel, &["esc"]),    // OK1
         ],
     ),
     // Dialogs whose focus is on a button or a list.
@@ -141,7 +141,7 @@ pub(super) const PRESET: Preset = &[
             (Action::End, &["end"]),
             (Action::NextField, &["tab"]),
             (Action::PrevField, &["backtab"]),
-            (Action::Confirm, &["enter"]),
+            (Action::Confirm, &["enter"]), // OK1
             (Action::Toggle, &["space"]),
             (Action::Cancel, &["esc", "f10"]), // OK1
         ],
@@ -152,18 +152,18 @@ pub(super) const PRESET: Preset = &[
     (
         Context::Viewer,
         &[
-            (Action::Up, &["up", "k", "y", "ctrl-p"]),
-            (Action::Down, &["down", "j", "e", "enter", "ctrl-n"]),
+            (Action::Up, &["up", "k", "y", "ctrl-p"]), // OK1
+            (Action::Down, &["down", "j", "e", "enter", "ctrl-n"]), // OK1
             (Action::PageUp, &["pageup", "b", "alt-v", "backspace"]),
             (Action::PageDown, &["pagedown", "space", "f", "ctrl-v"]),
-            (Action::Home, &["home", "g", "ctrl-home"]),
-            (Action::End, &["end", "shift-g", "ctrl-end"]),
+            (Action::Home, &["home", "g", "ctrl-home"]), // OK1
+            (Action::End, &["end", "shift-g", "ctrl-end"]), // OK1
             (Action::Left, &["left", "h"]),
             (Action::Right, &["right", "l"]),
             (Action::ToggleWrap, &["f2"]),
-            (Action::Help, &["f1"]),
+            (Action::Help, &["f1"]),                    // OK1
             (Action::Quit, &["f3", "f10", "q", "esc"]), // OK1
-            (Action::Redraw, &["ctrl-l"]),
+            (Action::Redraw, &["ctrl-l"]),              // OK1
         ],
     ),
     // What the windows that list items to choose from share: the location menu, the zoxide

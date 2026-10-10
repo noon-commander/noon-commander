@@ -386,7 +386,11 @@ async fn hand_over(
         Handover::UserScreen => {
             let mut events = EventStream::new();
             if suspended.is_ok() && crossterm::terminal::enable_raw_mode().is_ok() {
+                // The keys that go back are read as the panels read them: without the kitty
+                // keyboard protocol, Ctrl+` arrives as Ctrl+Space.
+                let _ = asked.modes.keyboard(true);
                 output::wait_to_go_back(&mut events, app.keymap()).await;
+                let _ = asked.modes.keyboard(false);
             }
             (events, Vec::new())
         }
@@ -439,27 +443,33 @@ impl Modes {
     }
 
     fn enter(self) -> io::Result<()> {
-        use crossterm::event::{
-            EnableBracketedPaste, KeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
-        };
-
-        crossterm::execute!(io::stdout(), EnableBracketedPaste)?;
-        if self.keyboard {
-            // Without alternate keys, Alt++ arrives as Alt+Shift+= and matches no binding.
-            let flags = KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
-                | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS;
-            crossterm::execute!(io::stdout(), PushKeyboardEnhancementFlags(flags))?;
-        }
-        Ok(())
+        crossterm::execute!(io::stdout(), crossterm::event::EnableBracketedPaste)?;
+        self.keyboard(true)
     }
 
     fn leave(self) -> io::Result<()> {
-        use crossterm::event::{DisableBracketedPaste, PopKeyboardEnhancementFlags};
+        self.keyboard(false)?;
+        crossterm::execute!(io::stdout(), crossterm::event::DisableBracketedPaste)
+    }
 
-        if self.keyboard {
-            crossterm::execute!(io::stdout(), PopKeyboardEnhancementFlags)?;
+    /// Turns the kitty keyboard protocol on or off, where the terminal speaks it. Kitty keeps
+    /// one stack of its modes for each screen, so each `true` takes a `false` on the same one.
+    fn keyboard(self, on: bool) -> io::Result<()> {
+        use crossterm::event::{
+            KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+        };
+
+        if !self.keyboard {
+            return Ok(());
         }
-        crossterm::execute!(io::stdout(), DisableBracketedPaste)
+        if on {
+            // Without alternate keys, Alt++ arrives as Alt+Shift+= and matches no binding.
+            let flags = KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+                | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS;
+            crossterm::execute!(io::stdout(), PushKeyboardEnhancementFlags(flags))
+        } else {
+            crossterm::execute!(io::stdout(), PopKeyboardEnhancementFlags)
+        }
     }
 }
 

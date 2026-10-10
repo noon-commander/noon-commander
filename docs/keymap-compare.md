@@ -104,7 +104,7 @@ always do.
 | Mark the names that match a pattern | `select` | ⏳ | +<br>Alt++ | + | +<br>Numpad+<br>Alt++ | Numpad+ | — | — |
 | Unmark the names that match a pattern | `unselect` | ⏳ | -<br>\\<br>Alt+- | -<br>\\ | -<br>\\<br>Numpad-<br>Alt+- | Numpad- | — | — |
 | Invert the marks on files; directories stay as they are | `invert_marks` | ⏳ | \*<br>Alt+\* | v | \*<br>Numpad\*<br>Alt+\* | Numpad* | — | — |
-| The other panel | `switch_panel` | ✅ | Tab | Tab<br>Ctrl+w w<br>Ctrl+w Ctrl+w | Tab<br>Ctrl+i | Tab | — | — |
+| The other panel | `switch_panel` | ✅ | Tab<br>Ctrl+i | Tab<br>Ctrl+w w<br>Ctrl+w Ctrl+w | Tab<br>Ctrl+i | Tab | — | — |
 | Swap the panels | `swap_panels` | ✅ | Ctrl+u | Ctrl+w x | Ctrl+u | Ctrl+u | — | — |
 | Open the directory under the cursor in the other panel | `other_panel_open` | ⏳ | Alt+o | Alt+o | Alt+o | — | — | — |
 | Show this directory in the other panel | `other_panel_sync` | ⏳ | Alt+i | Alt+i | Alt+i | — | — | — |

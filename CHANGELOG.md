@@ -29,7 +29,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   both keymaps. Ctrl+y does what Enter does in the menus, the lists, the dialogs, renaming, and
   on the command line, as in vim's pop-up menu. In both keymaps, Ctrl+h does what Backspace does
   wherever text is typed, as in mc, and in the default one Alt+< and Alt+> go to the first and
-  the last row of a panel, as in mc. In the vim keymap, Ctrl+c closes the windows and
+  the last row of a panel and Ctrl+i switches panels, as in mc, where the terminal tells Ctrl+i
+  from Tab. In the vim keymap, Ctrl+c closes the windows and
   the lists and ends quick search and renaming, as Esc does. In both, F10 closes the command line
   and the completion list, and Ctrl+c closes the command line, as in a shell. `noc keymap diff`
   compares two keymaps action by action, the default and the vim one unless named: `|` where the

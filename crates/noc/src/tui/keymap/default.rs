@@ -40,8 +40,8 @@ pub(super) const PRESET: Preset = &[
             (Action::Unselect, &["-", "\\", "alt--"]),
             (Action::InvertMarks, &["*", "alt-*"]),
             // Panels
-            (Action::SwitchPanel, &["tab"]),   // OK1
-            (Action::SwapPanels, &["ctrl-u"]), // OK1
+            (Action::SwitchPanel, &["tab", "ctrl-i"]), // OK1
+            (Action::SwapPanels, &["ctrl-u"]),         // OK1
             (Action::OtherPanelOpen, &["alt-o"]),
             (Action::OtherPanelSync, &["alt-i"]),
             (Action::Reload, &["ctrl-r"]),

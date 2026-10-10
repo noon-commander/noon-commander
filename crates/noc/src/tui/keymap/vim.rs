@@ -43,7 +43,7 @@ pub(super) const PRESET: Preset = &[
             (Action::InvertMarks, &["v"]),
             // Panels
             (Action::SwitchPanel, &["tab", "ctrl-w w", "ctrl-w ctrl-w"]), // OK1
-            (Action::SwapPanels, &["ctrl-w x"]),
+            (Action::SwapPanels, &["ctrl-w x"]),                          // OK1
             (Action::OtherPanelOpen, &["alt-o"]),
             (Action::OtherPanelSync, &["alt-i"]),
             // ranger's R.
@@ -58,11 +58,11 @@ pub(super) const PRESET: Preset = &[
             // vim's `/`; in quick search, Ctrl+g goes to the next match.
             (Action::QuickSearch, &["/"]),
             // Not in mc, whose command line takes what is typed (ADR 0019).
-            (Action::Shell, &["!"]),
-            (Action::Command, &[":"]),
+            (Action::Shell, &["!"]),   // OK1
+            (Action::Command, &[":"]), // OK1
             // vim's `q:`, the window of the command-line history.
             (Action::CommandHistory, &["q :"]),
-            (Action::Help, &["g ?", "f1"]),
+            (Action::Help, &["g ?", "f1"]), // OK1
             // ranger's i shows the file; e edits it.
             (Action::View, &["i", "f3"]),
             (Action::Edit, &["e", "f4"]),
@@ -94,10 +94,10 @@ pub(super) const PRESET: Preset = &[
             // Not in mc: W for workspaces, and Shift saves the tabs of both panels as one.
             (Action::Workspaces, &["alt-w"]),
             (Action::SaveWorkspace, &["alt-shift-w"]),
-            (Action::PullDown, &["g m", "f9"]),
-            (Action::PullDownLast, &["g shift-m", "shift-f9", "f19"]),
-            (Action::Quit, &["shift-z shift-z", "f10"]),
-            (Action::Redraw, &["ctrl-l"]),
+            (Action::PullDown, &["g m", "f9"]), // OK1
+            (Action::PullDownLast, &["g shift-m", "shift-f9", "f19"]), // OK1
+            (Action::Quit, &["shift-q", "shift-z shift-z", "f10"]), // OK1
+            (Action::Redraw, &["ctrl-l"]),      // OK1
         ],
     ),
     // A panel on the virtual root or the list of hosts, on top of the panel's.

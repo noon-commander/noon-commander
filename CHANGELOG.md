@@ -42,8 +42,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the next match, i views, e edits, y y copies, d d moves, c w renames in the row, D D deletes
   (and disconnects the host under the cursor on the root), R reads the directory again, z h
   shows hidden files, o n, o e, o m, and o s sort, q : opens the command history, w the jobs,
-  c d Quick cd, g n, g c, g t, and g T open, close, and switch tabs, and Esc and Ctrl+c stop
-  loading; F3 … F8, Alt+o, Alt+i, Alt+z, Alt+w, Alt+W, Alt+F1, Alt+F2, Alt+Left, Alt+Right,
+  c d Quick cd, g n, g c, g t, and g T open, close, and switch tabs, Q and Z Z quit, and Esc
+  and Ctrl+c stop loading; F3 … F8, Alt+o, Alt+i, Alt+z, Alt+w, Alt+W, Alt+F1, Alt+F2, Alt+Left, Alt+Right,
   Ctrl+x #, and Ctrl+x Tab do what they do in the default keymap. q closes the help, and Ctrl+b
   and Ctrl+f turn pages in dialogs. In text fields and on the command line, Ctrl+b goes to the
   start, as on vim's command line; on the command line, Ctrl+p and Ctrl+n go through the history

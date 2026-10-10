@@ -142,7 +142,7 @@ always do.
 | Save the tabs of both panels as a workspace | `save_workspace` | ⏳ | Alt+W | Alt+W | — | — | — | — |
 | The pull-down menu | `pull_down` | ✅ | F9 | g m<br>F9 | F9 | F9 | — | — |
 | The pull-down menu, on the command that ran from it last | `pull_down_last` | ✅ | Shift+F9<br>F19 | g M<br>Shift+F9<br>F19 | Shift+F9 | Shift+F10 | — | — |
-| Quit | `quit` | ✅ | F10 | Z Z<br>F10 | F10 | F10 | q | Q<br>F10 |
+| Quit | `quit` | ✅ | F10 | Q<br>Z Z<br>F10 | F10 | F10 | q | Q<br>F10 |
 | Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | Ctrl+l | — | — | Ctrl+l |
 | F1…F10 on terminals without function keys | — | ⏳ | Esc, then 1…9, 0 | Esc, then 1…9, 0 | Esc, then 1…9, 0 | — | — | — |
 | Alt+key on terminals without Alt | — | ⏳ | Esc, then the key | Esc, then the key | Esc, then the key | — | — | — |

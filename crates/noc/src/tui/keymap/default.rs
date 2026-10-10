@@ -40,8 +40,8 @@ pub(super) const PRESET: Preset = &[
             (Action::Unselect, &["-", "\\", "alt--"]),
             (Action::InvertMarks, &["*", "alt-*"]),
             // Panels
-            (Action::SwitchPanel, &["tab"]), // OK1
-            (Action::SwapPanels, &["ctrl-u"]),
+            (Action::SwitchPanel, &["tab"]),   // OK1
+            (Action::SwapPanels, &["ctrl-u"]), // OK1
             (Action::OtherPanelOpen, &["alt-o"]),
             (Action::OtherPanelSync, &["alt-i"]),
             (Action::Reload, &["ctrl-r"]),
@@ -55,11 +55,11 @@ pub(super) const PRESET: Preset = &[
             (Action::SortBySize, &["ctrl-f6"]),
             (Action::QuickSearch, &["ctrl-s", "alt-s"]),
             // Not in mc, whose command line takes what is typed (ADR 0019).
-            (Action::Shell, &["!"]),
-            (Action::Command, &[":"]),
+            (Action::Shell, &["!"]),   // OK1
+            (Action::Command, &[":"]), // OK1
             // mc's: the command line, with its history.
             (Action::CommandHistory, &["alt-h"]),
-            (Action::Help, &["f1"]),
+            (Action::Help, &["f1"]), // OK1
             (Action::View, &["f3"]),
             (Action::Edit, &["f4"]),
             (Action::Copy, &["f5"]),
@@ -92,12 +92,10 @@ pub(super) const PRESET: Preset = &[
             // and Esc W where Alt never arrives.
             (Action::Workspaces, &["alt-w"]),
             (Action::SaveWorkspace, &["alt-shift-w"]),
-            (Action::PullDown, &["f9"]),
-            // Not in mc: Far's Shift+F10, next to F9, as mc's Shift+F10 quits. Terminals without
-            // Shift+F9 send F19.
-            (Action::PullDownLast, &["shift-f9", "f19"]),
-            (Action::Quit, &["f10"]),
-            (Action::Redraw, &["ctrl-l"]),
+            (Action::PullDown, &["f9"]),                  // OK1
+            (Action::PullDownLast, &["shift-f9", "f19"]), // OK1
+            (Action::Quit, &["f10"]),                     // OK1
+            (Action::Redraw, &["ctrl-l"]),                // OK1
         ],
     ),
     // A panel on the virtual root or the list of hosts, on top of the panel's.

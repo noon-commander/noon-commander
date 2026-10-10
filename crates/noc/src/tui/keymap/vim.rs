@@ -31,23 +31,18 @@ pub(super) const PRESET: Preset = &[
                 Action::PageDown,
                 &["ctrl-f", "shift-down", "shift-enter", "pagedown"],
             ),
-            (Action::Home, &["g g", "home"]),   // OK1
-            (Action::End, &["shift-g", "end"]), // OK1
-            (Action::Enter, &["l", "enter"]),   // OK1
+            (Action::Home, &["g g", "home"]),              // OK1
+            (Action::End, &["shift-g", "end"]),            // OK1
+            (Action::Enter, &["l", "right", "enter"]),     // OK1
+            (Action::Parent, &["h", "left", "backspace"]), // OK1
             // Marks
             (Action::Mark, &["space", "insert"]),
-            // `-` goes to the parent, so `\` alone unmarks; ranger's `v` inverts the marks.
+            // mc's `+`, `-`, and `\`; ranger's `v` inverts the marks.
             (Action::Select, &["+"]),
-            (Action::Unselect, &["\\"]),
+            (Action::Unselect, &["-", "\\"]),
             (Action::InvertMarks, &["v"]),
-            // netrw's and vinegar's `-`, next to `h`.
-            (Action::Parent, &["h", "-", "backspace", "ctrl-h"]),
-            // vim's window commands, with Ctrl held or not; with two panels the previous window
-            // is the other one.
-            (
-                Action::SwitchPanel,
-                &["tab", "ctrl-w w", "ctrl-w ctrl-w", "ctrl-w p"],
-            ),
+            // Panels
+            (Action::SwitchPanel, &["tab", "ctrl-w w", "ctrl-w ctrl-w"]), // OK1
             (Action::SwapPanels, &["ctrl-w x"]),
             (Action::OtherPanelOpen, &["alt-o"]),
             (Action::OtherPanelSync, &["alt-i"]),

@@ -1706,21 +1706,21 @@ mod tests {
     }
 
     #[test]
-    fn h_and_minus_go_to_the_parent_directory_in_vim() {
+    fn h_and_left_go_to_the_parent_directory_in_vim() {
         let vim = Keymap::by_name("vim").unwrap();
         for context in [Context::Panel, Context::Root] {
             let mut state = KeyState::default();
             assert_eq!(
-                feed(&vim, &mut state, context, &["h", "-"]),
+                feed(&vim, &mut state, context, &["h", "left"]),
                 actions(&[Action::Parent, Action::Parent]),
                 "{context:?}"
             );
         }
         let mut state = KeyState::default();
         assert_eq!(
-            feed(&vim, &mut state, Context::QuickSearch, &["h", "-"]),
-            [Resolved::Insert('h'), Resolved::Insert('-')],
-            "characters of the name searched for"
+            feed(&vim, &mut state, Context::QuickSearch, &["h"]),
+            [Resolved::Insert('h')],
+            "a letter of the name searched for"
         );
     }
 
@@ -1781,12 +1781,9 @@ mod tests {
                     &vim,
                     &mut state,
                     context,
-                    &[
-                        "tab", "ctrl-w", "w", "ctrl-w", "ctrl-w", "ctrl-w", "p", "ctrl-w", "x"
-                    ]
+                    &["tab", "ctrl-w", "w", "ctrl-w", "ctrl-w", "ctrl-w", "x"]
                 ),
                 actions(&[
-                    Action::SwitchPanel,
                     Action::SwitchPanel,
                     Action::SwitchPanel,
                     Action::SwitchPanel,
@@ -1895,11 +1892,6 @@ mod tests {
                 "{context:?}"
             );
         }
-        let mut state = KeyState::default();
-        assert_eq!(
-            feed(&vim, &mut state, Context::Panel, &["ctrl-h"]),
-            actions(&[Action::Parent])
-        );
     }
 
     #[test]
@@ -2139,7 +2131,7 @@ mod tests {
         let hints = vim.hints(Context::Panel, &[]);
         let hint = |keys: &str| hints.iter().find(|hint| hint.keys == keys).cloned();
         assert_eq!(hint("g").map(|hint| hint.more), Some(8));
-        assert_eq!(hint("Ctrl+w").map(|hint| hint.more), Some(4));
+        assert_eq!(hint("Ctrl+w").map(|hint| hint.more), Some(3));
         assert_eq!(hint("Z").map(|hint| hint.more), Some(1));
         // Where characters are text, the panel's are left out.
         let search = keymap.hints(Context::QuickSearch, &[]);

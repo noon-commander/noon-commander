@@ -28,9 +28,10 @@ pub(super) const PRESET: Preset = &[
             (Action::Down, &["down", "ctrl-n"]), // OK1
             (Action::PageUp, &["pageup", "alt-v"]),
             (Action::PageDown, &["pagedown", "ctrl-v"]),
-            (Action::Home, &["home"]),   // OK1
-            (Action::End, &["end"]),     // OK1
-            (Action::Enter, &["enter"]), // OK1
+            (Action::Home, &["home"]),          // OK1
+            (Action::End, &["end"]),            // OK1
+            (Action::Enter, &["enter"]),        // OK1
+            (Action::Parent, &["ctrl-pageup"]), // OK1
             // Marks
             (Action::Mark, &["insert", "ctrl-t", "shift-down"]),
             (Action::MarkUp, &["shift-up"]),
@@ -38,8 +39,8 @@ pub(super) const PRESET: Preset = &[
             (Action::Select, &["+", "alt-+"]),
             (Action::Unselect, &["-", "\\", "alt--"]),
             (Action::InvertMarks, &["*", "alt-*"]),
-            (Action::Parent, &["ctrl-pageup"]),
-            (Action::SwitchPanel, &["tab"]),
+            // Panels
+            (Action::SwitchPanel, &["tab"]), // OK1
             (Action::SwapPanels, &["ctrl-u"]),
             (Action::OtherPanelOpen, &["alt-o"]),
             (Action::OtherPanelSync, &["alt-i"]),

@@ -97,14 +97,14 @@ always do.
 | One page down | `page_down` | ✅ | PgDn<br>Ctrl+v | Ctrl+f<br>Shift+Down<br>Shift+Enter<br>PgDn | PgDn<br>Ctrl+v | — | Ctrl+f<br>PgDn | PgDn<br>Ctrl+f |
 | First row | `home` | ✅ | Home | g g<br>Home | Home<br>A1<br>Alt+< | — | g g<br>Home | Home<br>g g |
 | Last row | `end` | ✅ | End | G<br>End | End<br>C1<br>Alt+> | — | G<br>End | End<br>G |
-| Open the directory or file under the cursor (yazi: l and Right enter a directory, o and Enter open the marked files) | `enter` | ✅ | Enter | l<br>Enter | Enter | Enter | l<br>Right<br>o<br>Enter | Right<br>Enter<br>l |
+| Open the directory or file under the cursor (yazi: l and Right enter a directory, o and Enter open the marked files) | `enter` | ✅ | Enter | l<br>Right<br>Enter | Enter | Enter | l<br>Right<br>o<br>Enter | Right<br>Enter<br>l |
+| Parent directory; above /, the volumes and hosts | `parent` | ✅ | Ctrl+PgUp | h<br>Left<br>Backspace | Ctrl+PgUp | Ctrl+PgUp | h<br>Left | Left<br>h |
 | Mark or unmark, then the next row | `mark` | ⏳ | Insert<br>Ctrl+t<br>Shift+Down | Space<br>Insert | Insert<br>Ctrl+t<br>Shift+Down | Insert<br>Shift+Down | Space | Space |
 | Mark or unmark, then the row above | `mark_up` | ⏳ | Shift+Up | — | Shift+Up | Shift+Up | — | — |
 | Mark the names that match a pattern | `select` | ⏳ | +<br>Alt++ | + | +<br>Numpad+<br>Alt++ | Numpad+ | — | — |
-| Unmark the names that match a pattern | `unselect` | ⏳ | -<br>\\<br>Alt+- | \\ | -<br>\\<br>Numpad-<br>Alt+- | Numpad- | — | — |
+| Unmark the names that match a pattern | `unselect` | ⏳ | -<br>\\<br>Alt+- | -<br>\\ | -<br>\\<br>Numpad-<br>Alt+- | Numpad- | — | — |
 | Invert the marks on files; directories stay as they are | `invert_marks` | ⏳ | \*<br>Alt+\* | v | \*<br>Numpad\*<br>Alt+\* | Numpad* | — | — |
-| Parent directory; above /, the volumes and hosts | `parent` | ✅ | Ctrl+PgUp | h<br>-<br>Backspace<br>Ctrl+h | Ctrl+PgUp | Ctrl+PgUp | h<br>Left | Left<br>h |
-| The other panel | `switch_panel` | ✅ | Tab | Tab<br>Ctrl+w w<br>Ctrl+w Ctrl+w<br>Ctrl+w p | Tab<br>Ctrl+i | Tab | — | — |
+| The other panel | `switch_panel` | ✅ | Tab | Tab<br>Ctrl+w w<br>Ctrl+w Ctrl+w | Tab<br>Ctrl+i | Tab | — | — |
 | Swap the panels | `swap_panels` | ✅ | Ctrl+u | Ctrl+w x | Ctrl+u | Ctrl+u | — | — |
 | Open the directory under the cursor in the other panel | `other_panel_open` | ⏳ | Alt+o | Alt+o | Alt+o | — | — | — |
 | Show this directory in the other panel | `other_panel_sync` | ⏳ | Alt+i | Alt+i | Alt+i | — | — | — |

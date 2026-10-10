@@ -22,33 +22,33 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   chooses the colors, and takes effect at once: `default`, modelled on mc, or `vim`. In the vim
   keymap, k, j, g g, and G move in dialogs too, and g m opens the pull-down menu, as F9 does,
   where Ctrl+n and Ctrl+p move, Ctrl+f and Ctrl+b, or Shift+Down and Shift+Up, go to the last
-  and first command, and Ctrl+c closes it. In its panels, Tab, Ctrl+w w, Ctrl+w Ctrl+w, and
-  Ctrl+w p switch to the other panel, and Ctrl+w x swaps them, as vim's window commands do. In
+  and first command, and Ctrl+c closes it. In its panels, Tab, Ctrl+w w, and Ctrl+w Ctrl+w
+  switch to the other panel, and Ctrl+w x swaps them, as vim's window commands do. In
   the location menu, the zoxide window, the workspaces, and the command history, Ctrl+n, Ctrl+p,
   Ctrl+f, and Ctrl+b move as in the panels, and Ctrl+c closes them: the four share their keys in
   both keymaps. Ctrl+y does what Enter does in the menus, the lists, and the dialogs, as in vim's
-  pop-up menu, and Ctrl+h does what Backspace does wherever text is typed, and goes to the
-  parent directory in the panels. In both keymaps, Ctrl+h deletes the character before the
-  cursor on the command line and in the fields of dialogs, as in mc. In the vim keymap, Ctrl+c
-  closes the windows and the lists and ends quick search and renaming, as Esc does. In both,
-  F10 closes the command line and the completion list, and Ctrl+c closes the command line, as
-  in a shell.
-  `noc keymap diff` compares two keymaps action by
-  action, the default and the vim one unless named: `|` where the keys differ, `<` and `>` for an
-  action only one of them binds, in color in a terminal; `--all` shows what they bind alike too.
+  pop-up menu, and Ctrl+h does what Backspace does wherever text is typed. In both keymaps,
+  Ctrl+h deletes the character before the cursor on the command line and in the fields of
+  dialogs, as in mc. In the vim keymap, Ctrl+c closes the windows and the lists and ends quick
+  search and renaming, as Esc does. In both, F10 closes the command line and the completion list,
+  and Ctrl+c closes the command line, as in a shell. `noc keymap diff` compares two keymaps
+  action by action, the default and the vim one unless named: `|` where the keys differ, `<` and
+  `>` for an action only one of them binds, in color in a terminal; `--all` shows what they bind
+  alike too.
 - The vim keymap does in its panels everything the default one does but mark upwards, with
-  vim's keys, and ranger's and yazi's where vim has none: Space marks, + and \ mark and unmark by
-  a pattern, v inverts the marks, / starts quick search and Ctrl+g goes to the next match, i
-  views, e edits, y y copies, d d moves, c w renames in the row, D D deletes (and disconnects
-  the host under the cursor on the root), R reads the directory again, z h shows hidden files,
-  o n, o e, o m, and o s sort, q : opens the command history, w the jobs, c d Quick cd, g n,
-  g c, g t, and g T open, close, and switch tabs, and Esc and Ctrl+c stop loading; F3 … F8,
-  Alt+o, Alt+i, Alt+z, Alt+w, Alt+W, Alt+F1, Alt+F2, Alt+Left, Alt+Right, Ctrl+x #, and
-  Ctrl+x Tab do what they do in the default keymap. q closes the help, and Ctrl+b and Ctrl+f
-  turn pages in dialogs. In text fields and on the command line, Ctrl+b goes to the start, as on
-  vim's command line; on the command line, Ctrl+p and Ctrl+n go through the history in place of
-  Alt+p and Alt+n, Ctrl+r opens it, and Ctrl+f opens the command in the editor; Ctrl+p and
-  Ctrl+n move in the completion list.
+  vim's keys, and ranger's and yazi's where vim has none: l and Right open what is under the
+  cursor, as Enter does, h, Left, and Backspace go to the parent directory, Space marks, + marks
+  and - and \ unmark by a pattern, v inverts the marks, / starts quick search and Ctrl+g goes to
+  the next match, i views, e edits, y y copies, d d moves, c w renames in the row, D D deletes
+  (and disconnects the host under the cursor on the root), R reads the directory again, z h
+  shows hidden files, o n, o e, o m, and o s sort, q : opens the command history, w the jobs,
+  c d Quick cd, g n, g c, g t, and g T open, close, and switch tabs, and Esc and Ctrl+c stop
+  loading; F3 … F8, Alt+o, Alt+i, Alt+z, Alt+w, Alt+W, Alt+F1, Alt+F2, Alt+Left, Alt+Right,
+  Ctrl+x #, and Ctrl+x Tab do what they do in the default keymap. q closes the help, and Ctrl+b
+  and Ctrl+f turn pages in dialogs. In text fields and on the command line, Ctrl+b goes to the
+  start, as on vim's command line; on the command line, Ctrl+p and Ctrl+n go through the history
+  in place of Alt+p and Alt+n, Ctrl+r opens it, and Ctrl+f opens the command in the editor;
+  Ctrl+p and Ctrl+n move in the completion list.
 - The terminal's window or tab is titled with the active panel's directory, as the prompt of the
   command line shows it (`~/src — noc`, or `host:path`), and gets its own title back when Noon
   Commander quits or hands the terminal to a command, where the terminal keeps a stack of titles.

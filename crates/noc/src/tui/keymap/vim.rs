@@ -24,74 +24,58 @@ pub(super) const PRESET: Preset = &[
         Context::Panel,
         &[
             // Navigation
-            (Action::Up, &["k", "up", "ctrl-p"]),     // OK1
-            (Action::Down, &["j", "down", "ctrl-n"]), // OK1
-            (Action::PageUp, &["ctrl-b", "shift-up", "pageup"]),
-            (
-                Action::PageDown,
-                &["ctrl-f", "shift-down", "shift-enter", "pagedown"],
-            ),
+            (Action::Up, &["k", "up", "ctrl-p"]),          // OK1
+            (Action::Down, &["j", "down", "ctrl-n"]),      // OK1
+            (Action::PageUp, &["ctrl-b", "pageup"]),       // OK1
+            (Action::PageDown, &["ctrl-f", "pagedown"]),   // OK1
             (Action::Home, &["g g", "home"]),              // OK1
             (Action::End, &["shift-g", "end"]),            // OK1
             (Action::Enter, &["l", "right", "enter"]),     // OK1
             (Action::Parent, &["h", "left", "backspace"]), // OK1
-            // Marks
-            (Action::Mark, &["space", "insert"]),
-            // mc's `+`, `-`, and `\`; ranger's `v` inverts the marks.
-            (Action::Select, &["+"]),
-            (Action::Unselect, &["-", "\\"]),
-            (Action::InvertMarks, &["v"]),
+            (Action::Reload, &["shift-r"]),                // OK1
+            (Action::Cancel, &["esc", "ctrl-c"]),          // OK1
             // Panels
-            (Action::SwitchPanel, &["tab", "ctrl-w w", "ctrl-w ctrl-w"]), // OK1
-            (Action::SwapPanels, &["ctrl-w x"]),                          // OK1
-            (Action::OtherPanelOpen, &["alt-o"]),
-            (Action::OtherPanelSync, &["alt-i"]),
-            // ranger's R.
-            (Action::Reload, &["shift-r"]),
-            (Action::Cancel, &["esc", "ctrl-c"]), // OK1
-            // ranger's z for settings and o for the order of sorting.
-            (Action::ToggleHidden, &["z h"]),
-            (Action::SortByName, &["o n"]),
-            (Action::SortByExtension, &["o e"]),
-            (Action::SortByTime, &["o m"]),
-            (Action::SortBySize, &["o s"]),
-            // vim's `/`; in quick search, Ctrl+g goes to the next match.
-            (Action::QuickSearch, &["/"]),
-            // Not in mc, whose command line takes what is typed (ADR 0019).
-            (Action::Shell, &["!"]),   // OK1
-            (Action::Command, &[":"]), // OK1
-            // vim's `q:`, the window of the command-line history.
-            (Action::CommandHistory, &["q :"]),
-            (Action::Help, &["g ?", "f1"]), // OK1
-            // ranger's i shows the file; e edits it.
-            (Action::View, &["i", "f3"]),
-            (Action::Edit, &["e", "f4"]),
-            // Doubled as vim's operators on a line: y y copies, d d moves, and D D deletes; c w
-            // changes the name in its row.
-            (Action::Copy, &["y y", "f5"]),
-            (Action::Move, &["d d", "f6"]),
-            (Action::Rename, &["c w", "shift-f6", "f16"]),
-            (Action::Mkdir, &["f7"]),
-            // In text fields, Delete deletes a character.
-            (Action::Delete, &["shift-d shift-d", "f8", "delete"]),
-            // yazi's and ranger's w, for their tasks.
-            (Action::Jobs, &["w"]),
-            // Not in mc; `#` for a hash.
-            (Action::Checksum, &["ctrl-x #"]),
-            // Far Manager's menus to change drives.
-            (Action::LocationMenuLeft, &["alt-f1"]),
-            (Action::LocationMenuRight, &["alt-f2"]),
-            // Not in mc: zoxide's `z`.
-            (Action::Jump, &["alt-z"]),
-            // ranger's `cd`.
-            (Action::QuickCd, &["c d"]),
-            // ranger's g n, g c, g t, and g T, as vim's tabs.
+            (Action::SwitchPanel, &["tab", "ctrl-w w"]), // OK1
+            (Action::SwapPanels, &["ctrl-w x"]),         // OK1
+            (Action::OtherPanelOpen, &["ctrl-w f"]),     // OK1
+            (Action::OtherPanelSync, &["ctrl-w v"]),     // OK1
+            // Marks
+            (Action::Mark, &["shift-j", "shift-down", "insert"]), // OK1
+            (Action::MarkUp, &["shift-k", "shift-up"]),           // OK1
+            (Action::Select, &["+"]),                             // OK1
+            (Action::Unselect, &["-"]),                           // OK1
+            (Action::InvertMarks, &["v"]),                        // OK1
+            // Tabs
             (Action::NewTab, &["g n"]),
             (Action::CloseTab, &["g c"]),
             (Action::NextTab, &["g t", "alt-right"]),
             (Action::PrevTab, &["g shift-t", "alt-left"]),
             (Action::TabList, &["ctrl-x tab"]),
-            // Not in mc: W for workspaces, and Shift saves the tabs of both panels as one.
+            // Items
+            (Action::ToggleHidden, &["z h"]),    // OK1
+            (Action::SortByName, &["o n"]),      // OK1
+            (Action::SortByExtension, &["o e"]), // OK1
+            (Action::SortByTime, &["o m"]),      // OK1
+            (Action::SortBySize, &["o s"]),      // OK1
+            // -
+            (Action::QuickSearch, &["/"]),               // OK1
+            (Action::Shell, &["!"]),                     // OK1
+            (Action::Command, &[":"]),                   // OK1
+            (Action::CommandHistory, &["q :"]),          // OK1
+            (Action::Help, &["g ?", "f1"]),              // OK1
+            (Action::View, &["i", "f3"]),                // OK1
+            (Action::Edit, &["e", "f4"]),                // OK1
+            (Action::Copy, &["y", "f5"]),                // OK1
+            (Action::Move, &["d", "f6"]),                // OK1
+            (Action::Rename, &["r", "shift-f6", "f16"]), // OK1
+            (Action::Mkdir, &["shift-a", "f7"]),         // OK1
+            (Action::Delete, &["shift-d", "f8"]),        // OK1
+            (Action::Jobs, &["w"]),
+            (Action::Checksum, &["ctrl-w #"]),
+            (Action::LocationMenuLeft, &["ctrl-w h"]),
+            (Action::LocationMenuRight, &["ctrl-w r"]),
+            (Action::Jump, &["c z"]),
+            (Action::QuickCd, &["c d"]),
             (Action::Workspaces, &["alt-w"]),
             (Action::SaveWorkspace, &["alt-shift-w"]),
             (Action::PullDown, &["g m", "f9"]), // OK1
@@ -160,15 +144,12 @@ pub(super) const PRESET: Preset = &[
     (
         Context::Viewer,
         &[
-            (Action::Up, &["k", "up", "ctrl-p"]),              // OK1
-            (Action::Down, &["j", "down", "ctrl-n", "enter"]), // OK1
-            (Action::PageUp, &["ctrl-b", "shift-up", "pageup"]),
-            (
-                Action::PageDown,
-                &["ctrl-f", "shift-down", "shift-enter", "pagedown"],
-            ),
-            (Action::Home, &["g g", "home"]),   // OK1
-            (Action::End, &["shift-g", "end"]), // OK1
+            (Action::Up, &["k", "up", "ctrl-p"]),                      // OK1
+            (Action::Down, &["j", "down", "ctrl-n", "enter"]),         // OK1
+            (Action::PageUp, &["ctrl-b", "shift-up", "pageup"]),       // OK1
+            (Action::PageDown, &["ctrl-f", "shift-down", "pagedown"]), // OK1
+            (Action::Home, &["g g", "home"]),                          // OK1
+            (Action::End, &["shift-g", "end"]),                        // OK1
             (Action::Left, &["h", "left"]),
             (Action::Right, &["l", "right"]),
             (Action::ToggleWrap, &["f2"]),
@@ -182,18 +163,15 @@ pub(super) const PRESET: Preset = &[
     (
         Context::List,
         &[
-            (Action::Up, &["up", "ctrl-p"]),
-            (Action::Down, &["down", "ctrl-n"]),
-            (Action::PageUp, &["ctrl-b", "shift-up", "pageup"]),
-            (
-                Action::PageDown,
-                &["ctrl-f", "shift-down", "shift-enter", "pagedown"],
-            ),
-            (Action::Home, &["home"]),
-            (Action::End, &["end"]),
-            (Action::Confirm, &["ctrl-y", "enter"]),
-            (Action::Backspace, &["backspace", "ctrl-h"]),
-            (Action::Cancel, &["esc", "ctrl-c", "f10"]), // OK1
+            (Action::Up, &["up", "ctrl-p"]),                           // OK1
+            (Action::Down, &["down", "ctrl-n"]),                       // OK1
+            (Action::PageUp, &["ctrl-b", "shift-up", "pageup"]),       // OK1
+            (Action::PageDown, &["ctrl-f", "shift-down", "pagedown"]), // OK1
+            (Action::Home, &["home"]),                                 // OK1
+            (Action::End, &["end"]),                                   // OK1
+            (Action::Confirm, &["ctrl-y", "enter"]),                   // OK1
+            (Action::Backspace, &["backspace", "ctrl-h"]),             // OK1
+            (Action::Cancel, &["esc", "ctrl-c", "f10"]),               // OK1
         ],
     ),
     // The location menu, on top of the list's; characters filter it.
@@ -217,15 +195,12 @@ pub(super) const PRESET: Preset = &[
     (
         Context::PullDown,
         &[
-            (Action::Up, &["up", "ctrl-p"]),
-            (Action::Down, &["down", "ctrl-n"]),
+            (Action::Up, &["up", "ctrl-p"]),     // OK1
+            (Action::Down, &["down", "ctrl-n"]), // OK1
             (Action::Left, &["left", "backtab"]),
             (Action::Right, &["right", "tab"]),
             (Action::Home, &["ctrl-b", "shift-up", "home", "pageup"]),
-            (
-                Action::End,
-                &["ctrl-f", "shift-down", "shift-enter", "end", "pagedown"],
-            ),
+            (Action::End, &["ctrl-f", "shift-down", "end", "pagedown"]),
             (Action::Confirm, &["ctrl-y", "enter"]),
             (Action::Cancel, &["esc", "ctrl-c", "f9", "f10"]), // OK1
         ],
@@ -250,8 +225,8 @@ pub(super) const PRESET: Preset = &[
     (
         Context::Completion,
         &[
-            (Action::Up, &["ctrl-p", "up"]),
-            (Action::Down, &["ctrl-n", "down"]),
+            (Action::Up, &["up", "ctrl-p"]),
+            (Action::Down, &["down", "ctrl-n"]),
             (Action::PageUp, &["pageup"]),
             (Action::PageDown, &["pagedown"]),
             (Action::Home, &["home"]),

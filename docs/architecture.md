@@ -819,15 +819,15 @@ location = "root"
   not listed byte for byte, renames it. Without `posix-rename` the file there goes first. A
   reload keeps the field on its entry; the field goes with the entry or when the panel goes
   elsewhere.
-- **F8 (or Delete) deletes** the marked entries, or the one under the cursor, after a red
-  question with Yes as the default, as in mc: `Delete file "x"?`, `Delete directory "x" and
-  everything in it?`, or `Delete 3 files and directories?`. mc asks a second time before it
-  goes into a directory that is not empty; Noon Commander says so in the first question instead.
-  The job runs in a task of its own, or in the host's task, with a window that shows
-  what it counts, the entry at hand, a gauge, and done/total; Esc or Abort stops it. A
-  failure asks in a red dialog, with mc's buttons: Ignore, Ignore all, Retry, and Abort.
-  When the job ends, panels on the directory read it again, and a cursor whose entry is gone
-  stays on its row. If the host's connection is lost, the job ends with it.
+- **F8 deletes** the marked entries, or the one under the cursor, after a red question with Yes as
+  the default, as in mc: `Delete file "x"?`, `Delete directory "x" and everything in it?`, or
+  `Delete 3 files and directories?`. mc asks a second time before it goes into a directory that is
+  not empty; Noon Commander says so in the first question instead. The job runs in a task of its
+  own, or in the host's task, with a window that shows what it counts, the entry at hand, a gauge,
+  and done/total; Esc or Abort stops it. A failure asks in a red dialog, with mc's buttons: Ignore,
+  Ignore all, Retry, and Abort. When the job ends, panels on the directory read it again, and a
+  cursor whose entry is gone stays on its row. If the host's connection is lost, the job ends with
+  it.
 - **Jobs.** A job's window has Background, the default, and Abort: Enter sends the job
   behind the panels, which take the keys again, and Esc aborts, as in mc. As many jobs run
   at once as `transfer.parallel_jobs` says (2); a later one waits, in front or behind, and
@@ -948,7 +948,7 @@ location = "root"
   everywhere; the first context that knows a key sequence decides, except that a sequence it only
   starts does what a later context binds it to. The help lists the keys of `list` with each window
   that falls back to it, as that window uses them. Bindings are key sequences matched by prefix
-  with a 1-second timeout, so a vim preset (`g g`, `d d`) can follow the default mc preset.
+  with a 1-second timeout, so a vim preset (`g g`, `Z Z`) can follow the default mc preset.
   `ui.keymap` names the built-in preset, as `ui.theme` names the theme (`Keymap::NAMES`,
   `Keymap::by_name`); the Configuration dialog switches it at once. Each preset is a module of
   its own, `tui/keymap/default.rs` and `tui/keymap/vim.rs`: each context with its actions, and

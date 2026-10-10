@@ -1347,15 +1347,12 @@ mod tests {
             Some("Ctrl+x #")
         );
         assert_eq!(key(Context::Panel, Action::Disconnect), None);
-        // In the root F8 disconnects, so Delete has only its own key there.
+        // In the root F8 disconnects, which leaves Delete no key there.
         assert_eq!(
             key(Context::Root, Action::Disconnect).as_deref(),
             Some("F8")
         );
-        assert_eq!(
-            key(Context::Root, Action::Delete).as_deref(),
-            Some("Delete")
-        );
+        assert_eq!(key(Context::Root, Action::Delete), None);
         assert_eq!(key(Context::Root, Action::EditHost).as_deref(), Some("F4"));
         assert_eq!(key(Context::Root, Action::Edit), None, "F4 edits the host");
     }
@@ -1519,7 +1516,7 @@ mod tests {
     }
 
     #[test]
-    fn the_vim_panels_do_what_the_default_ones_do_but_mark_upwards() {
+    fn the_vim_panels_do_what_the_default_ones_do() {
         let vim = Keymap::by_name("vim").unwrap();
         let mc = Keymap::mc();
         let panel = |keymap: &Keymap| -> Vec<Action> {
@@ -1529,10 +1526,11 @@ mod tests {
                 .map(|(action, _)| action)
                 .collect()
         };
-        let mut expected = panel(&mc);
-        // Shift+Up turns a page in vim's panels.
-        expected.retain(|action| *action != Action::MarkUp);
-        assert_eq!(panel(&vim), expected, "in the order of the default preset");
+        assert_eq!(
+            panel(&vim),
+            panel(&mc),
+            "in the order of the default preset"
+        );
         assert_eq!(vim.fkeys(Context::Panel), mc.fkeys(Context::Panel));
         let mut state = KeyState::default();
         assert_eq!(
@@ -1547,7 +1545,7 @@ mod tests {
     }
 
     #[test]
-    fn vim_letters_and_doubled_operators_act_on_the_entries() {
+    fn vim_letters_act_on_the_entries() {
         let vim = Keymap::by_name("vim").unwrap();
         let mut state = KeyState::default();
         assert_eq!(
@@ -1556,10 +1554,9 @@ mod tests {
                 &mut state,
                 Context::Panel,
                 &[
-                    "space", "+", "\\", "v", "shift-r", "z", "h", "o", "n", "o", "e", "o", "m",
-                    "o", "s", "/", "q", ":", "i", "e", "y", "y", "d", "d", "c", "w", "shift-d",
-                    "shift-d", "w", "c", "d", "g", "n", "g", "c", "g", "t", "g", "shift-t",
-                    "ctrl-c"
+                    "shift-j", "+", "-", "v", "shift-r", "z", "h", "o", "n", "o", "e", "o", "m",
+                    "o", "s", "/", "q", ":", "i", "e", "y", "d", "r", "shift-a", "shift-d", "w",
+                    "c", "d", "g", "n", "g", "c", "g", "t", "g", "shift-t", "ctrl-c"
                 ]
             ),
             actions(&[
@@ -1580,6 +1577,7 @@ mod tests {
                 Action::Copy,
                 Action::Move,
                 Action::Rename,
+                Action::Mkdir,
                 Action::Delete,
                 Action::Jobs,
                 Action::QuickCd,
@@ -1781,14 +1779,9 @@ mod tests {
                     &vim,
                     &mut state,
                     context,
-                    &["tab", "ctrl-w", "w", "ctrl-w", "ctrl-w", "ctrl-w", "x"]
+                    &["tab", "ctrl-w", "w", "ctrl-w", "x"]
                 ),
-                actions(&[
-                    Action::SwitchPanel,
-                    Action::SwitchPanel,
-                    Action::SwitchPanel,
-                    Action::SwapPanels,
-                ]),
+                actions(&[Action::SwitchPanel, Action::SwitchPanel, Action::SwapPanels,]),
                 "{context:?}"
             );
             // A lone Ctrl+w waits for its second key, then does nothing.
@@ -2080,13 +2073,13 @@ mod tests {
         let hints = keymap.hints(Context::Panel, &ctrl_x);
         assert_eq!(
             hint_keys(&hints),
-            ["j", "#", "1", "2", "z", "t", "w", "n", "p", "Tab"]
+            ["t", "w", "n", "p", "Tab", "j", "#", "1", "2", "z"]
         );
         assert_eq!(
             hints[0],
             Hint {
-                keys: "j".to_owned(),
-                action: Some(Action::Jobs),
+                keys: "t".to_owned(),
+                action: Some(Action::NewTab),
                 more: 0
             }
         );
@@ -2096,7 +2089,7 @@ mod tests {
         let g = parse_sequence("g").unwrap();
         assert_eq!(
             hint_keys(&vim.hints(Context::Panel, &g)),
-            ["g", "?", "n", "c", "t", "T", "m", "M"]
+            ["g", "n", "c", "t", "T", "?", "m", "M"]
         );
     }
 
@@ -2131,7 +2124,7 @@ mod tests {
         let hints = vim.hints(Context::Panel, &[]);
         let hint = |keys: &str| hints.iter().find(|hint| hint.keys == keys).cloned();
         assert_eq!(hint("g").map(|hint| hint.more), Some(8));
-        assert_eq!(hint("Ctrl+w").map(|hint| hint.more), Some(3));
+        assert_eq!(hint("Ctrl+w").map(|hint| hint.more), Some(7));
         assert_eq!(hint("Z").map(|hint| hint.more), Some(1));
         // Where characters are text, the panel's are left out.
         let search = keymap.hints(Context::QuickSearch, &[]);

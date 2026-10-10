@@ -93,51 +93,51 @@ always do.
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
 | One row up | `up` | ✅ | Up<br>Ctrl+p | k<br>Up<br>Ctrl+p | Up<br>Ctrl+p | — | k<br>Up | Up<br>k |
 | One row down | `down` | ✅ | Down<br>Ctrl+n | j<br>Down<br>Ctrl+n | Down<br>Ctrl+n | — | j<br>Down | Down<br>j |
-| One page up | `page_up` | ✅ | PgUp<br>Alt+v | Ctrl+b<br>Shift+Up<br>PgUp | PgUp<br>Alt+v | — | Ctrl+b<br>PgUp | PgUp<br>Ctrl+b |
-| One page down | `page_down` | ✅ | PgDn<br>Ctrl+v | Ctrl+f<br>Shift+Down<br>Shift+Enter<br>PgDn | PgDn<br>Ctrl+v | — | Ctrl+f<br>PgDn | PgDn<br>Ctrl+f |
+| One page up | `page_up` | ✅ | PgUp<br>Alt+v | Ctrl+b<br>PgUp | PgUp<br>Alt+v | — | Ctrl+b<br>PgUp | PgUp<br>Ctrl+b |
+| One page down | `page_down` | ✅ | PgDn<br>Ctrl+v | Ctrl+f<br>PgDn | PgDn<br>Ctrl+v | — | Ctrl+f<br>PgDn | PgDn<br>Ctrl+f |
 | First row | `home` | ✅ | Home<br>Alt+< | g g<br>Home | Home<br>A1<br>Alt+< | — | g g<br>Home | Home<br>g g |
 | Last row | `end` | ✅ | End<br>Alt+> | G<br>End | End<br>C1<br>Alt+> | — | G<br>End | End<br>G |
 | Open the directory or file under the cursor (yazi: l and Right enter a directory, o and Enter open the marked files) | `enter` | ✅ | Enter | l<br>Right<br>Enter | Enter | Enter | l<br>Right<br>o<br>Enter | Right<br>Enter<br>l |
 | Parent directory; above /, the volumes and hosts | `parent` | ✅ | Ctrl+PgUp | h<br>Left<br>Backspace | Ctrl+PgUp | Ctrl+PgUp | h<br>Left | Left<br>h |
-| Mark or unmark, then the next row | `mark` | ⏳ | Insert<br>Ctrl+t<br>Shift+Down | Space<br>Insert | Insert<br>Ctrl+t<br>Shift+Down | Insert<br>Shift+Down | Space | Space |
-| Mark or unmark, then the row above | `mark_up` | ⏳ | Shift+Up | — | Shift+Up | Shift+Up | — | — |
-| Mark the names that match a pattern | `select` | ⏳ | +<br>Alt++ | + | +<br>Numpad+<br>Alt++ | Numpad+ | — | — |
-| Unmark the names that match a pattern | `unselect` | ⏳ | -<br>\\<br>Alt+- | -<br>\\ | -<br>\\<br>Numpad-<br>Alt+- | Numpad- | — | — |
-| Invert the marks on files; directories stay as they are | `invert_marks` | ⏳ | \*<br>Alt+\* | v | \*<br>Numpad\*<br>Alt+\* | Numpad* | — | — |
-| The other panel | `switch_panel` | ✅ | Tab<br>Ctrl+i | Tab<br>Ctrl+w w<br>Ctrl+w Ctrl+w | Tab<br>Ctrl+i | Tab | — | — |
-| Swap the panels | `swap_panels` | ✅ | Ctrl+u | Ctrl+w x | Ctrl+u | Ctrl+u | — | — |
-| Open the directory under the cursor in the other panel | `other_panel_open` | ⏳ | Alt+o | Alt+o | Alt+o | — | — | — |
-| Show this directory in the other panel | `other_panel_sync` | ⏳ | Alt+i | Alt+i | Alt+i | — | — | — |
-| Read the directory again | `reload` | ⏳ | Ctrl+r | R | Ctrl+r | Ctrl+r | — | R |
+| Read the directory again | `reload` | ✅ | Ctrl+r | R | Ctrl+r | Ctrl+r | — | R |
 | Stop loading or connecting | `cancel` | ✅ | Esc | Esc<br>Ctrl+c | — | — | — | Ctrl+c |
-| Show or hide names that start with a dot (Far: hidden and system files) | `toggle_hidden` | ⏳ | Alt+. | z h | Alt+. | Ctrl+h | . | z h<br>Ctrl+h<br>Backspace |
-| Sort by name; again: reverse | `sort_by_name` | ⏳ | Ctrl+F3 | o n | — | Ctrl+F3 | , a<br>, A (reverse) | o b<br>o B (reverse) |
-| Sort by extension; again: reverse | `sort_by_extension` | ⏳ | Ctrl+F4 | o e | — | Ctrl+F4 | , e<br>, E (reverse) | o e<br>o E (reverse) |
-| Sort by modification time; again: reverse | `sort_by_time` | ⏳ | Ctrl+F5 | o m | — | Ctrl+F5 | , m<br>, M (reverse) | o m<br>o M (reverse) |
-| Sort by size; again: reverse | `sort_by_size` | ⏳ | Ctrl+F6 | o s | — | Ctrl+F6 | , s<br>, S (reverse) | o s<br>o S (reverse) |
-| Start quick search | `quick_search` | ⏳ | Ctrl+s<br>Alt+s | / | Ctrl+s<br>Alt+s | Alt+characters<br>Alt+Shift+characters | / | f |
-| Open the command line for a shell command | `shell` | ✅ | ! | ! | Typing | Typing | ; (in the background)<br>: | !<br>s |
-| Open the command line for a command of noc | `command` | ✅ | : | : | — | — | — | :<br>; |
-| The command history | `command_history` | ⏳ | Alt+h | q : | Alt+h | Alt+F8 | — | — |
-| Help | `help` | ✅ | F1 | g ?<br>F1 | F1 | F1 | \~<br>F1 | ?<br>F1 |
-| View the file under the cursor | `view` | ⏳ | F3 | i<br>F3 | F3 | F3<br>Numpad5<br>Ctrl+Shift+F3 (always internal) | — | i<br>F3 |
-| Edit the file under the cursor in $VISUAL or $EDITOR | `edit` | ⏳ | F4 | e<br>F4 | F4 | F4<br>Ctrl+Shift+F4 (always internal) | — | F4<br>E |
-| Copy the marked entries, or the one under the cursor | `copy` | ⏳ | F5 | y y<br>F5 | F5 | F5 | y, then p | y y, then p p<br>F5, then p p |
-| Move or rename the marked entries, or the one under the cursor | `move` | ⏳ | F6 | d d<br>F6 | F6 | F6 | x, then p | d d, then p p<br>F6, then p p |
-| Rename the entry under the cursor in its row (mc, Far: rename or move it in a dialog, ignoring the marks; yazi: in an input box, and the marked entries in $EDITOR; ranger: on its console) | `rename` | ⏳ | Shift+F6<br>F16 | c w<br>Shift+F6<br>F16 | Shift+F6 | Shift+F6 | r | F2 (before the extension)<br>c w (a new name)<br>a (before the extension)<br>A (at the end)<br>I (at the start) |
-| Make a directory | `mkdir` | ⏳ | F7 | F7 | F7 | F7 | a (a name that ends in /) | F7 |
-| Delete the marked entries, or the one under the cursor | `delete` | ⏳ | F8<br>Delete | D D<br>F8<br>Delete | F8 | F8 | D | F8<br>d D |
-| The running jobs: bring one to the front, or abort it | `jobs` | ⏳ | Ctrl+x j | w | Ctrl+x j | — | w | w |
-| Checksums of the marked files, or the one under the cursor | `checksum` | ⏳ | Ctrl+x # | Ctrl+x # | — | — | — | — |
-| Change the left panel's location: a volume or a host (Far: its drive) | `location_menu_left` | ⏳ | Alt+F1<br>Ctrl+x 1 | Alt+F1 | — | Alt+F1 | — | — |
-| Change the right panel's location: a volume or a host (Far: its drive) | `location_menu_right` | ⏳ | Alt+F2<br>Ctrl+x 2 | Alt+F2 | — | Alt+F2 | — | — |
-| Jump to a directory that zoxide ranks | `jump` | ⏳ | Alt+z<br>Ctrl+x z | Alt+z | — | — | Z | — |
-| Quick cd: type a path as for cd | `quick_cd` | ⏳ | Alt+c | c d | Alt+c | — | g Space | c d |
+| The other panel | `switch_panel` | ✅ | Tab<br>Ctrl+i | Tab<br>Ctrl+w w | Tab<br>Ctrl+i | Tab | — | — |
+| Swap the panels | `swap_panels` | ✅ | Ctrl+u | Ctrl+w x | Ctrl+u | Ctrl+u | — | — |
+| Open the directory under the cursor in the other panel | `other_panel_open` | ✅ | Alt+o | Ctrl+w f | Alt+o | — | — | — |
+| Show this directory in the other panel | `other_panel_sync` | ✅ | Alt+i | Ctrl+w v | Alt+i | — | — | — |
+| Mark or unmark, then the next row | `mark` | ✅ | Insert<br>Ctrl+t<br>Shift+Down | J<br>Shift+Down<br>Insert | Insert<br>Ctrl+t<br>Shift+Down | Insert<br>Shift+Down | Space | Space |
+| Mark or unmark, then the row above | `mark_up` | ✅ | Shift+Up | K<br>Shift+Up | Shift+Up | Shift+Up | — | — |
+| Mark the names that match a pattern | `select` | ✅ | +<br>Alt++ | + | +<br>Numpad+<br>Alt++ | Numpad+ | — | — |
+| Unmark the names that match a pattern | `unselect` | ✅ | -<br>\\<br>Alt+- | - | -<br>\\<br>Numpad-<br>Alt+- | Numpad- | — | — |
+| Invert the marks on files; directories stay as they are | `invert_marks` | ✅ | \*<br>Alt+\* | v | \*<br>Numpad\*<br>Alt+\* | Numpad* | — | — |
 | A new tab in this panel, on the same directory | `new_tab` | ⏳ | Ctrl+x t | g n | — | — | t t | Ctrl+n<br>g n |
 | Close this tab; the last one stays | `close_tab` | ⏳ | Ctrl+x w | g c | — | — | — | Ctrl+w<br>g c |
 | The next tab in this panel | `next_tab` | ⏳ | Alt+Right<br>Ctrl+x n | g t<br>Alt+Right | — | — | ] | Tab<br>Alt+Right<br>g t |
 | The previous tab in this panel | `prev_tab` | ⏳ | Alt+Left<br>Ctrl+x p | g T<br>Alt+Left | — | — | [ | Shift+Tab<br>Alt+Left<br>g T |
 | The tabs of this panel, to choose one | `tab_list` | ⏳ | Ctrl+x Tab | Ctrl+x Tab | — | — | — | — |
+| Show or hide names that start with a dot (Far: hidden and system files) | `toggle_hidden` | ✅ | Alt+. | z h | Alt+. | Ctrl+h | . | z h<br>Ctrl+h<br>Backspace |
+| Sort by name; again: reverse | `sort_by_name` | ✅ | Ctrl+F3 | o n | — | Ctrl+F3 | , a<br>, A (reverse) | o b<br>o B (reverse) |
+| Sort by extension; again: reverse | `sort_by_extension` | ✅ | Ctrl+F4 | o e | — | Ctrl+F4 | , e<br>, E (reverse) | o e<br>o E (reverse) |
+| Sort by modification time; again: reverse | `sort_by_time` | ✅ | Ctrl+F5 | o m | — | Ctrl+F5 | , m<br>, M (reverse) | o m<br>o M (reverse) |
+| Sort by size; again: reverse | `sort_by_size` | ✅ | Ctrl+F6 | o s | — | Ctrl+F6 | , s<br>, S (reverse) | o s<br>o S (reverse) |
+| Start quick search | `quick_search` | ✅ | Ctrl+s<br>Alt+s | / | Ctrl+s<br>Alt+s | Alt+characters<br>Alt+Shift+characters | / | f |
+| Open the command line for a shell command | `shell` | ✅ | ! | ! | Typing | Typing | ; (in the background)<br>: | !<br>s |
+| Open the command line for a command of noc | `command` | ✅ | : | : | — | — | — | :<br>; |
+| The command history | `command_history` | ✅ | Alt+h | q : | Alt+h | Alt+F8 | — | — |
+| Help | `help` | ✅ | F1 | g ?<br>F1 | F1 | F1 | \~<br>F1 | ?<br>F1 |
+| View the file under the cursor | `view` | ✅ | F3 | i<br>F3 | F3 | F3<br>Numpad5<br>Ctrl+Shift+F3 (always internal) | — | i<br>F3 |
+| Edit the file under the cursor in $VISUAL or $EDITOR | `edit` | ✅ | F4 | e<br>F4 | F4 | F4<br>Ctrl+Shift+F4 (always internal) | — | F4<br>E |
+| Copy the marked entries, or the one under the cursor | `copy` | ✅ | F5 | y<br>F5 | F5 | F5 | y, then p | y y, then p p<br>F5, then p p |
+| Move or rename the marked entries, or the one under the cursor | `move` | ✅ | F6 | d<br>F6 | F6 | F6 | x, then p | d d, then p p<br>F6, then p p |
+| Rename the entry under the cursor in its row (mc, Far: rename or move it in a dialog, ignoring the marks; yazi: in an input box, and the marked entries in $EDITOR; ranger: on its console) | `rename` | ✅ | Shift+F6<br>F16 | r<br>Shift+F6<br>F16 | Shift+F6 | Shift+F6 | r | F2 (before the extension)<br>c w (a new name)<br>a (before the extension)<br>A (at the end)<br>I (at the start) |
+| Make a directory | `mkdir` | ✅ | F7 | A<br>F7 | F7 | F7 | a (a name that ends in /) | F7 |
+| Delete the marked entries, or the one under the cursor | `delete` | ✅ | F8 | D<br>F8 | F8 | F8 | D | F8<br>d D |
+| The running jobs: bring one to the front, or abort it | `jobs` | ⏳ | Ctrl+x j | w | Ctrl+x j | — | w | w |
+| Checksums of the marked files, or the one under the cursor | `checksum` | ⏳ | Ctrl+x # | Ctrl+w # | — | — | — | — |
+| Change the left panel's location: a volume or a host (Far: its drive) | `location_menu_left` | ⏳ | Alt+F1<br>Ctrl+x 1 | Ctrl+w h | — | Alt+F1 | — | — |
+| Change the right panel's location: a volume or a host (Far: its drive) | `location_menu_right` | ⏳ | Alt+F2<br>Ctrl+x 2 | Ctrl+w r | — | Alt+F2 | — | — |
+| Jump to a directory that zoxide ranks | `jump` | ⏳ | Alt+z<br>Ctrl+x z | c z | — | — | Z | — |
+| Quick cd: type a path as for cd | `quick_cd` | ⏳ | Alt+c | c d | Alt+c | — | g Space | c d |
 | The saved workspaces: restore, rename, or delete one | `workspaces` | ⏳ | Alt+w | Alt+w | — | — | — | — |
 | Save the tabs of both panels as a workspace | `save_workspace` | ⏳ | Alt+W | Alt+W | — | — | — | — |
 | The pull-down menu | `pull_down` | ✅ | F9 | g m<br>F9 | F9 | F9 | — | — |
@@ -422,12 +422,12 @@ the keys of its pager, which shows files, the output of commands, and the log.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| One line up | `up` | ✅ | Up<br>k<br>y<br>Ctrl+p | k<br>Up<br>Ctrl+p | Up<br>k<br>y<br>Insert<br>Ctrl+p | Up | — | Up<br>k<br>Ctrl+p |
-| One line down | `down` | ✅ | Down<br>j<br>e<br>Enter<br>Ctrl+n | j<br>Down<br>Ctrl+n<br>Enter | Down<br>j<br>e<br>Enter<br>Delete<br>Ctrl+n | Down | — | Down<br>j<br>Ctrl+n<br>Enter |
-| One page up | `page_up` | ✅ | PgUp<br>b<br>Alt+v<br>Backspace | Ctrl+b<br>Shift+Up<br>PgUp | PgUp<br>Alt+v<br>b<br>Backspace<br>Ctrl+h | PgUp | — | PgUp<br>p<br>b<br>Ctrl+b |
-| One page down | `page_down` | ✅ | PgDn<br>Space<br>f<br>Ctrl+v | Ctrl+f<br>Shift+Down<br>Shift+Enter<br>PgDn | PgDn<br>Space<br>f<br>Ctrl+v | PgDn | — | PgDn<br>n<br>f<br>Ctrl+f<br>Space |
-| The start of the file | `home` | ✅ | Home<br>g<br>Ctrl+Home | g g<br>Home | Home<br>A1<br>g<br>Ctrl+Home<br>Ctrl+PgUp<br>Alt+< | Home<br>Ctrl+Home | — | Home<br>g |
-| The end of the file | `end` | ✅ | End<br>G<br>Ctrl+End | G<br>End | End<br>C1<br>G<br>Ctrl+End<br>Ctrl+PgDn<br>Alt+> | End<br>Ctrl+End | — | End<br>G |
+| One line up | `up` | ✅ | Up<br>k<br>y<br>Insert<br>Ctrl+p | k<br>Up<br>Ctrl+p | Up<br>k<br>y<br>Insert<br>Ctrl+p | Up | — | Up<br>k<br>Ctrl+p |
+| One line down | `down` | ✅ | Down<br>j<br>e<br>Enter<br>Delete<br>Ctrl+n | j<br>Down<br>Ctrl+n<br>Enter | Down<br>j<br>e<br>Enter<br>Delete<br>Ctrl+n | Down | — | Down<br>j<br>Ctrl+n<br>Enter |
+| One page up | `page_up` | ✅ | PgUp<br>Alt+v<br>b<br>Backspace<br>Ctrl+h | Ctrl+b<br>Shift+Up<br>PgUp | PgUp<br>Alt+v<br>b<br>Backspace<br>Ctrl+h | PgUp | — | PgUp<br>p<br>b<br>Ctrl+b |
+| One page down | `page_down` | ✅ | PgDn<br>Space<br>f<br>Ctrl+v | Ctrl+f<br>Shift+Down<br>PgDn | PgDn<br>Space<br>f<br>Ctrl+v | PgDn | — | PgDn<br>n<br>f<br>Ctrl+f<br>Space |
+| The start of the file | `home` | ✅ | Home<br>g<br>Ctrl+Home<br>Ctrl+PgUp<br>Alt+< | g g<br>Home | Home<br>A1<br>g<br>Ctrl+Home<br>Ctrl+PgUp<br>Alt+< | Home<br>Ctrl+Home | — | Home<br>g |
+| The end of the file | `end` | ✅ | End<br>G<br>Ctrl+End<br>Ctrl+PgDn<br>Alt+> | G<br>End | End<br>C1<br>G<br>Ctrl+End<br>Ctrl+PgDn<br>Alt+> | End<br>Ctrl+End | — | End<br>G |
 | One column left, when lines are cut (ranger: four) | `left` | ⏳ | Left<br>h | h<br>Left | Left<br>h | Left | — | Left<br>h |
 | One column right, when lines are cut (ranger: four) | `right` | ⏳ | Right<br>l | l<br>Right | Right<br>l | Right | — | Right<br>l |
 | Wrap long lines, or cut them | `toggle_wrap` | ⏳ | F2 | F2 | F2 | F2 | — | — |
@@ -484,15 +484,15 @@ which asks for the program to open files with.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Previous item | `up` | ✅ | Up | Up<br>Ctrl+p | Up<br>Ctrl+p | Up | k<br>Up | — |
-| Next item | `down` | ✅ | Down | Down<br>Ctrl+n | Down<br>Ctrl+n | Down | j<br>Down | — |
-| One page up | `page_up` | ✅ | PgUp | Ctrl+b<br>Shift+Up<br>PgUp | PgUp<br>Alt+v | — | — | — |
-| One page down | `page_down` | ✅ | PgDn | Ctrl+f<br>Shift+Down<br>Shift+Enter<br>PgDn | PgDn<br>Ctrl+v | — | — | — |
-| First item | `home` | ✅ | Home | Home | Home<br>A1<br>Alt+< | — | — | — |
-| Last item | `end` | ✅ | End | End | End<br>C1<br>Alt+> | — | — | — |
+| Previous item | `up` | ✅ | Up<br>Ctrl+p | Up<br>Ctrl+p | Up<br>Ctrl+p | Up | k<br>Up | — |
+| Next item | `down` | ✅ | Down<br>Ctrl+n | Down<br>Ctrl+n | Down<br>Ctrl+n | Down | j<br>Down | — |
+| One page up | `page_up` | ✅ | PgUp<br>Alt+v | Ctrl+b<br>Shift+Up<br>PgUp | PgUp<br>Alt+v | — | — | — |
+| One page down | `page_down` | ✅ | PgDn<br>Ctrl+v | Ctrl+f<br>Shift+Down<br>PgDn | PgDn<br>Ctrl+v | — | — | — |
+| First item | `home` | ✅ | Home<br>Alt+< | Home | Home<br>A1<br>Alt+< | — | — | — |
+| Last item | `end` | ✅ | End<br>Alt+> | End | End<br>C1<br>Alt+> | — | — | — |
 | Take the item, as the window's section says | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | Enter | Enter | Enter | — |
 | Take back the last character of the filter or the keywords | `backspace` | ✅ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | — | — | — | — |
-| Close the window | `cancel` | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | Esc<br>F10<br>Ctrl+g | Esc | Esc<br>Ctrl+[<br>Ctrl+c | — |
+| Close the window | `cancel` | ✅ | Esc<br>F10<br>Ctrl+g | Esc<br>Ctrl+c<br>F10 | Esc<br>F10<br>Ctrl+g | Esc | Esc<br>Ctrl+[<br>Ctrl+c | — |
 
 ## Location menu (`location_menu`)
 
@@ -546,12 +546,12 @@ move in it.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| The command above | `up` | ✅ | Up | Up<br>Ctrl+p | Up<br>Ctrl+p | — | — | — |
-| The command below | `down` | ✅ | Down | Down<br>Ctrl+n | Down<br>Ctrl+n | — | — | — |
+| The command above | `up` | ✅ | Up<br>Ctrl+p | Up<br>Ctrl+p | Up<br>Ctrl+p | — | — | — |
+| The command below | `down` | ✅ | Down<br>Ctrl+n | Down<br>Ctrl+n | Down<br>Ctrl+n | — | — | — |
 | The menu to the left | `left` | ✅ | Left<br>Shift+Tab | Left<br>Shift+Tab | Left<br>Ctrl+b | — | — | — |
 | The menu to the right | `right` | ✅ | Right<br>Tab | Right<br>Tab | Right<br>Ctrl+f | — | — | — |
 | The first command | `home` | ✅ | Home<br>PgUp | Ctrl+b<br>Shift+Up<br>Home<br>PgUp | Home<br>Alt+< | — | — | — |
-| The last command | `end` | ✅ | End<br>PgDn | Ctrl+f<br>Shift+Down<br>Shift+Enter<br>End<br>PgDn | End<br>Alt+> | — | — | — |
+| The last command | `end` | ✅ | End<br>PgDn | Ctrl+f<br>Shift+Down<br>End<br>PgDn | End<br>Alt+> | — | — | — |
 | Open the menu, or run the command | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | Enter | — | — | — |
 | Close the menu, then the menu bar | `cancel` | ✅ | Esc<br>F9<br>F10 | Esc<br>Ctrl+c<br>F9<br>F10 | Esc<br>F10<br>Ctrl+g | — | — | — |
 | Open a menu or run a command by its letter | — | ✅ | Letter | Letter | Letter | — | — | — |
@@ -621,8 +621,8 @@ console's line.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Previous choice | `up` | ⏳ | Up | Ctrl+p<br>Up | — | — | Alt+k<br>Up<br>Ctrl+p | Shift+Tab |
-| Next choice | `down` | ⏳ | Down | Ctrl+n<br>Down | — | — | Alt+j<br>Down<br>Ctrl+n | — |
+| Previous choice | `up` | ⏳ | Up | Up<br>Ctrl+p | — | — | Alt+k<br>Up<br>Ctrl+p | Shift+Tab |
+| Next choice | `down` | ⏳ | Down | Down<br>Ctrl+n | — | — | Alt+j<br>Down<br>Ctrl+n | — |
 | One page up | `page_up` | ⏳ | PgUp | PgUp | — | — | — | — |
 | One page down | `page_down` | ⏳ | PgDn | PgDn | — | — | — | — |
 | First choice | `home` | ⏳ | Home | Home | — | — | — | — |

@@ -50,7 +50,8 @@ pub(super) const PRESET: Preset = &[
             (Action::CloseTab, &["ctrl-x w"]),
             (Action::NextTab, &["alt-right", "ctrl-x n"]),
             (Action::PrevTab, &["alt-left", "ctrl-x p"]),
-            (Action::TabList, &["ctrl-x tab"]),
+            (Action::TabListLeft, &["ctrl-x ["]),
+            (Action::TabListRight, &["ctrl-x ]"]),
             // Items
             (Action::ToggleHidden, &["alt-."]),      // OK1
             (Action::SortByName, &["ctrl-f3"]),      // OK1
@@ -169,8 +170,8 @@ pub(super) const PRESET: Preset = &[
             (Action::Redraw, &["ctrl-l"]),              // OK1
         ],
     ),
-    // What the windows that list items to choose from share: the location menu, the zoxide
-    // window, the workspaces, and the command history fall back to it.
+    // What the windows that list items to choose from share: the location menu, the tab menu, the
+    // zoxide window, the workspaces, and the command history fall back to it.
     (
         Context::List,
         &[
@@ -190,6 +191,8 @@ pub(super) const PRESET: Preset = &[
         Context::LocationMenu,
         &[(Action::Disconnect, &["f8"]), (Action::Reload, &["ctrl-r"])],
     ),
+    // The tab menu of a panel, on top of the list's; characters filter it.
+    (Context::TabMenu, &[]),
     // The zoxide window, on top of the list's; characters are keywords.
     (Context::Jump, &[]),
     // The window of the saved workspaces, on top of the list's; characters filter it. Insert adds

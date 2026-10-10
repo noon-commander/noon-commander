@@ -316,8 +316,8 @@ best directories, which Enter opens in the active panel:
 
 ### Fuzzy search
 
-Quick search, the filter of the location menu, the zoxide window, and the Workspaces window
-match what is typed as fzf does while `ui.fuzzy_search` is on, which it is by default
+Quick search, the filters of the location menu and the tab menu, the zoxide window, and the
+Workspaces window match what is typed as fzf does while `ui.fuzzy_search` is on, which it is by default
 ([ADR 0016](adr/0016-fuzzy-search.md)). `tui/fuzzy.rs` wraps `nucleo-matcher`, Helix's port of
 fzf's algorithm:
 
@@ -357,8 +357,16 @@ row and names the tab that shows by its whole location:
 - Ctrl+x t opens a new tab after the one that shows, on the same directory with the same
   listing and cursor, without marks; Ctrl+x w closes the tab that shows (the last one stays),
   and the next one shows. Alt+Right and Alt+Left, or Ctrl+x n and Ctrl+x p, go round the tabs;
-  Ctrl+x Tab lists them, with their whole locations, to choose one. Left and Right in F9 do
-  the same for the panel on that side.
+  Ctrl+x [ and Ctrl+x ] open the tab menu of the left and the right panel, whichever is
+  active: the tabs with their whole locations, over that panel, to show one. The panel whose
+  tab is shown becomes active. Left and Right in F9 do the same for the panel on that side.
+- The tab menu, the location menu, the Workspaces window, and the command history share
+  `tui/picker.rs`: the filter, which typing fills and which matches as fzf does with
+  `ui.fuzzy_search`, the digits of the first ten rows while it is empty (but in the history,
+  whose commands have digits), the cursor, scrolling, the mouse, and the box, which the menus
+  draw over their panel and the windows over both. Each holds its own rows, says what the
+  filter finds them by, and draws them. The zoxide window does not: zoxide, not a filter,
+  picks its rows from the keywords typed.
 - Names on the line of tabs are brief: the last component of a directory, `~` for the home
   directory, `host:name` on a host, and the host alone in its start directory. The frame's
   verticals close each side's line, and its top corners become tees (`╠`, `╣`) that join it,

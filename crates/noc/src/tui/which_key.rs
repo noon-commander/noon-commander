@@ -285,7 +285,7 @@ mod tests {
             row("Ctrl+x"),
             Some(Row {
                 keys: "Ctrl+x".to_owned(),
-                text: "+10 keys".to_owned(),
+                text: "+11 keys".to_owned(),
                 group: true
             })
         );
@@ -302,7 +302,7 @@ mod tests {
             typed: Some("Ctrl+x".to_owned()),
             rows: keymap.hints(Context::Panel, &[ctrl_x]),
         };
-        insta::assert_snapshot!(draw(&hints, 100, 12));
+        insta::assert_snapshot!(draw(&hints, 100, 13));
     }
 
     #[test]

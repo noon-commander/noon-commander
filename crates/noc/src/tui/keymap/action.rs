@@ -17,6 +17,8 @@ pub(crate) enum Context {
     List,
     /// The location menu of Alt+F1 and Alt+F2, which has a filter; falls back to `List`.
     LocationMenu,
+    /// The tab menu of a panel, which has a filter; falls back to `List`.
+    TabMenu,
     /// The zoxide window of Alt+z, which takes keywords; falls back to `List`.
     Jump,
     /// The window of the saved workspaces, which has a filter; falls back to `List`.
@@ -58,6 +60,7 @@ impl Context {
             Self::Root => "root",
             Self::List => "list",
             Self::LocationMenu => "location_menu",
+            Self::TabMenu => "tab_menu",
             Self::Jump => "jump",
             Self::Workspaces => "workspaces",
             Self::PullDown => "pull_down",
@@ -107,6 +110,7 @@ impl Context {
             // Menus are modal too.
             Self::List => &[Self::List, Self::Global],
             Self::LocationMenu => &[Self::LocationMenu, Self::List, Self::Global],
+            Self::TabMenu => &[Self::TabMenu, Self::List, Self::Global],
             Self::Jump => &[Self::Jump, Self::List, Self::Global],
             Self::Workspaces => &[Self::Workspaces, Self::List, Self::Global],
             Self::CommandHistory => &[Self::CommandHistory, Self::List, Self::Global],
@@ -140,6 +144,7 @@ impl Context {
                 | Self::PathInput
                 | Self::Completion
                 | Self::LocationMenu
+                | Self::TabMenu
                 | Self::Jump
                 | Self::Workspaces
                 | Self::CommandHistory
@@ -160,6 +165,7 @@ impl Context {
                 | Self::PathInput
                 | Self::Completion
                 | Self::LocationMenu
+                | Self::TabMenu
                 | Self::Jump
                 | Self::Workspaces
                 | Self::CommandHistory
@@ -250,8 +256,10 @@ pub(crate) enum Action {
     NextTab,
     /// Shows the panel's previous tab, round.
     PrevTab,
-    /// Lists the panel's tabs to choose one.
-    TabList,
+    /// Lists the left panel's tabs to choose one.
+    TabListLeft,
+    /// Lists the right panel's tabs to choose one.
+    TabListRight,
     /// Asks for a name and saves the tabs of both panels as a workspace.
     SaveWorkspace,
     /// Opens the window of the saved workspaces.
@@ -366,7 +374,8 @@ impl Action {
             Self::CloseTab => "close_tab",
             Self::NextTab => "next_tab",
             Self::PrevTab => "prev_tab",
-            Self::TabList => "tab_list",
+            Self::TabListLeft => "tab_list_left",
+            Self::TabListRight => "tab_list_right",
             Self::SaveWorkspace => "save_workspace",
             Self::Workspaces => "workspaces",
             Self::Reload => "reload",
@@ -413,6 +422,7 @@ impl Context {
         Self::Root,
         Self::List,
         Self::LocationMenu,
+        Self::TabMenu,
         Self::Jump,
         Self::Workspaces,
         Self::PullDown,
@@ -472,7 +482,8 @@ impl Action {
         Self::CloseTab,
         Self::NextTab,
         Self::PrevTab,
-        Self::TabList,
+        Self::TabListLeft,
+        Self::TabListRight,
         Self::SaveWorkspace,
         Self::Workspaces,
         Self::Reload,

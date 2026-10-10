@@ -26,6 +26,7 @@ mod pulldown;
 mod root;
 mod scrollbar;
 mod sums;
+mod tab_menu;
 mod tabs;
 mod tasks;
 mod theme;

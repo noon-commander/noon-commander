@@ -82,7 +82,7 @@
 - [ ] More built-in dark and light pairs from the same palette roles: Gruvbox (dark/light),
       Rosé Pine (main/dawn), Tokyo Night (night/day), Solarized (dark/light)
 - [ ] User themes and keymap overrides
-- [x] Tabs: each panel has its own (Ctrl+x t, Ctrl+x w, Alt+Left/Right, Ctrl+x Tab), on a line
+- [x] Tabs: each panel has its own (Ctrl+x t, Ctrl+x w, Alt+Left/Right, Ctrl+x [ and ]), on a line
       above the panels or in their frames, `ui.tab_bar`
       ([ADR 0011](adr/0011-tabs-per-panel.md))
 - [x] zoxide: Alt+z jumps to the directories it ranks; directories where the user did

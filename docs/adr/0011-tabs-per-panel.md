@@ -37,9 +37,11 @@ switch, which means a round trip on a remote host, and it loses marks.
   tab that waits for it.
 - A new tab (Ctrl+x t) copies the one that shows, its listing included, so it needs no
   listing; it waits for the same request if that one does. Ctrl+x w closes a tab (the last
-  one stays), Alt+Right and Alt+Left or Ctrl+x n and Ctrl+x p go round them, and Ctrl+x Tab
-  lists them to choose one. The keys sit under Ctrl+x because Ctrl+t marks, as in mc, most
-  terminals do not pass Ctrl+Tab, and Alt and a digit already stand for the F-keys.
+  one stays), Alt+Right and Alt+Left or Ctrl+x n and Ctrl+x p go round them, and Ctrl+x [ and
+  Ctrl+x ] open the tab menu of the left and the right panel: drawn over that panel and
+  filtered by typing, as its location menu is. The keys sit under Ctrl+x because Ctrl+t
+  marks, as in mc, most terminals do not pass Ctrl+Tab, and Alt and a digit already stand for
+  the F-keys.
 - `ui.tab_bar` decides where a side with more than one tab shows them: `line` (the default) on
   a line of its own above both panels, as Total Commander does, with short names; `frame` in
   the top line of the panel's frame in place of its title, which costs no row, with the whole

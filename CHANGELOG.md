@@ -50,8 +50,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   row, A makes a directory, D deletes (D D disconnects the host under the cursor on the root), R
   reads the directory again, z h shows hidden files, o n, o e, o m, and o s sort, q : opens the
   command history, w the jobs, c d Quick cd, c z jumps with zoxide, g n, g c, g t, and g T open,
-  close, and switch tabs, Z Z quits, and Esc and Ctrl+c stop loading; F3 … F8, Alt+w, Alt+W,
-  Alt+Left, Alt+Right, and Ctrl+x Tab do what they do in the default keymap. q closes the help, and
+  close, and switch tabs, t h and t l list the left and the right panel's tabs, Z Z quits, and Esc
+  and Ctrl+c stop loading; F3 … F8, Alt+w, Alt+W, Alt+Left, and Alt+Right do what they do in the
+  default keymap. q closes the help, and
   Ctrl+b and Ctrl+f turn pages in dialogs. In text fields and on the command line, Ctrl+b goes to
   the start, as on vim's command line; on the command line, Ctrl+p and Ctrl+n go through the history
   in place of Alt+p and Alt+n, Ctrl+r opens it, and Ctrl+f opens the command in the editor; Ctrl+p
@@ -121,8 +122,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `ui.type_to_search` and its row in Options → Configuration are gone; remove the key from
   `config.toml`. `!` and `:` will open a command line for shell commands.
 - Release builds use full link-time optimization, which makes the `noc` binary about 6% smaller.
-- The title of a panel, and the list of tabs (Ctrl+x Tab), show the home directory as `~`: `~/src`
-  rather than `/Users/me/src`.
+- The title of a panel, and the tab menu, show the home directory as `~`: `~/src` rather
+  than `/Users/me/src`.
+- The list of tabs is now a tab menu, like the location menu: it opens for either panel,
+  whichever is active, with Ctrl+x [ for the left one and Ctrl+x ] for the right one in place
+  of Ctrl+x Tab, and is drawn over that panel rather than in the middle of the screen. Typing
+  filters it, as fzf does with `ui.fuzzy_search`; while the filter is empty, 1 … 9 and 0 show
+  the first ten tabs, and the mouse picks one as in the other menus. Showing a tab makes its
+  panel active. The actions are `tab_list_left` and `tab_list_right`, in place of `tab_list`,
+  and the menu has keys of its own in the `tab_menu` context.
 - Keys are written one way in the help, the menus, and the docs: letters in lowercase, after a
   modifier too, and in uppercase for Shift and the letter (`Ctrl+r`, `Alt+W`, `G`), `Shift+` only
   before other keys (`Shift+F6`), and `PgUp`, `PgDn` rather than `PageUp`, `PageDown`.

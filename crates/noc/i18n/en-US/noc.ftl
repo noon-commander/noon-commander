@@ -102,7 +102,7 @@ root-free = Free
 root-address = Address
 
 ## What the windows that list rows to choose from share (src/tui/picker): the location menu,
-## the workspaces, and the command history. Prefix: picker-.
+## the tab menu, the workspaces, and the command history. Prefix: picker-.
 
 # The first line: what was typed to filter the window.
 picker-filter = Filter: { $text }
@@ -129,8 +129,10 @@ jump-not-installed = zoxide is not installed: cannot run { $program }. Get it fr
 
 ## Tabs (src/tui/tabs, src/tui/app). Prefix: tabs-. Each side has tabs of its own.
 
-# Title of the list of a panel's tabs, Ctrl+x Tab; each row is the tab's number and where it is.
-tabs-title = Tabs
+# Titles of the tab menu of Ctrl+x [ and Ctrl+x ], drawn over the panel whose tabs it lists;
+# each row is where a tab is.
+tabs-title-left = Left tabs
+tabs-title-right = Right tabs
 
 ## Workspaces (src/tui/workspaces, src/tui/app): the tabs of both panels, saved under a name in
 ## workspaces.toml. Prefix: workspaces-.
@@ -346,6 +348,7 @@ help-everywhere = Everywhere
 help-panels = Panels
 help-root = Volumes and hosts
 help-menu = Location menu
+help-tab-menu = Tab menu
 help-jump = zoxide
 help-workspaces = Workspaces
 help-history = Command history
@@ -418,7 +421,8 @@ help-new-tab = A new tab in this panel, on the same directory
 help-close-tab = Close this tab; the last one stays
 help-next-tab = The next tab in this panel
 help-prev-tab = The previous tab in this panel
-help-tab-list = The tabs of this panel, to choose one
+help-tab-list-left = The tabs of the left panel, to choose one
+help-tab-list-right = The tabs of the right panel, to choose one
 help-save-workspace = Save the tabs of both panels as a workspace
 help-workspaces-open = The saved workspaces: restore, rename, or delete one
 help-workspaces-save = Save the tabs of both panels as a new workspace
@@ -435,6 +439,7 @@ help-menu-open = Open the volume or host in the panel
 help-menu-back = Take back the last character of the filter
 help-menu-reload = Read the volumes and hosts again
 help-menu-close = Close the menu
+help-tab-menu-show = Show the tab in the panel
 help-pulldown-open = The pull-down menu: Left, File, Command, Options, Workspace, Right
 help-pulldown-last = The pull-down menu, on the command of it that ran last
 help-pulldown-up = The command above
@@ -487,10 +492,10 @@ help-command-edit = Edit the command in $VISUAL or $EDITOR; it comes back withou
 help-command-run = Run the command; after a \ at the end of the line, a new line
 help-command-close = Close the command line
 help-note-esc = Esc 1 … Esc 0 stand for F1 … F10, and Esc followed by a key for Alt and the key, for terminals without them. A lone Esc acts after a second; Esc Esc at once.
-help-note-menu = Typing in the location menu filters it; 1 … 9 and 0 open the first ten rows while the filter is empty.
+help-note-menu = Typing in the location menu and the tab menu filters them; 1 … 9 and 0 open the first ten rows while the filter is empty.
 help-note-jump = Typing in the zoxide window gives it keywords, as z does in a shell; 1 … 9 and 0 open the first ten rows while there are none.
 help-note-jump-fuzzy = Typing in the zoxide window filters its directories; 1 … 9 and 0 open the first ten rows while nothing is typed.
-help-note-fuzzy = Quick search, the location menu, the zoxide window, and the Workspaces window match as fzf does: the letters typed in order, not necessarily together, best match first. Words separated by spaces must all match; 'word matches as it is, ^word at the start, word$ at the end, and !word where it is not.
+help-note-fuzzy = Quick search, the location menu, the tab menu, the zoxide window, and the Workspaces window match as fzf does: the letters typed in order, not necessarily together, best match first. Words separated by spaces must all match; 'word matches as it is, ^word at the start, word$ at the end, and !word where it is not.
 help-note-workspaces = A workspace holds the tabs of both panels: where each is, its sort order, and the row under its cursor. Alt+w and F9 → Workspace list them; restoring one replaces every tab.
 help-note-command = ! opens the command line, and : too, for commands of Noon Commander, of which :!command is the only one so far. A command runs with the terminal, in the panel's directory, then a key brings the panels back; cd and export last only as long as the command.
 help-note-pulldown = In the pull-down menu, the highlighted letter of a menu opens it, and that of a command runs it.

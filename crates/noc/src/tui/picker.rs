@@ -1,5 +1,6 @@
-//! What the windows that list rows to choose one from share: the location menu, drawn over
-//! its panel, the window of the saved workspaces, and the window of the command history. Typing filters the rows; in all but the history, `1` … `9` and `0` choose
+//! What the windows that list rows to choose one from share: the location menu and the tab
+//! menu, drawn over their panel, the window of the saved workspaces, and the window of the
+//! command history. Typing filters the rows; in all but the history, `1` … `9` and `0` choose
 //! the first ten while the filter is empty.
 
 use ratatui::Frame;

@@ -1065,7 +1065,9 @@ mod tests {
                     "ctrl-x",
                     "p",
                     "ctrl-x",
-                    "tab",
+                    "[",
+                    "ctrl-x",
+                    "]",
                     "alt-right",
                     "alt-left"
                 ]
@@ -1075,7 +1077,8 @@ mod tests {
                 Action::CloseTab,
                 Action::NextTab,
                 Action::PrevTab,
-                Action::TabList,
+                Action::TabListLeft,
+                Action::TabListRight,
                 Action::NextTab,
                 Action::PrevTab
             ])
@@ -1673,6 +1676,7 @@ mod tests {
         for context in [
             Context::DialogInput,
             Context::LocationMenu,
+            Context::TabMenu,
             Context::QuickSearch,
         ] {
             let mut state = KeyState::default();
@@ -1872,6 +1876,7 @@ mod tests {
             Context::QuickSearch,
             Context::Rename,
             Context::LocationMenu,
+            Context::TabMenu,
             Context::Jump,
             Context::Workspaces,
             Context::DialogInput,
@@ -1904,6 +1909,7 @@ mod tests {
             Context::QuickSearch,
             Context::Rename,
             Context::LocationMenu,
+            Context::TabMenu,
             Context::Jump,
             Context::Workspaces,
             Context::Completion,
@@ -1952,6 +1958,7 @@ mod tests {
     fn windows_that_list_items_share_the_keys_of_the_list() {
         let windows = [
             Context::LocationMenu,
+            Context::TabMenu,
             Context::Jump,
             Context::Workspaces,
             Context::CommandHistory,
@@ -2073,7 +2080,7 @@ mod tests {
         let hints = keymap.hints(Context::Panel, &ctrl_x);
         assert_eq!(
             hint_keys(&hints),
-            ["t", "w", "n", "p", "Tab", "j", "#", "1", "2", "z"]
+            ["t", "w", "n", "p", "[", "]", "j", "#", "1", "2", "z"]
         );
         assert_eq!(
             hints[0],
@@ -2113,7 +2120,7 @@ mod tests {
             Some(&Hint {
                 keys: "Ctrl+x".to_owned(),
                 action: None,
-                more: 10
+                more: 11
             })
         );
         assert!(

@@ -46,6 +46,7 @@ impl Help {
             (Context::Rename, fl!("help-renaming")),
             (Context::CommandLine, fl!("help-command-line")),
             (Context::LocationMenu, fl!("help-menu")),
+            (Context::TabMenu, fl!("help-tab-menu")),
             (Context::Jump, fl!("help-jump")),
             (Context::Workspaces, fl!("help-workspaces")),
             (Context::CommandHistory, fl!("help-history")),
@@ -209,8 +210,10 @@ fn key_lines(keys: &str, width: usize) -> Vec<String> {
 /// and the key hints leave out.
 pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
     if let Some(text) = describe_rows(context, action)
+        .or_else(|| describe_tabs(context, action))
         .or_else(|| describe_completion(context, action))
         .or_else(|| describe_location_menu(context, action))
+        .or_else(|| describe_tab_menu(context, action))
         .or_else(|| describe_workspaces(context, action))
         .or_else(|| describe_command_line(context, action))
         .or_else(|| describe_history(context, action))
@@ -256,13 +259,6 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::LocationMenuRight) => fl!("help-menu-right"),
         (Context::Panel, Action::Jump) => fl!("help-jump-open"),
         (Context::Panel, Action::QuickCd) => fl!("help-quick-cd"),
-        (Context::Panel, Action::NewTab) => fl!("help-new-tab"),
-        (Context::Panel, Action::CloseTab) => fl!("help-close-tab"),
-        (Context::Panel, Action::NextTab) => fl!("help-next-tab"),
-        (Context::Panel, Action::PrevTab) => fl!("help-prev-tab"),
-        (Context::Panel, Action::TabList) => fl!("help-tab-list"),
-        (Context::Panel, Action::SaveWorkspace) => fl!("help-save-workspace"),
-        (Context::Panel, Action::Workspaces) => fl!("help-workspaces-open"),
         (Context::Panel | Context::Viewer, Action::Help) => fl!("help-help"),
         (Context::Global, Action::KeyHints) => fl!("help-key-hints"),
         (Context::Global, Action::UserScreen) => fl!("help-user-screen"),
@@ -305,6 +301,25 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Viewer, Action::Right) => fl!("help-viewer-right"),
         (Context::Viewer, Action::ToggleWrap) => fl!("help-viewer-wrap"),
         (Context::Viewer, Action::Quit) => fl!("help-viewer-quit"),
+        _ => return None,
+    };
+    Some(text)
+}
+
+/// What the keys of tabs and workspaces do in a panel.
+fn describe_tabs(context: Context, action: Action) -> Option<String> {
+    if context != Context::Panel {
+        return None;
+    }
+    let text = match action {
+        Action::NewTab => fl!("help-new-tab"),
+        Action::CloseTab => fl!("help-close-tab"),
+        Action::NextTab => fl!("help-next-tab"),
+        Action::PrevTab => fl!("help-prev-tab"),
+        Action::TabListLeft => fl!("help-tab-list-left"),
+        Action::TabListRight => fl!("help-tab-list-right"),
+        Action::SaveWorkspace => fl!("help-save-workspace"),
+        Action::Workspaces => fl!("help-workspaces-open"),
         _ => return None,
     };
     Some(text)
@@ -386,6 +401,7 @@ fn describe_rows(context: Context, action: Action) -> Option<String> {
         Context::Panel
             | Context::Viewer
             | Context::LocationMenu
+            | Context::TabMenu
             | Context::Jump
             | Context::Workspaces
             | Context::CommandHistory
@@ -413,6 +429,22 @@ fn describe_location_menu(context: Context, action: Action) -> Option<String> {
         Action::Backspace => fl!("help-menu-back"),
         Action::Disconnect => fl!("help-disconnect"),
         Action::Reload => fl!("help-menu-reload"),
+        Action::Cancel => fl!("help-menu-close"),
+        _ => return None,
+    };
+    Some(text)
+}
+
+/// What `action` does in the tab menu, beyond moving the cursor.
+fn describe_tab_menu(context: Context, action: Action) -> Option<String> {
+    if context != Context::TabMenu {
+        return None;
+    }
+    let text = match action {
+        Action::Home => fl!("help-first-row"),
+        Action::End => fl!("help-last-row"),
+        Action::Confirm => fl!("help-tab-menu-show"),
+        Action::Backspace => fl!("help-menu-back"),
         Action::Cancel => fl!("help-menu-close"),
         _ => return None,
     };
@@ -523,6 +555,7 @@ mod tests {
                 "Renaming in place",
                 "Command line",
                 "Location menu",
+                "Tab menu",
                 "zoxide",
                 "Workspaces",
                 "Command history",

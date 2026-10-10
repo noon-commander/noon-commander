@@ -37,6 +37,8 @@ pub(crate) enum Command {
     On(Side, Action),
     /// Opens the location menu of the panel on that side.
     Location(Side),
+    /// Lists the tabs of the panel on that side.
+    Tabs(Side),
     /// Closes the connection of the host that the panel on that side shows.
     DisconnectPanel(Side),
     /// Opens the Configuration dialog.
@@ -279,11 +281,7 @@ fn panel_menu(title: Label, side: Side) -> Menu {
                 Command::On(side, Action::CloseTab),
                 Mark::None,
             ),
-            item(
-                fl!("pulldown-tab-list"),
-                Command::On(side, Action::TabList),
-                Mark::None,
-            ),
+            item(fl!("pulldown-tab-list"), Command::Tabs(side), Mark::None),
         ],
     }
 }

@@ -45,12 +45,13 @@ pub(super) const PRESET: Preset = &[
             (Action::Select, &["+"]),                             // OK1
             (Action::Unselect, &["-"]),                           // OK1
             (Action::InvertMarks, &["v"]),                        // OK1
-            // Tabs
+            // Tabs !
             (Action::NewTab, &["g n"]),
             (Action::CloseTab, &["g c"]),
-            (Action::NextTab, &["g t", "alt-right"]),
-            (Action::PrevTab, &["g shift-t", "alt-left"]),
-            (Action::TabList, &["ctrl-x tab"]),
+            (Action::NextTab, &["g t", "] t"]),
+            (Action::PrevTab, &["g shift-t", "[ t"]),
+            (Action::TabListLeft, &["t h"]),
+            (Action::TabListRight, &["t l"]),
             // Items
             (Action::ToggleHidden, &["z h"]),    // OK1
             (Action::SortByName, &["o n"]),      // OK1
@@ -158,8 +159,8 @@ pub(super) const PRESET: Preset = &[
             (Action::Redraw, &["ctrl-l"]),              // OK1
         ],
     ),
-    // What the windows that list items to choose from share: the location menu, the zoxide
-    // window, the workspaces, and the command history fall back to it.
+    // What the windows that list items to choose from share: the location menu, the tab menu, the
+    // zoxide window, the workspaces, and the command history fall back to it.
     (
         Context::List,
         &[
@@ -179,6 +180,8 @@ pub(super) const PRESET: Preset = &[
         Context::LocationMenu,
         &[(Action::Disconnect, &["f8"]), (Action::Reload, &["ctrl-r"])],
     ),
+    // The tab menu of a panel, on top of the list's; characters filter it.
+    (Context::TabMenu, &[]),
     // The zoxide window, on top of the list's; characters are keywords.
     (Context::Jump, &[]),
     // The window of the saved workspaces, on top of the list's; characters filter it. Insert adds

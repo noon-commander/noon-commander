@@ -114,7 +114,8 @@ always do.
 | Close this tab; the last one stays | `close_tab` | ⏳ | Ctrl+x w | g c | — | — | — | Ctrl+w<br>g c |
 | The next tab in this panel | `next_tab` | ⏳ | Alt+Right<br>Ctrl+x n | g t<br>Alt+Right | — | — | ] | Tab<br>Alt+Right<br>g t |
 | The previous tab in this panel | `prev_tab` | ⏳ | Alt+Left<br>Ctrl+x p | g T<br>Alt+Left | — | — | [ | Shift+Tab<br>Alt+Left<br>g T |
-| The tabs of this panel, to choose one | `tab_list` | ⏳ | Ctrl+x Tab | Ctrl+x Tab | — | — | — | — |
+| The tabs of the left panel, to choose one | `tab_list_left` | ⏳ | Ctrl+x [ | t h | — | — | — | — |
+| The tabs of the right panel, to choose one | `tab_list_right` | ⏳ | Ctrl+x ] | t l | — | — | — | — |
 | Show or hide names that start with a dot (Far: hidden and system files) | `toggle_hidden` | ✅ | Alt+. | z h | Alt+. | Ctrl+h | . | z h<br>Ctrl+h<br>Backspace |
 | Sort by name; again: reverse | `sort_by_name` | ✅ | Ctrl+F3 | o n | — | Ctrl+F3 | , a<br>, A (reverse) | o b<br>o B (reverse) |
 | Sort by extension; again: reverse | `sort_by_extension` | ✅ | Ctrl+F4 | o e | — | Ctrl+F4 | , e<br>, E (reverse) | o e<br>o E (reverse) |
@@ -475,12 +476,12 @@ the keys of its pager, which shows files, the output of commands, and the log.
 
 ## Lists (`list`)
 
-The keys that the windows listing items to choose from share: the location menu, the zoxide
-window, the workspaces, and the command history fall back to it, and their sections list only
-the keys they add. Keys never go to it alone; the help lists its keys with each of those windows,
-with what Enter takes there. The mc column has the keys of mc's lists, such as its histories and
-its hotlist; the far column, those of Far's menus; the yazi column, those of its pick window,
-which asks for the program to open files with.
+The keys that the windows listing items to choose from share: the location menu, the tab menu,
+the zoxide window, the workspaces, and the command history fall back to it, and their sections
+list only the keys they add. Keys never go to it alone; the help lists its keys with each of
+those windows, with what Enter takes there. The mc column has the keys of mc's lists, such as
+its histories and its hotlist; the far column, those of Far's menus; the yazi column, those of
+its pick window, which asks for the program to open files with.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
@@ -514,6 +515,18 @@ drive menu among them.
 | Align all items left / right | — | ⏳ | — | — | — | Alt+Home / Alt+End | — | — |
 | Align selected item left / right | — | ⏳ | — | — | — | Alt+Shift+Home / Alt+Shift+End | — | — |
 | Fixed menu columns | — | ⏳ | — | — | — | Shift+F5 | — | — |
+
+## Tab menu (`tab_menu`)
+
+Ctrl+x [ and Ctrl+x ], or t h and t l in the vim keymap: the tabs of the left or the right panel,
+drawn over it as the location menu is; characters filter it. It binds no keys of its own: it
+falls back to `list`, whose Enter shows the tab in the panel. mc, Far, yazi, and ranger have no
+menu of tabs.
+
+| Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
+| --- | --- | :-: | --- | --- | --- | --- | --- | --- |
+| Filter the tabs | — | ⏳ | Typing | Typing | — | — | — | — |
+| Show a tab by its number (empty filter) | — | ⏳ | 1…9, 0 | 1…9, 0 | — | — | — | — |
 
 ## zoxide window (`jump`)
 

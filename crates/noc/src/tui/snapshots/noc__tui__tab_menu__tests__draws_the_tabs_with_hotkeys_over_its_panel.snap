@@ -1,0 +1,14 @@
+---
+source: crates/noc/src/tui/tab_menu.rs
+expression: "draw(&mut menu, 40, 10)"
+---
+"                                        "
+"     ╔════════ Left tabs ═════════╗     "
+"     ║ Filter:                    ║     "
+"     ║ ────────────────────────── ║     "
+"     ║ 1 ~/src                    ║     "
+"     ║ 2 /var/log                 ║     "
+"     ║ 3 web:/var/www             ║     "
+"     ║ 4 ~/src/noc                ║     "
+"     ╚════════════════════════════╝     "
+"                                        "

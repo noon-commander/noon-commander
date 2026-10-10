@@ -44,6 +44,7 @@ use super::pattern::Pattern;
 use super::progress::{Counts, JobButton, JobView};
 use super::pulldown::{self, Command, PullDown, PullDownEvent, Status};
 use super::sums::{Mark, SumRow, SumsButton, SumsEvent, SumsWindow, Verdict};
+use super::tab_menu::{TabMenu, TabMenuEvent};
 use super::tabs::{self, Bar, PanelId, Tab, Tabs};
 use super::tasks::{HostHandle, JobEvent};
 use super::theme::{ColorDepth, Theme};
@@ -271,7 +272,6 @@ const MKDIR_DIALOG_WIDTH: u16 = 60;
 const COPY_DIALOG_WIDTH: u16 = 70;
 const HOST_DIALOG_WIDTH: u16 = 70;
 const CHECKSUM_DIALOG_WIDTH: u16 = 70;
-const TAB_DIALOG_WIDTH: u16 = 70;
 const WORKSPACE_DIALOG_WIDTH: u16 = 60;
 /// The fields of the dialog of F4 on a host.
 const HOST_LABEL: usize = 0;
@@ -349,8 +349,6 @@ enum Purpose {
         location: Location,
         bytes: Vec<u8>,
     },
-    /// The list of the tabs on `side`: OK shows the one chosen.
-    TabList { side: Side },
     /// Quick cd in `panel`: OK opens the path typed there.
     QuickCd { panel: PanelId },
     /// A question about workspaces.
@@ -624,6 +622,8 @@ pub(crate) struct App {
     menu: Option<LocationMenu>,
     /// The generation of the last listing for the menu.
     menu_listings: u64,
+    /// The tab menu of Ctrl+x [ or Ctrl+x ], over the panels and under the dialogs.
+    tab_menu: Option<TabMenu>,
     /// Tab completion in the dialog in front.
     completion: Option<Completing>,
     /// The generation of the last listing for completion.
@@ -684,6 +684,7 @@ enum Front {
     /// The dialog in front, by its id.
     Dialog(u64),
     Menu,
+    TabMenu,
     Jump,
     Workspaces,
     History,
@@ -761,6 +762,7 @@ impl App {
             help: None,
             menu: None,
             menu_listings: 0,
+            tab_menu: None,
             completion: None,
             completions: 0,
             jump: None,
@@ -935,6 +937,8 @@ impl App {
             Front::Dialog(open.dialog.id())
         } else if self.menu.is_some() {
             Front::Menu
+        } else if self.tab_menu.is_some() {
+            Front::TabMenu
         } else if self.jump.is_some() {
             Front::Jump
         } else if self.workspaces_window.is_some() {
@@ -1063,6 +1067,10 @@ impl App {
         }
         let action = match front {
             Front::Menu => self.menu.as_mut().and_then(|menu| menu.pointer(pointer)),
+            Front::TabMenu => self
+                .tab_menu
+                .as_mut()
+                .and_then(|menu| menu.pointer(pointer)),
             Front::Jump => self.jump.as_mut().and_then(|jump| jump.pointer(pointer)),
             Front::Workspaces => self
                 .workspaces_window
@@ -1199,6 +1207,8 @@ impl App {
             }
         } else if self.menu.is_some() {
             Context::LocationMenu
+        } else if self.tab_menu.is_some() {
+            Context::TabMenu
         } else if self.jump.is_some() {
             Context::Jump
         } else if self.workspaces_window.is_some() {
@@ -1444,7 +1454,6 @@ impl App {
                     return self.revealed(side);
                 }
             }
-            Action::TabList => self.ask_tab(side),
             _ => {}
         }
         Vec::new()
@@ -1485,25 +1494,40 @@ impl App {
         self.route(id, request)
     }
 
-    /// Lists the tabs on `side`, where they are, to choose one.
-    fn ask_tab(&mut self, side: Side) {
+    /// Opens the tab menu for the panel on `side`, which lists where its tabs are.
+    fn open_tab_menu(&mut self, side: Side) {
         let tabs = self.tabs(side);
-        let choices = tabs
+        let titles = tabs
             .iter()
-            .enumerate()
-            .map(|(index, tab)| {
-                let title = tabs::title(tab.panel.location(), &self.root_title, &self.home);
-                format!("{} {title}", index + 1)
-            })
+            .map(|tab| tabs::title(tab.panel.location(), &self.root_title, &self.home))
             .collect();
-        let buttons = vec![Button::Ok, Button::Cancel];
-        let title = fl!("tabs-title");
-        let dialog = Dialog::fields(&title, &[], &[], buttons, TAB_DIALOG_WIDTH)
-            .with_choices(choices, tabs.index());
-        self.dialogs.push_back(Open {
-            dialog,
-            purpose: Purpose::TabList { side },
-        });
+        let fuzzy = self.config.ui.fuzzy_search;
+        self.tab_menu = Some(TabMenu::new(side, titles, tabs.index(), fuzzy));
+    }
+
+    /// Gives a key to the tab menu: the tab it shows is its panel's, which becomes active, as
+    /// the location menu's panel does.
+    fn handle_tab_menu(&mut self, input: Resolved) -> Vec<Effect> {
+        let Some(menu) = &mut self.tab_menu else {
+            return Vec::new();
+        };
+        match menu.handle(input) {
+            TabMenuEvent::Pending => Vec::new(),
+            TabMenuEvent::Closed => {
+                self.tab_menu = None;
+                Vec::new()
+            }
+            TabMenuEvent::Show(index) => {
+                let side = menu.side();
+                self.tab_menu = None;
+                self.active = side;
+                self.panel_mut(side).end_search();
+                if self.tabs_mut(side).select(index) {
+                    return self.revealed(side);
+                }
+                Vec::new()
+            }
+        }
     }
 
     /// Gives a key to what is over the panels, front first, if anything is.
@@ -1513,6 +1537,9 @@ impl App {
         }
         if self.menu.is_some() {
             return Some(self.handle_menu(input));
+        }
+        if self.tab_menu.is_some() {
+            return Some(self.handle_tab_menu(input));
         }
         if self.jump.is_some() {
             return Some(self.handle_jump(input));
@@ -1584,11 +1611,11 @@ impl App {
                 self.help = Some(self.help_screen());
             }
             Action::SwitchPanel => self.active = self.active.other(),
-            Action::NewTab
-            | Action::CloseTab
-            | Action::NextTab
-            | Action::PrevTab
-            | Action::TabList => return self.tab_action(self.active, action),
+            Action::NewTab | Action::CloseTab | Action::NextTab | Action::PrevTab => {
+                return self.tab_action(self.active, action);
+            }
+            Action::TabListLeft => self.open_tab_menu(Side::Left),
+            Action::TabListRight => self.open_tab_menu(Side::Right),
             // The active panel moves to the other side and stays active, as in mc.
             Action::SwapPanels => self.swapped = !self.swapped,
             Action::OtherPanelOpen => {
@@ -2262,17 +2289,17 @@ impl App {
             Command::Do(action) => self.handle(Resolved::Action(action)),
             Command::On(
                 side,
-                action @ (Action::NewTab
-                | Action::CloseTab
-                | Action::NextTab
-                | Action::PrevTab
-                | Action::TabList),
+                action @ (Action::NewTab | Action::CloseTab | Action::NextTab | Action::PrevTab),
             ) => self.tab_action(side, action),
             Command::On(side, action) => match self.panel_mut(side).handle(action) {
                 Some(request) => self.open(self.shown(side), request),
                 None => Vec::new(),
             },
             Command::Location(side) => self.open_menu(side),
+            Command::Tabs(side) => {
+                self.open_tab_menu(side);
+                Vec::new()
+            }
             Command::DisconnectPanel(side) => match self.host_of(side) {
                 Some(host) => self.disconnect(&host),
                 None => Vec::new(),
@@ -2427,6 +2454,17 @@ impl App {
                     },
                 ),
             },
+            Command::Tabs(side) => Status {
+                enabled: true,
+                checked: false,
+                key: self.keymap.key(
+                    context,
+                    match side {
+                        Side::Left => Action::TabListLeft,
+                        Side::Right => Action::TabListRight,
+                    },
+                ),
+            },
             Command::DisconnectPanel(side) => Status {
                 enabled: self.host_of(side).is_some(),
                 ..Status::default()
@@ -2538,19 +2576,12 @@ impl App {
             {
                 return self.rename_entry(panel, from, to, true);
             }
-            Purpose::TabList { side } if ok => {
-                self.panel_mut(side).end_search();
-                if self.tabs_mut(side).select(dialog.chosen()) {
-                    return self.revealed(side);
-                }
-            }
             Purpose::QuickCd { panel } if ok => return self.cd(panel, dialog.text()),
             Purpose::Workspace(question) => {
                 return self.workspace_dialog_closed(dialog.text(), question, event);
             }
             Purpose::Quit => self.quit = event == DialogEvent::Pressed(Button::Yes),
             Purpose::EditHost { .. }
-            | Purpose::TabList { .. }
             | Purpose::QuickCd { .. }
             | Purpose::Checksum { .. }
             | Purpose::SaveSums { .. }
@@ -4656,12 +4687,17 @@ impl App {
         if self.viewing.is_none() {
             // On the menu bar, or on the top line of the panels without it.
             self.render_jobs(frame, menu_bar);
+            // The menus of a panel, over it.
+            let over = |side| match side {
+                Side::Left => left,
+                Side::Right => right,
+            };
             if let Some(menu) = &mut self.menu {
-                let area = match menu.side() {
-                    Side::Left => left,
-                    Side::Right => right,
-                };
+                let area = over(menu.side());
                 menu.render(frame, area, &self.theme, self.decor, &hosts, self.tick);
+            }
+            if let Some(menu) = &mut self.tab_menu {
+                menu.render(frame, over(menu.side()), &self.theme);
             }
             if let Some(jump) = &mut self.jump {
                 jump.render(frame, panels, &self.theme);
@@ -8341,9 +8377,9 @@ mod tests {
         app.handle(action(Action::Down));
         let effects = app.handle(action(Action::Enter));
         answer(&mut app, effects, &Listing::Dir(Vec::new()));
-        app.handle(action(Action::TabList));
+        app.handle(action(Action::TabListLeft));
         let text = screen_of(&mut app, 16);
-        assert!(text.contains("Tabs"), "{text}");
+        assert!(text.contains("Left tabs"), "{text}");
         assert!(
             text.contains("1 /srv") && text.contains("2 /srv/left"),
             "{text}"
@@ -8351,6 +8387,28 @@ mod tests {
         app.handle(action(Action::Up));
         assert!(app.handle(action(Action::Confirm)).is_empty());
         assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3], 1));
+    }
+
+    #[test]
+    fn the_list_of_the_other_panels_tabs_makes_it_active() {
+        let mut app = loaded();
+        app.handle(action(Action::NewTab));
+        app.handle(action(Action::TabListRight));
+        assert_eq!(app.context(), Context::TabMenu);
+        let text = screen_of(&mut app, 16);
+        let title = text.lines().find_map(|line| {
+            let at = line.find("Right tabs")?;
+            Some(line[..at].chars().count())
+        });
+        assert!(
+            title.is_some_and(|column| column > 80),
+            "over the right panel: {text}"
+        );
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        assert!(app.tab_menu.is_none());
+        assert_eq!(app.active, Side::Right);
+        assert_eq!(tab_numbers(&app, Side::Right), (vec![2], 2));
+        assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3], 3));
     }
 
     /// Saves the tabs of both panels as `name` with Alt+W, and returns what is saved.
@@ -9351,7 +9409,7 @@ mod tests {
         app.set_hints(&keys);
         let text = screen_of(&mut app, 16);
         assert!(
-            text.contains("Esc closes") && text.contains("Ctrl+x") && text.contains("+10 keys"),
+            text.contains("Esc closes") && text.contains("Ctrl+x") && text.contains("+11 keys"),
             "{text}"
         );
         // A dialog in front hides them…

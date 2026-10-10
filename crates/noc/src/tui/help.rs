@@ -48,7 +48,7 @@ impl Help {
             (Context::LocationMenu, fl!("help-menu")),
             (Context::Jump, fl!("help-jump")),
             (Context::Workspaces, fl!("help-workspaces")),
-            (Context::History, fl!("help-history")),
+            (Context::CommandHistory, fl!("help-history")),
             (Context::PullDown, fl!("help-pulldown")),
             (Context::Dialog, fl!("help-dialogs")),
             (Context::DialogInput, fl!("help-text-fields")),
@@ -309,7 +309,7 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
 
 /// What keys do in the window of the command history.
 fn describe_history(context: Context, action: Action) -> Option<String> {
-    if context != Context::History {
+    if context != Context::CommandHistory {
         return None;
     }
     let text = match action {
@@ -386,7 +386,7 @@ fn describe_rows(context: Context, action: Action) -> Option<String> {
             | Context::LocationMenu
             | Context::Jump
             | Context::Workspaces
-            | Context::History
+            | Context::CommandHistory
             | Context::Completion
     );
     let text = match action {

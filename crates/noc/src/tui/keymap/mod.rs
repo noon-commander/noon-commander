@@ -1800,7 +1800,7 @@ mod tests {
             Context::Workspaces,
             Context::DialogInput,
             Context::CommandLine,
-            Context::History,
+            Context::CommandHistory,
         ] {
             let mut state = KeyState::default();
             assert_eq!(
@@ -1836,7 +1836,7 @@ mod tests {
             Context::Workspaces,
             Context::Completion,
             Context::CommandLine,
-            Context::History,
+            Context::CommandHistory,
         ] {
             assert!(cancel(&vim, context, "ctrl-c"), "{context:?}");
         }
@@ -1882,7 +1882,7 @@ mod tests {
             Context::LocationMenu,
             Context::Jump,
             Context::Workspaces,
-            Context::History,
+            Context::CommandHistory,
         ];
         for name in Keymap::NAMES {
             let keymap = Keymap::by_name(name).unwrap();

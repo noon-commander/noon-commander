@@ -1202,7 +1202,7 @@ impl App {
         } else if self.workspaces_window.is_some() {
             Context::Workspaces
         } else if self.history_window.is_some() {
-            Context::History
+            Context::CommandHistory
         } else if !self.results.is_empty()
             || self.in_front().is_some()
             || self.jobs_list.is_some()
@@ -9195,7 +9195,7 @@ mod tests {
         app.handle(action(Action::CommandHistory));
         assert_eq!(
             app.context(),
-            Context::History,
+            Context::CommandHistory,
             "Alt+h opens the line and the window"
         );
         let text = screen_of(&mut app, 16);

@@ -270,7 +270,7 @@ pub(super) const PRESET: Preset = &[
     // The window of the command history, on top of the list's; characters filter it, and Tab
     // switches between the panel's host and all hosts.
     (
-        Context::History,
+        Context::CommandHistory,
         &[(Action::NextField, &["tab"]), (Action::Delete, &["delete"])],
     ),
     // The terminal's own screen, with the output of commands.

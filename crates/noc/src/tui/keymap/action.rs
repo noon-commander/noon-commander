@@ -41,7 +41,7 @@ pub(crate) enum Context {
     /// The command line of `!` and `:`. Keys it does not bind, but the global ones, do nothing.
     CommandLine,
     /// The window of the command history, which has a filter; falls back to `List`.
-    History,
+    CommandHistory,
     /// The terminal's own screen, with the output of commands, in place of the panels; only
     /// the keys that go back to the panels do anything.
     UserScreen,
@@ -67,7 +67,7 @@ impl Context {
             Self::Completion => "completion",
             Self::Viewer => "viewer",
             Self::CommandLine => "command_line",
-            Self::History => "history",
+            Self::CommandHistory => "command_history",
             Self::UserScreen => "user_screen",
         }
     }
@@ -105,7 +105,7 @@ impl Context {
             Self::LocationMenu => &[Self::LocationMenu, Self::List, Self::Global],
             Self::Jump => &[Self::Jump, Self::List, Self::Global],
             Self::Workspaces => &[Self::Workspaces, Self::List, Self::Global],
-            Self::History => &[Self::History, Self::List, Self::Global],
+            Self::CommandHistory => &[Self::CommandHistory, Self::List, Self::Global],
             Self::PullDown => &[Self::PullDown, Self::Global],
         }
     }
@@ -138,7 +138,7 @@ impl Context {
                 | Self::LocationMenu
                 | Self::Jump
                 | Self::Workspaces
-                | Self::History
+                | Self::CommandHistory
                 | Self::PullDown
         )
     }
@@ -158,7 +158,7 @@ impl Context {
                 | Self::LocationMenu
                 | Self::Jump
                 | Self::Workspaces
-                | Self::History
+                | Self::CommandHistory
                 | Self::PullDown
         )
     }
@@ -419,7 +419,7 @@ impl Context {
         Self::Completion,
         Self::Viewer,
         Self::CommandLine,
-        Self::History,
+        Self::CommandHistory,
         Self::UserScreen,
     ];
 }

@@ -523,7 +523,7 @@ of their input lines that noc lacks, such as words and the clipboard, are under 
 | Clear command line | — | ⏳ | — | — | — | Ctrl+y |
 | Select block in command line | — | ⏳ | — | — | — | Alt+Shift+Left/Right/Home/End |
 
-## Command history (`history`)
+## Command history (`command_history`)
 
 Alt+h in the panels and on the command line; characters filter it. It falls back to `list`,
 whose Enter puts the command on the command line without running it, as Ctrl+Enter does in

@@ -109,7 +109,7 @@ always do.
 | Open the directory under the cursor in the other panel | `other_panel_open` | ⏳ | Alt+o | Alt+o | Alt+o | — | — | — |
 | Show this directory in the other panel | `other_panel_sync` | ⏳ | Alt+i | Alt+i | Alt+i | — | — | — |
 | Read the directory again | `reload` | ⏳ | Ctrl+r | R | Ctrl+r | Ctrl+r | — | R |
-| Stop loading or connecting | `cancel` | ⏳ | Esc<br>Esc Esc | Esc<br>Ctrl+c | — | — | — | Ctrl+c |
+| Stop loading or connecting | `cancel` | ✅ | Esc<br>Esc Esc | Esc<br>Ctrl+c | — | — | — | Ctrl+c |
 | Show or hide names that start with a dot (Far: hidden and system files) | `toggle_hidden` | ⏳ | Alt+. | z h | Alt+. | Ctrl+h | . | z h<br>Ctrl+h<br>Backspace |
 | Sort by name; again: reverse | `sort_by_name` | ⏳ | Ctrl+F3 | o n | — | Ctrl+F3 | , a<br>, A (reverse) | o b<br>o B (reverse) |
 | Sort by extension; again: reverse | `sort_by_extension` | ⏳ | Ctrl+F4 | o e | — | Ctrl+F4 | , e<br>, E (reverse) | o e<br>o E (reverse) |
@@ -360,7 +360,7 @@ in an input box, and ranger on its console, whose keys are those of text fields.
 | Delete to the start | `delete_to_start` | ⏳ | Ctrl+u | Ctrl+u | — | — | — | — |
 | Delete to the end | `delete_to_end` | ⏳ | Ctrl+k | Ctrl+k | — | — | — | — |
 | Rename to the name typed | `confirm` | ⏳ | Enter | Enter | — | — | — | — |
-| Keep the name as it was | `cancel` | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — | — | — |
+| Keep the name as it was | `cancel` | ✅ | Esc | Esc<br>Ctrl+c | — | — | — | — |
 
 ## Dialogs and help (`dialog`)
 
@@ -384,7 +384,7 @@ since ranger asks its questions on the console.
 | Previous field or button | `prev_field` | ⏳ | Shift+Tab | Shift+Tab | Shift+Tab | — | — | — |
 | Press the focused button; from a text field or a check box, the default one; close the help | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | Enter | Ctrl+Enter (default button) | Enter (confirm, help)<br>y (confirm) | — |
 | Switch the check box, choose the radio button, or press the focused button | `toggle` | ⏳ | Space | Space | Space | — | — | — |
-| Cancel; abort the job in front; close the help or the window | `cancel` | ⏳ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | Esc<br>Esc Esc<br>F10<br>Ctrl+g<br>Ctrl+c (abort copy/delete) | Esc | Esc<br>Ctrl+[<br>Ctrl+c<br>n (confirm)<br>w (tasks) | Esc<br>q<br>Q<br>w<br>Ctrl+c |
+| Cancel; abort the job in front; close the help or the window | `cancel` | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | Esc<br>Esc Esc<br>F10<br>Ctrl+g<br>Ctrl+c (abort copy/delete) | Esc | Esc<br>Ctrl+[<br>Ctrl+c<br>n (confirm)<br>w (tasks) | Esc<br>q<br>Q<br>w<br>Ctrl+c |
 | Copy/move in background (in dialog) | — | ⏳ | — | — | Alt+b | — | — | — |
 | Focus first dialog item | — | ⏳ | — | — | — | Home | — | — |
 | Focus default dialog item | — | ⏳ | — | — | — | PgDn<br>End | — | — |
@@ -432,7 +432,7 @@ the keys of its pager, which shows files, the output of commands, and the log.
 | One column right, when lines are cut (ranger: four) | `right` | ⏳ | Right<br>l | l<br>Right | Right<br>l | Right | — | Right<br>l |
 | Wrap long lines, or cut them | `toggle_wrap` | ⏳ | F2 | F2 | F2 | F2 | — | — |
 | Help | `help` | ✅ | F1 | g ?<br>F1 | F1 | F1 | — | — |
-| Close the viewer | `quit` | ⏳ | F3<br>F10<br>q<br>Esc | q<br>Esc<br>F3<br>F10 | F3<br>F10<br>q<br>Esc | F10<br>F3<br>Numpad5<br>Esc | — | Esc<br>q<br>Q<br>i<br>F3 |
+| Close the viewer | `quit` | ✅ | F3<br>F10<br>q<br>Esc | q<br>Esc<br>F3<br>F10 | F3<br>F10<br>q<br>Esc | F10<br>F3<br>Numpad5<br>Esc | — | Esc<br>q<br>Q<br>i<br>F3 |
 | Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | Ctrl+l | — | — | Ctrl+l |
 | Wrap type (by chars/words) | — | ⏳ | — | — | — | Shift+F2 | — | — |
 | Hex/code mode | — | ⏳ | — | — | F4 | F4 | — | — |
@@ -629,7 +629,7 @@ console's line.
 | Last choice | `end` | ⏳ | End | End | — | — | — | — |
 | Next choice, round | `complete` | ⏳ | Tab | Tab | — | — | — | Tab |
 | Put the choice in the field | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | — | — | Tab | — |
-| Close the list | `cancel` | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | — | — | Ctrl+c | — |
+| Close the list | `cancel` | ✅ | Esc | Esc<br>Ctrl+c | — | — | Ctrl+c | — |
 | Close the list and edit the field | — | ⏳ | Other keys | Other keys | — | — | — | — |
 | Put the choice in the field and run it | — | ⏳ | — | — | — | — | Enter | — |
 
@@ -686,7 +686,7 @@ Far. Far's rows are those of its history menus.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| The commands of the panel's host, or of all hosts | `next_field` | ⏳ | Tab | Tab | — | — | — | — |
+| The commands of the panel's host, or of all hosts | `next_field` | ✅ | Tab | Tab | — | — | — | — |
 | Remove the command from the history | `delete` | ✅ | Delete<br>Ctrl+Backspace<br>F8 | Delete<br>Ctrl+Backspace<br>F8 | Delete<br>d | Shift+Delete | — | — |
 | Re-run command / open item | — | ⏳ | — | — | — | Enter | — | — |
 | Run in separate window | — | ⏳ | — | — | — | Shift+Enter | — | — |
@@ -707,7 +707,7 @@ that bring the panels back do anything.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Back to the panels | `cancel` | ✅ | Ctrl+o<br>Ctrl+\`<br>Ctrl+Space<br>Esc | Esc<br>Ctrl+\`<br>Ctrl+Space | Ctrl+o | Ctrl+o | — | — |
+| Back to the panels | `cancel` | ✅ | Esc<br>Ctrl+o<br>Ctrl+\`<br>Ctrl+Space | Esc<br>Ctrl+\`<br>Ctrl+Space | Ctrl+o | Ctrl+o | — | — |
 
 ## Mouse
 

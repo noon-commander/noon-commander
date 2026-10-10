@@ -23,13 +23,15 @@ pub(super) const PRESET: Preset = &[
     (
         Context::Panel,
         &[
-            (Action::Up, &["up", "ctrl-p"]),
-            (Action::Down, &["down", "ctrl-n"]),
+            // Navigation
+            (Action::Up, &["up", "ctrl-p"]),     // OK1
+            (Action::Down, &["down", "ctrl-n"]), // OK1
             (Action::PageUp, &["pageup", "alt-v"]),
             (Action::PageDown, &["pagedown", "ctrl-v"]),
-            (Action::Home, &["home"]),
-            (Action::End, &["end"]),
-            (Action::Enter, &["enter"]),
+            (Action::Home, &["home"]),   // OK1
+            (Action::End, &["end"]),     // OK1
+            (Action::Enter, &["enter"]), // OK1
+            // Marks
             (Action::Mark, &["insert", "ctrl-t", "shift-down"]),
             (Action::MarkUp, &["shift-up"]),
             // mc takes `+`, `-`, `\`, and `*` as commands while its command line is empty.
@@ -42,7 +44,7 @@ pub(super) const PRESET: Preset = &[
             (Action::OtherPanelOpen, &["alt-o"]),
             (Action::OtherPanelSync, &["alt-i"]),
             (Action::Reload, &["ctrl-r"]),
-            (Action::Cancel, &["esc", "esc esc"]),
+            (Action::Cancel, &["esc", "esc esc"]), // OK1
             (Action::ToggleHidden, &["alt-."]),
             // mc leaves sorting to its menu; these are Far Manager's keys. macOS takes them for
             // keyboard navigation unless those shortcuts are turned off.
@@ -107,7 +109,7 @@ pub(super) const PRESET: Preset = &[
         Context::QuickSearch,
         &[
             (Action::Backspace, &["backspace"]),
-            (Action::Cancel, &["esc"]),
+            (Action::Cancel, &["esc"]), // OK1
         ],
     ),
     // The name field of an entry renamed in its row.
@@ -123,7 +125,7 @@ pub(super) const PRESET: Preset = &[
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),
             (Action::Confirm, &["enter"]),
-            (Action::Cancel, &["esc", "f10"]),
+            (Action::Cancel, &["esc"]), // OK1
         ],
     ),
     // Dialogs whose focus is on a button or a list.
@@ -142,7 +144,7 @@ pub(super) const PRESET: Preset = &[
             (Action::PrevField, &["backtab"]),
             (Action::Confirm, &["enter"]),
             (Action::Toggle, &["space"]),
-            (Action::Cancel, &["esc", "f10"]),
+            (Action::Cancel, &["esc", "f10"]), // OK1
         ],
     ),
     // The help of F1, on top of the dialog's.
@@ -161,7 +163,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Right, &["right", "l"]),
             (Action::ToggleWrap, &["f2"]),
             (Action::Help, &["f1"]),
-            (Action::Quit, &["f3", "f10", "q", "esc"]),
+            (Action::Quit, &["f3", "f10", "q", "esc"]), // OK1
             (Action::Redraw, &["ctrl-l"]),
         ],
     ),
@@ -178,7 +180,7 @@ pub(super) const PRESET: Preset = &[
             (Action::End, &["end"]),
             (Action::Confirm, &["enter"]),
             (Action::Backspace, &["backspace"]),
-            (Action::Cancel, &["esc", "f10"]),
+            (Action::Cancel, &["esc", "f10"]), // OK1
         ],
     ),
     // The location menu, on top of the list's; characters filter it.
@@ -209,7 +211,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Home, &["home", "pageup"]),
             (Action::End, &["end", "pagedown"]),
             (Action::Confirm, &["enter"]),
-            (Action::Cancel, &["esc", "f9", "f10"]),
+            (Action::Cancel, &["esc", "f9", "f10"]), // OK1
         ],
     ),
     // Text fields, on top of the dialog's.
@@ -239,7 +241,7 @@ pub(super) const PRESET: Preset = &[
             (Action::End, &["end"]),
             (Action::Complete, &["tab"]),
             (Action::Confirm, &["enter"]),
-            (Action::Cancel, &["esc", "f10"]),
+            (Action::Cancel, &["esc"]), // OK1
         ],
     ),
     // The command line of `!` and `:`. Ctrl+j arrives as LF where Enter arrives as CR, so it starts
@@ -265,7 +267,7 @@ pub(super) const PRESET: Preset = &[
             // mc's Alt+h, and bash's Ctrl+r.
             (Action::CommandHistory, &["alt-h", "ctrl-r"]),
             (Action::Confirm, &["enter"]),
-            (Action::Cancel, &["esc", "ctrl-c", "f10"]),
+            (Action::Cancel, &["esc", "ctrl-c", "f10"]), // OK1
         ],
     ),
     // The window of the command history, on top of the list's; characters filter it, and Tab
@@ -281,7 +283,7 @@ pub(super) const PRESET: Preset = &[
     (
         Context::UserScreen,
         &[
-            (Action::Cancel, &["ctrl-o", "ctrl-`", "ctrl-space", "esc"]), // OK1
+            (Action::Cancel, &["esc", "ctrl-o", "ctrl-`", "ctrl-space"]), // OK1
         ],
     ),
 ];

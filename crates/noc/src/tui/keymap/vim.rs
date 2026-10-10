@@ -23,17 +23,18 @@ pub(super) const PRESET: Preset = &[
     (
         Context::Panel,
         &[
-            (Action::Up, &["k", "up", "ctrl-p"]),
-            (Action::Down, &["j", "down", "ctrl-n"]),
+            // Navigation
+            (Action::Up, &["k", "up", "ctrl-p"]),     // OK1
+            (Action::Down, &["j", "down", "ctrl-n"]), // OK1
             (Action::PageUp, &["ctrl-b", "shift-up", "pageup"]),
             (
                 Action::PageDown,
                 &["ctrl-f", "shift-down", "shift-enter", "pagedown"],
             ),
-            (Action::Home, &["g g", "home"]),
-            (Action::End, &["shift-g", "end"]),
-            (Action::Enter, &["l", "enter"]),
-            // Space marks, as in yazi and ranger; Shift+Down and Shift+Up turn pages here.
+            (Action::Home, &["g g", "home"]),   // OK1
+            (Action::End, &["shift-g", "end"]), // OK1
+            (Action::Enter, &["l", "enter"]),   // OK1
+            // Marks
             (Action::Mark, &["space", "insert"]),
             // `-` goes to the parent, so `\` alone unmarks; ranger's `v` inverts the marks.
             (Action::Select, &["+"]),
@@ -136,7 +137,7 @@ pub(super) const PRESET: Preset = &[
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),
             (Action::Confirm, &["enter"]),
-            (Action::Cancel, &["esc", "ctrl-c", "f10"]), // OK1
+            (Action::Cancel, &["esc", "ctrl-c"]), // OK1
         ],
     ),
     // Dialogs whose focus is on a button or a list.
@@ -177,7 +178,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Right, &["l", "right"]),
             (Action::ToggleWrap, &["f2"]),
             (Action::Help, &["g ?", "f1"]),
-            (Action::Quit, &["q", "esc", "f3", "f10"]),
+            (Action::Quit, &["q", "esc", "f3", "f10"]), // OK1
             (Action::Redraw, &["ctrl-l"]),
         ],
     ),
@@ -262,7 +263,7 @@ pub(super) const PRESET: Preset = &[
             (Action::End, &["end"]),
             (Action::Complete, &["tab"]),
             (Action::Confirm, &["ctrl-y", "enter"]),
-            (Action::Cancel, &["esc", "ctrl-c", "f10"]), // OK1
+            (Action::Cancel, &["esc", "ctrl-c"]), // OK1
         ],
     ),
     // The command line of `!` and `:`. Ctrl+j arrives as LF where Enter arrives as CR, so it starts

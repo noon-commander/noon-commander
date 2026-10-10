@@ -1909,9 +1909,10 @@ mod tests {
             feed(keymap, &mut state, context, &[key]) == actions(&[Action::Cancel])
         };
         let mc = Keymap::mc();
-        for context in [Context::Rename, Context::Completion, Context::CommandLine] {
+        for context in [Context::Completion, Context::CommandLine] {
             assert!(cancel(&mc, context, "f10"), "{context:?}");
         }
+        assert!(!cancel(&mc, Context::Rename, "f10"));
         assert!(cancel(&mc, Context::CommandLine, "ctrl-c"));
         let vim = Keymap::by_name("vim").unwrap();
         for context in [

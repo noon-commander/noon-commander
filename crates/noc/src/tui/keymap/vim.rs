@@ -112,8 +112,8 @@ pub(super) const PRESET: Preset = &[
     (
         Context::QuickSearch,
         &[
-            (Action::Backspace, &["backspace", "ctrl-h"]),
-            (Action::Cancel, &["esc", "ctrl-c"]), // OK1
+            (Action::Backspace, &["backspace", "ctrl-h"]), // OK1
+            (Action::Cancel, &["esc", "ctrl-c"]),          // OK1
             // vim's Ctrl+g, to the next match while a pattern is typed.
             (Action::QuickSearch, &["ctrl-g"]),
         ],
@@ -127,7 +127,7 @@ pub(super) const PRESET: Preset = &[
             // Ctrl+b, as on vim's command line.
             (Action::Home, &["home", "ctrl-b"]),
             (Action::End, &["end", "ctrl-e"]),
-            (Action::Backspace, &["backspace", "ctrl-h"]),
+            (Action::Backspace, &["backspace", "ctrl-h"]), // OK1
             (Action::Delete, &["delete"]),
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),

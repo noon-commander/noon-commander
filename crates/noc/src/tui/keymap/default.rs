@@ -107,8 +107,8 @@ pub(super) const PRESET: Preset = &[
     (
         Context::QuickSearch,
         &[
-            (Action::Backspace, &["backspace"]),
-            (Action::Cancel, &["esc"]), // OK1
+            (Action::Backspace, &["backspace"]), // OK1
+            (Action::Cancel, &["esc"]),          // OK1
         ],
     ),
     // The name field of an entry renamed in its row.
@@ -119,7 +119,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Right, &["right"]),
             (Action::Home, &["home", "ctrl-a"]),
             (Action::End, &["end", "ctrl-e"]),
-            (Action::Backspace, &["backspace"]),
+            (Action::Backspace, &["backspace"]), // OK1
             (Action::Delete, &["delete"]),
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),

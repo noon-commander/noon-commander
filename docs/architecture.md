@@ -938,10 +938,11 @@ location = "root"
   removes it.
 - **Keymap.** Keys map to `Action`s per context (`global`, `panel`, `root`, `quick_search`,
   `command_line`, `command_history`, `user_screen`, `list`, `location_menu`, `jump`,
-  `workspaces`, `pull_down`, `dialog`, `dialog_input`, `viewer`). Each context falls back along
-  a chain, for example the root and quick search to the panel, the windows that list items to
-  choose from (`location_menu`, `jump`, `workspaces`, `command_history`) to `list`, which holds
-  the keys they share, and every one but `user_screen` to `global` last, whose keys do the same
+  `workspaces`, `pull_down`, `dialog`, `help`, `dialog_input`, `viewer`). Each context falls back
+  along a chain, for example the root and quick search to the panel, the help to the dialog, the
+  windows that list items to choose from (`location_menu`, `jump`, `workspaces`,
+  `command_history`) to `list`, which holds the keys they share, and every one but `user_screen`
+  to `global` last, whose keys do the same
   everywhere; the first context that knows a key sequence decides, except that a sequence it only
   starts does what a later context binds it to. The help lists the keys of `list` with each window
   that falls back to it, as that window uses them. Bindings are key sequences matched by prefix
@@ -950,7 +951,9 @@ location = "root"
   `Keymap::by_name`); the Configuration dialog switches it at once. Each preset is a module of
   its own, `tui/keymap/default.rs` and `tui/keymap/vim.rs`: each context with its actions, and
   each action with its key sequences, in the order the help lists them. Both list every context in
-  the same order; the vim preset has panels, dialogs, and a viewer of its own. `noc keymap diff`
+  the same order; the vim preset takes vim's keys, and ranger's and yazi's where vim has none, in
+  the panels, the dialogs and the help, the viewer, the lists, the text fields, and the command
+  line. `noc keymap diff`
   (`just keymap-diff`) compares two presets action by action (`tui/keymap/diff.rs`), with the
   keys written as the help writes them.
   As in mc, `Esc` in a panel waits for the next key: `Esc 1` … `Esc 0` stand for F1 … F10, `Esc`

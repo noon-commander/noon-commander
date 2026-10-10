@@ -1519,40 +1519,21 @@ mod tests {
     }
 
     #[test]
-    fn the_vim_panels_open_the_command_line_and_the_menu_and_quit() {
+    fn the_vim_panels_do_what_the_default_ones_do_but_mark_upwards() {
         let vim = Keymap::by_name("vim").unwrap();
-        let panel: Vec<Action> = vim
-            .help(Context::Panel)
-            .into_iter()
-            .map(|(action, _)| action)
-            .collect();
-        assert_eq!(
-            panel,
-            [
-                Action::Up,
-                Action::Down,
-                Action::PageUp,
-                Action::PageDown,
-                Action::Home,
-                Action::End,
-                Action::Enter,
-                Action::Parent,
-                Action::SwitchPanel,
-                Action::SwapPanels,
-                Action::Shell,
-                Action::Command,
-                Action::Help,
-                Action::PullDown,
-                Action::PullDownLast,
-                Action::Quit,
-                Action::Redraw
-            ]
-        );
-        let mut fkeys = [None; 10];
-        fkeys[0] = Some(Action::Help);
-        fkeys[8] = Some(Action::PullDown);
-        fkeys[9] = Some(Action::Quit);
-        assert_eq!(vim.fkeys(Context::Panel), fkeys);
+        let mc = Keymap::mc();
+        let panel = |keymap: &Keymap| -> Vec<Action> {
+            keymap
+                .help(Context::Panel)
+                .into_iter()
+                .map(|(action, _)| action)
+                .collect()
+        };
+        let mut expected = panel(&mc);
+        // Shift+Up turns a page in vim's panels.
+        expected.retain(|action| *action != Action::MarkUp);
+        assert_eq!(panel(&vim), expected, "in the order of the default preset");
+        assert_eq!(vim.fkeys(Context::Panel), mc.fkeys(Context::Panel));
         let mut state = KeyState::default();
         assert_eq!(
             feed(&vim, &mut state, Context::Panel, &["!", ":", "g", "?"]),
@@ -1563,9 +1544,114 @@ mod tests {
             feed(&vim, &mut state, Context::Panel, &["x"]),
             [Resolved::Insert('x')]
         );
+    }
+
+    #[test]
+    fn vim_letters_and_doubled_operators_act_on_the_entries() {
+        let vim = Keymap::by_name("vim").unwrap();
+        let mut state = KeyState::default();
         assert_eq!(
-            vim.help(Context::CommandLine),
-            Keymap::mc().help(Context::CommandLine)
+            feed(
+                &vim,
+                &mut state,
+                Context::Panel,
+                &[
+                    "space", "+", "\\", "v", "shift-r", "z", "h", "o", "n", "o", "e", "o", "m",
+                    "o", "s", "/", "q", ":", "i", "e", "y", "y", "d", "d", "c", "w", "shift-d",
+                    "shift-d", "w", "c", "d", "g", "n", "g", "c", "g", "t", "g", "shift-t",
+                    "ctrl-c"
+                ]
+            ),
+            actions(&[
+                Action::Mark,
+                Action::Select,
+                Action::Unselect,
+                Action::InvertMarks,
+                Action::Reload,
+                Action::ToggleHidden,
+                Action::SortByName,
+                Action::SortByExtension,
+                Action::SortByTime,
+                Action::SortBySize,
+                Action::QuickSearch,
+                Action::CommandHistory,
+                Action::View,
+                Action::Edit,
+                Action::Copy,
+                Action::Move,
+                Action::Rename,
+                Action::Delete,
+                Action::Jobs,
+                Action::QuickCd,
+                Action::NewTab,
+                Action::CloseTab,
+                Action::NextTab,
+                Action::PrevTab,
+                Action::Cancel,
+            ])
+        );
+        // On the root, D D disconnects the host under the cursor.
+        assert_eq!(
+            feed(&vim, &mut state, Context::Root, &["shift-d", "shift-d"]),
+            actions(&[Action::Disconnect])
+        );
+        // In quick search, letters are the name searched for, and Ctrl+g goes to the next match.
+        assert_eq!(
+            feed(&vim, &mut state, Context::QuickSearch, &["y", "ctrl-g"]),
+            [Resolved::Insert('y'), Resolved::Action(Action::QuickSearch)]
+        );
+    }
+
+    #[test]
+    fn vim_fields_and_the_command_line_take_the_keys_of_vims_command_line() {
+        let vim = Keymap::by_name("vim").unwrap();
+        for context in [Context::Rename, Context::DialogInput, Context::CommandLine] {
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&vim, &mut state, context, &["ctrl-b", "ctrl-e"]),
+                actions(&[Action::Home, Action::End]),
+                "{context:?}"
+            );
+        }
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(
+                &vim,
+                &mut state,
+                Context::CommandLine,
+                &["ctrl-p", "ctrl-n", "ctrl-f", "ctrl-r"]
+            ),
+            actions(&[
+                Action::OlderCommand,
+                Action::NewerCommand,
+                Action::EditCommand,
+                Action::CommandHistory
+            ])
+        );
+        assert_eq!(
+            feed(&vim, &mut state, Context::Dialog, &["ctrl-b", "ctrl-f"]),
+            actions(&[Action::PageUp, Action::PageDown])
+        );
+        assert_eq!(
+            feed(&vim, &mut state, Context::Completion, &["ctrl-p", "ctrl-n"]),
+            actions(&[Action::Up, Action::Down])
+        );
+    }
+
+    #[test]
+    fn q_closes_the_help_in_vim_and_no_other_dialog() {
+        let vim = Keymap::by_name("vim").unwrap();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&vim, &mut state, Context::Help, &["q", "j", "esc"]),
+            actions(&[Action::Cancel, Action::Down, Action::Cancel])
+        );
+        assert_eq!(feed(&vim, &mut state, Context::Dialog, &["q"]), []);
+        let mc = Keymap::mc();
+        assert_eq!(feed(&mc, &mut state, Context::Help, &["q"]), []);
+        assert_eq!(
+            feed(&mc, &mut state, Context::Help, &["esc", "f10"]),
+            actions(&[Action::Cancel, Action::Cancel])
         );
     }
 
@@ -2017,7 +2103,7 @@ mod tests {
         let g = parse_sequence("g").unwrap();
         assert_eq!(
             hint_keys(&vim.hints(Context::Panel, &g)),
-            ["g", "?", "m", "M"]
+            ["g", "?", "n", "c", "t", "T", "m", "M"]
         );
     }
 
@@ -2051,7 +2137,7 @@ mod tests {
         let vim = Keymap::by_name("vim").unwrap();
         let hints = vim.hints(Context::Panel, &[]);
         let hint = |keys: &str| hints.iter().find(|hint| hint.keys == keys).cloned();
-        assert_eq!(hint("g").map(|hint| hint.more), Some(4));
+        assert_eq!(hint("g").map(|hint| hint.more), Some(8));
         assert_eq!(hint("Ctrl+w").map(|hint| hint.more), Some(4));
         assert_eq!(hint("Z").map(|hint| hint.more), Some(1));
         // Where characters are text, the panel's are left out.

@@ -30,6 +30,12 @@ pub(super) const PRESET: Preset = &[
             (Action::Home, &["g g", "home"]),
             (Action::End, &["shift-g", "end"]),
             (Action::Enter, &["l", "enter"]),
+            // Space marks, as in yazi and ranger; Shift+Down and Shift+Up turn pages here.
+            (Action::Mark, &["space", "insert"]),
+            // `-` goes to the parent, so `\` alone unmarks; ranger's `v` inverts the marks.
+            (Action::Select, &["+"]),
+            (Action::Unselect, &["\\"]),
+            (Action::InvertMarks, &["v"]),
             // netrw's and vinegar's `-`, next to `h`.
             (Action::Parent, &["h", "-", "backspace", "ctrl-h"]),
             // vim's window commands, with Ctrl held or not; with two panels the previous window
@@ -39,10 +45,58 @@ pub(super) const PRESET: Preset = &[
                 &["tab", "ctrl-w w", "ctrl-w ctrl-w", "ctrl-w p"],
             ),
             (Action::SwapPanels, &["ctrl-w x"]),
+            (Action::OtherPanelOpen, &["alt-o"]),
+            (Action::OtherPanelSync, &["alt-i"]),
+            // ranger's R.
+            (Action::Reload, &["shift-r"]),
+            (Action::Cancel, &["esc", "ctrl-c"]),
+            // ranger's z for settings and o for the order of sorting.
+            (Action::ToggleHidden, &["z h"]),
+            (Action::SortByName, &["o n"]),
+            (Action::SortByExtension, &["o e"]),
+            (Action::SortByTime, &["o m"]),
+            (Action::SortBySize, &["o s"]),
+            // vim's `/`; in quick search, Ctrl+g goes to the next match.
+            (Action::QuickSearch, &["/"]),
             // Not in mc, whose command line takes what is typed (ADR 0019).
             (Action::Shell, &["!"]),
             (Action::Command, &[":"]),
+            // vim's `q:`, the window of the command-line history.
+            (Action::CommandHistory, &["q :"]),
+            // mc's and Far's: the output of commands.
+            (Action::UserScreen, &["ctrl-o"]),
             (Action::Help, &["g ?", "f1"]),
+            // ranger's i shows the file; e edits it.
+            (Action::View, &["i", "f3"]),
+            (Action::Edit, &["e", "f4"]),
+            // Doubled as vim's operators on a line: y y copies, d d moves, and D D deletes; c w
+            // changes the name in its row.
+            (Action::Copy, &["y y", "f5"]),
+            (Action::Move, &["d d", "f6"]),
+            (Action::Rename, &["c w", "shift-f6", "f16"]),
+            (Action::Mkdir, &["f7"]),
+            // In text fields, Delete deletes a character.
+            (Action::Delete, &["shift-d shift-d", "f8", "delete"]),
+            // yazi's and ranger's w, for their tasks.
+            (Action::Jobs, &["w"]),
+            // Not in mc; `#` for a hash.
+            (Action::Checksum, &["ctrl-x #"]),
+            // Far Manager's menus to change drives.
+            (Action::LocationMenuLeft, &["alt-f1"]),
+            (Action::LocationMenuRight, &["alt-f2"]),
+            // Not in mc: zoxide's `z`.
+            (Action::Jump, &["alt-z"]),
+            // ranger's `cd`.
+            (Action::QuickCd, &["c d"]),
+            // ranger's g n, g c, g t, and g T, as vim's tabs.
+            (Action::NewTab, &["g n"]),
+            (Action::CloseTab, &["g c"]),
+            (Action::NextTab, &["g t", "alt-right"]),
+            (Action::PrevTab, &["g shift-t", "alt-left"]),
+            (Action::TabList, &["ctrl-x tab"]),
+            // Not in mc: W for workspaces, and Shift saves the tabs of both panels as one.
+            (Action::Workspaces, &["alt-w"]),
+            (Action::SaveWorkspace, &["alt-shift-w"]),
             (Action::PullDown, &["g m", "f9"]),
             (Action::PullDownLast, &["g shift-m", "shift-f9", "f19"]),
             (Action::Quit, &["shift-z shift-z", "f10"]),
@@ -52,7 +106,10 @@ pub(super) const PRESET: Preset = &[
     // A panel on the virtual root or the list of hosts, on top of the panel's.
     (
         Context::Root,
-        &[(Action::EditHost, &["f4"]), (Action::Disconnect, &["f8"])],
+        &[
+            (Action::EditHost, &["f4"]),
+            (Action::Disconnect, &["shift-d shift-d", "f8"]),
+        ],
     ),
     // Quick search in the active panel; other keys go to the panel.
     (
@@ -60,6 +117,8 @@ pub(super) const PRESET: Preset = &[
         &[
             (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Cancel, &["esc", "ctrl-c"]),
+            // vim's Ctrl+g, to the next match while a pattern is typed.
+            (Action::QuickSearch, &["ctrl-g"]),
         ],
     ),
     // The name field of an entry renamed in its row.
@@ -68,7 +127,8 @@ pub(super) const PRESET: Preset = &[
         &[
             (Action::Left, &["left"]),
             (Action::Right, &["right"]),
-            (Action::Home, &["home", "ctrl-a"]),
+            // Ctrl+b, as on vim's command line.
+            (Action::Home, &["home", "ctrl-b"]),
             (Action::End, &["end", "ctrl-e"]),
             (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Delete, &["delete"]),
@@ -86,8 +146,8 @@ pub(super) const PRESET: Preset = &[
             (Action::Down, &["j", "down"]),
             (Action::Left, &["left"]),
             (Action::Right, &["right"]),
-            (Action::PageUp, &["pageup"]),
-            (Action::PageDown, &["pagedown"]),
+            (Action::PageUp, &["ctrl-b", "pageup"]),
+            (Action::PageDown, &["ctrl-f", "pagedown"]),
             (Action::Home, &["g g", "home"]),
             (Action::End, &["shift-g", "end"]),
             (Action::NextField, &["tab"]),
@@ -97,6 +157,8 @@ pub(super) const PRESET: Preset = &[
             (Action::Cancel, &["esc", "ctrl-c", "f10"]),
         ],
     ),
+    // The help of F1, on top of the dialog's: q closes it, as it closes the viewer and a pager.
+    (Context::Help, &[(Action::Cancel, &["q"])]),
     // The viewer of F3.
     (
         Context::Viewer,
@@ -114,7 +176,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Right, &["l", "right"]),
             (Action::ToggleWrap, &["f2"]),
             (Action::Help, &["g ?", "f1"]),
-            (Action::Quit, &["f3", "f10", "q", "esc"]),
+            (Action::Quit, &["q", "esc", "f3", "f10"]),
             (Action::Redraw, &["ctrl-l"]),
         ],
     ),
@@ -171,11 +233,11 @@ pub(super) const PRESET: Preset = &[
             (Action::Cancel, &["esc", "ctrl-c", "f9", "f10"]),
         ],
     ),
-    // Text fields, on top of the dialog's.
+    // Text fields, on top of the dialog's. Ctrl+b goes to the start, as on vim's command line.
     (
         Context::DialogInput,
         &[
-            (Action::Home, &["home", "ctrl-a"]),
+            (Action::Home, &["home", "ctrl-b"]),
             (Action::End, &["end", "ctrl-e"]),
             (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Delete, &["delete"]),
@@ -187,11 +249,12 @@ pub(super) const PRESET: Preset = &[
     // still leave the field.
     (Context::PathInput, &[(Action::Complete, &["tab"])]),
     // The list of completions under a path field; other keys close it and go to the field.
+    // Ctrl+p and Ctrl+n move, as in vim's pop-up menu.
     (
         Context::Completion,
         &[
-            (Action::Up, &["up"]),
-            (Action::Down, &["down"]),
+            (Action::Up, &["ctrl-p", "up"]),
+            (Action::Down, &["ctrl-n", "down"]),
             (Action::PageUp, &["pageup"]),
             (Action::PageDown, &["pagedown"]),
             (Action::Home, &["home"]),
@@ -203,7 +266,8 @@ pub(super) const PRESET: Preset = &[
     ),
     // The command line of `!` and `:`. Ctrl+j arrives as LF where Enter arrives as CR, so it starts
     // a new line in every terminal; Shift+Enter does where the terminal speaks the kitty keyboard
-    // protocol. Ctrl+x Ctrl+e edits the command, as in bash.
+    // protocol. As on vim's command line, Ctrl+b goes to the start, Ctrl+p and Ctrl+n go through
+    // the history, and Ctrl+f opens the command for editing, as Ctrl+x Ctrl+e does in bash.
     (
         Context::CommandLine,
         &[
@@ -211,18 +275,18 @@ pub(super) const PRESET: Preset = &[
             (Action::Right, &["right"]),
             (Action::Up, &["up"]),
             (Action::Down, &["down"]),
-            (Action::Home, &["home", "ctrl-a"]),
+            (Action::Home, &["home", "ctrl-b"]),
             (Action::End, &["end", "ctrl-e"]),
             (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Delete, &["delete"]),
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),
             (Action::NewLine, &["ctrl-j", "shift-enter"]),
-            (Action::EditCommand, &["ctrl-x ctrl-e"]),
-            (Action::OlderCommand, &["alt-p"]),
-            (Action::NewerCommand, &["alt-n"]),
-            // mc's Alt+h, and bash's Ctrl+r.
-            (Action::CommandHistory, &["alt-h", "ctrl-r"]),
+            (Action::EditCommand, &["ctrl-f", "ctrl-x ctrl-e"]),
+            (Action::OlderCommand, &["ctrl-p"]),
+            (Action::NewerCommand, &["ctrl-n"]),
+            // bash's Ctrl+r.
+            (Action::CommandHistory, &["ctrl-r"]),
             (Action::UserScreen, &["ctrl-o"]),
             (Action::Confirm, &["enter"]),
             (Action::Cancel, &["esc", "ctrl-c", "f10"]),

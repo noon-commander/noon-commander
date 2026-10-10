@@ -145,6 +145,8 @@ pub(super) const PRESET: Preset = &[
             (Action::Cancel, &["esc", "f10"]),
         ],
     ),
+    // The help of F1, on top of the dialog's.
+    (Context::Help, &[]),
     // The viewer of F3.
     (
         Context::Viewer,

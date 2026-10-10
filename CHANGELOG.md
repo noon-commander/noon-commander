@@ -36,6 +36,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `noc keymap diff` compares two keymaps action by
   action, the default and the vim one unless named: `|` where the keys differ, `<` and `>` for an
   action only one of them binds, in color in a terminal; `--all` shows what they bind alike too.
+- The vim keymap does in its panels everything the default one does but mark upwards, with
+  vim's keys, and ranger's and yazi's where vim has none: Space marks, + and \ mark and unmark by
+  a pattern, v inverts the marks, / starts quick search and Ctrl+g goes to the next match, i
+  views, e edits, y y copies, d d moves, c w renames in the row, D D deletes (and disconnects
+  the host under the cursor on the root), R reads the directory again, z h shows hidden files,
+  o n, o e, o m, and o s sort, q : opens the command history, w the jobs, c d Quick cd, g n,
+  g c, g t, and g T open, close, and switch tabs, and Esc and Ctrl+c stop loading; F3 … F8,
+  Alt+o, Alt+i, Alt+z, Alt+w, Alt+W, Alt+F1, Alt+F2, Alt+Left, Alt+Right, Ctrl+o, Ctrl+x #, and
+  Ctrl+x Tab do what they do in the default keymap. q closes the help, and Ctrl+b and Ctrl+f
+  turn pages in dialogs. In text fields and on the command line, Ctrl+b goes to the start, as on
+  vim's command line; on the command line, Ctrl+p and Ctrl+n go through the history in place of
+  Alt+p and Alt+n, Ctrl+r opens it, and Ctrl+f opens the command in the editor; Ctrl+p and
+  Ctrl+n move in the completion list.
 - The terminal's window or tab is titled with the active panel's directory, as the prompt of the
   command line shows it (`~/src — noc`, or `host:path`), and gets its own title back when Noon
   Commander quits or hands the terminal to a command, where the terminal keeps a stack of titles.

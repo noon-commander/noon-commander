@@ -360,10 +360,11 @@ in an input box, and ranger on its console, whose keys are those of text fields.
 
 ## Dialogs and help (`dialog`)
 
-A dialog whose focus is on a button, a check box, or a list, and the windows of the help, the
-jobs, a job, and checksums. Dialogs are modal: the panel's keys do nothing there. The yazi column
-has the keys of its confirmations (confirm), its list of tasks (tasks), and its help; the ranger
-column, those of its list of tasks, since ranger asks its questions on the console.
+A dialog whose focus is on a button, a check box, or a list, and the windows of the jobs, a job,
+and checksums; the help falls back to it, so its keys scroll and close the help too. Dialogs are
+modal: the panel's keys do nothing there. The yazi column has the keys of its confirmations
+(confirm), its list of tasks (tasks), and its help; the ranger column, those of its list of tasks,
+since ranger asks its questions on the console.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
@@ -379,7 +380,7 @@ column, those of its list of tasks, since ranger asks its questions on the conso
 | Previous field or button | `prev_field` | ⏳ | Shift+Tab | Shift+Tab | Shift+Tab | — | — | — |
 | Press the focused button; from a text field or a check box, the default one; close the help | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | Enter | Ctrl+Enter (default button) | Enter (confirm, help)<br>y (confirm) | — |
 | Switch the check box, choose the radio button, or press the focused button | `toggle` | ⏳ | Space | Space | Space | — | — | — |
-| Cancel; abort the job in front; close the help or the window | `cancel` | ⏳ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10<br>q (help) | Esc<br>Esc Esc<br>F10<br>Ctrl+g<br>Ctrl+c (abort copy/delete) | Esc | Esc<br>Ctrl+[<br>Ctrl+c<br>n (confirm)<br>w (tasks) | Esc<br>q<br>Q<br>w<br>Ctrl+c |
+| Cancel; abort the job in front; close the help or the window | `cancel` | ⏳ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | Esc<br>Esc Esc<br>F10<br>Ctrl+g<br>Ctrl+c (abort copy/delete) | Esc | Esc<br>Ctrl+[<br>Ctrl+c<br>n (confirm)<br>w (tasks) | Esc<br>q<br>Q<br>w<br>Ctrl+c |
 | Copy/move in background (in dialog) | — | ⏳ | — | — | Alt+b | — | — | — |
 | Focus first dialog item | — | ⏳ | — | — | — | Home | — | — |
 | Focus default dialog item | — | ⏳ | — | — | — | PgDn<br>End | — | — |
@@ -400,6 +401,15 @@ column, those of its list of tasks, since ranger asks its questions on the conso
 | Run the job under the cursor first | — | ⏳ | — | — | — | — | — | K<br>PgUp |
 | Run the job under the cursor last | — | ⏳ | — | — | — | — | — | J<br>PgDn |
 | Redraw the screen | — | ⏳ | — | — | Ctrl+l | — | — | Ctrl+l |
+
+## Help (`help`)
+
+The help of F1. Keys it does not bind go to the dialog, whose keys scroll the help and close it;
+the keys of the other programs' help are there too.
+
+| Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
+| --- | --- | :-: | --- | --- | --- | --- | --- | --- |
+| Close the help | `cancel` | ⏳ | — | q | F10<br>Esc | Esc | Esc<br>Ctrl+[<br>Ctrl+c | — |
 
 ## Viewer (`viewer`)
 

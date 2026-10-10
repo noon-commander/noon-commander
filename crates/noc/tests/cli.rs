@@ -265,7 +265,7 @@ fn keymap_diff_compares_the_default_and_the_vim_keymap() {
     let text = stdout(&output);
     let header: Vec<&str> = text.lines().next().unwrap().split_whitespace().collect();
     assert_eq!(header, ["default", "vim"]);
-    assert!(text.contains("\n[root] same\n"), "{text}");
+    assert!(text.contains("\n[workspaces] same\n"), "{text}");
     assert!(
         text.lines()
             .any(|line| line.starts_with("  up ") && line.ends_with("|  k, Up")),

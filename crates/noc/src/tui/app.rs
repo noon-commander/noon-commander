@@ -838,6 +838,7 @@ impl App {
             | Context::Root
             | Context::PullDown
             | Context::Dialog
+            | Context::Help
             | Context::Viewer => Vec::new(),
             _ => text
                 .chars()
@@ -1203,12 +1204,11 @@ impl App {
             Context::Workspaces
         } else if self.history_window.is_some() {
             Context::CommandHistory
-        } else if !self.results.is_empty()
-            || self.in_front().is_some()
-            || self.jobs_list.is_some()
-            || self.help.is_some()
+        } else if !self.results.is_empty() || self.in_front().is_some() || self.jobs_list.is_some()
         {
             Context::Dialog
+        } else if self.help.is_some() {
+            Context::Help
         } else if let Some(configuration) = &self.configuration {
             configuration.context()
         } else if self.pulldown.is_some() {
@@ -6613,7 +6613,7 @@ mod tests {
 
         // F1 shows the help over it, and Esc goes back to it.
         app.handle(action(Action::Help));
-        assert_eq!(app.context(), Context::Dialog);
+        assert_eq!(app.context(), Context::Help);
         app.handle(action(Action::Cancel));
         assert_eq!(app.context(), Context::Viewer);
         app.handle(action(Action::Quit));
@@ -7787,7 +7787,7 @@ mod tests {
     fn f1_opens_the_help_under_any_prompt() {
         let mut app = loaded();
         app.handle(action(Action::Help));
-        assert_eq!(app.context(), Context::Dialog);
+        assert_eq!(app.context(), Context::Help);
         assert!(screen(&mut app).contains("Help"));
         assert!(screen(&mut app).contains("10Cancel"));
 
@@ -7801,7 +7801,7 @@ mod tests {
         assert!(screen(&mut app).contains("password"));
         app.handle(action(Action::Cancel));
         assert_eq!(answer.try_recv(), Ok(None));
-        assert_eq!(app.context(), Context::Dialog, "back to the help");
+        assert_eq!(app.context(), Context::Help, "back to the help");
         app.handle(action(Action::Cancel));
         assert_eq!(app.context(), Context::Panel);
         assert!(!app.quits());

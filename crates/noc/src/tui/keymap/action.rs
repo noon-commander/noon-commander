@@ -30,6 +30,8 @@ pub(crate) enum Context {
     Rename,
     /// A dialog whose focus is on a button or a list.
     Dialog,
+    /// The help of F1; falls back to `Dialog`, whose keys scroll it and close it.
+    Help,
     /// A dialog whose focus is on a text field; falls back to `Dialog`.
     DialogInput,
     /// A text field for a path, which Tab completes; falls back to `DialogInput`.
@@ -62,6 +64,7 @@ impl Context {
             Self::QuickSearch => "quick_search",
             Self::Rename => "rename",
             Self::Dialog => "dialog",
+            Self::Help => "help",
             Self::DialogInput => "dialog_input",
             Self::PathInput => "path_input",
             Self::Completion => "completion",
@@ -82,6 +85,7 @@ impl Context {
             Self::Rename => &[Self::Rename, Self::Global],
             // Dialogs are modal: panel keys do nothing while one is open.
             Self::Dialog => &[Self::Dialog, Self::Global],
+            Self::Help => &[Self::Help, Self::Dialog, Self::Global],
             Self::DialogInput => &[Self::DialogInput, Self::Dialog, Self::Global],
             Self::PathInput => &[
                 Self::PathInput,
@@ -414,6 +418,7 @@ impl Context {
         Self::QuickSearch,
         Self::Rename,
         Self::Dialog,
+        Self::Help,
         Self::DialogInput,
         Self::PathInput,
         Self::Completion,

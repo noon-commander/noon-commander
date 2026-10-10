@@ -707,7 +707,7 @@ that bring the panels back do anything.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Back to the panels | `cancel` | ✅ | Ctrl+o<br>Ctrl+\`<br>Ctrl+Space<br>Esc | Ctrl+\`<br>Ctrl+Space<br>Esc | Ctrl+o | Ctrl+o | — | — |
+| Back to the panels | `cancel` | ✅ | Ctrl+o<br>Ctrl+\`<br>Ctrl+Space<br>Esc | Esc<br>Ctrl+\`<br>Ctrl+Space | Ctrl+o | Ctrl+o | — | — |
 
 ## Mouse
 

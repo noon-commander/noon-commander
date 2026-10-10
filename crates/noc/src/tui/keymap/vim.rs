@@ -52,7 +52,7 @@ pub(super) const PRESET: Preset = &[
             (Action::OtherPanelSync, &["alt-i"]),
             // ranger's R.
             (Action::Reload, &["shift-r"]),
-            (Action::Cancel, &["esc", "ctrl-c"]),
+            (Action::Cancel, &["esc", "ctrl-c"]), // OK1
             // ranger's z for settings and o for the order of sorting.
             (Action::ToggleHidden, &["z h"]),
             (Action::SortByName, &["o n"]),
@@ -117,7 +117,7 @@ pub(super) const PRESET: Preset = &[
         Context::QuickSearch,
         &[
             (Action::Backspace, &["backspace", "ctrl-h"]),
-            (Action::Cancel, &["esc", "ctrl-c"]),
+            (Action::Cancel, &["esc", "ctrl-c"]), // OK1
             // vim's Ctrl+g, to the next match while a pattern is typed.
             (Action::QuickSearch, &["ctrl-g"]),
         ],
@@ -136,7 +136,7 @@ pub(super) const PRESET: Preset = &[
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),
             (Action::Confirm, &["enter"]),
-            (Action::Cancel, &["esc", "ctrl-c", "f10"]),
+            (Action::Cancel, &["esc", "ctrl-c", "f10"]), // OK1
         ],
     ),
     // Dialogs whose focus is on a button or a list.
@@ -155,7 +155,7 @@ pub(super) const PRESET: Preset = &[
             (Action::PrevField, &["backtab"]),
             (Action::Confirm, &["ctrl-y", "enter"]),
             (Action::Toggle, &["space"]),
-            (Action::Cancel, &["esc", "ctrl-c", "f10"]),
+            (Action::Cancel, &["esc", "ctrl-c", "f10"]), // OK1
         ],
     ),
     // The help of F1, on top of the dialog's: q closes it, as it closes the viewer and a pager.
@@ -197,7 +197,7 @@ pub(super) const PRESET: Preset = &[
             (Action::End, &["end"]),
             (Action::Confirm, &["ctrl-y", "enter"]),
             (Action::Backspace, &["backspace", "ctrl-h"]),
-            (Action::Cancel, &["esc", "ctrl-c", "f10"]),
+            (Action::Cancel, &["esc", "ctrl-c", "f10"]), // OK1
         ],
     ),
     // The location menu, on top of the list's; characters filter it.
@@ -231,7 +231,7 @@ pub(super) const PRESET: Preset = &[
                 &["ctrl-f", "shift-down", "shift-enter", "end", "pagedown"],
             ),
             (Action::Confirm, &["ctrl-y", "enter"]),
-            (Action::Cancel, &["esc", "ctrl-c", "f9", "f10"]),
+            (Action::Cancel, &["esc", "ctrl-c", "f9", "f10"]), // OK1
         ],
     ),
     // Text fields, on top of the dialog's. Ctrl+b goes to the start, as on vim's command line.
@@ -262,7 +262,7 @@ pub(super) const PRESET: Preset = &[
             (Action::End, &["end"]),
             (Action::Complete, &["tab"]),
             (Action::Confirm, &["ctrl-y", "enter"]),
-            (Action::Cancel, &["esc", "ctrl-c", "f10"]),
+            (Action::Cancel, &["esc", "ctrl-c", "f10"]), // OK1
         ],
     ),
     // The command line of `!` and `:`. Ctrl+j arrives as LF where Enter arrives as CR, so it starts
@@ -289,7 +289,7 @@ pub(super) const PRESET: Preset = &[
             // bash's Ctrl+r.
             (Action::CommandHistory, &["ctrl-r"]),
             (Action::Confirm, &["enter"]),
-            (Action::Cancel, &["esc", "ctrl-c", "f10"]),
+            (Action::Cancel, &["esc", "ctrl-c", "f10"]), // OK1
         ],
     ),
     // The window of the command history, on top of the list's; characters filter it, and Tab
@@ -305,7 +305,7 @@ pub(super) const PRESET: Preset = &[
     (
         Context::UserScreen,
         &[
-            (Action::Cancel, &["ctrl-`", "ctrl-space", "esc"]), // OK1
+            (Action::Cancel, &["esc", "ctrl-`", "ctrl-space"]), // OK1
         ],
     ),
 ];

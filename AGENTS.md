@@ -125,8 +125,8 @@ a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on th
   in any preset, update the `noc (default)` or `noc (vim)` column in
   [docs/keymap-compare.md](docs/keymap-compare.md) in the same change. Its sections are the
   contexts and its rows the actions, as `noc keymap diff` names them; an action new to a context
-  gets a row in that section, among noc's actions in the order of the default preset, with mc's
-  and Far's keys for the same thing.
+  gets a row in that section, among noc's actions in the order of the default preset, with the
+  keys of mc, Far, yazi, and ranger for the same thing.
 - Presets: `crates/noc/src/tui/keymap/default.rs` and `vim.rs`, one per `ui.keymap` name. Each
   lists every context, in the same order as the other and with the same comments where they
   agree. `just keymap-diff` (`noc keymap diff`) compares them action by action.

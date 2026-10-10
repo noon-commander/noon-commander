@@ -95,8 +95,8 @@ always do.
 | One row down | `down` | ✅ | Down<br>Ctrl+n | j<br>Down<br>Ctrl+n | Down<br>Ctrl+n | — | j<br>Down | Down<br>j |
 | One page up | `page_up` | ✅ | PgUp<br>Alt+v | Ctrl+b<br>Shift+Up<br>PgUp | PgUp<br>Alt+v | — | Ctrl+b<br>PgUp | PgUp<br>Ctrl+b |
 | One page down | `page_down` | ✅ | PgDn<br>Ctrl+v | Ctrl+f<br>Shift+Down<br>Shift+Enter<br>PgDn | PgDn<br>Ctrl+v | — | Ctrl+f<br>PgDn | PgDn<br>Ctrl+f |
-| First row | `home` | ✅ | Home | g g<br>Home | Home<br>A1<br>Alt+< | — | g g<br>Home | Home<br>g g |
-| Last row | `end` | ✅ | End | G<br>End | End<br>C1<br>Alt+> | — | G<br>End | End<br>G |
+| First row | `home` | ✅ | Home<br>Alt+< | g g<br>Home | Home<br>A1<br>Alt+< | — | g g<br>Home | Home<br>g g |
+| Last row | `end` | ✅ | End<br>Alt+> | G<br>End | End<br>C1<br>Alt+> | — | G<br>End | End<br>G |
 | Open the directory or file under the cursor (yazi: l and Right enter a directory, o and Enter open the marked files) | `enter` | ✅ | Enter | l<br>Right<br>Enter | Enter | Enter | l<br>Right<br>o<br>Enter | Right<br>Enter<br>l |
 | Parent directory; above /, the volumes and hosts | `parent` | ✅ | Ctrl+PgUp | h<br>Left<br>Backspace | Ctrl+PgUp | Ctrl+PgUp | h<br>Left | Left<br>h |
 | Mark or unmark, then the next row | `mark` | ⏳ | Insert<br>Ctrl+t<br>Shift+Down | Space<br>Insert | Insert<br>Ctrl+t<br>Shift+Down | Insert<br>Shift+Down | Space | Space |
@@ -109,7 +109,7 @@ always do.
 | Open the directory under the cursor in the other panel | `other_panel_open` | ⏳ | Alt+o | Alt+o | Alt+o | — | — | — |
 | Show this directory in the other panel | `other_panel_sync` | ⏳ | Alt+i | Alt+i | Alt+i | — | — | — |
 | Read the directory again | `reload` | ⏳ | Ctrl+r | R | Ctrl+r | Ctrl+r | — | R |
-| Stop loading or connecting | `cancel` | ✅ | Esc<br>Esc Esc | Esc<br>Ctrl+c | — | — | — | Ctrl+c |
+| Stop loading or connecting | `cancel` | ✅ | Esc | Esc<br>Ctrl+c | — | — | — | Ctrl+c |
 | Show or hide names that start with a dot (Far: hidden and system files) | `toggle_hidden` | ⏳ | Alt+. | z h | Alt+. | Ctrl+h | . | z h<br>Ctrl+h<br>Backspace |
 | Sort by name; again: reverse | `sort_by_name` | ⏳ | Ctrl+F3 | o n | — | Ctrl+F3 | , a<br>, A (reverse) | o b<br>o B (reverse) |
 | Sort by extension; again: reverse | `sort_by_extension` | ⏳ | Ctrl+F4 | o e | — | Ctrl+F4 | , e<br>, E (reverse) | o e<br>o E (reverse) |
@@ -336,7 +336,7 @@ over.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Take back the last character | `backspace` | ✅ | Backspace | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | — | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h |
+| Take back the last character | `backspace` | ✅ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | — | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h |
 | End the search | `cancel` | ✅ | Esc | Esc<br>Ctrl+c | Esc | — | Ctrl+c<br>Esc Esc | Esc<br>Ctrl+c<br>Ctrl+g |
 | Next match; the default preset leaves it to the panel | `quick_search` | ⏳ | Ctrl+s<br>Alt+s | Ctrl+g | Ctrl+s<br>Alt+s | Ctrl+Enter | n | n |
 | Previous match | — | ⏳ | — | — | — | Ctrl+Shift+Enter | N | N |
@@ -355,7 +355,7 @@ in an input box, and ranger on its console, whose keys are those of text fields.
 | One character right | `right` | ⏳ | Right | Right | — | — | — | — |
 | Start of the text | `home` | ⏳ | Home<br>Ctrl+a | Home<br>Ctrl+b | — | — | — | — |
 | End of the text | `end` | ⏳ | End<br>Ctrl+e | End<br>Ctrl+e | — | — | — | — |
-| Delete the character before the cursor | `backspace` | ✅ | Backspace | Backspace<br>Ctrl+h | — | — | — | — |
+| Delete the character before the cursor | `backspace` | ✅ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | — | — | — | — |
 | Delete the character at the cursor | `delete` | ⏳ | Delete | Delete | — | — | — | — |
 | Delete to the start | `delete_to_start` | ⏳ | Ctrl+u | Ctrl+u | — | — | — | — |
 | Delete to the end | `delete_to_end` | ⏳ | Ctrl+k | Ctrl+k | — | — | — | — |
@@ -491,7 +491,7 @@ which asks for the program to open files with.
 | First item | `home` | ✅ | Home | Home | Home<br>A1<br>Alt+< | — | — | — |
 | Last item | `end` | ✅ | End | End | End<br>C1<br>Alt+> | — | — | — |
 | Take the item, as the window's section says | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | Enter | Enter | Enter | — |
-| Take back the last character of the filter or the keywords | `backspace` | ✅ | Backspace | Backspace<br>Ctrl+h | — | — | — | — |
+| Take back the last character of the filter or the keywords | `backspace` | ✅ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | — | — | — | — |
 | Close the window | `cancel` | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | Esc<br>F10<br>Ctrl+g | Esc | Esc<br>Ctrl+[<br>Ctrl+c | — |
 
 ## Location menu (`location_menu`)

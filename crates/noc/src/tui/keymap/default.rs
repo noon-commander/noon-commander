@@ -28,8 +28,8 @@ pub(super) const PRESET: Preset = &[
             (Action::Down, &["down", "ctrl-n"]), // OK1
             (Action::PageUp, &["pageup", "alt-v"]),
             (Action::PageDown, &["pagedown", "ctrl-v"]),
-            (Action::Home, &["home"]),          // OK1
-            (Action::End, &["end"]),            // OK1
+            (Action::Home, &["home", "alt-<"]), // OK1
+            (Action::End, &["end", "alt->"]),   // OK1
             (Action::Enter, &["enter"]),        // OK1
             (Action::Parent, &["ctrl-pageup"]), // OK1
             // Marks
@@ -45,7 +45,7 @@ pub(super) const PRESET: Preset = &[
             (Action::OtherPanelOpen, &["alt-o"]),
             (Action::OtherPanelSync, &["alt-i"]),
             (Action::Reload, &["ctrl-r"]),
-            (Action::Cancel, &["esc", "esc esc"]), // OK1
+            (Action::Cancel, &["esc"]), // OK1
             (Action::ToggleHidden, &["alt-."]),
             // mc leaves sorting to its menu; these are Far Manager's keys. macOS takes them for
             // keyboard navigation unless those shortcuts are turned off.
@@ -107,8 +107,8 @@ pub(super) const PRESET: Preset = &[
     (
         Context::QuickSearch,
         &[
-            (Action::Backspace, &["backspace"]), // OK1
-            (Action::Cancel, &["esc"]),          // OK1
+            (Action::Backspace, &["backspace", "ctrl-h"]), // OK1
+            (Action::Cancel, &["esc"]),                    // OK1
         ],
     ),
     // The name field of an entry renamed in its row.
@@ -119,7 +119,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Right, &["right"]),
             (Action::Home, &["home", "ctrl-a"]),
             (Action::End, &["end", "ctrl-e"]),
-            (Action::Backspace, &["backspace"]), // OK1
+            (Action::Backspace, &["backspace", "ctrl-h"]), // OK1
             (Action::Delete, &["delete"]),
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),
@@ -178,7 +178,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Home, &["home"]),
             (Action::End, &["end"]),
             (Action::Confirm, &["enter"]),
-            (Action::Backspace, &["backspace"]),
+            (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Cancel, &["esc", "f10"]), // OK1
         ],
     ),

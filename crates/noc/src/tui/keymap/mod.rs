@@ -853,12 +853,12 @@ mod tests {
             feed(&keymap, &mut state, Context::Panel, &["0"]),
             actions(&[Action::Quit])
         );
-        // Esc Esc cancels without waiting.
+        // The second Esc settles the first one at once, then waits for a key of its own.
         assert_eq!(
             feed(&keymap, &mut state, Context::Panel, &["esc", "esc"]),
             actions(&[Action::Cancel])
         );
-        assert_eq!(state.deadline(), None);
+        assert!(state.deadline().is_some());
     }
 
     #[test]
@@ -2025,7 +2025,7 @@ mod tests {
         };
         assert_eq!(keys(Action::Up), Some("Up, Ctrl+p"));
         assert_eq!(keys(Action::Quit), Some("F10"));
-        assert_eq!(keys(Action::Cancel), Some("Esc, Esc Esc"));
+        assert_eq!(keys(Action::Cancel), Some("Esc"));
         assert_eq!(keys(Action::SortByName), Some("Ctrl+F3"));
         assert_eq!(panel[0].0, Action::Up, "in the order of the preset");
         assert_eq!(

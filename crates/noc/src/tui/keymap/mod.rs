@@ -1037,17 +1037,20 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_x_hash_computes_checksums() {
-        let keymap = Keymap::mc();
-        let mut state = KeyState::default();
-        assert_eq!(
-            feed(&keymap, &mut state, Context::Panel, &["ctrl-x", "#"]),
-            actions(&[Action::Checksum])
-        );
+    fn f_c_and_f_hash_compute_checksums() {
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&keymap, &mut state, Context::Panel, &["f", "c", "f", "#"]),
+                actions(&[Action::Checksum, Action::Checksum]),
+                "{name}"
+            );
+        }
     }
 
     #[test]
-    fn tabs_live_under_ctrl_x_and_alt_arrows() {
+    fn tabs_live_under_t_brackets_and_alt_arrows() {
         let keymap = Keymap::mc();
         let mut state = KeyState::default();
         assert_eq!(
@@ -1056,18 +1059,18 @@ mod tests {
                 &mut state,
                 Context::Panel,
                 &[
-                    "ctrl-x",
                     "t",
-                    "ctrl-x",
-                    "w",
-                    "ctrl-x",
                     "n",
-                    "ctrl-x",
-                    "p",
-                    "ctrl-x",
-                    "[",
-                    "ctrl-x",
+                    "t",
+                    "c",
                     "]",
+                    "t",
+                    "[",
+                    "t",
+                    "t",
+                    "h",
+                    "t",
+                    "l",
                     "alt-right",
                     "alt-left"
                 ]
@@ -1084,40 +1087,35 @@ mod tests {
             ])
         );
         assert_eq!(
-            feed(&keymap, &mut state, Context::Root, &["ctrl-x", "t"]),
+            feed(&keymap, &mut state, Context::Root, &["t", "n"]),
             actions(&[Action::NewTab]),
             "in the root too"
         );
     }
 
     #[test]
-    fn alt_w_lists_workspaces_alt_shift_w_saves_and_the_window_takes_insert_f6_and_f8() {
+    fn t_w_lists_workspaces_t_shift_w_saves_and_the_window_takes_insert_f6_and_f8() {
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(
+                    &keymap,
+                    &mut state,
+                    Context::Panel,
+                    &["t", "w", "t", "shift-w"]
+                ),
+                actions(&[Action::Workspaces, Action::SaveWorkspace]),
+                "{name}"
+            );
+            assert_eq!(
+                feed(&keymap, &mut state, Context::Root, &["t", "w"]),
+                actions(&[Action::Workspaces]),
+                "{name}"
+            );
+        }
         let keymap = Keymap::mc();
         let mut state = KeyState::default();
-        assert_eq!(
-            feed(
-                &keymap,
-                &mut state,
-                Context::Panel,
-                &["alt-w", "esc", "w", "alt-shift-w", "esc", "shift-w"]
-            ),
-            actions(&[
-                Action::Workspaces,
-                Action::Workspaces,
-                Action::SaveWorkspace,
-                Action::SaveWorkspace
-            ])
-        );
-        assert_eq!(
-            feed(&keymap, &mut state, Context::Root, &["alt-w"]),
-            actions(&[Action::Workspaces])
-        );
-        // Some terminals send an uppercase letter with Alt but without Shift.
-        let upper = KeyEvent::new(KeyCode::Char('W'), KeyModifiers::ALT);
-        assert_eq!(
-            keymap.feed(&mut state, Context::Panel, upper, Instant::now()),
-            actions(&[Action::SaveWorkspace])
-        );
         assert!(
             !feed(&keymap, &mut state, Context::Panel, &["ctrl-x", "s"])
                 .contains(&Resolved::Action(Action::SaveWorkspace)),
@@ -1347,7 +1345,7 @@ mod tests {
         );
         assert_eq!(
             key(Context::Panel, Action::Checksum).as_deref(),
-            Some("Ctrl+x #")
+            Some("f c")
         );
         assert_eq!(key(Context::Panel, Action::Disconnect), None);
         // In the root F8 disconnects, which leaves Delete no key there.
@@ -1542,8 +1540,8 @@ mod tests {
         );
         // A character that no binding claims, which a panel takes for nothing.
         assert_eq!(
-            feed(&vim, &mut state, Context::Panel, &["x"]),
-            [Resolved::Insert('x')]
+            feed(&vim, &mut state, Context::Panel, &["u"]),
+            [Resolved::Insert('u')]
         );
     }
 
@@ -1557,9 +1555,9 @@ mod tests {
                 &mut state,
                 Context::Panel,
                 &[
-                    "shift-j", "+", "-", "v", "shift-r", "z", "h", "o", "n", "o", "e", "o", "m",
-                    "o", "s", "/", "q", ":", "i", "e", "y", "d", "r", "shift-a", "shift-d", "w",
-                    "c", "d", "g", "n", "g", "c", "g", "t", "g", "shift-t", "ctrl-c"
+                    "shift-j", "+", "-", "v", "shift-r", "o", "h", "o", "n", "o", "e", "o", "m",
+                    "o", "s", "/", "q", ":", "i", "e", "y", "y", "x", "r", "shift-a", "d", "w",
+                    "g", "d", "g", "n", "g", "c", "g", "t", "g", "shift-t", "ctrl-c"
                 ]
             ),
             actions(&[
@@ -2026,7 +2024,7 @@ mod tests {
         assert_eq!(keys(Action::Up), Some("Up, Ctrl+p"));
         assert_eq!(keys(Action::Quit), Some("F10"));
         assert_eq!(keys(Action::Cancel), Some("Esc"));
-        assert_eq!(keys(Action::SortByName), Some("Ctrl+F3"));
+        assert_eq!(keys(Action::SortByName), Some("o n"));
         assert_eq!(panel[0].0, Action::Up, "in the order of the preset");
         assert_eq!(
             keymap.help(Context::Root),
@@ -2076,27 +2074,29 @@ mod tests {
     #[test]
     fn hints_list_the_keys_that_can_follow_in_the_order_of_the_preset() {
         let keymap = Keymap::mc();
-        let ctrl_x = parse_sequence("ctrl-x").unwrap();
-        let hints = keymap.hints(Context::Panel, &ctrl_x);
-        assert_eq!(
-            hint_keys(&hints),
-            ["t", "w", "n", "p", "[", "]", "j", "#", "1", "2", "z"]
-        );
+        let t = parse_sequence("t").unwrap();
+        let hints = keymap.hints(Context::Panel, &t);
+        assert_eq!(hint_keys(&hints), ["n", "c", "h", "l", "w", "W"]);
         assert_eq!(
             hints[0],
             Hint {
-                keys: "t".to_owned(),
+                keys: "n".to_owned(),
                 action: Some(Action::NewTab),
                 more: 0
             }
         );
         // The root falls back to the panel.
-        assert_eq!(keymap.hints(Context::Root, &ctrl_x), hints);
+        assert_eq!(keymap.hints(Context::Root, &t), hints);
+        let ctrl_x = parse_sequence("ctrl-x").unwrap();
+        assert_eq!(
+            hint_keys(&keymap.hints(Context::Panel, &ctrl_x)),
+            ["1", "2", "z", "j"]
+        );
         let vim = Keymap::by_name("vim").unwrap();
         let g = parse_sequence("g").unwrap();
         assert_eq!(
             hint_keys(&vim.hints(Context::Panel, &g)),
-            ["g", "n", "c", "t", "T", "?", "m", "M"]
+            ["g", "m", "M", "n", "c", "t", "T", "z", "d", "?"]
         );
     }
 
@@ -2120,9 +2120,10 @@ mod tests {
             Some(&Hint {
                 keys: "Ctrl+x".to_owned(),
                 action: None,
-                more: 11
+                more: 4
             })
         );
+        assert_eq!(hint("t").map(|hint| hint.more), Some(6));
         assert!(
             hints.iter().all(|hint| !hint.keys.contains("Esc")),
             "Esc closes the hints"
@@ -2130,8 +2131,8 @@ mod tests {
         let vim = Keymap::by_name("vim").unwrap();
         let hints = vim.hints(Context::Panel, &[]);
         let hint = |keys: &str| hints.iter().find(|hint| hint.keys == keys).cloned();
-        assert_eq!(hint("g").map(|hint| hint.more), Some(8));
-        assert_eq!(hint("Ctrl+w").map(|hint| hint.more), Some(7));
+        assert_eq!(hint("g").map(|hint| hint.more), Some(10));
+        assert_eq!(hint("Ctrl+w").map(|hint| hint.more), Some(6));
         assert_eq!(hint("Z").map(|hint| hint.more), Some(1));
         // Where characters are text, the panel's are left out.
         let search = keymap.hints(Context::QuickSearch, &[]);
@@ -2146,20 +2147,17 @@ mod tests {
         let start = Instant::now();
         let delay = Duration::from_millis(500);
         assert_eq!(keymap.hints_due(&state, delay), None);
-        assert_eq!(
-            keymap.feed(&mut state, Context::Panel, key("ctrl-x"), start),
-            []
-        );
+        assert_eq!(keymap.feed(&mut state, Context::Panel, key("t"), start), []);
         assert_eq!(keymap.hints_due(&state, delay), Some(start + delay));
         assert_eq!(keymap.hints_of(&state, Context::Panel), None, "not yet");
         keymap.show_hints(&mut state, Context::Panel);
         assert_eq!(state.deadline(), None, "no timeout while they show");
         assert_eq!(keymap.hints_due(&state, delay), None, "they show");
         let hints = keymap.hints_of(&state, Context::Panel).unwrap();
-        assert_eq!(hints.typed.as_deref(), Some("Ctrl+x"));
+        assert_eq!(hints.typed.as_deref(), Some("t"));
         assert_eq!(keymap.hints_of(&state, Context::Dialog), None);
         assert_eq!(
-            keymap.feed(&mut state, Context::Panel, key("t"), start),
+            keymap.feed(&mut state, Context::Panel, key("n"), start),
             actions(&[Action::NewTab])
         );
         assert_eq!(keymap.hints_of(&state, Context::Panel), None, "done");
@@ -2324,12 +2322,15 @@ mod tests {
         };
         assert_eq!(alt('+'), actions(&[Action::Select]));
         assert_eq!(alt('*'), actions(&[Action::InvertMarks]));
+        assert_eq!(alt('/'), actions(&[Action::KeyHints]));
+        // No preset binds Alt and an uppercase letter, so one is made up for it.
+        let keymap = Keymap::of(&[(Context::Panel, &[(Action::SaveWorkspace, &["alt-shift-w"])])]);
+        let upper = KeyEvent::new(KeyCode::Char('W'), KeyModifiers::ALT);
         assert_eq!(
-            alt('W'),
+            keymap.feed(&mut KeyState::default(), Context::Panel, upper, now),
             actions(&[Action::SaveWorkspace]),
             "Shift comes back"
         );
-        assert_eq!(alt('/'), actions(&[Action::KeyHints]));
     }
 
     #[test]

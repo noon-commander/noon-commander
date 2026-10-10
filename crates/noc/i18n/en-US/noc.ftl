@@ -137,16 +137,16 @@ tabs-title-right = Right tabs
 ## Workspaces (src/tui/workspaces, src/tui/app): the tabs of both panels, saved under a name in
 ## workspaces.toml. Prefix: workspaces-.
 
-# The window of Alt+w, F9 → Workspace → Workspace list….
+# The window of t w, F9 → Workspace → Workspace list….
 workspaces-title = Workspaces
 # When no workspace is saved yet.
-workspaces-none = No workspace is saved yet. Insert here, or Alt+W in a panel, saves the tabs of both panels under a name.
+workspaces-none = No workspace is saved yet. Insert here, or t W in a panel, saves the tabs of both panels under a name.
 # Right of a workspace: how many tabs it has, in both panels together.
 workspaces-tabs = { $count ->
         [one] 1 tab
        *[other] { $count } tabs
     }
-# The dialog of Alt+W, and of Insert in the window.
+# The dialog of t W, and of Insert in the window.
 workspaces-save-title = Save workspace
 workspaces-save-prompt = Save the tabs of both panels as:
 # The name of an existing workspace was typed.
@@ -496,7 +496,7 @@ help-note-menu = Typing in the location menu and the tab menu filters them; 1 �
 help-note-jump = Typing in the zoxide window gives it keywords, as z does in a shell; 1 … 9 and 0 open the first ten rows while there are none.
 help-note-jump-fuzzy = Typing in the zoxide window filters its directories; 1 … 9 and 0 open the first ten rows while nothing is typed.
 help-note-fuzzy = Quick search, the location menu, the tab menu, the zoxide window, and the Workspaces window match as fzf does: the letters typed in order, not necessarily together, best match first. Words separated by spaces must all match; 'word matches as it is, ^word at the start, word$ at the end, and !word where it is not.
-help-note-workspaces = A workspace holds the tabs of both panels: where each is, its sort order, and the row under its cursor. Alt+w and F9 → Workspace list them; restoring one replaces every tab.
+help-note-workspaces = A workspace holds the tabs of both panels: where each is, its sort order, and the row under its cursor. t w and F9 → Workspace list them; restoring one replaces every tab.
 help-note-command = ! opens the command line, and : too, for commands of Noon Commander, of which :!command is the only one so far. A command runs with the terminal, in the panel's directory, then a key brings the panels back; cd and export last only as long as the command.
 help-note-pulldown = In the pull-down menu, the highlighted letter of a menu opens it, and that of a command runs it.
 help-note-key-hints = After a key that starts longer sequences, such as Ctrl+x, the keys that can follow show after a moment, and wait for one; Esc closes them, and Backspace takes back the last key.
@@ -654,7 +654,7 @@ transfer-same = the source and the target are the same
 # The target is in a source directory.
 transfer-into-itself = it is in { $path }
 
-## Checksums, Ctrl+x # (src/tui/app, src/tui/sums). Prefix: checksum-.
+## Checksums, f c or f # (src/tui/app, src/tui/sums). Prefix: checksum-.
 
 checksum-title = Checksum
 # Above the algorithms. Directories count with the files in them.

@@ -285,7 +285,7 @@ mod tests {
             row("Ctrl+x"),
             Some(Row {
                 keys: "Ctrl+x".to_owned(),
-                text: "+11 keys".to_owned(),
+                text: "+4 keys".to_owned(),
                 group: true
             })
         );

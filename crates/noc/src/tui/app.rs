@@ -362,7 +362,7 @@ enum Purpose {
 /// What a dialog about workspaces is for.
 #[derive(Debug)]
 enum WorkspaceQuestion {
-    /// Alt+W, or Insert in the window: OK saves the tabs of both panels under the name
+    /// t W, or Insert in the window: OK saves the tabs of both panels under the name
     /// typed.
     Save,
     /// The name typed for `workspace` is taken: Yes saves it in place of that one.
@@ -641,7 +641,7 @@ pub(crate) struct App {
     configuration: Option<Configuration>,
     /// The saved workspaces, as `workspaces.toml` held them last.
     workspaces: Workspaces,
-    /// The workspace restored or saved last, which the dialog of Alt+W offers.
+    /// The workspace restored or saved last, which the dialog of t W offers.
     workspace: Option<String>,
     /// The window of the saved workspaces, over the panels and under the dialogs.
     workspaces_window: Option<WorkspacesWindow>,
@@ -1804,7 +1804,7 @@ impl App {
         });
     }
 
-    /// Saves the tabs of both panels under `name`, the text of the dialog of Alt+W. A name
+    /// Saves the tabs of both panels under `name`, the text of the dialog of t W. A name
     /// that another workspace has asks first; that of the workspace restored or saved last
     /// does not, as saving it again is what the dialog offers.
     fn save_workspace_as(&mut self, name: &str) -> Vec<Effect> {
@@ -7428,7 +7428,7 @@ mod tests {
             "{text}"
         );
         assert!(
-            line_with(&text, "Sort by size").contains("Ctrl+F6"),
+            line_with(&text, "Sort by size").contains("o s"),
             "keys show for the active panel: {text}"
         );
         assert!(
@@ -7439,10 +7439,7 @@ mod tests {
         // Right goes round to Left, which acts on the panel on its side.
         app.handle(action(Action::Right));
         let text = screen_of(&mut app, 20);
-        assert!(
-            !line_with(&text, "Sort by size").contains("Ctrl+F6"),
-            "{text}"
-        );
+        assert!(!line_with(&text, "Sort by size").contains("o s"), "{text}");
         assert!(app.handle(Resolved::Insert('z')).is_empty());
         assert!(app.pulldown.is_none(), "a command closes the menu");
         assert_eq!(app.panel(Side::Left).sort_action(), Action::SortBySize);
@@ -8009,7 +8006,7 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_x_hash_shows_the_checksum_of_a_file_and_copies_it() {
+    fn f_hash_shows_the_checksum_of_a_file_and_copies_it() {
         let mut app = on_files();
         app.handle(action(Action::Checksum));
         let text = screen_of(&mut app, 20);
@@ -8097,7 +8094,7 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_x_hash_compares_with_the_file_in_the_other_panel() {
+    fn f_hash_compares_with_the_file_in_the_other_panel() {
         let mut app = on_files();
         app.active = Side::Right;
         app.handle(action(Action::Down));
@@ -8411,7 +8408,7 @@ mod tests {
         assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3], 3));
     }
 
-    /// Saves the tabs of both panels as `name` with Alt+W, and returns what is saved.
+    /// Saves the tabs of both panels as `name` with t W, and returns what is saved.
     fn save_as(app: &mut App, name: &str) -> Workspace {
         assert!(app.handle(action(Action::SaveWorkspace)).is_empty());
         app.handle(action(Action::DeleteToStart));
@@ -9409,7 +9406,7 @@ mod tests {
         app.set_hints(&keys);
         let text = screen_of(&mut app, 16);
         assert!(
-            text.contains("Esc closes") && text.contains("Ctrl+x") && text.contains("+11 keys"),
+            text.contains("Esc closes") && text.contains("Ctrl+x") && text.contains("+4 keys"),
             "{text}"
         );
         // A dialog in front hides them…

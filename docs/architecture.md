@@ -212,10 +212,10 @@ menu:
  ╔══════════════════════════════╗
  ║   Change location…    Alt+F1 ║
  ╟──────────────────────────────╢
- ║ • Sort by name       Ctrl+F3 ║
- ║   Sort by extension  Ctrl+F4 ║
- ║   Sort by time       Ctrl+F5 ║
- ║   Sort by size       Ctrl+F6 ║
+ ║ • Sort by name           o n ║
+ ║   Sort by extension      o e ║
+ ║   Sort by time           o m ║
+ ║   Sort by size           o s ║
  ╟──────────────────────────────╢
  ║   Rescan              Ctrl+r ║
  ║   Disconnect                 ║
@@ -391,11 +391,11 @@ A workspace is the tabs of both panels, saved under a name
 ([ADR 0017](adr/0017-workspaces.md)): for each side its tabs in order, each with its location,
 sort order, and the name under its cursor, and the tab that shows; and the side with the keys.
 
-- Alt+W (`Esc W`), or F9 → Workspace → Save workspace…, asks for a name, offering
+- t W, or F9 → Workspace → Save workspace…, asks for a name, offering
   that of the workspace restored or saved last, and saves the tabs under it; the name of
   another workspace asks before replacing it. A location that `workspaces.toml` cannot hold,
   such as a name that is not UTF-8, is saved as the nearest directory above it.
-- Alt+w (`Esc w`), or F9 → Workspace → Workspace list…, opens a window of the saved
+- t w, or F9 → Workspace → Workspace list…, opens a window of the saved
   workspaces with a filter, which matches as [fzf](#fuzzy-search) does with
   `ui.fuzzy_search` (keymap context `workspaces`): Enter restores, Insert saves the tabs as a
   new workspace, starting with an empty name, F6 renames, F8 deletes after a question, and
@@ -735,8 +735,7 @@ location = "root"
 - **Panels.** Each panel lists a directory with `..` first, then directories, then files, by
   name ignoring case; columns are name, size, and modification time (local time, `ls -l`
   style), and narrow panels drop the time, then the size. Each panel has its own sort order:
-  name, extension, modification time, or size (Far's Ctrl+F3 … Ctrl+F6, as mc binds none;
-  macOS keeps them for keyboard navigation unless that is turned off in its settings);
+  name, extension, modification time, or size (`o n`, `o e`, `o m`, `o s` in both presets);
   time and size start newest and largest first, the same key again reverses, ties go by name,
   and an arrow in the header marks the order. Directories stay first. Names that start with a
   dot are shown unless `ui.show_hidden` is off; Alt+. switches them in both panels, as in mc.
@@ -851,7 +850,7 @@ location = "root"
   does not open in the middle of other work. F10 asks before quitting while jobs run;
   quitting stops them and waits up to five seconds, so that a copy removes its unfinished
   file before the connections close.
-- **Checksums.** Ctrl+x # (not in mc) asks for an algorithm (radio buttons, the last one
+- **Checksums.** f c or f # (not in mc) asks for an algorithm (radio buttons, the last one
   chosen first, SHA-256 at first) for the marked entries, or the one under the cursor; files
   in directories count. For one file, the dialog has a field for the checksum it should have,
   pasted from a download page or a line of `sha256sum` (the first word counts, in any case);

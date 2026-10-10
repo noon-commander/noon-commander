@@ -32,8 +32,8 @@ The same panels in the theme `mc-classic`, with the blue of Midnight Commander:
   Manager.
 - **Tabs in each panel.** Keep several directories and servers open on each side, and switch
   between them with Alt+Left and Alt+Right.
-- **Workspaces.** Save the tabs of both panels under a name with Alt+W, and bring the
-  whole layout back with Alt+w.
+- **Workspaces.** Save the tabs of both panels under a name with t W, and bring the
+  whole layout back with t w.
 - **zoxide built in.** Alt+z jumps to the directories [zoxide](https://github.com/ajeetdsouza/zoxide)
   ranks, and the directories you work in from Noon Commander count there too.
 - **Fuzzy search, as in fzf.** Quick search, the location menu, and the zoxide window find

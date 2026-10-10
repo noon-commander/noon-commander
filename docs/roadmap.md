@@ -27,7 +27,7 @@
 - [x] Opening hosts: background connect (Esc stops it), remote listings, `start_dir`, lost
       connections
 - [x] Disconnect, `ssh -G` on connect, connection state in the root
-- [x] Sorting (Ctrl+F3 … Ctrl+F6) and hidden files (`ui.show_hidden`, Alt+.)
+- [x] Sorting (`o n`, `o e`, `o m`, `o s`) and hidden files (`ui.show_hidden`, Alt+.)
 - [x] Quick search
 - [x] Keymap engine with the mc preset
 - [x] Nerd Font icons and mc markers
@@ -65,7 +65,7 @@
 - [x] Host settings in `hosts.toml`, typed and edited with F4 on a host: `other_dir`,
       `remember_dir` ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md))
 - [x] Clipboard through OSC 52 ([ADR 0008](adr/0008-clipboard-through-osc-52.md))
-- [x] Checksums (Ctrl+x #): SHA-256, SHA-512, SHA-1, MD5, BLAKE3 of files and trees, an
+- [x] Checksums (f c, f #): SHA-256, SHA-512, SHA-1, MD5, BLAKE3 of files and trees, an
       expected checksum, comparison with the file in the other panel, Copy and Save
 - [ ] Verify files of checksums (`*.sha256`, `SHA256SUMS`, `*.md5`, `*.sfv`): `OK`, `FAILED`,
       and missing, with a total
@@ -97,8 +97,8 @@
       extension selected
 - [x] Fuzzy search as fzf does it in quick search, the location menu, and the zoxide window,
       `ui.fuzzy_search` ([ADR 0016](adr/0016-fuzzy-search.md))
-- [x] Workspaces: the tabs of both panels saved under a name (Alt+W), restored from
-      F9 → Workspace or their window (Alt+w), which also saves, renames, and deletes them;
+- [x] Workspaces: the tabs of both panels saved under a name (t W), restored from
+      F9 → Workspace or their window (t w), which also saves, renames, and deletes them;
       `workspaces.toml`
       ([ADR 0017](adr/0017-workspaces.md))
 - [ ] Bookmarks and history

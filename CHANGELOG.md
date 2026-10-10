@@ -18,45 +18,43 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the keys that can follow it; Esc closes the hints, and Backspace takes back the last key.
   `ui.which_key` and `ui.which_key_delay_ms` (Key hints and Key hints delay in Options →
   Configuration) turn them off and set the delay.
-- `ui.keymap` (Keymap in Options → Configuration) chooses the keymap by name, as `ui.theme`
-  chooses the colors, and takes effect at once: `default`, modelled on mc, or `vim`. In the vim
-  keymap, k, j, g g, and G move in dialogs too, and g m opens the pull-down menu, as F9 does,
-  where Ctrl+n and Ctrl+p move, Ctrl+f and Ctrl+b, or Shift+Down and Shift+Up, go to the last
-  and first command, and Ctrl+c closes it. In its panels, Tab and Ctrl+w w switch to the
-  other panel, Ctrl+w x swaps them, Ctrl+w f opens the directory under the cursor in the other
-  panel, and Ctrl+w v shows this directory there, as vim's window commands do; Ctrl+w h and
-  Ctrl+w r change the left and the right panel's location, and Ctrl+w # makes checksums. In the
-  location menu, the zoxide window, the workspaces, and the command history, Ctrl+n, Ctrl+p,
-  Ctrl+f, and Ctrl+b move as in the panels, and Ctrl+c closes them: the four share their keys in
-  both keymaps. Ctrl+y does what Enter does in the menus, the lists, the dialogs, renaming, and
-  on the command line, as in vim's pop-up menu. In both keymaps, Ctrl+h does what Backspace does
-  wherever text is typed, as in mc, and in the default one Alt+< and Alt+> go to the first and
-  the last row of a panel or a list, Ctrl+p, Ctrl+n, Alt+v, and Ctrl+v move in the lists as in
-  the panels, and Ctrl+p and Ctrl+n in the pull-down menu, and Ctrl+i switches panels, as in mc,
-  where the terminal tells Ctrl+i from Tab; Ctrl+g closes the lists, Ctrl+g and Ctrl+c dialogs,
-  and in the viewer Insert and Delete scroll a line and Ctrl+h a page up, and Ctrl+PgUp and
-  Alt+< go to the start, Ctrl+PgDn and Alt+> to the end, as in mc. In the vim keymap, Ctrl+c
-  closes the windows and the lists and ends quick search and renaming, as Esc does. In both, F10
-  closes the command line and the completion list, and Ctrl+c closes the command line, as in a
-  shell.
-  `noc keymap diff` compares two keymaps action by action, the default and the vim one unless
-  named: `|` where the keys differ, `<` and `>` for an action only one of them binds, in color in
-  a terminal; `--all` shows what they bind alike too.
+- `ui.keymap` (Keymap in Options → Configuration) chooses the keymap by name, as `ui.theme` chooses
+  the colors, and takes effect at once: `default`, modelled on mc, or `vim`. In the vim keymap, k,
+  j, g g, and G move in dialogs too, and g m opens the pull-down menu, as F9 does, where Ctrl+n and
+  Ctrl+p move, Ctrl+f and Ctrl+b, or Shift+Down and Shift+Up, go to the last and first command, and
+  Ctrl+c closes it. In its panels, Tab and Ctrl+w w switch to the other panel, Ctrl+w x swaps them,
+  Ctrl+w f opens the directory under the cursor in the other panel, and Ctrl+w v shows this
+  directory there, as vim's window commands do; Ctrl+w h and Ctrl+w l change the left and the right
+  panel's location. In the location menu, the zoxide window, the workspaces, and the command
+  history, Ctrl+n, Ctrl+p, Ctrl+f, and Ctrl+b move as in the panels, and Ctrl+c closes them: the
+  four share their keys in both keymaps. Ctrl+y does what Enter does in the menus, the lists, the
+  dialogs, renaming, and on the command line, as in vim's pop-up menu. In both keymaps, Ctrl+h does
+  what Backspace does wherever text is typed, as in mc, and in the default one Alt+< and Alt+> go to
+  the first and the last row of a panel or a list, Ctrl+p, Ctrl+n, Alt+v, and Ctrl+v move in the
+  lists as in the panels, and Ctrl+p and Ctrl+n in the pull-down menu, and Ctrl+i switches panels,
+  as in mc, where the terminal tells Ctrl+i from Tab; Ctrl+g closes the lists, Ctrl+g and Ctrl+c
+  dialogs, and in the viewer Insert and Delete scroll a line and Ctrl+h a page up, and Ctrl+PgUp and
+  Alt+< go to the start, Ctrl+PgDn and Alt+> to the end, as in mc. In the vim keymap, Ctrl+c closes
+  the windows and the lists and ends quick search and renaming, as Esc does. In both, F10 closes the
+  command line and the completion list, and Ctrl+c closes the command line, as in a shell.
+  `noc keymap diff` compares two keymaps action by action, the default and the vim one unless named:
+  `|` where the keys differ, `<` and `>` for an action only one of them binds, in color in a
+  terminal; `--all` shows what they bind alike too.
 - The vim keymap does in its panels everything the default one does, with vim's keys, and ranger's
   and yazi's where vim has none: l and Right open what is under the cursor, as Enter does, h, Left,
   and Backspace go to the parent directory, J, Shift+Down, and Insert mark and go down, K and
   Shift+Up mark and go up, + marks and - unmarks by a pattern, v inverts the marks, / starts quick
-  search and Ctrl+g goes to the next match, i views, e edits, y copies, d moves, r renames in the
-  row, A makes a directory, D deletes (D D disconnects the host under the cursor on the root), R
-  reads the directory again, z h shows hidden files, o n, o e, o m, and o s sort, q : opens the
-  command history, w the jobs, c d Quick cd, c z jumps with zoxide, g n, g c, g t, and g T open,
-  close, and switch tabs, t h and t l list the left and the right panel's tabs, Z Z quits, and Esc
-  and Ctrl+c stop loading; F3 … F8, Alt+w, Alt+W, Alt+Left, and Alt+Right do what they do in the
-  default keymap. q closes the help, and
-  Ctrl+b and Ctrl+f turn pages in dialogs. In text fields and on the command line, Ctrl+b goes to
-  the start, as on vim's command line; on the command line, Ctrl+p and Ctrl+n go through the history
-  in place of Alt+p and Alt+n, Ctrl+r opens it, and Ctrl+f opens the command in the editor; Ctrl+p
-  and Ctrl+n move in the completion list.
+  search and Ctrl+g goes to the next match, i views, e edits, Y and y y copy, x moves, r renames in
+  the row, A makes a directory, d deletes (D D disconnects the host under the cursor on the root),
+  f c and f # make checksums, R reads the directory again, o h shows hidden files, o n, o e, o m,
+  and o s sort, q : opens the command history, w the jobs, g d Quick cd, g z jumps with zoxide, g n,
+  g c, g t, and g T open, close, and switch tabs, t h and t l list the left and the right panel's
+  tabs, t w and t W list and save workspaces, Z Z quits, and Esc and Ctrl+c stop loading; F3 … F8,
+  Alt+Left, and Alt+Right do what they do in the default keymap. q closes the help, and Ctrl+b and
+  Ctrl+f turn pages in dialogs. In text fields and on the command line, Ctrl+b goes to the start, as
+  on vim's command line; on the command line, Ctrl+p and Ctrl+n go through the history in place of
+  Alt+p and Alt+n, Ctrl+r opens it, and Ctrl+f opens the command in the editor; Ctrl+p and Ctrl+n
+  move in the completion list.
 - The terminal's window or tab is titled with the active panel's directory, as the prompt of the
   command line shows it (`~/src — noc`, or `host:path`), and gets its own title back when Noon
   Commander quits or hands the terminal to a command, where the terminal keeps a stack of titles.
@@ -100,8 +98,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Options → Configuration, turns it off, and `ui.wheel` sets how far the wheel scrolls: a
   number of lines (3) or `"page"`. While it is on, the terminal selects text with Shift held,
   or Option in iTerm2.
-- Workspaces: Alt+W saves the tabs of both panels under a name, with their sort orders
-  and the rows under their cursors, and restoring one replaces every tab. Alt+w, or
+- Workspaces: t W saves the tabs of both panels under a name, with their sort orders and the
+  rows under their cursors, and restoring one replaces every tab. t w, or
   F9 → Workspace → Workspace list…, opens their window, which filters them; Enter restores,
   Insert saves the tabs as a new one, and F6 and F8 rename and delete them. F9 → Workspace
   lists them too. They are kept in `workspaces.toml` in the data directory
@@ -125,12 +123,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The title of a panel, and the tab menu, show the home directory as `~`: `~/src` rather
   than `/Users/me/src`.
 - The list of tabs is now a tab menu, like the location menu: it opens for either panel,
-  whichever is active, with Ctrl+x [ for the left one and Ctrl+x ] for the right one in place
+  whichever is active, with t h for the left one and t l for the right one in place
   of Ctrl+x Tab, and is drawn over that panel rather than in the middle of the screen. Typing
   filters it, as fzf does with `ui.fuzzy_search`; while the filter is empty, 1 … 9 and 0 show
   the first ten tabs, and the mouse picks one as in the other menus. Showing a tab makes its
   panel active. The actions are `tab_list_left` and `tab_list_right`, in place of `tab_list`,
   and the menu has keys of its own in the `tab_menu` context.
+- The default keymap takes the tab and sort keys of the vim keymap: t n opens a tab, t c closes
+  it, ] t and [ t switch tabs (Alt+Right and Alt+Left too), and o n, o e, o m, and o s sort, in
+  place of Ctrl+x t, Ctrl+x w, Ctrl+x n, Ctrl+x p, and Ctrl+F3 … Ctrl+F6. Both keymaps make
+  checksums with f c and f #, in place of Ctrl+x # and Ctrl+w #.
 - Keys are written one way in the help, the menus, and the docs: letters in lowercase, after a
   modifier too, and in uppercase for Shift and the letter (`Ctrl+r`, `Alt+W`, `G`), `Shift+` only
   before other keys (`Shift+F6`), and `PgUp`, `PgDn` rather than `PageUp`, `PageDown`.

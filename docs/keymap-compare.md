@@ -142,7 +142,7 @@ always do.
 | Save the tabs of both panels as a workspace | `save_workspace` | ⏳ | Alt+W | Alt+W | — | — | — | — |
 | The pull-down menu | `pull_down` | ✅ | F9 | g m<br>F9 | F9 | F9 | — | — |
 | The pull-down menu, on the command that ran from it last | `pull_down_last` | ✅ | Shift+F9<br>F19 | g M<br>Shift+F9<br>F19 | Shift+F9 | Shift+F10 | — | — |
-| Quit | `quit` | ✅ | F10 | q<br>Z Z<br>F10 | F10 | F10 | q | Q<br>F10 |
+| Quit | `quit` | ✅ | F10 | Z Z<br>F10 | F10 | F10 | q | Q<br>F10 |
 | Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | Ctrl+l | — | — | Ctrl+l |
 | F1…F10 on terminals without function keys | — | ⏳ | Esc, then 1…9, 0 | Esc, then 1…9, 0 | Esc, then 1…9, 0 | — | — | — |
 | Alt+key on terminals without Alt | — | ⏳ | Esc, then the key | Esc, then the key | Esc, then the key | — | — | — |
@@ -384,7 +384,7 @@ since ranger asks its questions on the console.
 | Previous field or button | `prev_field` | ⏳ | Shift+Tab | Shift+Tab | Shift+Tab | — | — | — |
 | Press the focused button; from a text field or a check box, the default one; close the help | `confirm` | ✅ | Enter | Ctrl+y<br>Enter | Enter | Ctrl+Enter (default button) | Enter (confirm, help)<br>y (confirm) | — |
 | Switch the check box, choose the radio button, or press the focused button | `toggle` | ⏳ | Space | Space | Space | — | — | — |
-| Cancel; abort the job in front; close the help or the window | `cancel` | ✅ | Esc<br>F10 | Esc<br>Ctrl+c<br>F10 | Esc<br>Esc Esc<br>F10<br>Ctrl+g<br>Ctrl+c (abort copy/delete) | Esc | Esc<br>Ctrl+[<br>Ctrl+c<br>n (confirm)<br>w (tasks) | Esc<br>q<br>Q<br>w<br>Ctrl+c |
+| Cancel; abort the job in front; close the help or the window | `cancel` | ✅ | Esc<br>F10<br>Ctrl+g<br>Ctrl+c | Esc<br>Ctrl+c<br>F10 | Esc<br>Esc Esc<br>F10<br>Ctrl+g<br>Ctrl+c (abort copy/delete) | Esc | Esc<br>Ctrl+[<br>Ctrl+c<br>n (confirm)<br>w (tasks) | Esc<br>q<br>Q<br>w<br>Ctrl+c |
 | Copy/move in background (in dialog) | — | ⏳ | — | — | Alt+b | — | — | — |
 | Focus first dialog item | — | ⏳ | — | — | — | Home | — | — |
 | Focus default dialog item | — | ⏳ | — | — | — | PgDn<br>End | — | — |

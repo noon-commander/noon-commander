@@ -30,12 +30,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   on the command line, as in vim's pop-up menu. In both keymaps, Ctrl+h does what Backspace does
   wherever text is typed, as in mc, and in the default one Alt+< and Alt+> go to the first and
   the last row of a panel and Ctrl+i switches panels, as in mc, where the terminal tells Ctrl+i
-  from Tab. In the vim keymap, Ctrl+c closes the windows and
-  the lists and ends quick search and renaming, as Esc does. In both, F10 closes the command line
-  and the completion list, and Ctrl+c closes the command line, as in a shell. `noc keymap diff`
-  compares two keymaps action by action, the default and the vim one unless named: `|` where the
-  keys differ, `<` and `>` for an action only one of them binds, in color in a terminal; `--all`
-  shows what they bind alike too.
+  from Tab; Ctrl+g and Ctrl+c close dialogs, as in mc. In the vim keymap, Ctrl+c closes the
+  windows and the lists and ends quick search and renaming, as Esc does. In both, F10 closes the
+  command line and the completion list, and Ctrl+c closes the command line, as in a shell.
+  `noc keymap diff` compares two keymaps action by action, the default and the vim one unless
+  named: `|` where the keys differ, `<` and `>` for an action only one of them binds, in color in
+  a terminal; `--all` shows what they bind alike too.
 - The vim keymap does in its panels everything the default one does but mark upwards, with
   vim's keys, and ranger's and yazi's where vim has none: l and Right open what is under the
   cursor, as Enter does, h, Left, and Backspace go to the parent directory, Space marks, + marks
@@ -43,7 +43,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the next match, i views, e edits, y y copies, d d moves, c w renames in the row, D D deletes
   (and disconnects the host under the cursor on the root), R reads the directory again, z h
   shows hidden files, o n, o e, o m, and o s sort, q : opens the command history, w the jobs,
-  c d Quick cd, g n, g c, g t, and g T open, close, and switch tabs, q and Z Z quit, and Esc
+  c d Quick cd, g n, g c, g t, and g T open, close, and switch tabs, Z Z quits, and Esc
   and Ctrl+c stop loading; F3 … F8, Alt+o, Alt+i, Alt+z, Alt+w, Alt+W, Alt+F1, Alt+F2, Alt+Left, Alt+Right,
   Ctrl+x #, and Ctrl+x Tab do what they do in the default keymap. q closes the help, and Ctrl+b
   and Ctrl+f turn pages in dialogs. In text fields and on the command line, Ctrl+b goes to the

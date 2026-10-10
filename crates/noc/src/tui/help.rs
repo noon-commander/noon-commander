@@ -483,7 +483,10 @@ mod tests {
         assert!(has("F10", "Quit"));
         assert!(has("F8", "Disconnect the host under the cursor"));
         assert!(has("Ctrl+s, Alt+s", "Quick search; again: the next match"));
-        assert!(has("Esc, F10", "Cancel, or close this help"));
+        assert!(has(
+            "Esc, F10, Ctrl+g, Ctrl+c",
+            "Cancel, or close this help"
+        ));
         // One key, two meanings.
         let ctrl_u: Vec<&str> = help
             .entries

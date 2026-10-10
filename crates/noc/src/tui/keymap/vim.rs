@@ -96,7 +96,7 @@ pub(super) const PRESET: Preset = &[
             (Action::SaveWorkspace, &["alt-shift-w"]),
             (Action::PullDown, &["g m", "f9"]), // OK1
             (Action::PullDownLast, &["g shift-m", "shift-f9", "f19"]), // OK1
-            (Action::Quit, &["q", "shift-z shift-z", "f10"]), // OK1
+            (Action::Quit, &["shift-z shift-z", "f10"]), // OK1
             (Action::Redraw, &["ctrl-l"]),      // OK1
         ],
     ),

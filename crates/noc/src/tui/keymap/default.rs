@@ -143,7 +143,7 @@ pub(super) const PRESET: Preset = &[
             (Action::PrevField, &["backtab"]),
             (Action::Confirm, &["enter"]), // OK1
             (Action::Toggle, &["space"]),
-            (Action::Cancel, &["esc", "f10"]), // OK1
+            (Action::Cancel, &["esc", "f10", "ctrl-g", "ctrl-c"]), // OK1
         ],
     ),
     // The help of F1, on top of the dialog's.

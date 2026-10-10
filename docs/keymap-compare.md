@@ -69,11 +69,15 @@ after its own fallbacks, so a context that binds the same key itself takes it fi
 commands is the exception: noc draws nothing there. None of mc, Far, yazi, and ranger binds
 Alt+/; mc's Alt+?, which finds files, stays free for noc's Find file. yazi and ranger show the
 keys that can follow on their own, once the first key of a sequence is pressed; yazi binds its
-help in every window, and F1 in mc and Far opens the help of the window in front.
+help in every window, and F1 in mc and Far opens the help of the window in front. Ctrl+o shows
+the output of commands over whatever is in front, which is there again afterwards; mc and Far
+hide or show the panels with it in the panels and on their command line, and mc in its viewer
+and editor too.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
 | The keys that can be typed now, over whatever is in front, and what they do, as which-key shows them | `key_hints` | ✅ | Alt+/ | Alt+/ | — | — | — | — |
+| The output of commands, in place of the panels and what is in front of them (mc, Far: hide or show the panels) | `user_screen` | ⏳ | Ctrl+o | Ctrl+o | Ctrl+o | Ctrl+o | — | — |
 | Help: the keys of what is in front, and what they do | — | ⏳ | — | — | F1 | F1 | \~<br>F1 | — |
 
 ## Panels (`panel`)
@@ -114,7 +118,6 @@ always do.
 | Open the command line for a shell command | `shell` | ✅ | ! | ! | Typing | Typing | ; (in the background)<br>: | !<br>s |
 | Open the command line for a command of noc | `command` | ✅ | : | : | — | — | — | :<br>; |
 | The command history | `command_history` | ⏳ | Alt+h | q : | Alt+h | Alt+F8 | — | — |
-| The output of commands, in place of the panels (mc, Far: hide or show the panels) | `user_screen` | ⏳ | Ctrl+o | Ctrl+o | Ctrl+o | Ctrl+o | — | — |
 | Help | `help` | ✅ | F1 | g ?<br>F1 | F1 | F1 | \~<br>F1 | ?<br>F1 |
 | View the file under the cursor | `view` | ⏳ | F3 | i<br>F3 | F3 | F3<br>Numpad5<br>Ctrl+Shift+F3 (always internal) | — | i<br>F3 |
 | Edit the file under the cursor in $VISUAL or $EDITOR | `edit` | ⏳ | F4 | e<br>F4 | F4 | F4<br>Ctrl+Shift+F4 (always internal) | — | F4<br>E |
@@ -654,7 +657,6 @@ clipboard, are under text fields, as are yazi's modes.
 | The command before in the history of the panel's host | `older_command` | ⏳ | Alt+p | Ctrl+p | Alt+p<br>Ctrl+Down | Ctrl+e | Ctrl+p | Ctrl+p |
 | The command after in the history of the panel's host | `newer_command` | ⏳ | Alt+n | Ctrl+n | Alt+n<br>Ctrl+Up | Ctrl+x | Ctrl+n | Ctrl+n |
 | The command history | `command_history` | ⏳ | Alt+h<br>Ctrl+r | Ctrl+r | Alt+h | Alt+F8 | — | — |
-| The output of commands, in place of the panels | `user_screen` | ⏳ | Ctrl+o | Ctrl+o | Ctrl+o | Ctrl+o | — | — |
 | Run the command; after a \\ at the end of the line, a new line | `confirm` | ⏳ | Enter | Enter | Enter | Enter | Enter | Enter<br>Ctrl+j |
 | Close the command line | `cancel` | ✅ | Esc<br>Ctrl+c<br>F10 | Esc<br>Ctrl+c<br>F10 | — | Esc | Ctrl+c<br>Esc Esc | Esc<br>Ctrl+c<br>Ctrl+g |
 | Insert current file name | — | ⏳ | — | — | Alt+Enter<br>Ctrl+Enter | Ctrl+j<br>Ctrl+Enter | — | — |

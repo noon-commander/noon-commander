@@ -15,6 +15,8 @@ pub(super) const PRESET: Preset = &[
             // Not in mc or Far: the keys that can be typed now, over whatever is in front, as
             // which-key shows them. Alt+? stays free for finding files, as in mc.
             (Action::KeyHints, &["alt-/"]),
+            // mc's and Far's: the output of commands, over whatever is in front, which stays.
+            (Action::UserScreen, &["ctrl-o"]),
         ],
     ),
     // The panels.
@@ -54,8 +56,6 @@ pub(super) const PRESET: Preset = &[
             (Action::Command, &[":"]),
             // mc's: the command line, with its history.
             (Action::CommandHistory, &["alt-h"]),
-            // mc's and Far's: the output of commands.
-            (Action::UserScreen, &["ctrl-o"]),
             (Action::Help, &["f1"]),
             (Action::View, &["f3"]),
             (Action::Edit, &["f4"]),
@@ -264,7 +264,6 @@ pub(super) const PRESET: Preset = &[
             (Action::NewerCommand, &["alt-n"]),
             // mc's Alt+h, and bash's Ctrl+r.
             (Action::CommandHistory, &["alt-h", "ctrl-r"]),
-            (Action::UserScreen, &["ctrl-o"]),
             (Action::Confirm, &["enter"]),
             (Action::Cancel, &["esc", "ctrl-c", "f10"]),
         ],

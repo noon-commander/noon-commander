@@ -285,7 +285,8 @@ pub(crate) enum Action {
     NewerCommand,
     /// Opens the window of the command history.
     CommandHistory,
-    /// Shows the terminal's own screen, with the output of commands, in place of the panels.
+    /// Shows the terminal's own screen, with the output of commands, in place of the panels and
+    /// whatever is in front of them, which stays as it was.
     UserScreen,
     /// Closes the connection to the host under the cursor, or stops connecting to it.
     Disconnect,

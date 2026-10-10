@@ -14,6 +14,8 @@ pub(super) const PRESET: Preset = &[
         &[
             // The keys that can be typed now, over whatever is in front, as which-key shows them.
             (Action::KeyHints, &["alt-/"]),
+            // mc's and Far's: the output of commands, over whatever is in front, which stays.
+            (Action::UserScreen, &["ctrl-o"]),
         ],
     ),
     // The panels.
@@ -63,8 +65,6 @@ pub(super) const PRESET: Preset = &[
             (Action::Command, &[":"]),
             // vim's `q:`, the window of the command-line history.
             (Action::CommandHistory, &["q :"]),
-            // mc's and Far's: the output of commands.
-            (Action::UserScreen, &["ctrl-o"]),
             (Action::Help, &["g ?", "f1"]),
             // ranger's i shows the file; e edits it.
             (Action::View, &["i", "f3"]),
@@ -287,7 +287,6 @@ pub(super) const PRESET: Preset = &[
             (Action::NewerCommand, &["ctrl-n"]),
             // bash's Ctrl+r.
             (Action::CommandHistory, &["ctrl-r"]),
-            (Action::UserScreen, &["ctrl-o"]),
             (Action::Confirm, &["enter"]),
             (Action::Cancel, &["esc", "ctrl-c", "f10"]),
         ],

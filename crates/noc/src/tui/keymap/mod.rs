@@ -2221,6 +2221,31 @@ mod tests {
     }
 
     #[test]
+    fn ctrl_o_shows_the_output_of_commands_everywhere() {
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            for &context in Context::ALL {
+                if matches!(context, Context::Global | Context::UserScreen) {
+                    continue;
+                }
+                let mut state = KeyState::default();
+                assert_eq!(
+                    feed(&keymap, &mut state, context, &["ctrl-o"]),
+                    actions(&[Action::UserScreen]),
+                    "{name}: {context:?}"
+                );
+                let hints = keymap.hints(context, &[]);
+                assert!(
+                    hints.iter().any(
+                        |hint| hint.keys == "Ctrl+o" && hint.action == Some(Action::UserScreen)
+                    ),
+                    "{name}: {context:?} hints"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn alt_slash_asks_for_the_hints_everywhere_but_on_the_user_screen() {
         for name in Keymap::NAMES {
             let keymap = Keymap::by_name(name).unwrap();

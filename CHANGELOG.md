@@ -53,8 +53,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   command line shows it (`~/src — noc`, or `host:path`), and gets its own title back when Noon
   Commander quits or hands the terminal to a command, where the terminal keeps a stack of titles.
   `ui.terminal_title` (Terminal title in Options → Configuration) turns it off.
-- Ctrl+o shows the output of commands in place of the panels, as in mc and Far, in the panels and on
-  the command line; Ctrl+o or Esc brings the panels back. Each command now shows after its prompt,
+- Ctrl+o shows the output of commands in place of the panels, as in mc and Far, wherever it is
+  pressed: in the panels, on the command line, over dialogs, menus, and the viewer; Ctrl+o or Esc
+  brings back what was there. Each command now shows after its prompt,
   its output ends on a line of its own, and the line that asks for a key stands out and gives way to
   `[exit N]`, bold and red, after a command that failed. `shell.pause` (Wait after a command in
   Options → Configuration) says when the output waits for a key: `always`, `on-error`, or `never`.

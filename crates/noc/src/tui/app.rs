@@ -201,7 +201,8 @@ pub(crate) enum Handover {
     EditCommand { file: PathBuf, text: String },
     /// A shell command of the command line.
     Run(Run),
-    /// Nothing: the terminal's own screen shows, with the output of commands, until Ctrl+o.
+    /// Nothing: the terminal's own screen shows, with the output of commands, until Ctrl+o; then
+    /// whatever was in front is there again.
     UserScreen,
 }
 
@@ -1551,6 +1552,11 @@ impl App {
             self.hints_asked = Some(self.context());
             return Vec::new();
         }
+        // So does the output of commands, and what is in front is there again afterwards.
+        if input == Resolved::Action(Action::UserScreen) {
+            self.handover = Some(Handover::UserScreen);
+            return Vec::new();
+        }
         if let Some(effects) = self.handle_over(input) {
             return effects;
         }
@@ -1571,7 +1577,6 @@ impl App {
             Action::Shell | Action::Command | Action::CommandHistory => {
                 self.open_command_line(action);
             }
-            Action::UserScreen => self.handover = Some(Handover::UserScreen),
             Action::Quit => self.ask_quit(),
             Action::Jobs => self.jobs_list = Some(JobsList::default()),
             Action::Redraw => self.redraw = true,
@@ -2755,10 +2760,6 @@ impl App {
     /// Gives a key to the command line: Enter hands its command to the event loop, to run in
     /// the active panel's directory.
     fn handle_command_line(&mut self, input: Resolved) -> Vec<Effect> {
-        if input == Resolved::Action(Action::UserScreen) {
-            self.handover = Some(Handover::UserScreen);
-            return Vec::new();
-        }
         let Some(line) = &mut self.command_line else {
             return Vec::new();
         };
@@ -9242,6 +9243,28 @@ mod tests {
             Some("ls"),
             "the line stays as it was"
         );
+    }
+
+    #[test]
+    fn ctrl_o_shows_the_output_over_whatever_is_in_front_which_stays() {
+        for opens in [
+            Action::QuickSearch,
+            Action::Mkdir,
+            Action::Help,
+            Action::PullDown,
+            Action::Jobs,
+        ] {
+            let mut app = loaded();
+            app.handle(action(opens));
+            let context = app.context();
+            assert_ne!(context, Context::Panel, "{opens:?} opens something");
+            app.handle(action(Action::UserScreen));
+            assert!(
+                matches!(app.take_handover(), Some(Handover::UserScreen)),
+                "{opens:?}"
+            );
+            assert_eq!(app.context(), context, "{opens:?} stays in front");
+        }
     }
 
     #[test]

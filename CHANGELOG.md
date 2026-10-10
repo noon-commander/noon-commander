@@ -66,10 +66,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   command line, or Alt+p, brings back the commands of the panel's host, and Down, or Alt+n,
   goes forward to what was typed. Alt+h or Ctrl+r on the line, or Alt+h in a panel, opens a
   window of the history that typing filters: Tab shows every host, Enter puts the command on
-  the line without running it, its prompt standing out if it ran on another host, and Delete
-  removes it. `shell.history_size` (500, as bash's `HISTSIZE`, or Command line → History size
-  in Options → Configuration) sets how many commands are kept; a command that starts with a
-  space is never kept.
+  the line without running it, its prompt standing out if it ran on another host, and Delete,
+  Ctrl+Backspace, or F8 removes it. `shell.history_size` (500, as bash's `HISTSIZE`, or Command
+  line → History size in Options → Configuration) sets how many commands are kept; a command
+  that starts with a space is never kept.
 - Input for the command line: Shift+Enter starts a new line where the terminal speaks the
   kitty keyboard protocol, which Noon Commander now asks for where the terminal has it, with
   the keys typed with Shift reported too, so that Alt with a symbol such as Alt++ or Alt+* still

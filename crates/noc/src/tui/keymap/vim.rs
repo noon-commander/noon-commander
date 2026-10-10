@@ -296,7 +296,10 @@ pub(super) const PRESET: Preset = &[
     // switches between the panel's host and all hosts.
     (
         Context::CommandHistory,
-        &[(Action::NextField, &["tab"]), (Action::Delete, &["delete"])],
+        &[
+            (Action::NextField, &["tab"]),                         // OK1
+            (Action::Delete, &["delete", "ctrl-backspace", "f8"]), // OK1
+        ],
     ),
     // The terminal's own screen, with the output of commands.
     (

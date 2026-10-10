@@ -687,7 +687,7 @@ Far. Far's rows are those of its history menus.
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
 | The commands of the panel's host, or of all hosts | `next_field` | ⏳ | Tab | Tab | — | — | — | — |
-| Remove the command from the history | `delete` | ⏳ | Delete | Delete | Delete<br>d | Shift+Delete | — | — |
+| Remove the command from the history | `delete` | ✅ | Delete<br>Ctrl+Backspace<br>F8 | Delete<br>Ctrl+Backspace<br>F8 | Delete<br>d | Shift+Delete | — | — |
 | Re-run command / open item | — | ⏳ | — | — | — | Enter | — | — |
 | Run in separate window | — | ⏳ | — | — | — | Shift+Enter | — | — |
 | Run as administrator | — | ⏳ | — | — | — | Ctrl+Alt+Enter | — | — |

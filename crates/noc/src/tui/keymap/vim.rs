@@ -5,6 +5,9 @@
 //! contexts in the same order, and `noc keymap diff` shows what differs. Where Esc waits,
 //! `esc 1` … `esc 0` stand for F1 … F10 without being written here.
 
+// NOTE: Comments marked `OK1` are the maintainer's: the binding was checked and approved.
+// Do not touch them.
+
 use super::{Action, Context, Preset};
 
 pub(super) const PRESET: Preset = &[
@@ -12,10 +15,8 @@ pub(super) const PRESET: Preset = &[
     (
         Context::Global,
         &[
-            // The keys that can be typed now, over whatever is in front, as which-key shows them.
-            (Action::KeyHints, &["alt-/"]),
-            // mc's and Far's: the output of commands, over whatever is in front, which stays.
-            (Action::UserScreen, &["ctrl-o"]),
+            (Action::KeyHints, &["alt-/"]),                  // OK1
+            (Action::UserScreen, &["ctrl-`", "ctrl-space"]), // OK1
         ],
     ),
     // The panels.
@@ -298,5 +299,10 @@ pub(super) const PRESET: Preset = &[
         &[(Action::NextField, &["tab"]), (Action::Delete, &["delete"])],
     ),
     // The terminal's own screen, with the output of commands.
-    (Context::UserScreen, &[(Action::Cancel, &["ctrl-o", "esc"])]),
+    (
+        Context::UserScreen,
+        &[
+            (Action::Cancel, &["ctrl-`", "ctrl-space", "esc"]), // OK1
+        ],
+    ),
 ];

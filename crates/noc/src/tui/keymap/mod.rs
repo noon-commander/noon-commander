@@ -2221,27 +2221,57 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_o_shows_the_output_of_commands_everywhere() {
+    fn ctrl_backtick_shows_the_output_of_commands_everywhere() {
         for name in Keymap::NAMES {
             let keymap = Keymap::by_name(name).unwrap();
+            // Ctrl+o, mc's, only in the default keymap.
+            let mut keys = vec![("ctrl-`", "Ctrl+`"), ("ctrl-space", "Ctrl+Space")];
+            if *name == "default" {
+                keys.push(("ctrl-o", "Ctrl+o"));
+            }
             for &context in Context::ALL {
                 if matches!(context, Context::Global | Context::UserScreen) {
                     continue;
                 }
-                let mut state = KeyState::default();
-                assert_eq!(
-                    feed(&keymap, &mut state, context, &["ctrl-o"]),
-                    actions(&[Action::UserScreen]),
-                    "{name}: {context:?}"
-                );
                 let hints = keymap.hints(context, &[]);
-                assert!(
-                    hints.iter().any(
-                        |hint| hint.keys == "Ctrl+o" && hint.action == Some(Action::UserScreen)
-                    ),
-                    "{name}: {context:?} hints"
+                for (key, text) in &keys {
+                    let mut state = KeyState::default();
+                    assert_eq!(
+                        feed(&keymap, &mut state, context, &[key]),
+                        actions(&[Action::UserScreen]),
+                        "{name}: {context:?} {key}"
+                    );
+                    assert!(
+                        hints
+                            .iter()
+                            .any(|hint| hint.action == Some(Action::UserScreen)
+                                && hint.keys.split(", ").any(|keys| keys == *text)),
+                        "{name}: {context:?} hints {key}"
+                    );
+                }
+            }
+            let mut state = KeyState::default();
+            for (key, _) in &keys {
+                assert_eq!(
+                    feed(&keymap, &mut state, Context::UserScreen, &[key]),
+                    actions(&[Action::Cancel]),
+                    "{name}: {key}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn ctrl_backtick_arrives_as_ctrl_space_without_the_kitty_protocol() {
+        let legacy = KeyEvent::new(KeyCode::Char(' '), KeyModifiers::CONTROL);
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            let mut state = KeyState::default();
+            assert_eq!(
+                keymap.feed(&mut state, Context::Panel, legacy, Instant::now()),
+                actions(&[Action::UserScreen]),
+                "{name}"
+            );
         }
     }
 

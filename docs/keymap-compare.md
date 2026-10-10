@@ -72,12 +72,13 @@ keys that can follow on their own, once the first key of a sequence is pressed; 
 help in every window, and F1 in mc and Far opens the help of the window in front. Ctrl+o shows
 the output of commands over whatever is in front, which is there again afterwards; mc and Far
 hide or show the panels with it in the panels and on their command line, and mc in its viewer
-and editor too.
+and editor too. Ctrl+\` does the same in both presets; terminals without the kitty keyboard
+protocol send it as Ctrl+Space, which is bound too.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
 | The keys that can be typed now, over whatever is in front, and what they do, as which-key shows them | `key_hints` | ✅ | Alt+/ | Alt+/ | — | — | — | — |
-| The output of commands, in place of the panels and what is in front of them (mc, Far: hide or show the panels) | `user_screen` | ⏳ | Ctrl+o | Ctrl+o | Ctrl+o | Ctrl+o | — | — |
+| The output of commands, in place of the panels and what is in front of them (mc, Far: hide or show the panels) | `user_screen` | ✅ | Ctrl+o<br>Ctrl+\`<br>Ctrl+Space | Ctrl+\`<br>Ctrl+Space | Ctrl+o | Ctrl+o | — | — |
 | Help: the keys of what is in front, and what they do | — | ⏳ | — | — | F1 | F1 | \~<br>F1 | — |
 
 ## Panels (`panel`)
@@ -706,7 +707,7 @@ that bring the panels back do anything.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Back to the panels | `cancel` | ⏳ | Ctrl+o<br>Esc | Ctrl+o<br>Esc | Ctrl+o | Ctrl+o | — | — |
+| Back to the panels | `cancel` | ✅ | Ctrl+o<br>Ctrl+\`<br>Ctrl+Space<br>Esc | Ctrl+\`<br>Ctrl+Space<br>Esc | Ctrl+o | Ctrl+o | — | — |
 
 ## Mouse
 

@@ -7400,16 +7400,8 @@ mod tests {
             "{text}"
         );
 
-        // Right stops at Right; Left, at the other end, acts on the panel on its side.
+        // Right goes round to Left, which acts on the panel on its side.
         app.handle(action(Action::Right));
-        let text = screen_of(&mut app, 20);
-        assert!(
-            line_with(&text, "Sort by size").contains("Ctrl+F6"),
-            "{text}"
-        );
-        for _ in 0..5 {
-            app.handle(action(Action::Left));
-        }
         let text = screen_of(&mut app, 20);
         assert!(
             !line_with(&text, "Sort by size").contains("Ctrl+F6"),

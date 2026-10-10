@@ -3,20 +3,19 @@
 //! directory, and the whole command under the cursor below them. Typing filters it; Enter puts
 //! the command on the command line, without running it.
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 
 use noc_config::HistoryEntry;
 use ratatui::Frame;
-use ratatui::layout::{Position, Rect};
+use ratatui::layout::Rect;
 use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, draw_box, frame_around};
-use super::fuzzy::Fuzzy;
+use super::dialog::Colors;
 use super::keymap::{Action, Resolved};
-use super::mouse::{Drawn, Pointer};
+use super::mouse::Pointer;
+use super::picker::{Body, MenuLine, Pick, Picker};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -58,18 +57,8 @@ pub(crate) struct HistoryWindow {
     labels: HashMap<String, String>,
     /// Shows the commands of every host, not only those of `here`.
     all: bool,
-    filter: String,
-    /// The filter matches as fzf does: `ui.fuzzy_search`.
-    fuzzy: bool,
-    /// How well each entry matches the filter, higher for better; `None` hides it.
-    matches: Vec<Option<u32>>,
-    /// The row under the cursor, among those shown.
-    cursor: usize,
-    /// First row on screen, and rows on screen at the last render.
-    offset: usize,
-    page: usize,
-    /// Where the last render drew it, for the mouse.
-    drawn: RefCell<Drawn>,
+    /// Filters the commands of the hosts shown. Digits are text: commands have them.
+    picker: Picker,
 }
 
 impl HistoryWindow {
@@ -86,127 +75,78 @@ impl HistoryWindow {
             here,
             labels,
             all: false,
-            filter: String::new(),
-            fuzzy,
-            matches: Vec::new(),
-            cursor: 0,
-            offset: 0,
-            page: 1,
-            drawn: RefCell::default(),
+            picker: Picker::new(fuzzy).without_hotkeys(),
         };
-        window.refilter();
+        window.picker.set_rows(window.texts());
         window
     }
 
     /// Takes the commands again, after a change; the cursor stays on its row.
     pub(crate) fn set_history(&mut self, history: &[HistoryEntry]) {
         self.entries = history.iter().rev().cloned().collect();
-        self.refilter();
-        self.cursor = self.cursor.min(self.shown().len().saturating_sub(1));
+        self.picker.set_rows(self.texts());
+        let last = self.picker.len().saturating_sub(1);
+        self.picker.set_cursor(self.picker.cursor().min(last));
     }
 
-    /// Matches the entries of the hosts shown against the filter again: by command, ignoring
-    /// case; `fuzzy`, as fzf matches a line.
-    fn refilter(&mut self) {
-        let mut fuzzy = Fuzzy::names(&self.filter);
-        let filter = self.filter.to_lowercase();
-        self.matches = self
-            .entries
+    /// The entries of the hosts shown, newest first, whether the filter shows them or not.
+    fn scoped(&self) -> impl Iterator<Item = &HistoryEntry> {
+        self.entries
             .iter()
-            .map(|entry| {
-                if !self.all && entry.host != self.here {
-                    None
-                } else if self.fuzzy {
-                    fuzzy.score(&entry.command)
-                } else {
-                    entry.command.to_lowercase().contains(&filter).then_some(0)
-                }
-            })
-            .collect();
+            .filter(|entry| self.all || entry.host == self.here)
+    }
+
+    /// What the filter finds each entry of the hosts shown by: its command.
+    fn texts(&self) -> Vec<Vec<String>> {
+        self.scoped()
+            .map(|entry| vec![entry.command.clone()])
+            .collect()
     }
 
     /// The entries shown, newest first.
     fn shown(&self) -> Vec<&HistoryEntry> {
-        self.entries
-            .iter()
-            .zip(&self.matches)
-            .filter_map(|(entry, score)| score.map(|_| entry))
-            .collect()
-    }
-
-    /// The row to put the cursor on after the filter changed: the newest of those that match
-    /// best.
-    fn best_row(&self) -> usize {
-        let shown: Vec<u32> = self.matches.iter().flatten().copied().collect();
-        let best = shown.iter().max();
-        shown
-            .iter()
-            .position(|score| Some(score) == best)
-            .unwrap_or(0)
+        self.picker.shown(self.scoped())
     }
 
     fn chosen(&self) -> Option<&HistoryEntry> {
-        self.shown().get(self.cursor).copied()
+        self.shown().get(self.picker.cursor()).copied()
     }
 
-    /// Takes a key: arrows move, characters filter, Backspace takes one back, Tab switches
-    /// between this host and all hosts, Enter takes the command, Delete removes it, and Esc
-    /// closes the window.
+    /// Takes a key: the picker's, where Enter takes the command, and Tab, which switches
+    /// between this host and all hosts, and Delete, which removes the command.
     pub(crate) fn handle(&mut self, input: Resolved) -> HistoryEvent {
-        let last = self.shown().len().saturating_sub(1);
-        let page = self.page.max(1);
-        match input {
-            Resolved::Insert(c) => {
-                self.filter.push(c);
-                self.refilter();
-                self.cursor = self.best_row();
+        let event = |entry: &HistoryEntry, delete: bool| {
+            let (command, host) = (entry.command.clone(), entry.host.clone());
+            if delete {
+                HistoryEvent::Delete { command, host }
+            } else {
+                HistoryEvent::Take { command, host }
             }
-            Resolved::Action(action) => match action {
-                Action::Up => self.cursor = self.cursor.saturating_sub(1),
-                Action::Down => self.cursor = (self.cursor + 1).min(last),
-                Action::PageUp => self.cursor = self.cursor.saturating_sub(page),
-                Action::PageDown => self.cursor = (self.cursor + page).min(last),
-                Action::Home => self.cursor = 0,
-                Action::End => self.cursor = last,
-                Action::Backspace => {
-                    self.filter.pop();
-                    self.refilter();
-                    self.cursor = self.best_row();
-                }
-                Action::NextField => {
-                    self.all = !self.all;
-                    self.refilter();
-                    self.cursor = self.best_row();
-                }
-                Action::Confirm => {
-                    if let Some(entry) = self.chosen() {
-                        return HistoryEvent::Take {
-                            command: entry.command.clone(),
-                            host: entry.host.clone(),
-                        };
-                    }
-                }
-                Action::Delete => {
-                    if let Some(entry) = self.chosen() {
-                        return HistoryEvent::Delete {
-                            command: entry.command.clone(),
-                            host: entry.host.clone(),
-                        };
-                    }
-                }
-                Action::Cancel => return HistoryEvent::Closed,
-                _ => {}
-            },
+        };
+        match self.picker.handle(input) {
+            Pick::Chosen(row) => self
+                .shown()
+                .get(row)
+                .map_or(HistoryEvent::Pending, |entry| event(entry, false)),
+            Pick::Closed => HistoryEvent::Closed,
+            Pick::Other(Action::NextField) => {
+                self.all = !self.all;
+                self.picker.set_rows(self.texts());
+                self.picker.focus_best();
+                HistoryEvent::Pending
+            }
+            Pick::Other(Action::Delete) => self
+                .chosen()
+                .map_or(HistoryEvent::Pending, |entry| event(entry, true)),
+            Pick::Pending | Pick::Other(_) => HistoryEvent::Pending,
         }
-        HistoryEvent::Pending
     }
 
     /// Takes a press of the mouse, where the window was drawn last: a click puts the cursor on
     /// a row, and returns the key that a double click on one, or a click outside the window,
     /// stands for: Enter or Esc.
     pub(crate) fn pointer(&mut self, pointer: Pointer) -> Option<Action> {
-        let drawn = self.drawn.borrow().clone();
-        drawn.menu_press(pointer, &mut self.cursor)
+        self.picker.pointer(pointer)
     }
 
     /// The name of `host` in the window: its label, else its alias; `local` for this machine.
@@ -225,15 +165,19 @@ impl HistoryWindow {
     /// Draws the window centered over `area`, the panels: the filter and which hosts it shows,
     /// the commands, scrolled to the cursor, and the whole command under the cursor.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        let (page, cursor, offset) = self.draw(frame, area, theme);
-        (self.page, self.cursor, self.offset) = (page, cursor, offset);
-    }
-
-    /// The filter, with the cursor after it, and which hosts the window shows, on the first
-    /// line of `inner`; a line under them.
-    fn draw_filter(&self, frame: &mut Frame<'_>, inner: Rect, theme: &Theme) {
-        let width = usize::from(inner.width);
-        let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
+        // From the fields, not `shown`, so that the picker can draw while this borrows them.
+        let (all, here) = (self.all, &self.here);
+        let scoped = self
+            .entries
+            .iter()
+            .filter(|entry| all || entry.host == *here);
+        let shown = self.picker.shown(scoped);
+        let lines: Vec<MenuLine> = (0..shown.len()).map(MenuLine::Row).collect();
+        let cursor = self.picker.cursor().min(shown.len().saturating_sub(1));
+        let footer = shown.get(cursor).map_or_else(Vec::new, |entry| {
+            let width = usize::from(WIDTH.min(area.width).saturating_sub(4));
+            preview_rows(&entry.command, width)
+        });
         let scope = if self.all {
             fl!("history-all-hosts")
         } else {
@@ -242,67 +186,13 @@ impl HistoryWindow {
                 host = self.host_name(self.here.as_deref())
             )
         };
-        let scope = cells::sanitize(scope.as_bytes());
-        let filter = fl!(
-            "history-filter",
-            text = cells::sanitize(self.filter.as_bytes())
-        );
-        let column = u16::try_from(cells::width(&filter)).unwrap_or(u16::MAX);
-        let room = width.saturating_sub(cells::width(&scope) + 1);
-        let top = format!("{} {scope}", cells::fit(&filter, room, Align::Left));
-        frame.render_widget(Line::styled(top, theme.dialog), line(0));
-        frame.set_cursor_position(Position::new(
-            inner.x.saturating_add(column).min(inner.right() - 1),
-            inner.y,
-        ));
-        frame.render_widget(Line::styled("─".repeat(width), theme.dialog), line(1));
-    }
-
-    fn draw(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) -> (usize, usize, usize) {
-        let shown = self.shown();
-        let rows = u16::try_from(shown.len().max(1))
-            .unwrap_or(u16::MAX)
-            .min(MAX_ROWS);
-        let preview = self.chosen().map_or_else(Vec::new, |entry| {
-            let width = usize::from(WIDTH.min(area.width).saturating_sub(4));
-            preview_rows(&entry.command, width)
-        });
-        let colors = Colors::of(theme, false);
-        // Borders, the filter, the line under it, the rows, a line, the preview.
-        let preview_rows = u16::try_from(preview.len()).unwrap_or(0);
-        let size = (WIDTH, rows + 5 + preview_rows);
-        let inner = draw_box(frame, area, size, &fl!("history-title"), colors, theme);
-        let mut drawn = self.drawn.borrow_mut();
-        *drawn = Drawn {
-            frame: frame_around(inner),
-            ..Drawn::default()
+        let message = if self.entries.is_empty() {
+            Some(fl!("history-none"))
+        } else if shown.is_empty() {
+            Some(fl!("history-nothing"))
+        } else {
+            None
         };
-        if inner.height < 4 || inner.width < 8 {
-            return (self.page, self.cursor, self.offset);
-        }
-        let width = usize::from(inner.width);
-        let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
-
-        self.draw_filter(frame, inner, theme);
-
-        let below = 1 + preview_rows;
-        let page = usize::from(inner.height.saturating_sub(2 + below)).max(1);
-        if shown.is_empty() {
-            let message = if self.entries.is_empty() {
-                fl!("history-none")
-            } else {
-                fl!("history-nothing")
-            };
-            for (index, text) in (2..inner.height).zip(cells::wrap(&message, width)) {
-                frame.render_widget(Line::styled(text, theme.dialog), line(index));
-            }
-            return (page, self.cursor, self.offset);
-        }
-        let cursor = self.cursor.min(shown.len() - 1);
-        let offset = self
-            .offset
-            .min(cursor)
-            .max((cursor + 1).saturating_sub(page));
         let hosts: Vec<String> = shown
             .iter()
             .map(|entry| cells::sanitize(self.host_name(entry.host.as_deref()).as_bytes()))
@@ -313,8 +203,20 @@ impl HistoryWindow {
             .max()
             .unwrap_or(0)
             .min(HOST_WIDTH);
-        let dir_width = DIR_WIDTH.min(width / 4);
-        for (index, (row, entry)) in shown.iter().enumerate().skip(offset).take(page).enumerate() {
+        let title = fl!("history-title");
+        let body = Body {
+            title: &title,
+            width: WIDTH,
+            lines: &lines,
+            max_lines: Some(MAX_ROWS),
+            note: Some(scope),
+            message,
+            footer,
+        };
+        let focused = Colors::of(theme, false).focused_style();
+        self.picker.render(frame, area, theme, body, &mut |row| {
+            let entry = shown[row.index];
+            let dir_width = DIR_WIDTH.min(row.width / 4);
             let mut lines = entry.command.lines();
             let first = cells::sanitize(lines.next().unwrap_or_default().as_bytes());
             let more = lines.count();
@@ -323,37 +225,29 @@ impl HistoryWindow {
             } else {
                 String::new()
             };
-            let room = width.saturating_sub(host_width + dir_width + 4 + cells::width(&more));
+            let room = row
+                .width
+                .saturating_sub(host_width + dir_width + 4 + cells::width(&more));
             let first = if more.is_empty() {
                 cells::fit(&first, room, Align::Left)
             } else {
                 cells::fit(&format!("{first} …"), room, Align::Left)
             };
-            let host = cells::fit(&hosts[row], host_width, Align::Left);
+            let host = cells::fit(&hosts[row.index], host_width, Align::Left);
             let dir = cells::fit(
                 &cells::sanitize(entry.dir.as_bytes()),
                 dir_width,
                 Align::Left,
             );
-            let style = if row == cursor {
-                colors.focused_style()
-            } else if entry.host != self.here {
+            let style = if row.selected {
+                focused
+            } else if entry.host != *here {
                 theme.dialog.add_modifier(Modifier::DIM)
             } else {
                 theme.dialog
             };
-            let text =
-                Line::from(vec![Span::raw(format!(" {host} {dir} {first}{more} "))]).style(style);
-            let y = u16::try_from(index + 2).unwrap_or(u16::MAX);
-            frame.render_widget(text, line(y));
-            drawn.rows.push((row, line(y)));
-        }
-        let top = inner.height.saturating_sub(below);
-        frame.render_widget(Line::styled("─".repeat(width), theme.dialog), line(top));
-        for (index, text) in (top + 1..inner.height).zip(preview) {
-            frame.render_widget(Line::styled(text, theme.dialog), line(index));
-        }
-        (page, cursor, offset)
+            Line::from(vec![Span::raw(format!(" {host} {dir} {first}{more} "))]).style(style)
+        });
     }
 }
 

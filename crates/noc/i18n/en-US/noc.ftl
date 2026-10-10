@@ -101,16 +101,20 @@ root-free = Free
 # Column header: user@hostname:port from ssh -G.
 root-address = Address
 
+## What the windows that list rows to choose from share (src/tui/picker): the location menu,
+## the workspaces, and the command history. Prefix: picker-.
+
+# The first line: what was typed to filter the window.
+picker-filter = Filter: { $text }
+# When the filter leaves no row.
+picker-nothing = Nothing matches.
+
 ## The location menu of Alt+F1 and Alt+F2 (src/tui/menu), as Far Manager's menu to change
 ## drives. Prefix: menu-.
 
 # Titles: the panel the menu changes.
 menu-left = Left
 menu-right = Right
-# The first line: what was typed to filter the menu.
-menu-filter = Filter: { $text }
-# When the filter leaves no row.
-menu-nothing = Nothing matches.
 
 ## The zoxide window of Alt+z (src/tui/jump): the directories zoxide ranks highest for the
 ## keywords typed, as `z` picks them in a shell. Prefix: jump-.
@@ -133,12 +137,8 @@ tabs-title = Tabs
 
 # The window of Alt+w, F9 → Workspace → Workspace list….
 workspaces-title = Workspaces
-# The first line: what was typed to filter the window.
-workspaces-filter = Filter: { $text }
 # When no workspace is saved yet.
 workspaces-none = No workspace is saved yet. Insert here, or Alt+W in a panel, saves the tabs of both panels under a name.
-# When the filter leaves no row.
-workspaces-nothing = Nothing matches.
 # Right of a workspace: how many tabs it has, in both panels together.
 workspaces-tabs = { $count ->
         [one] 1 tab
@@ -717,14 +717,13 @@ command-exit-mark = [exit { $code }]
 command-signal-mark = [signal { $signal }]
 # The window of the command history, Alt+h or Ctrl+r on the command line.
 history-title = Command history
-# The filter, at the top.
-history-filter = Filter: { $text }
 # Which commands the window shows; Tab switches.
 history-this-host = { $host } ⇄ all
 history-all-hosts = all hosts ⇄ this one
 # The host of commands that ran on this machine.
 history-local = local
 history-none = No commands yet. Commands run with ! and : come here.
+# When the filter leaves no command.
 history-nothing = No command matches.
 # history.toml could not be read or written; the reason names the file.
 history-error = Cannot keep the command history: { $reason }

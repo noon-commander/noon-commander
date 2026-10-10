@@ -20,6 +20,7 @@ mod mouse;
 mod output;
 mod panel;
 mod pattern;
+mod picker;
 mod progress;
 mod pulldown;
 mod root;

@@ -2,23 +2,22 @@
 //! directory, the volumes, and the SFTP hosts, for one panel. Typing filters it; while the filter is empty,
 //! `1` … `9` and `0` open the first ten rows.
 
-use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
 use noc_vfs::{Location, Space, Volume};
 use ratatui::Frame;
-use ratatui::layout::{Position, Rect};
+use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
 use super::app::Side;
 use super::cells::{self, Align};
 use super::decor::Decor;
-use super::dialog::{Colors, draw_box, frame_around};
-use super::fuzzy::Fuzzy;
+use super::dialog::Colors;
 use super::keymap::{Action, Resolved};
-use super::mouse::{Drawn, Pointer};
+use super::mouse::Pointer;
 use super::panel::{HostState, Listed, Listing};
+use super::picker::{Body, MenuLine, Pick, Picker, ShownRow};
 use super::root::{RootHost, volume_name, volume_of};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -50,14 +49,6 @@ enum Item<'a> {
     Host(&'a RootHost),
 }
 
-/// A line of the menu: a row to choose, by its index among the rows the filter shows, or the
-/// heading of the hosts.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Shown {
-    Item(usize),
-    Hosts,
-}
-
 /// The menu of one panel. Its volumes and hosts come from a listing of the virtual root.
 #[derive(Debug)]
 pub(crate) struct LocationMenu {
@@ -73,26 +64,14 @@ pub(crate) struct LocationMenu {
     /// `true` once the first listing arrived.
     loaded: bool,
     error: Option<String>,
-    filter: String,
-    /// The filter matches as fzf does: `ui.fuzzy_search`.
-    fuzzy: bool,
-    /// How well each row, shown or not, matches the filter, higher for better; `None` hides
-    /// it.
-    matches: Vec<Option<u32>>,
-    /// The row under the cursor, among those the filter shows.
-    cursor: usize,
-    /// First line on screen, and lines on screen at the last render.
-    offset: usize,
-    page: usize,
-    /// Where the last render drew it, for the mouse.
-    drawn: RefCell<Drawn>,
+    picker: Picker,
 }
 
 impl LocationMenu {
     /// A menu for the panel on `side`, which shows `current`, waiting for the listing
     /// `generation`. Its first row opens `home`.
     pub(crate) fn new(side: Side, current: Location, home: PathBuf, generation: u64) -> Self {
-        Self {
+        let mut menu = Self {
             side,
             current,
             home,
@@ -101,21 +80,16 @@ impl LocationMenu {
             hosts: Vec::new(),
             loaded: false,
             error: None,
-            filter: String::new(),
-            fuzzy: false,
-            // The home directory, before the listing.
-            matches: vec![Some(0)],
-            cursor: 0,
-            offset: 0,
-            page: 1,
-            drawn: RefCell::default(),
-        }
+            picker: Picker::new(false),
+        };
+        // The home directory, before the listing.
+        menu.picker.set_rows(menu.texts());
+        menu
     }
 
     /// The same menu, whose filter matches as fzf does if `fuzzy` (`ui.fuzzy_search`).
     pub(crate) fn fuzzy(mut self, fuzzy: bool) -> Self {
-        self.fuzzy = fuzzy;
-        self.refilter();
+        self.picker.set_fuzzy(fuzzy);
         self
     }
 
@@ -143,14 +117,15 @@ impl LocationMenu {
                 self.volumes = volumes;
                 self.hosts = hosts;
                 self.error = None;
-                self.refilter();
+                self.picker.set_rows(self.texts());
                 let items = self.items();
                 let keep =
                     chosen.and_then(|chosen| items.iter().position(|item| key(*item) == chosen));
-                self.cursor = match keep {
+                let cursor = match keep {
                     Some(row) if self.loaded => row,
                     _ => self.current_row(&items),
                 };
+                self.picker.set_cursor(cursor);
                 self.loaded = true;
             }
             Ok(_) => {}
@@ -185,58 +160,22 @@ impl LocationMenu {
         position.unwrap_or(0)
     }
 
-    /// Every row, shown or not: the home directory, the volumes, then the hosts.
-    fn all_items(&self) -> impl Iterator<Item = Item<'_>> {
-        let space = volume_of(&self.volumes, &self.home).and_then(|volume| volume.space);
-        std::iter::once(Item::Home(&self.home, space))
-            .chain(self.volumes.iter().map(Item::Volume))
-            .chain(self.hosts.iter().map(Item::Host))
-    }
-
-    /// Matches the rows against the filter again. A row shows if one of its texts (name,
-    /// mount point; alias, label, address) contains the filter, ignoring case; `fuzzy`, if
-    /// they match it as fzf matches a line.
-    fn refilter(&mut self) {
-        self.matches = if self.fuzzy {
-            let mut fuzzy = Fuzzy::names(&self.filter);
-            self.all_items()
-                .map(|item| fuzzy.score(&texts(item).join(" ")))
-                .collect()
-        } else {
-            let filter = self.filter.to_lowercase();
-            self.all_items()
-                .map(|item| {
-                    texts(item)
-                        .iter()
-                        .any(|text| text.to_lowercase().contains(&filter))
-                        .then_some(0)
-                })
-                .collect()
-        };
+    /// What the filter finds each row by, shown or not.
+    fn texts(&self) -> Vec<Vec<String>> {
+        all_items(&self.home, &self.volumes, &self.hosts)
+            .map(texts)
+            .collect()
     }
 
     /// The rows the filter shows, in their order.
     fn items(&self) -> Vec<Item<'_>> {
-        self.all_items()
-            .zip(&self.matches)
-            .filter_map(|(item, score)| score.map(|_| item))
-            .collect()
-    }
-
-    /// The row to put the cursor on after the filter changed: the first of those that match
-    /// best. Without `fuzzy`, all match as well, so it is the first.
-    fn best_row(&self) -> usize {
-        let shown: Vec<u32> = self.matches.iter().flatten().copied().collect();
-        let best = shown.iter().max();
-        shown
-            .iter()
-            .position(|score| Some(score) == best)
-            .unwrap_or(0)
+        self.picker
+            .shown(all_items(&self.home, &self.volumes, &self.hosts))
     }
 
     /// The row under the cursor.
     fn chosen(&self) -> Option<Item<'_>> {
-        self.items().get(self.cursor).copied()
+        self.items().get(self.picker.cursor()).copied()
     }
 
     /// Where a row leads: the home directory, a volume's mount point, or a host's home
@@ -252,74 +191,41 @@ impl LocationMenu {
         }
     }
 
-    /// Takes a key: arrows move, Enter opens, a digit opens its row while the filter is empty,
-    /// other characters filter, Backspace takes one back, F8 disconnects a host, and Esc
-    /// closes the menu.
+    /// Takes a key: the picker's, and F8, which disconnects a host, and Ctrl+r, which reads
+    /// the volumes and hosts again.
     pub(crate) fn handle(&mut self, input: Resolved) -> MenuEvent {
-        let rows = self.items().len();
-        let last = rows.saturating_sub(1);
-        let page = self.page.max(1);
-        match input {
-            Resolved::Insert(c) if self.filter.is_empty() && c.is_ascii_digit() => {
-                let digit = c.to_digit(10).map_or(0, |digit| digit as usize);
-                let row = (digit + 9) % 10;
-                return match self.items().get(row) {
-                    Some(item) => MenuEvent::Open(Self::open(*item)),
-                    None => MenuEvent::Pending,
-                };
-            }
-            Resolved::Insert(c) => {
-                self.filter.push(c);
-                self.refilter();
-                self.cursor = self.best_row();
-            }
-            Resolved::Action(action) => match action {
-                Action::Up => self.cursor = self.cursor.saturating_sub(1),
-                Action::Down => self.cursor = (self.cursor + 1).min(last),
-                Action::PageUp => self.cursor = self.cursor.saturating_sub(page),
-                Action::PageDown => self.cursor = (self.cursor + page).min(last),
-                Action::Home => self.cursor = 0,
-                Action::End => self.cursor = last,
-                Action::Backspace => {
-                    self.filter.pop();
-                    self.refilter();
-                    self.cursor = self.best_row();
-                }
-                Action::Confirm => {
-                    return match self.chosen() {
-                        Some(item) => MenuEvent::Open(Self::open(item)),
-                        None => MenuEvent::Pending,
-                    };
-                }
-                Action::Disconnect => {
-                    if let Some(Item::Host(host)) = self.chosen() {
-                        return MenuEvent::Disconnect(host.alias.clone());
-                    }
-                }
-                Action::Reload => return MenuEvent::Reload,
-                Action::Cancel => return MenuEvent::Closed,
-                _ => {}
+        match self.picker.handle(input) {
+            Pick::Chosen(row) => match self.items().get(row) {
+                Some(item) => MenuEvent::Open(Self::open(*item)),
+                None => MenuEvent::Pending,
             },
+            Pick::Closed => MenuEvent::Closed,
+            Pick::Other(Action::Disconnect) => match self.chosen() {
+                Some(Item::Host(host)) => MenuEvent::Disconnect(host.alias.clone()),
+                _ => MenuEvent::Pending,
+            },
+            Pick::Other(Action::Reload) => MenuEvent::Reload,
+            Pick::Pending | Pick::Other(_) => MenuEvent::Pending,
         }
-        MenuEvent::Pending
     }
 
     /// Takes a press of the mouse, where the menu was drawn last: a click puts the cursor on
     /// a row, and returns the key that a double click on one, or a click outside the menu,
     /// stands for: Enter or Esc.
     pub(crate) fn pointer(&mut self, pointer: Pointer) -> Option<Action> {
-        let drawn = self.drawn.borrow().clone();
-        drawn.menu_press(pointer, &mut self.cursor)
+        self.picker.pointer(pointer)
     }
 
     /// The lines: the rows the filter shows, with a heading above the hosts.
-    fn lines(items: &[Item<'_>]) -> Vec<Shown> {
+    fn lines(items: &[Item<'_>]) -> Vec<MenuLine> {
         let mut lines = Vec::with_capacity(items.len() + 1);
+        let mut hosts = false;
         for (row, item) in items.iter().enumerate() {
-            if matches!(item, Item::Host(_)) && !lines.contains(&Shown::Hosts) {
-                lines.push(Shown::Hosts);
+            if matches!(item, Item::Host(_)) && !hosts {
+                hosts = true;
+                lines.push(MenuLine::Heading(fl!("root-sftp")));
             }
-            lines.push(Shown::Item(row));
+            lines.push(MenuLine::Row(row));
         }
         lines
     }
@@ -335,122 +241,54 @@ impl LocationMenu {
         hosts: &dyn Fn(&str) -> HostState,
         tick: u64,
     ) {
-        let (page, cursor, offset) = self.draw(frame, area, theme, decor, hosts, tick);
-        (self.page, self.cursor, self.offset) = (page, cursor, offset);
-    }
-
-    /// Draws the menu; returns the lines on a page, and the cursor and the first line shown.
-    fn draw(
-        &self,
-        frame: &mut Frame<'_>,
-        area: Rect,
-        theme: &Theme,
-        decor: Decor,
-        hosts: &dyn Fn(&str) -> HostState,
-        tick: u64,
-    ) -> (usize, usize, usize) {
-        let items = self.items();
+        let items = self
+            .picker
+            .shown(all_items(&self.home, &self.volumes, &self.hosts));
         let lines = Self::lines(&items);
-        let shown = u16::try_from(lines.len().max(1)).unwrap_or(u16::MAX);
-        let colors = Colors::of(theme, false);
         let title = match self.side {
             Side::Left => fl!("menu-left"),
             Side::Right => fl!("menu-right"),
         };
-        // Borders, the filter, the line under it, the rows.
-        let size = (WIDTH, shown.saturating_add(4));
-        let inner = draw_box(frame, area, size, &title, colors, theme);
-        let mut drawn = self.drawn.borrow_mut();
-        *drawn = Drawn {
-            frame: frame_around(inner),
-            ..Drawn::default()
-        };
-        if inner.height < 3 || inner.width < 4 {
-            return (self.page, self.cursor, self.offset);
-        }
-        let width = usize::from(inner.width);
-        let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
-
-        let filter = fl!(
-            "menu-filter",
-            text = cells::sanitize(self.filter.as_bytes())
-        );
-        // Right after the text, spaces typed last included.
-        let column = u16::try_from(cells::width(&filter)).unwrap_or(u16::MAX);
-        let filter = cells::fit(&filter, width, Align::Left);
-        frame.render_widget(Line::styled(filter, theme.dialog), line(0));
-        frame.set_cursor_position(Position::new(
-            inner.x.saturating_add(column).min(inner.right() - 1),
-            inner.y,
-        ));
-        frame.render_widget(Line::styled("─".repeat(width), theme.dialog), line(1));
-
-        let page = usize::from(inner.height - 2);
-        let message = if !self.loaded {
-            Some(self.error.clone().unwrap_or_else(|| fl!("panel-loading")))
-        } else if items.is_empty() {
-            Some(fl!("menu-nothing"))
-        } else {
-            None
-        };
-        if let Some(message) = message {
-            let text = cells::fit(&message, width, Align::Left);
-            frame.render_widget(Line::styled(text, theme.dialog), line(2));
-            return (page, self.cursor, self.offset);
-        }
-        let cursor = self.cursor.min(items.len() - 1);
-        let at = lines
-            .iter()
-            .position(|shown| *shown == Shown::Item(cursor))
-            .unwrap_or(0);
-        // The heading above the first host shows with it.
-        let top = if at > 0 && lines[at - 1] == Shown::Hosts {
-            at - 1
-        } else {
-            at
-        };
-        let offset = self.offset.min(top).max((at + 1).saturating_sub(page));
-
-        let info_width = items
+        let message =
+            (!self.loaded).then(|| self.error.clone().unwrap_or_else(|| fl!("panel-loading")));
+        let widest = items
             .iter()
             .map(|item| cells::width(&info(*item, hosts)))
             .max()
-            .unwrap_or(0)
-            .min(width / 2);
-        // A hotkey, a space, the name, a space, the information.
-        let name_width = width.saturating_sub(info_width + 3);
-        let hotkeys = self.filter.is_empty();
+            .unwrap_or(0);
         let look = Look {
             theme,
             decor,
             hosts,
             tick,
-            focused: colors.focused_style(),
+            focused: Colors::of(theme, false).focused_style(),
         };
-        for (index, shown) in lines.iter().skip(offset).take(page).enumerate() {
-            let y = u16::try_from(index + 2).unwrap_or(u16::MAX);
-            let text = match *shown {
-                Shown::Hosts => {
-                    let heading = format!("─ {} ", fl!("root-sftp"));
-                    let rest = width.saturating_sub(cells::width(&heading));
-                    Line::styled(format!("{heading}{}", "─".repeat(rest)), theme.dialog)
-                }
-                Shown::Item(row) => {
-                    let hotkey = match row {
-                        0..=9 if hotkeys => {
-                            char::from_digit(u32::try_from((row + 1) % 10).unwrap_or(0), 10)
-                                .unwrap_or(' ')
-                        }
-                        _ => ' ',
-                    };
-                    drawn.rows.push((row, line(y)));
-                    look.line(items[row], hotkey, row == cursor, (name_width, info_width))
-                }
-            };
-            frame.render_widget(text, line(y));
-        }
-        (page, cursor, offset)
+        let body = Body {
+            title: &title,
+            width: WIDTH,
+            lines: &lines,
+            message,
+            ..Body::default()
+        };
+        self.picker.render(frame, area, theme, body, &mut |row| {
+            let info_width = widest.min(row.width / 2);
+            // A hotkey, a space, the name, a space, the information.
+            let name_width = row.width.saturating_sub(info_width + 3);
+            look.line(items[row.index], row, (name_width, info_width))
+        });
     }
+}
+
+/// Every row, shown or not: the home directory `home`, the volumes, then the hosts.
+fn all_items<'a>(
+    home: &'a Path,
+    volumes: &'a [Volume],
+    hosts: &'a [RootHost],
+) -> impl Iterator<Item = Item<'a>> {
+    let space = volume_of(volumes, home).and_then(|volume| volume.space);
+    std::iter::once(Item::Home(home, space))
+        .chain(volumes.iter().map(Item::Volume))
+        .chain(hosts.iter().map(Item::Host))
 }
 
 /// How rows are drawn.
@@ -468,8 +306,9 @@ impl Look<'_> {
     fn line(
         &self,
         item: Item<'_>,
-        hotkey: char,
-        selected: bool,
+        ShownRow {
+            hotkey, selected, ..
+        }: ShownRow,
         (name_width, info_width): (usize, usize),
     ) -> Line<'static> {
         let (prefix, name, marker) = match item {

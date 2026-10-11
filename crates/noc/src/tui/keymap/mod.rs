@@ -1556,8 +1556,9 @@ mod tests {
                 Context::Panel,
                 &[
                     "shift-j", "+", "-", "v", "shift-r", "o", "h", "o", "n", "o", "e", "o", "m",
-                    "o", "s", "/", "q", ":", "i", "e", "y", "y", "x", "r", "shift-a", "d", "w",
-                    "g", "d", "g", "n", "g", "c", "g", "t", "g", "shift-t", "ctrl-c"
+                    "o", "s", "/", "q", ":", "i", "e", "y", "y", "x", "r", "shift-a", "d",
+                    "shift-d", "w", "g", "d", "g", "n", "g", "c", "g", "t", "g", "shift-t",
+                    "ctrl-c"
                 ]
             ),
             actions(&[
@@ -1594,6 +1595,13 @@ mod tests {
             feed(&vim, &mut state, Context::Root, &["shift-d", "shift-d"]),
             actions(&[Action::Disconnect])
         );
+        // d alone deletes nothing: it waits for D, and d d is left for the trash.
+        let now = Instant::now();
+        for keys in [&["d"][..], &["d", "d"]] {
+            let mut resolved = feed(&vim, &mut state, Context::Panel, keys);
+            resolved.extend(vim.expire(&mut state, now + SEQUENCE_TIMEOUT));
+            assert_eq!(resolved, [], "{keys:?}");
+        }
         // In quick search, letters are the name searched for, and Ctrl+g goes to the next match.
         assert_eq!(
             feed(&vim, &mut state, Context::QuickSearch, &["y", "ctrl-g"]),

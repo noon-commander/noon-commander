@@ -103,6 +103,9 @@
       ([ADR 0017](adr/0017-workspaces.md))
 - [ ] Bookmarks and history
 - [ ] chmod and symlinks
+- [ ] Trash: the marked entries, or the one under the cursor, moved to the trash (`d d` in the
+      vim keymap) rather than deleted: `~/.Trash` on macOS, the FreeDesktop trash on Linux. SFTP
+      has no trash, so what hosts do needs an ADR
 - [x] Mouse support ([ADR 0018](adr/0018-mouse-support.md)): panels, tabs, the F-key bar, the
       viewer, the pull-down menu, dialogs, and every window; `ui.mouse` and `ui.wheel`
 - [ ] Restore panel state on start, with the tabs

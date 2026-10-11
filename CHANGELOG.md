@@ -45,7 +45,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and Backspace go to the parent directory, J, Shift+Down, and Insert mark and go down, K and
   Shift+Up mark and go up, + marks and - unmarks by a pattern, v inverts the marks, / starts quick
   search and Ctrl+g goes to the next match, i views, e edits, Y and y y copy, x moves, r renames in
-  the row, A makes a directory, d deletes (D D disconnects the host under the cursor on the root),
+  the row, A makes a directory, d D deletes (D D disconnects the host under the cursor on the root),
   f c and f # make checksums, R reads the directory again, o h shows hidden files, o n, o e, o m,
   and o s sort, q : opens the command history, w the jobs, g d Quick cd, g z jumps with zoxide, g n,
   g c, g t, and g T open, close, and switch tabs, t h and t l list the left and the right panel's

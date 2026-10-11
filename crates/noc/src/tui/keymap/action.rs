@@ -186,6 +186,10 @@ pub(crate) enum Action {
     PageUp,
     /// One page down.
     PageDown,
+    /// Half a page up.
+    HalfPageUp,
+    /// Half a page down.
+    HalfPageDown,
     /// The first row, or the start of a text field.
     Home,
     /// The last row, or the end of a text field.
@@ -344,6 +348,8 @@ impl Action {
             Self::Right => "right",
             Self::PageUp => "page_up",
             Self::PageDown => "page_down",
+            Self::HalfPageUp => "half_page_up",
+            Self::HalfPageDown => "half_page_down",
             Self::Home => "home",
             Self::End => "end",
             Self::Enter => "enter",
@@ -453,6 +459,8 @@ impl Action {
         Self::Right,
         Self::PageUp,
         Self::PageDown,
+        Self::HalfPageUp,
+        Self::HalfPageDown,
         Self::Home,
         Self::End,
         Self::Enter,

@@ -1790,6 +1790,25 @@ mod tests {
     }
 
     #[test]
+    fn half_pages_with_shift_and_the_page_keys_or_vims_ctrl_u_and_ctrl_d() {
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(
+                &Keymap::mc(),
+                &mut state,
+                Context::Panel,
+                &["shift-pageup", "shift-pagedown"]
+            ),
+            actions(&[Action::HalfPageUp, Action::HalfPageDown])
+        );
+        let vim = Keymap::by_name("vim").unwrap();
+        assert_eq!(
+            feed(&vim, &mut state, Context::Panel, &["ctrl-u", "ctrl-d"]),
+            actions(&[Action::HalfPageUp, Action::HalfPageDown])
+        );
+    }
+
+    #[test]
     fn n_shift_n_and_shift_f7_repeat_the_last_quick_search() {
         for name in Keymap::NAMES {
             let keymap = Keymap::by_name(name).unwrap();

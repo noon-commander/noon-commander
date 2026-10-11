@@ -48,10 +48,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   terminal; `--all` shows what they bind alike too.
 - The vim keymap does in its panels everything the default one does, with vim's keys, and ranger's
   and yazi's where vim has none: l and Right open what is under the cursor, as Enter does, h, Left,
-  and Backspace go to the parent directory, J, Shift+Down, and Insert mark and go down, K and
-  Shift+Up mark and go up, + marks and - unmarks by a pattern, v inverts the marks, / starts quick
-  search, where Ctrl+g and Ctrl+t go to the next and the previous match and Enter ends it on the
-  match rather than opening it, i views, e edits,
+  and Backspace go to the parent directory, Ctrl+u and Ctrl+d go half a page up and down, J,
+  Shift+Down, and Insert mark and go down, K and Shift+Up mark and go up, + marks and - unmarks by
+  a pattern, v inverts the marks, / starts quick search, where Ctrl+g and Ctrl+t go to the next
+  and the previous match and Enter ends it on the match rather than opening it, i views, e edits,
   Y and y y copy, x moves, r renames in the row, A makes a directory, d D deletes, f # makes
   checksums, R reads the directory again, o h shows hidden files, o n, o e, o m, and o s sort,
   q : opens the command history, f j the jobs, g d Quick cd, g z jumps with zoxide, g n, g c, g t,
@@ -124,6 +124,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the next and the previous name that matches it, round, and so does Shift+F7 (or F17) to the
   next, as mc and Far search again with it; Ctrl+s with nothing typed yet (/ and Ctrl+g in the
   vim keymap) searches for it again, as mc's Ctrl+s Ctrl+s does.
+- Shift+PgUp and Shift+PgDn go half a page up and down in the panels, as in yazi; Ctrl+u and
+  Ctrl+d do in the vim keymap.
 
 ### Changed
 

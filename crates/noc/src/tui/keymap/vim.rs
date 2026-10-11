@@ -24,10 +24,12 @@ pub(super) const PRESET: Preset = &[
         Context::Panel,
         &[
             // Navigation
-            (Action::Up, &["k", "up", "ctrl-p"]),          // OK1
-            (Action::Down, &["j", "down", "ctrl-n"]),      // OK1
-            (Action::PageUp, &["ctrl-b", "pageup"]),       // OK1
-            (Action::PageDown, &["ctrl-f", "pagedown"]),   // OK1
+            (Action::Up, &["k", "up", "ctrl-p"]),        // OK1
+            (Action::Down, &["j", "down", "ctrl-n"]),    // OK1
+            (Action::PageUp, &["ctrl-b", "pageup"]),     // OK1
+            (Action::PageDown, &["ctrl-f", "pagedown"]), // OK1
+            (Action::HalfPageUp, &["ctrl-u"]),
+            (Action::HalfPageDown, &["ctrl-d"]),
             (Action::Home, &["g g", "home"]),              // OK1
             (Action::End, &["shift-g", "end"]),            // OK1
             (Action::Enter, &["l", "right", "enter"]),     // OK1

@@ -412,6 +412,8 @@ fn describe_rows(context: Context, action: Action) -> Option<String> {
         Action::Down if rows => fl!("help-row-down"),
         Action::PageUp if rows => fl!("help-page-up"),
         Action::PageDown if rows => fl!("help-page-down"),
+        Action::HalfPageUp if rows => fl!("help-half-page-up"),
+        Action::HalfPageDown if rows => fl!("help-half-page-down"),
         _ => return None,
     };
     Some(text)
@@ -523,6 +525,7 @@ mod tests {
             "Shift+F7, F17, n",
             "The next name that matches the last quick search"
         ));
+        assert!(has("Shift+PgDn", "Half a page down"));
         assert!(has(
             "Esc, F10, Ctrl+g, Ctrl+c",
             "Cancel, or close this help"

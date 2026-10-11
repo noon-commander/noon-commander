@@ -102,6 +102,8 @@ too.
 | One row down | `down` | ✅ | Down<br>Ctrl+n | j<br>Down<br>Ctrl+n | Down<br>Ctrl+n | — | j<br>Down | Down<br>j |
 | One page up | `page_up` | ✅ | PgUp<br>Alt+v | Ctrl+b<br>PgUp | PgUp<br>Alt+v | — | Ctrl+b<br>PgUp | PgUp<br>Ctrl+b |
 | One page down | `page_down` | ✅ | PgDn<br>Ctrl+v | Ctrl+f<br>PgDn | PgDn<br>Ctrl+v | — | Ctrl+f<br>PgDn | PgDn<br>Ctrl+f |
+| Half a page up | `half_page_up` | ⏳ | Shift+PgUp | Ctrl+u | — | — | Ctrl+u<br>Shift+PgUp | K<br>Ctrl+u |
+| Half a page down | `half_page_down` | ⏳ | Shift+PgDn | Ctrl+d | — | — | Ctrl+d<br>Shift+PgDn | J<br>Ctrl+d |
 | First row | `home` | ✅ | Home<br>Alt+< | g g<br>Home | Home<br>A1<br>Alt+< | — | g g<br>Home | Home<br>g g |
 | Last row | `end` | ✅ | End<br>Alt+> | G<br>End | End<br>C1<br>Alt+> | — | G<br>End | End<br>G |
 | Open the directory or file under the cursor | `enter` | ✅ | Enter | l<br>Right<br>Enter | Enter | Enter | l<br>Right<br>o<br>Enter | Right<br>Enter<br>l |
@@ -271,8 +273,6 @@ too.
 | Follow the symlink under the cursor | — | ⏳ | — | — | — | — | g f | g L |
 | This directory, with its symlinks resolved | — | ⏳ | — | — | — | — | — | g l |
 | Top / middle / bottom file on screen | — | ⏳ | — | — | Alt+g / Alt+r / Alt+j | — | — | — |
-| Half a page up | — | ⏳ | — | — | — | — | Ctrl+u<br>Shift+PgUp | K<br>Ctrl+u |
-| Half a page down | — | ⏳ | — | — | — | — | Ctrl+d<br>Shift+PgDn | J<br>Ctrl+d |
 | The next / previous directory beside this one | — | ⏳ | — | — | — | — | — | ] / [ |
 | The next / previous entry of the tree, depth first, entering directories | — | ⏳ | — | — | — | — | — | } / { |
 | The next file after a directory, or the next directory after a file | — | ⏳ | — | — | — | — | — | ) |

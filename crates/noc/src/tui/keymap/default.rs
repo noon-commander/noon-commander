@@ -29,12 +29,15 @@ pub(super) const PRESET: Preset = &[
             (Action::Down, &["down", "ctrl-n"]),         // OK1
             (Action::PageUp, &["pageup", "alt-v"]),      // OK1
             (Action::PageDown, &["pagedown", "ctrl-v"]), // OK1
-            (Action::Home, &["home", "alt-<"]),          // OK1
-            (Action::End, &["end", "alt->"]),            // OK1
-            (Action::Enter, &["enter"]),                 // OK1
-            (Action::Parent, &["ctrl-pageup"]),          // OK1
-            (Action::Reload, &["ctrl-r"]),               // OK1
-            (Action::Cancel, &["esc"]),                  // OK1
+            // Shift+PgUp and Shift+PgDn, as in yazi.
+            (Action::HalfPageUp, &["shift-pageup"]),
+            (Action::HalfPageDown, &["shift-pagedown"]),
+            (Action::Home, &["home", "alt-<"]), // OK1
+            (Action::End, &["end", "alt->"]),   // OK1
+            (Action::Enter, &["enter"]),        // OK1
+            (Action::Parent, &["ctrl-pageup"]), // OK1
+            (Action::Reload, &["ctrl-r"]),      // OK1
+            (Action::Cancel, &["esc"]),         // OK1
             // PullDown
             (Action::PullDown, &["f9"]),                  // OK1
             (Action::PullDownLast, &["shift-f9", "f19"]), // OK1

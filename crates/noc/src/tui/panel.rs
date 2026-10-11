@@ -799,11 +799,14 @@ impl Panel {
     pub(crate) fn handle(&mut self, action: Action) -> Option<ListRequest> {
         let last = self.rows().saturating_sub(1);
         let page = self.page.max(1);
+        let half = (page / 2).max(1);
         match action {
             Action::Up => self.cursor = self.cursor.saturating_sub(1),
             Action::Down => self.cursor = (self.cursor + 1).min(last),
             Action::PageUp => self.cursor = self.cursor.saturating_sub(page),
             Action::PageDown => self.cursor = (self.cursor + page).min(last),
+            Action::HalfPageUp => self.cursor = self.cursor.saturating_sub(half),
+            Action::HalfPageDown => self.cursor = (self.cursor + half).min(last),
             Action::Home => self.cursor = 0,
             Action::End => self.cursor = last,
             // As in mc, the cursor moves on even from `..`, which cannot be marked.
@@ -1979,9 +1982,25 @@ mod tests {
         assert_eq!(panel.cursor, 0);
         panel.handle(Action::End);
         assert_eq!(under_cursor(&panel), "zeta.txt");
+        panel.page = 4;
+        let row = panel.cursor;
+        panel.handle(Action::HalfPageUp);
+        assert_eq!(panel.cursor, row - 2, "half of four rows");
+        panel.handle(Action::HalfPageDown);
+        assert_eq!(panel.cursor, row);
+        panel.handle(Action::HalfPageDown);
+        assert_eq!(panel.cursor, row, "stops at the last row");
+        panel.page = 1;
+        panel.handle(Action::HalfPageUp);
+        assert_eq!(panel.cursor, row - 1, "at least one row");
 
         let mut empty = loaded("/srv", Vec::new());
-        for action in [Action::Down, Action::End, Action::PageDown] {
+        for action in [
+            Action::Down,
+            Action::End,
+            Action::PageDown,
+            Action::HalfPageDown,
+        ] {
             assert_eq!(empty.handle(action), None);
             assert_eq!(empty.cursor, 0);
         }

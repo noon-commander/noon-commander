@@ -89,6 +89,12 @@ asks for a shell command in an input box, and ranger opens its console with `:`.
 and \*, on the numpad too, mark and unmark only while its command line is empty; with Alt, they
 always do.
 
+Both presets group keys of their own under a first key: t for the tabs and the workspaces, o for
+the sort order, as ranger's sort keys, and f for the file operations. f stands for mc's Ctrl+x,
+whose letters it keeps for mc's commands: c chmod, o chown, e chattr, l, s, and v links, j the
+jobs. mc has no checksums, so they take #. The vim preset adds vim's g, q, and Ctrl+w, and puts
+the hidden names under o too.
+
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
 | One row up | `up` | ✅ | Up<br>Ctrl+p | k<br>Up<br>Ctrl+p | Up<br>Ctrl+p | — | k<br>Up | Up<br>k |

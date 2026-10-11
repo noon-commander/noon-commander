@@ -962,9 +962,11 @@ location = "root"
   each action with its key sequences, in the order the help lists them. Both list every context in
   the same order; the vim preset takes vim's keys, and ranger's and yazi's where vim has none, in
   the panels, the dialogs and the help, the viewer, the lists, the text fields, and the command
-  line. `noc keymap diff`
-  (`just keymap-diff`) compares two presets action by action (`tui/keymap/diff.rs`), with the
-  keys written as the help writes them.
+  line. Both group their own panel keys under `t` (tabs and workspaces), `o` (sort order), and
+  `f` (file operations), which stands for mc's `Ctrl+x` and keeps its letters for mc's commands
+  (`f j` lists the jobs, and `f c` is left for chmod); the checksums, which mc has not, take
+  `f #`. `noc keymap diff` (`just keymap-diff`) compares two presets action by action
+  (`tui/keymap/diff.rs`), with the keys written as the help writes them.
   As in mc, `Esc` in a panel waits for the next key: `Esc 1` … `Esc 0` stand for F1 … F10, `Esc`
   followed by a character stands for Alt and that character, for terminals whose Alt key sends
   nothing, and `Esc` alone cancels once the timeout passes (`Esc Esc` at once). An `Esc` and a quick

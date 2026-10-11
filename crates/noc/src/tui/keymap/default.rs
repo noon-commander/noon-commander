@@ -73,7 +73,9 @@ pub(super) const PRESET: Preset = &[
             (Action::CommandHistory, &["alt-h"]),        // OK1
             (Action::Jump, &["alt-z", "ctrl-x z"]),      // OK1
             (Action::QuickCd, &["alt-c"]),               // OK1
-            // File operations
+            // File operations. f stands for mc's Ctrl+x, whose letters it keeps for mc's commands:
+            // c chmod, o chown, e chattr, l, s, and v links, j the jobs. mc has no checksums, so
+            // they take #, for a hash.
             (Action::View, &["f3"]),                // OK1
             (Action::Edit, &["f4"]),                // OK1
             (Action::Copy, &["f5"]),                // OK1

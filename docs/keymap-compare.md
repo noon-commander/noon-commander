@@ -136,11 +136,11 @@ Shift+F7 (or F17), mc's and Far's key to search again, repeats it forward too.
 | Sort by extension; again: reverse | `sort_by_extension` | ✅ | o e | o e | — | Ctrl+F4 | , e<br>, E (reverse) | o e<br>o E (reverse) |
 | Sort by modification time; again: reverse | `sort_by_time` | ✅ | o m | o m | — | Ctrl+F5 | , m<br>, M (reverse) | o m<br>o M (reverse) |
 | Sort by size; again: reverse | `sort_by_size` | ✅ | o s | o s | — | Ctrl+F6 | , s<br>, S (reverse) | o s<br>o S (reverse) |
-| Mark or unmark, then the next row | `mark` | ✅ | Insert<br>Ctrl+t<br>Shift+Down | J<br>Shift+Down<br>Insert | Insert<br>Ctrl+t<br>Shift+Down | Insert<br>Shift+Down | Space | Space |
+| Mark or unmark, then the next row | `mark` | ⏳ | Insert<br>Ctrl+t<br>Shift+Down | J<br>Space<br>Shift+Down<br>Insert | Insert<br>Ctrl+t<br>Shift+Down | Insert<br>Shift+Down | Space | Space |
 | Mark or unmark, then the row above | `mark_up` | ✅ | Shift+Up | K<br>Shift+Up | Shift+Up | Shift+Up | — | — |
 | Mark the names that match a pattern | `select` | ✅ | +<br>Alt++ | + | +<br>Numpad+<br>Alt++ | Numpad+ | — | — |
 | Unmark the names that match a pattern | `unselect` | ✅ | -<br>\\<br>Alt+- | - | -<br>\\<br>Numpad-<br>Alt+- | Numpad- | — | — |
-| Invert the marks on files; directories stay as they are | `invert_marks` | ✅ | \*<br>Alt+\* | v | \*<br>Numpad\*<br>Alt+\* | Numpad* | — | — |
+| Invert the marks on files; directories stay as they are | `invert_marks` | ⏳ | \*<br>Alt+\* | \* | \*<br>Numpad\*<br>Alt+\* | Numpad* | — | — |
 | Start quick search | `quick_search` | ✅ | Ctrl+s<br>Alt+s | / | Ctrl+s<br>Alt+s | Alt+characters<br>Alt+Shift+characters | / | f |
 | The next name that matches the last quick search | `next_match` | ⏳ | Shift+F7<br>F17<br>n | n<br>Shift+F7<br>F17 | — | — | n | n |
 | The previous name that matches the last quick search | `prev_match` | ⏳ | N | N | — | — | N | N |
@@ -306,7 +306,7 @@ Shift+F7 (or F17), mc's and Far's key to search again, repeats it forward too.
 | Deselect all files | — | ⏳ | — | — | — | Shift+Numpad- | Esc<br>Ctrl+[ | u v |
 | Restore previous selection | — | ⏳ | — | — | — | Ctrl+m | — | — |
 | Leave visual mode (yazi: or else unmark everything, or leave the search or the filter) | — | ⏳ | — | — | — | — | Esc<br>Ctrl+[ | Esc |
-| Visual mode: mark the rows the cursor moves over | — | ⏳ | — | — | — | — | v | V |
+| Visual mode: mark the rows the cursor moves over | — | ⏳ | — | v | — | — | v | V |
 | Visual mode: unmark the rows the cursor moves over | — | ⏳ | — | — | — | — | V | u V |
 | Tag or untag the marked entries, or the one under the cursor | — | ⏳ | — | — | — | — | — | t |
 | Tag or untag with a character of one's own | — | ⏳ | — | — | — | — | — | ", then the character |

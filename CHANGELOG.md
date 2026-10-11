@@ -49,9 +49,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   in color in a terminal; `--all` shows what they bind alike too.
 - The vim keymap does in its panels everything the default one does, with vim's keys, and ranger's
   and yazi's where vim has none: l and Right open what is under the cursor, as Enter does, h, Left,
-  and Backspace go to the parent directory, Ctrl+u and Ctrl+d go half a page up and down, J,
+  and Backspace go to the parent directory, Ctrl+u and Ctrl+d go half a page up and down, J, Space,
   Shift+Down, and Insert mark and go down, K and Shift+Up mark and go up, + marks and - unmarks by
-  a pattern, v inverts the marks, / starts quick search, where Ctrl+g and Ctrl+t go to the next
+  a pattern, * inverts the marks, / starts quick search, where Ctrl+g and Ctrl+t go to the next
   and the previous match and Enter ends it on the match rather than opening it, i views, e edits,
   Y and y y copy, x moves, r renames in the row, A makes a directory, d D deletes, f # makes
   checksums, R reads the directory again, o h shows hidden files, o n, o e, o m, and o s sort,

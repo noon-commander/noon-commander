@@ -66,11 +66,12 @@ pub(super) const PRESET: Preset = &[
             (Action::SortByTime, &["o m"]),      // OK1
             (Action::SortBySize, &["o s"]),      // OK1
             // Marks
-            (Action::Mark, &["shift-j", "shift-down", "insert"]), // OK1
-            (Action::MarkUp, &["shift-k", "shift-up"]),           // OK1
-            (Action::Select, &["+"]),                             // OK1
-            (Action::Unselect, &["-"]),                           // OK1
-            (Action::InvertMarks, &["v"]),                        // OK1
+            // Space, as in yazi and ranger. * inverts, as in mc, and leaves v for a visual mode.
+            (Action::Mark, &["shift-j", "space", "shift-down", "insert"]),
+            (Action::MarkUp, &["shift-k", "shift-up"]), // OK1
+            (Action::Select, &["+"]),                   // OK1
+            (Action::Unselect, &["-"]),                 // OK1
+            (Action::InvertMarks, &["*"]),
             // Tools
             (Action::QuickSearch, &["/"]), // OK1
             // The last quick search again, as vim's n and N; Shift+F7 as in the default keymap.

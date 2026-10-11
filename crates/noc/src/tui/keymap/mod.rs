@@ -1564,13 +1564,14 @@ mod tests {
                 &mut state,
                 Context::Panel,
                 &[
-                    "shift-j", "+", "-", "v", "shift-r", "o", "h", "o", "n", "o", "e", "o", "m",
-                    "o", "s", "/", "q", ":", "i", "e", "y", "y", "x", "r", "shift-a", "d",
-                    "shift-d", "f", "j", "g", "d", "g", "n", "g", "c", "g", "t", "g", "shift-t",
-                    "ctrl-c"
+                    "shift-j", "space", "+", "-", "*", "shift-r", "o", "h", "o", "n", "o", "e",
+                    "o", "m", "o", "s", "/", "q", ":", "i", "e", "y", "y", "x", "r", "shift-a",
+                    "d", "shift-d", "f", "j", "g", "d", "g", "n", "g", "c", "g", "t", "g",
+                    "shift-t", "ctrl-c"
                 ]
             ),
             actions(&[
+                Action::Mark,
                 Action::Mark,
                 Action::Select,
                 Action::Unselect,
@@ -1599,10 +1600,10 @@ mod tests {
                 Action::Cancel,
             ])
         );
-        // w no longer lists the jobs: f j does.
+        // w no longer lists the jobs: f j does; v is left for a visual mode.
         assert_eq!(
-            feed(&vim, &mut state, Context::Panel, &["w"]),
-            [Resolved::Insert('w')]
+            feed(&vim, &mut state, Context::Panel, &["w", "v"]),
+            [Resolved::Insert('w'), Resolved::Insert('v')]
         );
         // d alone deletes nothing: it waits for D, and d d is left for the trash.
         let now = Instant::now();

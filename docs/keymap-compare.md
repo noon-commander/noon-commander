@@ -500,6 +500,7 @@ its pick window, which asks for the program to open files with.
 | Take the item, as the window's section says | `confirm` | ⏳ | Enter | Ctrl+y<br>Enter | Enter | Enter | Enter | — |
 | Take back the last character of the filter or the keywords | `backspace` | ⏳ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | — | — | — | — |
 | Close the window | `cancel` | ⏳ | Esc<br>F10<br>Ctrl+g | Esc<br>Ctrl+c<br>F10 | Esc<br>F10<br>Ctrl+g | Esc | Esc<br>Ctrl+[<br>Ctrl+c | — |
+| F1…F10 on terminals without function keys, in the windows that bind them | — | ⏳ | Alt+1…9, 0 | Alt+1…9, 0 | Esc, then 1…9, 0 | — | — | — |
 
 ## Location menu (`location_menu`)
 

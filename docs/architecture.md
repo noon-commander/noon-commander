@@ -214,7 +214,8 @@ volume or a host, grouped under headings:
   cursor goes to the first. The rows keep their order either way. Backspace takes a character
   back. F4 edits the settings of the host under the cursor, F8 or Delete (as in Far's menu of
   drives) disconnects it or stops connecting to it, Ctrl+r reads the volumes and hosts again, and
-  Esc or F10 closes the menu.
+  Esc or F10 closes the menu. Alt+4, Alt+8, and Alt+0 stand for F4, F8, and F10, as they do in
+  the other windows that list items.
 - `recent.toml` in the state directory keeps the places used last: the aliases of hosts and
   the mount points of volumes, most recent first, up to 50 of each. A host counts as used when
   a connection to it succeeds; a volume when a panel arrives in a directory on it in any way:
@@ -1014,13 +1015,13 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   has not, take `f #`. `noc keymap diff` (`just keymap-diff`) compares two presets action by action
   (`tui/keymap/diff.rs`), with the keys written as the help writes them.
   `Esc` acts at once everywhere ([ADR 0020](adr/0020-esc-acts-at-once.md)). Unlike in mc, it
-  does not wait in a panel for a key that would make it Alt or an F-key: in the panels,
-  Alt+1 … Alt+0 stand for F1 … F10 instead, for terminals without F-keys. An `Esc` and a
-  quick next key arrive as Alt and that key, so there an unbound Alt and a character count as
-  `Esc` and the character. Keys are written with `crokey` names. User overrides in `keymap.toml`
-  are planned for M4. The F-key bar is generated from the active keymap, and so is the help
-  screen (F1): the keys of each context, with what they do, for what the app can do already; a
-  prompt from ssh shows over it.
+  does not wait in a panel for a key that would make it Alt or an F-key: in the panels and the
+  windows that list items, Alt+1 … Alt+0 stand for F1 … F10 instead, for terminals without
+  F-keys. An `Esc` and a quick next key arrive as Alt and that key, so in the panels an unbound
+  Alt and a character count as `Esc` and the character. Keys are written with `crokey` names.
+  User overrides in `keymap.toml` are planned for M4. The F-key bar is generated from the active
+  keymap, and so is the help screen (F1): the keys of each context, with what they do, for what the
+  app can do already; a prompt from ssh shows over it.
 - **Key hints.** As which-key does, the keymap lists the keys that can follow a pending sequence,
   or every key of a context, with what the help says they do (`Keymap::hints`, drawn by
   `tui/which_key.rs` in columns across the bottom of the panels). The event loop owns the

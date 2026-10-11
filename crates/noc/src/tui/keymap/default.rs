@@ -2,9 +2,9 @@
 //!
 //! Each context with its actions, and each action with its key sequences in crokey's syntax, the
 //! keys of a sequence apart; the help lists them in this order. `vim.rs` has the same contexts in
-//! the same order, and `noc keymap diff` shows what differs. In the panels, `alt-1` … `alt-0`
-//! stand for F1 … F10 without being written here. An action's keys start with mc's, before
-//! those it shares with `vim.rs`: the pull-down menu shows the first.
+//! the same order, and `noc keymap diff` shows what differs. In the panels and the windows that
+//! list items, `alt-1` … `alt-0` stand for F1 … F10 without being written here. An action's keys
+//! start with mc's, before those it shares with `vim.rs`: the pull-down menu shows the first.
 
 // NOTE: Comments marked `OK1` are the maintainer's: the binding was checked and approved.
 // Do not touch them.

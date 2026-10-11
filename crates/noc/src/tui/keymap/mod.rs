@@ -3,8 +3,8 @@
 //!
 //! A binding is a sequence of one or more key combinations, such as `f10` or `ctrl-x j`. While
 //! the keys typed so far are the start of a longer binding, the keymap waits up to
-//! [`SEQUENCE_TIMEOUT`] for the next key. `Esc` never waits: it acts at once. In the panels,
-//! Alt+1 … Alt+0 stand for F1 … F10, for terminals without F-keys.
+//! [`SEQUENCE_TIMEOUT`] for the next key. `Esc` never waits: it acts at once. In the panels and
+//! the windows that list items, Alt+1 … Alt+0 stand for F1 … F10, for terminals without F-keys.
 //!
 //! As which-key does, the keymap lists the keys that can follow a pending sequence, or every
 //! key of a context, with what they do ([`Keymap::hints`]). While the hints show, the sequence
@@ -164,7 +164,7 @@ impl Keymap {
                     })
                 })
                 .collect();
-            let bindings = if context.alt_stands_for_esc() {
+            let bindings = if context.alt_digits_stand_for_f_keys() {
                 with_alt_digits(bindings)
             } else {
                 bindings
@@ -840,6 +840,27 @@ mod tests {
                 "{name}"
             );
             assert_eq!(state.deadline(), None);
+            // The windows that list items take them for their F-keys too, theirs and the list's.
+            assert_eq!(
+                feed(
+                    &keymap,
+                    &mut state,
+                    Context::LocationMenu,
+                    &["alt-4", "alt-8", "alt-0"]
+                ),
+                actions(&[Action::EditHost, Action::Disconnect, Action::Cancel]),
+                "{name}"
+            );
+            assert_eq!(
+                feed(&keymap, &mut state, Context::Workspaces, &["alt-6"]),
+                actions(&[Action::Move]),
+                "{name}"
+            );
+            assert_eq!(
+                feed(&keymap, &mut state, Context::TabMenu, &["alt-0", "alt-5"]),
+                actions(&[Action::Cancel]),
+                "{name}: no F5 there"
+            );
             assert_eq!(
                 feed(&keymap, &mut state, Context::Dialog, &["alt-0"]),
                 [],
@@ -2132,22 +2153,24 @@ mod tests {
     }
 
     #[test]
-    fn every_f_key_has_an_alt_digit_alias_where_alt_stands_for_esc() {
-        let keymap = Keymap::mc();
-        for (context, bindings) in &keymap.contexts {
-            if !context.alt_stands_for_esc() {
-                continue;
-            }
-            for (sequence, action) in &bindings.0 {
-                if let [key] = sequence.as_slice()
-                    && key.modifiers.is_empty()
-                    && let KeyCode::F(number @ 1..=10) = *key.codes.first()
-                {
-                    let alias = parse_sequence(&format!("alt-{}", number % 10)).unwrap();
-                    assert!(
-                        bindings.0.contains(&(alias, *action)),
-                        "F{number} in {context:?}"
-                    );
+    fn every_f_key_has_an_alt_digit_alias_where_alt_digits_stand_for_f_keys() {
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            for (context, bindings) in &keymap.contexts {
+                if !context.alt_digits_stand_for_f_keys() {
+                    continue;
+                }
+                for (sequence, action) in &bindings.0 {
+                    if let [key] = sequence.as_slice()
+                        && key.modifiers.is_empty()
+                        && let KeyCode::F(number @ 1..=10) = *key.codes.first()
+                    {
+                        let alias = parse_sequence(&format!("alt-{}", number % 10)).unwrap();
+                        assert!(
+                            bindings.0.contains(&(alias, *action)),
+                            "{name}: F{number} in {context:?}"
+                        );
+                    }
                 }
             }
         }

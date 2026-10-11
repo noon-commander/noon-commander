@@ -134,6 +134,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   stops loading, as Esc does.
 - In the location menu, Delete disconnects the host under the cursor, as F8 does and as in Far's
   menu of drives.
+- Alt+1 … Alt+0 stand for F1 … F10 in the windows that list items too, as in the panels: Alt+4
+  and Alt+8 edit and disconnect a host in the location menu, for one.
 
 ### Changed
 

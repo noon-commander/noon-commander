@@ -128,6 +128,22 @@ impl Context {
         matches!(self, Self::Panel)
     }
 
+    /// Whether Alt+1 … Alt+0 stand for the F-keys bound here, for terminals without them: in
+    /// the panels, and in the windows that list items, whose F-keys act on the item under the
+    /// cursor. Dialogs keep Alt as it is.
+    pub(crate) fn alt_digits_stand_for_f_keys(self) -> bool {
+        matches!(
+            self,
+            Self::Panel
+                | Self::List
+                | Self::LocationMenu
+                | Self::TabMenu
+                | Self::Jump
+                | Self::Workspaces
+                | Self::CommandHistory
+        )
+    }
+
     /// Whether every character is text, even one that a fallback context binds: in quick
     /// search, `*` is part of a name, not a command; in a text field, Space is a space; in the
     /// menus, digits are hotkeys and letters filter; in the pull-down menu, letters run commands.

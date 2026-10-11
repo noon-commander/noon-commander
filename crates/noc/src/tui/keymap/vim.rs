@@ -2,8 +2,8 @@
 //!
 //! Each context with its actions, and each action with its key sequences in crokey's syntax, the
 //! keys of a sequence apart; the help lists them in this order. `default.rs` has the same
-//! contexts in the same order, and `noc keymap diff` shows what differs. In the panels,
-//! `alt-1` … `alt-0` stand for F1 … F10 without being written here.
+//! contexts in the same order, and `noc keymap diff` shows what differs. In the panels and the
+//! windows that list items, `alt-1` … `alt-0` stand for F1 … F10 without being written here.
 
 // NOTE: Comments marked `OK1` are the maintainer's: the binding was checked and approved.
 // Do not touch them.

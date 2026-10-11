@@ -615,7 +615,7 @@ mod tests {
         assert_ne!(draw(&mut help, 60, 12), top);
         help.handle(action(Action::End));
         let bottom = draw(&mut help, 60, 12);
-        assert!(bottom.contains("Alt+1 … Alt+0 stand for F1"), "{bottom}");
+        assert!(bottom.contains("stand for F1 … F10"), "{bottom}");
         help.handle(action(Action::Down));
         assert_eq!(draw(&mut help, 60, 12), bottom, "no further than the end");
         help.handle(action(Action::Home));

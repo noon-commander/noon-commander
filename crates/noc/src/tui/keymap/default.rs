@@ -43,9 +43,13 @@ pub(super) const PRESET: Preset = &[
             (Action::PullDownLast, &["shift-f9", "f19"]), // OK1
             // Panels
             (Action::SwitchPanel, &["tab", "ctrl-i"]), // OK1
-            (Action::SwapPanels, &["ctrl-u"]),         // OK1
-            (Action::OtherPanelOpen, &["alt-o"]),      // OK1
-            (Action::OtherPanelSync, &["alt-i"]),      // OK1
+            // vim's Ctrl+w keys need no Alt, which the Option key of macOS terminals often does not
+            // send.
+            (Action::FocusLeft, &["ctrl-x left", "ctrl-w h"]),
+            (Action::FocusRight, &["ctrl-x right", "ctrl-w l"]),
+            (Action::SwapPanels, &["ctrl-u"]), // OK1
+            (Action::OtherPanelOpen, &["alt-o", "ctrl-w f"]),
+            (Action::OtherPanelSync, &["alt-i", "ctrl-w v"]),
             (Action::LocationMenuLeft, &["alt-f1", "ctrl-x 1"]), // OK1
             (Action::LocationMenuRight, &["alt-f2", "ctrl-x 2"]), // OK1
             // Tabs & Workspaces

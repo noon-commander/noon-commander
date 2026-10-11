@@ -92,9 +92,12 @@ Both presets group keys of their own under a first key: t for the tabs and the w
 the sort order, as ranger's sort keys, and the hidden names, and f for the file operations. f
 stands for mc's Ctrl+x, whose letters it keeps for mc's commands: c chmod, o chown, e chattr, l,
 s, and v links, j the jobs. mc has no checksums, so they take #. The vim preset adds vim's g, q,
-and Ctrl+w. In both, n and N repeat the last quick search, forward and backward, as in vim,
-yazi, and ranger; Shift+F7 (or F17), mc's and Far's key to search again, repeats it forward
-too.
+and Ctrl+w; it opens the location menus with Ctrl+w 1 and Ctrl+w 2, as the default does with
+Ctrl+x 1 and Ctrl+x 2. Both presets bind vim's Ctrl+w h and Ctrl+w l, and Ctrl+x Left and
+Ctrl+x Right, for the left and the right panel. The default takes vim's Ctrl+w f and Ctrl+w v
+too, as keys that need no Alt, which the Option key of macOS terminals often does not send. In
+both, n and N repeat the last quick search, forward and backward, as in vim, yazi, and ranger;
+Shift+F7 (or F17), mc's and Far's key to search again, repeats it forward too.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
@@ -112,12 +115,14 @@ too.
 | Stop loading or connecting | `cancel` | ✅ | Esc | Esc<br>Ctrl+c | — | — | — | Ctrl+c |
 | The pull-down menu | `pull_down` | ✅ | F9 | g m<br>F9 | F9 | F9 | — | — |
 | The pull-down menu, on the command that ran from it last | `pull_down_last` | ✅ | Shift+F9<br>F19 | g M<br>Shift+F9<br>F19 | Shift+F9 | Shift+F10 | — | — |
-| The other panel | `switch_panel` | ✅ | Tab<br>Ctrl+i | Tab<br>Ctrl+w w | Tab<br>Ctrl+i | Tab | — | — |
+| The other panel | `switch_panel` | ⏳ | Tab<br>Ctrl+i | Tab<br>Ctrl+w w<br>Ctrl+w Ctrl+w | Tab<br>Ctrl+i | Tab | — | — |
+| The left panel, wherever the panels were swapped | `focus_left` | ⏳ | Ctrl+x Left<br>Ctrl+w h | Ctrl+w h<br>Ctrl+x Left | — | — | — | — |
+| The right panel, wherever the panels were swapped | `focus_right` | ⏳ | Ctrl+x Right<br>Ctrl+w l | Ctrl+w l<br>Ctrl+x Right | — | — | — | — |
 | Swap the panels | `swap_panels` | ✅ | Ctrl+u | Ctrl+w x | Ctrl+u | Ctrl+u | — | — |
-| Open the directory under the cursor in the other panel | `other_panel_open` | ✅ | Alt+o | Ctrl+w f | Alt+o | — | — | — |
-| Show this directory in the other panel | `other_panel_sync` | ✅ | Alt+i | Ctrl+w v | Alt+i | — | — | — |
-| Change the left panel's location | `location_menu_left` | ✅ | Alt+F1<br>Ctrl+x 1 | Ctrl+w h | — | Alt+F1 | — | — |
-| Change the right panel's location | `location_menu_right` | ✅ | Alt+F2<br>Ctrl+x 2 | Ctrl+w l | — | Alt+F2 | — | — |
+| Open the directory under the cursor in the other panel | `other_panel_open` | ⏳ | Alt+o<br>Ctrl+w f | Ctrl+w f | Alt+o | — | — | — |
+| Show this directory in the other panel | `other_panel_sync` | ⏳ | Alt+i<br>Ctrl+w v | Ctrl+w v | Alt+i | — | — | — |
+| Change the left panel's location | `location_menu_left` | ⏳ | Alt+F1<br>Ctrl+x 1 | Ctrl+w 1 | — | Alt+F1 | — | — |
+| Change the right panel's location | `location_menu_right` | ⏳ | Alt+F2<br>Ctrl+x 2 | Ctrl+w 2 | — | Alt+F2 | — | — |
 | A new tab in this panel, on the same directory | `new_tab` | ✅ | t n | t n<br>g n | — | — | t t | Ctrl+n<br>g n |
 | Close this tab; the last one stays | `close_tab` | ✅ | t c | t c<br>g c | — | — | — | Ctrl+w<br>g c |
 | The next tab in this panel | `next_tab` | ✅ | ] t<br>Alt+Right | ] t<br>g t<br>Alt+Right | — | — | ] | Tab<br>Alt+Right<br>g t |

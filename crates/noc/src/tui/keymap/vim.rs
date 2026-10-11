@@ -40,12 +40,16 @@ pub(super) const PRESET: Preset = &[
             (Action::PullDown, &["g m", "f9"]), // OK1
             (Action::PullDownLast, &["g shift-m", "shift-f9", "f19"]), // OK1
             // Panels
-            (Action::SwitchPanel, &["tab", "ctrl-w w"]), // OK1
-            (Action::SwapPanels, &["ctrl-w x"]),         // OK1
-            (Action::OtherPanelOpen, &["ctrl-w f"]),     // OK1
-            (Action::OtherPanelSync, &["ctrl-w v"]),     // OK1
-            (Action::LocationMenuLeft, &["ctrl-w h"]),   // OK1
-            (Action::LocationMenuRight, &["ctrl-w l"]),  // OK1
+            (Action::SwitchPanel, &["tab", "ctrl-w w", "ctrl-w ctrl-w"]),
+            // vim's Ctrl+w h and Ctrl+w l go to the window on the left and on the right; the
+            // location menus take the numbers of the default keymap's Ctrl+x 1 and Ctrl+x 2.
+            (Action::FocusLeft, &["ctrl-w h", "ctrl-x left"]),
+            (Action::FocusRight, &["ctrl-w l", "ctrl-x right"]),
+            (Action::SwapPanels, &["ctrl-w x"]),     // OK1
+            (Action::OtherPanelOpen, &["ctrl-w f"]), // OK1
+            (Action::OtherPanelSync, &["ctrl-w v"]), // OK1
+            (Action::LocationMenuLeft, &["ctrl-w 1"]),
+            (Action::LocationMenuRight, &["ctrl-w 2"]),
             // Tabs & Workspaces
             (Action::NewTab, &["t n", "g n"]),               // OK1
             (Action::CloseTab, &["t c", "g c"]),             // OK1

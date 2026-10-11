@@ -924,7 +924,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   shows this directory in the other panel with the cursor on the same name. Panels keep their
   identity when swapped (only where they are drawn changes), so a listing still in flight
   reaches the panel that asked for it. Sort order and errors go with the panel; mc keeps the
-  sort order on its side.
+  sort order on its side. Ctrl+w h and Ctrl+w l, as vim goes to the window on the left and on
+  the right, or Ctrl+x Left and Ctrl+x Right, make the panel drawn on that side active, whichever
+  it is after Ctrl+u.
 - **Quick search.** Ctrl+s / Alt+s start quick search, as in mc; typing in a panel does nothing,
   since `!` and `:` open the [command line](#command-line-of--and-). With
   `ui.fuzzy_search` (the default) the cursor jumps to the best match as [fzf](#fuzzy-search) ranks

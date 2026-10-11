@@ -1625,6 +1625,9 @@ impl App {
                 self.help = Some(self.help_screen());
             }
             Action::SwitchPanel => self.active = self.active.other(),
+            Action::FocusLeft | Action::FocusRight => {
+                self.active = self.drawn_on(action == Action::FocusLeft);
+            }
             Action::NewTab | Action::CloseTab | Action::NextTab | Action::PrevTab => {
                 return self.tab_action(self.active, action);
             }
@@ -1745,6 +1748,16 @@ impl App {
             let fuzzy_search = self.config.ui.fuzzy_search;
             self.panel_mut(self.active)
                 .step_match(&last, forward, fuzzy_search);
+        }
+    }
+
+    /// The side of the panel drawn on the left, or on the right: swapped panels are drawn on
+    /// each other's sides.
+    fn drawn_on(&self, left: bool) -> Side {
+        if left == self.swapped {
+            Side::Right
+        } else {
+            Side::Left
         }
     }
 
@@ -8120,6 +8133,24 @@ mod tests {
         assert_eq!(under(&app), "bin");
         app.handle(action(Action::NextMatch));
         assert_eq!(under(&app), "bin", "the only match");
+    }
+
+    #[test]
+    fn focus_left_and_right_go_by_where_the_panels_are_drawn() {
+        let mut app = loaded();
+        app.handle(action(Action::FocusRight));
+        assert_eq!(app.active, Side::Right);
+        app.handle(action(Action::FocusLeft));
+        assert_eq!(app.active, Side::Left);
+        app.handle(action(Action::SwapPanels));
+        app.handle(action(Action::FocusLeft));
+        assert_eq!(
+            app.active,
+            Side::Right,
+            "the right panel is drawn on the left"
+        );
+        app.handle(action(Action::FocusRight));
+        assert_eq!(app.active, Side::Left);
     }
 
     #[test]

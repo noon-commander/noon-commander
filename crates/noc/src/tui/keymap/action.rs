@@ -230,6 +230,10 @@ pub(crate) enum Action {
     Parent,
     /// Makes the other panel active.
     SwitchPanel,
+    /// Makes the panel drawn on the left active, wherever the panels were swapped.
+    FocusLeft,
+    /// Makes the panel drawn on the right active.
+    FocusRight,
     /// Swaps the two panels.
     SwapPanels,
     /// Opens the directory under the cursor in the other panel.
@@ -369,6 +373,8 @@ impl Action {
             Self::Unselect => "unselect",
             Self::Parent => "parent",
             Self::SwitchPanel => "switch_panel",
+            Self::FocusLeft => "focus_left",
+            Self::FocusRight => "focus_right",
             Self::SwapPanels => "swap_panels",
             Self::OtherPanelOpen => "other_panel_open",
             Self::OtherPanelSync => "other_panel_sync",
@@ -480,6 +486,8 @@ impl Action {
         Self::Unselect,
         Self::Parent,
         Self::SwitchPanel,
+        Self::FocusLeft,
+        Self::FocusRight,
         Self::SwapPanels,
         Self::OtherPanelOpen,
         Self::OtherPanelSync,

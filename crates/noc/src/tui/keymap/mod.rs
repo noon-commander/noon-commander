@@ -1779,14 +1779,65 @@ mod tests {
                 &vim,
                 &mut state,
                 Context::Panel,
-                &["tab", "ctrl-w", "w", "ctrl-w", "x"]
+                &["tab", "ctrl-w", "w", "ctrl-w", "ctrl-w", "ctrl-w", "x"]
             ),
-            actions(&[Action::SwitchPanel, Action::SwitchPanel, Action::SwapPanels])
+            actions(&[
+                Action::SwitchPanel,
+                Action::SwitchPanel,
+                Action::SwitchPanel,
+                Action::SwapPanels
+            ])
         );
         // A lone Ctrl+w waits for its second key, then does nothing.
         let now = Instant::now();
         assert_eq!(vim.feed(&mut state, Context::Panel, key("ctrl-w"), now), []);
         assert_eq!(vim.expire(&mut state, now + SEQUENCE_TIMEOUT), []);
+        // The location menus take the numbers, as Ctrl+x 1 and Ctrl+x 2 in the default keymap.
+        assert_eq!(
+            feed(
+                &vim,
+                &mut state,
+                Context::Panel,
+                &["ctrl-w", "1", "ctrl-w", "2"]
+            ),
+            actions(&[Action::LocationMenuLeft, Action::LocationMenuRight])
+        );
+    }
+
+    #[test]
+    fn ctrl_w_h_and_l_or_ctrl_x_left_and_right_go_to_the_left_and_the_right_panel() {
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(
+                    &keymap,
+                    &mut state,
+                    Context::Panel,
+                    &[
+                        "ctrl-w", "h", "ctrl-w", "l", "ctrl-x", "left", "ctrl-x", "right"
+                    ]
+                ),
+                actions(&[
+                    Action::FocusLeft,
+                    Action::FocusRight,
+                    Action::FocusLeft,
+                    Action::FocusRight
+                ]),
+                "{name}"
+            );
+            // The default keymap shares vim's Ctrl+w f and Ctrl+w v, which need no Alt.
+            assert_eq!(
+                feed(
+                    &keymap,
+                    &mut state,
+                    Context::Panel,
+                    &["ctrl-w", "f", "ctrl-w", "v"]
+                ),
+                actions(&[Action::OtherPanelOpen, Action::OtherPanelSync]),
+                "{name}"
+            );
+        }
     }
 
     #[test]
@@ -2150,7 +2201,7 @@ mod tests {
         );
         let ctrl_x = parse_sequence("ctrl-x").unwrap();
         let hints = keymap.hints(Context::Panel, &ctrl_x);
-        assert_eq!(hint_keys(&hints), ["1", "2", "z", "j"]);
+        assert_eq!(hint_keys(&hints), ["Left", "Right", "1", "2", "z", "j"]);
         // Quick search falls back to the panel.
         assert_eq!(keymap.hints(Context::QuickSearch, &ctrl_x), hints);
         let vim = Keymap::by_name("vim").unwrap();
@@ -2182,9 +2233,10 @@ mod tests {
             Some(&Hint {
                 keys: "Ctrl+x".to_owned(),
                 action: None,
-                more: 4
+                more: 6
             })
         );
+        assert_eq!(hint("Ctrl+w").map(|hint| hint.more), Some(4));
         assert_eq!(hint("t").map(|hint| hint.more), Some(6));
         assert!(
             hints.iter().all(|hint| !hint.keys.contains("Esc")),
@@ -2194,7 +2246,8 @@ mod tests {
         let hints = vim.hints(Context::Panel, &[]);
         let hint = |keys: &str| hints.iter().find(|hint| hint.keys == keys).cloned();
         assert_eq!(hint("g").map(|hint| hint.more), Some(10));
-        assert_eq!(hint("Ctrl+w").map(|hint| hint.more), Some(6));
+        assert_eq!(hint("Ctrl+w").map(|hint| hint.more), Some(9));
+        assert_eq!(hint("Ctrl+x").map(|hint| hint.more), Some(2));
         assert_eq!(hint("Z").map(|hint| hint.more), Some(1));
         // Where characters are text, the panel's are left out.
         let search = keymap.hints(Context::QuickSearch, &[]);

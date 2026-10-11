@@ -231,6 +231,8 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::Unselect) => fl!("help-unselect"),
         (Context::Panel, Action::Parent) => fl!("help-parent"),
         (Context::Panel, Action::SwitchPanel) => fl!("help-switch-panel"),
+        (Context::Panel, Action::FocusLeft) => fl!("help-focus-left"),
+        (Context::Panel, Action::FocusRight) => fl!("help-focus-right"),
         (Context::Panel, Action::SwapPanels) => fl!("help-swap-panels"),
         (Context::Panel, Action::OtherPanelOpen) => fl!("help-other-open"),
         (Context::Panel, Action::OtherPanelSync) => fl!("help-other-sync"),
@@ -525,6 +527,7 @@ mod tests {
             "Shift+F7, F17, n",
             "The next name that matches the last quick search"
         ));
+        assert!(has("Ctrl+x Left, Ctrl+w h", "The left panel"));
         assert!(has("Shift+PgDn", "Half a page down"));
         assert!(has(
             "Esc, F10, Ctrl+g, Ctrl+c",

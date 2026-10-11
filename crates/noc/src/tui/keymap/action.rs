@@ -190,7 +190,7 @@ pub(crate) enum Action {
     Home,
     /// The last row, or the end of a text field.
     End,
-    /// Opens the directory or host under the cursor.
+    /// Opens the directory under the cursor.
     Enter,
     /// Marks the entry under the cursor, or unmarks it, and moves down.
     Mark,

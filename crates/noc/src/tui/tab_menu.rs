@@ -1,6 +1,6 @@
-//! The tab menu of Ctrl+x [ and Ctrl+x ]: the tabs of one panel, drawn over it as the location
-//! menu is, to show one. Typing filters it; while the filter is empty, `1` … `9` and `0` show
-//! the first ten tabs.
+//! The tab menu of `t h` and `t l`: the tabs of one panel, drawn over it as the location menu
+//! is, to show one. Typing filters it; while the filter is empty, `1` … `9` and `0` show the
+//! first ten tabs.
 
 use ratatui::Frame;
 use ratatui::layout::Rect;

@@ -644,7 +644,7 @@ pub(crate) struct App {
     menu: Option<LocationMenu>,
     /// The generation of the last listing for the menu.
     menu_listings: u64,
-    /// The tab menu of Ctrl+x [ or Ctrl+x ], over the panels and under the dialogs.
+    /// The tab menu of `t h` or `t l`, over the panels and under the dialogs.
     tab_menu: Option<TabMenu>,
     /// Tab completion in the dialog in front.
     completion: Option<Completing>,

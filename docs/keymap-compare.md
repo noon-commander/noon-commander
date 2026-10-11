@@ -516,10 +516,9 @@ keys of Far's menus, its drive menu among them.
 
 ## Tab menu (`tab_menu`)
 
-Ctrl+x [ and Ctrl+x ], or t h and t l in the vim keymap: the tabs of the left or the right panel,
-drawn over it as the location menu is; characters filter it. It binds no keys of its own: it
-falls back to `list`, whose Enter shows the tab in the panel. mc, Far, yazi, and ranger have no
-menu of tabs.
+t h and t l: the tabs of the left or the right panel, drawn over it as the location menu is;
+characters filter it. It binds no keys of its own: it falls back to `list`, whose Enter shows the
+tab in the panel. mc, Far, yazi, and ranger have no menu of tabs.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |

@@ -127,7 +127,7 @@ jump-not-installed = zoxide is not installed: cannot run { $program }. Get it fr
 
 ## Tabs (src/tui/tabs, src/tui/app). Prefix: tabs-. Each side has tabs of its own.
 
-# Titles of the tab menu of Ctrl+x [ and Ctrl+x ], drawn over the panel whose tabs it lists;
+# Titles of the tab menu of t h and t l, drawn over the panel whose tabs it lists;
 # each row is where a tab is.
 tabs-title-left = Left tabs
 tabs-title-right = Right tabs
@@ -379,13 +379,13 @@ help-page-up = One page up
 help-page-down = One page down
 help-first-row = First row
 help-last-row = Last row
-help-enter = Open the directory or host under the cursor
+help-enter = Open the directory under the cursor
 help-mark = Mark or unmark, then the next row
 help-mark-up = Mark or unmark, then the row above
 help-invert-marks = Invert the marks on files
 help-select = Mark the names that match a pattern
 help-unselect = Unmark the names that match a pattern
-help-parent = Parent directory; above /, the volumes and hosts
+help-parent = Parent directory
 help-switch-panel = The other panel
 help-swap-panels = Swap the panels
 help-other-open = Open the directory under the cursor in the other panel

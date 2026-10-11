@@ -146,8 +146,7 @@ impl Keymap {
         preset(name).map(Self::of)
     }
 
-    /// The default preset, modelled on Midnight Commander. `Esc` followed by a digit stands for
-    /// the F-key, for terminals that lack them.
+    /// The default preset, modelled on Midnight Commander.
     pub(crate) fn mc() -> Self {
         Self::of(default::PRESET)
     }

@@ -381,12 +381,12 @@ row and names the tab that shows by its whole location:
 - A tab is a whole `Panel` (listing, cursor, marks, sort order, quick search), so switching
   shows it at once. Hidden tabs list nothing: when a job or F7 changes a directory that a
   hidden tab shows, the tab is marked stale and reads it again when it shows.
-- Ctrl+x t opens a new tab after the one that shows, on the same directory with the same
-  listing and cursor, without marks; Ctrl+x w closes the tab that shows (the last one stays),
-  and the next one shows. Alt+Right and Alt+Left, or Ctrl+x n and Ctrl+x p, go round the tabs;
-  Ctrl+x [ and Ctrl+x ] open the tab menu of the left and the right panel, whichever is
-  active: the tabs with their whole locations, over that panel, to show one. The panel whose
-  tab is shown becomes active. Left and Right in F9 do the same for the panel on that side.
+- `t n` opens a new tab after the one that shows, on the same directory with the same listing
+  and cursor, without marks; `t c` closes the tab that shows (the last one stays), and the next
+  one shows. Alt+Right and Alt+Left, or `] t` and `[ t`, go round the tabs; `t h` and `t l` open
+  the tab menu of the left and the right panel, whichever is active: the tabs with their whole
+  locations, over that panel, to show one. The panel whose tab is shown becomes active. Left and
+  Right in F9 do the same for the panel on that side.
 - The tab menu, the location menu, the Workspaces window, and the command history share
   `tui/picker.rs`: the filter, which typing fills and which matches as fzf does with
   `ui.fuzzy_search`, the digits of the first ten rows while it is empty (but in the history,

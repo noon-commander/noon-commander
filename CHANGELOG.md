@@ -158,9 +158,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Keys are written one way in the help, the menus, and the docs: letters in lowercase, after a
   modifier too, and in uppercase for Shift and the letter (`Ctrl+r`, `Alt+W`, `G`), `Shift+` only
   before other keys (`Shift+F6`), and `PgUp`, `PgDn` rather than `PageUp`, `PageDown`.
-- Up and Down in the pull-down menu of F9 no longer go round it: Down stops at the last command,
-  and Up on the first goes back to the menu bar, as Home there does; on the bar, Up and Home no
-  longer open the menu.
+- Home on the first command of the pull-down menu of F9 goes back to the menu bar; on the bar,
+  Up and Home no longer open the menu.
 - F9 always opens the menu bar alone at the menu of the active panel, and each menu opens at its
   first command; the menu no longer opens again where it closed.
 

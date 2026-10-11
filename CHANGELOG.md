@@ -130,6 +130,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - In both keymaps, Ctrl+w h and Ctrl+w l, or Ctrl+x Left and Ctrl+x Right, make the panel drawn on
   the left or on the right active, after Ctrl+u too. In the default keymap, Ctrl+w f and Ctrl+w v
   do what Alt+o and Alt+i do, where the Option key of a macOS terminal sends no Alt.
+- In the default keymap, Backspace goes to the parent directory too, as Ctrl+PgUp does, and Ctrl+c
+  stops loading, as Esc does.
 
 ### Changed
 

@@ -1911,6 +1911,29 @@ mod tests {
     }
 
     #[test]
+    fn space_marks_and_star_inverts_in_vim_and_backspace_goes_up_in_both() {
+        let vim = Keymap::by_name("vim").unwrap();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&vim, &mut state, Context::Panel, &["space", "*"]),
+            actions(&[Action::Mark, Action::InvertMarks])
+        );
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            assert_eq!(
+                feed(&keymap, &mut state, Context::Panel, &["backspace"]),
+                actions(&[Action::Parent]),
+                "{name}"
+            );
+            assert_eq!(
+                feed(&keymap, &mut state, Context::QuickSearch, &["backspace"]),
+                actions(&[Action::Backspace]),
+                "{name}: a character of the search back"
+            );
+        }
+    }
+
+    #[test]
     fn g_m_opens_the_pull_down_menu_in_vim_and_its_letters_stay_letters() {
         let vim = Keymap::by_name("vim").unwrap();
         let mut state = KeyState::default();
@@ -2014,7 +2037,10 @@ mod tests {
             assert!(cancel(&mc, context, "f10"), "{context:?}");
         }
         assert!(!cancel(&mc, Context::Rename, "f10"));
-        assert!(cancel(&mc, Context::CommandLine, "ctrl-c"));
+        // Quick search takes the panel's Ctrl+c.
+        for context in [Context::CommandLine, Context::Panel, Context::QuickSearch] {
+            assert!(cancel(&mc, context, "ctrl-c"), "{context:?}");
+        }
         let vim = Keymap::by_name("vim").unwrap();
         for context in [
             Context::QuickSearch,
@@ -2136,7 +2162,7 @@ mod tests {
         };
         assert_eq!(keys(Action::Up), Some("Up, Ctrl+p"));
         assert_eq!(keys(Action::Quit), Some("F10"));
-        assert_eq!(keys(Action::Cancel), Some("Esc"));
+        assert_eq!(keys(Action::Cancel), Some("Esc, Ctrl+c"));
         assert_eq!(keys(Action::SortByName), Some("o n"));
         assert_eq!(panel[0].0, Action::Up, "in the order of the preset");
         assert_eq!(

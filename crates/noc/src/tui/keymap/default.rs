@@ -35,9 +35,9 @@ pub(super) const PRESET: Preset = &[
             (Action::Home, &["home", "alt-<"]), // OK1
             (Action::End, &["end", "alt->"]),   // OK1
             (Action::Enter, &["enter"]),        // OK1
-            (Action::Parent, &["ctrl-pageup"]), // OK1
-            (Action::Reload, &["ctrl-r"]),      // OK1
-            (Action::Cancel, &["esc"]),         // OK1
+            (Action::Parent, &["ctrl-pageup", "backspace"]),
+            (Action::Reload, &["ctrl-r"]), // OK1
+            (Action::Cancel, &["esc", "ctrl-c"]),
             // PullDown
             (Action::PullDown, &["f9"]),                  // OK1
             (Action::PullDownLast, &["shift-f9", "f19"]), // OK1

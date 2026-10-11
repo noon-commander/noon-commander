@@ -24,12 +24,12 @@ pub(super) const PRESET: Preset = &[
         Context::Panel,
         &[
             // Navigation
-            (Action::Up, &["k", "up", "ctrl-p"]),        // OK1
-            (Action::Down, &["j", "down", "ctrl-n"]),    // OK1
-            (Action::PageUp, &["ctrl-b", "pageup"]),     // OK1
-            (Action::PageDown, &["ctrl-f", "pagedown"]), // OK1
-            (Action::HalfPageUp, &["ctrl-u"]),
-            (Action::HalfPageDown, &["ctrl-d"]),
+            (Action::Up, &["k", "up", "ctrl-p"]),          // OK1
+            (Action::Down, &["j", "down", "ctrl-n"]),      // OK1
+            (Action::PageUp, &["ctrl-b", "pageup"]),       // OK1
+            (Action::PageDown, &["ctrl-f", "pagedown"]),   // OK1
+            (Action::HalfPageUp, &["ctrl-u"]),             // OK1
+            (Action::HalfPageDown, &["ctrl-d"]),           // OK1
             (Action::Home, &["g g", "home"]),              // OK1
             (Action::End, &["shift-g", "end"]),            // OK1
             (Action::Enter, &["l", "right", "enter"]),     // OK1
@@ -40,16 +40,14 @@ pub(super) const PRESET: Preset = &[
             (Action::PullDown, &["g m", "f9"]), // OK1
             (Action::PullDownLast, &["g shift-m", "shift-f9", "f19"]), // OK1
             // Panels
-            (Action::SwitchPanel, &["tab", "ctrl-w w", "ctrl-w ctrl-w"]),
-            // vim's Ctrl+w h and Ctrl+w l go to the window on the left and on the right; the
-            // location menus take the numbers of the default keymap's Ctrl+x 1 and Ctrl+x 2.
-            (Action::FocusLeft, &["ctrl-w h", "ctrl-x left"]),
-            (Action::FocusRight, &["ctrl-w l", "ctrl-x right"]),
-            (Action::SwapPanels, &["ctrl-w x"]),     // OK1
-            (Action::OtherPanelOpen, &["ctrl-w f"]), // OK1
-            (Action::OtherPanelSync, &["ctrl-w v"]), // OK1
-            (Action::LocationMenuLeft, &["ctrl-w 1"]),
-            (Action::LocationMenuRight, &["ctrl-w 2"]),
+            (Action::SwitchPanel, &["tab", "ctrl-w w", "ctrl-w ctrl-w"]), // OK1
+            (Action::FocusLeft, &["ctrl-w h", "ctrl-x left"]),            // OK1
+            (Action::FocusRight, &["ctrl-w l", "ctrl-x right"]),          // OK1
+            (Action::SwapPanels, &["ctrl-w x"]),                          // OK1
+            (Action::OtherPanelOpen, &["ctrl-w f"]),                      // OK1
+            (Action::OtherPanelSync, &["ctrl-w v"]),                      // OK1
+            (Action::LocationMenuLeft, &["ctrl-w 1"]),                    // OK1
+            (Action::LocationMenuRight, &["ctrl-w 2"]),                   // OK1
             // Tabs & Workspaces
             (Action::NewTab, &["t n", "g n"]),               // OK1
             (Action::CloseTab, &["t c", "g c"]),             // OK1
@@ -66,25 +64,21 @@ pub(super) const PRESET: Preset = &[
             (Action::SortByTime, &["o m"]),      // OK1
             (Action::SortBySize, &["o s"]),      // OK1
             // Marks
-            // Space, as in yazi and ranger. * inverts, as in mc, and leaves v for a visual mode.
-            (Action::Mark, &["shift-j", "space", "shift-down", "insert"]),
-            (Action::MarkUp, &["shift-k", "shift-up"]), // OK1
-            (Action::Select, &["+"]),                   // OK1
-            (Action::Unselect, &["-"]),                 // OK1
-            (Action::InvertMarks, &["*"]),
+            (Action::Mark, &["shift-j", "space", "shift-down", "insert"]), // OK1
+            (Action::MarkUp, &["shift-k", "shift-up"]),                    // OK1
+            (Action::Select, &["+"]),                                      // OK1
+            (Action::Unselect, &["-"]),                                    // OK1
+            (Action::InvertMarks, &["*"]),                                 // OK1
+            // Search
+            (Action::QuickSearch, &["/"]),                  // OK1
+            (Action::NextMatch, &["n", "shift-f7", "f17"]), // OK1
+            (Action::PrevMatch, &["shift-n"]),              // OK1
             // Tools
-            (Action::QuickSearch, &["/"]), // OK1
-            // The last quick search again, as vim's n and N; Shift+F7 as in the default keymap.
-            (Action::NextMatch, &["n", "shift-f7", "f17"]),
-            (Action::PrevMatch, &["shift-n"]),
-            (Action::Shell, &["!"]),            // OK1
-            (Action::Command, &[":"]),          // OK1
-            (Action::CommandHistory, &["q :"]), // OK1
-            (Action::Jump, &["g z"]),           // OK1
-            (Action::QuickCd, &["g d"]),        // OK1
-            // File operations. f stands for mc's Ctrl+x, whose letters it keeps for mc's commands:
-            // c chmod, o chown, e chattr, l, s, and v links, j the jobs. mc has no checksums, so
-            // they take #, for a hash.
+            (Action::Shell, &["!"]),                     // OK1
+            (Action::Command, &[":"]),                   // OK1
+            (Action::CommandHistory, &["q :"]),          // OK1
+            (Action::Jump, &["g z"]),                    // OK1
+            (Action::QuickCd, &["g d"]),                 // OK1
             (Action::View, &["i", "f3"]),                // OK1
             (Action::Edit, &["e", "f4"]),                // OK1
             (Action::Copy, &["shift-y", "y y", "f5"]),   // OK1
@@ -104,11 +98,9 @@ pub(super) const PRESET: Preset = &[
     (
         Context::QuickSearch,
         &[
-            (Action::Backspace, &["backspace", "ctrl-h"]),
+            (Action::Backspace, &["backspace", "ctrl-h"]), // OK1
             // Enter ends the search on the match, as in vim, rather than opening the entry.
-            (Action::Cancel, &["esc", "ctrl-c", "enter"]),
-            // vim's Ctrl+g and Ctrl+t, to the next and the previous match while a pattern is
-            // typed.
+            (Action::Cancel, &["esc", "ctrl-c", "enter"]), // OK1
             (Action::QuickSearch, &["ctrl-g"]),
             (Action::PrevMatch, &["ctrl-t"]),
         ],

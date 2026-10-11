@@ -105,24 +105,24 @@ Shift+F7 (or F17), mc's and Far's key to search again, repeats it forward too.
 | One row down | `down` | ✅ | Down<br>Ctrl+n | j<br>Down<br>Ctrl+n | Down<br>Ctrl+n | — | j<br>Down | Down<br>j |
 | One page up | `page_up` | ✅ | PgUp<br>Alt+v | Ctrl+b<br>PgUp | PgUp<br>Alt+v | — | Ctrl+b<br>PgUp | PgUp<br>Ctrl+b |
 | One page down | `page_down` | ✅ | PgDn<br>Ctrl+v | Ctrl+f<br>PgDn | PgDn<br>Ctrl+v | — | Ctrl+f<br>PgDn | PgDn<br>Ctrl+f |
-| Half a page up | `half_page_up` | ⏳ | Shift+PgUp | Ctrl+u | — | — | Ctrl+u<br>Shift+PgUp | K<br>Ctrl+u |
-| Half a page down | `half_page_down` | ⏳ | Shift+PgDn | Ctrl+d | — | — | Ctrl+d<br>Shift+PgDn | J<br>Ctrl+d |
+| Half a page up | `half_page_up` | ✅ | Shift+PgUp | Ctrl+u | — | — | Ctrl+u<br>Shift+PgUp | K<br>Ctrl+u |
+| Half a page down | `half_page_down` | ✅ | Shift+PgDn | Ctrl+d | — | — | Ctrl+d<br>Shift+PgDn | J<br>Ctrl+d |
 | First row | `home` | ✅ | Home<br>Alt+< | g g<br>Home | Home<br>A1<br>Alt+< | — | g g<br>Home | Home<br>g g |
 | Last row | `end` | ✅ | End<br>Alt+> | G<br>End | End<br>C1<br>Alt+> | — | G<br>End | End<br>G |
 | Open the directory or file under the cursor | `enter` | ✅ | Enter | l<br>Right<br>Enter | Enter | Enter | l<br>Right<br>o<br>Enter | Right<br>Enter<br>l |
-| Parent directory; nothing in / | `parent` | ⏳ | Ctrl+PgUp<br>Backspace | h<br>Left<br>Backspace | Ctrl+PgUp | Ctrl+PgUp | h<br>Left | Left<br>h |
+| Parent directory; nothing in / | `parent` | ✅ | Ctrl+PgUp<br>Backspace | h<br>Left<br>Backspace | Ctrl+PgUp | Ctrl+PgUp | h<br>Left | Left<br>h |
 | Read the directory again | `reload` | ✅ | Ctrl+r | R | Ctrl+r | Ctrl+r | — | R |
-| Stop loading or connecting | `cancel` | ⏳ | Esc<br>Ctrl+c | Esc<br>Ctrl+c | — | — | — | Ctrl+c |
+| Stop loading or connecting | `cancel` | ✅ | Esc<br>Ctrl+c | Esc<br>Ctrl+c | — | — | — | Ctrl+c |
 | The pull-down menu | `pull_down` | ✅ | F9 | g m<br>F9 | F9 | F9 | — | — |
 | The pull-down menu, on the command that ran from it last | `pull_down_last` | ✅ | Shift+F9<br>F19 | g M<br>Shift+F9<br>F19 | Shift+F9 | Shift+F10 | — | — |
-| The other panel | `switch_panel` | ⏳ | Tab<br>Ctrl+i | Tab<br>Ctrl+w w<br>Ctrl+w Ctrl+w | Tab<br>Ctrl+i | Tab | — | — |
-| The left panel, wherever the panels were swapped | `focus_left` | ⏳ | Ctrl+x Left<br>Ctrl+w h | Ctrl+w h<br>Ctrl+x Left | — | — | — | — |
-| The right panel, wherever the panels were swapped | `focus_right` | ⏳ | Ctrl+x Right<br>Ctrl+w l | Ctrl+w l<br>Ctrl+x Right | — | — | — | — |
+| The other panel | `switch_panel` | ✅ | Tab<br>Ctrl+i | Tab<br>Ctrl+w w<br>Ctrl+w Ctrl+w | Tab<br>Ctrl+i | Tab | — | — |
+| The left panel, wherever the panels were swapped | `focus_left` | ✅ | Ctrl+x Left<br>Ctrl+w h | Ctrl+w h<br>Ctrl+x Left | — | — | — | — |
+| The right panel, wherever the panels were swapped | `focus_right` | ✅ | Ctrl+x Right<br>Ctrl+w l | Ctrl+w l<br>Ctrl+x Right | — | — | — | — |
 | Swap the panels | `swap_panels` | ✅ | Ctrl+u | Ctrl+w x | Ctrl+u | Ctrl+u | — | — |
-| Open the directory under the cursor in the other panel | `other_panel_open` | ⏳ | Alt+o<br>Ctrl+w f | Ctrl+w f | Alt+o | — | — | — |
-| Show this directory in the other panel | `other_panel_sync` | ⏳ | Alt+i<br>Ctrl+w v | Ctrl+w v | Alt+i | — | — | — |
-| Change the location of the panel drawn on the left, after Ctrl+u too | `location_menu_left` | ⏳ | Alt+F1<br>Ctrl+x 1 | Ctrl+w 1 | — | Alt+F1 | — | — |
-| Change the location of the panel drawn on the right | `location_menu_right` | ⏳ | Alt+F2<br>Ctrl+x 2 | Ctrl+w 2 | — | Alt+F2 | — | — |
+| Open the directory under the cursor in the other panel | `other_panel_open` | ✅ | Alt+o<br>Ctrl+w f | Ctrl+w f | Alt+o | — | — | — |
+| Show this directory in the other panel | `other_panel_sync` | ✅ | Alt+i<br>Ctrl+w v | Ctrl+w v | Alt+i | — | — | — |
+| Change the location of the panel drawn on the left, after Ctrl+u too | `location_menu_left` | ✅ | Alt+F1<br>Ctrl+x 1 | Ctrl+w 1 | — | Alt+F1 | — | — |
+| Change the location of the panel drawn on the right | `location_menu_right` | ✅ | Alt+F2<br>Ctrl+x 2 | Ctrl+w 2 | — | Alt+F2 | — | — |
 | A new tab in this panel, on the same directory | `new_tab` | ✅ | t n | t n<br>g n | — | — | t t | Ctrl+n<br>g n |
 | Close this tab; the last one stays | `close_tab` | ✅ | t c | t c<br>g c | — | — | — | Ctrl+w<br>g c |
 | The next tab in this panel | `next_tab` | ✅ | ] t<br>Alt+Right | ] t<br>g t<br>Alt+Right | — | — | ] | Tab<br>Alt+Right<br>g t |
@@ -136,14 +136,14 @@ Shift+F7 (or F17), mc's and Far's key to search again, repeats it forward too.
 | Sort by extension; again: reverse | `sort_by_extension` | ✅ | o e | o e | — | Ctrl+F4 | , e<br>, E (reverse) | o e<br>o E (reverse) |
 | Sort by modification time; again: reverse | `sort_by_time` | ✅ | o m | o m | — | Ctrl+F5 | , m<br>, M (reverse) | o m<br>o M (reverse) |
 | Sort by size; again: reverse | `sort_by_size` | ✅ | o s | o s | — | Ctrl+F6 | , s<br>, S (reverse) | o s<br>o S (reverse) |
-| Mark or unmark, then the next row | `mark` | ⏳ | Insert<br>Ctrl+t<br>Shift+Down | J<br>Space<br>Shift+Down<br>Insert | Insert<br>Ctrl+t<br>Shift+Down | Insert<br>Shift+Down | Space | Space |
+| Mark or unmark, then the next row | `mark` | ✅ | Insert<br>Ctrl+t<br>Shift+Down | J<br>Space<br>Shift+Down<br>Insert | Insert<br>Ctrl+t<br>Shift+Down | Insert<br>Shift+Down | Space | Space |
 | Mark or unmark, then the row above | `mark_up` | ✅ | Shift+Up | K<br>Shift+Up | Shift+Up | Shift+Up | — | — |
 | Mark the names that match a pattern | `select` | ✅ | +<br>Alt++ | + | +<br>Numpad+<br>Alt++ | Numpad+ | — | — |
 | Unmark the names that match a pattern | `unselect` | ✅ | -<br>\\<br>Alt+- | - | -<br>\\<br>Numpad-<br>Alt+- | Numpad- | — | — |
-| Invert the marks on files; directories stay as they are | `invert_marks` | ⏳ | \*<br>Alt+\* | \* | \*<br>Numpad\*<br>Alt+\* | Numpad* | — | — |
+| Invert the marks on files; directories stay as they are | `invert_marks` | ✅ | \*<br>Alt+\* | \* | \*<br>Numpad\*<br>Alt+\* | Numpad* | — | — |
 | Start quick search | `quick_search` | ✅ | Ctrl+s<br>Alt+s | / | Ctrl+s<br>Alt+s | Alt+characters<br>Alt+Shift+characters | / | f |
-| The next name that matches the last quick search | `next_match` | ⏳ | Shift+F7<br>F17<br>n | n<br>Shift+F7<br>F17 | — | — | n | n |
-| The previous name that matches the last quick search | `prev_match` | ⏳ | N | N | — | — | N | N |
+| The next name that matches the last quick search | `next_match` | ✅ | Shift+F7<br>F17<br>n | n<br>Shift+F7<br>F17 | — | — | n | n |
+| The previous name that matches the last quick search | `prev_match` | ✅ | N | N | — | — | N | N |
 | Open the command line for a shell command | `shell` | ✅ | ! | ! | Typing | Typing | ; (in the background)<br>: | !<br>s |
 | Open the command line for a command of noc | `command` | ✅ | : | : | — | — | — | :<br>; |
 | The command history | `command_history` | ✅ | Alt+h | q : | Alt+h | Alt+F8 | — | — |
@@ -344,11 +344,11 @@ the panel, once the search is over.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Take back the last character | `backspace` | ⏳ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | — | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h |
-| End the search; the cursor stays on the match | `cancel` | ⏳ | Esc | Esc<br>Ctrl+c<br>Enter | Esc | — | Ctrl+c<br>Esc Esc | Esc<br>Ctrl+c<br>Ctrl+g |
+| Take back the last character | `backspace` | ✅ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | — | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h |
+| End the search; the cursor stays on the match | `cancel` | ✅ | Esc | Esc<br>Ctrl+c<br>Enter | Esc | — | Ctrl+c<br>Esc Esc | Esc<br>Ctrl+c<br>Ctrl+g |
 | Next match; with nothing typed, the last search again, as mc's Ctrl+s Ctrl+s; the default preset leaves it to the panel | `quick_search` | ⏳ | Ctrl+s<br>Alt+s | Ctrl+g | Ctrl+s<br>Alt+s | Ctrl+Enter | n | n |
 | Previous match | `prev_match` | ⏳ | — | Ctrl+t | — | Ctrl+Shift+Enter | N | N |
-| Paste from clipboard | — | ⏳ | — | — | — | Ctrl+v<br>Shift+Insert | — | — |
+| Paste from clipboard | — | 🚫 | — | — | — | Ctrl+v<br>Shift+Insert | — | — |
 
 ## Renaming in place (`rename`)
 

@@ -25,31 +25,28 @@ pub(super) const PRESET: Preset = &[
         Context::Panel,
         &[
             // Navigation
-            (Action::Up, &["up", "ctrl-p"]),             // OK1
-            (Action::Down, &["down", "ctrl-n"]),         // OK1
-            (Action::PageUp, &["pageup", "alt-v"]),      // OK1
-            (Action::PageDown, &["pagedown", "ctrl-v"]), // OK1
-            // Shift+PgUp and Shift+PgDn, as in yazi.
-            (Action::HalfPageUp, &["shift-pageup"]),
-            (Action::HalfPageDown, &["shift-pagedown"]),
-            (Action::Home, &["home", "alt-<"]), // OK1
-            (Action::End, &["end", "alt->"]),   // OK1
-            (Action::Enter, &["enter"]),        // OK1
-            (Action::Parent, &["ctrl-pageup", "backspace"]),
-            (Action::Reload, &["ctrl-r"]), // OK1
-            (Action::Cancel, &["esc", "ctrl-c"]),
+            (Action::Up, &["up", "ctrl-p"]),                 // OK1
+            (Action::Down, &["down", "ctrl-n"]),             // OK1
+            (Action::PageUp, &["pageup", "alt-v"]),          // OK1
+            (Action::PageDown, &["pagedown", "ctrl-v"]),     // OK1
+            (Action::HalfPageUp, &["shift-pageup"]),         // OK1
+            (Action::HalfPageDown, &["shift-pagedown"]),     // OK1
+            (Action::Home, &["home", "alt-<"]),              // OK1
+            (Action::End, &["end", "alt->"]),                // OK1
+            (Action::Enter, &["enter"]),                     // OK1
+            (Action::Parent, &["ctrl-pageup", "backspace"]), // OK1
+            (Action::Reload, &["ctrl-r"]),                   // OK1
+            (Action::Cancel, &["esc", "ctrl-c"]),            // OK1
             // PullDown
             (Action::PullDown, &["f9"]),                  // OK1
             (Action::PullDownLast, &["shift-f9", "f19"]), // OK1
             // Panels
             (Action::SwitchPanel, &["tab", "ctrl-i"]), // OK1
-            // vim's Ctrl+w keys need no Alt, which the Option key of macOS terminals often does not
-            // send.
-            (Action::FocusLeft, &["ctrl-x left", "ctrl-w h"]),
-            (Action::FocusRight, &["ctrl-x right", "ctrl-w l"]),
-            (Action::SwapPanels, &["ctrl-u"]), // OK1
-            (Action::OtherPanelOpen, &["alt-o", "ctrl-w f"]),
-            (Action::OtherPanelSync, &["alt-i", "ctrl-w v"]),
+            (Action::FocusLeft, &["ctrl-x left", "ctrl-w h"]), // OK1
+            (Action::FocusRight, &["ctrl-x right", "ctrl-w l"]), // OK1
+            (Action::SwapPanels, &["ctrl-u"]),         // OK1
+            (Action::OtherPanelOpen, &["alt-o", "ctrl-w f"]), // OK1
+            (Action::OtherPanelSync, &["alt-i", "ctrl-w v"]), // OK1
             (Action::LocationMenuLeft, &["alt-f1", "ctrl-x 1"]), // OK1
             (Action::LocationMenuRight, &["alt-f2", "ctrl-x 2"]), // OK1
             // Tabs & Workspaces
@@ -73,19 +70,16 @@ pub(super) const PRESET: Preset = &[
             (Action::Select, &["+", "alt-+"]),                   // OK1
             (Action::Unselect, &["-", "\\", "alt--"]),           // OK1
             (Action::InvertMarks, &["*", "alt-*"]),              // OK1
-            // Tools
+            // Search
             (Action::QuickSearch, &["ctrl-s", "alt-s"]), // OK1
-            // The last quick search again: Shift+F7, as mc and Far search again, and vim's n and N.
-            (Action::NextMatch, &["shift-f7", "f17", "n"]),
-            (Action::PrevMatch, &["shift-n"]),
+            (Action::NextMatch, &["shift-f7", "f17", "n"]), // OK1
+            (Action::PrevMatch, &["shift-n"]),           // OK1
+            // Tools
             (Action::Shell, &["!"]),                // OK1
             (Action::Command, &[":"]),              // OK1
             (Action::CommandHistory, &["alt-h"]),   // OK1
             (Action::Jump, &["alt-z", "ctrl-x z"]), // OK1
             (Action::QuickCd, &["alt-c"]),          // OK1
-            // File operations. f stands for mc's Ctrl+x, whose letters it keeps for mc's commands:
-            // c chmod, o chown, e chattr, l, s, and v links, j the jobs. mc has no checksums, so
-            // they take #, for a hash.
             (Action::View, &["f3"]),                // OK1
             (Action::Edit, &["f4"]),                // OK1
             (Action::Copy, &["f5"]),                // OK1
@@ -105,8 +99,8 @@ pub(super) const PRESET: Preset = &[
     (
         Context::QuickSearch,
         &[
-            (Action::Backspace, &["backspace", "ctrl-h"]),
-            (Action::Cancel, &["esc"]),
+            (Action::Backspace, &["backspace", "ctrl-h"]), // OK1
+            (Action::Cancel, &["esc"]),                    // OK1
         ],
     ),
     // The name field of an entry renamed in its row.

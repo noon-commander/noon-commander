@@ -1061,6 +1061,25 @@ mod tests {
     }
 
     #[test]
+    fn o_h_shows_or_hides_dot_names_and_alt_dot_comes_first_in_the_default_keymap() {
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&keymap, &mut state, Context::Panel, &["o", "h"]),
+                actions(&[Action::ToggleHidden]),
+                "{name}"
+            );
+        }
+        assert_eq!(
+            Keymap::mc()
+                .key(Context::Panel, Action::ToggleHidden)
+                .as_deref(),
+            Some("Alt+.")
+        );
+    }
+
+    #[test]
     fn tabs_live_under_t_brackets_and_alt_arrows() {
         let keymap = Keymap::mc();
         let mut state = KeyState::default();

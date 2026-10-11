@@ -27,7 +27,7 @@
 - [x] Opening hosts: background connect (Esc stops it), remote listings, `start_dir`, lost
       connections
 - [x] Disconnect, `ssh -G` on connect, connection state in the root
-- [x] Sorting (`o n`, `o e`, `o m`, `o s`) and hidden files (`ui.show_hidden`, Alt+.)
+- [x] Sorting (`o n`, `o e`, `o m`, `o s`) and hidden files (`ui.show_hidden`, Alt+., `o h`)
 - [x] Quick search
 - [x] Keymap engine with the mc preset
 - [x] Nerd Font icons and mc markers

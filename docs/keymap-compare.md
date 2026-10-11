@@ -90,10 +90,10 @@ and \*, on the numpad too, mark and unmark only while its command line is empty;
 always do.
 
 Both presets group keys of their own under a first key: t for the tabs and the workspaces, o for
-the sort order, as ranger's sort keys, and f for the file operations. f stands for mc's Ctrl+x,
-whose letters it keeps for mc's commands: c chmod, o chown, e chattr, l, s, and v links, j the
-jobs. mc has no checksums, so they take #. The vim preset adds vim's g, q, and Ctrl+w, and puts
-the hidden names under o too.
+the sort order, as ranger's sort keys, and the hidden names, and f for the file operations. f
+stands for mc's Ctrl+x, whose letters it keeps for mc's commands: c chmod, o chown, e chattr, l,
+s, and v links, j the jobs. mc has no checksums, so they take #. The vim preset adds vim's g, q,
+and Ctrl+w.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
@@ -123,7 +123,7 @@ the hidden names under o too.
 | The tabs of the right panel, to choose one | `tab_list_right` | ✅ | t l | t l | — | — | — | — |
 | The saved workspaces: restore, rename, or delete one | `workspaces` | ✅ | t w | t w | — | — | — | — |
 | Save the tabs of both panels as a workspace | `save_workspace` | ✅ | t W | t W | — | — | — | — |
-| Show or hide names that start with a dot | `toggle_hidden` | ✅ | Alt+. | o h | Alt+. | Ctrl+h | . | z h<br>Ctrl+h<br>Backspace |
+| Show or hide names that start with a dot | `toggle_hidden` | ✅ | Alt+.<br>o h | o h | Alt+. | Ctrl+h | . | z h<br>Ctrl+h<br>Backspace |
 | Sort by name; again: reverse | `sort_by_name` | ✅ | o n | o n | — | Ctrl+F3 | , a<br>, A (reverse) | o b<br>o B (reverse) |
 | Sort by extension; again: reverse | `sort_by_extension` | ✅ | o e | o e | — | Ctrl+F4 | , e<br>, E (reverse) | o e<br>o E (reverse) |
 | Sort by modification time; again: reverse | `sort_by_time` | ✅ | o m | o m | — | Ctrl+F5 | , m<br>, M (reverse) | o m<br>o M (reverse) |

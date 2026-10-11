@@ -383,7 +383,7 @@ row and names the tab that shows by its whole location:
   panel's colors as if it grew out of it (`tab_active`), with its number in an accent on the
   side that has the keys (`tab_number`) and plainer on the other (`tab_active_idle`). Tabs in
   the frame take the same styles, with the frame's line between them.
-- Ctrl+u swaps the sides with their tabs. Alt+. and the settings apply to every tab.
+- Ctrl+u swaps the sides with their tabs. Alt+., o h, and the settings apply to every tab.
 
 ### Workspaces
 
@@ -668,7 +668,7 @@ theme = "mc-classic"             # "terminal", "noon-dark", "noon-light", "catpp
 keymap = "default"               # modelled on mc, or "vim"
 borders = "double"               # frames of panels and dialogs: ═ ║ ╔; "single": ─ │ ┌
 icons = true                     # Nerd Font icons; false: mc's markers (/ * @ ~ …)
-show_hidden = true               # names that start with a dot; Alt+. switches while running
+show_hidden = true               # names that start with a dot; Alt+. or o h switches while running
 fuzzy_search = true              # quick search and filters match as fzf; false: literally
 menu_bar = "on-demand"           # the F9 menu bar while a menu is open; "always": above the panels
 tab_bar = "line"                 # tabs on a line above the panels; "frame": in the panel's frame
@@ -738,7 +738,7 @@ location = "root"
   name, extension, modification time, or size (`o n`, `o e`, `o m`, `o s` in both presets);
   time and size start newest and largest first, the same key again reverses, ties go by name,
   and an arrow in the header marks the order. Directories stay first. Names that start with a
-  dot are shown unless `ui.show_hidden` is off; Alt+. switches them in both panels, as in mc.
+  dot are shown unless `ui.show_hidden` is off; Alt+., as in mc, or o h switches them in both panels.
   Sorting and hiding keep the cursor on its entry.
 - **The cursor of the inactive panel.** Unlike mc, the inactive panel shows where its cursor
   is (the checksum comparison reads the file there): its row gets a background of its own
@@ -962,10 +962,10 @@ location = "root"
   each action with its key sequences, in the order the help lists them. Both list every context in
   the same order; the vim preset takes vim's keys, and ranger's and yazi's where vim has none, in
   the panels, the dialogs and the help, the viewer, the lists, the text fields, and the command
-  line. Both group their own panel keys under `t` (tabs and workspaces), `o` (sort order), and
-  `f` (file operations), which stands for mc's `Ctrl+x` and keeps its letters for mc's commands
-  (`f j` lists the jobs, and `f c` is left for chmod); the checksums, which mc has not, take
-  `f #`. `noc keymap diff` (`just keymap-diff`) compares two presets action by action
+  line. Both group their own panel keys under `t` (tabs and workspaces), `o` (sort order and
+  hidden names), and `f` (file operations), which stands for mc's `Ctrl+x` and keeps its letters
+  for mc's commands (`f j` lists the jobs, and `f c` is left for chmod); the checksums, which mc
+  has not, take `f #`. `noc keymap diff` (`just keymap-diff`) compares two presets action by action
   (`tui/keymap/diff.rs`), with the keys written as the help writes them.
   As in mc, `Esc` in a panel waits for the next key: `Esc 1` … `Esc 0` stand for F1 … F10, `Esc`
   followed by a character stands for Alt and that character, for terminals whose Alt key sends

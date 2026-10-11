@@ -55,11 +55,11 @@ pub(super) const PRESET: Preset = &[
             (Action::Workspaces, &["t w"]),           // OK1
             (Action::SaveWorkspace, &["t shift-w"]),  // OK1
             // Items
-            (Action::ToggleHidden, &["alt-."]),  // OK1
-            (Action::SortByName, &["o n"]),      // OK1
-            (Action::SortByExtension, &["o e"]), // OK1
-            (Action::SortByTime, &["o m"]),      // OK1
-            (Action::SortBySize, &["o s"]),      // OK1
+            (Action::ToggleHidden, &["alt-.", "o h"]), // OK1
+            (Action::SortByName, &["o n"]),            // OK1
+            (Action::SortByExtension, &["o e"]),       // OK1
+            (Action::SortByTime, &["o m"]),            // OK1
+            (Action::SortBySize, &["o s"]),            // OK1
             // Marks
             (Action::Mark, &["insert", "ctrl-t", "shift-down"]), // OK1
             (Action::MarkUp, &["shift-up"]),                     // OK1

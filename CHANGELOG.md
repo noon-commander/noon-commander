@@ -131,7 +131,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and the menu has keys of its own in the `tab_menu` context.
 - The default keymap takes the tab and sort keys of the vim keymap: t n opens a tab, t c closes
   it, ] t and [ t switch tabs (Alt+Right and Alt+Left too), and o n, o e, o m, and o s sort, in
-  place of Ctrl+x t, Ctrl+x w, Ctrl+x n, Ctrl+x p, and Ctrl+F3 … Ctrl+F6. Both keymaps make
+  place of Ctrl+x t, Ctrl+x w, Ctrl+x n, Ctrl+x p, and Ctrl+F3 … Ctrl+F6; o h shows hidden files,
+  as Alt+. does. Both keymaps make
   checksums with f #, in place of Ctrl+x # and Ctrl+w #, and list the jobs with f j: the
   default one after Ctrl+x j, the vim one in place of w.
 - Keys are written one way in the help, the menus, and the docs: letters in lowercase, after a

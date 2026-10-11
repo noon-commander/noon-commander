@@ -92,6 +92,7 @@ Paths come from `crates/noc-config/src/paths.rs`.
 | `hosts.toml` | Next to `config.toml` | Typed per-host settings; `[hosts]` in `config.toml` is an error (ADR 0007) |
 | `workspaces.toml` | XDG data | Saved tabs of both panels (ADR 0017) |
 | `history.toml` | XDG state | Command-line history |
+| `recent.toml` | XDG state | The hosts and volumes used last, for the location menu |
 
 - Write these files only through `noc-config`, which replaces them atomically (`write.rs`).
   Edits to `config.toml` and `hosts.toml` keep the user's comments and other keys.

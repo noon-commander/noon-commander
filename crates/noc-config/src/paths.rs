@@ -19,8 +19,8 @@ pub struct Paths {
     pub config_dir: PathBuf,
     /// Bookmarks and workspaces: `$XDG_DATA_HOME/noc`, by default `~/.local/share/noc`.
     pub data_dir: PathBuf,
-    /// History, last directories, and logs: `$XDG_STATE_HOME/noc`, by default
-    /// `~/.local/state/noc`.
+    /// History, recent hosts and volumes, last directories, and logs: `$XDG_STATE_HOME/noc`,
+    /// by default `~/.local/state/noc`.
     pub state_dir: PathBuf,
     /// Cached `ssh -G` results: `$XDG_CACHE_HOME/noc`, by default `~/.cache/noc`.
     pub cache_dir: PathBuf,
@@ -97,6 +97,11 @@ impl Paths {
     /// The commands of the command line: `history.toml` in [`state_dir`](Self::state_dir).
     pub fn history_file(&self) -> PathBuf {
         self.state_dir.join("history.toml")
+    }
+
+    /// The hosts and volumes used last: `recent.toml` in [`state_dir`](Self::state_dir).
+    pub fn recent_file(&self) -> PathBuf {
+        self.state_dir.join("recent.toml")
     }
 
     /// Creates [`runtime_dir`](Self::runtime_dir) with mode 0700 if it is missing, and checks
@@ -192,6 +197,10 @@ mod tests {
         assert_eq!(
             paths.history_file().as_os_str(),
             "/home/u/.local/state/noc/history.toml"
+        );
+        assert_eq!(
+            paths.recent_file().as_os_str(),
+            "/home/u/.local/state/noc/recent.toml"
         );
     }
 

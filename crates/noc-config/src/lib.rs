@@ -8,6 +8,8 @@
 //! [`save_workspace`], [`remove_workspace`], and [`rename_workspace`] write whole.
 //! [`History`] is the schema of `history.toml`, the commands of the command line, which
 //! [`add_command`] and [`remove_command`] write whole.
+//! [`Recent`] is the schema of `recent.toml`, the hosts and volumes used last, which
+//! [`Recent::save`] writes whole.
 
 mod config;
 mod edit;
@@ -15,6 +17,7 @@ mod error;
 mod history;
 mod hosts;
 mod paths;
+mod recent;
 mod workspaces;
 mod write;
 
@@ -29,6 +32,7 @@ pub use hosts::{
     DEFAULT_HOSTS, HostConfig, Hosts, SftpHost, local_dir, save_host, write_default_hosts,
 };
 pub use paths::Paths;
+pub use recent::{RECENT_MAX, Recent};
 pub use workspaces::{
     PanelSide, Place, SavedTab, SortBy, Workspace, Workspaces, remove_workspace, rename_workspace,
     save_workspace,

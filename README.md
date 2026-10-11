@@ -217,6 +217,22 @@ Configuration lives in `~/.config/noc/`, following the XDG layout on macOS too;
 `noc config init` writes the commented defaults, and `noc config paths` shows every file and
 directory Noon Commander uses.
 
+### The Option key on macOS
+
+Many keys of the default keymap use Alt, as mc's do: Alt+o, Alt+i, Alt+c, Alt+h, Alt+z, Alt+F1,
+and Alt+1 … Alt+0 for terminals without F-keys. On macOS the Option key types characters such as
+`ø` instead, unless the terminal sends it as Alt:
+
+- Terminal.app: Settings → Profiles → Keyboard → Use Option as Meta key.
+- iTerm2: Settings → Profiles → Keys → Left Option key: Esc+.
+- Ghostty: `macos-option-as-alt = true`.
+- kitty: `macos_option_as_alt yes`.
+- Alacritty: `option_as_alt = "Both"` under `[window]`.
+
+Without it, F9 opens the pull-down menu, which has those commands, and Ctrl+w f and Ctrl+w v do
+what Alt+o and Alt+i do. Terminal.app sends Option+Left and Option+Right as Esc b and Esc f, which
+move by words in a shell, whatever that setting says; `[ t` and `] t` switch tabs there.
+
 ## Contributing
 
 See [AGENTS.md](AGENTS.md) for the project rules, layout, and commands. They apply to humans and

@@ -1,49 +1,73 @@
 # AGENTS.md
 
-Instructions for AI coding agents (and humans) working on Noon Commander.
+Instructions for AI coding agents and humans working on Noon Commander.
 
-**English only.** All code, comments, docstrings, commit messages, TODO notes, log messages, and
-test descriptions must be written in English. No exceptions. `just typos` checks the spelling;
-a word it gets wrong goes to `typos.toml`, with a comment if the reason is not obvious.
+**English only**: code, comments, docs, commits, logs, test names. `just typos` checks spelling;
+add false positives to `typos.toml`, with a comment if the reason is not obvious.
+
+## Hard rules
+
+- Forwarding exists only behind the `forwarding` feature, checked only in
+  `crates/noc-ssh/src/policy.rs`. SFTP channels always use `policy::SFTP_CHANNEL_OPTIONS`.
+- Never add an SSH implementation (`russh`, `ssh2`, `libssh2-sys`); `deny.toml` bans them.
+- Spawn `ssh` only from `noc-ssh`. Never through `sh -c`. Always `--` before the destination.
+- Spawn other programs only from `noc-tools` (ADR 0012). Never through a shell. `--` before
+  paths. Kill on drop. Tests use a fake program.
+- Sole shell exception: the command line's `$SHELL -c`, whose command is the user's (ADR 0019).
+- User-supplied ssh arguments must pass the validator (ADR 0004). Unknown flags are errors.
+- Never pass `StrictHostKeyChecking=no`. Never write to `~/.ssh/`.
+- Clipboard: write through OSC 52 only. Never read it. Never call `pbcopy`/`xclip` (ADR 0008).
+- No blocking I/O in async code; use `spawn_blocking`.
+- Remote operations are cancel-safe: dropping the future abandons them cleanly. Long work
+  (connect, transfer, recursive walk) also takes a `CancellationToken`.
+- Secrets: `secrecy::SecretString` only. Never log, persist, or pass them via argv.
+- No user-facing TUI text in code. Put it in Fluent files; read it with `fl!`.
+- Widgets never match raw keys. They receive `Action`s from the keymap.
+- Address panels by `PanelId` (side + tab number, never reused), not `Side` (ADR 0011).
+
+## Commands
+
+```sh
+just check   # fmt-check, clippy and tests (with and without forwarding), cargo-deny
+just lint    # Markdown, shell scripts, spelling, TOML, workflows, unused dependencies
+just all     # check + lint + stale snapshots; run before committing
+just fmt     # format the code
+just run     # run noc from source; arguments go to noc
+```
+
+- Done means `just check` passes. It changes no files.
+- Iterate on one crate with `cargo test -p <crate> [name]` and
+  `cargo clippy -p <crate> --all-targets`. `just test`/`just clippy` always build the whole
+  workspace twice.
+- Other recipes: `just --list`. `just msrv` needs rustup; `just logo` needs `resvg`.
+- CI runs `justfile` recipes (ADR 0013). Add a new check as a recipe and call it from `ci.yml`;
+  never put raw commands in `ci.yml`.
+- Releases are the exception: `release.yml` builds from a signed `v*` tag (ADR 0014). Package
+  templates live in `packaging/`. Packages are named `noon-commander`; `noc` is the binary.
+- After editing `assets/icons/logo.svg`, run `just logo`. A new PNG gets its own `_logo-png`
+  line in the `logo` recipe.
 
 ## Project
 
-Noon Commander (binary `noc`) is a Midnight Commander-style, two-panel terminal file manager for
-macOS and Linux, focused on seamless local and SFTP file operations, written in async Rust
-(tokio, ratatui). SFTP is its foundation and the reason it exists. It drives the system OpenSSH
-client instead of implementing SSH.
+Two-panel, Midnight Commander-style terminal file manager for macOS and Linux. Async Rust
+(tokio, ratatui). Local and SFTP files are equally first-class. Drives the system OpenSSH
+client; the system `ssh` is the single source of truth for connections and auth.
 
-Naming: the full name "Noon Commander" is used only in prose; everything technical is `noc`
-(binary, crates `noc-*`, XDG directories, `NOC_*` environment variables).
-
-- Architecture: [docs/architecture.md](docs/architecture.md)
-- Roadmap and current milestone: [docs/roadmap.md](docs/roadmap.md)
-- Decisions: [docs/adr/](docs/adr/)
-
-Status: pre-alpha. Read the roadmap before starting work. Browsing (M2) and file operations
-(M3) work; polish (M4) is next.
-
-## Philosophy
-
-- A full file manager: local and remote files are equally first-class. SFTP is the foundation;
-  other backends may be added behind the `Vfs` trait.
-- Noon Commander moves files; it does not tunnel anything.
-- The system `ssh` is the single source of truth for connections, configuration, and
-  authentication.
-- The Noon Commander config decorates hosts from `ssh_config` (labels, start directories,
-  hiding); it never duplicates them.
-- The UI never waits on the network. Remote operations are asynchronous, cancellable, and report
-  progress.
-
-Non-goals: port, agent, X11, or tunnel forwarding; an in-process SSH implementation; storing
-credentials; editing `~/.ssh/*`.
+- Pre-alpha. M0–M3 done; M4 (polish) is current. Read [docs/roadmap.md](docs/roadmap.md)
+  before starting work.
+- Background and philosophy: [README.md](README.md). Design:
+  [docs/architecture.md](docs/architecture.md). Decisions: [docs/adr/](docs/adr/).
+- Names: "Noon Commander" in prose only. Everything technical is `noc` (binary, `noc-*`
+  crates, XDG directories, `NOC_*` variables).
+- Non-goals: any forwarding or tunneling, an in-process SSH, storing credentials, editing
+  `~/.ssh/*`.
 
 ## Layout
 
 | Crate | Responsibility |
 | --- | --- |
 | `crates/noc` | Binary and UI: CLI, bootstrap, askpass entry point, ratatui app, keymap, themes, icons, i18n |
-| `crates/noc-config` | XDG paths, TOML schema, defaults |
+| `crates/noc-config` | XDG paths, TOML schemas, defaults, writing config files |
 | `crates/noc-ssh` | Host discovery, `ssh -G`, argument validation, forwarding policy, ControlMaster, SFTP channels, askpass bridge |
 | `crates/noc-vfs` | `Vfs` trait and backends (local, SFTP), mounted volumes |
 | `crates/noc-ops` | Job engine: copy, move, delete, mkdir, checksums; progress, cancellation, conflicts |
@@ -51,154 +75,122 @@ credentials; editing `~/.ssh/*`.
 | `crates/noc-text` | Terminal-safe text: sanitizing, widths in cells, fitting, wrapping |
 | `crates/noc-viewer` | The F3 viewer: reading through the `Vfs`, scrolling, wrapping; its own Fluent text |
 
-`noc-config`, `noc-ssh`, `noc-vfs`, `noc-tools`, and `noc-text` depend on no other `noc-*`
-crate; `noc-ops` depends on `noc-vfs`; `noc-viewer` on `noc-vfs` and `noc-text`; the binary on
-all of them. Dependencies point one way, toward the binary. Library crates contain no UI code
-and no user-facing text, except `noc-viewer`, a piece of the UI that knows nothing of the
-keymap, the theme, or the app ([ADR 0015](docs/adr/0015-viewer-and-text-crates.md)).
+- `noc-config`, `noc-ssh`, `noc-vfs`, `noc-tools`, `noc-text` depend on no other `noc-*` crate.
+- `noc-ops` → `noc-vfs`. `noc-viewer` → `noc-vfs`, `noc-text`. The binary → all.
+- Library crates: no UI code, no user-facing text. Exception: `noc-viewer`, which knows nothing
+  of the keymap, theme, or app (ADR 0015).
+- No `core` or `utils` crate. Shared code stays where it is used until a second crate needs it,
+  then moves to a crate named for its topic.
 
-There is no `core` or `utils` crate. Code that two crates need goes into a crate of its own
-topic, as terminal-safe text went into `noc-text`, once the second one needs it; until then it
-stays where it is used.
+## State files
 
-## Commands
+Paths come from `crates/noc-config/src/paths.rs`.
 
-```sh
-just check   # rustfmt, clippy and tests with and without forwarding, cargo-deny
-just lint    # Markdown, shell scripts, spelling, TOML, workflows, unused dependencies
-just all     # check, lint, and stale snapshots
-just fmt     # format the code
-```
+| File | Location | Holds |
+| --- | --- | --- |
+| `config.toml` | XDG config | All settings except per-host ones (ADR 0009) |
+| `hosts.toml` | Next to `config.toml` | Typed per-host settings; `[hosts]` in `config.toml` is an error (ADR 0007) |
+| `workspaces.toml` | XDG data | Saved tabs of both panels (ADR 0017) |
+| `history.toml` | XDG state | Command-line history |
 
-Work is done when `just check` passes; it changes no files. Run `just all` before committing.
-The tasks live in the `justfile` ([ADR 0013](docs/adr/0013-just-task-runner.md)), and CI runs the
-same recipes: a new check is added there as a recipe and called from `ci.yml`, never written into
-`ci.yml` as a raw command. Releases are the exception: `release.yml` builds them from a signed
-`v*` tag with its steps written out, and only there; package templates live in `packaging/`
-([ADR 0014](docs/adr/0014-release-workflow-and-homebrew-tap.md)). Packages are named
-`noon-commander`; `noc` is only the binary.
-
-After changing `assets/icons/logo.svg`, run `just logo` (needs `resvg`) to render the PNGs again;
-a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on the command line.
-
-## Hard rules
-
-- No forwarding by default. Forwarding code may exist only behind the `forwarding` feature,
-  which is checked solely in `crates/noc-ssh/src/policy.rs`. SFTP channels always use
-  `policy::SFTP_CHANNEL_OPTIONS`.
-- Never add an SSH implementation (`russh`, `ssh2`, `libssh2-sys`); `deny.toml` bans them.
-- Spawn `ssh` only from `noc-ssh`: never through `sh -c`, always with `--` before the
-  destination. Spawn every other program only from `noc-tools` (ADR 0012): never through a
-  shell, with `--` before paths, killed on drop; tests use a fake program. The one exception
-  is the command line's `$SHELL -c`, whose command is the user's (ADR 0019).
-- User-supplied ssh arguments must pass the validator (ADR 0004). Unknown flags are errors.
-- Never pass `StrictHostKeyChecking=no` and never write to `~/.ssh/`.
-- No blocking I/O in async code; use `spawn_blocking`. Remote operations must be cancel-safe
-  (dropping the future abandons them cleanly); long-running work such as connecting, transfers,
-  and recursive walks also takes a `CancellationToken`.
-- Secrets live in `secrecy::SecretString`. Never log them, persist them, or pass them via argv.
-- No user-facing TUI text in code: it goes to Fluent files and is read with `fl!`.
-- Widgets never match raw keys; they receive `Action`s from the keymap.
+- Write these files only through `noc-config`, which replaces them atomically (`write.rs`).
+  Edits to `config.toml` and `hosts.toml` keep the user's comments and other keys.
+- Logs go to a file in XDG state.
 
 ## Code conventions
 
-- Edition 2024, MSRV 1.88 (`rust-version`). CI checks the MSRV, so don't use newer std APIs;
-  `just msrv` checks it locally (needs rustup).
-- Dependency versions are declared once in the root `[workspace.dependencies]`; crates use
-  `name.workspace = true`. Every crate has `[lints] workspace = true`. A dependency that no
-  crate uses any more is removed from both places; `just unused` finds it.
-- TOML files are formatted by taplo; `just toml` checks them and `just toml-fmt` formats them.
-- Errors: `thiserror` enums in libraries, `color-eyre` in the binary. No `unwrap`/`expect`
-  outside tests.
-- Logging: `tracing` only, written to a file in the XDG state directory (the terminal belongs to
-  the TUI). Library crates never print.
-- `unsafe` is denied. The only planned exception is `setsid` in a `pre_exec` hook in
-  `noc-ssh`, with a local `#[allow(unsafe_code)]` and a `// SAFETY:` comment.
+- Edition 2024, MSRV 1.88. No newer std APIs; CI checks the MSRV.
+- `clippy::pedantic` is on workspace-wide; clippy runs with `-D warnings`.
+- No `unwrap`/`expect`/`dbg!`/`todo!` outside tests.
+- Errors: `thiserror` enums in libraries, `color-eyre` in the binary.
+- Logging: `tracing` only. Library crates never print; the terminal belongs to the TUI.
+- `unsafe` is denied. Sole planned exception: `setsid` in a `pre_exec` hook in `noc-ssh`, with
+  a local `#[allow(unsafe_code)]` and a `// SAFETY:` comment.
 - Prefer `pub(crate)`; `unreachable_pub` is on.
-- Comments explain why, not what, and stay sparse.
+- Dependencies: declare versions once in root `[workspace.dependencies]`; crates use
+  `name.workspace = true`. Every crate has `[lints] workspace = true`. Remove unused ones from
+  both places (`just unused`).
+- TOML is formatted by taplo: `just toml` checks, `just toml-fmt` formats.
+- Comments explain why, not what. Keep them sparse.
 
 ## UI conventions
 
-- Keymap: actions per context (`panel`, `dialog`, `viewer`, `quick_search`, `location_menu`);
-  bindings are key sequences so a vim preset can be added. The default preset is mc. The F-key
-  bar and help are generated from the active keymap. When you add, change, or remove a binding
-  in any preset, update the `noc (default)` or `noc (vim)` column in
-  [docs/keymap-compare.md](docs/keymap-compare.md) in the same change. Its sections are the
-  contexts and its rows the actions, as `noc keymap diff` names them; an action new to a context
-  gets a row in that section, among noc's actions in the order of the default preset, with the
-  keys of mc, Far, yazi, and ranger for the same thing.
-- Presets: `crates/noc/src/tui/keymap/default.rs` and `vim.rs`, one per `ui.keymap` name. Each
-  lists every context, in the same order as the other and with the same comments where they
-  agree. `just keymap-diff` (`noc keymap diff`) compares them action by action. In the default
-  preset, an action's keys start with the ones closest to mc (mc's own, or Far's where mc has
-  none), and only then those it shares with the vim preset: the pull-down menu shows the first.
-- Keys in text (the help, menus, Fluent files, docs, comments) are written one way, the way
-  `keymap::describe` writes them and as [docs/keymap-compare.md](docs/keymap-compare.md)
-  explains: letters lowercase, after a modifier too (`Ctrl+l`); an uppercase letter is Shift
-  and the letter (`G`, `Alt+W`); `Shift+` only before keys that are not letters (`Shift+F6`);
-  sequences apart (`Ctrl+x t`, `Z Z`); `PgUp`, `PgDn`, `Delete`, `Insert`, `Backspace`. Keys in
-  presets and `config.toml` stay in crokey's syntax (`ctrl-x t`, `shift-z`).
-- Text: Fluent files in `crates/noc/i18n/`, and the viewer's own in `crates/noc-viewer/i18n/`;
-  `en-US` only for now. A crate with text of its own has its own loader, and
-  `noc::i18n::select` selects its language too. Library errors are typed; the UI turns them
-  into messages. clap `--help` output and logs stay English.
-- Icons: Nerd Fonts v3, written as literal glyphs in Rust and TOML, never as escape sequences.
-  Icons are optional (`ui.icons`, on by default); without them use mc markers: `/` directory,
+### Keymap
+
+- Contexts: `Context` in `crates/noc/src/tui/keymap/action.rs`. Bindings are key sequences.
+- Presets: `crates/noc/src/tui/keymap/default.rs` (mc, the default) and `vim.rs`, one per
+  `ui.keymap` value. Both list every context in the same order, with the same comments where
+  they agree. `just keymap-diff` compares them.
+- In the default preset, list an action's mc keys first (Far's where mc has none), then those
+  shared with vim. The pull-down menu shows the first.
+- The F-key bar and help are generated from the active keymap.
+- Changing any binding: update the `noc (default)` or `noc (vim)` column of
+  [docs/keymap-compare.md](docs/keymap-compare.md) in the same change. A new action gets a row
+  in its context's section, in default-preset order, with the keys of mc, Far, yazi, ranger.
+- Keys in text (help, menus, Fluent, docs, comments) follow `keymap::describe`: `Ctrl+l`, `G`,
+  `Alt+W`, `Shift+F6`, `Ctrl+x t`, `PgUp`. Full rules: docs/keymap-compare.md. Presets and
+  `config.toml` use crokey syntax (`ctrl-x t`, `shift-z`).
+- Mouse: a widget translates a press into the key it stands for (Enter, Esc) and sends it down
+  the keyboard path. Release the mouse on editor hand-off, exit, and panic (ADR 0018).
+
+### Text
+
+- Fluent files: `crates/noc/i18n/`, viewer's own in `crates/noc-viewer/i18n/`. `en-US` only.
+- A crate with its own text has its own loader; `noc::i18n::select` selects its language too.
+- Library errors are typed; the UI turns them into messages.
+- clap `--help` and logs stay English, outside Fluent.
+
+### Look
+
+- Icons: Nerd Fonts v3 as literal glyphs in Rust and TOML, never escape sequences.
+- Icons are optional (`ui.icons`, on by default). Without them use mc markers: `/` directory,
   `*` executable, `@` symlink, `~` symlink to a directory.
-- Settings: every option in `config.toml` must be editable in the UI, in the Configuration
-  dialog (Options → Configuration…); users should never have to edit the file by hand. A new
-  option ships together with its row in the dialog (name, hint, Fluent text) and is written
-  back through `noc_config::save_config` ([ADR 0009](docs/adr/0009-configuration-dialog-writes-config-toml.md)).
-  Apply it at once where the running app can; otherwise the dialog says it takes effect after
-  a restart.
+- Themes: one function over named palette roles per family. Without truecolor, map to indexes
+  16–255 only, never the low 16 (ADR 0010).
+- Fuzzy matching: `nucleo-matcher` only, only in `crates/noc/src/tui/fuzzy.rs` (ADR 0016).
+
+### Settings
+
+- Every option must be editable in Options → Configuration…; users never edit files by hand.
+- A new `config.toml` option ships with its dialog row (name, hint, Fluent text) and is saved
+  through `noc_config::save_config` (ADR 0009). Per-host options go to `hosts.toml` (ADR 0007).
+- Apply a change immediately where possible; otherwise the dialog says it needs a restart.
 
 ## SSH integration
 
-- Build ssh command lines in this order: program → forced options → `ssh.args` →
-  role options → `--` → destination.
-- Forced options live in `policy.rs`; change them only together with an ADR.
-- `ssh -G` runs `Match exec` predicates: call it lazily (on selection or connect), never for
-  every host at startup.
-- Minimum OpenSSH is 8.7: `SSH_ASKPASS_REQUIRE` (8.4) and the `StdinNull` and
-  `ForkAfterAuthentication` keywords (8.7), which Noon Commander forces off.
-- Every ssh child runs in its own session (`setsid`), without a controlling terminal, except the
-  command line's, which gets the terminal (ADR 0019); prompts go through the askpass bridge.
-  `ssh -O` commands use `-F /dev/null`.
+- Command-line order: program → forced options → `-F` and `ssh.args` → role options → `--` →
+  destination → remote command (if any).
+- Forced options live in `policy.rs`. Change them only with an ADR.
+- `ssh -G` runs `Match exec`: call it lazily (on selection or connect), never for every host
+  at startup.
+- Minimum OpenSSH 8.7: `SSH_ASKPASS_REQUIRE` (8.4); `StdinNull` and `ForkAfterAuthentication`
+  (8.7), which are forced off.
+- Every ssh child runs in its own session (`setsid`) without a controlling terminal; prompts go
+  through the askpass bridge. Exception: the command line's ssh keeps the terminal (ADR 0019).
+- `ssh -O` commands use `-F /dev/null`.
 
 ## Testing
 
-- Unit tests live next to the code in `#[cfg(test)] mod tests`.
-- UI: `insta` snapshots on ratatui's `TestBackend`; review with `just snap`
-  (`cargo insta review`). After renaming or removing a snapshot test, `just snap-stale` finds
-  the snapshot files left behind.
-- SFTP backends run against the local `sftp-server` (`/usr/libexec/sftp-server` on macOS) over
-  pipes, with no network.
-- ssh orchestration tests set `ssh.program` to `crates/noc-ssh/tests/support/fake-ssh`, a POSIX
-  shell script that emulates `-V`, `-G`, `-M`, `-O`, `-s … sftp` (served by the local
-  `sftp-server`), and remote commands, and logs its command lines. Keep it in sync with the flags we
-  pass.
-- zoxide tests use `crates/noc-tools/tests/support/fake-zoxide` the same way; tests never touch
-  the real zoxide database.
-- Shell scripts are POSIX `sh` and pass ShellCheck; `just sh` finds them by their shebang.
-- Tests must not touch the real `~/.ssh` or XDG directories; use temporary directories.
+- Unit tests next to the code in `#[cfg(test)] mod tests`.
+- UI: `insta` snapshots on ratatui's `TestBackend`. Review with `just snap`. After renaming or
+  removing a snapshot test, `just snap-stale` finds orphaned files.
+- SFTP backends: local `sftp-server` (`/usr/libexec/sftp-server` on macOS) over pipes, no
+  network.
+- ssh orchestration: set `ssh.program` to `crates/noc-ssh/tests/support/fake-ssh`. It emulates
+  `-V`, `-G`, `-M`, `-O`, `-s … sftp`, and remote commands, and logs its command lines. Keep it
+  in sync with the flags we pass.
+- zoxide: `crates/noc-tools/tests/support/fake-zoxide`. Never touch the real database.
+- Never touch the real `~/.ssh` or XDG directories; use temporary directories.
+- Shell scripts: POSIX `sh`, pass ShellCheck (`just sh`).
 
-## Platforms
+## Workflow
 
-macOS first: all development and the Rust jobs of CI run there. Linux is a target, so keep code
-portable (Unix APIs via `rustix`, nothing macOS-specific outside `cfg(target_os = "macos")`).
-Windows is out of scope.
-
-## Git
-
-- Never commit, push, tag, or create branches unless the maintainer explicitly asks.
-- Never rewrite history (amend, rebase, force-push) unless explicitly asked.
-- When asked to commit: Conventional Commits, one logical change per commit.
-
-## Docs
-
-- Record significant decisions as ADRs in `docs/adr/` (`NNNN-title.md`: Status, Context,
-  Decision, Consequences).
-- Keep `docs/architecture.md`, `docs/roadmap.md`, and `docs/keymap-compare.md` in sync with the
-  code.
-- Add user-visible changes to `CHANGELOG.md` under `Unreleased`.
-- Markdown follows `.markdownlint.yaml` (lines up to 100 characters); `just md` checks it.
+- Platforms: macOS first (development and CI Rust jobs). Linux is a target: Unix APIs via
+  `rustix`, macOS-only code under `cfg(target_os = "macos")`. Windows is out of scope.
+- Git: never commit, push, tag, branch, or rewrite history unless explicitly asked. Commits use
+  Conventional Commits, one logical change each.
+- ADRs: significant decisions go in `docs/adr/NNNN-title.md` (Status, Context, Decision,
+  Consequences).
+- Keep `docs/architecture.md`, `docs/roadmap.md`, `docs/keymap-compare.md` in sync with code.
+- User-visible changes go in `CHANGELOG.md` under `Unreleased`.
+- Markdown follows `.markdownlint.yaml` (100-character lines); `just md` checks it.

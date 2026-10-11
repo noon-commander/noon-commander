@@ -129,7 +129,9 @@ a new PNG gets its own `_logo-png` line in the `logo` recipe, never a size on th
   keys of mc, Far, yazi, and ranger for the same thing.
 - Presets: `crates/noc/src/tui/keymap/default.rs` and `vim.rs`, one per `ui.keymap` name. Each
   lists every context, in the same order as the other and with the same comments where they
-  agree. `just keymap-diff` (`noc keymap diff`) compares them action by action.
+  agree. `just keymap-diff` (`noc keymap diff`) compares them action by action. In the default
+  preset, an action's keys start with the ones closest to mc (mc's own, or Far's where mc has
+  none), and only then those it shares with the vim preset: the pull-down menu shows the first.
 - Keys in text (the help, menus, Fluent files, docs, comments) are written one way, the way
   `keymap::describe` writes them and as [docs/keymap-compare.md](docs/keymap-compare.md)
   explains: letters lowercase, after a modifier too (`Ctrl+l`); an uppercase letter is Shift

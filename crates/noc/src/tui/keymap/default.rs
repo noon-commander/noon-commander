@@ -73,7 +73,6 @@ pub(super) const PRESET: Preset = &[
             (Action::CommandHistory, &["alt-h"]),        // OK1
             (Action::Jump, &["alt-z", "ctrl-x z"]),      // OK1
             (Action::QuickCd, &["alt-c"]),               // OK1
-            (Action::Jobs, &["ctrl-x j"]),               // OK1
             // File operations
             (Action::View, &["f3"]),                // OK1
             (Action::Edit, &["f4"]),                // OK1
@@ -83,6 +82,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Mkdir, &["f7"]),               // OK1
             (Action::Delete, &["f8"]),              // OK1
             (Action::Checksum, &["f #"]),           // OK1
+            (Action::Jobs, &["ctrl-x j", "f j"]),   // OK1
             // Other
             (Action::Help, &["f1"]),       // OK1
             (Action::Quit, &["f10"]),      // OK1

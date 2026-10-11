@@ -1037,16 +1037,27 @@ mod tests {
     }
 
     #[test]
-    fn f_hash_computes_checksums() {
+    fn f_lists_the_jobs_and_computes_checksums() {
         for name in Keymap::NAMES {
             let keymap = Keymap::by_name(name).unwrap();
             let mut state = KeyState::default();
             assert_eq!(
-                feed(&keymap, &mut state, Context::Panel, &["f", "#"]),
-                actions(&[Action::Checksum]),
+                feed(&keymap, &mut state, Context::Panel, &["f", "j", "f", "#"]),
+                actions(&[Action::Jobs, Action::Checksum]),
                 "{name}"
             );
         }
+        // The default keymap keeps mc's Ctrl+x j, first.
+        let keymap = Keymap::mc();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&keymap, &mut state, Context::Panel, &["ctrl-x", "j"]),
+            actions(&[Action::Jobs])
+        );
+        assert_eq!(
+            keymap.key(Context::Panel, Action::Jobs).as_deref(),
+            Some("Ctrl+x j")
+        );
     }
 
     #[test]
@@ -1557,7 +1568,7 @@ mod tests {
                 &[
                     "shift-j", "+", "-", "v", "shift-r", "o", "h", "o", "n", "o", "e", "o", "m",
                     "o", "s", "/", "q", ":", "i", "e", "y", "y", "x", "r", "shift-a", "d",
-                    "shift-d", "w", "g", "d", "g", "n", "g", "c", "g", "t", "g", "shift-t",
+                    "shift-d", "f", "j", "g", "d", "g", "n", "g", "c", "g", "t", "g", "shift-t",
                     "ctrl-c"
                 ]
             ),
@@ -1594,6 +1605,11 @@ mod tests {
         assert_eq!(
             feed(&vim, &mut state, Context::Root, &["shift-d", "shift-d"]),
             actions(&[Action::Disconnect])
+        );
+        // w no longer lists the jobs: f j does.
+        assert_eq!(
+            feed(&vim, &mut state, Context::Panel, &["w"]),
+            [Resolved::Insert('w')]
         );
         // d alone deletes nothing: it waits for D, and d d is left for the trash.
         let now = Instant::now();

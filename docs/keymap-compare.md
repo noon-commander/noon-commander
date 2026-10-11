@@ -133,7 +133,6 @@ always do.
 | The command history | `command_history` | ✅ | Alt+h | q : | Alt+h | Alt+F8 | — | — |
 | Jump to a directory that zoxide ranks | `jump` | ✅ | Alt+z<br>Ctrl+x z | g z | — | — | Z | — |
 | Quick cd: type a path as for cd | `quick_cd` | ✅ | Alt+c | g d | Alt+c | — | g Space | c d |
-| The running jobs: bring one to the front, or abort it | `jobs` | ✅ | Ctrl+x j | w | Ctrl+x j | — | w | w |
 | View the file under the cursor | `view` | ✅ | F3 | i<br>F3 | F3 | F3<br>Numpad5<br>Ctrl+Shift+F3 (always internal) | — | i<br>F3 |
 | Edit the file under the cursor in $VISUAL or $EDITOR | `edit` | ✅ | F4 | e<br>F4 | F4 | F4<br>Ctrl+Shift+F4 (always internal) | — | F4<br>E |
 | Copy the marked entries, or the one under the cursor | `copy` | ✅ | F5 | Y<br>y y<br>F5 | F5 | F5 | y, then p | y y, then p p<br>F5, then p p |
@@ -142,6 +141,7 @@ always do.
 | Make a directory | `mkdir` | ✅ | F7 | A<br>F7 | F7 | F7 | a (a name that ends in /) | F7 |
 | Delete the marked entries, or the one under the cursor | `delete` | ✅ | F8 | d D<br>F8 | F8 | F8 | D | F8<br>d D |
 | Checksums of the marked files, or the one under the cursor | `checksum` | ✅ | f # | f # | — | — | — | — |
+| The running jobs: bring one to the front, or abort it | `jobs` | ✅ | Ctrl+x j<br>f j | f j | Ctrl+x j | — | w | w |
 | Help | `help` | ✅ | F1 | g ?<br>F1 | F1 | F1 | \~<br>F1 | ?<br>F1 |
 | Quit | `quit` | ✅ | F10 | Z Z<br>F10 | F10 | F10 | q | Q<br>F10 |
 | Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | Ctrl+l | — | — | Ctrl+l |

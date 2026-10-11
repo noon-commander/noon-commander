@@ -511,7 +511,7 @@ keys of Far's menus, its drive menu among them.
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
 | Edit the settings of the host under the cursor | `edit_host` | ⏳ | F4 | F4 | — | — | — | — |
-| Disconnect the host under the cursor, or stop connecting to it | `disconnect` | ⏳ | F8 | F8 | — | Delete | — | — |
+| Disconnect the host under the cursor, or stop connecting to it | `disconnect` | ⏳ | F8<br>Delete | F8<br>Delete | — | Delete | — | — |
 | Read the volumes and hosts again | `reload` | ⏳ | Ctrl+r | Ctrl+r | — | Ctrl+r | — | — |
 | Filter the items | — | ⏳ | Typing | Typing | — | Ctrl+Alt+f<br>RightAlt | — | — |
 | Open one of the first ten places by its number (empty filter) | — | ⏳ | 1…9, 0 | 1…9, 0 | — | — | — | — |

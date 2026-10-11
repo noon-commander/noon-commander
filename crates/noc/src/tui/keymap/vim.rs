@@ -186,12 +186,13 @@ pub(super) const PRESET: Preset = &[
         ],
     ),
     // The location menu, on top of the list's; characters filter it. F4 and F8 edit and
-    // disconnect the host under the cursor.
+    // disconnect the host under the cursor, and Delete disconnects it too, as in Far's menu of
+    // drives.
     (
         Context::LocationMenu,
         &[
             (Action::EditHost, &["f4"]),
-            (Action::Disconnect, &["f8"]),
+            (Action::Disconnect, &["f8", "delete"]),
             (Action::Reload, &["ctrl-r"]),
         ],
     ),

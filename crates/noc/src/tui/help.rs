@@ -518,7 +518,7 @@ mod tests {
             })
         };
         assert!(has("F10", "Quit"));
-        assert!(has("F8", "Disconnect the host under the cursor"));
+        assert!(has("F8, Delete", "Disconnect the host under the cursor"));
         assert!(has(
             "Ctrl+s, Alt+s",
             "Quick search; again: the next match, or with nothing typed, the last search"

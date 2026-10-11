@@ -212,8 +212,9 @@ volume or a host, grouped under headings:
   `ui.fuzzy_search` (the default) it matches them as [fzf](#fuzzy-search) does, and the cursor
   goes to the best row; otherwise a row's text must contain the filter, ignoring case, and the
   cursor goes to the first. The rows keep their order either way. Backspace takes a character
-  back. F4 edits the settings of the host under the cursor, F8 disconnects it or stops
-  connecting to it, Ctrl+r reads the volumes and hosts again, and Esc or F10 closes the menu.
+  back. F4 edits the settings of the host under the cursor, F8 or Delete (as in Far's menu of
+  drives) disconnects it or stops connecting to it, Ctrl+r reads the volumes and hosts again, and
+  Esc or F10 closes the menu.
 - `recent.toml` in the state directory keeps the places used last: the aliases of hosts and
   the mount points of volumes, most recent first, up to 50 of each. A host counts as used when
   a connection to it succeeds; a volume when a panel arrives in a directory on it in any way:

@@ -132,6 +132,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   do what Alt+o and Alt+i do, where the Option key of a macOS terminal sends no Alt.
 - In the default keymap, Backspace goes to the parent directory too, as Ctrl+PgUp does, and Ctrl+c
   stops loading, as Esc does.
+- In the location menu, Delete disconnects the host under the cursor, as F8 does and as in Far's
+  menu of drives.
 
 ### Changed
 

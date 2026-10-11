@@ -1188,7 +1188,9 @@ mod tests {
                 &keymap,
                 &mut state,
                 Context::LocationMenu,
-                &["1", "p", "+", "space", "down", "enter", "f8", "esc"]
+                &[
+                    "1", "p", "+", "space", "down", "enter", "f8", "delete", "esc"
+                ]
             ),
             [
                 Resolved::Insert('1'),
@@ -1197,6 +1199,7 @@ mod tests {
                 Resolved::Insert(' '),
                 Resolved::Action(Action::Down),
                 Resolved::Action(Action::Confirm),
+                Resolved::Action(Action::Disconnect),
                 Resolved::Action(Action::Disconnect),
                 Resolved::Action(Action::Cancel),
             ]
@@ -2169,7 +2172,7 @@ mod tests {
             keymap.help(Context::LocationMenu)[..3],
             [
                 (Action::EditHost, "F4".to_owned()),
-                (Action::Disconnect, "F8".to_owned()),
+                (Action::Disconnect, "F8, Delete".to_owned()),
                 (Action::Reload, "Ctrl+r".to_owned())
             ],
             "the menu's own keys first"
@@ -2245,7 +2248,7 @@ mod tests {
         let menu = keymap.hints(Context::LocationMenu, &[]);
         assert_eq!(
             hint_keys(&menu[..3]),
-            ["F4", "F8", "Ctrl+r"],
+            ["F4", "F8, Delete", "Ctrl+r"],
             "the menu's own keys first"
         );
         assert_eq!(menu[0].action, Some(Action::EditHost));

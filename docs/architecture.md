@@ -264,12 +264,12 @@ menu:
   the cursor skips them.
 - On the bar, Left and Right, or Shift+Tab and Tab, select the next menu, round the bar, as
   Alt+Left and Alt+Right go round the tabs; Enter, Down, or the menu's highlighted letter (`&`
-  in the Fluent messages) opens it, and Up and Home do nothing. In an open menu, Left and Right
-  open the next one, round the bar too; Up and Down move round it, from the last command to the
-  first and back, and the mouse wheel stops at its ends; Home and End go to its first and last
-  command; Home on the first command goes back to the bar; Enter or the command's highlighted
-  letter runs it. Esc, F9, or F10 goes back to the bar, and closes the bar from there. Running a
-  command closes it first.
+  in the Fluent messages) opens it, End opens it on its last command, and Up and Home do
+  nothing. In an open menu, Left and Right open the next one, round the bar too; Up and Down move
+  round it, from the last command to the first and back, and the mouse wheel stops at its ends;
+  Home and End go to its first and last command; Home on the first command goes back to the bar;
+  Enter or the command's highlighted letter runs it. Esc, F9, or F10 goes back to the bar, and
+  closes the bar from there. Running a command closes it first.
 - The menu keeps nothing when it closes, and a menu opens at its first command. The app keeps
   only the `Command` that ran last, so Shift+F9 Enter repeats it. A command on a panel stays
   with that panel after Ctrl+u, under the other title. A command that cannot run now passes the

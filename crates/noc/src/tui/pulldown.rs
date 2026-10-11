@@ -547,10 +547,11 @@ impl PullDown {
     }
 
     /// Takes a key. On the bar, Left and Right select the next menu, round the bar, and Enter,
-    /// Down, or a menu's letter opens it; Up and Home do nothing there. In an open menu, Left
-    /// and Right open the next menu; Up and Down move to the next command that runs now, round
-    /// the menu; Home goes to the first, and on the first goes back to the bar; Enter or a
-    /// command's letter runs it; Esc goes back to the bar, and closes the menu bar from there.
+    /// Down, or a menu's letter opens it, End on its last command; Up and Home do nothing there.
+    /// In an open menu, Left and Right open the next menu; Up and Down move to the next command
+    /// that runs now, round the menu; Home goes to the first, and on the first goes back to the
+    /// bar; Enter or a command's letter runs it; Esc goes back to the bar, and closes the menu
+    /// bar from there.
     pub(crate) fn handle(
         &mut self,
         input: Resolved,

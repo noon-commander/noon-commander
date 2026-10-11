@@ -1,11 +1,10 @@
 //! Key bindings: key sequences mapped to actions per context, with the built-in presets in
 //! `default.rs` and `vim.rs`.
 //!
-//! A binding is a sequence of one or more key combinations, such as `f10` or `esc 0`. While the
-//! keys typed so far are the start of a longer binding, the keymap waits up to
-//! [`SEQUENCE_TIMEOUT`] for the next key. As in mc, a pending `Esc` followed by a character
-//! stands for Alt and that character, for terminals whose Alt key sends nothing (by default,
-//! Option on macOS).
+//! A binding is a sequence of one or more key combinations, such as `f10` or `ctrl-x j`. While
+//! the keys typed so far are the start of a longer binding, the keymap waits up to
+//! [`SEQUENCE_TIMEOUT`] for the next key. `Esc` never waits: it acts at once. In the panels,
+//! Alt+1 … Alt+0 stand for F1 … F10, for terminals without F-keys.
 //!
 //! As which-key does, the keymap lists the keys that can follow a pending sequence, or every
 //! key of a context, with what they do ([`Keymap::hints`]). While the hints show, the sequence
@@ -26,7 +25,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 pub(crate) use action::{Action, Context};
 pub(crate) use diff::Diff;
 
-/// How long a sequence such as `Esc 1` waits for its next key.
+/// How long a sequence such as `Ctrl+x j` waits for its next key.
 pub(crate) const SEQUENCE_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// What keys resolved to.
@@ -166,8 +165,8 @@ impl Keymap {
                     })
                 })
                 .collect();
-            let bindings = if context.esc_waits() {
-                with_esc_digits(bindings)
+            let bindings = if context.alt_stands_for_esc() {
+                with_alt_digits(bindings)
             } else {
                 bindings
             };
@@ -178,7 +177,7 @@ impl Keymap {
 
     /// What the first context in `context`'s chain that knows `keys` knows about them. A prefix
     /// that this context does not bind itself does, once it times out, what a later context
-    /// binds it to: `Esc` still cancels where a context adds `Esc 8`.
+    /// binds it to.
     fn lookup(&self, context: Context, keys: &[KeyCombination]) -> Lookup {
         let mut known = context
             .chain()
@@ -240,9 +239,10 @@ impl Keymap {
             state.hinting = false;
             state.context = Some(context);
         }
-        // An Esc and the key right after it reach a terminal program in one read, which
-        // crossterm reports as Alt and the key; so do terminals whose Alt key sends Esc.
-        if context.esc_waits()
+        // An Esc and the key right after it can reach a terminal program in one read, which
+        // crossterm reports as Alt and the key, so an Alt and a character that nothing binds
+        // count as both.
+        if context.alt_stands_for_esc()
             && state.keys.is_empty()
             && let Some(plain) = without_alt(event)
             && self.lookup(context, &[KeyCombination::from(event)]) == Lookup::Unknown
@@ -262,7 +262,6 @@ impl Keymap {
             return vec![Resolved::Insert(c)];
         }
         let mut resolved = Vec::new();
-        let mut alt_from_esc = false;
         state.keys.push(KeyCombination::from(event));
         loop {
             match self.lookup(context, &state.keys) {
@@ -273,26 +272,17 @@ impl Keymap {
                 Lookup::Prefix(own) => {
                     state.since = Some(now);
                     // While the hints show, a sequence that does nothing alone waits.
-                    let waits = state.hinting && own.is_none() && state.keys.first() != Some(&ESC);
+                    let waits = state.hinting && own.is_none();
                     state.deadline = (!waits).then_some(now + SEQUENCE_TIMEOUT);
                 }
                 Lookup::Unknown if state.keys.len() == 1 => {
-                    if let Some(c) = text(event).filter(|_| context.accepts_text() && !alt_from_esc)
-                    {
+                    if let Some(c) = text(event).filter(|_| context.accepts_text()) {
                         resolved.push(Resolved::Insert(c));
                     }
                     state.clear();
                 }
                 Lookup::Unknown => {
                     let key = state.keys.pop().unwrap_or_else(|| unreachable!());
-                    if state.keys == [ESC] && is_character(key) {
-                        state.keys = vec![KeyCombination {
-                            modifiers: key.modifiers | KeyModifiers::ALT,
-                            ..key
-                        }];
-                        alt_from_esc = true;
-                        continue;
-                    }
                     // The new key cannot continue the pending sequence: settle that one as if
                     // it had timed out, then try the new key on its own.
                     resolved.extend(self.settle(state, context));
@@ -325,7 +315,7 @@ impl Keymap {
     /// The actions `context` binds itself, in the order of the preset, each with its keys as
     /// text such as `Ctrl+r, Alt+s`, for the help screen; then those of the contexts it falls
     /// back to whose keys the help lists with it, as far as they still do that here. The
-    /// `Esc 1` … `Esc 0` aliases are left out; the help explains them once.
+    /// Alt+1 … Alt+0 aliases are left out; the help explains them once.
     pub(crate) fn help(&self, context: Context) -> Vec<(Action, String)> {
         let mut rows: Vec<(Action, String)> = Vec::new();
         let listed = context
@@ -335,7 +325,7 @@ impl Keymap {
             .filter_map(|other| self.contexts.get(other))
             .flat_map(|bindings| &bindings.0);
         for (sequence, action) in listed {
-            if is_esc_digit(sequence) {
+            if is_alt_digit(sequence) {
                 continue;
             }
             let does = match self.lookup(context, sequence) {
@@ -358,7 +348,7 @@ impl Keymap {
     }
 
     /// The first key sequence along `context`'s chain that does `action` there, as text such as
-    /// `Ctrl+F3`, for the pull-down menu. `Esc 1` … `Esc 0` count only where nothing else does.
+    /// `Ctrl+x j`, for the pull-down menu. Alt+1 … Alt+0 count only where nothing else does.
     pub(crate) fn key(&self, context: Context, action: Action) -> Option<String> {
         let does = |sequence: &[KeyCombination]| match self.lookup(context, sequence) {
             Lookup::Exact(bound) | Lookup::Prefix(Some(bound)) => bound == action,
@@ -372,7 +362,7 @@ impl Keymap {
             .filter(|(sequence, bound)| *bound == action && does(sequence))
             .map(|(sequence, _)| sequence);
         let (aliases, keys): (Vec<&Sequence>, Vec<&Sequence>) =
-            sequences.partition(|sequence| is_esc_digit(sequence));
+            sequences.partition(|sequence| is_alt_digit(sequence));
         let sequence = keys.first().or(aliases.first())?;
         Some(describe(sequence))
     }
@@ -390,14 +380,13 @@ impl Keymap {
     }
 
     /// When the hints of the pending sequence are due, `delay` after its last key; `None` if
-    /// they show already, or for a sequence that has none: one that does something alone, or
-    /// that starts with `Esc`, which stands for Alt and the F-keys and acts alone after its
-    /// timeout. Until then the sequence does not time out.
+    /// they show already, or for a sequence that does something alone, which has none. Until
+    /// then the sequence does not time out.
     pub(crate) fn hints_due(&self, state: &KeyState, delay: Duration) -> Option<Instant> {
         let context = state.context?;
         let since = state.since?;
         let hinted = !state.hinting
-            && state.keys.first().is_some_and(|key| *key != ESC)
+            && !state.keys.is_empty()
             && self.lookup(context, &state.keys) == Lookup::Prefix(None);
         hinted.then_some(since + delay)
     }
@@ -432,14 +421,16 @@ impl Keymap {
 
     /// The keys that can follow `prefix` in `context`'s chain, in the order of the preset, the
     /// context's own first. Keys that do the same share a row; a key that starts longer
-    /// sequences has one of its own. Sequences that start with `Esc` are left out, and where
-    /// every character is text, so are characters that only a fallback context binds.
+    /// sequences has one of its own. `Esc`, which closes the hints, and the Alt+1 … Alt+0
+    /// aliases are left out, and where every character is text, so are characters that only a
+    /// fallback context binds.
     pub(crate) fn hints(&self, context: Context, prefix: &[KeyCombination]) -> Vec<Hint> {
         let mut next: Vec<KeyCombination> = Vec::new();
         for (sequence, _) in self.chain_bindings(context) {
             if sequence.len() > prefix.len()
                 && sequence.starts_with(prefix)
                 && sequence.first() != Some(&ESC)
+                && !is_alt_digit(sequence)
                 && let Some(key) = sequence.get(prefix.len())
                 && !next.contains(key)
             {
@@ -572,22 +563,22 @@ fn describe_key(key: KeyCombination) -> String {
 const ESC: KeyCombination = KeyCombination::one_key(KeyCode::Esc, KeyModifiers::NONE);
 const BACKSPACE: KeyCombination = KeyCombination::one_key(KeyCode::Backspace, KeyModifiers::NONE);
 
-/// Whether `sequence` is `Esc` and a digit, which stands for an F-key.
-fn is_esc_digit(sequence: &[KeyCombination]) -> bool {
-    matches!(sequence, [first, digit]
-        if *first == ESC && matches!(digit.codes.first(), KeyCode::Char('0'..='9')))
+/// Whether `sequence` is Alt and a digit, which stands for an F-key.
+fn is_alt_digit(sequence: &[KeyCombination]) -> bool {
+    matches!(sequence, [key]
+        if key.modifiers == KeyModifiers::ALT && matches!(key.codes.first(), KeyCode::Char('0'..='9')))
 }
 
-/// Adds `Esc 1` … `Esc 0` next to every binding of F1 … F10, unless that sequence is bound.
-fn with_esc_digits(mut bindings: Vec<(Sequence, Action)>) -> Vec<(Sequence, Action)> {
+/// Adds Alt+1 … Alt+0 next to every binding of F1 … F10, unless that key is bound.
+fn with_alt_digits(mut bindings: Vec<(Sequence, Action)>) -> Vec<(Sequence, Action)> {
     let aliases: Vec<(Sequence, Action)> = bindings
         .iter()
         .filter_map(|(sequence, action)| match sequence.as_slice() {
             [key] if key.modifiers.is_empty() => match *key.codes.first() {
                 KeyCode::F(number @ 1..=10) => {
                     let digit = char::from_digit(u32::from(number % 10), 10)?;
-                    let digit = KeyCombination::one_key(KeyCode::Char(digit), KeyModifiers::NONE);
-                    Some((vec![ESC, digit], *action))
+                    let digit = KeyCombination::one_key(KeyCode::Char(digit), KeyModifiers::ALT);
+                    Some((vec![digit], *action))
                 }
                 _ => None,
             },
@@ -611,7 +602,7 @@ fn without_alt(event: KeyEvent) -> Option<KeyEvent> {
         .then(|| KeyEvent::new(event.code, event.modifiers - KeyModifiers::ALT))
 }
 
-/// Whether `key` is a character without Ctrl or Alt, which a pending `Esc` turns into Alt.
+/// Whether `key` is a character without Ctrl or Alt.
 fn is_character(key: KeyCombination) -> bool {
     key.is_ansi_compatible()
         && matches!(key.codes.first(), KeyCode::Char(_))
@@ -627,7 +618,7 @@ fn preset(name: &str) -> Option<Preset> {
     }
 }
 
-/// Parses a space-separated key sequence such as `esc 0`, with `crokey` key names.
+/// Parses a space-separated key sequence such as `ctrl-x j`, with `crokey` key names.
 fn parse_sequence(text: &str) -> Option<Sequence> {
     let sequence: Sequence = text
         .split_whitespace()
@@ -750,19 +741,44 @@ mod tests {
     }
 
     #[test]
-    fn esc_digit_stands_for_the_f_key() {
+    fn esc_acts_at_once_and_a_digit_after_it_is_a_digit() {
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            let mut state = KeyState::default();
+            for context in [Context::Panel, Context::Root] {
+                assert_eq!(
+                    feed(&keymap, &mut state, context, &["esc"]),
+                    actions(&[Action::Cancel]),
+                    "{name}"
+                );
+                assert_eq!(state.deadline(), None, "{name}: Esc does not wait");
+            }
+            assert_eq!(
+                feed(&keymap, &mut state, Context::Panel, &["esc", "0"]),
+                [Resolved::Action(Action::Cancel), Resolved::Insert('0')],
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_key_right_after_esc_does_what_it_does_alone() {
         let keymap = Keymap::mc();
         let mut state = KeyState::default();
-        assert_eq!(feed(&keymap, &mut state, Context::Panel, &["esc"]), []);
-        assert!(state.deadline().is_some(), "waits for the next key");
         assert_eq!(
-            feed(&keymap, &mut state, Context::Panel, &["0"]),
-            actions(&[Action::Quit])
+            feed(&keymap, &mut state, Context::Panel, &["esc", "o", "n"]),
+            actions(&[Action::Cancel, Action::SortByName]),
+            "not Alt+o"
         );
-        assert_eq!(state.deadline(), None);
+        let vim = Keymap::by_name("vim").unwrap();
         assert_eq!(
-            feed(&keymap, &mut state, Context::Panel, &["esc", "1"]),
-            actions(&[Action::Help])
+            feed(
+                &vim,
+                &mut state,
+                Context::Panel,
+                &["esc", "j", "esc", "g", "g"]
+            ),
+            actions(&[Action::Cancel, Action::Down, Action::Cancel, Action::Home])
         );
     }
 
@@ -772,93 +788,94 @@ mod tests {
         let mut state = KeyState::default();
         let start = Instant::now();
         assert_eq!(
-            keymap.feed(&mut state, Context::Panel, key("esc"), start),
+            keymap.feed(&mut state, Context::Panel, key("ctrl-x"), start),
             []
         );
         assert_eq!(state.deadline(), Some(start + SEQUENCE_TIMEOUT));
         assert_eq!(keymap.expire(&mut state, start), [], "not yet");
-        // A lone Esc cancels once nothing follows, as in mc.
-        assert_eq!(
-            keymap.expire(&mut state, start + SEQUENCE_TIMEOUT),
-            actions(&[Action::Cancel])
-        );
+        // A sequence that does nothing alone does nothing when nothing follows.
+        assert_eq!(keymap.expire(&mut state, start + SEQUENCE_TIMEOUT), []);
         assert_eq!(state.deadline(), None);
         assert_eq!(
-            keymap.feed(&mut state, Context::Panel, key("0"), start),
-            [Resolved::Insert('0')],
-            "a later digit is just a digit"
+            keymap.feed(&mut state, Context::Panel, key("j"), start),
+            [Resolved::Insert('j')],
+            "a later letter is just a letter"
         );
     }
 
     #[test]
-    fn esc_and_a_character_stand_for_alt() {
+    fn an_unbound_alt_and_a_character_stand_for_esc_and_the_character() {
+        // What an Esc typed quickly before a key, or with an Alt that sends Esc, arrives as.
         let keymap = Keymap::mc();
         let mut state = KeyState::default();
-        assert_eq!(
-            feed(&keymap, &mut state, Context::Panel, &["esc", "."]),
-            actions(&[Action::ToggleHidden])
-        );
         assert_eq!(
             feed(&keymap, &mut state, Context::Panel, &["alt-."]),
             actions(&[Action::ToggleHidden])
         );
         assert_eq!(
-            feed(&keymap, &mut state, Context::Panel, &["esc", "z"]),
-            actions(&[Action::Jump])
+            feed(&keymap, &mut state, Context::Panel, &["alt-q"]),
+            [Resolved::Action(Action::Cancel), Resolved::Insert('q')]
         );
-        // An unbound Alt combination types nothing.
-        assert_eq!(feed(&keymap, &mut state, Context::Panel, &["esc", "q"]), []);
-        assert_eq!(feed(&keymap, &mut state, Context::Panel, &["alt-q"]), []);
+        let vim = Keymap::by_name("vim").unwrap();
+        assert_eq!(
+            feed(&vim, &mut state, Context::Panel, &["alt-j", "alt-/"]),
+            actions(&[Action::Cancel, Action::Down, Action::KeyHints])
+        );
         assert_eq!(state.deadline(), None);
+        // Dialogs keep Alt as it is.
+        assert_eq!(feed(&keymap, &mut state, Context::Dialog, &["alt-q"]), []);
     }
 
     #[test]
-    fn alt_and_a_digit_stand_for_esc_and_the_digit() {
-        // What `Esc 0` typed quickly, or Alt+0 where Alt sends Esc, arrives as.
-        let keymap = Keymap::mc();
-        let mut state = KeyState::default();
-        assert_eq!(
-            feed(&keymap, &mut state, Context::Panel, &["alt-0", "alt-1"]),
-            actions(&[Action::Quit, Action::Help])
-        );
-        assert_eq!(
-            feed(&keymap, &mut state, Context::Root, &["alt-8"]),
-            actions(&[Action::Disconnect])
-        );
-        assert_eq!(state.deadline(), None);
-        // Bound Alt keys keep their binding, and dialogs keep Alt as it is.
-        assert_eq!(
-            feed(&keymap, &mut state, Context::Panel, &["alt-."]),
-            actions(&[Action::ToggleHidden])
-        );
-        assert_eq!(feed(&keymap, &mut state, Context::Dialog, &["alt-0"]), []);
+    fn alt_and_a_digit_stand_for_the_f_key() {
+        // For terminals without F-keys, as mc's Esc 1 … Esc 0.
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&keymap, &mut state, Context::Panel, &["alt-0", "alt-1"]),
+                actions(&[Action::Quit, Action::Help]),
+                "{name}"
+            );
+            assert_eq!(
+                feed(&keymap, &mut state, Context::Root, &["alt-8"]),
+                actions(&[Action::Disconnect]),
+                "{name}"
+            );
+            assert_eq!(state.deadline(), None);
+            assert_eq!(
+                feed(&keymap, &mut state, Context::Dialog, &["alt-0"]),
+                [],
+                "{name}"
+            );
+        }
     }
 
     #[test]
     fn a_broken_sequence_lets_the_new_key_through() {
         let keymap = Keymap::mc();
         let mut state = KeyState::default();
-        // The pending Esc settles as if it had timed out, then the new key runs.
+        // The pending Ctrl+x settles as if it had timed out, doing nothing, then the new key runs.
         assert_eq!(
-            feed(&keymap, &mut state, Context::Panel, &["esc", "tab"]),
-            actions(&[Action::Cancel, Action::SwitchPanel])
+            feed(&keymap, &mut state, Context::Panel, &["ctrl-x", "tab"]),
+            actions(&[Action::SwitchPanel])
         );
-        // The new key may start a sequence of its own.
+        // The new key may start a sequence of its own…
         assert_eq!(
-            feed(&keymap, &mut state, Context::Panel, &["esc", "f10", "esc"]),
-            actions(&[Action::Cancel, Action::Quit])
+            feed(&keymap, &mut state, Context::Panel, &["ctrl-x", "t", "n"]),
+            actions(&[Action::NewTab])
         );
-        assert!(state.deadline().is_some());
+        // …the same one too.
         assert_eq!(
-            feed(&keymap, &mut state, Context::Panel, &["0"]),
-            actions(&[Action::Quit])
+            feed(
+                &keymap,
+                &mut state,
+                Context::Panel,
+                &["ctrl-x", "ctrl-x", "j"]
+            ),
+            actions(&[Action::Jobs])
         );
-        // The second Esc settles the first one at once, then waits for a key of its own.
-        assert_eq!(
-            feed(&keymap, &mut state, Context::Panel, &["esc", "esc"]),
-            actions(&[Action::Cancel])
-        );
-        assert!(state.deadline().is_some());
+        assert_eq!(state.deadline(), None);
     }
 
     #[test]
@@ -881,16 +898,15 @@ mod tests {
             ])
         );
         assert_eq!(
-            feed(&keymap, &mut state, Context::Panel, &["esc", "*"]),
-            actions(&[Action::InvertMarks]),
-            "Esc * is Alt+*"
+            feed(&keymap, &mut state, Context::Panel, &["alt-*"]),
+            actions(&[Action::InvertMarks])
         );
         assert_eq!(
             feed(
                 &keymap,
                 &mut state,
                 Context::Panel,
-                &["+", "-", "\\", "esc", "-"]
+                &["+", "-", "\\", "alt--"]
             ),
             actions(&[
                 Action::Select,
@@ -973,7 +989,7 @@ mod tests {
                 &keymap,
                 &mut state,
                 Context::Root,
-                &["f8", "esc", "8", "esc", "0", "enter"]
+                &["f8", "alt-8", "alt-0", "enter"]
             ),
             actions(&[
                 Action::Disconnect,
@@ -987,14 +1003,8 @@ mod tests {
             actions(&[Action::Delete]),
             "only the root disconnects; panels delete"
         );
-        // `Esc 8` makes `Esc` a prefix in the root too, but alone it still cancels.
-        let start = Instant::now();
         assert_eq!(
-            keymap.feed(&mut state, Context::Root, key("esc"), start),
-            []
-        );
-        assert_eq!(
-            keymap.expire(&mut state, start + SEQUENCE_TIMEOUT),
+            feed(&keymap, &mut state, Context::Root, &["esc"]),
             actions(&[Action::Cancel])
         );
         let mut root = [None; 10];
@@ -1311,12 +1321,12 @@ mod tests {
     }
 
     #[test]
-    fn quick_cd_opens_with_alt_c_or_esc_c() {
+    fn quick_cd_opens_with_alt_c() {
         let keymap = Keymap::mc();
         let mut state = KeyState::default();
         assert_eq!(
-            feed(&keymap, &mut state, Context::Panel, &["alt-c", "esc", "c"]),
-            actions(&[Action::QuickCd, Action::QuickCd])
+            feed(&keymap, &mut state, Context::Panel, &["alt-c"]),
+            actions(&[Action::QuickCd])
         );
         assert_eq!(
             feed(&keymap, &mut state, Context::Root, &["alt-c"]),
@@ -1329,7 +1339,7 @@ mod tests {
         let keymap = Keymap::mc();
         let mut state = KeyState::default();
         assert_eq!(
-            feed(&keymap, &mut state, Context::Panel, &["f9", "esc", "9"]),
+            feed(&keymap, &mut state, Context::Panel, &["f9", "alt-9"]),
             actions(&[Action::PullDown, Action::PullDown])
         );
         assert_eq!(
@@ -1392,10 +1402,10 @@ mod tests {
     fn a_new_context_forgets_a_pending_sequence() {
         let keymap = Keymap::mc();
         let mut state = KeyState::default();
-        assert_eq!(feed(&keymap, &mut state, Context::Panel, &["esc"]), []);
+        assert_eq!(feed(&keymap, &mut state, Context::Panel, &["ctrl-x"]), []);
         assert_eq!(
-            feed(&keymap, &mut state, Context::DialogInput, &["0"]),
-            [Resolved::Insert('0')]
+            feed(&keymap, &mut state, Context::DialogInput, &["j"]),
+            [Resolved::Insert('j')]
         );
     }
 
@@ -2033,10 +2043,10 @@ mod tests {
     }
 
     #[test]
-    fn every_f_key_has_an_esc_digit_alias_where_esc_waits() {
+    fn every_f_key_has_an_alt_digit_alias_where_alt_stands_for_esc() {
         let keymap = Keymap::mc();
         for (context, bindings) in &keymap.contexts {
-            if !context.esc_waits() {
+            if !context.alt_stands_for_esc() {
                 continue;
             }
             for (sequence, action) in &bindings.0 {
@@ -2044,7 +2054,7 @@ mod tests {
                     && key.modifiers.is_empty()
                     && let KeyCode::F(number @ 1..=10) = *key.codes.first()
                 {
-                    let alias = parse_sequence(&format!("esc {}", number % 10)).unwrap();
+                    let alias = parse_sequence(&format!("alt-{}", number % 10)).unwrap();
                     assert!(
                         bindings.0.contains(&(alias, *action)),
                         "F{number} in {context:?}"
@@ -2055,7 +2065,7 @@ mod tests {
     }
 
     #[test]
-    fn help_lists_keys_by_action_without_esc_digit_aliases() {
+    fn help_lists_keys_by_action_without_alt_digit_aliases() {
         let keymap = Keymap::mc();
         let panel = keymap.help(Context::Panel);
         let keys = |action| {
@@ -2344,10 +2354,15 @@ mod tests {
                 [],
                 "{name}"
             );
-            // Where Esc waits, Esc and / stand for Alt+/ too, though vim's panels search with /.
+            // Esc does not wait for /, so Esc / in vim's panels cancels, then searches.
+            let slash = if *name == "vim" {
+                Resolved::Action(Action::QuickSearch)
+            } else {
+                Resolved::Insert('/')
+            };
             assert_eq!(
                 feed(&keymap, &mut state, Context::Panel, &["esc", "/"]),
-                actions(&[Action::KeyHints]),
+                [Resolved::Action(Action::Cancel), slash],
                 "{name}"
             );
         }

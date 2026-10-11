@@ -159,7 +159,7 @@ row, the hosts from the ssh config ([ADR 0006](adr/0006-virtual-root-with-volume
   red, when the last attempt failed or the connection was lost. In the `terminal` theme, which
   has no colors, connected hosts are bold and the others dim. Without icons, the markers are
   `○`, `●`, the spinner, and `✗`. Every row has one cell in front of its name, so names line
-  up across volumes, hosts, and `..`. F8 (`Esc 8`) on a host closes the connection to it, or
+  up across volumes, hosts, and `..`. F8 (Alt+8) on a host closes the connection to it, or
   stops connecting to it.
 - Locations are `Root`, `Sftp` (the list of hosts), `Local(PathBuf)`, or `Remote { host, path }`.
   Remote paths are bytes, because SFTP v3 does not guarantee UTF-8, and are displayed lossily.
@@ -203,7 +203,7 @@ too, for terminals whose Alt+F1 never arrives, such as macOS Terminal without Op
 
 ### Pull-down menu
 
-F9 (`Esc 9`) opens mc's menu bar, as Far does: the bar alone with the menu of the active panel
+F9 (Alt+9) opens mc's menu bar, as Far does: the bar alone with the menu of the active panel
 selected. Shift+F9 (F19) opens it on the command that ran last, as Far's Shift+F10. An open
 menu:
 
@@ -255,7 +255,7 @@ menu:
 
 ### Quick cd
 
-Alt+c (`Esc c`), as mc's Quick cd, asks for a path and opens it in the active panel, as `cd`
+Alt+c, as mc's Quick cd, asks for a path and opens it in the active panel, as `cd`
 in a shell reads it: relative to the panel's directory, `/…` absolute, `~` and `~/…` the home
 directory, `..` and `.` resolved by name, `-` the directory the tab showed before, and
 `host:path` on a host, scp-style, which connects to it if needed. On a host, paths stay on it
@@ -967,14 +967,14 @@ location = "root"
   for mc's commands (`f j` lists the jobs, and `f c` is left for chmod); the checksums, which mc
   has not, take `f #`. `noc keymap diff` (`just keymap-diff`) compares two presets action by action
   (`tui/keymap/diff.rs`), with the keys written as the help writes them.
-  As in mc, `Esc` in a panel waits for the next key: `Esc 1` … `Esc 0` stand for F1 … F10, `Esc`
-  followed by a character stands for Alt and that character, for terminals whose Alt key sends
-  nothing, and `Esc` alone cancels once the timeout passes (`Esc Esc` at once). An `Esc` and a quick
-  next key arrive as Alt and that key, so there an unbound Alt and a character count as `Esc` and
-  the character. In dialogs, quick search, and the menus `Esc` acts at once. Keys are written with
-  `crokey` names. User overrides in `keymap.toml` are planned for M4. The F-key bar is generated
-  from the active keymap, and so is the help screen (F1): the keys of each context, with what they
-  do, for what the app can do already; a prompt from ssh shows over it.
+  `Esc` acts at once everywhere ([ADR 0020](adr/0020-esc-acts-at-once.md)). Unlike in mc, it
+  does not wait in a panel for a key that would make it Alt or an F-key: in the panels and the
+  root, Alt+1 … Alt+0 stand for F1 … F10 instead, for terminals without F-keys. An `Esc` and a
+  quick next key arrive as Alt and that key, so there an unbound Alt and a character count as
+  `Esc` and the character. Keys are written with `crokey` names. User overrides in `keymap.toml`
+  are planned for M4. The F-key bar is generated from the active keymap, and so is the help
+  screen (F1): the keys of each context, with what they do, for what the app can do already; a
+  prompt from ssh shows over it.
 - **Key hints.** As which-key does, the keymap lists the keys that can follow a pending sequence,
   or every key of a context, with what the help says they do (`Keymap::hints`, drawn by
   `tui/which_key.rs` in columns across the bottom of the panels). The event loop owns the

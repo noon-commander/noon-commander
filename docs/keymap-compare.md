@@ -46,7 +46,7 @@ Keys are written the same way in every column, whatever notation the source uses
 - Shift is written out only before keys that are not letters (`Shift+F6`, `Shift+Enter`,
   `Ctrl+Shift+[`); symbols are written as typed (`+`, `*`, `?`).
 - Modifiers come in the order `Ctrl+Alt+Shift+`; the keys of a sequence are apart (`Ctrl+x l`,
-  `Esc 1`, `Z Z`).
+  `Esc Esc`, `Z Z`).
 - Named keys: Enter, Esc, Tab, Space, Backspace, Delete, Insert, Home, End, PgUp, PgDn, Up,
   Down, Left, Right, F1…F24, Numpad+, Numpad-, Numpad\*, Numpad5; A1 and C1 are mc's names for
   the keys at the upper and the lower left of the numpad. The mouse: Click, Double click, Right
@@ -151,8 +151,8 @@ and Ctrl+w.
 | Help | `help` | ✅ | F1 | g ?<br>F1 | F1 | F1 | \~<br>F1 | ?<br>F1 |
 | Quit | `quit` | ✅ | F10 | Z Z<br>F10 | F10 | F10 | q | Q<br>F10 |
 | Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | Ctrl+l | — | — | Ctrl+l |
-| F1…F10 on terminals without function keys | — | ✅ | Esc, then 1…9, 0 | Esc, then 1…9, 0 | Esc, then 1…9, 0 | — | — | — |
-| Alt+key on terminals without Alt | — | ⏳ | Esc, then the key | Esc, then the key | Esc, then the key | — | — | — |
+| F1…F10 on terminals without function keys | — | ✅ | Alt+1…9, 0 | Alt+1…9, 0 | Esc, then 1…9, 0 | — | — | — |
+| Alt+key on terminals without Alt | — | 🚫 | — | — | Esc, then the key | — | — | — |
 | Enter the directory or archive under the cursor | — | ⏳ | — | — | Ctrl+PgDn | Ctrl+PgDn<br>Ctrl+Shift+PgDn (always as archive) | — | — |
 | Execute in separate window | — | ⏳ | — | — | — | Shift+Enter | — | — |
 | Run as administrator | — | ⏳ | — | — | — | Ctrl+Alt+Enter | — | — |

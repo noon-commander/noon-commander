@@ -17,13 +17,13 @@ Enter
 Sleep 2s
 Show
 
-# The right panel goes to prod-web through quick cd. Alt-C is typed as Esc, then c: the
-# browser behind vhs turns Alt+c into a letter of its own.
+# The right panel goes to prod-web through its location menu, Ctrl+x 2: the browser behind
+# vhs sends neither Alt nor F-keys, so Alt+c and Alt+F2 do not reach noc.
 Tab
-Escape
-Type "c"
+Ctrl+X
+Type "2"
 Sleep 300ms
-Type "prod-web:"
+Type "prod-web"
 Enter
 Sleep 2s
 Down
@@ -35,8 +35,11 @@ Down
 Sleep 500ms
 Screenshot assets/screenshots/panels.png
 
-# Quit with F10, as Esc, then 0, so that noc closes its connection to prod-web.
+# Quit, so that noc closes its connection to prod-web. There is no F10 to quit with, but noc
+# quits on SIGTERM too; the command runs in the left panel, whose shell noc started.
 Hide
-Escape
-Type "0"
+Type "!kill -TERM $PPID"
+Enter
+Sleep 1s
+Enter
 Sleep 1s

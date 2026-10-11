@@ -124,10 +124,11 @@ impl Context {
         matches!(self, Self::List)
     }
 
-    /// Whether `Esc` waits for another key, as in mc: `Esc 1` … `Esc 0` stand for F1 … F10,
-    /// `Esc` and a character for Alt and that character, and `Esc` alone acts once the sequence
-    /// times out. Elsewhere `Esc` acts at once.
-    pub(crate) fn esc_waits(self) -> bool {
+    /// Whether Alt and a key stand for Esc and the key, as in mc: Alt+1 … Alt+0 for F1 … F10,
+    /// which mc reads as `Esc 1` … `Esc 0`, and an Alt and a character that nothing binds for
+    /// `Esc` and the character, which is how an Esc typed quickly before a key arrives. `Esc`
+    /// itself acts at once, here as everywhere.
+    pub(crate) fn alt_stands_for_esc(self) -> bool {
         matches!(self, Self::Panel | Self::Root)
     }
 

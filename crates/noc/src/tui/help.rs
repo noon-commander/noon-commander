@@ -88,7 +88,7 @@ impl Help {
         entries.push(Entry::Note(fl!("help-note-command")));
         entries.push(Entry::Note(fl!("help-note-pulldown")));
         entries.push(Entry::Note(fl!("help-note-key-hints")));
-        entries.push(Entry::Note(fl!("help-note-esc")));
+        entries.push(Entry::Note(fl!("help-note-f-keys")));
         Self {
             entries,
             offset: 0,
@@ -569,7 +569,7 @@ mod tests {
         );
         assert_eq!(
             help.entries.last(),
-            Some(&Entry::Note(fl!("help-note-esc")))
+            Some(&Entry::Note(fl!("help-note-f-keys")))
         );
         let fuzzy = Entry::Note(fl!("help-note-fuzzy"));
         assert!(help.entries.contains(&fuzzy));
@@ -602,7 +602,7 @@ mod tests {
         assert_ne!(draw(&mut help, 60, 12), top);
         help.handle(action(Action::End));
         let bottom = draw(&mut help, 60, 12);
-        assert!(bottom.contains("A lone Esc acts"), "{bottom}");
+        assert!(bottom.contains("Alt+1 … Alt+0 stand for F1"), "{bottom}");
         help.handle(action(Action::Down));
         assert_eq!(draw(&mut help, 60, 12), bottom, "no further than the end");
         help.handle(action(Action::Home));

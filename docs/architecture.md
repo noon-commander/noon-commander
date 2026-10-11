@@ -166,8 +166,10 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
 
 Alt+F1 and Alt+F2, as Far Manager's menus to change drives, open a menu over the left or the right
 panel (Ctrl+x 1 and Ctrl+x 2 too, for terminals whose Alt+F1 never arrives, such as macOS Terminal
-without Option as Meta, and F9 → Left or Right → Change location). It is the one place to choose a
-volume or a host, grouped under headings:
+without Option as Meta, and F9 → Left or Right → Change location). Left and right are where the
+panels are drawn, as in Far: after Ctrl+u, Alt+F1 opens the menu of the right panel, drawn on the
+left, and its title says Left. It is the one place to choose a volume or a host, grouped under
+headings:
 
 ```text
  ╔════════════════════ Left ════════════════════╗

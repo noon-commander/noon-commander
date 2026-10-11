@@ -121,8 +121,8 @@ Shift+F7 (or F17), mc's and Far's key to search again, repeats it forward too.
 | Swap the panels | `swap_panels` | ✅ | Ctrl+u | Ctrl+w x | Ctrl+u | Ctrl+u | — | — |
 | Open the directory under the cursor in the other panel | `other_panel_open` | ⏳ | Alt+o<br>Ctrl+w f | Ctrl+w f | Alt+o | — | — | — |
 | Show this directory in the other panel | `other_panel_sync` | ⏳ | Alt+i<br>Ctrl+w v | Ctrl+w v | Alt+i | — | — | — |
-| Change the left panel's location | `location_menu_left` | ⏳ | Alt+F1<br>Ctrl+x 1 | Ctrl+w 1 | — | Alt+F1 | — | — |
-| Change the right panel's location | `location_menu_right` | ⏳ | Alt+F2<br>Ctrl+x 2 | Ctrl+w 2 | — | Alt+F2 | — | — |
+| Change the location of the panel drawn on the left, after Ctrl+u too | `location_menu_left` | ⏳ | Alt+F1<br>Ctrl+x 1 | Ctrl+w 1 | — | Alt+F1 | — | — |
+| Change the location of the panel drawn on the right | `location_menu_right` | ⏳ | Alt+F2<br>Ctrl+x 2 | Ctrl+w 2 | — | Alt+F2 | — | — |
 | A new tab in this panel, on the same directory | `new_tab` | ✅ | t n | t n<br>g n | — | — | t t | Ctrl+n<br>g n |
 | Close this tab; the last one stays | `close_tab` | ✅ | t c | t c<br>g c | — | — | — | Ctrl+w<br>g c |
 | The next tab in this panel | `next_tab` | ✅ | ] t<br>Alt+Right | ] t<br>g t<br>Alt+Right | — | — | ] | Tab<br>Alt+Right<br>g t |

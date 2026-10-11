@@ -1669,8 +1669,9 @@ impl App {
                     self.ask_edit_host(host);
                 }
             }
-            Action::LocationMenuLeft => return self.open_menu(Side::Left),
-            Action::LocationMenuRight => return self.open_menu(Side::Right),
+            // As in Far, of the panel drawn on that side, whichever it is after Ctrl+u.
+            Action::LocationMenuLeft => return self.open_menu(self.drawn_on(true)),
+            Action::LocationMenuRight => return self.open_menu(self.drawn_on(false)),
             Action::Jump => return self.open_jump(),
             Action::QuickCd => self.ask_cd(),
             Action::SaveWorkspace => self.ask_save_workspace(true),
@@ -1823,7 +1824,9 @@ impl App {
         self.menu_listings += 1;
         let generation = self.menu_listings;
         let current = self.panel(side).location().clone();
+        let drawn = if self.swapped { side.other() } else { side };
         let mut menu = LocationMenu::new(side, current, self.home.clone(), generation)
+            .drawn(drawn)
             .fuzzy(self.config.ui.fuzzy_search)
             .recent(&self.recent);
         menu.set_connected(self.hosts.keys().cloned().collect());
@@ -7578,6 +7581,25 @@ mod tests {
             "a host connects: {effect:?}"
         );
         assert_eq!(app.active, Side::Left);
+    }
+
+    #[test]
+    fn alt_f1_changes_the_panel_drawn_on_the_left_after_ctrl_u() {
+        let mut app = loaded();
+        app.handle(action(Action::SwapPanels));
+        open_menu(&mut app, Action::LocationMenuLeft);
+        let text = screen_of(&mut app, 14);
+        let title = line_with(&text, "Left");
+        let column = title.chars().take_while(|c| *c != 'L').count();
+        assert!(column < 80, "titled Left, over the left half: {text}");
+        let Effect::List {
+            panel: PanelId { side, .. },
+            ..
+        } = one(app.handle(Resolved::Insert('3')))
+        else {
+            panic!("expected a listing");
+        };
+        assert_eq!(side, Side::Right, "the right panel is drawn on the left");
     }
 
     /// The line of `text` that holds `needle`.

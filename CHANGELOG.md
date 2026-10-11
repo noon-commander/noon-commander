@@ -144,6 +144,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   places used last first, and each its first ten, with the place the panel is on and the hosts in
   use; a last row, such as `24 more…`, shows the rest, and the filter finds them all. The digits
   skip that row ([ADR 0021](docs/adr/0021-location-menu-replaces-the-virtual-root.md)).
+- After Ctrl+u, Alt+F1 and Alt+F2 open the location menu of the panel drawn on the left and on
+  the right, as in Far, and its title names that side; before, they kept to the panels as they
+  were before the swap.
 - F4 and F8 edit the settings of a host and disconnect it in the location menu, on the host under
   the cursor, rather than in a panel on the list of hosts. F9 → Command → Edit host settings… and
   Disconnect host act on the host the active panel shows. Disconnecting leaves the panels on the

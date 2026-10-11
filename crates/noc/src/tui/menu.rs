@@ -93,6 +93,8 @@ impl Item<'_> {
 #[derive(Debug)]
 pub(crate) struct LocationMenu {
     side: Side,
+    /// Where the panel is drawn, which the title names: the other side after Ctrl+u.
+    drawn: Side,
     /// Of the listing the menu waits for; a reply to an older one is dropped.
     generation: u64,
     contents: Contents,
@@ -124,6 +126,7 @@ impl LocationMenu {
     pub(crate) fn new(side: Side, current: Location, home: PathBuf, generation: u64) -> Self {
         let mut menu = Self {
             side,
+            drawn: side,
             generation,
             contents: Contents {
                 current,
@@ -151,6 +154,12 @@ impl LocationMenu {
     /// The same menu, with the hosts and volumes in `recent` first in their groups.
     pub(crate) fn recent(mut self, recent: &Recent) -> Self {
         self.contents.recent = recent.clone();
+        self
+    }
+
+    /// The same menu, for a panel drawn on `drawn`, which the title names.
+    pub(crate) fn drawn(mut self, drawn: Side) -> Self {
+        self.drawn = drawn;
         self
     }
 
@@ -316,7 +325,7 @@ impl LocationMenu {
         let rows = self.contents.rows();
         let items = self.picker.shown(rows.into_iter().map(|(item, _)| item));
         let lines = Self::lines(&items);
-        let title = match self.side {
+        let title = match self.drawn {
             Side::Left => fl!("menu-left"),
             Side::Right => fl!("menu-right"),
         };

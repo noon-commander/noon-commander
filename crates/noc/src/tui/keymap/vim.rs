@@ -81,7 +81,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Rename, &["r", "shift-f6", "f16"]), // OK1
             (Action::Mkdir, &["shift-a", "f7"]),         // OK1
             (Action::Delete, &["d shift-d", "f8"]),      // OK1
-            (Action::Checksum, &["f c", "f #"]),         // OK1
+            (Action::Checksum, &["f #"]),                // OK1
             // Other
             (Action::Help, &["g ?", "f1"]),              // OK1
             (Action::Quit, &["shift-z shift-z", "f10"]), // OK1

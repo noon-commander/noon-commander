@@ -850,7 +850,7 @@ location = "root"
   does not open in the middle of other work. F10 asks before quitting while jobs run;
   quitting stops them and waits up to five seconds, so that a copy removes its unfinished
   file before the connections close.
-- **Checksums.** f c or f # (not in mc) asks for an algorithm (radio buttons, the last one
+- **Checksums.** f # (not in mc) asks for an algorithm (radio buttons, the last one
   chosen first, SHA-256 at first) for the marked entries, or the one under the cursor; files
   in directories count. For one file, the dialog has a field for the checksum it should have,
   pasted from a download page or a line of `sha256sum` (the first word counts, in any case);

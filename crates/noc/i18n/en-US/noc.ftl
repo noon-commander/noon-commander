@@ -654,7 +654,7 @@ transfer-same = the source and the target are the same
 # The target is in a source directory.
 transfer-into-itself = it is in { $path }
 
-## Checksums, f c or f # (src/tui/app, src/tui/sums). Prefix: checksum-.
+## Checksums, f # (src/tui/app, src/tui/sums). Prefix: checksum-.
 
 checksum-title = Checksum
 # Above the algorithms. Directories count with the files in them.

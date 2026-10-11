@@ -141,7 +141,7 @@ always do.
 | Rename the entry under the cursor in its row | `rename` | ✅ | Shift+F6<br>F16 | r<br>Shift+F6<br>F16 | Shift+F6 | Shift+F6 | r | F2 (before the extension)<br>c w (a new name)<br>a (before the extension)<br>A (at the end)<br>I (at the start) |
 | Make a directory | `mkdir` | ✅ | F7 | A<br>F7 | F7 | F7 | a (a name that ends in /) | F7 |
 | Delete the marked entries, or the one under the cursor | `delete` | ✅ | F8 | d D<br>F8 | F8 | F8 | D | F8<br>d D |
-| Checksums of the marked files, or the one under the cursor | `checksum` | ✅ | f c<br>f # | f c<br>f # | — | — | — | — |
+| Checksums of the marked files, or the one under the cursor | `checksum` | ✅ | f # | f # | — | — | — | — |
 | Help | `help` | ✅ | F1 | g ?<br>F1 | F1 | F1 | \~<br>F1 | ?<br>F1 |
 | Quit | `quit` | ✅ | F10 | Z Z<br>F10 | F10 | F10 | q | Q<br>F10 |
 | Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | Ctrl+l | — | — | Ctrl+l |

@@ -46,10 +46,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Shift+Up mark and go up, + marks and - unmarks by a pattern, v inverts the marks, / starts quick
   search and Ctrl+g goes to the next match, i views, e edits, Y and y y copy, x moves, r renames in
   the row, A makes a directory, d D deletes (D D disconnects the host under the cursor on the root),
-  f c and f # make checksums, R reads the directory again, o h shows hidden files, o n, o e, o m,
-  and o s sort, q : opens the command history, w the jobs, g d Quick cd, g z jumps with zoxide, g n,
-  g c, g t, and g T open, close, and switch tabs, t h and t l list the left and the right panel's
-  tabs, t w and t W list and save workspaces, Z Z quits, and Esc and Ctrl+c stop loading; F3 … F8,
+  f # makes checksums, R reads the directory again, o h shows hidden files, o n, o e, o m, and o s
+  sort, q : opens the command history, w the jobs, g d Quick cd, g z jumps with zoxide, g n, g c,
+  g t, and g T open, close, and switch tabs, t h and t l list the left and the right panel's tabs,
+  t w and t W list and save workspaces, Z Z quits, and Esc and Ctrl+c stop loading; F3 … F8,
   Alt+Left, and Alt+Right do what they do in the default keymap. q closes the help, and Ctrl+b and
   Ctrl+f turn pages in dialogs. In text fields and on the command line, Ctrl+b goes to the start, as
   on vim's command line; on the command line, Ctrl+p and Ctrl+n go through the history in place of
@@ -132,7 +132,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The default keymap takes the tab and sort keys of the vim keymap: t n opens a tab, t c closes
   it, ] t and [ t switch tabs (Alt+Right and Alt+Left too), and o n, o e, o m, and o s sort, in
   place of Ctrl+x t, Ctrl+x w, Ctrl+x n, Ctrl+x p, and Ctrl+F3 … Ctrl+F6. Both keymaps make
-  checksums with f c and f #, in place of Ctrl+x # and Ctrl+w #.
+  checksums with f #, in place of Ctrl+x # and Ctrl+w #.
 - Keys are written one way in the help, the menus, and the docs: letters in lowercase, after a
   modifier too, and in uppercase for Shift and the letter (`Ctrl+r`, `Alt+W`, `G`), `Shift+` only
   before other keys (`Shift+F6`), and `PgUp`, `PgDn` rather than `PageUp`, `PageDown`.

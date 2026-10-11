@@ -65,7 +65,7 @@
 - [x] Host settings in `hosts.toml`, typed and edited with F4 on a host: `other_dir`,
       `remember_dir` ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md))
 - [x] Clipboard through OSC 52 ([ADR 0008](adr/0008-clipboard-through-osc-52.md))
-- [x] Checksums (f c, f #): SHA-256, SHA-512, SHA-1, MD5, BLAKE3 of files and trees, an
+- [x] Checksums (f #): SHA-256, SHA-512, SHA-1, MD5, BLAKE3 of files and trees, an
       expected checksum, comparison with the file in the other panel, Copy and Save
 - [ ] Verify files of checksums (`*.sha256`, `SHA256SUMS`, `*.md5`, `*.sfv`): `OK`, `FAILED`,
       and missing, with a total

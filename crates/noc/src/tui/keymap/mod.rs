@@ -1037,13 +1037,13 @@ mod tests {
     }
 
     #[test]
-    fn f_c_and_f_hash_compute_checksums() {
+    fn f_hash_computes_checksums() {
         for name in Keymap::NAMES {
             let keymap = Keymap::by_name(name).unwrap();
             let mut state = KeyState::default();
             assert_eq!(
-                feed(&keymap, &mut state, Context::Panel, &["f", "c", "f", "#"]),
-                actions(&[Action::Checksum, Action::Checksum]),
+                feed(&keymap, &mut state, Context::Panel, &["f", "#"]),
+                actions(&[Action::Checksum]),
                 "{name}"
             );
         }
@@ -1345,7 +1345,7 @@ mod tests {
         );
         assert_eq!(
             key(Context::Panel, Action::Checksum).as_deref(),
-            Some("f c")
+            Some("f #")
         );
         assert_eq!(key(Context::Panel, Action::Disconnect), None);
         // In the root F8 disconnects, which leaves Delete no key there.

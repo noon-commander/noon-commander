@@ -260,8 +260,8 @@ pub(super) const PRESET: Preset = &[
             (Action::Right, &["right"]),
             (Action::Up, &["up"]),
             (Action::Down, &["down"]),
-            (Action::Home, &["home", "ctrl-a"]),
-            (Action::End, &["end", "ctrl-e"]),
+            (Action::Home, &["ctrl-a", "home"]),
+            (Action::End, &["ctrl-e", "end"]),
             (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Delete, &["delete"]),
             (Action::DeleteToStart, &["ctrl-u"]),
@@ -288,6 +288,6 @@ pub(super) const PRESET: Preset = &[
     // The terminal's own screen, with the output of commands.
     (
         Context::UserScreen,
-        &[(Action::Cancel, &["esc", "ctrl-o", "ctrl-`", "ctrl-space"])],
+        &[(Action::Cancel, &["ctrl-o", "esc", "ctrl-`", "ctrl-space"])],
     ),
 ];

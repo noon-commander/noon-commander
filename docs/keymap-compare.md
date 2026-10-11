@@ -666,8 +666,8 @@ clipboard, are under text fields, as are yazi's modes.
 | One character right | `right` | ⏳ | Right | Right | Ctrl+f<br>Right<br>Alt+Right | Right<br>Ctrl+d | l<br>Right<br>Ctrl+f | Right<br>Ctrl+f |
 | The line above; from the first line, the command before in the history of the panel's host | `up` | ⏳ | Up | Up | — | — | k<br>Up | Up |
 | The line below; from the last line, the command after in the history | `down` | ⏳ | Down | Down | — | — | j<br>Down | Down |
-| Start of the line | `home` | ⏳ | Home<br>Ctrl+a | Home<br>Ctrl+b | Ctrl+a | Ctrl+Home | 0<br>Ctrl+a<br>Home | Home<br>Ctrl+a |
-| End of the line | `end` | ⏳ | End<br>Ctrl+e | End<br>Ctrl+e | Ctrl+e | Ctrl+End | $<br>Ctrl+e<br>End | End<br>Ctrl+e |
+| Start of the line | `home` | ⏳ | Ctrl+a<br>Home | Home<br>Ctrl+b | Ctrl+a | Ctrl+Home | 0<br>Ctrl+a<br>Home | Home<br>Ctrl+a |
+| End of the line | `end` | ⏳ | Ctrl+e<br>End | End<br>Ctrl+e | Ctrl+e | Ctrl+End | $<br>Ctrl+e<br>End | End<br>Ctrl+e |
 | Delete the character before the cursor | `backspace` | ⏳ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | Ctrl+h<br>Backspace | Backspace | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h |
 | Delete the character at the cursor | `delete` | ⏳ | Delete | Delete | Ctrl+d<br>Delete | Delete | Delete<br>Ctrl+d | Delete<br>Ctrl+d |
 | Delete to the start of the line | `delete_to_start` | ⏳ | Ctrl+u | Ctrl+u | Ctrl+w (nothing selected) | — | Ctrl+u | Ctrl+u |
@@ -726,7 +726,7 @@ that bring the panels back do anything.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Back to the panels | `cancel` | ⏳ | Esc<br>Ctrl+o<br>Ctrl+\`<br>Ctrl+Space | Esc<br>Ctrl+\`<br>Ctrl+Space | Ctrl+o | Ctrl+o | — | — |
+| Back to the panels | `cancel` | ⏳ | Ctrl+o<br>Esc<br>Ctrl+\`<br>Ctrl+Space | Esc<br>Ctrl+\`<br>Ctrl+Space | Ctrl+o | Ctrl+o | — | — |
 
 ## Mouse
 

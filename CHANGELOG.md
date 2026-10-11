@@ -50,16 +50,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and yazi's where vim has none: l and Right open what is under the cursor, as Enter does, h, Left,
   and Backspace go to the parent directory, J, Shift+Down, and Insert mark and go down, K and
   Shift+Up mark and go up, + marks and - unmarks by a pattern, v inverts the marks, / starts quick
-  search and Ctrl+g goes to the next match, i views, e edits, Y and y y copy, x moves, r renames in
-  the row, A makes a directory, d D deletes, f # makes checksums, R reads the directory again, o h
-  shows hidden files, o n, o e, o m, and o s sort, q : opens the command history, f j the jobs, g d
-  Quick cd, g z jumps with zoxide, g n, g c, g t, and g T open, close, and switch tabs, t h and t l
-  list the left and the right panel's tabs, t w and t W list and save workspaces, Z Z quits, and Esc
-  and Ctrl+c stop loading; F3 … F8, Alt+Left, and Alt+Right do what they do in the default keymap. q
-  closes the help, and Ctrl+b and Ctrl+f turn pages in dialogs. In text fields and on the command
-  line, Ctrl+b goes to the start, as on vim's command line; on the command line, Ctrl+p and Ctrl+n
-  go through the history in place of Alt+p and Alt+n, Ctrl+r opens it, and Ctrl+f opens the command
-  in the editor; Ctrl+p and Ctrl+n move in the completion list.
+  search, where Ctrl+g and Ctrl+t go to the next and the previous match and Enter ends it on the
+  match rather than opening it, i views, e edits,
+  Y and y y copy, x moves, r renames in the row, A makes a directory, d D deletes, f # makes
+  checksums, R reads the directory again, o h shows hidden files, o n, o e, o m, and o s sort,
+  q : opens the command history, f j the jobs, g d Quick cd, g z jumps with zoxide, g n, g c, g t,
+  and g T open, close, and switch tabs, t h and t l list the left and the right panel's tabs, t w
+  and t W list and save workspaces, Z Z quits, and Esc and Ctrl+c stop loading; F3 … F8, Alt+Left,
+  and Alt+Right do what they do in the default keymap. q closes the help, and Ctrl+b and Ctrl+f
+  turn pages in dialogs. In text fields and on the command line, Ctrl+b goes to the start, as on
+  vim's command line; on the command line, Ctrl+p and Ctrl+n go through the history in place of
+  Alt+p and Alt+n, Ctrl+r opens it, and Ctrl+f opens the command in the editor; Ctrl+p and Ctrl+n
+  move in the completion list.
 - The terminal's window or tab is titled with the active panel's directory, as the prompt of the
   command line shows it (`~/src — noc`, or `host:path`), and gets its own title back when Noon
   Commander quits or hands the terminal to a command, where the terminal keeps a stack of titles.
@@ -118,6 +120,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   name. A taken file name asks before it is replaced; a directory's is never replaced.
 - Shift+F9 (or F19, and g M in the vim keymap) opens the pull-down menu on the command that ran
   from it last, as Far's Shift+F10 does, so Shift+F9 Enter repeats it.
+- Quick search is kept once it ends, as vim keeps its last pattern: in both keymaps, n and N go to
+  the next and the previous name that matches it, round, and so does Shift+F7 (or F17) to the
+  next, as mc and Far search again with it; Ctrl+s with nothing typed yet (/ and Ctrl+g in the
+  vim keymap) searches for it again, as mc's Ctrl+s Ctrl+s does.
 
 ### Changed
 

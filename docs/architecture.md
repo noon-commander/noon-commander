@@ -932,12 +932,17 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   best; otherwise to the first name from where it is that starts with the text, ignoring case, and
   Ctrl+s to the next one, round to the top. Either way a character that matches nothing is dropped,
   as in mc, and the listing keeps its order. Backspace takes a character back; Esc ends the search,
-  and any other key ends it and then does what it does. While it runs, every character is text, even
-  one that a panel binds, such as `*`. Long names lose their middle, marked with `~`. Names are
-  shown terminal-safe: control and bidi characters become `?`. Listings run in background tasks;
-  a reply carries the generation of its request, so a stale one is dropped. If a directory cannot
-  be read, the panel stays where it was and says why below the listing. Going up puts the cursor
-  on the directory just left. A panel shows a [`Location`](#locations), always a directory.
+  and any other key ends it and then does what it does: Enter opens what it found, as in mc, but
+  in the vim keymap Enter only ends it, as in vim. While it runs, every character is text, even
+  one that a panel binds, such as `*`. The app keeps what the last search found, whichever panel
+  it ran in, as vim keeps its last pattern: `n` and `N` (and Shift+F7 or F17, mc's and Far's key
+  to search again) go to the next and the previous name that matches it, round, and Ctrl+s with
+  nothing typed yet searches for it again, as mc's Ctrl+s Ctrl+s does. Long names lose their
+  middle, marked with `~`. Names are shown terminal-safe: control and bidi characters become `?`.
+  Listings run in background tasks; a reply carries the generation of its request, so a stale one is
+  dropped. If a directory cannot be read, the panel stays where it was and says why below the
+  listing. Going up puts the cursor on the directory just left. A panel shows a
+  [`Location`](#locations), always a directory.
 - <a id="command-line-of--and-"></a>**Command line of `!` and `:`** ([ADR
   0019](adr/0019-shell-command-line.md)). In a local panel, `!` opens a line above the F-key bar for
   a shell command, after a prompt with the panel's directory (`~` for home, its middle cut past a

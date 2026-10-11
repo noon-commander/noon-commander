@@ -66,7 +66,10 @@ pub(super) const PRESET: Preset = &[
             (Action::Unselect, &["-"]),                           // OK1
             (Action::InvertMarks, &["v"]),                        // OK1
             // Tools
-            (Action::QuickSearch, &["/"]),      // OK1
+            (Action::QuickSearch, &["/"]), // OK1
+            // The last quick search again, as vim's n and N; Shift+F7 as in the default keymap.
+            (Action::NextMatch, &["n", "shift-f7", "f17"]),
+            (Action::PrevMatch, &["shift-n"]),
             (Action::Shell, &["!"]),            // OK1
             (Action::Command, &[":"]),          // OK1
             (Action::CommandHistory, &["q :"]), // OK1
@@ -95,9 +98,12 @@ pub(super) const PRESET: Preset = &[
         Context::QuickSearch,
         &[
             (Action::Backspace, &["backspace", "ctrl-h"]),
-            (Action::Cancel, &["esc", "ctrl-c"]),
-            // vim's Ctrl+g, to the next match while a pattern is typed.
+            // Enter ends the search on the match, as in vim, rather than opening the entry.
+            (Action::Cancel, &["esc", "ctrl-c", "enter"]),
+            // vim's Ctrl+g and Ctrl+t, to the next and the previous match while a pattern is
+            // typed.
             (Action::QuickSearch, &["ctrl-g"]),
+            (Action::PrevMatch, &["ctrl-t"]),
         ],
     ),
     // The name field of an entry renamed in its row.

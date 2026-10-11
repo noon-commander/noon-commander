@@ -1790,6 +1790,56 @@ mod tests {
     }
 
     #[test]
+    fn n_shift_n_and_shift_f7_repeat_the_last_quick_search() {
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(
+                    &keymap,
+                    &mut state,
+                    Context::Panel,
+                    &["n", "shift-n", "shift-f7", "f17"]
+                ),
+                actions(&[
+                    Action::NextMatch,
+                    Action::PrevMatch,
+                    Action::NextMatch,
+                    Action::NextMatch
+                ]),
+                "{name}: F17, as terminals may send Shift+F7"
+            );
+            // While a search runs, n and N are part of the name; Shift+F7 goes on.
+            assert_eq!(
+                feed(
+                    &keymap,
+                    &mut state,
+                    Context::QuickSearch,
+                    &["n", "shift-n", "shift-f7"]
+                ),
+                [
+                    Resolved::Insert('n'),
+                    Resolved::Insert('N'),
+                    Resolved::Action(Action::NextMatch)
+                ],
+                "{name}"
+            );
+        }
+        // Enter ends vim's search on the match, and Ctrl+t goes back, as in vim; in the default
+        // keymap Enter opens the entry, as in mc.
+        let vim = Keymap::by_name("vim").unwrap();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&vim, &mut state, Context::QuickSearch, &["ctrl-t", "enter"]),
+            actions(&[Action::PrevMatch, Action::Cancel])
+        );
+        assert_eq!(
+            feed(&Keymap::mc(), &mut state, Context::QuickSearch, &["enter"]),
+            actions(&[Action::Enter])
+        );
+    }
+
+    #[test]
     fn g_m_opens_the_pull_down_menu_in_vim_and_its_letters_stay_letters() {
         let vim = Keymap::by_name("vim").unwrap();
         let mut state = KeyState::default();

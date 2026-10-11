@@ -272,8 +272,14 @@ pub(crate) enum Action {
     SortByTime,
     /// Sorts by size.
     SortBySize,
-    /// Starts quick search, or jumps to the next match.
+    /// Starts quick search, or jumps to the next match; with nothing typed yet, searches for
+    /// what the last search found.
     QuickSearch,
+    /// Moves to the next name that matches quick search: what is typed while it runs, or else
+    /// what the last search found.
+    NextMatch,
+    /// Moves to the previous name that matches quick search, likewise.
+    PrevMatch,
     /// Opens the command line for a shell command.
     Shell,
     /// Opens the command line for a command of Noon Commander, of which `!` runs a shell
@@ -381,6 +387,8 @@ impl Action {
             Self::SortByTime => "sort_by_time",
             Self::SortBySize => "sort_by_size",
             Self::QuickSearch => "quick_search",
+            Self::NextMatch => "next_match",
+            Self::PrevMatch => "prev_match",
             Self::Shell => "shell",
             Self::Command => "command",
             Self::NewLine => "new_line",
@@ -488,6 +496,8 @@ impl Action {
         Self::SortByTime,
         Self::SortBySize,
         Self::QuickSearch,
+        Self::NextMatch,
+        Self::PrevMatch,
         Self::Shell,
         Self::Command,
         Self::NewLine,

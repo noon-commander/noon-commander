@@ -580,24 +580,67 @@ impl Panel {
         self.search.is_some()
     }
 
+    /// What quick search has typed, while it runs.
+    pub(crate) fn search_text(&self) -> Option<&str> {
+        self.search.as_deref()
+    }
+
     /// Starts quick search, or jumps to the next match while it runs: the next one down, round
     /// to the top; `fuzzy` (`ui.fuzzy_search`), the next best, round to the best.
     pub(crate) fn search_next(&mut self, fuzzy: bool) {
-        let Some(text) = &self.search else {
+        let Some(text) = self.search.clone() else {
             self.search = Some(String::new());
             return;
         };
-        let next = if fuzzy {
+        self.step_match(&text, true, fuzzy);
+    }
+
+    /// Jumps to the next or the previous match of the search that runs, if one does.
+    pub(crate) fn search_step(&mut self, forward: bool, fuzzy: bool) {
+        if let Some(text) = self.search.clone() {
+            self.step_match(&text, forward, fuzzy);
+        }
+    }
+
+    /// Searches for `text`, what an earlier search found, as if it were typed again, and jumps
+    /// to its next match. Nothing changes if no name matches it.
+    pub(crate) fn search_resume(&mut self, text: &str, fuzzy: bool) {
+        if self.step_match(text, true, fuzzy) {
+            let text = if fuzzy {
+                text.to_owned()
+            } else {
+                text.to_lowercase()
+            };
+            self.search = Some(text);
+        }
+    }
+
+    /// Moves the cursor to the next name that matches `text`, down and round to the top, or to
+    /// the previous one, up and round to the bottom; `fuzzy`, to the next or the previous as fzf
+    /// ranks them, round, or to the best from a row that does not match. Whether one matches.
+    pub(crate) fn step_match(&mut self, text: &str, forward: bool, fuzzy: bool) -> bool {
+        let found = if fuzzy {
             let ranked = self.ranked(text);
+            let count = ranked.len();
             let at = ranked.iter().position(|&(row, _)| row == self.cursor);
-            let next = at.map_or(0, |at| (at + 1) % ranked.len());
-            ranked.get(next).map(|&(row, _)| row)
+            let index = match at {
+                Some(at) if forward => (at + 1) % count,
+                Some(at) => (at + count - 1) % count,
+                None => 0,
+            };
+            ranked.get(index).map(|&(row, _)| row)
         } else {
-            self.find(text, self.cursor + 1)
+            let text = text.to_lowercase();
+            if forward {
+                self.find(&text, self.cursor + 1)
+            } else {
+                self.find_back(&text, self.cursor)
+            }
         };
-        if let Some(row) = next {
+        if let Some(row) = found {
             self.cursor = row;
         }
+        found.is_some()
     }
 
     /// Adds `c` to quick search, starting it if needed, and moves the cursor to the first name
@@ -638,18 +681,35 @@ impl Panel {
         }
     }
 
-    pub(crate) fn end_search(&mut self) {
-        self.search = None;
+    /// Ends quick search; what it typed, unless that was nothing.
+    pub(crate) fn end_search(&mut self) -> Option<String> {
+        self.search.take().filter(|text| !text.trim().is_empty())
     }
 
     /// The first row from `start` on, round to the top, whose name starts with `text` (lower
     /// case). `..` never matches.
     fn find(&self, text: &str, start: usize) -> Option<usize> {
         let rows = self.rows();
-        (start..rows).chain(0..start.min(rows)).find(|&index| {
-            self.search_name(index)
-                .is_some_and(|name| name.to_lowercase().starts_with(text))
-        })
+        (start..rows)
+            .chain(0..start.min(rows))
+            .find(|&index| self.starts_with(index, text))
+    }
+
+    /// The first row before `start`, up and round to the bottom, whose name starts with `text`
+    /// (lower case).
+    fn find_back(&self, text: &str, start: usize) -> Option<usize> {
+        let rows = self.rows();
+        let start = start.min(rows);
+        (0..start)
+            .rev()
+            .chain((start..rows).rev())
+            .find(|&index| self.starts_with(index, text))
+    }
+
+    /// Whether the name of row `index` starts with `text` (lower case), ignoring case.
+    fn starts_with(&self, index: usize, text: &str) -> bool {
+        self.search_name(index)
+            .is_some_and(|name| name.to_lowercase().starts_with(text))
     }
 
     /// The rows whose names match `text` as fzf matches it, with their scores, best first;
@@ -1868,6 +1928,37 @@ mod tests {
         assert!(!panel.searching(), "no match, no search");
         panel.search_type(' ', true);
         assert!(!panel.searching(), "nor from a space");
+    }
+
+    #[test]
+    fn matches_go_both_ways_round_and_an_ended_search_says_what_it_found() {
+        let names = ["bar", "bin", "cat", "boot"];
+        let files = names.map(|name| entry(name, FileKind::File, 1));
+        let mut panel = loaded("/srv", files.into());
+        panel.search_type('B', false);
+        assert_eq!(under_cursor(&panel), "bar");
+        panel.search_step(false, false);
+        assert_eq!(under_cursor(&panel), "boot", "up, round to the bottom");
+        panel.search_step(true, false);
+        assert_eq!(under_cursor(&panel), "bar", "down, round to the top");
+        assert_eq!(panel.end_search().as_deref(), Some("b"));
+        assert!(!panel.step_match("x", true, false), "no match");
+        assert_eq!(under_cursor(&panel), "bar", "the cursor stays");
+        assert!(panel.step_match("B", false, false), "ignoring case");
+        assert_eq!(under_cursor(&panel), "boot");
+
+        // Fuzzy: the previous one as fzf ranks them, round to the worst.
+        panel.search_resume("bt", true);
+        assert_eq!(panel.search_text(), Some("bt"));
+        let best = under_cursor(&panel);
+        panel.search_step(false, true);
+        panel.search_step(true, true);
+        assert_eq!(under_cursor(&panel), best, "back and forth");
+        panel.search_back();
+        panel.search_back();
+        assert_eq!(panel.end_search(), None, "nothing typed, nothing kept");
+        panel.search_resume("x", false);
+        assert!(!panel.searching(), "no match, no search");
     }
 
     #[test]

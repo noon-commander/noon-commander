@@ -580,6 +580,9 @@ pub(crate) struct App {
     active: Side,
     /// The right panel is drawn on the left.
     swapped: bool,
+    /// What the last quick search found, in any panel, for `n` and `N`, as vim keeps the last
+    /// pattern.
+    last_search: Option<String>,
     hosts: HashMap<String, Host>,
     connections: u64,
     /// The settings, with `~` expanded; `ui.show_hidden` follows Alt+.
@@ -750,6 +753,7 @@ impl App {
             last_tab: 2,
             active: Side::Left,
             swapped: false,
+            last_search: None,
             hosts: HashMap::new(),
             connections: 0,
             config: config.clone(),
@@ -1188,7 +1192,7 @@ impl App {
     /// the cursor there, and opens the row on a double click or marks it on a right click.
     /// Either way the side gets the keys, and quick search ends, as at a key of its own.
     fn click_panel(&mut self, side: Side, press: Press, at: Position) -> Vec<Effect> {
-        self.panel_mut(self.active).end_search();
+        self.end_search(self.active);
         self.active = side;
         let tab = self
             .spots
@@ -1461,7 +1465,7 @@ impl App {
                 }
             }
             Action::NextTab | Action::PrevTab => {
-                self.panel_mut(side).end_search();
+                self.end_search(side);
                 if self.tabs_mut(side).step(action == Action::NextTab) {
                     return self.revealed(side);
                 }
@@ -1473,7 +1477,7 @@ impl App {
 
     /// Opens a tab on `side` after the one that shows, on the same location, and shows it.
     fn new_tab(&mut self, side: Side) -> Vec<Effect> {
-        self.panel_mut(side).end_search();
+        self.end_search(side);
         let (panel, request) = self.panel(side).duplicate();
         self.last_tab += 1;
         let id = PanelId {
@@ -1533,7 +1537,7 @@ impl App {
                 let side = menu.side();
                 self.tab_menu = None;
                 self.active = side;
-                self.panel_mut(side).end_search();
+                self.end_search(side);
                 if self.tabs_mut(side).select(index) {
                     return self.revealed(side);
                 }
@@ -1609,10 +1613,8 @@ impl App {
             return Vec::new();
         };
         match action {
-            Action::QuickSearch => {
-                let fuzzy_search = self.config.ui.fuzzy_search;
-                self.panel_mut(self.active).search_next(fuzzy_search);
-            }
+            Action::QuickSearch => self.quick_search(),
+            Action::NextMatch | Action::PrevMatch => self.search_again(action == Action::NextMatch),
             Action::Shell | Action::Command | Action::CommandHistory => {
                 self.open_command_line(action);
             }
@@ -1686,34 +1688,70 @@ impl App {
     /// does next, if any. Characters go nowhere else: typing in a panel does nothing.
     fn search_key(&mut self, input: Resolved) -> Option<Action> {
         let fuzzy_search = self.config.ui.fuzzy_search;
-        let panel = self.panel_mut(self.active);
+        let side = self.active;
+        let searching = self.panel(side).searching();
         match input {
             Resolved::Insert(c) => {
-                if panel.searching() {
-                    panel.search_type(c, fuzzy_search);
+                if searching {
+                    self.panel_mut(side).search_type(c, fuzzy_search);
                 }
                 None
             }
-            Resolved::Action(action) if panel.searching() => match action {
+            Resolved::Action(action) if searching => match action {
                 Action::Backspace => {
-                    panel.search_back();
+                    self.panel_mut(side).search_back();
                     None
                 }
                 Action::QuickSearch => {
-                    panel.search_next(fuzzy_search);
+                    self.quick_search();
+                    None
+                }
+                Action::NextMatch | Action::PrevMatch => {
+                    let forward = action == Action::NextMatch;
+                    self.panel_mut(side).search_step(forward, fuzzy_search);
                     None
                 }
                 Action::Cancel => {
-                    panel.end_search();
+                    self.end_search(side);
                     None
                 }
                 // Any other key ends the search, then does what it does.
                 _ => {
-                    panel.end_search();
+                    self.end_search(side);
                     Some(action)
                 }
             },
             Resolved::Action(action) => Some(action),
+        }
+    }
+
+    /// Starts quick search in the active panel, or jumps to the next match; with nothing typed
+    /// yet, searches for what the last search found, as mc's Ctrl+s Ctrl+s does.
+    fn quick_search(&mut self) {
+        let fuzzy_search = self.config.ui.fuzzy_search;
+        let last = self.last_search.clone();
+        let panel = self.panel_mut(self.active);
+        let typed = panel.search_text().is_some_and(|text| !text.is_empty());
+        match last {
+            Some(last) if panel.searching() && !typed => panel.search_resume(&last, fuzzy_search),
+            _ => panel.search_next(fuzzy_search),
+        }
+    }
+
+    /// Moves the cursor of the active panel to the next name, or the previous one, that matches
+    /// what the last quick search found.
+    fn search_again(&mut self, forward: bool) {
+        if let Some(last) = self.last_search.clone() {
+            let fuzzy_search = self.config.ui.fuzzy_search;
+            self.panel_mut(self.active)
+                .step_match(&last, forward, fuzzy_search);
+        }
+    }
+
+    /// Ends quick search in the panel on `side`, and keeps what it found for `n` and `N`.
+    fn end_search(&mut self, side: Side) {
+        if let Some(text) = self.panel_mut(side).end_search() {
+            self.last_search = Some(text);
         }
     }
 
@@ -8039,6 +8077,49 @@ mod tests {
         assert!(screen(&mut app).contains("Search: "));
         assert!(app.handle(action(Action::Cancel)).is_empty());
         assert_eq!(app.context(), Context::Panel, "Esc ends it");
+    }
+
+    #[test]
+    fn n_and_shift_n_repeat_the_last_quick_search_and_ctrl_s_twice_brings_it_back() {
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
+        let names = ["bar", "bin", "boot", "dev"];
+        answer(&mut app, effects, &Listing::Dir(names.map(dir).to_vec()));
+        app.config.ui.fuzzy_search = false;
+        let under = |app: &App| cursor_name(app, Side::Left);
+        app.handle(action(Action::NextMatch));
+        assert_eq!(under(&app), "", "no search yet: the cursor stays on ..");
+
+        app.handle(action(Action::QuickSearch));
+        app.handle(Resolved::Insert('b'));
+        assert_eq!(under(&app), "bar");
+        app.handle(action(Action::PrevMatch));
+        assert_eq!(under(&app), "boot", "back, round to the bottom");
+        assert_eq!(app.context(), Context::QuickSearch, "still searching");
+        app.handle(action(Action::Cancel));
+        for (key, name) in [
+            (Action::NextMatch, "bar"),
+            (Action::NextMatch, "bin"),
+            (Action::PrevMatch, "bar"),
+            (Action::PrevMatch, "boot"),
+        ] {
+            app.handle(action(key));
+            assert_eq!(under(&app), name, "{key:?}");
+        }
+        assert_eq!(app.context(), Context::Panel);
+
+        // With nothing typed, the second Ctrl+s searches for what the last search found.
+        app.handle(action(Action::QuickSearch));
+        app.handle(action(Action::QuickSearch));
+        assert_eq!(under(&app), "bar");
+        assert!(screen(&mut app).contains("Search: b"));
+        // A key that ends a search keeps it too.
+        app.handle(Resolved::Insert('i'));
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Home));
+        app.handle(action(Action::NextMatch));
+        assert_eq!(under(&app), "bin");
+        app.handle(action(Action::NextMatch));
+        assert_eq!(under(&app), "bin", "the only match");
     }
 
     #[test]

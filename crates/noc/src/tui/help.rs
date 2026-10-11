@@ -242,6 +242,8 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Panel, Action::SortByTime) => fl!("help-sort-time"),
         (Context::Panel, Action::SortBySize) => fl!("help-sort-size"),
         (Context::Panel, Action::QuickSearch) => fl!("help-quick-search-start"),
+        (Context::Panel, Action::NextMatch) => fl!("help-match-next"),
+        (Context::Panel, Action::PrevMatch) => fl!("help-match-prev"),
         (Context::Panel, Action::Shell) => fl!("help-shell"),
         (Context::Panel, Action::Command) => fl!("help-command"),
         (Context::Panel, Action::CommandHistory) => fl!("help-command-history"),
@@ -278,6 +280,7 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::QuickSearch | Context::Jump, Action::Backspace) => fl!("help-search-back"),
         (Context::QuickSearch, Action::Cancel) => fl!("help-search-end"),
         (Context::QuickSearch, Action::QuickSearch) => fl!("help-search-next"),
+        (Context::QuickSearch, Action::PrevMatch) => fl!("help-search-prev"),
         (Context::Dialog, Action::Up) => fl!("help-dialog-up"),
         (Context::Dialog, Action::Down) => fl!("help-dialog-down"),
         (Context::Dialog, Action::Left) => fl!("help-dialog-left"),
@@ -512,7 +515,14 @@ mod tests {
         };
         assert!(has("F10", "Quit"));
         assert!(has("F8", "Disconnect the host under the cursor"));
-        assert!(has("Ctrl+s, Alt+s", "Quick search; again: the next match"));
+        assert!(has(
+            "Ctrl+s, Alt+s",
+            "Quick search; again: the next match, or with nothing typed, the last search"
+        ));
+        assert!(has(
+            "Shift+F7, F17, n",
+            "The next name that matches the last quick search"
+        ));
         assert!(has(
             "Esc, F10, Ctrl+g, Ctrl+c",
             "Cancel, or close this help"

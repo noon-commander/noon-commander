@@ -92,7 +92,9 @@ Both presets group keys of their own under a first key: t for the tabs and the w
 the sort order, as ranger's sort keys, and the hidden names, and f for the file operations. f
 stands for mc's Ctrl+x, whose letters it keeps for mc's commands: c chmod, o chown, e chattr, l,
 s, and v links, j the jobs. mc has no checksums, so they take #. The vim preset adds vim's g, q,
-and Ctrl+w.
+and Ctrl+w. In both, n and N repeat the last quick search, forward and backward, as in vim,
+yazi, and ranger; Shift+F7 (or F17), mc's and Far's key to search again, repeats it forward
+too.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
@@ -133,6 +135,8 @@ and Ctrl+w.
 | Unmark the names that match a pattern | `unselect` | ✅ | -<br>\\<br>Alt+- | - | -<br>\\<br>Numpad-<br>Alt+- | Numpad- | — | — |
 | Invert the marks on files; directories stay as they are | `invert_marks` | ✅ | \*<br>Alt+\* | v | \*<br>Numpad\*<br>Alt+\* | Numpad* | — | — |
 | Start quick search | `quick_search` | ✅ | Ctrl+s<br>Alt+s | / | Ctrl+s<br>Alt+s | Alt+characters<br>Alt+Shift+characters | / | f |
+| The next name that matches the last quick search | `next_match` | ⏳ | Shift+F7<br>F17<br>n | n<br>Shift+F7<br>F17 | — | — | n | n |
+| The previous name that matches the last quick search | `prev_match` | ⏳ | N | N | — | — | N | N |
 | Open the command line for a shell command | `shell` | ✅ | ! | ! | Typing | Typing | ; (in the background)<br>: | !<br>s |
 | Open the command line for a command of noc | `command` | ✅ | : | : | — | — | — | :<br>; |
 | The command history | `command_history` | ✅ | Alt+h | q : | Alt+h | Alt+F8 | — | — |
@@ -327,17 +331,18 @@ and Ctrl+w.
 ## Quick search (`quick_search`)
 
 In the active panel; characters are part of the name searched for, and keys it does not bind go
-to the panel. yazi searches as the name is typed in an input box, and ranger as it is typed on
-its console; both go to the next and previous match with keys of the panel, once the search is
-over.
+to the panel. In the default preset, Enter ends the search and opens the entry, through the
+panel, as in mc; in the vim preset, Enter only ends it, on the match, as in vim. The last search
+stays for n, N, and Shift+F7 in the panel. yazi searches as the name is typed in an input box,
+and ranger as it is typed on its console; both go to the next and previous match with keys of
+the panel, once the search is over.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
 | Take back the last character | `backspace` | ⏳ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | — | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h |
-| End the search | `cancel` | ⏳ | Esc | Esc<br>Ctrl+c | Esc | — | Ctrl+c<br>Esc Esc | Esc<br>Ctrl+c<br>Ctrl+g |
-| Next match; the default preset leaves it to the panel | `quick_search` | ⏳ | Ctrl+s<br>Alt+s | Ctrl+g | Ctrl+s<br>Alt+s | Ctrl+Enter | n | n |
-| Previous match | — | ⏳ | — | — | — | Ctrl+Shift+Enter | N | N |
-| Search with previous pattern | — | ⏳ | — | — | Ctrl+s Ctrl+s | — | — | — |
+| End the search; the cursor stays on the match | `cancel` | ⏳ | Esc | Esc<br>Ctrl+c<br>Enter | Esc | — | Ctrl+c<br>Esc Esc | Esc<br>Ctrl+c<br>Ctrl+g |
+| Next match; with nothing typed, the last search again, as mc's Ctrl+s Ctrl+s; the default preset leaves it to the panel | `quick_search` | ⏳ | Ctrl+s<br>Alt+s | Ctrl+g | Ctrl+s<br>Alt+s | Ctrl+Enter | n | n |
+| Previous match | `prev_match` | ⏳ | — | Ctrl+t | — | Ctrl+Shift+Enter | N | N |
 | Paste from clipboard | — | ⏳ | — | — | — | Ctrl+v<br>Shift+Insert | — | — |
 
 ## Renaming in place (`rename`)

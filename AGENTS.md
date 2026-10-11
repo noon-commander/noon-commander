@@ -121,8 +121,8 @@ Paths come from `crates/noc-config/src/paths.rs`.
 - Presets: `crates/noc/src/tui/keymap/default.rs` (mc, the default) and `vim.rs`, one per
   `ui.keymap` value. Both list every context in the same order, with the same comments where
   they agree. `just keymap-diff` compares them.
-- In the default preset, list an action's mc keys first (Far's where mc has none), then those
-  shared with vim. The pull-down menu shows the first.
+- In the default preset, list an action's mc keys first, then those shared with vim. The
+  pull-down menu shows the first.
 - The F-key bar and help are generated from the active keymap.
 - Changing any binding: update the `noc (default)` or `noc (vim)` column of
   [docs/keymap-compare.md](docs/keymap-compare.md) in the same change. A new action gets a row

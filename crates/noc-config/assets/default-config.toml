@@ -29,11 +29,11 @@ args = []
 multiplex = true
 
 [discovery]
-# Hosts from ssh_config to leave out of the host list. Patterns may use `*` and `?`.
+# Hosts from ssh_config to leave out of the location menu. Patterns may use `*` and `?`.
 hide = ["github.com", "gitlab.com", "bitbucket.org"]
 
 [volumes]
-# Mounted volumes to leave out of the root, by mount point, such as "/Volumes/Backup*" or
+# Mounted volumes to leave out of the location menu, by mount point, such as "/Volumes/Backup*" or
 # "/mnt/*". Patterns may use `*` and `?`. The system volume is always listed.
 hide = []
 

@@ -8,12 +8,12 @@ use std::time::{Duration, Instant, SystemTime};
 
 use jiff::tz::TimeZone;
 use noc_config::{
-    Config, HistoryEntry, HostConfig, Hosts, MenuBar, PanelSide, SftpHost, TabBar, UiConfig, Wheel,
-    Workspace, Workspaces,
+    Config, HistoryEntry, HostConfig, Hosts, MenuBar, PanelSide, Recent, SftpHost, TabBar,
+    UiConfig, Wheel, Workspace, Workspaces,
 };
 use noc_ops::{Algorithm, Conflict, CopyOptions, Decision, Sum};
 use noc_tools::zoxide::Scored;
-use noc_vfs::{FileKind, Location, Metadata, RemotePath};
+use noc_vfs::{FileKind, Location, Metadata, RemotePath, Volume};
 use noc_viewer::{Command as ViewerCommand, Styles as ViewerStyles, Viewer};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
@@ -41,6 +41,7 @@ use super::panel::{
     location_text,
 };
 use super::pattern::Pattern;
+use super::places::{Places, volume_of};
 use super::progress::{Counts, JobButton, JobView};
 use super::pulldown::{self, Command, PullDown, PullDownEvent, Status};
 use super::sums::{Mark, SumRow, SumsButton, SumsEvent, SumsWindow, Verdict};
@@ -83,7 +84,7 @@ pub(crate) enum Effect {
         request: ListRequest,
         host: Option<HostHandle>,
     },
-    /// List the virtual root for the location menu and pass the result to [`App::places`].
+    /// Read the volumes and the hosts for the location menu and pass them to [`App::places`].
     ListPlaces { generation: u64 },
     /// Read the start of the file at `location` for the viewer `id`, through `host` if it is
     /// remote, and report to [`App::read`]; `cancel` stops it.
@@ -191,6 +192,9 @@ pub(crate) enum Effect {
     /// Read or change `history.toml`, after the changes before, and report to
     /// [`App::history_changed`].
     History(HistoryChange),
+    /// Read or write `recent.toml`, after the changes before, and report what it read to
+    /// [`App::recent_loaded`].
+    Recent(RecentChange),
 }
 
 /// What the event loop hands the terminal to, with the panels hidden.
@@ -221,6 +225,15 @@ pub(crate) enum HistoryChange {
     },
 }
 
+/// What to do with `recent.toml`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RecentChange {
+    /// Read it.
+    Load,
+    /// Write these hosts and volumes in it.
+    Save(Recent),
+}
+
 /// What to do with `workspaces.toml`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WorkspaceChange {
@@ -249,18 +262,24 @@ enum Host {
         stop: CancellationToken,
         handle: HostHandle,
     },
+    /// The attempt `connection` failed, or the connection was lost, and a dialog asks whether
+    /// to try again; the panels that wait for the host wait on.
+    Stalled { connection: u64 },
 }
 
 impl Host {
     fn connection(&self) -> u64 {
         match self {
-            Self::Connecting { connection, .. } | Self::Connected { connection, .. } => *connection,
+            Self::Connecting { connection, .. }
+            | Self::Connected { connection, .. }
+            | Self::Stalled { connection } => *connection,
         }
     }
 
     fn stop(&self) {
         match self {
             Self::Connecting { stop, .. } | Self::Connected { stop, .. } => stop.cancel(),
+            Self::Stalled { .. } => {}
         }
     }
 }
@@ -353,6 +372,9 @@ enum Purpose {
     QuickCd { panel: PanelId },
     /// A question about workspaces.
     Workspace(WorkspaceQuestion),
+    /// Connecting to `host` failed for `reason`, or its connection was lost: Retry tries
+    /// again for the panels that wait for it.
+    Reconnect { host: String, reason: String },
     /// F10 while jobs run: Yes quits and stops them.
     Quit,
     /// Something to read, such as an error.
@@ -487,7 +509,7 @@ impl Job {
             .iter()
             .filter_map(|location| match location {
                 Location::Remote { host, .. } => Some(host.clone()),
-                Location::Root | Location::Sftp | Location::Local(_) => None,
+                Location::Local(_) => None,
             })
             .collect();
         let view = match kind {
@@ -647,8 +669,12 @@ pub(crate) struct App {
     workspaces_window: Option<WorkspacesWindow>,
     /// The home directory, the first row of the location menu.
     home: PathBuf,
-    /// The title of the virtual root: the name of this machine.
-    root_title: String,
+    /// The hosts and volumes used last, as `recent.toml` holds them with those used since.
+    recent: Recent,
+    /// `recent` as `recent.toml` holds it, or will once it is written.
+    recent_written: Recent,
+    /// The volumes as read last, which tell which one a panel arrives on.
+    volumes: Vec<Volume>,
     keymap: Keymap,
     /// The key hints, over everything at the bottom of the panels, as the event loop's key
     /// state has them.
@@ -700,7 +726,7 @@ enum Front {
 
 impl App {
     /// Both panels on the local directory `start`, and the listings to request for them. The
-    /// virtual root and the location menu open `home`, which `~` in dialogs stands for too.
+    /// location menu opens `home`, which `~` in dialogs stands for too.
     pub(crate) fn new(start: &Path, home: &Path, config: &Config) -> (Self, Vec<Effect>) {
         let (ui, transfer) = (&config.ui, &config.transfer);
         let show_hidden = ui.show_hidden;
@@ -774,7 +800,9 @@ impl App {
             workspace: None,
             workspaces_window: None,
             home: home.to_path_buf(),
-            root_title: fl!("root-title"),
+            recent: Recent::default(),
+            recent_written: Recent::default(),
+            volumes: Vec::new(),
             // `ui.keymap` was checked when the config was loaded.
             keymap: keymap_of(ui),
             hints: None,
@@ -838,7 +866,6 @@ impl App {
                 Vec::new()
             }
             Context::Panel
-            | Context::Root
             | Context::PullDown
             | Context::Dialog
             | Context::Help
@@ -852,8 +879,8 @@ impl App {
     }
 
     /// The directory of the active panel if it is local and new since the last call: the
-    /// working directory of the process follows it. A remote panel or the root leaves the
-    /// working directory where it was.
+    /// working directory of the process follows it. A remote panel leaves the working
+    /// directory where it was.
     pub(crate) fn take_work_dir(&mut self) -> Option<PathBuf> {
         let Location::Local(dir) = self.panel(self.active).location() else {
             return None;
@@ -868,11 +895,6 @@ impl App {
     /// Uses `hosts`, the settings from `hosts.toml`.
     pub(crate) fn set_hosts(&mut self, hosts: Arc<Hosts>) {
         self.host_settings = hosts;
-    }
-
-    /// Titles the virtual root with `name`, the name of this machine.
-    pub(crate) fn set_root_title(&mut self, name: String) {
-        self.root_title = name;
     }
 
     /// Draws in the colors that the terminal can show, `depth`.
@@ -1233,16 +1255,6 @@ impl App {
         } else if self.panel(self.active).searching() {
             Context::QuickSearch
         } else {
-            self.panel_context()
-        }
-    }
-
-    /// Where keys go in the active panel, out of quick search: the commands of the pull-down
-    /// menu show the keys of that context.
-    fn panel_context(&self) -> Context {
-        if self.panel(self.active).shows_root() {
-            Context::Root
-        } else {
             Context::Panel
         }
     }
@@ -1264,16 +1276,16 @@ impl App {
             | Action::Disconnect
             | Action::Cancel
             | Action::PullDown
-            | Action::PullDownLast => true,
-            Action::Mkdir
+            | Action::PullDownLast
+            | Action::Mkdir
             | Action::Delete
             | Action::Copy
             | Action::Move
             | Action::Rename
             | Action::View
-            | Action::Edit => !self.panel(self.active).shows_root(),
+            | Action::Edit => true,
             Action::ToggleWrap => self.viewing.is_some(),
-            Action::EditHost => self.panel(self.active).host_under_cursor().is_some(),
+            Action::EditHost => self.chosen_host().is_some(),
             _ => false,
         }
     }
@@ -1499,7 +1511,7 @@ impl App {
         let tabs = self.tabs(side);
         let titles = tabs
             .iter()
-            .map(|tab| tabs::title(tab.panel.location(), &self.root_title, &self.home))
+            .map(|tab| tabs::title(tab.panel.location(), &self.home))
             .collect();
         let fuzzy = self.config.ui.fuzzy_search;
         self.tab_menu = Some(TabMenu::new(side, titles, tabs.index(), fuzzy));
@@ -1646,8 +1658,12 @@ impl App {
             Action::Select => self.ask_pattern(true),
             Action::Unselect => self.ask_pattern(false),
             Action::Cancel => self.cancel(self.active),
-            Action::Disconnect => return self.disconnect_under_cursor(),
-            Action::EditHost => self.ask_edit_host(),
+            Action::Disconnect => self.disconnect_chosen(),
+            Action::EditHost => {
+                if let Some(host) = self.chosen_host() {
+                    self.ask_edit_host(host);
+                }
+            }
             Action::LocationMenuLeft => return self.open_menu(Side::Left),
             Action::LocationMenuRight => return self.open_menu(Side::Right),
             Action::Jump => return self.open_jump(),
@@ -1756,9 +1772,22 @@ impl App {
         self.menu_listings += 1;
         let generation = self.menu_listings;
         let current = self.panel(side).location().clone();
-        let menu = LocationMenu::new(side, current, self.home.clone(), generation)
-            .fuzzy(self.config.ui.fuzzy_search);
+        let mut menu = LocationMenu::new(side, current, self.home.clone(), generation)
+            .fuzzy(self.config.ui.fuzzy_search)
+            .recent(&self.recent);
+        menu.set_connected(self.hosts.keys().cloned().collect());
         self.menu = Some(menu);
+        vec![Effect::ListPlaces { generation }]
+    }
+
+    /// Reads the volumes and hosts of the location menu again, if it is open.
+    fn reload_menu(&mut self) -> Vec<Effect> {
+        let Some(menu) = &mut self.menu else {
+            return Vec::new();
+        };
+        self.menu_listings += 1;
+        let generation = self.menu_listings;
+        menu.reload(generation);
         vec![Effect::ListPlaces { generation }]
     }
 
@@ -1779,13 +1808,15 @@ impl App {
                 self.active = side;
                 self.go(self.shown(side), Destination::to(location))
             }
-            MenuEvent::Disconnect(host) => self.disconnect(&host),
-            MenuEvent::Reload => {
-                self.menu_listings += 1;
-                let generation = self.menu_listings;
-                menu.reload(generation);
-                vec![Effect::ListPlaces { generation }]
+            MenuEvent::Disconnect(host) => {
+                self.disconnect(&host);
+                Vec::new()
             }
+            MenuEvent::EditHost(host) => {
+                self.ask_edit_host(host);
+                Vec::new()
+            }
+            MenuEvent::Reload => self.reload_menu(),
         }
     }
 
@@ -2164,7 +2195,7 @@ impl App {
     fn open_jump(&mut self) -> Vec<Effect> {
         let exclude = match self.panel(self.active).location() {
             Location::Local(path) => Some(path.clone()),
-            Location::Root | Location::Sftp | Location::Remote { .. } => None,
+            Location::Remote { .. } => None,
         };
         let jump = JumpMenu::new(self.home.clone(), exclude, 0).fuzzy(self.config.ui.fuzzy_search);
         self.jump = Some(jump);
@@ -2300,10 +2331,12 @@ impl App {
                 self.open_tab_menu(side);
                 Vec::new()
             }
-            Command::DisconnectPanel(side) => match self.host_of(side) {
-                Some(host) => self.disconnect(&host),
-                None => Vec::new(),
-            },
+            Command::DisconnectPanel(side) => {
+                if let Some(host) = self.host_of(side) {
+                    self.disconnect(&host);
+                }
+                Vec::new()
+            }
             Command::Configuration => {
                 let icons = self.decor.icons();
                 let configuration = Configuration::new(
@@ -2367,11 +2400,6 @@ impl App {
         }
         self.copy_choices.atomic = config.transfer.atomic_upload;
         self.parallel_jobs = config.transfer.parallel_jobs.get();
-        // What the root and the list of hosts show may change with the ssh settings and the
-        // hidden hosts and volumes.
-        let lists = config.ssh != self.config.ssh
-            || config.discovery != self.config.discovery
-            || config.volumes != self.config.volumes;
         self.config = config.clone();
         let mut effects = vec![Effect::SaveConfig {
             old: Box::new(old),
@@ -2379,10 +2407,6 @@ impl App {
             config: Box::new(config),
         }];
         effects.extend(self.start_queued());
-        if lists {
-            effects.extend(self.reload(&Location::Root));
-            effects.extend(self.reload(&Location::Sftp));
-        }
         effects
     }
 
@@ -2404,18 +2428,19 @@ impl App {
 
     /// Whether a command of the pull-down menu runs now, its mark, and its key.
     fn command_status(&self, command: Command) -> Status {
-        let context = self.panel_context();
+        let context = Context::Panel;
         let active = self.panel(self.active);
-        let files = !active.shows_root();
         match command {
             Command::Do(action) => Status {
                 enabled: match action {
-                    Action::Select | Action::Unselect | Action::InvertMarks => files,
                     Action::Checksum => !active.chosen().is_empty(),
-                    Action::Disconnect => active
-                        .host_under_cursor()
-                        .is_some_and(|host| self.hosts.contains_key(host)),
-                    Action::QuickSearch
+                    Action::Disconnect => self
+                        .chosen_host()
+                        .is_some_and(|host| self.hosts.contains_key(&host)),
+                    Action::Select
+                    | Action::Unselect
+                    | Action::InvertMarks
+                    | Action::QuickSearch
                     | Action::Jump
                     | Action::QuickCd
                     | Action::SwapPanels
@@ -2485,19 +2510,48 @@ impl App {
         }
     }
 
-    /// Takes the result of an [`Effect::ListPlaces`].
-    pub(crate) fn places(&mut self, generation: u64, result: Result<Listed, String>) {
+    /// Takes the result of an [`Effect::ListPlaces`]: the volumes, which tell which one a
+    /// panel arrives on, and, for the location menu, the hosts.
+    pub(crate) fn places(&mut self, generation: u64, result: Result<Places, String>) {
+        if let Ok(places) = &result {
+            self.volumes.clone_from(&places.volumes);
+        }
         if let Some(menu) = &mut self.menu {
             menu.listed(generation, result);
         }
     }
 
-    /// Hosts that are connected or connecting, which the virtual root shows again.
+    /// Hosts that are connected, connecting, or stalled, which the location menu always shows.
     fn sync_connected(&mut self) {
-        let connected: HashSet<String> = self.hosts.keys().cloned().collect();
-        for panel in self.panels_mut() {
-            panel.set_connected(connected.clone());
+        if let Some(menu) = &mut self.menu {
+            menu.set_connected(self.hosts.keys().cloned().collect());
         }
+    }
+
+    /// Takes the hosts and volumes as `recent.toml` held them; those used since come first.
+    pub(crate) fn recent_loaded(&mut self, result: Result<Recent, String>) {
+        let Ok(loaded) = result else {
+            return;
+        };
+        let mut recent = loaded.clone();
+        for host in self.recent.hosts.iter().rev() {
+            recent.use_host(host);
+        }
+        for volume in self.recent.volumes.iter().rev() {
+            recent.use_volume(volume);
+        }
+        self.recent = recent;
+        self.recent_written = loaded;
+    }
+
+    /// The hosts and volumes used last, if they changed since the last call, for
+    /// `recent.toml`.
+    pub(crate) fn take_recent(&mut self) -> Option<Recent> {
+        if self.recent == self.recent_written {
+            return None;
+        }
+        self.recent_written.clone_from(&self.recent);
+        Some(self.recent.clone())
     }
 
     /// Does what a dialog was for, once `event` closed it.
@@ -2516,7 +2570,7 @@ impl App {
             }
             Purpose::Pattern { panel, mark } if ok => self.mark_matching(panel, mark, dialog),
             Purpose::Mkdir { panel } if ok && !dialog.text().is_empty() => {
-                let resolved = self.panel_of(panel).and_then(|p| p.resolve(dialog.text()));
+                let resolved = self.panel_of(panel).map(|p| p.resolve(dialog.text()));
                 if let Some(location) = resolved {
                     return self.create_dir(panel, location);
                 }
@@ -2560,9 +2614,8 @@ impl App {
                 expect,
             } if ok => return self.start_checksum(dialog, dir, &names, other, expect),
             Purpose::SaveSums { window, dir, bytes } if ok && !dialog.text().is_empty() => {
-                if let Some(location) = child(&dir, dialog.text().as_bytes()) {
-                    return self.write_sums(window, location, bytes, false);
-                }
+                let location = child(&dir, dialog.text().as_bytes());
+                return self.write_sums(window, location, bytes, false);
             }
             Purpose::OverwriteSums {
                 window,
@@ -2580,6 +2633,12 @@ impl App {
             Purpose::Workspace(question) => {
                 return self.workspace_dialog_closed(dialog.text(), question, event);
             }
+            Purpose::Reconnect { host, reason } => {
+                if event == DialogEvent::Pressed(Button::Retry) {
+                    return self.reconnect(&host);
+                }
+                self.give_up(&host, &reason);
+            }
             Purpose::Quit => self.quit = event == DialogEvent::Pressed(Button::Yes),
             Purpose::EditHost { .. }
             | Purpose::QuickCd { .. }
@@ -2596,15 +2655,15 @@ impl App {
         Vec::new()
     }
 
-    /// Views the file under the cursor of the active panel, as F3 does in mc; a directory, or
-    /// a row of the virtual root, opens as with Enter.
+    /// Views the file under the cursor of the active panel, as F3 does in mc; a directory
+    /// opens as with Enter.
     fn view(&mut self) -> Vec<Effect> {
         let side = self.active;
         let panel = self.panel(side);
         let file = panel
             .entry_under_cursor()
             .filter(|entry| !entry.is_dir_like())
-            .and_then(|entry| child(panel.location(), &entry.name));
+            .map(|entry| child(panel.location(), &entry.name));
         let Some(location) = file else {
             if let Some(request) = self.panel_mut(side).handle(Action::Enter) {
                 return self.open(self.shown(side), request);
@@ -2616,7 +2675,7 @@ impl App {
                 Some(Host::Connected { handle, .. }) => Some(handle.clone()),
                 _ => None,
             },
-            Location::Root | Location::Sftp | Location::Local(_) => None,
+            Location::Local(_) => None,
         };
         self.last_job += 1;
         let id = self.last_job;
@@ -2646,7 +2705,7 @@ impl App {
         let Some((name, location)) = panel
             .entry_under_cursor()
             .filter(|entry| !entry.is_dir_like())
-            .and_then(|entry| Some((entry.name.clone(), child(&dir, &entry.name)?)))
+            .map(|entry| (entry.name.clone(), child(&dir, &entry.name)))
         else {
             return Vec::new();
         };
@@ -2734,7 +2793,7 @@ impl App {
                 Some(Host::Connected { handle, .. }) => Some(handle.clone()),
                 _ => None,
             },
-            Location::Root | Location::Sftp | Location::Local(_) => None,
+            Location::Local(_) => None,
         };
         let Some(handle) = handle else {
             self.keep_edit(&path, &editing.file);
@@ -2778,7 +2837,6 @@ impl App {
             Location::Remote { host, .. } => {
                 matches!(self.hosts.get(host), Some(Host::Connected { .. }))
             }
-            Location::Root | Location::Sftp => false,
         };
         if opens {
             self.command_line = Some(CommandLine::new(kind));
@@ -2804,7 +2862,7 @@ impl App {
             CommandEvent::Older | CommandEvent::Newer => {
                 let host = match self.panel(self.active).location() {
                     Location::Remote { host, .. } => Some(host.as_str()),
-                    _ => None,
+                    Location::Local(_) => None,
                 };
                 let commands: Vec<&str> = self
                     .history
@@ -2849,7 +2907,6 @@ impl App {
                             dir: path.clone(),
                         }
                     }
-                    Location::Root | Location::Sftp => return Vec::new(),
                 };
                 let mut effects = self.remember(&dir, &command);
                 self.handover = Some(Handover::Run(Run {
@@ -2871,7 +2928,7 @@ impl App {
         }
         let here = match self.panel(self.active).location() {
             Location::Remote { host, .. } => Some(host.clone()),
-            _ => None,
+            Location::Local(_) => None,
         };
         let labels = self
             .history
@@ -2902,7 +2959,7 @@ impl App {
                 self.history_window = None;
                 let here = match self.panel(self.active).location() {
                     Location::Remote { host, .. } => Some(host.as_str()),
-                    _ => None,
+                    Location::Local(_) => None,
                 };
                 let foreign = host.as_deref() != here;
                 if let Some(line) = &mut self.command_line {
@@ -2933,7 +2990,6 @@ impl App {
                 Some(host.clone()),
                 String::from_utf8_lossy(path.as_bytes()).into_owned(),
             ),
-            Location::Root | Location::Sftp => return Vec::new(),
         };
         let time = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -3016,17 +3072,12 @@ impl App {
     }
 
     /// The title of the terminal's window or tab while `ui.terminal_title` is on: where the
-    /// active panel is, as the prompt of a shell command shows it, or the name of this machine
-    /// in the virtual root.
+    /// active panel is, as the prompt of a shell command shows it.
     pub(crate) fn terminal_title(&self) -> Option<String> {
         if !self.config.ui.terminal_title {
             return None;
         }
-        let place = match self.panel(self.active).location() {
-            Location::Root => cells::sanitize(self.root_title.as_bytes()),
-            _ => self.active_place(),
-        };
-        Some(fl!("terminal-title", place = place))
+        Some(fl!("terminal-title", place = self.active_place()))
     }
 
     /// The directory of the active panel, with `~` for the home directory, or `host:path` with
@@ -3045,7 +3096,6 @@ impl App {
                     path: path.clone(),
                 })
             }
-            other => location_text(other),
         }
     }
 
@@ -3139,9 +3189,9 @@ impl App {
                     return Vec::new();
                 }
             }
-            Location::Root | Location::Sftp | Location::Local(_) => None,
+            Location::Local(_) => None,
         };
-        let targets = names.iter().filter_map(|name| child(&dir, name)).collect();
+        let targets = names.iter().map(|name| child(&dir, name)).collect();
         let noted = self.note(&dir);
         self.last_job += 1;
         let id = self.last_job;
@@ -3205,7 +3255,7 @@ impl App {
         let names = chosen.iter().map(|entry| entry.name.clone()).collect();
         let dir = panel.location().clone();
         let other = self.panel(self.active.other()).location().clone();
-        let offered = (!other.is_virtual()).then(|| (location_text(&other), other));
+        let offered = Some((location_text(&other), other));
         let text = offered
             .as_ref()
             .map(|(text, _)| text.clone())
@@ -3242,7 +3292,7 @@ impl App {
         {
             return Some(Location::Remote { host, path });
         }
-        self.panel_of(panel)?.resolve(text)
+        Some(self.panel_of(panel)?.resolve(text))
     }
 
     /// Starts copying or moving `names` from `dir` to `target`, and shows its progress; a
@@ -3254,7 +3304,7 @@ impl App {
         names: &[Vec<u8>],
         target: Location,
     ) -> Vec<Effect> {
-        let sources: Vec<Location> = names.iter().filter_map(|name| child(&dir, name)).collect();
+        let sources: Vec<Location> = names.iter().map(|name| child(&dir, name)).collect();
         let error = |reason: String| {
             let path = location_text(&target);
             if kind == JobKind::Move {
@@ -3277,7 +3327,7 @@ impl App {
                 Some(Host::Connected { handle, .. }) => Ok(Some(handle.clone())),
                 _ => Err(()),
             },
-            Location::Root | Location::Sftp | Location::Local(_) => Ok(None),
+            Location::Local(_) => Ok(None),
         };
         let (Ok(from), Ok(to)) = (handle(&dir), handle(&target)) else {
             self.show_error(&error(fl!("error-connection-closed")));
@@ -3290,7 +3340,10 @@ impl App {
         let id = self.last_job;
         let cancel = CancellationToken::new();
         // Into the target, or to it as a new name in its parent; a move empties the source.
-        let changes = vec![target.clone(), target.parent(), dir];
+        let changes = [Some(target.clone()), target.parent(), Some(dir)]
+            .into_iter()
+            .flatten()
+            .collect();
         let job = Job::new(id, kind, changes, cancel.clone());
         let moving = kind == JobKind::Move;
         let options = CopyOptions {
@@ -3501,7 +3554,7 @@ impl App {
                 Some(Host::Connected { handle, .. }) => Ok(Some(handle.clone())),
                 _ => Err(()),
             },
-            Location::Root | Location::Sftp | Location::Local(_) => Ok(None),
+            Location::Local(_) => Ok(None),
         }
     }
 
@@ -3528,11 +3581,11 @@ impl App {
         let other = other_panel
             .entry_under_cursor()
             .filter(|entry| single_file && !entry.is_dir_like())
-            .and_then(|entry| {
-                let location = child(other_panel.location(), &entry.name)?;
-                Some((location, names.first() == Some(&entry.name)))
+            .map(|entry| {
+                let location = child(other_panel.location(), &entry.name);
+                (location, names.first() == Some(&entry.name))
             })
-            .filter(|(location, _)| child(&dir, &names[0]).as_ref() != Some(location));
+            .filter(|(location, _)| child(&dir, &names[0]) != *location);
         let fields = if single_file {
             vec![(fl!("checksum-expected"), String::new())]
         } else {
@@ -3593,7 +3646,7 @@ impl App {
         };
         self.algorithm = algorithm;
         let compare = other.is_some() && dialog.checked(0);
-        let mut groups = vec![names.iter().filter_map(|name| child(&dir, name)).collect()];
+        let mut groups = vec![names.iter().map(|name| child(&dir, name)).collect()];
         if compare {
             groups.extend(other.map(|location| vec![location]));
         }
@@ -3825,7 +3878,9 @@ impl App {
                         .window
                         .set_status(fl!("checksum-saved", path = path));
                 }
-                self.reload(&location.parent())
+                location
+                    .parent()
+                    .map_or_else(Vec::new, |dir| self.reload(&dir))
             }
             Err(None) => {
                 let message = fl!("checksum-exists", path = path);
@@ -3881,9 +3936,6 @@ impl App {
     /// Opens the dialog of F7 for the active panel, with the name under the cursor, as in mc.
     fn ask_mkdir(&mut self) {
         let panel = self.panel(self.active);
-        if panel.shows_root() {
-            return;
-        }
         let name = panel
             .name_under_cursor()
             .map(|name| String::from_utf8_lossy(name).into_owned())
@@ -3913,7 +3965,7 @@ impl App {
                 Some(Host::Connected { handle, .. }) => Some(handle.clone()),
                 _ => None,
             },
-            Location::Root | Location::Sftp | Location::Local(_) => None,
+            Location::Local(_) => None,
         };
         let mut effects = vec![Effect::CreateDir {
             panel,
@@ -3953,7 +4005,7 @@ impl App {
             let Some(tab) = self.tab_mut(id) else {
                 continue;
             };
-            if *tab.panel.location() != parent {
+            if Some(tab.panel.location()) != parent.as_ref() {
                 continue;
             }
             let request = match &name {
@@ -4036,10 +4088,7 @@ impl App {
             return Vec::new();
         }
         let dir = panel.location().clone();
-        match (child(&dir, &name), child(&dir, text.as_bytes())) {
-            (Some(from), Some(to)) => self.rename_entry(id, from, to, false),
-            _ => Vec::new(),
-        }
+        self.rename_entry(id, child(&dir, &name), child(&dir, text.as_bytes()), false)
     }
 
     /// Renames `from` to `to` for `panel`, in the background, over a file there if `replace`;
@@ -4057,7 +4106,7 @@ impl App {
             self.show_error(&fl!("rename-error", path = path, reason = reason));
             return Vec::new();
         };
-        let noted = self.note(&from.parent());
+        let noted = from.parent().map_or_else(Vec::new, |dir| self.note(&dir));
         let mut effects = vec![Effect::Rename {
             panel,
             from,
@@ -4117,9 +4166,6 @@ impl App {
     /// Opens the dialog of `+` (`mark`) or `-` for the active panel, as in mc: a pattern, and
     /// whether it applies to files only and whether case counts.
     fn ask_pattern(&mut self, mark: bool) {
-        if self.panel(self.active).shows_root() {
-            return;
-        }
         let title = if mark {
             fl!("pattern-select")
         } else {
@@ -4166,23 +4212,14 @@ impl App {
         self.pattern_options = options;
     }
 
-    /// Opens the dialog of F4 on the host under the cursor of the active panel: its settings
-    /// from `hosts.toml`.
-    fn ask_edit_host(&mut self) {
-        let Some(name) = self
-            .panel(self.active)
-            .host_under_cursor()
-            .map(str::to_owned)
-        else {
-            return;
-        };
+    /// Opens the dialog of F4 on the host `name`: its settings from `hosts.toml`.
+    fn ask_edit_host(&mut self, name: String) {
         let old = self.host_settings.get(&name).cloned();
         let sftp = match &old {
             Some(HostConfig::Sftp(sftp)) => sftp.clone(),
             None => SftpHost::default(),
         };
-        // The active panel shows the hosts, so the other one is more likely on this one.
-        let current = [self.active.other(), self.active]
+        let current = [self.active, self.active.other()]
             .into_iter()
             .find_map(|side| match self.panel(side).location() {
                 Location::Remote { host, path } if *host == name && !path.as_bytes().is_empty() => {
@@ -4241,15 +4278,13 @@ impl App {
         }
     }
 
-    /// Takes the end of an [`Effect::SaveHost`]: the host settings now, which the lists of
-    /// hosts show at once, or why they could not be saved.
+    /// Takes the end of an [`Effect::SaveHost`]: the host settings now, which the location menu
+    /// shows at once, or why they could not be saved.
     pub(crate) fn host_saved(&mut self, result: Result<Arc<Hosts>, String>) -> Vec<Effect> {
         match result {
             Ok(hosts) => {
                 self.host_settings = hosts;
-                let mut effects = self.reload(&Location::Root);
-                effects.extend(self.reload(&Location::Sftp));
-                effects
+                self.reload_menu()
             }
             Err(reason) => {
                 let reason = cells::sanitize(reason.as_bytes());
@@ -4319,25 +4354,30 @@ impl App {
                     host,
                 }]
             }
-            Some(Host::Connecting { .. }) => Vec::new(),
+            Some(Host::Connecting { .. } | Host::Stalled { .. }) => Vec::new(),
             None => {
-                self.failed.remove(host);
-                self.connections += 1;
-                let connection = self.connections;
-                let stop = CancellationToken::new();
                 let host = host.clone();
-                let state = Host::Connecting {
-                    connection,
-                    stop: stop.clone(),
-                };
-                self.hosts.insert(host.clone(), state);
-                vec![Effect::Connect {
-                    host,
-                    connection,
-                    stop,
-                }]
+                self.connect(&host)
             }
         }
+    }
+
+    /// Starts connecting to `host`, which is not connected.
+    fn connect(&mut self, host: &str) -> Vec<Effect> {
+        self.failed.remove(host);
+        self.connections += 1;
+        let connection = self.connections;
+        let stop = CancellationToken::new();
+        let state = Host::Connecting {
+            connection,
+            stop: stop.clone(),
+        };
+        self.hosts.insert(host.to_owned(), state);
+        vec![Effect::Connect {
+            host: host.to_owned(),
+            connection,
+            stop,
+        }]
     }
 
     /// Stops what the panel on `side` waits for. A connection attempt stops for every panel.
@@ -4360,40 +4400,40 @@ impl App {
         self.panel_mut(side).cancel();
     }
 
-    /// Closes the connection to the host under the cursor of the active panel, or stops
-    /// connecting to it.
-    fn disconnect_under_cursor(&mut self) -> Vec<Effect> {
-        match self.panel(self.active).host_under_cursor() {
-            Some(host) => {
-                let host = host.to_owned();
-                self.disconnect(&host)
-            }
-            None => Vec::new(),
+    /// The host that F4 and F8 act on: the one under the cursor of the location menu, else the
+    /// one the active panel shows.
+    fn chosen_host(&self) -> Option<String> {
+        if let Some(menu) = &self.menu {
+            return menu.chosen_host().map(str::to_owned);
+        }
+        match self.panel(self.active).location() {
+            Location::Remote { host, .. } => Some(host.clone()),
+            Location::Local(_) => None,
         }
     }
 
-    /// Closes the connection to `host`, or stops connecting to it. Panels on that host go back
-    /// to the list of hosts.
-    fn disconnect(&mut self, host: &str) -> Vec<Effect> {
+    /// Closes the connection to the host that F8 acts on, or stops connecting to it.
+    fn disconnect_chosen(&mut self) {
+        if let Some(host) = self.chosen_host() {
+            self.disconnect(&host);
+        }
+    }
+
+    /// Closes the connection to `host`, or stops connecting to it. Panels on that host stay
+    /// there, without their entries, until they read their directories again.
+    fn disconnect(&mut self, host: &str) {
         let Some(state) = self.hosts.remove(host) else {
-            return Vec::new();
+            return;
         };
         state.stop();
-        let mut effects = Vec::new();
-        for id in self.panel_ids() {
-            let Some(panel) = self.panel_of_mut(id) else {
-                continue;
-            };
-            if matches!(state, Host::Connecting { .. }) {
-                if waits_for(panel, host) {
-                    panel.cancel();
-                }
-            } else if let Some(request) = panel.leave_host(host, None) {
-                effects.extend(self.route(id, request));
+        for panel in self.panels_mut() {
+            if matches!(state, Host::Connected { .. }) {
+                panel.drop_host(host);
+            } else if waits_for(panel, host) {
+                panel.cancel();
             }
         }
         self.sync_connected();
-        effects
     }
 
     /// Takes the address `ssh -G` gave for a host.
@@ -4401,11 +4441,12 @@ impl App {
         self.addresses.insert(host, address);
     }
 
-    /// What the root shows for a host.
+    /// What the location menu and the panels show for a host.
     fn host_state(&self, host: &str) -> HostState {
         let status = match self.hosts.get(host) {
             Some(Host::Connecting { .. }) => HostStatus::Connecting,
             Some(Host::Connected { .. }) => HostStatus::Connected,
+            Some(Host::Stalled { .. }) => HostStatus::Stalled,
             None if self.failed.contains(host) => HostStatus::Failed,
             None => HostStatus::Idle,
         };
@@ -4435,6 +4476,11 @@ impl App {
             let arriving = tab.arriving.take();
             tab.noted =
                 matches!(&location, Location::Local(path) if arriving.as_ref() == Some(path));
+            if let Location::Local(path) = &location
+                && let Some(volume) = volume_of(&self.volumes, path)
+            {
+                self.recent.use_volume(&volume.mount_point);
+            }
         }
         if let Location::Remote { host, path } = location
             && !path.as_bytes().is_empty()
@@ -4458,14 +4504,15 @@ impl App {
         {
             return Vec::new();
         }
-        let stop = match state {
-            Host::Connecting { stop, .. } | Host::Connected { stop, .. } => stop.clone(),
+        let (Host::Connecting { stop, .. } | Host::Connected { stop, .. }) = state else {
+            return Vec::new();
         };
         *state = Host::Connected {
             connection,
-            stop,
+            stop: stop.clone(),
             handle,
         };
+        self.recent.use_host(host);
         let mut effects = Vec::new();
         for id in self.panel_ids() {
             // A tab that a workspace restored hidden asks once it shows.
@@ -4488,8 +4535,10 @@ impl App {
         connection: u64,
         reason: Option<&str>,
     ) -> Vec<Effect> {
-        if self.hosts.get(host).map(Host::connection) != Some(connection) {
-            return Vec::new();
+        match self.hosts.get(host) {
+            Some(state @ (Host::Connecting { .. } | Host::Connected { .. }))
+                if state.connection() == connection => {}
+            _ => return Vec::new(),
         }
         let Some(state) = self.hosts.remove(host) else {
             return Vec::new();
@@ -4498,8 +4547,8 @@ impl App {
             self.failed.insert(host.to_owned());
         }
         let mut effects = Vec::new();
-        // Their tasks dropped the jobs on the host; its panels leave it, so there is nothing
-        // to read.
+        // Their tasks dropped the jobs on the host, whose panels show nothing of it until it is
+        // back, so there is nothing to read.
         let lost: Vec<u64> = self
             .jobs
             .iter()
@@ -4515,31 +4564,86 @@ impl App {
             }
         }
         effects.extend(self.start_queued());
-        for id in self.panel_ids() {
-            let Some(panel) = self.panel_of_mut(id) else {
-                continue;
-            };
-            match (&state, reason) {
-                (Host::Connecting { .. }, Some(reason)) => {
-                    if let Some(request) = panel.pending_request()
-                        && waits_for(panel, host)
-                    {
-                        panel.listed(request.generation, Err(reason.to_owned()));
+        match reason {
+            Some(reason) => {
+                self.hosts
+                    .insert(host.to_owned(), Host::Stalled { connection });
+                let lost = matches!(state, Host::Connected { .. });
+                if lost {
+                    for panel in self.panels_mut() {
+                        panel.lose_host(host);
                     }
                 }
-                (Host::Connecting { .. }, None) => {
-                    if waits_for(panel, host) {
+                self.ask_reconnect(host, reason, lost);
+            }
+            None => {
+                for panel in self.panels_mut() {
+                    if matches!(state, Host::Connected { .. }) {
+                        panel.drop_host(host);
+                    } else if waits_for(panel, host) {
                         panel.cancel();
-                    }
-                }
-                (Host::Connected { .. }, _) => {
-                    if let Some(request) = panel.leave_host(host, reason) {
-                        effects.extend(self.route(id, request));
                     }
                 }
             }
         }
+        self.sync_connected();
         effects
+    }
+
+    /// Asks whether to connect to `host` again, after the attempt failed for `reason` or, if
+    /// `lost`, the connection was lost.
+    fn ask_reconnect(&mut self, host: &str, reason: &str, lost: bool) {
+        let shown = cells::sanitize(host.as_bytes());
+        let why = cells::sanitize(reason.as_bytes());
+        let message = if lost {
+            fl!("reconnect-lost", host = shown, reason = why)
+        } else {
+            fl!("reconnect-failed", host = shown, reason = why)
+        };
+        let buttons = vec![Button::Retry, Button::Cancel];
+        let dialog = Dialog::question(&fl!("reconnect-title"), &message, buttons, 0, true);
+        self.dialogs.push_back(Open {
+            dialog,
+            purpose: Purpose::Reconnect {
+                host: host.to_owned(),
+                reason: reason.to_owned(),
+            },
+        });
+    }
+
+    /// Tries `host` again, for the panels that wait for it, after Retry.
+    fn reconnect(&mut self, host: &str) -> Vec<Effect> {
+        if !matches!(self.hosts.get(host), Some(Host::Stalled { .. })) {
+            return Vec::new();
+        }
+        self.hosts.remove(host);
+        let effects = self.connect(host);
+        self.sync_connected();
+        effects
+    }
+
+    /// Stops waiting for `host`, which could not be reached for `reason`, after Cancel: the
+    /// panels that were to open it stay where they were and say why; those on it stay there
+    /// without their entries.
+    fn give_up(&mut self, host: &str, reason: &str) {
+        if !matches!(self.hosts.get(host), Some(Host::Stalled { .. })) {
+            return;
+        }
+        self.hosts.remove(host);
+        for panel in self.panels_mut() {
+            let Some(request) = panel.pending_request() else {
+                continue;
+            };
+            if !waits_for(panel, host) {
+                continue;
+            }
+            if is_on(panel.location(), host) {
+                panel.cancel();
+            } else {
+                panel.listed(request.generation, Err(reason.to_owned()));
+            }
+        }
+        self.sync_connected();
     }
 
     /// Queues a dialog for a question from ssh.
@@ -4569,13 +4673,13 @@ impl App {
             .retain(|open| !matches!(open.purpose, Purpose::Ssh { id: shown, .. } if shown == id));
     }
 
-    /// Whether something on screen moves while time passes: a host that is connecting, or the
-    /// time of a working job in its window or in the list of jobs.
+    /// Whether something on screen moves while time passes: a host that is connecting or
+    /// stalled, or the time of a working job in its window or in the list of jobs.
     pub(crate) fn animates(&self) -> bool {
         let connecting = self
             .hosts
             .values()
-            .any(|host| matches!(host, Host::Connecting { .. }));
+            .any(|host| matches!(host, Host::Connecting { .. } | Host::Stalled { .. }));
         let timed = self
             .jobs
             .iter()
@@ -4637,11 +4741,12 @@ impl App {
             .map(|host| (host.clone(), self.host_state(host)))
             .collect();
         let hosts = |host: &str| states.get(host).cloned().unwrap_or_default();
+        let reload_key = self.keymap.key(Context::Panel, Action::Reload);
         let view = View {
             hosts: &hosts,
             decor: self.decor,
             theme: &self.theme,
-            root_title: &self.root_title,
+            reload_key: reload_key.as_deref(),
             tick: self.tick,
             now,
             tz,
@@ -4846,7 +4951,7 @@ fn render_side(
     home: &Path,
 ) -> Vec<(usize, Rect)> {
     tabs.active_mut().panel.render(frame, area, focused, view);
-    let names = tabs.names(view.root_title, home, line.is_none());
+    let names = tabs.names(home, line.is_none());
     let bar = Bar {
         names: &names,
         active: tabs.index(),
@@ -5055,10 +5160,14 @@ fn remote_within(outer: &RemotePath, inner: &RemotePath) -> bool {
 /// The last component of a local or remote path.
 fn file_name(location: &Location) -> Option<Vec<u8>> {
     match location {
-        Location::Root | Location::Sftp => None,
         Location::Local(path) => path.file_name().map(|name| name.as_bytes().to_vec()),
         Location::Remote { path, .. } => path.file_name().map(<[u8]>::to_vec),
     }
+}
+
+/// Whether `location` is on `host`.
+fn is_on(location: &Location, host: &str) -> bool {
+    matches!(location, Location::Remote { host: shown, .. } if shown == host)
 }
 
 /// Whether `panel` waits for a listing on `host`.
@@ -5103,7 +5212,7 @@ mod tests {
     use secrecy::ExposeSecret as _;
 
     use super::super::panel::Listing;
-    use super::super::root::RootHost;
+    use super::super::places::KnownHost;
     use super::*;
 
     fn dir(name: &str) -> DirEntry {
@@ -5263,39 +5372,45 @@ mod tests {
         app
     }
 
-    /// An app with both panels on the list of hosts, `web` and `db`, which they reached from the
-    /// virtual root.
-    fn at_root() -> App {
+    /// The places of the location menu: no volumes, and the hosts `web` and `db`.
+    fn places() -> Places {
+        Places {
+            volumes: Vec::new(),
+            hosts: ["web", "db"]
+                .map(|alias| KnownHost {
+                    alias: alias.to_owned(),
+                    label: None,
+                    address: None,
+                })
+                .to_vec(),
+        }
+    }
+
+    /// An app with both panels on `/`, empty.
+    fn at_slash() -> App {
         let (mut app, effects) = App::new(Path::new("/"), Path::new("/home/me"), &config());
         answer(&mut app, effects, &Listing::Dir(Vec::new()));
-        let hosts = ["web", "db"].map(|alias| RootHost {
-            alias: alias.to_owned(),
-            label: None,
-            address: None,
-        });
-        for side in Side::BOTH {
-            app.active = side;
-            let effects = app.handle(action(Action::Parent));
-            let root = Listing::Root {
-                volumes: Vec::new(),
-                hosts: hosts.to_vec(),
-            };
-            answer(&mut app, effects, &root);
-            app.handle(action(Action::End));
-            let effects = app.handle(action(Action::Enter));
-            answer(&mut app, effects, &Listing::Hosts(hosts.to_vec()));
-        }
-        app.active = Side::Left;
         app
     }
 
-    /// Opens the host `rows` rows below `..` in the list of hosts in the panel on `side`.
-    fn enter_host(app: &mut App, side: Side, rows: usize) -> Vec<Effect> {
-        app.active = side;
-        for _ in 0..rows {
-            app.handle(action(Action::Down));
-        }
-        app.handle(action(Action::Enter))
+    /// Opens the location menu of the panel on `side`, with its places.
+    fn menu_on(app: &mut App, side: Side) {
+        let effects = app.handle(action(match side {
+            Side::Left => Action::LocationMenuLeft,
+            Side::Right => Action::LocationMenuRight,
+        }));
+        let Effect::ListPlaces { generation } = one(effects) else {
+            panic!("expected the places");
+        };
+        app.places(generation, Ok(places()));
+    }
+
+    /// Opens the host of [`places`] number `host`, from 1, in the panel on `side`, through its
+    /// location menu, after the home directory, which 0 opens.
+    fn enter_host(app: &mut App, side: Side, host: usize) -> Vec<Effect> {
+        menu_on(app, side);
+        let digit = char::from_digit(u32::try_from(host + 1).unwrap(), 10).unwrap();
+        app.handle(Resolved::Insert(digit))
     }
 
     /// Wide enough for whole status lines.
@@ -5374,7 +5489,7 @@ mod tests {
         app.handle(action(Action::SwitchPanel));
         assert_eq!(app.take_work_dir(), Some(PathBuf::from("/srv/left")));
 
-        let mut app = at_root();
+        let mut app = at_slash();
         app.take_work_dir();
         let effects = enter_host(&mut app, Side::Left, 1);
         let Effect::Connect { connection, .. } = one(effects) else {
@@ -5729,29 +5844,6 @@ mod tests {
             app.panel(Side::Left).here(),
             "on the row Alt+o moved on to"
         );
-
-        // A host opens in the other panel once it is connected.
-        let mut app = at_root();
-        app.handle(action(Action::Down));
-        let Effect::Connect {
-            host, connection, ..
-        } = one(app.handle(action(Action::OtherPanelOpen)))
-        else {
-            panic!("expected a connection");
-        };
-        assert_eq!(host, "web");
-        let (handle, _requests) = HostHandle::channel();
-        let effects = app.connected("web", connection, handle);
-        assert!(matches!(
-            &effects[..],
-            [Effect::List {
-                panel: PanelId {
-                    side: Side::Right,
-                    ..
-                },
-                ..
-            }]
-        ));
     }
 
     fn type_text(app: &mut App, text: &str) {
@@ -5901,12 +5993,8 @@ mod tests {
     }
 
     #[test]
-    fn f7_works_on_hosts_but_not_in_the_root() {
-        let mut app = at_root();
-        assert!(!screen(&mut app).contains("7Mkdir"));
-        app.handle(action(Action::Mkdir));
-        assert_eq!(app.context(), Context::Root, "nowhere to make it");
-
+    fn f7_works_on_hosts() {
+        let mut app = at_slash();
         let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
             panic!("expected a connection");
         };
@@ -6335,7 +6423,7 @@ mod tests {
 
     #[test]
     fn a_job_on_a_lost_host_ends_with_it() {
-        let mut app = at_root();
+        let mut app = at_slash();
         let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
             panic!("expected a connection");
         };
@@ -6349,9 +6437,13 @@ mod tests {
         assert!(through_host, "through the host's task");
 
         let effects = app.closed("web", connection, Some("Broken pipe"));
-        assert_eq!(effects.len(), 1, "back to the root");
+        assert!(effects.is_empty(), "the panel waits for an answer");
         assert!(app.jobs.is_empty());
-        assert_ne!(app.context(), Context::Dialog);
+        assert_eq!(app.dialogs.len(), 1, "no question about the job");
+        assert!(matches!(
+            app.dialogs.front().map(|open| &open.purpose),
+            Some(Purpose::Reconnect { .. })
+        ));
     }
 
     /// The only effect, which must start copying: the job, its sources, its target, whether
@@ -6579,7 +6671,7 @@ mod tests {
 
     #[test]
     fn a_copy_to_a_lost_host_ends_with_it() {
-        let mut app = at_root();
+        let mut app = at_slash();
         let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Right, 1)) else {
             panic!("expected a connection");
         };
@@ -6602,8 +6694,7 @@ mod tests {
         );
 
         app.active = Side::Left;
-        app.handle(action(Action::Home));
-        let effects = app.handle(action(Action::Enter));
+        let effects = app.go(app.shown(Side::Left), Destination::to(local("/srv")));
         answer(&mut app, effects, &Listing::Dir(vec![file("notes", 5)]));
         app.handle(action(Action::Down));
         app.handle(action(Action::Copy));
@@ -6699,7 +6790,7 @@ mod tests {
 
     /// An app whose left panel is on `web:/home/deploy`, which holds `notes`.
     fn on_a_host() -> (App, u64) {
-        let mut app = at_root();
+        let mut app = at_slash();
         let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
             panic!("expected a connection");
         };
@@ -6802,6 +6893,7 @@ mod tests {
         app.job_event(id, JobEvent::Finished { complete: true });
         app.take_edit().unwrap();
         app.closed("web", connection, Some("Broken pipe"));
+        app.handle(action(Action::Cancel));
         assert!(app.edited(Ok(true)).is_empty());
         assert!(screen_of(&mut app, 12).contains("did not go back"));
     }
@@ -6859,11 +6951,7 @@ mod tests {
     }
 
     #[test]
-    fn pattern_dialogs_wait_for_no_prompt_and_skip_the_root() {
-        let mut app = at_root();
-        app.handle(action(Action::Select));
-        assert_eq!(app.context(), Context::Root, "no names to match");
-
+    fn pattern_dialogs_wait_for_no_prompt() {
         let mut app = loaded();
         app.handle(action(Action::Select));
         let (password, answer) = ask(1, PromptKind::Secret, "deploy@web's password: ");
@@ -6919,7 +7007,7 @@ mod tests {
 
     #[test]
     fn a_host_connects_once_and_then_lists_for_every_panel_that_waits() {
-        let mut app = at_root();
+        let mut app = at_slash();
         let Effect::Connect {
             host, connection, ..
         } = one(enter_host(&mut app, Side::Left, 1))
@@ -6954,7 +7042,7 @@ mod tests {
         assert!(!screen(&mut app).contains("Connecting"));
 
         // A connected host lists at once.
-        let effects = enter_host(&mut app, Side::Left, 0);
+        let effects = enter_host(&mut app, Side::Left, 1);
         assert!(matches!(&effects[..], [Effect::List { host: Some(_), .. }]));
     }
 
@@ -6984,7 +7072,7 @@ mod tests {
 
     #[test]
     fn opening_a_host_sends_the_other_panel_to_its_other_dir_once() {
-        let mut app = at_root();
+        let mut app = at_slash();
         let site = SftpHost {
             other_dir: Some("~/site".to_owned()),
             ..SftpHost::default()
@@ -7023,7 +7111,7 @@ mod tests {
 
     #[test]
     fn bang_runs_a_command_on_the_host_of_the_panel() {
-        let mut app = at_root();
+        let mut app = at_slash();
         let site = SftpHost {
             label: Some("Site".to_owned()),
             ..SftpHost::default()
@@ -7060,7 +7148,7 @@ mod tests {
     #[test]
     fn remember_dir_resumes_the_last_directory_of_the_session() {
         for remember_dir in [true, false] {
-            let mut app = at_root();
+            let mut app = at_slash();
             let host = SftpHost {
                 remember_dir,
                 ..SftpHost::default()
@@ -7083,8 +7171,7 @@ mod tests {
             };
             app.listed(app.shown(Side::Left), request.generation, Ok(listed));
 
-            let effects = app.disconnect("web");
-            answer(&mut app, effects, &Listing::Hosts(Vec::new()));
+            app.disconnect("web");
             let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Right, 1))
             else {
                 panic!("expected a connection");
@@ -7095,9 +7182,11 @@ mod tests {
         }
     }
 
-    /// Opens the dialog of F4 on `web` from the list of hosts in the left panel.
+    /// Opens the dialog of F4 on `web` from the location menu of the left panel.
     fn edit_web(app: &mut App) {
-        app.active = Side::Left;
+        if app.menu.is_none() {
+            menu_on(app, Side::Left);
+        }
         app.handle(action(Action::Home));
         app.handle(action(Action::Down));
         assert!(app.supports(Action::EditHost));
@@ -7113,10 +7202,11 @@ mod tests {
 
     #[test]
     fn f4_on_a_host_saves_its_settings() {
-        let mut app = at_root();
-        assert!(!screen(&mut app).contains("4Edit"), "not on `..`");
+        let mut app = at_slash();
+        menu_on(&mut app, Side::Left);
+        assert!(!screen_of(&mut app, 14).contains("4Edit"), "not on Home");
         app.handle(action(Action::Down));
-        assert!(screen(&mut app).contains("4Edit"));
+        assert!(screen_of(&mut app, 14).contains("4Edit"));
         edit_web(&mut app);
         assert!(screen_of(&mut app, 20).contains("Host web"));
         typed(&mut app, "Prod");
@@ -7132,7 +7222,10 @@ mod tests {
         let mut hosts = Hosts::default();
         hosts.hosts.insert("web".to_owned(), prod.clone());
         let effects = app.host_saved(Ok(Arc::new(hosts)));
-        assert_eq!(effects.len(), 2, "both lists of hosts are read again");
+        assert!(
+            matches!(&effects[..], [Effect::ListPlaces { .. }]),
+            "the menu reads the hosts again"
+        );
 
         // The dialog opens with the settings; unchanged, nothing is saved, and emptied, they go.
         edit_web(&mut app);
@@ -7151,7 +7244,7 @@ mod tests {
 
     #[test]
     fn f4_on_a_host_rejects_another_kind_of_other_dir() {
-        let mut app = at_root();
+        let mut app = at_slash();
         edit_web(&mut app);
         app.handle(action(Action::Down));
         app.handle(action(Action::Down));
@@ -7172,7 +7265,7 @@ mod tests {
 
     #[test]
     fn use_current_fills_in_the_directory_open_on_the_host() {
-        let mut app = at_root();
+        let mut app = at_slash();
         let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Right, 1)) else {
             panic!("expected a connection");
         };
@@ -7192,31 +7285,61 @@ mod tests {
     }
 
     #[test]
-    fn a_failed_connection_is_reported_and_can_be_tried_again() {
-        let mut app = at_root();
+    fn a_failed_connection_asks_to_retry_while_the_panel_waits() {
+        let mut app = at_slash();
         let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 2)) else {
             panic!("expected a connection");
         };
         let refused = "deploy@db: Permission denied (publickey).";
         assert!(app.closed("db", connection, Some(refused)).is_empty());
+        assert!(
+            app.closed("db", connection, Some(refused)).is_empty(),
+            "reported once"
+        );
+        assert_eq!(app.host_state("db").status, HostStatus::Stalled);
+        assert!(app.animates(), "the spinner turns");
+        assert_eq!(app.dialogs.len(), 1);
+        let text = screen_of(&mut app, 20);
+        assert!(
+            text.contains("Cannot connect to db: deploy@db: Permission denied (publickey)."),
+            "{text}"
+        );
+        assert!(text.contains("db: Retry or Cancel?"), "{text}");
+
+        // Retry, the default, connects again for the panel that still waits.
+        let Effect::Connect {
+            connection: again, ..
+        } = one(app.handle(action(Action::Confirm)))
+        else {
+            panic!("expected a new connection");
+        };
+        assert_ne!(again, connection);
+        assert_eq!(app.host_state("db").status, HostStatus::Connecting);
+        let waiting = app.panel(Side::Left).pending_request();
+        assert_eq!(
+            waiting.map(|request| request.location),
+            Some(remote("db", ""))
+        );
+
+        // Cancel: the panel stays where it was and says why.
+        assert!(app.closed("db", again, Some(refused)).is_empty());
+        assert!(app.handle(action(Action::Cancel)).is_empty());
+        assert_eq!(app.host_state("db").status, HostStatus::Failed);
+        assert_eq!(app.panel(Side::Left).location(), &local("/"));
+        assert_eq!(app.panel(Side::Left).pending_request(), None);
         let text = screen(&mut app);
         assert!(
             text.contains("Cannot open db: deploy@db: Permission denied (publickey)."),
             "{text}"
         );
-
-        let Effect::Connect {
-            connection: again, ..
-        } = one(enter_host(&mut app, Side::Left, 0))
-        else {
+        let Effect::Connect { .. } = one(enter_host(&mut app, Side::Left, 2)) else {
             panic!("expected a new connection");
         };
-        assert_ne!(again, connection);
     }
 
     #[test]
     fn cancel_stops_a_connection_attempt_for_every_panel() {
-        let mut app = at_root();
+        let mut app = at_slash();
         let Effect::Connect {
             connection, stop, ..
         } = one(enter_host(&mut app, Side::Left, 1))
@@ -7241,8 +7364,8 @@ mod tests {
     }
 
     #[test]
-    fn a_lost_connection_sends_its_panels_back_to_the_list_of_hosts() {
-        let mut app = at_root();
+    fn a_lost_connection_empties_its_panels_and_asks_to_retry() {
+        let mut app = at_slash();
         let Effect::Connect {
             connection, stop, ..
         } = one(enter_host(&mut app, Side::Left, 1))
@@ -7254,31 +7377,49 @@ mod tests {
         answer(&mut app, effects, &Listing::Dir(vec![dir("www")]));
         assert!(screen(&mut app).contains("www"));
 
-        let effects = app.closed("web", connection, Some("Broken pipe"));
-        let [
-            Effect::List {
-                panel: PanelId { side, .. },
-                request,
-                ..
-            },
-        ] = &effects[..]
-        else {
-            panic!("expected the list of hosts, got {effects:?}");
-        };
-        assert_eq!((*side, &request.location), (Side::Left, &Location::Sftp));
-        let text = screen(&mut app);
+        assert!(
+            app.closed("web", connection, Some("Broken pipe"))
+                .is_empty()
+        );
+        assert!(!stop.is_cancelled(), "it ended on its own");
+        let text = screen_of(&mut app, 20);
+        assert!(!text.contains("www"), "{text}");
         assert!(
             text.contains("Lost the connection to web: Broken pipe"),
             "{text}"
         );
-        assert!(!stop.is_cancelled(), "it ended on its own");
+        assert!(text.contains("web: Retry or Cancel?"), "{text}");
+        assert_eq!(app.panel(Side::Left).location(), &remote("web", ""));
+
+        // Retry reads the directory again once the host is back.
+        let Effect::Connect { connection, .. } = one(app.handle(action(Action::Confirm))) else {
+            panic!("expected a new connection");
+        };
+        let (handle, _requests) = HostHandle::channel();
+        let effects = app.connected("web", connection, handle);
+        let [Effect::List { request, .. }] = &effects[..] else {
+            panic!("expected the directory, got {effects:?}");
+        };
+        assert_eq!(request.location, remote("web", ""));
+        answer(&mut app, effects, &Listing::Dir(vec![dir("www")]));
+        assert!(screen(&mut app).contains("www"));
+
+        // Cancel leaves the panel on the host, without its entries, until it reads it again.
+        app.closed("web", connection, Some("Broken pipe"));
+        app.handle(action(Action::Cancel));
+        let text = screen(&mut app);
+        assert!(
+            text.contains("Not connected to web; Ctrl+r connects"),
+            "{text}"
+        );
+        let Effect::Connect { .. } = one(app.handle(action(Action::Reload))) else {
+            panic!("expected a new connection");
+        };
     }
 
     #[test]
-    fn the_list_of_hosts_disconnects_the_host_under_the_cursor() {
-        let mut app = at_root();
-        assert_eq!(app.context(), Context::Root);
-        assert!(screen(&mut app).contains("8Disconn"));
+    fn f8_in_the_location_menu_disconnects_the_host_under_the_cursor() {
+        let mut app = at_slash();
         let Effect::Connect {
             connection, stop, ..
         } = one(enter_host(&mut app, Side::Left, 1))
@@ -7288,33 +7429,29 @@ mod tests {
         let (handle, _requests) = HostHandle::channel();
         let effects = app.connected("web", connection, handle);
         answer(&mut app, effects, &Listing::Dir(vec![dir("www")]));
-        assert_eq!(app.context(), Context::Panel, "the left panel is on web");
-        assert!(!screen(&mut app).contains("Disconn"));
         assert_eq!(app.host_state("web").status, HostStatus::Connected);
+        assert!(!screen(&mut app).contains("Disconn"), "F8 deletes here");
 
-        // From the other panel's list of hosts.
-        app.active = Side::Right;
+        // From the other panel's menu.
+        menu_on(&mut app, Side::Right);
+        assert!(screen_of(&mut app, 14).contains("8Disconn"));
         app.handle(action(Action::Down));
-        let Effect::List {
-            panel: PanelId { side, .. },
-            request,
-            host: None,
-        } = one(app.handle(action(Action::Disconnect)))
-        else {
-            panic!("expected the list of hosts for the left panel");
-        };
-        assert_eq!((side, &request.location), (Side::Left, &Location::Sftp));
+        assert!(app.handle(action(Action::Disconnect)).is_empty());
         assert!(stop.is_cancelled());
         assert_eq!(app.host_state("web").status, HostStatus::Idle);
         assert!(
             app.closed("web", connection, None).is_empty(),
             "already gone"
         );
-        assert!(
-            !screen(&mut app).contains("Lost"),
-            "asked for, so no reason"
-        );
+        app.handle(action(Action::Cancel));
+        let text = screen(&mut app);
+        assert!(!text.contains("www"), "{text}");
+        assert!(text.contains("Not connected to web"), "{text}");
+        assert!(!text.contains("Lost"), "asked for, so no reason: {text}");
+        assert_eq!(app.panel(Side::Left).location(), &remote("web", ""));
         // Nothing to close, or not a host.
+        menu_on(&mut app, Side::Right);
+        app.handle(action(Action::Down));
         assert!(app.handle(action(Action::Disconnect)).is_empty());
         app.handle(action(Action::Home));
         assert!(app.handle(action(Action::Disconnect)).is_empty());
@@ -7333,27 +7470,14 @@ mod tests {
             kind,
             space: None,
         };
-        let hosts = ["web", "db"].map(|alias| RootHost {
-            alias: alias.to_owned(),
-            label: None,
-            address: None,
-        });
-        let listing = Listing::Root {
+        let places = Places {
             volumes: vec![
                 volume("/", noc_vfs::VolumeKind::System),
                 volume("/Volumes/USB", noc_vfs::VolumeKind::Local),
             ],
-            hosts: hosts.to_vec(),
+            ..places()
         };
-        let location = Location::Root;
-        app.places(
-            generation,
-            Ok(Listed {
-                location,
-                listing,
-                space: None,
-            }),
-        );
+        app.places(generation, Ok(places));
     }
 
     #[test]
@@ -7598,28 +7722,6 @@ mod tests {
             Path::new("/home/me/bin/ssh"),
             "expanded, for ssh"
         );
-
-        // Hidden hosts and volumes change what the root and the list of hosts show, so panels
-        // there read them again.
-        let mut app = at_root();
-        open_configuration(&mut app);
-        config_category(&mut app, 3);
-        app.handle(Resolved::Insert('x'));
-        let effects = app.handle(action(Action::Confirm));
-        assert!(matches!(effects[0], Effect::SaveConfig { .. }));
-        assert!(
-            effects[1..].iter().any(|effect| matches!(
-                effect,
-                Effect::List {
-                    panel: PanelId {
-                        side: Side::Left,
-                        ..
-                    },
-                    ..
-                }
-            )),
-            "{effects:?}"
-        );
     }
 
     #[test]
@@ -7664,48 +7766,80 @@ mod tests {
     }
 
     #[test]
-    fn the_root_shows_connected_hosts_below_its_row_of_hosts() {
-        let (mut app, effects) = App::new(Path::new("/"), Path::new("/home/me"), &config());
-        answer(&mut app, effects, &Listing::Dir(Vec::new()));
-        let hosts = ["web", "db"].map(|alias| RootHost {
-            alias: alias.to_owned(),
-            label: None,
-            address: None,
-        });
-        let root = Listing::Root {
-            volumes: Vec::new(),
-            hosts: hosts.to_vec(),
-        };
-        let effects = app.handle(action(Action::Parent));
-        answer(&mut app, effects, &root);
-        assert!(!screen(&mut app).contains("db"), "{}", screen(&mut app));
-        app.active = Side::Right;
-        let effects = app.handle(action(Action::Parent));
-        answer(&mut app, effects, &root);
-        app.handle(action(Action::End));
-        let effects = app.handle(action(Action::Enter));
-        answer(&mut app, effects, &Listing::Hosts(hosts.to_vec()));
-        let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Right, 2)) else {
+    fn hosts_and_volumes_used_last_come_first_and_go_to_recent_toml() {
+        let mut app = at_slash();
+        assert_eq!(app.take_recent(), None);
+        let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 2)) else {
             panic!("expected a connection");
         };
-        // The row below the left root's row of hosts.
-        let below = |app: &mut App| {
-            let text = screen_of(app, 10);
-            let line = text.lines().nth(4).unwrap_or_default().to_owned();
-            line.split("║║").next().unwrap_or_default().to_owned()
+        assert_eq!(app.take_recent(), None, "not before it connects");
+        let (handle, _requests) = HostHandle::channel();
+        app.connected("db", connection, handle);
+        let recent = app.take_recent().unwrap();
+        assert_eq!(recent.hosts, ["db"]);
+        assert_eq!(app.take_recent(), None, "once");
+
+        // `recent.toml` arrives late: what was used since comes first.
+        let saved = Recent {
+            hosts: vec!["web".to_owned(), "db".to_owned()],
+            volumes: vec![PathBuf::from("/")],
         };
-        assert!(below(&mut app).contains("db"), "the left root shows it");
-        app.closed("db", connection, Some("refused"));
-        assert!(!below(&mut app).contains("db"));
+        app.recent_loaded(Ok(saved));
+        assert_eq!(app.recent.hosts, ["db", "web"]);
+        assert_eq!(
+            app.take_recent().map(|recent| recent.hosts),
+            Some(app.recent.hosts.clone())
+        );
+        app.recent_loaded(Err("unreadable".to_owned()));
+        assert_eq!(app.recent.hosts, ["db", "web"]);
+
+        // db comes first in the menu, after the home directory.
+        menu_on(&mut app, Side::Right);
+        let Effect::List { request, host, .. } = one(app.handle(Resolved::Insert('2'))) else {
+            panic!("expected a listing");
+        };
+        assert_eq!((request.location, host.is_some()), (remote("db", ""), true));
+
+        // A panel that arrives on a volume uses it.
+        let volume = |path: &str| noc_vfs::Volume {
+            mount_point: PathBuf::from(path),
+            label: None,
+            fs_type: None,
+            kind: noc_vfs::VolumeKind::Local,
+            space: None,
+        };
+        let places = Places {
+            volumes: vec![volume("/"), volume("/Volumes/USB")],
+            hosts: Vec::new(),
+        };
+        app.places(0, Ok(places));
+        app.active = Side::Left;
+        let effects = app.go(
+            app.shown(Side::Left),
+            Destination::to(local("/Volumes/USB/a")),
+        );
+        answer(&mut app, effects, &Listing::Dir(Vec::new()));
+        assert_eq!(
+            app.take_recent().map(|recent| recent.volumes),
+            Some(vec![PathBuf::from("/Volumes/USB"), PathBuf::from("/")])
+        );
+        let effects = app.go(
+            app.shown(Side::Left),
+            Destination::to(local("/Volumes/USB/b")),
+        );
+        answer(&mut app, effects, &Listing::Dir(Vec::new()));
+        assert_eq!(app.take_recent(), None, "already the first");
     }
 
     #[test]
     fn disconnect_stops_a_connection_attempt() {
-        let mut app = at_root();
+        let mut app = at_slash();
         let Effect::Connect { stop, .. } = one(enter_host(&mut app, Side::Left, 2)) else {
             panic!("expected a connection");
         };
         assert_eq!(app.host_state("db").status, HostStatus::Connecting);
+        menu_on(&mut app, Side::Left);
+        app.handle(action(Action::End));
         assert!(app.handle(action(Action::Disconnect)).is_empty());
         assert!(stop.is_cancelled());
         assert_eq!(app.panel(Side::Left).pending_request(), None);
@@ -7713,13 +7847,14 @@ mod tests {
     }
 
     #[test]
-    fn the_root_shows_failures_and_fresh_addresses() {
-        let mut app = at_root();
+    fn the_menu_shows_failures_and_fresh_addresses() {
+        let mut app = at_slash();
         let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
             panic!("expected a connection");
         };
         app.resolved("web".to_owned(), "deploy@10.0.0.9".to_owned());
         app.closed("web", connection, Some("Connection refused"));
+        app.handle(action(Action::Cancel));
         assert_eq!(
             app.host_state("web"),
             HostState {
@@ -7727,12 +7862,14 @@ mod tests {
                 address: Some("deploy@10.0.0.9".to_owned()),
             }
         );
-        let text = screen(&mut app);
+        menu_on(&mut app, Side::Left);
+        let text = screen_of(&mut app, 14);
         assert!(text.contains("✗ web"), "{text}");
         assert!(text.contains("deploy@10.0.0.9"), "{text}");
 
         // A new attempt clears the failure.
-        enter_host(&mut app, Side::Left, 0);
+        app.handle(action(Action::Cancel));
+        enter_host(&mut app, Side::Left, 1);
         assert_eq!(app.host_state("web").status, HostStatus::Connecting);
     }
 
@@ -7755,7 +7892,7 @@ mod tests {
 
     #[test]
     fn prompts_wait_their_turn_and_take_the_keys() {
-        let mut app = at_root();
+        let mut app = at_slash();
         let (password, password_answer) = ask(1, PromptKind::Secret, "deploy@web's password: ");
         let (host_key, host_key_answer) = ask(2, PromptKind::HostKey, "Continue (yes/no)? ");
         app.ask(password);
@@ -7780,17 +7917,12 @@ mod tests {
         app.handle(action(Action::Cancel));
         assert!(!app.quits());
         assert_eq!(host_key_answer.try_recv(), Ok(None));
-        assert_eq!(app.context(), Context::Root);
-        assert_eq!(
-            app.panel(Side::Left).host_under_cursor(),
-            None,
-            "still on [Local]"
-        );
+        assert_eq!(app.context(), Context::Panel);
     }
 
     #[test]
     fn dialogs_close_when_ssh_stops_waiting() {
-        let mut app = at_root();
+        let mut app = at_slash();
         let (first, first_answer) = ask(1, PromptKind::Secret, "first");
         let (second, second_answer) = ask(2, PromptKind::Confirm, "second");
         app.ask(first);
@@ -7802,11 +7934,11 @@ mod tests {
         assert!(second_answer.try_recv().is_err());
         assert!(screen(&mut app).contains("Confirm user presence"));
         app.handle(action(Action::Confirm));
-        assert_eq!(app.context(), Context::Root, "OK dismisses a notice");
+        assert_eq!(app.context(), Context::Panel, "OK dismisses a notice");
 
         app.notice(4, "web", "Touch your key");
         app.prompt_closed(4);
-        assert_eq!(app.context(), Context::Root);
+        assert_eq!(app.context(), Context::Panel);
     }
 
     #[test]
@@ -7835,7 +7967,7 @@ mod tests {
 
     #[test]
     fn quitting_stops_every_connection() {
-        let mut app = at_root();
+        let mut app = at_slash();
         let stops: Vec<CancellationToken> = [(Side::Left, 1), (Side::Right, 2)]
             .into_iter()
             .map(|(side, rows)| match &enter_host(&mut app, side, rows)[..] {
@@ -8345,26 +8477,21 @@ mod tests {
     }
 
     #[test]
-    fn disconnecting_sends_hidden_tabs_on_the_host_back_too() {
-        let mut app = at_root();
+    fn disconnecting_empties_hidden_tabs_on_the_host_too() {
+        let mut app = at_slash();
         let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
             panic!("expected a connection");
         };
         connect_web(&mut app, Side::Left, connection, "/var/www");
         app.handle(action(Action::NewTab));
         app.handle(action(Action::PrevTab));
-        let effects = app.disconnect("web");
-        let tabs: Vec<u64> = effects
-            .iter()
-            .map(|effect| match effect {
-                Effect::List { panel, request, .. } => {
-                    assert_eq!(request.location, Location::Sftp);
-                    panel.tab
-                }
-                other => panic!("unexpected {other:?}"),
-            })
-            .collect();
-        assert_eq!(tabs.len(), 2, "both tabs on web: {effects:?}");
+        app.disconnect("web");
+        assert_eq!(app.left.len(), 2);
+        for tab in app.left.iter_mut() {
+            assert_eq!(tab.panel.location(), &remote("web", "/var/www"), "it stays");
+            tab.panel.handle(Action::End);
+            assert_eq!(tab.panel.entry_under_cursor(), None, "without its entries");
+        }
     }
 
     #[test]
@@ -8430,7 +8557,7 @@ mod tests {
     }
 
     /// A workspace: on the left `~/src`, sorted by time, with the cursor on `notes`, then `web:/var/www`,
-    /// which shows; on the right the root, which has the keys.
+    /// which shows; on the right `/`, which has the keys.
     fn noon() -> Workspace {
         use noc_config::{Place, SavedTab, SortBy};
 
@@ -8459,7 +8586,7 @@ mod tests {
                     })
                 },
             ],
-            right: vec![tab(Place::Root)],
+            right: vec![tab(Place::Local("/".to_owned()))],
         }
     }
 
@@ -8541,7 +8668,7 @@ mod tests {
             panic!("unexpected {effects:?}");
         };
         assert_eq!(right.side, Side::Right);
-        assert_eq!(request.location, Location::Root);
+        assert_eq!(request.location, local("/"));
         assert_eq!(app.active, Side::Right);
         assert_eq!(tab_numbers(&app, Side::Left), (vec![4, 5], 5), "new tabs");
         assert_eq!(app.panel(Side::Left).location(), &remote("web", "/var/www"));
@@ -8983,10 +9110,6 @@ mod tests {
         let effects = app.handle(action(Action::View));
         assert_eq!(zoxide_adds(&effects), [] as [PathBuf; 0], "record is off");
 
-        let mut app = at_root();
-        app.config.zoxide.record = true;
-        let hosts = app.panel(Side::Left).location().clone();
-        assert_eq!(zoxide_adds(&app.note(&hosts)), [] as [PathBuf; 0]);
         let mut app = on_a_host().0;
         app.config.zoxide.record = true;
         let here = app.panel(app.active).location().clone();
@@ -9150,7 +9273,7 @@ mod tests {
     }
 
     #[test]
-    fn colon_needs_a_bang_and_the_root_has_no_command_line() {
+    fn colon_needs_a_bang_and_a_host_its_connection() {
         let mut app = loaded();
         app.handle(action(Action::Command));
         assert!(screen(&mut app).contains(':'));
@@ -9161,9 +9284,14 @@ mod tests {
         assert_eq!(app.context(), Context::CommandLine, "the line stays");
         app.handle(action(Action::Cancel));
         assert_eq!(app.context(), Context::Panel);
-        let mut root = at_root();
-        root.handle(action(Action::Shell));
-        assert_eq!(root.context(), Context::Root);
+        let mut app = at_slash();
+        let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
+            panic!("expected a connection");
+        };
+        connect_web(&mut app, Side::Left, connection, "/var/www");
+        app.disconnect("web");
+        app.handle(action(Action::Shell));
+        assert_eq!(app.context(), Context::Panel);
     }
 
     /// Runs `command` from the command line of the active panel.
@@ -9381,15 +9509,6 @@ mod tests {
         let (mut app, effects) = App::new(Path::new("/"), Path::new("/home/me"), &config());
         answer(&mut app, effects, &Listing::Dir(Vec::new()));
         assert_eq!(app.terminal_title().as_deref(), Some("/ — noc"));
-        app.set_root_title("mac\x1b".to_owned());
-        let effects = app.handle(action(Action::Parent));
-        let root = Listing::Root {
-            volumes: Vec::new(),
-            hosts: Vec::new(),
-        };
-        answer(&mut app, effects, &root);
-        assert_eq!(app.panel(app.active).location(), &Location::Root);
-        assert_eq!(app.terminal_title().as_deref(), Some("mac? — noc"));
     }
 
     #[test]

@@ -102,37 +102,15 @@ Every ssh command line is assembled in `noc-ssh`, in this order: program → for
 for an option, so `-o` values in user arguments cannot override forced options; flags are covered
 by validation ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)).
 
-## Virtual root
+## Locations
 
-The root of the virtual file system lists the home directory, the mounted volumes, and, as one
-row, the hosts from the ssh config ([ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)):
+A panel always shows a directory: a `Location` is `Local(PathBuf)` or `Remote { host, path }`.
+Volumes and hosts are chosen in the [location menu](#location-menu), which replaced the virtual
+root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
+([ADR 0021](adr/0021-location-menu-replaces-the-virtual-root.md)).
 
-```text
-╔ alex-mbp ═══════════════════════════╗╔ SFTP ═══════════════════════════════╗
-║          Name        │ Free  │ Size ║║        Name       │     Address     ║
-║~ Home                │   212G│  994G║║/..                │UP--DIR          ║
-║+ Macintosh HD        │   212G│  994G║║● prod-web         │deploy@10.0.0.5  ║
-║+ SANDISK             │    12G│   64G║║○ staging          │ubuntu@stg:2222  ║
-║+ share               │      ?│     ?║║✗ nas              │admin@nas        ║
-║/ SFTP                │        3 hosts║║                                     ║
-║● prod-web            │deploy@10.0.0.5║║                                     ║
-╟─────────────────────────────────────╢╟─────────────────────────────────────╢
-║/Volumes/SANDISK  exfat              ║║prod-web                             ║
-╚═════════════════════════════════════╝╚═════════════════════════════════════╝
- 1Help 2Menu 3View 4Edit 5Copy 6RenMov 7Mkdir 8Delete 9PullDn 10Quit
-```
-
-- The root is titled with the name of the machine. `Home` comes first and opens the home directory,
-  with the space of the volume that holds it; the status line shows its path. The volumes follow,
-  the system volume (`/`) on top and the others by mount point, named by their label or else their
-  mount point, with their free space and size; the status line shows a volume's mount point and file
-  system. Every volume opens at its mount point, the system volume at `/`, so `..` from `/` and
-  Enter lead back where the panel was.
-- Below the volumes, `SFTP` opens the list of hosts, and the hosts that are connected or
-  connecting follow it, so that they stay one keystroke away.
-- `..` follows paths, as in mc: from `/Volumes/USB` to `/Volumes`; from a local `/` to the root,
-  with the cursor on the system volume; from a remote `/` (or the remote home directory) to the
-  list of hosts, with the cursor on the host; from the list of hosts to the root.
+- `..` follows paths, as in mc: from `/Volumes/USB` to `/Volumes`. A local `/` and a remote `/`
+  have no `..`, and going up from them does nothing (`Location::parent` is `None`).
 - Volumes come from `noc_vfs::volumes`: on macOS `/` and the entries of `/Volumes`, without
   symlinks and without mounts marked `nobrowse` (Time Machine snapshots, for instance); on
   Linux the mounts of `/proc/self/mountinfo` that are `/`, on a `/dev/` device, or a network
@@ -141,28 +119,44 @@ row, the hosts from the ssh config ([ADR 0006](adr/0006-virtual-root-with-volume
   `statfs`/`statvfs` on blocking threads, each awaited for at most 500 ms: a volume that does
   not answer (a dead network mount can block forever) is listed with `?` and is not asked
   again until the earlier call returns. `[volumes] hide` leaves out mount points by pattern;
-  the system volume always stays.
-- Hosts come in config order, named by their `label` from `hosts.toml` if set (the status line shows
-  the alias), with the address cached from an earlier `ssh -G`. The root and the list of hosts
-  are listed like directories, in background tasks that read the volumes, scan the ssh config,
-  and load the cache, so Ctrl+r reads them again.
-- Entering a host connects in the background (the status line says so; Esc stops it) and opens,
-  shown as an absolute path, the last directory shown on it in this session if `remember_dir`
-  is set and the directory is still there, else the configured `start_dir`, else the remote home
-  directory. If the host has an `other_dir`, the other panel opens it at the same time.
-- F4 on a host edits its settings in a dialog (label, remote directory, other panel directory,
-  remember the last directory); Use Current fills in the directory a panel shows on the host.
-  They are saved to `hosts.toml` in the background, and the lists of hosts are read again.
-- When a connection is lost, the panels on that host go back to the list of hosts and say why.
-- The icon in front of each host shows its state, in a color of its own: a server, gray when
-  not connected and green when connected; a spinner while connecting; a server with a cross,
-  red, when the last attempt failed or the connection was lost. In the `terminal` theme, which
-  has no colors, connected hosts are bold and the others dim. Without icons, the markers are
-  `○`, `●`, the spinner, and `✗`. Every row has one cell in front of its name, so names line
-  up across volumes, hosts, and `..`. F8 (Alt+8) on a host closes the connection to it, or
-  stops connecting to it.
-- Locations are `Root`, `Sftp` (the list of hosts), `Local(PathBuf)`, or `Remote { host, path }`.
-  Remote paths are bytes, because SFTP v3 does not guarantee UTF-8, and are displayed lossily.
+  the system volume always stays. A volume is named by its label or else its mount point, and
+  opens at its mount point, the system volume at `/`.
+- The app reads the volumes once at start, in the background, to know which volume a panel is
+  on; the location menu reads them again each time it opens.
+- Hosts come in config order, named by their `label` from `hosts.toml` if set, with the address
+  of this session's `ssh -G`, or else the one cached from an earlier one. `[discovery] hide`
+  leaves out hosts by pattern.
+- Opening a host connects in the background and opens, shown as an absolute path, the last
+  directory shown on it in this session if `remember_dir` is set and the directory is still
+  there, else the configured `start_dir`, else the remote home directory. If the host has an
+  `other_dir`, the other panel opens it at the same time. While a panel waits for the
+  connection, its status line starts with a spinner, `| Connecting to web…`, and Esc stops it.
+- A failed connection, the first attempt or a lost one, opens a dialog, Connection, that says
+  `Cannot connect to web: reason` or `Lost the connection to web: reason`, with Retry (the
+  default) and Cancel. While it is open, the panels that wait for the host keep waiting, and
+  their status line says `web: Retry or Cancel?` after a spinner in the color of a failed host.
+  On a lost connection, the panels on the host, in every tab, drop their entries at once and
+  wait to read the same directory, with the cursor where it was. Retry connects again, and the
+  waiting panels read their directories once it is connected. Cancel after a failed first
+  attempt leaves the panel where it was, with `Cannot open web: reason` in its status line;
+  after a lost connection, it leaves the panels on the host without entries, and their status
+  line says `Not connected to web; Ctrl+r connects`, with the Reload key of the active keymap.
+  Ctrl+r, or Enter on `..`, connects again. Jobs on a lost host end with it.
+- F8 in the location menu, or Disconnect in the menus of F9, closes the connection to a host, or
+  stops connecting to it. Panels on a connected host stay there without entries, with the same
+  status line, and no dialog asks; a panel that only waited for the host stays where it was.
+- F4 in the location menu edits the settings of a host in a dialog (label, remote directory,
+  other panel directory, remember the last directory); Use Current fills in the directory a
+  panel shows on the host. They are saved to `hosts.toml` in the background, and the menu reads
+  the hosts again.
+- In the location menu, the icon in front of each host shows its state, in a color of its own:
+  a server, gray when not connected and green when connected; a spinner while connecting; a
+  server with a cross, red, when the last attempt failed, the connection was lost, or a dialog
+  asks whether to retry. In the `terminal` theme, which has no colors, connected hosts are bold
+  and the others dim. Without icons, the markers are `○`, `●`, the spinner, and `✗`. Every row
+  has one cell in front of its name, so names line up across the home directory, volumes, and
+  hosts.
+- Remote paths are bytes, because SFTP v3 does not guarantee UTF-8, and are displayed lossily.
   The SFTP client library still requires UTF-8 names; see the known issues in the
   [roadmap](roadmap.md).
 - Names from the server that are empty or contain `/` or NUL are dropped from listings: joined
@@ -171,35 +165,67 @@ row, the hosts from the ssh config ([ADR 0006](adr/0006-virtual-root-with-volume
 ### Location menu
 
 Alt+F1 and Alt+F2, as Far Manager's menus to change drives, open a menu over the left or the right
-panel with the same places: the home directory, the volumes, then every host (Ctrl+x 1 and Ctrl+x 2
-too, for terminals whose Alt+F1 never arrives, such as macOS Terminal without Option as Meta).
+panel (Ctrl+x 1 and Ctrl+x 2 too, for terminals whose Alt+F1 never arrives, such as macOS Terminal
+without Option as Meta, and F9 → Left or Right → Change location). It is the one place to choose a
+volume or a host, grouped under headings:
 
 ```text
  ╔════════════════════ Left ════════════════════╗
  ║ Filter:                                      ║
  ║ ──────────────────────────────────────────── ║
+ ║ ─ Favorites ──────────────────────────────── ║
  ║ 1 ~ Home                                212G ║
+ ║ ─ Mounts ─────────────────────────────────── ║
  ║ 2 + Macintosh HD                        212G ║
  ║ 3 + USB                                  12G ║
- ║ 4 + share                                  ? ║
  ║ ─ SFTP ───────────────────────────────────── ║
- ║ 5 ● Prod                     deploy@10.0.0.5 ║
- ║ 6 ○ db                                       ║
+ ║ 4 ● Prod                     deploy@10.0.0.5 ║
+ ║ 5 ○ db                                       ║
+ ║ 6 ○ staging                  ubuntu@stg:2222 ║
+ ║ 7 ✗ nas                            admin@nas ║
+ ║ 8 ○ backup                                   ║
+ ║ 9 ○ ci                                       ║
+ ║ 0 ○ git                                      ║
+ ║   ○ mail                                     ║
+ ║   ○ vpn                                      ║
+ ║   ○ www                                      ║
+ ║   24 more…                                   ║
  ╚══════════════════════════════════════════════╝
 ```
 
+- Favorites holds `Home`, which opens the home directory, with the free space of the volume
+  that holds it; the user's favorites will join it. Mounts holds the volumes, with their free
+  space, and SFTP the hosts, with their addresses. Plugins for other backends will be a group
+  of their own. A group without rows is not drawn.
+- Mounts and SFTP put the places used last first, then the others in their usual order: the
+  system volume, then the others by mount point; the hosts in config order. Each group shows
+  its first ten places (a constant, not a setting), and always the volume or host the panel is
+  on and the hosts that are connected, connecting, or waiting for Retry. A last row,
+  `24 more…`, stands for the rest: the cursor and the mouse select it, but it takes no digit,
+  and Enter on it shows the whole group until the menu closes.
 - The cursor starts on the home directory or the volume that holds the panel's directory,
-  whichever is nearer, or on its host. Enter
-  opens the row in that panel, which becomes active; while the filter is empty, `1` … `9` and
-  `0` open the first ten rows.
-- Typing filters the rows by name, mount point, alias, and address. With `ui.fuzzy_search`
-  (the default) it matches them as [fzf](#fuzzy-search) does, and the cursor goes to the best
-  row; otherwise a row's text must contain the filter, ignoring case, and the cursor goes to
-  the first. The rows keep their order either way. Backspace takes a character back. F8
-  disconnects the host under the cursor, Ctrl+r reads the volumes and hosts again, and Esc or
-  F10 closes the menu.
-- The menu is modal (keymap context `location_menu`) and lists the root in the background; its
-  listing carries a generation of its own, so a stale one is dropped.
+  whichever is nearer, or on its host. Enter opens the row in that panel, which becomes active;
+  while the filter is empty, `1` … `9` and `0` open the first ten places, skipping the rows of
+  more.
+- Typing filters the places by name, path or mount point, alias, label, and address, and finds
+  every one, hidden ones too; the rows of more go away while the filter has text. With
+  `ui.fuzzy_search` (the default) it matches them as [fzf](#fuzzy-search) does, and the cursor
+  goes to the best row; otherwise a row's text must contain the filter, ignoring case, and the
+  cursor goes to the first. The rows keep their order either way. Backspace takes a character
+  back. F4 edits the settings of the host under the cursor, F8 disconnects it or stops
+  connecting to it, Ctrl+r reads the volumes and hosts again, and Esc or F10 closes the menu.
+- `recent.toml` in the state directory keeps the places used last: the aliases of hosts and
+  the mount points of volumes, most recent first, up to 50 of each. A host counts as used when
+  a connection to it succeeds; a volume when a panel arrives in a directory on it in any way:
+  the menu, Quick cd, zoxide, Enter, or a workspace. The app reads the file at start, and after
+  a turn of the event loop that changed the lists, a task writes it through `noc-config`, whole
+  and atomically, one change after another. Mount points that are not UTF-8 are not kept, since
+  TOML cannot hold them.
+- The menu is modal (keymap context `location_menu`). Each time it opens, and on Ctrl+r, a
+  background task reads the volumes, scans the ssh config, and loads the cache of `ssh -G`;
+  that listing carries a generation of its own, so a stale one is dropped. A host that connects
+  or disconnects while the menu is open shows its new state at once, and the cursor stays on
+  its row.
 
 ### Pull-down menu
 
@@ -227,8 +253,8 @@ menu:
   [tabs](#tabs): New tab, Close tab, and Tab list…. File
   has F3 … F8, `+`, `-`, `*`, Checksums, and Exit; Command has quick search,
   [Quick cd](#quick-cd), the [zoxide](#zoxide) window, the other-panel
-  commands, the jobs, host settings and disconnect for the host under the cursor, help, and
-  redraw; Options has Configuration… and Show hidden files (`✓` while on); Workspace has Save
+  commands, the jobs, host settings and disconnect for the host the active panel shows, help,
+  and redraw; Options has Configuration… and Show hidden files (`✓` while on); Workspace has Save
   workspace…, Workspace list…, and the saved [workspaces](#workspaces), with digits as their
   letters. Without icons, the marks are `*` and `x`. A menu taller than the screen scrolls
   with the cursor.
@@ -259,9 +285,9 @@ Alt+c, as mc's Quick cd, asks for a path and opens it in the active panel, as `c
 in a shell reads it: relative to the panel's directory, `/…` absolute, `~` and `~/…` the home
 directory, `..` and `.` resolved by name, `-` the directory the tab showed before, and
 `host:path` on a host, scp-style, which connects to it if needed. On a host, paths stay on it
-and `~` is the remote home. From the volumes and hosts, relative paths start at the home
-directory. `cd ..` puts the cursor on the directory left, as Ctrl+PgUp does; a path that is not
-there leaves the panel where it is, with the reason below the listing. It is in F9 → Command.
+and `~` is the remote home. `cd ..` puts the cursor on the directory left, as Ctrl+PgUp does; a
+path that is not there leaves the panel where it is, with the reason below the listing. It is in
+F9 → Command.
 
 ### Completion
 
@@ -365,8 +391,10 @@ row and names the tab that shows by its whole location:
   `ui.fuzzy_search`, the digits of the first ten rows while it is empty (but in the history,
   whose commands have digits), the cursor, scrolling, the mouse, and the box, which the menus
   draw over their panel and the windows over both. Each holds its own rows, says what the
-  filter finds them by, and draws them. The zoxide window does not: zoxide, not a filter,
-  picks its rows from the keywords typed.
+  filter finds them by, and draws them. A row may show only while the filter is empty, as the
+  rows of more in the location menu do, which take no digit, or only while it has text, as the
+  places behind them do. The zoxide window does not use it: zoxide, not a filter, picks its
+  rows from the keywords typed.
 - Names on the line of tabs are brief: the last component of a directory, `~` for the home
   directory, `host:name` on a host, and the host alone in its start directory. The frame's
   verticals close each side's line, and its top corners become tees (`╠`, `╣`) that join it,
@@ -377,7 +405,9 @@ row and names the tab that shows by its whole location:
   Listings, new directories, and the dialogs of `+`, `-`, F5, F6, and F7 carry it, so a reply
   reaches the tab that asked even after a switch, and one for a closed tab is dropped. What
   acts on the other side (Alt+o, Alt+i, F5's target, `other_dir`) acts on the tab that shows
-  there. Disconnecting or losing a host sends every tab on it back to the list of hosts.
+  there. Disconnecting or losing a host leaves every tab on it there, hidden or not, without
+  its entries; after a lost connection they wait for Retry and read their directories when the
+  host is back.
 - Tabs look like tabs: the line is dark (`tab`: gray on black in mc-classic, as the F-key
   bar; `crust` in Catppuccin; dim text in `terminal`), and the tab that shows takes the
   panel's colors as if it grew out of it (`tab_active`), with its number in an accent on the
@@ -394,7 +424,8 @@ sort order, and the name under its cursor, and the tab that shows; and the side 
 - t W, or F9 → Workspace → Save workspace…, asks for a name, offering
   that of the workspace restored or saved last, and saves the tabs under it; the name of
   another workspace asks before replacing it. A location that `workspaces.toml` cannot hold,
-  such as a name that is not UTF-8, is saved as the nearest directory above it.
+  such as a name that is not UTF-8, is saved as the nearest directory above it that it can
+  hold, or else as `~`.
 - t w, or F9 → Workspace → Workspace list…, opens a window of the saved
   workspaces with a filter, which matches as [fzf](#fuzzy-search) does with
   `ui.fuzzy_search` (keymap context `workspaces`): Enter restores, Insert saves the tabs as a
@@ -463,8 +494,9 @@ settings window: there is no OK or Cancel, and every change takes effect as it i
   in the field; Esc puts back what it had and closes the dialog.
 - A change is used at once, but the language, which the next start reads: the interface
   redraws, copies and the job queue follow `[transfer]`, and the settings in `Context`, which
-  sit behind a lock, change for new connections, `ssh -G`, and listings, so panels on the
-  root or the list of hosts read them again. Connections that are open stay as they are.
+  sit behind a lock, change for new connections, `ssh -G`, and listings, so the location menu
+  lists the volumes and hosts with them the next time it opens. Connections that are open stay
+  as they are.
 - Each change writes its keys to the config file in the background. One task writes them in
   turn, so that a change never overtakes the one before it; a failure shows an error.
 
@@ -549,8 +581,8 @@ noc keymap diff [L] [R]  compare two built-in keymaps action by action, default 
 - The working directory of the process follows the active panel: after each turn of the
   event loop, a local directory the active panel now shows (once its listing arrived)
   goes to a task that `chdir`s to it in `spawn_blocking`, the latest of the waiting ones only.
-  A remote panel or the virtual root leaves it where it was. Programs that the app starts,
-  such as the editor, inherit it.
+  A remote panel leaves it where it was. Programs that the app starts, such as the editor,
+  inherit it.
 
 ## File operations
 
@@ -639,7 +671,7 @@ variables:
 | --- | --- |
 | Settings, keymap, themes | `~/.config/noc/` (`config.toml`, `hosts.toml`, `keymap.toml`, `themes/`) |
 | Data (workspaces, bookmarks) | `~/.local/share/noc/` (`workspaces.toml`) |
-| State (`history.toml`, last directories, logs) | `~/.local/state/noc/` |
+| State (`history.toml`, `recent.toml`, last directories, logs) | `~/.local/state/noc/` |
 | Cache (`ssh -G` results) | `~/.cache/noc/` |
 | Runtime (control sockets, askpass socket, F4 temp files) | `$XDG_RUNTIME_DIR/noc/` or `$TMPDIR/noc-$UID/`, mode 0700 |
 
@@ -660,7 +692,7 @@ multiplex = true                 # false: one connection per channel
 hide = ["github.com", "gitlab.com", "bitbucket.org"]
 
 [volumes]
-hide = ["/Volumes/Backup*"]      # mount points to leave out of the root; never the system volume
+hide = ["/Volumes/Backup*"]      # mount points to leave out of the location menu; never the system volume
 
 [ui]
 language = "auto"                # or a language tag such as "en-US"; others fall back to it
@@ -693,9 +725,9 @@ Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
 
 Host settings live in `hosts.toml` next to `config.toml`, one table per host with a required
 `type` that decides its other keys ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md)).
-F4 on a host rewrites only its table through `toml_edit`, keeping comments and the other tables,
-and replaces the file atomically. The settings sit behind a lock in the shared `Context`, so the
-TUI and the host tasks see a change at once.
+F4 on a host in the location menu rewrites only its table through `toml_edit`, keeping comments
+and the other tables, and replaces the file atomically. The settings sit behind a lock in the
+shared `Context`, so the TUI and the host tasks see a change at once.
 
 ```toml
 ["prod-web"]                     # an ssh_config alias; decorates it, never duplicates it
@@ -717,8 +749,8 @@ name = "noon"
 active = "right"                 # the side with the keys
 
 [[workspace.left]]
-location = "~/src/noon"          # root, sftp, /…, ~, ~/…, or host:path
-cursor = "Cargo.toml"            # the entry, or host alias, under the cursor
+location = "~/src/noon"          # /…, ~, ~/…, or host:path; root and sftp read as ~
+cursor = "Cargo.toml"            # the entry under the cursor
 current = true                   # the tab that shows; else the first
 
 [[workspace.left]]
@@ -727,14 +759,23 @@ sort = "time"                    # name (the default), extension, time, size
 descending = true
 
 [[workspace.right]]
-location = "root"
+location = "/"
+```
+
+The places used last live in `recent.toml` in the state directory, for the
+[location menu](#location-menu). Noon Commander writes the whole file on each change, behind a
+header that says so; deleting it only forgets their order.
+
+```toml
+hosts = ["prod-web", "db"]       # aliases, most recent first, up to 50
+volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that are UTF-8
 ```
 
 ## UI
 
-- **Panels.** Each panel lists a directory with `..` first, then directories, then files, by
-  name ignoring case; columns are name, size, and modification time (local time, `ls -l`
-  style), and narrow panels drop the time, then the size. Each panel has its own sort order:
+- **Panels.** Each panel lists a directory with `..` first (but in a `/`), then directories,
+  then files, by name ignoring case; columns are name, size, and modification time (local time,
+  `ls -l` style), and narrow panels drop the time, then the size. Each panel has its own sort order:
   name, extension, modification time, or size (`o n`, `o e`, `o m`, `o s` in both presets);
   time and size start newest and largest first, the same key again reverses, ties go by name,
   and an arrow in the header marks the order. Directories stay first. Names that start with a
@@ -751,12 +792,12 @@ location = "root"
   file system that holds the directory, and the share that is free: `123G / 500G (24%)`. It is
   read with every listing, so it changes when a job reads the panel again or on Ctrl+r; a panel
   on another directory of the same file system keeps what it read last. Locally it waits at
-  most as long as a volume of the virtual root, so a dead network mount leaves it out; over
+  most as long as a volume in the location menu, so a dead network mount leaves it out; over
   SFTP it needs the `statvfs@openssh.com` extension, which OpenSSH's server has. A file system
   that reports no size, or a panel too narrow for it, shows none.
 - **Marks.** As in mc: Insert or Ctrl+t marks the entry under the cursor, or unmarks it, and
   moves down (Shift+Down too, Shift+Up moves up); `*` (or Alt+*) inverts the marks on files,
-  leaving directories as they are; `..`, volumes, and hosts cannot be marked.
+  leaving directories as they are; `..` cannot be marked.
   Marked rows are underlined, and yellow in mc-classic (bold, which mc uses without colors, is
   for directories); the line below the listing shows the size of the marked files and how
   many entries are marked, such as `12,345 B in 3 files`. Marks are names, so they
@@ -774,8 +815,7 @@ location = "root"
   home directory (the remote one on a host; `\~` for a name that starts with `~`); missing
   parents are not made. The directory is made in the background, locally or by the host's
   task, and panels on the directory it is in read it again, the one that asked with the
-  cursor on it. An error shows in a red dialog, as mc shows errors. F7 is not offered in the
-  virtual root or the list of hosts.
+  cursor on it. An error shows in a red dialog, as mc shows errors.
 - **F5 copies** the marked entries, or the one under the cursor, as mc does: a dialog asks
   where to, opening with the other panel's location (`host:/path` for a host), and whether to
   preserve attributes (times and permission bits; on, and remembered). A typed target is
@@ -873,13 +913,12 @@ location = "root"
   ([ADR 0008](adr/0008-clipboard-through-osc-52.md)).
 - **Terminal title.** With `ui.terminal_title` (the default) the event loop titles the
   terminal's window or tab with OSC 0 between frames: the active panel's directory as the
-  prompt of the command line shows it (`~/src — noc`, `host:path` with the host's label), or
-  the name of the machine in the root, sanitized like every name. Before the first title it
-  saves the terminal's own on xterm's stack of titles (`CSI 22 t`) and takes it back from
-  there (`CSI 23 t`) on quitting and before handing the terminal to another program, which
-  gets the shell's title and may set its own.
+  prompt of the command line shows it (`~/src — noc`, `host:path` with the host's label),
+  sanitized like every name. Before the first title it saves the terminal's own on xterm's
+  stack of titles (`CSI 22 t`) and takes it back from there (`CSI 23 t`) on quitting and before
+  handing the terminal to another program, which gets the shell's title and may set its own.
 - **The other panel.** As in mc: Ctrl+u swaps the panels, and the active one stays active on
-  the other side; Alt+o opens the directory or host under the cursor in the other panel (from
+  the other side; Alt+o opens the directory under the cursor in the other panel (from
   a file, the parent directory with the cursor on this one) and moves the cursor down; Alt+i
   shows this directory in the other panel with the cursor on the same name. Panels keep their
   identity when swapped (only where they are drawn changes), so a listing still in flight
@@ -893,13 +932,11 @@ location = "root"
   Ctrl+s to the next one, round to the top. Either way a character that matches nothing is dropped,
   as in mc, and the listing keeps its order. Backspace takes a character back; Esc ends the search,
   and any other key ends it and then does what it does. While it runs, every character is text, even
-  one that a panel binds, such as `*`. The root and the list of hosts search the names they show:
-  volume labels, labels, or aliases. Long names lose their middle, marked with `~`. Names are shown
-  terminal-safe: control and bidi characters become `?`. Listings run in background tasks; a reply
-  carries the generation of its request, so a stale one is dropped. If a directory cannot be read,
-  the panel stays where it was and says why below the listing. Going up puts the cursor on the
-  directory just left. A panel shows a `Location`, so the [virtual root](#virtual-root) and the list
-  of hosts are kinds of listing too.
+  one that a panel binds, such as `*`. Long names lose their middle, marked with `~`. Names are
+  shown terminal-safe: control and bidi characters become `?`. Listings run in background tasks;
+  a reply carries the generation of its request, so a stale one is dropped. If a directory cannot
+  be read, the panel stays where it was and says why below the listing. Going up puts the cursor
+  on the directory just left. A panel shows a [`Location`](#locations), always a directory.
 - <a id="command-line-of--and-"></a>**Command line of `!` and `:`** ([ADR
   0019](adr/0019-shell-command-line.md)). In a local panel, `!` opens a line above the F-key bar for
   a shell command, after a prompt with the panel's directory (`~` for home, its middle cut past a
@@ -945,10 +982,10 @@ location = "root"
   its directory, and its first line, and the whole command under the cursor below; Enter puts it on
   the line, with the prompt reversed until the next key if it ran on another host, and Delete
   removes it.
-- **Keymap.** Keys map to `Action`s per context (`global`, `panel`, `root`, `quick_search`,
+- **Keymap.** Keys map to `Action`s per context (`global`, `panel`, `quick_search`,
   `command_line`, `command_history`, `user_screen`, `list`, `location_menu`, `jump`,
   `workspaces`, `pull_down`, `dialog`, `help`, `dialog_input`, `viewer`). Each context falls back
-  along a chain, for example the root and quick search to the panel, the help to the dialog, the
+  along a chain, for example quick search to the panel, the help to the dialog, the
   windows that list items to choose from (`location_menu`, `jump`, `workspaces`,
   `command_history`) to `list`, which holds the keys they share, and every one but `user_screen`
   to `global` last, whose keys do the same
@@ -968,8 +1005,8 @@ location = "root"
   has not, take `f #`. `noc keymap diff` (`just keymap-diff`) compares two presets action by action
   (`tui/keymap/diff.rs`), with the keys written as the help writes them.
   `Esc` acts at once everywhere ([ADR 0020](adr/0020-esc-acts-at-once.md)). Unlike in mc, it
-  does not wait in a panel for a key that would make it Alt or an F-key: in the panels and the
-  root, Alt+1 … Alt+0 stand for F1 … F10 instead, for terminals without F-keys. An `Esc` and a
+  does not wait in a panel for a key that would make it Alt or an F-key: in the panels,
+  Alt+1 … Alt+0 stand for F1 … F10 instead, for terminals without F-keys. An `Esc` and a
   quick next key arrive as Alt and that key, so there an unbound Alt and a character count as
   `Esc` and the character. Keys are written with `crokey` names. User overrides in `keymap.toml`
   are planned for M4. The F-key bar is generated from the active keymap, and so is the help
@@ -1052,14 +1089,14 @@ location = "root"
   a dialog leaves a blank cell between its frame and its edge, which gives way on a screen too
   small for it.
 - **Icons.** Nerd Fonts v3 glyphs, on by default (`ui.icons`), in front of each name: our own for
-  directories, `..`, links, broken links, FIFOs, sockets, devices, executables, the home
-  directory, volumes, network volumes, the list of hosts, and hosts (which tell their state);
-  `devicons` for files by name or extension. devicons asks the disk whether a name it does not
-  know is a directory, so names go to it inside a path with a NUL byte, which names
+  directories, `..`, links, broken links, FIFOs, sockets, devices, and executables, and in the
+  location menu for the home directory, volumes, network volumes, and hosts (which tell their
+  state); `devicons` for files by name or extension. devicons asks the disk whether a name it
+  does not know is a directory, so names go to it inside a path with a NUL byte, which names
   nothing: drawing stays free of I/O, and remote names are never looked up locally. Without
   icons, mc's markers: `/` directory, `~` link to a directory, `@` link, `!` broken link, `*`
   executable, `|` FIFO, `=` socket, `-` character device, `+` block device and volume; the
-  home directory is `~`, and the list of hosts `/`, as it opens like a directory.
+  home directory is `~`.
 
 ## Releases
 

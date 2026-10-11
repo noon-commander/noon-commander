@@ -101,7 +101,9 @@
       F9 → Workspace or their window (t w), which also saves, renames, and deletes them;
       `workspaces.toml`
       ([ADR 0017](adr/0017-workspaces.md))
-- [ ] Bookmarks and history
+- [ ] Favorites in the location menu: directories the user chooses, local or remote, as
+      bookmarks in its Favorites group
+- [ ] History of the directories visited
 - [ ] chmod and symlinks
 - [ ] Trash: the marked entries, or the one under the cursor, moved to the trash (`d d` in the
       vim keymap) rather than deleted: `~/.Trash` on macOS, the FreeDesktop trash on Linux. SFTP
@@ -125,6 +127,11 @@
 - [x] Keymap presets by name, chosen as themes are: `ui.keymap`, `default` and `vim`
 - [x] Key hints, as which-key: the keys that can follow `Ctrl+x`, `g`, …, and every key of
       whatever is in front (`Alt+/`); `ui.which_key`, `ui.which_key_delay_ms`
+- [x] The location menu replaces the virtual root and the list of hosts: groups Favorites,
+      Mounts, and SFTP, the places used last first (`recent.toml`), the first ten of each with
+      a row for the rest; F4 and F8 on hosts there; a Retry dialog for failed connections, and
+      panels that stay on a lost host; no `..` in `/`
+      ([ADR 0021](adr/0021-location-menu-replaces-the-virtual-root.md))
 
 ## Known issues
 
@@ -151,8 +158,9 @@
 - CRC32, for `.sfv` files.
 - Resumable transfers.
 - Watch for volumes that are mounted or unmounted (DiskArbitration on macOS, `poll` on
-  `/proc/self/mountinfo` on Linux) instead of reading them on each listing; eject from the root.
-- Plugins for other backends as rows of the virtual root.
+  `/proc/self/mountinfo` on Linux) instead of reading them each time the location menu opens;
+  eject from the menu.
+- Plugins for other backends as a group of the location menu.
 - zoxide on a host, over its master connection, for remote directories; it runs remote
   commands, which needs an ADR, as checksums on the server do.
 - Anything behind the `forwarding` feature ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)).

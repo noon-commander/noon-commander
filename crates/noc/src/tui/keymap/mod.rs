@@ -745,14 +745,12 @@ mod tests {
         for name in Keymap::NAMES {
             let keymap = Keymap::by_name(name).unwrap();
             let mut state = KeyState::default();
-            for context in [Context::Panel, Context::Root] {
-                assert_eq!(
-                    feed(&keymap, &mut state, context, &["esc"]),
-                    actions(&[Action::Cancel]),
-                    "{name}"
-                );
-                assert_eq!(state.deadline(), None, "{name}: Esc does not wait");
-            }
+            assert_eq!(
+                feed(&keymap, &mut state, Context::Panel, &["esc"]),
+                actions(&[Action::Cancel]),
+                "{name}"
+            );
+            assert_eq!(state.deadline(), None, "{name}: Esc does not wait");
             assert_eq!(
                 feed(&keymap, &mut state, Context::Panel, &["esc", "0"]),
                 [Resolved::Action(Action::Cancel), Resolved::Insert('0')],
@@ -838,8 +836,8 @@ mod tests {
                 "{name}"
             );
             assert_eq!(
-                feed(&keymap, &mut state, Context::Root, &["alt-8"]),
-                actions(&[Action::Disconnect]),
+                feed(&keymap, &mut state, Context::Panel, &["alt-8"]),
+                actions(&[Action::Delete]),
                 "{name}"
             );
             assert_eq!(state.deadline(), None);
@@ -981,43 +979,31 @@ mod tests {
     }
 
     #[test]
-    fn the_root_adds_host_keys_to_the_panel_keys() {
-        let keymap = Keymap::mc();
-        let mut state = KeyState::default();
-        assert_eq!(
-            feed(
-                &keymap,
-                &mut state,
-                Context::Root,
-                &["f8", "alt-8", "alt-0", "enter"]
-            ),
-            actions(&[
-                Action::Disconnect,
-                Action::Disconnect,
-                Action::Quit,
-                Action::Enter
-            ])
-        );
-        assert_eq!(
-            feed(&keymap, &mut state, Context::Panel, &["f8"]),
-            actions(&[Action::Delete]),
-            "only the root disconnects; panels delete"
-        );
-        assert_eq!(
-            feed(&keymap, &mut state, Context::Root, &["esc"]),
-            actions(&[Action::Cancel])
-        );
-        let mut root = [None; 10];
-        root[0] = Some(Action::Help);
-        root[2] = Some(Action::View);
-        root[3] = Some(Action::EditHost);
-        root[4] = Some(Action::Copy);
-        root[5] = Some(Action::Move);
-        root[6] = Some(Action::Mkdir);
-        root[7] = Some(Action::Disconnect);
-        root[8] = Some(Action::PullDown);
-        root[9] = Some(Action::Quit);
-        assert_eq!(keymap.fkeys(Context::Root), root);
+    fn f4_and_f8_act_on_hosts_in_the_location_menu_and_on_files_in_panels() {
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(
+                    &keymap,
+                    &mut state,
+                    Context::LocationMenu,
+                    &["f4", "f8", "ctrl-r", "f10"]
+                ),
+                actions(&[
+                    Action::EditHost,
+                    Action::Disconnect,
+                    Action::Reload,
+                    Action::Cancel
+                ]),
+                "{name}"
+            );
+            assert_eq!(
+                feed(&keymap, &mut state, Context::Panel, &["f4", "f8"]),
+                actions(&[Action::Edit, Action::Delete]),
+                "{name}: only the location menu disconnects; panels delete"
+            );
+        }
     }
 
     #[test]
@@ -1126,11 +1112,6 @@ mod tests {
                 Action::PrevTab
             ])
         );
-        assert_eq!(
-            feed(&keymap, &mut state, Context::Root, &["t", "n"]),
-            actions(&[Action::NewTab]),
-            "in the root too"
-        );
     }
 
     #[test]
@@ -1146,11 +1127,6 @@ mod tests {
                     &["t", "w", "t", "shift-w"]
                 ),
                 actions(&[Action::Workspaces, Action::SaveWorkspace]),
-                "{name}"
-            );
-            assert_eq!(
-                feed(&keymap, &mut state, Context::Root, &["t", "w"]),
-                actions(&[Action::Workspaces]),
                 "{name}"
             );
         }
@@ -1207,10 +1183,6 @@ mod tests {
                 Action::LocationMenuRight
             ])
         );
-        assert_eq!(
-            feed(&keymap, &mut state, Context::Root, &["alt-f2"]),
-            actions(&[Action::LocationMenuRight])
-        );
         // In the menu, every character filters or is a hotkey; keys move and act.
         assert_eq!(
             feed(
@@ -1241,6 +1213,7 @@ mod tests {
             "the menu is modal"
         );
         let mut menu = [None; 10];
+        menu[3] = Some(Action::EditHost);
         menu[7] = Some(Action::Disconnect);
         menu[9] = Some(Action::Cancel);
         assert_eq!(keymap.fkeys(Context::LocationMenu), menu);
@@ -1258,10 +1231,6 @@ mod tests {
                 &["alt-z", "ctrl-x", "z"]
             ),
             actions(&[Action::Jump, Action::Jump])
-        );
-        assert_eq!(
-            feed(&keymap, &mut state, Context::Root, &["alt-z"]),
-            actions(&[Action::Jump])
         );
         assert_eq!(
             feed(
@@ -1328,10 +1297,6 @@ mod tests {
             feed(&keymap, &mut state, Context::Panel, &["alt-c"]),
             actions(&[Action::QuickCd])
         );
-        assert_eq!(
-            feed(&keymap, &mut state, Context::Root, &["alt-c"]),
-            actions(&[Action::QuickCd])
-        );
     }
 
     #[test]
@@ -1388,14 +1353,19 @@ mod tests {
             Some("f #")
         );
         assert_eq!(key(Context::Panel, Action::Disconnect), None);
-        // In the root F8 disconnects, which leaves Delete no key there.
+        assert_eq!(key(Context::Panel, Action::Edit).as_deref(), Some("F4"));
+        assert_eq!(key(Context::Panel, Action::Delete).as_deref(), Some("F8"));
+        // In the location menu F4 and F8 act on the host under the cursor.
         assert_eq!(
-            key(Context::Root, Action::Disconnect).as_deref(),
+            key(Context::LocationMenu, Action::EditHost).as_deref(),
+            Some("F4")
+        );
+        assert_eq!(
+            key(Context::LocationMenu, Action::Disconnect).as_deref(),
             Some("F8")
         );
-        assert_eq!(key(Context::Root, Action::Delete), None);
-        assert_eq!(key(Context::Root, Action::EditHost).as_deref(), Some("F4"));
-        assert_eq!(key(Context::Root, Action::Edit), None, "F4 edits the host");
+        assert_eq!(key(Context::LocationMenu, Action::Edit), None);
+        assert_eq!(key(Context::LocationMenu, Action::Delete), None);
     }
 
     #[test]
@@ -1630,11 +1600,6 @@ mod tests {
                 Action::Cancel,
             ])
         );
-        // On the root, D D disconnects the host under the cursor.
-        assert_eq!(
-            feed(&vim, &mut state, Context::Root, &["shift-d", "shift-d"]),
-            actions(&[Action::Disconnect])
-        );
         // w no longer lists the jobs: f j does.
         assert_eq!(
             feed(&vim, &mut state, Context::Panel, &["w"]),
@@ -1710,12 +1675,7 @@ mod tests {
     #[test]
     fn j_and_k_move_down_and_up_in_vim() {
         let vim = Keymap::by_name("vim").unwrap();
-        for context in [
-            Context::Panel,
-            Context::Root,
-            Context::Dialog,
-            Context::Viewer,
-        ] {
+        for context in [Context::Panel, Context::Dialog, Context::Viewer] {
             let mut state = KeyState::default();
             assert_eq!(
                 feed(&vim, &mut state, context, &["j", "k"]),
@@ -1742,15 +1702,11 @@ mod tests {
     #[test]
     fn l_opens_the_entry_under_the_cursor_in_vim() {
         let vim = Keymap::by_name("vim").unwrap();
-        for context in [Context::Panel, Context::Root] {
-            let mut state = KeyState::default();
-            assert_eq!(
-                feed(&vim, &mut state, context, &["l", "enter"]),
-                actions(&[Action::Enter, Action::Enter]),
-                "{context:?}"
-            );
-        }
         let mut state = KeyState::default();
+        assert_eq!(
+            feed(&vim, &mut state, Context::Panel, &["l", "enter"]),
+            actions(&[Action::Enter, Action::Enter])
+        );
         assert_eq!(
             feed(&vim, &mut state, Context::QuickSearch, &["l"]),
             [Resolved::Insert('l')],
@@ -1761,15 +1717,11 @@ mod tests {
     #[test]
     fn h_and_left_go_to_the_parent_directory_in_vim() {
         let vim = Keymap::by_name("vim").unwrap();
-        for context in [Context::Panel, Context::Root] {
-            let mut state = KeyState::default();
-            assert_eq!(
-                feed(&vim, &mut state, context, &["h", "left"]),
-                actions(&[Action::Parent, Action::Parent]),
-                "{context:?}"
-            );
-        }
         let mut state = KeyState::default();
+        assert_eq!(
+            feed(&vim, &mut state, Context::Panel, &["h", "left"]),
+            actions(&[Action::Parent, Action::Parent])
+        );
         assert_eq!(
             feed(&vim, &mut state, Context::QuickSearch, &["h"]),
             [Resolved::Insert('h')],
@@ -1780,12 +1732,7 @@ mod tests {
     #[test]
     fn g_g_and_shift_g_go_to_the_first_and_the_last_row_in_vim() {
         let vim = Keymap::by_name("vim").unwrap();
-        for context in [
-            Context::Panel,
-            Context::Root,
-            Context::Dialog,
-            Context::Viewer,
-        ] {
+        for context in [Context::Panel, Context::Dialog, Context::Viewer] {
             let mut state = KeyState::default();
             assert_eq!(
                 feed(&vim, &mut state, context, &["g", "g", "shift-g"]),
@@ -1827,27 +1774,20 @@ mod tests {
     #[test]
     fn tab_and_ctrl_w_switch_and_swap_the_panels_in_vim() {
         let vim = Keymap::by_name("vim").unwrap();
-        for context in [Context::Panel, Context::Root] {
-            let mut state = KeyState::default();
-            assert_eq!(
-                feed(
-                    &vim,
-                    &mut state,
-                    context,
-                    &["tab", "ctrl-w", "w", "ctrl-w", "x"]
-                ),
-                actions(&[Action::SwitchPanel, Action::SwitchPanel, Action::SwapPanels,]),
-                "{context:?}"
-            );
-            // A lone Ctrl+w waits for its second key, then does nothing.
-            let now = Instant::now();
-            assert_eq!(vim.feed(&mut state, context, key("ctrl-w"), now), []);
-            assert_eq!(
-                vim.expire(&mut state, now + SEQUENCE_TIMEOUT),
-                [],
-                "{context:?}"
-            );
-        }
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(
+                &vim,
+                &mut state,
+                Context::Panel,
+                &["tab", "ctrl-w", "w", "ctrl-w", "x"]
+            ),
+            actions(&[Action::SwitchPanel, Action::SwitchPanel, Action::SwapPanels])
+        );
+        // A lone Ctrl+w waits for its second key, then does nothing.
+        let now = Instant::now();
+        assert_eq!(vim.feed(&mut state, Context::Panel, key("ctrl-w"), now), []);
+        assert_eq!(vim.expire(&mut state, now + SEQUENCE_TIMEOUT), []);
     }
 
     #[test]
@@ -2080,11 +2020,13 @@ mod tests {
         assert_eq!(keys(Action::SortByName), Some("o n"));
         assert_eq!(panel[0].0, Action::Up, "in the order of the preset");
         assert_eq!(
-            keymap.help(Context::Root),
+            keymap.help(Context::LocationMenu)[..3],
             [
                 (Action::EditHost, "F4".to_owned()),
-                (Action::Disconnect, "F8".to_owned())
-            ]
+                (Action::Disconnect, "F8".to_owned()),
+                (Action::Reload, "Ctrl+r".to_owned())
+            ],
+            "the menu's own keys first"
         );
     }
 
@@ -2138,13 +2080,11 @@ mod tests {
                 more: 0
             }
         );
-        // The root falls back to the panel.
-        assert_eq!(keymap.hints(Context::Root, &t), hints);
         let ctrl_x = parse_sequence("ctrl-x").unwrap();
-        assert_eq!(
-            hint_keys(&keymap.hints(Context::Panel, &ctrl_x)),
-            ["1", "2", "z", "j"]
-        );
+        let hints = keymap.hints(Context::Panel, &ctrl_x);
+        assert_eq!(hint_keys(&hints), ["1", "2", "z", "j"]);
+        // Quick search falls back to the panel.
+        assert_eq!(keymap.hints(Context::QuickSearch, &ctrl_x), hints);
         let vim = Keymap::by_name("vim").unwrap();
         let g = parse_sequence("g").unwrap();
         assert_eq!(
@@ -2156,14 +2096,15 @@ mod tests {
     #[test]
     fn hints_of_every_key_share_rows_by_action_and_count_the_keys_under_a_prefix() {
         let keymap = Keymap::mc();
-        let hints = keymap.hints(Context::Root, &[]);
-        let hint = |keys: &str| hints.iter().find(|hint| hint.keys == keys);
+        let menu = keymap.hints(Context::LocationMenu, &[]);
         assert_eq!(
-            hint("F4").map(|hint| hint.action),
-            Some(Some(Action::EditHost)),
-            "the root's own keys first"
+            hint_keys(&menu[..3]),
+            ["F4", "F8", "Ctrl+r"],
+            "the menu's own keys first"
         );
-        assert_eq!(hints[0].keys, "F4");
+        assert_eq!(menu[0].action, Some(Action::EditHost));
+        let hints = keymap.hints(Context::Panel, &[]);
+        let hint = |keys: &str| hints.iter().find(|hint| hint.keys == keys);
         assert_eq!(
             hint("Up, Ctrl+p").map(|hint| hint.action),
             Some(Some(Action::Up))
@@ -2225,8 +2166,8 @@ mod tests {
         let mut state = KeyState::default();
         let now = Instant::now();
         keymap.show_hints(&mut state, Context::Panel);
-        let root = keymap.hints_of(&state, Context::Panel).unwrap();
-        assert_eq!(root.typed, None);
+        let every_key = keymap.hints_of(&state, Context::Panel).unwrap();
+        assert_eq!(every_key.typed, None);
         assert_eq!(
             keymap.feed(&mut state, Context::Panel, key("ctrl-x"), now),
             []
@@ -2240,7 +2181,7 @@ mod tests {
             keymap.feed(&mut state, Context::Panel, key("backspace"), now),
             []
         );
-        assert_eq!(keymap.hints_of(&state, Context::Panel), Some(root));
+        assert_eq!(keymap.hints_of(&state, Context::Panel), Some(every_key));
         assert_eq!(
             keymap.feed(&mut state, Context::Panel, key("esc"), now),
             [],

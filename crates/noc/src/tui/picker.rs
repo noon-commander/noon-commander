@@ -27,6 +27,17 @@ pub(crate) enum Pick {
     Other(Action),
 }
 
+/// When a row shows, if the filter finds it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum Shows {
+    #[default]
+    Always,
+    /// Only while the filter has text, such as a row past the first ones of its group.
+    Filtered,
+    /// Only while the filter is empty, and without a digit: a row that shows more rows.
+    Unfiltered,
+}
+
 /// A line of a window, under its filter.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum MenuLine {
@@ -72,6 +83,8 @@ pub(crate) struct ShownRow {
 pub(crate) struct Picker {
     /// What the filter finds each row by, shown or not.
     texts: Vec<Vec<String>>,
+    /// When each row shows.
+    shows: Vec<Shows>,
     filter: String,
     /// The filter matches as fzf does: `ui.fuzzy_search`.
     fuzzy: bool,
@@ -95,6 +108,7 @@ impl Picker {
     pub(crate) fn new(fuzzy: bool) -> Self {
         Self {
             texts: Vec::new(),
+            shows: Vec::new(),
             filter: String::new(),
             fuzzy,
             hotkeys: true,
@@ -121,7 +135,14 @@ impl Picker {
     /// Takes the rows again, each by the texts the filter finds it by. The cursor stays on its
     /// index; the window puts it where it belongs.
     pub(crate) fn set_rows(&mut self, texts: Vec<Vec<String>>) {
+        self.shows = vec![Shows::Always; texts.len()];
         self.texts = texts;
+        self.refilter();
+    }
+
+    /// Takes the rows again, each by the texts the filter finds it by and when it shows.
+    pub(crate) fn set_rows_showing(&mut self, rows: Vec<(Vec<String>, Shows)>) {
+        (self.texts, self.shows) = rows.into_iter().unzip();
         self.refilter();
     }
 
@@ -158,10 +179,28 @@ impl Picker {
             .unwrap_or(0);
     }
 
+    /// The rows that digits choose while the filter is empty, by their index among those the
+    /// filter shows: the first ten that are not rows of more rows.
+    fn hotkey_rows(&self) -> Vec<usize> {
+        if !self.hotkeys || !self.filter.is_empty() {
+            return Vec::new();
+        }
+        self.matches
+            .iter()
+            .zip(&self.shows)
+            .filter(|(score, _)| score.is_some())
+            .enumerate()
+            .filter(|(_, (_, shows))| **shows != Shows::Unfiltered)
+            .map(|(index, _)| index)
+            .take(10)
+            .collect()
+    }
+
     /// Matches the rows against the filter again. A row shows if one of its texts contains the
-    /// filter, ignoring case; `fuzzy`, if they match it as fzf matches a line.
+    /// filter, ignoring case; `fuzzy`, if they match it as fzf matches a line. Then only rows
+    /// for an empty filter, or for one with text, show as `shows` says.
     fn refilter(&mut self) {
-        self.matches = if self.fuzzy {
+        let scores: Vec<Option<u32>> = if self.fuzzy {
             let mut fuzzy = Fuzzy::names(&self.filter);
             self.texts
                 .iter()
@@ -179,6 +218,16 @@ impl Picker {
                 })
                 .collect()
         };
+        let empty = self.filter.is_empty();
+        self.matches = scores
+            .into_iter()
+            .zip(&self.shows)
+            .map(|(score, shows)| match shows {
+                Shows::Always => score,
+                Shows::Filtered => score.filter(|_| !empty),
+                Shows::Unfiltered => empty.then_some(0),
+            })
+            .collect();
     }
 
     /// Takes a key: arrows move, Enter chooses, a digit chooses its row while the filter is
@@ -191,11 +240,9 @@ impl Picker {
         match input {
             Resolved::Insert(c) if self.hotkeys && self.filter.is_empty() && c.is_ascii_digit() => {
                 let digit = c.to_digit(10).map_or(0, |digit| digit as usize);
-                let row = (digit + 9) % 10;
-                return if row < rows {
-                    Pick::Chosen(row)
-                } else {
-                    Pick::Pending
+                return match self.hotkey_rows().get((digit + 9) % 10) {
+                    Some(&row) => Pick::Chosen(row),
+                    None => Pick::Pending,
                 };
             }
             Resolved::Insert(c) => {
@@ -290,7 +337,7 @@ impl Picker {
             at
         };
         let offset = self.offset.min(top).max((at + 1).saturating_sub(self.page));
-        let hotkeys = self.hotkeys && self.filter.is_empty();
+        let hotkeys = self.hotkey_rows();
         for (index, shown) in lines.iter().skip(offset).take(self.page).enumerate() {
             let y = u16::try_from(index + 2).unwrap_or(u16::MAX);
             let text = match shown {
@@ -300,13 +347,12 @@ impl Picker {
                     Line::styled(format!("{heading}{}", "─".repeat(rest)), theme.dialog)
                 }
                 MenuLine::Row(index) => {
-                    let hotkey = match *index {
-                        0..=9 if hotkeys => {
-                            char::from_digit(u32::try_from((index + 1) % 10).unwrap_or(0), 10)
-                                .unwrap_or(' ')
-                        }
-                        _ => ' ',
-                    };
+                    let hotkey = hotkeys
+                        .iter()
+                        .position(|row| row == index)
+                        .and_then(|digit| u32::try_from((digit + 1) % 10).ok())
+                        .and_then(|digit| char::from_digit(digit, 10))
+                        .unwrap_or(' ');
                     self.drawn.rows.push((*index, line(y)));
                     row(ShownRow {
                         index: *index,
@@ -386,6 +432,28 @@ mod tests {
         typed(&mut picker, "2");
         assert!(picker.shown(0..3).is_empty(), "a digit is text then");
         assert_eq!(press(&mut picker, Action::Confirm), Pick::Pending);
+    }
+
+    #[test]
+    fn rows_show_while_the_filter_is_empty_or_has_text_as_they_say() {
+        let mut picker = Picker::new(false);
+        let row = |text: &str, shows| (vec![text.to_owned()], shows);
+        picker.set_rows_showing(vec![
+            row("web", Shows::Always),
+            row("db", Shows::Filtered),
+            row("", Shows::Unfiltered),
+            row("dns", Shows::Always),
+        ]);
+        assert_eq!(picker.shown(0..4), [0, 2, 3]);
+        assert_eq!(
+            picker.handle(Resolved::Insert('2')),
+            Pick::Chosen(2),
+            "the row of more rows takes no digit"
+        );
+        typed(&mut picker, "d");
+        assert_eq!(picker.shown(0..4), [1, 3]);
+        press(&mut picker, Action::Backspace);
+        assert_eq!(picker.shown(0..4), [0, 2, 3]);
     }
 
     #[test]

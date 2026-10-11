@@ -9,6 +9,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- When a connection to a host fails, or is lost, a dialog says why and offers Retry, the
+  default, and Cancel. The panels on a lost host stay on their directory, without its entries,
+  and read it again once Retry connects; after Cancel they stay there, and Ctrl+r, or Enter on
+  `..`, connects again. While a panel waits for a host, its status line starts with a spinner.
+- `recent.toml` in the state directory (`~/.local/state/noc/`) keeps the hosts and volumes used
+  last, up to 50 of each, for the location menu.
 - Key hints, as which-key shows them: half a second after a key that starts longer sequences,
   such as Ctrl+x, or g and Ctrl+w in the vim keymap, the keys that can follow it show at the
   bottom of the panels with what they do, and the key waits for the next one instead of timing
@@ -45,16 +51,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and Backspace go to the parent directory, J, Shift+Down, and Insert mark and go down, K and
   Shift+Up mark and go up, + marks and - unmarks by a pattern, v inverts the marks, / starts quick
   search and Ctrl+g goes to the next match, i views, e edits, Y and y y copy, x moves, r renames in
-  the row, A makes a directory, d D deletes (D D disconnects the host under the cursor on the root),
-  f # makes checksums, R reads the directory again, o h shows hidden files, o n, o e, o m, and o s
-  sort, q : opens the command history, f j the jobs, g d Quick cd, g z jumps with zoxide, g n, g c,
-  g t, and g T open, close, and switch tabs, t h and t l list the left and the right panel's tabs,
-  t w and t W list and save workspaces, Z Z quits, and Esc and Ctrl+c stop loading; F3 … F8,
-  Alt+Left, and Alt+Right do what they do in the default keymap. q closes the help, and Ctrl+b and
-  Ctrl+f turn pages in dialogs. In text fields and on the command line, Ctrl+b goes to the start, as
-  on vim's command line; on the command line, Ctrl+p and Ctrl+n go through the history in place of
-  Alt+p and Alt+n, Ctrl+r opens it, and Ctrl+f opens the command in the editor; Ctrl+p and Ctrl+n
-  move in the completion list.
+  the row, A makes a directory, d D deletes, f # makes checksums, R reads the directory again, o h
+  shows hidden files, o n, o e, o m, and o s sort, q : opens the command history, f j the jobs, g d
+  Quick cd, g z jumps with zoxide, g n, g c, g t, and g T open, close, and switch tabs, t h and t l
+  list the left and the right panel's tabs, t w and t W list and save workspaces, Z Z quits, and Esc
+  and Ctrl+c stop loading; F3 … F8, Alt+Left, and Alt+Right do what they do in the default keymap. q
+  closes the help, and Ctrl+b and Ctrl+f turn pages in dialogs. In text fields and on the command
+  line, Ctrl+b goes to the start, as on vim's command line; on the command line, Ctrl+p and Ctrl+n
+  go through the history in place of Alt+p and Alt+n, Ctrl+r opens it, and Ctrl+f opens the command
+  in the editor; Ctrl+p and Ctrl+n move in the completion list.
 - The terminal's window or tab is titled with the active panel's directory, as the prompt of the
   command line shows it (`~/src — noc`, or `host:path`), and gets its own title back when Noon
   Commander quits or hands the terminal to a command, where the terminal keeps a stack of titles.
@@ -116,6 +121,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The location menu of Alt+F1 and Alt+F2 groups its places under headings: Favorites (Home, for
+  now), Mounts (the volumes), and SFTP (the hosts of the ssh config). Mounts and SFTP show the
+  places used last first, and each its first ten, with the place the panel is on and the hosts in
+  use; a last row, such as `24 more…`, shows the rest, and the filter finds them all. The digits
+  skip that row ([ADR 0021](docs/adr/0021-location-menu-replaces-the-virtual-root.md)).
+- F4 and F8 edit the settings of a host and disconnect it in the location menu, on the host under
+  the cursor, rather than in a panel on the list of hosts. F9 → Command → Edit host settings… and
+  Disconnect host act on the host the active panel shows. Disconnecting leaves the panels on the
+  host there, without entries, rather than sending them to the list of hosts.
+- Workspaces saved with the location `root` or `sftp` open the home directory there. A location
+  that `workspaces.toml` cannot hold is saved as the nearest directory above it, or else as `~`.
 - Esc acts at once in the panels too, instead of waiting a second for a key, as in mc: a key
   typed right after it does what it does alone, where before it could be lost or run an Alt key.
   Alt+1 … Alt+0 stand for F1 … F10 in place of Esc 1 … Esc 0, and Esc followed by a key no longer
@@ -147,6 +163,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   longer open the menu.
 - F9 always opens the menu bar alone at the menu of the active panel, and each menu opens at its
   first command; the menu no longer opens again where it closed.
+
+### Removed
+
+- The virtual root and the list of hosts: volumes and hosts are chosen in the location menu.
+  A local or remote `/` has no `..` any more, the `root` keymap context is gone, with D D of the
+  vim keymap, and the terminal and tab titles no longer show the name of the machine.
 
 ## [0.1.0] - 2026-10-03
 

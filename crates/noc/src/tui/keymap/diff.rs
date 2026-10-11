@@ -256,7 +256,7 @@ mod tests {
                 (Action::Help, &["f1"]),
             ],
         ),
-        (Context::Root, &[(Action::EditHost, &["f4"])]),
+        (Context::LocationMenu, &[(Action::EditHost, &["f4"])]),
         (Context::Dialog, &[(Action::Cancel, &["esc"])]),
     ];
 
@@ -269,7 +269,7 @@ mod tests {
                 (Action::Redraw, &["ctrl-l"]),
             ],
         ),
-        (Context::Root, &[(Action::EditHost, &["f4"])]),
+        (Context::LocationMenu, &[(Action::EditHost, &["f4"])]),
         (Context::Viewer, &[(Action::Quit, &["q"])]),
     ];
 
@@ -286,7 +286,7 @@ mod tests {
   up      Up, Ctrl+p |  k, Up
   quit    F10        <
   redraw             >  Ctrl+l
-[root] same
+[location_menu] same
 [dialog]  only in left
   cancel  Esc        <
 [viewer]  only in right
@@ -305,7 +305,7 @@ mod tests {
   quit       F10        <
   help       F1            F1
   redraw                >  Ctrl+l
-[root]
+[location_menu]
   edit_host  F4            F4
 [dialog]  only in left
   cancel     Esc        <

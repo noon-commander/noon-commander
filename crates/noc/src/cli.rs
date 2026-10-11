@@ -40,8 +40,8 @@ pub(crate) enum Command {
     /// List a directory.
     Ls {
         /// A local path, or `host:path` for a remote one; `host:` is the remote home
-        /// directory. Without it, lists the virtual root: the mount points of the volumes, and
-        /// the hosts as `host:`.
+        /// directory. Without it, lists what the location menu offers: the mount points of the
+        /// volumes, and the hosts as `host:`.
         location: Option<String>,
     },
     /// Manage the configuration file.

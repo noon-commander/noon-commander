@@ -4,14 +4,9 @@ use std::str::FromStr;
 
 use crate::RemotePath;
 
-/// A place a panel can show: the virtual root, the list of SFTP hosts, a local directory, or a
-/// remote directory.
+/// A place a panel can show: a local directory, or a remote directory.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Location {
-    /// The virtual root: the mounted volumes, and the list of SFTP hosts.
-    Root,
-    /// The hosts from the ssh config, in the virtual root.
-    Sftp,
     /// A path on the local file system. Relative paths, including the empty path, are relative
     /// to the current directory.
     Local(PathBuf),
@@ -41,32 +36,31 @@ impl Location {
         }
     }
 
-    /// `..` semantics: the lexical parent on the same file system. Above a local `/` is
-    /// [`Location::Root`]; above a remote `/` and remote paths without a parent (the empty path,
-    /// which is the home directory) is [`Location::Sftp`], and above that the root. The parent of
-    /// [`Location::Root`] is itself.
+    /// `..` semantics: the lexical parent on the same file system; `None` for a local `/`, a
+    /// remote `/`, and remote paths without a parent (the empty path, which is the home
+    /// directory).
     ///
     /// Like [`Path::parent`](std::path::Path::parent), the parent of a single relative component
     /// such as `a` is the empty path.
     #[must_use]
-    pub fn parent(&self) -> Self {
+    pub fn parent(&self) -> Option<Self> {
         match self {
-            Self::Root | Self::Sftp => Self::Root,
             Self::Local(path) => path
                 .parent()
-                .map_or(Self::Root, |parent| Self::Local(parent.to_path_buf())),
-            Self::Remote { host, path } => {
-                path.parent().map_or(Self::Sftp, |parent| Self::Remote {
-                    host: host.clone(),
-                    path: parent,
-                })
-            }
+                .map(|parent| Self::Local(parent.to_path_buf())),
+            Self::Remote { host, path } => path.parent().map(|parent| Self::Remote {
+                host: host.clone(),
+                path: parent,
+            }),
         }
     }
 
-    /// Whether this is a list the app makes, rather than a directory: the root or the hosts.
-    pub fn is_virtual(&self) -> bool {
-        matches!(self, Self::Root | Self::Sftp)
+    /// Whether there is a [`parent`](Self::parent), without making it.
+    pub fn has_parent(&self) -> bool {
+        match self {
+            Self::Local(path) => path.parent().is_some(),
+            Self::Remote { path, .. } => path.as_bytes().iter().any(|&byte| byte != b'/'),
+        }
     }
 }
 
@@ -118,29 +112,32 @@ mod tests {
 
     #[test]
     fn local_parents() {
-        assert_eq!(local("/").parent(), Location::Root);
-        assert_eq!(local("/a").parent(), local("/"));
-        assert_eq!(local("/a/b").parent(), local("/a"));
-        assert_eq!(local("/a/b/").parent(), local("/a"));
-        assert_eq!(local("a").parent(), local(""));
-        assert_eq!(local("").parent(), Location::Root);
+        assert_eq!(local("/").parent(), None);
+        assert_eq!(local("/a").parent(), Some(local("/")));
+        assert_eq!(local("/a/b").parent(), Some(local("/a")));
+        assert_eq!(local("/a/b/").parent(), Some(local("/a")));
+        assert_eq!(local("a").parent(), Some(local("")));
+        assert_eq!(local("").parent(), None);
+        for path in ["/", "/a", "/a/b/", "a", ""] {
+            assert_eq!(local(path).has_parent(), local(path).parent().is_some());
+        }
     }
 
     #[test]
     fn remote_parents() {
-        assert_eq!(remote("h", "/").parent(), Location::Sftp);
-        assert_eq!(remote("h", "/a").parent(), remote("h", "/"));
-        assert_eq!(remote("h", "/a/b/").parent(), remote("h", "/a"));
-        assert_eq!(remote("h", "a/b").parent(), remote("h", "a"));
-        assert_eq!(remote("h", "a").parent(), remote("h", ""));
-        assert_eq!(remote("h", "").parent(), Location::Sftp);
-    }
-
-    #[test]
-    fn the_hosts_lead_to_the_root_which_is_its_own_parent() {
-        assert_eq!(Location::Sftp.parent(), Location::Root);
-        assert_eq!(Location::Root.parent(), Location::Root);
-        assert!(Location::Root.is_virtual() && Location::Sftp.is_virtual());
-        assert!(!local("/").is_virtual() && !remote("h", "").is_virtual());
+        assert_eq!(remote("h", "/").parent(), None);
+        assert_eq!(remote("h", "/a").parent(), Some(remote("h", "/")));
+        assert_eq!(remote("h", "/a/b/").parent(), Some(remote("h", "/a")));
+        assert_eq!(remote("h", "a/b").parent(), Some(remote("h", "a")));
+        assert_eq!(remote("h", "a").parent(), Some(remote("h", "")));
+        assert_eq!(remote("h", "").parent(), None);
+        for path in ["/", "//", "/a", "/a/b/", "a", ""] {
+            let location = remote("h", path);
+            assert_eq!(
+                location.has_parent(),
+                location.parent().is_some(),
+                "{path:?}"
+            );
+        }
     }
 }

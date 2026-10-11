@@ -14,7 +14,6 @@ use super::app::Side;
 use super::cells::{self, Align};
 use super::panel::{ListRequest, Panel, home_text, location_text};
 use super::theme::Theme;
-use crate::i18n::fl;
 
 /// A panel, by its side and its tab there. Tabs never move between sides and their numbers
 /// are never used again, so a reply for a closed tab finds no panel and is dropped.
@@ -154,16 +153,16 @@ impl Tabs {
 
     /// Where each tab is, as the tab bar names it: the tab that shows, if `full`, as the
     /// panel's title does; the others briefly.
-    pub(crate) fn names(&self, root_title: &str, home: &Path, full: bool) -> Vec<String> {
+    pub(crate) fn names(&self, home: &Path, full: bool) -> Vec<String> {
         self.tabs
             .iter()
             .enumerate()
             .map(|(index, tab)| {
                 let location = tab.panel.location();
                 if full && index == self.active {
-                    title(location, root_title, home)
+                    title(location, home)
                 } else {
-                    short_name(location, root_title, home)
+                    short_name(location, home)
                 }
             })
             .collect()
@@ -171,20 +170,17 @@ impl Tabs {
 }
 
 /// Where a panel is, as its title shows it, with `~` for the home directory `home`.
-pub(crate) fn title(location: &Location, root_title: &str, home: &Path) -> String {
+pub(crate) fn title(location: &Location, home: &Path) -> String {
     match location {
-        Location::Root => cells::sanitize(root_title.as_bytes()),
         Location::Local(path) => home_text(path, home),
-        _ => location_text(location),
+        Location::Remote { .. } => location_text(location),
     }
 }
 
 /// Where a panel is, briefly: the last component of a directory, `~` for the home directory,
 /// `host:name` on a host, or the host alone in its start directory.
-fn short_name(location: &Location, root_title: &str, home: &Path) -> String {
+fn short_name(location: &Location, home: &Path) -> String {
     match location {
-        Location::Root => cells::sanitize(root_title.as_bytes()),
-        Location::Sftp => fl!("root-sftp"),
         Location::Local(path) if path == home => "~".to_owned(),
         Location::Local(path) => path.file_name().map_or_else(
             || cells::sanitize(path.as_os_str().as_bytes()),
@@ -453,12 +449,10 @@ mod tests {
             host: "web".to_owned(),
             path: RemotePath::from(path),
         };
-        let name = |location: &Location| short_name(location, "mbp", home);
+        let name = |location: &Location| short_name(location, home);
         assert_eq!(name(&local("/home/me/src")), "src");
         assert_eq!(name(&local("/home/me")), "~");
         assert_eq!(name(&local("/")), "/");
-        assert_eq!(name(&Location::Root), "mbp");
-        assert_eq!(name(&Location::Sftp), "SFTP");
         assert_eq!(name(&remote("")), "web");
         assert_eq!(name(&remote("/var/log")), "web:log");
         assert_eq!(name(&remote("/")), "web:/");
@@ -547,7 +541,10 @@ mod tests {
             side: Side::Left,
             tab,
         };
-        let panel = || Panel::new(Location::Root, PathBuf::from("/home/me"), true).0;
+        let panel = || {
+            let home = PathBuf::from("/home/me");
+            Panel::new(Location::Local(home.clone()), home, true).0
+        };
         let mut tabs = Tabs::new(Tab::new(id(1), panel()));
         assert!(tabs.close().is_none(), "the last tab stays");
         tabs.push(Tab::new(id(2), panel()));

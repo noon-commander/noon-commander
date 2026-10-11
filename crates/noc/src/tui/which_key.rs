@@ -308,7 +308,7 @@ mod tests {
     #[test]
     fn draws_every_key_of_the_root_and_says_how_many_do_not_fit() {
         let keymap = Keymap::mc();
-        let hints = root(&keymap, Context::Root);
+        let hints = root(&keymap, Context::Panel);
         insta::assert_snapshot!(draw(&hints, 100, 14));
     }
 }

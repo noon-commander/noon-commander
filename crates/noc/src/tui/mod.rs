@@ -21,9 +21,9 @@ mod output;
 mod panel;
 mod pattern;
 mod picker;
+mod places;
 mod progress;
 mod pulldown;
-mod root;
 mod scrollbar;
 mod sums;
 mod tab_menu;
@@ -60,7 +60,7 @@ use tasks::{Done, Tasks};
 use crate::context::Context;
 use crate::i18n::fl;
 
-pub(crate) use root::read_volumes;
+pub(crate) use places::read_volumes;
 
 /// Whether `name` is a built-in theme, for `ui.theme`; and the names there are.
 pub(crate) fn is_valid_theme(name: &str) -> bool {
@@ -125,6 +125,7 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
         Done::ConfigSaved(result) => app.config_saved(result),
         Done::Workspaces { changed, result } => app.workspaces_changed(changed, result),
         Done::History(result) => app.history_changed(result),
+        Done::Recent(result) => app.recent_loaded(result),
         Done::Jumps { generation, result } => app.jumps(generation, result),
         Done::Names {
             generation,
@@ -182,6 +183,9 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
         }
         if let Some(dir) = app.take_work_dir() {
             tasks.change_work_dir(dir);
+        }
+        if let Some(recent) = app.take_recent() {
+            tasks.run(vec![app::Effect::Recent(app::RecentChange::Save(recent))]);
         }
         if let Some(handover) = app.take_handover() {
             let (fresh, after) =
@@ -251,28 +255,21 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     result
 }
 
-/// The app with both panels on `start`, set up for this terminal and machine, and the work
-/// it asks for first, the saved workspaces among it.
+/// The app with both panels on `start`, set up for this terminal, and the work it asks for
+/// first: the saved workspaces, the history, the places used last, and the volumes, which
+/// tell which one a panel is on.
 fn start_app(context: &Context, start: &Path, tz: &TimeZone) -> (App, Vec<app::Effect>) {
     let (mut app, mut effects) = App::new(start, &context.paths.home, &context.config());
     effects.push(app::Effect::Workspaces(app::WorkspaceChange::Load));
     effects.push(app::Effect::History(app::HistoryChange::Load));
+    effects.push(app::Effect::Recent(app::RecentChange::Load));
+    // No menu asks for this generation.
+    effects.push(app::Effect::ListPlaces { generation: 0 });
     app.set_color_depth(theme::ColorDepth::detect());
     app.set_time_zone(tz.clone());
-    if let Some(name) = host_name() {
-        app.set_root_title(name);
-    }
     app.set_runtime_dir(context.paths.runtime_dir.clone());
     app.set_hosts(context.hosts());
     (app, effects)
-}
-
-/// The name of this machine without its domain, for the title of the virtual root.
-fn host_name() -> Option<String> {
-    let uname = rustix::system::uname();
-    let name = uname.nodename().to_string_lossy();
-    let name = name.split('.').next().unwrap_or_default();
-    (!name.is_empty()).then(|| name.to_owned())
 }
 
 /// Runs the editor on `file`, with the terminal handed over, and tells whether the file changed

@@ -61,7 +61,7 @@ pub struct SavedTab {
     pub sort: SortBy,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub descending: bool,
-    /// The name of the entry under the cursor, or the alias of the host under it.
+    /// The name of the entry under the cursor.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cursor: Option<String>,
     /// The tab that shows on its side; at most one per side, else the first shows.
@@ -80,14 +80,13 @@ pub enum SortBy {
     Size,
 }
 
-/// Where a tab is, written as one string: `root` (the virtual root), `sftp` (the list of
-/// hosts), a local directory as an absolute path, `~`, or `~/…`, or `host:path` on a host (an
-/// empty path is the host's start directory).
+/// Where a tab is, written as one string: a local directory as an absolute path, `~`, or
+/// `~/…`, or `host:path` on a host (an empty path is the host's start directory). `root` and
+/// `sftp`, which earlier versions wrote for the virtual root and the list of hosts, read as
+/// `~`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(try_from = "String", into = "String")]
 pub enum Place {
-    Root,
-    Sftp,
     /// As written: `/…`, `~`, or `~/…`.
     Local(String),
     Remote {
@@ -99,10 +98,8 @@ pub enum Place {
 impl Place {
     /// Parses the text form; `None` for anything else.
     pub fn parse(text: &str) -> Option<Self> {
-        match text {
-            "root" => return Some(Self::Root),
-            "sftp" => return Some(Self::Sftp),
-            _ => {}
+        if matches!(text, "root" | "sftp") {
+            return Some(Self::Local("~".to_owned()));
         }
         if text.starts_with(['/', '~']) {
             return crate::local_dir(text, Path::new("/"))
@@ -138,7 +135,7 @@ impl Place {
     pub fn local_dir(&self, home: &Path) -> Option<PathBuf> {
         match self {
             Self::Local(text) => crate::local_dir(text, home),
-            Self::Root | Self::Sftp | Self::Remote { .. } => None,
+            Self::Remote { .. } => None,
         }
     }
 }
@@ -146,8 +143,6 @@ impl Place {
 impl fmt::Display for Place {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Root => f.write_str("root"),
-            Self::Sftp => f.write_str("sftp"),
             Self::Local(path) => f.write_str(path),
             Self::Remote { host, path } => write!(f, "{host}:{path}"),
         }
@@ -158,9 +153,8 @@ impl TryFrom<String> for Place {
     type Error = String;
 
     fn try_from(text: String) -> Result<Self, Self::Error> {
-        Self::parse(&text).ok_or_else(|| {
-            format!("`{text}` is not `root`, `sftp`, a path that starts with / or ~/, or host:path")
-        })
+        Self::parse(&text)
+            .ok_or_else(|| format!("`{text}` is not a path that starts with / or ~/, or host:path"))
     }
 }
 
@@ -341,7 +335,7 @@ sort = \"time\"
 descending = true
 
 [[workspace.right]]
-location = \"root\"
+location = \"/\"
 ";
 
     fn parse(text: &str) -> Workspaces {
@@ -367,7 +361,7 @@ location = \"root\"
             name: name.to_owned(),
             active: PanelSide::Left,
             left: vec![tab("~")],
-            right: vec![tab("sftp")],
+            right: vec![tab("web:")],
         }
     }
 
@@ -387,7 +381,7 @@ location = \"root\"
                     ..tab("web:/var/www")
                 },
             ],
-            right: vec![tab("root")],
+            right: vec![tab("/")],
         }
     }
 
@@ -442,7 +436,7 @@ location = \"root\"
         let workspaces = parse(
             "[[workspace]]\nname = \"a\"\n\
              [[workspace.left]]\nlocation = \"/\"\n\
-             [[workspace.right]]\nlocation = \"sftp\"\n",
+             [[workspace.right]]\nlocation = \"web:\"\n",
         );
         let workspace = Workspace {
             left: vec![tab("/")],
@@ -454,7 +448,7 @@ location = \"root\"
             format!(
                 "{HEADER}[[workspace]]\nname = \"a\"\nactive = \"left\"\n\n\
                  [[workspace.left]]\nlocation = \"/\"\n\n\
-                 [[workspace.right]]\nlocation = \"sftp\"\n"
+                 [[workspace.right]]\nlocation = \"web:\"\n"
             )
         );
         assert_eq!(parse(""), Workspaces::default());
@@ -470,8 +464,6 @@ location = \"root\"
         };
         let local = |path: &str| Place::Local(path.to_owned());
         for (text, expected) in [
-            ("root", Place::Root),
-            ("sftp", Place::Sftp),
             ("/", local("/")),
             ("/var/www", local("/var/www")),
             ("/a b:c", local("/a b:c")),
@@ -499,11 +491,14 @@ location = \"root\"
             assert_eq!(
                 Place::try_from(text.to_owned()),
                 Err(format!(
-                    "`{text}` is not `root`, `sftp`, a path that starts with / or ~/, or host:path"
+                    "`{text}` is not a path that starts with / or ~/, or host:path"
                 ))
             );
         }
         assert_eq!(Place::try_from("web:x".to_owned()), Ok(remote("web", "x")));
+        for legacy in ["root", "sftp"] {
+            assert_eq!(Place::parse(legacy), Some(local("~")), "{legacy:?}");
+        }
     }
 
     #[test]
@@ -532,9 +527,7 @@ location = \"root\"
             place("~/a").local_dir(Path::new("/Users/v")),
             Some(PathBuf::from("/Users/v/a"))
         );
-        for text in ["root", "sftp", "web:/var/www"] {
-            assert_eq!(place(text).local_dir(home), None);
-        }
+        assert_eq!(place("web:/var/www").local_dir(home), None);
     }
 
     #[test]

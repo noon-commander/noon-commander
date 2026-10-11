@@ -27,9 +27,9 @@ The same panels in the theme `mc-classic`, with the blue of Midnight Commander:
 - **Your `~/.ssh/config` just works.** Noon Commander never implements SSH. It runs the `ssh` you
   already use, so `ProxyJump`, `Match`, `Include`, agents, FIDO keys, certificates, and
   `known_hosts` behave exactly as in your terminal.
-- **Every disk and server in one place.** The virtual root lists the mounted volumes and all
-  hosts from your ssh config; Alt+F1 and Alt+F2 switch a panel to any of them, as in Far
-  Manager.
+- **Every disk and server in one place.** Alt+F1 and Alt+F2 open a menu of the mounted volumes
+  and all hosts from your ssh config, as in Far Manager, with the ones you used last first and
+  a filter that finds any of them.
 - **Tabs in each panel.** Keep several directories and servers open on each side, and switch
   between them with Alt+Left and Alt+Right.
 - **Workspaces.** Save the tabs of both panels under a name with t W, and bring the
@@ -56,7 +56,8 @@ Non-goals: forwarding of any kind, a built-in SSH implementation, a password man
 
 ## Planned features
 
-- Virtual root with the mounted volumes and all hosts from `ssh_config`.
+- A location menu with your favorite directories, the mounted volumes, and all hosts from
+  `ssh_config`, the ones used last first.
 - Copy and move between local and remote, or between two remote hosts.
 - Password, OTP, and host-key prompts inside the TUI (via `SSH_ASKPASS`).
 - One authentication per host, shared by all panels and transfers (OpenSSH `ControlMaster`).

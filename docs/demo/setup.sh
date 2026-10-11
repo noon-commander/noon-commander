@@ -11,7 +11,7 @@
 # 104 bytes on macOS. Then DIR/bin/noc starts noc in that world. It runs NOC_BIN, by default the debug build
 # of this checkout (`cargo build -p noc`).
 #
-# The local panel shows the real path of DIR, and the virtual root the name of this machine.
+# The local panel shows the real path of DIR.
 set -eu
 # Times of the made-up files are written and shown in UTC, wherever the screenshots are taken.
 TZ=UTC

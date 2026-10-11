@@ -195,7 +195,7 @@ impl WorkspacesWindow {
 /// A tab as a workspace saves it: where `panel` is, or goes, its sort order, and what is
 /// under its cursor; `current` if it is the tab that shows on its side. A location that
 /// `workspaces.toml` cannot hold, such as a path that is not UTF-8, is saved as the nearest
-/// directory above it that it can hold.
+/// directory above it that it can hold, or else as the home directory.
 pub(crate) fn saved_tab(panel: &Panel, current: bool, home: &Path) -> SavedTab {
     let (sort, descending) = panel.sort_order();
     let (mut location, cursor) = panel.heading();
@@ -204,8 +204,11 @@ pub(crate) fn saved_tab(panel: &Panel, current: bool, home: &Path) -> SavedTab {
         if let Some(place) = place_of(&location, home) {
             break place;
         }
-        location = location.parent();
         cursor = None;
+        match location.parent() {
+            Some(parent) => location = parent,
+            None => break Place::Local("~".to_owned()),
+        }
     };
     SavedTab {
         place,
@@ -224,8 +227,6 @@ pub(crate) fn saved_tab(panel: &Panel, current: bool, home: &Path) -> SavedTab {
 /// How `workspaces.toml` writes `location`, if it can.
 fn place_of(location: &Location, home: &Path) -> Option<Place> {
     match location {
-        Location::Root => Some(Place::Root),
-        Location::Sftp => Some(Place::Sftp),
         Location::Local(path) => Place::local(path, home),
         Location::Remote { host, path } => {
             let place = Place::Remote {
@@ -246,12 +247,10 @@ pub(crate) fn restored_panel(
     show_hidden: bool,
 ) -> (Panel, super::panel::ListRequest) {
     let location = match &saved.place {
-        Place::Root => Location::Root,
-        Place::Sftp => Location::Sftp,
         // `workspaces.toml` holds only places that start with / or ~.
-        place @ Place::Local(_) => place
-            .local_dir(home)
-            .map_or(Location::Root, Location::Local),
+        place @ Place::Local(_) => {
+            Location::Local(place.local_dir(home).unwrap_or_else(|| home.to_path_buf()))
+        }
         Place::Remote { host, path } => Location::Remote {
             host: host.clone(),
             path: RemotePath::from(path.as_str()),
@@ -438,8 +437,6 @@ mod tests {
             path: RemotePath::new(path),
         };
         let local = |path: &str| Location::Local(PathBuf::from(path));
-        assert_eq!(place_of(&Location::Root, home), Some(Place::Root));
-        assert_eq!(place_of(&Location::Sftp, home), Some(Place::Sftp));
         assert_eq!(
             place_of(&local("/home/me/src"), home),
             Some(Place::Local("~/src".to_owned()))

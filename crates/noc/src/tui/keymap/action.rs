@@ -9,8 +9,6 @@ pub(crate) enum Context {
     Global,
     /// A panel that lists a directory.
     Panel,
-    /// A panel on the virtual root or the list of hosts; falls back to `Panel`.
-    Root,
     /// Keys that the windows listing items to choose from share, whose characters filter the
     /// list: the menus, the zoxide window, the workspaces, the command history fall back to it.
     /// Keys never go to it alone.
@@ -57,7 +55,6 @@ impl Context {
         match self {
             Self::Global => "global",
             Self::Panel => "panel",
-            Self::Root => "root",
             Self::List => "list",
             Self::LocationMenu => "location_menu",
             Self::TabMenu => "tab_menu",
@@ -83,7 +80,6 @@ impl Context {
         match self {
             Self::Global => &[Self::Global],
             Self::Panel => &[Self::Panel, Self::Global],
-            Self::Root => &[Self::Root, Self::Panel, Self::Global],
             Self::QuickSearch => &[Self::QuickSearch, Self::Panel, Self::Global],
             Self::Rename => &[Self::Rename, Self::Global],
             // Dialogs are modal: panel keys do nothing while one is open.
@@ -129,7 +125,7 @@ impl Context {
     /// `Esc` and the character, which is how an Esc typed quickly before a key arrives. `Esc`
     /// itself acts at once, here as everywhere.
     pub(crate) fn alt_stands_for_esc(self) -> bool {
-        matches!(self, Self::Panel | Self::Root)
+        matches!(self, Self::Panel)
     }
 
     /// Whether every character is text, even one that a fallback context binds: in quick
@@ -158,7 +154,6 @@ impl Context {
         matches!(
             self,
             Self::Panel
-                | Self::Root
                 | Self::QuickSearch
                 | Self::Rename
                 | Self::CommandLine
@@ -227,7 +222,7 @@ pub(crate) enum Action {
     Select,
     /// Asks for a pattern and unmarks the entries whose names match it.
     Unselect,
-    /// Opens the parent directory; from `/`, the virtual root.
+    /// Opens the parent directory; nothing in a `/`.
     Parent,
     /// Makes the other panel active.
     SwitchPanel,
@@ -420,7 +415,6 @@ impl Context {
     pub(crate) const ALL: &'static [Self] = &[
         Self::Global,
         Self::Panel,
-        Self::Root,
         Self::List,
         Self::LocationMenu,
         Self::TabMenu,

@@ -50,7 +50,6 @@ pub(crate) fn directory(
     match here {
         Location::Remote { host, path } => remote(host, path, text.as_bytes()),
         Location::Local(dir) => Location::Local(local(dir, home, text)),
-        Location::Root | Location::Sftp => Location::Local(local(home, home, text)),
     }
 }
 
@@ -201,21 +200,10 @@ mod tests {
     }
 
     #[test]
-    fn from_the_volumes_and_hosts_paths_start_at_home() {
-        assert_eq!(cd("src", &Location::Root), Some(local_at("/home/me/src")));
-        assert_eq!(cd("/tmp", &Location::Sftp), Some(local_at("/tmp")));
-        assert_eq!(cd("web:", &Location::Root), Some(remote_at("web", "")));
-    }
-
-    #[test]
     fn directories_for_completion_take_only_the_hosts_they_are_told() {
         let here = local_at("/srv");
         let home = Path::new(HOME);
         assert_eq!(directory("", &here, home, |_| true), here);
-        assert_eq!(
-            directory("", &Location::Root, home, |_| true),
-            local_at(HOME)
-        );
         assert_eq!(
             directory("web:/var/", &here, home, |host| host == "web"),
             remote_at("web", "/var")

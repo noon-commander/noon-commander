@@ -16,17 +16,17 @@ use crate::format;
 use crate::tui::read_volumes;
 
 pub(super) async fn run(context: &Context, location: Option<&str>) -> Result<ExitCode> {
-    match location.map_or(Location::Root, Location::parse) {
+    let Some(location) = location else {
         // Each line is a location to list: the mount point of a volume, or `host:`.
-        Location::Root | Location::Sftp => {
-            for volume in read_volumes(&context.config().volumes.hide).await {
-                println!("{}", volume.mount_point.display());
-            }
-            for alias in super::host_aliases(context).await? {
-                println!("{alias}:");
-            }
-            Ok(ExitCode::SUCCESS)
+        for volume in read_volumes(&context.config().volumes.hide).await {
+            println!("{}", volume.mount_point.display());
         }
+        for alias in super::host_aliases(context).await? {
+            println!("{alias}:");
+        }
+        return Ok(ExitCode::SUCCESS);
+    };
+    match Location::parse(location) {
         Location::Local(path) => {
             let entries = LocalFs
                 .list_dir(&path)

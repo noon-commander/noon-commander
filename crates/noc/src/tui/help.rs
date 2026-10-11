@@ -41,7 +41,6 @@ impl Help {
         let sections = [
             (Context::Global, fl!("help-everywhere")),
             (Context::Panel, fl!("help-panels")),
-            (Context::Root, fl!("help-root")),
             (Context::QuickSearch, fl!("help-quick-search")),
             (Context::Rename, fl!("help-renaming")),
             (Context::CommandLine, fl!("help-command-line")),
@@ -264,8 +263,6 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Global, Action::UserScreen) => fl!("help-user-screen"),
         (Context::Panel, Action::Quit) => fl!("help-quit"),
         (Context::Panel | Context::Viewer, Action::Redraw) => fl!("help-redraw"),
-        (Context::Root, Action::Disconnect) => fl!("help-disconnect"),
-        (Context::Root, Action::EditHost) => fl!("help-edit-host"),
         (Context::Jump, Action::Cancel) => fl!("help-menu-close"),
         (Context::Jump, Action::Confirm) => fl!("help-jump-go"),
         (Context::PullDown, Action::Cancel) => fl!("help-pulldown-close"),
@@ -427,6 +424,7 @@ fn describe_location_menu(context: Context, action: Action) -> Option<String> {
         Action::End => fl!("help-last-row"),
         Action::Confirm => fl!("help-menu-open"),
         Action::Backspace => fl!("help-menu-back"),
+        Action::EditHost => fl!("help-edit-host"),
         Action::Disconnect => fl!("help-disconnect"),
         Action::Reload => fl!("help-menu-reload"),
         Action::Cancel => fl!("help-menu-close"),
@@ -550,7 +548,6 @@ mod tests {
             [
                 "Everywhere",
                 "Panels",
-                "Volumes and hosts",
                 "Quick search",
                 "Renaming in place",
                 "Command line",

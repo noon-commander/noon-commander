@@ -23,7 +23,7 @@ pub struct Config {
     pub ssh: SshConfig,
     /// `[discovery]`: which hosts from `ssh_config` are listed.
     pub discovery: DiscoveryConfig,
-    /// `[volumes]`: which mounted volumes the root lists.
+    /// `[volumes]`: which mounted volumes the location menu lists.
     pub volumes: VolumesConfig,
     /// `[ui]`: how the TUI looks.
     pub ui: UiConfig,
@@ -336,7 +336,7 @@ impl Default for SshConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct DiscoveryConfig {
-    /// Host aliases to leave out of the host list, as patterns with `*` and `?`. Default:
+    /// Host aliases to leave out of the location menu, as patterns with `*` and `?`. Default:
     /// `github.com`, `gitlab.com`, and `bitbucket.org`.
     pub hide: Vec<String>,
 }
@@ -355,7 +355,7 @@ impl Default for DiscoveryConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct VolumesConfig {
-    /// Mount points to leave out of the root, as patterns with `*` and `?`, such as
+    /// Mount points to leave out of the location menu, as patterns with `*` and `?`, such as
     /// `/Volumes/Backup*`. The system volume is always listed. Default: none.
     pub hide: Vec<String>,
 }

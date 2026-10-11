@@ -1,8 +1,9 @@
-//! What the virtual root lists: the mounted volumes and the hosts.
+//! What the location menu lists: the mounted volumes and the hosts.
 
 use std::io;
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
 use noc_ssh::pattern::wildcard_match;
@@ -15,9 +16,18 @@ use crate::context::{Context, describe};
 /// How long a volume may take to say how big it is; a dead network mount never does.
 pub(crate) const VOLUME_TIMEOUT: Duration = Duration::from_millis(500);
 
-/// A host in the virtual root.
+/// The places of the location menu, as read at one time.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct Places {
+    /// The system volume first, then by mount point.
+    pub(crate) volumes: Vec<Volume>,
+    /// In config order.
+    pub(crate) hosts: Vec<KnownHost>,
+}
+
+/// A host of the ssh config.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct RootHost {
+pub(crate) struct KnownHost {
     /// The alias from `ssh_config`.
     pub(crate) alias: String,
     /// The host's label from `hosts.toml`.
@@ -30,7 +40,7 @@ pub(crate) struct RootHost {
 /// earlier runs. Discovery warnings go to the log.
 ///
 /// Blocking: reads the ssh config files and the cache.
-pub(crate) fn read_hosts(context: &Context) -> Vec<RootHost> {
+pub(crate) fn read_hosts(context: &Context) -> Vec<KnownHost> {
     let discovery = context.scan();
     for warning in &discovery.warnings {
         tracing::warn!("{}", describe(warning));
@@ -38,7 +48,7 @@ pub(crate) fn read_hosts(context: &Context) -> Vec<RootHost> {
     let cache = context.load_cache(&discovery);
     discovery
         .visible(&context.config().discovery.hide)
-        .map(|host| RootHost {
+        .map(|host| KnownHost {
             alias: host.alias.clone(),
             label: context.label(&host.alias),
             address: cache
@@ -51,6 +61,17 @@ pub(crate) fn read_hosts(context: &Context) -> Vec<RootHost> {
 /// Taken while the volumes are read. A second reader waits for the first, rather than finding
 /// every volume busy and taking it for a dead network mount.
 static READING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// The volumes and the hosts. They are read each time, so a reload shows what changed.
+pub(crate) async fn read_places(context: Arc<Context>) -> Result<Places, String> {
+    let hide = context.config().volumes.hide.clone();
+    let hosts = tokio::task::spawn_blocking(move || read_hosts(&context));
+    let (volumes, hosts) = tokio::join!(read_volumes(&hide), hosts);
+    Ok(Places {
+        volumes,
+        hosts: hosts.map_err(|error| error.to_string())?,
+    })
+}
 
 /// The mounted volumes that `volumes.hide` does not hide. The system volume always stays.
 pub(crate) async fn read_volumes(hide: &[String]) -> Vec<Volume> {
@@ -136,12 +157,12 @@ mod tests {
         assert_eq!(
             read_hosts(&context),
             [
-                RootHost {
+                KnownHost {
                     alias: "web".to_owned(),
                     label: Some("Prod".to_owned()),
                     address: None,
                 },
-                RootHost {
+                KnownHost {
                     alias: "db".to_owned(),
                     label: None,
                     address: Some("admin@10.0.0.5:2222".to_owned()),

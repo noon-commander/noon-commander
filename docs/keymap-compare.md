@@ -83,11 +83,10 @@ protocol send it as Ctrl+Space, which is bound too.
 
 ## Panels (`panel`)
 
-A panel that lists a directory. The volumes and hosts and quick search fall back to it. mc and
-Far have a command line under the panels that takes what is typed; noc opens one with `!`, yazi
-asks for a shell command in an input box, and ranger opens its console with `:`. mc's +, -, \\,
-and \*, on the numpad too, mark and unmark only while its command line is empty; with Alt, they
-always do.
+A panel that lists a directory. Quick search falls back to it. mc and Far have a command line
+under the panels that takes what is typed; noc opens one with `!`, yazi asks for a shell command
+in an input box, and ranger opens its console with `:`. mc's +, -, \\, and \*, on the numpad
+too, mark and unmark only while its command line is empty; with Alt, they always do.
 
 Both presets group keys of their own under a first key: t for the tabs and the workspaces, o for
 the sort order, as ranger's sort keys, and the hidden names, and f for the file operations. f
@@ -104,7 +103,7 @@ and Ctrl+w.
 | First row | `home` | ✅ | Home<br>Alt+< | g g<br>Home | Home<br>A1<br>Alt+< | — | g g<br>Home | Home<br>g g |
 | Last row | `end` | ✅ | End<br>Alt+> | G<br>End | End<br>C1<br>Alt+> | — | G<br>End | End<br>G |
 | Open the directory or file under the cursor | `enter` | ✅ | Enter | l<br>Right<br>Enter | Enter | Enter | l<br>Right<br>o<br>Enter | Right<br>Enter<br>l |
-| Parent directory; above /, the volumes and hosts | `parent` | ✅ | Ctrl+PgUp | h<br>Left<br>Backspace | Ctrl+PgUp | Ctrl+PgUp | h<br>Left | Left<br>h |
+| Parent directory; nothing in / | `parent` | ✅ | Ctrl+PgUp | h<br>Left<br>Backspace | Ctrl+PgUp | Ctrl+PgUp | h<br>Left | Left<br>h |
 | Read the directory again | `reload` | ✅ | Ctrl+r | R | Ctrl+r | Ctrl+r | — | R |
 | Stop loading or connecting | `cancel` | ✅ | Esc | Esc<br>Ctrl+c | — | — | — | Ctrl+c |
 | The pull-down menu | `pull_down` | ✅ | F9 | g m<br>F9 | F9 | F9 | — | — |
@@ -325,15 +324,6 @@ and Ctrl+w.
 | The log of messages | — | ⏳ | — | — | — | — | — | W |
 | The console, with the command before | — | ⏳ | — | — | — | — | — | Ctrl+p |
 
-## Volumes and hosts (`root`)
-
-A panel on the virtual root or the list of hosts; keys it does not bind go to the panel.
-
-| Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
-| --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Edit the settings of the host under the cursor | `edit_host` | ⏳ | F4 | F4 | — | — | — | — |
-| Disconnect the host under the cursor | `disconnect` | ⏳ | F8 | D D<br>F8 | — | — | — | — |
-
 ## Quick search (`quick_search`)
 
 In the active panel; characters are part of the name searched for, and keys it does not bind go
@@ -503,16 +493,18 @@ its pick window, which asks for the program to open files with.
 
 ## Location menu (`location_menu`)
 
-Alt+F1 and Alt+F2: the volumes and hosts; characters filter it. It falls back to `list`, whose
-Enter opens the volume or host in the panel. The far column has the keys of Far's menus, its
-drive menu among them.
+Alt+F1 and Alt+F2: the home directory, the volumes, and the hosts, under their headings;
+characters filter it. It falls back to `list`, whose Enter opens the place in the panel, or, on
+the last row of a group that shows only its first places, shows the rest. The far column has the
+keys of Far's menus, its drive menu among them.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Disconnect the host | `disconnect` | ⏳ | F8 | F8 | — | Delete | — | — |
+| Edit the settings of the host under the cursor | `edit_host` | ⏳ | F4 | F4 | — | — | — | — |
+| Disconnect the host under the cursor, or stop connecting to it | `disconnect` | ⏳ | F8 | F8 | — | Delete | — | — |
 | Read the volumes and hosts again | `reload` | ⏳ | Ctrl+r | Ctrl+r | — | Ctrl+r | — | — |
 | Filter the items | — | ⏳ | Typing | Typing | — | Ctrl+Alt+f<br>RightAlt | — | — |
-| Open an item by its number (empty filter) | — | ⏳ | 1…9, 0 | 1…9, 0 | — | — | — | — |
+| Open one of the first ten places by its number (empty filter) | — | ⏳ | 1…9, 0 | 1…9, 0 | — | — | — | — |
 | Lock filter | — | ⏳ | — | — | — | Ctrl+Alt+l | — | — |
 | Shift all items by 1 position | — | ⏳ | — | — | — | Alt+Left<br>Alt+Right | — | — |
 | Shift selected item by 1 position | — | ⏳ | — | — | — | Alt+Shift+Left<br>Alt+Shift+Right | — | — |

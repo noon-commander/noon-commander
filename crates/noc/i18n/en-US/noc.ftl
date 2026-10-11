@@ -30,8 +30,8 @@ fkey-pulldown = PullDn
 ## The title of the terminal's window or tab (src/tui/app), with ui.terminal_title. Prefix:
 ## terminal-.
 
-# Where the active panel is: a directory with ~ for home, host:path, or the name of the machine
-# in the root. noc is the program's name, not to be translated.
+# Where the active panel is: a directory with ~ for home, or host:path. noc is the program's
+# name, not to be translated.
 terminal-title = { $place } — noc
 
 ## Panels (src/tui/panel). Prefixes: panel-, error-.
@@ -51,8 +51,14 @@ panel-search = Search: { $text }
 panel-rename = Rename: { $name }
 # Status line while a directory is read.
 panel-loading = Loading…
-# Status line while the panel waits for a connection to a host; Esc stops it.
+# Status line, after a spinner, while the panel waits for a connection to a host; Esc stops it.
 panel-connecting = Connecting to { $host }…
+# Status line, after a spinner, while a dialog asks whether to connect to the host again.
+panel-host-waiting = { $host }: Retry or Cancel?
+# Status line of a panel on a host that is not connected, which shows none of its entries;
+# reading the directory again connects. The second one names the key that does it.
+panel-disconnected = Not connected to { $host }
+panel-disconnected-key = Not connected to { $host }; { $key } connects
 # Below the listing: the size of the marked files in bytes, with a comma between each group of
 # three digits, and how many entries are marked.
 panel-marked = { $size } B in { $count ->
@@ -67,9 +73,13 @@ panel-error = Cannot open { $path }: { $reason }
 error-not-found = no such file or directory
 error-permission-denied = permission denied
 error-already-exists = already exists
-# Status line when the connection of a host the panel showed ends; the panel goes back to the
-# list of hosts.
-panel-host-lost = Lost the connection to { $host }: { $reason }
+
+## The dialog after a failed connection (src/tui/app): Retry tries again, Cancel leaves the
+## panels where they were. Prefix: reconnect-.
+
+reconnect-title = Connection
+reconnect-failed = Cannot connect to { $host }: { $reason }
+reconnect-lost = Lost the connection to { $host }: { $reason }
 
 ## Connection errors (src/tui/describe). Prefix: error-. Most of the time ssh's own words are
 ## shown instead.
@@ -79,27 +89,6 @@ error-ssh-exited = ssh ended with { $status }
 error-ssh-spawn = cannot run { $program }: { $reason }
 error-ssh-too-old = OpenSSH { $found } is too old; Noon Commander needs { $required } or newer
 error-not-openssh = { $program } is not OpenSSH
-
-## Virtual root (src/tui/panel). Prefix: root-.
-
-# Title of the panel that lists the mounted volumes and the hosts, where the name of the machine
-# is not known.
-root-title = Locations
-# The first row of the virtual root, which opens the home directory.
-root-home = Home
-# The row of the virtual root that opens the list of hosts from ssh_config, and that list's title.
-root-sftp = SFTP
-# Next to that row: how many hosts it holds.
-root-sftp-hosts = { $count ->
-        [one] { $count } host
-       *[other] { $count } hosts
-    }
-# Status line on that row.
-root-sftp-status = Hosts from the ssh config
-# Column header: the space left on a volume; its size is under panel-size.
-root-free = Free
-# Column header: user@hostname:port from ssh -G.
-root-address = Address
 
 ## What the windows that list rows to choose from share (src/tui/picker): the location menu,
 ## the tab menu, the workspaces, and the command history. Prefix: picker-.
@@ -115,6 +104,15 @@ picker-nothing = Nothing matches.
 # Titles: the panel the menu changes.
 menu-left = Left
 menu-right = Right
+# Headings of the groups of places.
+menu-favorites = Favorites
+menu-mounts = Mounts
+menu-sftp = SFTP
+# The row that opens the home directory.
+menu-home = Home
+# The last row of a group that shows only its first places: how many more it holds, which
+# Enter shows and the filter finds.
+menu-more = { $count } more…
 
 ## The zoxide window of Alt+z (src/tui/jump): the directories zoxide ranks highest for the
 ## keywords typed, as `z` picks them in a shell. Prefix: jump-.
@@ -277,7 +275,7 @@ config-atomic-upload-hint = Write each copy under a hidden name and rename it wh
 config-parallel-jobs = Parallel jobs
 config-parallel-jobs-hint = How many jobs run at once; later ones wait. Editing with F4 never waits.
 config-parallel-jobs-invalid = "{ $text }" is not a number of jobs: it takes a whole number, at least 1.
-# Settings of ssh, [ssh], and of the list of hosts, [discovery]. Lists are words separated by
+# Settings of ssh, [ssh], and of the hosts of the location menu, [discovery]. Lists are words separated by
 # spaces, with "…" around a word that has spaces.
 config-ssh = SSH
 config-ssh-program = Program
@@ -292,10 +290,10 @@ config-multiplex = Share connections
 config-multiplex-hint = One authenticated connection per host for panels and transfers; off for servers with MaxSessions 1.
 config-hide-hosts = Hidden hosts
 config-hide-hosts-hint = Hosts from ssh_config to leave out, as patterns with * and ?, separated by spaces.
-# Settings of the virtual root, [volumes].
+# Settings of the volumes of the location menu, [volumes].
 config-volumes = Volumes
 config-hide-volumes = Hidden volumes
-config-hide-volumes-hint = Mount points to leave out of the root, as patterns with * and ?, separated by spaces. The system volume always shows.
+config-hide-volumes-hint = Mount points to leave out of the location menu, as patterns with * and ?, separated by spaces. The system volume always shows.
 # Settings of zoxide, [zoxide].
 config-zoxide = zoxide
 config-zoxide-record = Record directories
@@ -346,7 +344,6 @@ dialog-use-current = Use current
 help-title = Help
 help-everywhere = Everywhere
 help-panels = Panels
-help-root = Volumes and hosts
 help-menu = Location menu
 help-tab-menu = Tab menu
 help-jump = zoxide

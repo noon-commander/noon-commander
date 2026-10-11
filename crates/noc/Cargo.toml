@@ -28,7 +28,7 @@ jiff.workspace = true
 nucleo-matcher.workspace = true
 ratatui.workspace = true
 rust-embed.workspace = true
-rustix = { workspace = true, features = ["system", "termios"] }
+rustix = { workspace = true, features = ["termios"] }
 secrecy.workspace = true
 noc-config.workspace = true
 noc-ssh.workspace = true

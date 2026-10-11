@@ -36,12 +36,12 @@ impl Decor {
         if self.icons { " " } else { "/" }
     }
 
-    /// The prefix of the home directory in the virtual root.
+    /// The prefix of the home directory in the location menu.
     pub(crate) fn home(self) -> &'static str {
         if self.icons { "󰋜 " } else { "~ " }
     }
 
-    /// The prefix of a volume in the virtual root: a disk, a network drive, or mc's marker of
+    /// The prefix of a volume in the location menu: a disk, a network drive, or mc's marker of
     /// block devices.
     pub(crate) fn volume(self, kind: VolumeKind) -> &'static str {
         match (self.icons, kind) {
@@ -49,12 +49,6 @@ impl Decor {
             (true, VolumeKind::Network) => "󰣳 ",
             (true, VolumeKind::System | VolumeKind::Local) => "󰋊 ",
         }
-    }
-
-    /// The prefix of the row of SFTP hosts in the virtual root, which opens like a directory: a
-    /// network folder, or mc's marker of directories.
-    pub(crate) fn sftp(self) -> &'static str {
-        if self.icons { "󰡰 " } else { "/ " }
     }
 
     /// The prefix of a host, which tells its status in one cell, as every prefix takes one:
@@ -65,10 +59,10 @@ impl Decor {
         let marker = match (self.icons, status) {
             (_, HostStatus::Connecting) => spinner(tick),
             (true, HostStatus::Idle | HostStatus::Connected) => '󰒋',
-            (true, HostStatus::Failed) => '󰒑',
+            (true, HostStatus::Failed | HostStatus::Stalled) => '󰒑',
             (false, HostStatus::Idle) => '○',
             (false, HostStatus::Connected) => '●',
-            (false, HostStatus::Failed) => '✗',
+            (false, HostStatus::Failed | HostStatus::Stalled) => '✗',
         };
         format!("{marker} ")
     }
@@ -224,12 +218,12 @@ mod tests {
         assert_eq!(plain.host(HostStatus::Connected, 0), "● ");
         assert_eq!(plain.host(HostStatus::Idle, 0), "○ ");
         assert_eq!(plain.host(HostStatus::Failed, 0), "✗ ");
+        assert_eq!(plain.host(HostStatus::Stalled, 0), "✗ ");
         let spun: Vec<String> = (0..5)
             .map(|tick| plain.host(HostStatus::Connecting, tick))
             .collect();
         assert_eq!(spun, ["| ", "/ ", "- ", "\\ ", "| "]);
         assert_eq!(plain.volume(VolumeKind::System), "+ ");
-        assert_eq!(plain.sftp(), "/ ");
         assert_eq!(plain.home(), "~ ");
         // With icons, the icon itself tells the status, so every prefix is one cell wide.
         let icons = Decor::new(true);
@@ -239,9 +233,8 @@ mod tests {
         assert_eq!(icons.host(HostStatus::Connecting, 1), "/ ");
         assert_eq!(icons.volume(VolumeKind::Local), "󰋊 ");
         assert_eq!(icons.volume(VolumeKind::Network), "󰣳 ");
-        assert_eq!(icons.sftp(), "󰡰 ");
         assert_eq!(icons.home(), "󰋜 ");
-        for prefix in [icons.parent(), icons.home(), icons.sftp()] {
+        for prefix in [icons.parent(), icons.home()] {
             assert_eq!(prefix.chars().count(), 2, "{prefix:?}");
         }
     }

@@ -1,7 +1,10 @@
 # 0006. A virtual root of volumes and a list of hosts
 
-- Status: Accepted
+- Status: Superseded in part by [ADR 0021](0021-location-menu-replaces-the-virtual-root.md)
 - Date: 2026-10-02
+
+How volumes are found, with at most 500 ms for each size, and `[volumes] hide` still hold. The
+root, the list of hosts, and `..` above `/` gave way to the location menu.
 
 ## Context
 

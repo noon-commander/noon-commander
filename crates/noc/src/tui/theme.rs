@@ -466,7 +466,7 @@ impl Theme {
             HostStatus::Idle => self.host_idle,
             HostStatus::Connecting => self.host_connecting,
             HostStatus::Connected => self.host_connected,
-            HostStatus::Failed => self.host_failed,
+            HostStatus::Failed | HostStatus::Stalled => self.host_failed,
         }
     }
 
@@ -477,7 +477,7 @@ impl Theme {
             HostStatus::Idle => idle,
             HostStatus::Connecting => connecting,
             HostStatus::Connected => connected,
-            HostStatus::Failed => failed,
+            HostStatus::Failed | HostStatus::Stalled => failed,
         }
     }
 }

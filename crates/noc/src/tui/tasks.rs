@@ -9,7 +9,7 @@ use std::time::Duration;
 use futures_util::StreamExt as _;
 use futures_util::stream::FuturesUnordered;
 use noc_config::{
-    Config, ConfigError, History, HistoryEntry, HostConfig, Hosts, Workspaces, add_command,
+    Config, ConfigError, History, HistoryEntry, HostConfig, Hosts, Recent, Workspaces, add_command,
     remove_command, remove_workspace, rename_workspace, save_config, save_host, save_workspace,
 };
 use noc_ops::{
@@ -30,11 +30,11 @@ use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::task::{AbortHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 
-use super::app::{Effect, HistoryChange, WorkspaceChange};
+use super::app::{Effect, HistoryChange, RecentChange, WorkspaceChange};
 use super::describe;
 use super::dialog::{Ask, Reply};
 use super::panel::{ListRequest, Listed, Listing};
-use super::root;
+use super::places::{self, Places};
 use super::tabs::PanelId;
 use crate::context::Context;
 use crate::i18n::fl;
@@ -54,10 +54,10 @@ pub(crate) enum Done {
         generation: u64,
         result: Result<Listed, String>,
     },
-    /// The listing of the virtual root for the location menu, of [`Effect::ListPlaces`].
+    /// The volumes and hosts of [`Effect::ListPlaces`], for the location menu.
     Places {
         generation: u64,
-        result: Result<Listed, String>,
+        result: Result<Places, String>,
     },
     /// A report from the job `id` of [`Effect::Delete`] or [`Effect::Copy`].
     Job { id: u64, event: JobEvent },
@@ -123,6 +123,9 @@ pub(crate) enum Done {
     /// The commands of `history.toml`, oldest first, after a change, or why it could not be
     /// read or written.
     History(Result<Vec<HistoryEntry>, String>),
+    /// The hosts and volumes of `recent.toml`, of [`RecentChange::Load`], or why they could not
+    /// be read.
+    Recent(Result<Recent, String>),
     /// The names of the [`Effect::ListNames`] `generation`: each with whether it is a
     /// directory, or why there are none; and the aliases of the hosts.
     Names {
@@ -227,6 +230,8 @@ pub(crate) struct Tasks {
     workspace_changes: mpsc::UnboundedSender<WorkspaceChange>,
     /// Reads and changes of `history.toml`, which one task makes in turn.
     history_changes: mpsc::UnboundedSender<HistoryChange>,
+    /// Reads and writes of `recent.toml`, which one task makes in turn.
+    recent_changes: mpsc::UnboundedSender<RecentChange>,
     /// Directories for zoxide, which one task adds in turn.
     zoxide_adds: mpsc::UnboundedSender<PathBuf>,
     /// The zoxide query in flight; a newer one replaces it.
@@ -246,6 +251,7 @@ impl Tasks {
         let config_saves = save_configs(context.config_file.clone(), done.clone());
         let workspace_changes = change_workspaces(context.paths.workspaces_file(), done.clone());
         let history_changes = change_history(context.paths.history_file(), done.clone());
+        let recent_changes = change_recent(context.paths.recent_file(), done.clone());
         let zoxide_adds = add_to_zoxide(Arc::clone(&context));
         Self {
             context,
@@ -257,6 +263,7 @@ impl Tasks {
             config_saves,
             workspace_changes,
             history_changes,
+            recent_changes,
             zoxide_adds,
             zoxide_query: None,
             work_dirs: change_work_dirs(),
@@ -364,6 +371,9 @@ impl Tasks {
                 Effect::History(change) => {
                     let _ = self.history_changes.send(change);
                 }
+                Effect::Recent(change) => {
+                    let _ = self.recent_changes.send(change);
+                }
             }
         }
     }
@@ -466,7 +476,7 @@ impl Tasks {
                 if !hosts {
                     return Vec::new();
                 }
-                tokio::task::spawn_blocking(move || root::read_hosts(&context))
+                tokio::task::spawn_blocking(move || places::read_hosts(&context))
                     .await
                     .map(|hosts| hosts.into_iter().map(|host| host.alias).collect())
                     .unwrap_or_default()
@@ -517,23 +527,22 @@ impl Tasks {
         });
     }
 
-    /// Lists the virtual root for the location menu.
+    /// Reads the volumes and the hosts for the location menu.
     fn list_places(&self, generation: u64) {
         let context = Arc::clone(&self.context);
         let done = self.done.clone();
         tokio::spawn(async move {
-            let result = list(context, Location::Root).await;
+            let result = places::read_places(context).await;
             let _ = done.send(Done::Places { generation, result });
         });
     }
 
-    /// Lists the virtual root, the hosts, or a local directory here.
+    /// Lists a local directory here.
     fn list(&self, panel: PanelId, request: ListRequest) {
-        let context = Arc::clone(&self.context);
         let done = self.done.clone();
         tokio::spawn(async move {
             let generation = request.generation;
-            let result = list(context, request.location).await;
+            let result = list(request.location).await;
             let _ = done.send(Done::Listed {
                 panel,
                 generation,
@@ -581,7 +590,7 @@ impl Tasks {
                     });
                 });
             }
-            (Location::Root | Location::Sftp | Location::Remote { .. }, _) => {
+            (Location::Remote { .. }, None) => {
                 let result = Err(fl!("error-connection-closed"));
                 let _ = self.done.send(Done::Created {
                     panel,
@@ -607,7 +616,6 @@ impl Tasks {
             match target {
                 Location::Local(path) => local.push(path),
                 Location::Remote { path, .. } => remote.push(path),
-                Location::Root | Location::Sftp => {}
             }
         }
         if let Some(handle) = host {
@@ -816,8 +824,40 @@ fn change_history(
     sender
 }
 
+/// Starts the task that reads and writes `recent.toml` at `path`, in the order the changes
+/// come, and reports what it read to `done`; a failed write only goes to the log.
+fn change_recent(
+    path: PathBuf,
+    done: mpsc::UnboundedSender<Done>,
+) -> mpsc::UnboundedSender<RecentChange> {
+    let (sender, mut receiver) = mpsc::unbounded_channel::<RecentChange>();
+    tokio::spawn(async move {
+        while let Some(change) = receiver.recv().await {
+            let path = path.clone();
+            let result = tokio::task::spawn_blocking(move || match change {
+                RecentChange::Load => Recent::load(&path).map(Some),
+                RecentChange::Save(recent) => recent.save(&path).map(|()| None),
+            })
+            .await;
+            let result = match result {
+                Ok(Ok(None)) => continue,
+                Ok(Ok(Some(recent))) => Ok(recent),
+                Ok(Err(error)) => Err(describe::chain(&error)),
+                Err(error) => Err(error.to_string()),
+            };
+            if let Err(reason) = &result {
+                tracing::warn!(%reason, "cannot read or write the recent places");
+            }
+            if done.send(Done::Recent(result)).is_err() {
+                break;
+            }
+        }
+    });
+    sender
+}
+
 /// The names in `dir`, each with whether it is a directory, read through `host` if it is
-/// remote; nothing without a host to read it through, and in the root.
+/// remote; nothing without a host to read it through.
 async fn names_in(
     dir: Option<Location>,
     host: Option<HostHandle>,
@@ -836,7 +876,7 @@ async fn names_in(
             };
             fs.list_dir(&path).await
         }
-        Some(Location::Root | Location::Sftp) | None => return Ok(Vec::new()),
+        None => return Ok(Vec::new()),
     };
     entries
         .map(|entries| {
@@ -905,8 +945,8 @@ fn change_work_dirs() -> mpsc::UnboundedSender<PathBuf> {
     sender
 }
 
-/// Runs `ssh -G` for a host that is being connected to, as the root shows effective addresses
-/// only from there: reports the address and stores it in the cache. Failures only go to the
+/// Runs `ssh -G` for a host that is being connected to, as the location menu shows effective
+/// addresses only from there: reports the address and stores it in the cache. Failures only go to the
 /// log; the connection reports its own.
 async fn resolve_address(
     context: Arc<Context>,
@@ -934,7 +974,8 @@ async fn resolve_address(
         address,
     });
     let _guard = cache.lock().await;
-    let saved = tokio::task::spawn_blocking(move || root::remember(&context, &host, cached)).await;
+    let saved =
+        tokio::task::spawn_blocking(move || places::remember(&context, &host, cached)).await;
     if let Ok(Err(error)) = saved {
         tracing::warn!(%error, "cannot save the ssh -G cache");
     }
@@ -1046,7 +1087,7 @@ async fn run_checksum(
                         .into_iter()
                         .filter_map(|location| match location {
                             Location::Local(path) => Some(path),
-                            _ => None,
+                            Location::Remote { .. } => None,
                         })
                         .collect();
                     let side = Endpoint {
@@ -1064,7 +1105,7 @@ async fn run_checksum(
                                 host = on;
                                 Some(path)
                             }
-                            _ => None,
+                            Location::Local(_) => None,
                         })
                         .collect();
                     let there = remote_location(host.clone());
@@ -1249,7 +1290,6 @@ impl CopyJob<'_> {
                     source_host = host;
                     remote.push(path);
                 }
-                Location::Root | Location::Sftp => {}
             }
         }
         let on_host = |host: String| {
@@ -1338,40 +1378,20 @@ impl CopyJob<'_> {
     }
 }
 
-/// Lists the virtual root, the hosts, or a local directory. The root reads the volumes and the
-/// ssh config each time, so a reload shows what changed.
-async fn list(context: Arc<Context>, location: Location) -> Result<Listed, String> {
-    let (listing, space) = match &location {
-        Location::Root => {
-            let hide = context.config().volumes.hide.clone();
-            let hosts = tokio::task::spawn_blocking(move || root::read_hosts(&context));
-            let (volumes, hosts) = tokio::join!(root::read_volumes(&hide), hosts);
-            let listing = Listing::Root {
-                volumes,
-                hosts: hosts.map_err(|error| error.to_string())?,
-            };
-            (listing, None)
-        }
-        Location::Sftp => {
-            let hosts = tokio::task::spawn_blocking(move || root::read_hosts(&context))
-                .await
-                .map_err(|error| error.to_string())?;
-            (Listing::Hosts(hosts), None)
-        }
-        Location::Local(path) => {
-            // The listing does not wait for a file system that is slow to tell its space.
-            let space = tokio::time::timeout(root::VOLUME_TIMEOUT, space(&LocalFs, path));
-            let (entries, space) = tokio::join!(LocalFs.list_dir(path), space);
-            let entries = entries.map_err(|error| describe::vfs_error(&error))?;
-            (Listing::Dir(entries), space.ok().flatten())
-        }
-        // The app sends these to the host's task.
-        Location::Remote { .. } => return Err(fl!("error-connection-closed")),
+/// Lists a local directory.
+async fn list(location: Location) -> Result<Listed, String> {
+    let Location::Local(path) = &location else {
+        // The app sends remote ones to the host's task.
+        return Err(fl!("error-connection-closed"));
     };
+    // The listing does not wait for a file system that is slow to tell its space.
+    let space = tokio::time::timeout(places::VOLUME_TIMEOUT, space(&LocalFs, path));
+    let (entries, space) = tokio::join!(LocalFs.list_dir(path), space);
+    let entries = entries.map_err(|error| describe::vfs_error(&error))?;
     Ok(Listed {
         location,
-        listing,
-        space,
+        listing: Listing::Dir(entries),
+        space: space.ok().flatten(),
     })
 }
 
@@ -1689,7 +1709,7 @@ mod tests {
         };
         result.map(|listed| match listed.location {
             Location::Remote { path, .. } => String::from_utf8_lossy(path.as_bytes()).into_owned(),
-            other => panic!("expected a remote location, got {other:?}"),
+            other @ Location::Local(_) => panic!("expected a remote location, got {other:?}"),
         })
     }
 
@@ -1741,7 +1761,6 @@ mod tests {
             path: RemotePath::from("/srv"),
         };
         assert_eq!(names_in(Some(remote), None).await, Ok(Vec::new()));
-        assert_eq!(names_in(Some(Location::Root), None).await, Ok(Vec::new()));
     }
 
     #[tokio::test]

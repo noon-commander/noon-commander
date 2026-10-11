@@ -90,14 +90,6 @@ pub(super) const PRESET: Preset = &[
             (Action::Redraw, &["ctrl-l"]),               // OK1
         ],
     ),
-    // A panel on the virtual root or the list of hosts, on top of the panel's.
-    (
-        Context::Root,
-        &[
-            (Action::EditHost, &["f4"]),
-            (Action::Disconnect, &["shift-d shift-d", "f8"]),
-        ],
-    ),
     // Quick search in the active panel; other keys go to the panel.
     (
         Context::QuickSearch,
@@ -180,10 +172,15 @@ pub(super) const PRESET: Preset = &[
             (Action::Cancel, &["esc", "ctrl-c", "f10"]),
         ],
     ),
-    // The location menu, on top of the list's; characters filter it.
+    // The location menu, on top of the list's; characters filter it. F4 and F8 edit and
+    // disconnect the host under the cursor.
     (
         Context::LocationMenu,
-        &[(Action::Disconnect, &["f8"]), (Action::Reload, &["ctrl-r"])],
+        &[
+            (Action::EditHost, &["f4"]),
+            (Action::Disconnect, &["f8"]),
+            (Action::Reload, &["ctrl-r"]),
+        ],
     ),
     // The tab menu of a panel, on top of the list's; characters filter it.
     (Context::TabMenu, &[]),

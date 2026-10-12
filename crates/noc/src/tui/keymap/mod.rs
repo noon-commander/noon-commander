@@ -1032,12 +1032,11 @@ mod tests {
         ];
         for name in Keymap::NAMES {
             let keymap = Keymap::by_name(name).unwrap();
-            let home = if *name == "vim" { "ctrl-b" } else { "ctrl-a" };
             let keys = [
                 "left",
                 "right",
                 "home",
-                home,
+                "ctrl-a",
                 "end",
                 "ctrl-e",
                 "backspace",
@@ -1771,32 +1770,50 @@ mod tests {
     #[test]
     fn vim_fields_and_the_command_line_take_the_keys_of_vims_command_line() {
         let vim = Keymap::by_name("vim").unwrap();
-        for context in [Context::Rename, Context::DialogInput, Context::CommandLine] {
-            let mut state = KeyState::default();
-            assert_eq!(
-                feed(&vim, &mut state, context, &["ctrl-b", "ctrl-e"]),
-                actions(&[Action::TextStart, Action::TextEnd]),
-                "{context:?}"
-            );
-        }
+        // On the command line, Ctrl+b goes to the start and Ctrl+f edits, as on vim's.
         let mut state = KeyState::default();
         assert_eq!(
             feed(
                 &vim,
                 &mut state,
                 Context::CommandLine,
-                &["ctrl-p", "ctrl-n", "ctrl-f", "ctrl-r"]
+                &["ctrl-b", "ctrl-e", "ctrl-p", "ctrl-n", "ctrl-f", "ctrl-r"]
             ),
             actions(&[
+                Action::TextStart,
+                Action::TextEnd,
                 Action::OlderCommand,
                 Action::NewerCommand,
                 Action::EditCommand,
                 Action::CommandHistory
             ])
         );
+        // Elsewhere Ctrl+b and Ctrl+f page alike, the text fields' too, which leave them to the
+        // panel or the dialog; renaming leaves them to nothing.
+        for context in [
+            Context::Panel,
+            Context::QuickSearch,
+            Context::DialogInput,
+            Context::PathInput,
+            Context::Dialog,
+            Context::Viewer,
+            Context::LocationMenu,
+            Context::Completion,
+        ] {
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&vim, &mut state, context, &["ctrl-b", "ctrl-f"]),
+                actions(&[Action::PageUp, Action::PageDown]),
+                "{context:?}"
+            );
+        }
         assert_eq!(
-            feed(&vim, &mut state, Context::Dialog, &["ctrl-b", "ctrl-f"]),
-            actions(&[Action::PageUp, Action::PageDown])
+            feed(&vim, &mut state, Context::Rename, &["ctrl-b", "ctrl-f"]),
+            []
+        );
+        assert_eq!(
+            vim.key(Context::Rename, Action::TextStart).as_deref(),
+            Some("Home")
         );
         // The buttons of a dialog stand in a row: h and l go along it, as j and k do.
         assert_eq!(

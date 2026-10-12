@@ -97,14 +97,15 @@ pub(super) const PRESET: Preset = &[
     ),
     // What the text fields share: quick search, the field of an entry renamed in its row, the
     // text fields of dialogs, the command line, and the filters of the lists fall back to it.
-    // Ctrl+b goes to the start, and Shift+Left and Shift+Right go by words, as on vim's command
-    // line; Ctrl+a goes to the start too, as in the shell, where a list's Ctrl+b pages.
+    // Shift+Left and Shift+Right go by words, as on vim's command line; Ctrl+a goes to the start,
+    // as in the shell. Ctrl+b and Ctrl+f are left to what the fields fall back to, which pages
+    // with them, as everywhere but on the command line.
     (
         Context::Input,
         &[
             (Action::Left, &["left"]),
             (Action::Right, &["right"]),
-            (Action::TextStart, &["home", "ctrl-b", "ctrl-a"]),
+            (Action::TextStart, &["home", "ctrl-a"]),
             (Action::TextEnd, &["end", "ctrl-e"]),
             (Action::WordLeft, &["shift-left", "ctrl-left"]),
             (Action::WordRight, &["shift-right", "ctrl-right"]),
@@ -289,14 +290,15 @@ pub(super) const PRESET: Preset = &[
     ),
     // The command line of `!` and `:`, on top of the text field's. Ctrl+j arrives as LF where
     // Enter arrives as CR, so it starts a new line in every terminal; Shift+Enter does where the
-    // terminal speaks the kitty keyboard protocol. As on vim's command line, Ctrl+p and Ctrl+n go
-    // through the history, and Ctrl+f opens the command for editing, as Ctrl+x Ctrl+e does in
-    // bash. No Ctrl+y, as in renaming.
+    // terminal speaks the kitty keyboard protocol. As on vim's command line, Ctrl+b goes to the
+    // start of the line, Ctrl+p and Ctrl+n go through the history, and Ctrl+f opens the command
+    // for editing, as Ctrl+x Ctrl+e does in bash. No Ctrl+y, as in renaming.
     (
         Context::CommandLine,
         &[
             (Action::Up, &["up"]),
             (Action::Down, &["down"]),
+            (Action::TextStart, &["ctrl-b"]),
             (Action::NewLine, &["ctrl-j", "shift-enter"]),
             (Action::EditCommand, &["ctrl-f", "ctrl-x ctrl-e"]),
             (Action::OlderCommand, &["ctrl-p"]),

@@ -60,10 +60,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and g T open, close, and switch tabs, t h and t l list the left and the right panel's tabs, t w
   and t W list and save workspaces, Z Z quits, and Esc and Ctrl+c stop loading; F3 … F8, Alt+Left,
   and Alt+Right do what they do in the default keymap. q closes the help, and Ctrl+b and Ctrl+f
-  turn pages in dialogs. In text fields and on the command line, Ctrl+b goes to the start, as on
-  vim's command line; on the command line, Ctrl+p and Ctrl+n go through the history in place of
-  Alt+p and Alt+n, Ctrl+r opens it, and Ctrl+f opens the command in the editor; Ctrl+p and Ctrl+n
-  move in the completion list.
+  turn pages in dialogs. On the command line, Ctrl+b goes to the start, as on vim's command line,
+  Ctrl+p and Ctrl+n go through the history in place of Alt+p and Alt+n, Ctrl+r opens it, and
+  Ctrl+f opens the command in the editor; Ctrl+p and Ctrl+n move in the completion list.
 - The terminal's window or tab is titled with the active panel's directory, as the prompt of the
   command line shows it (`~/src — noc`, or `host:path`), and gets its own title back when Noon
   Commander quits or hands the terminal to a command, where the terminal keeps a stack of titles.
@@ -163,10 +162,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `ui.type_to_search` and its row in Options → Configuration are gone; remove the key from
   `config.toml`. `!` and `:` will open a command line for shell commands.
 - Quick search edits its text as the other text fields do, with the same keys in both keymaps:
-  Left, Right, Home, End, Backspace, Delete, Ctrl+u, and Ctrl+k (Ctrl+a and Ctrl+e, or Ctrl+b and
-  Ctrl+e in the vim keymap). While it runs, Home and End move in the text rather than to the first
-  and the last row, and Ctrl+u clears it. The help lists Ctrl+s and Alt+s with quick search, as
-  the keys that go on to the next match.
+  Left, Right, Home, End, Backspace, Delete, Ctrl+u, Ctrl+k, Ctrl+a, and Ctrl+e. While it runs,
+  Home and End move in the text rather than to the first and the last row, and Ctrl+u clears it.
+  The help lists Ctrl+s and Alt+s with quick search, as the keys that go on to the next match.
 - The filters of the location menu, the tab menu, the workspaces, and the command history, and the
   keywords of the zoxide window, are text fields too: Left and Right move in them, and Ctrl+a and
   Ctrl+e go to their start and end (in the vim keymap too, whose Ctrl+b pages up there); Delete,
@@ -208,10 +206,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   f turn the page down, b and Backspace up, and g and G go to the top and the end, as in mc's help;
   Ctrl+b and Ctrl+f go to the menu on the left and on the right in the pull-down menu, and Alt+<
   and Alt+> to its first and last command.
-- In the vim keymap, Ctrl+a goes to the start of text fields too, as in the shell, and so to the
-  start of the filters of the lists, whose Ctrl+b pages up; h and l go from button to button in
-  dialogs, and Ctrl+p and Ctrl+n move in them, as in the lists; Enter and q leave the output of
-  commands, as the prompt under what vim's g < shows does, and the help names g < first for it.
+- In the vim keymap, Ctrl+a goes to the start of text fields, as in the shell, and of the filters
+  of the lists, whose Ctrl+b pages up; Ctrl+b and Ctrl+f page from the text fields as everywhere
+  but on the command line, so they end quick search and turn the panel's page, or a dialog's; h
+  and l go from button to button in dialogs, and Ctrl+p and Ctrl+n move in them, as in the lists;
+  Enter and q leave the output of commands, as the prompt under what vim's g < shows does, and the
+  help names g < first for it.
 - Ctrl+l redraws the screen everywhere in both keymaps, not only in the panels and the viewer: in
   dialogs, as in mc's, and in menus, windows, and on the command line too. What is in front stays
   as it was, and quick search goes on; the help lists the key under Everywhere.

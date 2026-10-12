@@ -348,13 +348,15 @@ sections list only the keys they add. Keys never go to it alone; the help lists 
 of those fields. The mc column has the keys of mc's input lines, its command line among them; the
 far column, those of Far's command line. The yazi column has the keys of its input boxes, which open
 in insert mode; its letters, digits, and symbols without a modifier work in normal mode, after Esc,
-as in vi. The ranger column has the keys of its console.
+as in vi. The ranger column has the keys of its console. The vim preset leaves Ctrl+b and Ctrl+f
+to what the fields fall back to, which pages with them, as everywhere but on the command line:
+they end quick search and turn the panel's page, and turn a dialog's.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
 | One character left | `left` | ✅ | Left<br>Ctrl+b | Left | Ctrl+b<br>Left<br>Alt+Left | Left<br>Ctrl+s | h<br>Left<br>Ctrl+b | Left<br>Ctrl+b |
 | One character right | `right` | ✅ | Right<br>Ctrl+f | Right | Ctrl+f<br>Right<br>Alt+Right | Right<br>Ctrl+d | l<br>Right<br>Ctrl+f | Right<br>Ctrl+f |
-| Start of the text | `text_start` | ✅ | Home<br>Ctrl+a<br>Alt+< | Home<br>Ctrl+b<br>Ctrl+a | Ctrl+a<br>Home<br>A1<br>Alt+< | Ctrl+Home | 0<br>Ctrl+a<br>Home | Home<br>Ctrl+a |
+| Start of the text | `text_start` | ✅ | Home<br>Ctrl+a<br>Alt+< | Home<br>Ctrl+a | Ctrl+a<br>Home<br>A1<br>Alt+< | Ctrl+Home | 0<br>Ctrl+a<br>Home | Home<br>Ctrl+a |
 | End of the text | `text_end` | ✅ | End<br>Ctrl+e<br>Alt+> | End<br>Ctrl+e | Ctrl+e<br>End<br>C1<br>Alt+> | Ctrl+End | $<br>Ctrl+e<br>End | End<br>Ctrl+e |
 | One word left: the start of the word before the cursor | `word_left` | ✅ | Ctrl+Left<br>Alt+b | Shift+Left<br>Ctrl+Left | Alt+b<br>Ctrl+Left | Ctrl+Left | b<br>B (WORD)<br>Alt+b<br>Ctrl+Left | Alt+b<br>Alt+Left |
 | One word right: the end of the word after the cursor | `word_right` | ✅ | Ctrl+Right<br>Alt+f | Shift+Right<br>Ctrl+Right | Alt+f<br>Ctrl+Right | Ctrl+Right | w<br>W (WORD)<br>e (its end)<br>E (the WORD's end)<br>Alt+f (its end)<br>Ctrl+Right (its end) | Alt+f<br>Alt+Right |
@@ -693,6 +695,7 @@ lacks, such as words and the clipboard, are under `input`, as are yazi's modes.
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
 | The line above; from the first line, the command before in the history of the panel's host | `up` | ✅ | Up | Up | — | — | k<br>Up | Up |
 | The line below; from the last line, the command after in the history | `down` | ✅ | Down | Down | — | — | j<br>Down | Down |
+| The start of the line, as on vim's command line | `text_start` | ✅ | — | Ctrl+b | — | — | — | — |
 | A new line in the command | `new_line` | ✅ | Ctrl+j<br>Shift+Enter (kitty keyboard protocol) | Ctrl+j<br>Shift+Enter (kitty keyboard protocol) | — | — | — | — |
 | Edit the command in $VISUAL or $EDITOR | `edit_command` | ✅ | Ctrl+x Ctrl+e | Ctrl+f<br>Ctrl+x Ctrl+e | — | — | — | — |
 | The command before in the history of the panel's host | `older_command` | ✅ | Alt+p<br>Ctrl+p | Ctrl+p | Alt+p<br>Ctrl+Down | Ctrl+e | Ctrl+p | Ctrl+p |

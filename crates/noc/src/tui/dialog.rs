@@ -229,6 +229,8 @@ impl Field {
             Action::Right => self.cursor = (self.cursor + 1).min(chars),
             Action::TextStart => self.cursor = 0,
             Action::TextEnd => self.cursor = chars,
+            Action::WordLeft => self.cursor = word_start(&self.text, 0, self.cursor),
+            Action::WordRight => self.cursor = word_end(&self.text, self.cursor, chars),
             Action::Backspace if self.cursor > 0 => {
                 self.remove(self.cursor - 1, self.cursor);
                 self.cursor -= 1;
@@ -330,6 +332,20 @@ pub(crate) fn word_start(text: &str, floor: usize, cursor: usize) -> usize {
         start -= 1;
     }
     start
+}
+
+/// Where the word after character `cursor` of `text` ends, past the spaces before it, but not
+/// after character `ceiling`.
+pub(crate) fn word_end(text: &str, cursor: usize, ceiling: usize) -> usize {
+    let chars: Vec<char> = text.chars().take(ceiling).collect();
+    let mut end = cursor.min(chars.len());
+    while end < chars.len() && chars[end].is_whitespace() {
+        end += 1;
+    }
+    while end < chars.len() && !chars[end].is_whitespace() {
+        end += 1;
+    }
+    end
 }
 
 impl fmt::Debug for Field {
@@ -1334,6 +1350,24 @@ mod tests {
         let mut selected = Field::selecting("report.pdf", 6);
         selected.edit(Action::DeleteWord);
         assert_eq!(selected.text(), ".pdf", "the selection goes first");
+    }
+
+    #[test]
+    fn word_keys_go_to_the_start_and_the_end_of_words() {
+        let mut field = Field::plain("cp  a.txt backup");
+        field.edit(Action::TextEnd);
+        assert!(field.edit(Action::WordLeft));
+        assert_eq!(field.cursor, 10, "the start of backup");
+        field.edit(Action::WordLeft);
+        field.edit(Action::WordLeft);
+        assert_eq!(field.cursor, 0);
+        field.edit(Action::WordRight);
+        assert_eq!(field.cursor, 2, "the end of cp");
+        field.edit(Action::WordRight);
+        assert_eq!(field.cursor, 9, "past the spaces, the end of a.txt");
+        field.edit(Action::WordRight);
+        field.edit(Action::WordRight);
+        assert_eq!(field.cursor, 16, "the end stays");
     }
 
     #[test]

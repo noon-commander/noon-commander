@@ -99,7 +99,8 @@ pub(super) const PRESET: Preset = &[
     ),
     // What the text fields share: quick search, the field of an entry renamed in its row, the
     // text fields of dialogs, the command line, and the filters of the lists fall back to it.
-    // Ctrl+b goes to the start, as on vim's command line.
+    // Ctrl+b goes to the start, and Shift+Left and Shift+Right go by words, as on vim's command
+    // line.
     (
         Context::Input,
         &[
@@ -107,11 +108,13 @@ pub(super) const PRESET: Preset = &[
             (Action::Right, &["right"]),
             (Action::TextStart, &["home", "ctrl-b"]),
             (Action::TextEnd, &["end", "ctrl-e"]),
+            (Action::WordLeft, &["shift-left", "ctrl-left"]),
+            (Action::WordRight, &["shift-right", "ctrl-right"]),
             (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Delete, &["delete"]),
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),
-            (Action::DeleteWord, &["ctrl-w"]),
+            (Action::DeleteWord, &["ctrl-w", "ctrl-backspace"]),
         ],
     ),
     // Quick search in the active panel, on top of the text field's; other keys go to the panel.
@@ -170,7 +173,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Right, &["l", "right"]),
             (Action::ToggleWrap, &["f2"]),
             (Action::Help, &["g ?", "f1"]),
-            (Action::Quit, &["q", "esc", "ctrl-[", "f3", "f10"]),
+            (Action::Quit, &["q", "esc", "ctrl-[", "ctrl-c", "f3", "f10"]),
             (Action::Redraw, &["ctrl-l"]),
         ],
     ),

@@ -14,7 +14,7 @@ use ratatui::widgets::Block;
 use unicode_width::UnicodeWidthChar as _;
 
 use super::cells;
-use super::dialog::word_start;
+use super::dialog::{word_end, word_start};
 use super::keymap::{Action, Resolved};
 use super::tasks::HostHandle;
 
@@ -225,6 +225,8 @@ impl CommandLine {
             Action::Right => self.cursor = (self.cursor + 1).min(length),
             Action::TextStart => self.cursor = start,
             Action::TextEnd => self.cursor = end,
+            Action::WordLeft => self.cursor = word_start(&self.text, start, self.cursor),
+            Action::WordRight => self.cursor = word_end(&self.text, self.cursor, end),
             Action::Up if start == 0 => return CommandEvent::Older,
             Action::Down if end == length => return CommandEvent::Newer,
             Action::Up => self.move_line(false),
@@ -594,6 +596,15 @@ mod tests {
         press(&mut words, Action::DeleteWord);
         press(&mut words, Action::DeleteWord);
         assert_eq!(words.text, "echo one\n", "within the line of the cursor");
+        let mut moves = shell("echo one\ntwo three");
+        press(&mut moves, Action::WordLeft);
+        press(&mut moves, Action::WordLeft);
+        press(&mut moves, Action::WordLeft);
+        assert_eq!(moves.cursor, 9, "the start of the line");
+        press(&mut moves, Action::Up);
+        press(&mut moves, Action::WordRight);
+        press(&mut moves, Action::WordRight);
+        assert_eq!(moves.cursor, 8, "the end of the line");
     }
 
     #[test]

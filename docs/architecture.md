@@ -933,28 +933,28 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   the right, or Ctrl+x Left and Ctrl+x Right, make the panel drawn on that side active, whichever
   it is after Ctrl+u.
 - **Quick search.** Ctrl+s / Alt+s start quick search, as in mc; typing in a panel does nothing,
-  since `!` and `:` open the [command line](#command-line-of--and-). With
-  `ui.fuzzy_search` (the default) the cursor jumps to the best match as [fzf](#fuzzy-search) ranks
-  it, the first from where it is of those as good, and Ctrl+s again to the next best, round to the
-  best; otherwise to the first name from where it is that starts with the text, ignoring case, and
-  Ctrl+s to the next one, round to the top. Either way a character that matches nothing is dropped,
-  as in mc, and the listing keeps its order. The text is a field with a cursor, edited with the
-  keys that every text field shares (`input`): Left, Right, Home, End, Backspace, Delete, Ctrl+u,
-  Ctrl+k, Ctrl+w; after an edit, the cursor stays on its name if that still matches, and goes to
-  the match that typing would have found otherwise. Esc ends the search on the match, Ctrl+g
-  (`abort`) gives it up and puts the cursor back where the search started, keeping nothing for `n`,
-  as in emacs, and any other key ends it and then does what it does: Enter opens what it found, as
-  in mc. In the vim keymap, as in vim, Enter only ends the search and Esc gives it up. Ctrl+r, and
-  Ctrl+t in the vim keymap, go to the previous match. While it runs, every character is text, even
-  one that a panel binds, such as `*`. The app keeps what the last search found, whichever panel
-  it ran in, as vim keeps its last pattern: `n` and `N` (and Shift+F7 or F17, mc's and Far's key
-  to search again) go to the next and the previous name that matches it, round, and Ctrl+s with
-  nothing typed yet searches for it again, as mc's Ctrl+s Ctrl+s does. Long names lose their
-  middle, marked with `~`. Names are shown terminal-safe: control and bidi characters become `?`.
-  Listings run in background tasks; a reply carries the generation of its request, so a stale one is
-  dropped. If a directory cannot be read, the panel stays where it was and says why below the
-  listing. Going up puts the cursor on the directory just left. A panel shows a
-  [`Location`](#locations), always a directory.
+  since `!` and `:` open the [command line](#command-line-of--and-). With `ui.fuzzy_search` (the
+  default) the cursor jumps to the best match as [fzf](#fuzzy-search) ranks it, the first from where
+  it is of those as good, and Ctrl+s again to the next best, round to the best; otherwise to the
+  first name from where it is that starts with the text, ignoring case, and Ctrl+s to the next one,
+  round to the top. Either way a character that matches nothing is dropped, as in mc, and the
+  listing keeps its order. The text is a field with a cursor, edited with the keys that every text
+  field shares (`input`): Left, Right, Ctrl+Left, Ctrl+Right, Home, End, Backspace, Delete, Ctrl+u,
+  Ctrl+k, Ctrl+w; after an edit, the cursor stays on its name if that still matches, and goes to the
+  match that typing would have found otherwise. Esc ends the search on the match, Ctrl+g (`abort`)
+  gives it up and puts the cursor back where the search started, keeping nothing for `n`, as in
+  emacs, and any other key ends it and then does what it does: Enter opens what it found, as in mc.
+  In the vim keymap, as in vim, Enter only ends the search and Esc gives it up. Ctrl+r, and Ctrl+t
+  in the vim keymap, go to the previous match. While it runs, every character is text, even one that
+  a panel binds, such as `*`. The app keeps what the last search found, whichever panel it ran in,
+  as vim keeps its last pattern: `n` and `N` (and Shift+F7 or F17, mc's and Far's key to search
+  again) go to the next and the previous name that matches it, round, and Ctrl+s with nothing typed
+  yet searches for it again, as mc's Ctrl+s Ctrl+s does. Long names lose their middle, marked with
+  `~`. Names are shown terminal-safe: control and bidi characters become `?`. Listings run in
+  background tasks; a reply carries the generation of its request, so a stale one is dropped. If a
+  directory cannot be read, the panel stays where it was and says why below the listing. Going up
+  puts the cursor on the directory just left. A panel shows a [`Location`](#locations), always a
+  directory.
 - <a id="command-line-of--and-"></a>**Command line of `!` and `:`** ([ADR
   0019](adr/0019-shell-command-line.md)). In a local panel, `!` opens a line above the F-key bar for
   a shell command, after a prompt with the panel's directory (`~` for home, its middle cut past a

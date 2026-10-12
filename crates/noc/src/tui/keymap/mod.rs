@@ -2207,6 +2207,133 @@ mod tests {
     }
 
     #[test]
+    fn ctrl_c_goes_with_esc_but_on_the_terminals_own_screen() {
+        for name in Keymap::NAMES {
+            for (context, bindings) in preset(name).unwrap() {
+                if *context == Context::UserScreen {
+                    continue;
+                }
+                for (action, keys) in *bindings {
+                    if keys.contains(&"esc") {
+                        assert!(
+                            keys.contains(&"ctrl-c"),
+                            "{name}: {action:?} in {context:?} has Esc without Ctrl+c"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn ctrl_g_cancels_as_in_mc_and_emacs_in_the_default_keymap() {
+        let mc = Keymap::mc();
+        for context in [
+            Context::Rename,
+            Context::Dialog,
+            Context::DialogInput,
+            Context::LocationMenu,
+            Context::TabMenu,
+            Context::Jump,
+            Context::Workspaces,
+            Context::CommandHistory,
+            Context::PullDown,
+            Context::Completion,
+            Context::CommandLine,
+        ] {
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&mc, &mut state, context, &["ctrl-g"]),
+                actions(&[Action::Cancel]),
+                "{context:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_default_keymaps_emacs_keys_move_in_the_completions_and_the_help() {
+        let mc = Keymap::mc();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&mc, &mut state, Context::Completion, &["ctrl-p", "ctrl-n"]),
+            actions(&[Action::Up, Action::Down])
+        );
+        assert_eq!(
+            feed(
+                &mc,
+                &mut state,
+                Context::Help,
+                &[
+                    "ctrl-p", "ctrl-n", "alt-v", "ctrl-v", "alt-<", "alt->", "up"
+                ]
+            ),
+            actions(&[
+                Action::Up,
+                Action::Down,
+                Action::PageUp,
+                Action::PageDown,
+                Action::Home,
+                Action::End,
+                Action::Up,
+            ])
+        );
+    }
+
+    #[test]
+    fn text_fields_go_by_words_and_ctrl_backspace_deletes_one() {
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            for context in [Context::Rename, Context::QuickSearch, Context::CommandLine] {
+                let mut state = KeyState::default();
+                assert_eq!(
+                    feed(
+                        &keymap,
+                        &mut state,
+                        context,
+                        &["ctrl-left", "ctrl-right", "ctrl-backspace"]
+                    ),
+                    actions(&[Action::WordLeft, Action::WordRight, Action::DeleteWord]),
+                    "{name}: {context:?}"
+                );
+            }
+            // The history keeps Ctrl+Backspace for deleting the command under the cursor.
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(
+                    &keymap,
+                    &mut state,
+                    Context::CommandHistory,
+                    &["ctrl-backspace"]
+                ),
+                actions(&[Action::Delete]),
+                "{name}"
+            );
+        }
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(
+                &Keymap::mc(),
+                &mut state,
+                Context::DialogInput,
+                &["alt-b", "alt-f"]
+            ),
+            actions(&[Action::WordLeft, Action::WordRight]),
+            "as in the shell"
+        );
+        let vim = Keymap::by_name("vim").unwrap();
+        assert_eq!(
+            feed(
+                &vim,
+                &mut state,
+                Context::DialogInput,
+                &["shift-left", "shift-right"]
+            ),
+            actions(&[Action::WordLeft, Action::WordRight]),
+            "as on vim's command line"
+        );
+    }
+
+    #[test]
     fn shift_tab_is_the_back_tab_terminals_send() {
         assert_eq!(parse_sequence("shift-tab"), parse_sequence("backtab"));
         assert_eq!(

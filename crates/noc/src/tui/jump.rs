@@ -190,6 +190,8 @@ impl JumpMenu {
                 | Action::Right
                 | Action::TextStart
                 | Action::TextEnd
+                | Action::WordLeft
+                | Action::WordRight
                 | Action::Backspace
                 | Action::Delete
                 | Action::DeleteToStart

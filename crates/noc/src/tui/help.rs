@@ -382,6 +382,8 @@ fn describe_field(context: Context, action: Action) -> Option<String> {
     let text = match (context, action) {
         (_, Action::Left) => fl!("help-field-left"),
         (_, Action::Right) => fl!("help-field-right"),
+        (_, Action::WordLeft) => fl!("help-field-word-left"),
+        (_, Action::WordRight) => fl!("help-field-word-right"),
         (_, Action::Delete) => fl!("help-field-delete"),
         (_, Action::DeleteWord) => fl!("help-field-delete-word"),
         (Context::CommandLine, _) => return None,
@@ -415,6 +417,8 @@ fn describe_filter(context: Context, action: Action) -> Option<String> {
         Action::Right => fl!("help-field-right"),
         Action::TextStart => fl!("help-field-home"),
         Action::TextEnd => fl!("help-field-end"),
+        Action::WordLeft => fl!("help-field-word-left"),
+        Action::WordRight => fl!("help-field-word-right"),
         Action::Backspace => fl!("help-field-backspace"),
         Action::Delete => fl!("help-field-delete"),
         Action::DeleteToStart => fl!("help-field-delete-to-start"),

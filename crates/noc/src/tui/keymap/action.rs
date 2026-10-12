@@ -343,6 +343,10 @@ pub(crate) enum Action {
     TextStart,
     /// The text cursor to the end of the text, or of its line on the command line.
     TextEnd,
+    /// The text cursor to the start of the word before it.
+    WordLeft,
+    /// The text cursor to the end of the word after it.
+    WordRight,
     /// Deletes the character before the text cursor.
     Backspace,
     /// Deletes the marked entries or the one under the cursor; in a text field, the character
@@ -451,6 +455,8 @@ impl Action {
             Self::EditHost => "edit_host",
             Self::TextStart => "text_start",
             Self::TextEnd => "text_end",
+            Self::WordLeft => "word_left",
+            Self::WordRight => "word_right",
             Self::Backspace => "backspace",
             Self::Delete => "delete",
             Self::DeleteToStart => "delete_to_start",
@@ -569,6 +575,8 @@ impl Action {
         Self::EditHost,
         Self::TextStart,
         Self::TextEnd,
+        Self::WordLeft,
+        Self::WordRight,
         Self::Backspace,
         Self::Delete,
         Self::DeleteToStart,

@@ -97,6 +97,8 @@ pub(super) const PRESET: Preset = &[
     ),
     // What the text fields share: quick search, the field of an entry renamed in its row, the
     // text fields of dialogs, the command line, and the filters of the lists fall back to it.
+    // Alt+b and Alt+f go by words, as in the shell, and so do the Option key and the arrows of
+    // macOS's Terminal, which sends them.
     (
         Context::Input,
         &[
@@ -104,11 +106,13 @@ pub(super) const PRESET: Preset = &[
             (Action::Right, &["right"]),
             (Action::TextStart, &["home", "ctrl-a"]),
             (Action::TextEnd, &["end", "ctrl-e"]),
+            (Action::WordLeft, &["ctrl-left", "alt-b"]),
+            (Action::WordRight, &["ctrl-right", "alt-f"]),
             (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Delete, &["delete"]),
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),
-            (Action::DeleteWord, &["ctrl-w"]),
+            (Action::DeleteWord, &["ctrl-w", "ctrl-backspace"]),
         ],
     ),
     // Quick search in the active panel, on top of the text field's; other keys go to the panel.
@@ -128,7 +132,7 @@ pub(super) const PRESET: Preset = &[
         Context::Rename,
         &[
             (Action::Confirm, &["enter", "ctrl-m"]),
-            (Action::Cancel, &["esc", "ctrl-["]),
+            (Action::Cancel, &["esc", "ctrl-[", "ctrl-g", "ctrl-c"]),
         ],
     ),
     // Dialogs whose focus is on a button or a list.
@@ -153,8 +157,19 @@ pub(super) const PRESET: Preset = &[
             ),
         ],
     ),
-    // The help of F1, on top of the dialog's.
-    (Context::Help, &[]),
+    // The help of F1, on top of the dialog's, which has the arrows and the page keys; the keys of
+    // mc's help and of the viewer scroll it too.
+    (
+        Context::Help,
+        &[
+            (Action::Up, &["ctrl-p"]),
+            (Action::Down, &["ctrl-n"]),
+            (Action::PageUp, &["alt-v"]),
+            (Action::PageDown, &["ctrl-v"]),
+            (Action::Home, &["alt-<"]),
+            (Action::End, &["alt->"]),
+        ],
+    ),
     // The viewer of F3.
     (
         Context::Viewer,
@@ -181,7 +196,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Right, &["right", "l"]),
             (Action::ToggleWrap, &["f2"]),
             (Action::Help, &["f1"]),
-            (Action::Quit, &["f3", "f10", "q", "esc", "ctrl-["]),
+            (Action::Quit, &["f3", "f10", "q", "esc", "ctrl-[", "ctrl-c"]),
             (Action::Redraw, &["ctrl-l"]),
         ],
     ),
@@ -198,7 +213,10 @@ pub(super) const PRESET: Preset = &[
             (Action::Home, &["home", "alt-<"]),
             (Action::End, &["end", "alt->"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
-            (Action::Cancel, &["esc", "ctrl-[", "f10", "ctrl-g"]),
+            (
+                Action::Cancel,
+                &["esc", "ctrl-[", "f10", "ctrl-g", "ctrl-c"],
+            ),
         ],
     ),
     // The location menu, on top of the list's; characters filter it. F4 and F8 edit and
@@ -237,7 +255,10 @@ pub(super) const PRESET: Preset = &[
             (Action::Home, &["home", "pageup"]),
             (Action::End, &["end", "pagedown"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
-            (Action::Cancel, &["esc", "ctrl-[", "f9", "f10"]),
+            (
+                Action::Cancel,
+                &["esc", "ctrl-[", "f9", "f10", "ctrl-g", "ctrl-c"],
+            ),
         ],
     ),
     // The text fields of dialogs: the text field's keys, then the dialog's.
@@ -249,15 +270,15 @@ pub(super) const PRESET: Preset = &[
     (
         Context::Completion,
         &[
-            (Action::Up, &["up"]),
-            (Action::Down, &["down"]),
+            (Action::Up, &["up", "ctrl-p"]),
+            (Action::Down, &["down", "ctrl-n"]),
             (Action::PageUp, &["pageup"]),
             (Action::PageDown, &["pagedown"]),
             (Action::Home, &["home"]),
             (Action::End, &["end"]),
             (Action::Complete, &["tab"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
-            (Action::Cancel, &["esc", "ctrl-["]),
+            (Action::Cancel, &["esc", "ctrl-[", "ctrl-g", "ctrl-c"]),
         ],
     ),
     // The command line of `!` and `:`, on top of the text field's. Ctrl+j arrives as LF where
@@ -275,7 +296,10 @@ pub(super) const PRESET: Preset = &[
             // mc's Alt+h, and bash's Ctrl+r.
             (Action::CommandHistory, &["alt-h", "ctrl-r"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
-            (Action::Cancel, &["esc", "ctrl-[", "ctrl-c", "f10"]),
+            (
+                Action::Cancel,
+                &["esc", "ctrl-[", "ctrl-g", "ctrl-c", "f10"],
+            ),
         ],
     ),
     // The window of the command history, on top of the list's; characters filter it, and Tab

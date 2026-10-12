@@ -179,8 +179,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - In quick search, Ctrl+g (Esc and Ctrl+c in the vim keymap) gives the search up: the cursor goes
   back to where it started, and n and N keep the search before. Ctrl+r goes to the previous match
   in the default keymap, as in emacs's search, and Ctrl+c ends the search there as Esc does.
-- Ctrl+w deletes the word before the cursor, and the spaces after it, in every text field, quick
-  search, the filters of the lists, and on the command line, as in the shell.
+- Ctrl+w, and Ctrl+Backspace, delete the word before the cursor, and the spaces after it, in every
+  text field, quick search, the filters of the lists, and on the command line, as in the shell;
+  Ctrl+Left and Ctrl+Right go by words there (and Alt+b and Alt+f in the default keymap, which
+  the Option key and the arrows of macOS's Terminal send; Shift+Left and Shift+Right in the vim
+  keymap, as on vim's command line).
+- In the default keymap, Ctrl+c closes and cancels wherever Esc does, but on the terminal's own
+  screen: renaming, the windows that list items, the list of completions, the pull-down menu, and
+  the viewer too, as in the vim keymap, whose viewer it closes now too. Ctrl+g, mc's and emacs's
+  key, cancels renaming, the pull-down menu, the list of completions, and the command line too.
+  Ctrl+p and Ctrl+n move in the list of completions, and Ctrl+p, Ctrl+n, Alt+v, Ctrl+v, Alt+<,
+  and Alt+> in the help, as in the panels.
 - In the vim keymap, Space comes first of the keys that mark, and Ctrl+w p and Ctrl+w r switch and
   swap the panels too, as vim's Ctrl+w p and Ctrl+w r do with windows.
 - Release builds use full link-time optimization, which makes the `noc` binary about 6% smaller.

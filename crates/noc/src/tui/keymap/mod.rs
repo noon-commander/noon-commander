@@ -2564,6 +2564,20 @@ mod tests {
     }
 
     #[test]
+    fn i_views_and_closes_the_viewer_in_vim_as_f3_does() {
+        let vim = Keymap::by_name("vim").unwrap();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&vim, &mut state, Context::Panel, &["i", "f3"]),
+            actions(&[Action::View, Action::View])
+        );
+        assert_eq!(
+            feed(&vim, &mut state, Context::Viewer, &["i", "f3"]),
+            actions(&[Action::Quit, Action::Quit])
+        );
+    }
+
+    #[test]
     fn vims_viewer_and_help_scroll_by_lines_and_half_pages() {
         let vim = Keymap::by_name("vim").unwrap();
         let mut state = KeyState::default();

@@ -474,7 +474,8 @@ vim preset, Ctrl+u and Ctrl+d, as in vim and a pager.
 ## Viewer (`viewer`)
 
 yazi has no viewer: it previews the file under the cursor beside the list. The ranger column has
-the keys of its pager, which shows files, the output of commands, and the log.
+the keys of its pager, which shows files, the output of commands, and the log. The key that opens
+the viewer closes it too: F3, and i in the vim preset, as in ranger.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
@@ -490,7 +491,7 @@ the keys of its pager, which shows files, the output of commands, and the log.
 | One column right, when lines are cut (ranger: four) | `right` | ✅ | Right<br>l | l<br>Right | Right<br>l | Right | — | Right<br>l |
 | Wrap long lines, or cut them | `toggle_wrap` | ✅ | F2 | F2 | F2 | F2 | — | — |
 | Help | `help` | ✅ | F1 | g ?<br>F1 | F1 | F1 | — | — |
-| Close the viewer | `quit` | ✅ | F3<br>F10<br>q<br>Esc<br>Ctrl+[<br>Ctrl+c | q<br>Esc<br>Ctrl+[<br>Ctrl+c<br>F3<br>F10 | F3<br>F10<br>q<br>Esc | F10<br>F3<br>Numpad5<br>Esc | — | Esc<br>q<br>Q<br>i<br>F3 |
+| Close the viewer | `quit` | ✅ | F3<br>F10<br>q<br>Esc<br>Ctrl+[<br>Ctrl+c | q<br>i<br>Esc<br>Ctrl+[<br>Ctrl+c<br>F3<br>F10 | F3<br>F10<br>q<br>Esc | F10<br>F3<br>Numpad5<br>Esc | — | Esc<br>q<br>Q<br>i<br>F3 |
 | F1…F10 on terminals without function keys | — | ✅ | Alt+1…9, 0 | Alt+1…9, 0 | Esc, then 1…9, 0 | — | — | — |
 | Wrap type (by chars/words) | — | ⏳ | — | — | — | Shift+F2 | — | — |
 | Hex/code mode | — | ⏳ | — | — | F4 | F4 | — | — |

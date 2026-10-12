@@ -191,7 +191,10 @@ pub(super) const PRESET: Preset = &[
             (Action::Right, &["l", "right"]),
             (Action::ToggleWrap, &["f2"]),
             (Action::Help, &["g ?", "f1"]),
-            (Action::Quit, &["q", "esc", "ctrl-[", "ctrl-c", "f3", "f10"]),
+            (
+                Action::Quit,
+                &["q", "i", "esc", "ctrl-[", "ctrl-c", "f3", "f10"],
+            ),
         ],
     ),
     // What the windows that list items to choose from share: the location menu, the tab menu, the

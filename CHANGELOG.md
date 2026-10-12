@@ -223,6 +223,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   field, in quick search and on the command line too, while the lists keep them for their first
   and last row; Ctrl+a and Ctrl+e go to the first and the last command of the pull-down menu. The
   help names Alt+Backspace first of the keys that delete the word before the cursor, as mc's.
+- In the vim keymap, i closes the viewer it opens, as in ranger, and as F3 does.
 - Release builds use full link-time optimization, which makes the `noc` binary about 6% smaller.
 - The title of a panel, and the tab menu, show the home directory as `~`: `~/src` rather
   than `/Users/me/src`.

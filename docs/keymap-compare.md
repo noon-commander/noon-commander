@@ -494,6 +494,7 @@ the keys of its pager, which shows files, the output of commands, and the log.
 | Help | `help` | ✅ | F1 | g ?<br>F1 | F1 | F1 | — | — |
 | Close the viewer | `quit` | ✅ | F3<br>F10<br>q<br>Esc<br>Ctrl+[<br>Ctrl+c | q<br>Esc<br>Ctrl+[<br>Ctrl+c<br>F3<br>F10 | F3<br>F10<br>q<br>Esc | F10<br>F3<br>Numpad5<br>Esc | — | Esc<br>q<br>Q<br>i<br>F3 |
 | Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | Ctrl+l | — | — | Ctrl+l |
+| F1…F10 on terminals without function keys | — | ✅ | Alt+1…9, 0 | Alt+1…9, 0 | Esc, then 1…9, 0 | — | — | — |
 | Wrap type (by chars/words) | — | ⏳ | — | — | — | Shift+F2 | — | — |
 | Hex/code mode | — | ⏳ | — | — | F4 | F4 | — | — |
 | Select mode (text/code/dump) | — | ⏳ | — | — | — | Shift+F4 | — | — |

@@ -142,12 +142,13 @@ impl Context {
     }
 
     /// Whether Alt+1 … Alt+0 stand for the F-keys bound here, for terminals without them: in
-    /// the panels, and in the windows that list items, whose F-keys act on the item under the
-    /// cursor. Dialogs keep Alt as it is.
+    /// the panels, the viewer, whose F2 alone wraps lines, and the windows that list items,
+    /// whose F-keys act on the item under the cursor. Dialogs keep Alt as it is.
     pub(crate) fn alt_digits_stand_for_f_keys(self) -> bool {
         matches!(
             self,
             Self::Panel
+                | Self::Viewer
                 | Self::List
                 | Self::LocationMenu
                 | Self::TabMenu

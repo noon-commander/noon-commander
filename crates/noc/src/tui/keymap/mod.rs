@@ -3,8 +3,9 @@
 //!
 //! A binding is a sequence of one or more key combinations, such as `f10` or `ctrl-x j`. While
 //! the keys typed so far are the start of a longer binding, the keymap waits up to
-//! [`SEQUENCE_TIMEOUT`] for the next key. `Esc` never waits: it acts at once. In the panels and
-//! the windows that list items, Alt+1 … Alt+0 stand for F1 … F10, for terminals without F-keys.
+//! [`SEQUENCE_TIMEOUT`] for the next key. `Esc` never waits: it acts at once. In the panels, the
+//! viewer, and the windows that list items, Alt+1 … Alt+0 stand for F1 … F10, for terminals
+//! without F-keys.
 //!
 //! As which-key does, the keymap lists the keys that can follow a pending sequence, or every
 //! key of a context, with what they do ([`Keymap::hints`]). While the hints show, the sequence
@@ -868,6 +869,12 @@ mod tests {
             assert_eq!(
                 feed(&keymap, &mut state, Context::Dialog, &["alt-0"]),
                 [],
+                "{name}"
+            );
+            // The viewer too, whose F2 alone wraps lines.
+            assert_eq!(
+                feed(&keymap, &mut state, Context::Viewer, &["alt-2", "alt-3"]),
+                actions(&[Action::ToggleWrap, Action::Quit]),
                 "{name}"
             );
         }

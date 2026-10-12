@@ -1033,13 +1033,13 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   has not, take `f #`. `noc keymap diff` (`just keymap-diff`) compares two presets action by action
   (`tui/keymap/diff.rs`), with the keys written as the help writes them.
   `Esc` acts at once everywhere ([ADR 0020](adr/0020-esc-acts-at-once.md)). Unlike in mc, it
-  does not wait in a panel for a key that would make it Alt or an F-key: in the panels and the
-  windows that list items, Alt+1 … Alt+0 stand for F1 … F10 instead, for terminals without
-  F-keys. An `Esc` and a quick next key arrive as Alt and that key, so in the panels an unbound
-  Alt and a character count as `Esc` and the character. Keys are written with `crokey` names.
-  User overrides in `keymap.toml` are planned for M4. The F-key bar is generated from the active
-  keymap, and so is the help screen (F1): the keys of each context, with what they do, for what the
-  app can do already; a prompt from ssh shows over it.
+  does not wait in a panel for a key that would make it Alt or an F-key: in the panels, the
+  viewer, and the windows that list items, Alt+1 … Alt+0 stand for F1 … F10 instead, for
+  terminals without F-keys. An `Esc` and a quick next key arrive as Alt and that key, so in the
+  panels an unbound Alt and a character count as `Esc` and the character. Keys are written with
+  `crokey` names. User overrides in `keymap.toml` are planned for M4. The F-key bar is generated
+  from the active keymap, and so is the help screen (F1): the keys of each context, with what they
+  do, for what the app can do already; a prompt from ssh shows over it.
 - **Key hints.** As which-key does, the keymap lists the keys that can follow a pending sequence,
   or every key of a context, with what the help says they do (`Keymap::hints`, drawn by
   `tui/which_key.rs` in columns across the bottom of the panels). The event loop owns the

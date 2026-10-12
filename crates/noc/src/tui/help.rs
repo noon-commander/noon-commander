@@ -217,6 +217,7 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         .or_else(|| describe_command_line(context, action))
         .or_else(|| describe_history(context, action))
         .or_else(|| describe_field(context, action))
+        .or_else(|| describe_filter(context, action))
     {
         return Some(text);
     }
@@ -279,7 +280,6 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::PullDown, Action::Home) => fl!("help-pulldown-home"),
         (Context::PullDown, Action::End) => fl!("help-pulldown-end"),
         (Context::PullDown, Action::Confirm) => fl!("help-pulldown-run"),
-        (Context::Jump, Action::Backspace) => fl!("help-search-back"),
         (Context::QuickSearch, Action::Cancel) => fl!("help-search-end"),
         (Context::QuickSearch, Action::QuickSearch) => fl!("help-search-next"),
         (Context::QuickSearch, Action::PrevMatch) => fl!("help-search-prev"),
@@ -337,7 +337,6 @@ fn describe_history(context: Context, action: Action) -> Option<String> {
         Action::End => fl!("help-last-row"),
         Action::NextField => fl!("help-history-hosts"),
         Action::Confirm => fl!("help-history-take"),
-        Action::Backspace => fl!("help-menu-back"),
         Action::Delete => fl!("help-history-delete"),
         Action::Cancel => fl!("help-workspaces-close"),
         _ => return None,
@@ -396,6 +395,31 @@ fn describe_field(context: Context, action: Action) -> Option<String> {
     Some(text)
 }
 
+/// What the keys of text fields do to the filter, or the keywords, of the windows that list
+/// items; Home and End stay the list's.
+fn describe_filter(context: Context, action: Action) -> Option<String> {
+    if !matches!(
+        context,
+        Context::LocationMenu
+            | Context::TabMenu
+            | Context::Jump
+            | Context::Workspaces
+            | Context::CommandHistory
+    ) {
+        return None;
+    }
+    let text = match action {
+        Action::Left => fl!("help-field-left"),
+        Action::Right => fl!("help-field-right"),
+        Action::Backspace => fl!("help-field-backspace"),
+        Action::Delete => fl!("help-field-delete"),
+        Action::DeleteToStart => fl!("help-field-delete-to-start"),
+        Action::DeleteToEnd => fl!("help-field-delete-to-end"),
+        _ => return None,
+    };
+    Some(text)
+}
+
 /// What the arrows and the page keys do in lists of rows.
 fn describe_rows(context: Context, action: Action) -> Option<String> {
     let rows = matches!(
@@ -430,7 +454,6 @@ fn describe_location_menu(context: Context, action: Action) -> Option<String> {
         Action::Home => fl!("help-first-row"),
         Action::End => fl!("help-last-row"),
         Action::Confirm => fl!("help-menu-open"),
-        Action::Backspace => fl!("help-menu-back"),
         Action::EditHost => fl!("help-edit-host"),
         Action::Disconnect => fl!("help-disconnect"),
         Action::Reload => fl!("help-menu-reload"),
@@ -449,7 +472,6 @@ fn describe_tab_menu(context: Context, action: Action) -> Option<String> {
         Action::Home => fl!("help-first-row"),
         Action::End => fl!("help-last-row"),
         Action::Confirm => fl!("help-tab-menu-show"),
-        Action::Backspace => fl!("help-menu-back"),
         Action::Cancel => fl!("help-menu-close"),
         _ => return None,
     };
@@ -466,7 +488,6 @@ fn describe_workspaces(context: Context, action: Action) -> Option<String> {
         Action::End => fl!("help-last-row"),
         Action::SaveWorkspace => fl!("help-workspaces-save"),
         Action::Confirm => fl!("help-workspaces-restore"),
-        Action::Backspace => fl!("help-menu-back"),
         Action::Move => fl!("help-workspaces-rename"),
         Action::Delete => fl!("help-workspaces-delete"),
         Action::Cancel => fl!("help-workspaces-close"),
@@ -554,6 +575,11 @@ mod tests {
                 "Delete to the start",
                 "Delete to the start",
                 "Delete to the start of the line",
+                "Delete to the start",
+                "Delete to the start",
+                "Delete to the start",
+                "Delete to the start",
+                "Delete to the start",
                 "Delete to the start"
             ]
         );

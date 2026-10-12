@@ -13,19 +13,21 @@ pub(crate) enum Context {
     /// list: the menus, the zoxide window, the workspaces, the command history fall back to it.
     /// Keys never go to it alone.
     List,
-    /// The location menu of Alt+F1 and Alt+F2, which has a filter; falls back to `List`.
+    /// The location menu of Alt+F1 and Alt+F2, which has a filter; falls back to `List`, then
+    /// to `Input`.
     LocationMenu,
-    /// The tab menu of a panel, which has a filter; falls back to `List`.
+    /// The tab menu of a panel, which has a filter; falls back to `List`, then to `Input`.
     TabMenu,
-    /// The zoxide window of Alt+z, which takes keywords; falls back to `List`.
+    /// The zoxide window of Alt+z, which takes keywords; falls back to `List`, then to `Input`.
     Jump,
-    /// The window of the saved workspaces, which has a filter; falls back to `List`.
+    /// The window of the saved workspaces, which has a filter; falls back to `List`, then to
+    /// `Input`.
     Workspaces,
     /// The pull-down menu of F9, whose commands have letters.
     PullDown,
     /// Keys that the text fields share, which edit the text: quick search, the field of an
-    /// entry renamed in its row, the text fields of dialogs, and the command line fall back to
-    /// it. Keys never go to it alone.
+    /// entry renamed in its row, the text fields of dialogs, the command line, and the filters
+    /// of the windows that list items fall back to it. Keys never go to it alone.
     Input,
     /// Quick search in the active panel; falls back to `Input`, then to the panel.
     QuickSearch,
@@ -47,7 +49,7 @@ pub(crate) enum Context {
     /// The command line of `!` and `:`; falls back to `Input`. Other keys, but the global ones,
     /// do nothing.
     CommandLine,
-    /// The window of the command history, which has a filter; falls back to `List`.
+    /// The window of the command history, which has a filter; falls back to `List`, then to `Input`.
     CommandHistory,
     /// The terminal's own screen, with the output of commands, in place of the panels; only
     /// the keys that go back to the panels do anything.
@@ -113,13 +115,14 @@ impl Context {
             Self::CommandLine => &[Self::CommandLine, Self::Input, Self::Global],
             // The terminal's own screen: nothing of noc's draws there, the hints neither.
             Self::UserScreen => &[Self::UserScreen],
-            // Menus are modal too.
+            // Menus are modal too. Their filters are text fields, whose keys come after the
+            // list's: Home and End go to the first and the last row.
             Self::List => &[Self::List, Self::Global],
-            Self::LocationMenu => &[Self::LocationMenu, Self::List, Self::Global],
-            Self::TabMenu => &[Self::TabMenu, Self::List, Self::Global],
-            Self::Jump => &[Self::Jump, Self::List, Self::Global],
-            Self::Workspaces => &[Self::Workspaces, Self::List, Self::Global],
-            Self::CommandHistory => &[Self::CommandHistory, Self::List, Self::Global],
+            Self::LocationMenu => &[Self::LocationMenu, Self::List, Self::Input, Self::Global],
+            Self::TabMenu => &[Self::TabMenu, Self::List, Self::Input, Self::Global],
+            Self::Jump => &[Self::Jump, Self::List, Self::Input, Self::Global],
+            Self::Workspaces => &[Self::Workspaces, Self::List, Self::Input, Self::Global],
+            Self::CommandHistory => &[Self::CommandHistory, Self::List, Self::Input, Self::Global],
             Self::PullDown => &[Self::PullDown, Self::Global],
         }
     }

@@ -13,7 +13,7 @@ use ratatui::layout::{Position, Rect};
 use ratatui::text::Line;
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, draw_box, frame_around};
+use super::dialog::{Colors, Field, draw_box, frame_around};
 use super::fuzzy::Fuzzy;
 use super::keymap::{Action, Resolved};
 use super::mouse::{Drawn, Pointer};
@@ -45,7 +45,8 @@ pub(crate) struct JumpMenu {
     exclude: Option<PathBuf>,
     /// Of the query the window waits for; an answer to an older one is dropped.
     generation: u64,
-    keywords: String,
+    /// The keywords, a text field.
+    keywords: Field,
     /// The window asks zoxide once for every directory and filters them itself, as fzf does
     /// (`ui.fuzzy_search`), instead of asking zoxide for each change of the keywords.
     fuzzy: bool,
@@ -72,7 +73,7 @@ impl JumpMenu {
             home,
             exclude,
             generation,
-            keywords: String::new(),
+            keywords: Field::plain(""),
             fuzzy: false,
             found: Vec::new(),
             rows: Vec::new(),
@@ -99,6 +100,7 @@ impl JumpMenu {
             return Vec::new();
         }
         self.keywords
+            .text()
             .split_whitespace()
             .map(str::to_owned)
             .collect()
@@ -143,7 +145,7 @@ impl JumpMenu {
             self.rows = (0..self.found.len()).collect();
             return;
         }
-        let mut fuzzy = Fuzzy::paths(&self.keywords);
+        let mut fuzzy = Fuzzy::paths(self.keywords.text());
         let mut scored: Vec<(usize, u32)> = self
             .found
             .iter()
@@ -159,13 +161,14 @@ impl JumpMenu {
         self.found.get(*self.rows.get(row)?)
     }
 
-    /// Takes a key: arrows move, Enter opens, a digit opens its row while nothing is typed,
-    /// other characters are keywords, Backspace takes one back, and Esc closes the window.
+    /// Takes a key: Up, Down, the page keys, Home, and End move, Enter opens, a digit opens its
+    /// row while nothing is typed, other characters are keywords, the other keys of text fields
+    /// edit them, and Esc closes the window.
     pub(crate) fn handle(&mut self, input: Resolved) -> JumpEvent {
         let last = self.rows.len().saturating_sub(1);
         let page = self.page.max(1);
         match input {
-            Resolved::Insert(c) if self.keywords.is_empty() && c.is_ascii_digit() => {
+            Resolved::Insert(c) if self.keywords.text().is_empty() && c.is_ascii_digit() => {
                 let digit = c.to_digit(10).map_or(0, |digit| digit as usize);
                 return match self.row((digit + 9) % 10) {
                     Some(scored) => JumpEvent::Open(scored.path.clone()),
@@ -173,7 +176,7 @@ impl JumpMenu {
                 };
             }
             Resolved::Insert(c) => {
-                self.keywords.push(c);
+                self.keywords.insert(c);
                 return self.changed();
             }
             Resolved::Action(action) => match action {
@@ -183,8 +186,15 @@ impl JumpMenu {
                 Action::PageDown => self.cursor = (self.cursor + page).min(last),
                 Action::Home => self.cursor = 0,
                 Action::End => self.cursor = last,
-                Action::Backspace => {
-                    if self.keywords.pop().is_some() {
+                Action::Left
+                | Action::Right
+                | Action::Backspace
+                | Action::Delete
+                | Action::DeleteToStart
+                | Action::DeleteToEnd => {
+                    let before = self.keywords.text().to_owned();
+                    self.keywords.edit(action);
+                    if self.keywords.text() != before {
                         return self.changed();
                     }
                 }
@@ -253,13 +263,10 @@ impl JumpMenu {
         let width = usize::from(inner.width);
         let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
 
-        let prompt = fl!(
-            "jump-keywords",
-            text = cells::sanitize(self.keywords.as_bytes())
-        );
-        // Right after the text, spaces typed last included.
-        let column = u16::try_from(cells::width(&prompt)).unwrap_or(u16::MAX);
-        let prompt = cells::fit(&prompt, width, Align::Left);
+        let prefix = cells::width(&fl!("jump-keywords", text = String::new()));
+        let (shown, column) = self.keywords.visible(width.saturating_sub(prefix));
+        let column = u16::try_from(prefix + column).unwrap_or(u16::MAX);
+        let prompt = cells::fit(&fl!("jump-keywords", text = shown), width, Align::Left);
         frame.render_widget(Line::styled(prompt, theme.dialog), line(0));
         frame.set_cursor_position(Position::new(
             inner.x.saturating_add(column).min(inner.right() - 1),
@@ -296,7 +303,7 @@ impl JumpMenu {
         let score_width = scores.iter().map(String::len).max().unwrap_or(0);
         // A hotkey, a space, the directory, a space, the score.
         let path_width = width.saturating_sub(score_width + 3);
-        let hotkeys = self.keywords.is_empty();
+        let hotkeys = self.keywords.text().is_empty();
         for (index, (row, scored)) in found.iter().enumerate().skip(offset).take(page).enumerate() {
             let hotkey = match row {
                 0..=9 if hotkeys => {
@@ -379,6 +386,34 @@ mod tests {
         assert_eq!(press(&mut menu, Action::Backspace), JumpEvent::Pending);
         assert_eq!(menu.keywords(), [] as [String; 0]);
         assert_eq!(press(&mut menu, Action::Cancel), JumpEvent::Closed);
+    }
+
+    #[test]
+    fn the_keywords_are_a_text_field_and_only_edits_ask_again() {
+        let mut menu = menu();
+        for c in "src".chars() {
+            menu.handle(Resolved::Insert(c));
+        }
+        assert_eq!(press(&mut menu, Action::Left), JumpEvent::Pending);
+        assert_eq!(press(&mut menu, Action::Left), JumpEvent::Pending);
+        assert_eq!(menu.handle(Resolved::Insert(' ')), JumpEvent::Query);
+        assert_eq!(menu.keywords(), ["s", "rc"]);
+        assert_eq!(press(&mut menu, Action::DeleteToEnd), JumpEvent::Query);
+        assert_eq!(menu.keywords(), ["s"]);
+        assert_eq!(
+            press(&mut menu, Action::Delete),
+            JumpEvent::Pending,
+            "at the end"
+        );
+        assert_eq!(press(&mut menu, Action::DeleteToStart), JumpEvent::Query);
+        assert_eq!(menu.keywords(), [] as [String; 0]);
+        // Home goes to the first row, as in the other lists.
+        press(&mut menu, Action::End);
+        press(&mut menu, Action::Home);
+        assert_eq!(
+            press(&mut menu, Action::Confirm),
+            JumpEvent::Open(PathBuf::from("/home/me/src/noc"))
+        );
     }
 
     #[test]

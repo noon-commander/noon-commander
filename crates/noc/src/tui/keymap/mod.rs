@@ -317,6 +317,7 @@ impl Keymap {
     /// Alt+1 … Alt+0 aliases are left out; the help explains them once.
     pub(crate) fn help(&self, context: Context) -> Vec<(Action, String)> {
         let mut rows: Vec<(Action, String)> = Vec::new();
+        let mut seen: Vec<&Sequence> = Vec::new();
         let listed = context
             .chain()
             .iter()
@@ -324,9 +325,12 @@ impl Keymap {
             .filter_map(|other| self.contexts.get(other))
             .flat_map(|bindings| &bindings.0);
         for (sequence, action) in listed {
-            if is_alt_digit(sequence) {
+            // A key that two of the contexts bind, such as Home in a list and in its filter,
+            // does what the first one says, and shows once.
+            if is_alt_digit(sequence) || seen.contains(&sequence) {
                 continue;
             }
+            seen.push(sequence);
             let does = match self.lookup(context, sequence) {
                 Lookup::Exact(bound) | Lookup::Prefix(Some(bound)) => bound == *action,
                 Lookup::Prefix(None) | Lookup::Unknown => false,
@@ -1292,14 +1296,14 @@ mod tests {
             ]
         );
         assert_eq!(
-            feed(
-                &keymap,
-                &mut state,
-                Context::LocationMenu,
-                &["tab", "ctrl-u", "f5"]
-            ),
+            feed(&keymap, &mut state, Context::LocationMenu, &["tab", "f5"]),
             [],
             "the menu is modal"
+        );
+        assert_eq!(
+            feed(&keymap, &mut state, Context::LocationMenu, &["ctrl-u"]),
+            actions(&[Action::DeleteToStart]),
+            "the filter is a text field"
         );
         let mut menu = [None; 10];
         menu[3] = Some(Action::EditHost);
@@ -2210,11 +2214,91 @@ mod tests {
                     }
                 }
             }
-            // The help lists them with each window, after the window's own keys.
-            let list = keymap.help(Context::List);
+            // The help lists them with each window, after the window's own keys and before
+            // those of the filter.
+            let actions = |rows: Vec<(Action, String)>| -> Vec<Action> {
+                rows.into_iter().map(|(action, _)| action).collect()
+            };
+            let list = actions(keymap.help(Context::List));
             for context in windows {
-                assert!(keymap.help(context).ends_with(&list), "{name}: {context:?}");
+                let help = actions(keymap.help(context));
+                assert!(
+                    help.windows(list.len()).any(|rows| rows == list),
+                    "{name}: {context:?}"
+                );
             }
+        }
+    }
+
+    #[test]
+    fn the_filters_of_the_lists_are_text_fields_whose_home_and_end_go_to_rows() {
+        let windows = [
+            Context::LocationMenu,
+            Context::TabMenu,
+            Context::Jump,
+            Context::Workspaces,
+            Context::CommandHistory,
+        ];
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            for context in windows {
+                assert_eq!(
+                    context.chain()[1..],
+                    [Context::List, Context::Input, Context::Global],
+                    "{context:?}"
+                );
+                let mut state = KeyState::default();
+                assert_eq!(
+                    feed(
+                        &keymap,
+                        &mut state,
+                        context,
+                        &[
+                            "left",
+                            "right",
+                            "backspace",
+                            "ctrl-u",
+                            "ctrl-k",
+                            "home",
+                            "end"
+                        ]
+                    ),
+                    actions(&[
+                        Action::Left,
+                        Action::Right,
+                        Action::Backspace,
+                        Action::DeleteToStart,
+                        Action::DeleteToEnd,
+                        Action::Home,
+                        Action::End,
+                    ]),
+                    "{name}: {context:?}"
+                );
+            }
+            // Home is the list's and the filter's: the help shows it once.
+            for context in Context::ALL {
+                for (action, keys) in keymap.help(*context) {
+                    let keys: Vec<&str> = keys.split(", ").collect();
+                    for (index, key) in keys.iter().enumerate() {
+                        assert!(
+                            !keys[..index].contains(key),
+                            "{name}: {key} twice for {action:?} in {context:?}"
+                        );
+                    }
+                }
+            }
+            // Delete takes a character of the filter, but where the window deletes rows.
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&keymap, &mut state, Context::TabMenu, &["delete"]),
+                actions(&[Action::Delete]),
+                "{name}"
+            );
+            assert_eq!(
+                feed(&keymap, &mut state, Context::LocationMenu, &["delete"]),
+                actions(&[Action::Disconnect]),
+                "{name}"
+            );
         }
     }
 

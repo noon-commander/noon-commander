@@ -335,13 +335,13 @@ Shift+F7 (or F17), mc's and Far's key to search again, repeats it forward too.
 
 ## Editing text (`input`)
 
-The keys that the text fields share, which edit the text: quick search, renaming in place, the
-text fields of dialogs, and the command line fall back to it, and their sections list only the
-keys they add. Keys never go to it alone; the help lists its keys with each of those fields. The
-mc column has the keys of mc's input lines, its command line among them; the far column, those
-of Far's command line. The yazi column has the keys of its input boxes, which open in insert
-mode; its letters, digits, and symbols without a modifier work in normal mode, after Esc, as in
-vi. The ranger column has the keys of its console.
+The keys that the text fields share, which edit the text: quick search, renaming in place, the text
+fields of dialogs, the command line, and the filters of the lists fall back to it, and their
+sections list only the keys they add. Keys never go to it alone; the help lists its keys with each
+of those fields. The mc column has the keys of mc's input lines, its command line among them; the
+far column, those of Far's command line. The yazi column has the keys of its input boxes, which open
+in insert mode; its letters, digits, and symbols without a modifier work in normal mode, after Esc,
+as in vi. The ranger column has the keys of its console.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
@@ -516,12 +516,14 @@ the keys of its pager, which shows files, the output of commands, and the log.
 
 ## Lists (`list`)
 
-The keys that the windows listing items to choose from share: the location menu, the tab menu,
-the zoxide window, the workspaces, and the command history fall back to it, and their sections
-list only the keys they add. Keys never go to it alone; the help lists its keys with each of
-those windows, with what Enter takes there. The mc column has the keys of mc's lists, such as
-its histories and its hotlist; the far column, those of Far's menus; the yazi column, those of
-its pick window, which asks for the program to open files with.
+The keys that the windows listing items to choose from share: the location menu, the tab menu, the
+zoxide window, the workspaces, and the command history fall back to it, then to `input`, whose keys
+edit their filter or keywords, and their sections list only the keys they add. Home and End, and
+Ctrl+a and Ctrl+e of `input`, go to the first and the last item here; Delete takes a character of
+the filter where the window does not take it. Keys never go to it alone; the help lists its keys
+with each of those windows, with what Enter takes there. The mc column has the keys of mc's lists,
+such as its histories and its hotlist; the far column, those of Far's menus; the yazi column, those
+of its pick window, which asks for the program to open files with.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
@@ -532,7 +534,6 @@ its pick window, which asks for the program to open files with.
 | First item | `home` | ⏳ | Home<br>Alt+< | Home | Home<br>A1<br>Alt+< | — | — | — |
 | Last item | `end` | ⏳ | End<br>Alt+> | End | End<br>C1<br>Alt+> | — | — | — |
 | Take the item, as the window's section says | `confirm` | ⏳ | Enter | Ctrl+y<br>Enter | Enter | Enter | Enter | — |
-| Take back the last character of the filter or the keywords | `backspace` | ⏳ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | — | — | — | — |
 | Close the window | `cancel` | ⏳ | Esc<br>F10<br>Ctrl+g | Esc<br>Ctrl+c<br>F10 | Esc<br>F10<br>Ctrl+g | Esc | Esc<br>Ctrl+[<br>Ctrl+c | — |
 | F1…F10 on terminals without function keys, in the windows that bind them | — | ⏳ | Alt+1…9, 0 | Alt+1…9, 0 | Esc, then 1…9, 0 | — | — | — |
 

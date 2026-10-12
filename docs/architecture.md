@@ -209,15 +209,15 @@ headings:
   whichever is nearer, or on its host. Enter opens the row in that panel, which becomes active;
   while the filter is empty, `1` … `9` and `0` open the first ten places, skipping the rows of
   more.
-- Typing filters the places by name, path or mount point, alias, label, and address, and finds
-  every one, hidden ones too; the rows of more go away while the filter has text. With
-  `ui.fuzzy_search` (the default) it matches them as [fzf](#fuzzy-search) does, and the cursor
-  goes to the best row; otherwise a row's text must contain the filter, ignoring case, and the
-  cursor goes to the first. The rows keep their order either way. Backspace takes a character
-  back. F4 edits the settings of the host under the cursor, F8 or Delete (as in Far's menu of
-  drives) disconnects it or stops connecting to it, Ctrl+r reads the volumes and hosts again, and
-  Esc or F10 closes the menu. Alt+4, Alt+8, and Alt+0 stand for F4, F8, and F10, as they do in
-  the other windows that list items.
+- Typing filters the places by name, path or mount point, alias, label, and address, and finds every
+  one, hidden ones too; the rows of more go away while the filter has text. With `ui.fuzzy_search`
+  (the default) it matches them as [fzf](#fuzzy-search) does, and the cursor goes to the best row;
+  otherwise a row's text must contain the filter, ignoring case, and the cursor goes to the first.
+  The rows keep their order either way. The filter is a text field, edited with the keys of `input`;
+  Home and End go to the first and the last row. F4 edits the settings of the host under the cursor,
+  F8 or Delete (as in Far's menu of drives) disconnects it or stops connecting to it, Ctrl+r reads
+  the volumes and hosts again, and Esc or F10 closes the menu. Alt+4, Alt+8, and Alt+0 stand for F4,
+  F8, and F10, as they do in the other windows that list items.
 - `recent.toml` in the state directory keeps the places used last: the aliases of hosts and
   the mount points of volumes, most recent first, up to 50 of each. A host counts as used when
   a connection to it succeeds; a volume when a panel arrives in a directory on it in any way:
@@ -392,14 +392,15 @@ row and names the tab that shows by its whole location:
   locations, over that panel, to show one. The panel whose tab is shown becomes active. Left and
   Right in F9 do the same for the panel on that side.
 - The tab menu, the location menu, the Workspaces window, and the command history share
-  `tui/picker.rs`: the filter, which typing fills and which matches as fzf does with
-  `ui.fuzzy_search`, the digits of the first ten rows while it is empty (but in the history,
-  whose commands have digits), the cursor, scrolling, the mouse, and the box, which the menus
-  draw over their panel and the windows over both. Each holds its own rows, says what the
-  filter finds them by, and draws them. A row may show only while the filter is empty, as the
-  rows of more in the location menu do, which take no digit, or only while it has text, as the
-  places behind them do. The zoxide window does not use it: zoxide, not a filter, picks its
-  rows from the keywords typed.
+  `tui/picker.rs`: the filter, a text field with a cursor (`dialog::Field`), which typing fills and
+  the keys of `input` edit, and which matches as fzf does with `ui.fuzzy_search`; Delete is the
+  window's in the workspaces and the history, which delete rows with it; the digits of the first ten
+  rows while it is empty (but in the history, whose commands have digits), the cursor, scrolling,
+  the mouse, and the box, which the menus draw over their panel and the windows over both. Each
+  holds its own rows, says what the filter finds them by, and draws them. A row may show only while
+  the filter is empty, as the rows of more in the location menu do, which take no digit, or only
+  while it has text, as the places behind them do. The zoxide window does not use it: zoxide, not a
+  filter, picks its rows from the keywords typed.
 - Names on the line of tabs are brief: the last component of a directory, `~` for the home
   directory, `host:name` on a host, and the host alone in its start directory. The frame's
   verticals close each side's line, and its top corners become tees (`╠`, `╣`) that join it,
@@ -1004,10 +1005,11 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   dialog, the text fields (`quick_search`, `rename`, `dialog_input`, `command_line`) to `input`,
   which holds the keys that edit text, and quick search on to the panel, the windows that list
   items to choose from (`location_menu`, `tab_menu`, `jump`, `workspaces`, `command_history`) to
-  `list`, which holds the keys they share, and every one but `user_screen` to `global` last, whose
-  keys do the same everywhere; the first context that knows a key sequence decides, except that a
-  sequence it only starts does what a later context binds it to. The help lists the keys of
-  `list` and `input` with each context that falls back to them, as that context uses them.
+  `list`, which holds the keys they share, then to `input` for their filters, whose Home and End
+  stay the list's, and every one but `user_screen` to `global` last, whose keys do the same
+  everywhere; the first context that knows a key sequence decides, except that a sequence it only
+  starts does what a later context binds it to. The help lists the keys of `list` and `input`
+  with each context that falls back to them, as that context uses them, each key once.
   Bindings are key sequences matched by prefix with a 1-second timeout, so a vim preset (`g g`,
   `Z Z`) can follow the default mc preset.
   `ui.keymap` names the built-in preset, as `ui.theme` names the theme (`Keymap::NAMES`,

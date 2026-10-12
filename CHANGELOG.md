@@ -165,6 +165,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Ctrl+e in the vim keymap). While it runs, Home and End move in the text rather than to the first
   and the last row, and Ctrl+u clears it. The help lists Ctrl+s and Alt+s with quick search, as
   the keys that go on to the next match.
+- The filters of the location menu, the tab menu, the workspaces, and the command history, and the
+  keywords of the zoxide window, are text fields too: Left and Right move in them, Delete, Ctrl+u,
+  and Ctrl+k delete, as Backspace does. Home and End still go to the first and the last row, and
+  so do Ctrl+a and Ctrl+e (Ctrl+e in the vim keymap); Delete still deletes the workspace or the
+  command under the cursor, and disconnects the host in the location menu.
 - Release builds use full link-time optimization, which makes the `noc` binary about 6% smaller.
 - The title of a panel, and the tab menu, show the home directory as `~`: `~/src` rather
   than `/Users/me/src`.

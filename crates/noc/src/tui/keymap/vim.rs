@@ -95,8 +95,8 @@ pub(super) const PRESET: Preset = &[
         ],
     ),
     // What the text fields share: quick search, the field of an entry renamed in its row, the
-    // text fields of dialogs, and the command line fall back to it. Ctrl+b goes to the start, as
-    // on vim's command line.
+    // text fields of dialogs, the command line, and the filters of the lists fall back to it.
+    // Ctrl+b goes to the start, as on vim's command line.
     (
         Context::Input,
         &[
@@ -169,7 +169,8 @@ pub(super) const PRESET: Preset = &[
         ],
     ),
     // What the windows that list items to choose from share: the location menu, the tab menu, the
-    // zoxide window, the workspaces, and the command history fall back to it.
+    // zoxide window, the workspaces, and the command history fall back to it, then to the text
+    // field's keys, which edit their filters.
     (
         Context::List,
         &[
@@ -180,7 +181,6 @@ pub(super) const PRESET: Preset = &[
             (Action::Home, &["home"]),
             (Action::End, &["end"]),
             (Action::Confirm, &["ctrl-y", "enter"]),
-            (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Cancel, &["esc", "ctrl-c", "f10"]),
         ],
     ),

@@ -8,7 +8,7 @@ use ratatui::layout::{Position, Rect};
 use ratatui::text::Line;
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, draw_box, frame_around};
+use super::dialog::{Colors, Field, draw_box, frame_around};
 use super::fuzzy::Fuzzy;
 use super::keymap::{Action, Resolved};
 use super::mouse::{Drawn, Pointer};
@@ -85,11 +85,14 @@ pub(crate) struct Picker {
     texts: Vec<Vec<String>>,
     /// When each row shows.
     shows: Vec<Shows>,
-    filter: String,
+    /// The filter, a text field.
+    filter: Field,
     /// The filter matches as fzf does: `ui.fuzzy_search`.
     fuzzy: bool,
     /// Digits choose the first ten rows while the filter is empty; else they are text.
     hotkeys: bool,
+    /// Delete is the window's, for the row under the cursor, rather than the filter's.
+    deletes_rows: bool,
     /// How well each row, shown or not, matches the filter, higher for better; `None` hides
     /// it.
     matches: Vec<Option<u32>>,
@@ -109,9 +112,10 @@ impl Picker {
         Self {
             texts: Vec::new(),
             shows: Vec::new(),
-            filter: String::new(),
+            filter: Field::plain(""),
             fuzzy,
             hotkeys: true,
+            deletes_rows: false,
             matches: Vec::new(),
             cursor: 0,
             offset: 0,
@@ -123,6 +127,12 @@ impl Picker {
     /// The same picker, whose digits are text, as the other characters.
     pub(crate) fn without_hotkeys(mut self) -> Self {
         self.hotkeys = false;
+        self
+    }
+
+    /// The same picker, which leaves Delete to the window, for the row under the cursor.
+    pub(crate) fn deleting_rows(mut self) -> Self {
+        self.deletes_rows = true;
         self
     }
 
@@ -182,7 +192,7 @@ impl Picker {
     /// The rows that digits choose while the filter is empty, by their index among those the
     /// filter shows: the first ten that are not rows of more rows.
     fn hotkey_rows(&self) -> Vec<usize> {
-        if !self.hotkeys || !self.filter.is_empty() {
+        if !self.hotkeys || !self.filter.text().is_empty() {
             return Vec::new();
         }
         self.matches
@@ -201,13 +211,13 @@ impl Picker {
     /// for an empty filter, or for one with text, show as `shows` says.
     fn refilter(&mut self) {
         let scores: Vec<Option<u32>> = if self.fuzzy {
-            let mut fuzzy = Fuzzy::names(&self.filter);
+            let mut fuzzy = Fuzzy::names(self.filter.text());
             self.texts
                 .iter()
                 .map(|texts| fuzzy.score(&texts.join(" ")))
                 .collect()
         } else {
-            let filter = self.filter.to_lowercase();
+            let filter = self.filter.text().to_lowercase();
             self.texts
                 .iter()
                 .map(|texts| {
@@ -218,7 +228,7 @@ impl Picker {
                 })
                 .collect()
         };
-        let empty = self.filter.is_empty();
+        let empty = self.filter.text().is_empty();
         self.matches = scores
             .into_iter()
             .zip(&self.shows)
@@ -230,15 +240,17 @@ impl Picker {
             .collect();
     }
 
-    /// Takes a key: arrows move, Enter chooses, a digit chooses its row while the filter is
-    /// empty, other characters filter, Backspace takes one back, and Esc closes the window.
-    /// Other keys are the window's.
+    /// Takes a key: Up, Down, the page keys, Home, and End move, Enter chooses, a digit chooses
+    /// its row while the filter is empty, other characters filter, the other keys of text fields
+    /// edit the filter, and Esc closes the window. Other keys are the window's.
     pub(crate) fn handle(&mut self, input: Resolved) -> Pick {
         let rows = self.len();
         let last = rows.saturating_sub(1);
         let page = self.page.max(1);
         match input {
-            Resolved::Insert(c) if self.hotkeys && self.filter.is_empty() && c.is_ascii_digit() => {
+            Resolved::Insert(c)
+                if self.hotkeys && self.filter.text().is_empty() && c.is_ascii_digit() =>
+            {
                 let digit = c.to_digit(10).map_or(0, |digit| digit as usize);
                 return match self.hotkey_rows().get((digit + 9) % 10) {
                     Some(&row) => Pick::Chosen(row),
@@ -246,7 +258,7 @@ impl Picker {
                 };
             }
             Resolved::Insert(c) => {
-                self.filter.push(c);
+                self.filter.insert(c);
                 self.refilter();
                 self.focus_best();
             }
@@ -257,10 +269,19 @@ impl Picker {
                 Action::PageDown => self.cursor = (self.cursor + page).min(last),
                 Action::Home => self.cursor = 0,
                 Action::End => self.cursor = last,
-                Action::Backspace => {
-                    self.filter.pop();
-                    self.refilter();
-                    self.focus_best();
+                Action::Delete if self.deletes_rows => return Pick::Other(action),
+                Action::Left
+                | Action::Right
+                | Action::Backspace
+                | Action::Delete
+                | Action::DeleteToStart
+                | Action::DeleteToEnd => {
+                    let before = self.filter.text().to_owned();
+                    self.filter.edit(action);
+                    if self.filter.text() != before {
+                        self.refilter();
+                        self.focus_best();
+                    }
                 }
                 Action::Confirm if self.cursor < rows => return Pick::Chosen(self.cursor),
                 Action::Confirm => {}
@@ -374,24 +395,23 @@ impl Picker {
         (self.cursor, self.offset) = (cursor, offset);
     }
 
-    /// The filter, with the cursor after it and `note` at the right, on the first line of
-    /// `inner`; a line under them.
+    /// The filter, with its cursor, and `note` at the right, on the first line of `inner`; a
+    /// line under them.
     fn draw_filter(&self, frame: &mut Frame<'_>, inner: Rect, theme: &Theme, note: Option<&str>) {
         let width = usize::from(inner.width);
         let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
-        let filter = fl!(
-            "picker-filter",
-            text = cells::sanitize(self.filter.as_bytes())
-        );
-        // Right after the text, spaces typed last included.
-        let column = u16::try_from(cells::width(&filter)).unwrap_or(u16::MAX);
+        let note = note.map(|note| cells::sanitize(note.as_bytes()));
+        let room = match &note {
+            Some(note) => width.saturating_sub(cells::width(note) + 1),
+            None => width,
+        };
+        let prefix = cells::width(&fl!("picker-filter", text = String::new()));
+        let (shown, column) = self.filter.visible(room.saturating_sub(prefix));
+        let column = u16::try_from(prefix + column).unwrap_or(u16::MAX);
+        let filter = cells::fit(&fl!("picker-filter", text = shown), room, Align::Left);
         let top = match note {
-            Some(note) => {
-                let note = cells::sanitize(note.as_bytes());
-                let room = width.saturating_sub(cells::width(&note) + 1);
-                format!("{} {note}", cells::fit(&filter, room, Align::Left))
-            }
-            None => cells::fit(&filter, width, Align::Left),
+            Some(note) => format!("{filter} {note}"),
+            None => filter,
         };
         frame.render_widget(Line::styled(top, theme.dialog), line(0));
         frame.set_cursor_position(Position::new(
@@ -481,6 +501,42 @@ mod tests {
             Pick::Other(Action::Reload)
         );
         assert_eq!(press(&mut picker, Action::Cancel), Pick::Closed);
+    }
+
+    #[test]
+    fn the_filter_is_a_text_field_and_delete_can_be_the_windows() {
+        let mut picker = picker(&["src", "docs", "target"], false);
+        typed(&mut picker, "sc");
+        assert!(picker.shown(0..3).is_empty(), "no name contains sc");
+        press(&mut picker, Action::Left);
+        typed(&mut picker, "r");
+        assert_eq!(picker.shown(0..3), [0], "typed in the middle: src");
+        press(&mut picker, Action::Delete);
+        assert_eq!(picker.shown(0..3), [0], "sr");
+        press(&mut picker, Action::Left);
+        press(&mut picker, Action::Backspace);
+        assert_eq!(picker.shown(0..3), [0, 2], "r");
+        press(&mut picker, Action::Right);
+        press(&mut picker, Action::DeleteToStart);
+        assert_eq!(picker.shown(0..3), [0, 1, 2]);
+        assert_eq!(
+            picker.handle(Resolved::Insert('2')),
+            Pick::Chosen(1),
+            "nothing left: digits choose again"
+        );
+        let mut rows = picker_rows_deleting(&["a", "b"]);
+        typed(&mut rows, "a");
+        assert_eq!(
+            press(&mut rows, Action::Delete),
+            Pick::Other(Action::Delete)
+        );
+        assert_eq!(rows.shown(0..2), [0], "the filter stays");
+    }
+
+    fn picker_rows_deleting(rows: &[&str]) -> Picker {
+        let mut picker = Picker::new(false).deleting_rows();
+        picker.set_rows(rows.iter().map(|row| vec![(*row).to_owned()]).collect());
+        picker
     }
 
     #[test]

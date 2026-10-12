@@ -75,7 +75,7 @@ impl HistoryWindow {
             here,
             labels,
             all: false,
-            picker: Picker::new(fuzzy).without_hotkeys(),
+            picker: Picker::new(fuzzy).without_hotkeys().deleting_rows(),
         };
         window.picker.set_rows(window.texts());
         window

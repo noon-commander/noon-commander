@@ -1015,8 +1015,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   `list`, which holds the keys they share, then to `input` for their filters (`input` moves the
   text cursor with actions of its own, `text_start` and `text_end`, so that Ctrl+a and Ctrl+e move
   in a filter while Home and End stay the list's), and every one but `user_screen` to `global`
-  last, whose keys do the same
-  everywhere; the first context that knows a key sequence decides, except that a sequence it only
+  last, whose keys do the same everywhere: the key hints, the output of commands, and Ctrl+l, which
+  redraws the screen; the app takes them before whatever is in front, which stays as it was. The
+  first context that knows a key sequence decides, except that a sequence it only
   starts does what a later context binds it to. The help lists the keys of `list` and `input`
   with each context that falls back to them, as that context uses them, each key once.
   Bindings are key sequences matched by prefix with a 1-second timeout, so a vim preset (`g g`,

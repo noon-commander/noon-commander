@@ -3112,6 +3112,43 @@ mod tests {
     }
 
     #[test]
+    fn ctrl_l_redraws_everywhere_but_on_the_user_screen() {
+        // As in mc, whose dialogs, viewer, and editor take it too, and in ranger.
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            for &context in Context::ALL {
+                if matches!(context, Context::Global | Context::UserScreen) {
+                    continue;
+                }
+                let mut state = KeyState::default();
+                assert_eq!(
+                    feed(&keymap, &mut state, context, &["ctrl-l"]),
+                    actions(&[Action::Redraw]),
+                    "{name}: {context:?}"
+                );
+                assert!(
+                    keymap
+                        .hints(context, &[])
+                        .iter()
+                        .any(|hint| hint.keys == "Ctrl+l" && hint.action == Some(Action::Redraw)),
+                    "{name}: {context:?} hints"
+                );
+            }
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&keymap, &mut state, Context::UserScreen, &["ctrl-l"]),
+                [],
+                "{name}"
+            );
+            assert_eq!(
+                keymap.key(Context::Panel, Action::Redraw).as_deref(),
+                Some("Ctrl+l"),
+                "{name}: for the pull-down menu"
+            );
+        }
+    }
+
+    #[test]
     fn alt_and_a_shifted_symbol_match_as_the_kitty_protocol_reports_alternate_keys() {
         // With alternate keys reported, crossterm gives the symbol typed and drops the Shift.
         let keymap = Keymap::mc();

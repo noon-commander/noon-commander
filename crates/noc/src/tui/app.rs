@@ -1600,6 +1600,11 @@ impl App {
             self.handover = Some(Handover::UserScreen);
             return Vec::new();
         }
+        // A redraw leaves what is in front as it was too; quick search goes on after it.
+        if input == Resolved::Action(Action::Redraw) {
+            self.redraw = true;
+            return Vec::new();
+        }
         if let Some(effects) = self.handle_over(input) {
             return effects;
         }
@@ -1620,7 +1625,6 @@ impl App {
             }
             Action::Quit => self.ask_quit(),
             Action::Jobs => self.jobs_list = Some(JobsList::default()),
-            Action::Redraw => self.redraw = true,
             Action::Help => {
                 self.help = Some(self.help_screen());
             }
@@ -3201,7 +3205,6 @@ impl App {
             Action::Help => {
                 self.help = Some(self.help_screen());
             }
-            Action::Redraw => self.redraw = true,
             Action::Quit | Action::Cancel => self.close_viewer(),
             action => {
                 if let Some(viewing) = &mut self.viewing
@@ -9631,6 +9634,26 @@ mod tests {
                 matches!(app.take_handover(), Some(Handover::UserScreen)),
                 "{opens:?}"
             );
+            assert_eq!(app.context(), context, "{opens:?} stays in front");
+        }
+    }
+
+    #[test]
+    fn ctrl_l_redraws_under_whatever_is_in_front_which_stays() {
+        for opens in [
+            Action::QuickSearch,
+            Action::Mkdir,
+            Action::Help,
+            Action::PullDown,
+            Action::Jobs,
+            Action::Shell,
+        ] {
+            let mut app = loaded();
+            app.handle(action(opens));
+            let context = app.context();
+            assert_ne!(context, Context::Panel, "{opens:?} opens something");
+            app.handle(action(Action::Redraw));
+            assert!(app.take_redraw(), "{opens:?}");
             assert_eq!(app.context(), context, "{opens:?} stays in front");
         }
     }

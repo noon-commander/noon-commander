@@ -15,6 +15,7 @@ pub(super) const PRESET: Preset = &[
         &[
             (Action::KeyHints, &["alt-/"]),
             (Action::UserScreen, &["g <", "ctrl-`"]),
+            (Action::Redraw, &["ctrl-l"]),
         ],
     ),
     // The panels.
@@ -92,7 +93,6 @@ pub(super) const PRESET: Preset = &[
             // Other
             (Action::Help, &["g ?", "f1"]),
             (Action::Quit, &["shift-z shift-z", "f10"]),
-            (Action::Redraw, &["ctrl-l"]),
         ],
     ),
     // What the text fields share: quick search, the field of an entry renamed in its row, the
@@ -192,7 +192,6 @@ pub(super) const PRESET: Preset = &[
             (Action::ToggleWrap, &["f2"]),
             (Action::Help, &["g ?", "f1"]),
             (Action::Quit, &["q", "esc", "ctrl-[", "ctrl-c", "f3", "f10"]),
-            (Action::Redraw, &["ctrl-l"]),
         ],
     ),
     // What the windows that list items to choose from share: the location menu, the tab menu, the

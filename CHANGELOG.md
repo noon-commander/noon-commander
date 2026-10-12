@@ -213,6 +213,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   start of the filters of the lists, whose Ctrl+b pages up; h and l go from button to button in
   dialogs, and Ctrl+p and Ctrl+n move in them, as in the lists; Enter and q leave the output of
   commands, as the prompt under what vim's g < shows does, and the help names g < first for it.
+- Ctrl+l redraws the screen everywhere in both keymaps, not only in the panels and the viewer: in
+  dialogs, as in mc's, and in menus, windows, and on the command line too. What is in front stays
+  as it was, and quick search goes on; the help lists the key under Everywhere.
 - Release builds use full link-time optimization, which makes the `noc` binary about 6% smaller.
 - The title of a panel, and the tab menu, show the home directory as `~`: `~/src` rather
   than `/Users/me/src`.

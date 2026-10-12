@@ -80,12 +80,14 @@ hide or show the panels with it in the panels and on their command line, and mc 
 and editor too. Ctrl+\` does the same in both presets, where the terminal speaks the kitty
 keyboard protocol; without it, terminals send it as Ctrl+Space, which noc leaves to macOS and to
 input methods, which switch the input source with it. The vim preset takes g <, vim's key for
-the output of the last command.
+the output of the last command. Ctrl+l redraws the screen under whatever is in front, which stays
+as it was, quick search too, as mc's Ctrl+l does in its panels, dialogs, viewer, and editor.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
 | The keys that can be typed now, over whatever is in front, and what they do, as which-key shows them | `key_hints` | ✅ | Alt+/ | Alt+/ | — | — | — | — |
 | The output of commands, in place of the panels and what is in front of them (mc, Far: hide or show the panels) | `user_screen` | ✅ | Ctrl+o<br>Ctrl+\` | g <<br>Ctrl+\` | Ctrl+o | Ctrl+o | — | — |
+| Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | Ctrl+l | — | — | Ctrl+l |
 | Help: the keys of what is in front, and what they do | — | ⏳ | — | — | F1 | F1 | \~<br>F1 | — |
 
 ## Panels (`panel`)
@@ -167,7 +169,6 @@ Shift+F7, mc's and Far's key to search again, repeats it forward too.
 | The running jobs: bring one to the front, or abort it | `jobs` | ✅ | Ctrl+x j<br>f j | f j | Ctrl+x j | — | w | w |
 | Help | `help` | ✅ | F1 | g ?<br>F1 | F1 | F1 | \~<br>F1 | ?<br>F1 |
 | Quit | `quit` | ✅ | F10 | Z Z<br>F10 | F10 | F10 | q | Q<br>F10 |
-| Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | Ctrl+l | — | — | Ctrl+l |
 | F1…F10 on terminals without function keys | — | ✅ | Alt+1…9, 0 | Alt+1…9, 0 | Esc, then 1…9, 0 | — | — | — |
 | Alt+key on terminals without Alt | — | 🚫 | — | — | Esc, then the key | — | — | — |
 | Enter the archive under the cursor as a directory | — | ⏳ | — | — | Ctrl+PgDn | Ctrl+PgDn<br>Ctrl+Shift+PgDn (always as archive) | — | — |
@@ -453,7 +454,6 @@ since ranger asks its questions on the console.
 | Abort the job under the cursor | — | ⏳ | — | — | — | — | x (tasks) | d d<br>Delete |
 | Run the job under the cursor first | — | ⏳ | — | — | — | — | — | K<br>PgUp |
 | Run the job under the cursor last | — | ⏳ | — | — | — | — | — | J<br>PgDn |
-| Redraw the screen | — | ⏳ | — | — | Ctrl+l | — | — | Ctrl+l |
 
 ## Help (`help`)
 
@@ -492,7 +492,6 @@ the keys of its pager, which shows files, the output of commands, and the log.
 | Wrap long lines, or cut them | `toggle_wrap` | ✅ | F2 | F2 | F2 | F2 | — | — |
 | Help | `help` | ✅ | F1 | g ?<br>F1 | F1 | F1 | — | — |
 | Close the viewer | `quit` | ✅ | F3<br>F10<br>q<br>Esc<br>Ctrl+[<br>Ctrl+c | q<br>Esc<br>Ctrl+[<br>Ctrl+c<br>F3<br>F10 | F3<br>F10<br>q<br>Esc | F10<br>F3<br>Numpad5<br>Esc | — | Esc<br>q<br>Q<br>i<br>F3 |
-| Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | Ctrl+l | — | — | Ctrl+l |
 | F1…F10 on terminals without function keys | — | ✅ | Alt+1…9, 0 | Alt+1…9, 0 | Esc, then 1…9, 0 | — | — | — |
 | Wrap type (by chars/words) | — | ⏳ | — | — | — | Shift+F2 | — | — |
 | Hex/code mode | — | ⏳ | — | — | F4 | F4 | — | — |
@@ -712,7 +711,6 @@ lacks, such as words and the clipboard, are under `input`, as are yazi's modes.
 | Insert character literally (quote) | — | ⏳ | — | — | Ctrl+q | — | — | — |
 | Clear command line | — | ⏳ | — | — | — | Ctrl+y | — | — |
 | Select block in command line | — | ⏳ | — | — | Shift+Left<br>Shift+Right<br>Shift+Home<br>Shift+End<br>Ctrl+Shift+Left<br>Ctrl+Shift+Right | Alt+Shift+Left<br>Alt+Shift+Right<br>Alt+Shift+Home<br>Alt+Shift+End | — | — |
-| Redraw the screen | — | ⏳ | — | — | Ctrl+l | — | — | Ctrl+l |
 
 ## Command history (`command_history`)
 

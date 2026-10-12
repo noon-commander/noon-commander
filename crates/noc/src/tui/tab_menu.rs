@@ -9,7 +9,7 @@ use ratatui::text::Line;
 use super::app::Side;
 use super::cells::{self, Align};
 use super::dialog::Colors;
-use super::keymap::{Action, Resolved};
+use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker};
 use super::theme::Theme;
@@ -68,8 +68,12 @@ impl TabMenu {
         self.picker.set_cursor(self.picker.cursor().min(last));
     }
 
-    /// Takes a key, as the picker does, and F8 and Delete, which close the tab under the
-    /// cursor.
+    /// The mode keys are typed in: Insert while the filter takes them.
+    pub(crate) fn mode(&self) -> Mode {
+        self.picker.mode()
+    }
+
+    /// Takes a key, as the picker does, and d d and F8, which close the tab under the cursor.
     pub(crate) fn handle(&mut self, input: Resolved) -> TabMenuEvent {
         let tab =
             |menu: &Self, row: usize| menu.picker.shown(0..menu.titles.len()).get(row).copied();
@@ -100,8 +104,8 @@ impl TabMenu {
             Side::Right => fl!("tabs-title-right"),
         };
         let widest = self.titles.iter().map(|title| cells::width(title)).max();
-        // The frame, a cell of room on either side, a hotkey, and a space.
-        let width = u16::try_from(widest.unwrap_or(0) + 6)
+        // The frame, and a cell of room on either side.
+        let width = u16::try_from(widest.unwrap_or(0) + 4)
             .unwrap_or(u16::MAX)
             .max(MIN_WIDTH);
         let body = Body {
@@ -112,9 +116,9 @@ impl TabMenu {
         };
         let focused = Colors::of(theme, false).focused_style();
         self.picker.render(frame, area, theme, body, &mut |row| {
-            let text = cells::fit(shown[row.index], row.width.saturating_sub(2), Align::Left);
+            let text = cells::fit(shown[row.index], row.width, Align::Left);
             let style = if row.selected { focused } else { theme.dialog };
-            Line::styled(format!("{} {text}", row.hotkey), style)
+            Line::styled(text, style)
         });
     }
 }
@@ -132,6 +136,7 @@ mod tests {
     }
 
     fn typed(menu: &mut TabMenu, text: &str) {
+        menu.handle(Resolved::Action(Action::QuickSearch));
         for c in text.chars() {
             assert_eq!(menu.handle(Resolved::Insert(c)), TabMenuEvent::Pending);
         }
@@ -150,11 +155,12 @@ mod tests {
     }
 
     #[test]
-    fn starts_on_the_tab_that_shows_and_enter_and_digits_show_tabs() {
+    fn starts_on_the_tab_that_shows_and_enter_shows_tabs() {
         let mut menu = menu();
         assert_eq!(press(&mut menu, Action::Confirm), TabMenuEvent::Show(1));
-        assert_eq!(menu.handle(Resolved::Insert('4')), TabMenuEvent::Show(3));
-        assert_eq!(menu.handle(Resolved::Insert('5')), TabMenuEvent::Pending);
+        press(&mut menu, Action::End);
+        assert_eq!(press(&mut menu, Action::Confirm), TabMenuEvent::Show(3));
+        assert_eq!(menu.handle(Resolved::Insert('1')), TabMenuEvent::Pending);
         assert_eq!(press(&mut menu, Action::Disconnect), TabMenuEvent::Pending);
         assert_eq!(press(&mut menu, Action::Cancel), TabMenuEvent::Closed);
     }
@@ -199,7 +205,7 @@ mod tests {
     }
 
     #[test]
-    fn draws_the_tabs_with_hotkeys_over_its_panel() {
+    fn draws_the_tabs_over_its_panel() {
         let mut menu = menu();
         insta::assert_snapshot!(draw(&mut menu, 40, 10));
         typed(&mut menu, "www");

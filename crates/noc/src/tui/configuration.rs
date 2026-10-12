@@ -13,7 +13,8 @@ use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
 use super::dialog::{Colors, Field, draw_box, draw_separator};
-use super::keymap::{Action, Context, Resolved};
+use super::edit::Registers;
+use super::keymap::{Action, Context, Mode, Resolved, Typed};
 use super::mouse::{Pointer, Press};
 use super::scrollbar;
 use super::theme::Theme;
@@ -32,7 +33,6 @@ const HINT_ROWS: u16 = 2;
 enum Key {
     Language,
     Theme,
-    Keymap,
     Borders,
     Icons,
     ShowHidden,
@@ -146,7 +146,6 @@ impl Setting {
                 language.clone_into(&mut ui.language);
             }
             Key::Theme => text.clone_into(&mut ui.theme),
-            Key::Keymap => text.clone_into(&mut ui.keymap),
             Key::Borders => {
                 ui.borders = match text {
                     "single" => Borders::Single,
@@ -315,7 +314,7 @@ fn choice(values: &[(&str, String)], current: &str) -> Value {
 
 fn text(value: &str) -> Value {
     Value::Text {
-        field: Field::plain(value),
+        field: Field::normal(value),
         applied: value.to_owned(),
     }
 }
@@ -374,12 +373,12 @@ fn join_words(words: &[String]) -> String {
 
 impl Configuration {
     /// The dialog with the settings `config` has, which shows paths under `home` from `~`;
-    /// `presets` are the themes and the keymaps to choose from, and `icons` puts the
-    /// categories' icons in front of their names.
-    pub(crate) fn new(config: &Config, home: &Path, presets: Presets<'_>, icons: bool) -> Self {
+    /// `themes` are the themes to choose from, and `icons` puts the categories' icons in front
+    /// of their names.
+    pub(crate) fn new(config: &Config, home: &Path, themes: &[&str], icons: bool) -> Self {
         let mut dialog = Self {
             categories: vec![
-                interface(config, presets),
+                interface(config, themes),
                 transfers(config),
                 ssh(config, home),
                 volumes(config),
@@ -398,6 +397,10 @@ impl Configuration {
         };
         if let Ok(applied) = dialog.config() {
             dialog.applied = applied;
+        }
+        // As a dialog that opens on a text field, in Insert mode.
+        if let Some(field) = dialog.field_mut() {
+            field.set_mode(Mode::Insert);
         }
         dialog
     }
@@ -440,7 +443,7 @@ impl Configuration {
             ..
         }) = self.setting_mut()
         {
-            *field = Field::plain(applied);
+            *field = Field::normal(applied);
         }
     }
 
@@ -478,18 +481,34 @@ impl Configuration {
         }
     }
 
+    /// The text field under the cursor, if the settings have the focus.
+    fn field(&self) -> Option<&Field> {
+        if self.focus != Focus::Settings {
+            return None;
+        }
+        match &self.settings().get(self.row)?.value {
+            Value::Text { field, .. } => Some(field),
+            Value::Toggle(_) | Value::Choice { .. } => None,
+        }
+    }
+
     /// The keymap context for the next key: `DialogInput` in a text field.
     pub(crate) fn context(&self) -> Context {
-        let text = self.focus == Focus::Settings
-            && matches!(
-                self.settings().get(self.row).map(|setting| &setting.value),
-                Some(Value::Text { .. })
-            );
-        if text {
+        if self.field().is_some() {
             Context::DialogInput
         } else {
             Context::Dialog
         }
+    }
+
+    /// The mode keys are typed in: the text field's under the cursor, else Normal mode.
+    pub(crate) fn mode(&self) -> Mode {
+        self.field().map_or(Mode::Normal, Field::mode)
+    }
+
+    /// The operator that the text field under the cursor has waiting, as `showcmd` shows it.
+    pub(crate) fn pending(&self) -> Option<String> {
+        self.field().and_then(Field::pending)
     }
 
     fn choose_category(&mut self, index: usize) {
@@ -500,22 +519,48 @@ impl Configuration {
         }
     }
 
-    /// Takes a key. Tab moves between the categories and the settings; Up and Down move
-    /// within them; Space or Enter switches a check box or picks the next choice, and Left and
-    /// Right pick choices, each applied at once. A text field is applied when the cursor leaves
-    /// it or on Enter, and keeps the cursor while it holds something invalid. Esc closes the
-    /// dialog, applying the text field under the cursor, or putting it back if invalid.
+    /// Takes a key, as typed without a count or a register.
+    #[cfg(test)]
     pub(crate) fn handle(&mut self, input: Resolved) -> ConfigEvent {
+        self.handle_typed(Typed::from(input), &mut Registers::default())
+    }
+
+    /// Takes a key, with its count and register. Tab moves between the categories and the
+    /// settings; Up and Down move within them; Space or Enter switches a check box or picks the
+    /// next choice, and Left and Right pick choices, each applied at once. A text field edits
+    /// its text in vim's modes; it is applied when the cursor leaves it or on Enter, and keeps
+    /// the cursor while it holds something invalid. A text field the cursor comes to is in
+    /// Normal mode, but after Tab, or from a field in Insert mode. Esc in Normal mode closes
+    /// the dialog, applying the text field under the cursor, or putting it back if invalid.
+    pub(crate) fn handle_typed(&mut self, typed: Typed, registers: &mut Registers) -> ConfigEvent {
+        let before = (self.focus, self.category, self.row);
+        let left = self.mode();
+        let event = self.take(typed, registers);
+        if (self.focus, self.category, self.row) != before {
+            let tab = typed.resolved == Resolved::Action(Action::NextField);
+            let mode = if tab || left == Mode::Insert {
+                Mode::Insert
+            } else {
+                Mode::Normal
+            };
+            if let Some(field) = self.field_mut() {
+                field.set_mode(mode);
+            }
+        }
+        event
+    }
+
+    fn take(&mut self, Typed { resolved, extra }: Typed, registers: &mut Registers) -> ConfigEvent {
         let mut event = ConfigEvent::default();
         let in_text = self.field_mut().is_some();
-        let action = match (input, self.field_mut()) {
+        let action = match (resolved, self.field_mut()) {
             (Resolved::Insert(c), Some(field)) => {
                 field.insert(c);
                 return event;
             }
             (Resolved::Insert(_), None) => return event,
             (Resolved::Action(action), Some(field)) => {
-                if field.edit(action) {
+                if field.handle(action, extra, registers) {
                     return event;
                 }
                 action
@@ -835,12 +880,10 @@ impl Configuration {
                         let column = u16::try_from(column).unwrap_or(0);
                         cursor = Some(Position::new(area.x + label + column, y));
                     }
-                    let style = if field.fresh() {
-                        theme.dialog_input_fresh
-                    } else {
-                        theme.dialog_input
-                    };
-                    Span::styled(cells::fit(&text, value_width, Align::Left), style)
+                    Span::styled(
+                        cells::fit(&text, value_width, Align::Left),
+                        theme.dialog_input,
+                    )
                 }
             };
             let x = area.x + u16::try_from(label_width + LABEL_GAP).unwrap_or(0);
@@ -859,10 +902,7 @@ impl Configuration {
     }
 }
 
-/// The names of the built-in themes and keymaps.
-pub(crate) type Presets<'a> = (&'a [&'a str], &'a [&'a str]);
-
-/// Choices whose text is their value, as the names of presets are.
+/// Choices whose text is their value, as the names of themes are.
 fn names<'a>(names: &[&'a str]) -> Vec<(&'a str, String)> {
     names
         .iter()
@@ -871,7 +911,7 @@ fn names<'a>(names: &[&'a str]) -> Vec<(&'a str, String)> {
 }
 
 /// Interface, `[ui]`.
-fn interface(config: &Config, (themes, keymaps): Presets<'_>) -> Category {
+fn interface(config: &Config, themes: &[&str]) -> Category {
     let ui = &config.ui;
     let borders = match ui.borders {
         Borders::Double => "double",
@@ -890,11 +930,6 @@ fn interface(config: &Config, (themes, keymaps): Presets<'_>) -> Category {
             Key::Theme,
             (fl!("config-theme"), fl!("config-theme-hint")),
             choice(&names(themes), &ui.theme),
-        ),
-        Setting::new(
-            Key::Keymap,
-            (fl!("config-keymap"), fl!("config-keymap-hint")),
-            choice(&names(keymaps), &ui.keymap),
         ),
         Setting::new(
             Key::Borders,
@@ -1148,7 +1183,7 @@ mod tests {
 
     use super::*;
 
-    const PRESETS: Presets<'static> = (&["mc-classic", "terminal"], &["default", "vim"]);
+    const PRESETS: &[&str] = &["mc-classic", "terminal"];
 
     fn action(action: Action) -> Resolved {
         Resolved::Action(action)
@@ -1172,7 +1207,11 @@ mod tests {
         terminal.backend().to_string()
     }
 
+    /// Types `text` in the text field under the cursor in place of what it holds, as A,
+    /// Ctrl+u, and typing do.
     fn typed(dialog: &mut Configuration, text: &str) {
+        dialog.handle(action(Action::AppendAtEnd));
+        dialog.handle(action(Action::DeleteToStart));
         for c in text.chars() {
             dialog.handle(Resolved::Insert(c));
         }
@@ -1219,9 +1258,7 @@ mod tests {
             (old.ui.theme.as_str(), new.ui.theme.as_str()),
             ("mc-classic", "terminal")
         );
-        for _ in 0..2 {
-            dialog.handle(action(Action::Down));
-        }
+        dialog.handle(action(Action::Down));
         let (old, new) = dialog.handle(action(Action::Confirm)).change.unwrap();
         assert_eq!(old.ui.theme, "terminal", "the change before counts");
         assert_eq!(
@@ -1233,7 +1270,7 @@ mod tests {
         // A text field takes effect when the cursor leaves it.
         category(&mut dialog, 1);
         dialog.handle(action(Action::Down));
-        assert_eq!(dialog.handle(Resolved::Insert('4')), ConfigEvent::default());
+        typed(&mut dialog, "4");
         let (_, new) = dialog.handle(action(Action::Up)).change.unwrap();
         assert_eq!(new.transfer.parallel_jobs.get(), 4);
         // Or on Enter, which keeps the cursor there; or as the dialog closes.
@@ -1323,14 +1360,11 @@ mod tests {
         dialog.handle(action(Action::Toggle));
         dialog.handle(action(Action::Down));
         dialog.handle(action(Action::Toggle));
-        dialog.handle(action(Action::Down));
-        dialog.handle(action(Action::Toggle));
         for _ in 0..3 {
             dialog.handle(action(Action::Down));
         }
         dialog.handle(action(Action::Toggle));
         dialog.handle(action(Action::Down));
-        dialog.handle(action(Action::DeleteToStart));
         typed(&mut dialog, "page");
         dialog.handle(action(Action::Down));
         dialog.handle(action(Action::Toggle));
@@ -1348,19 +1382,17 @@ mod tests {
         dialog.handle(action(Action::Down));
         dialog.handle(action(Action::Toggle));
         dialog.handle(action(Action::Down));
-        dialog.handle(action(Action::DeleteToStart));
+        typed(&mut dialog, "");
         category(&mut dialog, 3);
         typed(&mut dialog, "/mnt/*");
         category(&mut dialog, 4);
         dialog.handle(action(Action::Toggle));
         dialog.handle(action(Action::Down));
-        dialog.handle(action(Action::DeleteToStart));
         typed(&mut dialog, "~/.cargo/bin/zoxide");
         assert!(dialog.handle(action(Action::Cancel)).closed);
         let mut expected = Config::default();
         expected.ui.language = "de".to_owned();
         expected.ui.theme = "terminal".to_owned();
-        expected.ui.keymap = "vim".to_owned();
         expected.ui.borders = Borders::Single;
         expected.ui.icons = false;
         expected.ui.tab_bar = TabBar::Frame;
@@ -1383,8 +1415,8 @@ mod tests {
     fn an_invalid_text_keeps_the_cursor_and_says_why() {
         let cases: [(usize, usize, &str, &str); 8] = [
             (0, 0, "?", "is not auto or a language tag"),
-            (0, 8, "0", "is not a step of the wheel"),
-            (0, 8, "pages", "is not a step of the wheel"),
+            (0, 7, "0", "is not a step of the wheel"),
+            (0, 7, "pages", "is not a step of the wheel"),
             (1, 1, "x", "is not a number of jobs"),
             (2, 2, "-F other_config", "Invalid extra ssh arguments"),
             (2, 0, "", "The ssh program cannot be empty"),

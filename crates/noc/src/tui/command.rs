@@ -1,6 +1,7 @@
 //! The command line of `!` and `:` (ADR 0019): a shell command, typed over one or more lines,
 //! which the app runs in the active panel's directory with the terminal handed over.
 
+use std::ops::Range;
 use std::path::PathBuf;
 
 use noc_config::Pause;
@@ -14,8 +15,8 @@ use ratatui::widgets::Block;
 use unicode_width::UnicodeWidthChar as _;
 
 use super::cells;
-use super::dialog::{word_end, word_start};
-use super::keymap::{Action, Resolved};
+use super::edit::{Editor, Registers, line_bounds};
+use super::keymap::{Action, Mode, Resolved, Typed};
 use super::tasks::HostHandle;
 
 /// Rows the command line takes at most, however tall the screen.
@@ -44,8 +45,6 @@ pub(crate) enum CommandEvent {
     Run(String),
     /// Says that Noon Commander has no such command; the line stays.
     Unknown(String),
-    /// Opens the command in the editor.
-    Edit,
     /// Shows the command before in the history.
     Older,
     /// Shows the command after in the history.
@@ -72,13 +71,12 @@ pub(crate) enum Place {
     Remote { handle: HostHandle, dir: RemotePath },
 }
 
-/// The text of the command line and its cursor.
+/// The text of the command line, in vim's modes: it opens in Insert mode, as vim's command
+/// line, and Ctrl+f goes to Normal mode, where vim opens the window of the command line.
 #[derive(Debug)]
 pub(crate) struct CommandLine {
     kind: Kind,
-    text: String,
-    /// In characters.
-    cursor: usize,
+    editor: Editor,
     /// The first row shown, when the command has more rows than fit.
     scroll: usize,
     /// The command of the history shown, counted from the newest, and what was typed before
@@ -91,19 +89,19 @@ pub(crate) struct CommandLine {
 }
 
 /// A row of the command line as drawn: the prompt or the mark of a continued line, if it
-/// starts a line, and the text.
+/// starts a line, the text, and what of it Visual mode selects, in characters.
 #[derive(Debug, Default, PartialEq, Eq)]
 struct Row {
     lead: String,
     text: String,
+    selected: Option<Range<usize>>,
 }
 
 impl CommandLine {
     pub(crate) fn new(kind: Kind) -> Self {
         Self {
             kind,
-            text: String::new(),
-            cursor: 0,
+            editor: Editor::new("", Mode::Insert).with_lines(),
             scroll: 0,
             browsing: None,
             draft: String::new(),
@@ -139,7 +137,7 @@ impl CommandLine {
             return;
         };
         if self.browsing.is_none() {
-            self.draft = self.text.clone();
+            self.draft = self.text().to_owned();
         }
         self.browsing = Some(next);
         self.set_text(command);
@@ -151,111 +149,87 @@ impl CommandLine {
 
     /// The command as typed.
     pub(crate) fn text(&self) -> &str {
-        &self.text
+        self.editor.text()
     }
 
-    /// Replaces the command with `text`, such as what the editor left, without the line breaks
-    /// at its end, and puts the cursor after it.
+    /// The mode keys are typed in.
+    pub(crate) fn mode(&self) -> Mode {
+        self.editor.mode()
+    }
+
+    /// The operator that waits for its motion, as vim's `showcmd` shows it.
+    pub(crate) fn pending(&self) -> Option<String> {
+        self.editor.pending()
+    }
+
+    /// Replaces the command with `text`, without the line breaks at its end, and puts the
+    /// cursor after it.
     pub(crate) fn set_text(&mut self, text: &str) {
-        self.text = clean(text.trim_end_matches(['\n', '\r']));
-        self.cursor = self.text.chars().count();
+        let text = clean(text.trim_end_matches(['\n', '\r']));
+        self.editor.replace(&text, text.chars().count());
     }
 
     /// Puts pasted `text` at the cursor as it is, line breaks included; nothing runs.
     pub(crate) fn paste(&mut self, text: &str) {
-        let text = clean(text);
-        let offset = self.offset(self.cursor);
-        self.text.insert_str(offset, &text);
-        self.cursor += text.chars().count();
+        self.editor.insert_str(&clean(text));
     }
 
     fn chars(&self) -> Vec<char> {
-        self.text.chars().collect()
-    }
-
-    /// The byte offset of character `index`.
-    fn offset(&self, index: usize) -> usize {
-        self.text
-            .char_indices()
-            .nth(index)
-            .map_or(self.text.len(), |(offset, _)| offset)
+        self.text().chars().collect()
     }
 
     /// The first character of the line the cursor is on, and the end of that line.
     fn line_bounds(&self) -> (usize, usize) {
-        let chars = self.chars();
-        let start = chars[..self.cursor]
-            .iter()
-            .rposition(|&c| c == '\n')
-            .map_or(0, |newline| newline + 1);
-        let end = chars[self.cursor..]
-            .iter()
-            .position(|&c| c == '\n')
-            .map_or(chars.len(), |newline| self.cursor + newline);
-        (start, end)
+        line_bounds(&self.chars(), self.editor.cursor())
     }
 
-    fn insert(&mut self, c: char) {
-        let offset = self.offset(self.cursor);
-        self.text.insert(offset, c);
-        self.cursor += 1;
-    }
-
-    /// Removes the characters in `start..end`, and leaves the cursor at `start`.
-    fn remove(&mut self, start: usize, end: usize) {
-        let (from, to) = (self.offset(start), self.offset(end));
-        self.text.replace_range(from..to, "");
-        self.cursor = start;
-    }
-
-    /// Takes a key.
+    /// Takes a key, as typed without a count or a register.
+    #[cfg(test)]
     pub(crate) fn handle(&mut self, input: Resolved) -> CommandEvent {
+        self.handle_typed(Typed::from(input), &mut Registers::default())
+    }
+
+    /// Takes a key, with its count and register: the line's own keys, and the editor's for
+    /// the rest.
+    pub(crate) fn handle_typed(&mut self, typed: Typed, registers: &mut Registers) -> CommandEvent {
         self.foreign = false;
-        let action = match input {
+        let Typed { resolved, extra } = typed;
+        let action = match resolved {
             Resolved::Insert(c) => {
-                self.insert(c);
+                self.editor.insert(c);
                 return CommandEvent::None;
             }
             Resolved::Action(action) => action,
         };
-        let length = self.text.chars().count();
-        let (start, end) = self.line_bounds();
+        let length = self.text().chars().count();
+        let end = self.line_bounds().1;
         match action {
-            Action::Left => self.cursor = self.cursor.saturating_sub(1),
-            Action::Right => self.cursor = (self.cursor + 1).min(length),
-            Action::TextStart => self.cursor = start,
-            Action::TextEnd => self.cursor = end,
-            Action::WordLeft => self.cursor = word_start(&self.text, start, self.cursor),
-            Action::WordRight => self.cursor = word_end(&self.text, self.cursor, end),
-            Action::Up if start == 0 => return CommandEvent::Older,
-            Action::Down if end == length => return CommandEvent::Newer,
-            Action::Up => self.move_line(false),
-            Action::Down => self.move_line(true),
+            Action::Up | Action::Down => {
+                for _ in 0..extra.times() {
+                    let (start, end) = self.line_bounds();
+                    if action == Action::Up && start == 0 {
+                        return CommandEvent::Older;
+                    }
+                    if action == Action::Down && end == length {
+                        return CommandEvent::Newer;
+                    }
+                    self.move_line(action == Action::Down);
+                }
+            }
             Action::CommandHistory => return CommandEvent::History,
             Action::OlderCommand => return CommandEvent::Older,
             Action::NewerCommand => return CommandEvent::Newer,
-            Action::Backspace if self.cursor > 0 => self.remove(self.cursor - 1, self.cursor),
-            Action::DeleteChar if self.cursor < length => {
-                self.remove(self.cursor, self.cursor + 1);
-            }
-            Action::DeleteToStart => self.remove(start, self.cursor),
-            Action::DeleteToEnd => {
-                let cursor = self.cursor;
-                self.remove(cursor, end);
-            }
-            Action::DeleteWord => {
-                let cursor = self.cursor;
-                self.remove(word_start(&self.text, start, cursor), cursor);
-            }
-            Action::DeleteNextWord => {
-                let cursor = self.cursor;
-                self.remove(cursor, word_end(&self.text, cursor, end));
-            }
-            Action::NewLine => self.insert('\n'),
-            Action::EditCommand => return CommandEvent::Edit,
+            Action::NewLine => self.editor.insert('\n'),
             Action::Confirm => return self.confirm(end),
-            Action::Cancel => return CommandEvent::Close,
-            _ => {}
+            Action::Cancel => {
+                // Esc gives up an operator waiting for its motion before it closes the line.
+                if !self.editor.handle(action, extra, registers) {
+                    return CommandEvent::Close;
+                }
+            }
+            _ => {
+                self.editor.handle(action, extra, registers);
+            }
         }
         CommandEvent::None
     }
@@ -265,50 +239,42 @@ impl CommandLine {
     fn move_line(&mut self, next: bool) {
         let chars = self.chars();
         let (start, end) = self.line_bounds();
-        let column = self.cursor - start;
+        let column = self.editor.cursor() - start;
         let (start, end) = if next {
             if end == chars.len() {
                 return;
             }
-            let start = end + 1;
-            let end = chars[start..]
-                .iter()
-                .position(|&c| c == '\n')
-                .map_or(chars.len(), |newline| start + newline);
-            (start, end)
+            line_bounds(&chars, end + 1)
         } else {
             if start == 0 {
                 return;
             }
-            let end = start - 1;
-            let start = chars[..end]
-                .iter()
-                .rposition(|&c| c == '\n')
-                .map_or(0, |newline| newline + 1);
-            (start, end)
+            line_bounds(&chars, start - 1)
         };
-        self.cursor = (start + column).min(end);
+        self.editor.set_cursor((start + column).min(end));
     }
 
     /// Enter: a new line after an odd number of `\` at the end of the line, as a shell
     /// continues one; otherwise the command to run, if there is one.
     fn confirm(&mut self, end: usize) -> CommandEvent {
         let chars = self.chars();
-        let escapes = chars[..self.cursor]
+        let cursor = self.editor.cursor();
+        let escapes = chars[..cursor]
             .iter()
             .rev()
             .take_while(|&&c| c == '\\')
             .count();
-        if self.cursor == end && escapes % 2 == 1 {
-            self.insert('\n');
+        if self.mode() == Mode::Insert && cursor == end && escapes % 2 == 1 {
+            self.editor.insert('\n');
             return CommandEvent::None;
         }
+        let text = self.text().to_owned();
         let command = match self.kind {
-            Kind::Shell => self.text.clone(),
-            Kind::Noc => match self.text.strip_prefix('!') {
+            Kind::Shell => text,
+            Kind::Noc => match text.strip_prefix('!') {
                 Some(command) => command.to_owned(),
-                None if self.text.trim().is_empty() => return CommandEvent::Close,
-                None => return CommandEvent::Unknown(self.text.clone()),
+                None if text.trim().is_empty() => return CommandEvent::Close,
+                None => return CommandEvent::Unknown(text),
             },
         };
         if command.trim().is_empty() {
@@ -322,14 +288,16 @@ impl CommandLine {
     /// cursor. Long lines go on in the next row.
     fn layout(&self, prompt: &str, width: usize) -> (Vec<Row>, (usize, usize)) {
         let width = width.max(1);
+        let cursor = self.editor.cursor();
+        let selection = self.editor.selection();
         let mut rows = Vec::new();
         let mut at = (0, 0);
         let mut index = 0;
-        for (number, line) in self.text.split('\n').enumerate() {
+        for (number, line) in self.text().split('\n').enumerate() {
             let lead = if number == 0 { prompt } else { CONTINUATION };
             let mut row = Row {
                 lead: lead.to_owned(),
-                text: String::new(),
+                ..Row::default()
             };
             let mut used = cells::width(lead);
             for c in line.chars() {
@@ -339,14 +307,22 @@ impl CommandLine {
                     rows.push(std::mem::take(&mut row));
                     used = 0;
                 }
-                if index == self.cursor {
+                if index == cursor {
                     at = (rows.len(), used);
+                }
+                if selection
+                    .as_ref()
+                    .is_some_and(|selected| selected.contains(&index))
+                {
+                    let column = row.text.chars().count();
+                    let selected = row.selected.get_or_insert(column..column);
+                    selected.end = column + 1;
                 }
                 row.text.push(c);
                 used += cell;
                 index += 1;
             }
-            if index == self.cursor {
+            if index == cursor {
                 if used >= width {
                     rows.push(std::mem::take(&mut row));
                     used = 0;
@@ -396,7 +372,21 @@ impl CommandLine {
         };
         for (index, shown) in rows.into_iter().skip(self.scroll).take(height).enumerate() {
             let y = area.y + u16::try_from(index).unwrap_or(u16::MAX);
-            let line = Line::from(vec![Span::styled(shown.lead, lead), Span::raw(shown.text)]);
+            let mut spans = vec![Span::styled(shown.lead, lead)];
+            match shown.selected {
+                Some(selected) => {
+                    let chars: Vec<char> = shown.text.chars().collect();
+                    let part = |range: Range<usize>| chars[range].iter().collect::<String>();
+                    spans.push(Span::raw(part(0..selected.start)));
+                    spans.push(Span::styled(
+                        part(selected.clone()),
+                        style.add_modifier(Modifier::REVERSED),
+                    ));
+                    spans.push(Span::raw(part(selected.end..chars.len())));
+                }
+                None => spans.push(Span::raw(shown.text)),
+            }
+            let line = Line::from(spans);
             frame.render_widget(line.style(style), Rect::new(area.x, y, area.width, 1));
         }
         if focused {
@@ -542,10 +532,10 @@ mod tests {
         press(&mut line, Action::Left);
         line.paste("a\r\nb\rc\u{1b}[2J\td");
         assert_eq!(line.text(), "echoa\nb\nc[2J\td ");
-        assert_eq!(line.cursor, 14, "after the pasted text");
+        assert_eq!(line.editor.cursor(), 14, "after the pasted text");
         line.set_text("make\n  && ls\n\n");
         assert_eq!(line.text(), "make\n  && ls");
-        assert_eq!(line.cursor, 12);
+        assert_eq!(line.editor.cursor(), 12);
     }
 
     #[test]
@@ -578,39 +568,63 @@ mod tests {
     fn keys_edit_within_the_line_of_the_cursor() {
         let mut line = shell("first line\nsecond");
         press(&mut line, Action::TextStart);
-        assert_eq!(line.cursor, 11, "the start of its line");
+        assert_eq!(line.editor.cursor(), 11, "the start of its line");
         press(&mut line, Action::TextEnd);
         press(&mut line, Action::Up);
-        assert_eq!(line.cursor, 6, "the same column above");
+        assert_eq!(line.editor.cursor(), 6, "the same column above");
         press(&mut line, Action::DeleteToEnd);
-        assert_eq!(line.text, "first \nsecond");
+        assert_eq!(line.text(), "first \nsecond");
         press(&mut line, Action::Down);
-        assert_eq!(line.cursor, 13, "the end of a shorter line");
+        assert_eq!(line.editor.cursor(), 13, "the end of a shorter line");
         press(&mut line, Action::Down);
-        assert_eq!(line.cursor, 13, "the last line stays");
+        assert_eq!(line.editor.cursor(), 13, "the last line stays");
         press(&mut line, Action::DeleteToStart);
-        assert_eq!(line.text, "first \n");
+        assert_eq!(line.text(), "first \n");
         press(&mut line, Action::Backspace);
         press(&mut line, Action::Left);
         press(&mut line, Action::DeleteChar);
-        assert_eq!(line.text, "first");
+        assert_eq!(line.text(), "first");
         press(&mut line, Action::Up);
-        assert_eq!(line.cursor, 5, "the first line stays");
+        assert_eq!(line.editor.cursor(), 5, "the first line stays");
         let mut words = shell("echo one\ntwo three");
         press(&mut words, Action::DeleteWord);
-        assert_eq!(words.text, "echo one\ntwo ");
+        assert_eq!(words.text(), "echo one\ntwo ");
         press(&mut words, Action::DeleteWord);
         press(&mut words, Action::DeleteWord);
-        assert_eq!(words.text, "echo one\n", "within the line of the cursor");
-        let mut moves = shell("echo one\ntwo three");
-        press(&mut moves, Action::WordLeft);
-        press(&mut moves, Action::WordLeft);
-        press(&mut moves, Action::WordLeft);
-        assert_eq!(moves.cursor, 9, "the start of the line");
-        press(&mut moves, Action::Up);
-        press(&mut moves, Action::WordRight);
-        press(&mut moves, Action::WordRight);
-        assert_eq!(moves.cursor, 8, "the end of the line");
+        assert_eq!(
+            words.text(),
+            "echo one",
+            "the line break, then the line before"
+        );
+    }
+
+    #[test]
+    fn ctrl_f_goes_to_normal_mode_where_j_and_k_go_through_lines_and_the_history() {
+        let mut registers = Registers::default();
+        let mut line = shell("make\ntest");
+        assert_eq!(line.mode(), Mode::Insert);
+        press(&mut line, Action::NormalMode);
+        assert_eq!(line.mode(), Mode::Normal);
+        let typed = |action| Typed::from(Resolved::Action(action));
+        line.handle_typed(typed(Action::WordBackward), &mut registers);
+        line.handle_typed(typed(Action::DeleteOperator), &mut registers);
+        line.handle_typed(typed(Action::DeleteOperator), &mut registers);
+        assert_eq!(line.text(), "make");
+        assert_eq!(press(&mut line, Action::Up), CommandEvent::Older);
+        line.handle_typed(typed(Action::PutAfter), &mut registers);
+        assert_eq!(line.text(), "make\ntest", "a line goes in as a line");
+        line.handle_typed(typed(Action::DeleteOperator), &mut registers);
+        assert_eq!(
+            press(&mut line, Action::Cancel),
+            CommandEvent::None,
+            "the operator goes"
+        );
+        assert_eq!(press(&mut line, Action::Cancel), CommandEvent::Close);
+        assert_eq!(
+            press(&mut line, Action::Confirm),
+            CommandEvent::Run("make\ntest".to_owned()),
+            "Enter runs it in Normal mode too"
+        );
     }
 
     #[test]

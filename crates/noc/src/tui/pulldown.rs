@@ -864,14 +864,14 @@ mod tests {
     use crate::tui::keymap::{Context, Keymap};
 
     /// Every command runs but Delete, the panels sort by name, and only View and Checksums
-    /// show a key, the default keymap's.
+    /// show a key, the keymap's.
     fn status(command: Command) -> Status {
         Status {
             enabled: command != Command::Do(Action::Delete),
             checked: matches!(command, Command::On(_, Action::SortByName)),
             key: match command {
                 Command::Do(action @ (Action::View | Action::Checksum)) => {
-                    Keymap::mc().key(Context::Panel, action)
+                    Keymap::default().key(Context::Panel, action)
                 }
                 _ => None,
             },

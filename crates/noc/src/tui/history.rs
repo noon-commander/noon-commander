@@ -1,7 +1,7 @@
-//! The window of the command history, Alt+h or Ctrl+r on the command line (ADR 0019): the
+//! The window of the command history, `q :` in a panel or on the command line (ADR 0019): the
 //! commands of the panel's host, or of all hosts, newest first, each with its host and
-//! directory, and the whole command under the cursor below them. Typing filters it; Enter puts
-//! the command on the command line, without running it.
+//! directory, and the whole command under the cursor below them. `/` types in its filter; Enter
+//! puts the command on the command line, without running it.
 
 use std::collections::HashMap;
 
@@ -13,7 +13,7 @@ use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
 use super::dialog::Colors;
-use super::keymap::{Action, Resolved};
+use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker};
 use super::theme::Theme;
@@ -57,7 +57,7 @@ pub(crate) struct HistoryWindow {
     labels: HashMap<String, String>,
     /// Shows the commands of every host, not only those of `here`.
     all: bool,
-    /// Filters the commands of the hosts shown. Digits are text: commands have them.
+    /// Filters the commands of the hosts shown.
     picker: Picker,
 }
 
@@ -75,7 +75,7 @@ impl HistoryWindow {
             here,
             labels,
             all: false,
-            picker: Picker::new(fuzzy).without_hotkeys(),
+            picker: Picker::new(fuzzy),
         };
         window.picker.set_rows(window.texts());
         window
@@ -112,8 +112,13 @@ impl HistoryWindow {
         self.shown().get(self.picker.cursor()).copied()
     }
 
+    /// The mode keys are typed in: Insert while the filter takes them.
+    pub(crate) fn mode(&self) -> Mode {
+        self.picker.mode()
+    }
+
     /// Takes a key: the picker's, where Enter takes the command, and Tab, which switches
-    /// between this host and all hosts, and Delete, which removes the command.
+    /// between this host and all hosts, and d d and F8, which remove the command.
     pub(crate) fn handle(&mut self, input: Resolved) -> HistoryEvent {
         let event = |entry: &HistoryEntry, delete: bool| {
             let (command, host) = (entry.command.clone(), entry.host.clone());
@@ -351,6 +356,7 @@ mod tests {
     fn typing_filters_and_enter_takes_the_command_with_its_host() {
         let mut window = window(None);
         press(&mut window, Action::NextField);
+        press(&mut window, Action::QuickSearch);
         for c in "tail".chars() {
             window.handle(Resolved::Insert(c));
         }

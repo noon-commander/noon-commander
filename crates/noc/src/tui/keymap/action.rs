@@ -1,27 +1,40 @@
-//! What keys do: actions, and the contexts they are bound in.
+//! What keys do: actions, the contexts they are bound in, and vim's modes.
 
-/// Where a key is pressed. Keys are looked up in the context's [chain](Self::chain); the first
-/// context there that knows a key sequence, as a binding or as the start of one, decides.
+/// Which of vim's modes keys are typed in. The app says which from what has the keys: a text
+/// field in Insert mode takes characters as text, the panels and the lists take them as
+/// commands, and a selection takes the keys that act on it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum Mode {
+    /// Keys are commands: the panels, the lists, the buttons of dialogs, and a text field
+    /// after Esc.
+    Normal,
+    /// Characters are text: a text field, quick search, the command line, a filter.
+    Insert,
+    /// Keys extend a selection, and commands act on it: rows of a panel, or text of a field.
+    Visual,
+}
+
+/// Where a key is pressed. Keys are looked up in the context's [chain](Self::chain), in the
+/// mode they are typed in; the first context there that knows a key sequence, as a binding or
+/// as the start of one, decides.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum Context {
-    /// Keys that do the same wherever they are pressed: every context but the user screen falls
-    /// back to it last. Keys never go to it alone.
+    /// Keys that do the same wherever they are pressed, in every mode: every context but the
+    /// user screen falls back to it last. Keys never go to it alone.
     Global,
     /// A panel that lists a directory.
     Panel,
-    /// Keys that the windows listing items to choose from share, whose characters filter the
-    /// list: the menus, the zoxide window, the workspaces, the command history fall back to it.
-    /// Keys never go to it alone.
+    /// Keys that the windows listing items to choose from share: the menus, the zoxide window,
+    /// the workspaces, the command history fall back to it. Keys never go to it alone.
     List,
-    /// The location menu of Alt+F1 and Alt+F2, which has a filter; falls back to `List`, then
-    /// to `Input`.
+    /// The location menu of Alt+F1 and Alt+F2; falls back to `List`, and, while its filter
+    /// takes text, to `Input`.
     LocationMenu,
-    /// The tab menu of a panel, which has a filter; falls back to `List`, then to `Input`.
+    /// The tab menu of a panel; falls back as the location menu does.
     TabMenu,
-    /// The zoxide window of Alt+z, which takes keywords; falls back to `List`, then to `Input`.
+    /// The zoxide window, which takes keywords; falls back as the location menu does.
     Jump,
-    /// The window of the saved workspaces, which has a filter; falls back to `List`, then to
-    /// `Input`.
+    /// The window of the saved workspaces; falls back as the location menu does.
     Workspaces,
     /// The pull-down menu of F9, whose commands have letters.
     PullDown,
@@ -29,7 +42,7 @@ pub(crate) enum Context {
     /// entry renamed in its row, the text fields of dialogs, the command line, and the filters
     /// of the windows that list items fall back to it. Keys never go to it alone.
     Input,
-    /// Quick search in the active panel; falls back to `Input`, then to the panel.
+    /// Quick search in the active panel; falls back to `Input`.
     QuickSearch,
     /// The name field of the entry being renamed in its panel row; falls back to `Input`. Other
     /// keys, but the global ones, do nothing.
@@ -49,7 +62,7 @@ pub(crate) enum Context {
     /// The command line of `!` and `:`; falls back to `Input`. Other keys, but the global ones,
     /// do nothing.
     CommandLine,
-    /// The window of the command history, which has a filter; falls back to `List`, then to `Input`.
+    /// The window of the command history; falls back as the location menu does.
     CommandHistory,
     /// The terminal's own screen, with the output of commands, in place of the panels; only
     /// the keys that go back to the panels do anything.
@@ -57,40 +70,17 @@ pub(crate) enum Context {
 }
 
 impl Context {
-    /// The context's name in snake case, as `noc keymap diff` writes it.
-    pub(crate) fn name(self) -> &'static str {
-        match self {
-            Self::Global => "global",
-            Self::Panel => "panel",
-            Self::List => "list",
-            Self::LocationMenu => "location_menu",
-            Self::TabMenu => "tab_menu",
-            Self::Jump => "jump",
-            Self::Workspaces => "workspaces",
-            Self::PullDown => "pull_down",
-            Self::Input => "input",
-            Self::QuickSearch => "quick_search",
-            Self::Rename => "rename",
-            Self::Dialog => "dialog",
-            Self::Help => "help",
-            Self::DialogInput => "dialog_input",
-            Self::PathInput => "path_input",
-            Self::Completion => "completion",
-            Self::Viewer => "viewer",
-            Self::CommandLine => "command_line",
-            Self::CommandHistory => "command_history",
-            Self::UserScreen => "user_screen",
-        }
-    }
-
-    /// This context and its fallbacks, most specific first.
-    pub(crate) fn chain(self) -> &'static [Self] {
+    /// This context and its fallbacks in `mode`, most specific first.
+    pub(crate) fn chain(self, mode: Mode) -> &'static [Self] {
+        // The lists edit their filters with the keys of `Input` only while those take text: in
+        // Normal mode, `Input` has the motions of a text field.
+        let filtering = mode == Mode::Insert;
         match self {
             Self::Global => &[Self::Global],
             Self::Panel => &[Self::Panel, Self::Global],
             // Text fields edit their text with the keys of `Input` before anything else does.
             Self::Input => &[Self::Input, Self::Global],
-            Self::QuickSearch => &[Self::QuickSearch, Self::Input, Self::Panel, Self::Global],
+            Self::QuickSearch => &[Self::QuickSearch, Self::Input, Self::Global],
             Self::Rename => &[Self::Rename, Self::Input, Self::Global],
             // Dialogs are modal: panel keys do nothing while one is open.
             Self::Dialog => &[Self::Dialog, Self::Global],
@@ -115,88 +105,39 @@ impl Context {
             Self::CommandLine => &[Self::CommandLine, Self::Input, Self::Global],
             // The terminal's own screen: nothing of noc's draws there, the hints neither.
             Self::UserScreen => &[Self::UserScreen],
-            // Menus are modal too. Their filters are text fields, whose keys come after the
-            // list's: Home and End go to the first and the last row.
+            // Menus are modal too.
             Self::List => &[Self::List, Self::Global],
-            Self::LocationMenu => &[Self::LocationMenu, Self::List, Self::Input, Self::Global],
-            Self::TabMenu => &[Self::TabMenu, Self::List, Self::Input, Self::Global],
-            Self::Jump => &[Self::Jump, Self::List, Self::Input, Self::Global],
-            Self::Workspaces => &[Self::Workspaces, Self::List, Self::Input, Self::Global],
-            Self::CommandHistory => &[Self::CommandHistory, Self::List, Self::Input, Self::Global],
+            Self::LocationMenu if filtering => {
+                &[Self::LocationMenu, Self::List, Self::Input, Self::Global]
+            }
+            Self::LocationMenu => &[Self::LocationMenu, Self::List, Self::Global],
+            Self::TabMenu if filtering => &[Self::TabMenu, Self::List, Self::Input, Self::Global],
+            Self::TabMenu => &[Self::TabMenu, Self::List, Self::Global],
+            Self::Jump if filtering => &[Self::Jump, Self::List, Self::Input, Self::Global],
+            Self::Jump => &[Self::Jump, Self::List, Self::Global],
+            Self::Workspaces if filtering => {
+                &[Self::Workspaces, Self::List, Self::Input, Self::Global]
+            }
+            Self::Workspaces => &[Self::Workspaces, Self::List, Self::Global],
+            Self::CommandHistory if filtering => {
+                &[Self::CommandHistory, Self::List, Self::Input, Self::Global]
+            }
+            Self::CommandHistory => &[Self::CommandHistory, Self::List, Self::Global],
             Self::PullDown => &[Self::PullDown, Self::Global],
         }
     }
 
-    /// Whether the help lists this context's keys with each context that falls back to it,
-    /// where they mean what that one's window does with them, rather than apart.
-    pub(crate) fn helps_with_others(self) -> bool {
-        matches!(self, Self::List | Self::Input)
-    }
-
-    /// Whether Alt and a key stand for Esc and the key, as in mc: Alt+1 … Alt+0 for F1 … F10,
-    /// which mc reads as `Esc 1` … `Esc 0`, and an Alt and a character that nothing binds for
-    /// `Esc` and the character, which is how an Esc typed quickly before a key arrives. `Esc`
-    /// itself acts at once, here as everywhere.
+    /// Whether, in Normal mode, Alt and a character that nothing binds stand for Esc and the
+    /// character, which is how an Esc typed quickly before a key arrives. In Insert mode they
+    /// always do, as in vim in a terminal.
     pub(crate) fn alt_stands_for_esc(self) -> bool {
         matches!(self, Self::Panel)
     }
 
-    /// Whether Alt+1 … Alt+0 stand for the F-keys bound here, for terminals without them: in
-    /// the panels, the viewer, whose F2 alone wraps lines, and the windows that list items,
-    /// whose F-keys act on the item under the cursor. Dialogs keep Alt as it is.
-    pub(crate) fn alt_digits_stand_for_f_keys(self) -> bool {
-        matches!(
-            self,
-            Self::Panel
-                | Self::Viewer
-                | Self::List
-                | Self::LocationMenu
-                | Self::TabMenu
-                | Self::Jump
-                | Self::Workspaces
-                | Self::CommandHistory
-        )
-    }
-
-    /// Whether every character is text, even one that a fallback context binds: in quick
-    /// search, `*` is part of a name, not a command; in a text field, Space is a space; in the
-    /// menus, digits are hotkeys and letters filter; in the pull-down menu, letters run commands.
-    pub(crate) fn text_first(self) -> bool {
-        matches!(
-            self,
-            Self::QuickSearch
-                | Self::Rename
-                | Self::CommandLine
-                | Self::DialogInput
-                | Self::PathInput
-                | Self::Completion
-                | Self::LocationMenu
-                | Self::TabMenu
-                | Self::Jump
-                | Self::Workspaces
-                | Self::CommandHistory
-                | Self::PullDown
-        )
-    }
-
-    /// Whether an unbound printable key becomes [`Resolved::Insert`](super::Resolved::Insert).
-    pub(crate) fn accepts_text(self) -> bool {
-        matches!(
-            self,
-            Self::Panel
-                | Self::QuickSearch
-                | Self::Rename
-                | Self::CommandLine
-                | Self::DialogInput
-                | Self::PathInput
-                | Self::Completion
-                | Self::LocationMenu
-                | Self::TabMenu
-                | Self::Jump
-                | Self::Workspaces
-                | Self::CommandHistory
-                | Self::PullDown
-        )
+    /// Whether Alt and a letter run the command of the menu that has that letter: in the
+    /// pull-down menu, whose plain letters move as `h`, `j`, `k`, and `l` do.
+    pub(crate) fn alt_letters_are_hotkeys(self) -> bool {
+        matches!(self, Self::PullDown)
     }
 }
 
@@ -220,13 +161,14 @@ pub(crate) enum Action {
     HalfPageUp,
     /// Half a page down.
     HalfPageDown,
-    /// The first row, or the start of a text field.
+    /// The first row; with a count, that row.
     Home,
-    /// The last row, or the end of a text field.
+    /// The last row; with a count, that row.
     End,
     /// Opens the directory under the cursor.
     Enter,
-    /// Marks the entry under the cursor, or unmarks it, and moves down.
+    /// Marks the entry under the cursor, or unmarks it, and moves down; in Visual mode, marks
+    /// the rows selected.
     Mark,
     /// Marks the entry under the cursor, or unmarks it, and moves up.
     MarkUp,
@@ -290,7 +232,7 @@ pub(crate) enum Action {
     NewTab,
     /// Closes the panel's tab; the last one stays.
     CloseTab,
-    /// Shows the panel's next tab, round.
+    /// Shows the panel's next tab, round; with a count, the tab of that number.
     NextTab,
     /// Shows the panel's previous tab, round.
     PrevTab,
@@ -315,13 +257,17 @@ pub(crate) enum Action {
     /// Sorts by size.
     SortBySize,
     /// Starts quick search, or jumps to the next match; with nothing typed yet, searches for
-    /// what the last search found.
+    /// what the last search found. In a window that lists items, types in its filter.
     QuickSearch,
     /// Moves to the next name that matches quick search: what is typed while it runs, or else
     /// what the last search found.
     NextMatch,
     /// Moves to the previous name that matches quick search, likewise.
     PrevMatch,
+    /// Goes back to where the panel was before its last jump, as vim's Ctrl+o.
+    JumpBack,
+    /// Goes forward again to where a jump back came from, as vim's Ctrl+i.
+    JumpForward,
     /// Opens the command line for a shell command.
     Shell,
     /// Opens the command line for a command of Noon Commander, of which `!` runs a shell
@@ -329,8 +275,6 @@ pub(crate) enum Action {
     Command,
     /// Starts a new line in the command.
     NewLine,
-    /// Opens the command in the editor of `$VISUAL` or `$EDITOR`; what it leaves comes back.
-    EditCommand,
     /// The command before in the history of the panel's host.
     OlderCommand,
     /// The command after in the history of the panel's host.
@@ -344,26 +288,97 @@ pub(crate) enum Action {
     Disconnect,
     /// Edits the settings of the host under the cursor.
     EditHost,
-    /// The text cursor to the start of the text, or of its line on the command line.
+    /// Leaves Insert or Visual mode for Normal mode; in a window that lists items, leaves its
+    /// filter.
+    NormalMode,
+    /// Insert mode, before the cursor: vim's `i`.
+    InsertMode,
+    /// Insert mode, after the cursor: vim's `a`.
+    Append,
+    /// Insert mode, before the first character that is not blank: vim's `I`.
+    InsertAtStart,
+    /// Insert mode, at the end of the line: vim's `A`.
+    AppendAtEnd,
+    /// Visual mode, which selects from the cursor to where it goes; again: Normal mode.
+    VisualMode,
+    /// Puts the cursor at the other end of the selection.
+    OtherEnd,
+    /// Selects again the rows selected last.
+    Reselect,
+    /// Runs one command of Normal mode, then goes back to Insert mode: vim's Ctrl+o.
+    NormalOnce,
+    /// The text cursor to the start of the line.
     TextStart,
-    /// The text cursor to the end of the text, or of its line on the command line.
+    /// The text cursor to the first character of the line that is not blank.
+    FirstNonBlank,
+    /// The text cursor to the end of the line.
     TextEnd,
-    /// The text cursor to the start of the word before it.
-    WordLeft,
-    /// The text cursor to the end of the word after it.
-    WordRight,
+    /// The text cursor to the start of the next word: vim's `w`.
+    WordForward,
+    /// The text cursor to the start of the word before it: vim's `b`.
+    WordBackward,
+    /// The text cursor to the end of the word: vim's `e`.
+    WordEnd,
+    /// As `WordForward`, with words only apart where blanks are: vim's `W`.
+    BigWordForward,
+    /// As `WordBackward`, likewise: vim's `B`.
+    BigWordBackward,
+    /// As `WordEnd`, likewise: vim's `E`.
+    BigWordEnd,
+    /// The text cursor to the next character typed after it in the line: vim's `f`.
+    FindChar,
+    /// The text cursor back to the character typed after it: vim's `F`.
+    FindCharBack,
+    /// The text cursor to right before the character typed after it: vim's `t`.
+    TillChar,
+    /// The text cursor back to right after the character typed after it: vim's `T`.
+    TillCharBack,
+    /// Finds the character of the last `f`, `t`, `F`, or `T` again: vim's `;`.
+    RepeatFind,
+    /// The same, the other way: vim's `,`.
+    RepeatFindBack,
     /// Deletes the character before the text cursor.
     Backspace,
     /// Deletes the character at the text cursor.
     DeleteChar,
-    /// Deletes from the start of the text field to the cursor.
+    /// Deletes from the start of the line to the cursor.
     DeleteToStart,
-    /// Deletes from the cursor to the end of the text field.
+    /// Deletes from the cursor to the end of the line.
     DeleteToEnd,
-    /// Deletes the word before the text cursor, and the spaces after it, as the shell's Ctrl+w.
+    /// Deletes the word before the text cursor, as vim's Ctrl+w.
     DeleteWord,
-    /// Deletes the word after the text cursor, and the spaces before it, as the shell's Alt+d.
-    DeleteNextWord,
+    /// Deletes what the motion after it moves over, or the line for `d d`: vim's `d`. In
+    /// Visual mode, deletes what is selected.
+    DeleteOperator,
+    /// Deletes as `DeleteOperator` does, then Insert mode: vim's `c`.
+    ChangeOperator,
+    /// Copies what the motion after it moves over to a register: vim's `y`.
+    YankOperator,
+    /// Deletes the character at the cursor, then Insert mode: vim's `s`.
+    Substitute,
+    /// Deletes the text of the line, then Insert mode: vim's `S`.
+    SubstituteLine,
+    /// Deletes to the end of the line, then Insert mode: vim's `C`.
+    ChangeToEnd,
+    /// Replaces the character at the cursor with the one typed after it: vim's `r`.
+    ReplaceChar,
+    /// Switches the case of the character at the cursor, and moves on: vim's `~`.
+    ToggleCase,
+    /// Puts the text of a register after the cursor: vim's `p`.
+    PutAfter,
+    /// Puts the text of a register before the cursor: vim's `P`.
+    PutBefore,
+    /// Undoes the last change of the text.
+    Undo,
+    /// Does again what Undo undid.
+    Redo,
+    /// Names the register for the next command with the character typed after it: vim's `"`.
+    Register,
+    /// Puts the text of the register named by the character typed after it at the cursor: vim's
+    /// Ctrl+r in Insert mode.
+    PasteRegister,
+    /// Types the key after it as it is: vim's Ctrl+v.
+    InsertLiteral,
     /// Completes the path in a text field; in the list of completions, the next one.
     Complete,
     /// Accepts the dialog, or activates the focused button.
@@ -391,125 +406,26 @@ pub(crate) enum Action {
 }
 
 impl Action {
-    /// The action's name in snake case, as `noc keymap diff` writes it.
-    pub(crate) fn name(self) -> &'static str {
-        match self {
-            Self::Up => "up",
-            Self::Down => "down",
-            Self::Left => "left",
-            Self::Right => "right",
-            Self::PageUp => "page_up",
-            Self::PageDown => "page_down",
-            Self::HalfPageUp => "half_page_up",
-            Self::HalfPageDown => "half_page_down",
-            Self::Home => "home",
-            Self::End => "end",
-            Self::Enter => "enter",
-            Self::Mark => "mark",
-            Self::MarkUp => "mark_up",
-            Self::InvertMarks => "invert_marks",
-            Self::View => "view",
-            Self::ToggleWrap => "toggle_wrap",
-            Self::Edit => "edit",
-            Self::Copy => "copy",
-            Self::Move => "move",
-            Self::Rename => "rename",
-            Self::Mkdir => "mkdir",
-            Self::Delete => "delete",
-            Self::Checksum => "checksum",
-            Self::Jobs => "jobs",
-            Self::Select => "select",
-            Self::Unselect => "unselect",
-            Self::Parent => "parent",
-            Self::SwitchPanel => "switch_panel",
-            Self::FocusLeft => "focus_left",
-            Self::FocusRight => "focus_right",
-            Self::SwapPanels => "swap_panels",
-            Self::OtherPanelOpen => "other_panel_open",
-            Self::OtherPanelSync => "other_panel_sync",
-            Self::LocationMenuLeft => "location_menu_left",
-            Self::LocationMenuRight => "location_menu_right",
-            Self::Jump => "jump",
-            Self::QuickCd => "quick_cd",
-            Self::PullDown => "pull_down",
-            Self::PullDownLast => "pull_down_last",
-            Self::NewTab => "new_tab",
-            Self::CloseTab => "close_tab",
-            Self::NextTab => "next_tab",
-            Self::PrevTab => "prev_tab",
-            Self::TabListLeft => "tab_list_left",
-            Self::TabListRight => "tab_list_right",
-            Self::SaveWorkspace => "save_workspace",
-            Self::Workspaces => "workspaces",
-            Self::Reload => "reload",
-            Self::ToggleHidden => "toggle_hidden",
-            Self::SortByName => "sort_by_name",
-            Self::SortByExtension => "sort_by_extension",
-            Self::SortByTime => "sort_by_time",
-            Self::SortBySize => "sort_by_size",
-            Self::QuickSearch => "quick_search",
-            Self::NextMatch => "next_match",
-            Self::PrevMatch => "prev_match",
-            Self::Shell => "shell",
-            Self::Command => "command",
-            Self::NewLine => "new_line",
-            Self::EditCommand => "edit_command",
-            Self::OlderCommand => "older_command",
-            Self::NewerCommand => "newer_command",
-            Self::CommandHistory => "command_history",
-            Self::UserScreen => "user_screen",
-            Self::Disconnect => "disconnect",
-            Self::EditHost => "edit_host",
-            Self::TextStart => "text_start",
-            Self::TextEnd => "text_end",
-            Self::WordLeft => "word_left",
-            Self::WordRight => "word_right",
-            Self::Backspace => "backspace",
-            Self::DeleteChar => "delete_char",
-            Self::DeleteToStart => "delete_to_start",
-            Self::DeleteToEnd => "delete_to_end",
-            Self::DeleteWord => "delete_word",
-            Self::DeleteNextWord => "delete_next_word",
-            Self::Complete => "complete",
-            Self::Confirm => "confirm",
-            Self::Toggle => "toggle",
-            Self::Cancel => "cancel",
-            Self::Abort => "abort",
-            Self::NextField => "next_field",
-            Self::PrevField => "prev_field",
-            Self::Help => "help",
-            Self::KeyHints => "key_hints",
-            Self::Quit => "quit",
-            Self::Redraw => "redraw",
-        }
+    /// Whether the action takes the character typed after it, as `f` and `r` do.
+    pub(crate) fn takes_char(self) -> bool {
+        matches!(
+            self,
+            Self::FindChar
+                | Self::FindCharBack
+                | Self::TillChar
+                | Self::TillCharBack
+                | Self::ReplaceChar
+                | Self::Register
+                | Self::PasteRegister
+                | Self::InsertLiteral
+        )
     }
 }
 
 #[cfg(test)]
-impl Context {
-    /// Every context, in declaration order.
-    pub(crate) const ALL: &'static [Self] = &[
-        Self::Global,
-        Self::Panel,
-        Self::List,
-        Self::LocationMenu,
-        Self::TabMenu,
-        Self::Jump,
-        Self::Workspaces,
-        Self::PullDown,
-        Self::Input,
-        Self::QuickSearch,
-        Self::Rename,
-        Self::Dialog,
-        Self::Help,
-        Self::DialogInput,
-        Self::PathInput,
-        Self::Completion,
-        Self::Viewer,
-        Self::CommandLine,
-        Self::CommandHistory,
-        Self::UserScreen,
-    ];
+impl Mode {
+    /// Every mode.
+    pub(crate) const ALL: &'static [Self] = &[Self::Normal, Self::Insert, Self::Visual];
 }
 
 #[cfg(test)]
@@ -572,26 +488,61 @@ impl Action {
         Self::QuickSearch,
         Self::NextMatch,
         Self::PrevMatch,
+        Self::JumpBack,
+        Self::JumpForward,
         Self::Shell,
         Self::Command,
         Self::NewLine,
-        Self::EditCommand,
         Self::OlderCommand,
         Self::NewerCommand,
         Self::CommandHistory,
         Self::UserScreen,
         Self::Disconnect,
         Self::EditHost,
+        Self::NormalMode,
+        Self::InsertMode,
+        Self::Append,
+        Self::InsertAtStart,
+        Self::AppendAtEnd,
+        Self::VisualMode,
+        Self::OtherEnd,
+        Self::Reselect,
+        Self::NormalOnce,
         Self::TextStart,
+        Self::FirstNonBlank,
         Self::TextEnd,
-        Self::WordLeft,
-        Self::WordRight,
+        Self::WordForward,
+        Self::WordBackward,
+        Self::WordEnd,
+        Self::BigWordForward,
+        Self::BigWordBackward,
+        Self::BigWordEnd,
+        Self::FindChar,
+        Self::FindCharBack,
+        Self::TillChar,
+        Self::TillCharBack,
+        Self::RepeatFind,
+        Self::RepeatFindBack,
         Self::Backspace,
         Self::DeleteChar,
         Self::DeleteToStart,
         Self::DeleteToEnd,
         Self::DeleteWord,
-        Self::DeleteNextWord,
+        Self::DeleteOperator,
+        Self::ChangeOperator,
+        Self::YankOperator,
+        Self::Substitute,
+        Self::SubstituteLine,
+        Self::ChangeToEnd,
+        Self::ReplaceChar,
+        Self::ToggleCase,
+        Self::PutAfter,
+        Self::PutBefore,
+        Self::Undo,
+        Self::Redo,
+        Self::Register,
+        Self::PasteRegister,
+        Self::InsertLiteral,
         Self::Complete,
         Self::Confirm,
         Self::Toggle,
@@ -603,5 +554,32 @@ impl Action {
         Self::KeyHints,
         Self::Quit,
         Self::Redraw,
+    ];
+}
+
+#[cfg(test)]
+impl Context {
+    /// Every context, in declaration order.
+    pub(crate) const ALL: &'static [Self] = &[
+        Self::Global,
+        Self::Panel,
+        Self::List,
+        Self::LocationMenu,
+        Self::TabMenu,
+        Self::Jump,
+        Self::Workspaces,
+        Self::PullDown,
+        Self::Input,
+        Self::QuickSearch,
+        Self::Rename,
+        Self::Dialog,
+        Self::Help,
+        Self::DialogInput,
+        Self::PathInput,
+        Self::Completion,
+        Self::Viewer,
+        Self::CommandLine,
+        Self::CommandHistory,
+        Self::UserScreen,
     ];
 }

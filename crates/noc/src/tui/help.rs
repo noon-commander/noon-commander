@@ -6,7 +6,7 @@ use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
 use super::dialog::{Colors, draw_box};
-use super::keymap::{Action, Context, Keymap, Resolved};
+use super::keymap::{Action, Context, Keymap, Mode, Resolved};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -35,32 +35,43 @@ pub(crate) struct Help {
 }
 
 impl Help {
-    /// The keys `keymap` binds to what the app can do, by context. `fuzzy_search` adds a note
-    /// on matching as fzf does.
+    /// The keys `keymap` binds to what the app can do, by mode and context. `fuzzy_search`
+    /// adds a note on matching as fzf does.
     pub(crate) fn new(keymap: &Keymap, fuzzy_search: bool) -> Self {
         let sections = [
-            (Context::Global, fl!("help-everywhere")),
-            (Context::Panel, fl!("help-panels")),
-            (Context::QuickSearch, fl!("help-quick-search")),
-            (Context::Rename, fl!("help-renaming")),
-            (Context::CommandLine, fl!("help-command-line")),
-            (Context::LocationMenu, fl!("help-menu")),
-            (Context::TabMenu, fl!("help-tab-menu")),
-            (Context::Jump, fl!("help-jump")),
-            (Context::Workspaces, fl!("help-workspaces")),
-            (Context::CommandHistory, fl!("help-history")),
-            (Context::PullDown, fl!("help-pulldown")),
-            (Context::Dialog, fl!("help-dialogs")),
-            (Context::Help, fl!("help-this-help")),
-            (Context::DialogInput, fl!("help-text-fields")),
-            (Context::PathInput, fl!("help-path-fields")),
-            (Context::Completion, fl!("help-completion")),
-            (Context::Viewer, fl!("help-viewer")),
+            (Mode::Normal, Context::Global, fl!("help-everywhere")),
+            (Mode::Normal, Context::Panel, fl!("help-panels")),
+            (Mode::Visual, Context::Panel, fl!("help-panels-visual")),
+            (Mode::Insert, Context::Input, fl!("help-text-insert")),
+            (Mode::Normal, Context::Input, fl!("help-text-normal")),
+            (Mode::Visual, Context::Input, fl!("help-text-visual")),
+            (Mode::Insert, Context::QuickSearch, fl!("help-quick-search")),
+            (Mode::Insert, Context::Rename, fl!("help-renaming-insert")),
+            (Mode::Normal, Context::Rename, fl!("help-renaming")),
+            (Mode::Insert, Context::CommandLine, fl!("help-command-line")),
+            (
+                Mode::Normal,
+                Context::CommandLine,
+                fl!("help-command-line-normal"),
+            ),
+            (Mode::Normal, Context::List, fl!("help-lists")),
+            (Mode::Insert, Context::List, fl!("help-lists-filter")),
+            (Mode::Normal, Context::LocationMenu, fl!("help-menu")),
+            (Mode::Normal, Context::TabMenu, fl!("help-tab-menu")),
+            (Mode::Normal, Context::Workspaces, fl!("help-workspaces")),
+            (Mode::Normal, Context::CommandHistory, fl!("help-history")),
+            (Mode::Normal, Context::PullDown, fl!("help-pulldown")),
+            (Mode::Normal, Context::Dialog, fl!("help-dialogs")),
+            (Mode::Normal, Context::Help, fl!("help-this-help")),
+            (Mode::Insert, Context::DialogInput, fl!("help-text-fields")),
+            (Mode::Insert, Context::PathInput, fl!("help-path-fields")),
+            (Mode::Insert, Context::Completion, fl!("help-completion")),
+            (Mode::Normal, Context::Viewer, fl!("help-viewer")),
         ];
         let mut entries = Vec::new();
-        for (context, title) in sections {
+        for (mode, context, title) in sections {
             let rows: Vec<Entry> = keymap
-                .help(context)
+                .help(mode, context)
                 .into_iter()
                 .filter_map(|(action, keys)| {
                     let text = describe(context, action)?;
@@ -76,6 +87,8 @@ impl Help {
             }
         }
         entries.push(Entry::Blank);
+        entries.push(Entry::Note(fl!("help-note-modes")));
+        entries.push(Entry::Note(fl!("help-note-count")));
         entries.push(Entry::Note(fl!("help-note-menu")));
         if fuzzy_search {
             entries.push(Entry::Note(fl!("help-note-jump-fuzzy")));
@@ -87,7 +100,6 @@ impl Help {
         entries.push(Entry::Note(fl!("help-note-command")));
         entries.push(Entry::Note(fl!("help-note-pulldown")));
         entries.push(Entry::Note(fl!("help-note-key-hints")));
-        entries.push(Entry::Note(fl!("help-note-f-keys")));
         Self {
             entries,
             offset: 0,
@@ -211,71 +223,26 @@ fn key_lines(keys: &str, width: usize) -> Vec<String> {
 /// and the key hints leave out.
 pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
     if let Some(text) = describe_rows(context, action)
+        .or_else(|| describe_panel(context, action))
         .or_else(|| describe_tabs(context, action))
         .or_else(|| describe_completion(context, action))
+        .or_else(|| describe_list(context, action))
         .or_else(|| describe_location_menu(context, action))
         .or_else(|| describe_tab_menu(context, action))
         .or_else(|| describe_help(context, action))
         .or_else(|| describe_workspaces(context, action))
         .or_else(|| describe_command_line(context, action))
         .or_else(|| describe_history(context, action))
-        .or_else(|| describe_field(context, action))
-        .or_else(|| describe_filter(context, action))
+        .or_else(|| describe_text(context, action))
     {
         return Some(text);
     }
     let text = match (context, action) {
-        (Context::Panel | Context::Jump, Action::Home) => fl!("help-first-row"),
-        (Context::Panel | Context::Jump, Action::End) => fl!("help-last-row"),
-        (Context::Panel, Action::Enter) => fl!("help-enter"),
-        (Context::Panel, Action::Mark) => fl!("help-mark"),
-        (Context::Panel, Action::MarkUp) => fl!("help-mark-up"),
-        (Context::Panel, Action::InvertMarks) => fl!("help-invert-marks"),
-        (Context::Panel, Action::Select) => fl!("help-select"),
-        (Context::Panel, Action::Unselect) => fl!("help-unselect"),
-        (Context::Panel, Action::Parent) => fl!("help-parent"),
-        (Context::Panel, Action::SwitchPanel) => fl!("help-switch-panel"),
-        (Context::Panel, Action::FocusLeft) => fl!("help-focus-left"),
-        (Context::Panel, Action::FocusRight) => fl!("help-focus-right"),
-        (Context::Panel, Action::SwapPanels) => fl!("help-swap-panels"),
-        (Context::Panel, Action::OtherPanelOpen) => fl!("help-other-open"),
-        (Context::Panel, Action::OtherPanelSync) => fl!("help-other-sync"),
-        (Context::Panel, Action::Reload) => fl!("help-reload"),
-        (Context::Panel, Action::Cancel) => fl!("help-stop"),
-        (Context::Panel, Action::ToggleHidden) => fl!("help-toggle-hidden"),
-        (Context::Panel, Action::SortByName) => fl!("help-sort-name"),
-        (Context::Panel, Action::SortByExtension) => fl!("help-sort-extension"),
-        (Context::Panel, Action::SortByTime) => fl!("help-sort-time"),
-        (Context::Panel, Action::SortBySize) => fl!("help-sort-size"),
-        (Context::Panel, Action::QuickSearch) => fl!("help-quick-search-start"),
-        (Context::Panel, Action::NextMatch) => fl!("help-match-next"),
-        (Context::Panel, Action::PrevMatch) => fl!("help-match-prev"),
-        (Context::Panel, Action::Shell) => fl!("help-shell"),
-        (Context::Panel, Action::Command) => fl!("help-command"),
-        (Context::Panel, Action::CommandHistory) => fl!("help-command-history"),
-        (Context::Panel, Action::View) => fl!("help-view"),
-        (Context::Panel, Action::Edit) => fl!("help-edit"),
-        (Context::Panel, Action::Copy) => fl!("help-copy"),
-        (Context::Panel, Action::Move) => fl!("help-move"),
-        (Context::Panel, Action::Rename) => fl!("help-rename"),
-        (Context::Panel, Action::Mkdir) => fl!("help-mkdir"),
-        (Context::Panel, Action::Delete) => fl!("help-delete"),
-        (Context::Panel, Action::Jobs) => fl!("help-jobs"),
-        (Context::Panel, Action::Checksum) => fl!("help-checksum"),
-        (Context::Panel, Action::LocationMenuLeft) => fl!("help-menu-left"),
-        (Context::Panel, Action::LocationMenuRight) => fl!("help-menu-right"),
-        (Context::Panel, Action::Jump) => fl!("help-jump-open"),
-        (Context::Panel, Action::QuickCd) => fl!("help-quick-cd"),
         (Context::Panel | Context::Viewer, Action::Help) => fl!("help-help"),
         (Context::Global, Action::KeyHints) => fl!("help-key-hints"),
         (Context::Global, Action::UserScreen) => fl!("help-user-screen"),
         (Context::Global, Action::Redraw) => fl!("help-redraw"),
-        (Context::Panel, Action::Quit) => fl!("help-quit"),
-        (Context::Jump, Action::Cancel) => fl!("help-menu-close"),
-        (Context::Jump, Action::Confirm) => fl!("help-jump-go"),
         (Context::PullDown, Action::Cancel) => fl!("help-pulldown-close"),
-        (Context::Panel, Action::PullDown) => fl!("help-pulldown-open"),
-        (Context::Panel, Action::PullDownLast) => fl!("help-pulldown-last"),
         (Context::PullDown, Action::Up) => fl!("help-pulldown-up"),
         (Context::PullDown, Action::Down) => fl!("help-pulldown-down"),
         (Context::PullDown, Action::Left) => fl!("help-pulldown-left"),
@@ -287,25 +254,94 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::QuickSearch, Action::Abort) => fl!("help-search-abort"),
         (Context::QuickSearch, Action::QuickSearch) => fl!("help-search-next"),
         (Context::QuickSearch, Action::PrevMatch) => fl!("help-search-prev"),
-        (Context::Dialog, Action::Up) => fl!("help-dialog-up"),
-        (Context::Dialog, Action::Down) => fl!("help-dialog-down"),
+        (Context::QuickSearch, Action::TextStart) => fl!("help-field-home"),
+        (Context::QuickSearch, Action::TextEnd) => fl!("help-field-end"),
+        (Context::Dialog | Context::DialogInput, Action::Up) => fl!("help-dialog-up"),
+        (Context::Dialog | Context::DialogInput, Action::Down) => fl!("help-dialog-down"),
         (Context::Dialog, Action::Left) => fl!("help-dialog-left"),
         (Context::Dialog, Action::Right) => fl!("help-dialog-right"),
         (Context::Dialog, Action::PageUp) => fl!("help-dialog-page-up"),
         (Context::Dialog, Action::PageDown) => fl!("help-dialog-page-down"),
         (Context::Dialog, Action::Home) => fl!("help-dialog-home"),
         (Context::Dialog, Action::End) => fl!("help-dialog-end"),
-        (Context::Dialog, Action::NextField) => fl!("help-next-field"),
-        (Context::Dialog, Action::PrevField) => fl!("help-prev-field"),
-        (Context::Dialog, Action::Confirm) => fl!("help-confirm"),
+        (Context::Dialog | Context::DialogInput, Action::NextField) => fl!("help-next-field"),
+        (Context::Dialog | Context::DialogInput, Action::PrevField) => fl!("help-prev-field"),
+        (Context::Dialog | Context::DialogInput, Action::Confirm) => fl!("help-confirm"),
         (Context::Dialog, Action::Toggle) => fl!("help-toggle"),
-        (Context::Dialog, Action::Cancel) => fl!("help-dialog-cancel"),
+        (Context::Dialog | Context::DialogInput, Action::Cancel) => fl!("help-dialog-cancel"),
+        (Context::Jump, Action::Confirm) => fl!("help-jump-go"),
+        (Context::Jump, Action::Cancel) => fl!("help-menu-close"),
+        (Context::Rename, Action::Confirm) => fl!("help-rename-confirm"),
+        (Context::Rename, Action::Cancel) => fl!("help-rename-cancel"),
         (Context::Viewer, Action::Home) => fl!("help-viewer-top"),
         (Context::Viewer, Action::End) => fl!("help-viewer-end"),
         (Context::Viewer, Action::Left) => fl!("help-viewer-left"),
         (Context::Viewer, Action::Right) => fl!("help-viewer-right"),
         (Context::Viewer, Action::ToggleWrap) => fl!("help-viewer-wrap"),
         (Context::Viewer, Action::Quit) => fl!("help-viewer-quit"),
+        // The F-keys of quick search do what they do in the panel.
+        (Context::QuickSearch, _) => return describe(Context::Panel, action),
+        _ => return None,
+    };
+    Some(text)
+}
+
+/// What keys do in a panel, in Normal and in Visual mode.
+fn describe_panel(context: Context, action: Action) -> Option<String> {
+    if context != Context::Panel {
+        return None;
+    }
+    let text = match action {
+        Action::Home => fl!("help-first-row"),
+        Action::End => fl!("help-last-row"),
+        Action::Enter => fl!("help-enter"),
+        Action::Mark => fl!("help-mark"),
+        Action::MarkUp => fl!("help-mark-up"),
+        Action::InvertMarks => fl!("help-invert-marks"),
+        Action::Select => fl!("help-select"),
+        Action::Unselect => fl!("help-unselect"),
+        Action::Parent => fl!("help-parent"),
+        Action::JumpBack => fl!("help-jump-back"),
+        Action::JumpForward => fl!("help-jump-forward"),
+        Action::VisualMode => fl!("help-visual"),
+        Action::Reselect => fl!("help-reselect"),
+        Action::OtherEnd => fl!("help-other-end"),
+        Action::NormalMode => fl!("help-visual-end"),
+        Action::SwitchPanel => fl!("help-switch-panel"),
+        Action::FocusLeft => fl!("help-focus-left"),
+        Action::FocusRight => fl!("help-focus-right"),
+        Action::SwapPanels => fl!("help-swap-panels"),
+        Action::OtherPanelOpen => fl!("help-other-open"),
+        Action::OtherPanelSync => fl!("help-other-sync"),
+        Action::Reload => fl!("help-reload"),
+        Action::Cancel => fl!("help-stop"),
+        Action::ToggleHidden => fl!("help-toggle-hidden"),
+        Action::SortByName => fl!("help-sort-name"),
+        Action::SortByExtension => fl!("help-sort-extension"),
+        Action::SortByTime => fl!("help-sort-time"),
+        Action::SortBySize => fl!("help-sort-size"),
+        Action::QuickSearch => fl!("help-quick-search-start"),
+        Action::NextMatch => fl!("help-match-next"),
+        Action::PrevMatch => fl!("help-match-prev"),
+        Action::Shell => fl!("help-shell"),
+        Action::Command => fl!("help-command"),
+        Action::CommandHistory => fl!("help-command-history"),
+        Action::View => fl!("help-view"),
+        Action::Edit => fl!("help-edit"),
+        Action::Copy => fl!("help-copy"),
+        Action::Move => fl!("help-move"),
+        Action::Rename => fl!("help-rename"),
+        Action::Mkdir => fl!("help-mkdir"),
+        Action::Delete => fl!("help-delete"),
+        Action::Jobs => fl!("help-jobs"),
+        Action::Checksum => fl!("help-checksum"),
+        Action::LocationMenuLeft => fl!("help-menu-left"),
+        Action::LocationMenuRight => fl!("help-menu-right"),
+        Action::Jump => fl!("help-jump-open"),
+        Action::QuickCd => fl!("help-quick-cd"),
+        Action::PullDown => fl!("help-pulldown-open"),
+        Action::PullDownLast => fl!("help-pulldown-last"),
+        Action::Quit => fl!("help-quit"),
         _ => return None,
     };
     Some(text)
@@ -336,12 +372,9 @@ fn describe_history(context: Context, action: Action) -> Option<String> {
         return None;
     }
     let text = match action {
-        Action::Home => fl!("help-first-row"),
-        Action::End => fl!("help-last-row"),
         Action::NextField => fl!("help-history-hosts"),
         Action::Confirm => fl!("help-history-take"),
         Action::Delete => fl!("help-history-delete"),
-        Action::Cancel => fl!("help-workspaces-close"),
         _ => return None,
     };
     Some(text)
@@ -357,11 +390,8 @@ fn describe_command_line(context: Context, action: Action) -> Option<String> {
         Action::Down => fl!("help-command-down"),
         Action::TextStart => fl!("help-command-home"),
         Action::TextEnd => fl!("help-command-end"),
-        Action::Backspace => fl!("help-command-backspace"),
-        Action::DeleteToStart => fl!("help-command-delete-to-start"),
-        Action::DeleteToEnd => fl!("help-command-delete-to-end"),
         Action::NewLine => fl!("help-command-new-line"),
-        Action::EditCommand => fl!("help-command-edit"),
+        Action::NormalMode => fl!("help-command-normal"),
         Action::OlderCommand => fl!("help-command-older"),
         Action::NewerCommand => fl!("help-command-newer"),
         Action::CommandHistory => fl!("help-command-history"),
@@ -372,46 +402,18 @@ fn describe_command_line(context: Context, action: Action) -> Option<String> {
     Some(text)
 }
 
-/// What keys do in text fields, in quick search, in the field of an entry renamed in its row,
-/// and on the command line, whose lines have keys of their own.
-fn describe_field(context: Context, action: Action) -> Option<String> {
+/// What the keys of text fields do, in vim's modes: in quick search, the field of an entry
+/// renamed in its row, the text fields of dialogs, the command line, and the filters of lists.
+fn describe_text(context: Context, action: Action) -> Option<String> {
     if !matches!(
         context,
-        Context::DialogInput | Context::QuickSearch | Context::Rename | Context::CommandLine
-    ) {
-        return None;
-    }
-    let text = match (context, action) {
-        (_, Action::Left) => fl!("help-field-left"),
-        (_, Action::Right) => fl!("help-field-right"),
-        (_, Action::WordLeft) => fl!("help-field-word-left"),
-        (_, Action::WordRight) => fl!("help-field-word-right"),
-        (_, Action::DeleteChar) => fl!("help-field-delete"),
-        (_, Action::DeleteWord) => fl!("help-field-delete-word"),
-        (_, Action::DeleteNextWord) => fl!("help-field-delete-next-word"),
-        (Context::CommandLine, _) => return None,
-        (_, Action::TextStart) => fl!("help-field-home"),
-        (_, Action::TextEnd) => fl!("help-field-end"),
-        (_, Action::Backspace) => fl!("help-field-backspace"),
-        (_, Action::DeleteToStart) => fl!("help-field-delete-to-start"),
-        (_, Action::DeleteToEnd) => fl!("help-field-delete-to-end"),
-        (Context::Rename, Action::Confirm) => fl!("help-rename-confirm"),
-        (Context::Rename, Action::Cancel) => fl!("help-rename-cancel"),
-        _ => return None,
-    };
-    Some(text)
-}
-
-/// What the keys of text fields do to the filter, or the keywords, of the windows that list
-/// items; Home and End stay the list's, and Ctrl+a and Ctrl+e move in the filter.
-fn describe_filter(context: Context, action: Action) -> Option<String> {
-    if !matches!(
-        context,
-        Context::LocationMenu
-            | Context::TabMenu
-            | Context::Jump
-            | Context::Workspaces
-            | Context::CommandHistory
+        Context::Input
+            | Context::QuickSearch
+            | Context::Rename
+            | Context::DialogInput
+            | Context::PathInput
+            | Context::CommandLine
+            | Context::List
     ) {
         return None;
     }
@@ -419,15 +421,48 @@ fn describe_filter(context: Context, action: Action) -> Option<String> {
         Action::Left => fl!("help-field-left"),
         Action::Right => fl!("help-field-right"),
         Action::TextStart => fl!("help-field-home"),
+        Action::FirstNonBlank => fl!("help-field-first-non-blank"),
         Action::TextEnd => fl!("help-field-end"),
-        Action::WordLeft => fl!("help-field-word-left"),
-        Action::WordRight => fl!("help-field-word-right"),
+        Action::WordForward => fl!("help-field-word-forward"),
+        Action::WordBackward => fl!("help-field-word-backward"),
+        Action::WordEnd => fl!("help-field-word-end"),
+        Action::BigWordForward => fl!("help-field-big-word-forward"),
+        Action::BigWordBackward => fl!("help-field-big-word-backward"),
+        Action::BigWordEnd => fl!("help-field-big-word-end"),
+        Action::FindChar => fl!("help-field-find"),
+        Action::FindCharBack => fl!("help-field-find-back"),
+        Action::TillChar => fl!("help-field-till"),
+        Action::TillCharBack => fl!("help-field-till-back"),
+        Action::RepeatFind => fl!("help-field-repeat-find"),
+        Action::RepeatFindBack => fl!("help-field-repeat-find-back"),
         Action::Backspace => fl!("help-field-backspace"),
         Action::DeleteChar => fl!("help-field-delete"),
         Action::DeleteToStart => fl!("help-field-delete-to-start"),
         Action::DeleteToEnd => fl!("help-field-delete-to-end"),
         Action::DeleteWord => fl!("help-field-delete-word"),
-        Action::DeleteNextWord => fl!("help-field-delete-next-word"),
+        Action::InsertMode => fl!("help-field-insert"),
+        Action::Append => fl!("help-field-append"),
+        Action::InsertAtStart => fl!("help-field-insert-at-start"),
+        Action::AppendAtEnd => fl!("help-field-append-at-end"),
+        Action::VisualMode => fl!("help-field-visual"),
+        Action::OtherEnd => fl!("help-other-end"),
+        Action::NormalMode => fl!("help-field-normal"),
+        Action::NormalOnce => fl!("help-field-normal-once"),
+        Action::Substitute => fl!("help-field-substitute"),
+        Action::SubstituteLine => fl!("help-field-substitute-line"),
+        Action::ChangeToEnd => fl!("help-field-change-to-end"),
+        Action::ReplaceChar => fl!("help-field-replace"),
+        Action::ToggleCase => fl!("help-field-toggle-case"),
+        Action::DeleteOperator => fl!("help-field-delete-operator"),
+        Action::ChangeOperator => fl!("help-field-change-operator"),
+        Action::YankOperator => fl!("help-field-yank-operator"),
+        Action::PutAfter => fl!("help-field-put-after"),
+        Action::PutBefore => fl!("help-field-put-before"),
+        Action::Undo => fl!("help-field-undo"),
+        Action::Redo => fl!("help-field-redo"),
+        Action::Register => fl!("help-field-register"),
+        Action::PasteRegister => fl!("help-field-paste-register"),
+        Action::InsertLiteral => fl!("help-field-literal"),
         _ => return None,
     };
     Some(text)
@@ -437,15 +472,7 @@ fn describe_filter(context: Context, action: Action) -> Option<String> {
 fn describe_rows(context: Context, action: Action) -> Option<String> {
     let rows = matches!(
         context,
-        Context::Panel
-            | Context::Viewer
-            | Context::Help
-            | Context::LocationMenu
-            | Context::TabMenu
-            | Context::Jump
-            | Context::Workspaces
-            | Context::CommandHistory
-            | Context::Completion
+        Context::Panel | Context::Viewer | Context::Help | Context::List | Context::Completion
     );
     let text = match action {
         Action::Up if rows => fl!("help-row-up"),
@@ -459,35 +486,48 @@ fn describe_rows(context: Context, action: Action) -> Option<String> {
     Some(text)
 }
 
-/// What `action` does in the location menu, beyond moving the cursor.
-fn describe_location_menu(context: Context, action: Action) -> Option<String> {
-    if context != Context::LocationMenu {
+/// What the keys that the windows listing items share do.
+fn describe_list(context: Context, action: Action) -> Option<String> {
+    if context != Context::List {
         return None;
     }
     let text = match action {
         Action::Home => fl!("help-first-row"),
         Action::End => fl!("help-last-row"),
-        Action::Confirm => fl!("help-menu-open"),
-        Action::EditHost => fl!("help-edit-host"),
-        Action::Disconnect => fl!("help-disconnect"),
-        Action::Reload => fl!("help-menu-reload"),
-        Action::Cancel => fl!("help-menu-close"),
+        Action::QuickSearch => fl!("help-list-filter"),
+        Action::NormalMode => fl!("help-list-rows"),
+        Action::Confirm => fl!("help-list-take"),
+        Action::Cancel => fl!("help-list-close"),
         _ => return None,
     };
     Some(text)
 }
 
-/// What `action` does in the tab menu, beyond moving the cursor.
+/// What `action` does in the location menu, beyond what the lists do.
+fn describe_location_menu(context: Context, action: Action) -> Option<String> {
+    if context != Context::LocationMenu {
+        return None;
+    }
+    let text = match action {
+        Action::Confirm => fl!("help-menu-open"),
+        Action::Cancel => fl!("help-menu-close"),
+        Action::EditHost => fl!("help-edit-host"),
+        Action::Disconnect => fl!("help-disconnect"),
+        Action::Reload => fl!("help-menu-reload"),
+        _ => return None,
+    };
+    Some(text)
+}
+
+/// What `action` does in the tab menu, beyond what the lists do.
 fn describe_tab_menu(context: Context, action: Action) -> Option<String> {
     if context != Context::TabMenu {
         return None;
     }
     let text = match action {
-        Action::Home => fl!("help-first-row"),
-        Action::End => fl!("help-last-row"),
         Action::Confirm => fl!("help-tab-menu-show"),
-        Action::CloseTab => fl!("help-tab-menu-close"),
         Action::Cancel => fl!("help-menu-close"),
+        Action::CloseTab => fl!("help-tab-menu-close"),
         _ => return None,
     };
     Some(text)
@@ -507,14 +547,12 @@ fn describe_help(context: Context, action: Action) -> Option<String> {
     Some(text)
 }
 
-/// What `action` does in the window of the saved workspaces, beyond moving the cursor.
+/// What `action` does in the window of the saved workspaces, beyond what the lists do.
 fn describe_workspaces(context: Context, action: Action) -> Option<String> {
     if context != Context::Workspaces {
         return None;
     }
     let text = match action {
-        Action::Home => fl!("help-first-row"),
-        Action::End => fl!("help-last-row"),
         Action::SaveWorkspace => fl!("help-workspaces-save"),
         Action::Confirm => fl!("help-workspaces-restore"),
         Action::Move => fl!("help-workspaces-rename"),
@@ -528,8 +566,6 @@ fn describe_workspaces(context: Context, action: Action) -> Option<String> {
 /// What `action` does in path fields and the list of completions, beyond moving the cursor.
 fn describe_completion(context: Context, action: Action) -> Option<String> {
     let text = match (context, action) {
-        (Context::Completion, Action::Home) => fl!("help-first-row"),
-        (Context::Completion, Action::End) => fl!("help-last-row"),
         (Context::PathInput, Action::Complete) => fl!("help-complete"),
         (Context::Completion, Action::Complete) => fl!("help-complete-next"),
         (Context::Completion, Action::Confirm) => fl!("help-complete-take"),
@@ -559,36 +595,41 @@ mod tests {
     }
 
     #[test]
-    fn lists_what_the_app_can_do_by_context() {
-        let help = Help::new(&Keymap::mc(), true);
+    fn lists_what_the_app_can_do_by_mode_and_context() {
+        let help = Help::new(&Keymap::default(), true);
         let has = |keys: &str, text: &str| {
             help.entries.contains(&Entry::Keys {
                 keys: keys.to_owned(),
                 text: text.to_owned(),
             })
         };
-        assert!(has("F10", "Quit"));
-        assert!(has("F8, Delete", "Disconnect the host under the cursor"));
+        assert!(has("Z Z, F10", "Quit"));
+        assert!(has("d d, F8", "Disconnect the host under the cursor"));
         assert!(has(
-            "Ctrl+s, Alt+s",
+            "/",
             "Quick search; again: the next match, or with nothing typed, the last search"
         ));
         assert!(has(
-            "Shift+F7, n",
+            "n, Shift+F7",
             "The next name that matches the last quick search"
         ));
-        assert!(has("Ctrl+x Left, Ctrl+w h", "The left panel"));
-        assert!(has("Shift+PgDn", "Half a page down"));
+        assert!(has("Ctrl+w h", "The left panel"));
         assert!(has(
-            "Esc, Ctrl+[, F10, Ctrl+g, Ctrl+c",
+            "Ctrl+o",
+            "Back to where the panel was before its last jump, as vim's jump list"
+        ));
+        assert!(has("Tab, Ctrl+i", "Forward again, where Ctrl+o came from"));
+        assert!(has(
+            "Esc, Ctrl+[, Ctrl+c, q, F10",
             "Cancel, or close this help"
         ));
-        // Quick search lists the panel's key that goes on to the next match.
         assert!(has(
-            "Ctrl+s, Alt+s",
+            "Ctrl+g",
             "The next match; with nothing typed, the last search"
         ));
-        // One key, two meanings: the text fields share theirs.
+        assert!(has("u", "Undo the last change"));
+        assert!(has("/", "Type in the filter, in Insert mode"));
+        // One key, three meanings, by mode and context.
         let ctrl_u: Vec<&str> = help
             .entries
             .iter()
@@ -600,18 +641,32 @@ mod tests {
         assert_eq!(
             ctrl_u,
             [
-                "Swap the panels",
-                "Delete to the start",
-                "Delete to the start",
+                "Half a page up",
+                "Half a page up",
                 "Delete to the start of the line",
-                "Delete to the start",
-                "Delete to the start",
-                "Delete to the start",
-                "Delete to the start",
-                "Delete to the start",
-                "Delete to the start"
+                "Half a page up"
             ]
         );
+        // The help's own keys, which scroll it as less does.
+        assert!(has("Space, f", "One page down"));
+        assert_eq!(
+            help.entries.last(),
+            Some(&Entry::Note(fl!("help-note-key-hints")))
+        );
+        let fuzzy = Entry::Note(fl!("help-note-fuzzy"));
+        assert!(help.entries.contains(&fuzzy));
+        let keywords = Help::new(&Keymap::default(), false);
+        assert!(!keywords.entries.contains(&fuzzy));
+        assert!(
+            keywords
+                .entries
+                .contains(&Entry::Note(fl!("help-note-jump")))
+        );
+    }
+
+    #[test]
+    fn heads_each_mode_and_context_with_keys() {
+        let help = Help::new(&Keymap::default(), true);
         let headings: Vec<&str> = help
             .entries
             .iter()
@@ -625,38 +680,29 @@ mod tests {
             [
                 "Everywhere",
                 "Panels",
+                "Panels in Visual mode",
+                "Text fields in Insert mode",
+                "Text fields in Normal mode",
+                "Text fields in Visual mode",
                 "Quick search",
                 "Renaming in place",
+                "Renaming in place, in Normal mode",
                 "Command line",
+                "Command line in Normal mode",
+                "Lists",
+                "The filter of a list",
                 "Location menu",
                 "Tab menu",
-                "zoxide",
                 "Workspaces",
                 "Command history",
                 "Pull-down menu",
                 "Dialogs and help",
                 "This help",
-                "Text fields",
+                "Text fields of dialogs",
                 "Path fields",
                 "Completion list",
                 "Viewer"
             ]
-        );
-        // The help's own keys, which scroll it as mc's help scrolls.
-        assert!(has("Ctrl+v, Space, f", "One page down"));
-        assert!(has("Alt+>, G, Ctrl+End, Ctrl+PgDn", "The end"));
-        assert_eq!(
-            help.entries.last(),
-            Some(&Entry::Note(fl!("help-note-f-keys")))
-        );
-        let fuzzy = Entry::Note(fl!("help-note-fuzzy"));
-        assert!(help.entries.contains(&fuzzy));
-        let keywords = Help::new(&Keymap::mc(), false);
-        assert!(!keywords.entries.contains(&fuzzy));
-        assert!(
-            keywords
-                .entries
-                .contains(&Entry::Note(fl!("help-note-jump")))
         );
     }
 
@@ -673,14 +719,14 @@ mod tests {
 
     #[test]
     fn scrolls_within_its_rows_and_closes() {
-        let mut help = Help::new(&Keymap::mc(), true);
+        let mut help = Help::new(&Keymap::default(), true);
         let top = draw(&mut help, 60, 12);
         assert!(top.contains("Panels"), "{top}");
         assert!(!help.handle(action(Action::PageDown)));
         assert_ne!(draw(&mut help, 60, 12), top);
         help.handle(action(Action::End));
         let bottom = draw(&mut help, 60, 12);
-        assert!(bottom.contains("stand for F1 … F10"), "{bottom}");
+        assert!(bottom.contains("Backspace takes back"), "{bottom}");
         help.handle(action(Action::Down));
         assert_eq!(draw(&mut help, 60, 12), bottom, "no further than the end");
         help.handle(action(Action::Home));
@@ -691,7 +737,7 @@ mod tests {
 
     #[test]
     fn draws_keys_and_what_they_do() {
-        let mut help = Help::new(&Keymap::mc(), true);
+        let mut help = Help::new(&Keymap::default(), true);
         insta::assert_snapshot!(draw(&mut help, 70, 16));
     }
 }

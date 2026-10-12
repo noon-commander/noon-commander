@@ -1,6 +1,6 @@
 # 0020. Esc acts at once
 
-- Status: Accepted
+- Status: Superseded by [ADR 0022](0022-vim-modes.md)
 - Date: 2026-10-11
 
 ## Context

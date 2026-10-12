@@ -28,12 +28,13 @@ use super::command::{self, CommandEvent, CommandLine, Place, Run};
 use super::complete::{self, Candidate, Choices, ChoicesEvent, Kind, Offer, Outcome};
 use super::configuration::{ConfigEvent, Configuration};
 use super::decor::Decor;
-use super::dialog::{Ask, Button, Dialog, DialogEvent, Reply};
+use super::dialog::{Ask, Button, Dialog, DialogEvent, Field, Reply};
+use super::edit::Registers;
 use super::help::Help;
 use super::history::{HistoryEvent, HistoryWindow};
 use super::jobs::{JobsEvent, JobsList, Row};
 use super::jump::{JumpEvent, JumpMenu};
-use super::keymap::{Action, Context, Hints, KeyState, Keymap, Resolved};
+use super::keymap::{Action, Context, Extra, Hints, KeyState, Keymap, Mode, Resolved, Typed};
 use super::menu::{LocationMenu, MenuEvent};
 use super::mouse::{Pointer, Press};
 use super::panel::{
@@ -202,12 +203,10 @@ pub(crate) enum Effect {
 pub(crate) enum Handover {
     /// The editor of F4, on a local file.
     Edit(PathBuf),
-    /// The editor on the command line's text, written to `file`; what it leaves comes back.
-    EditCommand { file: PathBuf, text: String },
     /// A shell command of the command line.
     Run(Run),
-    /// Nothing: the terminal's own screen shows, with the output of commands, until Ctrl+o; then
-    /// whatever was in front is there again.
+    /// Nothing: the terminal's own screen shows, with the output of commands, until `g <`;
+    /// then whatever was in front is there again.
     UserScreen,
 }
 
@@ -284,6 +283,11 @@ impl Host {
     }
 }
 
+/// Most times a count repeats a motion, so that a long count cannot keep the app busy.
+const MAX_REPEAT: usize = 10_000;
+/// Cells of what a pending command has typed that the line above the F-key bar shows, as
+/// vim's `showcmd` shows at most.
+const SHOWCMD_WIDTH: usize = 10;
 /// Width of the dialogs of `+` and `-`, as in mc.
 const PATTERN_DIALOG_WIDTH: u16 = 50;
 /// Width of the dialogs of F7 and F5.
@@ -653,7 +657,7 @@ pub(crate) struct App {
     completion: Option<Completing>,
     /// The generation of the last listing for completion.
     completions: u64,
-    /// The zoxide window of Alt+z, over the panels and under the dialogs.
+    /// The zoxide window of `g z`, over the panels and under the dialogs.
     jump: Option<JumpMenu>,
     /// The generation of the last query for the zoxide window.
     jump_queries: u64,
@@ -682,8 +686,15 @@ pub(crate) struct App {
     /// The key hints, over everything at the bottom of the panels, as the event loop's key
     /// state has them.
     hints: Option<Hints>,
-    /// The key hints were asked for, with every key of this context.
-    hints_asked: Option<Context>,
+    /// The key hints were asked for, with every key of this mode and context.
+    hints_asked: Option<(Mode, Context)>,
+    /// What the pending command has typed so far, as the event loop's key state has it, for
+    /// vim's `showcmd`.
+    showcmd: String,
+    /// The count, the register, and the character that came with the key being handled.
+    extra: Extra,
+    /// What yanks and deletes keep, which every text field and the command line share.
+    registers: Registers,
     /// Where the last render drew what the mouse can press.
     spots: Spots,
     /// What was in front after the last click, if that click left it there: a double click
@@ -807,10 +818,12 @@ impl App {
             recent: Recent::default(),
             recent_written: Recent::default(),
             volumes: Vec::new(),
-            // `ui.keymap` was checked when the config was loaded.
-            keymap: keymap_of(ui),
+            keymap: Keymap::default(),
             hints: None,
             hints_asked: None,
+            showcmd: String::new(),
+            extra: Extra::default(),
+            registers: Registers::default(),
             spots: Spots::default(),
             clicked: None,
             quit: false,
@@ -844,18 +857,6 @@ impl App {
     /// What to hand the terminal to now, with the panels hidden; resets the request.
     pub(crate) fn take_handover(&mut self) -> Option<Handover> {
         self.handover.take()
-    }
-
-    /// Takes what the editor left of the command, or why it could not run.
-    pub(crate) fn command_edited(&mut self, result: Result<String, String>) {
-        match result {
-            Ok(text) => {
-                if let Some(line) = &mut self.command_line {
-                    line.set_text(&text);
-                }
-            }
-            Err(reason) => self.show_error(&cells::sanitize(reason.as_bytes())),
-        }
     }
 
     /// Takes pasted text: the command line gets all of it, line breaks included, and runs
@@ -925,14 +926,17 @@ impl App {
             .then(|| Duration::from_millis(u64::from(ui.which_key_delay_ms)))
     }
 
-    /// The context whose every key the key hints were asked for, since the last call.
-    pub(crate) fn take_hints_asked(&mut self) -> Option<Context> {
+    /// The mode and the context whose every key the key hints were asked for, since the last
+    /// call.
+    pub(crate) fn take_hints_asked(&mut self) -> Option<(Mode, Context)> {
         self.hints_asked.take()
     }
 
-    /// Shows the key hints that `keys` has, if any, from the next render.
+    /// Shows the key hints that `keys` has, if any, and what its pending command has typed,
+    /// from the next render.
     pub(crate) fn set_hints(&mut self, keys: &KeyState) {
-        self.hints = self.keymap.hints_of(keys, self.context());
+        self.hints = self.keymap.hints_of(keys, self.place());
+        self.showcmd = keys.showcmd();
     }
 
     /// Whether the mouse is on: `ui.mouse`.
@@ -1261,6 +1265,122 @@ impl App {
         } else {
             Context::Panel
         }
+    }
+
+    /// The mode keys are typed in now, as vim's: that of the text field that has them, Visual
+    /// mode while a panel selects rows, and else Normal mode.
+    pub(crate) fn mode(&self) -> Mode {
+        if let Some(open) = self.dialogs.front() {
+            if self.context() == Context::Completion {
+                Mode::Insert
+            } else {
+                open.dialog.mode()
+            }
+        } else if let Some(menu) = &self.menu {
+            menu.mode()
+        } else if let Some(menu) = &self.tab_menu {
+            menu.mode()
+        } else if let Some(jump) = &self.jump {
+            jump.mode()
+        } else if let Some(window) = &self.workspaces_window {
+            window.mode()
+        } else if let Some(window) = &self.history_window {
+            window.mode()
+        } else if !self.results.is_empty()
+            || self.in_front().is_some()
+            || self.jobs_list.is_some()
+            || self.help.is_some()
+        {
+            Mode::Normal
+        } else if let Some(configuration) = &self.configuration {
+            configuration.mode()
+        } else if self.pulldown.is_some() || self.viewing.is_some() {
+            Mode::Normal
+        } else if let Some(line) = &self.command_line {
+            line.mode()
+        } else {
+            let panel = self.panel(self.active);
+            if let Some(field) = panel.rename_field_ref() {
+                field.mode()
+            } else if panel.searching() {
+                Mode::Insert
+            } else if panel.visual() {
+                Mode::Visual
+            } else {
+                Mode::Normal
+            }
+        }
+    }
+
+    /// The mode and the context of the next key.
+    pub(crate) fn place(&self) -> (Mode, Context) {
+        (self.mode(), self.context())
+    }
+
+    /// The operator that a text field with the keys has waiting for its motion, as `showcmd`
+    /// shows it.
+    fn pending_operator(&self) -> Option<String> {
+        if let Some(open) = self.dialogs.front() {
+            return open.dialog.pending();
+        }
+        if let Some(configuration) = &self.configuration {
+            return configuration.pending();
+        }
+        if let Some(line) = &self.command_line {
+            return line.pending();
+        }
+        self.panel(self.active)
+            .rename_field_ref()
+            .and_then(Field::pending)
+    }
+
+    /// Takes keys resolved with what came with them: a count repeats a motion where keys
+    /// move a cursor over rows; a text field, the commands that take a count as a number,
+    /// such as `G`, and those that take a register or a character read them themselves.
+    pub(crate) fn typed(&mut self, typed: Typed) -> Vec<Effect> {
+        let Typed { resolved, extra } = typed;
+        let times = match resolved {
+            Resolved::Action(action) if self.repeats(action) => extra.times().min(MAX_REPEAT),
+            _ => 1,
+        };
+        self.extra = extra;
+        let mut effects = Vec::new();
+        for _ in 0..times {
+            effects.extend(self.handle(resolved));
+        }
+        self.extra = Extra::default();
+        effects
+    }
+
+    /// Whether a count repeats `action` where keys go now: a motion over rows, a mark, or a
+    /// match, outside the text fields, whose editor reads the count.
+    fn repeats(&self, action: Action) -> bool {
+        let text = matches!(
+            self.context(),
+            Context::Rename
+                | Context::DialogInput
+                | Context::PathInput
+                | Context::Completion
+                | Context::CommandLine
+                | Context::QuickSearch
+        );
+        !text
+            && matches!(
+                action,
+                Action::Up
+                    | Action::Down
+                    | Action::Left
+                    | Action::Right
+                    | Action::PageUp
+                    | Action::PageDown
+                    | Action::HalfPageUp
+                    | Action::HalfPageDown
+                    | Action::Mark
+                    | Action::MarkUp
+                    | Action::NextMatch
+                    | Action::PrevMatch
+                    | Action::PrevTab
+            )
     }
 
     /// Whether the app does something for `action` now; the F-key bar shows only those.
@@ -1625,7 +1745,7 @@ impl App {
         self.sync_connected();
         // Wherever keys go, the hints show their keys over what is in front, which stays open.
         if input == Resolved::Action(Action::KeyHints) {
-            self.hints_asked = Some(self.context());
+            self.hints_asked = Some(self.place());
             return Vec::new();
         }
         // So does the output of commands, and what is in front is there again afterwards.
@@ -1650,6 +1770,9 @@ impl App {
         let Some(action) = self.search_key(input) else {
             return Vec::new();
         };
+        if let Some(effects) = self.handle_vim(action) {
+            return effects;
+        }
         match action {
             Action::QuickSearch => self.quick_search(),
             Action::NextMatch | Action::PrevMatch => self.search_again(action == Action::NextMatch),
@@ -1725,6 +1848,72 @@ impl App {
         Vec::new()
     }
 
+    /// Does what vim's keys do in a panel that mc's have no likes of: Visual mode, the jump
+    /// list, and the commands that take a count as a number; `None` for the other keys.
+    fn handle_vim(&mut self, action: Action) -> Option<Vec<Effect>> {
+        if self.panel(self.active).visual() {
+            return Some(self.handle_visual(action));
+        }
+        let count = self.extra.count;
+        let id = self.shown(self.active);
+        match action {
+            Action::VisualMode => self.panel_mut(id.side).start_visual(),
+            Action::Reselect => self.panel_mut(id.side).reselect(),
+            Action::JumpBack | Action::JumpForward => {
+                let times = count.unwrap_or(1);
+                let panel = self.panel_mut(id.side);
+                let request = if action == Action::JumpBack {
+                    panel.jump_back(times)
+                } else {
+                    panel.jump_forward(times)
+                };
+                if let Some(request) = request {
+                    return Some(self.open(id, request));
+                }
+            }
+            // With a count, the row of that number, as vim's `G` and `g g` go to the line.
+            Action::Home | Action::End if count.is_some() => {
+                self.panel_mut(id.side).go_to_row(count.unwrap_or(1));
+            }
+            // With a count, the tab of that number, as vim's `g t`.
+            Action::NextTab if count.is_some() => {
+                self.end_search(id.side);
+                if self.tabs_mut(id.side).select(count.unwrap_or(1) - 1) {
+                    return Some(self.revealed(id.side));
+                }
+            }
+            _ => return None,
+        }
+        Some(Vec::new())
+    }
+
+    /// Takes a key while a panel selects rows in Visual mode: the motions extend the
+    /// selection, Space marks it, and the commands of files act on what it selects, which they
+    /// find marked.
+    fn handle_visual(&mut self, action: Action) -> Vec<Effect> {
+        let id = self.shown(self.active);
+        let count = self.extra.count;
+        let panel = self.panel_mut(id.side);
+        match action {
+            Action::NormalMode => panel.end_visual(),
+            Action::OtherEnd => panel.other_end(),
+            Action::Mark => panel.mark_visual(false),
+            Action::Copy | Action::Move | Action::Delete | Action::Checksum => {
+                panel.mark_visual(true);
+                return self.handle(Resolved::Action(action));
+            }
+            Action::Home | Action::End if count.is_some() => {
+                panel.go_to_row(count.unwrap_or(1));
+            }
+            _ => {
+                if let Some(request) = panel.handle(action) {
+                    return self.open(id, request);
+                }
+            }
+        }
+        Vec::new()
+    }
+
     /// Gives a key to quick search in the active panel, if it runs; the action that the panel
     /// does next, if any. Characters go nowhere else: typing in a panel does nothing.
     fn search_key(&mut self, input: Resolved) -> Option<Action> {
@@ -1743,19 +1932,27 @@ impl App {
                 | Action::Right
                 | Action::TextStart
                 | Action::TextEnd
-                | Action::WordLeft
-                | Action::WordRight
+                | Action::WordForward
+                | Action::WordBackward
                 | Action::Backspace
                 | Action::DeleteChar
                 | Action::DeleteToStart
                 | Action::DeleteToEnd
-                | Action::DeleteWord
-                | Action::DeleteNextWord => {
+                | Action::DeleteWord => {
                     self.panel_mut(side).search_edit(action, fuzzy_search);
                     None
                 }
                 Action::QuickSearch => {
                     self.quick_search();
+                    None
+                }
+                // As in vim's search, Ctrl+r types the text of a register.
+                Action::PasteRegister => {
+                    let text = self.registers.text(self.extra.char).unwrap_or_default();
+                    let text: Vec<char> = text.chars().filter(|c| !c.is_control()).collect();
+                    for c in text {
+                        self.panel_mut(side).search_type(c, fuzzy_search);
+                    }
                     None
                 }
                 Action::NextMatch | Action::PrevMatch => {
@@ -1796,12 +1993,13 @@ impl App {
     }
 
     /// Moves the cursor of the active panel to the next name, or the previous one, that matches
-    /// what the last quick search found.
+    /// what the last quick search found; where it was goes to the jump list.
     fn search_again(&mut self, forward: bool) {
         if let Some(last) = self.last_search.clone() {
             let fuzzy_search = self.config.ui.fuzzy_search;
-            self.panel_mut(self.active)
-                .step_match(&last, forward, fuzzy_search);
+            let panel = self.panel_mut(self.active);
+            panel.remember();
+            panel.step_match(&last, forward, fuzzy_search);
         }
     }
 
@@ -1857,7 +2055,11 @@ impl App {
         let Some(open) = self.dialogs.front_mut() else {
             return Vec::new();
         };
-        let event = open.dialog.handle(input);
+        let typed = Typed {
+            resolved: input,
+            extra: self.extra,
+        };
+        let event = open.dialog.handle_typed(typed, &mut self.registers);
         self.dialog_event(event)
     }
 
@@ -2446,12 +2648,8 @@ impl App {
             }
             Command::Configuration => {
                 let icons = self.decor.icons();
-                let configuration = Configuration::new(
-                    &self.config,
-                    &self.home,
-                    (Theme::NAMES, Keymap::NAMES),
-                    icons,
-                );
+                let configuration =
+                    Configuration::new(&self.config, &self.home, Theme::NAMES, icons);
                 self.configuration = Some(configuration);
                 Vec::new()
             }
@@ -2470,7 +2668,11 @@ impl App {
         let Some(configuration) = &mut self.configuration else {
             return Vec::new();
         };
-        let event = configuration.handle(input);
+        let typed = Typed {
+            resolved: input,
+            extra: self.extra,
+        };
+        let event = configuration.handle_typed(typed, &mut self.registers);
         self.configuration_event(event)
     }
 
@@ -2494,10 +2696,8 @@ impl App {
         let mut config = new.clone();
         config.expand_tilde(&self.home);
         let ui = &config.ui;
-        // The dialog offers only the built-in themes and keymaps, and those that `ui.theme`
-        // and `ui.keymap` name.
+        // The dialog offers only the built-in themes, and the one that `ui.theme` names.
         self.theme = theme_of(ui, self.color_depth);
-        self.keymap = keymap_of(ui);
         self.decor = Decor::new(ui.icons);
         if ui.show_hidden != self.config.ui.show_hidden {
             let show = ui.show_hidden;
@@ -2931,7 +3131,7 @@ impl App {
     }
 
     /// Opens the command line for `action`: `!` for a shell command, `:` for commands of Noon
-    /// Commander, Alt+h with the window of the history; in a panel on a local directory or on
+    /// Commander, `q :` with the window of the history; in a panel on a local directory or on
     /// one of a connected host.
     fn open_command_line(&mut self, action: Action) {
         let kind = if action == Action::Command {
@@ -2959,7 +3159,11 @@ impl App {
         let Some(line) = &mut self.command_line else {
             return Vec::new();
         };
-        let event = line.handle(input);
+        let typed = Typed {
+            resolved: input,
+            extra: self.extra,
+        };
+        let event = line.handle_typed(typed, &mut self.registers);
         match event {
             CommandEvent::None => Vec::new(),
             CommandEvent::Close => {
@@ -2985,13 +3189,6 @@ impl App {
             }
             CommandEvent::History => {
                 self.open_history();
-                Vec::new()
-            }
-            CommandEvent::Edit => {
-                let name = format!("command-{}.sh", std::process::id());
-                let text = line.text().to_owned();
-                let file = self.runtime_dir.join(name);
-                self.handover = Some(Handover::EditCommand { file, text });
                 Vec::new()
             }
             CommandEvent::Unknown(text) => {
@@ -4011,7 +4208,7 @@ impl App {
         }
     }
 
-    /// Opens the dialog of Quick cd, Alt+c, for the active panel, as in mc.
+    /// Opens the dialog of Quick cd, `g d`, for the active panel, as in mc.
     fn ask_cd(&mut self) {
         let (title, prompt) = (fl!("cd-title"), fl!("cd-prompt"));
         let dialog = Dialog::form(&title, &prompt, "", &[], MKDIR_DIALOG_WIDTH).with_completion();
@@ -4147,24 +4344,28 @@ impl App {
     }
 
     /// Gives a key to the field of the entry renamed in the active panel: Enter renames it,
-    /// Esc leaves it as it was, and other keys edit the name.
+    /// Esc in Normal mode leaves it as it was, and other keys edit the name in vim's modes.
     fn handle_rename(&mut self, input: Resolved) -> Vec<Effect> {
+        let extra = self.extra;
+        let mut registers = std::mem::take(&mut self.registers);
         let panel = self.panel_mut(self.active);
-        match input {
-            Resolved::Action(Action::Confirm) => return self.confirm_rename(),
-            Resolved::Action(Action::Cancel) => {
-                panel.end_rename();
+        let action = match (input, panel.rename_field()) {
+            (Resolved::Insert(c), Some(field)) => {
+                field.insert(c);
+                None
             }
-            Resolved::Insert(c) => {
-                if let Some(field) = panel.rename_field() {
-                    field.insert(c);
-                }
+            (Resolved::Action(action), Some(field)) => {
+                (!field.handle(action, extra, &mut registers)).then_some(action)
             }
-            Resolved::Action(action) => {
-                if let Some(field) = panel.rename_field() {
-                    field.edit(action);
-                }
+            (_, None) => None,
+        };
+        self.registers = registers;
+        match action {
+            Some(Action::Confirm) => return self.confirm_rename(),
+            Some(Action::Cancel) => {
+                self.panel_mut(self.active).end_rename();
             }
+            _ => {}
         }
         Vec::new()
     }
@@ -4821,10 +5022,12 @@ impl App {
         let bar_height = u16::from(always);
         let screen = frame.area();
         let prompt = self.command_prompt(screen.width);
+        // As vim's command line, the line of the mode and of the command typed when no command
+        // is.
         let line_height = self
             .command_line
             .as_ref()
-            .map_or(0, |line| line.height(&prompt, screen.width, screen.height));
+            .map_or(1, |line| line.height(&prompt, screen.width, screen.height));
         let [menu_bar, panels, command_line, key_bar] = Layout::vertical([
             Constraint::Length(bar_height),
             Constraint::Fill(1),
@@ -4878,10 +5081,7 @@ impl App {
             }
         }
         self.spots.fkeys = self.render_fkeys(frame, key_bar);
-        let focused = self.context() == Context::CommandLine;
-        if let Some(line) = &mut self.command_line {
-            line.render(frame, command_line, &prompt, Style::default(), focused);
-        }
+        self.render_command_line(frame, command_line, &prompt);
         if always {
             self.spots.menu_bar = pulldown::render_idle(frame, menu_bar, &self.theme);
         }
@@ -5011,11 +5211,62 @@ impl App {
         frame.render_widget(Line::styled(text, self.theme.panel_title_active), row);
     }
 
+    /// The command line in `area`, after `prompt`, if it is open; else the mode and what the
+    /// pending command has typed, on the line it takes.
+    fn render_command_line(&mut self, frame: &mut Frame<'_>, area: Rect, prompt: &str) {
+        let focused = self.context() == Context::CommandLine;
+        match &mut self.command_line {
+            Some(line) => line.render(frame, area, prompt, Style::default(), focused),
+            None => self.render_mode(frame, area),
+        }
+    }
+
+    /// The mode, as vim's `showmode` shows it on the left of `area`, and what the pending
+    /// command has typed, as its `showcmd` shows it on the right. Quick search, typed as vim's
+    /// search, shows no mode.
+    fn render_mode(&self, frame: &mut Frame<'_>, area: Rect) {
+        if area.is_empty() {
+            return;
+        }
+        let mode = match self.place() {
+            (Mode::Insert, context) if context != Context::QuickSearch => Some(fl!("mode-insert")),
+            (Mode::Visual, _) => Some(fl!("mode-visual")),
+            _ => None,
+        };
+        let typed = format!(
+            "{}{}",
+            self.pending_operator().unwrap_or_default(),
+            self.showcmd
+        );
+        // As vim's, the last ten cells of what is typed.
+        let typed: String = typed
+            .chars()
+            .rev()
+            .take(SHOWCMD_WIDTH)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        let width = usize::from(area.width);
+        let typed = cells::sanitize(typed.as_bytes());
+        let shown = cells::width(&typed).min(width);
+        let room = width.saturating_sub(shown + 1);
+        let mode = mode.map(|mode| cells::fit(&mode, room, Align::Left));
+        if let Some(mode) = mode {
+            frame.render_widget(Line::styled(mode, Style::new().bold()), area);
+        }
+        let x = area
+            .right()
+            .saturating_sub(u16::try_from(shown).unwrap_or(0));
+        let right = Rect::new(x, area.y, area.right() - x, 1);
+        frame.render_widget(Line::raw(typed), right);
+    }
+
     /// What F1 … F10 do now, each with its label on the F-key bar; `None` for a key that does
     /// nothing.
     fn fkey_actions(&self) -> [Option<(Action, String)>; 10] {
-        let context = self.context();
-        self.keymap.fkeys(context).map(|action| {
+        let (mode, context) = self.place();
+        self.keymap.fkeys(mode, context).map(|action| {
             let action = action.filter(|action| self.supports(*action))?;
             let label = match (context, action) {
                 (Context::Workspaces, Action::Move) => Some(fl!("fkey-rename")),
@@ -5103,11 +5354,6 @@ fn theme_of(ui: &UiConfig, depth: ColorDepth) -> Theme {
     Theme::by_name(&ui.theme, depth)
         .unwrap_or_else(Theme::mc_classic)
         .with_borders(ui.borders)
-}
-
-/// The keymap that `ui` names, or the default one.
-fn keymap_of(ui: &UiConfig) -> Keymap {
-    Keymap::by_name(&ui.keymap).unwrap_or_else(Keymap::mc)
 }
 
 /// What a job does after a failure, by the button `event` pressed.
@@ -5323,6 +5569,7 @@ mod tests {
     use super::super::panel::Listing;
     use super::super::places::KnownHost;
     use super::*;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     fn dir(name: &str) -> DirEntry {
         DirEntry {
@@ -5384,17 +5631,6 @@ mod tests {
         fn take_edit(&mut self) -> Option<PathBuf> {
             match self.handover.take() {
                 Some(Handover::Edit(file)) => Some(file),
-                other => {
-                    self.handover = other;
-                    None
-                }
-            }
-        }
-
-        /// The command line's text for the editor now, and its file.
-        fn take_command_edit(&mut self) -> Option<(PathBuf, String)> {
-            match self.handover.take() {
-                Some(Handover::EditCommand { file, text }) => Some((file, text)),
                 other => {
                     self.handover = other;
                     None
@@ -5518,13 +5754,12 @@ mod tests {
     /// location menu, after the home directory, which 0 opens.
     fn enter_host(app: &mut App, side: Side, host: usize) -> Vec<Effect> {
         menu_on(app, side);
-        let digit = char::from_digit(u32::try_from(host + 1).unwrap(), 10).unwrap();
-        app.handle(Resolved::Insert(digit))
+        choose(app, host)
     }
 
-    /// Wide enough for whole status lines.
+    /// Wide enough for whole status lines, and tall enough for two rows of a panel.
     fn screen(app: &mut App) -> String {
-        screen_of(app, 8)
+        screen_of(app, 9)
     }
 
     fn screen_of(app: &mut App, height: u16) -> String {
@@ -5684,12 +5919,187 @@ mod tests {
         );
     }
 
+    /// An app on `/srv`, which holds the files `names`.
+    fn with_files(names: &[&str]) -> App {
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
+        let files = names.iter().map(|name| file(name, 1)).collect();
+        answer(&mut app, effects, &Listing::Dir(files));
+        app
+    }
+
+    /// Feeds `keys` to the app as the event loop does, in the mode and the context it is in
+    /// at each key.
+    fn keys(app: &mut App, keys: &[&str]) -> Vec<Effect> {
+        let mut state = KeyState::default();
+        let mut effects = Vec::new();
+        for key in keys {
+            let combination = crokey::parse(key).unwrap().normalized();
+            let event = KeyEvent::new(*combination.codes.first(), combination.modifiers);
+            let place = app.place();
+            for typed in app.keymap().feed(&mut state, place, event, Instant::now()) {
+                effects.extend(app.typed(typed));
+            }
+        }
+        effects
+    }
+
+    #[test]
+    fn visual_mode_selects_rows_that_the_commands_of_files_act_on() {
+        let mut app = with_files(&["a", "b", "c", "d"]);
+        keys(&mut app, &["j", "v", "j", "j"]);
+        assert_eq!(app.place(), (Mode::Visual, Context::Panel));
+        assert!(screen(&mut app).contains("-- VISUAL --"));
+        keys(&mut app, &["o"]);
+        assert_eq!(cursor_name(&app, Side::Left), "a", "the other end");
+        keys(&mut app, &["space"]);
+        assert_eq!(app.mode(), Mode::Normal, "Space marks the rows and ends it");
+        assert_eq!(chosen_names(&app, Side::Left), ["a", "b", "c"]);
+        // A command acts on the rows selected, and only on them.
+        keys(&mut app, &["shift-g", "shift-v", "k", "d"]);
+        assert_eq!(chosen_names(&app, Side::Left), ["c", "d"]);
+        assert_eq!(app.context(), Context::Dialog, "it asks first");
+        keys(&mut app, &["esc"]);
+        // g v selects them again; Esc ends Visual mode.
+        keys(&mut app, &["g", "v"]);
+        assert_eq!(app.mode(), Mode::Visual);
+        keys(&mut app, &["esc"]);
+        assert_eq!(app.place(), (Mode::Normal, Context::Panel));
+    }
+
+    #[test]
+    fn a_count_repeats_a_motion_and_numbers_a_row_or_a_tab() {
+        let mut app = with_files(&["a", "b", "c", "d", "e"]);
+        keys(&mut app, &["3", "j"]);
+        assert_eq!(cursor_name(&app, Side::Left), "c");
+        keys(&mut app, &["2", "k"]);
+        assert_eq!(cursor_name(&app, Side::Left), "a");
+        keys(&mut app, &["5", "shift-g"]);
+        assert_eq!(cursor_name(&app, Side::Left), "d", "row 5, after ..");
+        keys(&mut app, &["2", "g", "g"]);
+        assert_eq!(cursor_name(&app, Side::Left), "a");
+        keys(&mut app, &["2", "space"]);
+        assert_eq!(chosen_names(&app, Side::Left), ["a", "b"]);
+        keys(&mut app, &["t", "n", "t", "n"]);
+        assert_eq!(app.tabs(Side::Left).index(), 2);
+        keys(&mut app, &["1", "g", "t"]);
+        assert_eq!(app.tabs(Side::Left).index(), 0, "the first tab");
+        keys(&mut app, &["2", "g", "shift-t"]);
+        assert_eq!(app.tabs(Side::Left).index(), 1, "two back, round");
+    }
+
+    #[test]
+    fn ctrl_o_and_tab_go_back_and_forth_through_the_jumps() {
+        let mut app = loaded();
+        let effects = keys(&mut app, &["j", "l"]);
+        answer(
+            &mut app,
+            effects,
+            &Listing::Dir(vec![file("x", 1), file("y", 1)]),
+        );
+        assert_eq!(app.panel(Side::Left).location(), &local("/srv/left"));
+        keys(&mut app, &["shift-g"]);
+        assert_eq!(cursor_name(&app, Side::Left), "y");
+        keys(&mut app, &["ctrl-o"]);
+        assert_eq!(cursor_name(&app, Side::Left), "", "back before G, on ..");
+        let effects = keys(&mut app, &["ctrl-o"]);
+        answer(
+            &mut app,
+            effects,
+            &Listing::Dir(vec![dir("left"), dir("right")]),
+        );
+        assert_eq!(app.panel(Side::Left).location(), &local("/srv"));
+        assert_eq!(cursor_name(&app, Side::Left), "left", "where it was");
+        let effects = keys(&mut app, &["tab"]);
+        answer(
+            &mut app,
+            effects,
+            &Listing::Dir(vec![file("x", 1), file("y", 1)]),
+        );
+        assert_eq!(app.panel(Side::Left).location(), &local("/srv/left"));
+        keys(&mut app, &["tab"]);
+        assert_eq!(cursor_name(&app, Side::Left), "y", "forward to after G");
+        assert!(keys(&mut app, &["tab"]).is_empty(), "nothing further");
+        // The panels switch with Ctrl+w, as vim's windows do.
+        keys(&mut app, &["ctrl-w", "w"]);
+        assert_eq!(app.active, Side::Right);
+    }
+
+    #[test]
+    fn fields_open_in_insert_mode_and_take_vims_normal_mode_after_esc() {
+        let mut app = with_files(&["report.pdf"]);
+        keys(&mut app, &["j", "r"]);
+        assert_eq!(app.place(), (Mode::Insert, Context::Rename));
+        assert!(screen(&mut app).contains("-- INSERT --"));
+        // In Insert mode j is text; Esc goes to Normal mode, where it is not.
+        keys(&mut app, &["esc", "0", "c", "w", "n", "e", "w", "esc"]);
+        assert_eq!(app.place(), (Mode::Normal, Context::Rename));
+        let text = |app: &mut App| {
+            let panel = app.panel_mut(Side::Left);
+            panel.rename_field().map(|field| field.text().to_owned())
+        };
+        assert_eq!(text(&mut app).as_deref(), Some("new.pdf"));
+        // A count and an operator wait on the line above the F-key bar.
+        keys(&mut app, &["2", "d"]);
+        let shown = screen(&mut app);
+        assert!(
+            line_with(&shown, "2d").ends_with(" 2d\""),
+            "on the right: {shown}"
+        );
+        keys(&mut app, &["esc"]);
+        assert_eq!(app.context(), Context::Rename, "Esc gave the operator up");
+        keys(&mut app, &["u"]);
+        assert_eq!(text(&mut app).as_deref(), Some("report.pdf"), "undone");
+        keys(&mut app, &["\"", "a", "y", "y", "esc"]);
+        assert_eq!(
+            app.context(),
+            Context::Panel,
+            "Esc in Normal mode leaves it"
+        );
+        // Registers go from field to field: here, the command line.
+        keys(&mut app, &[":", "!", "ctrl-r", "a"]);
+        assert_eq!(
+            app.command_line.as_ref().map(CommandLine::text),
+            Some("!report.pdf")
+        );
+        // Alt and a key in Insert mode are Esc and the key.
+        let alt_b = KeyEvent::new(KeyCode::Char('b'), KeyModifiers::ALT);
+        let mut state = KeyState::default();
+        let place = app.place();
+        let plain = app.keymap().alt_as_esc(&state, place, alt_b);
+        assert_eq!(plain, Some(KeyEvent::from(KeyCode::Char('b'))));
+        for typed in app.keymap().feed(
+            &mut state,
+            place,
+            KeyEvent::from(KeyCode::Esc),
+            Instant::now(),
+        ) {
+            app.typed(typed);
+        }
+        assert!(app.command_line.is_none(), "Esc closes vim's command line");
+    }
+
+    #[test]
+    fn lists_open_in_normal_mode_and_slash_types_in_the_filter() {
+        let mut app = loaded();
+        keys(&mut app, &["t", "n", "t", "h"]);
+        assert_eq!(app.place(), (Mode::Normal, Context::TabMenu));
+        keys(&mut app, &["/", "x"]);
+        assert_eq!(app.place(), (Mode::Insert, Context::TabMenu));
+        assert!(screen_of(&mut app, 16).contains("Filter: x"));
+        keys(&mut app, &["backspace", "esc"]);
+        assert_eq!(app.place(), (Mode::Normal, Context::TabMenu));
+        keys(&mut app, &["g", "g", "d", "d"]);
+        assert_eq!(app.tabs(Side::Left).len(), 1, "d d closes the tab");
+        keys(&mut app, &["q"]);
+        assert_eq!(app.context(), Context::Panel);
+    }
+
     #[test]
     fn the_wheel_scrolls_the_panel_under_it() {
         let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
         let files = (0..20).map(|n| file(&format!("f{n:02}"), 1)).collect();
         answer(&mut app, effects, &Listing::Dir(files));
-        screen_of(&mut app, 12);
+        screen_of(&mut app, 13);
         press(&mut app, Press::WheelDown, 90, 5);
         assert_eq!(app.active, Side::Left, "the wheel does not take the keys");
         assert_eq!(
@@ -5698,7 +6108,7 @@ mod tests {
             "on the first row shown"
         );
         assert_eq!(cursor_name(&app, Side::Left), "");
-        screen_of(&mut app, 12);
+        screen_of(&mut app, 13);
         press(&mut app, Press::WheelUp, 90, 5);
         assert_eq!(cursor_name(&app, Side::Right), "f02", "still on screen");
         for _ in 0..10 {
@@ -5711,9 +6121,9 @@ mod tests {
         );
 
         app.config.ui.wheel = Wheel::Page;
-        screen_of(&mut app, 12);
+        screen_of(&mut app, 13);
         press(&mut app, Press::WheelUp, 90, 5);
-        screen_of(&mut app, 12);
+        screen_of(&mut app, 13);
         assert_eq!(
             cursor_name(&app, Side::Right),
             "f13",
@@ -5951,7 +6361,7 @@ mod tests {
         assert_eq!(
             app.panel(Side::Right).here(),
             app.panel(Side::Left).here(),
-            "on the row Alt+o moved on to"
+            "on the row Ctrl+w f moved on to"
         );
     }
 
@@ -5959,6 +6369,27 @@ mod tests {
         for c in text.chars() {
             app.handle(Resolved::Insert(c));
         }
+    }
+
+    /// Chooses row `row`, from 0, of the list in front, as g g, j, and Enter do.
+    fn choose(app: &mut App, row: usize) -> Vec<Effect> {
+        app.handle(action(Action::Home));
+        for _ in 0..row {
+            app.handle(action(Action::Down));
+        }
+        app.handle(action(Action::Confirm))
+    }
+
+    /// Types `text` in the filter of the list in front, after `/`.
+    fn filter(app: &mut App, text: &str) {
+        app.handle(action(Action::QuickSearch));
+        type_text(app, text);
+    }
+
+    /// Types `text` in the text field in front in place of what it holds, after Ctrl+u.
+    fn retype(app: &mut App, text: &str) {
+        app.handle(action(Action::DeleteToStart));
+        type_text(app, text);
     }
 
     #[test]
@@ -5975,7 +6406,7 @@ mod tests {
         app.handle(action(Action::Select));
         assert_eq!(app.context(), Context::DialogInput);
         assert!(screen(&mut app).contains("Select"));
-        type_text(&mut app, "*.md");
+        retype(&mut app, "*.md");
         app.handle(action(Action::Confirm));
         assert_eq!(app.context(), Context::Panel);
         let text = screen(&mut app);
@@ -5996,7 +6427,7 @@ mod tests {
         // `-` with Files only leaves the directory marked.
         app.handle(action(Action::Unselect));
         assert!(screen(&mut app).contains("Unselect"));
-        type_text(&mut app, "*");
+        retype(&mut app, "*");
         for step in [Action::NextField, Action::Toggle, Action::Confirm] {
             app.handle(action(step));
         }
@@ -6004,7 +6435,7 @@ mod tests {
 
         // Esc and an empty pattern change nothing.
         app.handle(action(Action::Select));
-        type_text(&mut app, "c*");
+        retype(&mut app, "c*");
         app.handle(action(Action::Cancel));
         app.handle(action(Action::Select));
         app.handle(action(Action::DeleteToStart));
@@ -6037,7 +6468,7 @@ mod tests {
         let text = screen(&mut app);
         assert!(text.contains("Create a new directory"), "{text}");
         assert!(text.contains("Enter directory name:"), "{text}");
-        type_text(&mut app, "new");
+        retype(&mut app, "new");
         let (panel, location, host) = create_dir(app.handle(action(Action::Confirm)));
         assert_eq!(
             (panel.side, &location, host.is_none()),
@@ -6056,13 +6487,13 @@ mod tests {
             "stays"
         );
 
-        // The name under the cursor is filled in, and typing replaces it.
+        // The name under the cursor is filled in, the cursor after it, as in vim's Insert mode;
+        // Ctrl+u takes it away.
         app.handle(action(Action::Mkdir));
-        type_text(&mut app, "x");
+        retype(&mut app, "x");
         let (_, location, _) = create_dir(app.handle(action(Action::Confirm)));
         assert_eq!(location, local("/srv/x"));
         app.handle(action(Action::Mkdir));
-        app.handle(action(Action::TextEnd));
         type_text(&mut app, "2");
         let (_, location, _) = create_dir(app.handle(action(Action::Confirm)));
         assert_eq!(location, local("/srv/new2"));
@@ -6658,7 +7089,7 @@ mod tests {
         app.hosts.insert("web".to_owned(), web);
         let copy_to = |app: &mut App, text: &str| {
             app.handle(action(Action::Copy));
-            type_text(app, text);
+            retype(app, text);
             app.handle(action(Action::Confirm))
         };
         let (_, _, target, _, _) = copy_job(copy_to(&mut app, "sub"));
@@ -6700,7 +7131,7 @@ mod tests {
         answer(&mut app, effects, &Listing::Dir(vec![dir("left")]));
         app.handle(action(Action::Down));
         app.handle(action(Action::Copy));
-        type_text(&mut app, "/tmp");
+        retype(&mut app, "/tmp");
         let (_, _, target, _, options) = copy_job(app.handle(action(Action::Confirm)));
         assert_eq!(target, local("/tmp"));
         assert!(!options.atomic);
@@ -6726,7 +7157,7 @@ mod tests {
 
         // A new name renames in place.
         app.handle(action(Action::Move));
-        type_text(&mut app, "renamed");
+        retype(&mut app, "renamed");
         let (_, _, target, _, options) = copy_job(app.handle(action(Action::Confirm)));
         assert_eq!(target, local("/srv/renamed"));
         assert!(options.remove_sources);
@@ -6760,7 +7191,7 @@ mod tests {
         app.handle(action(Action::Confirm));
 
         app.handle(action(Action::Copy));
-        type_text(&mut app, "left/inner");
+        retype(&mut app, "left/inner");
         assert!(app.handle(action(Action::Confirm)).is_empty());
         let text = screen(&mut app);
         assert!(text.contains("it is in /srv/left"), "{text}");
@@ -7517,10 +7948,7 @@ mod tests {
         app.closed("web", connection, Some("Broken pipe"));
         app.handle(action(Action::Cancel));
         let text = screen(&mut app);
-        assert!(
-            text.contains("Not connected to web; Ctrl+r connects"),
-            "{text}"
-        );
+        assert!(text.contains("Not connected to web; R connects"), "{text}");
         let Effect::Connect { .. } = one(app.handle(action(Action::Reload))) else {
             panic!("expected a new connection");
         };
@@ -7609,7 +8037,7 @@ mod tests {
             panel: PanelId { side, .. },
             request,
             ..
-        } = one(app.handle(Resolved::Insert('3')))
+        } = one(choose(&mut app, 2))
         else {
             panic!("expected a listing");
         };
@@ -7629,7 +8057,7 @@ mod tests {
         app.handle(action(Action::Cancel));
         assert!(app.menu.is_none());
         open_menu(&mut app, Action::LocationMenuLeft);
-        app.handle(Resolved::Insert('w'));
+        filter(&mut app, "w");
         let effect = one(app.handle(action(Action::Confirm)));
         assert!(
             matches!(&effect, Effect::Connect { host, .. } if host == "web"),
@@ -7650,7 +8078,7 @@ mod tests {
         let Effect::List {
             panel: PanelId { side, .. },
             ..
-        } = one(app.handle(Resolved::Insert('3')))
+        } = one(choose(&mut app, 2))
         else {
             panic!("expected a listing");
         };
@@ -7676,7 +8104,7 @@ mod tests {
         app.handle(action(Action::Down));
         let text = screen_of(&mut app, 20);
         assert!(
-            line_with(&text, "Change location…").contains("Alt+F2"),
+            line_with(&text, "Change location…").contains("Ctrl+w 2"),
             "{text}"
         );
         assert!(
@@ -7810,6 +8238,14 @@ mod tests {
         assert_eq!(app.config.ui.language, "auto");
     }
 
+    /// Types `text` in the text field under the cursor in place of what it holds: A, Ctrl+u,
+    /// the text, and Esc, as typed in Normal mode.
+    fn edit_field(app: &mut App, text: &str) {
+        app.handle(action(Action::AppendAtEnd));
+        retype(app, text);
+        app.handle(action(Action::NormalMode));
+    }
+
     /// Opens the category `index` of the Configuration dialog, with the cursor on its first
     /// setting.
     fn config_category(app: &mut App, index: usize) {
@@ -7829,13 +8265,10 @@ mod tests {
         app.handle(action(Action::Toggle));
         assert!(!app.copy_choices.atomic);
         app.handle(action(Action::Down));
-        app.handle(Resolved::Insert('5'));
+        edit_field(&mut app, "5");
         config_category(&mut app, 2);
         assert_eq!(app.parallel_jobs, 5, "as the cursor left the field");
-        app.handle(action(Action::DeleteToStart));
-        for c in "~/bin/ssh".chars() {
-            app.handle(Resolved::Insert(c));
-        }
+        edit_field(&mut app, "~/bin/ssh");
         let effects = app.handle(action(Action::Confirm));
         let [Effect::SaveConfig { new, config, .. }] = &effects[..] else {
             panic!("expected the settings to be saved, and nothing to reload: {effects:?}");
@@ -7884,7 +8317,7 @@ mod tests {
         app.handle(action(Action::End));
         assert!(app.handle(action(Action::Disconnect)).is_empty());
         assert!(!app.hosts.contains_key("db"), "stopped connecting");
-        // Ctrl+r asks again; the earlier listing no longer counts.
+        // R asks again; the earlier listing no longer counts.
         let effects = app.handle(action(Action::Reload));
         assert!(matches!(
             &effects[..],
@@ -7923,7 +8356,7 @@ mod tests {
 
         // db comes first in the menu, after the home directory.
         menu_on(&mut app, Side::Right);
-        let Effect::List { request, host, .. } = one(app.handle(Resolved::Insert('2'))) else {
+        let Effect::List { request, host, .. } = one(choose(&mut app, 1)) else {
             panic!("expected a listing");
         };
         assert_eq!((request.location, host.is_some()), (remote("db", ""), true));
@@ -8139,11 +8572,7 @@ mod tests {
     fn ctrl_s_searches_and_other_keys_end_the_search() {
         let mut app = loaded();
         assert!(app.handle(Resolved::Insert('r')).is_empty());
-        assert_eq!(
-            app.context(),
-            Context::Panel,
-            "typing does nothing, as in mc"
-        );
+        assert_eq!(app.context(), Context::Panel, "typing does nothing");
         app.handle(action(Action::QuickSearch));
         assert!(app.handle(Resolved::Insert('r')).is_empty());
         assert_eq!(app.context(), Context::QuickSearch);
@@ -8160,7 +8589,7 @@ mod tests {
         assert_eq!(
             app.context(),
             Context::QuickSearch,
-            "Ctrl+s starts an empty search"
+            "/ starts an empty search"
         );
         app.handle(Resolved::Insert('l'));
         app.handle(action(Action::Backspace));
@@ -8238,7 +8667,7 @@ mod tests {
         }
         assert_eq!(app.context(), Context::Panel);
 
-        // With nothing typed, the second Ctrl+s searches for what the last search found.
+        // With nothing typed, the second / (Ctrl+g) searches for what the last search found.
         app.handle(action(Action::QuickSearch));
         app.handle(action(Action::QuickSearch));
         assert_eq!(under(&app), "bar");
@@ -8315,7 +8744,12 @@ mod tests {
     #[test]
     fn every_supported_f_key_action_has_a_label() {
         let app = loaded();
-        for action in app.keymap.fkeys(Context::Panel).into_iter().flatten() {
+        for action in app
+            .keymap
+            .fkeys(Mode::Normal, Context::Panel)
+            .into_iter()
+            .flatten()
+        {
             if app.supports(action) {
                 assert!(fkey_label(action).is_some(), "{action:?}");
             }
@@ -8735,7 +9169,7 @@ mod tests {
         let text = screen_of(&mut app, 16);
         assert!(text.contains("Left tabs"), "{text}");
         assert!(
-            text.contains("1 /srv") && text.contains("2 /srv/left"),
+            text.contains("║ /srv ") && text.contains("║ /srv/left "),
             "{text}"
         );
         app.handle(action(Action::Up));
@@ -8763,7 +9197,7 @@ mod tests {
         assert_eq!(tab_numbers(&app, Side::Left), (vec![3], 3));
         let text = screen_of(&mut app, 16);
         assert!(
-            text.contains("1 /srv") && !text.contains("2 /srv"),
+            text.contains("║ /srv ") && !text.contains("║ /srv/"),
             "{text}"
         );
         // The last one stays, and F8 does nothing for it.
@@ -9127,7 +9561,7 @@ mod tests {
         let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config);
         answer(&mut app, effects, &Listing::Dir(vec![dir("docs")]));
         app.handle(action(Action::NewTab));
-        let mut terminal = Terminal::new(TestBackend::new(100, 6)).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(100, 7)).unwrap();
         let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
             .draw(|frame| app.render(frame, now, &TimeZone::UTC))
@@ -9284,7 +9718,7 @@ mod tests {
         app.handle(action(Action::Rename));
         assert_eq!(app.context(), Context::Rename);
         assert!(screen(&mut app).contains("Rename: report.pdf"));
-        type_text(&mut app, "taken");
+        retype(&mut app, "taken");
         let rename = one(app.handle(action(Action::Confirm)));
         let Effect::Rename {
             panel,
@@ -9326,7 +9760,7 @@ mod tests {
 
         // A slash would move it: the error goes, and the field stays.
         app.handle(action(Action::Rename));
-        type_text(&mut app, "a/b");
+        retype(&mut app, "a/b");
         assert!(app.handle(action(Action::Confirm)).is_empty());
         assert!(screen(&mut app).contains("\"a/b.pdf\" cannot be a name"));
         app.handle(action(Action::Confirm));
@@ -9396,7 +9830,8 @@ mod tests {
         };
         assert_eq!(keywords, &[] as &[String]);
         assert_eq!(exclude.as_deref(), Some(Path::new("/srv")));
-        assert_eq!(app.context(), Context::Jump);
+        assert_eq!(app.place(), (Mode::Normal, Context::Jump));
+        app.handle(action(Action::QuickSearch));
         app.handle(Resolved::Insert('s'));
         let effects = app.handle(Resolved::Insert('c'));
         let [
@@ -9474,6 +9909,7 @@ mod tests {
             })
             .collect();
         app.jumps(*generation, Ok(found));
+        app.handle(action(Action::QuickSearch));
         for c in "src".chars() {
             assert!(app.handle(Resolved::Insert(c)).is_empty(), "no query");
         }
@@ -9632,7 +10068,7 @@ mod tests {
         assert_eq!(
             app.context(),
             Context::CommandHistory,
-            "Alt+h opens the line and the window"
+            "q : opens the line and the window"
         );
         let text = screen_of(&mut app, 16);
         assert!(text.contains("make") && !text.contains("uptime"), "{text}");
@@ -9741,27 +10177,6 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_x_ctrl_e_edits_the_command_and_brings_it_back() {
-        let mut app = loaded();
-        app.set_runtime_dir(PathBuf::from("/run/noc"));
-        app.handle(action(Action::Shell));
-        type_text(&mut app, "ls");
-        assert!(app.handle(action(Action::EditCommand)).is_empty());
-        let (file, text) = app.take_command_edit().unwrap();
-        assert!(file.starts_with("/run/noc"), "{file:?}");
-        assert_eq!(text, "ls");
-        assert!(app.take_command_edit().is_none());
-        app.command_edited(Ok("ls -l \\\n  /tmp\n".to_owned()));
-        assert_eq!(
-            app.command_line.as_ref().map(CommandLine::text),
-            Some("ls -l \\\n  /tmp")
-        );
-        assert_eq!(app.context(), Context::CommandLine, "it does not run");
-        app.command_edited(Err("Cannot edit the command: gone".to_owned()));
-        assert!(screen_of(&mut app, 12).contains("Cannot edit the command: gone"));
-    }
-
-    #[test]
     fn the_prompt_shows_the_directory_with_a_tilde_for_home() {
         let (mut app, _) = App::new(
             Path::new("/home/me/src/noc"),
@@ -9798,14 +10213,14 @@ mod tests {
         app.set_hints(&keys);
         assert!(!screen_of(&mut app, 16).contains("Esc closes"));
         app.handle(action(Action::KeyHints));
-        let context = app.take_hints_asked().unwrap();
-        assert_eq!(context, Context::Panel);
+        let place = app.take_hints_asked().unwrap();
+        assert_eq!(place, (Mode::Normal, Context::Panel));
         assert_eq!(app.take_hints_asked(), None, "asked once");
-        app.keymap().show_hints(&mut keys, context);
+        app.keymap().show_hints(&mut keys, place);
         app.set_hints(&keys);
         let text = screen_of(&mut app, 16);
         assert!(
-            text.contains("Esc closes") && text.contains("Ctrl+x") && text.contains("+4 keys"),
+            text.contains("Esc closes") && text.contains("Ctrl+w") && text.contains("+11 keys"),
             "{text}"
         );
         // A dialog in front hides them…
@@ -9813,11 +10228,11 @@ mod tests {
         app.set_hints(&keys);
         assert!(!screen_of(&mut app, 16).contains("Esc closes"));
         // …and shows its own when asked, staying open.
-        let dialog = app.context();
-        assert_eq!(dialog, Context::PathInput);
+        let dialog = app.place();
+        assert_eq!(dialog, (Mode::Insert, Context::PathInput));
         assert!(app.handle(action(Action::KeyHints)).is_empty());
         assert_eq!(app.take_hints_asked(), Some(dialog));
-        assert_eq!(app.context(), dialog);
+        assert_eq!(app.place(), dialog);
         app.keymap().show_hints(&mut keys, dialog);
         app.set_hints(&keys);
         let text = screen_of(&mut app, 16);
@@ -9830,7 +10245,10 @@ mod tests {
         app.handle(action(Action::PullDown));
         assert_eq!(app.context(), Context::PullDown);
         app.handle(action(Action::KeyHints));
-        assert_eq!(app.take_hints_asked(), Some(Context::PullDown));
+        assert_eq!(
+            app.take_hints_asked(),
+            Some((Mode::Normal, Context::PullDown))
+        );
         assert_eq!(app.context(), Context::PullDown);
     }
 

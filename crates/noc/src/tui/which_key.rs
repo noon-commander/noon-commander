@@ -8,7 +8,7 @@ use ratatui::text::{Line, Span};
 use super::cells::{self, Align};
 use super::dialog::{Colors, draw_box};
 use super::help;
-use super::keymap::{Action, Context, Hint, Hints};
+use super::keymap::{Action, Context, Hint, Hints, Mode};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -27,10 +27,10 @@ struct Row {
     group: bool,
 }
 
-/// What `action` does in `context`, or in the first context of its chain that says.
-fn describe(context: Context, action: Action) -> Option<String> {
+/// What `action` does in `context`, or in the first context of its chain in `mode` that says.
+fn describe((mode, context): (Mode, Context), action: Action) -> Option<String> {
     context
-        .chain()
+        .chain(mode)
         .iter()
         .find_map(|context| help::describe(*context, action))
 }
@@ -41,7 +41,7 @@ fn rows(hints: &Hints) -> Vec<Row> {
         .rows
         .iter()
         .filter_map(|Hint { keys, action, more }| {
-            let text = action.and_then(|action| describe(hints.context, action));
+            let text = action.and_then(|action| describe((hints.mode, hints.context), action));
             let text = match (text, *more) {
                 (Some(text), 0) => text,
                 (None, 0) => return None,
@@ -229,8 +229,9 @@ mod tests {
 
     fn root(keymap: &Keymap, context: Context) -> Hints {
         let mut state = KeyState::default();
-        keymap.show_hints(&mut state, context);
-        keymap.hints_of(&state, context).unwrap()
+        let place = (Mode::Normal, context);
+        keymap.show_hints(&mut state, place);
+        keymap.hints_of(&state, place).unwrap()
     }
 
     #[test]
@@ -278,14 +279,14 @@ mod tests {
 
     #[test]
     fn rows_say_what_keys_do_and_how_many_follow() {
-        let keymap = Keymap::mc();
+        let keymap = Keymap::default();
         let rows = rows(&root(&keymap, Context::Panel));
         let row = |keys: &str| rows.iter().find(|row| row.keys == keys).cloned();
         assert_eq!(
-            row("Ctrl+x"),
+            row("Ctrl+w"),
             Some(Row {
-                keys: "Ctrl+x".to_owned(),
-                text: "+6 keys".to_owned(),
+                keys: "Ctrl+w".to_owned(),
+                text: "+11 keys".to_owned(),
                 group: true
             })
         );
@@ -294,20 +295,22 @@ mod tests {
     }
 
     #[test]
-    fn draws_the_keys_after_ctrl_x() {
-        let keymap = Keymap::mc();
-        let ctrl_x = crokey::parse("ctrl-x").unwrap().normalized();
+    fn draws_the_keys_after_ctrl_w() {
+        let keymap = Keymap::default();
+        let ctrl_w = crokey::parse("ctrl-w").unwrap().normalized();
+        let place = (Mode::Normal, Context::Panel);
         let hints = Hints {
+            mode: Mode::Normal,
             context: Context::Panel,
-            typed: Some("Ctrl+x".to_owned()),
-            rows: keymap.hints(Context::Panel, &[ctrl_x]),
+            typed: Some("Ctrl+w".to_owned()),
+            rows: keymap.hints(place, &[ctrl_w]),
         };
         insta::assert_snapshot!(draw(&hints, 100, 13));
     }
 
     #[test]
     fn draws_every_key_of_the_root_and_says_how_many_do_not_fit() {
-        let keymap = Keymap::mc();
+        let keymap = Keymap::default();
         let hints = root(&keymap, Context::Panel);
         insta::assert_snapshot!(draw(&hints, 100, 14));
     }

@@ -1,4 +1,4 @@
-//! The list of jobs, as mc's Background jobs (Ctrl+x j): how far each is, with buttons that
+//! The list of jobs, as mc's Background jobs (`f j`): how far each is, with buttons that
 //! bring the selected one to the front or abort it.
 
 use std::cell::RefCell;

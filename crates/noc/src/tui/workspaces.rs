@@ -13,7 +13,7 @@ use ratatui::text::Line;
 
 use super::cells::{self, Align};
 use super::dialog::Colors;
-use super::keymap::{Action, Resolved};
+use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
 use super::panel::{Destination, Panel, SortKey};
 use super::picker::{Body, MenuLine, Pick, Picker};
@@ -125,8 +125,13 @@ impl WorkspacesWindow {
         self.chosen().is_some()
     }
 
-    /// Takes a key: the picker's, where Enter and the digits restore a workspace, and Insert,
-    /// which saves the tabs as a new workspace, F6, which renames, and F8, which deletes.
+    /// The mode keys are typed in: Insert while the filter takes them.
+    pub(crate) fn mode(&self) -> Mode {
+        self.picker.mode()
+    }
+
+    /// Takes a key: the picker's, where Enter restores a workspace, and a, which saves the
+    /// tabs as a new workspace, r and F6, which rename, and d d and F8, which delete.
     pub(crate) fn handle(&mut self, input: Resolved) -> WorkspacesEvent {
         let chosen = |window: &Self, event: fn(String) -> WorkspacesEvent| {
             window
@@ -178,8 +183,8 @@ impl WorkspacesWindow {
         };
         let focused = Colors::of(theme, false).focused_style();
         self.picker.render(frame, area, theme, body, &mut |row| {
-            // A hotkey, a space, the name, a space, the tabs.
-            let name_width = row.width.saturating_sub(count_width + 3);
+            // The name, a space, the tabs.
+            let name_width = row.width.saturating_sub(count_width + 1);
             let name = cells::fit(
                 &cells::sanitize(shown[row.index].name.as_bytes()),
                 name_width,
@@ -187,7 +192,7 @@ impl WorkspacesWindow {
             );
             let count = cells::fit(&counts[row.index], count_width, Align::Right);
             let style = if row.selected { focused } else { theme.dialog };
-            Line::styled(format!("{} {name} {count}", row.hotkey), style)
+            Line::styled(format!("{name} {count}"), style)
         });
     }
 }
@@ -316,6 +321,7 @@ mod tests {
     }
 
     fn typed(window: &mut WorkspacesWindow, text: &str) {
+        window.handle(Resolved::Action(Action::QuickSearch));
         for c in text.chars() {
             assert_eq!(window.handle(Resolved::Insert(c)), WorkspacesEvent::Pending);
         }
@@ -330,15 +336,14 @@ mod tests {
     }
 
     #[test]
-    fn enter_digits_f6_and_f8_act_on_their_row() {
+    fn enter_f6_and_f8_act_on_their_row() {
         let mut window = window();
         let restore = |name: &str| WorkspacesEvent::Restore(name.to_owned());
         assert_eq!(press(&mut window, Action::Confirm), restore("noon"));
-        assert_eq!(window.handle(Resolved::Insert('3')), restore("photos"));
         assert_eq!(
-            window.handle(Resolved::Insert('9')),
+            window.handle(Resolved::Insert('3')),
             WorkspacesEvent::Pending,
-            "no ninth row"
+            "no digits"
         );
         press(&mut window, Action::Down);
         assert_eq!(
@@ -424,7 +429,7 @@ mod tests {
     }
 
     #[test]
-    fn draws_names_with_hotkeys_and_their_tabs() {
+    fn draws_names_and_their_tabs() {
         let mut window = window();
         insta::assert_snapshot!(draw(&mut window, 12));
     }

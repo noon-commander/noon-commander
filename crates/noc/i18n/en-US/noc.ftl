@@ -29,6 +29,12 @@ fkey-pulldown = PullDn
 # Closes the tab under the cursor in the tab menu.
 fkey-close-tab = Close
 
+## The mode keys are typed in, as vim shows it on the line above the F-key bar (src/tui/app),
+## in Insert and Visual mode. Prefix: mode-.
+
+mode-insert = -- INSERT --
+mode-visual = -- VISUAL --
+
 ## The title of the terminal's window or tab (src/tui/app), with ui.terminal_title. Prefix:
 ## terminal-.
 
@@ -116,7 +122,7 @@ menu-home = Home
 # Enter shows and the filter finds.
 menu-more = { $count } more…
 
-## The zoxide window of Alt+z (src/tui/jump): the directories zoxide ranks highest for the
+## The zoxide window of g z (src/tui/jump): the directories zoxide ranks highest for the
 ## keywords typed, as `z` picks them in a shell. Prefix: jump-.
 
 jump-title = zoxide
@@ -238,8 +244,6 @@ config-language = Language
 config-language-hint = A language tag, such as en-US, or auto for the system locale.
 config-theme = Theme
 config-theme-hint = Colors: mc-classic, as mc; terminal, the terminal's own; noon, from the logo, and catppuccin, each dark or light.
-config-keymap = Keymap
-config-keymap-hint = Keys: default, modelled on mc, or vim.
 config-borders = Borders
 config-borders-hint = The frames of panels and dialogs.
 config-borders-double = Double ═ ║ ╔
@@ -247,7 +251,7 @@ config-borders-single = Single ─ │ ┌
 config-icons = Icons
 config-icons-hint = Nerd Font icons in front of names; without them, mc's markers.
 config-show-hidden = Show hidden files
-config-show-hidden-hint = Names that begin with a dot; o h switches them, and Alt+. in the default keymap.
+config-show-hidden-hint = Names that begin with a dot; o h switches them.
 config-fuzzy-search = Fuzzy search
 config-fuzzy-search-hint = Quick search, the location menu, and the zoxide and Workspaces windows match as fzf does: the letters typed in order, best matches first.
 config-mouse = Mouse
@@ -258,7 +262,7 @@ config-wheel-invalid = "{ $text }" is not a step of the wheel: it takes a number
 config-terminal-title = Terminal title
 config-terminal-title-hint = The title of the terminal's window or tab shows the active panel's directory.
 config-which-key = Key hints
-config-which-key-hint = After a key that starts longer sequences, such as Ctrl+x, show the keys that can follow it, as which-key does.
+config-which-key-hint = After a key that starts longer sequences, such as g or Ctrl+w, show the keys that can follow it, as which-key does.
 config-which-key-delay = Key hints delay
 config-which-key-delay-hint = How long after such a key the hints show, in milliseconds.
 config-which-key-delay-invalid = "{ $text }" is not a delay: it takes a whole number of milliseconds, from 0 to 65535.
@@ -301,7 +305,7 @@ config-zoxide = zoxide
 config-zoxide-record = Record directories
 config-zoxide-record-hint = Add a local directory to zoxide once you copy, delete, view, or edit something there; passing through does not count.
 config-zoxide-program = Program
-config-zoxide-program-hint = The zoxide program: a name in PATH, or a path. Alt+z jumps to the directories it ranks.
+config-zoxide-program-hint = The zoxide program: a name in PATH, or a path. g z jumps to the directories it ranks.
 config-zoxide-program-empty = The zoxide program cannot be empty.
 config-shell = Command line
 config-pause = Wait after a command
@@ -346,9 +350,18 @@ dialog-use-current = Use current
 help-title = Help
 help-everywhere = Everywhere
 help-panels = Panels
+help-panels-visual = Panels in Visual mode
+help-text-insert = Text fields in Insert mode
+help-text-normal = Text fields in Normal mode
+help-text-visual = Text fields in Visual mode
+help-lists = Lists
+help-lists-filter = The filter of a list
+help-list-filter = Type in the filter, in Insert mode
+help-list-rows = Back to the rows, with the filter kept
+help-list-take = Take the row under the cursor
+help-list-close = Close the window
 help-menu = Location menu
 help-tab-menu = Tab menu
-help-jump = zoxide
 help-workspaces = Workspaces
 help-history = Command history
 help-history-hosts = The commands of the panel's host, or of all hosts
@@ -356,14 +369,16 @@ help-history-take = Put the command on the command line, without running it
 help-history-delete = Remove the command from the history
 help-pulldown = Pull-down menu
 help-quick-search = Quick search
-help-renaming = Renaming in place
+help-renaming = Renaming in place, in Normal mode
+help-renaming-insert = Renaming in place
 help-command-line = Command line
+help-command-line-normal = Command line in Normal mode
 help-dialogs = Dialogs and help
 help-this-help = This help
 help-this-help-top = The top
 help-this-help-end = The end
 help-this-help-close = Close this help
-help-text-fields = Text fields
+help-text-fields = Text fields of dialogs
 help-path-fields = Path fields
 help-completion = Completion list
 help-complete = Complete the path; again: list the choices
@@ -392,6 +407,12 @@ help-invert-marks = Invert the marks on files
 help-select = Mark the names that match a pattern
 help-unselect = Unmark the names that match a pattern
 help-parent = Parent directory
+help-jump-back = Back to where the panel was before its last jump, as vim's jump list
+help-jump-forward = Forward again, where Ctrl+o came from
+help-visual = Visual mode: select rows from here to the cursor
+help-reselect = Select again the rows selected last
+help-other-end = The other end of the selection
+help-visual-end = Normal mode again
 help-switch-panel = The other panel
 help-focus-left = The left panel
 help-focus-right = The right panel
@@ -474,50 +495,80 @@ help-prev-field = Previous field or button
 help-confirm = Press the button with the focus
 help-toggle = Switch the check box, or press the button
 help-dialog-cancel = Cancel, or close this help
-help-field-home = Start of the text
-help-field-end = End of the text
+help-field-home = Start of the line
+help-field-first-non-blank = The first character of the line that is not blank
+help-field-end = End of the line
 help-field-backspace = Delete the character before the cursor
 help-field-delete = Delete the character at the cursor
-help-field-delete-to-start = Delete to the start
-help-field-delete-to-end = Delete to the end
+help-field-delete-to-start = Delete to the start of the line
+help-field-delete-to-end = Delete to the end of the line
 help-field-delete-word = Delete the word before the cursor
-help-field-delete-next-word = Delete the word after the cursor
 help-field-left = One character left
 help-field-right = One character right
-help-field-word-left = To the start of the word before the cursor
-help-field-word-right = To the end of the word after the cursor
+help-field-word-forward = The start of the next word
+help-field-word-backward = The start of the word before the cursor
+help-field-word-end = The end of the word
+help-field-big-word-forward = The start of the next word, where only blanks part words
+help-field-big-word-backward = The start of the word before, where only blanks part words
+help-field-big-word-end = The end of the word, where only blanks part words
+help-field-find = The next character typed after it, in the line
+help-field-find-back = Back to the character typed after it
+help-field-till = Right before the next character typed after it
+help-field-till-back = Back to right after the character typed after it
+help-field-repeat-find = Find again, as the last f, t, F, or T
+help-field-repeat-find-back = Find again, the other way
+help-field-insert = Insert mode, before the cursor
+help-field-append = Insert mode, after the cursor
+help-field-insert-at-start = Insert mode, at the start of the line
+help-field-append-at-end = Insert mode, at the end of the line
+help-field-visual = Visual mode: select from here to the cursor
+help-field-normal = Normal mode
+help-field-normal-once = One command of Normal mode, then Insert mode again
+help-field-substitute = Delete the character at the cursor, then Insert mode
+help-field-substitute-line = Delete the text of the line, then Insert mode
+help-field-change-to-end = Delete to the end of the line, then Insert mode
+help-field-replace = Replace the character at the cursor with the one typed after it
+help-field-toggle-case = Switch the case, and move on
+help-field-delete-operator = Delete what the motion after it moves over, or the line for d d; in Visual mode, the selection
+help-field-change-operator = Delete as d does, then Insert mode
+help-field-yank-operator = Copy what the motion after it moves over to a register, or the line for y y
+help-field-put-after = Put the text of the register after the cursor
+help-field-put-before = Put the text of the register before the cursor
+help-field-undo = Undo the last change
+help-field-redo = Redo what undo took back
+help-field-register = The register, a … z, for the next command; A … Z append to it
+help-field-paste-register = Put the text of the register typed after it
+help-field-literal = Type the next key as it is
 help-rename-confirm = Rename to the name typed
 help-rename-cancel = Keep the name as it was
 help-command-up = The line above; from the first line, the command before in the history of the panel's host
 help-command-down = The line below; from the last line, the command after in the history
 help-command-older = The command before in the history of the panel's host
 help-command-newer = The command after in the history; after the last, what was typed
-help-user-screen = The output of commands, in place of the panels; the same key or Esc brings them back
+help-user-screen = The output of commands, in place of the panels; the same keys, q, or Esc bring them back
 help-command-history = The command history: filter it, and take a command of this host or another
 help-command-home = Start of the line
 help-command-end = End of the line
-help-command-delete-to-start = Delete to the start of the line
-help-command-delete-to-end = Delete to the end of the line
-help-command-backspace = Delete the character before the cursor
 help-command-new-line = A new line in the command; Shift+Enter where the terminal tells it from Enter
-help-command-edit = Edit the command in $VISUAL or $EDITOR; it comes back without running
+help-command-normal = Normal mode, to edit the command with vim's keys
 help-command-run = Run the command; after a \ at the end of the line, a new line
 help-command-close = Close the command line
-help-note-f-keys = In the panels and the windows that list items, Alt+1 … Alt+0 stand for F1 … F10, for terminals without them.
-help-note-menu = Typing in the location menu and the tab menu filters them; 1 … 9 and 0 open the first ten rows while the filter is empty.
-help-note-jump = Typing in the zoxide window gives it keywords, as z does in a shell; 1 … 9 and 0 open the first ten rows while there are none.
-help-note-jump-fuzzy = Typing in the zoxide window filters its directories; 1 … 9 and 0 open the first ten rows while nothing is typed.
+help-note-modes = Keys are vim's, in its modes; the F-keys are mc's, in every mode. Text fields, quick search, and the command line open in Insert mode, where characters are text and Esc goes to Normal mode; the line above the F-key bar says -- INSERT -- and -- VISUAL --, and the cursor is a bar in Insert mode. Alt and a key stand for Esc and the key there. Ctrl+c closes a dialog in every mode.
+help-note-count = In Normal mode, a count goes before a command: 5j goes five rows down, 3G to the third row, 2g t to the second tab, and d3w deletes three words. In text fields, "a names a register, which every field shares, and A appends to it.
+help-note-menu = The lists open in Normal mode: / types in the filter, and Esc goes back to the rows.
+help-note-jump = In the zoxide window, / types keywords, as z takes them in a shell.
+help-note-jump-fuzzy = In the zoxide window, / types what filters its directories.
 help-note-fuzzy = Quick search, the location menu, the tab menu, the zoxide window, and the Workspaces window match as fzf does: the letters typed in order, not necessarily together, best match first. Words separated by spaces must all match; 'word matches as it is, ^word at the start, word$ at the end, and !word where it is not.
 help-note-workspaces = A workspace holds the tabs of both panels: where each is, its sort order, and the row under its cursor. t w and F9 → Workspace list them; restoring one replaces every tab.
 help-note-command = ! opens the command line, and : too, for commands of Noon Commander, of which :!command is the only one so far. A command runs with the terminal, in the panel's directory, then a key brings the panels back; cd and export last only as long as the command.
-help-note-pulldown = In the pull-down menu, the highlighted letter of a menu opens it, and that of a command runs it.
-help-note-key-hints = After a key that starts longer sequences, such as Ctrl+x, the keys that can follow show after a moment, and wait for one; Esc closes them, and Backspace takes back the last key.
+help-note-pulldown = In the pull-down menu, Alt and the highlighted letter of a menu open it, and Alt and that of a command run it.
+help-note-key-hints = After a key that starts longer sequences, such as g or Ctrl+w, the keys that can follow show after a moment, and wait for one; Esc closes them, and Backspace takes back the last key.
 help-key-hints = The keys that can be typed now, and what they do
 
 ## Key hints, as which-key shows them (src/tui/which_key): the keys that can follow those
 ## typed so far, at the bottom of the panels. Prefix: which-key-.
 
-# The title while no key is typed; otherwise it is the keys typed, such as Ctrl+x.
+# The title while no key is typed; otherwise it is the keys typed, such as Ctrl+w.
 which-key-title = Keys
 # After a key that starts longer sequences: how many.
 which-key-more = { $count ->
@@ -552,7 +603,7 @@ pattern-unselect = Unselect
 pattern-files-only = Files only
 pattern-case-sensitive = Case sensitive
 
-## Quick cd, Alt+c (src/tui/app, src/tui/cd). Prefix: cd-. As in mc.
+## Quick cd, g d (src/tui/app, src/tui/cd). Prefix: cd-. As in mc.
 
 cd-title = Quick cd
 # Above the field: a path as cd takes it in a shell.
@@ -585,7 +636,7 @@ job-speed = { $size }/s
 # While a job waits for others to finish, as transfer.parallel_jobs allows.
 job-waiting = Waiting for other jobs to finish…
 
-## The list of jobs, Ctrl+x j (src/tui/jobs), as mc's Background jobs. Prefix: jobs-.
+## The list of jobs, f j (src/tui/jobs), as mc's Background jobs. Prefix: jobs-.
 
 jobs-title = Jobs
 jobs-none = No jobs are running.
@@ -744,5 +795,3 @@ history-none = No commands yet. Commands run with ! and : come here.
 history-nothing = No command matches.
 # history.toml could not be read or written; the reason names the file.
 history-error = Cannot keep the command history: { $reason }
-# The command could not go to the editor of Ctrl+x Ctrl+e, or come back.
-command-edit-error = Cannot edit the command: { $reason }

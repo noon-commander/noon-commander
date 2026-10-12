@@ -140,10 +140,11 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
   waiting panels read their directories once it is connected. Cancel after a failed first
   attempt leaves the panel where it was, with `Cannot open web: reason` in its status line;
   after a lost connection, it leaves the panels on the host without entries, and their status
-  line says `Not connected to web; Ctrl+r connects`, with the Reload key of the active keymap.
-  Ctrl+r, or Enter on `..`, connects again. Jobs on a lost host end with it.
-- F8 in the location menu, or Disconnect in the menus of F9, closes the connection to a host, or
-  stops connecting to it. Panels on a connected host stay there without entries, with the same
+  line says `Not connected to web; R connects`, with the Reload key of the keymap. `R`, or
+  Enter on `..`, connects again. Jobs on a lost host end with it.
+- F8 or `d d` in the location menu, or Disconnect in the menus of F9, closes the connection to a
+  host, or stops connecting to it. Panels on a connected host stay there without entries, with the
+  same
   status line, and no dialog asks; a panel that only waited for the host stays where it was.
 - F4 in the location menu edits the settings of a host in a dialog (label, remote directory,
   other panel directory, remember the last directory); Use Current fills in the directory a
@@ -164,34 +165,33 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
 
 ### Location menu
 
-Alt+F1 and Alt+F2, as Far Manager's menus to change drives, open a menu over the left or the right
-panel (Ctrl+x 1 and Ctrl+x 2 too, for terminals whose Alt+F1 never arrives, such as macOS Terminal
-without Option as Meta, and F9 → Left or Right → Change location). Left and right are where the
-panels are drawn, as in Far: after Ctrl+u, Alt+F1 opens the menu of the right panel, drawn on the
-left, and its title says Left. It is the one place to choose a volume or a host, grouped under
-headings:
+Ctrl+w 1 and Ctrl+w 2 open a menu over the left or the right panel (Alt+F1 and Alt+F2 too, as Far
+Manager's menus to change drives, and F9 → Left or Right → Change location). Left and right are
+where the panels are drawn, as in Far: after Ctrl+w x, Ctrl+w 1 opens the menu of the right panel,
+drawn on the left, and its title says Left. It is the one place to choose a volume or a host,
+grouped under headings:
 
 ```text
  ╔════════════════════ Left ════════════════════╗
  ║ Filter:                                      ║
  ║ ──────────────────────────────────────────── ║
  ║ ─ Favorites ──────────────────────────────── ║
- ║ 1 ~ Home                                212G ║
+ ║ ~ Home                                  212G ║
  ║ ─ Mounts ─────────────────────────────────── ║
- ║ 2 + Macintosh HD                        212G ║
- ║ 3 + USB                                  12G ║
+ ║ + Macintosh HD                          212G ║
+ ║ + USB                                    12G ║
  ║ ─ SFTP ───────────────────────────────────── ║
- ║ 4 ● Prod                     deploy@10.0.0.5 ║
- ║ 5 ○ db                                       ║
- ║ 6 ○ staging                  ubuntu@stg:2222 ║
- ║ 7 ✗ nas                            admin@nas ║
- ║ 8 ○ backup                                   ║
- ║ 9 ○ ci                                       ║
- ║ 0 ○ git                                      ║
- ║   ○ mail                                     ║
- ║   ○ vpn                                      ║
- ║   ○ www                                      ║
- ║   24 more…                                   ║
+ ║ ● Prod                       deploy@10.0.0.5 ║
+ ║ ○ db                                         ║
+ ║ ○ staging                    ubuntu@stg:2222 ║
+ ║ ✗ nas                              admin@nas ║
+ ║ ○ backup                                     ║
+ ║ ○ ci                                         ║
+ ║ ○ git                                        ║
+ ║ ○ mail                                       ║
+ ║ ○ vpn                                        ║
+ ║ ○ www                                        ║
+ ║ 24 more…                                     ║
  ╚══════════════════════════════════════════════╝
 ```
 
@@ -203,21 +203,21 @@ headings:
   system volume, then the others by mount point; the hosts in config order. Each group shows
   its first ten places (a constant, not a setting), and always the volume or host the panel is
   on and the hosts that are connected, connecting, or waiting for Retry. A last row,
-  `24 more…`, stands for the rest: the cursor and the mouse select it, but it takes no digit,
-  and Enter on it shows the whole group until the menu closes.
-- The cursor starts on the home directory or the volume that holds the panel's directory,
-  whichever is nearer, or on its host. Enter opens the row in that panel, which becomes active;
-  while the filter is empty, `1` … `9` and `0` open the first ten places, skipping the rows of
-  more.
-- Typing filters the places by name, path or mount point, alias, label, and address, and finds every
-  one, hidden ones too; the rows of more go away while the filter has text. With `ui.fuzzy_search`
-  (the default) it matches them as [fzf](#fuzzy-search) does, and the cursor goes to the best row;
-  otherwise a row's text must contain the filter, ignoring case, and the cursor goes to the first.
-  The rows keep their order either way. The filter is a text field, edited with the keys of `input`;
-  Home and End go to the first and the last row. F4 edits the settings of the host under the cursor,
-  F8 or Delete (as in Far's menu of drives) disconnects it or stops connecting to it, Ctrl+r reads
-  the volumes and hosts again, and Esc or F10 closes the menu. Alt+4, Alt+8, and Alt+0 stand for F4,
-  F8, and F10, as they do in the other windows that list items.
+  `24 more…`, stands for the rest: the cursor and the mouse select it, and Enter on it shows the
+  whole group until the menu closes.
+- The menu opens in Normal mode, as the other [lists](#lists) do, with the cursor on the home
+  directory or the volume that holds the panel's directory, whichever is nearer, or on its host:
+  `j` and `k` move, `g g` and `G` go to the first and the last row, and Enter opens the row in
+  that panel, which becomes active.
+- `/` types in the filter, in Insert mode, which finds the places by name, path or mount point,
+  alias, label, and address, and finds every one, hidden ones too; the rows of more go away while
+  the filter has text. With `ui.fuzzy_search` (the default) it matches them as
+  [fzf](#fuzzy-search) does, and the cursor goes to the best row; otherwise a row's text must
+  contain the filter, ignoring case, and the cursor goes to the first. The rows keep their order
+  either way. The filter is a text field, edited with the keys of `input`; Esc goes back to the
+  rows with the filter kept. F4 edits the settings of the host under the cursor, F8 or `d d`
+  disconnects it or stops connecting to it, `R` reads the volumes and hosts again, and Esc, `q`,
+  or F10 closes the menu.
 - `recent.toml` in the state directory keeps the places used last: the aliases of hosts and
   the mount points of volumes, most recent first, up to 50 of each. A host counts as used when
   a connection to it succeeds; a volume when a panel arrives in a directory on it in any way:
@@ -225,7 +225,7 @@ headings:
   a turn of the event loop that changed the lists, a task writes it through `noc-config`, whole
   and atomically, one change after another. Mount points that are not UTF-8 are not kept, since
   TOML cannot hold them.
-- The menu is modal (keymap context `location_menu`). Each time it opens, and on Ctrl+r, a
+- The menu is modal (keymap context `location_menu`). Each time it opens, and on `R`, a
   background task reads the volumes, scans the ssh config, and loads the cache of `ssh -G`;
   that listing carries a generation of its own, so a stale one is dropped. A host that connects
   or disconnects while the menu is open shows its new state at once, and the cursor stays on
@@ -233,26 +233,26 @@ headings:
 
 ### Pull-down menu
 
-F9 (Alt+9) opens mc's menu bar, as Far does: the bar alone with the menu of the active panel
+F9 (or `g m`) opens mc's menu bar, as Far does: the bar alone with the menu of the active panel
 selected. Shift+F9 opens it on the command that ran last, as Far's Shift+F10. An open
 menu:
 
 ```text
   Left     File     Command     Options     Workspace     Right         2 jobs 37%
  ╔══════════════════════════════╗
- ║   Change location…    Alt+F1 ║
+ ║   Change location…  Ctrl+w 1 ║
  ╟──────────────────────────────╢
  ║ • Sort by name           o n ║
  ║   Sort by extension      o e ║
  ║   Sort by time           o m ║
  ║   Sort by size           o s ║
  ╟──────────────────────────────╢
- ║   Rescan              Ctrl+r ║
+ ║   Rescan                   R ║
  ║   Disconnect                 ║
  ╚══════════════════════════════╝
 ```
 
-- Left and Right act on the panel drawn on that side, after Ctrl+u too: its location menu,
+- Left and Right act on the panel drawn on that side, after Ctrl+w x too: its location menu,
   sort order (`•` marks the current one), Rescan, Disconnect while it shows a host, and its
   [tabs](#tabs): New tab, Close tab, and Tab list…. File
   has F3 … F8, `+`, `-`, `*`, Checksums, and Exit; Command has quick search,
@@ -260,50 +260,53 @@ menu:
   commands, the jobs, host settings and disconnect for the host the active panel shows, help,
   and redraw; Options has Configuration… and Show hidden files (`✓` while on); Workspace has Save
   workspace…, Workspace list…, and the saved [workspaces](#workspaces), with digits as their
-  letters. Without icons, the marks are `*` and `x`. A menu taller than the screen scrolls
+  letters, typed with Alt. Without icons, the marks are `*` and `x`. A menu taller than the screen
+  scrolls
   with the cursor.
 - Commands do what their keys do, through the same `Action`s. Each shows the key that does
   it in the active panel's context (`Keymap::key`); Left and Right show sort and rescan keys
   only for the active panel, as keys act there. Commands that cannot run now are dimmed, and
   the cursor skips them.
-- On the bar, Left and Right, or Shift+Tab and Tab, select the next menu, round the bar, as
-  Alt+Left and Alt+Right go round the tabs; Enter, Down, or the menu's highlighted letter (`&`
-  in the Fluent messages) opens it, End opens it on its last command, and Up and Home do
-  nothing. In an open menu, Left and Right open the next one, round the bar too; Up and Down move
-  round it, from the last command to the first and back, and the mouse wheel stops at its ends;
-  Home and End go to its first and last command; Home on the first command goes back to the bar;
-  Enter or the command's highlighted letter runs it. Esc, F9, or F10 goes back to the bar, and
-  closes the bar from there. Running a command closes it first.
+- On the bar, `h` and `l` (Left and Right, Shift+Tab and Tab) select the next menu, round the
+  bar; Enter, `j` (Down), or Alt and the menu's highlighted letter (`&` in the Fluent messages)
+  opens it, `G` (End) opens it on its last command, and `k` (Up) and `g g` (Home) do nothing. In
+  an open menu, `h` and `l` open the next one, round the bar too; `k` and `j` move round it, from
+  the last command to the first and back, and the mouse wheel stops at its ends; `g g` and `G`
+  go to its first and last command; `g g` on the first command goes back to the bar; Enter or
+  Alt and the command's highlighted letter runs it. Esc, `q`, F9, or F10 goes back to the bar,
+  and closes the bar from there. Running a command closes it first.
 - The menu keeps nothing when it closes, and a menu opens at its first command. The app keeps
   only the `Command` that ran last, so Shift+F9 Enter repeats it. A command on a panel stays
-  with that panel after Ctrl+u, under the other title. A command that cannot run now passes the
+  with that panel after Ctrl+w x, under the other title. A command that cannot run now passes the
   cursor on to the next one; one that is gone, such as a deleted workspace, leaves the bar as F9
   opens it.
 - `ui.menu_bar` decides where the bar is: `on-demand` (the default) draws it over the top line
   of the panels only while a menu is open, as Far does; `always` keeps it above the panels, as
   mc does, which takes a row from them. The jobs indicator sits at the right end of that row.
-- The menu is modal (keymap context `pull_down`); letters are text there, so they are hotkeys.
+- The menu is modal (keymap context `pull_down`), in Normal mode; Alt and a letter or a digit
+  reach its hotkeys, so the plain letters stay vim's motions.
 
 ### Quick cd
 
-Alt+c, as mc's Quick cd, asks for a path and opens it in the active panel, as `cd`
+`g d`, as mc's Quick cd, asks for a path and opens it in the active panel, as `cd`
 in a shell reads it: relative to the panel's directory, `/…` absolute, `~` and `~/…` the home
 directory, `..` and `.` resolved by name, `-` the directory the tab showed before, and
 `host:path` on a host, scp-style, which connects to it if needed. On a host, paths stay on it
-and `~` is the remote home. `cd ..` puts the cursor on the directory left, as Ctrl+PgUp does; a
+and `~` is the remote home. `cd ..` puts the cursor on the directory left, as `h` does; a
 path that is not there leaves the panel where it is, with the reason below the listing. It is in
 F9 → Command.
 
 ### Completion
 
-Tab completes the path before the cursor in the fields of Quick cd, F5, F6, and F7, as bash
-does (keymap context `path_input`), from a listing of the directory it names, read as the
-dialog reads its text:
+Tab completes the path before the cursor in the fields of Quick cd, F5, F6, and F7, in Insert
+mode, as bash does (keymap context `path_input`), from a listing of the directory it names, read
+as the dialog reads its text:
 
 - The last part, after the last `/`, is completed. One match goes in, with `/` after a
   directory and `:` after a host; several go in as far as they agree, and a Tab that gets no
-  further lists them under the field (context `completion`): arrows and Tab choose, Enter
-  takes one, Esc closes the list, and any other key closes it and goes to the field.
+  further lists them under the field (context `completion`), as vim's pop-up menu: Ctrl+n,
+  Ctrl+p, the arrows, and Tab choose, Ctrl+y or Enter takes one, Ctrl+e or Esc closes the list,
+  and any other key closes it and goes to the field.
 - Names that start with a dot count only after a typed dot. Case counts, unless nothing
   matches with it. Names that are not UTF-8 or hold control characters cannot be typed and
   are left out.
@@ -316,25 +319,25 @@ dialog reads its text:
 ### zoxide
 
 [zoxide](https://github.com/ajeetdsouza/zoxide) ranks the directories the user works in
-([ADR 0012](adr/0012-external-tools-and-zoxide.md)). Alt+z (Ctrl+x z) opens a window of its
-best directories, which Enter opens in the active panel:
+([ADR 0012](adr/0012-external-tools-and-zoxide.md)). `g z` opens a window of its best
+directories, which Enter opens in the active panel:
 
 ```text
 ╔═════════════════════════════ zoxide ═════════════════════════════╗
 ║ Jump to: src                                                     ║
 ║ ──────────────────────────────────────────────────────────────── ║
-║ 1 ~/src/noc                                                 56.0 ║
-║ 2 /srv/www/src                                              12.5 ║
+║ ~/src/noc                                                   56.0 ║
+║ /srv/www/src                                                12.5 ║
 ╚══════════════════════════════════════════════════════════════════╝
 ```
 
 - With `ui.fuzzy_search` (the default), the window asks
   `zoxide query --list --score --exclude <dir> --` once, for every directory but the panel's,
-  and typing filters them as [fzf](#fuzzy-search) does, best match first and those as good in
-  zoxide's order, as `zi` does with fzf. Otherwise typing gives zoxide keywords, as
+  and what `/` types filters them as [fzf](#fuzzy-search) does, best match first and those as
+  good in zoxide's order, as `zi` does with fzf. Otherwise what `/` types is zoxide keywords, as
   `z foo bar` in a shell; each change asks
   `zoxide query --list --score --exclude <dir> -- <keywords>` again, and a query still running
-  is dropped. While nothing is typed, `1` … `9` and `0` open the first ten rows. Directories
+  is dropped. The window opens in Normal mode, as the other [lists](#lists) do. Directories
   under the home directory show from `~`, and fuzzy search matches them as shown.
 - A local directory goes to zoxide (`zoxide add -- <dir>`) once the user does something in it,
   at most once a visit: a copy, move, or delete from it, a copy or move into it when a panel
@@ -365,6 +368,25 @@ fzf's algorithm:
   as good.
 - Tab completion in path fields still completes the start of a name.
 
+### Lists
+
+The location menu, the tab menu, the zoxide window, the Workspaces window, and the command
+history list rows to choose from. They open in Normal mode (keymap context `list`, which each
+one's context falls back to): `j`, `k`, Ctrl+d, Ctrl+u, Ctrl+f, Ctrl+b, `g g`, and `G` move, a
+count repeats a motion, Enter takes the row under the cursor, `d d` and F8 delete it where the
+window can, and Esc, `q`, Ctrl+c, or F10 closes the window. `/` types in the filter, in Insert
+mode, where characters are text, the keys of `input` edit it, Up, Down, Ctrl+p, and Ctrl+n still
+move, and Esc goes back to the rows with the filter kept. There are no digit hotkeys.
+
+- All but the zoxide window share `tui/picker.rs`: the filter, a text field with a cursor
+  (`dialog::Field`), which matches as fzf does with `ui.fuzzy_search`; the cursor, scrolling,
+  the mouse, and the box, which the menus draw over their panel and the windows over both. Each
+  holds its own rows, says what the filter finds them by, and draws them. A row may show only
+  while the filter is empty, as the rows of more in the location menu do, or only while it has
+  text, as the places behind them do.
+- The zoxide window does not use it: zoxide, not a filter, picks its rows from the keywords
+  typed. It has the same modes.
+
 ### Tabs
 
 Each side has tabs of its own ([ADR 0011](adr/0011-tabs-per-panel.md)). A side with more than
@@ -387,25 +409,13 @@ row and names the tab that shows by its whole location:
   hidden tab shows, the tab is marked stale and reads it again when it shows.
 - `t n` opens a new tab after the one that shows, on the same directory with the same listing
   and cursor, without marks; `t c` closes the tab that shows (the last one stays), and the next
-  one shows. Alt+Right and Alt+Left, or `] t` and `[ t`, go round the tabs; `t h` and `t l` open
-  the tab menu of the left and the right panel, whichever is active: the tabs with their whole
-  locations, over that panel, to show one. The panel whose tab is shown becomes active. F8 and
-  Delete (`close_tab`) close the tab under the cursor there as `t c` closes the one that shows
+  one shows. `g t` and `g T`, or `] t` and `[ t`, go round the tabs, and `g t` with a count goes
+  to the tab of that number, as in vim; `t h` and `t l` open the tab menu of the left and the
+  right panel, whichever is active: the tabs with their whole locations, over that panel, to show
+  one. The panel whose tab is shown becomes active. `d d` and F8 (`close_tab`) close the tab
+  under the cursor there as `t c` closes the one that shows
   (`Tabs::close_at`), and the menu stays open with the rest. Left and Right in F9 do the same for
   the panel on that side.
-- The tab menu, the location menu, the Workspaces window, and the command history share
-  `tui/picker.rs`: the filter, a text field with a cursor (`dialog::Field`), which typing fills and
-  the keys of `input` edit, and which matches as fzf does with `ui.fuzzy_search`; the action
-  `Delete` goes to the window, which deletes the row under the cursor in the workspaces and the
-  history (the tab menu takes Delete for `close_tab`), and `input`'s `DeleteChar` (Delete, and
-  Ctrl+d in the default keymap) to the filter, so Ctrl+d never deletes a row; the digits of the
-  first ten
-  rows while it is empty (but in the history, whose commands have digits), the cursor, scrolling,
-  the mouse, and the box, which the menus draw over their panel and the windows over both. Each
-  holds its own rows, says what the filter finds them by, and draws them. A row may show only while
-  the filter is empty, as the rows of more in the location menu do, which take no digit, or only
-  while it has text, as the places behind them do. The zoxide window does not use it: zoxide, not a
-  filter, picks its rows from the keywords typed.
 - Names on the line of tabs are brief: the last component of a directory, `~` for the home
   directory, `host:name` on a host, and the host alone in its start directory. The frame's
   verticals close each side's line, and its top corners become tees (`╠`, `╣`) that join it,
@@ -415,7 +425,7 @@ row and names the tab that shows by its whole location:
 - Panels are named by a `PanelId`, their side and tab number, which is never used again.
   Listings, new directories, and the dialogs of `+`, `-`, F5, F6, and F7 carry it, so a reply
   reaches the tab that asked even after a switch, and one for a closed tab is dropped. What
-  acts on the other side (Alt+o, Alt+i, F5's target, `other_dir`) acts on the tab that shows
+  acts on the other side (Ctrl+w f, Ctrl+w v, F5's target, `other_dir`) acts on the tab that shows
   there. Disconnecting or losing a host leaves every tab on it there, hidden or not, without
   its entries; after a lost connection they wait for Retry and read their directories when the
   host is back.
@@ -424,7 +434,9 @@ row and names the tab that shows by its whole location:
   panel's colors as if it grew out of it (`tab_active`), with its number in an accent on the
   side that has the keys (`tab_number`) and plainer on the other (`tab_active_idle`). Tabs in
   the frame take the same styles, with the frame's line between them.
-- Ctrl+u swaps the sides with their tabs. Alt+., o h, and the settings apply to every tab.
+- Ctrl+w x swaps the sides with their tabs. `o h` and the settings apply to every tab.
+- Each tab keeps a jump list of its own, as vim's windows do, and none goes to a workspace: see
+  [Panels](#ui).
 
 ### Workspaces
 
@@ -432,28 +444,28 @@ A workspace is the tabs of both panels, saved under a name
 ([ADR 0017](adr/0017-workspaces.md)): for each side its tabs in order, each with its location,
 sort order, and the name under its cursor, and the tab that shows; and the side with the keys.
 
-- t W, or F9 → Workspace → Save workspace…, asks for a name, offering
+- `t W`, or F9 → Workspace → Save workspace…, asks for a name, offering
   that of the workspace restored or saved last, and saves the tabs under it; the name of
   another workspace asks before replacing it. A location that `workspaces.toml` cannot hold,
   such as a name that is not UTF-8, is saved as the nearest directory above it that it can
   hold, or else as `~`.
-- t w, or F9 → Workspace → Workspace list…, opens a window of the saved
-  workspaces with a filter, which matches as [fzf](#fuzzy-search) does with
-  `ui.fuzzy_search` (keymap context `workspaces`): Enter restores, Insert saves the tabs as a
-  new workspace, starting with an empty name, F6 renames, F8 deletes after a question, and
-  digits restore while the filter is empty. A workspace just saved there gets the cursor.
+- `t w`, or F9 → Workspace → Workspace list…, opens a window of the saved
+  workspaces, one of the [lists](#lists), with a filter, which matches as [fzf](#fuzzy-search)
+  does with `ui.fuzzy_search` (keymap context `workspaces`): Enter restores, `a` saves the tabs
+  as a new workspace, starting with an empty name, `r` or F6 renames, and `d d` or F8 deletes
+  after a question. A workspace just saved there gets the cursor.
 
   ```text
   ╔═══════════════════════ Workspaces ═══════════════════════╗
   ║ Filter:                                                  ║
   ║ ──────────────────────────────────────────────────────── ║
-  ║ 1 noon                                            3 tabs ║
-  ║ 2 deploy                                          2 tabs ║
+  ║ noon                                              3 tabs ║
+  ║ deploy                                            2 tabs ║
   ╚══════════════════════════════════════════════════════════╝
   ```
 
 - F9 → Workspace lists the saved workspaces below its two commands, the first ten with
-  `1` … `9` and `0`, and marks the one restored or saved last; choosing one restores it.
+  Alt+1 … Alt+9 and Alt+0, and marks the one restored or saved last; choosing one restores it.
 - Restoring replaces every tab of both panels with new ones (new `PanelId`s, so replies for the
   old tabs are dropped). The tab that shows on each side lists its location at once, connecting
   to its host if needed; a hidden one keeps its first request and sends it when it shows, so
@@ -493,12 +505,15 @@ settings window: there is no OK or Cancel, and every change takes effect as it i
   last column. The two lines below them, set apart by a line across the dialog, say what the
   setting under the cursor does and whether it takes effect only after a restart, or, in
   the colors of errors, why the text typed cannot be used.
-- Tab moves between the categories and the settings; Up and Down move within them, and Home
-  and End go to the first and last category; Left on anything but a text field goes back to
-  the categories; Esc or F10 closes the dialog.
-- Space or Enter switches a check box or picks the next choice, and Left and Right pick
-  choices: each takes effect at once. A text field takes effect when the cursor leaves it
-  (Up, Down, Tab) or on Enter, and as the dialog closes. Its value is checked first: the
+- Tab moves between the categories and the settings; `j` and `k` (Down and Up) move within
+  them, and `g g` and `G` go to the first and last category; `h` (Left) on anything but a text
+  field goes back to the categories; Esc, `q`, or F10 closes the dialog, in Normal mode.
+- Space or Enter switches a check box or picks the next choice, and `h` and `l` pick choices:
+  each takes effect at once. The dialog opens on the language, a text field, in Insert mode; a
+  text field the cursor comes to with `j` or `k` is in Normal mode, where `i`, `a`, or `A` goes
+  to Insert mode, and one it comes to with Tab, or from a field in Insert mode, in Insert mode
+  (see [Text fields](#ui)). A text field takes effect when the cursor leaves it (Up, Down, Tab)
+  or on Enter, and as the dialog closes. Its value is checked first: the
   language tag, a whole number of parallel jobs, a program for ssh, and the extra ssh
   arguments, through the same validator as at start
   ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)). An invalid one keeps the cursor
@@ -554,8 +569,6 @@ noc hosts [--resolve]  hosts from ssh_config with cached addresses; --resolve ru
 noc ls [LOCATION]      a local path or host:path; without one, the mount points and hosts
 noc config init        write the commented default config.toml
 noc config paths       show the files and directories in use
-noc keymap diff [L] [R]  compare two built-in keymaps action by action, default and vim unless
-                         named; --all shows what they bind alike, --color=WHEN colors
 ```
 
 `--config FILE` replaces `~/.config/noc/config.toml`. Logs go to
@@ -581,8 +594,9 @@ noc keymap diff [L] [R]  compare two built-in keymaps action by action, default 
 - The terminal is restored on every exit: a guard leaves raw mode and the alternate screen when
   the TUI returns or fails, ratatui's panic hook does it before a panic message, and SIGTERM,
   SIGHUP, and SIGINT end the event loop like a quit.
-- Another program (the editor of F4, a command of the command line; the Ctrl+o console later) gets
-  the terminal as the shell would give it: the event loop shows the cursor, leaves the alternate
+- Another program (the editor of F4, a command of the command line, the output of commands of
+  `g <`) gets the terminal as the shell would give it: the event loop shows the cursor, gives it
+  the terminal's own shape back, leaves the alternate
   screen and raw mode, and drops its `EventStream` first. The stream's reader thread holds
   crossterm's input lock while it waits, and a new stream takes that lock, so the old one must go
   before the program starts, or its reader eats the first key, and the new one is made after it. The
@@ -708,15 +722,14 @@ hide = ["/Volumes/Backup*"]      # mount points to leave out of the location men
 [ui]
 language = "auto"                # or a language tag such as "en-US"; others fall back to it
 theme = "mc-classic"             # "terminal", "noon-dark", "noon-light", "catppuccin-mocha", …
-keymap = "default"               # modelled on mc, or "vim"
 borders = "double"               # frames of panels and dialogs: ═ ║ ╔; "single": ─ │ ┌
 icons = true                     # Nerd Font icons; false: mc's markers (/ * @ ~ …)
-show_hidden = true               # names that start with a dot; Alt+. or o h switches while running
+show_hidden = true               # names that start with a dot; o h switches while running
 fuzzy_search = true              # quick search and filters match as fzf; false: literally
 menu_bar = "on-demand"           # the F9 menu bar while a menu is open; "always": above the panels
 tab_bar = "line"                 # tabs on a line above the panels; "frame": in the panel's frame
 terminal_title = true            # the window's title shows the active panel's directory
-which_key = true                 # after Ctrl+x, g, …: the keys that can follow, as which-key
+which_key = true                 # after g, Ctrl+w, …: the keys that can follow, as which-key
 which_key_delay_ms = 500         # how long after such a key the hints show
 
 [transfer]
@@ -784,13 +797,21 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 
 ## UI
 
+- **Keys.** The keymap is vim's, in its modes, with mc's F-keys
+  ([ADR 0022](adr/0022-vim-modes.md)); see the keymap below. The panels take keys in
+  Normal mode, as vim's buffers do; text fields, quick search, and the command line in Insert
+  mode. The line above the F-key bar shows the mode, `-- INSERT --` or `-- VISUAL --`, on the
+  left, and the count, register, operator, or keys of a command typed so far on the right, as
+  vim's `showmode` and `showcmd` do; the command line takes it while open. The cursor is a
+  bar in Insert mode and a block in the others (DECSCUSR), and the terminal's own shape comes
+  back whenever another program gets the terminal, and on quitting.
 - **Panels.** Each panel lists a directory with `..` first (but in a `/`), then directories,
   then files, by name ignoring case; columns are name, size, and modification time (local time,
   `ls -l` style), and narrow panels drop the time, then the size. Each panel has its own sort order:
-  name, extension, modification time, or size (`o n`, `o e`, `o m`, `o s` in both presets);
+  name, extension, modification time, or size (`o n`, `o e`, `o m`, `o s`);
   time and size start newest and largest first, the same key again reverses, ties go by name,
   and an arrow in the header marks the order. Directories stay first. Names that start with a
-  dot are shown unless `ui.show_hidden` is off; Alt+., as in mc, or o h switches them in both panels.
+  dot are shown unless `ui.show_hidden` is off; `o h` switches them in both panels.
   Sorting and hiding keep the cursor on its entry.
 - **The cursor of the inactive panel.** Unlike mc, the inactive panel shows where its cursor
   is (the checksum comparison reads the file there): its row gets a background of its own
@@ -801,32 +822,40 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   256 colors, and the dialogs' blue-gray (`#E8ECF4`) in `noon-light`.
 - **Free space.** As in mc, the bottom of a panel's frame shows the free space and size of the
   file system that holds the directory, and the share that is free: `123G / 500G (24%)`. It is
-  read with every listing, so it changes when a job reads the panel again or on Ctrl+r; a panel
+  read with every listing, so it changes when a job reads the panel again or on `R`; a panel
   on another directory of the same file system keeps what it read last. Locally it waits at
   most as long as a volume in the location menu, so a dead network mount leaves it out; over
   SFTP it needs the `statvfs@openssh.com` extension, which OpenSSH's server has. A file system
   that reports no size, or a panel too narrow for it, shows none.
-- **Marks.** As in mc: Insert or Ctrl+t marks the entry under the cursor, or unmarks it, and
-  moves down (Shift+Down too, Shift+Up moves up); `*` (or Alt+*) inverts the marks on files,
-  leaving directories as they are; `..` cannot be marked.
+- **Marks.** Space or `J` marks the entry under the cursor, or unmarks it, and moves down, as
+  mc's Insert does (Shift+Down too; `K` and Shift+Up move up), and a count marks that many;
+  `*` inverts the marks on files, leaving directories as they are; `..` cannot be marked.
   Marked rows are underlined, and yellow in mc-classic (bold, which mc uses without colors, is
   for directories); the line below the listing shows the size of the marked files and how
   many entries are marked, such as `12,345 B in 3 files`. Marks are names, so they
-  survive sorting and Ctrl+r (for names still there); another directory starts unmarked, and
+  survive sorting and `R` (for names still there); another directory starts unmarked, and
   entries that get hidden lose their marks, so that no operation acts on what is not shown.
-  `+` (or Alt++) marks and `-` (or `\`, Alt+-) unmarks the names that match a shell pattern,
+  `+` marks and `-` unmarks the names that match a shell pattern,
   in a dialog with mc's options: Files only (off) and Case sensitive (on). Patterns are read
   as mc reads them: `*`, `?`, `[a-z]` (`[!…]` or `[^…]` outside the set), `{a,b}`, and `\`
   for the next character as it is; the whole name must match, and what does not parse is
   literal. mc's regular expressions are left out. The dialog opens with the last pattern
-  (`*` at first) and options. `+`, `-`, `\`, and `*` are commands, as in mc with an empty
-  command line.
-- **F7 makes a directory**, as in mc: the dialog opens with the name under the cursor, which
-  typing replaces. The name may be a relative path, an absolute one, or start with `~` for the
-  home directory (the remote one on a host; `\~` for a name that starts with `~`); missing
-  parents are not made. The directory is made in the background, locally or by the host's
-  task, and panels on the directory it is in read it again, the one that asked with the
-  cursor on it. An error shows in a red dialog, as mc shows errors.
+  (`*` at first) and options.
+- **Visual mode.** `v` or `V` selects rows from the one under the cursor to wherever the cursor
+  goes, as vim's Visual mode selects lines; `o` goes to the other end, `g v` selects the rows
+  selected last again, and Esc, `v`, or `V` ends it. Space marks the rows selected; `y`, `x`,
+  `d`, F5, F6, F8, and `f #` make them the marked entries and act on them, as on any marks.
+- **Jumps.** Each tab keeps a jump list, as vim does: going to another directory (Enter, `h`,
+  Quick cd, a menu, zoxide, a workspace's tab), `G`, `g g`, `n`, `N`, and a quick search that
+  moved the cursor put where the panel was on it, up to 100 places. Ctrl+o goes back, and Tab
+  or Ctrl+i forward again, with a count too; a place in this directory moves the cursor at
+  once, another one reads its directory.
+- **F7 makes a directory**, as in mc: the dialog opens with the name under the cursor, in Insert
+  mode with the cursor after it; Ctrl+u clears it. The name may be a relative path, an absolute
+  one, or start with `~` for the home directory (the remote one on a host; `\~` for a name that
+  starts with `~`); missing parents are not made. The directory is made in the background,
+  locally or by the host's task, and panels on the directory it is in read it again, the one
+  that asked with the cursor on it. An error shows in a red dialog, as mc shows errors.
 - **F5 copies** the marked entries, or the one under the cursor, as mc does: a dialog asks
   where to, opening with the other panel's location (`host:/path` for a host), and whether to
   preserve attributes (times and permission bits; on, and remembered). A typed target is
@@ -847,10 +876,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   tabs go to stops of 8, `\r\n` ends lines, and control characters are shown safely. Long
   lines wrap (F2 cuts them, and Left and Right scroll then); the position is a line and a
   row within it, so that only the lines in view are wrapped, whatever the size of the file.
-  Keys follow mc's viewer: arrows, `j`/`k`, PgUp/PgDn, Space and `b`, `u` and `d` for half a
-  page (`HalfPageUp` and `HalfPageDown` of the viewer), Home/End, `g`/`G`, and F3, F10, `q`, or
-  Esc to close; F1 shows the help over it, and Alt+1 … Alt+0 stand for the F-keys. The vim keymap
-  takes vim's and less's Ctrl+e and Ctrl+y, a line, and Ctrl+d and Ctrl+u, half a page.
+  Keys follow vim and less: `j`/`k`, Ctrl+e/Ctrl+y, and the arrows a line, Ctrl+f/Ctrl+b,
+  Space/`b`, and PgUp/PgDn a page, Ctrl+d/Ctrl+u and `d`/`u` half a page, `g g`/`G` and
+  Home/End the ends, and F3, F10, `q`, `i`, or Esc to close; F1 or `g ?` shows the help over it.
 - **F4 edits** the file under the cursor in `$VISUAL`, else `$EDITOR`, else `vi`, split at
   spaces (`code -w`), without a shell. A local file is edited where it is. A remote one is
   copied, with its times and permission bits, to `edit-PID-N-name` in the runtime directory
@@ -867,18 +895,19 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   removes each source once all of it is copied. Its window says Moving; when it ends, the
   panels on both sides read their directories again.
 - **Shift+F6 renames in place** the entry under the cursor, not the marked ones: its
-  row becomes a text field from the name on, over the size and time columns, with all of a
-  file's name but its last extension selected (a directory, a dotfile, or a name that ends
-  with a dot, whole); typing replaces the selection, and moving lets it go. Enter renames,
-  Esc keeps the name, and other panel keys do nothing (`Context::Rename`); the status line
-  shows the old name. An empty or unchanged name renames nothing; one with `/` or NUL, or
-  `.` or `..`, is an error and the field stays. A name that is not UTF-8 cannot be edited,
-  which an error says: F6 renames it. `noc_ops::rename` checks the new name first: a
-  directory's is an error, a file's asks in a red question with No as the default, and a name
-  the file system takes for the entry itself, differing only in case or normalization and
-  not listed byte for byte, renames it. Without `posix-rename` the file there goes first. A
-  reload keeps the field on its entry; the field goes with the entry or when the panel goes
-  elsewhere.
+  row becomes a text field from the name on, over the size and time columns, in Insert mode
+  with the cursor before a file's last extension (after the whole name of a directory, a
+  dotfile, or a name that ends with a dot), so that Ctrl+u takes away the rest of the name.
+  Enter renames in every mode; Esc goes to Normal mode, where vim's motions and operators edit
+  the name, and Esc there keeps the name; Ctrl+c keeps it in every mode; other panel keys do
+  nothing (`Context::Rename`). The status line shows the old name. An empty or unchanged name
+  renames nothing; one with `/` or NUL, or `.` or `..`, is an error and the field stays. A name
+  that is not UTF-8 cannot be edited, which an error says: F6 renames it. `noc_ops::rename`
+  checks the new name first: a directory's is an error, a file's asks in a red question with No
+  as the default, and a name the file system takes for the entry itself, differing only in case
+  or normalization and not listed byte for byte, renames it. Without `posix-rename` the file
+  there goes first. A reload keeps the field on its entry; the field goes with the entry or when
+  the panel goes elsewhere.
 - **F8 deletes** the marked entries, or the one under the cursor, after a red question with Yes as
   the default, as in mc: `Delete file "x"?`, `Delete directory "x" and everything in it?`, or
   `Delete 3 files and directories?`. mc asks a second time before it goes into a directory that is
@@ -892,7 +921,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   behind the panels, which take the keys again, and Esc aborts, as in mc. As many jobs run
   at once as `transfer.parallel_jobs` says (2); a later one waits, in front or behind, and
   starts when one ends, the oldest first. Abort takes a waiting job away at once. The jobs
-  of F4 never wait, but count while they run. Ctrl+x j lists the jobs, as mc's Background
+  of F4 never wait, but count while they run. `f j` lists the jobs, as mc's Background
   jobs: a row for each, with what it does, how far it is (a percentage, `counting`,
   `waiting`, or `aborting`), and the entry at hand, and Show (the default), Abort, and OK.
   Show brings the selected job to the front, in its window; the selection follows its job
@@ -903,7 +932,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   does not open in the middle of other work. F10 asks before quitting while jobs run;
   quitting stops them and waits up to five seconds, so that a copy removes its unfinished
   file before the connections close.
-- **Checksums.** f # (not in mc) asks for an algorithm (radio buttons, the last one
+- **Checksums.** `f #` (not in mc) asks for an algorithm (radio buttons, the last one
   chosen first, SHA-256 at first) for the marked entries, or the one under the cursor; files
   in directories count. For one file, the dialog has a field for the checksum it should have,
   pasted from a download page or a line of `sha256sum` (the first word counts, in any case);
@@ -930,33 +959,34 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   sanitized like every name. Before the first title it saves the terminal's own on xterm's
   stack of titles (`CSI 22 t`) and takes it back from there (`CSI 23 t`) on quitting and before
   handing the terminal to another program, which gets the shell's title and may set its own.
-- **The other panel.** As in mc: Ctrl+u swaps the panels, and the active one stays active on
-  the other side; Alt+o opens the directory under the cursor in the other panel (from
-  a file, the parent directory with the cursor on this one) and moves the cursor down; Alt+i
-  shows this directory in the other panel with the cursor on the same name. Panels keep their
-  identity when swapped (only where they are drawn changes), so a listing still in flight
-  reaches the panel that asked for it. Sort order and errors go with the panel; mc keeps the
-  sort order on its side. Ctrl+w h and Ctrl+w l, as vim goes to the window on the left and on
-  the right, or Ctrl+x Left and Ctrl+x Right, make the panel drawn on that side active, whichever
-  it is after Ctrl+u.
-- **Quick search.** Ctrl+s / Alt+s start quick search, as in mc; typing in a panel does nothing,
-  since `!` and `:` open the [command line](#command-line-of--and-). With `ui.fuzzy_search` (the
-  default) the cursor jumps to the best match as [fzf](#fuzzy-search) ranks it, the first from where
-  it is of those as good, and Ctrl+s again to the next best, round to the best; otherwise to the
-  first name from where it is that starts with the text, ignoring case, and Ctrl+s to the next one,
-  round to the top. Either way a character that matches nothing is dropped, as in mc, and the
-  listing keeps its order. The text is a field with a cursor, edited with the keys that every text
-  field shares (`input`): Left, Right, Ctrl+Left, Ctrl+Right, Home, End, Backspace, Delete, Ctrl+u,
-  Ctrl+k, Ctrl+w; after an edit, the cursor stays on its name if that still matches, and goes to the
-  match that typing would have found otherwise. Esc ends the search on the match, Ctrl+g (`abort`)
-  gives it up and puts the cursor back where the search started, keeping nothing for `n`, as in
-  emacs, and any other key ends it and then does what it does: Enter opens what it found, as in mc.
-  In the vim keymap, as in vim, Enter only ends the search and Esc gives it up. Ctrl+r, and Ctrl+t
-  in the vim keymap, go to the previous match. While it runs, every character is text, even one that
-  a panel binds, such as `*`. The app keeps what the last search found, whichever panel it ran in,
-  as vim keeps its last pattern: `n` and `N` (and Shift+F7, mc's and Far's key to search again) go
-  to the next and the previous name that matches it, round, and Ctrl+s with nothing typed yet
-  searches for it again, as mc's Ctrl+s Ctrl+s does. Long names lose their middle, marked with
+- **The other panel.** As vim's windows: Ctrl+w w, Ctrl+w Ctrl+w, or Ctrl+w p makes the other
+  panel active; Ctrl+w x or Ctrl+w r swaps the panels, as mc's Ctrl+u, and the active one stays
+  active on the other side; Ctrl+w f opens the directory under the cursor in the other panel, as
+  mc's Alt+o (from a file, the parent directory with the cursor on this one) and moves the cursor
+  down; Ctrl+w v shows this directory in the other panel with the cursor on the same name, as
+  mc's Alt+i. Panels keep their identity when swapped (only where they are drawn changes), so a
+  listing still in flight reaches the panel that asked for it. Sort order and errors go with the
+  panel; mc keeps the sort order on its side. Ctrl+w h and Ctrl+w l make the panel drawn on that
+  side active, whichever it is after Ctrl+w x.
+- **Quick search.** `/` starts quick search, typed as vim's search, in Insert mode; typing in a
+  panel in Normal mode does nothing but its commands, and `!` and `:` open the
+  [command line](#command-line-of--and-). With `ui.fuzzy_search` (the default) the cursor jumps
+  to the best match as [fzf](#fuzzy-search) ranks it, the first from where it is of those as
+  good, and Ctrl+g to the next best, round to the best; otherwise to the first name from where it
+  is that starts with the text, ignoring case, and Ctrl+g to the next one, round to the top.
+  Either way a character that matches nothing is dropped, as in mc, and the listing keeps its
+  order. The text is a field with a cursor, edited with the keys that every text field shares in
+  Insert mode (`input`): Left, Right, Shift+Left, Shift+Right, Home, End (and Ctrl+b, Ctrl+e, as
+  on vim's command line), Backspace, Delete, Ctrl+u, Ctrl+w, and Ctrl+r and a register; after an
+  edit, the cursor stays on its name if that still matches, and goes to the match that typing
+  would have found otherwise. As in vim, Enter ends the search on the match, and Esc or Ctrl+c
+  (`abort`) gives it up and puts the cursor back where the search started, keeping nothing for
+  `n`. Ctrl+t goes to the previous match. While it runs, every character is text, even one that a
+  panel binds, such as `*`. A search that moved the cursor puts where it started in the jump
+  list. The app keeps what the last search found, whichever panel it ran in, as vim keeps its
+  last pattern: `n` and `N` (and Shift+F7, mc's and Far's key to search again) go to the next and
+  the previous name that matches it, round, and Ctrl+g with nothing typed yet searches for it
+  again, as mc's Ctrl+s Ctrl+s does. Long names lose their middle, marked with
   `~`. Names are shown terminal-safe: control and bidi characters become `?`. Listings run in
   background tasks; a reply carries the generation of its request, so a stale one is dropped. If a
   directory cannot be read, the panel stays where it was and says why below the listing. Going up
@@ -966,97 +996,118 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   0019](adr/0019-shell-command-line.md)). In a local panel, `!` opens a line above the F-key bar for
   a shell command, after a prompt with the panel's directory (`~` for home, its middle cut past a
   third of the width); `:` opens it for commands of Noon Commander, of which `!command` is the only
-  one so far. In a panel on a connected host the prompt starts with the host's label or alias. Every
-  character is text there. Ctrl+j, or Enter after an odd number of `\` at the end of a line, starts
-  a new line, marked `>`; long lines wrap, and the line grows up to a third of the screen and ten
-  rows, then scrolls to the cursor. Up and Down move between lines, Home and End (Ctrl+a, Ctrl+e) go
-  to the ends of the line. Enter hands the command to the event loop, which suspends the TUI as for
-  F4 and runs it with `noc-tools`' `Shell`: `$SHELL -c <command>` (`/bin/sh` without `$SHELL`) in
-  the panel's directory, the command in one argument as typed. On a host, the host's task builds the
-  ssh command from its session (`Session::command_in`) and the event loop runs it with the terminal:
-  over the master, with `cd -- '<dir>' || exit` before the command. `tui/output.rs` shows the
-  command after its prompt first, bold, and afterwards ends its output on a line of its own as zsh
-  does (a dim `⏎`, spaces to the last column, `\r`, a cleared line); then a line in reverse video
-  asks for a key, with the exit status of a failure, unless `shell.pause` says not to wait, and
-  after the key `[exit N]` takes its place for a command that failed. The event loop then takes the
-  terminal back; both panels read their directories again, as in mc. Esc, Ctrl+c, or F10 closes the
-  line; Backspace on an empty line does not. Ctrl+o, a `global` key of both keymaps (and g < in the
-  vim one, as vim shows the output of its last command), hands the terminal over without a
-  program wherever it is pressed: its own screen shows, with the output of the commands, until a key
-  that the `user_screen` context binds to Cancel (Ctrl+o, Esc), and then whatever was in front, a
-  dialog, a menu, the viewer, or the line, is there again as it was. Shift+Enter starts a new line
-  too where the terminal speaks the kitty keyboard protocol: at start the event loop asks for it
-  with `supports_keyboard_enhancement` (in `spawn_blocking`, before the stream of events takes
+  one so far. In a panel on a connected host the prompt starts with the host's label or alias. The
+  line opens in Insert mode, as vim's command line, where every character is text. Ctrl+j, or Enter
+  after an odd number of `\` at the end of a line, starts a new line, marked `>`; long lines wrap,
+  and the line grows up to a third of the screen and ten rows, then scrolls to the cursor. Up and
+  Down move between lines, Home and End (Ctrl+b, Ctrl+e) go to the ends of the line. Ctrl+f goes to
+  Normal mode, in place of vim's window of the command line: vim's motions, operators, registers,
+  and undo edit the command there, `j` and `k` go through its lines and then the history, and `q :`
+  opens the window of the history. Enter hands the command to the event loop, which suspends the TUI
+  as for F4 and runs it with `noc-tools`' `Shell`: `$SHELL -c <command>` (`/bin/sh` without
+  `$SHELL`) in the panel's directory, the command in one argument as typed. On a host, the host's
+  task builds the ssh command from its session (`Session::command_in`) and the event loop runs it
+  with the terminal: over the master, with `cd -- '<dir>' || exit` before the command.
+  `tui/output.rs` shows the command after its prompt first, bold, and afterwards ends its output on
+  a line of its own as zsh does (a dim `⏎`, spaces to the last column, `\r`, a cleared line); then a
+  line in reverse video asks for a key, with the exit status of a failure, unless `shell.pause` says
+  not to wait, and after the key `[exit N]` takes its place for a command that failed. The event
+  loop then takes the terminal back; both panels read their directories again, as in mc. Esc,
+  Ctrl+c, or F10 closes the line, as on vim's command line, in Insert mode and in Normal mode;
+  Backspace on an empty line does not. `g <`, a `global` key, as vim shows the output of its last
+  command, hands the terminal over without a program wherever it is pressed but in Insert mode: its
+  own screen shows, with the output of the commands, until a key that the `user_screen` context
+  binds to Cancel (`g <`, Enter, `q`, Esc), and then whatever was in front, a dialog, a menu, the
+  viewer, or the line, is there again as it was. Shift+Enter starts a new line too where the
+  terminal speaks the kitty keyboard protocol: at start the event loop asks for it with
+  `supports_keyboard_enhancement` (in `spawn_blocking`, before the stream of events takes
   crossterm's reader) and then pushes `DISAMBIGUATE_ESCAPE_CODES` and `REPORT_ALTERNATE_KEYS`, so
   that Alt with a symbol typed with Shift, such as Alt++, arrives as that symbol (Ctrl+[, Ctrl+m,
-  and Ctrl+i then arrive apart from Esc, Enter, and Tab, so the keymaps bind them wherever they
-  bind those); it pops them, and turns bracketed paste off, whenever another program gets the
-  terminal, on exit, and on a panic. With bracketed paste a paste arrives as one event: the command
-  line takes it whole, line breaks included, and runs nothing; text fields, quick search, and the
-  menus' filters take its characters without line breaks; panels, the pull-down menu, dialogs'
-  buttons, and the viewer ignore it. Ctrl+x Ctrl+e writes the command to a file in the private
-  runtime directory, runs the editor on it as F4 does, and puts what it left back into the line,
-  without the line breaks at its end; the file goes afterwards. Each command that ran, unless it
-  starts with a space, goes to `history.toml` in the state directory with its host (the alias; none
-  for a local one), directory, and time: `noc-config`'s `add_command` reads the file again, replaces
-  the same command on the same host, keeps the newest `shell.history_size`, and writes it whole and
-  atomically, mode 0600; one task makes the changes in turn, and the app keeps the commands in
-  memory. Up on the first line of a command, or Alt+p, goes back through the commands of the panel's
-  host, and Down on the last line, or Alt+n, forward to what was typed. Alt+h or Ctrl+r on the line,
-  or Alt+h in a panel, opens the window of the history (`tui/history.rs`): the commands of the
-  panel's host, or of all of them after Tab, newest first, filtered as quick search matches, each
-  with its host's label or alias, its directory, and its first line, and the whole command under the
-  cursor below; Enter puts it on the line, with the prompt reversed until the next key if it ran on
-  another host, and Delete removes it.
-- **Keymap.** Keys map to `Action`s per context (`global`, `panel`, `input`, `quick_search`,
-  `rename`, `command_line`, `command_history`, `user_screen`, `list`, `location_menu`,
-  `tab_menu`, `jump`, `workspaces`, `pull_down`, `dialog`, `help`, `dialog_input`, `path_input`,
-  `completion`, `viewer`). Each context falls back along a chain, for example the help to the
-  dialog, the text fields (`quick_search`, `rename`, `dialog_input`, `command_line`) to `input`,
-  which holds the keys that edit text, and quick search on to the panel, the windows that list
-  items to choose from (`location_menu`, `tab_menu`, `jump`, `workspaces`, `command_history`) to
-  `list`, which holds the keys they share, then to `input` for their filters (`input` moves the
-  text cursor with actions of its own, `text_start` and `text_end`, so that Ctrl+a and Ctrl+e move
-  in a filter while Home and End stay the list's), and every one but `user_screen` to `global`
-  last, whose keys do the same everywhere: the key hints, the output of commands, and Ctrl+l, which
-  redraws the screen; the app takes them before whatever is in front, which stays as it was. The
-  first context that knows a key sequence decides, except that a sequence it only
-  starts does what a later context binds it to. The help lists the keys of `list` and `input`
-  with each context that falls back to them, as that context uses them, each key once.
-  Bindings are key sequences matched by prefix with a 1-second timeout, so a vim preset (`g g`,
-  `Z Z`) can follow the default mc preset.
-  `ui.keymap` names the built-in preset, as `ui.theme` names the theme (`Keymap::NAMES`,
-  `Keymap::by_name`); the Configuration dialog switches it at once. Each preset is a module of
-  its own, `tui/keymap/default.rs` and `tui/keymap/vim.rs`: each context with its actions, and
-  each action with its key sequences, in the order the help lists them. Both list every context in
-  the same order; the vim preset takes vim's keys, and ranger's and yazi's where vim has none, in
-  the panels, the dialogs and the help, the viewer, the lists, the text fields, and the command
-  line. Both group their own panel keys under `t` (tabs and workspaces), `o` (sort order and
-  hidden names), and `f` (file operations), which stands for mc's `Ctrl+x` and keeps its letters
-  for mc's commands (`f j` lists the jobs, and `f c` is left for chmod); the checksums, which mc
-  has not, take `f #`. `noc keymap diff` (`just keymap-diff`) compares two presets action by action
-  (`tui/keymap/diff.rs`), with the keys written as the help writes them.
-  `Esc` acts at once everywhere ([ADR 0020](adr/0020-esc-acts-at-once.md)). Unlike in mc, it
-  does not wait in a panel for a key that would make it Alt or an F-key: in the panels, the
-  viewer, and the windows that list items, Alt+1 … Alt+0 stand for F1 … F10 instead, for
-  terminals without F-keys. An `Esc` and a quick next key arrive as Alt and that key, so in the
-  panels an unbound Alt and a character count as `Esc` and the character. Keys are written with
-  `crokey` names. User overrides in `keymap.toml` are planned for M4. The F-key bar is generated
-  from the active keymap, and so is the help screen (F1): the keys of each context, with what they
-  do, for what the app can do already; a prompt from ssh shows over it.
+  and Ctrl+i then arrive apart from Esc, Enter, and Tab, so the keymap binds them wherever it binds
+  those); it pops them, and turns bracketed paste off, whenever another program gets the terminal,
+  on exit, and on a panic. With bracketed paste a paste arrives as one event: the command line takes
+  it whole, line breaks included, and runs nothing; text fields, quick search, and the menus'
+  filters take its characters without line breaks; panels, the pull-down menu, dialogs' buttons, and
+  the viewer ignore it. Each command that ran, unless it starts with a space, goes to `history.toml`
+  in the state directory with its host (the alias; none for a local one), directory, and time:
+  `noc-config`'s `add_command` reads the file again, replaces the same command on the same host,
+  keeps the newest `shell.history_size`, and writes it whole and atomically, mode 0600; one task
+  makes the changes in turn, and the app keeps the commands in memory. Up on the first line of a
+  command, or Ctrl+p, goes back through the commands of the panel's host, and Down on the last line,
+  or Ctrl+n, forward to what was typed, as on vim's command line. `q :` in a panel, or on the line
+  in Normal mode, opens the window of the history (`tui/history.rs`), one of the [lists](#lists):
+  the commands of the panel's host, or of all of them after Tab, newest first, filtered as quick
+  search matches, each with its host's label or alias, its directory, and its first line, and the
+  whole command under the cursor below; Enter puts it on the line, with the prompt reversed until
+  the next key if it ran on another host, and `d d` or F8 removes it.
+- **Keymap.** The keymap is vim's, in its modes, with mc's F-keys
+  ([ADR 0022](adr/0022-vim-modes.md)): one preset, `tui/keymap/preset.rs`, maps keys to
+  `Action`s per mode (`Mode::Normal`, `Insert`, `Visual`) and context (`global`, `panel`,
+  `input`, `quick_search`, `rename`, `command_line`, `command_history`, `user_screen`, `list`,
+  `location_menu`, `tab_menu`, `jump`, `workspaces`, `pull_down`, `dialog`, `help`,
+  `dialog_input`, `path_input`, `completion`, `viewer`), in the order the help lists them. The
+  app says which mode and context the next key goes to (`App::place`): the mode is that of the
+  text field with the keys, Visual mode while a panel selects rows, and else Normal mode. Each
+  context falls back along a chain in its mode (`Context::chain`), for example the help to the
+  dialog, the text fields (`quick_search`, `rename`, `dialog_input`, `command_line`) to
+  `input`, which holds the keys that edit text in each mode, and the windows that list items
+  (`location_menu`, `tab_menu`, `jump`, `workspaces`, `command_history`) to `list`, which
+  holds the keys they share, then, in Insert mode only, to `input` for their filters. Every one
+  but `user_screen` falls back to `global` last, whose keys are the same in every mode: the key
+  hints, the output of commands, and Ctrl+l, which redraws the screen; the app takes them
+  before whatever is in front, which stays as it was. The first context that knows a key
+  sequence decides, except that a sequence it only starts does what a later context binds it
+  to. Bindings are key sequences matched by prefix with a 1-second timeout (`g g`, `Z Z`,
+  `Ctrl+w h`). The panels group keys under `g`, Ctrl+w (the other panel, as vim's windows),
+  `t` (tabs and workspaces), `o` (sort order and hidden names), and `f` (`f j` the jobs, `f #`
+  the checksums, the rest of mc's Ctrl+x letters left for later).
+  In Insert mode a character is text unless the context itself binds it, and in Normal and
+  Visual mode a character nothing binds does nothing. The keymap reads what vim lets come with
+  a command and hands it to the app with the action (`Typed`, `Extra`): a count before it
+  (digits, `0` only after another), a register after `"`, and the character after the actions
+  that take one (`f`, `t`, `F`, `T`, `r`, `"`, and Ctrl+r and Ctrl+v in Insert mode). The app
+  repeats a motion over rows a count's times, and gives the count to what takes it as a number
+  (`G`, `g g`, `g t`, Ctrl+o) and to the text fields, whose editor (`tui/edit.rs`) reads it
+  itself. `Esc` acts at once: it never waits for a key after it, and while a command is pending
+  it gives the command up. An `Esc` and a quick next key arrive as Alt and that key, so in
+  Insert mode, and in the panels, Alt and a key that nothing binds go to the keymap as `Esc`,
+  then as the key in the mode `Esc` left (`Keymap::alt_as_esc`, in the event loop). The
+  pull-down menu takes Alt and a letter as its hotkey instead. Keys are written with `crokey`
+  names. User overrides of the keymap are planned. The F-key bar is generated from the keymap in
+  the mode and context of the next key, and so is the help screen (F1): the keys of each mode
+  and context, with what they do, for what the app can do already; a prompt from ssh shows over
+  it.
+- **Text fields.** A text field (`dialog::Field`, and the command line) holds a `tui/edit.rs`
+  `Editor`: the text, the cursor, and vim's modes over it. In Insert mode characters go in at
+  the cursor, and Left, Right, Home, End, Shift+Left, Shift+Right, Backspace, Delete, Ctrl+w,
+  Ctrl+u, Ctrl+r and a register, Ctrl+v, and Ctrl+o, one command of Normal mode, edit around
+  it; Esc goes to Normal mode, with the cursor on the character before it. Normal mode has
+  vim's motions (`h`, `l`, `w`, `b`, `e`, `W`, `B`, `E`, `0`, `^`, `$`, `f`, `t`, `F`, `T`,
+  `;`, `,`), the operators `d`, `c`, and `y` on a motion or doubled for the line, `x`, `X`,
+  `s`, `S`, `C`, `D`, `r`, `~`, `p`, `P`, `u`, Ctrl+r, `i`, `a`, `I`, `A`, and `v`, Visual
+  mode, whose motions select and whose `d`, `c`, `y`, and `~` act on the selection. A count
+  repeats a motion or a change, and multiplies with the count of an operator (`2d3w`). Undo
+  takes back one change at a time, and all that one stay in Insert mode typed, a change of
+  an operator `c` with it; it keeps 100. The registers (`edit::Registers`) live in the app,
+  which every field and the command line share: the unnamed one, which every yank and delete
+  fills, and `a` … `z`, of which `A` … `Z` append. None reads or writes the system clipboard.
+  A field holds one line, and a line put in it becomes text, its breaks spaces; the command
+  line holds lines, and `d d`, `y y`, and `p` take and put them whole. A secret field stays in
+  Insert mode, keeps no undo, and never copies its text into a register.
 - **Key hints.** As which-key does, the keymap lists the keys that can follow a pending sequence,
   or every key of a context, with what the help says they do (`Keymap::hints`, drawn by
   `tui/which_key.rs` in columns across the bottom of the panels). The event loop owns the
   `KeyState`: with `ui.which_key` on, a sequence that does nothing alone and does not start with
-  `Esc` (such as `Ctrl+x` or vim's `g`) does not time out; its hints show
-  `ui.which_key_delay_ms` after its last key (`Keymap::hints_due`), and it then waits for the
-  next key. The action `key_hints` shows every key of the context at once: `Alt+/` everywhere, in
-  both presets, bound once in the `global` context. The app takes it before whatever is in front,
-  which stays open under the hints.
+  `Esc` (such as `g` or Ctrl+w) does not time out; its hints show `ui.which_key_delay_ms` after
+  its last key (`Keymap::hints_due`), and it then waits for the next key. The action `key_hints`
+  shows every key of the mode and context at once: `Alt+/` everywhere, in every mode, bound once
+  in the `global` context. In Insert mode the hints leave out characters, which are text. The
+  app takes it before whatever is in front, which stays open under the hints.
   While hints show, the next key runs as it would have, or shows the keys that can follow it;
   `Esc` closes them and `Backspace` takes back the last key, and so do `Ctrl+[` and `Ctrl+h`,
-  which the kitty keyboard protocol tells apart from them. `Esc` sequences never show hints:
-  they stand for Alt and the F-keys, and a lone `Esc` acts after its timeout.
+  which the kitty keyboard protocol tells apart from them. `Esc` never starts a sequence, and
+  never shows hints. The `KeyState` also keeps what the pending command has typed, which the
+  line above the F-key bar shows (`KeyState::showcmd`).
 - **Mouse.** On by default (`ui.mouse`; [ADR 0018](adr/0018-mouse-support.md)). The event loop
   captures the mouse while it is on and turns crossterm's events into `Pointer`s
   (`tui/mouse.rs`): a click, a double click (the same cell within 400 ms), a right click, or a
@@ -1081,12 +1132,17 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   (`(*)` on the chosen one), text fields, check boxes, and buttons, each optional but the buttons;
   ssh's prompts and the app's own questions are the same kind of dialog, and each one in the queue
   knows where its answer goes. Keys go to the first dialog in the queue (contexts `dialog` and
-  `dialog_input`); Tab and the arrows move between the radio buttons, the fields, the check boxes,
-  and the buttons, Space chooses a radio button, switches a check box, or presses a button, Enter
-  presses the button with the focus (the default one from elsewhere, after choosing the radio button
-  it is on), and Esc or F10 cancels. In a text field every character is text, Space too. A field
-  that opens with text shows it dimmed, and typing replaces it, as in mc; an edit or a cursor move
-  keeps it. Long text scrolls to keep the cursor in view.
+  `dialog_input`). A dialog whose first focus is a text field opens in Insert mode, with the cursor
+  after the field's text, and any other in Normal mode. In Normal mode `j`, `k`, `h`, `l`, the
+  arrows, and Tab move between the radio buttons, the fields, the check boxes, and the buttons,
+  Space chooses a radio button, switches a check box, or presses a button, Enter presses the button
+  with the focus (the default one from elsewhere, after choosing the radio button it is on), and
+  Esc, `q`, Ctrl+c, or F10 cancels. A field takes the keys of a [text field](#ui) in its mode:
+  in Insert mode every character is text, Space too, Tab, Up, and Down still move the focus, Enter
+  presses the default button, Esc goes to Normal mode, and Ctrl+c or F10 cancels; in Normal mode,
+  Esc gives up an operator that waits, then cancels. The focus comes to a field in Insert mode
+  with Tab, a click, or from a field in Insert mode, and else in Normal mode. Long text scrolls to
+  keep the cursor in view; what Visual mode selects shows in reverse.
 - **Text.** Fluent files under `crates/noc/i18n/`, embedded in the binary and read with
   `fl!` from `i18n-embed-fl`, which checks message IDs against `en-US` at compile time; only
   `en-US` for now. `ui.language = "auto"` follows the system locale (through `sys-locale`).

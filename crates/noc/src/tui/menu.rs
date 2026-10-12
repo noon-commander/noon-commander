@@ -19,7 +19,7 @@ use super::app::Side;
 use super::cells::{self, Align};
 use super::decor::Decor;
 use super::dialog::Colors;
-use super::keymap::{Action, Resolved};
+use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
 use super::panel::HostState;
 use super::picker::{Body, MenuLine, Pick, Picker, ShownRow, Shows};
@@ -252,9 +252,14 @@ impl LocationMenu {
         }
     }
 
+    /// The mode keys are typed in: Insert while the filter takes them.
+    pub(crate) fn mode(&self) -> Mode {
+        self.picker.mode()
+    }
+
     /// Takes a key: the picker's, and F4, which edits the settings of a host, F8, which
-    /// disconnects it, and Ctrl+r, which reads the volumes and hosts again. Enter on the row
-    /// of the rest of a group shows them.
+    /// disconnects it, and R, which reads the volumes and hosts again. Enter on the row of the
+    /// rest of a group shows them.
     pub(crate) fn handle(&mut self, input: Resolved) -> MenuEvent {
         match self.picker.handle(input) {
             Pick::Chosen(row) => {
@@ -352,8 +357,8 @@ impl LocationMenu {
         };
         self.picker.render(frame, area, theme, body, &mut |row| {
             let info_width = widest.min(row.width / 2);
-            // A hotkey, a space, the name, a space, the information.
-            let name_width = row.width.saturating_sub(info_width + 3);
+            // The name, a space, the information.
+            let name_width = row.width.saturating_sub(info_width + 1);
             look.line(items[row.index], row, (name_width, info_width))
         });
     }
@@ -472,13 +477,11 @@ struct Look<'a> {
 }
 
 impl Look<'_> {
-    /// A row: its hotkey, its name with its prefix, and its information, in cells of `widths`.
+    /// A row: its name with its prefix, and its information, in cells of `widths`.
     fn line(
         &self,
         item: Item<'_>,
-        ShownRow {
-            hotkey, selected, ..
-        }: ShownRow,
+        ShownRow { selected, .. }: ShownRow,
         (name_width, info_width): (usize, usize),
     ) -> Line<'static> {
         let (prefix, name, marker) = match item {
@@ -502,9 +505,9 @@ impl Look<'_> {
         let name = cells::fit(&format!("{prefix}{name}"), name_width, Align::Left);
         let info = cells::fit(&info(item, self.hosts), info_width, Align::Right);
         if selected {
-            return Line::styled(format!("{hotkey} {name} {info}"), self.focused);
+            return Line::styled(format!("{name} {info}"), self.focused);
         }
-        let mut spans = vec![Span::raw(format!("{hotkey} "))];
+        let mut spans = Vec::new();
         match marker {
             // The status marker of a host has a color of its own.
             Some(style) => {
@@ -653,6 +656,7 @@ mod tests {
     }
 
     fn typed(menu: &mut LocationMenu, text: &str) {
+        menu.handle(Resolved::Action(Action::QuickSearch));
         for c in text.chars() {
             assert_eq!(menu.handle(Resolved::Insert(c)), MenuEvent::Pending);
         }
@@ -727,29 +731,27 @@ mod tests {
     }
 
     #[test]
-    fn enter_and_digits_open_home_volumes_and_hosts() {
+    fn enter_opens_home_volumes_and_hosts() {
         let mut menu = menu_at(home());
         assert_eq!(
             press(&mut menu, Action::Confirm),
             MenuEvent::Open(Location::Local(PathBuf::from("/Users/me")))
         );
+        press(&mut menu, Action::Down);
         assert_eq!(
-            menu.handle(Resolved::Insert('2')),
+            press(&mut menu, Action::Confirm),
             MenuEvent::Open(Location::Local(PathBuf::from("/"))),
             "volumes open at their mount points"
         );
+        press(&mut menu, Action::Down);
         assert_eq!(
-            menu.handle(Resolved::Insert('3')),
+            press(&mut menu, Action::Confirm),
             MenuEvent::Open(Location::Local(PathBuf::from("/Volumes/USB")))
         );
         assert_eq!(
             menu.handle(Resolved::Insert('6')),
-            MenuEvent::Open(remote("db"))
-        );
-        assert_eq!(
-            menu.handle(Resolved::Insert('9')),
             MenuEvent::Pending,
-            "no ninth row"
+            "no digits, and no filter in Normal mode"
         );
         press(&mut menu, Action::End);
         assert_eq!(
@@ -893,11 +895,6 @@ mod tests {
         .chain(["h09".to_owned(), "+4".to_owned()])
         .collect();
         assert_eq!(hosts_shown(&menu), first);
-        assert_eq!(
-            menu.handle(Resolved::Insert('0')),
-            MenuEvent::Open(remote("h07")),
-            "home, a volume, then the hosts take the digits"
-        );
 
         typed(&mut menu, "h1");
         assert_eq!(
@@ -912,7 +909,7 @@ mod tests {
         assert_eq!(menu.chosen().map(key), Some(Key::More(Group::Sftp)));
         assert_eq!(menu.chosen_host(), None);
         let text = draw(&mut menu, 20);
-        assert!(text.contains("  4 more…"), "no digit: {text}");
+        assert!(text.contains("║ 4 more…"), "{text}");
         assert_eq!(press(&mut menu, Action::Confirm), MenuEvent::Pending);
         assert_eq!(hosts_shown(&menu).len(), 14, "Enter shows them");
         assert_eq!(
@@ -972,8 +969,8 @@ mod tests {
             })
             .unwrap();
         let buffer = terminal.backend().buffer();
-        // Rows 11 … 13 hold the hosts, below their heading; their icons are in column 5.
-        let colors = |y: u16| (buffer[(5, y)].fg, buffer[(5, y)].bg);
+        // Rows 11 … 13 hold the hosts, below their heading; their icons are in column 3.
+        let colors = |y: u16| (buffer[(3, y)].fg, buffer[(3, y)].bg);
         assert_eq!(colors(11), (Color::Green, Color::Gray), "connected");
         assert_eq!(
             colors(12),
@@ -981,7 +978,7 @@ mod tests {
             "idle: the dialog's own color"
         );
         assert_eq!(colors(13), (Color::Red, Color::Gray), "failed");
-        assert_eq!(buffer[(5, 12)].symbol(), "󰒋");
+        assert_eq!(buffer[(3, 12)].symbol(), "󰒋");
     }
 
     #[test]
@@ -1010,7 +1007,7 @@ mod tests {
     }
 
     #[test]
-    fn draws_groups_under_their_headings_with_hotkeys() {
+    fn draws_groups_under_their_headings() {
         let mut menu = menu_at(remote("web"));
         insta::assert_snapshot!(draw(&mut menu, 16));
         let mut loading = LocationMenu::new(Side::Right, home(), PathBuf::from("/Users/me"), 1);

@@ -81,7 +81,9 @@
 - [x] Noon themes from the logo's colors, dark and light (`noon-dark`, `noon-light`)
 - [ ] More built-in dark and light pairs from the same palette roles: Gruvbox (dark/light),
       Rosé Pine (main/dawn), Tokyo Night (night/day), Solarized (dark/light)
-- [ ] User themes and keymap overrides
+- [ ] User themes
+- [ ] Keymap overrides: the user's own bindings per mode and context, on top of vim's
+      ([ADR 0022](adr/0022-vim-modes.md))
 - [x] Tabs: each panel has its own (Ctrl+x t, Ctrl+x w, Alt+Left/Right, Ctrl+x [ and ]), on a line
       above the panels or in their frames, `ui.tab_bar`
       ([ADR 0011](adr/0011-tabs-per-panel.md))
@@ -105,8 +107,8 @@
       bookmarks in its Favorites group
 - [ ] History of the directories visited
 - [ ] chmod and symlinks
-- [ ] Trash: the marked entries, or the one under the cursor, moved to the trash (`d d` in the
-      vim keymap) rather than deleted: `~/.Trash` on macOS, the FreeDesktop trash on Linux. SFTP
+- [ ] Trash: the marked entries, or the one under the cursor, moved to the trash (`d d`)
+      rather than deleted: `~/.Trash` on macOS, the FreeDesktop trash on Linux. SFTP
       has no trash, so what hosts do needs an ADR
 - [x] Mouse support ([ADR 0018](adr/0018-mouse-support.md)): panels, tabs, the F-key bar, the
       viewer, the pull-down menu, dialogs, and every window; `ui.mouse` and `ui.wheel`
@@ -127,6 +129,14 @@
 - [x] Keymap presets by name, chosen as themes are: `ui.keymap`, `default` and `vim`
 - [x] Key hints, as which-key: the keys that can follow `Ctrl+x`, `g`, …, and every key of
       whatever is in front (`Alt+/`); `ui.which_key`, `ui.which_key_delay_ms`
+- [x] One keymap, vim's, in its modes, with mc's F-keys; `ui.keymap` and the default preset are
+      gone ([ADR 0022](adr/0022-vim-modes.md)): Normal, Insert, and Visual mode in the panels,
+      the lists, the dialogs, and the text fields; vim's motions, operators, registers, counts,
+      and undo in text fields; Visual mode and a jump list (Ctrl+o, Tab) in the panels; the
+      mode and the command typed on a line above the F-key bar, and the cursor's shape
+- [ ] `.` repeats the last change, in text fields and of files
+- [ ] Yanks copied to the system clipboard through OSC 52, behind a setting
+- [ ] A key of vim's for editing the command line in `$EDITOR`, which Ctrl+x Ctrl+e did
 - [x] The location menu replaces the virtual root and the list of hosts: groups Favorites,
       Mounts, and SFTP, the places used last first (`recent.toml`), the first ten of each with
       a row for the rest; F4 and F8 on hosts there; a Retry dialog for failed connections, and
@@ -143,8 +153,6 @@
 
 ## Backlog
 
-- vim keymap preset, `ui.keymap = "vim"`: only the keys differ; `:` and `!` open the command line
-  as in the default preset.
 - Commands of Noon Commander after `:` (`:!` runs a shell command already).
 - Linux: CI job, release binaries, and packages (AUR, deb).
 - Translations.

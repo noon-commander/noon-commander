@@ -78,8 +78,6 @@ pub(crate) struct Theme {
     pub(crate) dialog_button_focused: Style,
     /// Text field in a dialog.
     pub(crate) dialog_input: Style,
-    /// Text field that still holds the text it opened with, which typing replaces.
-    pub(crate) dialog_input_fresh: Style,
     /// The progress bar of a job.
     pub(crate) gauge: Style,
     /// Error dialogs: body, frame, text, and buttons without the focus.
@@ -209,7 +207,6 @@ impl Theme {
             dialog_button: on(Color::Black, Color::Gray),
             dialog_button_focused: on(Color::Black, Color::Cyan),
             dialog_input: on(Color::Black, Color::Cyan),
-            dialog_input_fresh: on(Color::DarkGray, Color::Cyan),
             gauge: on(Color::White, Color::Black),
             error_dialog: on(Color::White, Color::Red),
             error_title: on(Color::LightYellow, Color::Red),
@@ -268,7 +265,6 @@ impl Theme {
             dialog_button: plain,
             dialog_button_focused: reversed,
             dialog_input: reversed,
-            dialog_input_fresh: reversed.dim(),
             gauge: plain,
             error_dialog: plain,
             error_title: plain.bold(),
@@ -326,7 +322,6 @@ impl Theme {
             dialog_button: on(p.text, p.surface0),
             dialog_button_focused: cursor,
             dialog_input: on(p.text, p.surface1),
-            dialog_input_fresh: on(p.subtext0, p.surface1),
             gauge: on(p.blue, p.surface0),
             error_dialog: on(p.base, p.red),
             error_title: on(p.base, p.red),
@@ -387,7 +382,6 @@ impl Theme {
             dialog_button: on(p.text, p.surface),
             dialog_button_focused: cursor,
             dialog_input: on(p.text, p.field),
-            dialog_input_fresh: on(p.muted, p.field),
             gauge: on(p.accent, p.surface),
             error_dialog: on(p.panel, p.red),
             error_title: on(p.panel, p.red).bold(),

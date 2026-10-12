@@ -17,18 +17,20 @@ Enter
 Sleep 2s
 Show
 
-# The right panel goes to prod-web through its location menu, Ctrl+x 2: the browser behind
-# vhs sends neither Alt nor F-keys, so Alt+c and Alt+F2 do not reach noc.
-Tab
-Ctrl+X
+# The right panel goes to prod-web through its location menu, Ctrl+w 2, whose filter / types
+# in: the browser behind vhs sends neither Alt nor F-keys, so Alt+F2 does not reach noc.
+Ctrl+W
+Type "w"
+Ctrl+W
 Type "2"
 Sleep 300ms
-Type "prod-web"
+Type "/prod-web"
 Enter
 Sleep 2s
 Down
 Down
-Tab
+Ctrl+W
+Type "w"
 Down
 Down
 Down

@@ -9,6 +9,7 @@ mod configuration;
 mod decor;
 mod describe;
 mod dialog;
+mod edit;
 mod fuzzy;
 mod help;
 mod history;
@@ -39,8 +40,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
 use color_eyre::eyre::{Result, bail};
+use crossterm::cursor::SetCursorStyle;
 use crossterm::event::{
-    DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyEventKind, MouseEvent,
+    DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyCode, KeyEvent, KeyEventKind,
+    MouseEvent,
 };
 use futures_util::StreamExt as _;
 use jiff::tz::TimeZone;
@@ -53,7 +56,7 @@ use tokio::signal::unix::{Signal, SignalKind, signal};
 use tokio::sync::mpsc;
 
 use app::{App, Handover};
-use keymap::KeyState;
+use keymap::{KeyState, Mode};
 use mouse::Clicks;
 use tasks::{Done, Tasks};
 
@@ -69,22 +72,6 @@ pub(crate) fn is_valid_theme(name: &str) -> bool {
 
 pub(crate) fn theme_names() -> &'static [&'static str] {
     theme::Theme::NAMES
-}
-
-/// Whether `name` is a built-in keymap, for `ui.keymap`; and the names there are.
-pub(crate) fn is_valid_keymap(name: &str) -> bool {
-    keymap::Keymap::by_name(name).is_some()
-}
-
-pub(crate) fn keymap_names() -> &'static [&'static str] {
-    keymap::Keymap::NAMES
-}
-
-/// The built-in keymaps `left` and `right` compared action by action, for `noc keymap diff`;
-/// `None` if either is not one. `all` shows the actions they bind alike too, and `color` paints
-/// the differences.
-pub(crate) fn keymap_diff(left: &str, right: &str, all: bool, color: bool) -> Option<String> {
-    keymap::Diff::by_names(left, right).map(|diff| diff.render(all, color))
 }
 
 /// Hands finished background work to the app, and runs what the app asks for next.
@@ -216,10 +203,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
         tokio::select! {
             event = events.next() => match event {
                 Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => {
-                    let context = app.context();
-                    for input in app.keymap().feed(&mut keys, context, key, Instant::now()) {
-                        tasks.run(app.handle(input));
-                    }
+                    take_key(&mut app, &mut tasks, &mut keys, key);
                 }
                 Some(Ok(Event::Paste(text))) => tasks.run(app.paste(&text)),
                 Some(Ok(Event::Mouse(event))) => {
@@ -299,38 +283,6 @@ async fn edit(file: &Path) -> Result<bool, String> {
     Ok(before != after)
 }
 
-/// Runs the editor on `text`, in `file`, which goes afterwards, and returns what it left
-/// there, or why the editor could not run.
-async fn edit_command(file: &Path, text: &str) -> Result<String, String> {
-    let failed = |reason: String| fl!("command-edit-error", reason = reason);
-    let mut contents = text.to_owned();
-    contents.push('\n');
-    tokio::fs::write(file, contents)
-        .await
-        .map_err(|error| failed(error.to_string()))?;
-    let editor = Editor::from_env();
-    let edited = match editor.edit(file).await {
-        Ok(_) => tokio::fs::read(file)
-            .await
-            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
-            .map_err(|error| failed(error.to_string())),
-        Err(error) => {
-            let reason = match &error {
-                ToolError::Spawn { source, .. } => source.to_string(),
-                other => describe::chain(other),
-            };
-            let program = editor.program().display().to_string();
-            Err(failed(fl!(
-                "edit-cannot-run",
-                program = program,
-                reason = reason
-            )))
-        }
-    };
-    let _ = tokio::fs::remove_file(file).await;
-    edited
-}
-
 /// Hands the terminal to the program of `handover`, takes it back, and returns what the app
 /// does next and a new stream of SIGINT, since Ctrl+c in the program reached Noon Commander
 /// too, with a new stream of events in place of `events`. The program gets the mouse and the
@@ -347,6 +299,8 @@ async fn hand_over(
     // nothing until it is polled.
     drop(events);
     asked.mouse = false;
+    // Leaving the modes gives the cursor its own shape back.
+    asked.bar = None;
     let suspended = asked
         .title
         .show(None)
@@ -359,14 +313,6 @@ async fn hand_over(
                 Err(error) => Err(error),
             };
             (EventStream::new(), app.edited(result))
-        }
-        Handover::EditCommand { file, text } => {
-            let result = match suspended {
-                Ok(()) => edit_command(&file, &text).await,
-                Err(error) => Err(error),
-            };
-            app.command_edited(result);
-            (EventStream::new(), Vec::new())
         }
         Handover::Run(run) => {
             let result = match suspended {
@@ -446,9 +392,14 @@ impl Modes {
         self.keyboard(true)
     }
 
+    /// Leaves the modes, and gives the cursor its shape back.
     fn leave(self) -> io::Result<()> {
         self.keyboard(false)?;
-        crossterm::execute!(io::stdout(), crossterm::event::DisableBracketedPaste)
+        crossterm::execute!(
+            io::stdout(),
+            crossterm::event::DisableBracketedPaste,
+            SetCursorStyle::DefaultUserShape
+        )
     }
 
     /// Turns the kitty keyboard protocol on or off, where the terminal speaks it. Kitty keeps
@@ -480,11 +431,15 @@ struct Asked {
     /// The mouse is captured.
     mouse: bool,
     title: Title,
+    /// The cursor is a bar, for Insert mode, or a block, for the others, as asked last; `None`
+    /// while it has the terminal's own shape.
+    bar: Option<bool>,
 }
 
 /// Does what the app asks of the terminal: a full redraw, text for the clipboard, capturing
-/// the mouse or releasing it, as `ui.mouse` says, and the window's title, as
-/// `ui.terminal_title` says.
+/// the mouse or releasing it, as `ui.mouse` says, the window's title, as `ui.terminal_title`
+/// says, and the shape of the cursor, a bar in Insert mode and a block in the others, as vim
+/// has it in terminals that can.
 fn take_terminal_requests(
     terminal: &mut DefaultTerminal,
     app: &mut App,
@@ -499,6 +454,16 @@ fn take_terminal_requests(
     if app.mouse() != asked.mouse {
         asked.mouse = app.mouse();
         capture_mouse(asked.mouse)?;
+    }
+    let bar = app.mode() == Mode::Insert;
+    if asked.bar != Some(bar) {
+        asked.bar = Some(bar);
+        let style = if bar {
+            SetCursorStyle::SteadyBar
+        } else {
+            SetCursorStyle::SteadyBlock
+        };
+        crossterm::execute!(io::stdout(), style)?;
     }
     asked.title.show(app.terminal_title())
 }
@@ -601,10 +566,32 @@ fn copy_to_clipboard(terminal: &mut DefaultTerminal, text: &str) -> io::Result<(
     )
 }
 
-/// Shows the key hints that the app asked for, and has it draw those that `keys` has.
+/// Gives a key press to the keymap in the mode and the context of the app, and what it resolves
+/// to to the app. Alt and a key that stand for Esc and the key go as both, each in the mode and
+/// the context it finds: Esc may leave Insert mode.
+fn take_key(app: &mut App, tasks: &mut Tasks, keys: &mut KeyState, key: KeyEvent) {
+    let now = Instant::now();
+    let place = app.place();
+    let (first, then) = match app.keymap().alt_as_esc(keys, place, key) {
+        Some(plain) => (KeyEvent::from(KeyCode::Esc), Some(plain)),
+        None => (key, None),
+    };
+    for typed in app.keymap().feed(keys, place, first, now) {
+        tasks.run(app.typed(typed));
+    }
+    if let Some(plain) = then {
+        let place = app.place();
+        for typed in app.keymap().feed(keys, place, plain, now) {
+            tasks.run(app.typed(typed));
+        }
+    }
+}
+
+/// Shows the key hints that the app asked for, and has it draw those that `keys` has, and what
+/// its pending command has typed.
 fn take_hints(app: &mut App, keys: &mut KeyState) {
-    if let Some(context) = app.take_hints_asked() {
-        app.keymap().show_hints(keys, context);
+    if let Some(place) = app.take_hints_asked() {
+        app.keymap().show_hints(keys, place);
     }
     app.set_hints(keys);
 }
@@ -626,13 +613,13 @@ fn key_timer(app: &App, keys: &KeyState) -> Option<Instant> {
 fn key_time(app: &mut App, tasks: &mut Tasks, keys: &mut KeyState) {
     let now = Instant::now();
     if hints_due(app, keys).is_some_and(|due| due <= now)
-        && let Some(context) = keys.context()
+        && let Some(place) = keys.place()
     {
-        app.keymap().show_hints(keys, context);
+        app.keymap().show_hints(keys, place);
         return;
     }
-    for input in app.keymap().expire(keys, now) {
-        tasks.run(app.handle(input));
+    for typed in app.keymap().expire(keys, now) {
+        tasks.run(app.typed(typed));
     }
 }
 

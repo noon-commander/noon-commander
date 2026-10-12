@@ -2,6 +2,7 @@
 
 use std::collections::HashSet;
 use std::ffi::OsStr;
+use std::ops::RangeInclusive;
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -25,6 +26,8 @@ use crate::i18n::fl;
 
 /// Width of the size column, as in mc.
 const SIZE_WIDTH: usize = 7;
+/// Jumps the jump list of a panel keeps, as vim's keeps 100.
+const MAX_JUMPS: usize = 100;
 
 /// Narrow panels drop columns to keep at least this many cells for names.
 const MIN_NAME_WIDTH: usize = 8;
@@ -230,6 +233,14 @@ pub(crate) struct Panel {
     search_origin: usize,
     /// The entry under the cursor, while its name is edited in its row.
     renaming: Option<Renaming>,
+    /// The row where Visual mode started, while it selects the rows from there to the cursor.
+    visual: Option<usize>,
+    /// The rows Visual mode selected last, for `g v`: where it started, and the cursor.
+    last_visual: Option<(usize, usize)>,
+    /// Where the panel was before its jumps, oldest first, as vim's jump list keeps them, and
+    /// the place in it after Ctrl+o: its length while no jump went back.
+    jumps: Vec<Destination>,
+    jump: usize,
     error: Option<String>,
     /// Where the lines between columns ran at the last render, so that they can be joined to
     /// a top of the frame drawn again over the panel's.
@@ -273,6 +284,10 @@ impl Panel {
             search: None,
             search_origin: 0,
             renaming: None,
+            visual: None,
+            last_visual: None,
+            jumps: Vec::new(),
+            jump: 0,
             error: None,
             column_lines: Vec::new(),
         };
@@ -302,6 +317,10 @@ impl Panel {
             search: None,
             search_origin: 0,
             renaming: None,
+            visual: None,
+            last_visual: None,
+            jumps: Vec::new(),
+            jump: 0,
             error: None,
             column_lines: Vec::new(),
         };
@@ -318,6 +337,8 @@ impl Panel {
         self.search = None;
         if location != self.location {
             self.renaming = None;
+            self.visual = None;
+            self.last_visual = None;
         }
         self.pending = Some(Pending {
             generation: self.generation,
@@ -350,6 +371,8 @@ impl Panel {
                 if location != self.location {
                     self.marked.clear();
                     self.renaming = None;
+                    self.visual = None;
+                    self.last_visual = None;
                 }
                 self.location = location;
                 self.listing = listing;
@@ -357,16 +380,7 @@ impl Panel {
                 self.disconnected = false;
                 self.arrange();
                 self.offset = 0;
-                let rows = self.rows();
-                self.cursor = (0..rows)
-                    .find(|&index| {
-                        self.row(index)
-                            .is_some_and(|row| pending.focus.matches(row))
-                    })
-                    .unwrap_or(match pending.focus {
-                        Focus::Near { row, .. } => row.min(rows.saturating_sub(1)),
-                        _ => 0,
-                    });
+                self.cursor = self.row_of(&pending.focus);
                 self.keep_renaming();
             }
             Err(reason) => {
@@ -385,6 +399,17 @@ impl Panel {
                 self.error = Some(fl!("panel-error", path = shown, reason = reason));
             }
         }
+    }
+
+    /// The row that `focus` puts the cursor on.
+    fn row_of(&self, focus: &Focus) -> usize {
+        let rows = self.rows();
+        (0..rows)
+            .find(|&index| self.row(index).is_some_and(|row| focus.matches(row)))
+            .unwrap_or(match focus {
+                Focus::Near { row, .. } => (*row).min(rows.saturating_sub(1)),
+                _ => 0,
+            })
     }
 
     /// The request the panel waits for, if any.
@@ -477,9 +502,10 @@ impl Panel {
         }
     }
 
-    /// Starts renaming the entry under the cursor in its row: the field holds its name, with
-    /// all but the last extension of a file selected. `false` on `..`, volumes, and hosts, and
-    /// for a name that is not UTF-8, which the field could not give back.
+    /// Starts renaming the entry under the cursor in its row: the field holds its name, in
+    /// Insert mode, with the cursor before the last extension of a file. `false` on `..`,
+    /// volumes, and hosts, and for a name that is not UTF-8, which the field could not give
+    /// back.
     pub(crate) fn start_rename(&mut self) -> bool {
         let Some(entry) = self.entry_under_cursor() else {
             return false;
@@ -487,7 +513,7 @@ impl Panel {
         let Ok(text) = std::str::from_utf8(&entry.name) else {
             return false;
         };
-        let field = Field::selecting(text, stem_chars(text, entry.is_dir_like()));
+        let field = Field::at(text, stem_chars(text, entry.is_dir_like()));
         self.renaming = Some(Renaming {
             name: entry.name.clone(),
             field,
@@ -504,6 +530,11 @@ impl Panel {
     /// The field with the new name, while an entry is being renamed.
     pub(crate) fn rename_field(&mut self) -> Option<&mut Field> {
         self.renaming.as_mut().map(|renaming| &mut renaming.field)
+    }
+
+    /// The field with the new name, to read, while an entry is being renamed.
+    pub(crate) fn rename_field_ref(&self) -> Option<&Field> {
+        self.renaming.as_ref().map(|renaming| &renaming.field)
     }
 
     /// Stops renaming: the name of the entry, and the text of the field.
@@ -739,12 +770,15 @@ impl Panel {
         }
     }
 
-    /// Ends quick search; what it typed, unless that was nothing.
+    /// Ends quick search; what it typed, unless that was nothing. Where it started goes to
+    /// the jump list, as vim's search puts it there.
     pub(crate) fn end_search(&mut self) -> Option<String> {
-        self.search
-            .take()
-            .map(|field| field.text().to_owned())
-            .filter(|text| !text.trim().is_empty())
+        let field = self.search.take()?;
+        if self.search_origin != self.cursor {
+            let origin = self.spot(self.search_origin);
+            self.push_jump(origin);
+        }
+        Some(field.text().to_owned()).filter(|text| !text.trim().is_empty())
     }
 
     /// The first row from `start` on, round to the top, whose name starts with `text` (lower
@@ -868,8 +902,10 @@ impl Panel {
             Action::PageDown => self.cursor = (self.cursor + page).min(last),
             Action::HalfPageUp => self.cursor = self.cursor.saturating_sub(half),
             Action::HalfPageDown => self.cursor = (self.cursor + half).min(last),
-            Action::Home => self.cursor = 0,
-            Action::End => self.cursor = last,
+            Action::Home | Action::End => {
+                self.remember();
+                self.cursor = if action == Action::Home { 0 } else { last };
+            }
             // As in mc, the cursor moves on even from `..`, which cannot be marked.
             Action::Mark => {
                 self.toggle_mark();
@@ -918,9 +954,144 @@ impl Panel {
         self.rearrange();
     }
 
-    /// Goes to `destination`; returns the listing to request.
+    /// Goes to `destination`; returns the listing to request. Where the panel was goes to the
+    /// jump list, if it is another location.
     pub(crate) fn go(&mut self, destination: Destination) -> ListRequest {
+        if destination.location != self.location {
+            self.remember();
+        }
         self.open(destination.location, destination.focus)
+    }
+
+    /// Puts the cursor on row `number`, counted from 1, as vim's `G` with a count does; where
+    /// it was goes to the jump list.
+    pub(crate) fn go_to_row(&mut self, number: usize) {
+        self.remember();
+        self.cursor = number.saturating_sub(1).min(self.rows().saturating_sub(1));
+    }
+
+    /// Puts where the panel is in the jump list, before a jump from here.
+    pub(crate) fn remember(&mut self) {
+        let here = self.here();
+        self.push_jump(here);
+    }
+
+    /// Where the cursor would be on `row` of this location.
+    fn spot(&self, row: usize) -> Destination {
+        let focus = match self.row(row) {
+            Some(Row::Entry(entry)) => Focus::Near {
+                name: entry.name.clone(),
+                row,
+            },
+            Some(Row::Parent) | None => Focus::First,
+        };
+        Destination {
+            location: self.location.clone(),
+            focus,
+        }
+    }
+
+    /// Adds `spot` to the jump list as the newest jump; jumps that Ctrl+o went back over go.
+    fn push_jump(&mut self, spot: Destination) {
+        self.jumps.truncate(self.jump);
+        if self.jumps.last() != Some(&spot) {
+            self.jumps.push(spot);
+        }
+        if self.jumps.len() > MAX_JUMPS {
+            self.jumps.remove(0);
+        }
+        self.jump = self.jumps.len();
+    }
+
+    /// Goes back to where the panel was before its last jump, as vim's Ctrl+o, `count` times;
+    /// the listing to request, if that is another location.
+    pub(crate) fn jump_back(&mut self, count: usize) -> Option<ListRequest> {
+        if self.jump == 0 {
+            return None;
+        }
+        let here = self.here();
+        if self.jump == self.jumps.len() {
+            self.jumps.push(here);
+        } else {
+            self.jumps[self.jump] = here;
+        }
+        self.jump = self.jump.saturating_sub(count);
+        self.travel(self.jumps[self.jump].clone())
+    }
+
+    /// Goes forward again where Ctrl+o came from, as vim's Ctrl+i, `count` times.
+    pub(crate) fn jump_forward(&mut self, count: usize) -> Option<ListRequest> {
+        if self.jump + 1 >= self.jumps.len() {
+            return None;
+        }
+        self.jumps[self.jump] = self.here();
+        self.jump = (self.jump + count).min(self.jumps.len() - 1);
+        self.travel(self.jumps[self.jump].clone())
+    }
+
+    /// Goes to `to` without a new jump: within this location at once, else by its listing.
+    fn travel(&mut self, to: Destination) -> Option<ListRequest> {
+        if to.location == self.location && self.pending.is_none() {
+            self.cursor = self.row_of(&to.focus);
+            return None;
+        }
+        Some(self.open(to.location, to.focus))
+    }
+
+    /// Whether Visual mode selects rows.
+    pub(crate) fn visual(&self) -> bool {
+        self.visual.is_some()
+    }
+
+    /// Starts Visual mode on the row under the cursor.
+    pub(crate) fn start_visual(&mut self) {
+        self.visual = Some(self.cursor);
+    }
+
+    /// Ends Visual mode, and keeps what it selected for `g v`.
+    pub(crate) fn end_visual(&mut self) {
+        if let Some(anchor) = self.visual.take() {
+            self.last_visual = Some((anchor, self.cursor));
+        }
+    }
+
+    /// Selects again the rows Visual mode selected last, as vim's `g v`.
+    pub(crate) fn reselect(&mut self) {
+        if let Some((anchor, cursor)) = self.last_visual {
+            let last = self.rows().saturating_sub(1);
+            self.visual = Some(anchor.min(last));
+            self.cursor = cursor.min(last);
+        }
+    }
+
+    /// Puts the cursor at the other end of what Visual mode selects.
+    pub(crate) fn other_end(&mut self) {
+        if let Some(anchor) = &mut self.visual {
+            std::mem::swap(anchor, &mut self.cursor);
+        }
+    }
+
+    /// The rows Visual mode selects.
+    fn visual_rows(&self) -> Option<RangeInclusive<usize>> {
+        let anchor = self.visual?.min(self.rows().saturating_sub(1));
+        Some(anchor.min(self.cursor)..=anchor.max(self.cursor))
+    }
+
+    /// Marks the entries Visual mode selects, and ends it. With `only`, for a command that acts
+    /// on them, they are the only marked ones.
+    pub(crate) fn mark_visual(&mut self, only: bool) {
+        let Some(rows) = self.visual_rows() else {
+            return;
+        };
+        if only {
+            self.marked.clear();
+        }
+        for index in rows {
+            if let Some(Row::Entry(entry)) = self.row(index) {
+                self.marked.insert(entry.name.clone());
+            }
+        }
+        self.end_visual();
     }
 
     /// This location, with the cursor on the row it is on.
@@ -965,7 +1136,7 @@ impl Panel {
         }
     }
 
-    /// What Alt+o opens in the other panel, as in mc: the directory under the cursor, or, for a
+    /// What Ctrl+w f opens in the other panel, as mc's Alt+o: the directory under the cursor, or, for a
     /// file, the parent directory with the cursor on this one. The cursor moves on
     /// to the next row.
     pub(crate) fn for_other_panel(&mut self) -> Option<Destination> {
@@ -1079,11 +1250,13 @@ impl Panel {
         let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
         let header = Line::styled(columns.header(self.sort), theme.header);
         frame.render_widget(header, line(inner.y));
+        let visual = self.visual_rows();
         for (screen_row, index) in (self.offset..self.rows()).take(list_height).enumerate() {
             let Some(row) = self.row(index) else { break };
             let marked = matches!(row, Row::Entry(entry) if self.marked.contains(&entry.name));
             let cursor = (index == self.cursor).then_some(active);
-            let text = row_style(columns.row(row, view), cursor, marked, theme);
+            let selected = visual.as_ref().is_some_and(|rows| rows.contains(&index));
+            let text = row_style(columns.row(row, view), cursor, (marked, selected), theme);
             let y = inner.y + 1 + u16::try_from(screen_row).unwrap_or(u16::MAX);
             frame.render_widget(text, line(y));
         }
@@ -1613,20 +1786,22 @@ fn stem_chars(name: &str, dir: bool) -> usize {
     }
 }
 
-/// `text` as a row under the cursor, `Some(true)` in the active panel, and `marked`. The cursor
-/// and marks replace the colors of the row, as in mc; the cursor of the inactive panel only puts
-/// a background under them.
+/// `text` as a row under the cursor, `Some(true)` in the active panel, `marked`, and `selected`
+/// by Visual mode. The cursor and marks replace the colors of the row, as in mc, and a selection
+/// reverses them; the cursor of the inactive panel only puts a background under them.
 fn row_style(
     mut text: Line<'static>,
     cursor: Option<bool>,
-    marked: bool,
+    (marked, selected): (bool, bool),
     theme: &Theme,
 ) -> Line<'static> {
-    let style = match (cursor == Some(true), marked) {
-        (true, true) => Some(theme.marked_cursor),
-        (true, false) => Some(theme.cursor),
-        (false, true) => Some(theme.marked),
-        (false, false) => None,
+    let style = match (cursor == Some(true), marked, selected) {
+        (true, true, _) => Some(theme.marked_cursor),
+        (true, false, _) => Some(theme.cursor),
+        (false, true, true) => Some(selection(theme.marked)),
+        (false, false, true) => Some(selection(theme.panel)),
+        (false, true, false) => Some(theme.marked),
+        (false, false, false) => None,
     };
     if let Some(style) = style {
         for span in &mut text.spans {
@@ -1651,6 +1826,7 @@ mod tests {
     use ratatui::style::Color;
 
     use super::*;
+    use crate::tui::keymap::Mode;
 
     /// 2023-11-14 22:13:20 UTC.
     const NOW: u64 = 1_700_000_000;
@@ -2887,14 +3063,16 @@ mod tests {
     }
 
     /// The selected text of the field, and all of it.
+    /// The text of the field of the entry being renamed before its cursor, and all of it.
     fn rename_field(panel: &mut Panel) -> (String, String) {
         let field = panel.rename_field().unwrap();
-        let ([_, selected, _], _) = field.visible_parts(80);
-        (selected, field.text().to_owned())
+        let (shown, column) = field.visible(80);
+        let before = shown.chars().take(column).collect();
+        (before, field.text().to_owned())
     }
 
     #[test]
-    fn renaming_selects_all_but_the_last_extension_of_a_file() {
+    fn renaming_puts_the_cursor_before_the_last_extension_of_a_file() {
         assert_eq!(stem_chars("report.final.pdf", false), 12);
         assert_eq!(stem_chars("archive.tar.gz", false), 11);
         assert_eq!(stem_chars("notes", false), 5);
@@ -2914,6 +3092,8 @@ mod tests {
             ("report.final".to_owned(), "report.final.pdf".to_owned())
         );
         let field = panel.rename_field().unwrap();
+        assert_eq!(field.mode(), Mode::Insert);
+        field.edit(Action::DeleteToStart);
         for c in "summary".chars() {
             field.insert(c);
         }
@@ -2947,7 +3127,7 @@ mod tests {
         more.push(entry("a-new-one", FileKind::File, 1));
         answer(&mut panel, &request, Listing::Dir(more));
         assert_eq!(under_cursor(&panel), "notes", "the cursor stays on it");
-        assert_eq!(rename_field(&mut panel).1, "x", "and so does the text");
+        assert_eq!(rename_field(&mut panel).1, "notesx", "and so does the text");
 
         let request = panel.handle(Action::Reload).unwrap();
         answer(&mut panel, &request, Listing::Dir(listing()));
@@ -2982,12 +3162,10 @@ mod tests {
         insta::assert_snapshot!(terminal.backend());
         let buffer = terminal.backend().buffer();
         let y = 1 + 1 + u16::try_from(panel.cursor - panel.offset).unwrap();
-        // After the marker, the selection, then the extension and the rest of the row, which
-        // the size and time columns no longer cut.
+        // After the marker, the name, in Insert mode with nothing selected, and the rest of the
+        // row, which the size and time columns no longer cut.
         let reversed = |x: u16| buffer[(x, y)].modifier.contains(Modifier::REVERSED);
-        assert!(!reversed(2), "the selection is not reversed in the field");
-        assert!(!reversed(13));
-        assert!(reversed(14), "the extension is not selected");
+        assert!(reversed(2) && reversed(14), "nothing is selected");
         assert!(reversed(38), "the field runs to the end of the row");
         assert_eq!(buffer[(30, y)].symbol(), " ", "no line between columns");
         assert_eq!(terminal.backend().cursor_position(), (14, y).into());

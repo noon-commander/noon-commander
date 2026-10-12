@@ -1,0 +1,17 @@
+---
+source: crates/noc/src/tui/which_key.rs
+expression: "draw(&hints, 100, 13)"
+---
+"                                                                                                    "
+"                                                                                                    "
+"                                                                                                    "
+"╔═════════════════════════════════════════════ Ctrl+w ═════════════════════════════════════════════╗"
+"║ w, Ctrl+w, p The other panel                                                                     ║"
+"║ h            The left panel                                                                      ║"
+"║ l            The right panel                                                                     ║"
+"║ x, r         Swap the panels                                                                     ║"
+"║ f            Open the directory under the cursor in the other panel                              ║"
+"║ v            Show this directory in the other panel                                              ║"
+"║ 1            Change the left panel's location: a volume or a host                                ║"
+"║ 2            Change the right panel's location: a volume or a host                               ║"
+"╚═══════════════════════════════════════════════════════════════ Esc closes, Backspace goes back ══╝"

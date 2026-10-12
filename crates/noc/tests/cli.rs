@@ -258,34 +258,6 @@ fn config_paths_follow_xdg_variables() {
 }
 
 #[test]
-fn keymap_diff_compares_the_default_and_the_vim_keymap() {
-    let sandbox = Sandbox::new(&[]);
-    let output = sandbox.run(&["keymap", "diff"]);
-    assert!(output.status.success(), "{}", stderr(&output));
-    let text = stdout(&output);
-    let header: Vec<&str> = text.lines().next().unwrap().split_whitespace().collect();
-    assert_eq!(header, ["default", "vim"]);
-    assert!(text.contains("\n[workspaces] same\n"), "{text}");
-    assert!(
-        text.lines()
-            .any(|line| line.starts_with("  up ") && line.ends_with("|  k, Up, Ctrl+p")),
-        "{text}"
-    );
-    assert!(
-        !text.contains('\x1b'),
-        "no color where stdout is not a terminal"
-    );
-
-    let colored = sandbox.run(&["keymap", "diff", "--color", "vim", "vim"]);
-    assert!(colored.status.success(), "{}", stderr(&colored));
-    assert!(stdout(&colored).contains("\x1b["));
-
-    let output = sandbox.run(&["keymap", "diff", "default", "emacs"]);
-    assert!(!output.status.success());
-    assert!(stderr(&output).contains("emacs"));
-}
-
-#[test]
 fn rejects_an_invalid_config() {
     let sandbox = Sandbox::new(&[]);
     sandbox.write_config("unknown = 1\n");
@@ -296,6 +268,12 @@ fn rejects_an_invalid_config() {
         "{}",
         stderr(&output)
     );
+
+    // The keymap is vim's; `ui.keymap` is gone.
+    sandbox.write_config("[ui]\nkeymap = \"vim\"\n");
+    let output = sandbox.run(&["hosts"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).contains("keymap"), "{}", stderr(&output));
 
     sandbox.write_config("args = [\"-L\", \"8080:localhost:80\"]\n");
     let output = sandbox.run(&["hosts"]);

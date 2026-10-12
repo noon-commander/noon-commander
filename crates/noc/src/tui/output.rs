@@ -14,7 +14,7 @@ use noc_tools::ToolError;
 use noc_tools::shell::Shell;
 
 use super::command::{Place, Run};
-use super::keymap::{Action, Context, KeyState, Keymap, Resolved};
+use super::keymap::{Action, Context, KeyState, Keymap, Mode, Resolved};
 use super::{describe, tasks};
 use crate::i18n::fl;
 
@@ -168,7 +168,7 @@ pub(super) async fn wait_for_key(events: &mut EventStream) {
 }
 
 /// Waits, while the terminal's screen shows, for a key that `keymap` binds to going back to
-/// the panels there: Ctrl+o or Esc in the mc preset. Other keys do nothing.
+/// the panels there, such as `g <` or Esc. Other keys do nothing.
 pub(super) async fn wait_to_go_back(events: &mut EventStream, keymap: &Keymap) {
     let mut keys = KeyState::default();
     while let Some(Ok(event)) = events.next().await {
@@ -176,8 +176,12 @@ pub(super) async fn wait_to_go_back(events: &mut EventStream, keymap: &Keymap) {
             && key.kind == KeyEventKind::Press
         {
             let now = std::time::Instant::now();
-            let resolved = keymap.feed(&mut keys, Context::UserScreen, key, now);
-            if resolved.contains(&Resolved::Action(Action::Cancel)) {
+            let place = (Mode::Normal, Context::UserScreen);
+            let typed = keymap.feed(&mut keys, place, key, now);
+            if typed
+                .iter()
+                .any(|typed| typed.resolved == Resolved::Action(Action::Cancel))
+            {
                 return;
             }
         }

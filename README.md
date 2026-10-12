@@ -19,22 +19,23 @@ The same panels in the theme `mc-classic`, with the blue of Midnight Commander:
 
 ## Why
 
-- **Two panels and mc keys.** Copy, move, rename, view, and delete files on your machine, between
-  your machine and your servers, or between two servers. The keys are the ones you know from
-  Midnight Commander.
+- **Two panels, vim's keys, mc's F-keys.** Copy, move, rename, view, and delete files on your
+  machine, between your machine and your servers, or between two servers. Keys work in vim's
+  modes, Normal, Insert, and Visual, down to the text fields, with motions, operators, counts,
+  and registers; the F-keys are the ones you know from Midnight Commander.
 - **SFTP at the core.** Remote hosts are not an add-on: Noon Commander was started to make SFTP
   feel as natural as the local disk, and remote files work just like local ones.
 - **Your `~/.ssh/config` just works.** Noon Commander never implements SSH. It runs the `ssh` you
   already use, so `ProxyJump`, `Match`, `Include`, agents, FIDO keys, certificates, and
   `known_hosts` behave exactly as in your terminal.
-- **Every disk and server in one place.** Alt+F1 and Alt+F2 open a menu of the mounted volumes
+- **Every disk and server in one place.** Ctrl+w 1 and Ctrl+w 2 open a menu of the mounted volumes
   and all hosts from your ssh config, as in Far Manager, with the ones you used last first and
   a filter that finds any of them.
 - **Tabs in each panel.** Keep several directories and servers open on each side, and switch
-  between them with Alt+Left and Alt+Right.
+  between them with `g t` and `g T`.
 - **Workspaces.** Save the tabs of both panels under a name with t W, and bring the
   whole layout back with t w.
-- **zoxide built in.** Alt+z jumps to the directories [zoxide](https://github.com/ajeetdsouza/zoxide)
+- **zoxide built in.** `g z` jumps to the directories [zoxide](https://github.com/ajeetdsouza/zoxide)
   ranks, and the directories you work in from Noon Commander count there too.
 - **Fuzzy search, as in fzf.** Quick search, the location menu, and the zoxide window find
   `config.rs` from `cfg`, best match first.
@@ -63,7 +64,7 @@ Non-goals: forwarding of any kind, a built-in SSH implementation, a password man
 - One authentication per host, shared by all panels and transfers (OpenSSH `ControlMaster`).
 - Configurable `ssh` binary and extra arguments.
 - Nerd Font icons, on by default.
-- Midnight Commander keybindings; a vim preset may follow.
+- Your own key bindings on top of vim's.
 
 ## Requirements
 
@@ -219,9 +220,10 @@ directory Noon Commander uses.
 
 ### The Option key on macOS
 
-Many keys of the default keymap use Alt, as mc's do: Alt+o, Alt+i, Alt+c, Alt+h, Alt+z, Alt+F1,
-and Alt+1 … Alt+0 for terminals without F-keys. On macOS the Option key types characters such as
-`ø` instead, unless the terminal sends it as Alt:
+A few keys use Alt: Alt+F1 and Alt+F2, Alt+/ for the key hints, and Alt and a letter for the
+commands of the pull-down menu. In Insert mode, Alt and a key also stand for Esc and the key, as
+in vim. On macOS the Option key types characters such as `ø` instead, unless the terminal sends
+it as Alt:
 
 - Terminal.app: Settings → Profiles → Keyboard → Use Option as Meta key.
 - iTerm2: Settings → Profiles → Keys → Left Option key: Esc+.
@@ -229,9 +231,8 @@ and Alt+1 … Alt+0 for terminals without F-keys. On macOS the Option key types 
 - kitty: `macos_option_as_alt yes`.
 - Alacritty: `option_as_alt = "Both"` under `[window]`.
 
-Without it, F9 opens the pull-down menu, which has those commands, and Ctrl+w f and Ctrl+w v do
-what Alt+o and Alt+i do. Terminal.app sends Option+Left and Option+Right as Esc b and Esc f, which
-move by words in a shell, whatever that setting says; `[ t` and `] t` switch tabs there.
+Without it, Ctrl+w 1 and Ctrl+w 2 open the location menus, and the arrows and Enter run the
+commands of the pull-down menu.
 
 ## Contributing
 

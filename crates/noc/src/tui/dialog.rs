@@ -9,15 +9,15 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use noc_ssh::askpass::PromptKind;
 use ratatui::Frame;
 use ratatui::layout::{Margin, Position, Rect};
-use ratatui::style::Style;
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear};
 use secrecy::SecretString;
 use unicode_width::UnicodeWidthChar as _;
-use zeroize::Zeroizing;
 
 use super::cells;
-use super::keymap::{Action, Context, Resolved};
+use super::edit::{Editor, Registers};
+use super::keymap::{Action, Context, Extra, Mode, Resolved, Typed};
 use super::mouse::{Pointer, Press};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -112,156 +112,87 @@ enum Focus {
     Button(usize),
 }
 
-/// A text field. A secret one is masked, and its text lives in memory reserved up front and
-/// wiped when the field goes.
+/// A text field, in vim's modes: a plain one opens in Insert mode, with the cursor at the end
+/// of its text. A secret one stays in Insert mode, is masked, and lives in memory reserved up
+/// front and wiped when the field goes.
 pub(crate) struct Field {
-    text: Zeroizing<String>,
-    /// In characters.
-    cursor: usize,
-    secret: bool,
-    /// Still the text the dialog opened with: typing replaces it, as in mc.
-    fresh: bool,
-    /// Characters that typing, Backspace, and Delete replace, as in a desktop text field;
-    /// moving the cursor lets them go.
-    selected: Option<Range<usize>>,
+    editor: Editor,
 }
 
 impl Field {
     fn secret() -> Self {
         Self {
-            text: Zeroizing::new(String::with_capacity(SECRET_CAPACITY)),
-            cursor: 0,
-            secret: true,
-            fresh: false,
-            selected: None,
+            editor: Editor::secret(SECRET_CAPACITY),
         }
     }
 
-    /// A plain field that opens with `text`, the cursor at its end.
+    /// A plain field that opens in Insert mode with `text`, the cursor at its end.
     pub(crate) fn plain(text: &str) -> Self {
         Self {
-            text: Zeroizing::new(text.to_owned()),
-            cursor: text.chars().count(),
-            secret: false,
-            fresh: !text.is_empty(),
-            selected: None,
+            editor: Editor::new(text, Mode::Insert),
         }
     }
 
-    /// A plain field that opens with `text`, its first `selected` characters selected and the
-    /// cursor after them.
-    pub(crate) fn selecting(text: &str, selected: usize) -> Self {
-        let selected = selected.min(text.chars().count());
+    /// A plain field that opens in Insert mode with `text`, the cursor before character
+    /// `cursor`.
+    pub(crate) fn at(text: &str, cursor: usize) -> Self {
+        let mut field = Self::plain(text);
+        field.editor.set_cursor(cursor);
+        field
+    }
+
+    /// A plain field that opens in Normal mode with `text`.
+    pub(crate) fn normal(text: &str) -> Self {
         Self {
-            text: Zeroizing::new(text.to_owned()),
-            cursor: selected,
-            secret: false,
-            fresh: false,
-            selected: (selected > 0).then_some(0..selected),
+            editor: Editor::new(text, Mode::Normal),
         }
-    }
-
-    fn chars(&self) -> usize {
-        self.text.chars().count()
     }
 
     /// The text, as typed.
     pub(crate) fn text(&self) -> &str {
-        &self.text
+        self.editor.text()
     }
 
-    /// Whether the field still holds the text it opened with, which typing replaces.
-    pub(crate) fn fresh(&self) -> bool {
-        self.fresh
+    /// The mode the field is in.
+    pub(crate) fn mode(&self) -> Mode {
+        self.editor.mode()
     }
 
-    /// The byte offset of character `index`.
-    fn offset(&self, index: usize) -> usize {
-        self.text
-            .char_indices()
-            .nth(index)
-            .map_or(self.text.len(), |(offset, _)| offset)
+    /// Insert mode, or Normal mode, as the focus comes to the field; a secret stays in Insert
+    /// mode.
+    pub(crate) fn set_mode(&mut self, mode: Mode) {
+        self.editor.set_mode(mode);
     }
 
+    /// The operator that waits for its motion, as vim's `showcmd` shows it.
+    pub(crate) fn pending(&self) -> Option<String> {
+        self.editor.pending()
+    }
+
+    /// Types `c` at the cursor.
     pub(crate) fn insert(&mut self, c: char) {
-        if std::mem::take(&mut self.fresh) {
-            self.text.clear();
-            self.cursor = 0;
-        }
-        self.remove_selected();
-        // Growing would copy the secret to new memory and leave the old one unwiped.
-        if self.secret && self.text.len() + c.len_utf8() > self.text.capacity() {
-            return;
-        }
-        let offset = self.offset(self.cursor);
-        self.text.insert(offset, c);
-        self.cursor += 1;
+        self.editor.insert(c);
     }
 
-    /// Removes the characters in `start..end`.
-    fn remove(&mut self, start: usize, end: usize) {
-        let (start, end) = (self.offset(start), self.offset(end));
-        self.text.replace_range(start..end, "");
-    }
-
-    /// Removes the selected characters, if any, and leaves the cursor where they were.
-    fn remove_selected(&mut self) -> bool {
-        let Some(selected) = self.selected.take() else {
-            return false;
-        };
-        self.remove(selected.start, selected.end);
-        self.cursor = selected.start;
-        true
-    }
-
-    /// Edits the text; `false` if `action` is not an edit.
+    /// Edits the text as Insert mode does, without leaving it; `false` if `action` is not an
+    /// edit. For filters, which stay in Insert mode.
     pub(crate) fn edit(&mut self, action: Action) -> bool {
-        if matches!(
-            action,
-            Action::Backspace | Action::DeleteChar | Action::DeleteWord | Action::DeleteNextWord
-        ) && self.remove_selected()
-        {
-            return true;
-        }
-        let chars = self.chars();
-        match action {
-            Action::Left => self.cursor = self.cursor.saturating_sub(1),
-            Action::Right => self.cursor = (self.cursor + 1).min(chars),
-            Action::TextStart => self.cursor = 0,
-            Action::TextEnd => self.cursor = chars,
-            Action::WordLeft => self.cursor = word_start(&self.text, 0, self.cursor),
-            Action::WordRight => self.cursor = word_end(&self.text, self.cursor, chars),
-            Action::Backspace if self.cursor > 0 => {
-                self.remove(self.cursor - 1, self.cursor);
-                self.cursor -= 1;
-            }
-            Action::DeleteChar if self.cursor < chars => {
-                self.remove(self.cursor, self.cursor + 1);
-            }
-            Action::DeleteToStart => {
-                self.remove(0, self.cursor);
-                self.cursor = 0;
-            }
-            Action::DeleteToEnd => self.remove(self.cursor, chars),
-            Action::DeleteWord => {
-                let start = word_start(&self.text, 0, self.cursor);
-                self.remove(start, self.cursor);
-                self.cursor = start;
-            }
-            Action::DeleteNextWord => {
-                let end = word_end(&self.text, self.cursor, chars);
-                self.remove(self.cursor, end);
-            }
-            Action::Backspace | Action::DeleteChar => {}
-            _ => return false,
-        }
-        self.fresh = false;
-        self.selected = None;
-        true
+        self.editor.edit(action)
     }
 
-    /// Puts the cursor at `column` of the `room` cells the field was drawn in, as a click does;
-    /// the text stays, as after a move of the cursor.
+    /// Takes `action`, typed with `extra`, in the field's mode; `false` if it is not the
+    /// field's, such as Enter, or Esc in Normal mode.
+    pub(crate) fn handle(
+        &mut self,
+        action: Action,
+        extra: Extra,
+        registers: &mut Registers,
+    ) -> bool {
+        self.editor.handle(action, extra, registers)
+    }
+
+    /// Puts the cursor at `column` of the `room` cells the field was drawn in, as a click does,
+    /// in Insert mode.
     pub(crate) fn click(&mut self, column: usize, room: usize) {
         let (first, shown, _) = self.window(room);
         let mut used = 0;
@@ -272,9 +203,8 @@ impl Field {
                 used <= column
             })
             .count();
-        self.cursor = (first + before).min(self.chars());
-        self.fresh = false;
-        self.selected = None;
+        self.editor.set_mode(Mode::Insert);
+        self.editor.set_cursor(first + before);
     }
 
     /// What fits in `room` cells, as shown (stars for a secret), from where the cursor stays
@@ -284,12 +214,12 @@ impl Field {
         (shown, column)
     }
 
-    /// What [`visible`](Self::visible) shows, cut in three: before the selection, the selection,
-    /// and after it; and the cursor's column.
+    /// What [`visible`](Self::visible) shows, cut in three: before what Visual mode selects,
+    /// the selection, and after it; and the cursor's column.
     pub(crate) fn visible_parts(&self, room: usize) -> ([String; 3], usize) {
         let (first, shown, column) = self.window(room);
         let chars: Vec<char> = shown.chars().collect();
-        let (start, end) = self.selected.as_ref().map_or((0, 0), |selected| {
+        let (start, end) = self.editor.selection().map_or((0, 0), |selected| {
             let clamp = |index: usize| index.saturating_sub(first).min(chars.len());
             (clamp(selected.start), clamp(selected.end))
         });
@@ -300,14 +230,15 @@ impl Field {
 
     /// The first character shown, what fits from there, and the cursor's column.
     fn window(&self, room: usize) -> (usize, String, usize) {
-        let chars: Vec<char> = if self.secret {
-            vec!['*'; self.chars()]
+        let chars: Vec<char> = if self.editor.is_secret() {
+            vec!['*'; self.editor.text().chars().count()]
         } else {
-            self.text.chars().collect()
+            self.editor.text().chars().collect()
         };
+        let cursor = self.editor.cursor();
         let width = |c: char| c.width().unwrap_or(0);
         // Back from the cursor while the text before it and the cursor itself fit.
-        let mut first = self.cursor;
+        let mut first = cursor;
         let mut column = 0;
         while first > 0 && column + width(chars[first - 1]) < room {
             first -= 1;
@@ -326,41 +257,9 @@ impl Field {
     }
 }
 
-/// Where the word before character `cursor` of `text` starts, with the spaces after it, but
-/// not before character `floor`: what the shell's Ctrl+w deletes.
-pub(crate) fn word_start(text: &str, floor: usize, cursor: usize) -> usize {
-    let chars: Vec<char> = text.chars().take(cursor).collect();
-    let mut start = chars.len();
-    while start > floor && chars[start - 1].is_whitespace() {
-        start -= 1;
-    }
-    while start > floor && !chars[start - 1].is_whitespace() {
-        start -= 1;
-    }
-    start
-}
-
-/// Where the word after character `cursor` of `text` ends, past the spaces before it, but not
-/// after character `ceiling`.
-pub(crate) fn word_end(text: &str, cursor: usize, ceiling: usize) -> usize {
-    let chars: Vec<char> = text.chars().take(ceiling).collect();
-    let mut end = cursor.min(chars.len());
-    while end < chars.len() && chars[end].is_whitespace() {
-        end += 1;
-    }
-    while end < chars.len() && !chars[end].is_whitespace() {
-        end += 1;
-    }
-    end
-}
-
 impl fmt::Debug for Field {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut debug = f.debug_struct("Field");
-        if !self.secret {
-            debug.field("text", &self.text.as_str());
-        }
-        debug.finish_non_exhaustive()
+        self.editor.fmt(f)
     }
 }
 
@@ -614,8 +513,13 @@ impl Dialog {
     /// The text of the first field before its cursor, and after it.
     pub(crate) fn around_cursor(&self) -> (&str, &str) {
         match self.fields.first() {
-            Some(LabelledField { field, .. }) if !field.secret => {
-                field.text.split_at(field.offset(field.cursor))
+            Some(LabelledField { field, .. }) if !field.editor.is_secret() => {
+                let text = field.text();
+                let offset = text
+                    .char_indices()
+                    .nth(field.editor.cursor())
+                    .map_or(text.len(), |(offset, _)| offset);
+                text.split_at(offset)
             }
             _ => ("", ""),
         }
@@ -624,17 +528,16 @@ impl Dialog {
     /// Replaces the text of the first field before its cursor with `before`, keeping what is
     /// after it, with the cursor after `before`.
     pub(crate) fn replace_before_cursor(&mut self, before: &str) {
+        let after = self.around_cursor().1.to_owned();
         let Some(LabelledField { field, .. }) = self.fields.first_mut() else {
             return;
         };
-        if field.secret {
+        if field.editor.is_secret() {
             return;
         }
-        let after = field.text[field.offset(field.cursor)..].to_owned();
-        *field.text = format!("{before}{after}");
-        field.cursor = before.chars().count();
-        field.fresh = false;
-        field.selected = None;
+        field
+            .editor
+            .replace(&format!("{before}{after}"), before.chars().count());
     }
 
     /// The same dialog with `message` above the rest.
@@ -665,7 +568,7 @@ impl Dialog {
         match (event, self.fields.first()) {
             (DialogEvent::Pressed(Button::Ok), Some(LabelledField { field, .. })) => {
                 // From `&str`: an exact copy, where `String` would be shrunk into new memory.
-                Some(SecretString::from(field.text.as_str()))
+                Some(SecretString::from(field.text()))
             }
             (DialogEvent::Pressed(Button::Yes), _) => Some(SecretString::from("yes")),
             _ => None,
@@ -680,24 +583,20 @@ impl Dialog {
     /// The text of field `index`, if plain.
     pub(crate) fn text_of(&self, index: usize) -> &str {
         match self.fields.get(index) {
-            Some(LabelledField { field, .. }) if !field.secret => &field.text,
+            Some(LabelledField { field, .. }) if !field.editor.is_secret() => field.text(),
             _ => "",
         }
     }
 
-    /// Replaces the text of plain field `index` and gives it the focus. Unlike the text a
-    /// field opens with, typing edits it.
+    /// Replaces the text of plain field `index` and gives it the focus, in Insert mode.
     pub(crate) fn set_text(&mut self, index: usize, text: &str) {
         let Some(LabelledField { field, .. }) = self.fields.get_mut(index) else {
             return;
         };
-        if field.secret {
+        if field.editor.is_secret() {
             return;
         }
-        *field = Field {
-            fresh: false,
-            ..Field::plain(text)
-        };
+        *field = Field::plain(text);
         self.focus = Focus::Field(index);
     }
 
@@ -716,21 +615,55 @@ impl Dialog {
         }
     }
 
-    /// Handles an action or a typed character.
-    pub(crate) fn handle(&mut self, input: Resolved) -> DialogEvent {
-        let field = match self.focus {
+    /// The mode keys are typed in: the focused field's, or Normal mode on a button, a check
+    /// box, or a choice.
+    pub(crate) fn mode(&self) -> Mode {
+        self.focused_field().map_or(Mode::Normal, Field::mode)
+    }
+
+    /// The operator that the focused field has waiting for its motion, as `showcmd` shows it.
+    pub(crate) fn pending(&self) -> Option<String> {
+        self.focused_field().and_then(Field::pending)
+    }
+
+    fn focused_field(&self) -> Option<&Field> {
+        match self.focus {
+            Focus::Field(index) => self.fields.get(index).map(|field| &field.field),
+            Focus::Choice(_) | Focus::Check(_) | Focus::Button(_) => None,
+        }
+    }
+
+    fn focused_field_mut(&mut self) -> Option<&mut Field> {
+        match self.focus {
             Focus::Field(index) => self.fields.get_mut(index).map(|field| &mut field.field),
             Focus::Choice(_) | Focus::Check(_) | Focus::Button(_) => None,
-        };
-        let action = match (input, field) {
+        }
+    }
+
+    /// Handles an action or a typed character, as typed without a count or a register.
+    #[cfg(test)]
+    pub(crate) fn handle(&mut self, input: Resolved) -> DialogEvent {
+        self.handle_typed(Typed::from(input), &mut Registers::default())
+    }
+
+    /// Handles an action or a typed character: the focused field takes what it edits with,
+    /// in its mode. Tab brings the focus to a field in Insert mode; the other keys that move it
+    /// bring it there in Normal mode, but from a field in Insert mode.
+    pub(crate) fn handle_typed(&mut self, typed: Typed, registers: &mut Registers) -> DialogEvent {
+        let Typed { resolved, extra } = typed;
+        let action = match (resolved, self.focused_field_mut()) {
             (Resolved::Insert(c), Some(field)) => {
                 field.insert(c);
                 return DialogEvent::Pending;
             }
             (Resolved::Insert(_), None) => return DialogEvent::Pending,
             (Resolved::Action(action), Some(field)) => {
-                if field.edit(action) {
+                if field.handle(action, extra, registers) {
                     return DialogEvent::Pending;
+                }
+                // A secret has no Normal mode: Esc closes its dialog.
+                if action == Action::NormalMode {
+                    return DialogEvent::Cancelled;
                 }
                 action
             }
@@ -761,12 +694,12 @@ impl Dialog {
                 Focus::Field(_) => DialogEvent::Pending,
             },
             Action::Cancel => DialogEvent::Cancelled,
-            Action::NextField | Action::Right | Action::Down => {
-                self.move_focus(true);
+            Action::NextField | Action::PrevField => {
+                self.move_focus(action == Action::NextField, Mode::Insert);
                 DialogEvent::Pending
             }
-            Action::PrevField | Action::Left | Action::Up => {
-                self.move_focus(false);
+            Action::Right | Action::Down | Action::Left | Action::Up => {
+                self.move_focus(matches!(action, Action::Right | Action::Down), self.mode());
                 DialogEvent::Pending
             }
             _ => DialogEvent::Pending,
@@ -813,8 +746,8 @@ impl Dialog {
     }
 
     /// Moves the focus through the choices, the fields, the check boxes, and the buttons,
-    /// round.
-    fn move_focus(&mut self, forward: bool) {
+    /// round; a field it comes to is in `mode`, Insert or Normal.
+    fn move_focus(&mut self, forward: bool, mode: Mode) {
         let stops: Vec<Focus> = (0..self.choices.len())
             .map(Focus::Choice)
             .chain((0..self.fields.len()).map(Focus::Field))
@@ -827,6 +760,14 @@ impl Dialog {
             .unwrap_or(0);
         let step = if forward { 1 } else { stops.len() - 1 };
         self.focus = stops[(current + step) % stops.len()];
+        let mode = if mode == Mode::Insert {
+            Mode::Insert
+        } else {
+            Mode::Normal
+        };
+        if let Some(field) = self.focused_field_mut() {
+            field.set_mode(mode);
+        }
     }
 
     /// Draws the dialog centered in `area`, with the terminal cursor in the focused field.
@@ -884,14 +825,18 @@ impl Dialog {
             if index >= inner.height {
                 return;
             }
-            let (text, column) = field.visible(room);
-            let style = if field.fresh {
-                theme.dialog_input_fresh
-            } else {
-                theme.dialog_input
-            };
-            let text = cells::fit(&text, room, cells::Align::Left);
-            frame.render_widget(Line::styled(text, style), row(index));
+            let ([before, selected, after], column) = field.visible_parts(room);
+            let used = cells::width(&before) + cells::width(&selected);
+            let after = cells::fit(&after, room.saturating_sub(used), cells::Align::Left);
+            let line = Line::from(vec![
+                Span::raw(before),
+                Span::styled(
+                    selected,
+                    theme.dialog_input.add_modifier(Modifier::REVERSED),
+                ),
+                Span::raw(after),
+            ]);
+            frame.render_widget(line.style(theme.dialog_input), row(index));
             spots.push((Focus::Field(number), row(index)));
             if number == 0 {
                 self.field_area.set(Some(row(index)));
@@ -1284,19 +1229,65 @@ mod tests {
     }
 
     #[test]
-    fn typing_replaces_the_text_a_form_opens_with() {
+    fn a_form_opens_in_insert_mode_and_esc_goes_to_normal_mode() {
         let mut dialog = form();
         assert_eq!(dialog.context(), Context::DialogInput);
+        assert_eq!(dialog.mode(), Mode::Insert);
         assert_eq!(dialog.text(), "*");
-        typed(&mut dialog, "*.txt");
-        assert_eq!(dialog.text(), "*.txt");
-        typed(&mut dialog, " x");
-        assert_eq!(dialog.text(), "*.txt x", "only the first key replaces it");
-
-        let mut dialog = form();
+        typed(&mut dialog, ".txt");
+        assert_eq!(dialog.text(), "*.txt", "typing goes on from the end");
+        assert_eq!(
+            dialog.handle(action(Action::NormalMode)),
+            DialogEvent::Pending
+        );
+        assert_eq!(dialog.mode(), Mode::Normal);
         dialog.handle(action(Action::TextStart));
-        typed(&mut dialog, "a");
-        assert_eq!(dialog.text(), "a*", "an edit keeps it");
+        dialog.handle(action(Action::DeleteChar));
+        assert_eq!(dialog.text(), ".txt");
+        dialog.handle(action(Action::Undo));
+        assert_eq!(dialog.text(), "*.txt");
+        assert_eq!(
+            dialog.handle(action(Action::Cancel)),
+            DialogEvent::Cancelled,
+            "Esc in Normal mode closes it"
+        );
+        let mut dialog = form();
+        dialog.handle(action(Action::NormalMode));
+        assert_eq!(
+            dialog.handle(action(Action::Confirm)),
+            DialogEvent::Pressed(Button::Ok),
+            "Enter in Normal mode too"
+        );
+        // A secret has no Normal mode: Esc closes its dialog.
+        assert_eq!(
+            secret().handle(action(Action::NormalMode)),
+            DialogEvent::Cancelled
+        );
+    }
+
+    #[test]
+    fn tab_brings_the_focus_to_a_field_in_insert_mode_and_j_and_k_in_normal_mode() {
+        let mut dialog = host_form();
+        dialog.handle(action(Action::NormalMode));
+        dialog.handle(action(Action::Down));
+        assert_eq!(
+            (dialog.text_of(1), dialog.mode()),
+            ("/var/www", Mode::Normal)
+        );
+        dialog.handle(action(Action::NextField));
+        assert_eq!(dialog.mode(), Mode::Insert, "Tab");
+        dialog.handle(action(Action::Up));
+        assert_eq!(dialog.mode(), Mode::Insert, "from a field in Insert mode");
+        assert_eq!(dialog.pending(), None);
+        dialog.handle(action(Action::NormalMode));
+        dialog.handle(action(Action::DeleteOperator));
+        assert_eq!(dialog.pending().as_deref(), Some("d"));
+        assert_eq!(
+            dialog.handle(action(Action::Cancel)),
+            DialogEvent::Pending,
+            "Esc gives the operator up first"
+        );
+        assert_eq!(dialog.pending(), None);
     }
 
     #[test]
@@ -1331,7 +1322,7 @@ mod tests {
     fn a_long_field_shows_the_part_around_its_cursor() {
         let mut field = Field::plain("abcdefghij");
         assert_eq!(field.visible(5), ("ghij".to_owned(), 4));
-        field.cursor = 0;
+        field.editor.set_cursor(0);
         assert_eq!(field.visible(5), ("abcde".to_owned(), 0));
         let wide = Field::plain("文件文件");
         assert_eq!(wide.visible(5), ("文件".to_owned(), 4));
@@ -1343,86 +1334,51 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_w_deletes_the_word_before_the_cursor_as_the_shell_does() {
+    fn ctrl_w_deletes_the_word_before_the_cursor_as_vim_does() {
         let mut field = Field::plain("cp a.txt  backup");
-        field.edit(Action::TextEnd);
         assert!(field.edit(Action::DeleteWord));
         assert_eq!(field.text(), "cp a.txt  ");
         field.edit(Action::DeleteWord);
-        assert_eq!(field.text(), "cp ", "the spaces after the word go with it");
+        assert_eq!(
+            field.text(),
+            "cp a.",
+            "the spaces go with the word, and a dot is one"
+        );
         field.edit(Action::TextStart);
         field.edit(Action::DeleteWord);
-        assert_eq!(field.text(), "cp ", "nothing before the cursor");
-        let mut selected = Field::selecting("report.pdf", 6);
-        selected.edit(Action::DeleteWord);
-        assert_eq!(selected.text(), ".pdf", "the selection goes first");
-        let mut next = Field::plain("cp  a.txt backup");
-        next.edit(Action::TextStart);
-        next.edit(Action::DeleteNextWord);
-        assert_eq!(next.text(), "  a.txt backup");
-        next.edit(Action::DeleteNextWord);
-        assert_eq!(
-            next.text(),
-            " backup",
-            "the spaces before the word go with it"
-        );
-        next.edit(Action::TextEnd);
-        next.edit(Action::DeleteNextWord);
-        assert_eq!(next.text(), " backup", "nothing after the cursor");
+        assert_eq!(field.text(), "cp a.", "nothing before the cursor");
     }
 
     #[test]
-    fn word_keys_go_to_the_start_and_the_end_of_words() {
+    fn word_keys_go_to_the_starts_of_words() {
         let mut field = Field::plain("cp  a.txt backup");
+        assert!(field.edit(Action::WordBackward));
+        assert_eq!(field.editor.cursor(), 10, "the start of backup");
+        field.edit(Action::WordBackward);
+        assert_eq!(field.editor.cursor(), 6, "txt");
+        field.edit(Action::TextStart);
+        field.edit(Action::WordForward);
+        assert_eq!(field.editor.cursor(), 4, "past the spaces");
         field.edit(Action::TextEnd);
-        assert!(field.edit(Action::WordLeft));
-        assert_eq!(field.cursor, 10, "the start of backup");
-        field.edit(Action::WordLeft);
-        field.edit(Action::WordLeft);
-        assert_eq!(field.cursor, 0);
-        field.edit(Action::WordRight);
-        assert_eq!(field.cursor, 2, "the end of cp");
-        field.edit(Action::WordRight);
-        assert_eq!(field.cursor, 9, "past the spaces, the end of a.txt");
-        field.edit(Action::WordRight);
-        field.edit(Action::WordRight);
-        assert_eq!(field.cursor, 16, "the end stays");
+        field.edit(Action::WordForward);
+        assert_eq!(field.editor.cursor(), 16, "the end stays");
     }
 
     #[test]
-    fn typing_replaces_the_selection_and_moving_lets_it_go() {
+    fn visual_mode_shows_what_it_selects() {
         let parts = |field: &Field, room| field.visible_parts(room);
-        let mut field = Field::selecting("report.pdf", 6);
+        let mut registers = Registers::default();
+        let mut field = Field::normal("report.pdf");
+        field.editor.set_cursor(0);
+        for action in [Action::VisualMode, Action::WordEnd] {
+            assert!(field.handle(action, Extra::default(), &mut registers));
+        }
         assert_eq!(
             parts(&field, 20),
-            ([String::new(), "report".to_owned(), ".pdf".to_owned()], 6)
+            ([String::new(), "report".to_owned(), ".pdf".to_owned()], 5)
         );
-        for c in "notes".chars() {
-            field.insert(c);
-        }
-        assert_eq!((field.text(), field.cursor), ("notes.pdf", 5));
+        field.handle(Action::NormalMode, Extra::default(), &mut registers);
         assert_eq!(parts(&field, 20).0[1], "", "nothing is selected any more");
-
-        let mut field = Field::selecting("report.pdf", 6);
-        assert!(field.edit(Action::Backspace));
-        assert_eq!((field.text(), field.cursor), (".pdf", 0));
-
-        let mut field = Field::selecting("report.pdf", 6);
-        assert!(field.edit(Action::TextEnd));
-        field.insert('x');
-        assert_eq!(field.text(), "report.pdfx");
-
-        let mut field = Field::selecting("report.pdf", 6);
-        assert!(field.edit(Action::Left));
-        field.insert('x');
-        assert_eq!(field.text(), "reporxt.pdf");
-
-        // Scrolled: the selection is cut where the window starts.
-        let field = Field::selecting("abcdefghij.txt", 10);
-        assert_eq!(
-            parts(&field, 5),
-            ([String::new(), "ghij".to_owned(), ".".to_owned()], 4)
-        );
     }
 
     /// Presses the mouse on the first cell of `text` where `dialog` is drawn at 40 by 12.
@@ -1482,6 +1438,7 @@ mod tests {
     #[test]
     fn draws_a_form_with_its_check_boxes() {
         let mut dialog = form();
+        dialog.handle(action(Action::DeleteToStart));
         typed(&mut dialog, "*.md");
         dialog.handle(action(Action::NextField));
         let terminal = draw(&dialog, 60, 10);
@@ -1507,16 +1464,16 @@ mod tests {
         dialog.handle(action(Action::NextField));
         assert_eq!(dialog.context(), Context::DialogInput);
         typed(&mut dialog, "/srv");
-        assert_eq!(dialog.text_of(0), "Staging");
-        assert_eq!(dialog.text(), "Staging");
-        assert_eq!(dialog.text_of(1), "/srv");
+        assert_eq!(dialog.text_of(0), "ProdStaging");
+        assert_eq!(dialog.text(), "ProdStaging");
+        assert_eq!(dialog.text_of(1), "/var/www/srv");
         assert_eq!(dialog.text_of(2), "");
         assert_eq!(dialog.text_of(3), "", "no such field");
         dialog.handle(action(Action::Up));
         typed(&mut dialog, "!");
         assert_eq!(
             dialog.text_of(0),
-            "Staging!",
+            "ProdStaging!",
             "Up goes back to the first field"
         );
         dialog.handle(action(Action::Down));
@@ -1607,19 +1564,6 @@ mod tests {
         assert_eq!(
             dialog.handle(action(Action::Confirm)),
             DialogEvent::Pressed(Button::Ok)
-        );
-    }
-
-    #[test]
-    fn mc_classic_draws_the_opening_text_dimmed() {
-        use ratatui::style::Color;
-
-        let terminal = draw_themed(&form(), 60, 10, &Theme::mc_classic());
-        let buffer = terminal.backend().buffer();
-        // The dialog spans columns 5 … 54 and rows 1 … 7; the field is on row 2.
-        assert_eq!(
-            (buffer[(7, 2)].fg, buffer[(7, 2)].bg),
-            (Color::DarkGray, Color::Cyan)
         );
     }
 }

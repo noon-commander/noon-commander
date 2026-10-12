@@ -118,19 +118,25 @@ Paths come from `crates/noc-config/src/paths.rs`.
 
 ### Keymap
 
-- Contexts: `Context` in `crates/noc/src/tui/keymap/action.rs`. Bindings are key sequences.
-- Presets: `crates/noc/src/tui/keymap/default.rs` (mc, the default) and `vim.rs`, one per
-  `ui.keymap` value. Both list every context in the same order, with the same comments where
-  they agree. `just keymap-diff` compares them.
-- In the default preset, list an action's mc keys first, then those shared with vim. The
-  pull-down menu shows the first.
-- The F-key bar and help are generated from the active keymap.
-- Changing any binding: update the `noc (default)` or `noc (vim)` column of
+- One keymap: vim's, in its modes, with mc's F-keys (ADR 0022). No other mc keys, no second
+  preset, no `ui.keymap`.
+- Modes and contexts: `Mode` and `Context` in `crates/noc/src/tui/keymap/action.rs`. Bindings
+  are key sequences per mode and context; `Context::chain(mode)` gives the fallbacks.
+  `global` keys work in every mode.
+- The preset: `crates/noc/src/tui/keymap/preset.rs`. An action's first key is what the
+  pull-down menu shows. In Insert mode characters are text; in Normal mode unbound ones do
+  nothing.
+- The app says where keys go: `App::place` returns the mode and the context. A new window or
+  field reports its mode; text fields keep theirs in their `edit::Editor`.
+- Counts, registers, and the character after `f`, `t`, `r`, `"`, Ctrl+r, Ctrl+v come with the
+  action (`keymap::Typed`, `Extra`), never as bindings.
+- The F-key bar and help are generated from the keymap, per mode and context.
+- Changing any binding: update the `noc` column of
   [docs/keymap-compare.md](docs/keymap-compare.md) in the same change. A new action gets a row
-  in its context's section, in default-preset order, with the keys of mc, Far, yazi, ranger.
+  in its mode and context's section, in preset order, with the keys of mc, Far, yazi, ranger.
 - Keys in text (help, menus, Fluent, docs, comments) follow `keymap::describe`: `Ctrl+l`, `G`,
-  `Alt+W`, `Shift+F6`, `Ctrl+x t`, `PgUp`. Full rules: docs/keymap-compare.md. Presets and
-  `config.toml` use crokey syntax (`ctrl-x t`, `shift-z`).
+  `Alt+W`, `Shift+F6`, `Ctrl+w h`, `PgUp`. Full rules: docs/keymap-compare.md. The preset uses
+  crokey syntax (`ctrl-w h`, `shift-z`).
 - Mouse: a widget translates a press into the key it stands for (Enter, Esc) and sends it down
   the keyboard path. Release the mouse on editor hand-off, exit, and panic (ADR 0018).
 

@@ -116,7 +116,7 @@ Shift+F7, mc's and Far's key to search again, repeats it forward too.
 | Half a page down | `half_page_down` | ✅ | Shift+PgDn | Ctrl+d | — | — | Ctrl+d<br>Shift+PgDn | J<br>Ctrl+d |
 | First row | `home` | ✅ | Home<br>Alt+< | g g<br>Home | Home<br>A1<br>Alt+< | — | g g<br>Home | Home<br>g g |
 | Last row | `end` | ✅ | End<br>Alt+> | G<br>End | End<br>C1<br>Alt+> | — | G<br>End | End<br>G |
-| Open the directory or file under the cursor | `enter` | ✅ | Enter<br>Ctrl+m | l<br>Right<br>Enter<br>Ctrl+m | Enter | Enter | l<br>Right<br>o<br>Enter | Right<br>Enter<br>l |
+| Open the directory or file under the cursor | `enter` | ✅ | Enter<br>Ctrl+m<br>Ctrl+PgDn | l<br>Right<br>Enter<br>Ctrl+m | Enter<br>Ctrl+PgDn | Enter<br>Ctrl+PgDn | l<br>Right<br>o<br>Enter | Right<br>Enter<br>l |
 | Parent directory; nothing in / | `parent` | ✅ | Ctrl+PgUp<br>Backspace | h<br>Left<br>Backspace | Ctrl+PgUp | Ctrl+PgUp | h<br>Left | Left<br>h |
 | Read the directory again | `reload` | ✅ | Ctrl+r | R | Ctrl+r | Ctrl+r | — | R |
 | Stop loading or connecting | `cancel` | ✅ | Esc<br>Ctrl+[<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c | — | — | — | Ctrl+c |
@@ -170,7 +170,7 @@ Shift+F7, mc's and Far's key to search again, repeats it forward too.
 | Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | Ctrl+l | — | — | Ctrl+l |
 | F1…F10 on terminals without function keys | — | ✅ | Alt+1…9, 0 | Alt+1…9, 0 | Esc, then 1…9, 0 | — | — | — |
 | Alt+key on terminals without Alt | — | 🚫 | — | — | Esc, then the key | — | — | — |
-| Enter the directory or archive under the cursor | — | ⏳ | — | — | Ctrl+PgDn | Ctrl+PgDn<br>Ctrl+Shift+PgDn (always as archive) | — | — |
+| Enter the archive under the cursor as a directory | — | ⏳ | — | — | Ctrl+PgDn | Ctrl+PgDn<br>Ctrl+Shift+PgDn (always as archive) | — | — |
 | Execute in separate window | — | ⏳ | — | — | — | Shift+Enter | — | — |
 | Run as administrator | — | ⏳ | — | — | — | Ctrl+Alt+Enter | — | — |
 | Open the marked files, or the one under the cursor, with a program chosen from a list | — | ⏳ | — | — | — | — | O<br>Shift+Enter | r |
@@ -449,8 +449,6 @@ since ranger asks its questions on the console.
 | Help: search | — | ⏳ | — | — | — | F7 | — | — |
 | Help: maximize/restore window | — | ⏳ | — | — | — | F5 | — | — |
 | Help: full list of help keys | — | ⏳ | — | — | F1 (again) | — | — | — |
-| In the help and lists, half a page up | — | ⏳ | — | — | u (help) | — | — | Ctrl+u<br>u |
-| In the help and lists, half a page down | — | ⏳ | — | — | d (help) | — | — | Ctrl+d |
 | The output of the job under the cursor | — | ⏳ | — | — | — | — | Enter (tasks) | — |
 | Abort the job under the cursor | — | ⏳ | — | — | — | — | x (tasks) | d d<br>Delete |
 | Run the job under the cursor first | — | ⏳ | — | — | — | — | — | K<br>PgUp |
@@ -461,16 +459,17 @@ since ranger asks its questions on the console.
 
 The help of F1. Keys it does not bind go to the dialog, whose keys scroll the help and close it;
 the keys of the other programs' help are there too. The default preset adds the page keys of its
-lists and viewer; the vim preset, Ctrl+u and Ctrl+d, as in vim and a pager.
+lists and the keys of mc's help, whose Space turns the page here rather than press a button; the
+vim preset, Ctrl+u and Ctrl+d, as in vim and a pager.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| One page up | `page_up` | ✅ | Alt+v | — | — | — | — | — |
-| One page down | `page_down` | ✅ | Ctrl+v | — | — | — | — | — |
-| Half a page up | `half_page_up` | ✅ | — | Ctrl+u | — | — | — | — |
-| Half a page down | `half_page_down` | ✅ | — | Ctrl+d | — | — | — | — |
-| The top | `home` | ✅ | Alt+< | — | — | — | — | — |
-| The end | `end` | ✅ | Alt+> | — | — | — | — | — |
+| One page up | `page_up` | ✅ | Alt+v<br>b<br>Backspace<br>Ctrl+h | — | b<br>Backspace | — | — | — |
+| One page down | `page_down` | ✅ | Ctrl+v<br>Space<br>f | — | Space<br>f | — | — | — |
+| Half a page up | `half_page_up` | ✅ | u | Ctrl+u | u | — | — | — |
+| Half a page down | `half_page_down` | ✅ | d | Ctrl+d | d | — | — | — |
+| The top | `home` | ✅ | Alt+<<br>g<br>Ctrl+Home<br>Ctrl+PgUp | — | g<br>Ctrl+Home<br>Ctrl+PgUp | — | — | — |
+| The end | `end` | ✅ | Alt+><br>G<br>Ctrl+End<br>Ctrl+PgDn | — | G<br>Ctrl+End<br>Ctrl+PgDn | — | — | — |
 | Close the help | `cancel` | ✅ | — | q | F10<br>Esc | Esc | Esc<br>Ctrl+[<br>Ctrl+c | — |
 
 ## Viewer (`viewer`)
@@ -484,8 +483,8 @@ the keys of its pager, which shows files, the output of commands, and the log.
 | One line down | `down` | ✅ | Down<br>j<br>e<br>Enter<br>Ctrl+m<br>Delete<br>Ctrl+n | j<br>Ctrl+e<br>Down<br>Ctrl+n<br>Enter<br>Ctrl+m | Down<br>j<br>e<br>Enter<br>Delete<br>Ctrl+n | Down | — | Down<br>j<br>Ctrl+n<br>Enter |
 | One page up | `page_up` | ✅ | PgUp<br>Alt+v<br>b<br>Backspace<br>Ctrl+h | Ctrl+b<br>Shift+Up<br>PgUp | PgUp<br>Alt+v<br>b<br>Backspace<br>Ctrl+h | PgUp | — | PgUp<br>p<br>b<br>Ctrl+b |
 | One page down | `page_down` | ✅ | PgDn<br>Space<br>f<br>Ctrl+v | Ctrl+f<br>Shift+Down<br>PgDn | PgDn<br>Space<br>f<br>Ctrl+v | PgDn | — | PgDn<br>n<br>f<br>Ctrl+f<br>Space |
-| Half a page up | `half_page_up` | ✅ | — | Ctrl+u | — | — | — | Ctrl+u<br>u |
-| Half a page down | `half_page_down` | ✅ | — | Ctrl+d | — | — | — | Ctrl+d<br>d |
+| Half a page up | `half_page_up` | ✅ | u | Ctrl+u | u | — | — | Ctrl+u<br>u |
+| Half a page down | `half_page_down` | ✅ | d | Ctrl+d | d | — | — | Ctrl+d<br>d |
 | The start of the file | `home` | ✅ | Home<br>g<br>Ctrl+Home<br>Ctrl+PgUp<br>Alt+< | g g<br>Home | Home<br>A1<br>g<br>Ctrl+Home<br>Ctrl+PgUp<br>Alt+< | Home<br>Ctrl+Home | — | Home<br>g |
 | The end of the file | `end` | ✅ | End<br>G<br>Ctrl+End<br>Ctrl+PgDn<br>Alt+> | G<br>End | End<br>C1<br>G<br>Ctrl+End<br>Ctrl+PgDn<br>Alt+> | End<br>Ctrl+End | — | End<br>G |
 | One column left, when lines are cut (ranger: four) | `left` | ✅ | Left<br>h | h<br>Left | Left<br>h | Left | — | Left<br>h |
@@ -508,8 +507,6 @@ the keys of its pager, which shows files, the output of commands, and the log.
 | Raw/Parsed | — | ⏳ | — | — | F8 | — | — | — |
 | Format/Unformat | — | ⏳ | — | — | F9 | — | — | — |
 | Code page | — | ⏳ | — | — | Alt+e | F8 (OEM/ANSI)<br>Shift+F8 (menu) | — | — |
-| Half page up | — | ⏳ | — | — | u | — | — | Ctrl+u<br>u |
-| Half page down | — | ⏳ | — | — | d | — | — | Ctrl+d<br>d |
 | 20 columns left / right | — | ⏳ | — | — | Ctrl+Left / Ctrl+Right (10 columns) | Ctrl+Left / Ctrl+Right | — | — |
 | Leftmost / rightmost column | — | ⏳ | — | — | Ctrl+a / Ctrl+e | Ctrl+Shift+Left / Ctrl+Shift+Right | — | — |
 | Shift characters/bytes (dump, code) | — | ⏳ | — | — | — | Ctrl+Left / Ctrl+Right | — | — |
@@ -625,10 +622,10 @@ move in it.
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
 | The command above | `up` | ✅ | Up<br>Ctrl+p | Up<br>Ctrl+p | Up<br>Ctrl+p | — | — | — |
 | The command below | `down` | ✅ | Down<br>Ctrl+n | Down<br>Ctrl+n | Down<br>Ctrl+n | — | — | — |
-| The menu to the left | `left` | ✅ | Left<br>Shift+Tab | Left<br>Shift+Tab | Left<br>Ctrl+b | — | — | — |
-| The menu to the right | `right` | ✅ | Right<br>Tab | Right<br>Tab | Right<br>Ctrl+f | — | — | — |
-| The first command | `home` | ✅ | Home<br>PgUp | Ctrl+b<br>Shift+Up<br>Home<br>PgUp | Home<br>Alt+< | — | — | — |
-| The last command | `end` | ✅ | End<br>PgDn | Ctrl+f<br>Shift+Down<br>End<br>PgDn | End<br>Alt+> | — | — | — |
+| The menu to the left | `left` | ✅ | Left<br>Ctrl+b<br>Shift+Tab | Left<br>Shift+Tab | Left<br>Ctrl+b | — | — | — |
+| The menu to the right | `right` | ✅ | Right<br>Ctrl+f<br>Tab | Right<br>Tab | Right<br>Ctrl+f | — | — | — |
+| The first command | `home` | ✅ | Home<br>Alt+<<br>PgUp | Ctrl+b<br>Shift+Up<br>Home<br>PgUp | Home<br>Alt+< | — | — | — |
+| The last command | `end` | ✅ | End<br>Alt+><br>PgDn | Ctrl+f<br>Shift+Down<br>End<br>PgDn | End<br>Alt+> | — | — | — |
 | Open the menu, or run the command | `confirm` | ✅ | Enter<br>Ctrl+m | Ctrl+y<br>Enter<br>Ctrl+m | Enter | — | — | — |
 | Close the menu, then the menu bar | `cancel` | ✅ | Esc<br>Ctrl+[<br>F9<br>F10<br>Ctrl+g<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c<br>F9<br>F10 | Esc<br>F10<br>Ctrl+g | — | — | — |
 | Open a menu or run a command by its letter | — | ⏳ | Letter | Letter | Letter | — | — | — |

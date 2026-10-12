@@ -31,7 +31,7 @@ pub(super) const PRESET: Preset = &[
             (Action::HalfPageDown, &["shift-pagedown"]),
             (Action::Home, &["home", "alt-<"]),
             (Action::End, &["end", "alt->"]),
-            (Action::Enter, &["enter", "ctrl-m"]),
+            (Action::Enter, &["enter", "ctrl-m", "ctrl-pagedown"]),
             (Action::Parent, &["ctrl-pageup", "backspace"]),
             (Action::Reload, &["ctrl-r"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c"]),
@@ -161,15 +161,20 @@ pub(super) const PRESET: Preset = &[
             ),
         ],
     ),
-    // The help of F1, on top of the dialog's, which has the arrows, Ctrl+p, and Ctrl+n; the page
-    // keys of the lists and the viewer scroll it too.
+    // The help of F1, on top of the dialog's, which has the arrows, Ctrl+p, and Ctrl+n; the keys
+    // of mc's help scroll it too, Space among them, which presses no button here.
     (
         Context::Help,
         &[
-            (Action::PageUp, &["alt-v"]),
-            (Action::PageDown, &["ctrl-v"]),
-            (Action::Home, &["alt-<"]),
-            (Action::End, &["alt->"]),
+            (Action::PageUp, &["alt-v", "b", "backspace", "ctrl-h"]),
+            (Action::PageDown, &["ctrl-v", "space", "f"]),
+            (Action::HalfPageUp, &["u"]),
+            (Action::HalfPageDown, &["d"]),
+            (Action::Home, &["alt-<", "g", "ctrl-home", "ctrl-pageup"]),
+            (
+                Action::End,
+                &["alt->", "shift-g", "ctrl-end", "ctrl-pagedown"],
+            ),
         ],
     ),
     // The viewer of F3.
@@ -186,6 +191,8 @@ pub(super) const PRESET: Preset = &[
                 &["pageup", "alt-v", "b", "backspace", "ctrl-h"],
             ),
             (Action::PageDown, &["pagedown", "space", "f", "ctrl-v"]),
+            (Action::HalfPageUp, &["u"]),
+            (Action::HalfPageDown, &["d"]),
             (
                 Action::Home,
                 &["home", "g", "ctrl-home", "ctrl-pageup", "alt-<"],
@@ -252,10 +259,10 @@ pub(super) const PRESET: Preset = &[
         &[
             (Action::Up, &["up", "ctrl-p"]),
             (Action::Down, &["down", "ctrl-n"]),
-            (Action::Left, &["left", "backtab"]),
-            (Action::Right, &["right", "tab"]),
-            (Action::Home, &["home", "pageup"]),
-            (Action::End, &["end", "pagedown"]),
+            (Action::Left, &["left", "ctrl-b", "backtab"]),
+            (Action::Right, &["right", "ctrl-f", "tab"]),
+            (Action::Home, &["home", "alt-<", "pageup"]),
+            (Action::End, &["end", "alt->", "pagedown"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
             (
                 Action::Cancel,

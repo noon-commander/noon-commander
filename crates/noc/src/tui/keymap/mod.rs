@@ -1433,6 +1433,16 @@ mod tests {
             ]
         );
         assert_eq!(
+            feed(
+                &keymap,
+                &mut state,
+                Context::PullDown,
+                &["ctrl-b", "ctrl-f", "alt-<", "alt->"]
+            ),
+            actions(&[Action::Left, Action::Right, Action::Home, Action::End]),
+            "as in mc's menu"
+        );
+        assert_eq!(
             feed(&keymap, &mut state, Context::PullDown, &["insert", "f5"]),
             [],
             "the menu is modal"
@@ -2457,6 +2467,44 @@ mod tests {
                 &["ctrl-p", "ctrl-n", "ctrl-v"]
             ),
             actions(&[Action::Up, Action::Down])
+        );
+    }
+
+    #[test]
+    fn the_default_panels_viewer_and_help_take_mcs_keys() {
+        let mc = Keymap::mc();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(
+                &mc,
+                &mut state,
+                Context::Panel,
+                &["ctrl-pagedown", "ctrl-pageup"]
+            ),
+            actions(&[Action::Enter, Action::Parent])
+        );
+        assert_eq!(
+            feed(&mc, &mut state, Context::Viewer, &["u", "d"]),
+            actions(&[Action::HalfPageUp, Action::HalfPageDown])
+        );
+        // Space scrolls the help, as in mc's, rather than pressing a button.
+        assert_eq!(
+            feed(
+                &mc,
+                &mut state,
+                Context::Help,
+                &["space", "f", "b", "backspace", "u", "d", "g", "shift-g"]
+            ),
+            actions(&[
+                Action::PageDown,
+                Action::PageDown,
+                Action::PageUp,
+                Action::PageUp,
+                Action::HalfPageUp,
+                Action::HalfPageDown,
+                Action::Home,
+                Action::End,
+            ])
         );
     }
 

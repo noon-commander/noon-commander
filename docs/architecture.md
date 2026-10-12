@@ -844,10 +844,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   tabs go to stops of 8, `\r\n` ends lines, and control characters are shown safely. Long
   lines wrap (F2 cuts them, and Left and Right scroll then); the position is a line and a
   row within it, so that only the lines in view are wrapped, whatever the size of the file.
-  Keys follow mc's viewer: arrows, `j`/`k`, PgUp/PgDn, Space and `b`, Home/End, `g`/`G`,
-  and F3, F10, `q`, or Esc to close; F1 shows the help over it. The vim keymap adds vim's and
-  less's Ctrl+e and Ctrl+y, a line, and Ctrl+d and Ctrl+u, half a page (`HalfPageUp` and
-  `HalfPageDown` of the viewer).
+  Keys follow mc's viewer: arrows, `j`/`k`, PgUp/PgDn, Space and `b`, `u` and `d` for half a
+  page (`HalfPageUp` and `HalfPageDown` of the viewer), Home/End, `g`/`G`, and F3, F10, `q`, or
+  Esc to close; F1 shows the help over it, and Alt+1 … Alt+0 stand for the F-keys. The vim keymap
+  takes vim's and less's Ctrl+e and Ctrl+y, a line, and Ctrl+d and Ctrl+u, half a page.
 - **F4 edits** the file under the cursor in `$VISUAL`, else `$EDITOR`, else `vi`, split at
   spaces (`code -w`), without a shell. A local file is edited where it is. A remote one is
   copied, with its times and permission bits, to `edit-PID-N-name` in the runtime directory

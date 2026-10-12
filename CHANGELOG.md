@@ -203,6 +203,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   completions, as they page the other lists.
 - In the vim keymap, Space comes first of the keys that mark, and Ctrl+w p and Ctrl+w r switch and
   swap the panels too, as vim's Ctrl+w p and Ctrl+w r do with windows.
+- More of mc's keys in the default keymap: Ctrl+PgDn opens the directory under the cursor, as
+  Ctrl+PgUp goes to the parent; u and d go half a page in the viewer and the help, where Space and
+  f turn the page down, b and Backspace up, and g and G go to the top and the end, as in mc's help;
+  Ctrl+b and Ctrl+f go to the menu on the left and on the right in the pull-down menu, and Alt+<
+  and Alt+> to its first and last command.
 - In the vim keymap, Ctrl+a goes to the start of text fields too, as in the shell, and so to the
   start of the filters of the lists, whose Ctrl+b pages up; h and l go from button to button in
   dialogs, and Ctrl+p and Ctrl+n move in them, as in the lists; Enter and q leave the output of

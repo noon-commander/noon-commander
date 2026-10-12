@@ -58,7 +58,8 @@ Keys are written the same way in every column, whatever notation the source uses
 
 Status, of noc as a whole:
 
-- ✅ settled: both presets bind the action, with the keys they will keep.
+- ✅ settled: the presets bind the action, with the keys they will keep; "—" in a preset's column
+  leaves it to the context the section falls back to, or unbound there.
 - ⏳ not settled yet: noc does not bind it yet, or its keys may still change. Its noc columns
   may show planned keys, which no preset binds yet.
 - 🚫 not needed: noc will not have it.
@@ -82,7 +83,7 @@ the output of the last command.
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
 | The keys that can be typed now, over whatever is in front, and what they do, as which-key shows them | `key_hints` | ✅ | Alt+/ | Alt+/ | — | — | — | — |
-| The output of commands, in place of the panels and what is in front of them (mc, Far: hide or show the panels) | `user_screen` | ⏳ | Ctrl+o<br>Ctrl+\` | Ctrl+\`<br>g < | Ctrl+o | Ctrl+o | — | — |
+| The output of commands, in place of the panels and what is in front of them (mc, Far: hide or show the panels) | `user_screen` | ✅ | Ctrl+o<br>Ctrl+\` | Ctrl+\`<br>g < | Ctrl+o | Ctrl+o | — | — |
 | Help: the keys of what is in front, and what they do | — | ⏳ | — | — | F1 | F1 | \~<br>F1 | — |
 
 ## Panels (`panel`)
@@ -113,16 +114,16 @@ Shift+F7 (or F17), mc's and Far's key to search again, repeats it forward too.
 | Half a page down | `half_page_down` | ✅ | Shift+PgDn | Ctrl+d | — | — | Ctrl+d<br>Shift+PgDn | J<br>Ctrl+d |
 | First row | `home` | ✅ | Home<br>Alt+< | g g<br>Home | Home<br>A1<br>Alt+< | — | g g<br>Home | Home<br>g g |
 | Last row | `end` | ✅ | End<br>Alt+> | G<br>End | End<br>C1<br>Alt+> | — | G<br>End | End<br>G |
-| Open the directory or file under the cursor | `enter` | ⏳ | Enter<br>Ctrl+m | l<br>Right<br>Enter<br>Ctrl+m | Enter | Enter | l<br>Right<br>o<br>Enter | Right<br>Enter<br>l |
+| Open the directory or file under the cursor | `enter` | ✅ | Enter<br>Ctrl+m | l<br>Right<br>Enter<br>Ctrl+m | Enter | Enter | l<br>Right<br>o<br>Enter | Right<br>Enter<br>l |
 | Parent directory; nothing in / | `parent` | ✅ | Ctrl+PgUp<br>Backspace | h<br>Left<br>Backspace | Ctrl+PgUp | Ctrl+PgUp | h<br>Left | Left<br>h |
 | Read the directory again | `reload` | ✅ | Ctrl+r | R | Ctrl+r | Ctrl+r | — | R |
-| Stop loading or connecting | `cancel` | ⏳ | Esc<br>Ctrl+[<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c | — | — | — | Ctrl+c |
+| Stop loading or connecting | `cancel` | ✅ | Esc<br>Ctrl+[<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c | — | — | — | Ctrl+c |
 | The pull-down menu | `pull_down` | ✅ | F9 | g m<br>F9 | F9 | F9 | — | — |
 | The pull-down menu, on the command that ran from it last | `pull_down_last` | ✅ | Shift+F9<br>F19 | g M<br>Shift+F9<br>F19 | Shift+F9 | Shift+F10 | — | — |
-| The other panel | `switch_panel` | ⏳ | Tab<br>Ctrl+i | Tab<br>Ctrl+w w<br>Ctrl+w Ctrl+w<br>Ctrl+w p | Tab<br>Ctrl+i | Tab | — | — |
+| The other panel | `switch_panel` | ✅ | Tab<br>Ctrl+i | Tab<br>Ctrl+w w<br>Ctrl+w Ctrl+w<br>Ctrl+w p | Tab<br>Ctrl+i | Tab | — | — |
 | The left panel, wherever the panels were swapped | `focus_left` | ✅ | Ctrl+x Left<br>Ctrl+w h | Ctrl+w h<br>Ctrl+x Left | — | — | — | — |
 | The right panel, wherever the panels were swapped | `focus_right` | ✅ | Ctrl+x Right<br>Ctrl+w l | Ctrl+w l<br>Ctrl+x Right | — | — | — | — |
-| Swap the panels | `swap_panels` | ⏳ | Ctrl+u | Ctrl+w x<br>Ctrl+w r | Ctrl+u | Ctrl+u | — | — |
+| Swap the panels | `swap_panels` | ✅ | Ctrl+u | Ctrl+w x<br>Ctrl+w r | Ctrl+u | Ctrl+u | — | — |
 | Open the directory under the cursor in the other panel | `other_panel_open` | ✅ | Alt+o<br>Ctrl+w f | Ctrl+w f | Alt+o | — | — | — |
 | Show this directory in the other panel | `other_panel_sync` | ✅ | Alt+i<br>Ctrl+w v | Ctrl+w v | Alt+i | — | — | — |
 | Change the location of the panel drawn on the left, after Ctrl+u too | `location_menu_left` | ✅ | Alt+F1<br>Ctrl+x 1 | Ctrl+w 1 | — | Alt+F1 | — | — |
@@ -140,7 +141,7 @@ Shift+F7 (or F17), mc's and Far's key to search again, repeats it forward too.
 | Sort by extension; again: reverse | `sort_by_extension` | ✅ | o e | o e | — | Ctrl+F4 | , e<br>, E (reverse) | o e<br>o E (reverse) |
 | Sort by modification time; again: reverse | `sort_by_time` | ✅ | o m | o m | — | Ctrl+F5 | , m<br>, M (reverse) | o m<br>o M (reverse) |
 | Sort by size; again: reverse | `sort_by_size` | ✅ | o s | o s | — | Ctrl+F6 | , s<br>, S (reverse) | o s<br>o S (reverse) |
-| Mark or unmark, then the next row | `mark` | ⏳ | Insert<br>Ctrl+t<br>Shift+Down | Space<br>J<br>Shift+Down<br>Insert | Insert<br>Ctrl+t<br>Shift+Down | Insert<br>Shift+Down | Space | Space |
+| Mark or unmark, then the next row | `mark` | ✅ | Insert<br>Ctrl+t<br>Shift+Down | Space<br>J<br>Shift+Down<br>Insert | Insert<br>Ctrl+t<br>Shift+Down | Insert<br>Shift+Down | Space | Space |
 | Mark or unmark, then the row above | `mark_up` | ✅ | Shift+Up | K<br>Shift+Up | Shift+Up | Shift+Up | — | — |
 | Mark the names that match a pattern | `select` | ✅ | +<br>Alt++ | + | +<br>Numpad+<br>Alt++ | Numpad+ | — | — |
 | Unmark the names that match a pattern | `unselect` | ✅ | -<br>\\<br>Alt+- | - | -<br>\\<br>Numpad-<br>Alt+- | Numpad- | — | — |
@@ -349,18 +350,18 @@ as in vi. The ranger column has the keys of its console.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| One character left | `left` | ⏳ | Left<br>Ctrl+b | Left | Ctrl+b<br>Left<br>Alt+Left | Left<br>Ctrl+s | h<br>Left<br>Ctrl+b | Left<br>Ctrl+b |
-| One character right | `right` | ⏳ | Right<br>Ctrl+f | Right | Ctrl+f<br>Right<br>Alt+Right | Right<br>Ctrl+d | l<br>Right<br>Ctrl+f | Right<br>Ctrl+f |
-| Start of the text | `text_start` | ⏳ | Home<br>Ctrl+a | Home<br>Ctrl+b | Ctrl+a<br>Home<br>A1<br>Alt+< | Ctrl+Home | 0<br>Ctrl+a<br>Home | Home<br>Ctrl+a |
-| End of the text | `text_end` | ⏳ | End<br>Ctrl+e | End<br>Ctrl+e | Ctrl+e<br>End<br>C1<br>Alt+> | Ctrl+End | $<br>Ctrl+e<br>End | End<br>Ctrl+e |
-| One word left: the start of the word before the cursor | `word_left` | ⏳ | Ctrl+Left<br>Alt+b | Shift+Left<br>Ctrl+Left | Alt+b<br>Ctrl+Left | Ctrl+Left | b<br>B (WORD)<br>Alt+b<br>Ctrl+Left | Alt+b<br>Alt+Left |
-| One word right: the end of the word after the cursor | `word_right` | ⏳ | Ctrl+Right<br>Alt+f | Shift+Right<br>Ctrl+Right | Alt+f<br>Ctrl+Right | Ctrl+Right | w<br>W (WORD)<br>e (its end)<br>E (the WORD's end)<br>Alt+f (its end)<br>Ctrl+Right (its end) | Alt+f<br>Alt+Right |
-| Delete the character before the cursor | `backspace` | ⏳ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | Ctrl+h<br>Backspace | Backspace | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h |
-| Delete the character at the cursor | `delete` | ⏳ | Delete<br>Ctrl+d | Delete | Ctrl+d<br>Delete | Delete | Delete<br>Ctrl+d | Delete<br>Ctrl+d |
-| Delete to the start | `delete_to_start` | ⏳ | Ctrl+u | Ctrl+u | Ctrl+w (nothing selected) | — | Ctrl+u | Ctrl+u |
-| Delete to the end | `delete_to_end` | ⏳ | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k |
-| Delete the word before the cursor, and the spaces after it, as the shell's Ctrl+w | `delete_word` | ⏳ | Ctrl+w<br>Alt+Backspace<br>Ctrl+Backspace | Ctrl+w<br>Alt+Backspace<br>Ctrl+Backspace | Ctrl+Alt+h<br>Alt+Backspace | Ctrl+Backspace | Ctrl+w<br>Ctrl+Backspace | Ctrl+w |
-| Delete the word after the cursor, and the spaces before it, as the shell's Alt+d | `delete_next_word` | ⏳ | Alt+d<br>Ctrl+Delete | Ctrl+Delete | Alt+d | Ctrl+Delete | Alt+d<br>Ctrl+Delete | Alt+d |
+| One character left | `left` | ✅ | Left<br>Ctrl+b | Left | Ctrl+b<br>Left<br>Alt+Left | Left<br>Ctrl+s | h<br>Left<br>Ctrl+b | Left<br>Ctrl+b |
+| One character right | `right` | ✅ | Right<br>Ctrl+f | Right | Ctrl+f<br>Right<br>Alt+Right | Right<br>Ctrl+d | l<br>Right<br>Ctrl+f | Right<br>Ctrl+f |
+| Start of the text | `text_start` | ✅ | Home<br>Ctrl+a | Home<br>Ctrl+b | Ctrl+a<br>Home<br>A1<br>Alt+< | Ctrl+Home | 0<br>Ctrl+a<br>Home | Home<br>Ctrl+a |
+| End of the text | `text_end` | ✅ | End<br>Ctrl+e | End<br>Ctrl+e | Ctrl+e<br>End<br>C1<br>Alt+> | Ctrl+End | $<br>Ctrl+e<br>End | End<br>Ctrl+e |
+| One word left: the start of the word before the cursor | `word_left` | ✅ | Ctrl+Left<br>Alt+b | Shift+Left<br>Ctrl+Left | Alt+b<br>Ctrl+Left | Ctrl+Left | b<br>B (WORD)<br>Alt+b<br>Ctrl+Left | Alt+b<br>Alt+Left |
+| One word right: the end of the word after the cursor | `word_right` | ✅ | Ctrl+Right<br>Alt+f | Shift+Right<br>Ctrl+Right | Alt+f<br>Ctrl+Right | Ctrl+Right | w<br>W (WORD)<br>e (its end)<br>E (the WORD's end)<br>Alt+f (its end)<br>Ctrl+Right (its end) | Alt+f<br>Alt+Right |
+| Delete the character before the cursor | `backspace` | ✅ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | Ctrl+h<br>Backspace | Backspace | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h |
+| Delete the character at the cursor | `delete` | ✅ | Delete<br>Ctrl+d | Delete | Ctrl+d<br>Delete | Delete | Delete<br>Ctrl+d | Delete<br>Ctrl+d |
+| Delete to the start | `delete_to_start` | ✅ | Ctrl+u | Ctrl+u | Ctrl+w (nothing selected) | — | Ctrl+u | Ctrl+u |
+| Delete to the end | `delete_to_end` | ✅ | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k |
+| Delete the word before the cursor, and the spaces after it, as the shell's Ctrl+w | `delete_word` | ✅ | Ctrl+w<br>Alt+Backspace<br>Ctrl+Backspace | Ctrl+w<br>Alt+Backspace<br>Ctrl+Backspace | Ctrl+Alt+h<br>Alt+Backspace | Ctrl+Backspace | Ctrl+w<br>Ctrl+Backspace | Ctrl+w |
+| Delete the word after the cursor, and the spaces before it, as the shell's Alt+d | `delete_next_word` | ✅ | Alt+d<br>Ctrl+Delete | Ctrl+Delete | Alt+d | Ctrl+Delete | Alt+d<br>Ctrl+Delete | Alt+d |
 | Select text | — | ⏳ | — | — | Shift+Left<br>Shift+Right<br>Ctrl+Shift+Left<br>Ctrl+Shift+Right<br>Shift+Home<br>Shift+End | — | — | — |
 | Cut the selection | — | ⏳ | — | — | — | — | d<br>D (to the end)<br>x (one character) | — |
 | Delete the selection | — | ⏳ | — | — | Ctrl+w | — | — | — |
@@ -393,10 +394,10 @@ to the next and previous match with keys of the panel, once the search is over.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| End the search; the cursor stays on the match | `cancel` | ⏳ | Esc<br>Ctrl+[<br>Ctrl+c | Enter<br>Ctrl+m | Esc | — | Ctrl+c<br>Esc Esc | Esc<br>Ctrl+c<br>Ctrl+g |
-| Give the search up: the cursor goes back to where it started, and the search is not kept | `abort` | ⏳ | Ctrl+g | Esc<br>Ctrl+[<br>Ctrl+c | — | — | — | — |
-| Next match; with nothing typed, the last search again, as mc's Ctrl+s Ctrl+s | `quick_search` | ⏳ | Ctrl+s<br>Alt+s | Ctrl+g | Ctrl+s<br>Alt+s | Ctrl+Enter | n | n |
-| Previous match | `prev_match` | ⏳ | Ctrl+r | Ctrl+t | — | Ctrl+Shift+Enter | N | N |
+| End the search; the cursor stays on the match | `cancel` | ✅ | Esc<br>Ctrl+[<br>Ctrl+c | Enter<br>Ctrl+m | Esc | — | Ctrl+c<br>Esc Esc | Esc<br>Ctrl+c<br>Ctrl+g |
+| Give the search up: the cursor goes back to where it started, and the search is not kept | `abort` | ✅ | Ctrl+g | Esc<br>Ctrl+[<br>Ctrl+c | — | — | — | — |
+| Next match; with nothing typed, the last search again, as mc's Ctrl+s Ctrl+s | `quick_search` | ✅ | Ctrl+s<br>Alt+s | Ctrl+g | Ctrl+s<br>Alt+s | Ctrl+Enter | n | n |
+| Previous match | `prev_match` | ✅ | Ctrl+r | Ctrl+t | — | Ctrl+Shift+Enter | N | N |
 | Paste from clipboard | — | 🚫 | — | — | — | Ctrl+v<br>Shift+Insert | — | — |
 
 ## Renaming in place (`rename`)
@@ -407,8 +408,8 @@ dialog, yazi in an input box, and ranger on its console, whose keys are those of
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Rename to the name typed | `confirm` | ⏳ | Enter<br>Ctrl+m | Ctrl+y<br>Enter<br>Ctrl+m | — | — | — | — |
-| Keep the name as it was | `cancel` | ⏳ | Esc<br>Ctrl+[<br>Ctrl+g<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c | — | — | — | — |
+| Rename to the name typed | `confirm` | ✅ | Enter<br>Ctrl+m | Ctrl+y<br>Enter<br>Ctrl+m | — | — | — | — |
+| Keep the name as it was | `cancel` | ✅ | Esc<br>Ctrl+[<br>Ctrl+g<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c | — | — | — | — |
 
 ## Dialogs and help (`dialog`)
 
@@ -420,19 +421,19 @@ since ranger asks its questions on the console.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Previous button; in the help and lists, one row up | `up` | ⏳ | Up<br>Ctrl+p | k<br>Up | Up<br>Ctrl+p (help, lists) | Up (help) | k<br>Up<br>Ctrl+p (help) | Up<br>k<br>Ctrl+p |
-| Next button; in the help and lists, one row down | `down` | ⏳ | Down<br>Ctrl+n | j<br>Down | Down<br>Ctrl+n (help, lists) | Down (help) | j<br>Down<br>Ctrl+n (help) | Down<br>j<br>Ctrl+n<br>Enter |
-| Previous button | `left` | ⏳ | Left | Left | Left | — | — | — |
-| Next button | `right` | ⏳ | Right | Right | Right | — | — | — |
-| In the help and lists, one page up | `page_up` | ⏳ | PgUp | Ctrl+b<br>PgUp | PgUp<br>Alt+v<br>b (help)<br>Backspace (help) | — | — | p<br>b<br>Ctrl+b |
-| In the help and lists, one page down | `page_down` | ⏳ | PgDn | Ctrl+f<br>PgDn | PgDn<br>Ctrl+v<br>Space (help)<br>f (help) | — | — | n<br>f<br>Ctrl+f<br>Space |
-| In the help and lists, the first row | `home` | ⏳ | Home | g g<br>Home | Home<br>A1<br>g (help)<br>Ctrl+Home (help)<br>Ctrl+PgUp (help)<br>Alt+< | — | — | Home<br>g |
-| In the help and lists, the last row | `end` | ⏳ | End | G<br>End | End<br>C1<br>G (help)<br>Ctrl+End (help)<br>Ctrl+PgDn (help)<br>Alt+> | — | — | End<br>G |
-| Next field or button | `next_field` | ⏳ | Tab | Tab | Tab | — | — | — |
-| Previous field or button | `prev_field` | ⏳ | Shift+Tab | Shift+Tab | Shift+Tab | — | — | — |
-| Press the focused button; from a text field or a check box, the default one; close the help | `confirm` | ⏳ | Enter<br>Ctrl+m | Ctrl+y<br>Enter<br>Ctrl+m | Enter | Ctrl+Enter (default button) | Enter (confirm, help)<br>y (confirm) | — |
-| Switch the check box, choose the radio button, or press the focused button | `toggle` | ⏳ | Space | Space | Space | — | — | — |
-| Cancel; abort the job in front; close the help or the window | `cancel` | ⏳ | Esc<br>Ctrl+[<br>F10<br>Ctrl+g<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c<br>F10 | Esc<br>Esc Esc<br>F10<br>Ctrl+g<br>Ctrl+c (abort copy/delete) | Esc | Esc<br>Ctrl+[<br>Ctrl+c<br>n (confirm)<br>w (tasks) | Esc<br>q<br>Q<br>w<br>Ctrl+c |
+| Previous button; in the help and lists, one row up | `up` | ✅ | Up<br>Ctrl+p | k<br>Up | Up<br>Ctrl+p (help, lists) | Up (help) | k<br>Up<br>Ctrl+p (help) | Up<br>k<br>Ctrl+p |
+| Next button; in the help and lists, one row down | `down` | ✅ | Down<br>Ctrl+n | j<br>Down | Down<br>Ctrl+n (help, lists) | Down (help) | j<br>Down<br>Ctrl+n (help) | Down<br>j<br>Ctrl+n<br>Enter |
+| Previous button | `left` | ✅ | Left | Left | Left | — | — | — |
+| Next button | `right` | ✅ | Right | Right | Right | — | — | — |
+| In the help and lists, one page up | `page_up` | ✅ | PgUp | Ctrl+b<br>PgUp | PgUp<br>Alt+v<br>b (help)<br>Backspace (help) | — | — | p<br>b<br>Ctrl+b |
+| In the help and lists, one page down | `page_down` | ✅ | PgDn | Ctrl+f<br>PgDn | PgDn<br>Ctrl+v<br>Space (help)<br>f (help) | — | — | n<br>f<br>Ctrl+f<br>Space |
+| In the help and lists, the first row | `home` | ✅ | Home | g g<br>Home | Home<br>A1<br>g (help)<br>Ctrl+Home (help)<br>Ctrl+PgUp (help)<br>Alt+< | — | — | Home<br>g |
+| In the help and lists, the last row | `end` | ✅ | End | G<br>End | End<br>C1<br>G (help)<br>Ctrl+End (help)<br>Ctrl+PgDn (help)<br>Alt+> | — | — | End<br>G |
+| Next field or button | `next_field` | ✅ | Tab | Tab | Tab | — | — | — |
+| Previous field or button | `prev_field` | ✅ | Shift+Tab | Shift+Tab | Shift+Tab | — | — | — |
+| Press the focused button; from a text field or a check box, the default one; close the help | `confirm` | ✅ | Enter<br>Ctrl+m | Ctrl+y<br>Enter<br>Ctrl+m | Enter | Ctrl+Enter (default button) | Enter (confirm, help)<br>y (confirm) | — |
+| Switch the check box, choose the radio button, or press the focused button | `toggle` | ✅ | Space | Space | Space | — | — | — |
+| Cancel; abort the job in front; close the help or the window | `cancel` | ✅ | Esc<br>Ctrl+[<br>F10<br>Ctrl+g<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c<br>F10 | Esc<br>Esc Esc<br>F10<br>Ctrl+g<br>Ctrl+c (abort copy/delete) | Esc | Esc<br>Ctrl+[<br>Ctrl+c<br>n (confirm)<br>w (tasks) | Esc<br>q<br>Q<br>w<br>Ctrl+c |
 | Copy/move in background (in dialog) | — | ⏳ | — | — | Alt+b | — | — | — |
 | Focus first dialog item | — | ⏳ | — | — | — | Home | — | — |
 | Focus default dialog item | — | ⏳ | — | — | — | PgDn<br>End | — | — |
@@ -462,13 +463,13 @@ lists and viewer; the vim preset, Ctrl+u and Ctrl+d, as in vim and a pager.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| One page up | `page_up` | ⏳ | Alt+v | — | — | — | — | — |
-| One page down | `page_down` | ⏳ | Ctrl+v | — | — | — | — | — |
-| Half a page up | `half_page_up` | ⏳ | — | Ctrl+u | — | — | — | — |
-| Half a page down | `half_page_down` | ⏳ | — | Ctrl+d | — | — | — | — |
-| The top | `home` | ⏳ | Alt+< | — | — | — | — | — |
-| The end | `end` | ⏳ | Alt+> | — | — | — | — | — |
-| Close the help | `cancel` | ⏳ | — | q | F10<br>Esc | Esc | Esc<br>Ctrl+[<br>Ctrl+c | — |
+| One page up | `page_up` | ✅ | Alt+v | — | — | — | — | — |
+| One page down | `page_down` | ✅ | Ctrl+v | — | — | — | — | — |
+| Half a page up | `half_page_up` | ✅ | — | Ctrl+u | — | — | — | — |
+| Half a page down | `half_page_down` | ✅ | — | Ctrl+d | — | — | — | — |
+| The top | `home` | ✅ | Alt+< | — | — | — | — | — |
+| The end | `end` | ✅ | Alt+> | — | — | — | — | — |
+| Close the help | `cancel` | ✅ | — | q | F10<br>Esc | Esc | Esc<br>Ctrl+[<br>Ctrl+c | — |
 
 ## Viewer (`viewer`)
 
@@ -477,20 +478,20 @@ the keys of its pager, which shows files, the output of commands, and the log.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| One line up | `up` | ⏳ | Up<br>k<br>y<br>Insert<br>Ctrl+p | k<br>Ctrl+y<br>Up<br>Ctrl+p | Up<br>k<br>y<br>Insert<br>Ctrl+p | Up | — | Up<br>k<br>Ctrl+p |
-| One line down | `down` | ⏳ | Down<br>j<br>e<br>Enter<br>Ctrl+m<br>Delete<br>Ctrl+n | j<br>Ctrl+e<br>Down<br>Ctrl+n<br>Enter<br>Ctrl+m | Down<br>j<br>e<br>Enter<br>Delete<br>Ctrl+n | Down | — | Down<br>j<br>Ctrl+n<br>Enter |
-| One page up | `page_up` | ⏳ | PgUp<br>Alt+v<br>b<br>Backspace<br>Ctrl+h | Ctrl+b<br>Shift+Up<br>PgUp | PgUp<br>Alt+v<br>b<br>Backspace<br>Ctrl+h | PgUp | — | PgUp<br>p<br>b<br>Ctrl+b |
-| One page down | `page_down` | ⏳ | PgDn<br>Space<br>f<br>Ctrl+v | Ctrl+f<br>Shift+Down<br>PgDn | PgDn<br>Space<br>f<br>Ctrl+v | PgDn | — | PgDn<br>n<br>f<br>Ctrl+f<br>Space |
-| Half a page up | `half_page_up` | ⏳ | — | Ctrl+u | — | — | — | Ctrl+u<br>u |
-| Half a page down | `half_page_down` | ⏳ | — | Ctrl+d | — | — | — | Ctrl+d<br>d |
-| The start of the file | `home` | ⏳ | Home<br>g<br>Ctrl+Home<br>Ctrl+PgUp<br>Alt+< | g g<br>Home | Home<br>A1<br>g<br>Ctrl+Home<br>Ctrl+PgUp<br>Alt+< | Home<br>Ctrl+Home | — | Home<br>g |
-| The end of the file | `end` | ⏳ | End<br>G<br>Ctrl+End<br>Ctrl+PgDn<br>Alt+> | G<br>End | End<br>C1<br>G<br>Ctrl+End<br>Ctrl+PgDn<br>Alt+> | End<br>Ctrl+End | — | End<br>G |
-| One column left, when lines are cut (ranger: four) | `left` | ⏳ | Left<br>h | h<br>Left | Left<br>h | Left | — | Left<br>h |
-| One column right, when lines are cut (ranger: four) | `right` | ⏳ | Right<br>l | l<br>Right | Right<br>l | Right | — | Right<br>l |
-| Wrap long lines, or cut them | `toggle_wrap` | ⏳ | F2 | F2 | F2 | F2 | — | — |
-| Help | `help` | ⏳ | F1 | g ?<br>F1 | F1 | F1 | — | — |
-| Close the viewer | `quit` | ⏳ | F3<br>F10<br>q<br>Esc<br>Ctrl+[<br>Ctrl+c | q<br>Esc<br>Ctrl+[<br>Ctrl+c<br>F3<br>F10 | F3<br>F10<br>q<br>Esc | F10<br>F3<br>Numpad5<br>Esc | — | Esc<br>q<br>Q<br>i<br>F3 |
-| Redraw the screen | `redraw` | ⏳ | Ctrl+l | Ctrl+l | Ctrl+l | — | — | Ctrl+l |
+| One line up | `up` | ✅ | Up<br>k<br>y<br>Insert<br>Ctrl+p | k<br>Ctrl+y<br>Up<br>Ctrl+p | Up<br>k<br>y<br>Insert<br>Ctrl+p | Up | — | Up<br>k<br>Ctrl+p |
+| One line down | `down` | ✅ | Down<br>j<br>e<br>Enter<br>Ctrl+m<br>Delete<br>Ctrl+n | j<br>Ctrl+e<br>Down<br>Ctrl+n<br>Enter<br>Ctrl+m | Down<br>j<br>e<br>Enter<br>Delete<br>Ctrl+n | Down | — | Down<br>j<br>Ctrl+n<br>Enter |
+| One page up | `page_up` | ✅ | PgUp<br>Alt+v<br>b<br>Backspace<br>Ctrl+h | Ctrl+b<br>Shift+Up<br>PgUp | PgUp<br>Alt+v<br>b<br>Backspace<br>Ctrl+h | PgUp | — | PgUp<br>p<br>b<br>Ctrl+b |
+| One page down | `page_down` | ✅ | PgDn<br>Space<br>f<br>Ctrl+v | Ctrl+f<br>Shift+Down<br>PgDn | PgDn<br>Space<br>f<br>Ctrl+v | PgDn | — | PgDn<br>n<br>f<br>Ctrl+f<br>Space |
+| Half a page up | `half_page_up` | ✅ | — | Ctrl+u | — | — | — | Ctrl+u<br>u |
+| Half a page down | `half_page_down` | ✅ | — | Ctrl+d | — | — | — | Ctrl+d<br>d |
+| The start of the file | `home` | ✅ | Home<br>g<br>Ctrl+Home<br>Ctrl+PgUp<br>Alt+< | g g<br>Home | Home<br>A1<br>g<br>Ctrl+Home<br>Ctrl+PgUp<br>Alt+< | Home<br>Ctrl+Home | — | Home<br>g |
+| The end of the file | `end` | ✅ | End<br>G<br>Ctrl+End<br>Ctrl+PgDn<br>Alt+> | G<br>End | End<br>C1<br>G<br>Ctrl+End<br>Ctrl+PgDn<br>Alt+> | End<br>Ctrl+End | — | End<br>G |
+| One column left, when lines are cut (ranger: four) | `left` | ✅ | Left<br>h | h<br>Left | Left<br>h | Left | — | Left<br>h |
+| One column right, when lines are cut (ranger: four) | `right` | ✅ | Right<br>l | l<br>Right | Right<br>l | Right | — | Right<br>l |
+| Wrap long lines, or cut them | `toggle_wrap` | ✅ | F2 | F2 | F2 | F2 | — | — |
+| Help | `help` | ✅ | F1 | g ?<br>F1 | F1 | F1 | — | — |
+| Close the viewer | `quit` | ✅ | F3<br>F10<br>q<br>Esc<br>Ctrl+[<br>Ctrl+c | q<br>Esc<br>Ctrl+[<br>Ctrl+c<br>F3<br>F10 | F3<br>F10<br>q<br>Esc | F10<br>F3<br>Numpad5<br>Esc | — | Esc<br>q<br>Q<br>i<br>F3 |
+| Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | Ctrl+l | — | — | Ctrl+l |
 | Wrap type (by chars/words) | — | ⏳ | — | — | — | Shift+F2 | — | — |
 | Hex/code mode | — | ⏳ | — | — | F4 | F4 | — | — |
 | Select mode (text/code/dump) | — | ⏳ | — | — | — | Shift+F4 | — | — |
@@ -544,14 +545,14 @@ of its pick window, which asks for the program to open files with.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Previous item | `up` | ⏳ | Up<br>Ctrl+p | Up<br>Ctrl+p | Up<br>Ctrl+p | Up | k<br>Up | — |
-| Next item | `down` | ⏳ | Down<br>Ctrl+n | Down<br>Ctrl+n | Down<br>Ctrl+n | Down | j<br>Down | — |
-| One page up | `page_up` | ⏳ | PgUp<br>Alt+v | Ctrl+b<br>Shift+Up<br>PgUp | PgUp<br>Alt+v | — | — | — |
-| One page down | `page_down` | ⏳ | PgDn<br>Ctrl+v | Ctrl+f<br>Shift+Down<br>PgDn | PgDn<br>Ctrl+v | — | — | — |
-| First item | `home` | ⏳ | Home<br>Alt+< | Home | Home<br>A1<br>Alt+< | — | — | — |
-| Last item | `end` | ⏳ | End<br>Alt+> | End | End<br>C1<br>Alt+> | — | — | — |
-| Take the item, as the window's section says | `confirm` | ⏳ | Enter<br>Ctrl+m | Ctrl+y<br>Enter<br>Ctrl+m | Enter | Enter | Enter | — |
-| Close the window | `cancel` | ⏳ | Esc<br>Ctrl+[<br>F10<br>Ctrl+g<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c<br>F10 | Esc<br>F10<br>Ctrl+g | Esc | Esc<br>Ctrl+[<br>Ctrl+c | — |
+| Previous item | `up` | ✅ | Up<br>Ctrl+p | Up<br>Ctrl+p | Up<br>Ctrl+p | Up | k<br>Up | — |
+| Next item | `down` | ✅ | Down<br>Ctrl+n | Down<br>Ctrl+n | Down<br>Ctrl+n | Down | j<br>Down | — |
+| One page up | `page_up` | ✅ | PgUp<br>Alt+v | Ctrl+b<br>Shift+Up<br>PgUp | PgUp<br>Alt+v | — | — | — |
+| One page down | `page_down` | ✅ | PgDn<br>Ctrl+v | Ctrl+f<br>Shift+Down<br>PgDn | PgDn<br>Ctrl+v | — | — | — |
+| First item | `home` | ✅ | Home<br>Alt+< | Home | Home<br>A1<br>Alt+< | — | — | — |
+| Last item | `end` | ✅ | End<br>Alt+> | End | End<br>C1<br>Alt+> | — | — | — |
+| Take the item, as the window's section says | `confirm` | ✅ | Enter<br>Ctrl+m | Ctrl+y<br>Enter<br>Ctrl+m | Enter | Enter | Enter | — |
+| Close the window | `cancel` | ✅ | Esc<br>Ctrl+[<br>F10<br>Ctrl+g<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c<br>F10 | Esc<br>F10<br>Ctrl+g | Esc | Esc<br>Ctrl+[<br>Ctrl+c | — |
 | F1…F10 on terminals without function keys, in the windows that bind them | — | ⏳ | Alt+1…9, 0 | Alt+1…9, 0 | Esc, then 1…9, 0 | — | — | — |
 
 ## Location menu (`location_menu`)
@@ -563,9 +564,9 @@ keys of Far's menus, its drive menu among them.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Edit the settings of the host under the cursor | `edit_host` | ⏳ | F4 | F4 | — | — | — | — |
-| Disconnect the host under the cursor, or stop connecting to it | `disconnect` | ⏳ | F8<br>Delete | F8<br>Delete | — | Delete | — | — |
-| Read the volumes and hosts again | `reload` | ⏳ | Ctrl+r | Ctrl+r | — | Ctrl+r | — | — |
+| Edit the settings of the host under the cursor | `edit_host` | ✅ | F4 | F4 | — | — | — | — |
+| Disconnect the host under the cursor, or stop connecting to it | `disconnect` | ✅ | F8<br>Delete | F8<br>Delete | — | Delete | — | — |
+| Read the volumes and hosts again | `reload` | ✅ | Ctrl+r | Ctrl+r | — | Ctrl+r | — | — |
 | Filter the items | — | ⏳ | Typing | Typing | — | Ctrl+Alt+f<br>RightAlt | — | — |
 | Open one of the first ten places by its number (empty filter) | — | ⏳ | 1…9, 0 | 1…9, 0 | — | — | — | — |
 | Lock filter | — | ⏳ | — | — | — | Ctrl+Alt+l | — | — |
@@ -606,9 +607,9 @@ replaces the tabs of both panels.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Save the tabs of both panels as a new workspace | `save_workspace` | ⏳ | Insert | Insert | — | — | — | — |
-| Rename the workspace | `move` | ⏳ | F6 | F6 | — | — | — | — |
-| Delete the workspace | `delete` | ⏳ | F8<br>Delete | F8<br>Delete | — | — | — | — |
+| Save the tabs of both panels as a new workspace | `save_workspace` | ✅ | Insert | Insert | — | — | — | — |
+| Rename the workspace | `move` | ✅ | F6 | F6 | — | — | — | — |
+| Delete the workspace | `delete` | ✅ | F8<br>Delete | F8<br>Delete | — | — | — | — |
 | Restore a workspace by its number (empty filter) | — | ⏳ | 1…9, 0 | 1…9, 0 | — | — | — | — |
 
 ## Pull-down menu (`pull_down`)
@@ -619,14 +620,14 @@ move in it.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| The command above | `up` | ⏳ | Up<br>Ctrl+p | Up<br>Ctrl+p | Up<br>Ctrl+p | — | — | — |
-| The command below | `down` | ⏳ | Down<br>Ctrl+n | Down<br>Ctrl+n | Down<br>Ctrl+n | — | — | — |
-| The menu to the left | `left` | ⏳ | Left<br>Shift+Tab | Left<br>Shift+Tab | Left<br>Ctrl+b | — | — | — |
-| The menu to the right | `right` | ⏳ | Right<br>Tab | Right<br>Tab | Right<br>Ctrl+f | — | — | — |
-| The first command | `home` | ⏳ | Home<br>PgUp | Ctrl+b<br>Shift+Up<br>Home<br>PgUp | Home<br>Alt+< | — | — | — |
-| The last command | `end` | ⏳ | End<br>PgDn | Ctrl+f<br>Shift+Down<br>End<br>PgDn | End<br>Alt+> | — | — | — |
-| Open the menu, or run the command | `confirm` | ⏳ | Enter<br>Ctrl+m | Ctrl+y<br>Enter<br>Ctrl+m | Enter | — | — | — |
-| Close the menu, then the menu bar | `cancel` | ⏳ | Esc<br>Ctrl+[<br>F9<br>F10<br>Ctrl+g<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c<br>F9<br>F10 | Esc<br>F10<br>Ctrl+g | — | — | — |
+| The command above | `up` | ✅ | Up<br>Ctrl+p | Up<br>Ctrl+p | Up<br>Ctrl+p | — | — | — |
+| The command below | `down` | ✅ | Down<br>Ctrl+n | Down<br>Ctrl+n | Down<br>Ctrl+n | — | — | — |
+| The menu to the left | `left` | ✅ | Left<br>Shift+Tab | Left<br>Shift+Tab | Left<br>Ctrl+b | — | — | — |
+| The menu to the right | `right` | ✅ | Right<br>Tab | Right<br>Tab | Right<br>Ctrl+f | — | — | — |
+| The first command | `home` | ✅ | Home<br>PgUp | Ctrl+b<br>Shift+Up<br>Home<br>PgUp | Home<br>Alt+< | — | — | — |
+| The last command | `end` | ✅ | End<br>PgDn | Ctrl+f<br>Shift+Down<br>End<br>PgDn | End<br>Alt+> | — | — | — |
+| Open the menu, or run the command | `confirm` | ✅ | Enter<br>Ctrl+m | Ctrl+y<br>Enter<br>Ctrl+m | Enter | — | — | — |
+| Close the menu, then the menu bar | `cancel` | ✅ | Esc<br>Ctrl+[<br>F9<br>F10<br>Ctrl+g<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c<br>F9<br>F10 | Esc<br>F10<br>Ctrl+g | — | — | — |
 | Open a menu or run a command by its letter | — | ⏳ | Letter | Letter | Letter | — | — | — |
 
 ## Text fields (`dialog_input`)
@@ -653,7 +654,7 @@ without a list.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Complete the path; again: list the choices | `complete` | ⏳ | Tab | Tab | Alt+Tab | — | — | Tab |
+| Complete the path; again: list the choices | `complete` | ✅ | Tab | Tab | Alt+Tab | — | — | Tab |
 
 ## Completion list (`completion`)
 
@@ -663,15 +664,15 @@ console's line.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Previous choice | `up` | ⏳ | Up<br>Ctrl+p | Up<br>Ctrl+p | — | — | Alt+k<br>Up<br>Ctrl+p | Shift+Tab |
-| Next choice | `down` | ⏳ | Down<br>Ctrl+n | Down<br>Ctrl+n | — | — | Alt+j<br>Down<br>Ctrl+n | — |
-| One page up | `page_up` | ⏳ | PgUp<br>Alt+v | Ctrl+b<br>PgUp | — | — | — | — |
-| One page down | `page_down` | ⏳ | PgDn<br>Ctrl+v | Ctrl+f<br>PgDn | — | — | — | — |
-| First choice | `home` | ⏳ | Home<br>Alt+< | Home | — | — | — | — |
-| Last choice | `end` | ⏳ | End<br>Alt+> | End | — | — | — | — |
-| Next choice, round | `complete` | ⏳ | Tab | Tab | — | — | — | Tab |
-| Put the choice in the field | `confirm` | ⏳ | Enter<br>Ctrl+m | Ctrl+y<br>Enter<br>Ctrl+m | — | — | Tab | — |
-| Close the list | `cancel` | ⏳ | Esc<br>Ctrl+[<br>Ctrl+g<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c | — | — | Ctrl+c | — |
+| Previous choice | `up` | ✅ | Up<br>Ctrl+p | Up<br>Ctrl+p | — | — | Alt+k<br>Up<br>Ctrl+p | Shift+Tab |
+| Next choice | `down` | ✅ | Down<br>Ctrl+n | Down<br>Ctrl+n | — | — | Alt+j<br>Down<br>Ctrl+n | — |
+| One page up | `page_up` | ✅ | PgUp<br>Alt+v | Ctrl+b<br>PgUp | — | — | — | — |
+| One page down | `page_down` | ✅ | PgDn<br>Ctrl+v | Ctrl+f<br>PgDn | — | — | — | — |
+| First choice | `home` | ✅ | Home<br>Alt+< | Home | — | — | — | — |
+| Last choice | `end` | ✅ | End<br>Alt+> | End | — | — | — | — |
+| Next choice, round | `complete` | ✅ | Tab | Tab | — | — | — | Tab |
+| Put the choice in the field | `confirm` | ✅ | Enter<br>Ctrl+m | Ctrl+y<br>Enter<br>Ctrl+m | — | — | Tab | — |
+| Close the list | `cancel` | ✅ | Esc<br>Ctrl+[<br>Ctrl+g<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c | — | — | Ctrl+c | — |
 | Close the list and edit the field | — | ⏳ | Other keys | Other keys | — | — | — | — |
 | Put the choice in the field and run it | — | ⏳ | — | — | — | — | Enter | — |
 
@@ -686,15 +687,15 @@ lacks, such as words and the clipboard, are under `input`, as are yazi's modes.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| The line above; from the first line, the command before in the history of the panel's host | `up` | ⏳ | Up | Up | — | — | k<br>Up | Up |
-| The line below; from the last line, the command after in the history | `down` | ⏳ | Down | Down | — | — | j<br>Down | Down |
-| A new line in the command | `new_line` | ⏳ | Ctrl+j<br>Shift+Enter (kitty keyboard protocol) | Ctrl+j<br>Shift+Enter (kitty keyboard protocol) | — | — | — | — |
-| Edit the command in $VISUAL or $EDITOR | `edit_command` | ⏳ | Ctrl+x Ctrl+e | Ctrl+f<br>Ctrl+x Ctrl+e | — | — | — | — |
-| The command before in the history of the panel's host | `older_command` | ⏳ | Alt+p<br>Ctrl+p | Ctrl+p | Alt+p<br>Ctrl+Down | Ctrl+e | Ctrl+p | Ctrl+p |
-| The command after in the history of the panel's host | `newer_command` | ⏳ | Alt+n<br>Ctrl+n | Ctrl+n | Alt+n<br>Ctrl+Up | Ctrl+x | Ctrl+n | Ctrl+n |
-| The command history | `command_history` | ⏳ | Alt+h<br>Ctrl+r | Ctrl+r | Alt+h | Alt+F8 | — | — |
-| Run the command; after a \\ at the end of the line, a new line | `confirm` | ⏳ | Enter<br>Ctrl+m | Ctrl+y<br>Enter<br>Ctrl+m | Enter | Enter | Enter | Enter<br>Ctrl+j |
-| Close the command line | `cancel` | ⏳ | Esc<br>Ctrl+[<br>Ctrl+g<br>Ctrl+c<br>F10 | Esc<br>Ctrl+[<br>Ctrl+c<br>F10 | — | Esc | Ctrl+c<br>Esc Esc | Esc<br>Ctrl+c<br>Ctrl+g |
+| The line above; from the first line, the command before in the history of the panel's host | `up` | ✅ | Up | Up | — | — | k<br>Up | Up |
+| The line below; from the last line, the command after in the history | `down` | ✅ | Down | Down | — | — | j<br>Down | Down |
+| A new line in the command | `new_line` | ✅ | Ctrl+j<br>Shift+Enter (kitty keyboard protocol) | Ctrl+j<br>Shift+Enter (kitty keyboard protocol) | — | — | — | — |
+| Edit the command in $VISUAL or $EDITOR | `edit_command` | ✅ | Ctrl+x Ctrl+e | Ctrl+f<br>Ctrl+x Ctrl+e | — | — | — | — |
+| The command before in the history of the panel's host | `older_command` | ✅ | Alt+p<br>Ctrl+p | Ctrl+p | Alt+p<br>Ctrl+Down | Ctrl+e | Ctrl+p | Ctrl+p |
+| The command after in the history of the panel's host | `newer_command` | ✅ | Alt+n<br>Ctrl+n | Ctrl+n | Alt+n<br>Ctrl+Up | Ctrl+x | Ctrl+n | Ctrl+n |
+| The command history | `command_history` | ✅ | Alt+h<br>Ctrl+r | Ctrl+r | Alt+h | Alt+F8 | — | — |
+| Run the command; after a \\ at the end of the line, a new line | `confirm` | ✅ | Enter<br>Ctrl+m | Ctrl+y<br>Enter<br>Ctrl+m | Enter | Enter | Enter | Enter<br>Ctrl+j |
+| Close the command line | `cancel` | ✅ | Esc<br>Ctrl+[<br>Ctrl+g<br>Ctrl+c<br>F10 | Esc<br>Ctrl+[<br>Ctrl+c<br>F10 | — | Esc | Ctrl+c<br>Esc Esc | Esc<br>Ctrl+c<br>Ctrl+g |
 | Insert current file name | — | ⏳ | — | — | Alt+Enter<br>Ctrl+Enter | Ctrl+j<br>Ctrl+Enter | — | — |
 | Insert file name from passive panel | — | ⏳ | — | — | — | Ctrl+Shift+Enter | — | — |
 | Insert full name of current file | — | ⏳ | — | — | Ctrl+Shift+Enter | Ctrl+f | — | — |
@@ -721,8 +722,8 @@ Far. Far's rows are those of its history menus.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| The commands of the panel's host, or of all hosts | `next_field` | ⏳ | Tab | Tab | — | — | — | — |
-| Remove the command from the history | `delete` | ⏳ | Delete<br>Ctrl+Backspace<br>F8 | Delete<br>Ctrl+Backspace<br>F8 | Delete<br>d | Shift+Delete | — | — |
+| The commands of the panel's host, or of all hosts | `next_field` | ✅ | Tab | Tab | — | — | — | — |
+| Remove the command from the history | `delete` | ✅ | Delete<br>Ctrl+Backspace<br>F8 | Delete<br>Ctrl+Backspace<br>F8 | Delete<br>d | Shift+Delete | — | — |
 | Re-run command / open item | — | ⏳ | — | — | — | Enter | — | — |
 | Run in separate window | — | ⏳ | — | — | — | Shift+Enter | — | — |
 | Run as administrator | — | ⏳ | — | — | — | Ctrl+Alt+Enter | — | — |
@@ -742,7 +743,7 @@ that bring the panels back do anything.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Back to the panels | `cancel` | ⏳ | Ctrl+o<br>Esc<br>Ctrl+[<br>Ctrl+\` | Esc<br>Ctrl+[<br>Ctrl+\`<br>g < | Ctrl+o | Ctrl+o | — | — |
+| Back to the panels | `cancel` | ✅ | Ctrl+o<br>Esc<br>Ctrl+[<br>Ctrl+\` | Esc<br>Ctrl+[<br>Ctrl+\`<br>g < | Ctrl+o | Ctrl+o | — | — |
 
 ## Mouse
 

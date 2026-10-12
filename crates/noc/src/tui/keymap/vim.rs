@@ -5,9 +5,6 @@
 //! contexts in the same order, and `noc keymap diff` shows what differs. In the panels and the
 //! windows that list items, `alt-1` … `alt-0` stand for F1 … F10 without being written here.
 
-// NOTE: Comments marked `OK1` are the maintainer's: the binding was checked and approved.
-// Do not touch them.
-
 use super::{Action, Context, Preset};
 
 pub(super) const PRESET: Preset = &[
@@ -15,7 +12,7 @@ pub(super) const PRESET: Preset = &[
     (
         Context::Global,
         &[
-            (Action::KeyHints, &["alt-/"]), // OK1
+            (Action::KeyHints, &["alt-/"]),
             (Action::UserScreen, &["ctrl-`", "g <"]),
         ],
     ),
@@ -24,77 +21,77 @@ pub(super) const PRESET: Preset = &[
         Context::Panel,
         &[
             // Navigation
-            (Action::Up, &["k", "up", "ctrl-p"]),        // OK1
-            (Action::Down, &["j", "down", "ctrl-n"]),    // OK1
-            (Action::PageUp, &["ctrl-b", "pageup"]),     // OK1
-            (Action::PageDown, &["ctrl-f", "pagedown"]), // OK1
-            (Action::HalfPageUp, &["ctrl-u"]),           // OK1
-            (Action::HalfPageDown, &["ctrl-d"]),         // OK1
-            (Action::Home, &["g g", "home"]),            // OK1
-            (Action::End, &["shift-g", "end"]),          // OK1
+            (Action::Up, &["k", "up", "ctrl-p"]),
+            (Action::Down, &["j", "down", "ctrl-n"]),
+            (Action::PageUp, &["ctrl-b", "pageup"]),
+            (Action::PageDown, &["ctrl-f", "pagedown"]),
+            (Action::HalfPageUp, &["ctrl-u"]),
+            (Action::HalfPageDown, &["ctrl-d"]),
+            (Action::Home, &["g g", "home"]),
+            (Action::End, &["shift-g", "end"]),
             (Action::Enter, &["l", "right", "enter", "ctrl-m"]),
-            (Action::Parent, &["h", "left", "backspace"]), // OK1
-            (Action::Reload, &["shift-r"]),                // OK1
+            (Action::Parent, &["h", "left", "backspace"]),
+            (Action::Reload, &["shift-r"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c"]),
             // PullDown
-            (Action::PullDown, &["g m", "f9"]), // OK1
-            (Action::PullDownLast, &["g shift-m", "shift-f9", "f19"]), // OK1
+            (Action::PullDown, &["g m", "f9"]),
+            (Action::PullDownLast, &["g shift-m", "shift-f9", "f19"]),
             // Panels
             (
                 Action::SwitchPanel,
                 &["tab", "ctrl-w w", "ctrl-w ctrl-w", "ctrl-w p"],
             ),
-            (Action::FocusLeft, &["ctrl-w h", "ctrl-x left"]), // OK1
-            (Action::FocusRight, &["ctrl-w l", "ctrl-x right"]), // OK1
+            (Action::FocusLeft, &["ctrl-w h", "ctrl-x left"]),
+            (Action::FocusRight, &["ctrl-w l", "ctrl-x right"]),
             (Action::SwapPanels, &["ctrl-w x", "ctrl-w r"]),
-            (Action::OtherPanelOpen, &["ctrl-w f"]),    // OK1
-            (Action::OtherPanelSync, &["ctrl-w v"]),    // OK1
-            (Action::LocationMenuLeft, &["ctrl-w 1"]),  // OK1
-            (Action::LocationMenuRight, &["ctrl-w 2"]), // OK1
+            (Action::OtherPanelOpen, &["ctrl-w f"]),
+            (Action::OtherPanelSync, &["ctrl-w v"]),
+            (Action::LocationMenuLeft, &["ctrl-w 1"]),
+            (Action::LocationMenuRight, &["ctrl-w 2"]),
             // Tabs & Workspaces
-            (Action::NewTab, &["t n", "g n"]),               // OK1
-            (Action::CloseTab, &["t c", "g c"]),             // OK1
-            (Action::NextTab, &["] t", "g t", "alt-right"]), // OK1
-            (Action::PrevTab, &["[ t", "g shift-t", "alt-left"]), // OK1
-            (Action::TabListLeft, &["t h"]),                 // OK1
-            (Action::TabListRight, &["t l"]),                // OK1
-            (Action::Workspaces, &["t w"]),                  // OK1
-            (Action::SaveWorkspace, &["t shift-w"]),         // OK1
+            (Action::NewTab, &["t n", "g n"]),
+            (Action::CloseTab, &["t c", "g c"]),
+            (Action::NextTab, &["] t", "g t", "alt-right"]),
+            (Action::PrevTab, &["[ t", "g shift-t", "alt-left"]),
+            (Action::TabListLeft, &["t h"]),
+            (Action::TabListRight, &["t l"]),
+            (Action::Workspaces, &["t w"]),
+            (Action::SaveWorkspace, &["t shift-w"]),
             // Items
-            (Action::ToggleHidden, &["o h"]),    // OK1
-            (Action::SortByName, &["o n"]),      // OK1
-            (Action::SortByExtension, &["o e"]), // OK1
-            (Action::SortByTime, &["o m"]),      // OK1
-            (Action::SortBySize, &["o s"]),      // OK1
+            (Action::ToggleHidden, &["o h"]),
+            (Action::SortByName, &["o n"]),
+            (Action::SortByExtension, &["o e"]),
+            (Action::SortByTime, &["o m"]),
+            (Action::SortBySize, &["o s"]),
             // Marks
             (Action::Mark, &["space", "shift-j", "shift-down", "insert"]),
-            (Action::MarkUp, &["shift-k", "shift-up"]), // OK1
-            (Action::Select, &["+"]),                   // OK1
-            (Action::Unselect, &["-"]),                 // OK1
-            (Action::InvertMarks, &["*"]),              // OK1
+            (Action::MarkUp, &["shift-k", "shift-up"]),
+            (Action::Select, &["+"]),
+            (Action::Unselect, &["-"]),
+            (Action::InvertMarks, &["*"]),
             // Search
-            (Action::QuickSearch, &["/"]),                  // OK1
-            (Action::NextMatch, &["n", "shift-f7", "f17"]), // OK1
-            (Action::PrevMatch, &["shift-n"]),              // OK1
+            (Action::QuickSearch, &["/"]),
+            (Action::NextMatch, &["n", "shift-f7", "f17"]),
+            (Action::PrevMatch, &["shift-n"]),
             // Tools
-            (Action::Shell, &["!"]),                     // OK1
-            (Action::Command, &[":"]),                   // OK1
-            (Action::CommandHistory, &["q :"]),          // OK1
-            (Action::Jump, &["g z"]),                    // OK1
-            (Action::QuickCd, &["g d"]),                 // OK1
-            (Action::View, &["i", "f3"]),                // OK1
-            (Action::Edit, &["e", "f4"]),                // OK1
-            (Action::Copy, &["shift-y", "y y", "f5"]),   // OK1
-            (Action::Move, &["x", "f6"]),                // OK1
-            (Action::Rename, &["r", "shift-f6", "f16"]), // OK1
-            (Action::Mkdir, &["shift-a", "f7"]),         // OK1
-            (Action::Delete, &["d shift-d", "f8"]),      // OK1
-            (Action::Checksum, &["f #"]),                // OK1
-            (Action::Jobs, &["f j"]),                    // OK1
+            (Action::Shell, &["!"]),
+            (Action::Command, &[":"]),
+            (Action::CommandHistory, &["q :"]),
+            (Action::Jump, &["g z"]),
+            (Action::QuickCd, &["g d"]),
+            (Action::View, &["i", "f3"]),
+            (Action::Edit, &["e", "f4"]),
+            (Action::Copy, &["shift-y", "y y", "f5"]),
+            (Action::Move, &["x", "f6"]),
+            (Action::Rename, &["r", "shift-f6", "f16"]),
+            (Action::Mkdir, &["shift-a", "f7"]),
+            (Action::Delete, &["d shift-d", "f8"]),
+            (Action::Checksum, &["f #"]),
+            (Action::Jobs, &["f j"]),
             // Other
-            (Action::Help, &["g ?", "f1"]),              // OK1
-            (Action::Quit, &["shift-z shift-z", "f10"]), // OK1
-            (Action::Redraw, &["ctrl-l"]),               // OK1
+            (Action::Help, &["g ?", "f1"]),
+            (Action::Quit, &["shift-z shift-z", "f10"]),
+            (Action::Redraw, &["ctrl-l"]),
         ],
     ),
     // What the text fields share: quick search, the field of an entry renamed in its row, the

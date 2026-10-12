@@ -385,8 +385,8 @@ async fn hand_over(
         Handover::UserScreen => {
             let mut events = EventStream::new();
             if suspended.is_ok() && crossterm::terminal::enable_raw_mode().is_ok() {
-                // The keys that go back are read as the panels read them: without the kitty
-                // keyboard protocol, Ctrl+` arrives as Ctrl+Space.
+                // The keys that go back are read as the panels read them, with the kitty keyboard
+                // protocol, which tells Ctrl+` and Ctrl+[ from other keys.
                 let _ = asked.modes.keyboard(true);
                 output::wait_to_go_back(&mut events, app.keymap()).await;
                 let _ = asked.modes.keyboard(false);

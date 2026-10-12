@@ -226,6 +226,8 @@ pub(crate) struct Panel {
     pending: Option<Pending>,
     /// The text field of quick search, with what it has matched so far, while it runs.
     search: Option<Field>,
+    /// The row the cursor was on when quick search started, for Abort.
+    search_origin: usize,
     /// The entry under the cursor, while its name is edited in its row.
     renaming: Option<Renaming>,
     error: Option<String>,
@@ -269,6 +271,7 @@ impl Panel {
             generation: 0,
             pending: None,
             search: None,
+            search_origin: 0,
             renaming: None,
             error: None,
             column_lines: Vec::new(),
@@ -297,6 +300,7 @@ impl Panel {
             generation: 0,
             pending: None,
             search: None,
+            search_origin: 0,
             renaming: None,
             error: None,
             column_lines: Vec::new(),
@@ -590,6 +594,7 @@ impl Panel {
     pub(crate) fn search_next(&mut self, fuzzy: bool) {
         let Some(text) = self.search_text().map(str::to_owned) else {
             self.search = Some(Field::plain(""));
+            self.search_origin = self.cursor;
             return;
         };
         self.step_match(&text, true, fuzzy);
@@ -652,6 +657,11 @@ impl Panel {
     /// is if several are as good. As in mc, a character that nothing matches is dropped.
     pub(crate) fn search_type(&mut self, c: char, fuzzy: bool) {
         let started = self.search.is_none();
+        let origin = if started {
+            self.cursor
+        } else {
+            self.search_origin
+        };
         let mut field = self.search.take().unwrap_or_else(|| Field::plain(""));
         // Smart case needs the capitals.
         let typed: Vec<char> = if fuzzy {
@@ -676,6 +686,7 @@ impl Panel {
             }
         }
         self.search = Some(field);
+        self.search_origin = origin;
     }
 
     /// Edits the text of quick search with a key of the text fields; then the cursor of the
@@ -718,6 +729,13 @@ impl Panel {
                 .min_by_key(|&row| (row + rows - self.cursor) % rows)
         } else {
             self.find(text, self.cursor)
+        }
+    }
+
+    /// Ends quick search and puts the cursor back on the row it started from.
+    pub(crate) fn abort_search(&mut self) {
+        if self.search.take().is_some() {
+            self.cursor = self.search_origin.min(self.rows().saturating_sub(1));
         }
     }
 
@@ -2005,6 +2023,26 @@ mod tests {
         assert_eq!(panel.end_search(), None, "nothing typed, nothing kept");
         panel.search_resume("x", false);
         assert!(!panel.searching(), "no match, no search");
+    }
+
+    #[test]
+    fn an_aborted_quick_search_goes_back_to_where_it_started() {
+        let names = ["bar", "bin", "boot", "cab"];
+        let files = names.map(|name| entry(name, FileKind::File, 1));
+        let mut panel = loaded("/srv", files.into());
+        panel.handle(Action::End);
+        panel.search_next(false);
+        panel.search_type('b', false);
+        panel.search_type('o', false);
+        assert_eq!(under_cursor(&panel), "boot");
+        panel.abort_search();
+        assert!(!panel.searching());
+        assert_eq!(under_cursor(&panel), "cab");
+        // Typing starts a search too, from where the cursor is.
+        panel.search_type('b', false);
+        panel.search_step(true, false);
+        panel.abort_search();
+        assert_eq!(under_cursor(&panel), "cab");
     }
 
     #[test]

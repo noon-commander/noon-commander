@@ -2131,13 +2131,17 @@ mod tests {
             assert!(cancel(&mc, context, "f10"), "{context:?}");
         }
         assert!(!cancel(&mc, Context::Rename, "f10"));
-        // Quick search takes the panel's Ctrl+c.
         for context in [Context::CommandLine, Context::Panel, Context::QuickSearch] {
             assert!(cancel(&mc, context, "ctrl-c"), "{context:?}");
         }
         let vim = Keymap::by_name("vim").unwrap();
+        // In vim's quick search, Ctrl+c gives the search up, as Esc does.
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&vim, &mut state, Context::QuickSearch, &["ctrl-c", "esc"]),
+            actions(&[Action::Abort, Action::Abort])
+        );
         for context in [
-            Context::QuickSearch,
             Context::Rename,
             Context::LocationMenu,
             Context::TabMenu,
@@ -2149,6 +2153,57 @@ mod tests {
         ] {
             assert!(cancel(&vim, context, "ctrl-c"), "{context:?}");
         }
+    }
+
+    #[test]
+    fn ctrl_bracket_and_ctrl_m_do_what_esc_and_enter_do() {
+        // With the kitty keyboard protocol, they no longer arrive as Esc and Enter.
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            for (_, bindings) in preset(name).unwrap() {
+                for (action, keys) in *bindings {
+                    for (key, alias) in [("esc", "ctrl-["), ("enter", "ctrl-m")] {
+                        assert_eq!(
+                            keys.contains(&key),
+                            keys.contains(&alias),
+                            "{name}: {action:?} has {key} without {alias}, or the other way"
+                        );
+                    }
+                }
+            }
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&keymap, &mut state, Context::Dialog, &["ctrl-[", "ctrl-m"]),
+                actions(&[Action::Cancel, Action::Confirm]),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn quick_search_gives_up_with_ctrl_g_in_the_default_keymap_and_esc_in_vim() {
+        let mc = Keymap::mc();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(
+                &mc,
+                &mut state,
+                Context::QuickSearch,
+                &["ctrl-g", "esc", "ctrl-r", "ctrl-w"]
+            ),
+            actions(&[
+                Action::Abort,
+                Action::Cancel,
+                Action::PrevMatch,
+                Action::DeleteWord
+            ])
+        );
+        let vim = Keymap::by_name("vim").unwrap();
+        assert_eq!(
+            feed(&vim, &mut state, Context::QuickSearch, &["enter", "ctrl-w"]),
+            actions(&[Action::Cancel, Action::DeleteWord]),
+            "Ctrl+w deletes a word rather than waiting for a window command"
+        );
     }
 
     #[test]
@@ -2338,7 +2393,7 @@ mod tests {
         };
         assert_eq!(keys(Action::Up), Some("Up, Ctrl+p"));
         assert_eq!(keys(Action::Quit), Some("F10"));
-        assert_eq!(keys(Action::Cancel), Some("Esc, Ctrl+c"));
+        assert_eq!(keys(Action::Cancel), Some("Esc, Ctrl+[, Ctrl+c"));
         assert_eq!(keys(Action::SortByName), Some("o n"));
         assert_eq!(panel[0].0, Action::Up, "in the order of the preset");
         assert_eq!(
@@ -2411,7 +2466,7 @@ mod tests {
         let g = parse_sequence("g").unwrap();
         assert_eq!(
             hint_keys(&vim.hints(Context::Panel, &g)),
-            ["g", "m", "M", "n", "c", "t", "T", "z", "d", "?"]
+            ["g", "m", "M", "n", "c", "t", "T", "z", "d", "?", "<"]
         );
     }
 
@@ -2448,8 +2503,8 @@ mod tests {
         let vim = Keymap::by_name("vim").unwrap();
         let hints = vim.hints(Context::Panel, &[]);
         let hint = |keys: &str| hints.iter().find(|hint| hint.keys == keys).cloned();
-        assert_eq!(hint("g").map(|hint| hint.more), Some(10));
-        assert_eq!(hint("Ctrl+w").map(|hint| hint.more), Some(9));
+        assert_eq!(hint("g").map(|hint| hint.more), Some(11));
+        assert_eq!(hint("Ctrl+w").map(|hint| hint.more), Some(11));
         assert_eq!(hint("Ctrl+x").map(|hint| hint.more), Some(2));
         assert_eq!(hint("Z").map(|hint| hint.more), Some(1));
         // Where characters are text, the panel's are left out.
@@ -2533,8 +2588,9 @@ mod tests {
     fn ctrl_backtick_shows_the_output_of_commands_everywhere() {
         for name in Keymap::NAMES {
             let keymap = Keymap::by_name(name).unwrap();
-            // Ctrl+o, mc's, only in the default keymap.
-            let mut keys = vec![("ctrl-`", "Ctrl+`"), ("ctrl-space", "Ctrl+Space")];
+            // Ctrl+o, mc's, only in the default keymap; Ctrl+Space, which switches the input
+            // source on macOS, in neither.
+            let mut keys = vec![("ctrl-`", "Ctrl+`")];
             if *name == "default" {
                 keys.push(("ctrl-o", "Ctrl+o"));
             }
@@ -2571,17 +2627,38 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_backtick_arrives_as_ctrl_space_without_the_kitty_protocol() {
-        let legacy = KeyEvent::new(KeyCode::Char(' '), KeyModifiers::CONTROL);
+    fn ctrl_space_is_left_to_the_input_source_and_g_lt_shows_the_output_in_vim() {
+        let ctrl_space = KeyEvent::new(KeyCode::Char(' '), KeyModifiers::CONTROL);
         for name in Keymap::NAMES {
             let keymap = Keymap::by_name(name).unwrap();
             let mut state = KeyState::default();
             assert_eq!(
-                keymap.feed(&mut state, Context::Panel, legacy, Instant::now()),
-                actions(&[Action::UserScreen]),
+                keymap.feed(&mut state, Context::Panel, ctrl_space, Instant::now()),
+                [],
                 "{name}"
             );
         }
+        // g < shows the output of the last command in vim; again, it goes back.
+        let vim = Keymap::by_name("vim").unwrap();
+        for (context, action) in [
+            (Context::Panel, Action::UserScreen),
+            (Context::Viewer, Action::UserScreen),
+            (Context::Dialog, Action::UserScreen),
+            (Context::UserScreen, Action::Cancel),
+        ] {
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&vim, &mut state, context, &["g", "<"]),
+                actions(&[action]),
+                "{context:?}"
+            );
+        }
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&vim, &mut state, Context::QuickSearch, &["g", "<"]),
+            [Resolved::Insert('g'), Resolved::Insert('<')],
+            "text where text is typed"
+        );
     }
 
     #[test]

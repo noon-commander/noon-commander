@@ -940,10 +940,12 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   Ctrl+s to the next one, round to the top. Either way a character that matches nothing is dropped,
   as in mc, and the listing keeps its order. The text is a field with a cursor, edited with the
   keys that every text field shares (`input`): Left, Right, Home, End, Backspace, Delete, Ctrl+u,
-  Ctrl+k; after an edit, the cursor stays on its name if that still matches, and goes to the
-  match that typing would have found otherwise. Esc ends the search, and any other key ends it and
-  then does what it does: Enter opens what it found, as in mc, but in the vim keymap Enter only
-  ends it, as in vim. While it runs, every character is text, even
+  Ctrl+k, Ctrl+w; after an edit, the cursor stays on its name if that still matches, and goes to
+  the match that typing would have found otherwise. Esc ends the search on the match, Ctrl+g
+  (`abort`) gives it up and puts the cursor back where the search started, keeping nothing for `n`,
+  as in emacs, and any other key ends it and then does what it does: Enter opens what it found, as
+  in mc. In the vim keymap, as in vim, Enter only ends the search and Esc gives it up. Ctrl+r, and
+  Ctrl+t in the vim keymap, go to the previous match. While it runs, every character is text, even
   one that a panel binds, such as `*`. The app keeps what the last search found, whichever panel
   it ran in, as vim keeps its last pattern: `n` and `N` (and Shift+F7 or F17, mc's and Far's key
   to search again) go to the next and the previous name that matches it, round, and Ctrl+s with
@@ -970,30 +972,31 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   does (a dim `⏎`, spaces to the last column, `\r`, a cleared line); then a line in reverse video
   asks for a key, with the exit status of a failure, unless `shell.pause` says not to wait, and
   after the key `[exit N]` takes its place for a command that failed. The event loop then takes the
-  terminal back; both panels read their directories again, as in mc. Esc, Ctrl+c, or F10 closes
-  the line; Backspace on an empty line does not. Ctrl+o, a `global` key, hands the terminal over
-  without a program wherever it is pressed: its own screen shows, with the output of the
-  commands, until a key that the `user_screen` context binds to Cancel (Ctrl+o, Esc), and then
-  whatever was in front, a dialog, a menu, the viewer, or the line, is there again as it was.
-  Shift+Enter starts a new line too where the terminal speaks the kitty keyboard protocol: at
-  start the event loop asks for it with `supports_keyboard_enhancement` (in `spawn_blocking`,
-  before the stream of events takes crossterm's reader) and then pushes
-  `DISAMBIGUATE_ESCAPE_CODES` and `REPORT_ALTERNATE_KEYS`, so that Alt with a symbol typed with
-  Shift, such as Alt++, arrives as that symbol; it pops them, and turns bracketed paste off,
-  whenever another program gets the terminal, on exit, and on a panic. With bracketed paste a paste
-  arrives as one event: the command line takes it whole, line breaks included, and runs nothing;
-  text fields, quick search, and the menus' filters take its characters without line
-  breaks; panels, the pull-down menu, dialogs' buttons, and the viewer ignore it. Ctrl+x Ctrl+e
-  writes the command to a file in the private runtime directory, runs the editor on it as F4 does,
-  and puts what it left back into the line, without the line breaks at its end; the file goes
-  afterwards. Each command that ran, unless it starts with a space, goes to `history.toml` in the
-  state directory with its host (the alias; none for a local one), directory, and time:
-  `noc-config`'s `add_command` reads the file again, replaces the same command on the same host,
-  keeps the newest `shell.history_size`, and writes it whole and atomically, mode 0600; one task
-  makes the changes in turn, and the app keeps the commands in memory. Up on the first line of a
-  command, or Alt+p, goes back through the commands of the panel's host, and Down on the last line,
-  or Alt+n, forward to what was typed. Alt+h or Ctrl+r on the line, or Alt+h in a panel, opens the
-  window of the history (`tui/history.rs`): the commands of the panel's host, or of all of them
+  terminal back; both panels read their directories again, as in mc. Esc, Ctrl+c, or F10 closes the
+  line; Backspace on an empty line does not. Ctrl+o, a `global` key (Ctrl+\` in both keymaps, and g
+  < in the vim one, as vim shows the output of its last command), hands the terminal over without a
+  program wherever it is pressed: its own screen shows, with the output of the commands, until a key
+  that the `user_screen` context binds to Cancel (Ctrl+o, Esc), and then whatever was in front, a
+  dialog, a menu, the viewer, or the line, is there again as it was. Shift+Enter starts a new line
+  too where the terminal speaks the kitty keyboard protocol: at start the event loop asks for it
+  with `supports_keyboard_enhancement` (in `spawn_blocking`, before the stream of events takes
+  crossterm's reader) and then pushes `DISAMBIGUATE_ESCAPE_CODES` and `REPORT_ALTERNATE_KEYS`, so
+  that Alt with a symbol typed with Shift, such as Alt++, arrives as that symbol (Ctrl+[ and Ctrl+m
+  then arrive apart from Esc and Enter, so the keymaps bind them wherever they bind those); it pops
+  them, and turns bracketed paste off, whenever another program gets the terminal, on exit, and on a
+  panic. With bracketed paste a paste arrives as one event: the command line takes it whole, line
+  breaks included, and runs nothing; text fields, quick search, and the menus' filters take its
+  characters without line breaks; panels, the pull-down menu, dialogs' buttons, and the viewer
+  ignore it. Ctrl+x Ctrl+e writes the command to a file in the private runtime directory, runs the
+  editor on it as F4 does, and puts what it left back into the line, without the line breaks at its
+  end; the file goes afterwards. Each command that ran, unless it starts with a space, goes to
+  `history.toml` in the state directory with its host (the alias; none for a local one), directory,
+  and time: `noc-config`'s `add_command` reads the file again, replaces the same command on the same
+  host, keeps the newest `shell.history_size`, and writes it whole and atomically, mode 0600; one
+  task makes the changes in turn, and the app keeps the commands in memory. Up on the first line of
+  a command, or Alt+p, goes back through the commands of the panel's host, and Down on the last
+  line, or Alt+n, forward to what was typed. Alt+h or Ctrl+r on the line, or Alt+h in a panel, opens
+  the window of the history (`tui/history.rs`): the commands of the panel's host, or of all of them
   after Tab, newest first, filtered as quick search matches, each with its host's label or alias,
   its directory, and its first line, and the whole command under the cursor below; Enter puts it on
   the line, with the prompt reversed until the next key if it ran on another host, and Delete

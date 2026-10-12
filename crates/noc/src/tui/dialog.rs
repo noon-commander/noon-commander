@@ -216,7 +216,11 @@ impl Field {
 
     /// Edits the text; `false` if `action` is not an edit.
     pub(crate) fn edit(&mut self, action: Action) -> bool {
-        if matches!(action, Action::Backspace | Action::Delete) && self.remove_selected() {
+        if matches!(
+            action,
+            Action::Backspace | Action::Delete | Action::DeleteWord
+        ) && self.remove_selected()
+        {
             return true;
         }
         let chars = self.chars();
@@ -235,6 +239,11 @@ impl Field {
                 self.cursor = 0;
             }
             Action::DeleteToEnd => self.remove(self.cursor, chars),
+            Action::DeleteWord => {
+                let start = word_start(&self.text, 0, self.cursor);
+                self.remove(start, self.cursor);
+                self.cursor = start;
+            }
             Action::Backspace | Action::Delete => {}
             _ => return false,
         }
@@ -307,6 +316,20 @@ impl Field {
         // Character for character: `shown` is UTF-8, and only control characters change.
         (first, cells::sanitize(shown.as_bytes()), column)
     }
+}
+
+/// Where the word before character `cursor` of `text` starts, with the spaces after it, but
+/// not before character `floor`: what the shell's Ctrl+w deletes.
+pub(crate) fn word_start(text: &str, floor: usize, cursor: usize) -> usize {
+    let chars: Vec<char> = text.chars().take(cursor).collect();
+    let mut start = chars.len();
+    while start > floor && chars[start - 1].is_whitespace() {
+        start -= 1;
+    }
+    while start > floor && !chars[start - 1].is_whitespace() {
+        start -= 1;
+    }
+    start
 }
 
 impl fmt::Debug for Field {
@@ -1290,6 +1313,22 @@ mod tests {
             secret.insert(c);
         }
         assert_eq!(secret.visible(4), ("***".to_owned(), 3));
+    }
+
+    #[test]
+    fn ctrl_w_deletes_the_word_before_the_cursor_as_the_shell_does() {
+        let mut field = Field::plain("cp a.txt  backup");
+        field.edit(Action::End);
+        assert!(field.edit(Action::DeleteWord));
+        assert_eq!(field.text(), "cp a.txt  ");
+        field.edit(Action::DeleteWord);
+        assert_eq!(field.text(), "cp ", "the spaces after the word go with it");
+        field.edit(Action::Home);
+        field.edit(Action::DeleteWord);
+        assert_eq!(field.text(), "cp ", "nothing before the cursor");
+        let mut selected = Field::selecting("report.pdf", 6);
+        selected.edit(Action::DeleteWord);
+        assert_eq!(selected.text(), ".pdf", "the selection goes first");
     }
 
     #[test]

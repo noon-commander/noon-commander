@@ -69,9 +69,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `ui.terminal_title` (Terminal title in Options → Configuration) turns it off.
 - Ctrl+o shows the output of commands in place of the panels, as in mc and Far, wherever it is
   pressed: in the panels, on the command line, over dialogs, menus, and the viewer; the same key
-  or Esc brings back what was there. Ctrl+\` does the same in both keymaps, and so does
-  Ctrl+Space, which terminals without the kitty keyboard protocol send for it; the vim keymap
-  leaves Ctrl+o unbound. Each command now shows after its prompt,
+  or Esc brings back what was there. Ctrl+\` does the same in both keymaps, where the terminal
+  speaks the kitty keyboard protocol; the vim keymap leaves Ctrl+o unbound and takes g <, vim's
+  key for the output of the last command, instead. Each command now shows after its prompt,
   its output ends on a line of its own, and the line that asks for a key stands out and gives way to
   `[exit N]`, bold and red, after a command that failed. `shell.pause` (Wait after a command in
   Options → Configuration) says when the output waits for a key: `always`, `on-error`, or `never`.
@@ -170,6 +170,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and Ctrl+k delete, as Backspace does. Home and End still go to the first and the last row, and
   so do Ctrl+a and Ctrl+e (Ctrl+e in the vim keymap); Delete still deletes the workspace or the
   command under the cursor, and disconnects the host in the location menu.
+- Ctrl+[ does what Esc does, and Ctrl+m what Enter does, in both keymaps, where the terminal
+  speaks the kitty keyboard protocol and so tells them apart.
+- Ctrl+Space no longer shows the output of commands: macOS and input methods switch the input
+  source with it. In the vim keymap, g < does, as vim shows the output of its last command, and
+  brings the panels back.
+- In quick search, Ctrl+g (Esc and Ctrl+c in the vim keymap) gives the search up: the cursor goes
+  back to where it started, and n and N keep the search before. Ctrl+r goes to the previous match
+  in the default keymap, as in emacs's search, and Ctrl+c ends the search there as Esc does.
+- Ctrl+w deletes the word before the cursor, and the spaces after it, in every text field, quick
+  search, the filters of the lists, and on the command line, as in the shell.
+- In the vim keymap, Space comes first of the keys that mark, and Ctrl+w p and Ctrl+w r switch and
+  swap the panels too, as vim's Ctrl+w p and Ctrl+w r do with windows.
 - Release builds use full link-time optimization, which makes the `noc` binary about 6% smaller.
 - The title of a panel, and the tab menu, show the home directory as `~`: `~/src` rather
   than `/Users/me/src`.

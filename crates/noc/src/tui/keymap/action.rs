@@ -348,6 +348,8 @@ pub(crate) enum Action {
     DeleteToStart,
     /// Deletes from the cursor to the end of the text field.
     DeleteToEnd,
+    /// Deletes the word before the text cursor, and the spaces after it, as the shell's Ctrl+w.
+    DeleteWord,
     /// Completes the path in a text field; in the list of completions, the next one.
     Complete,
     /// Accepts the dialog, or activates the focused button.
@@ -356,6 +358,9 @@ pub(crate) enum Action {
     Toggle,
     /// Closes the dialog, ends quick search, or stops a pending listing or connection.
     Cancel,
+    /// Ends quick search and puts the cursor back where the search started, as Esc does while
+    /// vim's search is typed.
+    Abort,
     /// Moves the focus to the next field or button.
     NextField,
     /// Moves the focus to the previous field or button.
@@ -444,10 +449,12 @@ impl Action {
             Self::Delete => "delete",
             Self::DeleteToStart => "delete_to_start",
             Self::DeleteToEnd => "delete_to_end",
+            Self::DeleteWord => "delete_word",
             Self::Complete => "complete",
             Self::Confirm => "confirm",
             Self::Toggle => "toggle",
             Self::Cancel => "cancel",
+            Self::Abort => "abort",
             Self::NextField => "next_field",
             Self::PrevField => "prev_field",
             Self::Help => "help",
@@ -558,10 +565,12 @@ impl Action {
         Self::Delete,
         Self::DeleteToStart,
         Self::DeleteToEnd,
+        Self::DeleteWord,
         Self::Complete,
         Self::Confirm,
         Self::Toggle,
         Self::Cancel,
+        Self::Abort,
         Self::NextField,
         Self::PrevField,
         Self::Help,

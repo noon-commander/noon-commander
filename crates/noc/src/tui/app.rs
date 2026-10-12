@@ -1709,7 +1709,8 @@ impl App {
                 | Action::Backspace
                 | Action::Delete
                 | Action::DeleteToStart
-                | Action::DeleteToEnd => {
+                | Action::DeleteToEnd
+                | Action::DeleteWord => {
                     self.panel_mut(side).search_edit(action, fuzzy_search);
                     None
                 }
@@ -1724,6 +1725,11 @@ impl App {
                 }
                 Action::Cancel => {
                     self.end_search(side);
+                    None
+                }
+                // What it found is not kept, as vim keeps no pattern its Esc gives up.
+                Action::Abort => {
+                    self.panel_mut(side).abort_search();
                     None
                 }
                 // Any other key ends the search, then does what it does.
@@ -8148,6 +8154,18 @@ mod tests {
         app.handle(action(Action::Up));
         assert_eq!(app.context(), Context::Panel);
         assert_eq!(under(&app), "boot");
+
+        // Abort goes back to where the search started, and keeps nothing for n.
+        app.handle(action(Action::QuickSearch));
+        for c in "ba".chars() {
+            app.handle(Resolved::Insert(c));
+        }
+        assert_eq!(under(&app), "bar");
+        app.handle(action(Action::Abort));
+        assert_eq!(app.context(), Context::Panel);
+        assert_eq!(under(&app), "boot");
+        app.handle(action(Action::NextMatch));
+        assert_eq!(under(&app), "dev", "the search before: ba was given up");
     }
 
     #[test]

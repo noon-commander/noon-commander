@@ -191,7 +191,8 @@ impl JumpMenu {
                 | Action::Backspace
                 | Action::Delete
                 | Action::DeleteToStart
-                | Action::DeleteToEnd => {
+                | Action::DeleteToEnd
+                | Action::DeleteWord => {
                     let before = self.keywords.text().to_owned();
                     self.keywords.edit(action);
                     if self.keywords.text() != before {

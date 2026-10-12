@@ -14,6 +14,7 @@ use ratatui::widgets::Block;
 use unicode_width::UnicodeWidthChar as _;
 
 use super::cells;
+use super::dialog::word_start;
 use super::keymap::{Action, Resolved};
 use super::tasks::HostHandle;
 
@@ -237,6 +238,10 @@ impl CommandLine {
             Action::DeleteToEnd => {
                 let cursor = self.cursor;
                 self.remove(cursor, end);
+            }
+            Action::DeleteWord => {
+                let cursor = self.cursor;
+                self.remove(word_start(&self.text, start, cursor), cursor);
             }
             Action::NewLine => self.insert('\n'),
             Action::EditCommand => return CommandEvent::Edit,
@@ -583,6 +588,12 @@ mod tests {
         assert_eq!(line.text, "first");
         press(&mut line, Action::Up);
         assert_eq!(line.cursor, 5, "the first line stays");
+        let mut words = shell("echo one\ntwo three");
+        press(&mut words, Action::DeleteWord);
+        assert_eq!(words.text, "echo one\ntwo ");
+        press(&mut words, Action::DeleteWord);
+        press(&mut words, Action::DeleteWord);
+        assert_eq!(words.text, "echo one\n", "within the line of the cursor");
     }
 
     #[test]

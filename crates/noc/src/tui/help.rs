@@ -281,6 +281,7 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::PullDown, Action::End) => fl!("help-pulldown-end"),
         (Context::PullDown, Action::Confirm) => fl!("help-pulldown-run"),
         (Context::QuickSearch, Action::Cancel) => fl!("help-search-end"),
+        (Context::QuickSearch, Action::Abort) => fl!("help-search-abort"),
         (Context::QuickSearch, Action::QuickSearch) => fl!("help-search-next"),
         (Context::QuickSearch, Action::PrevMatch) => fl!("help-search-prev"),
         (Context::Dialog, Action::Up) => fl!("help-dialog-up"),
@@ -382,6 +383,7 @@ fn describe_field(context: Context, action: Action) -> Option<String> {
         (_, Action::Left) => fl!("help-field-left"),
         (_, Action::Right) => fl!("help-field-right"),
         (_, Action::Delete) => fl!("help-field-delete"),
+        (_, Action::DeleteWord) => fl!("help-field-delete-word"),
         (Context::CommandLine, _) => return None,
         (_, Action::Home) => fl!("help-field-home"),
         (_, Action::End) => fl!("help-field-end"),
@@ -415,6 +417,7 @@ fn describe_filter(context: Context, action: Action) -> Option<String> {
         Action::Delete => fl!("help-field-delete"),
         Action::DeleteToStart => fl!("help-field-delete-to-start"),
         Action::DeleteToEnd => fl!("help-field-delete-to-end"),
+        Action::DeleteWord => fl!("help-field-delete-word"),
         _ => return None,
     };
     Some(text)
@@ -551,7 +554,7 @@ mod tests {
         assert!(has("Ctrl+x Left, Ctrl+w h", "The left panel"));
         assert!(has("Shift+PgDn", "Half a page down"));
         assert!(has(
-            "Esc, F10, Ctrl+g, Ctrl+c",
+            "Esc, Ctrl+[, F10, Ctrl+g, Ctrl+c",
             "Cancel, or close this help"
         ));
         // Quick search lists the panel's key that goes on to the next match.

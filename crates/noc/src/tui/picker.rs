@@ -275,7 +275,8 @@ impl Picker {
                 | Action::Backspace
                 | Action::Delete
                 | Action::DeleteToStart
-                | Action::DeleteToEnd => {
+                | Action::DeleteToEnd
+                | Action::DeleteWord => {
                     let before = self.filter.text().to_owned();
                     self.filter.edit(action);
                     if self.filter.text() != before {

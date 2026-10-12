@@ -234,7 +234,7 @@ headings:
 ### Pull-down menu
 
 F9 (Alt+9) opens mc's menu bar, as Far does: the bar alone with the menu of the active panel
-selected. Shift+F9 (F19) opens it on the command that ran last, as Far's Shift+F10. An open
+selected. Shift+F9 opens it on the command that ran last, as Far's Shift+F10. An open
 menu:
 
 ```text
@@ -863,7 +863,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   (`move_within`); between the local file system and a host, or two hosts, it copies and
   removes each source once all of it is copied. Its window says Moving; when it ends, the
   panels on both sides read their directories again.
-- **Shift+F6 (F16) renames in place** the entry under the cursor, not the marked ones: its
+- **Shift+F6 renames in place** the entry under the cursor, not the marked ones: its
   row becomes a text field from the name on, over the size and time columns, with all of a
   file's name but its last extension selected (a directory, a dotfile, or a name that ends
   with a dot, whole); typing replaces the selection, and moving lets it go. Enter renames,
@@ -951,9 +951,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   In the vim keymap, as in vim, Enter only ends the search and Esc gives it up. Ctrl+r, and Ctrl+t
   in the vim keymap, go to the previous match. While it runs, every character is text, even one that
   a panel binds, such as `*`. The app keeps what the last search found, whichever panel it ran in,
-  as vim keeps its last pattern: `n` and `N` (and Shift+F7 or F17, mc's and Far's key to search
-  again) go to the next and the previous name that matches it, round, and Ctrl+s with nothing typed
-  yet searches for it again, as mc's Ctrl+s Ctrl+s does. Long names lose their middle, marked with
+  as vim keeps its last pattern: `n` and `N` (and Shift+F7, mc's and Far's key to search again) go
+  to the next and the previous name that matches it, round, and Ctrl+s with nothing typed yet
+  searches for it again, as mc's Ctrl+s Ctrl+s does. Long names lose their middle, marked with
   `~`. Names are shown terminal-safe: control and bidi characters become `?`. Listings run in
   background tasks; a reply carries the generation of its request, so a stale one is dropped. If a
   directory cannot be read, the panel stays where it was and says why below the listing. Going up

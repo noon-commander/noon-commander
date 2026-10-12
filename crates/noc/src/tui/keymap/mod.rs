@@ -693,8 +693,8 @@ mod tests {
         let keymap = Keymap::mc();
         let mut state = KeyState::default();
         assert_eq!(
-            feed(&keymap, &mut state, Context::Panel, &["shift-f6", "f16"]),
-            actions(&[Action::Rename, Action::Rename])
+            feed(&keymap, &mut state, Context::Panel, &["shift-f6"]),
+            actions(&[Action::Rename])
         );
         assert_eq!(
             feed(
@@ -1401,8 +1401,8 @@ mod tests {
             actions(&[Action::PullDown, Action::PullDown])
         );
         assert_eq!(
-            feed(&keymap, &mut state, Context::Panel, &["shift-f9", "f19"]),
-            actions(&[Action::PullDownLast, Action::PullDownLast])
+            feed(&keymap, &mut state, Context::Panel, &["shift-f9"]),
+            actions(&[Action::PullDownLast])
         );
         assert_eq!(
             feed(
@@ -1968,15 +1968,10 @@ mod tests {
                     &keymap,
                     &mut state,
                     Context::Panel,
-                    &["n", "shift-n", "shift-f7", "f17"]
+                    &["n", "shift-n", "shift-f7"]
                 ),
-                actions(&[
-                    Action::NextMatch,
-                    Action::PrevMatch,
-                    Action::NextMatch,
-                    Action::NextMatch
-                ]),
-                "{name}: F17, as terminals may send Shift+F7"
+                actions(&[Action::NextMatch, Action::PrevMatch, Action::NextMatch]),
+                "{name}"
             );
             // While a search runs, n and N are part of the name; Shift+F7 goes on.
             assert_eq!(
@@ -2044,13 +2039,9 @@ mod tests {
                 &vim,
                 &mut state,
                 Context::Panel,
-                &["g", "shift-m", "shift-f9", "f19"]
+                &["g", "shift-m", "shift-f9"]
             ),
-            actions(&[
-                Action::PullDownLast,
-                Action::PullDownLast,
-                Action::PullDownLast
-            ])
+            actions(&[Action::PullDownLast, Action::PullDownLast])
         );
         assert_eq!(
             feed(

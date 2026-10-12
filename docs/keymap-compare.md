@@ -52,7 +52,9 @@ Keys are written the same way in every column, whatever notation the source uses
   the keys at the upper and the lower left of the numpad. The mouse: Click, Double click, Right
   click, Middle click, Wheel, Drag.
 - mc reads Shift+F1…Shift+F10 as F11…F20, so its column writes them as Shift+F1…Shift+F10.
-  It waits a second after Esc for a key that may follow; Esc Esc does not wait.
+  It waits a second after Esc for a key that may follow; Esc Esc does not wait. noc binds no
+  F11…F20 in their place: crossterm 0.29, which reads the keys, takes the codes of F15…F20 for
+  other F-keys, so that the Linux console's Shift+F9 would arrive as F16.
 - noc binds Ctrl+[ wherever it binds Esc, and Ctrl+m wherever it binds Enter: terminals send
   them as Esc and Enter, but tell them apart where they speak the kitty keyboard protocol.
 
@@ -102,7 +104,7 @@ Ctrl+x 1 and Ctrl+x 2. Both presets bind vim's Ctrl+w h and Ctrl+w l, and Ctrl+x
 Ctrl+x Right, for the left and the right panel. The default takes vim's Ctrl+w f and Ctrl+w v
 too, as keys that need no Alt, which the Option key of macOS terminals often does not send. In
 both, n and N repeat the last quick search, forward and backward, as in vim, yazi, and ranger;
-Shift+F7 (or F17), mc's and Far's key to search again, repeats it forward too.
+Shift+F7, mc's and Far's key to search again, repeats it forward too.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
@@ -119,7 +121,7 @@ Shift+F7 (or F17), mc's and Far's key to search again, repeats it forward too.
 | Read the directory again | `reload` | ✅ | Ctrl+r | R | Ctrl+r | Ctrl+r | — | R |
 | Stop loading or connecting | `cancel` | ✅ | Esc<br>Ctrl+[<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c | — | — | — | Ctrl+c |
 | The pull-down menu | `pull_down` | ✅ | F9 | g m<br>F9 | F9 | F9 | — | — |
-| The pull-down menu, on the command that ran from it last | `pull_down_last` | ✅ | Shift+F9<br>F19 | g M<br>Shift+F9<br>F19 | Shift+F9 | Shift+F10 | — | — |
+| The pull-down menu, on the command that ran from it last | `pull_down_last` | ✅ | Shift+F9 | g M<br>Shift+F9 | Shift+F9 | Shift+F10 | — | — |
 | The other panel | `switch_panel` | ✅ | Tab<br>Ctrl+i | Tab<br>Ctrl+w w<br>Ctrl+w Ctrl+w<br>Ctrl+w p | Tab<br>Ctrl+i | Tab | — | — |
 | The left panel, wherever the panels were swapped | `focus_left` | ✅ | Ctrl+x Left<br>Ctrl+w h | Ctrl+w h<br>Ctrl+x Left | — | — | — | — |
 | The right panel, wherever the panels were swapped | `focus_right` | ✅ | Ctrl+x Right<br>Ctrl+w l | Ctrl+w l<br>Ctrl+x Right | — | — | — | — |
@@ -147,7 +149,7 @@ Shift+F7 (or F17), mc's and Far's key to search again, repeats it forward too.
 | Unmark the names that match a pattern | `unselect` | ✅ | -<br>\\<br>Alt+- | - | -<br>\\<br>Numpad-<br>Alt+- | Numpad- | — | — |
 | Invert the marks on files; directories stay as they are | `invert_marks` | ✅ | \*<br>Alt+\* | \* | \*<br>Numpad\*<br>Alt+\* | Numpad* | — | — |
 | Start quick search | `quick_search` | ✅ | Ctrl+s<br>Alt+s | / | Ctrl+s<br>Alt+s | Alt+characters<br>Alt+Shift+characters | / | f |
-| The next name that matches the last quick search | `next_match` | ✅ | Shift+F7<br>F17<br>n | n<br>Shift+F7<br>F17 | — | — | n | n |
+| The next name that matches the last quick search | `next_match` | ✅ | Shift+F7<br>n | n<br>Shift+F7 | — | — | n | n |
 | The previous name that matches the last quick search | `prev_match` | ✅ | N | N | — | — | N | N |
 | Open the command line for a shell command | `shell` | ✅ | ! | ! | Typing | Typing | ; (in the background)<br>: | !<br>s |
 | Open the command line for a command of noc | `command` | ✅ | : | : | — | — | — | :<br>; |
@@ -158,7 +160,7 @@ Shift+F7 (or F17), mc's and Far's key to search again, repeats it forward too.
 | Edit the file under the cursor in $VISUAL or $EDITOR | `edit` | ✅ | F4 | e<br>F4 | F4 | F4<br>Ctrl+Shift+F4 (always internal) | — | F4<br>E |
 | Copy the marked entries, or the one under the cursor | `copy` | ✅ | F5 | Y<br>y y<br>F5 | F5 | F5 | y, then p | y y, then p p<br>F5, then p p |
 | Move or rename the marked entries, or the one under the cursor | `move` | ✅ | F6 | x<br>F6 | F6 | F6 | x, then p | d d, then p p<br>F6, then p p |
-| Rename the entry under the cursor in its row | `rename` | ✅ | Shift+F6<br>F16 | r<br>Shift+F6<br>F16 | Shift+F6 | Shift+F6 | r | F2 (before the extension)<br>c w (a new name)<br>a (before the extension)<br>A (at the end)<br>I (at the start) |
+| Rename the entry under the cursor in its row | `rename` | ✅ | Shift+F6 | r<br>Shift+F6 | Shift+F6 | Shift+F6 | r | F2 (before the extension)<br>c w (a new name)<br>a (before the extension)<br>A (at the end)<br>I (at the start) |
 | Make a directory | `mkdir` | ✅ | F7 | A<br>F7 | F7 | F7 | a (a name that ends in /) | F7 |
 | Delete the marked entries, or the one under the cursor | `delete` | ✅ | F8 | d D<br>F8 | F8 | F8 | D | F8<br>d D |
 | Checksums of the marked files, or the one under the cursor | `checksum` | ✅ | f # | f # | — | — | — | — |

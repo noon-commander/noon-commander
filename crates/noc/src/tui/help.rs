@@ -558,7 +558,7 @@ mod tests {
             "Quick search; again: the next match, or with nothing typed, the last search"
         ));
         assert!(has(
-            "Shift+F7, F17, n",
+            "Shift+F7, n",
             "The next name that matches the last quick search"
         ));
         assert!(has("Ctrl+x Left, Ctrl+w h", "The left panel"));

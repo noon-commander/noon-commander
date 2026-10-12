@@ -36,7 +36,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c"]),
             // PullDown
             (Action::PullDown, &["f9"]),
-            (Action::PullDownLast, &["shift-f9", "f19"]),
+            (Action::PullDownLast, &["shift-f9"]),
             // Panels
             (Action::SwitchPanel, &["tab", "ctrl-i"]),
             (Action::FocusLeft, &["ctrl-x left", "ctrl-w h"]),
@@ -69,7 +69,7 @@ pub(super) const PRESET: Preset = &[
             (Action::InvertMarks, &["*", "alt-*"]),
             // Search
             (Action::QuickSearch, &["ctrl-s", "alt-s"]),
-            (Action::NextMatch, &["shift-f7", "f17", "n"]),
+            (Action::NextMatch, &["shift-f7", "n"]),
             (Action::PrevMatch, &["shift-n"]),
             // Tools
             (Action::Shell, &["!"]),
@@ -81,7 +81,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Edit, &["f4"]),
             (Action::Copy, &["f5"]),
             (Action::Move, &["f6"]),
-            (Action::Rename, &["shift-f6", "f16"]),
+            (Action::Rename, &["shift-f6"]),
             (Action::Mkdir, &["f7"]),
             (Action::Delete, &["f8"]),
             (Action::Checksum, &["f #"]),

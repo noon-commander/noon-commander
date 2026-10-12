@@ -116,13 +116,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   window find `config.rs` from `cfg`, best match first, with fzf's `'`, `^`, `$`, and `!`.
   On by default; `ui.fuzzy_search = false`, or Fuzzy search in Options → Configuration,
   brings back literal matching.
-- Shift+F6 (or F16, and F9 → File → Rename in place) renames the entry under the cursor in
+- Shift+F6 (or F9 → File → Rename in place) renames the entry under the cursor in
   its row: the name is selected but for the last extension, Enter renames, and Esc keeps the
   name. A taken file name asks before it is replaced; a directory's is never replaced.
-- Shift+F9 (or F19, and g M in the vim keymap) opens the pull-down menu on the command that ran
+- Shift+F9 (or g M in the vim keymap) opens the pull-down menu on the command that ran
   from it last, as Far's Shift+F10 does, so Shift+F9 Enter repeats it.
 - Quick search is kept once it ends, as vim keeps its last pattern: in both keymaps, n and N go to
-  the next and the previous name that matches it, round, and so does Shift+F7 (or F17) to the
+  the next and the previous name that matches it, round, and so does Shift+F7 to the
   next, as mc and Far search again with it; Ctrl+s with nothing typed yet (/ and Ctrl+g in the
   vim keymap) searches for it again, as mc's Ctrl+s Ctrl+s does.
 - Shift+PgUp and Shift+PgDn go half a page up and down in the panels, as in yazi; Ctrl+u and

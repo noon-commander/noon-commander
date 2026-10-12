@@ -117,7 +117,7 @@ Shift+F7, mc's and Far's key to search again, repeats it forward too.
 | First row | `home` | ✅ | Home<br>Alt+< | g g<br>Home | Home<br>A1<br>Alt+< | — | g g<br>Home | Home<br>g g |
 | Last row | `end` | ✅ | End<br>Alt+> | G<br>End | End<br>C1<br>Alt+> | — | G<br>End | End<br>G |
 | Open the directory or file under the cursor | `enter` | ✅ | Enter<br>Ctrl+m<br>Ctrl+PgDn | l<br>Right<br>Enter<br>Ctrl+m | Enter<br>Ctrl+PgDn | Enter<br>Ctrl+PgDn | l<br>Right<br>o<br>Enter | Right<br>Enter<br>l |
-| Parent directory; nothing in / | `parent` | ✅ | Ctrl+PgUp<br>Backspace | h<br>Left<br>Backspace | Ctrl+PgUp | Ctrl+PgUp | h<br>Left | Left<br>h |
+| Parent directory; nothing in / | `parent` | ✅ | Ctrl+PgUp<br>Backspace<br>Ctrl+h | h<br>Left<br>Backspace<br>Ctrl+h | Ctrl+PgUp | Ctrl+PgUp | h<br>Left | Left<br>h |
 | Read the directory again | `reload` | ✅ | Ctrl+r | R | Ctrl+r | Ctrl+r | — | R |
 | Stop loading or connecting | `cancel` | ✅ | Esc<br>Ctrl+[<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c | — | — | — | Ctrl+c |
 | The pull-down menu | `pull_down` | ✅ | F9 | g m<br>F9 | F9 | F9 | — | — |

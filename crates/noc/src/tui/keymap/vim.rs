@@ -31,7 +31,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Home, &["g g", "home"]),
             (Action::End, &["shift-g", "end"]),
             (Action::Enter, &["l", "right", "enter", "ctrl-m"]),
-            (Action::Parent, &["h", "left", "backspace"]),
+            (Action::Parent, &["h", "left", "backspace", "ctrl-h"]),
             (Action::Reload, &["shift-r"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c"]),
             // PullDown

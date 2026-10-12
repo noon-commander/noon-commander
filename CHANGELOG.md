@@ -132,7 +132,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the left or on the right active, after Ctrl+u too. In the default keymap, Ctrl+w f and Ctrl+w v
   do what Alt+o and Alt+i do, where the Option key of a macOS terminal sends no Alt.
 - In the default keymap, Backspace goes to the parent directory too, as Ctrl+PgUp does, and Ctrl+c
-  stops loading, as Esc does.
+  stops loading, as Esc does. In both keymaps, Ctrl+h goes to the parent directory as Backspace
+  does, for terminals that send it for Backspace.
 - In the location menu, Delete disconnects the host under the cursor, as F8 does and as in Far's
   menu of drives.
 - Alt+1 … Alt+0 stand for F1 … F10 in the windows that list items and in the viewer too, as in

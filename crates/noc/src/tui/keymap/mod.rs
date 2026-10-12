@@ -2094,9 +2094,15 @@ mod tests {
         );
         for name in Keymap::NAMES {
             let keymap = Keymap::by_name(name).unwrap();
+            // Ctrl+h too, which some terminals send for Backspace.
             assert_eq!(
-                feed(&keymap, &mut state, Context::Panel, &["backspace"]),
-                actions(&[Action::Parent]),
+                feed(
+                    &keymap,
+                    &mut state,
+                    Context::Panel,
+                    &["backspace", "ctrl-h"]
+                ),
+                actions(&[Action::Parent, Action::Parent]),
                 "{name}"
             );
             assert_eq!(

@@ -389,14 +389,17 @@ row and names the tab that shows by its whole location:
   and cursor, without marks; `t c` closes the tab that shows (the last one stays), and the next
   one shows. Alt+Right and Alt+Left, or `] t` and `[ t`, go round the tabs; `t h` and `t l` open
   the tab menu of the left and the right panel, whichever is active: the tabs with their whole
-  locations, over that panel, to show one. The panel whose tab is shown becomes active. Left and
-  Right in F9 do the same for the panel on that side.
+  locations, over that panel, to show one. The panel whose tab is shown becomes active. F8 and
+  Delete (`close_tab`) close the tab under the cursor there as `t c` closes the one that shows
+  (`Tabs::close_at`), and the menu stays open with the rest. Left and Right in F9 do the same for
+  the panel on that side.
 - The tab menu, the location menu, the Workspaces window, and the command history share
   `tui/picker.rs`: the filter, a text field with a cursor (`dialog::Field`), which typing fills and
   the keys of `input` edit, and which matches as fzf does with `ui.fuzzy_search`; the action
   `Delete` goes to the window, which deletes the row under the cursor in the workspaces and the
-  history, and `input`'s `DeleteChar` (Delete, and Ctrl+d in the default keymap) to the filter, so
-  Ctrl+d never deletes a row; the digits of the first ten
+  history (the tab menu takes Delete for `close_tab`), and `input`'s `DeleteChar` (Delete, and
+  Ctrl+d in the default keymap) to the filter, so Ctrl+d never deletes a row; the digits of the
+  first ten
   rows while it is empty (but in the history, whose commands have digits), the cursor, scrolling,
   the mouse, and the box, which the menus draw over their panel and the windows over both. Each
   holds its own rows, says what the filter finds them by, and draws them. A row may show only while

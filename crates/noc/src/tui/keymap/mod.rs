@@ -869,8 +869,13 @@ mod tests {
                 "{name}"
             );
             assert_eq!(
-                feed(&keymap, &mut state, Context::TabMenu, &["alt-0", "alt-5"]),
-                actions(&[Action::Cancel]),
+                feed(
+                    &keymap,
+                    &mut state,
+                    Context::TabMenu,
+                    &["alt-8", "alt-0", "alt-5"]
+                ),
+                actions(&[Action::CloseTab, Action::Cancel]),
                 "{name}: no F5 there"
             );
             assert_eq!(
@@ -2768,16 +2773,21 @@ mod tests {
                     }
                 }
             }
-            // Delete takes a character of the filter, but where the window deletes rows.
+            // Delete takes a character of the filter, but where the window takes rows away.
             let mut state = KeyState::default();
             assert_eq!(
-                feed(&keymap, &mut state, Context::TabMenu, &["delete"]),
+                feed(&keymap, &mut state, Context::Jump, &["delete"]),
                 actions(&[Action::DeleteChar]),
                 "{name}"
             );
             assert_eq!(
                 feed(&keymap, &mut state, Context::LocationMenu, &["delete"]),
                 actions(&[Action::Disconnect]),
+                "{name}"
+            );
+            assert_eq!(
+                feed(&keymap, &mut state, Context::TabMenu, &["delete", "f8"]),
+                actions(&[Action::CloseTab, Action::CloseTab]),
                 "{name}"
             );
             for context in [Context::Workspaces, Context::CommandHistory] {

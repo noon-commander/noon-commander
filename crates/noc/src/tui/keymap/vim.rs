@@ -224,8 +224,9 @@ pub(super) const PRESET: Preset = &[
             (Action::Reload, &["ctrl-r"]),
         ],
     ),
-    // The tab menu of a panel, on top of the list's; characters filter it.
-    (Context::TabMenu, &[]),
+    // The tab menu of a panel, on top of the list's; characters filter it. F8 and Delete close
+    // the tab under the cursor, as they delete a workspace.
+    (Context::TabMenu, &[(Action::CloseTab, &["f8", "delete"])]),
     // The zoxide window, on top of the list's; characters are keywords.
     (Context::Jump, &[]),
     // The window of the saved workspaces, on top of the list's; characters filter it. Insert adds

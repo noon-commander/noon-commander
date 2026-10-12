@@ -123,10 +123,19 @@ impl Tabs {
     /// Closes the tab that shows, unless it is the last; the one after it shows, or the one
     /// before if it was the last.
     pub(crate) fn close(&mut self) -> Option<Tab> {
-        if self.tabs.len() < 2 {
+        self.close_at(self.active)
+    }
+
+    /// Closes the tab at `index`, unless it is the last. The tab that showed still does; if it
+    /// was the one closed, the one after it shows, or the one before if it was the last.
+    pub(crate) fn close_at(&mut self, index: usize) -> Option<Tab> {
+        if self.tabs.len() < 2 || index >= self.tabs.len() {
             return None;
         }
-        let tab = self.tabs.remove(self.active);
+        let tab = self.tabs.remove(index);
+        if index < self.active {
+            self.active -= 1;
+        }
         self.active = self.active.min(self.tabs.len() - 1);
         Some(tab)
     }
@@ -561,5 +570,39 @@ mod tests {
         assert_eq!(tabs.close().map(|tab| tab.id.tab), Some(1));
         assert_eq!(tabs.active().id.tab, 2, "the one after");
         assert_eq!(tabs.len(), 1);
+    }
+
+    #[test]
+    fn closing_another_tab_keeps_the_one_that_shows() {
+        let panel = || {
+            let home = PathBuf::from("/home/me");
+            Panel::new(Location::Local(home.clone()), home, true).0
+        };
+        let tab = |tab| {
+            let id = PanelId {
+                side: Side::Left,
+                tab,
+            };
+            Tab::new(id, panel())
+        };
+        let mut tabs = Tabs::new(tab(1));
+        tabs.push(tab(2));
+        tabs.push(tab(3));
+        tabs.push(tab(4));
+        assert!(tabs.select(2));
+        let numbers = |tabs: &Tabs| -> Vec<u64> { tabs.iter().map(|tab| tab.id.tab).collect() };
+        assert_eq!(tabs.close_at(0).map(|tab| tab.id.tab), Some(1));
+        assert_eq!(tabs.active().id.tab, 3, "before it");
+        assert_eq!(tabs.close_at(2).map(|tab| tab.id.tab), Some(4));
+        assert_eq!(tabs.active().id.tab, 3, "after it");
+        assert!(tabs.close_at(5).is_none());
+        assert_eq!(tabs.close_at(1).map(|tab| tab.id.tab), Some(3));
+        assert_eq!(
+            tabs.active().id.tab,
+            2,
+            "the one before the last, which it was"
+        );
+        assert!(tabs.close_at(0).is_none(), "the last tab stays");
+        assert_eq!(numbers(&tabs), [2]);
     }
 }

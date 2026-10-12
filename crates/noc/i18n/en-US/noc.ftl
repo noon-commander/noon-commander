@@ -26,6 +26,8 @@ fkey-edit-host = Edit
 fkey-cancel = Cancel
 # Opens the pull-down menu.
 fkey-pulldown = PullDn
+# Closes the tab under the cursor in the tab menu.
+fkey-close-tab = Close
 
 ## The title of the terminal's window or tab (src/tui/app), with ui.terminal_title. Prefix:
 ## terminal-.
@@ -442,6 +444,7 @@ help-menu-open = Open the volume or host in the panel
 help-menu-reload = Read the volumes and hosts again
 help-menu-close = Close the menu
 help-tab-menu-show = Show the tab in the panel
+help-tab-menu-close = Close the tab under the cursor; the last one stays
 help-pulldown-open = The pull-down menu: Left, File, Command, Options, Workspace, Right
 help-pulldown-last = The pull-down menu, on the command of it that ran last
 help-pulldown-up = The command above

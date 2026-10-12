@@ -485,6 +485,7 @@ fn describe_tab_menu(context: Context, action: Action) -> Option<String> {
         Action::Home => fl!("help-first-row"),
         Action::End => fl!("help-last-row"),
         Action::Confirm => fl!("help-tab-menu-show"),
+        Action::CloseTab => fl!("help-tab-menu-close"),
         Action::Cancel => fl!("help-menu-close"),
         _ => return None,
     };

@@ -580,11 +580,13 @@ keys of Far's menus, its drive menu among them.
 ## Tab menu (`tab_menu`)
 
 t h and t l: the tabs of the left or the right panel, drawn over it as the location menu is;
-characters filter it. It binds no keys of its own: it falls back to `list`, whose Enter shows the
-tab in the panel. mc, Far, yazi, and ranger have no menu of tabs.
+characters filter it. It falls back to `list`, whose Enter shows the tab in the panel; F8 and
+Delete close the tab under the cursor, as they delete a workspace, and the menu stays open. mc,
+Far, yazi, and ranger have no menu of tabs.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
+| Close the tab under the cursor; the last one stays | `close_tab` | ✅ | F8<br>Delete | F8<br>Delete | — | — | — | — |
 | Filter the tabs | — | ⏳ | Typing | Typing | — | — | — | — |
 | Show a tab by its number (empty filter) | — | ⏳ | 1…9, 0 | 1…9, 0 | — | — | — | — |
 

@@ -1273,6 +1273,9 @@ impl App {
                 .is_some_and(WorkspacesWindow::has_chosen);
             return action == Action::Cancel || chosen;
         }
+        if action == Action::CloseTab {
+            return self.tab_menu_closes();
+        }
         match action {
             Action::Help
             | Action::Quit
@@ -1512,17 +1515,22 @@ impl App {
 
     /// Opens the tab menu for the panel on `side`, which lists where its tabs are.
     fn open_tab_menu(&mut self, side: Side) {
-        let tabs = self.tabs(side);
-        let titles = tabs
+        let titles = self.tab_titles(side);
+        let fuzzy = self.config.ui.fuzzy_search;
+        let current = self.tabs(side).index();
+        self.tab_menu = Some(TabMenu::new(side, titles, current, fuzzy));
+    }
+
+    /// Where the tabs on `side` are, as the tab menu lists them.
+    fn tab_titles(&self, side: Side) -> Vec<String> {
+        self.tabs(side)
             .iter()
             .map(|tab| tabs::title(tab.panel.location(), &self.home))
-            .collect();
-        let fuzzy = self.config.ui.fuzzy_search;
-        self.tab_menu = Some(TabMenu::new(side, titles, tabs.index(), fuzzy));
+            .collect()
     }
 
     /// Gives a key to the tab menu: the tab it shows is its panel's, which becomes active, as
-    /// the location menu's panel does.
+    /// the location menu's panel does. A tab it closes goes as `t c` closes it; the menu stays.
     fn handle_tab_menu(&mut self, input: Resolved) -> Vec<Effect> {
         let Some(menu) = &mut self.tab_menu else {
             return Vec::new();
@@ -1543,7 +1551,32 @@ impl App {
                 }
                 Vec::new()
             }
+            TabMenuEvent::Close(index) => {
+                let side = menu.side();
+                let shown = index == self.tabs(side).index();
+                if shown {
+                    self.end_search(side);
+                }
+                if self.tabs_mut(side).close_at(index).is_none() {
+                    return Vec::new();
+                }
+                let titles = self.tab_titles(side);
+                if let Some(menu) = &mut self.tab_menu {
+                    menu.set_titles(titles);
+                }
+                if shown {
+                    return self.revealed(side);
+                }
+                Vec::new()
+            }
         }
+    }
+
+    /// Whether the tab menu is open on a panel with more than one tab, of which F8 closes one.
+    fn tab_menu_closes(&self) -> bool {
+        self.tab_menu
+            .as_ref()
+            .is_some_and(|menu| self.tabs(menu.side()).len() > 1)
     }
 
     /// Gives a key to what is over the panels, front first, if anything is.
@@ -5268,6 +5301,7 @@ fn fkey_label(action: Action) -> Option<String> {
         Action::Copy => Some(fl!("fkey-copy")),
         Action::Move => Some(fl!("fkey-move")),
         Action::PullDown => Some(fl!("fkey-pulldown")),
+        Action::CloseTab => Some(fl!("fkey-close-tab")),
         _ => None,
     }
 }
@@ -8707,6 +8741,36 @@ mod tests {
         app.handle(action(Action::Up));
         assert!(app.handle(action(Action::Confirm)).is_empty());
         assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3], 1));
+    }
+
+    #[test]
+    fn the_tab_menu_closes_tabs_and_stays_open() {
+        let mut app = loaded();
+        app.handle(action(Action::NewTab));
+        app.handle(action(Action::NewTab));
+        assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3, 4], 4));
+        app.handle(action(Action::TabListLeft));
+        let fkey = |app: &App| app.fkey_actions()[7].as_ref().map(|(action, _)| *action);
+        assert_eq!(fkey(&app), Some(Action::CloseTab), "F8");
+        // A tab that does not show goes; the one that shows stays.
+        app.handle(action(Action::Home));
+        assert!(app.handle(action(Action::CloseTab)).is_empty());
+        assert_eq!(tab_numbers(&app, Side::Left), (vec![3, 4], 4));
+        assert_eq!(app.context(), Context::TabMenu, "the menu stays");
+        // The one that shows goes, and the one before it shows.
+        app.handle(action(Action::End));
+        app.handle(action(Action::CloseTab));
+        assert_eq!(tab_numbers(&app, Side::Left), (vec![3], 3));
+        let text = screen_of(&mut app, 16);
+        assert!(
+            text.contains("1 /srv") && !text.contains("2 /srv"),
+            "{text}"
+        );
+        // The last one stays, and F8 does nothing for it.
+        assert!(app.handle(action(Action::CloseTab)).is_empty());
+        assert_eq!(tab_numbers(&app, Side::Left), (vec![3], 3));
+        assert_eq!(fkey(&app), None);
+        assert_eq!(app.active, Side::Left);
     }
 
     #[test]

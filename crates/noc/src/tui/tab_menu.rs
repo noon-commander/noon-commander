@@ -1,6 +1,6 @@
 //! The tab menu of `t h` and `t l`: the tabs of one panel, drawn over it as the location menu
-//! is, to show one. Typing filters it; while the filter is empty, `1` … `9` and `0` show the
-//! first ten tabs.
+//! is, to show one, or to close one. Typing filters it; while the filter is empty, `1` … `9` and
+//! `0` show the first ten tabs.
 
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -26,6 +26,8 @@ pub(crate) enum TabMenuEvent {
     Closed,
     /// Show the tab at this index in the menu's panel.
     Show(usize),
+    /// Close the tab at this index; the menu stays open.
+    Close(usize),
 }
 
 /// The menu of the tabs of one panel.
@@ -57,14 +59,26 @@ impl TabMenu {
         self.side
     }
 
-    /// Takes a key, as the picker does.
+    /// Takes the tabs again after one closed; the cursor stays on its row, or goes to the last.
+    pub(crate) fn set_titles(&mut self, titles: Vec<String>) {
+        self.picker
+            .set_rows(titles.iter().map(|title| vec![title.clone()]).collect());
+        self.titles = titles;
+        let last = self.picker.len().saturating_sub(1);
+        self.picker.set_cursor(self.picker.cursor().min(last));
+    }
+
+    /// Takes a key, as the picker does, and F8 and Delete, which close the tab under the
+    /// cursor.
     pub(crate) fn handle(&mut self, input: Resolved) -> TabMenuEvent {
+        let tab =
+            |menu: &Self, row: usize| menu.picker.shown(0..menu.titles.len()).get(row).copied();
         match self.picker.handle(input) {
-            Pick::Chosen(row) => match self.picker.shown(0..self.titles.len()).get(row) {
-                Some(&index) => TabMenuEvent::Show(index),
-                None => TabMenuEvent::Pending,
-            },
+            Pick::Chosen(row) => tab(self, row).map_or(TabMenuEvent::Pending, TabMenuEvent::Show),
             Pick::Closed => TabMenuEvent::Closed,
+            Pick::Other(Action::CloseTab) => {
+                tab(self, self.picker.cursor()).map_or(TabMenuEvent::Pending, TabMenuEvent::Close)
+            }
             Pick::Pending | Pick::Other(_) => TabMenuEvent::Pending,
         }
     }
@@ -143,6 +157,30 @@ mod tests {
         assert_eq!(menu.handle(Resolved::Insert('5')), TabMenuEvent::Pending);
         assert_eq!(press(&mut menu, Action::Disconnect), TabMenuEvent::Pending);
         assert_eq!(press(&mut menu, Action::Cancel), TabMenuEvent::Closed);
+    }
+
+    #[test]
+    fn close_tab_closes_the_tab_under_the_cursor_and_the_cursor_stays_on_its_row() {
+        let titles = |titles: &[&str]| titles.iter().map(|&title| title.to_owned()).collect();
+        let mut middle = menu();
+        assert_eq!(press(&mut middle, Action::CloseTab), TabMenuEvent::Close(1));
+        middle.set_titles(titles(&["~/src", "web:/var/www", "~/src/noc"]));
+        assert_eq!(press(&mut middle, Action::Confirm), TabMenuEvent::Show(1));
+        // Filtered, by its index among all the tabs.
+        typed(&mut middle, "noc");
+        assert_eq!(press(&mut middle, Action::CloseTab), TabMenuEvent::Close(2));
+        middle.set_titles(titles(&["~/src", "web:/var/www"]));
+        assert_eq!(
+            press(&mut middle, Action::CloseTab),
+            TabMenuEvent::Pending,
+            "none matches"
+        );
+        // The last row closed, the cursor goes to the one before.
+        let mut last = menu();
+        assert_eq!(press(&mut last, Action::End), TabMenuEvent::Pending);
+        assert_eq!(press(&mut last, Action::CloseTab), TabMenuEvent::Close(3));
+        last.set_titles(titles(&["~/src", "/var/log", "web:/var/www"]));
+        assert_eq!(press(&mut last, Action::Confirm), TabMenuEvent::Show(2));
     }
 
     #[test]

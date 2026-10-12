@@ -78,16 +78,14 @@ keys that can follow on their own, once the first key of a sequence is pressed; 
 help in every window, and F1 in mc and Far opens the help of the window in front. Ctrl+o shows
 the output of commands over whatever is in front, which is there again afterwards; mc and Far
 hide or show the panels with it in the panels and on their command line, and mc in its viewer
-and editor too. Ctrl+\` does the same in both presets, where the terminal speaks the kitty
-keyboard protocol; without it, terminals send it as Ctrl+Space, which noc leaves to macOS and to
-input methods, which switch the input source with it. The vim preset takes g <, vim's key for
-the output of the last command. Ctrl+l redraws the screen under whatever is in front, which stays
-as it was, quick search too, as mc's Ctrl+l does in its panels, dialogs, viewer, and editor.
+and editor too. Both presets take it; the vim preset takes g < too, vim's key for the output of
+the last command. Ctrl+l redraws the screen under whatever is in front, which stays as it was,
+quick search too, as mc's Ctrl+l does in its panels, dialogs, viewer, and editor.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
 | The keys that can be typed now, over whatever is in front, and what they do, as which-key shows them | `key_hints` | ✅ | Alt+/ | Alt+/ | — | — | — | — |
-| The output of commands, in place of the panels and what is in front of them (mc, Far: hide or show the panels) | `user_screen` | ✅ | Ctrl+o<br>Ctrl+\` | g <<br>Ctrl+\` | Ctrl+o | Ctrl+o | — | — |
+| The output of commands, in place of the panels and what is in front of them (mc, Far: hide or show the panels) | `user_screen` | ✅ | Ctrl+o | g <<br>Ctrl+o | Ctrl+o | Ctrl+o | — | — |
 | Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | Ctrl+l | — | — | Ctrl+l |
 | Help: the keys of what is in front, and what they do | — | ⏳ | — | — | F1 | F1 | \~<br>F1 | — |
 
@@ -738,12 +736,12 @@ Far. Far's rows are those of its history menus.
 ## Output of commands (`user_screen`)
 
 The terminal's own screen, with the output of commands, in place of the panels; only the keys
-that bring the panels back do anything. The vim preset takes Enter and q too, as the prompt under
-the output that vim's g < shows does.
+that bring the panels back do anything: Ctrl+o, as in mc and Far, in both presets. The vim preset
+takes g <, Enter, and q too, as the prompt under the output that vim's g < shows does.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Back to the panels | `cancel` | ✅ | Ctrl+o<br>Esc<br>Ctrl+[<br>Ctrl+\` | g <<br>Enter<br>Ctrl+m<br>q<br>Esc<br>Ctrl+[<br>Ctrl+\` | Ctrl+o | Ctrl+o | — | — |
+| Back to the panels | `cancel` | ✅ | Ctrl+o<br>Esc<br>Ctrl+[ | g <<br>Ctrl+o<br>Enter<br>Ctrl+m<br>q<br>Esc<br>Ctrl+[ | Ctrl+o | Ctrl+o | — | — |
 
 ## Mouse
 

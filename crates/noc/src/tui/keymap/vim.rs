@@ -14,7 +14,7 @@ pub(super) const PRESET: Preset = &[
         Context::Global,
         &[
             (Action::KeyHints, &["alt-/"]),
-            (Action::UserScreen, &["g <", "ctrl-`"]),
+            (Action::UserScreen, &["g <", "ctrl-o"]),
             (Action::Redraw, &["ctrl-l"]),
         ],
     ),
@@ -308,7 +308,7 @@ pub(super) const PRESET: Preset = &[
         Context::UserScreen,
         &[(
             Action::Cancel,
-            &["g <", "enter", "ctrl-m", "q", "esc", "ctrl-[", "ctrl-`"],
+            &["g <", "ctrl-o", "enter", "ctrl-m", "q", "esc", "ctrl-["],
         )],
     ),
 ];

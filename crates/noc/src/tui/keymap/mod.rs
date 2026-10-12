@@ -1559,16 +1559,16 @@ mod tests {
             ),
             actions(&[Action::Cancel, Action::Cancel])
         );
-        // In vim, Enter and q go back too, as from the prompt under what vim's g < shows.
+        // In vim, g <, Enter, and q go back too, as from the prompt under what vim's g < shows.
         let vim = Keymap::by_name("vim").unwrap();
         assert_eq!(
             feed(
                 &vim,
                 &mut state,
                 Context::UserScreen,
-                &["a", "ctrl-o", "g", "<", "enter", "q", "esc"]
+                &["a", "f10", "ctrl-o", "g", "<", "enter", "q", "esc"]
             ),
-            actions(&[Action::Cancel; 4])
+            actions(&[Action::Cancel; 5])
         );
         assert_eq!(
             vim.key(Context::Panel, Action::UserScreen).as_deref(),
@@ -3005,44 +3005,35 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_backtick_shows_the_output_of_commands_everywhere() {
+    fn ctrl_o_shows_the_output_of_commands_everywhere_and_goes_back() {
+        // mc's and Far's Ctrl+o, in both keymaps.
         for name in Keymap::NAMES {
             let keymap = Keymap::by_name(name).unwrap();
-            // Ctrl+o, mc's, only in the default keymap; Ctrl+Space, which switches the input
-            // source on macOS, in neither.
-            let mut keys = vec![("ctrl-`", "Ctrl+`")];
-            if *name == "default" {
-                keys.push(("ctrl-o", "Ctrl+o"));
-            }
             for &context in Context::ALL {
                 if matches!(context, Context::Global | Context::UserScreen) {
                     continue;
                 }
-                let hints = keymap.hints(context, &[]);
-                for (key, text) in &keys {
-                    let mut state = KeyState::default();
-                    assert_eq!(
-                        feed(&keymap, &mut state, context, &[key]),
-                        actions(&[Action::UserScreen]),
-                        "{name}: {context:?} {key}"
-                    );
-                    assert!(
-                        hints
-                            .iter()
-                            .any(|hint| hint.action == Some(Action::UserScreen)
-                                && hint.keys.split(", ").any(|keys| keys == *text)),
-                        "{name}: {context:?} hints {key}"
-                    );
-                }
-            }
-            let mut state = KeyState::default();
-            for (key, _) in &keys {
+                let mut state = KeyState::default();
                 assert_eq!(
-                    feed(&keymap, &mut state, Context::UserScreen, &[key]),
-                    actions(&[Action::Cancel]),
-                    "{name}: {key}"
+                    feed(&keymap, &mut state, context, &["ctrl-o"]),
+                    actions(&[Action::UserScreen]),
+                    "{name}: {context:?}"
+                );
+                assert!(
+                    keymap
+                        .hints(context, &[])
+                        .iter()
+                        .any(|hint| hint.action == Some(Action::UserScreen)
+                            && hint.keys.split(", ").any(|keys| keys == "Ctrl+o")),
+                    "{name}: {context:?} hints"
                 );
             }
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&keymap, &mut state, Context::UserScreen, &["ctrl-o"]),
+                actions(&[Action::Cancel]),
+                "{name}"
+            );
         }
     }
 

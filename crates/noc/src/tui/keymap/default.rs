@@ -15,7 +15,7 @@ pub(super) const PRESET: Preset = &[
         Context::Global,
         &[
             (Action::KeyHints, &["alt-/"]),
-            (Action::UserScreen, &["ctrl-o", "ctrl-`"]),
+            (Action::UserScreen, &["ctrl-o"]),
             (Action::Redraw, &["ctrl-l"]),
         ],
     ),
@@ -326,6 +326,6 @@ pub(super) const PRESET: Preset = &[
     // The terminal's own screen, with the output of commands.
     (
         Context::UserScreen,
-        &[(Action::Cancel, &["ctrl-o", "esc", "ctrl-[", "ctrl-`"])],
+        &[(Action::Cancel, &["ctrl-o", "esc", "ctrl-["])],
     ),
 ];

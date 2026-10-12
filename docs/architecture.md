@@ -977,8 +977,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   asks for a key, with the exit status of a failure, unless `shell.pause` says not to wait, and
   after the key `[exit N]` takes its place for a command that failed. The event loop then takes the
   terminal back; both panels read their directories again, as in mc. Esc, Ctrl+c, or F10 closes the
-  line; Backspace on an empty line does not. Ctrl+o, a `global` key (Ctrl+\` in both keymaps, and g
-  < in the vim one, as vim shows the output of its last command), hands the terminal over without a
+  line; Backspace on an empty line does not. Ctrl+o, a `global` key of both keymaps (and g < in the
+  vim one, as vim shows the output of its last command), hands the terminal over without a
   program wherever it is pressed: its own screen shows, with the output of the commands, until a key
   that the `user_screen` context binds to Cancel (Ctrl+o, Esc), and then whatever was in front, a
   dialog, a menu, the viewer, or the line, is there again as it was. Shift+Enter starts a new line

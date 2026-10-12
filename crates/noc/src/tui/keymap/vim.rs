@@ -297,12 +297,13 @@ pub(super) const PRESET: Preset = &[
         ],
     ),
     // The window of the command history, on top of the list's; characters filter it, and Tab
-    // switches between the panel's host and all hosts.
+    // switches between the panel's host and all hosts. Shift+Delete removes a command, as in
+    // Far's histories; Ctrl+Backspace and Ctrl+Delete stay the filter's.
     (
         Context::CommandHistory,
         &[
             (Action::NextField, &["tab", "ctrl-i"]),
-            (Action::Delete, &["delete", "ctrl-backspace", "f8"]),
+            (Action::Delete, &["delete", "shift-delete", "f8"]),
         ],
     ),
     // The terminal's own screen, with the output of commands. Enter and q go back, as from the

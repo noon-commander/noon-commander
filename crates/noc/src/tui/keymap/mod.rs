@@ -2398,27 +2398,38 @@ mod tests {
     fn text_fields_go_by_words_and_ctrl_backspace_deletes_one() {
         for name in Keymap::NAMES {
             let keymap = Keymap::by_name(name).unwrap();
-            for context in [Context::Rename, Context::QuickSearch, Context::CommandLine] {
+            for context in [
+                Context::Rename,
+                Context::QuickSearch,
+                Context::CommandLine,
+                Context::CommandHistory,
+            ] {
                 let mut state = KeyState::default();
                 assert_eq!(
                     feed(
                         &keymap,
                         &mut state,
                         context,
-                        &["ctrl-left", "ctrl-right", "ctrl-backspace"]
+                        &["ctrl-left", "ctrl-right", "ctrl-backspace", "ctrl-delete"]
                     ),
-                    actions(&[Action::WordLeft, Action::WordRight, Action::DeleteWord]),
+                    actions(&[
+                        Action::WordLeft,
+                        Action::WordRight,
+                        Action::DeleteWord,
+                        Action::DeleteNextWord
+                    ]),
                     "{name}: {context:?}"
                 );
             }
-            // The history keeps Ctrl+Backspace for deleting the command under the cursor.
+            // The history removes the command under the cursor with Shift+Delete, as Far does,
+            // and leaves the keys of words to its filter.
             let mut state = KeyState::default();
             assert_eq!(
                 feed(
                     &keymap,
                     &mut state,
                     Context::CommandHistory,
-                    &["ctrl-backspace"]
+                    &["shift-delete"]
                 ),
                 actions(&[Action::Delete]),
                 "{name}"

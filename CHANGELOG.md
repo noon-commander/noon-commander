@@ -219,6 +219,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   tells Ctrl+i from Tab: it goes to the next field of a dialog, completes a path, goes through the
   completions, switches the hosts of the command history, goes to the menu on the right in the
   pull-down menu, and in the vim keymap switches panels too, as it already did in the default one.
+- More of mc's keys in the default keymap: Alt+< and Alt+> go to the start and the end of a text
+  field, in quick search and on the command line too, while the lists keep them for their first
+  and last row; Ctrl+a and Ctrl+e go to the first and the last command of the pull-down menu. The
+  help names Alt+Backspace first of the keys that delete the word before the cursor, as mc's.
 - Release builds use full link-time optimization, which makes the `noc` binary about 6% smaller.
 - The title of a panel, and the tab menu, show the home directory as `~`: `~/src` rather
   than `/Users/me/src`.

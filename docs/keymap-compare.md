@@ -354,15 +354,15 @@ as in vi. The ranger column has the keys of its console.
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
 | One character left | `left` | ✅ | Left<br>Ctrl+b | Left | Ctrl+b<br>Left<br>Alt+Left | Left<br>Ctrl+s | h<br>Left<br>Ctrl+b | Left<br>Ctrl+b |
 | One character right | `right` | ✅ | Right<br>Ctrl+f | Right | Ctrl+f<br>Right<br>Alt+Right | Right<br>Ctrl+d | l<br>Right<br>Ctrl+f | Right<br>Ctrl+f |
-| Start of the text | `text_start` | ✅ | Home<br>Ctrl+a | Home<br>Ctrl+b<br>Ctrl+a | Ctrl+a<br>Home<br>A1<br>Alt+< | Ctrl+Home | 0<br>Ctrl+a<br>Home | Home<br>Ctrl+a |
-| End of the text | `text_end` | ✅ | End<br>Ctrl+e | End<br>Ctrl+e | Ctrl+e<br>End<br>C1<br>Alt+> | Ctrl+End | $<br>Ctrl+e<br>End | End<br>Ctrl+e |
+| Start of the text | `text_start` | ✅ | Home<br>Ctrl+a<br>Alt+< | Home<br>Ctrl+b<br>Ctrl+a | Ctrl+a<br>Home<br>A1<br>Alt+< | Ctrl+Home | 0<br>Ctrl+a<br>Home | Home<br>Ctrl+a |
+| End of the text | `text_end` | ✅ | End<br>Ctrl+e<br>Alt+> | End<br>Ctrl+e | Ctrl+e<br>End<br>C1<br>Alt+> | Ctrl+End | $<br>Ctrl+e<br>End | End<br>Ctrl+e |
 | One word left: the start of the word before the cursor | `word_left` | ✅ | Ctrl+Left<br>Alt+b | Shift+Left<br>Ctrl+Left | Alt+b<br>Ctrl+Left | Ctrl+Left | b<br>B (WORD)<br>Alt+b<br>Ctrl+Left | Alt+b<br>Alt+Left |
 | One word right: the end of the word after the cursor | `word_right` | ✅ | Ctrl+Right<br>Alt+f | Shift+Right<br>Ctrl+Right | Alt+f<br>Ctrl+Right | Ctrl+Right | w<br>W (WORD)<br>e (its end)<br>E (the WORD's end)<br>Alt+f (its end)<br>Ctrl+Right (its end) | Alt+f<br>Alt+Right |
 | Delete the character before the cursor | `backspace` | ✅ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | Ctrl+h<br>Backspace | Backspace | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h |
 | Delete the character at the cursor | `delete_char` | ✅ | Delete<br>Ctrl+d | Delete | Ctrl+d<br>Delete | Delete | Delete<br>Ctrl+d | Delete<br>Ctrl+d |
 | Delete to the start | `delete_to_start` | ✅ | Ctrl+u | Ctrl+u | Ctrl+w (nothing selected) | — | Ctrl+u | Ctrl+u |
 | Delete to the end | `delete_to_end` | ✅ | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k |
-| Delete the word before the cursor, and the spaces after it, as the shell's Ctrl+w | `delete_word` | ✅ | Ctrl+w<br>Alt+Backspace<br>Ctrl+Backspace | Ctrl+w<br>Alt+Backspace<br>Ctrl+Backspace | Ctrl+Alt+h<br>Alt+Backspace | Ctrl+Backspace | Ctrl+w<br>Ctrl+Backspace | Ctrl+w |
+| Delete the word before the cursor, and the spaces after it, as the shell's Ctrl+w | `delete_word` | ✅ | Alt+Backspace<br>Ctrl+w<br>Ctrl+Backspace | Ctrl+w<br>Alt+Backspace<br>Ctrl+Backspace | Ctrl+Alt+h<br>Alt+Backspace | Ctrl+Backspace | Ctrl+w<br>Ctrl+Backspace | Ctrl+w |
 | Delete the word after the cursor, and the spaces before it, as the shell's Alt+d | `delete_next_word` | ✅ | Alt+d<br>Ctrl+Delete | Ctrl+Delete | Alt+d | Ctrl+Delete | Alt+d<br>Ctrl+Delete | Alt+d |
 | Select text | — | ⏳ | — | — | Shift+Left<br>Shift+Right<br>Ctrl+Shift+Left<br>Ctrl+Shift+Right<br>Shift+Home<br>Shift+End | — | — | — |
 | Cut the selection | — | ⏳ | — | — | — | — | d<br>D (to the end)<br>x (one character) | — |
@@ -383,16 +383,16 @@ as in vi. The ranger column has the keys of its console.
 
 ## Quick search (`quick_search`)
 
-In the active panel; characters are part of the name searched for, the keys of `input` edit it,
-and other keys end the search and go to the panel: Home and End move the text cursor here, not
-the panel's. An edit searches again from the name under the cursor, which stays if it still
-matches; as in mc, a character that nothing matches is dropped. In the default preset, Enter
-ends the search and opens the entry, through the panel, as in mc, and Ctrl+g gives the search up
-and Ctrl+r goes to the previous match, as in emacs's search; in the vim preset, Enter only ends
-it, on the match, and Esc gives it up, as in vim. The last search stays for n, N, and Shift+F7
-in the panel. yazi
-searches as the name is typed in an input box, and ranger as it is typed on its console; both go
-to the next and previous match with keys of the panel, once the search is over.
+In the active panel; characters are part of the name searched for, the keys of `input` edit it, and
+other keys end the search and go to the panel: Home and End move the text cursor here, not the
+panel's, and so do Alt+< and Alt+> in the default preset, as in mc's input lines. An edit searches
+again from the name under the cursor, which stays if it still matches; as in mc, a character that
+nothing matches is dropped. In the default preset, Enter ends the search and opens the entry,
+through the panel, as in mc, and Ctrl+g gives the search up and Ctrl+r goes to the previous match,
+as in emacs's search; in the vim preset, Enter only ends it, on the match, and Esc gives it up, as
+in vim. The last search stays for n, N, and Shift+F7 in the panel. yazi searches as the name is
+typed in an input box, and ranger as it is typed on its console; both go to the next and previous
+match with keys of the panel, once the search is over.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
@@ -622,8 +622,8 @@ move in it.
 | The command below | `down` | ✅ | Down<br>Ctrl+n | Down<br>Ctrl+n | Down<br>Ctrl+n | — | — | — |
 | The menu to the left | `left` | ✅ | Left<br>Ctrl+b<br>Shift+Tab | Left<br>Shift+Tab | Left<br>Ctrl+b | — | — | — |
 | The menu to the right | `right` | ✅ | Right<br>Ctrl+f<br>Tab<br>Ctrl+i | Right<br>Tab<br>Ctrl+i | Right<br>Ctrl+f | — | — | — |
-| The first command | `home` | ✅ | Home<br>Alt+<<br>PgUp | Ctrl+b<br>Shift+Up<br>Home<br>PgUp | Home<br>Alt+< | — | — | — |
-| The last command | `end` | ✅ | End<br>Alt+><br>PgDn | Ctrl+f<br>Shift+Down<br>End<br>PgDn | End<br>Alt+> | — | — | — |
+| The first command | `home` | ✅ | Home<br>Alt+<<br>Ctrl+a<br>PgUp | Ctrl+b<br>Shift+Up<br>Home<br>PgUp | Home<br>Alt+<<br>Ctrl+a | — | — | — |
+| The last command | `end` | ✅ | End<br>Alt+><br>Ctrl+e<br>PgDn | Ctrl+f<br>Shift+Down<br>End<br>PgDn | End<br>Alt+><br>Ctrl+e | — | — | — |
 | Open the menu, or run the command | `confirm` | ✅ | Enter<br>Ctrl+m | Ctrl+y<br>Enter<br>Ctrl+m | Enter | — | — | — |
 | Close the menu, then the menu bar | `cancel` | ✅ | Esc<br>Ctrl+[<br>F9<br>F10<br>Ctrl+g<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c<br>F9<br>F10 | Esc<br>F10<br>Ctrl+g | — | — | — |
 | Open a menu or run a command by its letter | — | ⏳ | Letter | Letter | Letter | — | — | — |

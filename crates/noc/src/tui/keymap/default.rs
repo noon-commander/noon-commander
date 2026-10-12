@@ -97,14 +97,15 @@ pub(super) const PRESET: Preset = &[
     // text fields of dialogs, the command line, and the filters of the lists fall back to it.
     // Ctrl+b, Ctrl+f, and Ctrl+d move and delete as in mc's input lines and the shell; Alt+b and
     // Alt+f go by words, and so do the Option key and the arrows of macOS's Terminal, which sends
-    // them.
+    // them. Alt+< and Alt+> go to the start and the end, as in mc's input lines; the lists keep
+    // them for their first and last row.
     (
         Context::Input,
         &[
             (Action::Left, &["left", "ctrl-b"]),
             (Action::Right, &["right", "ctrl-f"]),
-            (Action::TextStart, &["home", "ctrl-a"]),
-            (Action::TextEnd, &["end", "ctrl-e"]),
+            (Action::TextStart, &["home", "ctrl-a", "alt-<"]),
+            (Action::TextEnd, &["end", "ctrl-e", "alt->"]),
             (Action::WordLeft, &["ctrl-left", "alt-b"]),
             (Action::WordRight, &["ctrl-right", "alt-f"]),
             (Action::Backspace, &["backspace", "ctrl-h"]),
@@ -113,7 +114,7 @@ pub(super) const PRESET: Preset = &[
             (Action::DeleteToEnd, &["ctrl-k"]),
             (
                 Action::DeleteWord,
-                &["ctrl-w", "alt-backspace", "ctrl-backspace"],
+                &["alt-backspace", "ctrl-w", "ctrl-backspace"],
             ),
             (Action::DeleteNextWord, &["alt-d", "ctrl-delete"]),
         ],
@@ -260,8 +261,8 @@ pub(super) const PRESET: Preset = &[
             (Action::Down, &["down", "ctrl-n"]),
             (Action::Left, &["left", "ctrl-b", "backtab"]),
             (Action::Right, &["right", "ctrl-f", "tab", "ctrl-i"]),
-            (Action::Home, &["home", "alt-<", "pageup"]),
-            (Action::End, &["end", "alt->", "pagedown"]),
+            (Action::Home, &["home", "alt-<", "ctrl-a", "pageup"]),
+            (Action::End, &["end", "alt->", "ctrl-e", "pagedown"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
             (
                 Action::Cancel,

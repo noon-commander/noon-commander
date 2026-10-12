@@ -1444,9 +1444,16 @@ mod tests {
                 &keymap,
                 &mut state,
                 Context::PullDown,
-                &["ctrl-b", "ctrl-f", "alt-<", "alt->"]
+                &["ctrl-b", "ctrl-f", "alt-<", "alt->", "ctrl-a", "ctrl-e"]
             ),
-            actions(&[Action::Left, Action::Right, Action::Home, Action::End]),
+            actions(&[
+                Action::Left,
+                Action::Right,
+                Action::Home,
+                Action::End,
+                Action::Home,
+                Action::End
+            ]),
             "as in mc's menu"
         );
         assert_eq!(
@@ -2458,6 +2465,8 @@ mod tests {
                     &[
                         "ctrl-b",
                         "ctrl-f",
+                        "alt-<",
+                        "alt->",
                         "ctrl-d",
                         "alt-backspace",
                         "alt-d",
@@ -2467,6 +2476,8 @@ mod tests {
                 actions(&[
                     Action::Left,
                     Action::Right,
+                    Action::TextStart,
+                    Action::TextEnd,
                     Action::DeleteChar,
                     Action::DeleteWord,
                     Action::DeleteNextWord,
@@ -2474,7 +2485,19 @@ mod tests {
                 ]),
                 "{context:?}"
             );
+            // mc's key for it comes first.
+            assert_eq!(
+                mc.key(context, Action::DeleteWord).as_deref(),
+                Some("Alt+Backspace"),
+                "{context:?}"
+            );
         }
+        // The lists keep Alt+< and Alt+> for their first and last row.
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&mc, &mut state, Context::LocationMenu, &["alt-<", "alt->"]),
+            actions(&[Action::Home, Action::End])
+        );
         let mut state = KeyState::default();
         assert_eq!(
             feed(&mc, &mut state, Context::CommandLine, &["ctrl-p", "ctrl-n"]),

@@ -226,6 +226,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - In the vim keymap, i closes the viewer it opens, as in ranger, and as F3 does.
 - In the tab menu, F8 and Delete close the tab under the cursor, as they delete a workspace in its
   window; the menu stays open with the other tabs, and the last tab stays.
+- In the vim keymap, Space and f turn the page down, b up, and d and u go half a page in the
+  viewer and the help, as in less and ranger's pager; Ctrl+e and Ctrl+y scroll the help by a line,
+  as they scroll the viewer.
 - Release builds use full link-time optimization, which makes the `noc` binary about 6% smaller.
 - The title of a panel, and the tab menu, show the home directory as `~`: `~/src` rather
   than `/Users/me/src`.

@@ -162,17 +162,24 @@ pub(super) const PRESET: Preset = &[
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c", "f10"]),
         ],
     ),
-    // The help of F1, on top of the dialog's: Ctrl+u and Ctrl+d go half a page, and q closes it,
-    // as in the viewer and a pager.
+    // The help of F1, on top of the dialog's, which has j, k, Ctrl+b, Ctrl+f, g g, and G: Ctrl+y
+    // and Ctrl+e scroll it by a line, and Ctrl+u and Ctrl+d by half a page, as in the viewer;
+    // Space, f, and b turn the page, and u and d half of it, as in less and ranger's pager, and
+    // q closes it. Space presses no button here.
     (
         Context::Help,
         &[
-            (Action::HalfPageUp, &["ctrl-u"]),
-            (Action::HalfPageDown, &["ctrl-d"]),
+            (Action::Up, &["ctrl-y"]),
+            (Action::Down, &["ctrl-e"]),
+            (Action::PageUp, &["b"]),
+            (Action::PageDown, &["space", "f"]),
+            (Action::HalfPageUp, &["ctrl-u", "u"]),
+            (Action::HalfPageDown, &["ctrl-d", "d"]),
             (Action::Cancel, &["q"]),
         ],
     ),
-    // The viewer of F3.
+    // The viewer of F3. Space, f, and b turn the page, and u and d half of it, as in less and
+    // ranger's pager.
     (
         Context::Viewer,
         &[
@@ -181,10 +188,13 @@ pub(super) const PRESET: Preset = &[
                 Action::Down,
                 &["j", "ctrl-e", "down", "ctrl-n", "enter", "ctrl-m"],
             ),
-            (Action::PageUp, &["ctrl-b", "shift-up", "pageup"]),
-            (Action::PageDown, &["ctrl-f", "shift-down", "pagedown"]),
-            (Action::HalfPageUp, &["ctrl-u"]),
-            (Action::HalfPageDown, &["ctrl-d"]),
+            (Action::PageUp, &["ctrl-b", "shift-up", "b", "pageup"]),
+            (
+                Action::PageDown,
+                &["ctrl-f", "shift-down", "space", "f", "pagedown"],
+            ),
+            (Action::HalfPageUp, &["ctrl-u", "u"]),
+            (Action::HalfPageDown, &["ctrl-d", "d"]),
             (Action::Home, &["g g", "home"]),
             (Action::End, &["shift-g", "end"]),
             (Action::Left, &["h", "left"]),

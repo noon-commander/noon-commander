@@ -2612,9 +2612,35 @@ mod tests {
             ])
         );
         assert_eq!(
-            feed(&vim, &mut state, Context::Help, &["ctrl-u", "ctrl-d", "q"]),
-            actions(&[Action::HalfPageUp, Action::HalfPageDown, Action::Cancel])
+            feed(
+                &vim,
+                &mut state,
+                Context::Help,
+                &["ctrl-y", "ctrl-e", "ctrl-u", "ctrl-d", "q"]
+            ),
+            actions(&[
+                Action::Up,
+                Action::Down,
+                Action::HalfPageUp,
+                Action::HalfPageDown,
+                Action::Cancel
+            ])
         );
+        // Both take the keys of less and ranger's pager too; Space presses no button in the help.
+        let pager = actions(&[
+            Action::PageDown,
+            Action::PageDown,
+            Action::PageUp,
+            Action::HalfPageDown,
+            Action::HalfPageUp,
+        ]);
+        for context in [Context::Viewer, Context::Help] {
+            assert_eq!(
+                feed(&vim, &mut state, context, &["space", "f", "b", "d", "u"]),
+                pager,
+                "{context:?}"
+            );
+        }
         // The completions page with Ctrl+b and Ctrl+f, as the lists do.
         assert_eq!(
             feed(&vim, &mut state, Context::Completion, &["ctrl-b", "ctrl-f"]),

@@ -459,14 +459,17 @@ since ranger asks its questions on the console.
 The help of F1. Keys it does not bind go to the dialog, whose keys scroll the help and close it;
 the keys of the other programs' help are there too. The default preset adds the page keys of its
 lists and the keys of mc's help, whose Space turns the page here rather than press a button; the
-vim preset, Ctrl+u and Ctrl+d, as in vim and a pager.
+vim preset, the keys of its viewer, Ctrl+y, Ctrl+e, Ctrl+u, and Ctrl+d as in vim, and Space, f,
+b, d, and u as in less and ranger's pager.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| One page up | `page_up` | ✅ | Alt+v<br>b<br>Backspace<br>Ctrl+h | — | b<br>Backspace | — | — | — |
-| One page down | `page_down` | ✅ | Ctrl+v<br>Space<br>f | — | Space<br>f | — | — | — |
-| Half a page up | `half_page_up` | ✅ | u | Ctrl+u | u | — | — | — |
-| Half a page down | `half_page_down` | ✅ | d | Ctrl+d | d | — | — | — |
+| One line up | `up` | ✅ | — | Ctrl+y | — | — | — | — |
+| One line down | `down` | ✅ | — | Ctrl+e | — | — | — | — |
+| One page up | `page_up` | ✅ | Alt+v<br>b<br>Backspace<br>Ctrl+h | b | b<br>Backspace | — | — | — |
+| One page down | `page_down` | ✅ | Ctrl+v<br>Space<br>f | Space<br>f | Space<br>f | — | — | — |
+| Half a page up | `half_page_up` | ✅ | u | Ctrl+u<br>u | u | — | — | — |
+| Half a page down | `half_page_down` | ✅ | d | Ctrl+d<br>d | d | — | — | — |
 | The top | `home` | ✅ | Alt+<<br>g<br>Ctrl+Home<br>Ctrl+PgUp | — | g<br>Ctrl+Home<br>Ctrl+PgUp | — | — | — |
 | The end | `end` | ✅ | Alt+><br>G<br>Ctrl+End<br>Ctrl+PgDn | — | G<br>Ctrl+End<br>Ctrl+PgDn | — | — | — |
 | Close the help | `cancel` | ✅ | — | q | F10<br>Esc | Esc | Esc<br>Ctrl+[<br>Ctrl+c | — |
@@ -481,10 +484,10 @@ the viewer closes it too: F3, and i in the vim preset, as in ranger.
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
 | One line up | `up` | ✅ | Up<br>k<br>y<br>Insert<br>Ctrl+p | k<br>Ctrl+y<br>Up<br>Ctrl+p | Up<br>k<br>y<br>Insert<br>Ctrl+p | Up | — | Up<br>k<br>Ctrl+p |
 | One line down | `down` | ✅ | Down<br>j<br>e<br>Enter<br>Ctrl+m<br>Delete<br>Ctrl+n | j<br>Ctrl+e<br>Down<br>Ctrl+n<br>Enter<br>Ctrl+m | Down<br>j<br>e<br>Enter<br>Delete<br>Ctrl+n | Down | — | Down<br>j<br>Ctrl+n<br>Enter |
-| One page up | `page_up` | ✅ | PgUp<br>Alt+v<br>b<br>Backspace<br>Ctrl+h | Ctrl+b<br>Shift+Up<br>PgUp | PgUp<br>Alt+v<br>b<br>Backspace<br>Ctrl+h | PgUp | — | PgUp<br>p<br>b<br>Ctrl+b |
-| One page down | `page_down` | ✅ | PgDn<br>Space<br>f<br>Ctrl+v | Ctrl+f<br>Shift+Down<br>PgDn | PgDn<br>Space<br>f<br>Ctrl+v | PgDn | — | PgDn<br>n<br>f<br>Ctrl+f<br>Space |
-| Half a page up | `half_page_up` | ✅ | u | Ctrl+u | u | — | — | Ctrl+u<br>u |
-| Half a page down | `half_page_down` | ✅ | d | Ctrl+d | d | — | — | Ctrl+d<br>d |
+| One page up | `page_up` | ✅ | PgUp<br>Alt+v<br>b<br>Backspace<br>Ctrl+h | Ctrl+b<br>Shift+Up<br>b<br>PgUp | PgUp<br>Alt+v<br>b<br>Backspace<br>Ctrl+h | PgUp | — | PgUp<br>p<br>b<br>Ctrl+b |
+| One page down | `page_down` | ✅ | PgDn<br>Space<br>f<br>Ctrl+v | Ctrl+f<br>Shift+Down<br>Space<br>f<br>PgDn | PgDn<br>Space<br>f<br>Ctrl+v | PgDn | — | PgDn<br>n<br>f<br>Ctrl+f<br>Space |
+| Half a page up | `half_page_up` | ✅ | u | Ctrl+u<br>u | u | — | — | Ctrl+u<br>u |
+| Half a page down | `half_page_down` | ✅ | d | Ctrl+d<br>d | d | — | — | Ctrl+d<br>d |
 | The start of the file | `home` | ✅ | Home<br>g<br>Ctrl+Home<br>Ctrl+PgUp<br>Alt+< | g g<br>Home | Home<br>A1<br>g<br>Ctrl+Home<br>Ctrl+PgUp<br>Alt+< | Home<br>Ctrl+Home | — | Home<br>g |
 | The end of the file | `end` | ✅ | End<br>G<br>Ctrl+End<br>Ctrl+PgDn<br>Alt+> | G<br>End | End<br>C1<br>G<br>Ctrl+End<br>Ctrl+PgDn<br>Alt+> | End<br>Ctrl+End | — | End<br>G |
 | One column left, when lines are cut (ranger: four) | `left` | ✅ | Left<br>h | h<br>Left | Left<br>h | Left | — | Left<br>h |

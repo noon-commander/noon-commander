@@ -1036,7 +1036,7 @@ mod tests {
                 Action::TextEnd,
                 Action::Backspace,
                 Action::Backspace,
-                Action::Delete,
+                Action::DeleteChar,
                 Action::DeleteToStart,
                 Action::DeleteToEnd,
             ]);
@@ -1458,9 +1458,9 @@ mod tests {
             Some("F8")
         );
         assert_eq!(key(Context::LocationMenu, Action::Edit), None);
-        // Delete is the filter's there, Ctrl+d's; F8 and the Delete key disconnect.
+        // Ctrl+d deletes a character of the filter there; F8 and the Delete key disconnect.
         assert_eq!(
-            key(Context::LocationMenu, Action::Delete).as_deref(),
+            key(Context::LocationMenu, Action::DeleteChar).as_deref(),
             Some("Ctrl+d")
         );
     }
@@ -2363,7 +2363,7 @@ mod tests {
                 actions(&[
                     Action::Left,
                     Action::Right,
-                    Action::Delete,
+                    Action::DeleteChar,
                     Action::DeleteWord,
                     Action::DeleteNextWord,
                     Action::DeleteNextWord,
@@ -2580,13 +2580,37 @@ mod tests {
             let mut state = KeyState::default();
             assert_eq!(
                 feed(&keymap, &mut state, Context::TabMenu, &["delete"]),
-                actions(&[Action::Delete]),
+                actions(&[Action::DeleteChar]),
                 "{name}"
             );
             assert_eq!(
                 feed(&keymap, &mut state, Context::LocationMenu, &["delete"]),
                 actions(&[Action::Disconnect]),
                 "{name}"
+            );
+            for context in [Context::Workspaces, Context::CommandHistory] {
+                assert_eq!(
+                    feed(&keymap, &mut state, context, &["delete", "f8"]),
+                    actions(&[Action::Delete, Action::Delete]),
+                    "{name}: {context:?}"
+                );
+            }
+        }
+        // The default keymap's Ctrl+d takes a character of the filter, as in mc's input lines,
+        // and never the row under the cursor.
+        let mc = Keymap::mc();
+        for context in [
+            Context::Workspaces,
+            Context::CommandHistory,
+            Context::LocationMenu,
+            Context::TabMenu,
+            Context::Jump,
+        ] {
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&mc, &mut state, context, &["ctrl-d"]),
+                actions(&[Action::DeleteChar]),
+                "{context:?}"
             );
         }
     }

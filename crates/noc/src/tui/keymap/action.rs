@@ -246,6 +246,10 @@ pub(crate) enum Action {
     Rename,
     /// Asks for a name and makes a directory.
     Mkdir,
+    /// Deletes the marked entries or the one under the cursor; in a window that lists items,
+    /// the item under the cursor. Text fields delete a character with `DeleteChar`, so that a
+    /// window whose filter falls back to them tells the two apart.
+    Delete,
     /// Asks for an algorithm, and computes the checksums of the marked files or the one under
     /// the cursor, with the files in marked directories.
     Checksum,
@@ -349,9 +353,8 @@ pub(crate) enum Action {
     WordRight,
     /// Deletes the character before the text cursor.
     Backspace,
-    /// Deletes the marked entries or the one under the cursor; in a text field, the character
-    /// at the text cursor.
-    Delete,
+    /// Deletes the character at the text cursor.
+    DeleteChar,
     /// Deletes from the start of the text field to the cursor.
     DeleteToStart,
     /// Deletes from the cursor to the end of the text field.
@@ -411,6 +414,7 @@ impl Action {
             Self::Move => "move",
             Self::Rename => "rename",
             Self::Mkdir => "mkdir",
+            Self::Delete => "delete",
             Self::Checksum => "checksum",
             Self::Jobs => "jobs",
             Self::Select => "select",
@@ -460,7 +464,7 @@ impl Action {
             Self::WordLeft => "word_left",
             Self::WordRight => "word_right",
             Self::Backspace => "backspace",
-            Self::Delete => "delete",
+            Self::DeleteChar => "delete_char",
             Self::DeleteToStart => "delete_to_start",
             Self::DeleteToEnd => "delete_to_end",
             Self::DeleteWord => "delete_word",
@@ -532,6 +536,7 @@ impl Action {
         Self::Move,
         Self::Rename,
         Self::Mkdir,
+        Self::Delete,
         Self::Checksum,
         Self::Jobs,
         Self::Select,
@@ -581,7 +586,7 @@ impl Action {
         Self::WordLeft,
         Self::WordRight,
         Self::Backspace,
-        Self::Delete,
+        Self::DeleteChar,
         Self::DeleteToStart,
         Self::DeleteToEnd,
         Self::DeleteWord,

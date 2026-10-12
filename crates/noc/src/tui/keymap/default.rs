@@ -107,7 +107,7 @@ pub(super) const PRESET: Preset = &[
             (Action::WordLeft, &["ctrl-left", "alt-b"]),
             (Action::WordRight, &["ctrl-right", "alt-f"]),
             (Action::Backspace, &["backspace", "ctrl-h"]),
-            (Action::Delete, &["delete", "ctrl-d"]),
+            (Action::DeleteChar, &["delete", "ctrl-d"]),
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),
             (

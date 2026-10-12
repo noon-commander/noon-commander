@@ -78,7 +78,7 @@ impl WorkspacesWindow {
         let mut window = Self {
             rows,
             wanted: None,
-            picker: Picker::new(fuzzy).deleting_rows(),
+            picker: Picker::new(fuzzy),
         };
         window.picker.set_rows(window.texts());
         window

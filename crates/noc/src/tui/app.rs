@@ -1709,7 +1709,7 @@ impl App {
                 | Action::WordLeft
                 | Action::WordRight
                 | Action::Backspace
-                | Action::Delete
+                | Action::DeleteChar
                 | Action::DeleteToStart
                 | Action::DeleteToEnd
                 | Action::DeleteWord
@@ -8148,7 +8148,7 @@ mod tests {
         app.handle(action(Action::TextStart));
         assert_eq!(under(&app), "boot");
         assert_eq!(app.context(), Context::QuickSearch);
-        app.handle(action(Action::Delete));
+        app.handle(action(Action::DeleteChar));
         assert!(screen(&mut app).contains("Search: o"));
         app.handle(action(Action::DeleteToEnd));
         assert!(screen(&mut app).contains("Search: "));

@@ -91,8 +91,6 @@ pub(crate) struct Picker {
     fuzzy: bool,
     /// Digits choose the first ten rows while the filter is empty; else they are text.
     hotkeys: bool,
-    /// Delete is the window's, for the row under the cursor, rather than the filter's.
-    deletes_rows: bool,
     /// How well each row, shown or not, matches the filter, higher for better; `None` hides
     /// it.
     matches: Vec<Option<u32>>,
@@ -115,7 +113,6 @@ impl Picker {
             filter: Field::plain(""),
             fuzzy,
             hotkeys: true,
-            deletes_rows: false,
             matches: Vec::new(),
             cursor: 0,
             offset: 0,
@@ -127,12 +124,6 @@ impl Picker {
     /// The same picker, whose digits are text, as the other characters.
     pub(crate) fn without_hotkeys(mut self) -> Self {
         self.hotkeys = false;
-        self
-    }
-
-    /// The same picker, which leaves Delete to the window, for the row under the cursor.
-    pub(crate) fn deleting_rows(mut self) -> Self {
-        self.deletes_rows = true;
         self
     }
 
@@ -269,7 +260,6 @@ impl Picker {
                 Action::PageDown => self.cursor = (self.cursor + page).min(last),
                 Action::Home => self.cursor = 0,
                 Action::End => self.cursor = last,
-                Action::Delete if self.deletes_rows => return Pick::Other(action),
                 Action::Left
                 | Action::Right
                 | Action::TextStart
@@ -277,7 +267,7 @@ impl Picker {
                 | Action::WordLeft
                 | Action::WordRight
                 | Action::Backspace
-                | Action::Delete
+                | Action::DeleteChar
                 | Action::DeleteToStart
                 | Action::DeleteToEnd
                 | Action::DeleteWord
@@ -510,14 +500,14 @@ mod tests {
     }
 
     #[test]
-    fn the_filter_is_a_text_field_and_delete_can_be_the_windows() {
+    fn the_filter_is_a_text_field_and_delete_is_the_windows() {
         let mut picker = picker(&["src", "docs", "target"], false);
         typed(&mut picker, "sc");
         assert!(picker.shown(0..3).is_empty(), "no name contains sc");
         press(&mut picker, Action::Left);
         typed(&mut picker, "r");
         assert_eq!(picker.shown(0..3), [0], "typed in the middle: src");
-        press(&mut picker, Action::Delete);
+        press(&mut picker, Action::DeleteChar);
         assert_eq!(picker.shown(0..3), [0], "sr");
         press(&mut picker, Action::Left);
         press(&mut picker, Action::Backspace);
@@ -539,19 +529,12 @@ mod tests {
         assert_eq!(picker.shown(0..3), [0, 1], "s");
         press(&mut picker, Action::End);
         assert_eq!(picker.cursor(), 1, "the last row shown");
-        let mut rows = picker_rows_deleting(&["a", "b"]);
-        typed(&mut rows, "a");
+        // Delete is the window's, for the row under the cursor: the workspaces, the history.
         assert_eq!(
-            press(&mut rows, Action::Delete),
+            press(&mut picker, Action::Delete),
             Pick::Other(Action::Delete)
         );
-        assert_eq!(rows.shown(0..2), [0], "the filter stays");
-    }
-
-    fn picker_rows_deleting(rows: &[&str]) -> Picker {
-        let mut picker = Picker::new(false).deleting_rows();
-        picker.set_rows(rows.iter().map(|row| vec![(*row).to_owned()]).collect());
-        picker
+        assert_eq!(picker.shown(0..3), [0, 1], "the filter stays");
     }
 
     #[test]

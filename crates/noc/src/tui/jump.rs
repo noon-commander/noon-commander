@@ -193,7 +193,7 @@ impl JumpMenu {
                 | Action::WordLeft
                 | Action::WordRight
                 | Action::Backspace
-                | Action::Delete
+                | Action::DeleteChar
                 | Action::DeleteToStart
                 | Action::DeleteToEnd
                 | Action::DeleteWord
@@ -407,7 +407,7 @@ mod tests {
         assert_eq!(press(&mut menu, Action::DeleteToEnd), JumpEvent::Query);
         assert_eq!(menu.keywords(), ["s"]);
         assert_eq!(
-            press(&mut menu, Action::Delete),
+            press(&mut menu, Action::DeleteChar),
             JumpEvent::Pending,
             "at the end"
         );

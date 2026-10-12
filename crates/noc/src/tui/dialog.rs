@@ -218,7 +218,7 @@ impl Field {
     pub(crate) fn edit(&mut self, action: Action) -> bool {
         if matches!(
             action,
-            Action::Backspace | Action::Delete | Action::DeleteWord | Action::DeleteNextWord
+            Action::Backspace | Action::DeleteChar | Action::DeleteWord | Action::DeleteNextWord
         ) && self.remove_selected()
         {
             return true;
@@ -235,7 +235,9 @@ impl Field {
                 self.remove(self.cursor - 1, self.cursor);
                 self.cursor -= 1;
             }
-            Action::Delete if self.cursor < chars => self.remove(self.cursor, self.cursor + 1),
+            Action::DeleteChar if self.cursor < chars => {
+                self.remove(self.cursor, self.cursor + 1);
+            }
             Action::DeleteToStart => {
                 self.remove(0, self.cursor);
                 self.cursor = 0;
@@ -250,7 +252,7 @@ impl Field {
                 let end = word_end(&self.text, self.cursor, chars);
                 self.remove(self.cursor, end);
             }
-            Action::Backspace | Action::Delete => {}
+            Action::Backspace | Action::DeleteChar => {}
             _ => return false,
         }
         self.fresh = false;
@@ -1146,7 +1148,7 @@ mod tests {
             dialog.handle(action(edit));
         }
         typed(&mut dialog, "X");
-        dialog.handle(action(Action::Delete));
+        dialog.handle(action(Action::DeleteChar));
         dialog.handle(action(Action::TextEnd));
         dialog.handle(action(Action::Backspace));
         assert_eq!(confirm(&mut dialog).as_deref(), Some("Xbce"));

@@ -393,8 +393,10 @@ row and names the tab that shows by its whole location:
   Right in F9 do the same for the panel on that side.
 - The tab menu, the location menu, the Workspaces window, and the command history share
   `tui/picker.rs`: the filter, a text field with a cursor (`dialog::Field`), which typing fills and
-  the keys of `input` edit, and which matches as fzf does with `ui.fuzzy_search`; Delete is the
-  window's in the workspaces and the history, which delete rows with it; the digits of the first ten
+  the keys of `input` edit, and which matches as fzf does with `ui.fuzzy_search`; the action
+  `Delete` goes to the window, which deletes the row under the cursor in the workspaces and the
+  history, and `input`'s `DeleteChar` (Delete, and Ctrl+d in the default keymap) to the filter, so
+  Ctrl+d never deletes a row; the digits of the first ten
   rows while it is empty (but in the history, whose commands have digits), the cursor, scrolling,
   the mouse, and the box, which the menus draw over their panel and the windows over both. Each
   holds its own rows, says what the filter finds them by, and draws them. A row may show only while

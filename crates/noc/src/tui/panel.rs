@@ -2062,7 +2062,7 @@ mod tests {
         assert_eq!(under_cursor(&panel), "boot", "a move of the text cursor");
         panel.search_type('x', false);
         assert_eq!(panel.search_text(), Some("bo"));
-        panel.search_edit(Action::Delete, false);
+        panel.search_edit(Action::DeleteChar, false);
         assert_eq!(panel.search_text(), Some("b"));
         assert_eq!(under_cursor(&panel), "boot", "it still matches");
         panel.search_type('a', false);

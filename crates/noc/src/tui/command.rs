@@ -235,7 +235,9 @@ impl CommandLine {
             Action::OlderCommand => return CommandEvent::Older,
             Action::NewerCommand => return CommandEvent::Newer,
             Action::Backspace if self.cursor > 0 => self.remove(self.cursor - 1, self.cursor),
-            Action::Delete if self.cursor < length => self.remove(self.cursor, self.cursor + 1),
+            Action::DeleteChar if self.cursor < length => {
+                self.remove(self.cursor, self.cursor + 1);
+            }
             Action::DeleteToStart => self.remove(start, self.cursor),
             Action::DeleteToEnd => {
                 let cursor = self.cursor;
@@ -590,7 +592,7 @@ mod tests {
         assert_eq!(line.text, "first \n");
         press(&mut line, Action::Backspace);
         press(&mut line, Action::Left);
-        press(&mut line, Action::Delete);
+        press(&mut line, Action::DeleteChar);
         assert_eq!(line.text, "first");
         press(&mut line, Action::Up);
         assert_eq!(line.cursor, 5, "the first line stays");

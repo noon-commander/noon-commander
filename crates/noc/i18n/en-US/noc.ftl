@@ -476,6 +476,7 @@ help-field-delete = Delete the character at the cursor
 help-field-delete-to-start = Delete to the start
 help-field-delete-to-end = Delete to the end
 help-field-delete-word = Delete the word before the cursor
+help-field-delete-next-word = Delete the word after the cursor
 help-field-left = One character left
 help-field-right = One character right
 help-field-word-left = To the start of the word before the cursor

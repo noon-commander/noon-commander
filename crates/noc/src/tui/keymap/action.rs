@@ -358,6 +358,8 @@ pub(crate) enum Action {
     DeleteToEnd,
     /// Deletes the word before the text cursor, and the spaces after it, as the shell's Ctrl+w.
     DeleteWord,
+    /// Deletes the word after the text cursor, and the spaces before it, as the shell's Alt+d.
+    DeleteNextWord,
     /// Completes the path in a text field; in the list of completions, the next one.
     Complete,
     /// Accepts the dialog, or activates the focused button.
@@ -462,6 +464,7 @@ impl Action {
             Self::DeleteToStart => "delete_to_start",
             Self::DeleteToEnd => "delete_to_end",
             Self::DeleteWord => "delete_word",
+            Self::DeleteNextWord => "delete_next_word",
             Self::Complete => "complete",
             Self::Confirm => "confirm",
             Self::Toggle => "toggle",
@@ -582,6 +585,7 @@ impl Action {
         Self::DeleteToStart,
         Self::DeleteToEnd,
         Self::DeleteWord,
+        Self::DeleteNextWord,
         Self::Complete,
         Self::Confirm,
         Self::Toggle,

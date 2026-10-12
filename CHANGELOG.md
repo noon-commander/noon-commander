@@ -190,6 +190,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   key, cancels renaming, the pull-down menu, the list of completions, and the command line too.
   Ctrl+p and Ctrl+n move in the list of completions, and Ctrl+p, Ctrl+n, Alt+v, Ctrl+v, Alt+<,
   and Alt+> in the help, as in the panels.
+- More keys of mc's input lines and the shell in the default keymap: Ctrl+b, Ctrl+f, and Ctrl+d
+  move and delete in the text fields, Alt+d deletes the word after the cursor, Ctrl+p and Ctrl+n
+  go through the history on the command line, and the list of completions pages and goes to its
+  ends with Alt+v, Ctrl+v, Alt+<, and Alt+>. Ctrl+p and Ctrl+n move in the dialogs' lists, such as
+  the jobs and the checksums. In both keymaps, Alt+Backspace deletes the word before the cursor,
+  as macOS's Option+Backspace does, and Ctrl+Delete the word after it.
+- In the vim keymap, Ctrl+e and Ctrl+y scroll the viewer by a line, and Ctrl+d and Ctrl+u by half
+  a page, in the viewer and the help, as in vim and less; Ctrl+b and Ctrl+f page the list of
+  completions, as they page the other lists.
 - In the vim keymap, Space comes first of the keys that mark, and Ctrl+w p and Ctrl+w r switch and
   swap the panels too, as vim's Ctrl+w p and Ctrl+w r do with windows.
 - Release builds use full link-time optimization, which makes the `noc` binary about 6% smaller.

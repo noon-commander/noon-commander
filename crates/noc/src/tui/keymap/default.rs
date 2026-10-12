@@ -97,22 +97,27 @@ pub(super) const PRESET: Preset = &[
     ),
     // What the text fields share: quick search, the field of an entry renamed in its row, the
     // text fields of dialogs, the command line, and the filters of the lists fall back to it.
-    // Alt+b and Alt+f go by words, as in the shell, and so do the Option key and the arrows of
-    // macOS's Terminal, which sends them.
+    // Ctrl+b, Ctrl+f, and Ctrl+d move and delete as in mc's input lines and the shell; Alt+b and
+    // Alt+f go by words, and so do the Option key and the arrows of macOS's Terminal, which sends
+    // them.
     (
         Context::Input,
         &[
-            (Action::Left, &["left"]),
-            (Action::Right, &["right"]),
+            (Action::Left, &["left", "ctrl-b"]),
+            (Action::Right, &["right", "ctrl-f"]),
             (Action::TextStart, &["home", "ctrl-a"]),
             (Action::TextEnd, &["end", "ctrl-e"]),
             (Action::WordLeft, &["ctrl-left", "alt-b"]),
             (Action::WordRight, &["ctrl-right", "alt-f"]),
             (Action::Backspace, &["backspace", "ctrl-h"]),
-            (Action::Delete, &["delete"]),
+            (Action::Delete, &["delete", "ctrl-d"]),
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),
-            (Action::DeleteWord, &["ctrl-w", "ctrl-backspace"]),
+            (
+                Action::DeleteWord,
+                &["ctrl-w", "alt-backspace", "ctrl-backspace"],
+            ),
+            (Action::DeleteNextWord, &["alt-d", "ctrl-delete"]),
         ],
     ),
     // Quick search in the active panel, on top of the text field's; other keys go to the panel.
@@ -135,12 +140,13 @@ pub(super) const PRESET: Preset = &[
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-g", "ctrl-c"]),
         ],
     ),
-    // Dialogs whose focus is on a button or a list.
+    // Dialogs whose focus is on a button or a list. Ctrl+p and Ctrl+n move as in the lists; the
+    // page keys of the lists stay out, for the text fields fall back to the dialog.
     (
         Context::Dialog,
         &[
-            (Action::Up, &["up"]),
-            (Action::Down, &["down"]),
+            (Action::Up, &["up", "ctrl-p"]),
+            (Action::Down, &["down", "ctrl-n"]),
             (Action::Left, &["left"]),
             (Action::Right, &["right"]),
             (Action::PageUp, &["pageup"]),
@@ -157,13 +163,11 @@ pub(super) const PRESET: Preset = &[
             ),
         ],
     ),
-    // The help of F1, on top of the dialog's, which has the arrows and the page keys; the keys of
-    // mc's help and of the viewer scroll it too.
+    // The help of F1, on top of the dialog's, which has the arrows, Ctrl+p, and Ctrl+n; the page
+    // keys of the lists and the viewer scroll it too.
     (
         Context::Help,
         &[
-            (Action::Up, &["ctrl-p"]),
-            (Action::Down, &["ctrl-n"]),
             (Action::PageUp, &["alt-v"]),
             (Action::PageDown, &["ctrl-v"]),
             (Action::Home, &["alt-<"]),
@@ -272,10 +276,10 @@ pub(super) const PRESET: Preset = &[
         &[
             (Action::Up, &["up", "ctrl-p"]),
             (Action::Down, &["down", "ctrl-n"]),
-            (Action::PageUp, &["pageup"]),
-            (Action::PageDown, &["pagedown"]),
-            (Action::Home, &["home"]),
-            (Action::End, &["end"]),
+            (Action::PageUp, &["pageup", "alt-v"]),
+            (Action::PageDown, &["pagedown", "ctrl-v"]),
+            (Action::Home, &["home", "alt-<"]),
+            (Action::End, &["end", "alt->"]),
             (Action::Complete, &["tab"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-g", "ctrl-c"]),
@@ -283,7 +287,8 @@ pub(super) const PRESET: Preset = &[
     ),
     // The command line of `!` and `:`, on top of the text field's. Ctrl+j arrives as LF where
     // Enter arrives as CR, so it starts a new line in every terminal; Shift+Enter does where the
-    // terminal speaks the kitty keyboard protocol. Ctrl+x Ctrl+e edits the command, as in bash.
+    // terminal speaks the kitty keyboard protocol. Ctrl+x Ctrl+e edits the command, and Ctrl+p
+    // and Ctrl+n go through the history, as in bash.
     (
         Context::CommandLine,
         &[
@@ -291,8 +296,8 @@ pub(super) const PRESET: Preset = &[
             (Action::Down, &["down"]),
             (Action::NewLine, &["ctrl-j", "shift-enter"]),
             (Action::EditCommand, &["ctrl-x ctrl-e"]),
-            (Action::OlderCommand, &["alt-p"]),
-            (Action::NewerCommand, &["alt-n"]),
+            (Action::OlderCommand, &["alt-p", "ctrl-p"]),
+            (Action::NewerCommand, &["alt-n", "ctrl-n"]),
             // mc's Alt+h, and bash's Ctrl+r.
             (Action::CommandHistory, &["alt-h", "ctrl-r"]),
             (Action::Confirm, &["enter", "ctrl-m"]),

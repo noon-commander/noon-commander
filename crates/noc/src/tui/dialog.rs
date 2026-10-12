@@ -218,7 +218,7 @@ impl Field {
     pub(crate) fn edit(&mut self, action: Action) -> bool {
         if matches!(
             action,
-            Action::Backspace | Action::Delete | Action::DeleteWord
+            Action::Backspace | Action::Delete | Action::DeleteWord | Action::DeleteNextWord
         ) && self.remove_selected()
         {
             return true;
@@ -245,6 +245,10 @@ impl Field {
                 let start = word_start(&self.text, 0, self.cursor);
                 self.remove(start, self.cursor);
                 self.cursor = start;
+            }
+            Action::DeleteNextWord => {
+                let end = word_end(&self.text, self.cursor, chars);
+                self.remove(self.cursor, end);
             }
             Action::Backspace | Action::Delete => {}
             _ => return false,
@@ -1350,6 +1354,19 @@ mod tests {
         let mut selected = Field::selecting("report.pdf", 6);
         selected.edit(Action::DeleteWord);
         assert_eq!(selected.text(), ".pdf", "the selection goes first");
+        let mut next = Field::plain("cp  a.txt backup");
+        next.edit(Action::TextStart);
+        next.edit(Action::DeleteNextWord);
+        assert_eq!(next.text(), "  a.txt backup");
+        next.edit(Action::DeleteNextWord);
+        assert_eq!(
+            next.text(),
+            " backup",
+            "the spaces before the word go with it"
+        );
+        next.edit(Action::TextEnd);
+        next.edit(Action::DeleteNextWord);
+        assert_eq!(next.text(), " backup", "nothing after the cursor");
     }
 
     #[test]

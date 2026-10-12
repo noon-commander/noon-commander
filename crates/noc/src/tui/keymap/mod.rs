@@ -1458,7 +1458,11 @@ mod tests {
             Some("F8")
         );
         assert_eq!(key(Context::LocationMenu, Action::Edit), None);
-        assert_eq!(key(Context::LocationMenu, Action::Delete), None);
+        // Delete is the filter's there, Ctrl+d's; F8 and the Delete key disconnect.
+        assert_eq!(
+            key(Context::LocationMenu, Action::Delete).as_deref(),
+            Some("Ctrl+d")
+        );
     }
 
     #[test]
@@ -2330,6 +2334,96 @@ mod tests {
             ),
             actions(&[Action::WordLeft, Action::WordRight]),
             "as on vim's command line"
+        );
+    }
+
+    #[test]
+    fn the_default_text_fields_take_the_keys_of_mcs_input_lines() {
+        let mc = Keymap::mc();
+        for context in [
+            Context::DialogInput,
+            Context::QuickSearch,
+            Context::CommandLine,
+        ] {
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(
+                    &mc,
+                    &mut state,
+                    context,
+                    &[
+                        "ctrl-b",
+                        "ctrl-f",
+                        "ctrl-d",
+                        "alt-backspace",
+                        "alt-d",
+                        "ctrl-delete"
+                    ]
+                ),
+                actions(&[
+                    Action::Left,
+                    Action::Right,
+                    Action::Delete,
+                    Action::DeleteWord,
+                    Action::DeleteNextWord,
+                    Action::DeleteNextWord,
+                ]),
+                "{context:?}"
+            );
+        }
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(&mc, &mut state, Context::CommandLine, &["ctrl-p", "ctrl-n"]),
+            actions(&[Action::OlderCommand, Action::NewerCommand]),
+            "as in bash"
+        );
+        assert_eq!(
+            feed(
+                &mc,
+                &mut state,
+                Context::Completion,
+                &["alt-v", "ctrl-v", "alt-<", "alt->"]
+            ),
+            actions(&[Action::PageUp, Action::PageDown, Action::Home, Action::End])
+        );
+        // Dialogs take Ctrl+p and Ctrl+n, but not Ctrl+v: their text fields fall back to them.
+        assert_eq!(
+            feed(
+                &mc,
+                &mut state,
+                Context::Dialog,
+                &["ctrl-p", "ctrl-n", "ctrl-v"]
+            ),
+            actions(&[Action::Up, Action::Down])
+        );
+    }
+
+    #[test]
+    fn vims_viewer_and_help_scroll_by_lines_and_half_pages() {
+        let vim = Keymap::by_name("vim").unwrap();
+        let mut state = KeyState::default();
+        assert_eq!(
+            feed(
+                &vim,
+                &mut state,
+                Context::Viewer,
+                &["ctrl-y", "ctrl-e", "ctrl-u", "ctrl-d"]
+            ),
+            actions(&[
+                Action::Up,
+                Action::Down,
+                Action::HalfPageUp,
+                Action::HalfPageDown
+            ])
+        );
+        assert_eq!(
+            feed(&vim, &mut state, Context::Help, &["ctrl-u", "ctrl-d", "q"]),
+            actions(&[Action::HalfPageUp, Action::HalfPageDown, Action::Cancel])
+        );
+        // The completions page with Ctrl+b and Ctrl+f, as the lists do.
+        assert_eq!(
+            feed(&vim, &mut state, Context::Completion, &["ctrl-b", "ctrl-f"]),
+            actions(&[Action::PageUp, Action::PageDown])
         );
     }
 

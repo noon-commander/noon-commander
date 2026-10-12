@@ -107,6 +107,8 @@ impl Help {
             Action::Down => self.offset + 1,
             Action::PageUp => self.offset.saturating_sub(self.page),
             Action::PageDown => self.offset + self.page,
+            Action::HalfPageUp => self.offset.saturating_sub(self.page.div_ceil(2)),
+            Action::HalfPageDown => self.offset + self.page.div_ceil(2),
             Action::Home => 0,
             Action::End => last,
             Action::Cancel | Action::Confirm => return true,
@@ -386,6 +388,7 @@ fn describe_field(context: Context, action: Action) -> Option<String> {
         (_, Action::WordRight) => fl!("help-field-word-right"),
         (_, Action::Delete) => fl!("help-field-delete"),
         (_, Action::DeleteWord) => fl!("help-field-delete-word"),
+        (_, Action::DeleteNextWord) => fl!("help-field-delete-next-word"),
         (Context::CommandLine, _) => return None,
         (_, Action::TextStart) => fl!("help-field-home"),
         (_, Action::TextEnd) => fl!("help-field-end"),
@@ -424,6 +427,7 @@ fn describe_filter(context: Context, action: Action) -> Option<String> {
         Action::DeleteToStart => fl!("help-field-delete-to-start"),
         Action::DeleteToEnd => fl!("help-field-delete-to-end"),
         Action::DeleteWord => fl!("help-field-delete-word"),
+        Action::DeleteNextWord => fl!("help-field-delete-next-word"),
         _ => return None,
     };
     Some(text)

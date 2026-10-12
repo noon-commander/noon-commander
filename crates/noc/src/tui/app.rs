@@ -1712,7 +1712,8 @@ impl App {
                 | Action::Delete
                 | Action::DeleteToStart
                 | Action::DeleteToEnd
-                | Action::DeleteWord => {
+                | Action::DeleteWord
+                | Action::DeleteNextWord => {
                     self.panel_mut(side).search_edit(action, fuzzy_search);
                     None
                 }
@@ -5049,6 +5050,8 @@ fn viewer_command(action: Action) -> Option<ViewerCommand> {
         Action::Down => ViewerCommand::Down,
         Action::PageUp => ViewerCommand::PageUp,
         Action::PageDown => ViewerCommand::PageDown,
+        Action::HalfPageUp => ViewerCommand::HalfPageUp,
+        Action::HalfPageDown => ViewerCommand::HalfPageDown,
         Action::Home => ViewerCommand::Home,
         Action::End => ViewerCommand::End,
         Action::Left => ViewerCommand::Left,

@@ -114,7 +114,11 @@ pub(super) const PRESET: Preset = &[
             (Action::Delete, &["delete"]),
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),
-            (Action::DeleteWord, &["ctrl-w", "ctrl-backspace"]),
+            (
+                Action::DeleteWord,
+                &["ctrl-w", "alt-backspace", "ctrl-backspace"],
+            ),
+            (Action::DeleteNextWord, &["ctrl-delete"]),
         ],
     ),
     // Quick search in the active panel, on top of the text field's; other keys go to the panel.
@@ -157,16 +161,29 @@ pub(super) const PRESET: Preset = &[
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c", "f10"]),
         ],
     ),
-    // The help of F1, on top of the dialog's: q closes it, as it closes the viewer and a pager.
-    (Context::Help, &[(Action::Cancel, &["q"])]),
+    // The help of F1, on top of the dialog's: Ctrl+u and Ctrl+d go half a page, and q closes it,
+    // as in the viewer and a pager.
+    (
+        Context::Help,
+        &[
+            (Action::HalfPageUp, &["ctrl-u"]),
+            (Action::HalfPageDown, &["ctrl-d"]),
+            (Action::Cancel, &["q"]),
+        ],
+    ),
     // The viewer of F3.
     (
         Context::Viewer,
         &[
-            (Action::Up, &["k", "up", "ctrl-p"]),
-            (Action::Down, &["j", "down", "ctrl-n", "enter", "ctrl-m"]),
+            (Action::Up, &["k", "ctrl-y", "up", "ctrl-p"]),
+            (
+                Action::Down,
+                &["j", "ctrl-e", "down", "ctrl-n", "enter", "ctrl-m"],
+            ),
             (Action::PageUp, &["ctrl-b", "shift-up", "pageup"]),
             (Action::PageDown, &["ctrl-f", "shift-down", "pagedown"]),
+            (Action::HalfPageUp, &["ctrl-u"]),
+            (Action::HalfPageDown, &["ctrl-d"]),
             (Action::Home, &["g g", "home"]),
             (Action::End, &["shift-g", "end"]),
             (Action::Left, &["h", "left"]),
@@ -238,14 +255,14 @@ pub(super) const PRESET: Preset = &[
     // still leave the field.
     (Context::PathInput, &[(Action::Complete, &["tab"])]),
     // The list of completions under a path field; other keys close it and go to the field.
-    // Ctrl+p and Ctrl+n move, as in vim's pop-up menu.
+    // Ctrl+p and Ctrl+n move, as in vim's pop-up menu, and Ctrl+b and Ctrl+f page, as in the lists.
     (
         Context::Completion,
         &[
             (Action::Up, &["up", "ctrl-p"]),
             (Action::Down, &["down", "ctrl-n"]),
-            (Action::PageUp, &["pageup"]),
-            (Action::PageDown, &["pagedown"]),
+            (Action::PageUp, &["ctrl-b", "pageup"]),
+            (Action::PageDown, &["ctrl-f", "pagedown"]),
             (Action::Home, &["home"]),
             (Action::End, &["end"]),
             (Action::Complete, &["tab"]),

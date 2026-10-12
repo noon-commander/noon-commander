@@ -245,6 +245,10 @@ impl CommandLine {
                 let cursor = self.cursor;
                 self.remove(word_start(&self.text, start, cursor), cursor);
             }
+            Action::DeleteNextWord => {
+                let cursor = self.cursor;
+                self.remove(cursor, word_end(&self.text, cursor, end));
+            }
             Action::NewLine => self.insert('\n'),
             Action::EditCommand => return CommandEvent::Edit,
             Action::Confirm => return self.confirm(end),

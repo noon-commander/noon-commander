@@ -280,7 +280,8 @@ impl Picker {
                 | Action::Delete
                 | Action::DeleteToStart
                 | Action::DeleteToEnd
-                | Action::DeleteWord => {
+                | Action::DeleteWord
+                | Action::DeleteNextWord => {
                     let before = self.filter.text().to_owned();
                     self.filter.edit(action);
                     if self.filter.text() != before {

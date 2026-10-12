@@ -351,8 +351,8 @@ as in vi. The ranger column has the keys of its console.
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
 | One character left | `left` | ⏳ | Left | Left | Ctrl+b<br>Left<br>Alt+Left | Left<br>Ctrl+s | h<br>Left<br>Ctrl+b | Left<br>Ctrl+b |
 | One character right | `right` | ⏳ | Right | Right | Ctrl+f<br>Right<br>Alt+Right | Right<br>Ctrl+d | l<br>Right<br>Ctrl+f | Right<br>Ctrl+f |
-| Start of the text | `home` | ⏳ | Home<br>Ctrl+a | Home<br>Ctrl+b | Ctrl+a<br>Home<br>A1<br>Alt+< | Ctrl+Home | 0<br>Ctrl+a<br>Home | Home<br>Ctrl+a |
-| End of the text | `end` | ⏳ | End<br>Ctrl+e | End<br>Ctrl+e | Ctrl+e<br>End<br>C1<br>Alt+> | Ctrl+End | $<br>Ctrl+e<br>End | End<br>Ctrl+e |
+| Start of the text | `text_start` | ⏳ | Home<br>Ctrl+a | Home<br>Ctrl+b | Ctrl+a<br>Home<br>A1<br>Alt+< | Ctrl+Home | 0<br>Ctrl+a<br>Home | Home<br>Ctrl+a |
+| End of the text | `text_end` | ⏳ | End<br>Ctrl+e | End<br>Ctrl+e | Ctrl+e<br>End<br>C1<br>Alt+> | Ctrl+End | $<br>Ctrl+e<br>End | End<br>Ctrl+e |
 | Delete the character before the cursor | `backspace` | ⏳ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | Ctrl+h<br>Backspace | Backspace | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h |
 | Delete the character at the cursor | `delete` | ⏳ | Delete | Delete | Ctrl+d<br>Delete | Delete | Delete<br>Ctrl+d | Delete<br>Ctrl+d |
 | Delete to the start | `delete_to_start` | ⏳ | Ctrl+u | Ctrl+u | Ctrl+w (nothing selected) | — | Ctrl+u | Ctrl+u |
@@ -525,9 +525,10 @@ the keys of its pager, which shows files, the output of commands, and the log.
 
 The keys that the windows listing items to choose from share: the location menu, the tab menu, the
 zoxide window, the workspaces, and the command history fall back to it, then to `input`, whose keys
-edit their filter or keywords, and their sections list only the keys they add. Home and End, and
-Ctrl+a and Ctrl+e of `input`, go to the first and the last item here; Delete takes a character of
-the filter where the window does not take it. Keys never go to it alone; the help lists its keys
+edit their filter or keywords, and their sections list only the keys they add. Home and End go to
+the first and the last item here, and Ctrl+a and Ctrl+e of `input` to the start and the end of the
+filter (vim's Ctrl+b stays the page up); Delete takes a character of the filter where the window
+does not take it. Keys never go to it alone; the help lists its keys
 with each of those windows, with what Enter takes there. The mc column has the keys of mc's lists,
 such as its histories and its hotlist; the far column, those of Far's menus; the yazi column, those
 of its pick window, which asks for the program to open files with.

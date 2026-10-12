@@ -227,8 +227,8 @@ impl Field {
         match action {
             Action::Left => self.cursor = self.cursor.saturating_sub(1),
             Action::Right => self.cursor = (self.cursor + 1).min(chars),
-            Action::Home => self.cursor = 0,
-            Action::End => self.cursor = chars,
+            Action::TextStart => self.cursor = 0,
+            Action::TextEnd => self.cursor = chars,
             Action::Backspace if self.cursor > 0 => {
                 self.remove(self.cursor - 1, self.cursor);
                 self.cursor -= 1;
@@ -1117,12 +1117,17 @@ mod tests {
     fn the_secret_field_edits_around_its_cursor() {
         let mut dialog = secret();
         typed(&mut dialog, "abcdef");
-        for edit in [Action::Left, Action::Left, Action::Backspace, Action::Home] {
+        for edit in [
+            Action::Left,
+            Action::Left,
+            Action::Backspace,
+            Action::TextStart,
+        ] {
             dialog.handle(action(edit));
         }
         typed(&mut dialog, "X");
         dialog.handle(action(Action::Delete));
-        dialog.handle(action(Action::End));
+        dialog.handle(action(Action::TextEnd));
         dialog.handle(action(Action::Backspace));
         assert_eq!(confirm(&mut dialog).as_deref(), Some("Xbce"));
 
@@ -1267,7 +1272,7 @@ mod tests {
         assert_eq!(dialog.text(), "*.txt x", "only the first key replaces it");
 
         let mut dialog = form();
-        dialog.handle(action(Action::Home));
+        dialog.handle(action(Action::TextStart));
         typed(&mut dialog, "a");
         assert_eq!(dialog.text(), "a*", "an edit keeps it");
     }
@@ -1318,12 +1323,12 @@ mod tests {
     #[test]
     fn ctrl_w_deletes_the_word_before_the_cursor_as_the_shell_does() {
         let mut field = Field::plain("cp a.txt  backup");
-        field.edit(Action::End);
+        field.edit(Action::TextEnd);
         assert!(field.edit(Action::DeleteWord));
         assert_eq!(field.text(), "cp a.txt  ");
         field.edit(Action::DeleteWord);
         assert_eq!(field.text(), "cp ", "the spaces after the word go with it");
-        field.edit(Action::Home);
+        field.edit(Action::TextStart);
         field.edit(Action::DeleteWord);
         assert_eq!(field.text(), "cp ", "nothing before the cursor");
         let mut selected = Field::selecting("report.pdf", 6);
@@ -1350,7 +1355,7 @@ mod tests {
         assert_eq!((field.text(), field.cursor), (".pdf", 0));
 
         let mut field = Field::selecting("report.pdf", 6);
-        assert!(field.edit(Action::End));
+        assert!(field.edit(Action::TextEnd));
         field.insert('x');
         assert_eq!(field.text(), "report.pdfx");
 

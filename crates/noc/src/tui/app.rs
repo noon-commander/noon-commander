@@ -1704,8 +1704,8 @@ impl App {
             Resolved::Action(action) if searching => match action {
                 Action::Left
                 | Action::Right
-                | Action::Home
-                | Action::End
+                | Action::TextStart
+                | Action::TextEnd
                 | Action::Backspace
                 | Action::Delete
                 | Action::DeleteToStart
@@ -6020,7 +6020,7 @@ mod tests {
         let (_, location, _) = create_dir(app.handle(action(Action::Confirm)));
         assert_eq!(location, local("/srv/x"));
         app.handle(action(Action::Mkdir));
-        app.handle(action(Action::End));
+        app.handle(action(Action::TextEnd));
         type_text(&mut app, "2");
         let (_, location, _) = create_dir(app.handle(action(Action::Confirm)));
         assert_eq!(location, local("/srv/new2"));
@@ -8140,7 +8140,7 @@ mod tests {
         }
         assert_eq!(under(&app), "boot");
         // Home goes to the start of the text, not to the first row, and the search goes on.
-        app.handle(action(Action::Home));
+        app.handle(action(Action::TextStart));
         assert_eq!(under(&app), "boot");
         assert_eq!(app.context(), Context::QuickSearch);
         app.handle(action(Action::Delete));
@@ -9266,7 +9266,7 @@ mod tests {
         app.handle(action(Action::Rename));
         assert!(app.handle(action(Action::Confirm)).is_empty());
         app.handle(action(Action::Rename));
-        app.handle(action(Action::End));
+        app.handle(action(Action::TextEnd));
         app.handle(action(Action::DeleteToStart));
         assert!(app.handle(action(Action::Confirm)).is_empty());
         assert_eq!(app.context(), Context::Panel);

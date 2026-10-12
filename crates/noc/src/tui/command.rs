@@ -223,8 +223,8 @@ impl CommandLine {
         match action {
             Action::Left => self.cursor = self.cursor.saturating_sub(1),
             Action::Right => self.cursor = (self.cursor + 1).min(length),
-            Action::Home => self.cursor = start,
-            Action::End => self.cursor = end,
+            Action::TextStart => self.cursor = start,
+            Action::TextEnd => self.cursor = end,
             Action::Up if start == 0 => return CommandEvent::Older,
             Action::Down if end == length => return CommandEvent::Newer,
             Action::Up => self.move_line(false),
@@ -569,9 +569,9 @@ mod tests {
     #[test]
     fn keys_edit_within_the_line_of_the_cursor() {
         let mut line = shell("first line\nsecond");
-        press(&mut line, Action::Home);
+        press(&mut line, Action::TextStart);
         assert_eq!(line.cursor, 11, "the start of its line");
-        press(&mut line, Action::End);
+        press(&mut line, Action::TextEnd);
         press(&mut line, Action::Up);
         assert_eq!(line.cursor, 6, "the same column above");
         press(&mut line, Action::DeleteToEnd);

@@ -353,8 +353,8 @@ fn describe_command_line(context: Context, action: Action) -> Option<String> {
     let text = match action {
         Action::Up => fl!("help-command-up"),
         Action::Down => fl!("help-command-down"),
-        Action::Home => fl!("help-command-home"),
-        Action::End => fl!("help-command-end"),
+        Action::TextStart => fl!("help-command-home"),
+        Action::TextEnd => fl!("help-command-end"),
         Action::Backspace => fl!("help-command-backspace"),
         Action::DeleteToStart => fl!("help-command-delete-to-start"),
         Action::DeleteToEnd => fl!("help-command-delete-to-end"),
@@ -385,8 +385,8 @@ fn describe_field(context: Context, action: Action) -> Option<String> {
         (_, Action::Delete) => fl!("help-field-delete"),
         (_, Action::DeleteWord) => fl!("help-field-delete-word"),
         (Context::CommandLine, _) => return None,
-        (_, Action::Home) => fl!("help-field-home"),
-        (_, Action::End) => fl!("help-field-end"),
+        (_, Action::TextStart) => fl!("help-field-home"),
+        (_, Action::TextEnd) => fl!("help-field-end"),
         (_, Action::Backspace) => fl!("help-field-backspace"),
         (_, Action::DeleteToStart) => fl!("help-field-delete-to-start"),
         (_, Action::DeleteToEnd) => fl!("help-field-delete-to-end"),
@@ -398,7 +398,7 @@ fn describe_field(context: Context, action: Action) -> Option<String> {
 }
 
 /// What the keys of text fields do to the filter, or the keywords, of the windows that list
-/// items; Home and End stay the list's.
+/// items; Home and End stay the list's, and Ctrl+a and Ctrl+e move in the filter.
 fn describe_filter(context: Context, action: Action) -> Option<String> {
     if !matches!(
         context,
@@ -413,6 +413,8 @@ fn describe_filter(context: Context, action: Action) -> Option<String> {
     let text = match action {
         Action::Left => fl!("help-field-left"),
         Action::Right => fl!("help-field-right"),
+        Action::TextStart => fl!("help-field-home"),
+        Action::TextEnd => fl!("help-field-end"),
         Action::Backspace => fl!("help-field-backspace"),
         Action::Delete => fl!("help-field-delete"),
         Action::DeleteToStart => fl!("help-field-delete-to-start"),

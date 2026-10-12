@@ -339,6 +339,10 @@ pub(crate) enum Action {
     Disconnect,
     /// Edits the settings of the host under the cursor.
     EditHost,
+    /// The text cursor to the start of the text, or of its line on the command line.
+    TextStart,
+    /// The text cursor to the end of the text, or of its line on the command line.
+    TextEnd,
     /// Deletes the character before the text cursor.
     Backspace,
     /// Deletes the marked entries or the one under the cursor; in a text field, the character
@@ -445,6 +449,8 @@ impl Action {
             Self::UserScreen => "user_screen",
             Self::Disconnect => "disconnect",
             Self::EditHost => "edit_host",
+            Self::TextStart => "text_start",
+            Self::TextEnd => "text_end",
             Self::Backspace => "backspace",
             Self::Delete => "delete",
             Self::DeleteToStart => "delete_to_start",
@@ -561,6 +567,8 @@ impl Action {
         Self::UserScreen,
         Self::Disconnect,
         Self::EditHost,
+        Self::TextStart,
+        Self::TextEnd,
         Self::Backspace,
         Self::Delete,
         Self::DeleteToStart,

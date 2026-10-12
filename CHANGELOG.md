@@ -166,10 +166,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and the last row, and Ctrl+u clears it. The help lists Ctrl+s and Alt+s with quick search, as
   the keys that go on to the next match.
 - The filters of the location menu, the tab menu, the workspaces, and the command history, and the
-  keywords of the zoxide window, are text fields too: Left and Right move in them, Delete, Ctrl+u,
-  and Ctrl+k delete, as Backspace does. Home and End still go to the first and the last row, and
-  so do Ctrl+a and Ctrl+e (Ctrl+e in the vim keymap); Delete still deletes the workspace or the
-  command under the cursor, and disconnects the host in the location menu.
+  keywords of the zoxide window, are text fields too: Left and Right move in them, and Ctrl+a and
+  Ctrl+e go to their start and end (Ctrl+e in the vim keymap, whose Ctrl+b pages up); Delete,
+  Ctrl+u, and Ctrl+k delete, as Backspace does. Home and End still go to the first and the last
+  row; Delete still deletes the workspace or the command under the cursor, and disconnects the
+  host in the location menu.
 - Ctrl+[ does what Esc does, and Ctrl+m what Enter does, in both keymaps, where the terminal
   speaks the kitty keyboard protocol and so tells them apart.
 - Ctrl+Space no longer shows the output of commands: macOS and input methods switch the input

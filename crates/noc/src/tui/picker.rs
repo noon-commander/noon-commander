@@ -272,6 +272,8 @@ impl Picker {
                 Action::Delete if self.deletes_rows => return Pick::Other(action),
                 Action::Left
                 | Action::Right
+                | Action::TextStart
+                | Action::TextEnd
                 | Action::Backspace
                 | Action::Delete
                 | Action::DeleteToStart
@@ -517,7 +519,7 @@ mod tests {
         press(&mut picker, Action::Left);
         press(&mut picker, Action::Backspace);
         assert_eq!(picker.shown(0..3), [0, 2], "r");
-        press(&mut picker, Action::Right);
+        press(&mut picker, Action::TextEnd);
         press(&mut picker, Action::DeleteToStart);
         assert_eq!(picker.shown(0..3), [0, 1, 2]);
         assert_eq!(
@@ -525,6 +527,15 @@ mod tests {
             Pick::Chosen(1),
             "nothing left: digits choose again"
         );
+        // Home is the list's; the filter has TextStart and TextEnd.
+        typed(&mut picker, "t");
+        press(&mut picker, Action::TextStart);
+        typed(&mut picker, "s");
+        assert!(picker.shown(0..3).is_empty(), "st");
+        press(&mut picker, Action::DeleteToEnd);
+        assert_eq!(picker.shown(0..3), [0, 1], "s");
+        press(&mut picker, Action::End);
+        assert_eq!(picker.cursor(), 1, "the last row shown");
         let mut rows = picker_rows_deleting(&["a", "b"]);
         typed(&mut rows, "a");
         assert_eq!(

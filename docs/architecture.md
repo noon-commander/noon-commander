@@ -1008,8 +1008,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   dialog, the text fields (`quick_search`, `rename`, `dialog_input`, `command_line`) to `input`,
   which holds the keys that edit text, and quick search on to the panel, the windows that list
   items to choose from (`location_menu`, `tab_menu`, `jump`, `workspaces`, `command_history`) to
-  `list`, which holds the keys they share, then to `input` for their filters, whose Home and End
-  stay the list's, and every one but `user_screen` to `global` last, whose keys do the same
+  `list`, which holds the keys they share, then to `input` for their filters (`input` moves the
+  text cursor with actions of its own, `text_start` and `text_end`, so that Ctrl+a and Ctrl+e move
+  in a filter while Home and End stay the list's), and every one but `user_screen` to `global`
+  last, whose keys do the same
   everywhere; the first context that knows a key sequence decides, except that a sequence it only
   starts does what a later context binds it to. The help lists the keys of `list` and `input`
   with each context that falls back to them, as that context uses them, each key once.

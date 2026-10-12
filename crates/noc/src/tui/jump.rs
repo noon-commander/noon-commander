@@ -188,6 +188,8 @@ impl JumpMenu {
                 Action::End => self.cursor = last,
                 Action::Left
                 | Action::Right
+                | Action::TextStart
+                | Action::TextEnd
                 | Action::Backspace
                 | Action::Delete
                 | Action::DeleteToStart

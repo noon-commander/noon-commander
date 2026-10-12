@@ -1030,10 +1030,10 @@ mod tests {
             let edits = actions(&[
                 Action::Left,
                 Action::Right,
-                Action::Home,
-                Action::Home,
-                Action::End,
-                Action::End,
+                Action::TextStart,
+                Action::TextStart,
+                Action::TextEnd,
+                Action::TextEnd,
                 Action::Backspace,
                 Action::Backspace,
                 Action::Delete,
@@ -1507,7 +1507,7 @@ mod tests {
                 Resolved::Action(Action::NewLine),
                 Resolved::Action(Action::NewLine),
                 Resolved::Action(Action::EditCommand),
-                Resolved::Action(Action::End),
+                Resolved::Action(Action::TextEnd),
                 Resolved::Action(Action::Confirm),
                 Resolved::Action(Action::Cancel),
             ]
@@ -1720,7 +1720,7 @@ mod tests {
             let mut state = KeyState::default();
             assert_eq!(
                 feed(&vim, &mut state, context, &["ctrl-b", "ctrl-e"]),
-                actions(&[Action::Home, Action::End]),
+                actions(&[Action::TextStart, Action::TextEnd]),
                 "{context:?}"
             );
         }
@@ -2315,7 +2315,8 @@ mod tests {
                             "ctrl-u",
                             "ctrl-k",
                             "home",
-                            "end"
+                            "end",
+                            "ctrl-e"
                         ]
                     ),
                     actions(&[
@@ -2326,7 +2327,19 @@ mod tests {
                         Action::DeleteToEnd,
                         Action::Home,
                         Action::End,
+                        Action::TextEnd,
                     ]),
+                    "{name}: {context:?}"
+                );
+                // Ctrl+a goes to the start of the filter; vim's Ctrl+b stays the list's page up.
+                let (key, action) = if *name == "vim" {
+                    ("ctrl-b", Action::PageUp)
+                } else {
+                    ("ctrl-a", Action::TextStart)
+                };
+                assert_eq!(
+                    feed(&keymap, &mut state, context, &[key]),
+                    actions(&[action]),
                     "{name}: {context:?}"
                 );
             }

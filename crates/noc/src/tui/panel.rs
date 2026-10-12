@@ -618,7 +618,7 @@ impl Panel {
             };
             let mut field = Field::plain(&text);
             // Typing goes on from the end rather than replacing the text.
-            field.edit(Action::End);
+            field.edit(Action::TextEnd);
             self.search = Some(field);
         }
     }
@@ -2057,7 +2057,7 @@ mod tests {
         panel.search_type('o', false);
         assert_eq!(under_cursor(&panel), "boot");
         // Typed in the middle, a character searches again; one that nothing matches is dropped.
-        panel.search_edit(Action::Home, false);
+        panel.search_edit(Action::TextStart, false);
         panel.search_edit(Action::Right, false);
         assert_eq!(under_cursor(&panel), "boot", "a move of the text cursor");
         panel.search_type('x', false);
@@ -2068,10 +2068,10 @@ mod tests {
         panel.search_type('a', false);
         assert_eq!(panel.search_text(), Some("ba"));
         assert_eq!(under_cursor(&panel), "bar", "round to the top");
-        panel.search_edit(Action::End, false);
+        panel.search_edit(Action::TextEnd, false);
         panel.search_type('t', false);
         assert_eq!(under_cursor(&panel), "bat");
-        panel.search_edit(Action::Home, false);
+        panel.search_edit(Action::TextStart, false);
         panel.search_edit(Action::DeleteToEnd, false);
         assert_eq!(panel.search_text(), Some(""));
         assert_eq!(
@@ -2081,7 +2081,7 @@ mod tests {
         );
         let hosts = |_: &str| HostState::default();
         panel.search_type('c', false);
-        panel.search_edit(Action::Home, false);
+        panel.search_edit(Action::TextStart, false);
         let mut terminal = render_with(&mut panel, (40, 6), true, &hosts, Decor::new(false));
         assert!(terminal.backend().to_string().contains("║Search: c"));
         assert_eq!(

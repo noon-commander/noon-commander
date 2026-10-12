@@ -215,6 +215,7 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         .or_else(|| describe_completion(context, action))
         .or_else(|| describe_location_menu(context, action))
         .or_else(|| describe_tab_menu(context, action))
+        .or_else(|| describe_help(context, action))
         .or_else(|| describe_workspaces(context, action))
         .or_else(|| describe_command_line(context, action))
         .or_else(|| describe_history(context, action))
@@ -299,7 +300,6 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Dialog, Action::Confirm) => fl!("help-confirm"),
         (Context::Dialog, Action::Toggle) => fl!("help-toggle"),
         (Context::Dialog, Action::Cancel) => fl!("help-dialog-cancel"),
-        (Context::Help, Action::Cancel) => fl!("help-this-help-close"),
         (Context::Viewer, Action::Home) => fl!("help-viewer-top"),
         (Context::Viewer, Action::End) => fl!("help-viewer-end"),
         (Context::Viewer, Action::Left) => fl!("help-viewer-left"),
@@ -439,6 +439,7 @@ fn describe_rows(context: Context, action: Action) -> Option<String> {
         context,
         Context::Panel
             | Context::Viewer
+            | Context::Help
             | Context::LocationMenu
             | Context::TabMenu
             | Context::Jump
@@ -487,6 +488,20 @@ fn describe_tab_menu(context: Context, action: Action) -> Option<String> {
         Action::Confirm => fl!("help-tab-menu-show"),
         Action::CloseTab => fl!("help-tab-menu-close"),
         Action::Cancel => fl!("help-menu-close"),
+        _ => return None,
+    };
+    Some(text)
+}
+
+/// What `action` does in this help, beyond scrolling it by rows and pages.
+fn describe_help(context: Context, action: Action) -> Option<String> {
+    if context != Context::Help {
+        return None;
+    }
+    let text = match action {
+        Action::Home => fl!("help-this-help-top"),
+        Action::End => fl!("help-this-help-end"),
+        Action::Cancel => fl!("help-this-help-close"),
         _ => return None,
     };
     Some(text)
@@ -620,12 +635,16 @@ mod tests {
                 "Command history",
                 "Pull-down menu",
                 "Dialogs and help",
+                "This help",
                 "Text fields",
                 "Path fields",
                 "Completion list",
                 "Viewer"
             ]
         );
+        // The help's own keys, which scroll it as mc's help scrolls.
+        assert!(has("Ctrl+v, Space, f", "One page down"));
+        assert!(has("Alt+>, G, Ctrl+End, Ctrl+PgDn", "The end"));
         assert_eq!(
             help.entries.last(),
             Some(&Entry::Note(fl!("help-note-f-keys")))

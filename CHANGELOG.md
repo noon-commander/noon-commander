@@ -229,6 +229,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - In the vim keymap, Space and f turn the page down, b up, and d and u go half a page in the
   viewer and the help, as in less and ranger's pager; Ctrl+e and Ctrl+y scroll the help by a line,
   as they scroll the viewer.
+- The help lists its own keys under This help, such as mc's Space, b, u, and d in the default
+  keymap, which it left out.
 - Release builds use full link-time optimization, which makes the `noc` binary about 6% smaller.
 - The title of a panel, and the tab menu, show the home directory as `~`: `~/src` rather
   than `/Users/me/src`.

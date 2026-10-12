@@ -210,12 +210,12 @@ impl Keymap {
             keys.push(key);
             let continues =
                 !state.keys.is_empty() && self.lookup(context, &keys) != Lookup::Unknown;
-            if !continues && key == ESC {
+            if !continues && (key == ESC || key == CTRL_BRACKET) {
                 state.clear();
                 state.hinting = false;
                 return Vec::new();
             }
-            if !continues && key == BACKSPACE && state.keys.pop().is_some() {
+            if !continues && (key == BACKSPACE || key == CTRL_H) && state.keys.pop().is_some() {
                 state.deadline = None;
                 return Vec::new();
             }
@@ -425,7 +425,7 @@ impl Keymap {
 
     /// The keys that can follow `prefix` in `context`'s chain, in the order of the preset, the
     /// context's own first. Keys that do the same share a row; a key that starts longer
-    /// sequences has one of its own. `Esc`, which closes the hints, and the Alt+1 … Alt+0
+    /// sequences has one of its own. `Esc` and `Ctrl+[`, which close the hints, and the Alt+1 … Alt+0
     /// aliases are left out, and where every character is text, so are characters that only a
     /// fallback context binds.
     pub(crate) fn hints(&self, context: Context, prefix: &[KeyCombination]) -> Vec<Hint> {
@@ -433,7 +433,9 @@ impl Keymap {
         for (sequence, _) in self.chain_bindings(context) {
             if sequence.len() > prefix.len()
                 && sequence.starts_with(prefix)
-                && sequence.first() != Some(&ESC)
+                && sequence
+                    .first()
+                    .is_none_or(|first| ![ESC, CTRL_BRACKET].contains(first))
                 && !is_alt_digit(sequence)
                 && let Some(key) = sequence.get(prefix.len())
                 && !next.contains(key)
@@ -566,6 +568,11 @@ fn describe_key(key: KeyCombination) -> String {
 
 const ESC: KeyCombination = KeyCombination::one_key(KeyCode::Esc, KeyModifiers::NONE);
 const BACKSPACE: KeyCombination = KeyCombination::one_key(KeyCode::Backspace, KeyModifiers::NONE);
+// Where the terminal speaks the kitty keyboard protocol, these no longer arrive as Esc and
+// Backspace, but do what they do.
+const CTRL_BRACKET: KeyCombination =
+    KeyCombination::one_key(KeyCode::Char('['), KeyModifiers::CONTROL);
+const CTRL_H: KeyCombination = KeyCombination::one_key(KeyCode::Char('h'), KeyModifiers::CONTROL);
 
 /// Whether `sequence` is Alt and a digit, which stands for an F-key.
 fn is_alt_digit(sequence: &[KeyCombination]) -> bool {
@@ -2948,6 +2955,20 @@ mod tests {
         );
         assert_eq!(keymap.hints_of(&state, Context::Panel), None);
         assert_eq!(state.deadline(), None, "no Esc pending");
+        // Ctrl+[ and Ctrl+h do the same, as everywhere Esc and Backspace act.
+        keymap.show_hints(&mut state, Context::Panel);
+        keymap.feed(&mut state, Context::Panel, key("ctrl-x"), now);
+        assert_eq!(
+            keymap.feed(&mut state, Context::Panel, key("ctrl-h"), now),
+            []
+        );
+        assert_eq!(keymap.hints_of(&state, Context::Panel).unwrap().typed, None);
+        assert_eq!(
+            keymap.feed(&mut state, Context::Panel, key("ctrl-["), now),
+            [],
+            "no Cancel"
+        );
+        assert_eq!(keymap.hints_of(&state, Context::Panel), None);
         // A key that does something closes them too.
         keymap.show_hints(&mut state, Context::Panel);
         assert_eq!(

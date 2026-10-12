@@ -20,8 +20,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   bottom of the panels with what they do, and the key waits for the next one instead of timing
   out. Alt+/ shows every key of whatever is in front the same way, in both keymaps: a panel, a
   dialog, a menu, a window, the viewer, or the command line, which stays open under them. The
-  next key runs as it would have, or shows the keys that can follow it; Esc closes the hints, and
-  Backspace takes back the last key.
+  next key runs as it would have, or shows the keys that can follow it; Esc or Ctrl+[ closes the
+  hints, and Backspace or Ctrl+h takes back the last key.
   `ui.which_key` and `ui.which_key_delay_ms` (Key hints and Key hints delay in Options →
   Configuration) turn them off and set the delay.
 - `ui.keymap` (Keymap in Options → Configuration) chooses the keymap by name, as `ui.theme` chooses

@@ -1050,7 +1050,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   both presets, bound once in the `global` context. The app takes it before whatever is in front,
   which stays open under the hints.
   While hints show, the next key runs as it would have, or shows the keys that can follow it;
-  `Esc` closes them and `Backspace` takes back the last key. `Esc` sequences never show hints:
+  `Esc` closes them and `Backspace` takes back the last key, and so do `Ctrl+[` and `Ctrl+h`,
+  which the kitty keyboard protocol tells apart from them. `Esc` sequences never show hints:
   they stand for Alt and the F-keys, and a lone `Esc` acts after its timeout.
 - **Mouse.** On by default (`ui.mouse`; [ADR 0018](adr/0018-mouse-support.md)). The event loop
   captures the mouse while it is on and turns crossterm's events into `Pointer`s

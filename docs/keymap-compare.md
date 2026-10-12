@@ -55,8 +55,9 @@ Keys are written the same way in every column, whatever notation the source uses
   It waits a second after Esc for a key that may follow; Esc Esc does not wait. noc binds no
   F11…F20 in their place: crossterm 0.29, which reads the keys, takes the codes of F15…F20 for
   other F-keys, so that the Linux console's Shift+F9 would arrive as F16.
-- noc binds Ctrl+[ wherever it binds Esc, and Ctrl+m wherever it binds Enter: terminals send
-  them as Esc and Enter, but tell them apart where they speak the kitty keyboard protocol.
+- noc binds Ctrl+[ wherever it binds Esc, Ctrl+m wherever it binds Enter, and Ctrl+i wherever
+  it binds Tab: terminals send them as Esc, Enter, and Tab, but tell them apart where they speak
+  the kitty keyboard protocol.
 
 Status, of noc as a whole:
 
@@ -124,7 +125,7 @@ Shift+F7, mc's and Far's key to search again, repeats it forward too.
 | Stop loading or connecting | `cancel` | ✅ | Esc<br>Ctrl+[<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c | — | — | — | Ctrl+c |
 | The pull-down menu | `pull_down` | ✅ | F9 | g m<br>F9 | F9 | F9 | — | — |
 | The pull-down menu, on the command that ran from it last | `pull_down_last` | ✅ | Shift+F9 | g M<br>Shift+F9 | Shift+F9 | Shift+F10 | — | — |
-| The other panel | `switch_panel` | ✅ | Tab<br>Ctrl+i | Tab<br>Ctrl+w w<br>Ctrl+w Ctrl+w<br>Ctrl+w p | Tab<br>Ctrl+i | Tab | — | — |
+| The other panel | `switch_panel` | ✅ | Tab<br>Ctrl+i | Tab<br>Ctrl+i<br>Ctrl+w w<br>Ctrl+w Ctrl+w<br>Ctrl+w p | Tab<br>Ctrl+i | Tab | — | — |
 | The left panel, wherever the panels were swapped | `focus_left` | ✅ | Ctrl+x Left<br>Ctrl+w h | Ctrl+w h<br>Ctrl+x Left | — | — | — | — |
 | The right panel, wherever the panels were swapped | `focus_right` | ✅ | Ctrl+x Right<br>Ctrl+w l | Ctrl+w l<br>Ctrl+x Right | — | — | — | — |
 | Swap the panels | `swap_panels` | ✅ | Ctrl+u | Ctrl+w x<br>Ctrl+w r | Ctrl+u | Ctrl+u | — | — |
@@ -240,8 +241,8 @@ Shift+F7, mc's and Far's key to search again, repeats it forward too.
 | Show tab 1…9 | — | ⏳ | — | — | — | — | 1…9 | Alt+1…9 (a new one if there is none) |
 | Move this tab left / right | — | ⏳ | — | — | — | — | { / } | Alt+l / Alt+r |
 | Directory history (list) | — | ⏳ | — | — | Alt+H | Alt+F12 | — | — |
-| Previous directory in history | — | ⏳ | — | — | Alt+y | — | H | H |
-| Next directory in history | — | ⏳ | — | — | Alt+u | — | L | L |
+| Previous directory in history | — | ⏳ | — | [ h | Alt+y | — | H | H |
+| Next directory in history | — | ⏳ | — | ] h | Alt+u | — | L | L |
 | View and edit history | — | ⏳ | — | — | Alt+E | Alt+F11 | — | — |
 | Info panel | — | ⏳ | — | — | Ctrl+x i (on other panel) | Ctrl+l | Tab | — |
 | Quick view panel | — | ⏳ | — | — | Ctrl+x q (on other panel) | Ctrl+q | — | z p |
@@ -432,7 +433,7 @@ since ranger asks its questions on the console.
 | In the help and lists, one page down | `page_down` | ✅ | PgDn | Ctrl+f<br>PgDn | PgDn<br>Ctrl+v<br>Space (help)<br>f (help) | — | — | n<br>f<br>Ctrl+f<br>Space |
 | In the help and lists, the first row | `home` | ✅ | Home | g g<br>Home | Home<br>A1<br>g (help)<br>Ctrl+Home (help)<br>Ctrl+PgUp (help)<br>Alt+< | — | — | Home<br>g |
 | In the help and lists, the last row | `end` | ✅ | End | G<br>End | End<br>C1<br>G (help)<br>Ctrl+End (help)<br>Ctrl+PgDn (help)<br>Alt+> | — | — | End<br>G |
-| Next field or button | `next_field` | ✅ | Tab | Tab | Tab | — | — | — |
+| Next field or button | `next_field` | ✅ | Tab<br>Ctrl+i | Tab<br>Ctrl+i | Tab | — | — | — |
 | Previous field or button | `prev_field` | ✅ | Shift+Tab | Shift+Tab | Shift+Tab | — | — | — |
 | Press the focused button; from a text field or a check box, the default one; close the help | `confirm` | ✅ | Enter<br>Ctrl+m | Enter<br>Ctrl+m | Enter | Ctrl+Enter (default button) | Enter (confirm, help)<br>y (confirm) | — |
 | Switch the check box, choose the radio button, or press the focused button | `toggle` | ✅ | Space | Space | Space | — | — | — |
@@ -622,7 +623,7 @@ move in it.
 | The command above | `up` | ✅ | Up<br>Ctrl+p | Up<br>Ctrl+p | Up<br>Ctrl+p | — | — | — |
 | The command below | `down` | ✅ | Down<br>Ctrl+n | Down<br>Ctrl+n | Down<br>Ctrl+n | — | — | — |
 | The menu to the left | `left` | ✅ | Left<br>Ctrl+b<br>Shift+Tab | Left<br>Shift+Tab | Left<br>Ctrl+b | — | — | — |
-| The menu to the right | `right` | ✅ | Right<br>Ctrl+f<br>Tab | Right<br>Tab | Right<br>Ctrl+f | — | — | — |
+| The menu to the right | `right` | ✅ | Right<br>Ctrl+f<br>Tab<br>Ctrl+i | Right<br>Tab<br>Ctrl+i | Right<br>Ctrl+f | — | — | — |
 | The first command | `home` | ✅ | Home<br>Alt+<<br>PgUp | Ctrl+b<br>Shift+Up<br>Home<br>PgUp | Home<br>Alt+< | — | — | — |
 | The last command | `end` | ✅ | End<br>Alt+><br>PgDn | Ctrl+f<br>Shift+Down<br>End<br>PgDn | End<br>Alt+> | — | — | — |
 | Open the menu, or run the command | `confirm` | ✅ | Enter<br>Ctrl+m | Ctrl+y<br>Enter<br>Ctrl+m | Enter | — | — | — |
@@ -653,7 +654,7 @@ without a list.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Complete the path; again: list the choices | `complete` | ✅ | Tab | Tab | Alt+Tab | — | — | Tab |
+| Complete the path; again: list the choices | `complete` | ✅ | Tab<br>Ctrl+i | Tab<br>Ctrl+i | Alt+Tab | — | — | Tab |
 
 ## Completion list (`completion`)
 
@@ -669,7 +670,7 @@ console's line.
 | One page down | `page_down` | ✅ | PgDn<br>Ctrl+v | Ctrl+f<br>PgDn | — | — | — | — |
 | First choice | `home` | ✅ | Home<br>Alt+< | Home | — | — | — | — |
 | Last choice | `end` | ✅ | End<br>Alt+> | End | — | — | — | — |
-| Next choice, round | `complete` | ✅ | Tab | Tab | — | — | — | Tab |
+| Next choice, round | `complete` | ✅ | Tab<br>Ctrl+i | Tab<br>Ctrl+i | — | — | — | Tab |
 | Put the choice in the field | `confirm` | ✅ | Enter<br>Ctrl+m | Ctrl+y<br>Enter<br>Ctrl+m | — | — | Tab | — |
 | Close the list | `cancel` | ✅ | Esc<br>Ctrl+[<br>Ctrl+g<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c | — | — | Ctrl+c | — |
 | Close the list and edit the field | — | ⏳ | Other keys | Other keys | — | — | — | — |
@@ -720,7 +721,7 @@ Far. Far's rows are those of its history menus.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| The commands of the panel's host, or of all hosts | `next_field` | ✅ | Tab | Tab | — | — | — | — |
+| The commands of the panel's host, or of all hosts | `next_field` | ✅ | Tab<br>Ctrl+i | Tab<br>Ctrl+i | — | — | — | — |
 | Remove the command from the history | `delete` | ✅ | Delete<br>Ctrl+Backspace<br>F8 | Delete<br>Ctrl+Backspace<br>F8 | Delete<br>d | Shift+Delete | — | — |
 | Re-run command / open item | — | ⏳ | — | — | — | Enter | — | — |
 | Run in separate window | — | ⏳ | — | — | — | Shift+Enter | — | — |

@@ -41,7 +41,7 @@ pub(super) const PRESET: Preset = &[
             // Panels
             (
                 Action::SwitchPanel,
-                &["tab", "ctrl-w w", "ctrl-w ctrl-w", "ctrl-w p"],
+                &["tab", "ctrl-i", "ctrl-w w", "ctrl-w ctrl-w", "ctrl-w p"],
             ),
             (Action::FocusLeft, &["ctrl-w h", "ctrl-x left"]),
             (Action::FocusRight, &["ctrl-w l", "ctrl-x right"]),
@@ -155,7 +155,7 @@ pub(super) const PRESET: Preset = &[
             (Action::PageDown, &["ctrl-f", "pagedown"]),
             (Action::Home, &["g g", "home"]),
             (Action::End, &["shift-g", "end"]),
-            (Action::NextField, &["tab"]),
+            (Action::NextField, &["tab", "ctrl-i"]),
             (Action::PrevField, &["backtab"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Toggle, &["space"]),
@@ -242,7 +242,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Up, &["up", "ctrl-p"]),
             (Action::Down, &["down", "ctrl-n"]),
             (Action::Left, &["left", "backtab"]),
-            (Action::Right, &["right", "tab"]),
+            (Action::Right, &["right", "tab", "ctrl-i"]),
             (Action::Home, &["ctrl-b", "shift-up", "home", "pageup"]),
             (Action::End, &["ctrl-f", "shift-down", "end", "pagedown"]),
             (Action::Confirm, &["ctrl-y", "enter", "ctrl-m"]),
@@ -253,7 +253,10 @@ pub(super) const PRESET: Preset = &[
     (Context::DialogInput, &[]),
     // Path fields, on top of the text field's: Tab completes, as in a shell; Shift+Tab and Down
     // still leave the field.
-    (Context::PathInput, &[(Action::Complete, &["tab"])]),
+    (
+        Context::PathInput,
+        &[(Action::Complete, &["tab", "ctrl-i"])],
+    ),
     // The list of completions under a path field; other keys close it and go to the field.
     // Ctrl+p and Ctrl+n move, as in vim's pop-up menu, and Ctrl+b and Ctrl+f page, as in the lists.
     (
@@ -265,7 +268,7 @@ pub(super) const PRESET: Preset = &[
             (Action::PageDown, &["ctrl-f", "pagedown"]),
             (Action::Home, &["home"]),
             (Action::End, &["end"]),
-            (Action::Complete, &["tab"]),
+            (Action::Complete, &["tab", "ctrl-i"]),
             (Action::Confirm, &["ctrl-y", "enter", "ctrl-m"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c"]),
         ],
@@ -295,7 +298,7 @@ pub(super) const PRESET: Preset = &[
     (
         Context::CommandHistory,
         &[
-            (Action::NextField, &["tab"]),
+            (Action::NextField, &["tab", "ctrl-i"]),
             (Action::Delete, &["delete", "ctrl-backspace", "f8"]),
         ],
     ),

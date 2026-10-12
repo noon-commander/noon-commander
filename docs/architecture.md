@@ -985,26 +985,26 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   too where the terminal speaks the kitty keyboard protocol: at start the event loop asks for it
   with `supports_keyboard_enhancement` (in `spawn_blocking`, before the stream of events takes
   crossterm's reader) and then pushes `DISAMBIGUATE_ESCAPE_CODES` and `REPORT_ALTERNATE_KEYS`, so
-  that Alt with a symbol typed with Shift, such as Alt++, arrives as that symbol (Ctrl+[ and Ctrl+m
-  then arrive apart from Esc and Enter, so the keymaps bind them wherever they bind those); it pops
-  them, and turns bracketed paste off, whenever another program gets the terminal, on exit, and on a
-  panic. With bracketed paste a paste arrives as one event: the command line takes it whole, line
-  breaks included, and runs nothing; text fields, quick search, and the menus' filters take its
-  characters without line breaks; panels, the pull-down menu, dialogs' buttons, and the viewer
-  ignore it. Ctrl+x Ctrl+e writes the command to a file in the private runtime directory, runs the
-  editor on it as F4 does, and puts what it left back into the line, without the line breaks at its
-  end; the file goes afterwards. Each command that ran, unless it starts with a space, goes to
-  `history.toml` in the state directory with its host (the alias; none for a local one), directory,
-  and time: `noc-config`'s `add_command` reads the file again, replaces the same command on the same
-  host, keeps the newest `shell.history_size`, and writes it whole and atomically, mode 0600; one
-  task makes the changes in turn, and the app keeps the commands in memory. Up on the first line of
-  a command, or Alt+p, goes back through the commands of the panel's host, and Down on the last
-  line, or Alt+n, forward to what was typed. Alt+h or Ctrl+r on the line, or Alt+h in a panel, opens
-  the window of the history (`tui/history.rs`): the commands of the panel's host, or of all of them
-  after Tab, newest first, filtered as quick search matches, each with its host's label or alias,
-  its directory, and its first line, and the whole command under the cursor below; Enter puts it on
-  the line, with the prompt reversed until the next key if it ran on another host, and Delete
-  removes it.
+  that Alt with a symbol typed with Shift, such as Alt++, arrives as that symbol (Ctrl+[, Ctrl+m,
+  and Ctrl+i then arrive apart from Esc, Enter, and Tab, so the keymaps bind them wherever they
+  bind those); it pops them, and turns bracketed paste off, whenever another program gets the
+  terminal, on exit, and on a panic. With bracketed paste a paste arrives as one event: the command
+  line takes it whole, line breaks included, and runs nothing; text fields, quick search, and the
+  menus' filters take its characters without line breaks; panels, the pull-down menu, dialogs'
+  buttons, and the viewer ignore it. Ctrl+x Ctrl+e writes the command to a file in the private
+  runtime directory, runs the editor on it as F4 does, and puts what it left back into the line,
+  without the line breaks at its end; the file goes afterwards. Each command that ran, unless it
+  starts with a space, goes to `history.toml` in the state directory with its host (the alias; none
+  for a local one), directory, and time: `noc-config`'s `add_command` reads the file again, replaces
+  the same command on the same host, keeps the newest `shell.history_size`, and writes it whole and
+  atomically, mode 0600; one task makes the changes in turn, and the app keeps the commands in
+  memory. Up on the first line of a command, or Alt+p, goes back through the commands of the panel's
+  host, and Down on the last line, or Alt+n, forward to what was typed. Alt+h or Ctrl+r on the line,
+  or Alt+h in a panel, opens the window of the history (`tui/history.rs`): the commands of the
+  panel's host, or of all of them after Tab, newest first, filtered as quick search matches, each
+  with its host's label or alias, its directory, and its first line, and the whole command under the
+  cursor below; Enter puts it on the line, with the prompt reversed until the next key if it ran on
+  another host, and Delete removes it.
 - **Keymap.** Keys map to `Action`s per context (`global`, `panel`, `input`, `quick_search`,
   `rename`, `command_line`, `command_history`, `user_screen`, `list`, `location_menu`,
   `tab_menu`, `jump`, `workspaces`, `pull_down`, `dialog`, `help`, `dialog_input`, `path_input`,

@@ -2245,13 +2245,14 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_bracket_and_ctrl_m_do_what_esc_and_enter_do() {
-        // With the kitty keyboard protocol, they no longer arrive as Esc and Enter.
+    fn ctrl_bracket_ctrl_m_and_ctrl_i_do_what_esc_enter_and_tab_do() {
+        // With the kitty keyboard protocol, they no longer arrive as Esc, Enter, and Tab.
         for name in Keymap::NAMES {
             let keymap = Keymap::by_name(name).unwrap();
             for (_, bindings) in preset(name).unwrap() {
                 for (action, keys) in *bindings {
-                    for (key, alias) in [("esc", "ctrl-["), ("enter", "ctrl-m")] {
+                    for (key, alias) in [("esc", "ctrl-["), ("enter", "ctrl-m"), ("tab", "ctrl-i")]
+                    {
                         assert_eq!(
                             keys.contains(&key),
                             keys.contains(&alias),
@@ -2262,10 +2263,28 @@ mod tests {
             }
             let mut state = KeyState::default();
             assert_eq!(
-                feed(&keymap, &mut state, Context::Dialog, &["ctrl-[", "ctrl-m"]),
-                actions(&[Action::Cancel, Action::Confirm]),
+                feed(
+                    &keymap,
+                    &mut state,
+                    Context::Dialog,
+                    &["ctrl-[", "ctrl-m", "ctrl-i"]
+                ),
+                actions(&[Action::Cancel, Action::Confirm, Action::NextField]),
                 "{name}"
             );
+            for (context, action) in [
+                (Context::Panel, Action::SwitchPanel),
+                (Context::PathInput, Action::Complete),
+                (Context::Completion, Action::Complete),
+                (Context::CommandHistory, Action::NextField),
+                (Context::PullDown, Action::Right),
+            ] {
+                assert_eq!(
+                    feed(&keymap, &mut state, context, &["ctrl-i"]),
+                    actions(&[action]),
+                    "{name}: {context:?}"
+                );
+            }
         }
     }
 

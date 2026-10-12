@@ -151,7 +151,7 @@ pub(super) const PRESET: Preset = &[
             (Action::PageDown, &["pagedown"]),
             (Action::Home, &["home"]),
             (Action::End, &["end"]),
-            (Action::NextField, &["tab"]),
+            (Action::NextField, &["tab", "ctrl-i"]),
             (Action::PrevField, &["backtab"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Toggle, &["space"]),
@@ -259,7 +259,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Up, &["up", "ctrl-p"]),
             (Action::Down, &["down", "ctrl-n"]),
             (Action::Left, &["left", "ctrl-b", "backtab"]),
-            (Action::Right, &["right", "ctrl-f", "tab"]),
+            (Action::Right, &["right", "ctrl-f", "tab", "ctrl-i"]),
             (Action::Home, &["home", "alt-<", "pageup"]),
             (Action::End, &["end", "alt->", "pagedown"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
@@ -273,7 +273,10 @@ pub(super) const PRESET: Preset = &[
     (Context::DialogInput, &[]),
     // Path fields, on top of the text field's: Tab completes, as in a shell; Shift+Tab and Down
     // still leave the field.
-    (Context::PathInput, &[(Action::Complete, &["tab"])]),
+    (
+        Context::PathInput,
+        &[(Action::Complete, &["tab", "ctrl-i"])],
+    ),
     // The list of completions under a path field; other keys close it and go to the field.
     (
         Context::Completion,
@@ -284,7 +287,7 @@ pub(super) const PRESET: Preset = &[
             (Action::PageDown, &["pagedown", "ctrl-v"]),
             (Action::Home, &["home", "alt-<"]),
             (Action::End, &["end", "alt->"]),
-            (Action::Complete, &["tab"]),
+            (Action::Complete, &["tab", "ctrl-i"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-g", "ctrl-c"]),
         ],
@@ -316,7 +319,7 @@ pub(super) const PRESET: Preset = &[
     (
         Context::CommandHistory,
         &[
-            (Action::NextField, &["tab"]),
+            (Action::NextField, &["tab", "ctrl-i"]),
             (Action::Delete, &["delete", "ctrl-backspace", "f8"]),
         ],
     ),

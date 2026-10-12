@@ -216,6 +216,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Ctrl+l redraws the screen everywhere in both keymaps, not only in the panels and the viewer: in
   dialogs, as in mc's, and in menus, windows, and on the command line too. What is in front stays
   as it was, and quick search goes on; the help lists the key under Everywhere.
+- Ctrl+i does what Tab does wherever Tab does something, in both keymaps, where the terminal
+  tells Ctrl+i from Tab: it goes to the next field of a dialog, completes a path, goes through the
+  completions, switches the hosts of the command history, goes to the menu on the right in the
+  pull-down menu, and in the vim keymap switches panels too, as it already did in the default one.
 - Release builds use full link-time optimization, which makes the `noc` binary about 6% smaller.
 - The title of a panel, and the tab menu, show the home directory as `~`: `~/src` rather
   than `/Users/me/src`.

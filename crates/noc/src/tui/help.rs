@@ -279,7 +279,7 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::PullDown, Action::Home) => fl!("help-pulldown-home"),
         (Context::PullDown, Action::End) => fl!("help-pulldown-end"),
         (Context::PullDown, Action::Confirm) => fl!("help-pulldown-run"),
-        (Context::QuickSearch | Context::Jump, Action::Backspace) => fl!("help-search-back"),
+        (Context::Jump, Action::Backspace) => fl!("help-search-back"),
         (Context::QuickSearch, Action::Cancel) => fl!("help-search-end"),
         (Context::QuickSearch, Action::QuickSearch) => fl!("help-search-next"),
         (Context::QuickSearch, Action::PrevMatch) => fl!("help-search-prev"),
@@ -370,18 +370,18 @@ fn describe_command_line(context: Context, action: Action) -> Option<String> {
     Some(text)
 }
 
-/// What keys do in text fields, in the field of an entry renamed in its row, and on the
-/// command line, whose lines have keys of their own.
+/// What keys do in text fields, in quick search, in the field of an entry renamed in its row,
+/// and on the command line, whose lines have keys of their own.
 fn describe_field(context: Context, action: Action) -> Option<String> {
     if !matches!(
         context,
-        Context::DialogInput | Context::Rename | Context::CommandLine
+        Context::DialogInput | Context::QuickSearch | Context::Rename | Context::CommandLine
     ) {
         return None;
     }
     let text = match (context, action) {
-        (Context::Rename | Context::CommandLine, Action::Left) => fl!("help-field-left"),
-        (Context::Rename | Context::CommandLine, Action::Right) => fl!("help-field-right"),
+        (_, Action::Left) => fl!("help-field-left"),
+        (_, Action::Right) => fl!("help-field-right"),
         (_, Action::Delete) => fl!("help-field-delete"),
         (Context::CommandLine, _) => return None,
         (_, Action::Home) => fl!("help-field-home"),
@@ -533,7 +533,12 @@ mod tests {
             "Esc, F10, Ctrl+g, Ctrl+c",
             "Cancel, or close this help"
         ));
-        // One key, two meanings.
+        // Quick search lists the panel's key that goes on to the next match.
+        assert!(has(
+            "Ctrl+s, Alt+s",
+            "The next match; with nothing typed, the last search"
+        ));
+        // One key, two meanings: the text fields share theirs.
         let ctrl_u: Vec<&str> = help
             .entries
             .iter()
@@ -546,6 +551,7 @@ mod tests {
             ctrl_u,
             [
                 "Swap the panels",
+                "Delete to the start",
                 "Delete to the start",
                 "Delete to the start of the line",
                 "Delete to the start"

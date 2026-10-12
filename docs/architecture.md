@@ -937,9 +937,12 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   it, the first from where it is of those as good, and Ctrl+s again to the next best, round to the
   best; otherwise to the first name from where it is that starts with the text, ignoring case, and
   Ctrl+s to the next one, round to the top. Either way a character that matches nothing is dropped,
-  as in mc, and the listing keeps its order. Backspace takes a character back; Esc ends the search,
-  and any other key ends it and then does what it does: Enter opens what it found, as in mc, but
-  in the vim keymap Enter only ends it, as in vim. While it runs, every character is text, even
+  as in mc, and the listing keeps its order. The text is a field with a cursor, edited with the
+  keys that every text field shares (`input`): Left, Right, Home, End, Backspace, Delete, Ctrl+u,
+  Ctrl+k; after an edit, the cursor stays on its name if that still matches, and goes to the
+  match that typing would have found otherwise. Esc ends the search, and any other key ends it and
+  then does what it does: Enter opens what it found, as in mc, but in the vim keymap Enter only
+  ends it, as in vim. While it runs, every character is text, even
   one that a panel binds, such as `*`. The app keeps what the last search found, whichever panel
   it ran in, as vim keeps its last pattern: `n` and `N` (and Shift+F7 or F17, mc's and Far's key
   to search again) go to the next and the previous name that matches it, round, and Ctrl+s with
@@ -994,17 +997,19 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   its directory, and its first line, and the whole command under the cursor below; Enter puts it on
   the line, with the prompt reversed until the next key if it ran on another host, and Delete
   removes it.
-- **Keymap.** Keys map to `Action`s per context (`global`, `panel`, `quick_search`,
-  `command_line`, `command_history`, `user_screen`, `list`, `location_menu`, `jump`,
-  `workspaces`, `pull_down`, `dialog`, `help`, `dialog_input`, `viewer`). Each context falls back
-  along a chain, for example quick search to the panel, the help to the dialog, the
-  windows that list items to choose from (`location_menu`, `jump`, `workspaces`,
-  `command_history`) to `list`, which holds the keys they share, and every one but `user_screen`
-  to `global` last, whose keys do the same
-  everywhere; the first context that knows a key sequence decides, except that a sequence it only
-  starts does what a later context binds it to. The help lists the keys of `list` with each window
-  that falls back to it, as that window uses them. Bindings are key sequences matched by prefix
-  with a 1-second timeout, so a vim preset (`g g`, `Z Z`) can follow the default mc preset.
+- **Keymap.** Keys map to `Action`s per context (`global`, `panel`, `input`, `quick_search`,
+  `rename`, `command_line`, `command_history`, `user_screen`, `list`, `location_menu`,
+  `tab_menu`, `jump`, `workspaces`, `pull_down`, `dialog`, `help`, `dialog_input`, `path_input`,
+  `completion`, `viewer`). Each context falls back along a chain, for example the help to the
+  dialog, the text fields (`quick_search`, `rename`, `dialog_input`, `command_line`) to `input`,
+  which holds the keys that edit text, and quick search on to the panel, the windows that list
+  items to choose from (`location_menu`, `tab_menu`, `jump`, `workspaces`, `command_history`) to
+  `list`, which holds the keys they share, and every one but `user_screen` to `global` last, whose
+  keys do the same everywhere; the first context that knows a key sequence decides, except that a
+  sequence it only starts does what a later context binds it to. The help lists the keys of
+  `list` and `input` with each context that falls back to them, as that context uses them.
+  Bindings are key sequences matched by prefix with a 1-second timeout, so a vim preset (`g g`,
+  `Z Z`) can follow the default mc preset.
   `ui.keymap` names the built-in preset, as `ui.theme` names the theme (`Keymap::NAMES`,
   `Keymap::by_name`); the Configuration dialog switches it at once. Each preset is a module of
   its own, `tui/keymap/default.rs` and `tui/keymap/vim.rs`: each context with its actions, and

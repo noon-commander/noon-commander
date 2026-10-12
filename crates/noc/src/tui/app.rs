@@ -1702,8 +1702,15 @@ impl App {
                 None
             }
             Resolved::Action(action) if searching => match action {
-                Action::Backspace => {
-                    self.panel_mut(side).search_back();
+                Action::Left
+                | Action::Right
+                | Action::Home
+                | Action::End
+                | Action::Backspace
+                | Action::Delete
+                | Action::DeleteToStart
+                | Action::DeleteToEnd => {
+                    self.panel_mut(side).search_edit(action, fuzzy_search);
                     None
                 }
                 Action::QuickSearch => {
@@ -8112,6 +8119,35 @@ mod tests {
         assert!(screen(&mut app).contains("Search: "));
         assert!(app.handle(action(Action::Cancel)).is_empty());
         assert_eq!(app.context(), Context::Panel, "Esc ends it");
+    }
+
+    #[test]
+    fn quick_search_edits_its_text_with_the_keys_of_text_fields() {
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
+        let names = ["bar", "bin", "boot", "dev"];
+        answer(&mut app, effects, &Listing::Dir(names.map(dir).to_vec()));
+        app.config.ui.fuzzy_search = false;
+        let under = |app: &App| cursor_name(app, Side::Left);
+        app.handle(action(Action::QuickSearch));
+        for c in "bo".chars() {
+            app.handle(Resolved::Insert(c));
+        }
+        assert_eq!(under(&app), "boot");
+        // Home goes to the start of the text, not to the first row, and the search goes on.
+        app.handle(action(Action::Home));
+        assert_eq!(under(&app), "boot");
+        assert_eq!(app.context(), Context::QuickSearch);
+        app.handle(action(Action::Delete));
+        assert!(screen(&mut app).contains("Search: o"));
+        app.handle(action(Action::DeleteToEnd));
+        assert!(screen(&mut app).contains("Search: "));
+        assert_eq!(app.context(), Context::QuickSearch, "still searching");
+        app.handle(Resolved::Insert('d'));
+        assert_eq!(under(&app), "dev");
+        // Up is the panel's: it ends the search and moves the cursor.
+        app.handle(action(Action::Up));
+        assert_eq!(app.context(), Context::Panel);
+        assert_eq!(under(&app), "boot");
     }
 
     #[test]

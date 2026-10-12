@@ -95,17 +95,10 @@ pub(super) const PRESET: Preset = &[
             (Action::Redraw, &["ctrl-l"]), // OK1
         ],
     ),
-    // Quick search in the active panel; other keys go to the panel.
+    // What the text fields share: quick search, the field of an entry renamed in its row, the
+    // text fields of dialogs, and the command line fall back to it.
     (
-        Context::QuickSearch,
-        &[
-            (Action::Backspace, &["backspace", "ctrl-h"]), // OK1
-            (Action::Cancel, &["esc"]),                    // OK1
-        ],
-    ),
-    // The name field of an entry renamed in its row.
-    (
-        Context::Rename,
+        Context::Input,
         &[
             (Action::Left, &["left"]),
             (Action::Right, &["right"]),
@@ -115,9 +108,20 @@ pub(super) const PRESET: Preset = &[
             (Action::Delete, &["delete"]),
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),
-            (Action::Confirm, &["enter"]),
-            (Action::Cancel, &["esc"]),
         ],
+    ),
+    // Quick search in the active panel, on top of the text field's; other keys go to the panel.
+    (
+        Context::QuickSearch,
+        &[
+            (Action::Cancel, &["esc"]), // OK1
+            (Action::QuickSearch, &["ctrl-s", "alt-s"]),
+        ],
+    ),
+    // The name field of an entry renamed in its row, on top of the text field's.
+    (
+        Context::Rename,
+        &[(Action::Confirm, &["enter"]), (Action::Cancel, &["esc"])],
     ),
     // Dialogs whose focus is on a button or a list.
     (
@@ -225,18 +229,8 @@ pub(super) const PRESET: Preset = &[
             (Action::Cancel, &["esc", "f9", "f10"]),
         ],
     ),
-    // Text fields, on top of the dialog's.
-    (
-        Context::DialogInput,
-        &[
-            (Action::Home, &["home", "ctrl-a"]),
-            (Action::End, &["end", "ctrl-e"]),
-            (Action::Backspace, &["backspace", "ctrl-h"]),
-            (Action::Delete, &["delete"]),
-            (Action::DeleteToStart, &["ctrl-u"]),
-            (Action::DeleteToEnd, &["ctrl-k"]),
-        ],
-    ),
+    // The text fields of dialogs: the text field's keys, then the dialog's.
+    (Context::DialogInput, &[]),
     // Path fields, on top of the text field's: Tab completes, as in a shell; Shift+Tab and Down
     // still leave the field.
     (Context::PathInput, &[(Action::Complete, &["tab"])]),
@@ -255,22 +249,14 @@ pub(super) const PRESET: Preset = &[
             (Action::Cancel, &["esc"]),
         ],
     ),
-    // The command line of `!` and `:`. Ctrl+j arrives as LF where Enter arrives as CR, so it starts
-    // a new line in every terminal; Shift+Enter does where the terminal speaks the kitty keyboard
-    // protocol. Ctrl+x Ctrl+e edits the command, as in bash.
+    // The command line of `!` and `:`, on top of the text field's. Ctrl+j arrives as LF where
+    // Enter arrives as CR, so it starts a new line in every terminal; Shift+Enter does where the
+    // terminal speaks the kitty keyboard protocol. Ctrl+x Ctrl+e edits the command, as in bash.
     (
         Context::CommandLine,
         &[
-            (Action::Left, &["left"]),
-            (Action::Right, &["right"]),
             (Action::Up, &["up"]),
             (Action::Down, &["down"]),
-            (Action::Home, &["ctrl-a", "home"]),
-            (Action::End, &["ctrl-e", "end"]),
-            (Action::Backspace, &["backspace", "ctrl-h"]),
-            (Action::Delete, &["delete"]),
-            (Action::DeleteToStart, &["ctrl-u"]),
-            (Action::DeleteToEnd, &["ctrl-k"]),
             (Action::NewLine, &["ctrl-j", "shift-enter"]),
             (Action::EditCommand, &["ctrl-x ctrl-e"]),
             (Action::OlderCommand, &["alt-p"]),

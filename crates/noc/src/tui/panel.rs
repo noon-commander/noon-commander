@@ -224,8 +224,8 @@ pub(crate) struct Panel {
     list: Rect,
     generation: u64,
     pending: Option<Pending>,
-    /// What quick search has matched so far, while it runs.
-    search: Option<String>,
+    /// The text field of quick search, with what it has matched so far, while it runs.
+    search: Option<Field>,
     /// The entry under the cursor, while its name is edited in its row.
     renaming: Option<Renaming>,
     error: Option<String>,
@@ -582,14 +582,14 @@ impl Panel {
 
     /// What quick search has typed, while it runs.
     pub(crate) fn search_text(&self) -> Option<&str> {
-        self.search.as_deref()
+        self.search.as_ref().map(Field::text)
     }
 
     /// Starts quick search, or jumps to the next match while it runs: the next one down, round
     /// to the top; `fuzzy` (`ui.fuzzy_search`), the next best, round to the best.
     pub(crate) fn search_next(&mut self, fuzzy: bool) {
-        let Some(text) = self.search.clone() else {
-            self.search = Some(String::new());
+        let Some(text) = self.search_text().map(str::to_owned) else {
+            self.search = Some(Field::plain(""));
             return;
         };
         self.step_match(&text, true, fuzzy);
@@ -597,7 +597,7 @@ impl Panel {
 
     /// Jumps to the next or the previous match of the search that runs, if one does.
     pub(crate) fn search_step(&mut self, forward: bool, fuzzy: bool) {
-        if let Some(text) = self.search.clone() {
+        if let Some(text) = self.search_text().map(str::to_owned) {
             self.step_match(&text, forward, fuzzy);
         }
     }
@@ -611,7 +611,10 @@ impl Panel {
             } else {
                 text.to_lowercase()
             };
-            self.search = Some(text);
+            let mut field = Field::plain(&text);
+            // Typing goes on from the end rather than replacing the text.
+            field.edit(Action::End);
+            self.search = Some(field);
         }
     }
 
@@ -643,20 +646,69 @@ impl Panel {
         found.is_some()
     }
 
-    /// Adds `c` to quick search, starting it if needed, and moves the cursor to the first name
-    /// from where it is that starts with the text, ignoring case; `fuzzy` (`ui.fuzzy_search`),
-    /// to the best match as fzf ranks them, the first from where it is if several are as good.
-    /// As in mc, a character that nothing matches is dropped.
+    /// Types `c` at the cursor of quick search, starting it if needed, and moves the cursor of
+    /// the panel to the first name from where it is that starts with the text, ignoring case;
+    /// `fuzzy` (`ui.fuzzy_search`), to the best match as fzf ranks them, the first from where it
+    /// is if several are as good. As in mc, a character that nothing matches is dropped.
     pub(crate) fn search_type(&mut self, c: char, fuzzy: bool) {
-        let mut text = self.search.clone().unwrap_or_default();
-        let found = if fuzzy {
-            // Smart case needs the capitals.
-            text.push(c);
-            // Spaces match everything; only between words do they mean something.
-            if text.trim().is_empty() && self.search.is_none() {
-                return;
+        let started = self.search.is_none();
+        let mut field = self.search.take().unwrap_or_else(|| Field::plain(""));
+        // Smart case needs the capitals.
+        let typed: Vec<char> = if fuzzy {
+            vec![c]
+        } else {
+            c.to_lowercase().collect()
+        };
+        for &c in &typed {
+            field.insert(c);
+        }
+        // Spaces match everything; only between words do they mean something.
+        if started && fuzzy && field.text().trim().is_empty() {
+            return;
+        }
+        match self.best_match(field.text(), fuzzy) {
+            Some(row) => self.cursor = row,
+            None if started => return,
+            None => {
+                for _ in &typed {
+                    field.edit(Action::Backspace);
+                }
             }
-            let ranked = self.ranked(&text);
+        }
+        self.search = Some(field);
+    }
+
+    /// Edits the text of quick search with a key of the text fields; then the cursor of the
+    /// panel stays on its name if that still matches, and goes to the match that typing would
+    /// have found otherwise. Moves of the text cursor leave the panel's where it is.
+    pub(crate) fn search_edit(&mut self, action: Action, fuzzy: bool) {
+        let Some(field) = &mut self.search else {
+            return;
+        };
+        let before = field.text().to_owned();
+        field.edit(action);
+        let text = field.text().to_owned();
+        if text == before || text.trim().is_empty() {
+            return;
+        }
+        let stays = if fuzzy {
+            self.ranked(&text)
+                .iter()
+                .any(|&(row, _)| row == self.cursor)
+        } else {
+            self.starts_with(self.cursor, &text)
+        };
+        if !stays && let Some(row) = self.best_match(&text, fuzzy) {
+            self.cursor = row;
+        }
+    }
+
+    /// The row that quick search goes to for `text`: the first from the cursor whose name
+    /// starts with it, ignoring case; `fuzzy`, the best as fzf ranks them, the first from the
+    /// cursor if several are as good.
+    fn best_match(&self, text: &str, fuzzy: bool) -> Option<usize> {
+        if fuzzy {
+            let ranked = self.ranked(text);
             let best = ranked.first().map(|&(_, score)| score);
             let rows = self.rows().max(1);
             ranked
@@ -665,25 +717,16 @@ impl Panel {
                 .map(|&(row, _)| row)
                 .min_by_key(|&row| (row + rows - self.cursor) % rows)
         } else {
-            text.extend(c.to_lowercase());
-            self.find(&text, self.cursor)
-        };
-        if let Some(row) = found {
-            self.cursor = row;
-            self.search = Some(text);
-        }
-    }
-
-    /// Takes the last character off quick search; the cursor stays.
-    pub(crate) fn search_back(&mut self) {
-        if let Some(text) = &mut self.search {
-            text.pop();
+            self.find(text, self.cursor)
         }
     }
 
     /// Ends quick search; what it typed, unless that was nothing.
     pub(crate) fn end_search(&mut self) -> Option<String> {
-        self.search.take().filter(|text| !text.trim().is_empty())
+        self.search
+            .take()
+            .map(|field| field.text().to_owned())
+            .filter(|text| !text.trim().is_empty())
     }
 
     /// The first row from `start` on, round to the top, whose name starts with `text` (lower
@@ -1040,8 +1083,8 @@ impl Panel {
         self.render_status(frame, line(inner.bottom() - 1), active, view);
     }
 
-    /// The status line, at `area`: the name being renamed, quick search with the cursor after
-    /// it in the active panel, the last error, the listing or host it waits for, the host it
+    /// The status line, at `area`: the name being renamed, quick search with its cursor in the
+    /// active panel, the last error, the listing or host it waits for, the host it
     /// is not connected to, or the name under the cursor.
     fn render_status(&self, frame: &mut Frame<'_>, area: Rect, active: bool, view: &View<'_>) {
         let theme = view.theme;
@@ -1051,15 +1094,16 @@ impl Panel {
         let mut waiting = None;
         let status = if let Some(renaming) = &self.renaming {
             fl!("panel-rename", name = cells::sanitize(&renaming.name))
-        } else if let Some(text) = &self.search {
+        } else if let Some(field) = &self.search {
             status_style = theme.quick_search;
-            let status = fl!("panel-search", text = cells::sanitize(text.as_bytes()));
+            let prefix = cells::width(&fl!("panel-search", text = String::new()));
+            let (shown, column) = field.visible(width.saturating_sub(prefix));
             if active {
-                let column = u16::try_from(cells::width(&status)).unwrap_or(u16::MAX);
+                let column = u16::try_from(prefix + column).unwrap_or(u16::MAX);
                 let x = area.x.saturating_add(column).min(area.right() - 1);
                 frame.set_cursor_position((x, area.y));
             }
-            status
+            fl!("panel-search", text = shown)
         } else if let Some(error) = &self.error {
             error.clone()
         } else if let Some(pending) = &self.pending {
@@ -1854,8 +1898,8 @@ mod tests {
         panel.search_type('I', false);
         assert_eq!(under_cursor(&panel), "bin");
         panel.search_type('x', false);
-        assert_eq!(panel.search.as_deref(), Some("bi"), "a miss is dropped");
-        panel.search_back();
+        assert_eq!(panel.search_text(), Some("bi"), "a miss is dropped");
+        panel.search_edit(Action::Backspace, false);
         assert_eq!(under_cursor(&panel), "bin", "the cursor stays");
         panel.search_next(false);
         assert_eq!(under_cursor(&panel), "Beta", "round to the top");
@@ -1899,10 +1943,9 @@ mod tests {
         panel.search_next(true);
         assert_eq!(under_cursor(&panel), "cfg-if", "round to the best");
         panel.search_type('q', true);
-        assert_eq!(panel.search.as_deref(), Some("cfg"), "a miss is dropped");
-        panel.search_back();
-        panel.search_back();
-        panel.search_back();
+        assert_eq!(panel.search_text(), Some("cfg"), "a miss is dropped");
+        panel.search_edit(Action::DeleteToStart, true);
+        assert_eq!(panel.search_text(), Some(""));
         panel.search_type('C', true);
         assert_eq!(
             under_cursor(&panel),
@@ -1957,11 +2000,57 @@ mod tests {
         panel.search_step(false, true);
         panel.search_step(true, true);
         assert_eq!(under_cursor(&panel), best, "back and forth");
-        panel.search_back();
-        panel.search_back();
+        panel.search_edit(Action::Backspace, true);
+        panel.search_edit(Action::Backspace, true);
         assert_eq!(panel.end_search(), None, "nothing typed, nothing kept");
         panel.search_resume("x", false);
         assert!(!panel.searching(), "no match, no search");
+    }
+
+    #[test]
+    fn quick_search_edits_its_text_as_a_text_field_does() {
+        let names = ["bar", "bat", "boot", "cab"];
+        let files = names.map(|name| entry(name, FileKind::File, 1));
+        let mut panel = loaded("/srv", files.into());
+        for c in "bt".chars() {
+            panel.search_type(c, false);
+        }
+        assert_eq!(panel.search_text(), Some("b"), "no name starts with bt");
+        panel.search_type('o', false);
+        assert_eq!(under_cursor(&panel), "boot");
+        // Typed in the middle, a character searches again; one that nothing matches is dropped.
+        panel.search_edit(Action::Home, false);
+        panel.search_edit(Action::Right, false);
+        assert_eq!(under_cursor(&panel), "boot", "a move of the text cursor");
+        panel.search_type('x', false);
+        assert_eq!(panel.search_text(), Some("bo"));
+        panel.search_edit(Action::Delete, false);
+        assert_eq!(panel.search_text(), Some("b"));
+        assert_eq!(under_cursor(&panel), "boot", "it still matches");
+        panel.search_type('a', false);
+        assert_eq!(panel.search_text(), Some("ba"));
+        assert_eq!(under_cursor(&panel), "bar", "round to the top");
+        panel.search_edit(Action::End, false);
+        panel.search_type('t', false);
+        assert_eq!(under_cursor(&panel), "bat");
+        panel.search_edit(Action::Home, false);
+        panel.search_edit(Action::DeleteToEnd, false);
+        assert_eq!(panel.search_text(), Some(""));
+        assert_eq!(
+            under_cursor(&panel),
+            "bat",
+            "nothing typed: the cursor stays"
+        );
+        let hosts = |_: &str| HostState::default();
+        panel.search_type('c', false);
+        panel.search_edit(Action::Home, false);
+        let mut terminal = render_with(&mut panel, (40, 6), true, &hosts, Decor::new(false));
+        assert!(terminal.backend().to_string().contains("║Search: c"));
+        assert_eq!(
+            terminal.get_cursor_position().unwrap(),
+            Position::new(9, 4),
+            "on the text cursor"
+        );
     }
 
     #[test]

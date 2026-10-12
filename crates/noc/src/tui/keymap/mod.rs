@@ -999,6 +999,72 @@ mod tests {
     }
 
     #[test]
+    fn the_text_fields_share_the_editing_keys_of_input() {
+        let fields = [
+            Context::QuickSearch,
+            Context::Rename,
+            Context::DialogInput,
+            Context::PathInput,
+            Context::CommandLine,
+        ];
+        for name in Keymap::NAMES {
+            let keymap = Keymap::by_name(name).unwrap();
+            let home = if *name == "vim" { "ctrl-b" } else { "ctrl-a" };
+            let keys = [
+                "left",
+                "right",
+                "home",
+                home,
+                "end",
+                "ctrl-e",
+                "backspace",
+                "ctrl-h",
+                "delete",
+                "ctrl-u",
+                "ctrl-k",
+            ];
+            let edits = actions(&[
+                Action::Left,
+                Action::Right,
+                Action::Home,
+                Action::Home,
+                Action::End,
+                Action::End,
+                Action::Backspace,
+                Action::Backspace,
+                Action::Delete,
+                Action::DeleteToStart,
+                Action::DeleteToEnd,
+            ]);
+            for context in fields {
+                assert!(context.chain().contains(&Context::Input), "{context:?}");
+                let mut state = KeyState::default();
+                assert_eq!(
+                    feed(&keymap, &mut state, context, &keys),
+                    edits,
+                    "{name}: {context:?}"
+                );
+            }
+            // Quick search edits its text with them, rather than moving the panel's cursor;
+            // keys that the text fields leave alone still go to the panel.
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&keymap, &mut state, Context::QuickSearch, &["up", "f5"]),
+                actions(&[Action::Up, Action::Copy]),
+                "{name}"
+            );
+            // Its key for the next match is its own, so the help lists it with quick search.
+            assert!(
+                keymap
+                    .help(Context::QuickSearch)
+                    .iter()
+                    .any(|(action, _)| *action == Action::QuickSearch),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
     fn f4_and_f8_act_on_hosts_in_the_location_menu_and_on_files_in_panels() {
         for name in Keymap::NAMES {
             let keymap = Keymap::by_name(name).unwrap();

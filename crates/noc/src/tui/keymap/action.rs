@@ -23,16 +23,20 @@ pub(crate) enum Context {
     Workspaces,
     /// The pull-down menu of F9, whose commands have letters.
     PullDown,
-    /// Quick search in the active panel. Keys it does not bind fall through to the panel.
+    /// Keys that the text fields share, which edit the text: quick search, the field of an
+    /// entry renamed in its row, the text fields of dialogs, and the command line fall back to
+    /// it. Keys never go to it alone.
+    Input,
+    /// Quick search in the active panel; falls back to `Input`, then to the panel.
     QuickSearch,
-    /// The name field of the entry being renamed in its panel row. Keys it does not bind, but
-    /// the global ones, do nothing.
+    /// The name field of the entry being renamed in its panel row; falls back to `Input`. Other
+    /// keys, but the global ones, do nothing.
     Rename,
     /// A dialog whose focus is on a button or a list.
     Dialog,
     /// The help of F1; falls back to `Dialog`, whose keys scroll it and close it.
     Help,
-    /// A dialog whose focus is on a text field; falls back to `Dialog`.
+    /// A dialog whose focus is on a text field; falls back to `Input`, then to `Dialog`.
     DialogInput,
     /// A text field for a path, which Tab completes; falls back to `DialogInput`.
     PathInput,
@@ -40,7 +44,8 @@ pub(crate) enum Context {
     Completion,
     /// The viewer of F3.
     Viewer,
-    /// The command line of `!` and `:`. Keys it does not bind, but the global ones, do nothing.
+    /// The command line of `!` and `:`; falls back to `Input`. Other keys, but the global ones,
+    /// do nothing.
     CommandLine,
     /// The window of the command history, which has a filter; falls back to `List`.
     CommandHistory,
@@ -61,6 +66,7 @@ impl Context {
             Self::Jump => "jump",
             Self::Workspaces => "workspaces",
             Self::PullDown => "pull_down",
+            Self::Input => "input",
             Self::QuickSearch => "quick_search",
             Self::Rename => "rename",
             Self::Dialog => "dialog",
@@ -80,15 +86,18 @@ impl Context {
         match self {
             Self::Global => &[Self::Global],
             Self::Panel => &[Self::Panel, Self::Global],
-            Self::QuickSearch => &[Self::QuickSearch, Self::Panel, Self::Global],
-            Self::Rename => &[Self::Rename, Self::Global],
+            // Text fields edit their text with the keys of `Input` before anything else does.
+            Self::Input => &[Self::Input, Self::Global],
+            Self::QuickSearch => &[Self::QuickSearch, Self::Input, Self::Panel, Self::Global],
+            Self::Rename => &[Self::Rename, Self::Input, Self::Global],
             // Dialogs are modal: panel keys do nothing while one is open.
             Self::Dialog => &[Self::Dialog, Self::Global],
             Self::Help => &[Self::Help, Self::Dialog, Self::Global],
-            Self::DialogInput => &[Self::DialogInput, Self::Dialog, Self::Global],
+            Self::DialogInput => &[Self::DialogInput, Self::Input, Self::Dialog, Self::Global],
             Self::PathInput => &[
                 Self::PathInput,
                 Self::DialogInput,
+                Self::Input,
                 Self::Dialog,
                 Self::Global,
             ],
@@ -96,11 +105,12 @@ impl Context {
                 Self::Completion,
                 Self::PathInput,
                 Self::DialogInput,
+                Self::Input,
                 Self::Dialog,
                 Self::Global,
             ],
             Self::Viewer => &[Self::Viewer, Self::Global],
-            Self::CommandLine => &[Self::CommandLine, Self::Global],
+            Self::CommandLine => &[Self::CommandLine, Self::Input, Self::Global],
             // The terminal's own screen: nothing of noc's draws there, the hints neither.
             Self::UserScreen => &[Self::UserScreen],
             // Menus are modal too.
@@ -117,7 +127,7 @@ impl Context {
     /// Whether the help lists this context's keys with each context that falls back to it,
     /// where they mean what that one's window does with them, rather than apart.
     pub(crate) fn helps_with_others(self) -> bool {
-        matches!(self, Self::List)
+        matches!(self, Self::List | Self::Input)
     }
 
     /// Whether Alt and a key stand for Esc and the key, as in mc: Alt+1 … Alt+0 for F1 … F10,
@@ -457,6 +467,7 @@ impl Context {
         Self::Jump,
         Self::Workspaces,
         Self::PullDown,
+        Self::Input,
         Self::QuickSearch,
         Self::Rename,
         Self::Dialog,

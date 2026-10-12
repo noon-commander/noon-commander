@@ -160,6 +160,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Typing in a panel no longer starts quick search; Ctrl+s or Alt+s do, as in mc. The setting
   `ui.type_to_search` and its row in Options → Configuration are gone; remove the key from
   `config.toml`. `!` and `:` will open a command line for shell commands.
+- Quick search edits its text as the other text fields do, with the same keys in both keymaps:
+  Left, Right, Home, End, Backspace, Delete, Ctrl+u, and Ctrl+k (Ctrl+a and Ctrl+e, or Ctrl+b and
+  Ctrl+e in the vim keymap). While it runs, Home and End move in the text rather than to the first
+  and the last row, and Ctrl+u clears it. The help lists Ctrl+s and Alt+s with quick search, as
+  the keys that go on to the next match.
 - Release builds use full link-time optimization, which makes the `noc` binary about 6% smaller.
 - The title of a panel, and the tab menu, show the home directory as `~`: `~/src` rather
   than `/Users/me/src`.

@@ -333,39 +333,73 @@ Shift+F7 (or F17), mc's and Far's key to search again, repeats it forward too.
 | The log of messages | — | ⏳ | — | — | — | — | — | W |
 | The console, with the command before | — | ⏳ | — | — | — | — | — | Ctrl+p |
 
-## Quick search (`quick_search`)
+## Editing text (`input`)
 
-In the active panel; characters are part of the name searched for, and keys it does not bind go
-to the panel. In the default preset, Enter ends the search and opens the entry, through the
-panel, as in mc; in the vim preset, Enter only ends it, on the match, as in vim. The last search
-stays for n, N, and Shift+F7 in the panel. yazi searches as the name is typed in an input box,
-and ranger as it is typed on its console; both go to the next and previous match with keys of
-the panel, once the search is over.
+The keys that the text fields share, which edit the text: quick search, renaming in place, the
+text fields of dialogs, and the command line fall back to it, and their sections list only the
+keys they add. Keys never go to it alone; the help lists its keys with each of those fields. The
+mc column has the keys of mc's input lines, its command line among them; the far column, those
+of Far's command line. The yazi column has the keys of its input boxes, which open in insert
+mode; its letters, digits, and symbols without a modifier work in normal mode, after Esc, as in
+vi. The ranger column has the keys of its console.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Take back the last character | `backspace` | ✅ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | — | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h |
+| One character left | `left` | ⏳ | Left | Left | Ctrl+b<br>Left<br>Alt+Left | Left<br>Ctrl+s | h<br>Left<br>Ctrl+b | Left<br>Ctrl+b |
+| One character right | `right` | ⏳ | Right | Right | Ctrl+f<br>Right<br>Alt+Right | Right<br>Ctrl+d | l<br>Right<br>Ctrl+f | Right<br>Ctrl+f |
+| Start of the text | `home` | ⏳ | Home<br>Ctrl+a | Home<br>Ctrl+b | Ctrl+a<br>Home<br>A1<br>Alt+< | Ctrl+Home | 0<br>Ctrl+a<br>Home | Home<br>Ctrl+a |
+| End of the text | `end` | ⏳ | End<br>Ctrl+e | End<br>Ctrl+e | Ctrl+e<br>End<br>C1<br>Alt+> | Ctrl+End | $<br>Ctrl+e<br>End | End<br>Ctrl+e |
+| Delete the character before the cursor | `backspace` | ⏳ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | Ctrl+h<br>Backspace | Backspace | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h |
+| Delete the character at the cursor | `delete` | ⏳ | Delete | Delete | Ctrl+d<br>Delete | Delete | Delete<br>Ctrl+d | Delete<br>Ctrl+d |
+| Delete to the start | `delete_to_start` | ⏳ | Ctrl+u | Ctrl+u | Ctrl+w (nothing selected) | — | Ctrl+u | Ctrl+u |
+| Delete to the end | `delete_to_end` | ⏳ | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k |
+| Word left | — | ⏳ | — | — | Alt+b<br>Ctrl+Left | Ctrl+Left | b<br>B (WORD)<br>Alt+b<br>Ctrl+Left | Alt+b<br>Alt+Left |
+| Word right | — | ⏳ | — | — | Alt+f<br>Ctrl+Right | Ctrl+Right | w<br>W (WORD)<br>e (its end)<br>E (the WORD's end)<br>Alt+f (its end)<br>Ctrl+Right (its end) | Alt+f<br>Alt+Right |
+| Delete word left | — | ⏳ | — | Ctrl+w | Ctrl+Alt+h<br>Alt+Backspace | Ctrl+Backspace | Ctrl+w<br>Ctrl+Backspace | Ctrl+w |
+| Delete word right | — | ⏳ | — | — | Alt+d | Ctrl+Delete | Alt+d<br>Ctrl+Delete | Alt+d |
+| Select text | — | ⏳ | — | — | Shift+Left<br>Shift+Right<br>Ctrl+Shift+Left<br>Ctrl+Shift+Right<br>Shift+Home<br>Shift+End | — | — | — |
+| Cut the selection | — | ⏳ | — | — | — | — | d<br>D (to the end)<br>x (one character) | — |
+| Delete the selection | — | ⏳ | — | — | Ctrl+w | — | — | — |
+| Copy | — | ⏳ | — | — | Alt+w | Ctrl+Insert | y | — |
+| Paste | — | ⏳ | — | — | Ctrl+y | Shift+Insert | p<br>P (before the cursor) | Ctrl+y |
+| Normal mode, as in vi; in normal mode, cancel | — | ⏳ | — | — | — | — | Esc<br>Ctrl+[ | — |
+| Insert mode: at the cursor / at the first character that is not a space / after the cursor / at the end | — | ⏳ | — | — | — | — | i / I / a / A | — |
+| Visual mode: select characters | — | ⏳ | — | — | — | — | v | — |
+| Select the whole text | — | ⏳ | — | — | — | — | V<br>Ctrl+A<br>Ctrl+E | — |
+| The first character that is not a space | — | ⏳ | — | — | — | — | _<br>^ | — |
+| Replace the character at the cursor | — | ⏳ | — | — | — | — | r | — |
+| Cut, then insert mode | — | ⏳ | — | — | — | — | c<br>C (to the end)<br>s (one character)<br>S (the whole text) | — |
+| Undo | — | ⏳ | — | — | — | — | u | — |
+| Redo | — | ⏳ | — | — | — | — | Ctrl+r | — |
+| Uppercase / lowercase the selection | — | ⏳ | — | — | — | — | U / u | — |
+| Swap the characters / the words at the cursor | — | ⏳ | — | — | — | — | — | Ctrl+t / Alt+t |
+
+## Quick search (`quick_search`)
+
+In the active panel; characters are part of the name searched for, the keys of `input` edit it,
+and other keys end the search and go to the panel: Home and End move the text cursor here, not
+the panel's. An edit searches again from the name under the cursor, which stays if it still
+matches; as in mc, a character that nothing matches is dropped. In the default preset, Enter
+ends the search and opens the entry, through the panel, as in mc; in the vim preset, Enter only
+ends it, on the match, as in vim. The last search stays for n, N, and Shift+F7 in the panel. yazi
+searches as the name is typed in an input box, and ranger as it is typed on its console; both go
+to the next and previous match with keys of the panel, once the search is over.
+
+| Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
+| --- | --- | :-: | --- | --- | --- | --- | --- | --- |
 | End the search; the cursor stays on the match | `cancel` | ✅ | Esc | Esc<br>Ctrl+c<br>Enter | Esc | — | Ctrl+c<br>Esc Esc | Esc<br>Ctrl+c<br>Ctrl+g |
-| Next match; with nothing typed, the last search again, as mc's Ctrl+s Ctrl+s; the default preset leaves it to the panel | `quick_search` | ⏳ | Ctrl+s<br>Alt+s | Ctrl+g | Ctrl+s<br>Alt+s | Ctrl+Enter | n | n |
+| Next match; with nothing typed, the last search again, as mc's Ctrl+s Ctrl+s | `quick_search` | ⏳ | Ctrl+s<br>Alt+s | Ctrl+g | Ctrl+s<br>Alt+s | Ctrl+Enter | n | n |
 | Previous match | `prev_match` | ⏳ | — | Ctrl+t | — | Ctrl+Shift+Enter | N | N |
 | Paste from clipboard | — | 🚫 | — | — | — | Ctrl+v<br>Shift+Insert | — | — |
 
 ## Renaming in place (`rename`)
 
-Shift+F6 edits the name in the entry's row; keys it does not bind, but the global ones, do
-nothing. None of mc, Far, yazi, and ranger renames in the row: mc and Far ask in a dialog, yazi
-in an input box, and ranger on its console, whose keys are those of text fields.
+Shift+F6 edits the name in the entry's row with the keys of `input`; other keys, but the global
+ones, do nothing. None of mc, Far, yazi, and ranger renames in the row: mc and Far ask in a
+dialog, yazi in an input box, and ranger on its console, whose keys are those of `input`.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| One character left | `left` | ⏳ | Left | Left | — | — | — | — |
-| One character right | `right` | ⏳ | Right | Right | — | — | — | — |
-| Start of the text | `home` | ⏳ | Home<br>Ctrl+a | Home<br>Ctrl+b | — | — | — | — |
-| End of the text | `end` | ⏳ | End<br>Ctrl+e | End<br>Ctrl+e | — | — | — | — |
-| Delete the character before the cursor | `backspace` | ⏳ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | — | — | — | — |
-| Delete the character at the cursor | `delete` | ⏳ | Delete | Delete | — | — | — | — |
-| Delete to the start | `delete_to_start` | ⏳ | Ctrl+u | Ctrl+u | — | — | — | — |
-| Delete to the end | `delete_to_end` | ⏳ | Ctrl+k | Ctrl+k | — | — | — | — |
 | Rename to the name typed | `confirm` | ⏳ | Enter | Ctrl+y<br>Enter | — | — | — | — |
 | Keep the name as it was | `cancel` | ⏳ | Esc | Esc<br>Ctrl+c | — | — | — | — |
 
@@ -579,31 +613,11 @@ move in it.
 
 ## Text fields (`dialog_input`)
 
-A text field in a dialog; keys it does not bind go to the dialog, whose Left and Right move the
-text cursor here. The mc column has the keys of mc's input lines, its command line among them;
-the far column, those of Far's command line. The yazi column has the keys of its input boxes,
-which open in insert mode; its letters, digits, and symbols without a modifier work in normal
-mode, after Esc, as in vi. The ranger column has the keys of its console.
+A text field in a dialog; it falls back to `input`, whose keys edit the text, then to the
+dialog. The mc column has the keys of mc's input lines; the far column, those of Far's dialogs.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| One character left, with the dialog's key | `left` | ⏳ | Left | Left | Ctrl+b<br>Left<br>Alt+Left | Left<br>Ctrl+s | h<br>Left<br>Ctrl+b | Left<br>Ctrl+b |
-| One character right, with the dialog's key | `right` | ⏳ | Right | Right | Ctrl+f<br>Right<br>Alt+Right | Right<br>Ctrl+d | l<br>Right<br>Ctrl+f | Right<br>Ctrl+f |
-| Start of the text | `home` | ⏳ | Home<br>Ctrl+a | Home<br>Ctrl+b | Ctrl+a<br>Home<br>A1<br>Alt+< | Ctrl+Home | 0<br>Ctrl+a<br>Home | Home<br>Ctrl+a |
-| End of the text | `end` | ⏳ | End<br>Ctrl+e | End<br>Ctrl+e | Ctrl+e<br>End<br>C1<br>Alt+> | Ctrl+End | $<br>Ctrl+e<br>End | End<br>Ctrl+e |
-| Delete the character before the cursor | `backspace` | ⏳ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | Ctrl+h<br>Backspace | Backspace | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h |
-| Delete the character at the cursor | `delete` | ⏳ | Delete | Delete | Ctrl+d<br>Delete | Delete | Delete<br>Ctrl+d | Delete<br>Ctrl+d |
-| Delete to the start | `delete_to_start` | ⏳ | Ctrl+u | Ctrl+u | Ctrl+w (nothing selected) | — | Ctrl+u | Ctrl+u |
-| Delete to the end | `delete_to_end` | ⏳ | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k |
-| Word left | — | ⏳ | — | — | Alt+b<br>Ctrl+Left | Ctrl+Left | b<br>B (WORD)<br>Alt+b<br>Ctrl+Left | Alt+b<br>Alt+Left |
-| Word right | — | ⏳ | — | — | Alt+f<br>Ctrl+Right | Ctrl+Right | w<br>W (WORD)<br>e (its end)<br>E (the WORD's end)<br>Alt+f (its end)<br>Ctrl+Right (its end) | Alt+f<br>Alt+Right |
-| Delete word left | — | ⏳ | — | Ctrl+w | Ctrl+Alt+h<br>Alt+Backspace | Ctrl+Backspace | Ctrl+w<br>Ctrl+Backspace | Ctrl+w |
-| Delete word right | — | ⏳ | — | — | Alt+d | Ctrl+Delete | Alt+d<br>Ctrl+Delete | Alt+d |
-| Select text | — | ⏳ | — | — | Shift+Left<br>Shift+Right<br>Ctrl+Shift+Left<br>Ctrl+Shift+Right<br>Shift+Home<br>Shift+End | — | — | — |
-| Cut the selection | — | ⏳ | — | — | — | — | d<br>D (to the end)<br>x (one character) | — |
-| Delete the selection | — | ⏳ | — | — | Ctrl+w | — | — | — |
-| Copy | — | ⏳ | — | — | Alt+w | Ctrl+Insert | y | — |
-| Paste | — | ⏳ | — | — | Ctrl+y | Shift+Insert | p<br>P (before the cursor) | Ctrl+y |
 | Input line history | — | ⏳ | — | — | Alt+h | Ctrl+Up (in dialogs)<br>Ctrl+Down (in dialogs) | — | — |
 | Previous history entry | — | ⏳ | — | — | Alt+p<br>Ctrl+Down | Ctrl+e | k<br>Up<br>Ctrl+p | Up<br>Ctrl+p |
 | Next history entry | — | ⏳ | — | — | Alt+n<br>Ctrl+Up | Ctrl+x | j<br>Down<br>Ctrl+n | Down<br>Ctrl+n |
@@ -612,17 +626,6 @@ mode, after Esc, as in vi. The ranger column has the keys of its console.
 | Dialog history: mark item | — | ⏳ | — | — | — | Insert | — | — |
 | Insert file name under cursor into dialog | — | ⏳ | — | — | — | Shift+Enter | — | — |
 | Insert passive panel file name into dialog | — | ⏳ | — | — | — | Ctrl+Shift+Enter | — | — |
-| Normal mode, as in vi; in normal mode, cancel | — | ⏳ | — | — | — | — | Esc<br>Ctrl+[ | — |
-| Insert mode: at the cursor / at the first character that is not a space / after the cursor / at the end | — | ⏳ | — | — | — | — | i / I / a / A | — |
-| Visual mode: select characters | — | ⏳ | — | — | — | — | v | — |
-| Select the whole text | — | ⏳ | — | — | — | — | V<br>Ctrl+A<br>Ctrl+E | — |
-| The first character that is not a space | — | ⏳ | — | — | — | — | _<br>^ | — |
-| Replace the character at the cursor | — | ⏳ | — | — | — | — | r | — |
-| Cut, then insert mode | — | ⏳ | — | — | — | — | c<br>C (to the end)<br>s (one character)<br>S (the whole text) | — |
-| Undo | — | ⏳ | — | — | — | — | u | — |
-| Redo | — | ⏳ | — | — | — | — | Ctrl+r | — |
-| Uppercase / lowercase the selection | — | ⏳ | — | — | — | — | U / u | — |
-| Swap the characters / the words at the cursor | — | ⏳ | — | — | — | — | — | Ctrl+t / Alt+t |
 
 ## Path fields (`path_input`)
 
@@ -656,24 +659,17 @@ console's line.
 
 ## Command line (`command_line`)
 
-`!` and `:` open it; keys it does not bind, but the global ones, do nothing. In mc and Far the
-command line is always under the panels, so their keys here are pressed in the panels. yazi
-asks for a shell command in an input box (; and : in the panels), and ranger's console (: and !)
-is its command line. The keys of their input lines that noc lacks, such as words and the
-clipboard, are under text fields, as are yazi's modes.
+`!` and `:` open it; it falls back to `input`, whose Home and End go to the start and the end of
+the line here, and whose Ctrl+u and Ctrl+k delete to them. Other keys, but the global ones, do
+nothing. In mc and Far the command line is always under the panels, so their keys here are
+pressed in the panels. yazi asks for a shell command in an input box (; and : in the panels),
+and ranger's console (: and !) is its command line. The keys of their input lines that noc
+lacks, such as words and the clipboard, are under `input`, as are yazi's modes.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| One character left | `left` | ⏳ | Left | Left | Ctrl+b<br>Left<br>Alt+Left | Left<br>Ctrl+s | h<br>Left<br>Ctrl+b | Left<br>Ctrl+b |
-| One character right | `right` | ⏳ | Right | Right | Ctrl+f<br>Right<br>Alt+Right | Right<br>Ctrl+d | l<br>Right<br>Ctrl+f | Right<br>Ctrl+f |
 | The line above; from the first line, the command before in the history of the panel's host | `up` | ⏳ | Up | Up | — | — | k<br>Up | Up |
 | The line below; from the last line, the command after in the history | `down` | ⏳ | Down | Down | — | — | j<br>Down | Down |
-| Start of the line | `home` | ⏳ | Ctrl+a<br>Home | Home<br>Ctrl+b | Ctrl+a | Ctrl+Home | 0<br>Ctrl+a<br>Home | Home<br>Ctrl+a |
-| End of the line | `end` | ⏳ | Ctrl+e<br>End | End<br>Ctrl+e | Ctrl+e | Ctrl+End | $<br>Ctrl+e<br>End | End<br>Ctrl+e |
-| Delete the character before the cursor | `backspace` | ⏳ | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h | Ctrl+h<br>Backspace | Backspace | Backspace<br>Ctrl+h | Backspace<br>Ctrl+h |
-| Delete the character at the cursor | `delete` | ⏳ | Delete | Delete | Ctrl+d<br>Delete | Delete | Delete<br>Ctrl+d | Delete<br>Ctrl+d |
-| Delete to the start of the line | `delete_to_start` | ⏳ | Ctrl+u | Ctrl+u | Ctrl+w (nothing selected) | — | Ctrl+u | Ctrl+u |
-| Delete to the end of the line | `delete_to_end` | ⏳ | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k | Ctrl+k |
 | A new line in the command | `new_line` | ⏳ | Ctrl+j<br>Shift+Enter (kitty keyboard protocol) | Ctrl+j<br>Shift+Enter (kitty keyboard protocol) | — | — | — | — |
 | Edit the command in $VISUAL or $EDITOR | `edit_command` | ⏳ | Ctrl+x Ctrl+e | Ctrl+f<br>Ctrl+x Ctrl+e | — | — | — | — |
 | The command before in the history of the panel's host | `older_command` | ⏳ | Alt+p | Ctrl+p | Alt+p<br>Ctrl+Down | Ctrl+e | Ctrl+p | Ctrl+p |

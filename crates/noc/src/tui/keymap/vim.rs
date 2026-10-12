@@ -94,30 +94,37 @@ pub(super) const PRESET: Preset = &[
             (Action::Redraw, &["ctrl-l"]),               // OK1
         ],
     ),
-    // Quick search in the active panel; other keys go to the panel.
+    // What the text fields share: quick search, the field of an entry renamed in its row, the
+    // text fields of dialogs, and the command line fall back to it. Ctrl+b goes to the start, as
+    // on vim's command line.
     (
-        Context::QuickSearch,
-        &[
-            (Action::Backspace, &["backspace", "ctrl-h"]), // OK1
-            // Enter ends the search on the match, as in vim, rather than opening the entry.
-            (Action::Cancel, &["esc", "ctrl-c", "enter"]), // OK1
-            (Action::QuickSearch, &["ctrl-g"]),
-            (Action::PrevMatch, &["ctrl-t"]),
-        ],
-    ),
-    // The name field of an entry renamed in its row.
-    (
-        Context::Rename,
+        Context::Input,
         &[
             (Action::Left, &["left"]),
             (Action::Right, &["right"]),
-            // Ctrl+b, as on vim's command line.
             (Action::Home, &["home", "ctrl-b"]),
             (Action::End, &["end", "ctrl-e"]),
             (Action::Backspace, &["backspace", "ctrl-h"]),
             (Action::Delete, &["delete"]),
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::DeleteToEnd, &["ctrl-k"]),
+        ],
+    ),
+    // Quick search in the active panel, on top of the text field's; other keys go to the panel.
+    // Ctrl+g and Ctrl+t go to the next and the previous match, as while vim's search is typed.
+    (
+        Context::QuickSearch,
+        &[
+            // Enter ends the search on the match, as in vim, rather than opening the entry.
+            (Action::Cancel, &["esc", "ctrl-c", "enter"]), // OK1
+            (Action::QuickSearch, &["ctrl-g"]),
+            (Action::PrevMatch, &["ctrl-t"]),
+        ],
+    ),
+    // The name field of an entry renamed in its row, on top of the text field's.
+    (
+        Context::Rename,
+        &[
             (Action::Confirm, &["ctrl-y", "enter"]),
             (Action::Cancel, &["esc", "ctrl-c"]),
         ],
@@ -216,18 +223,8 @@ pub(super) const PRESET: Preset = &[
             (Action::Cancel, &["esc", "ctrl-c", "f9", "f10"]),
         ],
     ),
-    // Text fields, on top of the dialog's. Ctrl+b goes to the start, as on vim's command line.
-    (
-        Context::DialogInput,
-        &[
-            (Action::Home, &["home", "ctrl-b"]),
-            (Action::End, &["end", "ctrl-e"]),
-            (Action::Backspace, &["backspace", "ctrl-h"]),
-            (Action::Delete, &["delete"]),
-            (Action::DeleteToStart, &["ctrl-u"]),
-            (Action::DeleteToEnd, &["ctrl-k"]),
-        ],
-    ),
+    // The text fields of dialogs: the text field's keys, then the dialog's.
+    (Context::DialogInput, &[]),
     // Path fields, on top of the text field's: Tab completes, as in a shell; Shift+Tab and Down
     // still leave the field.
     (Context::PathInput, &[(Action::Complete, &["tab"])]),
@@ -247,23 +244,16 @@ pub(super) const PRESET: Preset = &[
             (Action::Cancel, &["esc", "ctrl-c"]),
         ],
     ),
-    // The command line of `!` and `:`. Ctrl+j arrives as LF where Enter arrives as CR, so it starts
-    // a new line in every terminal; Shift+Enter does where the terminal speaks the kitty keyboard
-    // protocol. As on vim's command line, Ctrl+b goes to the start, Ctrl+p and Ctrl+n go through
-    // the history, and Ctrl+f opens the command for editing, as Ctrl+x Ctrl+e does in bash.
+    // The command line of `!` and `:`, on top of the text field's. Ctrl+j arrives as LF where
+    // Enter arrives as CR, so it starts a new line in every terminal; Shift+Enter does where the
+    // terminal speaks the kitty keyboard protocol. As on vim's command line, Ctrl+p and Ctrl+n go
+    // through the history, and Ctrl+f opens the command for editing, as Ctrl+x Ctrl+e does in
+    // bash.
     (
         Context::CommandLine,
         &[
-            (Action::Left, &["left"]),
-            (Action::Right, &["right"]),
             (Action::Up, &["up"]),
             (Action::Down, &["down"]),
-            (Action::Home, &["home", "ctrl-b"]),
-            (Action::End, &["end", "ctrl-e"]),
-            (Action::Backspace, &["backspace", "ctrl-h"]),
-            (Action::Delete, &["delete"]),
-            (Action::DeleteToStart, &["ctrl-u"]),
-            (Action::DeleteToEnd, &["ctrl-k"]),
             (Action::NewLine, &["ctrl-j", "shift-enter"]),
             (Action::EditCommand, &["ctrl-f", "ctrl-x ctrl-e"]),
             (Action::OlderCommand, &["ctrl-p"]),

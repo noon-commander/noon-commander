@@ -168,7 +168,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the keys that go on to the next match.
 - The filters of the location menu, the tab menu, the workspaces, and the command history, and the
   keywords of the zoxide window, are text fields too: Left and Right move in them, and Ctrl+a and
-  Ctrl+e go to their start and end (Ctrl+e in the vim keymap, whose Ctrl+b pages up); Delete,
+  Ctrl+e go to their start and end (in the vim keymap too, whose Ctrl+b pages up there); Delete,
   Ctrl+u, and Ctrl+k delete, as Backspace does. Home and End still go to the first and the last
   row; Delete still deletes the workspace or the command under the cursor, and disconnects the
   host in the location menu.
@@ -202,6 +202,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   completions, as they page the other lists.
 - In the vim keymap, Space comes first of the keys that mark, and Ctrl+w p and Ctrl+w r switch and
   swap the panels too, as vim's Ctrl+w p and Ctrl+w r do with windows.
+- In the vim keymap, Ctrl+a goes to the start of text fields too, as in the shell, and so to the
+  start of the filters of the lists, whose Ctrl+b pages up; h and l go from button to button in
+  dialogs, and Ctrl+p and Ctrl+n move in them, as in the lists; Enter and q leave the output of
+  commands, as the prompt under what vim's g < shows does, and the help names g < first for it.
 - Release builds use full link-time optimization, which makes the `noc` binary about 6% smaller.
 - The title of a panel, and the tab menu, show the home directory as `~`: `~/src` rather
   than `/Users/me/src`.

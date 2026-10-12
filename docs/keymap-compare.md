@@ -85,7 +85,7 @@ the output of the last command.
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
 | The keys that can be typed now, over whatever is in front, and what they do, as which-key shows them | `key_hints` | ✅ | Alt+/ | Alt+/ | — | — | — | — |
-| The output of commands, in place of the panels and what is in front of them (mc, Far: hide or show the panels) | `user_screen` | ✅ | Ctrl+o<br>Ctrl+\` | Ctrl+\`<br>g < | Ctrl+o | Ctrl+o | — | — |
+| The output of commands, in place of the panels and what is in front of them (mc, Far: hide or show the panels) | `user_screen` | ✅ | Ctrl+o<br>Ctrl+\` | g <<br>Ctrl+\` | Ctrl+o | Ctrl+o | — | — |
 | Help: the keys of what is in front, and what they do | — | ⏳ | — | — | F1 | F1 | \~<br>F1 | — |
 
 ## Panels (`panel`)
@@ -354,7 +354,7 @@ as in vi. The ranger column has the keys of its console.
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
 | One character left | `left` | ✅ | Left<br>Ctrl+b | Left | Ctrl+b<br>Left<br>Alt+Left | Left<br>Ctrl+s | h<br>Left<br>Ctrl+b | Left<br>Ctrl+b |
 | One character right | `right` | ✅ | Right<br>Ctrl+f | Right | Ctrl+f<br>Right<br>Alt+Right | Right<br>Ctrl+d | l<br>Right<br>Ctrl+f | Right<br>Ctrl+f |
-| Start of the text | `text_start` | ✅ | Home<br>Ctrl+a | Home<br>Ctrl+b | Ctrl+a<br>Home<br>A1<br>Alt+< | Ctrl+Home | 0<br>Ctrl+a<br>Home | Home<br>Ctrl+a |
+| Start of the text | `text_start` | ✅ | Home<br>Ctrl+a | Home<br>Ctrl+b<br>Ctrl+a | Ctrl+a<br>Home<br>A1<br>Alt+< | Ctrl+Home | 0<br>Ctrl+a<br>Home | Home<br>Ctrl+a |
 | End of the text | `text_end` | ✅ | End<br>Ctrl+e | End<br>Ctrl+e | Ctrl+e<br>End<br>C1<br>Alt+> | Ctrl+End | $<br>Ctrl+e<br>End | End<br>Ctrl+e |
 | One word left: the start of the word before the cursor | `word_left` | ✅ | Ctrl+Left<br>Alt+b | Shift+Left<br>Ctrl+Left | Alt+b<br>Ctrl+Left | Ctrl+Left | b<br>B (WORD)<br>Alt+b<br>Ctrl+Left | Alt+b<br>Alt+Left |
 | One word right: the end of the word after the cursor | `word_right` | ✅ | Ctrl+Right<br>Alt+f | Shift+Right<br>Ctrl+Right | Alt+f<br>Ctrl+Right | Ctrl+Right | w<br>W (WORD)<br>e (its end)<br>E (the WORD's end)<br>Alt+f (its end)<br>Ctrl+Right (its end) | Alt+f<br>Alt+Right |
@@ -423,10 +423,10 @@ since ranger asks its questions on the console.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Previous button; in the help and lists, one row up | `up` | ✅ | Up<br>Ctrl+p | k<br>Up | Up<br>Ctrl+p (help, lists) | Up (help) | k<br>Up<br>Ctrl+p (help) | Up<br>k<br>Ctrl+p |
-| Next button; in the help and lists, one row down | `down` | ✅ | Down<br>Ctrl+n | j<br>Down | Down<br>Ctrl+n (help, lists) | Down (help) | j<br>Down<br>Ctrl+n (help) | Down<br>j<br>Ctrl+n<br>Enter |
-| Previous button | `left` | ✅ | Left | Left | Left | — | — | — |
-| Next button | `right` | ✅ | Right | Right | Right | — | — | — |
+| Previous button; in the help and lists, one row up | `up` | ✅ | Up<br>Ctrl+p | k<br>Up<br>Ctrl+p | Up<br>Ctrl+p (help, lists) | Up (help) | k<br>Up<br>Ctrl+p (help) | Up<br>k<br>Ctrl+p |
+| Next button; in the help and lists, one row down | `down` | ✅ | Down<br>Ctrl+n | j<br>Down<br>Ctrl+n | Down<br>Ctrl+n (help, lists) | Down (help) | j<br>Down<br>Ctrl+n (help) | Down<br>j<br>Ctrl+n<br>Enter |
+| Previous button | `left` | ✅ | Left | h<br>Left | Left | — | — | — |
+| Next button | `right` | ✅ | Right | l<br>Right | Right | — | — | — |
 | In the help and lists, one page up | `page_up` | ✅ | PgUp | Ctrl+b<br>PgUp | PgUp<br>Alt+v<br>b (help)<br>Backspace (help) | — | — | p<br>b<br>Ctrl+b |
 | In the help and lists, one page down | `page_down` | ✅ | PgDn | Ctrl+f<br>PgDn | PgDn<br>Ctrl+v<br>Space (help)<br>f (help) | — | — | n<br>f<br>Ctrl+f<br>Space |
 | In the help and lists, the first row | `home` | ✅ | Home | g g<br>Home | Home<br>A1<br>g (help)<br>Ctrl+Home (help)<br>Ctrl+PgUp (help)<br>Alt+< | — | — | Home<br>g |
@@ -539,11 +539,11 @@ The keys that the windows listing items to choose from share: the location menu,
 zoxide window, the workspaces, and the command history fall back to it, then to `input`, whose keys
 edit their filter or keywords, and their sections list only the keys they add. Home and End go to
 the first and the last item here, and Ctrl+a and Ctrl+e of `input` to the start and the end of the
-filter (vim's Ctrl+b stays the page up); Delete takes a character of the filter where the window
-does not take it. Keys never go to it alone; the help lists its keys
-with each of those windows, with what Enter takes there. The mc column has the keys of mc's lists,
-such as its histories and its hotlist; the far column, those of Far's menus; the yazi column, those
-of its pick window, which asks for the program to open files with.
+filter, in both presets (vim's Ctrl+b stays the page up); Delete takes a character of the filter
+where the window does not take it. Keys never go to it alone; the help lists its keys with each
+of those windows, with what Enter takes there. The mc column has the keys of mc's lists, such as
+its histories and its hotlist; the far column, those of Far's menus; the yazi column, those of its
+pick window, which asks for the program to open files with.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
@@ -741,11 +741,12 @@ Far. Far's rows are those of its history menus.
 ## Output of commands (`user_screen`)
 
 The terminal's own screen, with the output of commands, in place of the panels; only the keys
-that bring the panels back do anything.
+that bring the panels back do anything. The vim preset takes Enter and q too, as the prompt under
+the output that vim's g < shows does.
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Back to the panels | `cancel` | ✅ | Ctrl+o<br>Esc<br>Ctrl+[<br>Ctrl+\` | Esc<br>Ctrl+[<br>Ctrl+\`<br>g < | Ctrl+o | Ctrl+o | — | — |
+| Back to the panels | `cancel` | ✅ | Ctrl+o<br>Esc<br>Ctrl+[<br>Ctrl+\` | g <<br>Enter<br>Ctrl+m<br>q<br>Esc<br>Ctrl+[<br>Ctrl+\` | Ctrl+o | Ctrl+o | — | — |
 
 ## Mouse
 

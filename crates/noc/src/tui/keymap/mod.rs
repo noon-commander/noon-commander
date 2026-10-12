@@ -1535,6 +1535,21 @@ mod tests {
             ),
             actions(&[Action::Cancel, Action::Cancel])
         );
+        // In vim, Enter and q go back too, as from the prompt under what vim's g < shows.
+        let vim = Keymap::by_name("vim").unwrap();
+        assert_eq!(
+            feed(
+                &vim,
+                &mut state,
+                Context::UserScreen,
+                &["a", "ctrl-o", "g", "<", "enter", "q", "esc"]
+            ),
+            actions(&[Action::Cancel; 4])
+        );
+        assert_eq!(
+            vim.key(Context::Panel, Action::UserScreen).as_deref(),
+            Some("g <")
+        );
     }
 
     #[test]
@@ -1746,6 +1761,16 @@ mod tests {
         assert_eq!(
             feed(&vim, &mut state, Context::Dialog, &["ctrl-b", "ctrl-f"]),
             actions(&[Action::PageUp, Action::PageDown])
+        );
+        // The buttons of a dialog stand in a row: h and l go along it, as j and k do.
+        assert_eq!(
+            feed(
+                &vim,
+                &mut state,
+                Context::Dialog,
+                &["h", "l", "ctrl-p", "ctrl-n"]
+            ),
+            actions(&[Action::Left, Action::Right, Action::Up, Action::Down])
         );
         assert_eq!(
             feed(&vim, &mut state, Context::Completion, &["ctrl-p", "ctrl-n"]),
@@ -2583,16 +2608,18 @@ mod tests {
                     "{name}: {context:?}"
                 );
                 // Ctrl+a goes to the start of the filter; vim's Ctrl+b stays the list's page up.
-                let (key, action) = if *name == "vim" {
-                    ("ctrl-b", Action::PageUp)
-                } else {
-                    ("ctrl-a", Action::TextStart)
-                };
                 assert_eq!(
-                    feed(&keymap, &mut state, context, &[key]),
-                    actions(&[action]),
+                    feed(&keymap, &mut state, context, &["ctrl-a"]),
+                    actions(&[Action::TextStart]),
                     "{name}: {context:?}"
                 );
+                if *name == "vim" {
+                    assert_eq!(
+                        feed(&keymap, &mut state, context, &["ctrl-b"]),
+                        actions(&[Action::PageUp]),
+                        "{context:?}"
+                    );
+                }
             }
             // Home is the list's and the filter's: the help shows it once.
             for context in Context::ALL {
@@ -2626,6 +2653,10 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn ctrl_d_takes_a_character_of_a_filter_never_its_row() {
         // The default keymap's Ctrl+d takes a character of the filter, as in mc's input lines,
         // and never the row under the cursor.
         let mc = Keymap::mc();

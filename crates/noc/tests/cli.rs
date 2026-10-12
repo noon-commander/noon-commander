@@ -268,7 +268,7 @@ fn keymap_diff_compares_the_default_and_the_vim_keymap() {
     assert!(text.contains("\n[workspaces] same\n"), "{text}");
     assert!(
         text.lines()
-            .any(|line| line.starts_with("  up ") && line.ends_with("|  k, Up")),
+            .any(|line| line.starts_with("  up ") && line.ends_with("|  k, Up, Ctrl+p")),
         "{text}"
     );
     assert!(

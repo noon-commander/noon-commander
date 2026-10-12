@@ -13,7 +13,7 @@ pub(super) const PRESET: Preset = &[
         Context::Global,
         &[
             (Action::KeyHints, &["alt-/"]),
-            (Action::UserScreen, &["ctrl-`", "g <"]),
+            (Action::UserScreen, &["g <", "ctrl-`"]),
         ],
     ),
     // The panels.
@@ -97,13 +97,13 @@ pub(super) const PRESET: Preset = &[
     // What the text fields share: quick search, the field of an entry renamed in its row, the
     // text fields of dialogs, the command line, and the filters of the lists fall back to it.
     // Ctrl+b goes to the start, and Shift+Left and Shift+Right go by words, as on vim's command
-    // line.
+    // line; Ctrl+a goes to the start too, as in the shell, where a list's Ctrl+b pages.
     (
         Context::Input,
         &[
             (Action::Left, &["left"]),
             (Action::Right, &["right"]),
-            (Action::TextStart, &["home", "ctrl-b"]),
+            (Action::TextStart, &["home", "ctrl-b", "ctrl-a"]),
             (Action::TextEnd, &["end", "ctrl-e"]),
             (Action::WordLeft, &["shift-left", "ctrl-left"]),
             (Action::WordRight, &["shift-right", "ctrl-right"]),
@@ -146,10 +146,10 @@ pub(super) const PRESET: Preset = &[
     (
         Context::Dialog,
         &[
-            (Action::Up, &["k", "up"]),
-            (Action::Down, &["j", "down"]),
-            (Action::Left, &["left"]),
-            (Action::Right, &["right"]),
+            (Action::Up, &["k", "up", "ctrl-p"]),
+            (Action::Down, &["j", "down", "ctrl-n"]),
+            (Action::Left, &["h", "left"]),
+            (Action::Right, &["l", "right"]),
             (Action::PageUp, &["ctrl-b", "pageup"]),
             (Action::PageDown, &["ctrl-f", "pagedown"]),
             (Action::Home, &["g g", "home"]),
@@ -299,9 +299,13 @@ pub(super) const PRESET: Preset = &[
             (Action::Delete, &["delete", "ctrl-backspace", "f8"]),
         ],
     ),
-    // The terminal's own screen, with the output of commands.
+    // The terminal's own screen, with the output of commands. Enter and q go back, as from the
+    // prompt under the output that vim's g < shows.
     (
         Context::UserScreen,
-        &[(Action::Cancel, &["esc", "ctrl-[", "ctrl-`", "g <"])],
+        &[(
+            Action::Cancel,
+            &["g <", "enter", "ctrl-m", "q", "esc", "ctrl-[", "ctrl-`"],
+        )],
     ),
 ];

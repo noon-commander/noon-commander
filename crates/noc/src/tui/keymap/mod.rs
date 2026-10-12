@@ -1754,6 +1754,45 @@ mod tests {
     }
 
     #[test]
+    fn ctrl_y_confirms_in_vims_lists_and_menus_but_not_where_text_is_typed() {
+        // The shell, mc, and ranger paste with Ctrl+y: after Ctrl+w or Ctrl+u it would rename,
+        // run, or accept the text cut short. Dialogs count, for their text fields fall back to
+        // them.
+        let vim = Keymap::by_name("vim").unwrap();
+        for context in [
+            Context::Rename,
+            Context::CommandLine,
+            Context::DialogInput,
+            Context::PathInput,
+            Context::Dialog,
+        ] {
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&vim, &mut state, context, &["ctrl-y"]),
+                [],
+                "{context:?}"
+            );
+        }
+        // As in vim's pop-up menu.
+        for context in [
+            Context::LocationMenu,
+            Context::TabMenu,
+            Context::Jump,
+            Context::Workspaces,
+            Context::CommandHistory,
+            Context::PullDown,
+            Context::Completion,
+        ] {
+            let mut state = KeyState::default();
+            assert_eq!(
+                feed(&vim, &mut state, context, &["ctrl-y"]),
+                actions(&[Action::Confirm]),
+                "{context:?}"
+            );
+        }
+    }
+
+    #[test]
     fn q_closes_the_help_in_vim_and_no_other_dialog() {
         let vim = Keymap::by_name("vim").unwrap();
         let mut state = KeyState::default();

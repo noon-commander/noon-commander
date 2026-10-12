@@ -410,7 +410,7 @@ dialog, yazi in an input box, and ranger on its console, whose keys are those of
 
 | Description | Action | Status | noc (default) | noc (vim) | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- | --- |
-| Rename to the name typed | `confirm` | ✅ | Enter<br>Ctrl+m | Ctrl+y<br>Enter<br>Ctrl+m | — | — | — | — |
+| Rename to the name typed | `confirm` | ✅ | Enter<br>Ctrl+m | Enter<br>Ctrl+m | — | — | — | — |
 | Keep the name as it was | `cancel` | ✅ | Esc<br>Ctrl+[<br>Ctrl+g<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c | — | — | — | — |
 
 ## Dialogs and help (`dialog`)
@@ -433,7 +433,7 @@ since ranger asks its questions on the console.
 | In the help and lists, the last row | `end` | ✅ | End | G<br>End | End<br>C1<br>G (help)<br>Ctrl+End (help)<br>Ctrl+PgDn (help)<br>Alt+> | — | — | End<br>G |
 | Next field or button | `next_field` | ✅ | Tab | Tab | Tab | — | — | — |
 | Previous field or button | `prev_field` | ✅ | Shift+Tab | Shift+Tab | Shift+Tab | — | — | — |
-| Press the focused button; from a text field or a check box, the default one; close the help | `confirm` | ✅ | Enter<br>Ctrl+m | Ctrl+y<br>Enter<br>Ctrl+m | Enter | Ctrl+Enter (default button) | Enter (confirm, help)<br>y (confirm) | — |
+| Press the focused button; from a text field or a check box, the default one; close the help | `confirm` | ✅ | Enter<br>Ctrl+m | Enter<br>Ctrl+m | Enter | Ctrl+Enter (default button) | Enter (confirm, help)<br>y (confirm) | — |
 | Switch the check box, choose the radio button, or press the focused button | `toggle` | ✅ | Space | Space | Space | — | — | — |
 | Cancel; abort the job in front; close the help or the window | `cancel` | ✅ | Esc<br>Ctrl+[<br>F10<br>Ctrl+g<br>Ctrl+c | Esc<br>Ctrl+[<br>Ctrl+c<br>F10 | Esc<br>Esc Esc<br>F10<br>Ctrl+g<br>Ctrl+c (abort copy/delete) | Esc | Esc<br>Ctrl+[<br>Ctrl+c<br>n (confirm)<br>w (tasks) | Esc<br>q<br>Q<br>w<br>Ctrl+c |
 | Copy/move in background (in dialog) | — | ⏳ | — | — | Alt+b | — | — | — |
@@ -696,7 +696,7 @@ lacks, such as words and the clipboard, are under `input`, as are yazi's modes.
 | The command before in the history of the panel's host | `older_command` | ✅ | Alt+p<br>Ctrl+p | Ctrl+p | Alt+p<br>Ctrl+Down | Ctrl+e | Ctrl+p | Ctrl+p |
 | The command after in the history of the panel's host | `newer_command` | ✅ | Alt+n<br>Ctrl+n | Ctrl+n | Alt+n<br>Ctrl+Up | Ctrl+x | Ctrl+n | Ctrl+n |
 | The command history | `command_history` | ✅ | Alt+h<br>Ctrl+r | Ctrl+r | Alt+h | Alt+F8 | — | — |
-| Run the command; after a \\ at the end of the line, a new line | `confirm` | ✅ | Enter<br>Ctrl+m | Ctrl+y<br>Enter<br>Ctrl+m | Enter | Enter | Enter | Enter<br>Ctrl+j |
+| Run the command; after a \\ at the end of the line, a new line | `confirm` | ✅ | Enter<br>Ctrl+m | Enter<br>Ctrl+m | Enter | Enter | Enter | Enter<br>Ctrl+j |
 | Close the command line | `cancel` | ✅ | Esc<br>Ctrl+[<br>Ctrl+g<br>Ctrl+c<br>F10 | Esc<br>Ctrl+[<br>Ctrl+c<br>F10 | — | Esc | Ctrl+c<br>Esc Esc | Esc<br>Ctrl+c<br>Ctrl+g |
 | Insert current file name | — | ⏳ | — | — | Alt+Enter<br>Ctrl+Enter | Ctrl+j<br>Ctrl+Enter | — | — |
 | Insert file name from passive panel | — | ⏳ | — | — | — | Ctrl+Shift+Enter | — | — |

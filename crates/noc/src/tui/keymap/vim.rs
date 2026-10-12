@@ -131,15 +131,18 @@ pub(super) const PRESET: Preset = &[
             (Action::PrevMatch, &["ctrl-t"]),
         ],
     ),
-    // The name field of an entry renamed in its row, on top of the text field's.
+    // The name field of an entry renamed in its row, on top of the text field's. Ctrl+y does
+    // not confirm here, on the command line, or in dialogs, whose text fields fall back to them:
+    // the shell, mc, and ranger paste with it, so after Ctrl+w or Ctrl+u it would take the text
+    // cut short. vim confirms with it only in its pop-up menu, as the lists and menus do here.
     (
         Context::Rename,
         &[
-            (Action::Confirm, &["ctrl-y", "enter", "ctrl-m"]),
+            (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c"]),
         ],
     ),
-    // Dialogs whose focus is on a button or a list.
+    // Dialogs whose focus is on a button or a list; no Ctrl+y, as in renaming.
     (
         Context::Dialog,
         &[
@@ -153,7 +156,7 @@ pub(super) const PRESET: Preset = &[
             (Action::End, &["shift-g", "end"]),
             (Action::NextField, &["tab"]),
             (Action::PrevField, &["backtab"]),
-            (Action::Confirm, &["ctrl-y", "enter", "ctrl-m"]),
+            (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Toggle, &["space"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c", "f10"]),
         ],
@@ -271,7 +274,7 @@ pub(super) const PRESET: Preset = &[
     // Enter arrives as CR, so it starts a new line in every terminal; Shift+Enter does where the
     // terminal speaks the kitty keyboard protocol. As on vim's command line, Ctrl+p and Ctrl+n go
     // through the history, and Ctrl+f opens the command for editing, as Ctrl+x Ctrl+e does in
-    // bash.
+    // bash. No Ctrl+y, as in renaming.
     (
         Context::CommandLine,
         &[
@@ -283,7 +286,7 @@ pub(super) const PRESET: Preset = &[
             (Action::NewerCommand, &["ctrl-n"]),
             // bash's Ctrl+r.
             (Action::CommandHistory, &["ctrl-r"]),
-            (Action::Confirm, &["ctrl-y", "enter", "ctrl-m"]),
+            (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c", "f10"]),
         ],
     ),

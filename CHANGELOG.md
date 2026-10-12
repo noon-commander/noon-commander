@@ -35,7 +35,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Ctrl+x 1 and Ctrl+x 2 do in the default keymap. In the location menu, the zoxide window, the
   workspaces, and the command history, Ctrl+n, Ctrl+p, Ctrl+f, and Ctrl+b move as in the panels,
   and Ctrl+c closes them: the four share their keys in both keymaps. Ctrl+y does what Enter does in
-  the menus, the lists, the dialogs, renaming, and on the command line, as in vim's pop-up menu. In
+  the menus, the lists, and the list of completions, as in vim's pop-up menu, but not in dialogs,
+  renaming, or on the command line, where the shell, mc, and ranger paste with it. In
   both keymaps, Ctrl+h does what Backspace does wherever text is typed, as in mc, and in the default
   one Alt+< and Alt+> go to the first and the last row of a panel or a list, Ctrl+p, Ctrl+n, Alt+v,
   and Ctrl+v move in the lists as in the panels, and Ctrl+p and Ctrl+n in the pull-down menu, and

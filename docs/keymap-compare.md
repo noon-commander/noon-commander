@@ -975,16 +975,17 @@ take the letter alone.
 
 ## Command line (`command_line`, Insert mode)
 
-`!` and `:` open it, in Insert mode, as vim's command line: Esc closes it, and Ctrl+f goes to
-Normal mode, in place of vim's window of the command line; Ctrl+o runs one command of Normal
-mode, then Insert mode comes back. It falls back to `input`, whose Home and End go to the start
-and the end of the line here and whose Ctrl+u deletes to the start, then to `global`; other keys,
-but characters, do nothing. Ctrl+j arrives as LF where Enter arrives as CR, so it starts a new
-line in every terminal; Shift+Enter does where the terminal speaks the kitty keyboard protocol.
-In mc and Far the command line is always under the panels, so their keys here are pressed in the
-panels. yazi asks for a shell command in an input box (; and : in the panels), and ranger's
-console (: and !) is its command line. The keys of their input lines that noc lacks, such as the
-clipboard, are under `input`, as are yazi's modes.
+`!` and `:` open it, in Insert mode, as vim's command line: Esc closes it, and Ctrl+f goes to Normal
+mode, in place of vim's window of the command line, after which Esc leaves Insert mode, as in that
+window; Ctrl+c and F10 close it in any mode. Ctrl+o runs one command of Normal mode, then Insert
+mode comes back. It falls back to `input`, whose Home and End go to the start and the end of the
+line here and whose Ctrl+u deletes to the start, then to `global`; other keys, but characters, do
+nothing. Ctrl+j arrives as LF where Enter arrives as CR, so it starts a new line in every terminal;
+Shift+Enter does where the terminal speaks the kitty keyboard protocol. In mc and Far the command
+line is always under the panels, so their keys here are pressed in the panels. yazi asks for a shell
+command in an input box (; and : in the panels), and ranger's console (: and !) is its command line.
+The keys of their input lines that noc lacks, such as the clipboard, are under `input`, as are
+yazi's modes.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -998,7 +999,8 @@ clipboard, are under `input`, as are yazi's modes.
 | The command after in the history of the panel's host | `newer_command` | ✅ | Ctrl+n | Alt+n<br>Ctrl+Up | Ctrl+x | Ctrl+n | Ctrl+n |
 | One command of Normal mode, then Insert mode again | `normal_once` | ⏳ | Ctrl+o | — | — | — | — |
 | Run the command; after a \\ at the end of the line, a new line | `confirm` | ✅ | Enter<br>Ctrl+m | Enter | Enter | Enter | Enter<br>Ctrl+j |
-| Close the command line | `cancel` | ✅ | Esc<br>Ctrl+[<br>Ctrl+c<br>F10 | — | Esc | Ctrl+c<br>Esc Esc | Esc<br>Ctrl+c<br>Ctrl+g |
+| Close the command line; after Ctrl+f, leave Insert mode for Normal mode, as in vim's window of the command line | `cancel` | ⏳ | Esc<br>Ctrl+[ | — | Esc | Esc Esc | Esc<br>Ctrl+g |
+| Close the command line, in any mode | `abort` | ⏳ | Ctrl+c<br>F10 | — | — | Ctrl+c | Ctrl+c |
 | Edit the command in $VISUAL or $EDITOR, until a key of vim's is chosen for it | — | ⏳ | — | — | — | — | — |
 | Insert current file name | — | ⏳ | — | Alt+Enter<br>Ctrl+Enter | Ctrl+j<br>Ctrl+Enter | — | — |
 | Insert file name from passive panel | — | ⏳ | — | — | Ctrl+Shift+Enter | — | — |

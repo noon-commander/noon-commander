@@ -153,6 +153,8 @@ pub(crate) struct KeyState {
     /// A command was given up since the app last asked: by Esc, or by a key that cannot go on
     /// with it. The app gives up its part too, such as an operator that waits in a text field.
     dropped: bool,
+    /// An operator of a text field waits for its motion, as the app says before each key.
+    operator: bool,
 }
 
 impl KeyState {
@@ -198,6 +200,12 @@ impl KeyState {
     /// on with it.
     pub(crate) fn take_dropped(&mut self) -> bool {
         std::mem::take(&mut self.dropped)
+    }
+
+    /// Says whether an operator of a text field waits for its motion: `"` then gives it up and
+    /// names no register, as in vim, so that the key after it is a command of its own.
+    pub(crate) fn set_operator(&mut self, waits: bool) {
+        self.operator = waits;
     }
 
     /// Forgets the whole command: the keys, the counts, the register, and what waits for a
@@ -472,6 +480,10 @@ impl Keymap {
     /// What `action` does now that its keys are typed: it waits for a character if it takes
     /// one, and else goes with the count and the register typed for it.
     fn resolve(state: &mut KeyState, action: Action) -> Option<Typed> {
+        if action == Action::Register && state.operator {
+            state.drop_command();
+            return None;
+        }
         if action.takes_char() {
             let keys = std::mem::take(&mut state.keys);
             state.clear();

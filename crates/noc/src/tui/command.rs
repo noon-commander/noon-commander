@@ -94,6 +94,9 @@ pub(crate) struct CommandLine {
     /// The line opened for the window of the history alone, with `q :` from a panel: it
     /// closes with the window, as vim's window of the command line does.
     alone: bool,
+    /// Ctrl+f went to Normal mode, in place of vim's window of the command line: Esc leaves
+    /// Insert mode then, rather than close the line.
+    window: bool,
 }
 
 /// A row of the command line as drawn: the prompt or the mark of a continued line, if it
@@ -117,6 +120,7 @@ impl CommandLine {
             column: None,
             foreign: false,
             alone: false,
+            window: false,
         }
     }
 
@@ -302,16 +306,23 @@ impl CommandLine {
             // Ctrl+f goes to Normal mode where the cursor is, as vim's window of the command
             // line opens, rather than one character back, as Esc does.
             Action::NormalMode if self.mode() == Mode::Insert => {
+                self.window = true;
                 self.editor.set_mode(Mode::Normal);
                 return CommandEvent::None;
             }
-            // Esc after Ctrl+o goes back to Insert mode before it closes the line.
+            // Esc after Ctrl+o goes back to Insert mode before it closes the line; after
+            // Ctrl+f, it leaves Insert mode, as in vim's window of the command line.
             Action::Cancel => {
                 if self.editor.handle(action, extra, registers) {
                     return CommandEvent::None;
                 }
+                if self.window && self.mode() == Mode::Insert {
+                    self.editor.handle(Action::NormalMode, extra, registers);
+                    return CommandEvent::None;
+                }
                 return CommandEvent::Close;
             }
+            Action::Abort => return CommandEvent::Close,
             _ => {
                 // A key that is not the editor's is the one command after Ctrl+o too.
                 if !self.editor.handle(action, extra, registers) {
@@ -822,6 +833,25 @@ mod tests {
             CommandEvent::Run("make\ntest".to_owned()),
             "Enter runs it in Normal mode too"
         );
+    }
+
+    #[test]
+    fn after_ctrl_f_esc_leaves_insert_mode_as_in_vims_window_of_the_command_line() {
+        let mut registers = Registers::default();
+        let typed = |action| Typed::from(Resolved::Action(action));
+        // Opened, Esc closes the line, as vim's command line.
+        assert_eq!(press(&mut shell("ls"), Action::Cancel), CommandEvent::Close);
+        let mut line = shell("ls -l");
+        press(&mut line, Action::NormalMode);
+        line.handle_typed(typed(Action::ChangeToEnd), &mut registers);
+        line.editor.insert('a');
+        assert_eq!(line.mode(), Mode::Insert);
+        assert_eq!(press(&mut line, Action::Cancel), CommandEvent::None);
+        assert_eq!((line.text(), line.mode()), ("ls -a", Mode::Normal));
+        assert_eq!(line.editor.cursor(), 4, "on the character before, as Esc");
+        // Ctrl+c and F10 close it in any mode.
+        line.handle_typed(typed(Action::Append), &mut registers);
+        assert_eq!(press(&mut line, Action::Abort), CommandEvent::Close);
     }
 
     #[test]

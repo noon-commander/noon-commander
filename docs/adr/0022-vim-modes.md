@@ -33,11 +33,12 @@ no registers.
   start in Normal mode. Quick search, the command line of `:` and `!`, the field of a rename,
   and a dialog whose first focus is a text field start in Insert mode; a dialog whose first
   focus is a button, in Normal mode.
-- **Esc goes to Normal mode**, then closes in Normal mode, in the field of a rename and the
-  fields of dialogs. Quick search, `:`, and `!` are typed as vim's command line: Esc closes
-  them, and Ctrl+f puts `:` and `!` in Normal mode in place of vim's window of the command
-  line. A secret field has no Normal mode: Esc closes its dialog. Ctrl+c closes or cancels in
-  every mode, the terminal's own screen of `g <` included.
+- **Esc goes to Normal mode**, then closes in Normal mode, in the field of a rename and the fields
+  of dialogs. Quick search, `:`, and `!` are typed as vim's command line: Esc closes them, and
+  Ctrl+f puts `:` and `!` in Normal mode in place of vim's window of the command line, after which
+  Esc leaves Insert mode, as in that window, and Ctrl+c and F10 close it. A secret field has no
+  Normal mode: Esc closes its dialog. Ctrl+c closes or cancels in every mode, the terminal's own
+  screen of `g <` included.
 - **Esc still acts at once**, as ADR 0020 decided: it never waits for a key after it. Typed
   while a command is pending, a sequence such as `g`, a count, a register, or an operator, it
   gives the command up, as in vim, instead of doing what it does alone; so does a key that

@@ -520,7 +520,8 @@ pub(super) const PRESET: Preset = &[
             ),
         ],
     ),
-    // The command line of `!` and `:`, as vim's command line: Esc closes it. Ctrl+j arrives
+    // The command line of `!` and `:`, as vim's command line: Esc closes it, but leaves Insert
+    // mode after Ctrl+f, as in vim's window of the command line; Ctrl+c closes it. Ctrl+j arrives
     // as LF where Enter arrives as CR, so it starts a new line in every terminal; Shift+Enter
     // does where the terminal speaks the kitty keyboard protocol. Ctrl+b and Ctrl+e go to the
     // start and the end of the line, Ctrl+p and Ctrl+n through the history, and Ctrl+f to
@@ -539,7 +540,8 @@ pub(super) const PRESET: Preset = &[
             (Action::NewerCommand, &["ctrl-n"]),
             (Action::NormalOnce, &["ctrl-o"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
-            (Action::Cancel, &["esc", "ctrl-[", "ctrl-c", "f10"]),
+            (Action::Cancel, &["esc", "ctrl-["]),
+            (Action::Abort, &["ctrl-c", "f10"]),
         ],
     ),
     // The command line in Normal mode: j and k go through its lines, then the history, and

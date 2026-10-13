@@ -117,12 +117,16 @@ enum Focus {
 /// front and wiped when the field goes.
 pub(crate) struct Field {
     editor: Editor,
+    /// The first character the last render showed: the text stays where it is while the
+    /// cursor shows, as a vim window's `leftcol`.
+    first: Cell<usize>,
 }
 
 impl Field {
     fn secret() -> Self {
         Self {
             editor: Editor::secret(SECRET_CAPACITY),
+            first: Cell::new(0),
         }
     }
 
@@ -130,6 +134,7 @@ impl Field {
     pub(crate) fn plain(text: &str) -> Self {
         Self {
             editor: Editor::new(text, Mode::Insert),
+            first: Cell::new(0),
         }
     }
 
@@ -145,6 +150,7 @@ impl Field {
     pub(crate) fn normal(text: &str) -> Self {
         Self {
             editor: Editor::new(text, Mode::Normal),
+            first: Cell::new(0),
         }
     }
 
@@ -260,22 +266,31 @@ impl Field {
         (parts, column)
     }
 
-    /// The first character shown, what fits from there, and the cursor's column.
+    /// The first character shown, what fits from there, and the cursor's column. The text
+    /// shown stays while the cursor shows; once it would not, the cursor goes to the middle,
+    /// as vim's 'sidescroll' 0 has it.
     fn window(&self, room: usize) -> (usize, String, usize) {
         let chars: Vec<char> = if self.editor.is_secret() {
             vec!['*'; self.editor.text().chars().count()]
         } else {
             self.editor.text().chars().collect()
         };
-        let cursor = self.editor.cursor();
+        let cursor = self.editor.cursor().min(chars.len());
         let width = |c: char| c.width().unwrap_or(0);
-        // Back from the cursor while the text before it and the cursor itself fit.
-        let mut first = cursor;
-        let mut column = 0;
-        while first > 0 && column + width(chars[first - 1]) < room {
-            first -= 1;
-            column += width(chars[first]);
-        }
+        let cells = |range: Range<usize>| chars[range].iter().map(|&c| width(c)).sum::<usize>();
+        let first = self.first.get().min(chars.len());
+        let (left, start) = (cells(0..first), cells(0..cursor));
+        let end = start + chars.get(cursor).map_or(1, |&c| width(c).max(1));
+        let first = if start < left || end > left + room {
+            let target = start.saturating_sub(room / 2);
+            (0..=cursor)
+                .find(|&index| cells(0..index) >= target)
+                .unwrap_or(cursor)
+        } else {
+            first
+        };
+        self.first.set(first);
+        let column = cells(first..cursor);
         let mut used = 0;
         let shown: String = chars[first..]
             .iter()
@@ -1448,18 +1463,24 @@ mod tests {
     }
 
     #[test]
-    fn a_long_field_shows_the_part_around_its_cursor() {
+    fn a_long_field_keeps_its_text_still_while_the_cursor_shows_as_vim() {
+        // Off the edge, the cursor goes to the middle, as with vim's 'sidescroll' 0.
         let mut field = Field::plain("abcdefghij");
-        assert_eq!(field.visible(5), ("ghij".to_owned(), 4));
+        assert_eq!(field.visible(5), ("ij".to_owned(), 2));
+        field.edit(Action::Left);
+        field.edit(Action::Left);
+        assert_eq!(field.visible(5), ("ij".to_owned(), 0), "the text stays");
+        field.edit(Action::Left);
+        assert_eq!(field.visible(5), ("fghij".to_owned(), 2));
         field.editor.set_cursor(0);
         assert_eq!(field.visible(5), ("abcde".to_owned(), 0));
         let wide = Field::plain("文件文件");
-        assert_eq!(wide.visible(5), ("文件".to_owned(), 4));
+        assert_eq!(wide.visible(5), ("件".to_owned(), 2));
         let mut secret = Field::secret();
         for c in "hunter2".chars() {
             secret.insert(c);
         }
-        assert_eq!(secret.visible(4), ("***".to_owned(), 3));
+        assert_eq!(secret.visible(4), ("**".to_owned(), 2));
     }
 
     #[test]
@@ -1479,15 +1500,15 @@ mod tests {
     }
 
     #[test]
-    fn word_keys_go_to_the_starts_of_words() {
+    fn word_keys_go_by_what_spaces_part_as_on_vims_command_line() {
         let mut field = Field::plain("cp  a.txt backup");
         assert!(field.edit(Action::WordBackward));
         assert_eq!(field.editor.cursor(), 10, "the start of backup");
         field.edit(Action::WordBackward);
-        assert_eq!(field.editor.cursor(), 6, "txt");
+        assert_eq!(field.editor.cursor(), 4, "a.txt, the dot no break");
         field.edit(Action::TextStart);
         field.edit(Action::WordForward);
-        assert_eq!(field.editor.cursor(), 4, "past the spaces");
+        assert_eq!(field.editor.cursor(), 2, "on the space after cp");
         field.edit(Action::TextEnd);
         field.edit(Action::WordForward);
         assert_eq!(field.editor.cursor(), 16, "the end stays");

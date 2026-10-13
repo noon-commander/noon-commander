@@ -571,6 +571,7 @@ help-command-new-line = A new line in the command; Shift+Enter where the termina
 help-command-normal = Normal mode, to edit the command with vim's keys
 help-command-run = Run the command; after a \ at the end of the line, a new line
 help-command-close = Close the command line
+help-command-cancel = Close the command line; after Ctrl+f, leave Insert mode for Normal mode, as in vim's window of the command line
 help-note-modes = Keys are vim's, in its modes; the F-keys of the panels are mc's, in Normal and Visual mode and in quick search. Text fields open in Insert mode, where characters are text, Esc goes to Normal mode, and Esc there closes; quick search and the command line close on Esc, as vim's search and command line do. The line above the F-key bar says -- INSERT -- and -- VISUAL --, and -- (insert) -- for the one command of Normal mode after Ctrl+o, and the cursor is a bar in Insert mode. Alt and a key stand for Esc and the key in Insert and Visual mode and in the panels, but on a password. Ctrl+c closes or cancels in every mode.
 help-note-count = In Normal mode, a count goes before a command: 5j goes five rows down, 3G to the third row, 2g t to the second tab, and d3w deletes three words. In text fields, "a names a register, which every field shares, and A appends to it.
 help-note-menu = The lists open in Normal mode: / types in the filter, and Esc goes back to the rows.

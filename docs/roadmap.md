@@ -139,7 +139,9 @@
 - [ ] Words as vim's 'iskeyword' parts them: also where the script changes (Latin, Han, kana,
       emoji), and with `×` and `÷` as letters
 - [ ] More of vim's commands in text fields: `r`, `u`, `U`, `D`, `X`, `C`, `S`, and `J` in
-      Visual mode, and `U` in Normal mode
+      Visual mode, and `U` in Normal mode; Shift and Ctrl with Left and Right move in Visual mode
+      as `w`, `W`, `b`, and `B`; Ctrl+r Ctrl+r, Ctrl+r Ctrl+o, and Ctrl+r Ctrl+p put a register
+      in Insert mode, as Ctrl+r does
 - [ ] Text objects in text fields: `iw`, `aw`, `iW`, `aW`, quotes, and brackets (`c i w`,
       `d i "`, `c i (`); `c i w` only moves the cursor until then
 - [ ] Registers as vim's: `"0` the last yank, `"1` … `"9` and `"-` the deletes; any other

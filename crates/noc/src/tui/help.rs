@@ -412,7 +412,8 @@ fn describe_command_line(context: Context, action: Action) -> Option<String> {
         Action::NewerCommand => fl!("help-command-newer"),
         Action::CommandHistory => fl!("help-command-history"),
         Action::Confirm => fl!("help-command-run"),
-        Action::Cancel => fl!("help-command-close"),
+        Action::Cancel => fl!("help-command-cancel"),
+        Action::Abort => fl!("help-command-close"),
         _ => return None,
     };
     Some(text)

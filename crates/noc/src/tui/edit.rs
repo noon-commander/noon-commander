@@ -15,7 +15,7 @@ use zeroize::Zeroizing;
 use super::keymap::{Action, Extra, MAX_COUNT, Mode};
 
 /// Changes that undo keeps, the oldest dropped first.
-const UNDO_LEVELS: usize = 100;
+const UNDO_LEVELS: usize = 1000;
 
 /// What yanks and deletes keep: the unnamed register, and `a` … `z`, which every text field and
 /// the command line share while Noon Commander runs. An uppercase name appends to the register
@@ -534,7 +534,10 @@ impl Editor {
         if after && self.cursor < end {
             self.cursor += 1;
         }
-        let back = eol == Some(line_index(&chars, self.cursor)) || action == Some(Action::TextEnd);
+        // `0`, `^`, and Home leave the cursor before the character they go to, even the last.
+        let to_start = matches!(action, Some(Action::TextStart | Action::FirstNonBlank));
+        let back = (eol == Some(line_index(&chars, self.cursor)) && !to_start)
+            || action == Some(Action::TextEnd);
         if back && self.cursor + 1 == end {
             self.cursor = end;
         }
@@ -598,11 +601,15 @@ impl Editor {
                     Action::Right => (self.cursor + 1).min(chars.len()),
                     Action::TextStart => start,
                     Action::TextEnd => end,
-                    Action::WordForward => word_start(&chars, self.cursor, false),
-                    _ => word_back(&chars, self.cursor, false),
+                    Action::WordForward if stop => word_start(&chars, self.cursor, false),
+                    Action::WordForward => command_word_forward(&chars, self.cursor),
+                    _ if stop => word_back(&chars, self.cursor, false),
+                    _ => command_word_back(&chars, self.cursor),
                 };
-                // As in vim, a move starts a new change, and a new insert.
-                if to != self.cursor {
+                // As in vim, a move starts a new change, and a new insert; Home and End do
+                // where the cursor is already.
+                let ends = matches!(action, Action::TextStart | Action::TextEnd);
+                if to != self.cursor || ends {
                     self.cursor = to;
                     self.insert_moved();
                 }
@@ -1281,16 +1288,7 @@ impl Editor {
         self.text.push_str(&snapshot.text);
         let chars = self.chars();
         let (line, column) = snapshot.cursor;
-        let start = match line.checked_sub(1) {
-            None => Some(0),
-            Some(breaks) => chars
-                .iter()
-                .enumerate()
-                .filter(|&(_, &c)| c == '\n')
-                .nth(breaks)
-                .map(|(index, _)| index + 1),
-        };
-        self.cursor = if let Some(start) = start {
+        self.cursor = if let Some(start) = line_start(&chars, line) {
             (start + column).min(line_bounds(&chars, start).1)
         } else {
             let (start, end) = line_bounds(&chars, chars.len());
@@ -1445,6 +1443,29 @@ fn empty_line(chars: &[char], index: usize) -> bool {
 
 /// Where the next word after character `at` starts, or the end of the text: vim's `w`. An
 /// empty line is a word.
+/// Where Shift+Right and Ctrl+Right go on vim's command line: on at least one character, to
+/// the next space, or the end. A line break counts as a space.
+fn command_word_forward(chars: &[char], at: usize) -> usize {
+    let mut to = at;
+    while to < chars.len() {
+        to += 1;
+        if chars.get(to).is_some_and(|&c| c == ' ' || c == '\n') {
+            break;
+        }
+    }
+    to
+}
+
+/// Where Shift+Left and Ctrl+Left go on vim's command line: back at least one character, to
+/// the start of the text after a space, or the start.
+fn command_word_back(chars: &[char], at: usize) -> usize {
+    let mut to = at.saturating_sub(1);
+    while to > 0 && !matches!(chars[to - 1], ' ' | '\n') {
+        to -= 1;
+    }
+    to
+}
+
 fn word_start(chars: &[char], at: usize, big: bool) -> usize {
     let mut index = at;
     if let Some(&c) = chars.get(index) {
@@ -1597,6 +1618,19 @@ fn blank_to_line_end(chars: &[char], at: usize) -> bool {
 }
 
 /// The first character of the line in `start..end` that is not blank, or its end.
+/// Where line `line` of `chars` starts, counted from 0, if it has that many.
+fn line_start(chars: &[char], line: usize) -> Option<usize> {
+    match line.checked_sub(1) {
+        None => Some(0),
+        Some(breaks) => chars
+            .iter()
+            .enumerate()
+            .filter(|&(_, &c)| c == '\n')
+            .nth(breaks)
+            .map(|(index, _)| index + 1),
+    }
+}
+
 fn first_non_blank(chars: &[char], start: usize, end: usize) -> usize {
     (start..end)
         .find(|&index| !chars[index].is_whitespace())
@@ -2447,6 +2481,56 @@ mod tests {
             &mut Registers::default()
         ));
         editor
+    }
+
+    #[test]
+    fn after_ctrl_o_0_and_home_go_on_before_the_last_character_as_vim() {
+        let mut registers = Registers::default();
+        for (text, key) in [
+            ("x", Action::TextStart),
+            ("x", Action::FirstNonBlank),
+            (" x", Action::FirstNonBlank),
+        ] {
+            let mut editor = after_ctrl_o(text);
+            run(&mut editor, &mut registers, &[plain(key)]);
+            editor.insert('Q');
+            assert_eq!(
+                editor.text(),
+                format!("{}Qx", &text[..text.len() - 1]),
+                "{key:?}"
+            );
+        }
+        // Another key that leaves the cursor on the last character goes on after it.
+        let mut editor = after_ctrl_o("x");
+        run(&mut editor, &mut registers, &[plain(Action::WordBackward)]);
+        editor.insert('Q');
+        assert_eq!(editor.text(), "xQ");
+    }
+
+    #[test]
+    fn home_and_end_start_a_new_change_where_the_cursor_is_already_as_vim() {
+        let mut registers = Registers::default();
+        let mut editor = at("foo", 0);
+        run(&mut editor, &mut registers, &[plain(Action::AppendAtEnd)]);
+        editor.insert('X');
+        run(&mut editor, &mut registers, &[plain(Action::TextEnd)]);
+        editor.insert('Y');
+        run(
+            &mut editor,
+            &mut registers,
+            &[plain(Action::NormalMode), plain(Action::Undo)],
+        );
+        assert_eq!(editor.text(), "fooX");
+        // Ctrl+w still stops where the insert started, as after a move to the right.
+        let mut editor = at("foo", 0);
+        run(&mut editor, &mut registers, &[plain(Action::AppendAtEnd)]);
+        editor.insert('X');
+        run(
+            &mut editor,
+            &mut registers,
+            &[plain(Action::TextEnd), plain(Action::DeleteWord)],
+        );
+        assert_eq!(editor.text(), "foo");
     }
 
     #[test]

@@ -1419,6 +1419,7 @@ impl App {
     }
 
     fn feed(&mut self, keys: &mut KeyState, key: KeyEvent, now: Instant) -> Vec<Effect> {
+        keys.set_operator(self.pending_operator().is_some());
         let typed = self.keymap.feed(keys, self.place(), key, now);
         self.take_typed(keys, typed)
     }
@@ -6569,6 +6570,17 @@ mod tests {
         assert!(screen(&mut app).contains("search hit BOTTOM, continuing at TOP"));
         keys(&mut app, &["g", "g", "/", "b", "enter"]);
         assert!(!screen(&mut app).contains("search hit"), "after it");
+    }
+
+    #[test]
+    fn a_quote_after_an_operator_gives_it_up_and_the_next_key_is_a_command() {
+        let mut app = loaded();
+        keys(
+            &mut app,
+            &[":", "a", "b", "c", "ctrl-f", "0", "d", "\"", "a", "x"],
+        );
+        let line = app.command_line.as_ref().expect("the command line");
+        assert_eq!((line.text(), line.mode()), ("axbc", Mode::Insert));
     }
 
     #[test]

@@ -984,3 +984,30 @@ fn rejects_invalid_sequences() {
     assert_eq!(parse_sequence("f10 nosuchkey"), None);
     assert_eq!(parse_sequence("esc 0").map(|keys| keys.len()), Some(2));
 }
+
+#[test]
+fn a_quote_after_an_operator_gives_it_up_and_names_no_register_as_vim() {
+    let keymap = Keymap::default();
+    let mut state = KeyState::default();
+    state.set_operator(true);
+    assert_eq!(feed(&keymap, &mut state, FIELD, &["\""]), []);
+    assert!(state.take_dropped(), "the operator goes");
+    state.set_operator(false);
+    assert_eq!(
+        feed(&keymap, &mut state, FIELD, &["a"]),
+        actions(&[Action::Append]),
+        "the key after it is a command of its own"
+    );
+    // A count typed after the operator goes with it.
+    state.set_operator(true);
+    assert_eq!(feed(&keymap, &mut state, FIELD, &["2", "\""]), []);
+    assert!(state.take_dropped());
+    state.set_operator(false);
+    assert_eq!(
+        feed(&keymap, &mut state, FIELD, &["x"]),
+        actions(&[Action::DeleteChar])
+    );
+    // Without an operator, it names a register.
+    assert_eq!(feed(&keymap, &mut state, FIELD, &["\"", "a"]), []);
+    assert!(!state.take_dropped());
+}

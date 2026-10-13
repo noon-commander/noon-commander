@@ -25,6 +25,7 @@ mod picker;
 mod places;
 mod progress;
 mod pulldown;
+mod scroll;
 mod scrollbar;
 mod sums;
 mod tab_menu;

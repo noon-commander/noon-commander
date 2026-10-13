@@ -63,10 +63,12 @@ no registers.
   the unnamed one live in memory and every text field and the command line share them; `A` …
   `Z` append. `"` names one wherever keys are commands, the panels and the lists too, so that the
   name never runs as a command, as vim never runs it. None reads or writes the system clipboard.
-- **The panels in vim's way**: `v` and `V` select rows in Visual mode, whose commands of files
-  act on the rows selected; Ctrl+o and Ctrl+i (Tab) go back and forth through a jump list per
-  tab, of locations and of `G`, `g g`, and searches; Ctrl+w switches the panels, as vim's
-  windows.
+- **The panels in vim's way**: `v` and `V` select rows in Visual mode, whose commands of files act
+  on the rows selected; Ctrl+o and Ctrl+i (Tab) go back and forth through a jump list per tab, of
+  locations and of `G`, `g g`, and searches; Ctrl+w switches the panels, as vim's windows. The rows
+  scroll as vim 9.1 scrolls a window, with the 'scrolloff' of its `defaults.vim`, five rows, fixed:
+  Ctrl+d, Ctrl+u, Ctrl+f, and Ctrl+b scroll the rows and move the cursor as vim's do, rather than
+  move the cursor by a page as mc's keys do, in the lists too.
 - **The lists** (the location menu, the tab menu, the zoxide window, the workspaces, the command
   history) take `j`, `k`, and `q` in Normal mode, and `d d` where a row can go; `/` types in
   their filter in Insert mode, and Esc goes back to the rows. Their digit hotkeys are gone.

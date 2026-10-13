@@ -585,8 +585,8 @@ pub(crate) struct App {
     /// The right panel is drawn on the left.
     swapped: bool,
     /// What the last quick search found, in any panel, for `n` and `N`, as vim keeps the last
-    /// pattern.
-    last_search: Option<String>,
+    /// pattern; and whether it went up the rows, as `?` does, which `n` then does too.
+    last_search: Option<(String, bool)>,
     hosts: HashMap<String, Host>,
     connections: u64,
     /// The settings, with `~` expanded; `ui.show_hidden` follows `o h`.
@@ -1956,6 +1956,10 @@ impl App {
         }
         match action {
             Action::QuickSearch => self.quick_search(),
+            Action::QuickSearchBack => {
+                let count = self.extra.times();
+                self.panel_mut(self.active).search_up(count);
+            }
             Action::NextMatch | Action::PrevMatch => self.search_again(action == Action::NextMatch),
             Action::Shell | Action::Command | Action::CommandHistory => {
                 self.open_command_line(action);
@@ -2040,7 +2044,7 @@ impl App {
         let count = self.extra.count;
         let id = self.shown(self.active);
         match action {
-            Action::VisualMode => self.panel_mut(id.side).start_visual(count.unwrap_or(1)),
+            Action::VisualMode => self.panel_mut(id.side).start_visual(count),
             Action::Reselect => self.panel_mut(id.side).reselect(),
             Action::JumpBack | Action::JumpForward => {
                 let times = count.unwrap_or(1);
@@ -2163,6 +2167,13 @@ impl App {
                 None
             }
             Resolved::Action(action) if searching => match action {
+                // As vim's search, Backspace and Delete with nothing typed give it up.
+                Action::Backspace | Action::DeleteChar
+                    if self.panel(side).search_text() == Some("") =>
+                {
+                    self.panel_mut(side).abort_search();
+                    None
+                }
                 Action::Left
                 | Action::Right
                 | Action::TextStart
@@ -2197,7 +2208,11 @@ impl App {
                 }
                 Action::Cancel => {
                     if self.panel(side).search_went_round(fuzzy_search) {
-                        self.message = Some(fl!("message-search-bottom"));
+                        self.message = Some(if self.panel(side).search_goes_back() {
+                            fl!("message-search-top")
+                        } else {
+                            fl!("message-search-bottom")
+                        });
                     }
                     self.end_search(side);
                     None
@@ -2227,18 +2242,22 @@ impl App {
         let panel = self.panel_mut(self.active);
         let typed = panel.search_text().is_some_and(|text| !text.is_empty());
         match last {
-            Some(last) if panel.searching() && !typed => panel.search_resume(&last, fuzzy_search),
+            Some((last, _)) if panel.searching() && !typed => {
+                panel.search_resume(&last, fuzzy_search);
+            }
             _ => panel.search_next(fuzzy_search, count),
         }
     }
 
     /// Moves the cursor of the active panel to the next name, or the previous one, that matches
-    /// what the last quick search found; where it was goes to the jump list.
-    fn search_again(&mut self, forward: bool) {
-        let Some(last) = self.last_search.clone() else {
+    /// what the last quick search found, `next` the way it went; where it was goes to the jump
+    /// list.
+    fn search_again(&mut self, next: bool) {
+        let Some((last, back)) = self.last_search.clone() else {
             self.message = Some(fl!("message-search-none"));
             return;
         };
+        let forward = next != back;
         let fuzzy_search = self.config.ui.fuzzy_search;
         let times = self.extra.times();
         let round = self
@@ -2263,10 +2282,12 @@ impl App {
         }
     }
 
-    /// Ends quick search in the panel on `side`, and keeps what it found for `n` and `N`.
+    /// Ends quick search in the panel on `side`, and keeps what it found for `n` and `N`, with
+    /// the way it went.
     fn end_search(&mut self, side: Side) {
+        let back = self.panel(side).search_goes_back();
         if let Some(text) = self.panel_mut(side).end_search() {
-            self.last_search = Some(text);
+            self.last_search = Some((text, back));
         }
     }
 
@@ -6573,6 +6594,67 @@ mod tests {
     }
 
     #[test]
+    fn question_mark_searches_up_and_n_goes_the_same_way_as_vims() {
+        let mut app = with_files(&["a1", "b2", "a3", "b4"]);
+        app.config.ui.fuzzy_search = false;
+        keys(&mut app, &["shift-g", "?"]);
+        assert!(screen(&mut app).contains("Search up: "));
+        keys(&mut app, &["a", "enter"]);
+        assert_eq!(cursor_name(&app, Side::Left), "a3");
+        keys(&mut app, &["n"]);
+        assert_eq!(cursor_name(&app, Side::Left), "a1");
+        keys(&mut app, &["n"]);
+        assert_eq!(cursor_name(&app, Side::Left), "a3");
+        assert!(screen(&mut app).contains("search hit TOP, continuing at BOTTOM"));
+        keys(&mut app, &["shift-n"]);
+        assert_eq!(cursor_name(&app, Side::Left), "a1");
+        assert!(screen(&mut app).contains("search hit BOTTOM, continuing at TOP"));
+        // Enter says so too, on a match not before where it started; a count goes on.
+        keys(&mut app, &["g", "g", "?", "b", "enter"]);
+        assert_eq!(cursor_name(&app, Side::Left), "b4");
+        assert!(screen(&mut app).contains("search hit TOP, continuing at BOTTOM"));
+        keys(&mut app, &["2", "?", "a", "enter"]);
+        assert_eq!(cursor_name(&app, Side::Left), "a1");
+    }
+
+    #[test]
+    fn backspace_and_delete_with_nothing_typed_give_quick_search_up_as_vims() {
+        let mut app = with_files(&["a1", "b2"]);
+        app.config.ui.fuzzy_search = false;
+        for key in ["backspace", "delete"] {
+            keys(&mut app, &["g", "g", "j", "/", "b"]);
+            assert_eq!(cursor_name(&app, Side::Left), "b2");
+            keys(&mut app, &["backspace"]);
+            assert!(app.panel(Side::Left).searching(), "the text goes first");
+            keys(&mut app, &[key]);
+            assert!(!app.panel(Side::Left).searching(), "{key}");
+            assert_eq!(cursor_name(&app, Side::Left), "a1", "back where it started");
+        }
+    }
+
+    #[test]
+    fn a_count_before_v_selects_the_last_selection_that_many_times_and_ctrl_j_goes_down() {
+        let mut app = with_files(&["a", "b", "c", "d", "e", "f", "g"]);
+        keys(&mut app, &["ctrl-j", "3", "v"]);
+        assert_eq!(app.panel(Side::Left).visual_size(), Some(3));
+        keys(
+            &mut app,
+            &["esc", "g", "g", "j", "v", "j", "space", "2", "v"],
+        );
+        assert_eq!(
+            app.panel(Side::Left).visual_size(),
+            Some(4),
+            "two rows marked, twice"
+        );
+        keys(&mut app, &["esc", "v"]);
+        assert_eq!(
+            app.panel(Side::Left).visual_size(),
+            Some(1),
+            "without a count"
+        );
+    }
+
+    #[test]
     fn a_quote_after_an_operator_gives_it_up_and_the_next_key_is_a_command() {
         let mut app = loaded();
         keys(
@@ -6652,33 +6734,24 @@ mod tests {
         screen_of(&mut app, 13);
         press(&mut app, Press::WheelDown, 90, 5);
         assert_eq!(app.active, Side::Left, "the wheel does not take the keys");
-        assert_eq!(
-            cursor_name(&app, Side::Right),
-            "f02",
-            "on the first row shown"
-        );
-        assert_eq!(cursor_name(&app, Side::Left), "");
-        screen_of(&mut app, 13);
+        let names = |app: &mut App| {
+            screen_of(app, 13);
+            [Side::Left, Side::Right].map(|side| cursor_name(app, side))
+        };
+        // As vim's Ctrl+e and Ctrl+y: the cursor moves only to keep what of 'scrolloff' fits
+        // around it in six rows.
+        assert_eq!(names(&mut app), ["", "f04"]);
         press(&mut app, Press::WheelUp, 90, 5);
-        assert_eq!(cursor_name(&app, Side::Right), "f02", "still on screen");
+        assert_eq!(names(&mut app)[1], "f01");
         for _ in 0..10 {
             press(&mut app, Press::WheelDown, 90, 5);
+            names(&mut app);
         }
-        assert_eq!(
-            cursor_name(&app, Side::Right),
-            "f14",
-            "on the first row of the last page"
-        );
+        assert_eq!(names(&mut app)[1], "f16", "never past the last row");
 
         app.config.ui.wheel = Wheel::Page;
-        screen_of(&mut app, 13);
         press(&mut app, Press::WheelUp, 90, 5);
-        screen_of(&mut app, 13);
-        assert_eq!(
-            cursor_name(&app, Side::Right),
-            "f13",
-            "on the last row a page up"
-        );
+        assert_eq!(names(&mut app)[1], "f10", "a page up");
     }
 
     #[test]

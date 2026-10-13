@@ -265,6 +265,8 @@ pub(crate) enum Action {
     /// Starts quick search, or jumps to the next match; with nothing typed yet, searches for
     /// what the last search found. In a window that lists items, types in its filter.
     QuickSearch,
+    /// Starts quick search up the rows, as vim's `?`; `n` then goes up too, and `N` down.
+    QuickSearchBack,
     /// Moves to the next name that matches quick search: what is typed while it runs, or else
     /// what the last search found.
     NextMatch,
@@ -494,6 +496,7 @@ impl Action {
         Self::SortByTime,
         Self::SortBySize,
         Self::QuickSearch,
+        Self::QuickSearchBack,
         Self::NextMatch,
         Self::PrevMatch,
         Self::JumpBack,

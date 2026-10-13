@@ -158,6 +158,10 @@ pub(crate) struct Editor {
     mode: Mode,
     /// Where Visual mode started.
     anchor: usize,
+    /// The lines and the columns the last command of Visual mode took, for a count before `v`,
+    /// as vim's `resel_VIsual_line_count` and `resel_VIsual_vcol`: on one line, how many
+    /// characters; on more, the column of the last.
+    reselect: Option<(usize, usize)>,
     pending: Option<Pending>,
     /// The last `f`, `t`, `F`, or `T`, and its character, for `;` and `,`.
     find: Option<(Action, char)>,
@@ -246,6 +250,7 @@ impl Editor {
             holds: Holds::Line,
             mode,
             anchor: 0,
+            reselect: None,
             pending: None,
             find: None,
             undo: Vec::new(),
@@ -794,6 +799,9 @@ impl Editor {
             Action::VisualMode => {
                 self.mode = Mode::Visual;
                 self.anchor = self.cursor;
+                if let Some(count) = extra.count {
+                    self.select_count(count);
+                }
             }
             Action::DeleteChar => {
                 let to = (self.cursor + count).min(end);
@@ -883,6 +891,9 @@ impl Editor {
             return true;
         }
         let selected = self.selection().unwrap_or(self.cursor..self.cursor);
+        if action == Action::ToggleCase || Operator::of(action).is_some() {
+            self.reselect = Some(self.reselect_of(&selected));
+        }
         match action {
             Action::OtherEnd => std::mem::swap(&mut self.anchor, &mut self.cursor),
             Action::NormalMode | Action::VisualMode => {
@@ -905,6 +916,36 @@ impl Editor {
             }
         }
         true
+    }
+
+    /// What a count before `v` selects, as vim's: as much as the last command of Visual mode
+    /// took, `count` times, from the cursor; without one, `count` characters.
+    fn select_count(&mut self, count: usize) {
+        let chars = self.chars();
+        let (start, end) = line_bounds(&chars, self.cursor);
+        self.cursor = match self.reselect {
+            Some((lines, column)) if lines > 1 => {
+                let line = line_index(&chars, self.cursor) + (lines * count).saturating_sub(1);
+                let last = line_index(&chars, chars.len());
+                let start = line_start(&chars, line.min(last)).unwrap_or(start);
+                (start + column).min(line_bounds(&chars, start).1)
+            }
+            Some((_, columns)) => (self.cursor + (columns * count).saturating_sub(1)).min(end),
+            None => (self.cursor + count.saturating_sub(1)).min(end),
+        };
+        self.clamp();
+    }
+
+    /// The lines and the columns of `selected`, for a count before `v` later.
+    fn reselect_of(&self, selected: &Range<usize>) -> (usize, usize) {
+        let chars = self.chars();
+        let last = selected.end.saturating_sub(1).max(selected.start);
+        let lines = line_index(&chars, last) - line_index(&chars, selected.start) + 1;
+        if lines > 1 {
+            (lines, last - line_bounds(&chars, last).0)
+        } else {
+            (1, selected.len().max(1))
+        }
     }
 
     /// Where `action` moves the cursor `count` times, if it is a motion that can; `operator`
@@ -2531,6 +2572,41 @@ mod tests {
             &[plain(Action::TextEnd), plain(Action::DeleteWord)],
         );
         assert_eq!(editor.text(), "foo");
+    }
+
+    #[test]
+    fn a_count_before_v_selects_as_much_as_the_last_visual_command_times_it() {
+        let mut registers = Registers::default();
+        let mut editor = at("abcdefgh", 1);
+        run(
+            &mut editor,
+            &mut registers,
+            &[
+                counted(Action::VisualMode, 2),
+                plain(Action::DeleteOperator),
+            ],
+        );
+        assert_eq!(editor.text(), "adefgh", "without one, that many characters");
+        let mut editor = at("abcdefgh abcdefgh", 0);
+        run(
+            &mut editor,
+            &mut registers,
+            &[
+                plain(Action::VisualMode),
+                counted(Action::Right, 2),
+                plain(Action::YankOperator),
+                plain(Action::WordForward),
+                counted(Action::VisualMode, 2),
+            ],
+        );
+        assert_eq!(editor.selection(), Some(9..15), "three characters, twice");
+        // Without a count, one character.
+        run(
+            &mut editor,
+            &mut registers,
+            &[plain(Action::NormalMode), plain(Action::VisualMode)],
+        );
+        assert_eq!(editor.selection(), Some(14..15));
     }
 
     #[test]

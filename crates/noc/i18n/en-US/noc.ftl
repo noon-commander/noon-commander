@@ -66,6 +66,8 @@ panel-up-dir = UP--DIR
 panel-dir = DIR
 # Status line during quick search: what was typed so far.
 panel-search = Search: { $text }
+# Status line during quick search up the rows, as vim's ?: what was typed so far.
+panel-search-back = Search up: { $text }
 # Status line while the entry under the cursor is renamed in its row: its name until now.
 panel-rename = Rename: { $name }
 # Status line while a directory is read.
@@ -443,8 +445,9 @@ help-sort-extension = Sort by extension; again: reverse
 help-sort-time = Sort by modification time, newest first; again: reverse
 help-sort-size = Sort by size, largest first; again: reverse
 help-quick-search-start = Quick search, typed as vim's search
-help-match-next = The next name that matches the last quick search
-help-match-prev = The previous name that matches the last quick search
+help-quick-search-back = Quick search up the rows, as vim's ?; n then goes up too, and N down
+help-match-next = The next name that matches the last quick search, the way it went
+help-match-prev = The previous name that matches the last quick search, the other way
 help-shell = Open the command line for a shell command, run in this directory
 help-command = Open the command line for a command of Noon Commander; :!command runs a shell command
 help-view = View the file under the cursor; on a directory, open it

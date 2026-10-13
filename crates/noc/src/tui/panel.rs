@@ -21,6 +21,7 @@ use super::decor::{self, Decor};
 use super::dialog::Field;
 use super::fuzzy::Fuzzy;
 use super::keymap::Action;
+use super::scroll::Window;
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -219,8 +220,8 @@ pub(crate) struct Panel {
     home: PathBuf,
     /// Row under the cursor; row 0 is `..`, if there is one.
     cursor: usize,
-    /// First row on screen.
-    offset: usize,
+    /// The rows on screen, as vim's window scrolls them.
+    window: Window,
     /// Rows on screen at the last render.
     page: usize,
     /// Where the rows were at the last render, for the mouse.
@@ -233,12 +234,16 @@ pub(crate) struct Panel {
     search_origin: usize,
     /// The count typed before `/`: quick search goes to that match, as vim's `3/` does.
     search_count: usize,
+    /// Quick search goes up the rows, as vim's `?`.
+    search_back: bool,
     /// The entry under the cursor, while its name is edited in its row.
     renaming: Option<Renaming>,
     /// The row where Visual mode started, while it selects the rows from there to the cursor.
     visual: Option<usize>,
     /// The rows Visual mode selected last, for `g v`: where it started, and the cursor.
     last_visual: Option<(usize, usize)>,
+    /// How many rows the last command of Visual mode took, for a count before `v`.
+    reselect: Option<usize>,
     /// Where the panel was before its jumps, oldest first, as vim's jump list keeps them, and
     /// the place in it after Ctrl+o: its length while no jump went back.
     jumps: Vec<Destination>,
@@ -278,7 +283,7 @@ impl Panel {
             marked: HashSet::new(),
             home,
             cursor: 0,
-            offset: 0,
+            window: Window::default(),
             page: 1,
             list: Rect::default(),
             generation: 0,
@@ -286,9 +291,11 @@ impl Panel {
             search: None,
             search_origin: 0,
             search_count: 1,
+            search_back: false,
             renaming: None,
             visual: None,
             last_visual: None,
+            reselect: None,
             jumps: Vec::new(),
             jump: 0,
             error: None,
@@ -312,7 +319,7 @@ impl Panel {
             marked: HashSet::new(),
             home: self.home.clone(),
             cursor: self.cursor,
-            offset: self.offset,
+            window: self.window,
             page: self.page,
             list: Rect::default(),
             generation: 0,
@@ -320,9 +327,11 @@ impl Panel {
             search: None,
             search_origin: 0,
             search_count: 1,
+            search_back: false,
             renaming: None,
             visual: None,
             last_visual: None,
+            reselect: None,
             jumps: Vec::new(),
             jump: 0,
             error: None,
@@ -384,7 +393,7 @@ impl Panel {
                 self.space = space;
                 self.disconnected = false;
                 self.arrange();
-                self.offset = 0;
+                self.window.reset();
                 self.cursor = self.row_of(&pending.focus);
                 self.restore_visual(visual);
                 self.keep_renaming();
@@ -643,15 +652,25 @@ impl Panel {
         self.search.as_ref().map(Field::text)
     }
 
-    /// Whether quick search went round past the last row to the match it is on, as vim's
-    /// search says when Enter ends it: the match is not after the row where it started. Fuzzy
-    /// search ranks the rows rather than go down them, so it never does.
+    /// Whether quick search goes up the rows, as vim's `?`.
+    pub(crate) fn search_goes_back(&self) -> bool {
+        self.search_back
+    }
+
+    /// Whether quick search went round past the last row to the match it is on, or past the
+    /// first going up, as vim's search says when Enter ends it: the match is not after the row
+    /// where it started, or not before it. Fuzzy search ranks the rows rather than go down
+    /// them, so it never does.
     pub(crate) fn search_went_round(&self, fuzzy: bool) -> bool {
-        !fuzzy
-            && self
-                .search_text()
-                .is_some_and(|text| !text.trim().is_empty())
-            && self.cursor <= self.search_origin
+        let typed = self
+            .search_text()
+            .is_some_and(|text| !text.trim().is_empty());
+        let round = if self.search_back {
+            self.cursor >= self.search_origin
+        } else {
+            self.cursor <= self.search_origin
+        };
+        !fuzzy && typed && round
     }
 
     /// Starts quick search, which goes to match `count` of what is typed, or jumps to the next
@@ -659,12 +678,23 @@ impl Panel {
     /// the next best, round to the best.
     pub(crate) fn search_next(&mut self, fuzzy: bool, count: usize) {
         let Some(text) = self.search_text().map(str::to_owned) else {
-            self.search = Some(Field::plain(""));
-            self.search_origin = self.cursor;
-            self.search_count = count.max(1);
+            self.start_search(count, false);
             return;
         };
         self.step_match(&text, true, fuzzy);
+    }
+
+    /// Starts quick search up the rows, as vim's `?`: to match `count` of what is typed, from
+    /// the row before the cursor, round to the bottom.
+    pub(crate) fn search_up(&mut self, count: usize) {
+        self.start_search(count, true);
+    }
+
+    fn start_search(&mut self, count: usize, back: bool) {
+        self.search = Some(Field::plain(""));
+        self.search_origin = self.cursor;
+        self.search_count = count.max(1);
+        self.search_back = back;
     }
 
     /// Jumps to the next or the previous match of the search that runs, if one does.
@@ -775,6 +805,7 @@ impl Panel {
         self.search_origin = origin;
         if started {
             self.search_count = 1;
+            self.search_back = false;
         }
         // Smart case needs the capitals.
         let typed: Vec<char> = if fuzzy {
@@ -828,13 +859,20 @@ impl Panel {
     }
 
     /// The row that quick search goes to for `text`, as vim's search goes from the row after
-    /// where it started, round: the first whose name starts with it, ignoring case; `fuzzy`,
-    /// the best as fzf ranks them, the first of several as good. With a count before `/`, the
-    /// match of that number, round again.
+    /// where it started, round, or up from the row before it: the first whose name starts with
+    /// it, ignoring case; `fuzzy`, the best as fzf ranks them, the first of several as good.
+    /// With a count before `/` or `?`, the match of that number, round again.
     fn best_match(&self, text: &str, fuzzy: bool) -> Option<usize> {
         let rows = self.rows().max(1);
-        let from = (self.search_origin + 1) % rows;
-        let after = |row: usize| (row + rows - from) % rows;
+        let origin = self.search_origin % rows;
+        let back = self.search_back;
+        let after = |row: usize| {
+            if back {
+                (origin + rows - 1 - row) % rows
+            } else {
+                (row + rows - origin - 1) % rows
+            }
+        };
         let matches: Vec<usize> = if fuzzy {
             let mut ranked = self.ranked(text);
             ranked.sort_by_key(|&(row, score)| (std::cmp::Reverse(score), after(row)));
@@ -979,16 +1017,21 @@ impl Panel {
 
     /// Moves the cursor or opens a directory. Returns the listing to request, if any.
     pub(crate) fn handle(&mut self, action: Action) -> Option<ListRequest> {
-        let last = self.rows().saturating_sub(1);
+        let rows = self.rows();
+        let last = rows.saturating_sub(1);
         let page = self.page.max(1);
-        let half = (page / 2).max(1);
         match action {
             Action::Up => self.cursor = self.cursor.saturating_sub(1),
             Action::Down => self.cursor = (self.cursor + 1).min(last),
-            Action::PageUp => self.cursor = self.cursor.saturating_sub(page),
-            Action::PageDown => self.cursor = (self.cursor + page).min(last),
-            Action::HalfPageUp => self.cursor = self.cursor.saturating_sub(half),
-            Action::HalfPageDown => self.cursor = (self.cursor + half).min(last),
+            // As vim's Ctrl+b, Ctrl+f, Ctrl+u, and Ctrl+d, which scroll the rows.
+            Action::PageUp | Action::PageDown => {
+                let down = action == Action::PageDown;
+                self.window.page(down, &mut self.cursor, rows, page);
+            }
+            Action::HalfPageUp | Action::HalfPageDown => {
+                let down = action == Action::HalfPageDown;
+                self.window.half_page(down, &mut self.cursor, rows, page);
+            }
             Action::Home | Action::End => {
                 self.remember();
                 self.cursor = if action == Action::Home { 0 } else { last };
@@ -1194,15 +1237,17 @@ impl Panel {
         self.visual.is_some()
     }
 
-    /// Starts Visual mode on the row under the cursor, and selects `count` rows from it, as
-    /// vim's `3V` selects three lines.
-    pub(crate) fn start_visual(&mut self, count: usize) {
+    /// Starts Visual mode on the row under the cursor. With a count, it selects as many rows
+    /// as the last command of Visual mode took, `count` times, or else `count` rows, as vim's
+    /// `3V` does.
+    pub(crate) fn start_visual(&mut self, count: Option<usize>) {
         self.visual = Some(self.cursor);
+        let Some(count) = count else {
+            return;
+        };
+        let rows = self.reselect.unwrap_or(1).saturating_mul(count);
         let last = self.rows().saturating_sub(1);
-        self.cursor = self
-            .cursor
-            .saturating_add(count.saturating_sub(1))
-            .min(last);
+        self.cursor = self.cursor.saturating_add(rows.saturating_sub(1)).min(last);
     }
 
     /// Ends Visual mode, and keeps what it selected for `g v`.
@@ -1253,6 +1298,7 @@ impl Panel {
         if only {
             self.marked.clear();
         }
+        self.reselect = Some(rows.clone().count());
         for index in rows {
             if let Some(Row::Entry(entry)) = self.row(index) {
                 self.marked.insert(entry.name.clone());
@@ -1418,7 +1464,10 @@ impl Panel {
         let header = Line::styled(columns.header(self.sort), theme.header);
         frame.render_widget(header, line(inner.y));
         let visual = self.visual_rows();
-        for (screen_row, index) in (self.offset..self.rows()).take(list_height).enumerate() {
+        for (screen_row, index) in (self.window.top()..self.rows())
+            .take(list_height)
+            .enumerate()
+        {
             let Some(row) = self.row(index) else { break };
             let marked = matches!(row, Row::Entry(entry) if self.marked.contains(&entry.name));
             let cursor = (index == self.cursor).then_some(active);
@@ -1454,14 +1503,21 @@ impl Panel {
             fl!("panel-rename", name = cells::sanitize(&renaming.name))
         } else if let Some(field) = &self.search {
             status_style = theme.quick_search;
-            let prefix = cells::width(&fl!("panel-search", text = String::new()));
+            let prompt = |text: String| {
+                if self.search_back {
+                    fl!("panel-search-back", text = text)
+                } else {
+                    fl!("panel-search", text = text)
+                }
+            };
+            let prefix = cells::width(&prompt(String::new()));
             let (shown, column) = field.visible(width.saturating_sub(prefix));
             if active {
                 let column = u16::try_from(prefix + column).unwrap_or(u16::MAX);
                 let x = area.x.saturating_add(column).min(area.right() - 1);
                 frame.set_cursor_position((x, area.y));
             }
-            fl!("panel-search", text = shown)
+            prompt(shown)
         } else if let Some(error) = &self.error {
             error.clone()
         } else if let Some(pending) = &self.pending {
@@ -1533,7 +1589,7 @@ impl Panel {
         };
         let Some(screen_row) = self
             .cursor
-            .checked_sub(self.offset)
+            .checked_sub(self.window.top())
             .filter(|&row| row < list_height)
         else {
             return;
@@ -1660,7 +1716,7 @@ impl Panel {
         if !self.list.contains(at) {
             return None;
         }
-        let row = self.offset + usize::from(at.y - self.list.y);
+        let row = self.window.top() + usize::from(at.y - self.list.y);
         (row < self.rows()).then_some(row)
     }
 
@@ -1681,37 +1737,23 @@ impl Panel {
         }
     }
 
-    /// Scrolls by `step` of the mouse wheel, down or up, without moving the cursor while it
-    /// stays on screen.
+    /// Scrolls by `step` of the mouse wheel, down or up, as vim's Ctrl+e and Ctrl+y: the cursor
+    /// moves only to stay on screen, with its margin.
     pub(crate) fn wheel(&mut self, step: Wheel, down: bool) {
         let page = self.page.max(1);
         let rows = match step {
             Wheel::Lines(lines) => usize::from(lines),
             Wheel::Page => page,
         };
-        let last = self.rows().saturating_sub(1);
-        self.offset = if down {
-            (self.offset + rows).min(self.rows().saturating_sub(page))
-        } else {
-            self.offset.saturating_sub(rows)
-        };
-        self.cursor = self
-            .cursor
-            .max(self.offset)
-            .min(self.offset + page - 1)
-            .min(last);
+        let count = self.rows();
+        self.window
+            .scroll(down, rows, &mut self.cursor, count, page);
     }
 
-    /// Keeps the cursor within the rows and on screen.
+    /// Keeps the cursor within the rows and on screen, as vim's window does.
     fn scroll(&mut self, height: usize) {
-        self.cursor = self.cursor.min(self.rows().saturating_sub(1));
-        let height = height.max(1);
-        self.offset = self.offset.min(self.rows().saturating_sub(height));
-        if self.cursor < self.offset {
-            self.offset = self.cursor;
-        } else if self.cursor >= self.offset + height {
-            self.offset = self.cursor + 1 - height;
-        }
+        let rows = self.rows();
+        self.window.follow(&mut self.cursor, rows, height);
     }
 }
 
@@ -2442,28 +2484,49 @@ mod tests {
         assert_eq!(panel.cursor, 0);
         panel.handle(Action::Down);
         assert_eq!(under_cursor(&panel), "alpha-link");
-        panel.handle(Action::PageDown);
-        assert_eq!(under_cursor(&panel), ".hidden");
-        panel.handle(Action::PageDown);
-        assert_eq!(under_cursor(&panel), "zeta.txt", "stops at the last row");
-        panel.handle(Action::PageUp);
-        assert_eq!(under_cursor(&panel), "bin");
-        panel.handle(Action::Home);
-        assert_eq!(panel.cursor, 0);
         panel.handle(Action::End);
         assert_eq!(under_cursor(&panel), "zeta.txt");
-        panel.page = 4;
-        let row = panel.cursor;
-        panel.handle(Action::HalfPageUp);
-        assert_eq!(panel.cursor, row - 2, "half of four rows");
-        panel.handle(Action::HalfPageDown);
-        assert_eq!(panel.cursor, row);
-        panel.handle(Action::HalfPageDown);
-        assert_eq!(panel.cursor, row, "stops at the last row");
-        panel.page = 1;
-        panel.handle(Action::HalfPageUp);
-        assert_eq!(panel.cursor, row - 1, "at least one row");
+        panel.handle(Action::Home);
+        assert_eq!(panel.cursor, 0);
+    }
 
+    #[test]
+    fn page_keys_scroll_the_rows_as_vims_and_keep_five_around_the_cursor() {
+        let files = (0..29).map(|n| entry(&format!("f{n:02}"), FileKind::File, 1));
+        let mut panel = loaded("/srv", files.collect());
+        panel.page = 10;
+        // Each key, then what a render does, as vim scrolls a window of ten lines.
+        let mut press = |action| {
+            panel.handle(action);
+            panel.scroll(10);
+            (panel.cursor, panel.window.top())
+        };
+        assert_eq!(press(Action::PageDown), (12, 8), "Ctrl+f");
+        assert_eq!(press(Action::PageUp), (4, 0), "Ctrl+b");
+        assert_eq!(press(Action::HalfPageDown), (9, 5), "Ctrl+d");
+        assert_eq!(press(Action::HalfPageDown), (14, 10));
+        assert_eq!(press(Action::HalfPageUp), (9, 5), "Ctrl+u");
+        assert_eq!(press(Action::End), (29, 20));
+        assert_eq!(press(Action::HalfPageDown), (29, 20), "the last row shows");
+        assert_eq!(
+            press(Action::PageDown),
+            (29, 29),
+            "only the last row, as vim's"
+        );
+        assert_eq!(press(Action::HalfPageUp), (28, 24));
+        assert_eq!(press(Action::Home), (0, 0));
+        for _ in 0..5 {
+            press(Action::Down);
+        }
+        assert_eq!(
+            press(Action::Down),
+            (6, 1),
+            "as vim, four rows below in ten"
+        );
+    }
+
+    #[test]
+    fn an_empty_listing_keeps_the_cursor_on_its_first_row() {
         let mut empty = loaded("/srv", Vec::new());
         for action in [
             Action::Down,
@@ -3193,7 +3256,7 @@ mod tests {
         let mut panel = loaded("/srv", many);
         panel.handle(Action::End);
         let backend = draw(&mut panel, 40, 10, false);
-        assert!(panel.offset > 0, "scrolled to the cursor");
+        assert!(panel.window.top() > 0, "scrolled to the cursor");
         let buffer = backend.buffer();
         let row_of = |text: &str| {
             (0..buffer.area.height).find(|&y| {
@@ -3362,7 +3425,7 @@ mod tests {
         );
         insta::assert_snapshot!(terminal.backend());
         let buffer = terminal.backend().buffer();
-        let y = 1 + 1 + u16::try_from(panel.cursor - panel.offset).unwrap();
+        let y = 1 + 1 + u16::try_from(panel.cursor - panel.window.top()).unwrap();
         // After the marker, the name, in Insert mode with nothing selected, and the rest of the
         // row, which the size and time columns no longer cut.
         let reversed = |x: u16| buffer[(x, y)].modifier.contains(Modifier::REVERSED);

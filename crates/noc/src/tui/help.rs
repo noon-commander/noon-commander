@@ -119,8 +119,8 @@ impl Help {
             Action::Down => self.offset + 1,
             Action::PageUp => self.offset.saturating_sub(self.page),
             Action::PageDown => self.offset + self.page,
-            Action::HalfPageUp => self.offset.saturating_sub(self.page.div_ceil(2)),
-            Action::HalfPageDown => self.offset + self.page.div_ceil(2),
+            Action::HalfPageUp => self.offset.saturating_sub((self.page / 2).max(1)),
+            Action::HalfPageDown => self.offset + (self.page / 2).max(1),
             Action::Home => 0,
             Action::End => last,
             Action::Cancel | Action::Confirm => return true,
@@ -337,6 +337,7 @@ fn describe_panel(context: Context, action: Action) -> Option<String> {
         Action::SortByTime => fl!("help-sort-time"),
         Action::SortBySize => fl!("help-sort-size"),
         Action::QuickSearch => fl!("help-quick-search-start"),
+        Action::QuickSearchBack => fl!("help-quick-search-back"),
         Action::NextMatch => fl!("help-match-next"),
         Action::PrevMatch => fl!("help-match-prev"),
         Action::Shell => fl!("help-shell"),
@@ -631,7 +632,7 @@ mod tests {
         assert!(has("y, F5", "Copy the rows selected"));
         assert!(has(
             "n, Shift+F7",
-            "The next name that matches the last quick search"
+            "The next name that matches the last quick search, the way it went"
         ));
         assert!(has("Ctrl+w h", "The left panel"));
         assert!(has(

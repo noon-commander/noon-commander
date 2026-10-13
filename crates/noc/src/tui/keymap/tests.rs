@@ -214,7 +214,11 @@ fn insert_mode_takes_characters_as_text() {
 #[test]
 fn normal_mode_takes_characters_as_commands() {
     assert_eq!(typed(PANEL, &["a"]), [], "nothing binds a in a panel");
-    assert_eq!(typed(PANEL, &["?"]), []);
+    assert_eq!(
+        typed(PANEL, &["?"]),
+        actions(&[Action::QuickSearchBack]),
+        "vim's ?"
+    );
     assert_eq!(typed(FIELD, &["i"]), actions(&[Action::InsertMode]));
     assert_eq!(
         typed(FIELD, &["j"]),

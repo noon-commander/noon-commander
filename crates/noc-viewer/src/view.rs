@@ -98,8 +98,9 @@ impl Viewer {
             Command::Down => self.down(1),
             Command::PageUp => self.up(self.page),
             Command::PageDown => self.down(self.page),
-            Command::HalfPageUp => self.up(self.page.div_ceil(2)),
-            Command::HalfPageDown => self.down(self.page.div_ceil(2)),
+            // Half of an odd page rounds down, as vim's 'scroll' and less's `d` do.
+            Command::HalfPageUp => self.up((self.page / 2).max(1)),
+            Command::HalfPageDown => self.down((self.page / 2).max(1)),
             Command::Home => {
                 self.top = (0, 0);
                 self.column = 0;
@@ -282,9 +283,9 @@ mod tests {
 
         viewer.handle(Command::PageDown);
         assert!(draw(&mut viewer, 30, 6).contains("line 6"));
-        // Half of the five rows, rounded up.
+        // Half of the five rows, rounded down, as vim's 'scroll'.
         viewer.handle(Command::HalfPageDown);
-        assert!(draw(&mut viewer, 30, 6).contains("9/20"));
+        assert!(draw(&mut viewer, 30, 6).contains("8/20"));
         viewer.handle(Command::HalfPageUp);
         assert!(draw(&mut viewer, 30, 6).contains("6/20"));
         viewer.handle(Command::End);

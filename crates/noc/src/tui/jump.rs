@@ -17,6 +17,7 @@ use super::dialog::{Colors, Field, draw_box, frame_around};
 use super::fuzzy::Fuzzy;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::{Drawn, Pointer};
+use super::scroll::Window;
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -61,8 +62,8 @@ pub(crate) struct JumpMenu {
     error: Option<String>,
     /// The row under the cursor.
     cursor: usize,
-    /// First row on screen, and rows on screen at the last render.
-    offset: usize,
+    /// The rows on screen, as vim's window scrolls them, and how many at the last render.
+    window: Window,
     page: usize,
     /// Where the last render drew it, for the mouse.
     drawn: RefCell<Drawn>,
@@ -83,7 +84,7 @@ impl JumpMenu {
             loaded: false,
             error: None,
             cursor: 0,
-            offset: 0,
+            window: Window::default(),
             page: 1,
             drawn: RefCell::default(),
         }
@@ -143,7 +144,7 @@ impl JumpMenu {
     /// first, and those as good in zoxide's order.
     fn refilter(&mut self) {
         self.cursor = 0;
-        self.offset = 0;
+        self.window.reset();
         if !self.fuzzy {
             self.rows = (0..self.found.len()).collect();
             return;
@@ -177,9 +178,9 @@ impl JumpMenu {
     /// the window. `/` types the keywords: characters then are keywords, and the keys of text
     /// fields edit them, until Esc goes back to the rows.
     pub(crate) fn handle(&mut self, input: Resolved) -> JumpEvent {
-        let last = self.rows.len().saturating_sub(1);
+        let rows = self.rows.len();
+        let last = rows.saturating_sub(1);
         let page = self.page.max(1);
-        let half = page.div_ceil(2);
         match input {
             Resolved::Insert(c) if self.typing => {
                 self.keywords.insert(c);
@@ -189,10 +190,15 @@ impl JumpMenu {
             Resolved::Action(action) => match action {
                 Action::Up => self.cursor = self.cursor.saturating_sub(1),
                 Action::Down => self.cursor = (self.cursor + 1).min(last),
-                Action::PageUp => self.cursor = self.cursor.saturating_sub(page),
-                Action::PageDown => self.cursor = (self.cursor + page).min(last),
-                Action::HalfPageUp => self.cursor = self.cursor.saturating_sub(half),
-                Action::HalfPageDown => self.cursor = (self.cursor + half).min(last),
+                // As vim's Ctrl+b, Ctrl+f, Ctrl+u, and Ctrl+d, which scroll the rows.
+                Action::PageUp | Action::PageDown => {
+                    let down = action == Action::PageDown;
+                    self.window.page(down, &mut self.cursor, rows, page);
+                }
+                Action::HalfPageUp | Action::HalfPageDown => {
+                    let down = action == Action::HalfPageDown;
+                    self.window.half_page(down, &mut self.cursor, rows, page);
+                }
                 Action::Home => self.cursor = 0,
                 Action::End => self.cursor = last,
                 Action::QuickSearch => self.typing = true,
@@ -258,11 +264,11 @@ impl JumpMenu {
     /// Draws the window centered over `area`, the panels: the keywords, then the directories,
     /// scrolled to the cursor.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        let (page, cursor, offset) = self.draw(frame, area, theme);
-        (self.page, self.cursor, self.offset) = (page, cursor, offset);
+        let (page, cursor, window) = self.draw(frame, area, theme);
+        (self.page, self.cursor, self.window) = (page, cursor, window);
     }
 
-    fn draw(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) -> (usize, usize, usize) {
+    fn draw(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) -> (usize, usize, Window) {
         let rows = u16::try_from(self.rows.len().max(1))
             .unwrap_or(u16::MAX)
             .min(MAX_ROWS);
@@ -276,7 +282,7 @@ impl JumpMenu {
             ..Drawn::default()
         };
         if inner.height < 3 || inner.width < 4 {
-            return (self.page, self.cursor, self.offset);
+            return (self.page, self.cursor, self.window);
         }
         let width = usize::from(inner.width);
         let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
@@ -308,13 +314,11 @@ impl JumpMenu {
             for (index, text) in (2..inner.height).zip(cells::wrap(&message, width)) {
                 frame.render_widget(Line::styled(text, theme.dialog), line(index));
             }
-            return (page, self.cursor, self.offset);
+            return (page, self.cursor, self.window);
         }
-        let cursor = self.cursor.min(self.rows.len() - 1);
-        let offset = self
-            .offset
-            .min(cursor)
-            .max((cursor + 1).saturating_sub(page));
+        let (mut window, mut cursor) = (self.window, self.cursor);
+        window.follow(&mut cursor, self.rows.len(), page);
+        let offset = window.top();
         let found: Vec<&Scored> = self.rows.iter().map(|&index| &self.found[index]).collect();
         let scores: Vec<String> = found
             .iter()
@@ -336,7 +340,7 @@ impl JumpMenu {
             frame.render_widget(text, line(y));
             drawn.rows.push((row, line(y)));
         }
-        (page, cursor, offset)
+        (page, cursor, window)
     }
 }
 

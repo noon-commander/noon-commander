@@ -120,29 +120,32 @@ vim's motions and search, nor mc's Shift+Up and Shift+Down.
 
 noc groups keys under a first key: vim's g, q, and Ctrl+w, and its own t for the tabs and the
 workspaces, o for the sort order, as ranger's sort keys, and the hidden names, and f for the file
-operations. f stands for mc's Ctrl+x, whose letters it keeps for mc's commands: c chmod, o chown,
-e chattr, l, s, and v links, j the jobs. mc has no checksums, so they take #. Ctrl+w switches the
-panels, as it switches vim's windows: Ctrl+w h and Ctrl+w l go to the left and the right one,
-and Ctrl+w 1 and Ctrl+w 2 open their location menus, as Alt+F1 and Alt+F2 do. n and N repeat the
-last quick search, forward and backward, as in vim, yazi, and ranger; Shift+F7, mc's and Far's
-key to search again, repeats it forward too. Of mc's keys, only the F-keys stay; they work in
-Visual mode and in quick search too, as their sections say.
+operations. f stands for mc's Ctrl+x, whose letters it keeps for mc's commands: c chmod, o chown, e
+chattr, l, s, and v links, j the jobs. mc has no checksums, so they take #. Ctrl+w switches the
+panels, as it switches vim's windows: Ctrl+w h and Ctrl+w l go to the left and the right one, and
+Ctrl+w 1 and Ctrl+w 2 open their location menus, as Alt+F1 and Alt+F2 do. / searches down and ? up,
+as in vim and yazi; n and N repeat the last quick search, the way it went and the other way, as in
+vim, yazi, and ranger; Shift+F7, mc's and Far's key to search again, repeats it forward too. Of mc's
+keys, only the F-keys stay; they work in Visual mode and in quick search too, as their sections say.
 
 A count goes before a motion, a mark, n, or N, and repeats it: 3j goes three rows down. Before G or
 g g, it goes to the row of that number, 5G to the fifth; before g t, to the tab of that number, 2g t
 to the second. Each tab keeps a jump list, as vim's windows do: changing the directory, G, g g, n,
 N, and a quick search that moves the cursor put where it was in the list. Ctrl+o goes back through
 it, and Tab forward again, as Ctrl+i does, since terminals send Tab as Ctrl+i; a count goes that
-many jumps, and one past the end of the list goes nowhere, as in vim. n and N say when they go round
-past the last row or the first, and n with no search before says so, on the line of the mode until
-the next key, as vim's messages. v and V start Visual mode, which selects rows from there to the
-cursor, as the next section says: the commands of files act on the rows it selects, which become the
-marks.
+many jumps, and one past the end of the list goes nowhere, as in vim. The rows scroll as vim's
+window does, with five rows kept above and below the cursor, as vim's defaults.vim sets 'scrolloff':
+Ctrl+d and Ctrl+u scroll half a page and move the cursor as far, and Ctrl+f and Ctrl+b scroll a page
+less two rows and put the cursor at its top or bottom, where mc's and Far's page keys move the
+cursor a page. n and N say when they go round past the last row or the first, and n with no search
+before says so, on the line of the mode until the next key, as vim's messages. v and V start Visual
+mode, which selects rows from there to the cursor, as the next section says: the commands of files
+act on the rows it selects, which become the marks.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
 | One row up | `up` | ✅ | k<br>Up<br>Ctrl+p | Up<br>Ctrl+p | — | k<br>Up | Up<br>k |
-| One row down | `down` | ✅ | j<br>Down<br>Ctrl+n | Down<br>Ctrl+n | — | j<br>Down | Down<br>j |
+| One row down | `down` | ⏳ | j<br>Down<br>Ctrl+n<br>Ctrl+j | Down<br>Ctrl+n | — | j<br>Down | Down<br>j |
 | One page up | `page_up` | ✅ | Ctrl+b<br>PgUp | PgUp<br>Alt+v | — | Ctrl+b<br>PgUp | PgUp<br>Ctrl+b |
 | One page down | `page_down` | ✅ | Ctrl+f<br>PgDn | PgDn<br>Ctrl+v | — | Ctrl+f<br>PgDn | PgDn<br>Ctrl+f |
 | Half a page up | `half_page_up` | ✅ | Ctrl+u | — | — | Ctrl+u<br>Shift+PgUp | K<br>Ctrl+u |
@@ -186,6 +189,7 @@ marks.
 | Unmark the names that match a pattern | `unselect` | ⏳ | g - | -<br>\\<br>Numpad-<br>Alt+- | Numpad- | — | — |
 | Invert the marks on files; directories stay as they are | `invert_marks` | ⏳ | g \* | \*<br>Numpad\*<br>Alt+\* | Numpad* | — | — |
 | Start quick search | `quick_search` | ✅ | / | Ctrl+s<br>Alt+s | Alt+characters<br>Alt+Shift+characters | / | f |
+| Start quick search up the rows, as vim's ?; n then goes up too, and N down | `quick_search_back` | ⏳ | ? | — | — | ? | — |
 | The next name that matches the last quick search | `next_match` | ✅ | n<br>Shift+F7 | — | — | n | n |
 | The previous name that matches the last quick search | `prev_match` | ✅ | N | — | — | N | N |
 | Open the command line for a shell command | `shell` | ✅ | ! | Typing | Typing | ; (in the background)<br>: | !<br>s |
@@ -389,7 +393,7 @@ it.
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
 | One row up | `up` | ⏳ | k<br>Up<br>Ctrl+p | — | — | — | — |
-| One row down | `down` | ⏳ | j<br>Down<br>Ctrl+n | — | — | — | — |
+| One row down | `down` | ⏳ | j<br>Down<br>Ctrl+n<br>Ctrl+j | — | — | — | — |
 | One page up | `page_up` | ⏳ | Ctrl+b<br>PgUp | — | — | — | — |
 | One page down | `page_down` | ⏳ | Ctrl+f<br>PgDn | — | — | — | — |
 | Half a page up | `half_page_up` | ⏳ | Ctrl+u | — | — | — | — |
@@ -563,16 +567,18 @@ In the active panel, in Insert mode, as vim's search is typed: characters are pa
 searched for, and the keys of `input` edit it, Ctrl+r among them, which types the text of a
 register; it falls back to `input`, then to `global`. An edit searches again from the name under the
 cursor, which stays if it still matches; as in mc, a character that nothing matches is dropped. As
-vim's search, it finds the first match after the row the cursor was on, round, and with a count
-before / the match of that number (2/). Enter and Ctrl+j end the search, on the match, and Esc and
-Ctrl+c give it up, as in vim; Delete at the end of the text deletes the character before it, as on
-vim's command line; Ctrl+g and Ctrl+t go to the next and the previous match, and Ctrl+b and Ctrl+e
-to the start and the end of the text, as on vim's command line. Up, Down, PgUp, PgDn, and the
-F-keys, Alt+F1 and Alt+F2 among them, end the search and do what they do in the panel, as in mc, but
-Shift+F7, which goes to the next match; Left, Right, Home, and End move in the text, and other keys
-that none of them binds do nothing. The last search stays for n, N, and Shift+F7 in the panel. yazi
-searches as the name is typed in an input box, and ranger as it is typed on its console; both go to
-the next and previous match with keys of the panel, once the search is over.
+vim's search, it finds the first match after the row the cursor was on, round, or before it, up,
+after ?, and with a count before / or ? the match of that number (2/). Enter and Ctrl+j end the
+search, on the match, and Esc and Ctrl+c give it up, as in vim, and so do Backspace and Delete with
+nothing typed; Delete at the end of the text deletes the character before it, and Shift and Ctrl
+with Left and Right go by what spaces part, as on vim's command line; Ctrl+g and Ctrl+t go to the
+next match down and the next up, and Ctrl+b and Ctrl+e to the start and the end of the text, as on
+vim's command line. Up, Down, PgUp, PgDn, and the F-keys, Alt+F1 and Alt+F2 among them, end the
+search and do what they do in the panel, as in mc, but Shift+F7, which goes to the next match; Left,
+Right, Home, and End move in the text, and other keys that none of them binds do nothing. The last
+search stays for n, N, and Shift+F7 in the panel. yazi searches as the name is typed in an input
+box, and ranger as it is typed on its console; both go to the next and previous match with keys of
+the panel, once the search is over.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -830,20 +836,21 @@ ranger. Space, f, and b turn the page, and u and d half of it, as in less.
 
 ## Lists (`list`, Normal mode)
 
-The keys that the windows listing items to choose from share, in Normal mode, where they start:
-the location menu, the tab menu, the zoxide window, the workspaces, and the command history fall
-back to it, then to `global`, and their sections list only the keys they add. Keys that nothing
-binds do nothing: no digit or letter picks an item. `/` types in the filter, or the keywords of
-the zoxide window, in Insert mode, and Esc there comes back with the filter kept. Keys never go to
-it alone; the help lists its keys with each of those windows, with what Enter takes there. The mc
-column has the keys of mc's lists, such as its histories and its hotlist; the far column, those of
-Far's menus; the yazi column, those of its pick window, which asks for the program to open files
-with. None of them has modes: their keys are here, not under Insert mode.
+The keys that the windows listing items to choose from share, in Normal mode, where they start: the
+location menu, the tab menu, the zoxide window, the workspaces, and the command history fall back to
+it, then to `global`, and their sections list only the keys they add. Keys that nothing binds do
+nothing: no digit or letter picks an item. The rows scroll as the panels' do, as vim's window,
+headings among them. `/` types in the filter, or the keywords of the zoxide window, in Insert mode,
+and Esc there comes back with the filter kept. Keys never go to it alone; the help lists its keys
+with each of those windows, with what Enter takes there. The mc column has the keys of mc's lists,
+such as its histories and its hotlist; the far column, those of Far's menus; the yazi column, those
+of its pick window, which asks for the program to open files with. None of them has modes: their
+keys are here, not under Insert mode.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
 | Previous item | `up` | ⏳ | k<br>Up<br>Ctrl+p | Up<br>Ctrl+p | Up | k<br>Up | — |
-| Next item | `down` | ⏳ | j<br>Down<br>Ctrl+n | Down<br>Ctrl+n | Down | j<br>Down | — |
+| Next item | `down` | ⏳ | j<br>Down<br>Ctrl+n<br>Ctrl+j | Down<br>Ctrl+n | Down | j<br>Down | — |
 | One page up | `page_up` | ⏳ | Ctrl+b<br>PgUp | PgUp<br>Alt+v | — | — | — |
 | One page down | `page_down` | ⏳ | Ctrl+f<br>PgDn | PgDn<br>Ctrl+v | — | — | — |
 | Half a page up | `half_page_up` | ⏳ | Ctrl+u | — | — | — | — |

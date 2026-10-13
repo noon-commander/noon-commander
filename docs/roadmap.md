@@ -169,7 +169,7 @@
       lists, as in the panels; before Ctrl+d and Ctrl+u, it scrolls that many rows, which they
       keep, as vim's `'scroll'`
 - [ ] `/` and Enter with nothing typed searches for the last pattern again
-- [ ] Visual mode in the panels: `/`, `n`, and `N` move its end; `g ?`, `g m`, `g M`, `Z Z`,
+- [ ] Visual mode in the panels: `/`, `?`, `n`, and `N` move its end; `g ?`, `g m`, `g M`, `Z Z`,
       Ctrl+w 1 and 2, and `Y` do what they do in Normal mode, as their F-keys already do
 - [ ] The jump list as vim's by default: a jump after Ctrl+o keeps the places after it, and a
       place already in the list moves to its end, rather than as `jumpoptions=stack`
@@ -180,10 +180,10 @@
 - [ ] Smaller keys of vim's: in the viewer `0`, `$`, `z h`, `z l`, and search (`/`, `?`, `n`, `N`);
       F1 and `g ?` close the help; Space goes back from the output of commands, as from vim's
       hit-enter prompt; Ctrl+u and Ctrl+d in the lists of dialogs; Ctrl+e closes the pull-down menu
-      and the filters of lists, where Ctrl+y confirms; Backspace on an empty command line closes it;
-      Replace mode (`R`, Insert in Insert mode), `Z Q`, `' '`, and marks (`m a`); a click gives up a
-      command that waits, such as `d` or `"a`, and a paste uses up a count or a register that
-      waits, as vim's does
+      and the filters of lists, where Ctrl+y confirms; Backspace and Delete on an empty command line
+      close it; Replace mode (`R`, Insert in Insert mode), `Z Q`, `' '`, and marks (`m a`); a click
+      gives up a command that waits, such as `d` or `"a`, and a paste uses up a count or a register
+      that waits, as vim's does
 - [x] The location menu replaces the virtual root and the list of hosts: groups Favorites,
       Mounts, and SFTP, the places used last first (`recent.toml`), the first ten of each with
       a row for the rest; F4 and F8 on hosts there; a Retry dialog for failed connections, and

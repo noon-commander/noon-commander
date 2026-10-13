@@ -27,7 +27,7 @@ pub(super) const PRESET: Preset = &[
         &[
             // Navigation
             (Action::Up, &["k", "up", "ctrl-p"]),
-            (Action::Down, &["j", "down", "ctrl-n"]),
+            (Action::Down, &["j", "down", "ctrl-n", "ctrl-j"]),
             (Action::PageUp, &["ctrl-b", "pageup"]),
             (Action::PageDown, &["ctrl-f", "pagedown"]),
             (Action::HalfPageUp, &["ctrl-u"]),
@@ -82,6 +82,7 @@ pub(super) const PRESET: Preset = &[
             (Action::InvertMarks, &["g *"]),
             // Search
             (Action::QuickSearch, &["/"]),
+            (Action::QuickSearchBack, &["?"]),
             (Action::NextMatch, &["n", "shift-f7"]),
             (Action::PrevMatch, &["shift-n"]),
             // Tools
@@ -112,7 +113,7 @@ pub(super) const PRESET: Preset = &[
         Context::Panel,
         &[
             (Action::Up, &["k", "up", "ctrl-p"]),
-            (Action::Down, &["j", "down", "ctrl-n"]),
+            (Action::Down, &["j", "down", "ctrl-n", "ctrl-j"]),
             (Action::PageUp, &["ctrl-b", "pageup"]),
             (Action::PageDown, &["ctrl-f", "pagedown"]),
             (Action::HalfPageUp, &["ctrl-u"]),
@@ -431,7 +432,7 @@ pub(super) const PRESET: Preset = &[
         Context::List,
         &[
             (Action::Up, &["k", "up", "ctrl-p"]),
-            (Action::Down, &["j", "down", "ctrl-n"]),
+            (Action::Down, &["j", "down", "ctrl-n", "ctrl-j"]),
             (Action::PageUp, &["ctrl-b", "pageup"]),
             (Action::PageDown, &["ctrl-f", "pagedown"]),
             (Action::HalfPageUp, &["ctrl-u"]),

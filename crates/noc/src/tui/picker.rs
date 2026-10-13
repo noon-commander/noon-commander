@@ -12,6 +12,7 @@ use super::dialog::{Colors, Field, draw_box, frame_around};
 use super::fuzzy::Fuzzy;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::{Drawn, Pointer};
+use super::scroll::Window;
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -94,9 +95,11 @@ pub(crate) struct Picker {
     matches: Vec<Option<u32>>,
     /// The row under the cursor, among those the filter shows.
     cursor: usize,
-    /// First line on screen, and lines on screen at the last render.
-    offset: usize,
+    /// The lines on screen, as vim's window scrolls them, and how many at the last render.
+    window: Window,
     page: usize,
+    /// The row each line of the last render showed, if any: headings show none.
+    rows_drawn: Vec<Option<usize>>,
     /// Where the last render drew the window, for the mouse.
     drawn: Drawn,
 }
@@ -113,8 +116,9 @@ impl Picker {
             filtering: false,
             matches: Vec::new(),
             cursor: 0,
-            offset: 0,
+            window: Window::default(),
             page: 1,
+            rows_drawn: Vec::new(),
             drawn: Drawn::default(),
         }
     }
@@ -221,8 +225,6 @@ impl Picker {
     pub(crate) fn handle(&mut self, input: Resolved) -> Pick {
         let rows = self.len();
         let last = rows.saturating_sub(1);
-        let page = self.page.max(1);
-        let half = page.div_ceil(2);
         match input {
             Resolved::Insert(c) if self.filtering => {
                 self.filter.insert(c);
@@ -233,10 +235,9 @@ impl Picker {
             Resolved::Action(action) => match action {
                 Action::Up => self.cursor = self.cursor.saturating_sub(1),
                 Action::Down => self.cursor = (self.cursor + 1).min(last),
-                Action::PageUp => self.cursor = self.cursor.saturating_sub(page),
-                Action::PageDown => self.cursor = (self.cursor + page).min(last),
-                Action::HalfPageUp => self.cursor = self.cursor.saturating_sub(half),
-                Action::HalfPageDown => self.cursor = (self.cursor + half).min(last),
+                Action::PageUp | Action::PageDown | Action::HalfPageUp | Action::HalfPageDown => {
+                    self.scroll(action);
+                }
                 Action::Home => self.cursor = 0,
                 Action::End => self.cursor = last,
                 Action::QuickSearch => self.filtering = true,
@@ -268,6 +269,42 @@ impl Picker {
             },
         }
         Pick::Pending
+    }
+
+    /// Ctrl+b, Ctrl+f, Ctrl+u, or Ctrl+d: scrolls the lines as vim's window, headings among
+    /// them, and puts the cursor on the row where vim's goes, or the next one the way it went.
+    fn scroll(&mut self, action: Action) {
+        let rows = self.len();
+        let lines = if self.rows_drawn.is_empty() {
+            rows
+        } else {
+            self.rows_drawn.len()
+        };
+        let mut line = self
+            .rows_drawn
+            .iter()
+            .position(|&row| row == Some(self.cursor))
+            .unwrap_or(self.cursor);
+        let down = matches!(action, Action::PageDown | Action::HalfPageDown);
+        let page = self.page.max(1);
+        if matches!(action, Action::PageUp | Action::PageDown) {
+            self.window.page(down, &mut line, lines, page);
+        } else {
+            self.window.half_page(down, &mut line, lines, page);
+        }
+        if self.rows_drawn.is_empty() {
+            self.cursor = line.min(rows.saturating_sub(1));
+            return;
+        }
+        let row = |line: &usize| self.rows_drawn.get(*line).copied().flatten();
+        let after = (line..self.rows_drawn.len()).find_map(|line| row(&line));
+        let before = (0..=line).rev().find_map(|line| row(&line));
+        let found = if down {
+            after.or(before)
+        } else {
+            before.or(after)
+        };
+        self.cursor = found.unwrap_or(0);
     }
 
     /// Takes a press of the mouse, where the window was drawn last: a click puts the cursor on
@@ -325,17 +362,20 @@ impl Picker {
             return;
         }
         let cursor = self.cursor.min(rows - 1);
-        let at = lines
+        let mut at = lines
             .iter()
             .position(|shown| *shown == MenuLine::Row(cursor))
             .unwrap_or(0);
-        // A heading right above the row under the cursor shows with it.
-        let top = if at > 0 && matches!(lines[at - 1], MenuLine::Heading(_)) {
-            at - 1
-        } else {
-            at
-        };
-        let offset = self.offset.min(top).max((at + 1).saturating_sub(self.page));
+        self.rows_drawn = lines
+            .iter()
+            .map(|shown| match shown {
+                MenuLine::Row(row) => Some(*row),
+                MenuLine::Heading(_) => None,
+            })
+            .collect();
+        // Five lines around the cursor show the heading of its rows with them too.
+        self.window.follow(&mut at, lines.len(), self.page);
+        let offset = self.window.top();
         for (index, shown) in lines.iter().skip(offset).take(self.page).enumerate() {
             let y = u16::try_from(index + 2).unwrap_or(u16::MAX);
             let text = match shown {
@@ -362,7 +402,7 @@ impl Picker {
                 frame.render_widget(Line::styled(text, theme.dialog), line(index));
             }
         }
-        (self.cursor, self.offset) = (cursor, offset);
+        self.cursor = cursor;
     }
 
     /// The filter, with its cursor while it takes text, and `note` at the right, on the first
@@ -414,6 +454,25 @@ mod tests {
 
     fn press(picker: &mut Picker, action: Action) -> Pick {
         picker.handle(Resolved::Action(action))
+    }
+
+    #[test]
+    fn page_keys_scroll_as_vims_and_skip_the_headings() {
+        let names: Vec<String> = (0..30).map(|n| format!("row{n}")).collect();
+        let names: Vec<&str> = names.iter().map(String::as_str).collect();
+        let mut plain = picker(&names, false);
+        plain.page = 10;
+        press(&mut plain, Action::PageDown);
+        assert_eq!(plain.cursor(), 12, "as vim's Ctrl+f in ten lines");
+        press(&mut plain, Action::HalfPageDown);
+        assert_eq!(plain.cursor(), 17, "as vim's Ctrl+d");
+        // A heading where the cursor would go: the row after it, the way the keys went.
+        let mut headed = picker(&names, false);
+        headed.page = 10;
+        headed.rows_drawn = (0..30).map(Some).collect();
+        headed.rows_drawn.insert(12, None);
+        press(&mut headed, Action::PageDown);
+        assert_eq!(headed.cursor(), 12, "on the line after the heading");
     }
 
     #[test]

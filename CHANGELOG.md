@@ -9,30 +9,33 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- One keymap, vim's, in its modes, with mc's F-keys
-  ([ADR 0022](docs/adr/0022-vim-modes.md)). The panels, the lists, the pull-down menu, the
-  viewer, and the help take keys in Normal mode; quick search, the command line of `!` and `:`,
-  renaming in place, and a dialog that opens on a text field take them in Insert mode, where
-  characters are text; Esc goes to Normal mode, and in Normal mode closes. Ctrl+c closes in every
-  mode. A line above the F-key bar shows `-- INSERT --` or `-- VISUAL --`, and the count,
+- One keymap, vim's, in its modes, with mc's F-keys ([ADR 0022](docs/adr/0022-vim-modes.md)). The
+  panels, the lists, the pull-down menu, the viewer, and the help take keys in Normal mode; quick
+  search, the command line of `!` and `:`, renaming in place, and a dialog that opens on a text
+  field take them in Insert mode, where characters are text. In a text field Esc goes to Normal
+  mode, and in Normal mode closes; quick search and the command line close on Esc, as vim's search
+  and command line do. Ctrl+c closes or cancels in every mode. Esc acts at once, where 0.1.0's
+  panels waited a second after it: it never waits for a key after it, and gives up a command typed
+  so far. A line above the F-key bar shows `-- INSERT --` or `-- VISUAL --`, and the count,
   register, operator, or keys of a command typed so far; the cursor is a bar in Insert mode and a
   block in the others.
-  - Panels: k, j, Ctrl+u, Ctrl+d, Ctrl+b, Ctrl+f, g g, and G move, l and Enter open, h and
-    Backspace go up; a count repeats a motion (5j), and G, g g, and g t take it as a row or a
-    tab (3G). v and V select rows in Visual mode, whose y, x, d, F5, F6, F8, and f # act on them
-    as on marked entries, and Space marks them; o goes to the other end, g v selects them
-    again. Ctrl+o and Tab (Ctrl+i) go back and forth through a jump list per tab, of the
-    directories left and of G, g g, n, N, and searches. Ctrl+w w, Ctrl+w p, Ctrl+w h, and
-    Ctrl+w l switch panels, as vim's windows; Ctrl+w x swaps them, Ctrl+w f and Ctrl+w v open
-    the directory under the cursor or this one in the other panel, and Ctrl+w 1 and Ctrl+w 2
-    change their locations. / starts quick search, typed as vim's search: Enter ends it on the
-    match, Esc gives it up, Ctrl+g and Ctrl+t go to the next and the previous match. Space, J,
-    and K mark, + and - mark and unmark by a pattern, * inverts; i views, e edits, Y and y y
-    copy, x moves, r renames in the row, A makes a directory, d D deletes, R reads the
-    directory again; t n, t c, g t, g T, t h, t l, t w, and t W for tabs and workspaces; o n,
-    o e, o m, o s sort and o h shows hidden files; g z jumps with zoxide, g d is Quick cd, f j
-    lists the jobs, q : opens the command history, g m and g M the pull-down menu, g ? the help,
-    g < the output of commands, and Z Z quits.
+  - Panels: k, j, Ctrl+u, Ctrl+d, Ctrl+b, Ctrl+f, g g, and G move, l and Enter open, h and Backspace
+    go up; a count repeats a motion (5j), and G, g g, and g t take it as a row or a tab (3G). v and
+    V select rows in Visual mode, whose y, x, d, F5, F6, F8, and f # act on them as on marked
+    entries, and Space marks them; o goes to the other end, g v selects them again, and the other
+    F-keys and Ctrl+w end it and do what they do. Ctrl+o and Tab (Ctrl+i) go back and forth through
+    a jump list per tab, of the directories left and of G, g g, n, N, and searches. Ctrl+w w, Ctrl+w
+    p, Ctrl+w h, and Ctrl+w l switch panels, as vim's windows; Ctrl+w x swaps them, Ctrl+w f and
+    Ctrl+w v open the directory under the cursor or this one in the other panel, and Ctrl+w 1 and
+    Ctrl+w 2 change their locations. / starts quick search, typed as vim's search: Enter ends it on
+    the match, Esc gives it up, Ctrl+g and Ctrl+t go to the next and the previous match, and the
+    arrows, the page keys, and the F-keys end it and do what they do, as in mc. Space, J, and K
+    mark, + and - mark and unmark by a pattern, * inverts; i views, e edits, Y and y y copy, x
+    moves, r renames in the row, A makes a directory, d D deletes, R reads the directory again; t n,
+    t c, g t, g T, t h, t l, t w, and t W for tabs and workspaces; o n, o e, o m, o s sort and o h
+    shows hidden files; g z jumps with zoxide, g d is Quick cd, f j lists the jobs, q : opens the
+    command history, g m and g M the pull-down menu, g ? the help, g < the output of commands, and Z
+    Z quits.
   - Text fields have vim's Normal mode after Esc: h, l, w, b, e, W, B, E, 0, ^, $, f, t, F, T,
     ;, and , move; d, c, and y act on a motion, or on the line when doubled, with counts (2d3w);
     x, X, s, S, C, D, r, and ~ change; p and P put; u and Ctrl+r undo and redo; i, a, I, and A
@@ -40,19 +43,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     goes to registers: the unnamed one, and "a … "z, which "A … "Z append to; every field and
     the command line share them, and Ctrl+r and a register puts one in Insert mode. Ctrl+o runs
     one command of Normal mode from Insert mode, Ctrl+v types the next key as it is, and Alt and
-    a key stand for Esc and the key, as in vim in a terminal.
+    a key stand for Esc and the key, as in vim in a terminal; on a password they do nothing.
   - The command line is vim's: Esc closes it, Ctrl+b and Ctrl+e go to the ends of the line,
     Ctrl+p and Ctrl+n through the history, and Ctrl+f goes to Normal mode, where j and k go
     through its lines and the history, and q : opens the window of the history.
   - The lists (the location menu, the tab menu, the zoxide window, the workspaces, the command
     history) open in Normal mode: j, k, g g, G, Ctrl+d, and Ctrl+u move, Enter takes the row,
-    d d deletes it where F8 does, and q closes; / types in the filter, and Esc goes back to the
-    rows with the filter kept.
+    d d deletes it where F8 does, and q closes; / types in the filter, where Ctrl+r types a
+    register too, and Esc goes back to the rows with the filter kept.
   - Dialogs: j, k, h, l, and Tab move between fields and buttons, Space switches, and q closes,
     in Normal mode; the focus comes to a field in Insert mode with Tab or a click.
   - The pull-down menu: h, j, k, and l move, and Alt and a highlighted letter run its command.
-  - The F-keys stay mc's, in every mode: F1 … F10, Shift+F6, Shift+F7, Shift+F9, Alt+F1, and
-    Alt+F2.
+  - The F-keys of the panels stay mc's, in Normal and Visual mode and in quick search: F1 …
+    F10, Shift+F6, Shift+F7, Shift+F9, Alt+F1, and Alt+F2.
 - When a connection to a host fails, or is lost, a dialog says why and offers Retry, the
   default, and Cancel. The panels on a lost host stay on their directory, without its entries,
   and read it again once Retry connects; after Cancel they stay there, and R, or Enter on `..`,
@@ -91,8 +94,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   kitty keyboard protocol, which Noon Commander now asks for where the terminal has it, with
   the keys typed with Shift reported too, so that Alt with a symbol such as Alt+/ still
   does what it does elsewhere; and pasted text arrives whole through bracketed paste, so a
-  pasted line break never runs a command. Text fields and quick search take pasted text without
-  its line breaks, and panels ignore it rather than take its characters as keys.
+  pasted line break never runs a command. Text fields take pasted text without its line breaks,
+  as one change in any mode; quick search and the filters of the lists take it too, a list in
+  Normal mode in its filter; panels ignore it rather than take its characters as keys.
 - A command line for shell commands: `!` opens it in a panel, and so does `:`, for commands of Noon
   Commander, of which `:!command` is the only one so far. The prompt shows the panel's directory,
   with the host's label or alias on a host, where the command runs over the host's connection with a
@@ -124,8 +128,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Shift+F10 does, so Shift+F9 Enter repeats it.
 - Quick search is kept once it ends, as vim keeps its last pattern: n and N go to the next and
   the previous name that matches it, round, and so does Shift+F7 to the next, as mc and Far
-  search again with it; / and Ctrl+g with nothing typed yet search for it again, as mc's
-  Ctrl+s Ctrl+s does.
+  search again with it; Ctrl+g in quick search with nothing typed yet searches for it again, as
+  mc's Ctrl+s Ctrl+s does.
 
 ### Changed
 
@@ -171,8 +175,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   whichever is active, with t h for the left one and t l for the right one, and is drawn over
   that panel rather than in the middle of the screen. / filters it, as fzf does with
   `ui.fuzzy_search`, and the mouse picks one as in the other menus. Showing a tab makes its
-  panel active. The actions are `tab_list_left` and `tab_list_right`, in place of `tab_list`,
-  and the menu has keys of its own in the `tab_menu` context.
+  panel active.
 - Keys are written one way in the help, the menus, and the docs: letters in lowercase, after a
   modifier too, and in uppercase for Shift and the letter (`Ctrl+r`, `Alt+W`, `G`), `Shift+` only
   before other keys (`Shift+F6`), and `PgUp`, `PgDn` rather than `PageUp`, `PageDown`.
@@ -184,14 +187,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Removed
 
 - The virtual root and the list of hosts: volumes and hosts are chosen in the location menu.
-  A local or remote `/` has no `..` any more, the `root` keymap context is gone, with D D of the
-  vim keymap, and the terminal and tab titles no longer show the name of the machine.
-- `ui.keymap`, the keymap modelled on mc, and `noc keymap diff`: there is one keymap, vim's
-  ([ADR 0022](docs/adr/0022-vim-modes.md)); `config.toml` with `ui.keymap` is an error, as any
-  unknown key is. Of mc's keys only the F-keys stay; Alt+1 … Alt+0 no longer stand for them,
-  and the lists have no digit hotkeys.
-- Ctrl+x Ctrl+e, which edited the command line in `$EDITOR`, until a key of vim's is chosen for
-  it.
+  A local or remote `/` has no `..` any more, and the terminal and tab titles no longer show the
+  name of the machine.
+- The keys modelled on mc: there is one keymap, vim's, in its modes
+  ([ADR 0022](docs/adr/0022-vim-modes.md)). Of mc's keys only the F-keys stay. Esc 1 … Esc 0 no
+  longer stand for F1 … F10, Esc and a key no longer stand for Alt and the key, and the location
+  menu has no digit hotkeys.
+- `ui.type_to_search` and its row in Options → Configuration: typing in a panel no longer starts
+  quick search; `/` does. Remove the key from `config.toml`, where it is an error now, as any
+  unknown key is.
 
 ## [0.1.0] - 2026-10-03
 

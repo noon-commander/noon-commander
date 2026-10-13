@@ -38,10 +38,13 @@ Keys are typed in one of vim's modes. Normal mode takes them as commands: the pa
 the pull-down menu, the viewer, and the help start in it, and keys that nothing binds there do
 nothing. Insert mode takes characters as text: quick search, the command line of `:` and `!`, the
 field of a rename, and a dialog whose first focus is a text field start in it. Visual mode
-selects rows of a panel, or text of a field, for the commands that act on them. Counts,
-registers, and the character typed after f, t, r, ", Ctrl+r, or Ctrl+v come with the action
-rather than as bindings; the sections say where they apply. mc, Far, and ranger have no modes;
-yazi has vi's in its input boxes, and a visual mode in its panels.
+selects rows of a panel, or text of a field, for the commands that act on them. Alt and a key
+stand for Esc and the key in Insert and Visual mode, and in the panels in Normal mode, unless
+something binds that Alt key, as a quick Esc and the key arrive from a terminal; on a password
+field they do nothing. Ctrl+c closes or cancels in every mode. Counts, registers, and the
+character typed after f, t, r, ", Ctrl+r, or Ctrl+v come with the action rather than as
+bindings; the sections say where they apply. mc, Far, and ranger have no modes; yazi has vi's in
+its input boxes, and a visual mode in its panels.
 
 yazi and ranger show one directory between its parent and a preview, with tabs and no second
 panel, so the keys of the other panel are "—" for them. Both copy and move in two steps: they
@@ -116,7 +119,8 @@ e chattr, l, s, and v links, j the jobs. mc has no checksums, so they take #. Ct
 panels, as it switches vim's windows: Ctrl+w h and Ctrl+w l go to the left and the right one,
 and Ctrl+w 1 and Ctrl+w 2 open their location menus, as Alt+F1 and Alt+F2 do. n and N repeat the
 last quick search, forward and backward, as in vim, yazi, and ranger; Shift+F7, mc's and Far's
-key to search again, repeats it forward too. Of mc's keys, only the F-keys stay.
+key to search again, repeats it forward too. Of mc's keys, only the F-keys stay; they work in
+Visual mode and in quick search too, as their sections say.
 
 A count goes before a motion, a mark, n, or N, and repeats it: 3j goes three rows down. Before G
 or g g, it goes to the row of that number, 5G to the fifth; before g t, to the tab of that number,
@@ -362,13 +366,16 @@ the marks.
 ## Panels (`panel`, Visual mode)
 
 Rows selected in a panel, from the row where v or V started Visual mode to the cursor, as vim's
-linewise Visual mode selects lines. It falls back to `global`; keys that neither binds do
-nothing. The motions extend the selection, after a count too, and G and g g after a count go to
-the row of that number. The commands of files act on the rows selected: they become the marks,
-the only ones, and Visual mode ends. Space marks them beside the marks already there, and Esc, v,
-or V leave Visual mode; g v, in Normal mode, selects the same rows again. yazi's and ranger's
-visual modes mark the rows that the cursor moves over with the keys of their panels, whose
-commands then act on the marks, so their columns here have only the keys that leave it.
+linewise Visual mode selects lines. It falls back to `global`. The motions extend the selection,
+after a count too, and G and g g after a count go to the row of that number. The commands of
+files, y, x, d, F5, F6, F8, and f #, act on the rows selected: they become the marks, the only
+ones, and Visual mode ends. Space marks them beside the marks already there, and Esc, Ctrl+c, v,
+or V leave Visual mode; g v, in Normal mode, selects the same rows again. The other F-keys,
+Alt+F1, Alt+F2, and the keys of Ctrl+w that go to another panel end Visual mode and do what they
+do in Normal mode, and so do Alt and a key, as Esc and the key; other keys that neither binds do
+nothing. yazi's and ranger's visual modes mark the rows that the cursor moves over with the keys
+of their panels, whose commands then act on the marks, so their columns here have only the keys
+that leave it.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -387,6 +394,20 @@ commands then act on the marks, so their columns here have only the keys that le
 | Delete the rows selected | `delete` | ⏳ | d<br>F8 | — | — | — | — |
 | Checksums of the files selected | `checksum` | ⏳ | f # | — | — | — | — |
 | Leave Visual mode (yazi: or else unmark everything, or leave the search or the filter) | `normal_mode` | ⏳ | Esc<br>Ctrl+[<br>Ctrl+c<br>v<br>V | — | — | Esc<br>Ctrl+[ | Esc |
+| Leave Visual mode, and show the help | `help` | ⏳ | F1 | — | — | — | — |
+| Leave Visual mode, and view the file under the cursor | `view` | ⏳ | F3 | — | — | — | — |
+| Leave Visual mode, and edit the file under the cursor | `edit` | ⏳ | F4 | — | — | — | — |
+| Leave Visual mode, and rename the entry under the cursor in its row | `rename` | ⏳ | Shift+F6 | — | — | — | — |
+| Leave Visual mode, and make a directory | `mkdir` | ⏳ | F7 | — | — | — | — |
+| Leave Visual mode, and go to the next name that matches the last quick search | `next_match` | ⏳ | Shift+F7 | — | — | — | — |
+| Leave Visual mode, and open the pull-down menu | `pull_down` | ⏳ | F9 | — | — | — | — |
+| Leave Visual mode, and open the pull-down menu on the command that ran from it last | `pull_down_last` | ⏳ | Shift+F9 | — | — | — | — |
+| Leave Visual mode, and quit | `quit` | ⏳ | F10 | — | — | — | — |
+| Leave Visual mode, and change the location of the panel drawn on the left | `location_menu_left` | ⏳ | Alt+F1 | — | — | — | — |
+| Leave Visual mode, and change the location of the panel drawn on the right | `location_menu_right` | ⏳ | Alt+F2 | — | — | — | — |
+| Leave Visual mode, and go to the other panel | `switch_panel` | ⏳ | Ctrl+w w<br>Ctrl+w Ctrl+w<br>Ctrl+w p | — | — | — | — |
+| Leave Visual mode, and go to the left panel, wherever the panels were swapped | `focus_left` | ⏳ | Ctrl+w h | — | — | — | — |
+| Leave Visual mode, and go to the right panel, wherever the panels were swapped | `focus_right` | ⏳ | Ctrl+w l | — | — | — | — |
 
 ## Editing text (`input`, Insert mode)
 
@@ -394,10 +415,13 @@ What the text fields share while they take text: quick search, the field of a re
 fields of dialogs, the command line, and the filters of the lists fall back to it, and their
 sections list only the keys they add. Keys never go to it alone; the help lists its keys with
 each of those fields. It falls back to `global`. Characters are text, and Alt and a key stand
-for Esc and the key, as a quick Esc and the key arrive from a terminal. Ctrl+r takes the
-register typed after it, a … z or " for the unnamed one, and Ctrl+v the key to type as it is.
-The registers live in memory, every text field and the command line share them, and none reads
-or writes the system clipboard.
+for Esc and the key, as a quick Esc and the key arrive from a terminal, except on a password
+field, where they do nothing. Ctrl+r takes the register typed after it, a … z or " for the
+unnamed one, and types its text, in quick search and the filters too; Ctrl+v takes the key to
+type as it is. The registers live in memory, every text field and the command line share them,
+and none reads or writes the system clipboard. Ctrl+o, one command of Normal mode, is bound by
+the fields that have Normal mode: the field of a rename, the text fields of dialogs, and the
+command line.
 
 The mc column has the keys of mc's input lines, its command line among them; the far column,
 those of Far's command line; the ranger column, those of its console. None of them has modes:
@@ -420,7 +444,6 @@ digits, and symbols, which work only in normal mode, are under Normal mode.
 | Delete to the start of the line | `delete_to_start` | ✅ | Ctrl+u | Ctrl+w (nothing selected) | — | Ctrl+u | Ctrl+u |
 | Put the text of the register typed after it | `paste_register` | ⏳ | Ctrl+r | — | — | — | — |
 | Type the next key as it is | `insert_literal` | ⏳ | Ctrl+v | — | — | — | — |
-| One command of Normal mode, then Insert mode again | `normal_once` | ⏳ | Ctrl+o | — | — | — | — |
 | Normal mode, as in vi, where Esc closes, as the field's section says (yazi: in normal mode, cancel) | `normal_mode` | ⏳ | Esc<br>Ctrl+[ | — | — | Esc<br>Ctrl+[ | — |
 | One word right: the end of the word after the cursor (noc: e, in Normal mode) | — | ⏳ | — | Alt+f<br>Ctrl+Right | Ctrl+Right | Alt+f<br>Ctrl+Right | Alt+f<br>Alt+Right |
 | Delete the word after the cursor, and the spaces before it, as the shell's Alt+d (noc: d e, in Normal mode) | — | ⏳ | — | Alt+d | Ctrl+Delete | Alt+d<br>Ctrl+Delete | Alt+d |
@@ -524,12 +547,14 @@ selects. mc selects text with Shift and the arrows, under Insert mode.
 ## Quick search (`quick_search`, Insert mode)
 
 In the active panel, in Insert mode, as vim's search is typed: characters are part of the name
-searched for, and the keys of `input` edit it; it falls back to `input`, then to `global`. An
-edit searches again from the name under the cursor, which stays if it still matches; as in mc, a
-character that nothing matches is dropped. Enter ends the search, on the match, and Esc gives it
-up, as in vim; Ctrl+g and Ctrl+t go to the next and the previous match, and Ctrl+b and Ctrl+e to
-the start and the end of the text, as on vim's command line. The F-keys end the search and do
-what they do in the panel, as in mc, but Shift+F7, which goes to the next match; other keys that
+searched for, and the keys of `input` edit it, Ctrl+r among them, which types the text of a
+register; it falls back to `input`, then to `global`. An edit searches again from the name under
+the cursor, which stays if it still matches; as in mc, a character that nothing matches is
+dropped. Enter ends the search, on the match, and Esc and Ctrl+c give it up, as in vim; Ctrl+g
+and Ctrl+t go to the next and the previous match, and Ctrl+b and Ctrl+e to the start and the
+end of the text, as on vim's command line. Up, Down, PgUp, PgDn, and the F-keys, Alt+F1 and
+Alt+F2 among them, end the search and do what they do in the panel, as in mc, but Shift+F7,
+which goes to the next match; Left, Right, Home, and End move in the text, and other keys that
 none of them binds do nothing. The last search stays for n, N, and Shift+F7 in the panel. yazi
 searches as the name is typed in an input box, and ranger as it is typed on its console; both go
 to the next and previous match with keys of the panel, once the search is over.
@@ -542,6 +567,10 @@ to the next and previous match with keys of the panel, once the search is over.
 | Previous match | `prev_match` | ✅ | Ctrl+t | — | Ctrl+Shift+Enter | N | N |
 | Start of the line | `text_start` | ⏳ | Ctrl+b | — | — | — | — |
 | End of the line | `text_end` | ⏳ | Ctrl+e | — | — | — | — |
+| End the search, and one row up | `up` | ⏳ | Up | — | — | — | — |
+| End the search, and one row down | `down` | ⏳ | Down | — | — | — | — |
+| End the search, and one page up | `page_up` | ⏳ | PgUp | — | — | — | — |
+| End the search, and one page down | `page_down` | ⏳ | PgDn | — | — | — | — |
 | End the search, and show the help | `help` | ⏳ | F1 | — | — | — | — |
 | End the search, and view the file under the cursor | `view` | ⏳ | F3 | — | — | — | — |
 | End the search, and edit the file under the cursor | `edit` | ⏳ | F4 | — | — | — | — |
@@ -552,7 +581,10 @@ to the next and previous match with keys of the panel, once the search is over.
 | End the search, and make a directory | `mkdir` | ⏳ | F7 | — | — | — | — |
 | End the search, and delete the marked entries, or the one under the cursor | `delete` | ⏳ | F8 | — | — | — | — |
 | End the search, and open the pull-down menu | `pull_down` | ⏳ | F9 | — | — | — | — |
+| End the search, and open the pull-down menu on the command that ran from it last | `pull_down_last` | ⏳ | Shift+F9 | — | — | — | — |
 | End the search, and quit | `quit` | ⏳ | F10 | — | — | — | — |
+| End the search, and change the location of the panel drawn on the left | `location_menu_left` | ⏳ | Alt+F1 | — | — | — | — |
+| End the search, and change the location of the panel drawn on the right | `location_menu_right` | ⏳ | Alt+F2 | — | — | — | — |
 | Paste from clipboard | — | 🚫 | — | — | Ctrl+v<br>Shift+Insert | — | — |
 
 ## Renaming in place (`rename`, Insert mode)
@@ -560,13 +592,14 @@ to the next and previous match with keys of the panel, once the search is over.
 r or Shift+F6 edits the name in the entry's row, in Insert mode, with the keys of `input`; it
 falls back to `input`, then to `global`, and other keys do nothing. Enter renames in every mode,
 and Ctrl+c leaves the name as it was in every mode; Esc goes to Normal mode, through `input`, and
-there leaves the name as it was. None of mc, Far, yazi, and ranger renames in the row: mc and Far
-ask in a dialog, yazi in an input box, and ranger on its console, whose keys are those of
-`input`.
+there leaves the name as it was. Ctrl+o runs one command of Normal mode, then Insert mode comes
+back, as in vim. None of mc, Far, yazi, and ranger renames in the row: mc and Far ask in a
+dialog, yazi in an input box, and ranger on its console, whose keys are those of `input`.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
 | Rename to the name typed | `confirm` | ✅ | Enter<br>Ctrl+m | — | — | — | — |
+| One command of Normal mode, then Insert mode again | `normal_once` | ⏳ | Ctrl+o | — | — | — | — |
 | Keep the name as it was | `cancel` | ⏳ | Ctrl+c | — | — | — | — |
 
 ## Renaming in place (`rename`, Normal mode)
@@ -656,9 +689,11 @@ starts; it falls back to `input`, whose keys edit the text, then to `dialog`, th
 Up, Down, Tab, and Shift+Tab still move between the fields and the buttons, and Enter presses the
 default button. Esc goes to Normal mode, through `input`, where the field binds nothing of its
 own: the keys of `input` edit the text, then those of `dialog` move, accept, and close, Esc among
-them. A secret field, such as a password, has no Normal mode: Esc closes its dialog. The mc
-column has the keys of mc's input lines; the far column, those of Far's dialogs. mc and Far move
-between the fields and press the buttons with the keys of their dialogs, under `dialog`.
+them; Ctrl+o runs one command of Normal mode, then Insert mode comes back. A secret field, such
+as a password, has no Normal mode: Esc closes its dialog, and Ctrl+o and Alt and a key do
+nothing. The mc column has the keys of mc's input lines; the far column, those of Far's dialogs.
+mc and Far move between the fields and press the buttons with the keys of their dialogs, under
+`dialog`.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -667,6 +702,7 @@ between the fields and press the buttons with the keys of their dialogs, under `
 | Next field or button | `next_field` | ⏳ | Tab<br>Ctrl+i | — | — | — | — |
 | Previous field or button | `prev_field` | ⏳ | Shift+Tab | — | — | — | — |
 | Press the default button | `confirm` | ⏳ | Enter<br>Ctrl+m | — | — | — | — |
+| One command of Normal mode, then Insert mode again | `normal_once` | ⏳ | Ctrl+o | — | — | — | — |
 | Cancel the dialog | `cancel` | ⏳ | Ctrl+c<br>F10 | — | — | — | — |
 | Input line history | — | ⏳ | — | Alt+h | Ctrl+Up (in dialogs)<br>Ctrl+Down (in dialogs) | — | — |
 | Previous history entry | — | ⏳ | — | Alt+p<br>Ctrl+Down | Ctrl+e | k<br>Up<br>Ctrl+p | Up<br>Ctrl+p |
@@ -806,9 +842,10 @@ with. None of them has modes: their keys are here, not under Insert mode.
 
 While `/` has the filter take text, in Insert mode: characters are text, and the windows fall back
 to `list`, then to `input`, whose keys edit the filter, then to `global`. Home and End go to the
-start and the end of the filter here, and to the first and the last item in Normal mode. Esc goes
-back to the rows with the filter kept, and Ctrl+c closes the window. mc, Far, and yazi have no
-modes in their lists: their keys are under Normal mode.
+start and the end of the filter here, and to the first and the last item in Normal mode. Ctrl+r
+types the text of a register, as in a text field. Esc goes back to the rows with the filter
+kept, and Ctrl+c closes the window. mc, Far, and yazi have no modes in their lists: their keys
+are under Normal mode.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -920,14 +957,15 @@ command run it; mc's menus take the letter alone.
 ## Command line (`command_line`, Insert mode)
 
 `!` and `:` open it, in Insert mode, as vim's command line: Esc closes it, and Ctrl+f goes to
-Normal mode, in place of vim's window of the command line. It falls back to `input`, whose Home
-and End go to the start and the end of the line here and whose Ctrl+u deletes to the start, then
-to `global`; other keys, but characters, do nothing. Ctrl+j arrives as LF where Enter arrives as
-CR, so it starts a new line in every terminal; Shift+Enter does where the terminal speaks the
-kitty keyboard protocol. In mc and Far the command line is always under the panels, so their keys
-here are pressed in the panels. yazi asks for a shell command in an input box (; and : in the
-panels), and ranger's console (: and !) is its command line. The keys of their input lines that
-noc lacks, such as the clipboard, are under `input`, as are yazi's modes.
+Normal mode, in place of vim's window of the command line; Ctrl+o runs one command of Normal
+mode, then Insert mode comes back. It falls back to `input`, whose Home and End go to the start
+and the end of the line here and whose Ctrl+u deletes to the start, then to `global`; other keys,
+but characters, do nothing. Ctrl+j arrives as LF where Enter arrives as CR, so it starts a new
+line in every terminal; Shift+Enter does where the terminal speaks the kitty keyboard protocol.
+In mc and Far the command line is always under the panels, so their keys here are pressed in the
+panels. yazi asks for a shell command in an input box (; and : in the panels), and ranger's
+console (: and !) is its command line. The keys of their input lines that noc lacks, such as the
+clipboard, are under `input`, as are yazi's modes.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -939,6 +977,7 @@ noc lacks, such as the clipboard, are under `input`, as are yazi's modes.
 | Normal mode, to edit the command with vim's keys | `normal_mode` | ⏳ | Ctrl+f | — | — | — | — |
 | The command before in the history of the panel's host | `older_command` | ✅ | Ctrl+p | Alt+p<br>Ctrl+Down | Ctrl+e | Ctrl+p | Ctrl+p |
 | The command after in the history of the panel's host | `newer_command` | ✅ | Ctrl+n | Alt+n<br>Ctrl+Up | Ctrl+x | Ctrl+n | Ctrl+n |
+| One command of Normal mode, then Insert mode again | `normal_once` | ⏳ | Ctrl+o | — | — | — | — |
 | Run the command; after a \\ at the end of the line, a new line | `confirm` | ✅ | Enter<br>Ctrl+m | Enter | Enter | Enter | Enter<br>Ctrl+j |
 | Close the command line | `cancel` | ✅ | Esc<br>Ctrl+[<br>Ctrl+c<br>F10 | — | Esc | Ctrl+c<br>Esc Esc | Esc<br>Ctrl+c<br>Ctrl+g |
 | Edit the command in $VISUAL or $EDITOR, until a key of vim's is chosen for it | — | ⏳ | — | — | — | — | — |
@@ -1020,12 +1059,12 @@ Tab and F8 still switch the hosts and remove the command.
 
 The terminal's own screen, with the output of commands, in place of the panels. It falls back to
 nothing, `global` neither: only the keys that bring the panels back do anything, g < again, Enter
-and q, as the prompt under the output that vim's g < shows takes them, and Esc. mc and Far show
-it and hide it with Ctrl+o.
+and q, as the prompt under the output that vim's g < shows takes them, and Esc and Ctrl+c. mc
+and Far show it and hide it with Ctrl+o.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
-| Back to the panels | `cancel` | ⏳ | g <<br>Enter<br>Ctrl+m<br>q<br>Esc<br>Ctrl+[ | Ctrl+o | Ctrl+o | — | — |
+| Back to the panels | `cancel` | ⏳ | g <<br>Enter<br>Ctrl+m<br>q<br>Esc<br>Ctrl+[<br>Ctrl+c | Ctrl+o | Ctrl+o | — | — |
 
 ## Mouse
 

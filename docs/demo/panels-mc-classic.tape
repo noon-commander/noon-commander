@@ -21,8 +21,7 @@ Show
 
 # The right panel goes to prod-web through its location menu, Ctrl+w 2, whose filter / types
 # in: the browser behind vhs sends neither Alt nor F-keys, so Alt+F2 does not reach noc.
-Ctrl+W
-Type "w"
+# Choosing a place makes the right panel active.
 Ctrl+W
 Type "2"
 Sleep 300ms
@@ -39,11 +38,7 @@ Down
 Sleep 500ms
 Screenshot assets/screenshots/panels-mc-classic.png
 
-# Quit, so that noc closes its connection to prod-web. There is no F10 to quit with, but noc
-# quits on SIGTERM too; the command runs in the left panel, whose shell noc started.
+# Quit with Z Z, so that noc closes its connection to prod-web: there is no F10 to quit with.
 Hide
-Type "!kill -TERM $PPID"
-Enter
-Sleep 1s
-Enter
+Type "ZZ"
 Sleep 1s

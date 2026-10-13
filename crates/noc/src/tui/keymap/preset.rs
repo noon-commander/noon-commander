@@ -33,12 +33,12 @@ pub(super) const PRESET: Preset = &[
             (Action::End, &["shift-g", "end"]),
             (Action::Enter, &["l", "right", "enter", "ctrl-m"]),
             (Action::Parent, &["h", "left", "backspace", "ctrl-h"]),
-            // Tab arrives as Ctrl+i, as in vim.
+            // Tab and Ctrl+i are one key, as in vim, but where the terminal tells them apart.
             (Action::JumpBack, &["ctrl-o"]),
             (Action::JumpForward, &["tab", "ctrl-i"]),
             (Action::Reload, &["shift-r"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c"]),
-            // PullDown
+            // The pull-down menu
             (Action::PullDown, &["g m", "f9"]),
             (Action::PullDownLast, &["g shift-m", "shift-f9"]),
             // Panels, as vim's windows.
@@ -101,7 +101,8 @@ pub(super) const PRESET: Preset = &[
         ],
     ),
     // Rows selected in a panel, from where Visual mode started to the cursor. The commands of
-    // files act on them, as on marked entries; Space marks them.
+    // files act on them, as on marked entries; Space marks them. The other F-keys, and Ctrl+w
+    // to another panel, end Visual mode and do what they do in Normal mode.
     (
         Mode::Visual,
         Context::Panel,
@@ -124,6 +125,23 @@ pub(super) const PRESET: Preset = &[
                 Action::NormalMode,
                 &["esc", "ctrl-[", "ctrl-c", "v", "shift-v"],
             ),
+            (Action::Help, &["f1"]),
+            (Action::View, &["f3"]),
+            (Action::Edit, &["f4"]),
+            (Action::Rename, &["shift-f6"]),
+            (Action::Mkdir, &["f7"]),
+            (Action::NextMatch, &["shift-f7"]),
+            (Action::PullDown, &["f9"]),
+            (Action::PullDownLast, &["shift-f9"]),
+            (Action::Quit, &["f10"]),
+            (Action::LocationMenuLeft, &["alt-f1"]),
+            (Action::LocationMenuRight, &["alt-f2"]),
+            (
+                Action::SwitchPanel,
+                &["ctrl-w w", "ctrl-w ctrl-w", "ctrl-w p"],
+            ),
+            (Action::FocusLeft, &["ctrl-w h"]),
+            (Action::FocusRight, &["ctrl-w l"]),
         ],
     ),
     // What the text fields share in Insert mode: quick search, the field of an entry renamed in
@@ -145,7 +163,6 @@ pub(super) const PRESET: Preset = &[
             (Action::DeleteToStart, &["ctrl-u"]),
             (Action::PasteRegister, &["ctrl-r"]),
             (Action::InsertLiteral, &["ctrl-v"]),
-            (Action::NormalOnce, &["ctrl-o"]),
             (Action::NormalMode, &["esc", "ctrl-["]),
         ],
     ),
@@ -232,7 +249,8 @@ pub(super) const PRESET: Preset = &[
     // Quick search in the active panel, as vim's search is typed: Enter ends it on the match,
     // and Esc and Ctrl+c go back to where it started. Ctrl+g and Ctrl+t go to the next and the
     // previous match, and Ctrl+b and Ctrl+e to the start and the end, as on vim's command line.
-    // The F-keys end it and do what they do in the panel, as in mc.
+    // The arrows and the page keys, and the F-keys, end it and do what they do in the panel,
+    // as in mc; Shift+F7 goes to the next match.
     (
         Mode::Insert,
         Context::QuickSearch,
@@ -243,6 +261,10 @@ pub(super) const PRESET: Preset = &[
             (Action::PrevMatch, &["ctrl-t"]),
             (Action::TextStart, &["ctrl-b"]),
             (Action::TextEnd, &["ctrl-e"]),
+            (Action::Up, &["up"]),
+            (Action::Down, &["down"]),
+            (Action::PageUp, &["pageup"]),
+            (Action::PageDown, &["pagedown"]),
             (Action::Help, &["f1"]),
             (Action::View, &["f3"]),
             (Action::Edit, &["f4"]),
@@ -253,7 +275,10 @@ pub(super) const PRESET: Preset = &[
             (Action::Mkdir, &["f7"]),
             (Action::Delete, &["f8"]),
             (Action::PullDown, &["f9"]),
+            (Action::PullDownLast, &["shift-f9"]),
             (Action::Quit, &["f10"]),
+            (Action::LocationMenuLeft, &["alt-f1"]),
+            (Action::LocationMenuRight, &["alt-f2"]),
         ],
     ),
     // The name field of an entry renamed in its row. Enter renames in every mode; Esc leaves
@@ -263,6 +288,7 @@ pub(super) const PRESET: Preset = &[
         Context::Rename,
         &[
             (Action::Confirm, &["enter", "ctrl-m"]),
+            (Action::NormalOnce, &["ctrl-o"]),
             (Action::Cancel, &["ctrl-c"]),
         ],
     ),
@@ -319,8 +345,8 @@ pub(super) const PRESET: Preset = &[
             (Action::HalfPageDown, &["ctrl-d", "d"]),
         ],
     ),
-    // The text fields of dialogs: the field's keys, then the dialog's. In Insert mode, the
-    // arrows and Tab still move between the fields and the buttons.
+    // The text fields of dialogs: the field's keys, then the dialog's. In Insert mode, Up,
+    // Down, Tab, and Shift+Tab still move between the fields and the buttons.
     (
         Mode::Insert,
         Context::DialogInput,
@@ -330,6 +356,7 @@ pub(super) const PRESET: Preset = &[
             (Action::NextField, &["tab", "ctrl-i"]),
             (Action::PrevField, &["backtab"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
+            (Action::NormalOnce, &["ctrl-o"]),
             (Action::Cancel, &["ctrl-c", "f10"]),
         ],
     ),
@@ -503,6 +530,7 @@ pub(super) const PRESET: Preset = &[
             (Action::NormalMode, &["ctrl-f"]),
             (Action::OlderCommand, &["ctrl-p"]),
             (Action::NewerCommand, &["ctrl-n"]),
+            (Action::NormalOnce, &["ctrl-o"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c", "f10"]),
         ],
@@ -553,7 +581,7 @@ pub(super) const PRESET: Preset = &[
         Context::UserScreen,
         &[(
             Action::Cancel,
-            &["g <", "enter", "ctrl-m", "q", "esc", "ctrl-["],
+            &["g <", "enter", "ctrl-m", "q", "esc", "ctrl-[", "ctrl-c"],
         )],
     ),
 ];

@@ -361,12 +361,12 @@ mod tests {
         assert_eq!(
             press(&mut empty, Action::SaveWorkspace),
             WorkspacesEvent::Save,
-            "Insert saves with or without workspaces"
+            "a saves with or without workspaces"
         );
     }
 
     #[test]
-    fn typing_filters_by_name_and_digits_are_text_then() {
+    fn the_filter_finds_names_and_its_digits_are_text() {
         let mut window = window();
         typed(&mut window, "o");
         let names: Vec<&str> = window.shown().iter().map(|row| row.name.as_str()).collect();
@@ -425,7 +425,7 @@ mod tests {
     #[test]
     fn says_how_to_save_one_when_there_are_none() {
         let mut window = WorkspacesWindow::new(Vec::new(), false);
-        assert!(draw(&mut window, 10).contains("Insert"));
+        assert!(draw(&mut window, 10).contains("a here"));
     }
 
     #[test]

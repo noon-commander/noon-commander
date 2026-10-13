@@ -74,7 +74,7 @@ impl Help {
                 .help(mode, context)
                 .into_iter()
                 .filter_map(|(action, keys)| {
-                    let text = describe(context, action)?;
+                    let text = describe_in((mode, context), action)?;
                     Some(Entry::Keys { keys, text })
                 })
                 .collect();
@@ -197,7 +197,7 @@ impl Help {
     }
 }
 
-/// `keys`, a list such as `Insert, Ctrl+t`, in lines of at most `width` cells, broken after
+/// `keys`, a list such as `Space, J`, in lines of at most `width` cells, broken after
 /// the commas. A single key wider than that gets a line of its own.
 fn key_lines(keys: &str, width: usize) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
@@ -217,6 +217,20 @@ fn key_lines(keys: &str, width: usize) -> Vec<String> {
         }
     }
     lines
+}
+
+/// What `action` does in `context` in `mode`: as [`describe`] says, but for the commands of
+/// files in Visual mode, which act on the rows selected.
+pub(crate) fn describe_in((mode, context): (Mode, Context), action: Action) -> Option<String> {
+    let text = match (mode, context, action) {
+        (Mode::Visual, Context::Panel, Action::Mark) => fl!("help-visual-mark"),
+        (Mode::Visual, Context::Panel, Action::Copy) => fl!("help-visual-copy"),
+        (Mode::Visual, Context::Panel, Action::Move) => fl!("help-visual-move"),
+        (Mode::Visual, Context::Panel, Action::Delete) => fl!("help-visual-delete"),
+        (Mode::Visual, Context::Panel, Action::Checksum) => fl!("help-visual-checksum"),
+        _ => return describe(context, action),
+    };
+    Some(text)
 }
 
 /// What `action` does in `context`; `None` for what the app cannot do yet, which the help
@@ -279,6 +293,7 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Viewer, Action::Right) => fl!("help-viewer-right"),
         (Context::Viewer, Action::ToggleWrap) => fl!("help-viewer-wrap"),
         (Context::Viewer, Action::Quit) => fl!("help-viewer-quit"),
+        (Context::QuickSearch, Action::NextMatch) => fl!("help-search-next-match"),
         // The F-keys of quick search do what they do in the panel.
         (Context::QuickSearch, _) => return describe(Context::Panel, action),
         _ => return None,
@@ -605,10 +620,12 @@ mod tests {
         };
         assert!(has("Z Z, F10", "Quit"));
         assert!(has("d d, F8", "Disconnect the host under the cursor"));
+        assert!(has("/", "Quick search, typed as vim's search"));
         assert!(has(
-            "/",
-            "Quick search; again: the next match, or with nothing typed, the last search"
+            "Space",
+            "Mark the rows selected, and Normal mode again"
         ));
+        assert!(has("y, F5", "Copy the rows selected"));
         assert!(has(
             "n, Shift+F7",
             "The next name that matches the last quick search"

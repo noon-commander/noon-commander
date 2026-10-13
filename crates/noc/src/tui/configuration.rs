@@ -9,6 +9,7 @@ use std::str::FromStr;
 use noc_config::{Borders, Config, MenuBar, Pause, TabBar, UiConfig, Wheel};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
+use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
@@ -511,6 +512,20 @@ impl Configuration {
         self.field().and_then(Field::pending)
     }
 
+    /// Puts pasted `text` in the text field under the cursor, if any.
+    pub(crate) fn paste(&mut self, text: &str) {
+        if let Some(field) = self.field_mut() {
+            field.paste(text);
+        }
+    }
+
+    /// Gives up the command of Normal mode that the text field under the cursor has waiting.
+    pub(crate) fn give_up(&mut self) {
+        if let Some(field) = self.field_mut() {
+            field.give_up();
+        }
+    }
+
     fn choose_category(&mut self, index: usize) {
         if index != self.category {
             self.category = index;
@@ -537,7 +552,10 @@ impl Configuration {
         let left = self.mode();
         let event = self.take(typed, registers);
         if (self.focus, self.category, self.row) != before {
-            let tab = typed.resolved == Resolved::Action(Action::NextField);
+            let tab = matches!(
+                typed.resolved,
+                Resolved::Action(Action::NextField | Action::PrevField)
+            );
             let mode = if tab || left == Mode::Insert {
                 Mode::Insert
             } else {
@@ -694,6 +712,10 @@ impl Configuration {
         self.focus = Focus::Settings;
         self.row = row;
         if !value.contains(at) {
+            // A click on the name of a text field types in it, as one on its value does.
+            if let Some(field) = self.field_mut() {
+                field.set_mode(Mode::Insert);
+            }
             return event;
         }
         let column = usize::from(at.x - value.x);
@@ -866,31 +888,41 @@ impl Configuration {
             let value = match &setting.value {
                 Value::Toggle(on) => {
                     let mark = if *on { 'x' } else { ' ' };
-                    Span::styled(format!("[{mark}]"), label_style)
+                    vec![Span::styled(format!("[{mark}]"), label_style)]
                 }
                 Value::Choice { options, chosen } => {
                     let text = options.get(*chosen).map_or("", |(_, text)| text.as_str());
                     let text = cells::fit(text, value_width.saturating_sub(4), Align::Left);
-                    Span::styled(format!("< {} >", text.trim_end()), label_style)
+                    vec![Span::styled(
+                        format!("< {} >", text.trim_end()),
+                        label_style,
+                    )]
                 }
                 Value::Text { field, .. } => {
-                    let (text, column) = field.visible(value_width);
+                    let ([before, selected, after], column) = field.visible_parts(value_width);
                     if focused {
                         let label = u16::try_from(label_width + LABEL_GAP).unwrap_or(0);
                         let column = u16::try_from(column).unwrap_or(0);
                         cursor = Some(Position::new(area.x + label + column, y));
                     }
-                    Span::styled(
-                        cells::fit(&text, value_width, Align::Left),
-                        theme.dialog_input,
-                    )
+                    // What Visual mode selects shows in reverse.
+                    let used = cells::width(&before) + cells::width(&selected);
+                    let after = cells::fit(&after, value_width.saturating_sub(used), Align::Left);
+                    let reversed = theme.dialog_input.add_modifier(Modifier::REVERSED);
+                    vec![
+                        Span::styled(before, theme.dialog_input),
+                        Span::styled(selected, reversed),
+                        Span::styled(after, theme.dialog_input),
+                    ]
                 }
             };
             let x = area.x + u16::try_from(label_width + LABEL_GAP).unwrap_or(0);
-            let value_cells = u16::try_from(value.width()).unwrap_or(0);
+            let value_cells = value.iter().map(Span::width).sum::<usize>();
+            let value_cells = u16::try_from(value_cells).unwrap_or(0);
             let row = Rect::new(area.x, y, area.width.saturating_sub(2), 1);
-            let line =
-                Line::from(vec![Span::styled(label, label_style), value]).style(theme.dialog);
+            let mut spans = vec![Span::styled(label, label_style)];
+            spans.extend(value);
+            let line = Line::from(spans).style(theme.dialog);
             frame.render_widget(line, row);
             let value = Rect::new(x, y, value_cells, 1).intersection(row);
             drawn.push((index, row, value));
@@ -1516,6 +1548,36 @@ mod tests {
             "{top}"
         );
         assert!(top.contains("Takes effect after a restart"), "{top}");
+    }
+
+    #[test]
+    fn text_fields_take_vims_modes_and_show_what_visual_mode_selects() {
+        let mut dialog = dialog();
+        assert_eq!(dialog.mode(), Mode::Insert, "it opens on the language");
+        dialog.handle(action(Action::NormalMode));
+        dialog.handle(action(Action::NextField));
+        dialog.handle(action(Action::PrevField));
+        assert_eq!(dialog.mode(), Mode::Insert, "Shift+Tab, as Tab");
+        dialog.handle(action(Action::NormalMode));
+        dialog.handle(action(Action::Down));
+        dialog.handle(action(Action::Up));
+        assert_eq!(dialog.mode(), Mode::Normal, "j and k");
+        for step in [Action::TextStart, Action::VisualMode, Action::WordEnd] {
+            dialog.handle(action(step));
+        }
+        assert_eq!(dialog.mode(), Mode::Visual);
+        let mut terminal = Terminal::new(TestBackend::new(80, 20)).unwrap();
+        terminal
+            .draw(|frame| dialog.render(frame, frame.area(), &Theme::mc_classic()))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let reversed: String = buffer
+            .content()
+            .iter()
+            .filter(|cell| cell.modifier.contains(Modifier::REVERSED))
+            .map(ratatui::buffer::Cell::symbol)
+            .collect();
+        assert_eq!(reversed, "auto");
     }
 
     #[test]

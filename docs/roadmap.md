@@ -27,7 +27,7 @@
 - [x] Opening hosts: background connect (Esc stops it), remote listings, `start_dir`, lost
       connections
 - [x] Disconnect, `ssh -G` on connect, connection state in the root
-- [x] Sorting (`o n`, `o e`, `o m`, `o s`) and hidden files (`ui.show_hidden`, Alt+., `o h`)
+- [x] Sorting (`o n`, `o e`, `o m`, `o s`) and hidden files (`ui.show_hidden`, `o h`)
 - [x] Quick search
 - [x] Keymap engine with the mc preset
 - [x] Nerd Font icons and mc markers
@@ -38,9 +38,9 @@
 
 ## M3: File operations (done)
 
-- [x] Panel actions that the keymap binds already: Ctrl+u swaps the panels, Alt+o opens the
-      directory under the cursor in the other panel, Alt+i shows this directory there
-- [x] Marks: Insert or Ctrl+t, Shift+Up/Down, `*`; their total below the listing
+- [x] Panel actions that the keymap binds already: Ctrl+w x swaps the panels, Ctrl+w f opens
+      the directory under the cursor in the other panel, Ctrl+w v shows this directory there
+- [x] Marks: Space, `J`, `K`, Shift+Up/Down, `*`; their total below the listing
 - [x] `+` and `-` mark and unmark by pattern
 - [x] VFS: create and remove directories, remove files, rename, set permissions and times
 - [x] F7 mkdir
@@ -55,13 +55,13 @@
 - [x] F4 edit via `$EDITOR` (suspends and resumes the TUI)
 - [x] Background jobs: the Background button, an indicator, a question on quit
 - [x] Job queue: `[transfer] parallel_jobs`
-- [x] A list of jobs (Ctrl+x j)
+- [x] A list of jobs (`f j`)
 
 ## M4: Polish (current)
 
 - [x] Virtual root of mounted volumes and a list of SFTP hosts, with the connected hosts in the
       root; `[volumes] hide` ([ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md))
-- [x] Location menu: Alt+F1, Alt+F2 (Ctrl+x 1, Ctrl+x 2), with a filter and hotkeys
+- [x] Location menu: Alt+F1, Alt+F2 (Ctrl+w 1, Ctrl+w 2), with a filter
 - [x] Host settings in `hosts.toml`, typed and edited with F4 on a host: `other_dir`,
       `remember_dir` ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md))
 - [x] Clipboard through OSC 52 ([ADR 0008](adr/0008-clipboard-through-osc-52.md))
@@ -84,19 +84,19 @@
 - [ ] User themes
 - [ ] Keymap overrides: the user's own bindings per mode and context, on top of vim's
       ([ADR 0022](adr/0022-vim-modes.md))
-- [x] Tabs: each panel has its own (Ctrl+x t, Ctrl+x w, Alt+Left/Right, Ctrl+x [ and ]), on a line
-      above the panels or in their frames, `ui.tab_bar`
+- [x] Tabs: each panel has its own (`t n`, `t c`, `g t`, `g T`), on a line above the panels or
+      in their frames, `ui.tab_bar`
       ([ADR 0011](adr/0011-tabs-per-panel.md))
-- [x] zoxide: Alt+z jumps to the directories it ranks; directories where the user did
+- [x] zoxide: `g z` jumps to the directories it ranks; directories where the user did
       something go to it, `[zoxide]`; external programs live in `noc-tools`
       ([ADR 0012](adr/0012-external-tools-and-zoxide.md))
 - [x] Release workflow from signed tags: macOS binaries for arm64 and x86_64 with build
       provenance attestations, and a Homebrew tap
       ([ADR 0014](adr/0014-release-workflow-and-homebrew-tap.md))
-- [x] Quick cd (Alt+c), as in mc, with `~`, `..`, `-`, and `host:path`
+- [x] Quick cd (`g d`), as in mc, with `~`, `..`, `-`, and `host:path`
 - [x] Tab completion of paths in Quick cd, F5, F6, and F7, with a list of choices
-- [x] Shift+F6 renames the entry under the cursor in its row, with the name but the last
-      extension selected
+- [x] Shift+F6 renames the entry under the cursor in its row, in Insert mode with the cursor
+      before the last extension
 - [x] Fuzzy search as fzf does it in quick search, the location menu, and the zoxide window,
       `ui.fuzzy_search` ([ADR 0016](adr/0016-fuzzy-search.md))
 - [x] Workspaces: the tabs of both panels saved under a name (t W), restored from
@@ -117,26 +117,25 @@
 - [x] Shell command line ([ADR 0019](adr/0019-shell-command-line.md)): `!` (and `:!`) runs a
       command in a local panel's directory; several lines (Ctrl+j, `\` Enter)
 - [x] Shell command line on hosts, over the master connection, with a terminal
-- [x] Shell command line: Shift+Enter (kitty keyboard protocol), bracketed paste, Ctrl+x
-      Ctrl+e in `$EDITOR`
-- [x] Ctrl+o shows the output of commands in place of the panels; each command shows after its
+- [x] Shell command line: Shift+Enter (kitty keyboard protocol), bracketed paste
+- [x] `g <` shows the output of commands in place of the panels; each command shows after its
       prompt, its output ends on a line of its own, and a failure leaves `[exit N]`;
       `shell.pause`. `! $SHELL` gives an interactive shell, so there is no console of its own
-- [x] Command history per host: Up/Down (Alt+p/Alt+n) for the panel's host, a window (Alt+h,
-      Ctrl+r) for one host or all; `shell.history_size`, `history.toml` in the state directory
+- [x] Command history per host: Up/Down (Ctrl+p/Ctrl+n) for the panel's host, a window
+      (`q :`) for one host or all; `shell.history_size`, `history.toml` in the state directory
 - [x] Terminal title: the active panel's directory, the terminal's own title back on quitting;
       `ui.terminal_title`
-- [x] Keymap presets by name, chosen as themes are: `ui.keymap`, `default` and `vim`
-- [x] Key hints, as which-key: the keys that can follow `Ctrl+x`, `g`, …, and every key of
+- [x] Key hints, as which-key: the keys that can follow `g`, Ctrl+w, …, and every key of
       whatever is in front (`Alt+/`); `ui.which_key`, `ui.which_key_delay_ms`
-- [x] One keymap, vim's, in its modes, with mc's F-keys; `ui.keymap` and the default preset are
-      gone ([ADR 0022](adr/0022-vim-modes.md)): Normal, Insert, and Visual mode in the panels,
-      the lists, the dialogs, and the text fields; vim's motions, operators, registers, counts,
-      and undo in text fields; Visual mode and a jump list (Ctrl+o, Tab) in the panels; the
-      mode and the command typed on a line above the F-key bar, and the cursor's shape
+- [x] One keymap, vim's, in its modes, with mc's F-keys, in place of two presets chosen by
+      `ui.keymap`, one modelled on mc ([ADR 0022](adr/0022-vim-modes.md)): Normal, Insert, and
+      Visual mode in the panels, the lists, the dialogs, and the text fields; vim's motions,
+      operators, registers, counts, and undo in text fields; Visual mode and a jump list
+      (Ctrl+o, Tab) in the panels; the mode and the command typed on a line above the F-key
+      bar, and the cursor's shape
 - [ ] `.` repeats the last change, in text fields and of files
 - [ ] Yanks copied to the system clipboard through OSC 52, behind a setting
-- [ ] A key of vim's for editing the command line in `$EDITOR`, which Ctrl+x Ctrl+e did
+- [ ] A key of vim's for editing the command line in `$EDITOR`
 - [x] The location menu replaces the virtual root and the list of hosts: groups Favorites,
       Mounts, and SFTP, the places used last first (`recent.toml`), the first ten of each with
       a row for the rest; F4 and F8 on hosts there; a Retry dialog for failed connections, and

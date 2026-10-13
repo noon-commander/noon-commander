@@ -174,6 +174,28 @@ impl Field {
         self.editor.insert(c);
     }
 
+    /// Puts pasted `text` at the cursor as one change, in any mode, without its control
+    /// characters.
+    pub(crate) fn paste(&mut self, text: &str) {
+        let typed = text.chars().filter(|c| !c.is_control());
+        // A password goes in character by character, so that no copy of it is left behind.
+        if self.editor.is_secret() {
+            typed.for_each(|c| self.editor.insert(c));
+            return;
+        }
+        self.editor.paste(&typed.collect::<String>());
+    }
+
+    /// Gives up the command of Normal mode that waits, as the keymap gives up its keys.
+    pub(crate) fn give_up(&mut self) {
+        self.editor.give_up();
+    }
+
+    /// Whether the field is masked, as for a password.
+    pub(crate) fn is_secret(&self) -> bool {
+        self.editor.is_secret()
+    }
+
     /// Edits the text as Insert mode does, without leaving it; `false` if `action` is not an
     /// edit. For filters, which stay in Insert mode.
     pub(crate) fn edit(&mut self, action: Action) -> bool {
@@ -626,6 +648,34 @@ impl Dialog {
         self.focused_field().and_then(Field::pending)
     }
 
+    /// Whether the focused field is a secret, such as a password.
+    pub(crate) fn secret_focused(&self) -> bool {
+        self.focused_field().is_some_and(Field::is_secret)
+    }
+
+    /// Puts pasted `text` in the focused field, if any.
+    pub(crate) fn paste(&mut self, text: &str) {
+        if let Some(field) = self.focused_field_mut() {
+            field.paste(text);
+        }
+    }
+
+    /// Gives up the command of Normal mode that the focused field has waiting.
+    pub(crate) fn give_up(&mut self) {
+        if let Some(field) = self.focused_field_mut() {
+            field.give_up();
+        }
+    }
+
+    /// Lets the focused field go: what Visual mode selects there stops showing.
+    fn leave_field(&mut self) {
+        if let Some(field) = self.focused_field_mut()
+            && field.mode() == Mode::Visual
+        {
+            field.set_mode(Mode::Normal);
+        }
+    }
+
     fn focused_field(&self) -> Option<&Field> {
         match self.focus {
             Focus::Field(index) => self.fields.get(index).map(|field| &field.field),
@@ -723,6 +773,9 @@ impl Dialog {
         if !matches!(press, Press::Click | Press::DoubleClick) {
             return DialogEvent::Pending;
         }
+        if focus != self.focus {
+            self.leave_field();
+        }
         self.focus = focus;
         match focus {
             Focus::Choice(index) => {
@@ -759,6 +812,7 @@ impl Dialog {
             .position(|stop| *stop == self.focus)
             .unwrap_or(0);
         let step = if forward { 1 } else { stops.len() - 1 };
+        self.leave_field();
         self.focus = stops[(current + step) % stops.len()];
         let mode = if mode == Mode::Insert {
             Mode::Insert
@@ -1263,6 +1317,19 @@ mod tests {
             secret().handle(action(Action::NormalMode)),
             DialogEvent::Cancelled
         );
+    }
+
+    #[test]
+    fn esc_after_ctrl_o_goes_back_to_insert_mode_and_leaves_the_dialog_open() {
+        let mut dialog = form();
+        assert_eq!(
+            dialog.handle(action(Action::NormalOnce)),
+            DialogEvent::Pending
+        );
+        assert_eq!(dialog.handle(action(Action::Cancel)), DialogEvent::Pending);
+        assert_eq!(dialog.mode(), Mode::Insert);
+        assert!(!dialog.secret_focused());
+        assert!(secret().secret_focused());
     }
 
     #[test]

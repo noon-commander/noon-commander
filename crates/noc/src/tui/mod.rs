@@ -42,8 +42,7 @@ use std::time::{Duration, Instant, SystemTime};
 use color_eyre::eyre::{Result, bail};
 use crossterm::cursor::SetCursorStyle;
 use crossterm::event::{
-    DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyCode, KeyEvent, KeyEventKind,
-    MouseEvent,
+    DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyEventKind, MouseEvent,
 };
 use futures_util::StreamExt as _;
 use jiff::tz::TimeZone;
@@ -203,7 +202,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
         tokio::select! {
             event = events.next() => match event {
                 Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => {
-                    take_key(&mut app, &mut tasks, &mut keys, key);
+                    tasks.run(app.key(&mut keys, key, Instant::now()));
                 }
                 Some(Ok(Event::Paste(text))) => tasks.run(app.paste(&text)),
                 Some(Ok(Event::Mouse(event))) => {
@@ -392,14 +391,12 @@ impl Modes {
         self.keyboard(true)
     }
 
-    /// Leaves the modes, and gives the cursor its shape back.
+    /// Leaves the modes, and gives the cursor its shape back; each even if another fails.
     fn leave(self) -> io::Result<()> {
-        self.keyboard(false)?;
-        crossterm::execute!(
-            io::stdout(),
-            crossterm::event::DisableBracketedPaste,
-            SetCursorStyle::DefaultUserShape
-        )
+        let keyboard = self.keyboard(false);
+        let paste = crossterm::execute!(io::stdout(), crossterm::event::DisableBracketedPaste);
+        let cursor = crossterm::execute!(io::stdout(), SetCursorStyle::DefaultUserShape);
+        keyboard.and(paste).and(cursor)
     }
 
     /// Turns the kitty keyboard protocol on or off, where the terminal speaks it. Kitty keeps
@@ -566,27 +563,6 @@ fn copy_to_clipboard(terminal: &mut DefaultTerminal, text: &str) -> io::Result<(
     )
 }
 
-/// Gives a key press to the keymap in the mode and the context of the app, and what it resolves
-/// to to the app. Alt and a key that stand for Esc and the key go as both, each in the mode and
-/// the context it finds: Esc may leave Insert mode.
-fn take_key(app: &mut App, tasks: &mut Tasks, keys: &mut KeyState, key: KeyEvent) {
-    let now = Instant::now();
-    let place = app.place();
-    let (first, then) = match app.keymap().alt_as_esc(keys, place, key) {
-        Some(plain) => (KeyEvent::from(KeyCode::Esc), Some(plain)),
-        None => (key, None),
-    };
-    for typed in app.keymap().feed(keys, place, first, now) {
-        tasks.run(app.typed(typed));
-    }
-    if let Some(plain) = then {
-        let place = app.place();
-        for typed in app.keymap().feed(keys, place, plain, now) {
-            tasks.run(app.typed(typed));
-        }
-    }
-}
-
 /// Shows the key hints that the app asked for, and has it draw those that `keys` has, and what
 /// its pending command has typed.
 fn take_hints(app: &mut App, keys: &mut KeyState) {
@@ -618,9 +594,7 @@ fn key_time(app: &mut App, tasks: &mut Tasks, keys: &mut KeyState) {
         app.keymap().show_hints(keys, place);
         return;
     }
-    for typed in app.keymap().expire(keys, now) {
-        tasks.run(app.typed(typed));
-    }
+    tasks.run(app.expire_keys(keys, now));
 }
 
 /// Completes at `deadline`; never without one.

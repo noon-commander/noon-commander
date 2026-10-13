@@ -171,7 +171,12 @@ impl CommandLine {
 
     /// Puts pasted `text` at the cursor as it is, line breaks included; nothing runs.
     pub(crate) fn paste(&mut self, text: &str) {
-        self.editor.insert_str(&clean(text));
+        self.editor.paste(&clean(text));
+    }
+
+    /// Gives up the command of Normal mode that waits, as the keymap gives up its keys.
+    pub(crate) fn give_up(&mut self) {
+        self.editor.give_up();
     }
 
     fn chars(&self) -> Vec<char> {
@@ -201,37 +206,57 @@ impl CommandLine {
             }
             Resolved::Action(action) => action,
         };
+        // An operator that waits takes the next key, which gives it up if it is no motion;
+        // Enter gives it up and runs the command.
+        if self.editor.pending().is_some() {
+            if action != Action::Confirm {
+                self.editor.handle(action, extra, registers);
+                return CommandEvent::None;
+            }
+            self.editor.give_up();
+        }
         let length = self.text().chars().count();
         let end = self.line_bounds().1;
-        match action {
+        let event = match action {
             Action::Up | Action::Down => {
+                let mut event = CommandEvent::None;
                 for _ in 0..extra.times() {
                     let (start, end) = self.line_bounds();
                     if action == Action::Up && start == 0 {
-                        return CommandEvent::Older;
+                        event = CommandEvent::Older;
+                        break;
                     }
                     if action == Action::Down && end == length {
-                        return CommandEvent::Newer;
+                        event = CommandEvent::Newer;
+                        break;
                     }
                     self.move_line(action == Action::Down);
                 }
+                event
             }
-            Action::CommandHistory => return CommandEvent::History,
-            Action::OlderCommand => return CommandEvent::Older,
-            Action::NewerCommand => return CommandEvent::Newer,
-            Action::NewLine => self.editor.insert('\n'),
+            Action::CommandHistory => CommandEvent::History,
+            Action::OlderCommand => CommandEvent::Older,
+            Action::NewerCommand => CommandEvent::Newer,
+            Action::NewLine => {
+                self.editor.insert('\n');
+                CommandEvent::None
+            }
             Action::Confirm => return self.confirm(end),
+            // Esc after Ctrl+o goes back to Insert mode before it closes the line.
             Action::Cancel => {
-                // Esc gives up an operator waiting for its motion before it closes the line.
-                if !self.editor.handle(action, extra, registers) {
-                    return CommandEvent::Close;
+                if self.editor.handle(action, extra, registers) {
+                    return CommandEvent::None;
                 }
+                return CommandEvent::Close;
             }
             _ => {
                 self.editor.handle(action, extra, registers);
+                return CommandEvent::None;
             }
-        }
-        CommandEvent::None
+        };
+        // A key of the line's own is the one command after Ctrl+o.
+        self.editor.give_up();
+        event
     }
 
     /// Puts the cursor on the next line, or the one before, in the same column or at the end
@@ -596,6 +621,28 @@ mod tests {
             "echo one",
             "the line break, then the line before"
         );
+    }
+
+    #[test]
+    fn an_operator_that_waits_gives_itself_up_at_a_key_of_the_line() {
+        let mut registers = Registers::default();
+        let typed = |action| Typed::from(Resolved::Action(action));
+        let mut line = shell("make\ntest");
+        press(&mut line, Action::NormalMode);
+        line.handle_typed(typed(Action::DeleteOperator), &mut registers);
+        let up = line.handle_typed(typed(Action::Up), &mut registers);
+        assert_eq!(up, CommandEvent::None, "k gives d up, and stays");
+        line.handle_typed(typed(Action::WordBackward), &mut registers);
+        assert_eq!(line.text(), "make\ntest");
+        // Ctrl+o, then Esc: Insert mode again, and the line stays open.
+        let mut line = shell("ls");
+        press(&mut line, Action::NormalOnce);
+        assert_eq!(press(&mut line, Action::Cancel), CommandEvent::None);
+        assert_eq!(line.mode(), Mode::Insert);
+        // A key of the line's own is the one command after Ctrl+o.
+        press(&mut line, Action::NormalOnce);
+        press(&mut line, Action::Up);
+        assert_eq!(line.mode(), Mode::Insert);
     }
 
     #[test]

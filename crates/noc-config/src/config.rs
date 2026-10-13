@@ -147,7 +147,7 @@ pub struct UiConfig {
     /// Whether the terminal's window or tab is titled with the active panel's directory while
     /// Noon Commander runs. Default: `true`.
     pub terminal_title: bool,
-    /// Whether the keys that can follow a key that starts longer sequences, such as Ctrl+x,
+    /// Whether the keys that can follow a key that starts longer sequences, such as g or Ctrl+w,
     /// show after [`which_key_delay_ms`](Self::which_key_delay_ms), as which-key shows them;
     /// such a key then waits for the next one. Default: `true`.
     pub which_key: bool,

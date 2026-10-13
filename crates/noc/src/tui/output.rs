@@ -1,5 +1,5 @@
 //! The terminal's own screen, the one the panels hide: commands of the command line write there
-//! with the terminal handed over, and Ctrl+o shows it (ADR 0019). Each command is shown after
+//! with the terminal handed over, and `g <` shows it (ADR 0019). Each command is shown after
 //! its prompt, as a shell would, and its output ends on a line of its own.
 
 use std::io::{self, Write as _};

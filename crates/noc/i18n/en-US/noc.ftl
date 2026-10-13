@@ -146,13 +146,13 @@ tabs-title-right = Right tabs
 # The window of t w, F9 → Workspace → Workspace list….
 workspaces-title = Workspaces
 # When no workspace is saved yet.
-workspaces-none = No workspace is saved yet. Insert here, or t W in a panel, saves the tabs of both panels under a name.
+workspaces-none = No workspace is saved yet. a here, or t W in a panel, saves the tabs of both panels under a name.
 # Right of a workspace: how many tabs it has, in both panels together.
 workspaces-tabs = { $count ->
         [one] 1 tab
        *[other] { $count } tabs
     }
-# The dialog of t W, and of Insert in the window.
+# The dialog of t W, and of a in the window.
 workspaces-save-title = Save workspace
 workspaces-save-prompt = Save the tabs of both panels as:
 # The name of an existing workspace was typed.
@@ -173,8 +173,8 @@ workspaces-save-error = Cannot save the workspaces: { $reason }
 workspaces-load-error = Cannot read the workspaces: { $reason }
 
 ## The pull-down menu of F9 (src/tui/pulldown), as mc's. Prefix: pulldown-. An & marks the
-## letter that opens a menu from the bar, or runs a command while its menu is open; letters
-## must differ on the bar and within a menu, and && stands for &.
+## letter that, typed with Alt, opens a menu from the bar, or runs a command while its menu is
+## open; letters must differ on the bar and within a menu, and && stands for &.
 
 # The menu bar. Left and Right act on the panel drawn on that side.
 pulldown-left = &Left
@@ -309,7 +309,7 @@ config-zoxide-program-hint = The zoxide program: a name in PATH, or a path. g z 
 config-zoxide-program-empty = The zoxide program cannot be empty.
 config-shell = Command line
 config-pause = Wait after a command
-config-pause-hint = When the output of a command stays on screen until a key; Ctrl+o shows it again either way.
+config-pause-hint = When the output of a command stays on screen until a key; g < shows it again either way.
 config-pause-always = Always
 config-pause-on-error = When it fails
 config-pause-never = Never
@@ -413,6 +413,11 @@ help-visual = Visual mode: select rows from here to the cursor
 help-reselect = Select again the rows selected last
 help-other-end = The other end of the selection
 help-visual-end = Normal mode again
+help-visual-mark = Mark the rows selected, and Normal mode again
+help-visual-copy = Copy the rows selected
+help-visual-move = Move or rename the rows selected
+help-visual-delete = Delete the rows selected
+help-visual-checksum = Checksums of the files selected
 help-switch-panel = The other panel
 help-focus-left = The left panel
 help-focus-right = The right panel
@@ -426,7 +431,7 @@ help-sort-name = Sort by name; again: reverse
 help-sort-extension = Sort by extension; again: reverse
 help-sort-time = Sort by modification time, newest first; again: reverse
 help-sort-size = Sort by size, largest first; again: reverse
-help-quick-search-start = Quick search; again: the next match, or with nothing typed, the last search
+help-quick-search-start = Quick search, typed as vim's search
 help-match-next = The next name that matches the last quick search
 help-match-prev = The previous name that matches the last quick search
 help-shell = Open the command line for a shell command, run in this directory
@@ -481,6 +486,7 @@ help-pulldown-close = Close the menu, then the menu bar
 help-search-end = End the search; the cursor stays on the match
 help-search-abort = Give the search up and go back to where it started
 help-search-next = The next match; with nothing typed, the last search
+help-search-next-match = The next match
 help-search-prev = The previous match
 help-dialog-up = Previous button; in this help, one line up
 help-dialog-down = Next button; in this help, one line down
@@ -545,7 +551,7 @@ help-command-up = The line above; from the first line, the command before in the
 help-command-down = The line below; from the last line, the command after in the history
 help-command-older = The command before in the history of the panel's host
 help-command-newer = The command after in the history; after the last, what was typed
-help-user-screen = The output of commands, in place of the panels; the same keys, q, or Esc bring them back
+help-user-screen = The output of commands, in place of the panels; g < again, Enter, q, or Esc brings them back
 help-command-history = The command history: filter it, and take a command of this host or another
 help-command-home = Start of the line
 help-command-end = End of the line
@@ -553,7 +559,7 @@ help-command-new-line = A new line in the command; Shift+Enter where the termina
 help-command-normal = Normal mode, to edit the command with vim's keys
 help-command-run = Run the command; after a \ at the end of the line, a new line
 help-command-close = Close the command line
-help-note-modes = Keys are vim's, in its modes; the F-keys are mc's, in every mode. Text fields, quick search, and the command line open in Insert mode, where characters are text and Esc goes to Normal mode; the line above the F-key bar says -- INSERT -- and -- VISUAL --, and the cursor is a bar in Insert mode. Alt and a key stand for Esc and the key there. Ctrl+c closes a dialog in every mode.
+help-note-modes = Keys are vim's, in its modes; the F-keys of the panels are mc's, in Normal and Visual mode and in quick search. Text fields open in Insert mode, where characters are text, Esc goes to Normal mode, and Esc there closes; quick search and the command line close on Esc, as vim's search and command line do. The line above the F-key bar says -- INSERT -- and -- VISUAL --, and the cursor is a bar in Insert mode. Alt and a key stand for Esc and the key in Insert and Visual mode and in the panels, but on a password. Ctrl+c closes or cancels in every mode.
 help-note-count = In Normal mode, a count goes before a command: 5j goes five rows down, 3G to the third row, 2g t to the second tab, and d3w deletes three words. In text fields, "a names a register, which every field shares, and A appends to it.
 help-note-menu = The lists open in Normal mode: / types in the filter, and Esc goes back to the rows.
 help-note-jump = In the zoxide window, / types keywords, as z takes them in a shell.
@@ -783,7 +789,7 @@ command-press-key = Press any key to return to Noon Commander.
 # Stays on the screen after a command that failed, after the key it waited for.
 command-exit-mark = [exit { $code }]
 command-signal-mark = [signal { $signal }]
-# The window of the command history, Alt+h or Ctrl+r on the command line.
+# The window of the command history, q : in a panel or on the command line in Normal mode.
 history-title = Command history
 # Which commands the window shows; Tab switches.
 history-this-host = { $host } ⇄ all

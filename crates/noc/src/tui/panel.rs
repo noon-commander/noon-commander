@@ -374,6 +374,7 @@ impl Panel {
                     self.visual = None;
                     self.last_visual = None;
                 }
+                let visual = self.visual_focus();
                 self.location = location;
                 self.listing = listing;
                 self.space = space;
@@ -381,6 +382,7 @@ impl Panel {
                 self.arrange();
                 self.offset = 0;
                 self.cursor = self.row_of(&pending.focus);
+                self.restore_visual(visual);
                 self.keep_renaming();
             }
             Err(reason) => {
@@ -438,6 +440,8 @@ impl Panel {
         self.marked.clear();
         self.renaming = None;
         self.search = None;
+        self.visual = None;
+        self.last_visual = None;
         self.space = None;
         self.disconnected = true;
     }
@@ -480,7 +484,9 @@ impl Panel {
     /// entry is no longer shown.
     fn rearrange(&mut self) {
         let focus = self.focus();
+        let visual = self.visual_focus();
         self.arrange();
+        self.restore_visual(visual);
         let rows = self.rows();
         self.cursor = (0..rows)
             .find(|&row| self.row(row).is_some_and(|row| focus.matches(row)))
@@ -658,23 +664,46 @@ impl Panel {
     /// the previous one, up and round to the bottom; `fuzzy`, to the next or the previous as fzf
     /// ranks them, round, or to the best from a row that does not match. Whether one matches.
     pub(crate) fn step_match(&mut self, text: &str, forward: bool, fuzzy: bool) -> bool {
+        self.step_matches(text, forward, fuzzy, 1)
+    }
+
+    /// Moves the cursor `times` matches on, as [`step_match`](Self::step_match) does once,
+    /// for vim's `3n`.
+    pub(crate) fn step_matches(
+        &mut self,
+        text: &str,
+        forward: bool,
+        fuzzy: bool,
+        times: usize,
+    ) -> bool {
         let found = if fuzzy {
             let ranked = self.ranked(text);
             let count = ranked.len();
             let at = ranked.iter().position(|&(row, _)| row == self.cursor);
+            let steps = times % count.max(1);
             let index = match at {
-                Some(at) if forward => (at + 1) % count,
-                Some(at) => (at + count - 1) % count,
+                Some(at) if forward => (at + steps) % count,
+                Some(at) => (at + count - steps) % count,
                 None => 0,
             };
             ranked.get(index).map(|&(row, _)| row)
         } else {
             let text = text.to_lowercase();
-            if forward {
-                self.find(&text, self.cursor + 1)
-            } else {
-                self.find_back(&text, self.cursor)
+            let mut found = None;
+            // No more steps than rows: round, they come back to where they were.
+            for _ in 0..times.min(self.rows()) {
+                let from = found.unwrap_or(self.cursor);
+                let next = if forward {
+                    self.find(&text, from + 1)
+                } else {
+                    self.find_back(&text, from)
+                };
+                if next.is_none() {
+                    break;
+                }
+                found = next;
             }
+            found
         };
         if let Some(row) = found {
             self.cursor = row;
@@ -978,17 +1007,39 @@ impl Panel {
 
     /// Where the cursor would be on `row` of this location.
     fn spot(&self, row: usize) -> Destination {
-        let focus = match self.row(row) {
+        Destination {
+            location: self.location.clone(),
+            focus: self.focus_at(row),
+        }
+    }
+
+    /// The entry on `row`, or the row itself if it is gone, as a focus.
+    fn focus_at(&self, row: usize) -> Focus {
+        match self.row(row) {
             Some(Row::Entry(entry)) => Focus::Near {
                 name: entry.name.clone(),
                 row,
             },
             Some(Row::Parent) | None => Focus::First,
-        };
-        Destination {
-            location: self.location.clone(),
-            focus,
         }
+    }
+
+    /// The rows Visual mode holds, by the entries on them, before the rows change: where it
+    /// started, and those it selected last.
+    fn visual_focus(&self) -> (Option<Focus>, Option<(Focus, Focus)>) {
+        let visual = self.visual.map(|row| self.focus_at(row));
+        let last = self
+            .last_visual
+            .map(|(anchor, cursor)| (self.focus_at(anchor), self.focus_at(cursor)));
+        (visual, last)
+    }
+
+    /// Puts what Visual mode holds back on its entries, after the rows changed, so that it
+    /// never selects other entries than those it did.
+    fn restore_visual(&mut self, (visual, last): (Option<Focus>, Option<(Focus, Focus)>)) {
+        self.visual = visual.map(|focus| self.row_of(&focus));
+        self.last_visual =
+            last.map(|(anchor, cursor)| (self.row_of(&anchor), self.row_of(&cursor)));
     }
 
     /// Adds `spot` to the jump list as the newest jump; jumps that Ctrl+o went back over go.
@@ -1011,12 +1062,29 @@ impl Panel {
         }
         let here = self.here();
         if self.jump == self.jumps.len() {
-            self.jumps.push(here);
+            self.jumps.push(here.clone());
+            if self.jumps.len() > MAX_JUMPS {
+                self.jumps.remove(0);
+                self.jump -= 1;
+            }
         } else {
-            self.jumps[self.jump] = here;
+            self.jumps[self.jump] = here.clone();
         }
-        self.jump = self.jump.saturating_sub(count);
-        self.travel(self.jumps[self.jump].clone())
+        // Places where the panel is already do not count, as a jump that went nowhere left
+        // them, and vim drops them.
+        let mut target = self.jump;
+        let mut left = count;
+        while left > 0 && target > 0 {
+            target -= 1;
+            if self.jumps[target] != here {
+                left -= 1;
+            }
+        }
+        if self.jumps[target] == here {
+            return None;
+        }
+        self.jump = target;
+        self.travel(self.jumps[target].clone())
     }
 
     /// Goes forward again where Ctrl+o came from, as vim's Ctrl+i, `count` times.
@@ -1024,9 +1092,21 @@ impl Panel {
         if self.jump + 1 >= self.jumps.len() {
             return None;
         }
-        self.jumps[self.jump] = self.here();
-        self.jump = (self.jump + count).min(self.jumps.len() - 1);
-        self.travel(self.jumps[self.jump].clone())
+        let here = self.here();
+        self.jumps[self.jump] = here.clone();
+        let mut target = self.jump;
+        let mut left = count;
+        while left > 0 && target + 1 < self.jumps.len() {
+            target += 1;
+            if self.jumps[target] != here {
+                left -= 1;
+            }
+        }
+        if self.jumps[target] == here {
+            return None;
+        }
+        self.jump = target;
+        self.travel(self.jumps[target].clone())
     }
 
     /// Goes to `to` without a new jump: within this location at once, else by its listing.
@@ -1136,9 +1216,9 @@ impl Panel {
         }
     }
 
-    /// What Ctrl+w f opens in the other panel, as mc's Alt+o: the directory under the cursor, or, for a
-    /// file, the parent directory with the cursor on this one. The cursor moves on
-    /// to the next row.
+    /// What Ctrl+w f opens in the other panel, as mc's Alt+o: the directory under the cursor,
+    /// or, for a file, the parent directory with the cursor on this one. The cursor moves on to
+    /// the next row.
     pub(crate) fn for_other_panel(&mut self) -> Option<Destination> {
         let destination = match self.row(self.cursor)? {
             Row::Entry(entry) if !entry.is_dir_like() => self.parent_destination(),
@@ -3062,7 +3142,6 @@ mod tests {
         panel.cursor = names(panel).iter().position(|shown| shown == name).unwrap();
     }
 
-    /// The selected text of the field, and all of it.
     /// The text of the field of the entry being renamed before its cursor, and all of it.
     fn rename_field(panel: &mut Panel) -> (String, String) {
         let field = panel.rename_field().unwrap();

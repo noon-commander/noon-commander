@@ -93,7 +93,7 @@ impl Item<'_> {
 #[derive(Debug)]
 pub(crate) struct LocationMenu {
     side: Side,
-    /// Where the panel is drawn, which the title names: the other side after Ctrl+u.
+    /// Where the panel is drawn, which the title names: the other side after Ctrl+w x.
     drawn: Side,
     /// Of the listing the menu waits for; a reply to an older one is dropped.
     generation: u64,

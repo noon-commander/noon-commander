@@ -1,12 +1,13 @@
 //! The pull-down menu of F9, as in mc: a bar of menus (Left, File, Command, Options,
 //! Workspace, Right), and the commands of the one that is open. Left and Right act on the
 //! panel drawn on that side; the others do what their keys do. Each command shows the key that
-//! does the same, from the keymap, and has a letter that runs it while its menu is open. The
-//! Workspace menu lists the saved workspaces too, the first ten with a digit; a menu taller
-//! than the screen scrolls with the cursor.
+//! does the same, from the keymap, and has a letter that, typed with Alt, runs it while its
+//! menu is open; the plain letters move, as `h`, `j`, `k`, and `l`. The Workspace menu lists the
+//! saved workspaces too, the first ten with a digit; a menu taller than the screen scrolls with
+//! the cursor.
 //!
-//! As in Far Manager, F9 opens the bar alone, at the menu of the active panel, where each menu's
-//! letter opens it, and Esc in an open menu goes back to the bar; Shift+F9 opens it on the
+//! As in Far Manager, F9 opens the bar alone, at the menu of the active panel, where Alt and each
+//! menu's letter open it, and Esc in an open menu goes back to the bar; Shift+F9 opens it on the
 //! command that ran last.
 
 use std::cell::RefCell;
@@ -54,7 +55,7 @@ pub(crate) struct Status {
     pub(crate) enabled: bool,
     /// Whether its mark shows: the sort order of the panel, or a setting that is on.
     pub(crate) checked: bool,
-    /// The keys that do the same, such as `Ctrl+F3`.
+    /// The keys that do the same, such as `o n`.
     pub(crate) key: Option<String>,
 }
 
@@ -198,8 +199,8 @@ fn titles() -> [Label; 6] {
 const WORKSPACE_NAME_WIDTH: usize = 40;
 
 /// Workspace: save the tabs of both panels, open the list of the saved workspaces, then the
-/// saved `workspaces`, which restore; the first ten have the digits `1` … `9` and `0`, and
-/// the one restored or saved last a mark.
+/// saved `workspaces`, which restore; the first ten have the digits `1` … `9` and `0`, typed
+/// with Alt, and the one restored or saved last a mark.
 fn workspace_menu(title: Label, workspaces: &[String]) -> Menu {
     let item = |text: String, command, mark| {
         Entry::Item(Item {
@@ -547,11 +548,11 @@ impl PullDown {
     }
 
     /// Takes a key. On the bar, Left and Right select the next menu, round the bar, and Enter,
-    /// Down, or a menu's letter opens it, End on its last command; Up and Home do nothing there.
-    /// In an open menu, Left and Right open the next menu; Up and Down move to the next command
-    /// that runs now, round the menu; Home goes to the first, and on the first goes back to the
-    /// bar; Enter or a command's letter runs it; Esc goes back to the bar, and closes the menu
-    /// bar from there.
+    /// Down, or a menu's letter (with Alt, which the keymap takes off) opens it, End on its last
+    /// command; Up and Home do nothing there. In an open menu, Left and Right open the next menu;
+    /// Up and Down move to the next command that runs now, round the menu; Home goes to the
+    /// first, and on the first goes back to the bar; Enter or a command's letter runs it; Esc
+    /// goes back to the bar, and closes the menu bar from there.
     pub(crate) fn handle(
         &mut self,
         input: Resolved,

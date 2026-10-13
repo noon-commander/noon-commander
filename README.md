@@ -221,9 +221,9 @@ directory Noon Commander uses.
 ### The Option key on macOS
 
 A few keys use Alt: Alt+F1 and Alt+F2, Alt+/ for the key hints, and Alt and a letter for the
-commands of the pull-down menu. In Insert mode, Alt and a key also stand for Esc and the key, as
-in vim. On macOS the Option key types characters such as `ø` instead, unless the terminal sends
-it as Alt:
+commands of the pull-down menu. In Insert and Visual mode, and in the panels, Alt and a key also
+stand for Esc and the key, as in vim, but on a password. On macOS the Option key types characters
+such as `ø` instead, unless the terminal sends it as Alt:
 
 - Terminal.app: Settings → Profiles → Keyboard → Use Option as Meta key.
 - iTerm2: Settings → Profiles → Keys → Left Option key: Esc+.
@@ -232,7 +232,8 @@ it as Alt:
 - Alacritty: `option_as_alt = "Both"` under `[window]`.
 
 Without it, Ctrl+w 1 and Ctrl+w 2 open the location menus, and the arrows and Enter run the
-commands of the pull-down menu.
+commands of the pull-down menu; the key hints of every key have no other key, but those after
+`g` or Ctrl+w show by themselves.
 
 ## Contributing
 

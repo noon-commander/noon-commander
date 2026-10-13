@@ -128,8 +128,8 @@ impl Context {
     }
 
     /// Whether, in Normal mode, Alt and a character that nothing binds stand for Esc and the
-    /// character, which is how an Esc typed quickly before a key arrives. In Insert mode they
-    /// always do, as in vim in a terminal.
+    /// character, which is how an Esc typed quickly before a key arrives. In Insert and Visual
+    /// mode they do in every context, as in vim in a terminal, but on a password.
     pub(crate) fn alt_stands_for_esc(self) -> bool {
         matches!(self, Self::Panel)
     }

@@ -342,7 +342,7 @@ directories, which Enter opens in the active panel:
 - A local directory goes to zoxide (`zoxide add -- <dir>`) once the user does something in it,
   at most once a visit: a copy, move, or delete from it, a copy or move into it when a panel
   shows it, F7, F3 or F4 on a file, checksums, or a jump there. Passing through, marking,
-  searching, sorting, and Ctrl+r do not count. Each tab remembers whether its visit counted;
+  searching, sorting, and `R` do not count. Each tab remembers whether its visit counted;
   going to another directory starts a new one. One task adds them in turn, so no two zoxide
   processes write its database at once.
 - `zoxide.record` turns recording off; without zoxide the window says it is not installed,
@@ -375,8 +375,10 @@ history list rows to choose from. They open in Normal mode (keymap context `list
 one's context falls back to): `j`, `k`, Ctrl+d, Ctrl+u, Ctrl+f, Ctrl+b, `g g`, and `G` move, a
 count repeats a motion, Enter takes the row under the cursor, `d d` and F8 delete it where the
 window can, and Esc, `q`, Ctrl+c, or F10 closes the window. `/` types in the filter, in Insert
-mode, where characters are text, the keys of `input` edit it, Up, Down, Ctrl+p, and Ctrl+n still
-move, and Esc goes back to the rows with the filter kept. There are no digit hotkeys.
+mode, where characters are text, the keys of `input` edit it (Ctrl+r types a register, which the
+app reads, and Ctrl+o, which has no Normal mode to go to, does nothing), Up, Down, Ctrl+p, and
+Ctrl+n still move, and Esc goes back to the rows with the filter kept. Text pasted while the
+rows have the keys goes to the filter, in Insert mode. There are no digit hotkeys.
 
 - All but the zoxide window share `tui/picker.rs`: the filter, a text field with a cursor
   (`dialog::Field`), which matches as fzf does with `ui.fuzzy_search`; the cursor, scrolling,
@@ -506,18 +508,19 @@ settings window: there is no OK or Cancel, and every change takes effect as it i
   setting under the cursor does and whether it takes effect only after a restart, or, in
   the colors of errors, why the text typed cannot be used.
 - Tab moves between the categories and the settings; `j` and `k` (Down and Up) move within
-  them, and `g g` and `G` go to the first and last category; `h` (Left) on anything but a text
-  field goes back to the categories; Esc, `q`, or F10 closes the dialog, in Normal mode.
-- Space or Enter switches a check box or picks the next choice, and `h` and `l` pick choices:
-  each takes effect at once. The dialog opens on the language, a text field, in Insert mode; a
-  text field the cursor comes to with `j` or `k` is in Normal mode, where `i`, `a`, or `A` goes
-  to Insert mode, and one it comes to with Tab, or from a field in Insert mode, in Insert mode
-  (see [Text fields](#ui)). A text field takes effect when the cursor leaves it (Up, Down, Tab)
-  or on Enter, and as the dialog closes. Its value is checked first: the
-  language tag, a whole number of parallel jobs, a program for ssh, and the extra ssh
-  arguments, through the same validator as at start
-  ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)). An invalid one keeps the cursor
-  in the field; Esc puts back what it had and closes the dialog.
+  them, and `g g` and `G` go to the first and last of them; `h` (Left) on anything but a text
+  field goes back to the categories; Esc, `q`, or F10 closes the dialog, in Normal mode (a
+  text field in Insert mode takes a first Esc to Normal mode).
+- Space or Enter switches a check box or picks the next choice, and `h` and `l` pick choices: each
+  takes effect at once. The dialog opens on the language, a text field, in Insert mode; a text field
+  the cursor comes to with `j` or `k` is in Normal mode, where `i`, `a`, or `A` goes to Insert mode,
+  and one it comes to with Tab or Shift+Tab, a click, or from a field in Insert mode, in Insert mode
+  (see [Text fields](#ui)); what Visual mode selects shows in reverse. A text field takes effect
+  when the cursor leaves it (Up, Down, Tab) or on Enter, and as the dialog closes. Its value is
+  checked first: the language tag, a whole number of parallel jobs, a program for ssh, and the extra
+  ssh arguments, through the same validator as at start ([ADR
+  0004](adr/0004-forwarding-compile-time-feature.md)). An invalid one keeps the cursor in the field;
+  Esc puts back what it had and closes the dialog.
 - A change is used at once, but the language, which the next start reads: the interface
   redraws, copies and the job queue follow `[transfer]`, and the settings in `Context`, which
   sit behind a lock, change for new connections, `ssh -G`, and listings, so the location menu
@@ -797,14 +800,14 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 
 ## UI
 
-- **Keys.** The keymap is vim's, in its modes, with mc's F-keys
-  ([ADR 0022](adr/0022-vim-modes.md)); see the keymap below. The panels take keys in
-  Normal mode, as vim's buffers do; text fields, quick search, and the command line in Insert
-  mode. The line above the F-key bar shows the mode, `-- INSERT --` or `-- VISUAL --`, on the
-  left, and the count, register, operator, or keys of a command typed so far on the right, as
-  vim's `showmode` and `showcmd` do; the command line takes it while open. The cursor is a
-  bar in Insert mode and a block in the others (DECSCUSR), and the terminal's own shape comes
-  back whenever another program gets the terminal, and on quitting.
+- **Keys.** The keymap is vim's, in its modes, with mc's F-keys ([ADR 0022](adr/0022-vim-modes.md));
+  see the keymap below. The panels take keys in Normal mode, as vim's buffers do; text fields, quick
+  search, and the command line in Insert mode. The line above the F-key bar shows the mode, `--
+  INSERT --` or `-- VISUAL --` (but in quick search, typed as vim's search, which shows none), on
+  the left, and the count, register, operator, or keys of a command typed so far on the right, as
+  vim's `showmode` and `showcmd` do; the command line takes it while open. The cursor is a bar in
+  Insert mode and a block in the others (DECSCUSR), and the terminal's own shape comes back whenever
+  another program gets the terminal, and on quitting.
 - **Panels.** Each panel lists a directory with `..` first (but in a `/`), then directories,
   then files, by name ignoring case; columns are name, size, and modification time (local time,
   `ls -l` style), and narrow panels drop the time, then the size. Each panel has its own sort order:
@@ -844,12 +847,17 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 - **Visual mode.** `v` or `V` selects rows from the one under the cursor to wherever the cursor
   goes, as vim's Visual mode selects lines; `o` goes to the other end, `g v` selects the rows
   selected last again, and Esc, `v`, or `V` ends it. Space marks the rows selected; `y`, `x`,
-  `d`, F5, F6, F8, and `f #` make them the marked entries and act on them, as on any marks.
+  `d`, F5, F6, F8, and `f #` make them the marked entries and act on them, as on any marks. The
+  other F-keys, Ctrl+w to the other panel, and the commands of the pull-down menu end Visual
+  mode and do what they do in Normal mode, and so does the panel losing the keys to the other
+  one or to another tab. The selection is held by the entries on its ends, so that a listing of
+  the same directory or another sort order keeps it on them.
 - **Jumps.** Each tab keeps a jump list, as vim does: going to another directory (Enter, `h`,
   Quick cd, a menu, zoxide, a workspace's tab), `G`, `g g`, `n`, `N`, and a quick search that
-  moved the cursor put where the panel was on it, up to 100 places. Ctrl+o goes back, and Tab
-  or Ctrl+i forward again, with a count too; a place in this directory moves the cursor at
-  once, another one reads its directory.
+  moved the cursor put where the panel was on it, up to 100 places; `n` with a count puts it
+  there once. Ctrl+o goes back, and Tab or Ctrl+i forward again, with a count too, skipping
+  places where the panel is already, as a jump to a directory that could not be read leaves
+  them; a place in this directory moves the cursor at once, another one reads its directory.
 - **F7 makes a directory**, as in mc: the dialog opens with the name under the cursor, in Insert
   mode with the cursor after it; Ctrl+u clears it. The name may be a relative path, an absolute
   one, or start with `~` for the home directory (the remote one on a host; `\~` for a name that
@@ -969,29 +977,29 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   panel; mc keeps the sort order on its side. Ctrl+w h and Ctrl+w l make the panel drawn on that
   side active, whichever it is after Ctrl+w x.
 - **Quick search.** `/` starts quick search, typed as vim's search, in Insert mode; typing in a
-  panel in Normal mode does nothing but its commands, and `!` and `:` open the
-  [command line](#command-line-of--and-). With `ui.fuzzy_search` (the default) the cursor jumps
-  to the best match as [fzf](#fuzzy-search) ranks it, the first from where it is of those as
-  good, and Ctrl+g to the next best, round to the best; otherwise to the first name from where it
-  is that starts with the text, ignoring case, and Ctrl+g to the next one, round to the top.
-  Either way a character that matches nothing is dropped, as in mc, and the listing keeps its
-  order. The text is a field with a cursor, edited with the keys that every text field shares in
-  Insert mode (`input`): Left, Right, Shift+Left, Shift+Right, Home, End (and Ctrl+b, Ctrl+e, as
-  on vim's command line), Backspace, Delete, Ctrl+u, Ctrl+w, and Ctrl+r and a register; after an
-  edit, the cursor stays on its name if that still matches, and goes to the match that typing
-  would have found otherwise. As in vim, Enter ends the search on the match, and Esc or Ctrl+c
-  (`abort`) gives it up and puts the cursor back where the search started, keeping nothing for
-  `n`. Ctrl+t goes to the previous match. While it runs, every character is text, even one that a
-  panel binds, such as `*`. A search that moved the cursor puts where it started in the jump
-  list. The app keeps what the last search found, whichever panel it ran in, as vim keeps its
-  last pattern: `n` and `N` (and Shift+F7, mc's and Far's key to search again) go to the next and
-  the previous name that matches it, round, and Ctrl+g with nothing typed yet searches for it
-  again, as mc's Ctrl+s Ctrl+s does. Long names lose their middle, marked with
-  `~`. Names are shown terminal-safe: control and bidi characters become `?`. Listings run in
-  background tasks; a reply carries the generation of its request, so a stale one is dropped. If a
-  directory cannot be read, the panel stays where it was and says why below the listing. Going up
-  puts the cursor on the directory just left. A panel shows a [`Location`](#locations), always a
-  directory.
+  panel in Normal mode does nothing but its commands, and `!` and `:` open the [command
+  line](#command-line-of--and-). With `ui.fuzzy_search` (the default) the cursor jumps to the best
+  match as [fzf](#fuzzy-search) ranks it, the first from where it is of those as good, and Ctrl+g to
+  the next best, round to the best; otherwise to the first name from where it is that starts with
+  the text, ignoring case, and Ctrl+g to the next one, round to the top. Either way a character that
+  matches nothing is dropped, as in mc, and the listing keeps its order. The text is a field with a
+  cursor, edited with the keys that every text field shares in Insert mode (`input`): Left, Right,
+  Shift+Left, Shift+Right, Home, End (and Ctrl+b, Ctrl+e, as on vim's command line), Backspace,
+  Delete, Ctrl+u, Ctrl+w, and Ctrl+r and a register; after an edit, the cursor stays on its name if
+  that still matches, and goes to the match that typing would have found otherwise. As in vim, Enter
+  ends the search on the match, and Esc or Ctrl+c (`abort`) gives it up and puts the cursor back
+  where the search started, keeping nothing for `n`. Ctrl+t goes to the previous match. The arrows,
+  the page keys, and the F-keys of the panel end the search and do what they do, as in mc; Shift+F7
+  goes to the next match. While it runs, every character is text, even one that a panel binds, such
+  as `*`. A search that moved the cursor puts where it started in the jump list. The app keeps what
+  the last search found, whichever panel it ran in, as vim keeps its last pattern: `n` and `N` (and
+  Shift+F7, mc's and Far's key to search again) go to the next and the previous name that matches
+  it, round, and Ctrl+g with nothing typed yet searches for it again, as mc's Ctrl+s Ctrl+s does.
+  Long names lose their middle, marked with `~`. Names are shown terminal-safe: control and bidi
+  characters become `?`. Listings run in background tasks; a reply carries the generation of its
+  request, so a stale one is dropped. If a directory cannot be read, the panel stays where it was
+  and says why below the listing. Going up puts the cursor on the directory just left. A panel shows
+  a [`Location`](#locations), always a directory.
 - <a id="command-line-of--and-"></a>**Command line of `!` and `:`** ([ADR
   0019](adr/0019-shell-command-line.md)). In a local panel, `!` opens a line above the F-key bar for
   a shell command, after a prompt with the panel's directory (`~` for home, its middle cut past a
@@ -1069,10 +1077,15 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   repeats a motion over rows a count's times, and gives the count to what takes it as a number
   (`G`, `g g`, `g t`, Ctrl+o) and to the text fields, whose editor (`tui/edit.rs`) reads it
   itself. `Esc` acts at once: it never waits for a key after it, and while a command is pending
-  it gives the command up. An `Esc` and a quick next key arrive as Alt and that key, so in
-  Insert mode, and in the panels, Alt and a key that nothing binds go to the keymap as `Esc`,
-  then as the key in the mode `Esc` left (`Keymap::alt_as_esc`, in the event loop). The
-  pull-down menu takes Alt and a letter as its hotkey instead. Keys are written with `crokey`
+  it gives the command up; so does a key that cannot go on with it, which the keymap says
+  (`KeyState::take_dropped`), and the app then gives up the part a text field holds, such as an
+  operator that waits for its motion, or the one command after Ctrl+o. A count typed after a
+  register multiplies the one typed before it. An `Esc` and a quick next key arrive as Alt and
+  that key, so in Insert and Visual mode, and in the panels, Alt and a key that nothing binds go
+  to the keymap as `Esc`, then as the key in the mode `Esc` left (`App::key`, with
+  `Keymap::alt_as_esc`), even while a command is pending, unless the key goes on with it. On a
+  password they do nothing, as the `Esc` would close its dialog and send the key to the panels.
+  The pull-down menu takes Alt and a letter as its hotkey instead. Keys are written with `crokey`
   names. User overrides of the keymap are planned. The F-key bar is generated from the keymap in
   the mode and context of the next key, and so is the help screen (F1): the keys of each mode
   and context, with what they do, for what the app can do already; a prompt from ssh shows over
@@ -1080,20 +1093,26 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 - **Text fields.** A text field (`dialog::Field`, and the command line) holds a `tui/edit.rs`
   `Editor`: the text, the cursor, and vim's modes over it. In Insert mode characters go in at
   the cursor, and Left, Right, Home, End, Shift+Left, Shift+Right, Backspace, Delete, Ctrl+w,
-  Ctrl+u, Ctrl+r and a register, Ctrl+v, and Ctrl+o, one command of Normal mode, edit around
-  it; Esc goes to Normal mode, with the cursor on the character before it. Normal mode has
+  Ctrl+u, Ctrl+r and a register, and Ctrl+v edit around it; Ctrl+o, in the fields that have a
+  Normal mode, runs one command of it, after which, or after Esc, Insert mode is back. Esc goes
+  to Normal mode, with the cursor on the character before it. Normal mode has
   vim's motions (`h`, `l`, `w`, `b`, `e`, `W`, `B`, `E`, `0`, `^`, `$`, `f`, `t`, `F`, `T`,
   `;`, `,`), the operators `d`, `c`, and `y` on a motion or doubled for the line, `x`, `X`,
   `s`, `S`, `C`, `D`, `r`, `~`, `p`, `P`, `u`, Ctrl+r, `i`, `a`, `I`, `A`, and `v`, Visual
-  mode, whose motions select and whose `d`, `c`, `y`, and `~` act on the selection. A count
-  repeats a motion or a change, and multiplies with the count of an operator (`2d3w`). Undo
+  mode, whose motions select and whose `d`, `c`, `y`, and `~` act on the selection. As in vim,
+  `cw` changes to the end of the word, which is the cursor on its last character, and `~` keeps
+  a character whose other case would take more than one. A count repeats a motion or a change,
+  and multiplies with the count of an operator (`2d3w`); it stops where the motion can go no
+  further. Undo
   takes back one change at a time, and all that one stay in Insert mode typed, a change of
   an operator `c` with it; it keeps 100. The registers (`edit::Registers`) live in the app,
   which every field and the command line share: the unnamed one, which every yank and delete
-  fills, and `a` … `z`, of which `A` … `Z` append. None reads or writes the system clipboard.
+  fills, and `a` … `z`, of which `A` … `Z` append; `_` keeps nothing. None reads or writes the
+  system clipboard. Pasted text goes in at the cursor as one change, in any mode.
   A field holds one line, and a line put in it becomes text, its breaks spaces; the command
   line holds lines, and `d d`, `y y`, and `p` take and put them whole. A secret field stays in
-  Insert mode, keeps no undo, and never copies its text into a register.
+  Insert mode, keeps no undo, and never copies its text into a register; what reads its text
+  reads it into memory reserved up front and wiped when it goes.
 - **Key hints.** As which-key does, the keymap lists the keys that can follow a pending sequence,
   or every key of a context, with what the help says they do (`Keymap::hints`, drawn by
   `tui/which_key.rs` in columns across the bottom of the panels). The event loop owns the

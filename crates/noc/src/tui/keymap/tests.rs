@@ -316,6 +316,23 @@ fn alt_and_a_key_stand_for_esc_and_the_key_in_insert_mode_and_the_panels() {
     assert_eq!(keymap.alt_as_esc(&state, TYPING, alt_slash), None, "bound");
     let alt_f1 = KeyEvent::new(KeyCode::F(1), KeyModifiers::ALT);
     assert_eq!(keymap.alt_as_esc(&state, PANEL, alt_f1), None);
+    assert_eq!(
+        keymap.alt_as_esc(&state, VISUAL_PANEL, alt_j),
+        plain,
+        "Esc leaves Visual mode"
+    );
+    // With a command typed so far, the Esc gives it up, unless the key goes on with it.
+    let mut pending = KeyState::default();
+    feed(&keymap, &mut pending, PANEL, &["3"]);
+    assert_eq!(keymap.alt_as_esc(&pending, PANEL, alt_j), plain);
+    let keymap = Keymap::of(&[(
+        Mode::Normal,
+        Context::Panel,
+        &[(Action::Home, &["g alt-j"])],
+    )]);
+    let mut pending = KeyState::default();
+    feed(&keymap, &mut pending, PANEL, &["g"]);
+    assert_eq!(keymap.alt_as_esc(&pending, PANEL, alt_j), None);
 }
 
 #[test]
@@ -370,23 +387,141 @@ fn quick_search_is_typed_as_vims_search() {
         ])
     );
     assert_eq!(
-        typed(search, &["down", "j"]),
-        inserts("j"),
-        "no keys of the panel"
+        typed(search, &["down", "pageup", "j"]),
+        [actions(&[Action::Down, Action::PageUp]), inserts("j")].concat(),
+        "the arrows and the page keys end it, characters are text"
     );
     assert_eq!(
-        typed(search, &["f5"]),
-        actions(&[Action::Copy]),
-        "but its F-keys"
+        typed(search, &["f5", "shift-f9", "alt-f1"]),
+        actions(&[Action::Copy, Action::PullDownLast, Action::LocationMenuLeft]),
+        "and its F-keys"
+    );
+    assert_eq!(
+        typed(search, &["ctrl-o"]),
+        [],
+        "no Normal mode to go to once"
+    );
+    let filter = (Mode::Insert, Context::Workspaces);
+    assert_eq!(typed(filter, &["ctrl-o"]), []);
+    assert_eq!(
+        typed(TYPING, &["ctrl-o"]),
+        actions(&[Action::NormalOnce]),
+        "a field has one"
     );
 }
 
 #[test]
-fn the_user_screen_goes_back_with_g_lt_enter_q_and_esc() {
+fn the_f_keys_work_in_visual_mode_too() {
+    let keymap = Keymap::default();
+    assert_eq!(
+        keymap.fkeys(Mode::Visual, Context::Panel),
+        keymap.fkeys(Mode::Normal, Context::Panel)
+    );
+    assert_eq!(
+        typed(VISUAL_PANEL, &["shift-f6", "shift-f9", "alt-f2"]),
+        actions(&[
+            Action::Rename,
+            Action::PullDownLast,
+            Action::LocationMenuRight
+        ])
+    );
+}
+
+#[test]
+fn a_count_before_a_register_and_one_after_it_multiply() {
+    let keymap = Keymap::default();
+    let mut state = KeyState::default();
+    feed(&keymap, &mut state, FIELD, &["2", "\"", "a", "3"]);
+    assert_eq!(state.showcmd(), "2\"a3", "as typed");
+    assert_eq!(
+        feed(&keymap, &mut state, FIELD, &["x"]),
+        with(
+            Action::DeleteChar,
+            Extra {
+                count: Some(6),
+                register: Some('a'),
+                char: None
+            }
+        )
+    );
+}
+
+#[test]
+fn a_command_given_up_says_so_for_the_app_to_give_up_its_part() {
+    let keymap = Keymap::default();
+    let mut state = KeyState::default();
+    let give_up = |state: &mut KeyState, keys: &[&str]| {
+        let typed = feed(&keymap, state, FIELD, keys);
+        (typed, state.take_dropped())
+    };
+    assert!(!give_up(&mut state, &["d"]).1, "an operator resolves");
+    assert_eq!(give_up(&mut state, &["f", "esc"]), (vec![], true));
+    assert_eq!(give_up(&mut state, &["2", "esc"]), (vec![], true));
+    assert_eq!(
+        give_up(&mut state, &["f", "left"]),
+        (vec![], true),
+        "no character"
+    );
+    assert_eq!(
+        give_up(&mut state, &["z"]),
+        (vec![], true),
+        "a key that does nothing"
+    );
+    assert!(!give_up(&mut state, &["esc"]).1, "Esc alone is a key");
+    assert!(!state.take_dropped(), "once");
+}
+
+#[test]
+fn a_key_that_cannot_go_on_with_a_sequence_counts_alone() {
+    // After g, a digit starts a count, as it would have alone.
+    assert_eq!(
+        typed(PANEL, &["g", "3", "j"]),
+        with(
+            Action::Down,
+            Extra {
+                count: Some(3),
+                ..Extra::default()
+            }
+        )
+    );
+    // And in Insert mode, a character that cannot go on with a sequence is text.
+    let keymap = Keymap::of(&[(
+        Mode::Insert,
+        Context::Input,
+        &[(Action::DeleteWord, &["ctrl-x ctrl-w"])],
+    )]);
+    let mut state = KeyState::default();
+    assert_eq!(
+        feed(&keymap, &mut state, TYPING, &["ctrl-x", "a"]),
+        inserts("a")
+    );
+}
+
+#[test]
+fn a_bound_prefix_that_times_out_under_the_hints_closes_them() {
+    let keymap = Keymap::of(&[(
+        Mode::Normal,
+        Context::Panel,
+        &[(Action::Home, &["g"]), (Action::End, &["g g"])],
+    )]);
+    let mut state = KeyState::default();
+    let start = Instant::now();
+    keymap.show_hints(&mut state, PANEL);
+    assert_eq!(keymap.feed(&mut state, PANEL, key("g"), start), []);
+    assert_eq!(
+        keymap.expire(&mut state, start + SEQUENCE_TIMEOUT),
+        actions(&[Action::Home])
+    );
+    assert_eq!(keymap.hints_of(&state, PANEL), None);
+}
+
+#[test]
+fn the_user_screen_goes_back_with_g_lt_enter_q_esc_and_ctrl_c() {
     let screen = (Mode::Normal, Context::UserScreen);
     for keys in [&["g", "<"][..], &["enter"], &["q"], &["esc"]] {
         assert_eq!(typed(screen, keys), actions(&[Action::Cancel]), "{keys:?}");
     }
+    assert_eq!(typed(screen, &["ctrl-c"]), actions(&[Action::Cancel]));
     assert_eq!(typed(screen, &["ctrl-o"]), []);
     assert_eq!(typed(screen, &["ctrl-l"]), [], "nothing global");
 }
@@ -445,7 +580,7 @@ fn f_keys_are_mcs() {
 fn the_preset_binds_each_key_once_and_every_action() {
     for (mode, context, bound) in preset::PRESET {
         let mut seen: Vec<Sequence> = Vec::new();
-        for (action, keys) in *bound {
+        for (_, keys) in *bound {
             for keys in *keys {
                 let sequence = parse_sequence(keys).unwrap_or_else(|| panic!("`{keys}`"));
                 assert!(
@@ -453,7 +588,6 @@ fn the_preset_binds_each_key_once_and_every_action() {
                     "{mode:?} {context:?}: `{keys}` twice"
                 );
                 seen.push(sequence);
-                let _ = action;
             }
         }
         // A prefix binds nothing itself, or keys would wait for what follows it.
@@ -473,6 +607,31 @@ fn the_preset_binds_each_key_once_and_every_action() {
         .collect();
     for action in Action::ALL {
         assert!(bound.contains(action), "{action:?} is not bound");
+    }
+}
+
+#[test]
+fn the_preset_has_each_mode_and_context_once_and_global_keys_in_normal_mode() {
+    let mut seen: Vec<(Mode, Context)> = Vec::new();
+    for (mode, context, bound) in preset::PRESET {
+        assert!(
+            !seen.contains(&(*mode, *context)),
+            "{mode:?} {context:?} twice"
+        );
+        seen.push((*mode, *context));
+        if *context == Context::Global {
+            assert_eq!(*mode, Mode::Normal, "Global is the same in every mode");
+        }
+        // In Insert mode a character is text unless the context itself binds it, so a context
+        // that others fall back to would bind it in vain.
+        if *mode == Mode::Insert && matches!(context, Context::Input | Context::List) {
+            for (action, keys) in *bound {
+                for keys in *keys {
+                    let first = parse_sequence(keys).unwrap()[0];
+                    assert!(!is_character(first), "{action:?}: `{keys}` would be text");
+                }
+            }
+        }
     }
 }
 

@@ -31,7 +31,7 @@ pub(crate) use action::{Action, Context, Mode};
 pub(crate) const SEQUENCE_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// The largest count; more digits change nothing.
-const MAX_COUNT: usize = 99_999;
+pub(crate) const MAX_COUNT: usize = 99_999;
 
 /// What keys resolved to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -140,10 +140,16 @@ pub(crate) struct KeyState {
     hinting: bool,
     /// The count typed so far.
     count: Option<usize>,
+    /// The count typed before the register, which the count after it multiplies, as in vim's
+    /// `2"a3x`.
+    outer: Option<usize>,
     /// The register named after `"`.
     register: Option<char>,
     /// An action that waits for the character typed after it, and the keys that typed it.
     awaiting: Option<(Action, Sequence)>,
+    /// A command was given up since the app last asked: by Esc, or by a key that cannot go on
+    /// with it. The app gives up its part too, such as an operator that waits in a text field.
+    dropped: bool,
 }
 
 impl KeyState {
@@ -158,16 +164,19 @@ impl KeyState {
         Some((self.mode?, self.context?))
     }
 
-    /// What the pending command has typed so far, as vim's `showcmd` shows it: the count, the
-    /// register, and the keys, such as `2"ag` or `^W`.
+    /// What the pending command has typed so far, as vim's `showcmd` shows it, in the order it
+    /// was typed: the count, the register, and the keys, such as `2"ag` or `^W`.
     pub(crate) fn showcmd(&self) -> String {
         let mut text = self
-            .count
+            .outer
             .map(|count| count.to_string())
             .unwrap_or_default();
         if let Some(register) = self.register {
             text.push('"');
             text.push(register);
+        }
+        if let Some(count) = self.count {
+            text.push_str(&count.to_string());
         }
         let awaiting = self.awaiting.iter().flat_map(|(_, keys)| keys);
         for key in self.keys.iter().chain(awaiting) {
@@ -182,19 +191,37 @@ impl KeyState {
         self.since = None;
     }
 
-    /// Gives up the whole command: the keys, the count, the register, and what waits for a
+    /// Whether a command was given up since the last call, by Esc or by a key that cannot go
+    /// on with it.
+    pub(crate) fn take_dropped(&mut self) -> bool {
+        std::mem::take(&mut self.dropped)
+    }
+
+    /// Forgets the whole command: the keys, the counts, the register, and what waits for a
     /// character.
     fn reset(&mut self) {
         self.clear();
         self.count = None;
+        self.outer = None;
         self.register = None;
         self.awaiting = None;
     }
 
-    /// The count and the register typed for the command that resolves now, which they leave.
+    /// Gives up the whole command, and says so to the app.
+    fn drop_command(&mut self) {
+        self.reset();
+        self.dropped = true;
+    }
+
+    /// The count and the register typed for the command that resolves now, which they leave:
+    /// the counts before and after the register multiplied.
     fn take_extra(&mut self) -> Extra {
+        let count = match (self.outer.take(), self.count.take()) {
+            (Some(outer), Some(count)) => Some(outer.saturating_mul(count).min(MAX_COUNT)),
+            (outer, count) => count.or(outer),
+        };
         Extra {
-            count: self.count.take(),
+            count,
             register: self.register.take(),
             char: None,
         }
@@ -204,6 +231,7 @@ impl KeyState {
     fn pending(&self) -> bool {
         !self.keys.is_empty()
             || self.count.is_some()
+            || self.outer.is_some()
             || self.register.is_some()
             || self.awaiting.is_some()
     }
@@ -308,7 +336,7 @@ impl Keymap {
             let continues =
                 !state.keys.is_empty() && self.lookup(mode, context, &keys) != Lookup::Unknown;
             if !continues && (key == ESC || key == CTRL_BRACKET) {
-                state.reset();
+                state.drop_command();
                 state.hinting = false;
                 return Vec::new();
             }
@@ -343,7 +371,7 @@ impl Keymap {
         }
         // Esc gives up what is typed of a command, rather than doing what it does alone.
         if (key == ESC || key == CTRL_BRACKET) && state.pending() {
-            state.reset();
+            state.drop_command();
             return Vec::new();
         }
         if mode != Mode::Insert
@@ -370,35 +398,35 @@ impl Keymap {
         {
             return vec![Typed::from(Resolved::Insert(c))];
         }
-        let mut typed = Vec::new();
         state.keys.push(key);
-        loop {
-            match self.lookup(mode, context, &state.keys) {
-                Lookup::Exact(action) => {
-                    typed.extend(Self::resolve(state, action));
-                }
-                Lookup::Prefix(own) => {
-                    state.since = Some(now);
-                    // While the hints show, a sequence that does nothing alone waits.
-                    let waits = state.hinting && own.is_none();
-                    state.deadline = (!waits).then_some(now + SEQUENCE_TIMEOUT);
-                }
-                Lookup::Unknown if state.keys.len() == 1 => {
-                    if let Some(c) = text(event).filter(|_| mode == Mode::Insert) {
-                        typed.push(Typed::from(Resolved::Insert(c)));
-                    }
-                    state.reset();
-                }
-                Lookup::Unknown => {
-                    let key = state.keys.pop().unwrap_or_else(|| unreachable!());
-                    // The new key cannot continue the pending sequence: settle that one as if
-                    // it had timed out, then try the new key on its own.
-                    typed.extend(self.settle(state));
-                    state.keys.push(key);
-                    continue;
-                }
+        match self.lookup(mode, context, &state.keys) {
+            Lookup::Exact(action) => Self::resolve(state, action).into_iter().collect(),
+            Lookup::Prefix(own) => {
+                state.since = Some(now);
+                // While the hints show, a sequence that does nothing alone waits.
+                let waits = state.hinting && own.is_none();
+                state.deadline = (!waits).then_some(now + SEQUENCE_TIMEOUT);
+                Vec::new()
             }
-            return typed;
+            Lookup::Unknown if state.keys.len() == 1 => {
+                if let Some(c) = text(event).filter(|_| mode == Mode::Insert) {
+                    state.reset();
+                    return vec![Typed::from(Resolved::Insert(c))];
+                }
+                // A key that does nothing gives up the command it comes in, such as `d` and a
+                // key that is no motion.
+                state.drop_command();
+                Vec::new()
+            }
+            Lookup::Unknown => {
+                state.keys.pop();
+                // The new key cannot continue the pending sequence: settle that one as if it
+                // had timed out, then take the new key as a key of its own, which may be a
+                // count, text, or the character an action waits for.
+                let mut typed = self.settle(state);
+                typed.extend(self.feed_key(state, (mode, context), event, now));
+                typed
+            }
         }
     }
 
@@ -427,13 +455,18 @@ impl Keymap {
             _ => text(event),
         };
         let Some(c) = c else {
-            state.reset();
+            state.drop_command();
             return Vec::new();
         };
         match action {
-            // The register goes with the command after it, and the count typed before it too.
+            // The register goes with the command after it, and the count typed before it too,
+            // which a count typed after it multiplies.
             Action::Register => {
                 state.register = Some(c);
+                if let Some(count) = state.count.take() {
+                    let outer = state.outer.unwrap_or(1).saturating_mul(count);
+                    state.outer = Some(outer.min(MAX_COUNT));
+                }
                 Vec::new()
             }
             Action::InsertLiteral => {
@@ -458,7 +491,13 @@ impl Keymap {
     /// one, and is dropped otherwise.
     pub(crate) fn expire(&self, state: &mut KeyState, now: Instant) -> Vec<Typed> {
         match state.deadline {
-            Some(deadline) if deadline <= now => self.settle(state),
+            Some(deadline) if deadline <= now => {
+                let typed = self.settle(state);
+                if state.keys.is_empty() {
+                    state.hinting = false;
+                }
+                typed
+            }
             _ => Vec::new(),
         }
     }
@@ -473,7 +512,7 @@ impl Keymap {
                 Self::resolve(state, action).into_iter().collect()
             }
             Lookup::Prefix(None) | Lookup::Unknown => {
-                state.reset();
+                state.drop_command();
                 Vec::new()
             }
         }
@@ -481,30 +520,35 @@ impl Keymap {
 
     /// The key without Alt, if Alt and `event` stand for Esc and that key, typed in `mode`
     /// where `context` has the keys: an Esc and the key right after it can reach a terminal
-    /// program in one read, which crossterm reports as Alt and the key. In Insert mode, Alt and
-    /// a character that nothing binds leave it for Normal mode and do what the character does
-    /// there, as in vim in a terminal; in the panels, they cancel and do it too.
+    /// program in one read, which crossterm reports as Alt and the key. In Insert and Visual
+    /// mode, Alt and a character that nothing binds leave it for Normal mode and do what the
+    /// character does there, as in vim in a terminal; in the panels, they cancel and do it too.
+    /// A command typed so far is given up by the Esc, unless the key goes on with it.
     pub(crate) fn alt_as_esc(
         &self,
         state: &KeyState,
         (mode, context): (Mode, Context),
         event: KeyEvent,
     ) -> Option<KeyEvent> {
-        let applies =
-            mode == Mode::Insert || (mode == Mode::Normal && context.alt_stands_for_esc());
-        if !applies
-            || context.alt_letters_are_hotkeys()
-            || state.place() == Some((mode, context)) && state.pending()
-        {
+        let applies = mode != Mode::Normal || context.alt_stands_for_esc();
+        if !applies || context.alt_letters_are_hotkeys() {
             return None;
         }
+        let key = KeyCombination::from(event);
+        let here = state.place() == Some((mode, context));
+        if here && !state.keys.is_empty() {
+            let mut keys = state.keys.clone();
+            keys.push(key);
+            if self.lookup(mode, context, &keys) != Lookup::Unknown {
+                return None;
+            }
+        }
         let plain = without_alt(event)?;
-        (self.lookup(mode, context, &[KeyCombination::from(event)]) == Lookup::Unknown)
-            .then_some(plain)
+        (self.lookup(mode, context, &[key]) == Lookup::Unknown).then_some(plain)
     }
 
     /// The actions `context` binds itself in `mode`, in the order of the preset, each with its
-    /// keys as text such as `Ctrl+r, R`, for the help screen, as far as they still do that
+    /// keys as text such as `g g, Home`, for the help screen, as far as they still do that
     /// along its chain.
     pub(crate) fn help(&self, mode: Mode, context: Context) -> Vec<(Action, String)> {
         let mut rows: Vec<(Action, String)> = Vec::new();

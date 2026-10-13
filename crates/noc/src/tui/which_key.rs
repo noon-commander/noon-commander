@@ -32,7 +32,7 @@ fn describe((mode, context): (Mode, Context), action: Action) -> Option<String> 
     context
         .chain(mode)
         .iter()
-        .find_map(|context| help::describe(*context, action))
+        .find_map(|context| help::describe_in((mode, *context), action))
 }
 
 /// The rows of `hints`, without the actions the app cannot do yet.
@@ -169,7 +169,7 @@ fn render_cells(frame: &mut Frame<'_>, inner: Rect, grid: Grid, rows: &[Row], th
     }
 }
 
-/// `keys`, a list such as `Insert, Ctrl+t`, in `width` cells: as many of them as fit whole,
+/// `keys`, a list such as `Space, J`, in `width` cells: as many of them as fit whole,
 /// and the first cut where not even that one does.
 fn fit_keys(keys: &str, width: usize) -> String {
     let mut fitted = String::new();

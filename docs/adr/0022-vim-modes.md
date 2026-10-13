@@ -46,10 +46,14 @@ no registers.
 - **Alt and a key stand for Esc and the key** in Insert and Visual mode, as an Esc and a quick next
   key arrive in a terminal, and in the panels in Normal mode, unless something binds that Alt key or
   the key goes on with a command typed so far. Any key but Esc does, Enter, Backspace, and the
-  arrows too, as vim gets them from a terminal that sends Alt and a key as Esc and the key. On a
-  password they do nothing: the Esc would close its dialog and send the key to the panels. The
-  pull-down menu runs the command of a letter with Alt and the letter; its plain letters move as
-  `h`, `j`, `k`, and `l`.
+  arrows too. Without the kitty keyboard protocol, an Esc and a quick key arrive as Alt and the key,
+  and vim gets them the same way. With it, which Noon Commander asks for, Alt arrives as Alt: vim
+  would take an Alt key that nothing maps as a character with the eighth bit set (Alt+j as `ê`),
+  typed in Insert mode and doing nothing in Normal mode. Noon Commander keeps Esc and the key, as
+  nvim does in Insert and Visual mode and on its command line (`:help i_ALT`), and in the panels
+  too, as vim does without the protocol. On a password they do nothing: the Esc would close its
+  dialog and send the key to the panels. The pull-down menu runs the command of a letter with Alt
+  and the letter; its plain letters move as `h`, `j`, `k`, and `l`.
 - **Normal mode in text fields is vim's**: its motions, the operators `d`, `c`, and `y` on a
   motion or doubled for the line, `x`, `s`, `r`, `~`, `p`, `u`, Ctrl+r, and Visual mode. A text
   field opens in Insert mode with the cursor after its text, not selected: Ctrl+u clears it.

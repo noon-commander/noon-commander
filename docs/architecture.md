@@ -1094,15 +1094,16 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   gives up the part a text field holds, such as an operator that waits for its motion, or the one
   command after Ctrl+o. A count typed after a register multiplies the one typed before it. An `Esc`
   and a quick next key arrive as Alt and that key, so in Insert and Visual mode, and in the panels,
-  Alt and a key that nothing binds, any key but `Esc`, go, as vim gets them from a terminal that
-  sends Alt as Esc and the key, to the keymap as `Esc`, then as the key in the mode `Esc` left
-  (`App::key`, with `Keymap::alt_as_esc`), even while a command is pending, unless the key goes on
-  with it. On a password they do nothing, as the `Esc` would close its dialog and send the key to
-  the panels. The pull-down menu takes Alt and a letter as its hotkey instead. Keys are written with
-  `crokey` names. User overrides of the keymap are planned. The F-key bar is generated from the
-  keymap in the mode and context of the next key, and so is the help screen (F1): the keys of each
-  mode and context, with what they do, for what the app can do already; a prompt from ssh shows over
-  it.
+  Alt and a key that nothing binds, any key but `Esc`, go to the keymap as `Esc`, then as the key in
+  the mode `Esc` left (`App::key`, with `Keymap::alt_as_esc`), even while a command is pending,
+  unless the key goes on with it. vim gets them so without the kitty keyboard protocol; with it,
+  which Noon Commander asks for, vim would type the key with the eighth bit set, and Noon Commander
+  does as nvim does in Insert and Visual mode ([ADR 0022](adr/0022-vim-modes.md)). On a password
+  they do nothing, as the `Esc` would close its dialog and send the key to the panels. The pull-down
+  menu takes Alt and a letter as its hotkey instead. Keys are written with `crokey` names. User
+  overrides of the keymap are planned. The F-key bar is generated from the keymap in the mode and
+  context of the next key, and so is the help screen (F1): the keys of each mode and context, with
+  what they do, for what the app can do already; a prompt from ssh shows over it.
 - **Text fields.** A text field (`dialog::Field`, and the command line) holds a `tui/edit.rs`
   `Editor`: the text, the cursor, and vim's modes over it. In Insert mode characters go in at the
   cursor, and Left, Right, Home, End, Shift+Left, Shift+Right, Backspace, Delete, Ctrl+w, Ctrl+u,

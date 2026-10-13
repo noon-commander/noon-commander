@@ -561,8 +561,9 @@ impl Keymap {
     /// where `context` has the keys: an Esc and the key right after it can reach a terminal
     /// program in one read, which crossterm reports as Alt and the key. In Insert and Visual
     /// mode, Alt and a key that nothing binds leave it for Normal mode and do what the key does
-    /// there, as in vim in a terminal that sends Alt as Esc and the key; in the panels, they
-    /// cancel and do it too.
+    /// there; in the panels, they cancel and do it too. Without the kitty keyboard protocol vim
+    /// gets them so; with it, vim would type the key with the eighth bit set, and the keymap
+    /// does as nvim does in Insert and Visual mode (ADR 0022).
     /// A command typed so far is given up by the Esc, unless the key goes on with it.
     pub(crate) fn alt_as_esc(
         &self,
@@ -869,8 +870,8 @@ const CTRL_BRACKET: KeyCombination =
     KeyCombination::one_key(KeyCode::Char('['), KeyModifiers::CONTROL);
 const CTRL_H: KeyCombination = KeyCombination::one_key(KeyCode::Char('h'), KeyModifiers::CONTROL);
 
-/// The same key without Alt, if `event` has Alt: any key but Esc, Enter and the arrows too, as a
-/// terminal that sends Alt as Esc and the key has vim take them.
+/// The same key without Alt, if `event` has Alt: any key but Esc, Enter and the arrows too, as an
+/// Esc and a quick key arrive without the kitty keyboard protocol.
 fn alt_off(event: KeyEvent) -> Option<KeyEvent> {
     (event.modifiers.contains(KeyModifiers::ALT) && event.code != KeyCode::Esc)
         .then(|| KeyEvent::new(event.code, event.modifiers - KeyModifiers::ALT))

@@ -144,8 +144,7 @@
       `d i "`, `c i (`); `c i w` only moves the cursor until then
 - [ ] Registers as vim's: `"0` the last yank, `"1` … `"9` and `"-` the deletes; any other
       name than these, `a` … `z`, `A` … `Z`, `"`, and `_` gives the command up
-- [ ] `p` in Visual mode puts in place of the selection; `Y` yanks to the end of the line, as
-      nvim's
+- [ ] `p` in Visual mode puts in place of the selection; `Y` yanks the line, as vim's `y y`
 - [ ] A count repeats what `i`, `a`, `I`, and `A` type (`3ix` Esc)
 - [ ] The lines of the command line in Normal mode: `o`, `O`, `J`, `g g`, `G`, `d j`, `d k`,
       `V`, and `r` Enter; `v $` and Space in Visual mode take the line break; a put of lines
@@ -176,12 +175,13 @@
       as on vim's
 - [ ] `H`, `M`, `L`, `z z`, `z t`, `z b`, Ctrl+e, and Ctrl+y in the panels and the lists
 - [ ] Enter and `l` on a file open it
-- [ ] Smaller keys of vim's: in the viewer `0`, `$`, `z h`, `z l`, and search (`/`, `?`, `n`,
-      `N`); F1 and `g ?` close the help; Space goes back from the output of commands, as from
-      vim's hit-enter prompt; Ctrl+u and Ctrl+d in the lists of dialogs; Ctrl+e closes the
-      pull-down menu and the filters of lists, where Ctrl+y confirms; Backspace on an empty
-      command line closes it; Replace mode (`R`, Insert in Insert mode), `Z Q`, `' '`, and
-      marks (`m a`); a click or a paste gives up a command that waits, such as `d` or `"a`
+- [ ] Smaller keys of vim's: in the viewer `0`, `$`, `z h`, `z l`, and search (`/`, `?`, `n`, `N`);
+      F1 and `g ?` close the help; Space goes back from the output of commands, as from vim's
+      hit-enter prompt; Ctrl+u and Ctrl+d in the lists of dialogs; Ctrl+e closes the pull-down menu
+      and the filters of lists, where Ctrl+y confirms; Backspace on an empty command line closes it;
+      Replace mode (`R`, Insert in Insert mode), `Z Q`, `' '`, and marks (`m a`); a click gives up a
+      command that waits, such as `d` or `"a`, and a paste uses up a count or a register that
+      waits, as vim's does
 - [x] The location menu replaces the virtual root and the list of hosts: groups Favorites,
       Mounts, and SFTP, the places used last first (`recent.toml`), the first ten of each with
       a row for the rest; F4 and F8 on hosts there; a Retry dialog for failed connections, and

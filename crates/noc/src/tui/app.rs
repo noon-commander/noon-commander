@@ -2195,6 +2195,9 @@ impl App {
                     None
                 }
                 Action::Cancel => {
+                    if self.panel(side).search_went_round(fuzzy_search) {
+                        self.message = Some(fl!("message-search-bottom"));
+                    }
                     self.end_search(side);
                     None
                 }
@@ -6554,9 +6557,18 @@ mod tests {
             "until the next key"
         );
         keys(&mut app, &["/", "a", "enter", "n"]);
-        assert!(screen(&mut app).contains("Search hit BOTTOM, continuing at TOP"));
+        assert!(screen(&mut app).contains("search hit BOTTOM, continuing at TOP"));
         keys(&mut app, &["shift-n"]);
-        assert!(screen(&mut app).contains("Search hit TOP, continuing at BOTTOM"));
+        assert!(screen(&mut app).contains("search hit TOP, continuing at BOTTOM"));
+        // So does Enter in quick search, typed as vim's search, on a match before where it
+        // started; fuzzy search ranks the rows instead.
+        let mut app = with_files(&["a1", "b2", "c3"]);
+        app.config.ui.fuzzy_search = false;
+        keys(&mut app, &["shift-g", "/", "b", "enter"]);
+        assert_eq!(cursor_name(&app, Side::Left), "b2");
+        assert!(screen(&mut app).contains("search hit BOTTOM, continuing at TOP"));
+        keys(&mut app, &["g", "g", "/", "b", "enter"]);
+        assert!(!screen(&mut app).contains("search hit"), "after it");
     }
 
     #[test]

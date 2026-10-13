@@ -1003,13 +1003,14 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   search found, whichever panel it ran in, as vim keeps its last pattern: `n` and `N` (and Shift+F7,
   mc's and Far's key to search again) go to the next and the previous name that matches it, round,
   and Ctrl+g with nothing typed yet searches for it again, as mc's Ctrl+s Ctrl+s does. As vim's,
-  they say when they go round past the last row or the first ("Search hit BOTTOM, continuing at
-  TOP"), and that there was no search before, on the line of the mode until the next key. Long names
-  lose their middle, marked with `~`. Names are shown terminal-safe: control and bidi characters
-  become `?`. Listings run in background tasks; a reply carries the generation of its request, so a
-  stale one is dropped. If a directory cannot be read, the panel stays where it was and says why
-  below the listing. Going up puts the cursor on the directory just left. A panel shows a
-  [`Location`](#locations), always a directory.
+  they say when they go round past the last row or the first ("search hit BOTTOM, continuing at
+  TOP"), and that there was no search before, on the line of the mode until the next key; so does
+  Enter in quick search on a match before the row where it started, but in fuzzy search, which ranks
+  the rows rather than go down them. Long names lose their middle, marked with `~`. Names are shown
+  terminal-safe: control and bidi characters become `?`. Listings run in background tasks; a reply
+  carries the generation of its request, so a stale one is dropped. If a directory cannot be read,
+  the panel stays where it was and says why below the listing. Going up puts the cursor on the
+  directory just left. A panel shows a [`Location`](#locations), always a directory.
 - <a id="command-line-of--and-"></a>**Command line of `!` and `:`** ([ADR
   0019](adr/0019-shell-command-line.md)). In a local panel, `!` opens a line above the F-key bar for
   a shell command, after a prompt with the panel's directory (`~` for home, its middle cut past a
@@ -1060,95 +1061,99 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   matches, each with its host's label or alias, its directory, and its first line, and the whole
   command under the cursor below; Enter puts it on the line, with the prompt reversed until the next
   key if it ran on another host, and `d d` or F8 removes it.
-- **Keymap.** The keymap is vim's, in its modes, with mc's F-keys
-  ([ADR 0022](adr/0022-vim-modes.md)): one preset, `tui/keymap/preset.rs`, maps keys to
-  `Action`s per mode (`Mode::Normal`, `Insert`, `Visual`) and context (`global`, `panel`,
-  `input`, `quick_search`, `rename`, `command_line`, `command_history`, `user_screen`, `list`,
-  `location_menu`, `tab_menu`, `jump`, `workspaces`, `pull_down`, `dialog`, `help`,
-  `dialog_input`, `path_input`, `completion`, `viewer`), in the order the help lists them. The
-  app says which mode and context the next key goes to (`App::place`): the mode is that of the
-  text field with the keys, Visual mode while a panel selects rows, and else Normal mode. Each
-  context falls back along a chain in its mode (`Context::chain`), for example the help to the
-  dialog, the text fields (`quick_search`, `rename`, `dialog_input`, `command_line`) to
-  `input`, which holds the keys that edit text in each mode, and the windows that list items
-  (`location_menu`, `tab_menu`, `jump`, `workspaces`, `command_history`) to `list`, which
-  holds the keys they share, then, in Insert mode only, to `input` for their filters. Every one
-  but `user_screen` falls back to `global` last, whose keys are the same in every mode: the key
-  hints, the output of commands, and Ctrl+l, which redraws the screen; the app takes them
-  before whatever is in front, which stays as it was. The first context that knows a key
-  sequence decides, except that a sequence it only starts does what a later context binds it
-  to. Bindings are key sequences matched by prefix with a 1-second timeout (`g g`, `Z Z`,
-  `Ctrl+w h`). The panels group keys under `g`, Ctrl+w (the other panel, as vim's windows),
-  `t` (tabs and workspaces), `o` (sort order and hidden names), and `f` (`f j` the jobs, `f #`
-  the checksums, the rest of mc's Ctrl+x letters left for later).
-  In Insert mode a character is text unless the context itself binds it, and in Normal and
-  Visual mode a character nothing binds does nothing. The keymap reads what vim lets come with
-  a command and hands it to the app with the action (`Typed`, `Extra`): a count before it
-  (digits, `0` only after another), a register after `"`, and the character after the actions
-  that take one (`f`, `t`, `F`, `T`, `r`, `"`, and Ctrl+r and Ctrl+v in Insert mode). The app
-  repeats a motion over rows a count's times, and gives the count to what takes it as a number
-  (`G`, `g g`, `g t`, Ctrl+o) and to the text fields, whose editor (`tui/edit.rs`) reads it
-  itself. `Esc` acts at once: it never waits for a key after it, and while a command is pending
-  it gives the command up; so does a key that cannot go on with it, which in Normal and Visual
-  mode goes too, as in vim (`g x` and Ctrl+w `e` do nothing), unless what came before it does
-  something alone. The keymap says so (`KeyState::take_dropped`), and the app then gives up the
-  part a text field holds, such as an operator that waits for its motion, or the one command
-  after Ctrl+o. A count typed after a
-  register multiplies the one typed before it. An `Esc` and a quick next key arrive as Alt and
-  that key, so in Insert and Visual mode, and in the panels, Alt and a key that nothing binds, any
-  key but `Esc`, as in nvim, go
-  to the keymap as `Esc`, then as the key in the mode `Esc` left (`App::key`, with
-  `Keymap::alt_as_esc`), even while a command is pending, unless the key goes on with it. On a
-  password they do nothing, as the `Esc` would close its dialog and send the key to the panels.
-  The pull-down menu takes Alt and a letter as its hotkey instead. Keys are written with `crokey`
-  names. User overrides of the keymap are planned. The F-key bar is generated from the keymap in
-  the mode and context of the next key, and so is the help screen (F1): the keys of each mode
-  and context, with what they do, for what the app can do already; a prompt from ssh shows over
+- **Keymap.** The keymap is vim's, in its modes, with mc's F-keys ([ADR
+  0022](adr/0022-vim-modes.md)): one preset, `tui/keymap/preset.rs`, maps keys to `Action`s per mode
+  (`Mode::Normal`, `Insert`, `Visual`) and context (`global`, `panel`, `input`, `quick_search`,
+  `rename`, `command_line`, `command_history`, `user_screen`, `list`, `location_menu`, `tab_menu`,
+  `jump`, `workspaces`, `pull_down`, `dialog`, `help`, `dialog_input`, `path_input`, `completion`,
+  `viewer`), in the order the help lists them. The app says which mode and context the next key goes
+  to (`App::place`): the mode is that of the text field with the keys, Visual mode while a panel
+  selects rows, and else Normal mode. Each context falls back along a chain in its mode
+  (`Context::chain`), for example the help to the dialog, the text fields (`quick_search`, `rename`,
+  `dialog_input`, `command_line`) to `input`, which holds the keys that edit text in each mode, and
+  the windows that list items (`location_menu`, `tab_menu`, `jump`, `workspaces`, `command_history`)
+  to `list`, which holds the keys they share, then, in Insert mode only, to `input` for their
+  filters. Every one but `user_screen` falls back to `global` last, whose keys are the same in every
+  mode: the key hints, the output of commands, and Ctrl+l, which redraws the screen; the app takes
+  them before whatever is in front, which stays as it was. The first context that knows a key
+  sequence decides, except that a sequence it only starts does what a later context binds it to.
+  Bindings are key sequences matched by prefix with a 1-second timeout (`g g`, `Z Z`, `Ctrl+w h`).
+  The panels group keys under `g`, Ctrl+w (the other panel, as vim's windows), `t` (tabs and
+  workspaces), `o` (sort order and hidden names), and `f` (`f j` the jobs, `f #` the checksums, the
+  rest of mc's Ctrl+x letters left for later). In Insert mode a character is text unless the context
+  itself binds it, and in Normal and Visual mode a character nothing binds does nothing. The keymap
+  reads what vim lets come with a command and hands it to the app with the action (`Typed`,
+  `Extra`): a count before it (digits, `0` only after another), a register after `"`, and the
+  character after the actions that take one (`f`, `t`, `F`, `T`, `r`, `"`, and Ctrl+r and Ctrl+v in
+  Insert mode). The app repeats a motion over rows a count's times, and gives the count to what
+  takes it as a number (`G`, `g g`, `g t`, Ctrl+o) and to the text fields, whose editor
+  (`tui/edit.rs`) reads it itself. `Esc` acts at once: it never waits for a key after it, and while
+  a command is pending it gives the command up; so does a key that cannot go on with it, which in
+  Normal and Visual mode goes too, as in vim (`g x` and Ctrl+w `e` do nothing), unless what came
+  before it does something alone. The keymap says so (`KeyState::take_dropped`), and the app then
+  gives up the part a text field holds, such as an operator that waits for its motion, or the one
+  command after Ctrl+o. A count typed after a register multiplies the one typed before it. An `Esc`
+  and a quick next key arrive as Alt and that key, so in Insert and Visual mode, and in the panels,
+  Alt and a key that nothing binds, any key but `Esc`, go, as vim gets them from a terminal that
+  sends Alt as Esc and the key, to the keymap as `Esc`, then as the key in the mode `Esc` left
+  (`App::key`, with `Keymap::alt_as_esc`), even while a command is pending, unless the key goes on
+  with it. On a password they do nothing, as the `Esc` would close its dialog and send the key to
+  the panels. The pull-down menu takes Alt and a letter as its hotkey instead. Keys are written with
+  `crokey` names. User overrides of the keymap are planned. The F-key bar is generated from the
+  keymap in the mode and context of the next key, and so is the help screen (F1): the keys of each
+  mode and context, with what they do, for what the app can do already; a prompt from ssh shows over
   it.
 - **Text fields.** A text field (`dialog::Field`, and the command line) holds a `tui/edit.rs`
   `Editor`: the text, the cursor, and vim's modes over it. In Insert mode characters go in at the
   cursor, and Left, Right, Home, End, Shift+Left, Shift+Right, Backspace, Delete, Ctrl+w, Ctrl+u,
-  Ctrl+r and a register, and Ctrl+v edit around it. As nvim's 'backspace' has them, Ctrl+w and
-  Ctrl+u stop once where Insert mode started, but on the command line, whose keys are those of
-  vim's, and at the start of a line join it to the line above; a move of the cursor, Ctrl+w, Ctrl+u,
-  and the focus coming back start a new change for undo, and a new insert at the next change, as
-  vim's `Insstart` and `Insstart_orig`: right after a move, Ctrl+w and Ctrl+u still stop where the
-  insert started, and after a move to the right with something typed they keep stopping there. On
-  the command line and in the filters, as on vim's command line, Delete at the end deletes the
-  character before. Ctrl+o, in the fields that have a Normal mode, runs one command of it, after
-  which, or after Esc, Insert mode is back; from after the end of a line the command starts on its
-  last character, and the cursor goes back after it if it is still there, as in vim, and so after a
-  command that deletes to the end of the line and after the text that `p` and `P` put. A key that is
-  not the field's, such as `j` to the next field of a dialog, or Ctrl+l, is that one command too.
-  Esc goes to Normal mode, with the cursor on the character before it. Normal mode has vim's motions
-  (`h`, `l`, `w`, `b`, `e`, `W`, `B`, `E`, `0`, `^`, `$`, `f`, `t`, `F`, `T`, `;`, `,`), the
-  operators `d`, `c`, and `y` on a motion or doubled for the line, `x`, `X`, `s`, `S`, `C`, `D`,
-  `r`, `~`, `p`, `P`, `u`, Ctrl+r, `i`, `a`, `I`, `A`, and `v`, Visual mode, whose motions select
-  and whose `d`, `c`, `y`, and `~` act on the selection; Space and Backspace move as `l` and `h`,
-  and on the command line go on to the next line and back to the one before, as vim's 'whichwrap'
-  has them. As in vim, `w` and `b` stop on an empty line, as on a word, `C` and `D` take a count of
-  lines as `$` does, and more lines than one from the last line go nowhere (`2 d d`, `3 D`), `cw`
-  changes to the end of the word, which is the cursor on its last character, `c b` at the start of
-  the text goes nowhere, `^` on a line of blanks is the last of them, and `~` keeps a character
-  whose other case would take more than one, and is a change for undo even on one without a case. On
-  the command line, operators take what vim's rules give them: an exclusive motion that ends at the
-  start of a line ends at the end of the line before, or takes the lines whole from the indent
-  (`:help exclusive`, so `d w` on an empty line takes it), and a delete over lines from the indent
-  to the end of a line takes them whole (`:help d`, as `d 2 $`). A count repeats a motion or a
-  change, and multiplies with the count of an operator (`2d3w`); it stops where the motion can go no
-  further. Undo takes back one change at a time, and all that one stay in Insert mode typed, a
-  change of an operator `c` with it; it keeps 100, and undo and redo leave the cursor where the
-  change starts, as vim's do (after `d b` at the start of the word deleted; after `c c` and `S` on
-  the first character of the line that is not blank). The registers (`edit::Registers`) live in the
-  app, which every field and the command line share: the unnamed one, which every yank and delete
-  fills, and `a` … `z`, of which `A` … `Z` append; `_` keeps nothing. `"` names one in `global`,
-  wherever keys are commands, so that the name never runs as a command. None reads or writes the
-  system clipboard. Pasted text is one change, as nvim puts it: at the cursor in Insert mode, after
-  it in Normal mode, with the cursor on its last character, and in place of the selection in Visual
-  mode, which goes to the unnamed register. A field holds one line, and a line put in it becomes
-  text, its breaks spaces; the command line holds lines, and `d d`, `y y`, and `p` take and put them
-  whole. A secret field stays in Insert mode, keeps no undo, and never copies its text into a
-  register; what reads its text reads it into memory reserved up front and wiped when it goes.
+  Ctrl+r and a register, and Ctrl+v edit around it. As vim's 'backspace' has them, Ctrl+w and Ctrl+u
+  stop once where Insert mode started, but on the command line, whose keys are those of vim's, and
+  at the start of a line join it to the line above; a move of the cursor, Ctrl+u, and the focus
+  coming back start a new change for undo, and a new insert at the next change, as vim's `Insstart`
+  and `Insstart_orig`: right after a move, Ctrl+w and Ctrl+u still stop where the insert started,
+  and after a move to the right with something typed, or after Ctrl+u, they keep stopping there.
+  Ctrl+u is a change of its own because vim's `defaults.vim` maps it after Ctrl+g u; Ctrl+w, which
+  it does not map, deletes within the change, as in vim. On the command line and in the filters, as
+  on vim's command line, Delete at the end deletes the character before. Ctrl+o, in the fields that
+  have a Normal mode, runs one command of it, after which, or after Esc, Insert mode is back; from
+  after the end of a line the command starts on its last character, and the cursor goes back after
+  it if it is still there, as in vim, and so after a command that deletes to the end of the line and
+  after the text that `p` and `P` put. A key that is not the field's, such as `j` to the next field
+  of a dialog, or Ctrl+l, is that one command too. Esc goes to Normal mode, with the cursor on the
+  character before it. Normal mode has vim's motions (`h`, `l`, `w`, `b`, `e`, `W`, `B`, `E`, `0`,
+  `^`, `$`, `f`, `t`, `F`, `T`, `;`, `,`), the operators `d`, `c`, and `y` on a motion or doubled
+  for the line, `x`, `X`, `s`, `S`, `C`, `D`, `r`, `~`, `p`, `P`, `u`, Ctrl+r, `i`, `a`, `I`, `A`,
+  and `v`, Visual mode, whose motions select and whose `d`, `c`, `y`, and `~` act on the selection;
+  Space and Backspace move as `l` and `h`, and on the command line go on to the next line and back
+  to the one before, as vim's 'whichwrap' has them. As in vim, `w` and `b` stop on an empty line, as
+  on a word, `C` and `D` take a count of lines as `$` does, and more lines than one from the last
+  line go nowhere (`2 d d`, `3 D`), `cw` changes to the end of the word, which is the cursor on its
+  last character, `c b` at the start of the text goes nowhere, `^` on a line of blanks is the last
+  of them, and `~` keeps a character whose other case would take more than one, and is a change for
+  undo even on one without a case. On the command line, operators take what vim's rules give them:
+  an exclusive motion that ends at the start of a line ends at the end of the line before, or takes
+  the lines whole from the indent (`:help exclusive`, so `d w` on an empty line takes it), and a
+  delete over lines from the indent to the end of a line takes them whole (`:help d`, as `d 2 $`). A
+  count repeats a motion or a change, and multiplies with the count of an operator (`2d3w`); it
+  stops where the motion can go no further. Undo takes back one change at a time, and all that one
+  stay in Insert mode typed, a change of an operator `c` with it; it keeps 100, and undo and redo
+  leave the cursor where the change starts, as vim's do, on its line and in its column (after `d b`
+  at the start of the word deleted; after `d d`, `c c`, and `S` of one line on its first character
+  that is not blank, if the cursor was after it, as 'startofline' moves it first; from a line that
+  is gone, on the first character of the last one that is not blank). The registers
+  (`edit::Registers`) live in the app, which every field and the command line share: the unnamed
+  one, which every yank and delete fills, and `a` … `z`, of which `A` … `Z` append; `_` keeps
+  nothing. `"` names one in `global`, wherever keys are commands, so that the name never runs as a
+  command. None reads or writes the system clipboard. Pasted text is one change, as vim puts it: at
+  the cursor in Insert mode; in Normal mode as if typed in Insert mode, then Esc, so before the
+  cursor at the start of a line and after it elsewhere, with the cursor on its last character; and
+  in place of the selection in Visual mode, which goes to the unnamed register. After Ctrl+o, Normal
+  mode stays after it, and an operator that waits is given up, and the paste with it, as in vim.
+  What a delete appends to a register (`"Ad w`), the unnamed register keeps alone, as vim's register
+  1, which it reads then. A field holds one line, and a line put in it becomes text, its breaks
+  spaces; the command line holds lines, and `d d`, `y y`, and `p` take and put them whole. A secret
+  field stays in Insert mode, keeps no undo, and never copies its text into a register; what reads
+  its text reads it into memory reserved up front and wiped when it goes.
 - **Key hints.** As which-key does, the keymap lists the keys that can follow a pending sequence, or
   every key of a context, with what the help says they do (`Keymap::hints`, drawn by
   `tui/which_key.rs` in columns across the bottom of the panels). The event loop owns the

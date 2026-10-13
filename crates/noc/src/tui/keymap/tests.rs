@@ -313,7 +313,7 @@ fn alt_and_a_key_stand_for_esc_and_the_key_in_insert_mode_and_the_panels() {
     );
     let alt_f1 = KeyEvent::new(KeyCode::F(1), KeyModifiers::ALT);
     assert_eq!(keymap.alt_as_esc(&state, PANEL, alt_f1), None, "bound");
-    // Any key, as in nvim: an Esc and a quick Enter, Backspace, or arrow arrive with Alt too.
+    // Any key: an Esc and a quick Enter, Backspace, or arrow arrive with Alt too.
     for code in [
         KeyCode::Enter,
         KeyCode::Backspace,

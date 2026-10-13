@@ -643,6 +643,17 @@ impl Panel {
         self.search.as_ref().map(Field::text)
     }
 
+    /// Whether quick search went round past the last row to the match it is on, as vim's
+    /// search says when Enter ends it: the match is not after the row where it started. Fuzzy
+    /// search ranks the rows rather than go down them, so it never does.
+    pub(crate) fn search_went_round(&self, fuzzy: bool) -> bool {
+        !fuzzy
+            && self
+                .search_text()
+                .is_some_and(|text| !text.trim().is_empty())
+            && self.cursor <= self.search_origin
+    }
+
     /// Starts quick search, which goes to match `count` of what is typed, or jumps to the next
     /// match while it runs: the next one down, round to the top; `fuzzy` (`ui.fuzzy_search`),
     /// the next best, round to the best.

@@ -43,8 +43,8 @@ mode-insert-visual = -- (insert) VISUAL --
 ## the rows or their start. Prefix: message-.
 
 message-search-none = No previous search
-message-search-bottom = Search hit BOTTOM, continuing at TOP
-message-search-top = Search hit TOP, continuing at BOTTOM
+message-search-bottom = search hit BOTTOM, continuing at TOP
+message-search-top = search hit TOP, continuing at BOTTOM
 
 ## The title of the terminal's window or tab (src/tui/app), with ui.terminal_title. Prefix:
 ## terminal-.

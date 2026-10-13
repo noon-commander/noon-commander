@@ -31,32 +31,34 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     Ctrl+w l switch panels, as vim's windows; Ctrl+w x swaps them, Ctrl+w f and Ctrl+w v open the
     directory under the cursor or this one in the other panel, and Ctrl+w 1 and Ctrl+w 2 change
     their locations. / starts quick search, typed as vim's search, from the row after the cursor and
-    with a count to the match of that number (2/): Enter and Ctrl+j end it on the match, Esc gives
-    it up, Ctrl+g and Ctrl+t go to the next and the previous match, and the arrows, the page keys,
-    and the F-keys end it and do what they do, as in mc. Space, J, and K mark, with a count as far
-    as the listing goes, g + and g - mark and unmark by a pattern, and g \* inverts, as mc's +, -,
-    and \*, which noc leaves unbound, as Shift+Up and Shift+Down; i views, e edits, Y and y y copy,
-    x moves, r renames in the row, A makes a directory, d D deletes, R reads the directory again; t
-    n, t c, g t, g T, t h, t l, t w, and t W for tabs and workspaces; o n, o e, o m, o s sort and o
-    h shows hidden files; g z jumps with zoxide, g d is Quick cd, f j lists the jobs, q : opens the
-    command history, g m and g M the pull-down menu, g ? the help, g < the output of commands, and Z
-    Z quits.
-  - Text fields have vim's Normal mode after Esc: h, l, w, b, e, W, B, E, 0, ^, $, f, t, F, T,
-    ;, and , move; d, c, and y act on a motion, or on the line when doubled, with counts (2d3w);
-    x, X, s, S, C, D, r, and ~ change; p and P put; u and Ctrl+r undo and redo; i, a, I, and A
-    go to Insert mode, and v to Visual mode, whose d, c, y, and ~ act on what it selects. Text
-    goes to registers: the unnamed one, and "a … "z, which "A … "Z append to; every field and
-    the command line share them, and Ctrl+r and a register puts one in Insert mode. " names a
-    register wherever keys are commands, so that "x in a panel moves nothing. Ctrl+o runs one
-    command of Normal mode from Insert mode, from after the end of a line on its last character,
-    and back after the text that p and P put or the end of the line that it deleted to, as vim's;
-    Ctrl+v types the next key as it is, and Alt and a key stand for Esc and the key, as in vim in
-    a terminal; on a password they do nothing. As nvim's, Ctrl+w and Ctrl+u stop once where
-    Insert mode started, after a move of the cursor too, which starts a new change for undo;
-    undo and redo leave the cursor where the change starts. On the command line, Space and
-    Backspace go on to the next line and back, and operators over lines follow vim's rules: d b
-    at the start of a line keeps its line break, and d 2 $ from the indent deletes the lines
-    whole.
+    with a count to the match of that number (2/): Enter and Ctrl+j end it on the match, and say
+    when it went round past the last row, Esc gives it up, Ctrl+g and Ctrl+t go to the next and the
+    previous match, and the arrows, the page keys, and the F-keys end it and do what they do, as in
+    mc. Space, J, and K mark, with a count as far as the listing goes, g + and g - mark and unmark
+    by a pattern, and g \* inverts, as mc's +, -, and \*, which noc leaves unbound, as Shift+Up and
+    Shift+Down; i views, e edits, Y and y y copy, x moves, r renames in the row, A makes a
+    directory, d D deletes, R reads the directory again; t n, t c, g t, g T, t h, t l, t w, and t W
+    for tabs and workspaces; o n, o e, o m, o s sort and o h shows hidden files; g z jumps with
+    zoxide, g d is Quick cd, f j lists the jobs, q : opens the command history, g m and g M the
+    pull-down menu, g ? the help, g < the output of commands, and Z Z quits.
+  - Text fields have vim's Normal mode after Esc: h, l, w, b, e, W, B, E, 0, ^, $, f, t, F, T, ;,
+    and , move; d, c, and y act on a motion, or on the line when doubled, with counts (2d3w); x, X,
+    s, S, C, D, r, and ~ change; p and P put; u and Ctrl+r undo and redo; i, a, I, and A go to
+    Insert mode, and v to Visual mode, whose d, c, y, and ~ act on what it selects. Text goes to
+    registers: the unnamed one, and "a … "z, which "A … "Z append to, and what a delete appends the
+    unnamed one keeps alone, as vim's register 1 does; every field and the command line share them,
+    and Ctrl+r and a register puts one in Insert mode. " names a register wherever keys are
+    commands, so that "x in a panel moves nothing. Ctrl+o runs one command of Normal mode from
+    Insert mode, from after the end of a line on its last character, and back after the text that p
+    and P put or the end of the line that it deleted to, as vim's; Ctrl+v types the next key as it
+    is, and Alt and a key stand for Esc and the key, as in vim in a terminal; on a password they do
+    nothing. As vim's, Ctrl+w and Ctrl+u stop once where Insert mode started, after a move of the
+    cursor too, which starts a new change for undo, and so does Ctrl+u, which vim's defaults.vim
+    maps after Ctrl+g u, but not Ctrl+w; undo and redo leave the cursor where the change starts, on
+    its line and in its column, and after d d, c c, and S on the first character that is not blank,
+    as 'startofline' has it. On the command line, Space and Backspace go on to the next line and
+    back, and operators over lines follow vim's rules: d b at the start of a line keeps its line
+    break, and d 2 $ from the indent deletes the lines whole.
   - The command line is vim's: Esc closes it, Ctrl+b and Ctrl+e go to the ends of the line,
     Ctrl+p and Ctrl+n through the history, Delete at the end deletes the character before, and
     Ctrl+f goes to Normal mode, where j and k go through its lines, keeping their column, and the
@@ -113,9 +115,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   typed with Shift reported too, so that Alt and a symbol typed with Shift, such as Alt+*, stand for
   Esc and that symbol; and pasted text arrives whole through bracketed paste, so a pasted line break
   never runs a command. Text fields take pasted text without its line breaks, as one change in any
-  mode, as nvim puts it: after the cursor in Normal mode, and in place of the selection in Visual
-  mode; quick search and the filters of the lists take it too, a list in Normal mode in its filter;
-  panels ignore it rather than take its characters as keys.
+  mode, as vim puts it: in Normal mode as typed in Insert mode, after the cursor but at the start of
+  a line before it, and in place of the selection in Visual mode; quick search and the filters of
+  the lists take it too, a list in Normal mode in its filter; panels ignore it rather than take its
+  characters as keys.
 - A command line for shell commands: `!` opens it in a panel, and so does `:`, for commands of Noon
   Commander, of which `:!command` is the only one so far. The prompt shows the panel's directory,
   with the host's label or alias on a host, where the command runs over the host's connection with a

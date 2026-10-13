@@ -46,8 +46,9 @@ impl Registers {
     }
 
     /// Keeps `register` in the unnamed register, and in the one `name` names, if any; `_`
-    /// keeps nothing.
-    fn keep(&mut self, name: Option<char>, register: Register) {
+    /// keeps nothing. What a delete appends to a register (`deleted`) the unnamed one keeps
+    /// alone, as vim's register 1 does, which it reads then.
+    fn keep(&mut self, name: Option<char>, register: Register, deleted: bool) {
         match name {
             Some('_') => {}
             Some(c) if c.is_ascii_uppercase() => {
@@ -62,9 +63,9 @@ impl Registers {
                     kept.clone()
                 } else {
                     self.named.insert(lower, register.clone());
-                    register
+                    register.clone()
                 };
-                self.unnamed = kept;
+                self.unnamed = if deleted { register } else { kept };
             }
             Some(c) if c.is_ascii_lowercase() => {
                 self.named.insert(c, register.clone());
@@ -131,7 +132,9 @@ struct Motion {
 #[derive(Debug, Clone)]
 struct Snapshot {
     text: String,
-    cursor: usize,
+    /// The line and the column of the cursor, counted in characters from 0: vim keeps where
+    /// the change started so, for undo and redo alike, whatever the lines became.
+    cursor: (usize, usize),
 }
 
 /// What a text holds.
@@ -187,7 +190,7 @@ struct Insert {
     /// Whether Insert mode changed the text since it started.
     typed: bool,
     /// Whether Ctrl+w and Ctrl+u keep stopping where they do, as after a move to the right of
-    /// it with something typed, or after one of them, as nvim's are.
+    /// it with something typed, or after Ctrl+u, which vim's defaults.vim maps after Ctrl+g u.
     keep_stop: bool,
 }
 
@@ -439,15 +442,25 @@ impl Editor {
         self.cursor += text.chars().count();
     }
 
-    /// Puts pasted `text` as one change, as nvim does: at the cursor in Insert mode; after it in
-    /// Normal mode, the cursor on its last character; and in place of the selection in Visual
-    /// mode, which goes to the unnamed register.
+    /// Puts pasted `text` as one change, as vim does: at the cursor in Insert mode. In Normal
+    /// mode, as if typed in Insert mode, then Esc: before the cursor at the start of a line,
+    /// after it elsewhere. In Visual mode, in place of the selection, which goes to the unnamed
+    /// register. After Ctrl+o, Normal mode stays, and an operator that waits is given up with the
+    /// paste.
     pub(crate) fn paste(&mut self, text: &str, registers: &mut Registers) {
         if self.mode == Mode::Insert {
             self.next_insert_key();
             self.insert_str(text);
             return;
         }
+        if self.pending.is_some() {
+            self.give_up();
+            return;
+        }
+        // The paste is the one command after Ctrl+o; Insert mode does not come back, as in vim.
+        self.once = false;
+        self.once_eol = None;
+        self.once_after = false;
         let text = if self.has_lines() {
             text.to_owned()
         } else {
@@ -466,6 +479,7 @@ impl Editor {
                         text: taken,
                         lines: false,
                     },
+                    true,
                 );
             }
             self.mode = Mode::Normal;
@@ -475,16 +489,21 @@ impl Editor {
             self.remove(selected.start, selected.end);
             selected.start
         } else {
+            let (start, _) = line_bounds(&chars, self.cursor);
+            self.cursor += usize::from(self.cursor > start);
             self.begin_change();
-            if chars.is_empty() || chars.get(self.cursor) == Some(&'\n') {
-                self.cursor
-            } else {
-                self.cursor + 1
-            }
+            self.cursor
         };
         let offset = self.offset(at);
         self.text.insert_str(offset, &text);
-        self.cursor = at + text.chars().count() - 1;
+        // Esc puts the cursor on the character before, unless it is at the start of a line.
+        let end = at + text.chars().count();
+        let chars = self.chars();
+        self.cursor = if line_bounds(&chars, end).0 == end {
+            end
+        } else {
+            end - 1
+        };
         self.clamp();
     }
 
@@ -556,7 +575,7 @@ impl Editor {
     }
 
     /// The keys of Insert mode; `stop` where Ctrl+w and Ctrl+u stop once where Insert mode
-    /// started, as nvim's 'backspace' has them in a text, not on its command line.
+    /// started, as vim's 'backspace' has them in a text, not on its command line.
     fn insert_mode(
         &mut self,
         action: Action,
@@ -607,12 +626,14 @@ impl Editor {
                 self.delete(self.cursor, end);
             }
             Action::DeleteToStart | Action::DeleteWord => {
-                // As nvim's, which put Ctrl+g u before them: what they delete is a change of
-                // its own, and where they stop stays.
-                self.changed = false;
-                self.insert.start = self.cursor;
-                self.insert.keep_stop = true;
-                self.insert.typed = false;
+                // As vim's defaults.vim puts Ctrl+g u before Ctrl+u: what it deletes is a change
+                // of its own, and where they stop stays. Ctrl+w deletes within the change.
+                if action == Action::DeleteToStart {
+                    self.changed = false;
+                    self.insert.start = self.cursor;
+                    self.insert.keep_stop = true;
+                    self.insert.typed = false;
+                }
                 self.insert_changes();
                 let mut from = if action == Action::DeleteWord {
                     word_back(&chars, self.cursor, false).max(start)
@@ -664,7 +685,9 @@ impl Editor {
         if let Some(operator) = Operator::of(action) {
             match self.pending.take() {
                 Some(pending) if pending.operator == operator => {
-                    self.lines_operate(pending, times(count, pending.count), registers);
+                    let count = times(count, pending.count);
+                    self.back_to_first_non_blank(operator, count);
+                    self.lines_operate(pending, count, registers);
                 }
                 // Another operator gives the first one up, as an unknown motion does.
                 Some(_) => {}
@@ -789,6 +812,7 @@ impl Editor {
                     register: extra.register,
                     outer: None,
                 };
+                self.back_to_first_non_blank(Operator::Change, count);
                 self.lines_operate(pending, count, registers);
             }
             // As `c $` and `d $`: to the end of the line, and of `count` - 1 lines more.
@@ -987,6 +1011,7 @@ impl Editor {
                     text: taken,
                     lines: false,
                 },
+                operator != Operator::Yank,
             );
         }
         // Undo puts the cursor back where the change starts.
@@ -1091,7 +1116,11 @@ impl Editor {
             end = line_bounds(&chars, end + 1).1;
         }
         let text: String = chars[start..end].iter().collect();
-        registers.keep(pending.register, Register { text, lines: true });
+        registers.keep(
+            pending.register,
+            Register { text, lines: true },
+            pending.operator != Operator::Yank,
+        );
         match pending.operator {
             Operator::Yank => {}
             Operator::Delete => {
@@ -1107,10 +1136,21 @@ impl Editor {
                 let (start, end) = line_bounds(&chars, from.min(chars.len()));
                 self.cursor = first_non_blank(&chars, start, end);
             }
-            // Undo puts the cursor on the first character that is not blank, as vim's.
-            Operator::Change => self.change_range(start, end, first_non_blank(&chars, start, end)),
+            Operator::Change => self.change_range(start, end, self.cursor),
         }
         self.clamp();
+    }
+
+    /// Before `d d`, `c c`, or `S` on `count` lines, as vim's: on one line, the cursor goes back
+    /// to the first character that is not blank if it is after it ('startofline'), which is
+    /// where undo puts it back; on more, it stays, before the line where the motion goes.
+    fn back_to_first_non_blank(&mut self, operator: Operator, count: usize) {
+        if operator == Operator::Yank || count > 1 {
+            return;
+        }
+        let chars = self.chars();
+        let (start, end) = line_bounds(&chars, self.cursor);
+        self.cursor = self.cursor.min(first_non_blank(&chars, start, end));
     }
 
     /// Puts the register `name` names after the cursor, or before it, `count` times.
@@ -1225,27 +1265,51 @@ impl Editor {
 
     /// The text as it is, with the cursor at `cursor`.
     fn snapshot_at(&self, cursor: usize) -> Snapshot {
+        let chars = self.chars();
+        let (start, _) = line_bounds(&chars, cursor);
         Snapshot {
             text: self.text.as_str().to_owned(),
-            cursor,
+            cursor: (line_index(&chars, cursor), cursor.min(chars.len()) - start),
         }
     }
 
+    /// The text of `snapshot`, with the cursor on the line and in the column it keeps, as far as
+    /// they go; past the last line, on the first character of the last one that is not blank,
+    /// as vim's undo puts it with 'startofline'.
     fn restore(&mut self, snapshot: &Snapshot) {
         self.text.clear();
         self.text.push_str(&snapshot.text);
-        self.cursor = snapshot.cursor;
+        let chars = self.chars();
+        let (line, column) = snapshot.cursor;
+        let start = match line.checked_sub(1) {
+            None => Some(0),
+            Some(breaks) => chars
+                .iter()
+                .enumerate()
+                .filter(|&(_, &c)| c == '\n')
+                .nth(breaks)
+                .map(|(index, _)| index + 1),
+        };
+        self.cursor = if let Some(start) = start {
+            (start + column).min(line_bounds(&chars, start).1)
+        } else {
+            let (start, end) = line_bounds(&chars, chars.len());
+            first_non_blank(&chars, start, end)
+        };
         self.clamp();
     }
 
-    /// Takes back `count` changes. Undo and redo both leave the cursor where it was before the
-    /// change, as vim does.
+    /// Takes back `count` changes. Undo and redo both leave the cursor where the change started,
+    /// as vim does.
     fn undo(&mut self, count: usize) {
         for _ in 0..count {
             let Some(snapshot) = self.undo.pop() else {
                 return;
             };
-            self.redo.push(self.snapshot_at(snapshot.cursor));
+            self.redo.push(Snapshot {
+                text: self.text.as_str().to_owned(),
+                cursor: snapshot.cursor,
+            });
             self.restore(&snapshot);
         }
     }
@@ -1255,7 +1319,10 @@ impl Editor {
             let Some(snapshot) = self.redo.pop() else {
                 return;
             };
-            self.undo.push(self.snapshot_at(snapshot.cursor));
+            self.undo.push(Snapshot {
+                text: self.text.as_str().to_owned(),
+                cursor: snapshot.cursor,
+            });
             self.restore(&snapshot);
         }
     }
@@ -1974,6 +2041,20 @@ mod tests {
             &[(Action::PutBefore, named('a'))],
         );
         assert_eq!(other.text(), "alphabetalphabetaa");
+        // A yank appended leaves the whole register in the unnamed one, and a delete only what
+        // it deleted, as vim's register 1 holds it.
+        assert_eq!(registers.text(None), Some("alphabeta"));
+        let mut deletes = at("one two", 0);
+        run(
+            &mut deletes,
+            &mut registers,
+            &[
+                (Action::DeleteChar, named('a')),
+                (Action::DeleteChar, named('A')),
+            ],
+        );
+        assert_eq!(registers.text(Some('a')), Some("on"));
+        assert_eq!(registers.text(None), Some("n"));
     }
 
     #[test]
@@ -2301,18 +2382,42 @@ mod tests {
     }
 
     #[test]
-    fn a_paste_is_one_change_in_any_mode_as_in_nvim() {
+    fn a_paste_is_one_change_in_any_mode_as_in_vim() {
         let mut registers = Registers::default();
-        // In Normal mode after the cursor, which goes to its last character.
+        // In Normal mode as typed in Insert mode, then Esc: after the cursor, but at the start
+        // of a line before it; the cursor goes to its last character.
+        let mut editor = at("ab", 1);
+        editor.paste("xyz", &mut registers);
+        assert_eq!((editor.text(), editor.mode()), ("abxyz", Mode::Normal));
+        assert_eq!(editor.cursor(), 4);
+        run(&mut editor, &mut registers, &[plain(Action::Undo)]);
+        assert_eq!(
+            (editor.text(), editor.cursor()),
+            ("ab", 1),
+            "where the insert started"
+        );
         let mut editor = at("ab", 0);
         editor.paste("xyz", &mut registers);
-        assert_eq!((editor.text(), editor.mode()), ("axyzb", Mode::Normal));
-        assert_eq!(editor.cursor(), 3);
-        run(&mut editor, &mut registers, &[plain(Action::Undo)]);
-        assert_eq!(editor.text(), "ab");
+        assert_eq!((editor.text(), editor.cursor()), ("xyzab", 2));
         let mut empty = Editor::new("", Mode::Normal);
         empty.paste("xy", &mut registers);
         assert_eq!(empty.cursor(), 1, "on the last character, not after it");
+        let mut lines = at("ab\ncd", 0).with_lines();
+        lines.paste("x\n", &mut registers);
+        assert_eq!(
+            (lines.text(), lines.cursor()),
+            ("x\nab\ncd", 2),
+            "Esc stays at a line start"
+        );
+        // After Ctrl+o, Normal mode stays; an operator that waits is given up, and the paste.
+        let mut once = after_ctrl_o("ab");
+        once.paste("x", &mut registers);
+        assert_eq!((once.text(), once.mode()), ("abx", Mode::Normal));
+        let mut waits = at("ab", 0);
+        run(&mut waits, &mut registers, &[plain(Action::DeleteOperator)]);
+        waits.paste("x", &mut registers);
+        assert_eq!(waits.text(), "ab");
+        assert!(waits.pending().is_none());
         // In Visual mode in place of the selection, which the unnamed register keeps.
         let mut selected = at("abc def", 0);
         run(
@@ -2501,7 +2606,7 @@ mod tests {
     }
 
     #[test]
-    fn moves_in_insert_mode_and_ctrl_w_start_a_new_change_and_redo_keeps_the_cursor() {
+    fn moves_in_insert_mode_and_ctrl_u_start_a_new_change_and_redo_keeps_the_cursor() {
         let mut registers = Registers::default();
         let mut editor = at("abc", 0);
         run(&mut editor, &mut registers, &[plain(Action::InsertMode)]);
@@ -2517,6 +2622,21 @@ mod tests {
         let mut editor = at("abc", 0);
         run(&mut editor, &mut registers, &[plain(Action::InsertMode)]);
         editor.insert('x');
+        run(&mut editor, &mut registers, &[plain(Action::DeleteToStart)]);
+        editor.insert('y');
+        run(
+            &mut editor,
+            &mut registers,
+            &[plain(Action::NormalMode), plain(Action::Undo)],
+        );
+        assert_eq!(
+            editor.text(),
+            "xabc",
+            "Ctrl+u too, as vim's defaults.vim maps it"
+        );
+        let mut editor = at("abc", 0);
+        run(&mut editor, &mut registers, &[plain(Action::InsertMode)]);
+        editor.insert('x');
         run(&mut editor, &mut registers, &[plain(Action::DeleteWord)]);
         editor.insert('y');
         run(
@@ -2524,7 +2644,7 @@ mod tests {
             &mut registers,
             &[plain(Action::NormalMode), plain(Action::Undo)],
         );
-        assert_eq!(editor.text(), "xabc", "Ctrl+w too");
+        assert_eq!(editor.text(), "abc", "but not Ctrl+w");
         // The focus coming back starts a new change.
         let mut editor = Editor::new("", Mode::Insert);
         editor.insert('a');
@@ -2670,6 +2790,66 @@ mod tests {
     }
 
     #[test]
+    fn undo_and_redo_of_lines_put_the_cursor_where_vim_does() {
+        let mut registers = Registers::default();
+        let undone = |text: &str, cursor: usize, keys: &[(Action, Extra)], redo: bool| {
+            let mut editor = at(text, 0).with_lines();
+            editor.set_cursor(cursor);
+            let mut registers = Registers::default();
+            run(&mut editor, &mut registers, keys);
+            run(&mut editor, &mut registers, &[plain(Action::Undo)]);
+            if redo {
+                run(&mut editor, &mut registers, &[plain(Action::Redo)]);
+            }
+            (editor.text().to_owned(), editor.cursor())
+        };
+        let dd = [plain(Action::DeleteOperator), plain(Action::DeleteOperator)];
+        let cc = [
+            plain(Action::ChangeOperator),
+            plain(Action::ChangeOperator),
+            plain(Action::NormalMode),
+        ];
+        // On one line, the first character that is not blank, or the cursor before it.
+        assert_eq!(
+            undone("  ab cd\nef", 5, &dd, false),
+            ("  ab cd\nef".to_owned(), 2)
+        );
+        assert_eq!(undone("  ab cd\nef", 1, &dd, false).1, 1);
+        assert_eq!(undone("  ab cd\nef", 5, &cc, false).1, 2);
+        assert_eq!(undone("  ab cd\nef", 0, &cc, false).1, 0);
+        // On more lines, the cursor.
+        let two_dd = [
+            plain(Action::DeleteOperator),
+            counted(Action::DeleteOperator, 2),
+        ];
+        assert_eq!(undone("  ab cd\nef", 5, &two_dd, false).1, 5);
+        // Redo keeps the line and the column, and from a line that is gone goes to the first
+        // character of the last one that is not blank.
+        assert_eq!(undone("  ab cd\nef", 5, &cc, true), ("\nef".to_owned(), 0));
+        assert_eq!(
+            undone("ab cd\nef gh\nij", 13, &dd, true),
+            ("ab cd\nef gh".to_owned(), 6)
+        );
+        assert_eq!(
+            undone("ab cd\nef gh\nij", 8, &two_dd, true),
+            ("ab cd".to_owned(), 0)
+        );
+        assert_eq!(undone("  ab\n  cd", 5, &dd, true), ("  ab".to_owned(), 2));
+        // A change within a line: the same column, on the same line.
+        let mut editor = at("abc\ndef", 6).with_lines();
+        run(
+            &mut editor,
+            &mut registers,
+            &[
+                plain(Action::DeleteChar),
+                plain(Action::Undo),
+                plain(Action::Redo),
+            ],
+        );
+        assert_eq!((editor.text(), editor.cursor()), ("abc\nde", 5));
+    }
+
+    #[test]
     fn ctrl_o_goes_back_to_insert_mode_after_the_text_put_or_the_end_deleted_to() {
         type Case<'a> = (usize, &'a [(Action, Extra)], &'a str, usize);
         let mut registers = Registers::default();
@@ -2680,6 +2860,7 @@ mod tests {
                 text: "X".to_owned(),
                 lines: false,
             },
+            false,
         );
         let cases: [Case<'_>; 6] = [
             (2, &[plain(Action::DeleteToEnd)], "ab", 2),
@@ -2742,7 +2923,7 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_w_and_ctrl_u_after_a_move_stop_where_the_insert_started_as_nvims() {
+    fn ctrl_w_and_ctrl_u_after_a_move_stop_where_the_insert_started_as_vims() {
         let mut registers = Registers::default();
         let typed = |text: &str, keys: &[(Action, Extra)], typed: &str| {
             let mut editor = Editor::new(text, Mode::Insert);
@@ -2778,6 +2959,33 @@ mod tests {
         editor.insert('x');
         run(&mut editor, &mut registers, &[plain(Action::DeleteWord)]);
         assert_eq!(editor.text(), "");
+        // After Ctrl+w, a move to the left starts the insert where it goes: Ctrl+w stops there.
+        let mut editor = typed(
+            "foo bar baz",
+            &[
+                plain(Action::DeleteWord),
+                plain(Action::Left),
+                plain(Action::Left),
+            ],
+            "",
+        );
+        editor.insert('Z');
+        run(&mut editor, &mut registers, &[plain(Action::DeleteWord)]);
+        assert_eq!(editor.text(), "foo bar ");
+        // After Ctrl+u, which vim's defaults.vim maps after Ctrl+g u, they keep stopping where
+        // they did.
+        let mut editor = typed(
+            "foo bar baz",
+            &[
+                plain(Action::DeleteToStart),
+                plain(Action::Left),
+                plain(Action::Left),
+            ],
+            "XY",
+        );
+        editor.insert('Z');
+        run(&mut editor, &mut registers, &[plain(Action::DeleteToStart)]);
+        assert_eq!(editor.text(), "az");
     }
 
     #[test]

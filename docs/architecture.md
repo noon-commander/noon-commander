@@ -830,20 +830,19 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   most as long as a volume in the location menu, so a dead network mount leaves it out; over
   SFTP it needs the `statvfs@openssh.com` extension, which OpenSSH's server has. A file system
   that reports no size, or a panel too narrow for it, shows none.
-- **Marks.** Space or `J` marks the entry under the cursor, or unmarks it, and moves down, as
-  mc's Insert does (Shift+Down too; `K` and Shift+Up move up), and a count marks that many;
-  `*` inverts the marks on files, leaving directories as they are; `..` cannot be marked.
-  Marked rows are underlined, and yellow in mc-classic (bold, which mc uses without colors, is
-  for directories); the line below the listing shows the size of the marked files and how
-  many entries are marked, such as `12,345 B in 3 files`. Marks are names, so they
-  survive sorting and `R` (for names still there); another directory starts unmarked, and
-  entries that get hidden lose their marks, so that no operation acts on what is not shown.
-  `+` marks and `-` unmarks the names that match a shell pattern,
-  in a dialog with mc's options: Files only (off) and Case sensitive (on). Patterns are read
-  as mc reads them: `*`, `?`, `[a-z]` (`[!…]` or `[^…]` outside the set), `{a,b}`, and `\`
-  for the next character as it is; the whole name must match, and what does not parse is
-  literal. mc's regular expressions are left out. The dialog opens with the last pattern
-  (`*` at first) and options.
+- **Marks.** Space or `J` marks the entry under the cursor, or unmarks it, and moves down, as mc's
+  Insert does (Shift+Down too; `K` and Shift+Up move up), and a count marks that many, the row at
+  the end of the listing once; `*` inverts the marks on files, leaving directories as they are; `..`
+  cannot be marked. Marked rows are underlined, and yellow in mc-classic (bold, which mc uses
+  without colors, is for directories); the line below the listing shows the size of the marked files
+  and how many entries are marked, such as `12,345 B in 3 files`. Marks are names, so they survive
+  sorting and `R` (for names still there); another directory starts unmarked, and entries that get
+  hidden lose their marks, so that no operation acts on what is not shown. `+` marks and `-` unmarks
+  the names that match a shell pattern, in a dialog with mc's options: Files only (off) and Case
+  sensitive (on). Patterns are read as mc reads them: `*`, `?`, `[a-z]` (`[!…]` or `[^…]` outside
+  the set), `{a,b}`, and `\` for the next character as it is; the whole name must match, and what
+  does not parse is literal. mc's regular expressions are left out. The dialog opens with the last
+  pattern (`*` at first) and options.
 - **Visual mode.** `v` or `V` selects rows from the one under the cursor to wherever the cursor
   goes, as vim's Visual mode selects lines; `o` goes to the other end, `g v` selects the rows
   selected last again, and Esc, `v`, or `V` ends it. Space marks the rows selected; `y`, `x`,
@@ -852,12 +851,13 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   mode and do what they do in Normal mode, and so does the panel losing the keys to the other
   one or to another tab. The selection is held by the entries on its ends, so that a listing of
   the same directory or another sort order keeps it on them.
-- **Jumps.** Each tab keeps a jump list, as vim does: going to another directory (Enter, `h`,
-  Quick cd, a menu, zoxide, a workspace's tab), `G`, `g g`, `n`, `N`, and a quick search that
-  moved the cursor put where the panel was on it, up to 100 places; `n` with a count puts it
-  there once. Ctrl+o goes back, and Tab or Ctrl+i forward again, with a count too, skipping
-  places where the panel is already, as a jump to a directory that could not be read leaves
-  them; a place in this directory moves the cursor at once, another one reads its directory.
+- **Jumps.** Each tab keeps a jump list, as vim does with `jumpoptions=stack`: going to another
+  directory (Enter, `h`, Quick cd, a menu, zoxide, a workspace's tab), `G`, `g g`, `n`, `N`, and a
+  quick search that moved the cursor put where the panel was on it, up to 100 places; `n` with a
+  count puts it there once, and one that finds nothing, never. Ctrl+o goes back, and Tab or Ctrl+i
+  forward again, with a count too, skipping places where the panel is already, as a jump to a
+  directory that could not be read leaves them; a place in this directory moves the cursor at once,
+  another one reads its directory.
 - **F7 makes a directory**, as in mc: the dialog opens with the name under the cursor, in Insert
   mode with the cursor after it; Ctrl+u clears it. The name may be a relative path, an absolute
   one, or start with `~` for the home directory (the remote one on a host; `\~` for a name that
@@ -1042,7 +1042,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   keeps the newest `shell.history_size`, and writes it whole and atomically, mode 0600; one task
   makes the changes in turn, and the app keeps the commands in memory. Up on the first line of a
   command, or Ctrl+p, goes back through the commands of the panel's host, and Down on the last line,
-  or Ctrl+n, forward to what was typed, as on vim's command line. `q :` in a panel, or on the line
+  or Ctrl+n, forward to what was typed, as on vim's command line; the line of `:` shows them after
+  `!`, which runs them. `q :` in a panel, or on the line
   in Normal mode, opens the window of the history (`tui/history.rs`), one of the [lists](#lists):
   the commands of the panel's host, or of all of them after Tab, newest first, filtered as quick
   search matches, each with its host's label or alias, its directory, and its first line, and the
@@ -1077,9 +1078,11 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   repeats a motion over rows a count's times, and gives the count to what takes it as a number
   (`G`, `g g`, `g t`, Ctrl+o) and to the text fields, whose editor (`tui/edit.rs`) reads it
   itself. `Esc` acts at once: it never waits for a key after it, and while a command is pending
-  it gives the command up; so does a key that cannot go on with it, which the keymap says
-  (`KeyState::take_dropped`), and the app then gives up the part a text field holds, such as an
-  operator that waits for its motion, or the one command after Ctrl+o. A count typed after a
+  it gives the command up; so does a key that cannot go on with it, which in Normal and Visual
+  mode goes too, as in vim (`g x` and Ctrl+w `e` do nothing), unless what came before it does
+  something alone. The keymap says so (`KeyState::take_dropped`), and the app then gives up the
+  part a text field holds, such as an operator that waits for its motion, or the one command
+  after Ctrl+o. A count typed after a
   register multiplies the one typed before it. An `Esc` and a quick next key arrive as Alt and
   that key, so in Insert and Visual mode, and in the panels, Alt and a key that nothing binds, any
   key but `Esc`, as in nvim, go

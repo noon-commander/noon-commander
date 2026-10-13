@@ -578,6 +578,19 @@ impl Panel {
         }
     }
 
+    /// Marks or unmarks `count` rows from the cursor down, or up, as Space or `K` typed that
+    /// many times, as far as the listing goes: the row at its end turns once.
+    pub(crate) fn mark_rows(&mut self, down: bool, count: usize) {
+        let action = if down { Action::Mark } else { Action::MarkUp };
+        for _ in 0..count {
+            let at = self.cursor;
+            self.handle(action);
+            if self.cursor == at {
+                break;
+            }
+        }
+    }
+
     /// Inverts the marks on the shown entries that are not directories, as mc does by default.
     fn invert_marks(&mut self) {
         let Listing::Dir(entries) = &self.listing;
@@ -667,15 +680,25 @@ impl Panel {
         self.step_matches(text, forward, fuzzy, 1)
     }
 
-    /// Moves the cursor `times` matches on, as [`step_match`](Self::step_match) does once,
-    /// for vim's `3n`.
-    pub(crate) fn step_matches(
+    /// Moves the cursor `times` matches on, as vim's `3n`, and puts where it was in the jump
+    /// list, once; a search that finds nothing leaves the jumps as they are, as in vim.
+    pub(crate) fn search_again(
         &mut self,
         text: &str,
         forward: bool,
         fuzzy: bool,
         times: usize,
     ) -> bool {
+        let here = self.here();
+        let found = self.step_matches(text, forward, fuzzy, times);
+        if found {
+            self.push_jump(here);
+        }
+        found
+    }
+
+    /// Moves the cursor `times` matches on, as [`step_match`](Self::step_match) does once.
+    fn step_matches(&mut self, text: &str, forward: bool, fuzzy: bool, times: usize) -> bool {
         let found = if fuzzy {
             let ranked = self.ranked(text);
             let count = ranked.len();
@@ -2560,6 +2583,41 @@ mod tests {
             "files only"
         );
         assert_eq!(panel.marked_total(), (4, 10_012_346));
+    }
+
+    #[test]
+    fn n_that_finds_nothing_leaves_the_jumps_as_they_are() {
+        let mut panel = loaded("/srv", listing());
+        panel.handle(Action::End);
+        let end = panel.cursor;
+        assert!(panel.jump_back(1).is_none(), "in this directory");
+        assert_eq!(panel.cursor, 0);
+        assert!(!panel.search_again("nothing", true, false, 1));
+        assert!(panel.jump_forward(1).is_none());
+        assert_eq!(panel.cursor, end, "Tab still goes forward");
+    }
+
+    #[test]
+    fn a_count_marks_as_far_as_the_listing_goes() {
+        let mut panel = loaded("/srv", listing());
+        panel.handle(Action::End);
+        panel.handle(Action::Up);
+        let before = under_cursor(&panel);
+        panel.mark_rows(true, 4);
+        assert_eq!(
+            marked(&panel),
+            [before.as_str(), "zeta.txt"],
+            "the last row once"
+        );
+        panel.mark_rows(false, 2);
+        assert_eq!(marked(&panel), Vec::<String>::new());
+        panel.mark_rows(false, 99);
+        assert_eq!(panel.cursor, 0, "on `..`, which is never marked");
+        assert_eq!(
+            panel.marked_total().0,
+            4,
+            "the rows above, not the two below"
+        );
     }
 
     #[test]

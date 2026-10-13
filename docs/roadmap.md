@@ -136,6 +136,40 @@
 - [ ] `.` repeats the last change, in text fields and of files
 - [ ] Yanks copied to the system clipboard through OSC 52, behind a setting
 - [ ] A key of vim's for editing the command line in `$EDITOR`
+- [ ] Text objects in text fields: `iw`, `aw`, `iW`, `aW`, quotes, and brackets (`c i w`,
+      `d i "`, `c i (`); `c i w` only moves the cursor until then
+- [ ] Registers as vim's: `"0` the last yank, `"1` … `"9` and `"-` the deletes; any other
+      name than these, `a` … `z`, `A` … `Z`, `"`, and `_` gives the command up
+- [ ] `p` in Visual mode puts in place of the selection; `Y` yanks to the end of the line, as
+      nvim's
+- [ ] A count repeats what `i`, `a`, `I`, and `A` type (`3ix` Esc)
+- [ ] The lines of the command line in Normal mode: `o`, `O`, `J`, `g g`, `G`, `d j`, `d k`,
+      `V`, and `r` Enter; `v $` takes the line break; a put of lines within a line leaves the
+      cursor at their start, and Ctrl+r of whole lines ends them with a line break
+- [ ] Ctrl+w with Ctrl held (`Ctrl+w Ctrl+h`, `Ctrl+l`, `Ctrl+x`, `Ctrl+r`, `Ctrl+p`,
+      `Ctrl+v`, `Ctrl+f`) and with the arrows; a count before `Ctrl+w w` names the panel
+- [ ] After a count or a register, Ctrl+c only gives the command up, and Esc in Visual mode
+      ends it too, as in vim
+- [ ] `g`, Ctrl+w, `Z`, and the other sequences never time out, with the key hints off too,
+      as vim's own commands; Delete takes back the last digit of a count (vim's `N<Del>`)
+- [ ] A count before `G` and `g g` goes to that line or row in the viewer, the help, and the
+      lists, as in the panels; before Ctrl+d and Ctrl+u, it scrolls that many rows, which they
+      keep, as vim's `'scroll'`
+- [ ] `/` and Enter with nothing typed searches for the last pattern again
+- [ ] Visual mode in the panels: `/`, `n`, and `N` move its end; `g ?`, `g m`, `g M`, `Z Z`,
+      Ctrl+w 1 and 2, and `Y` do what they do in Normal mode, as their F-keys already do
+- [ ] The jump list as vim's by default: a jump after Ctrl+o keeps the places after it, and a
+      place already in the list moves to its end, rather than as `jumpoptions=stack`
+- [ ] Up and Down on the command line recall only the commands that start with what is typed,
+      as on vim's
+- [ ] `H`, `M`, `L`, `z z`, `z t`, `z b`, Ctrl+e, and Ctrl+y in the panels and the lists
+- [ ] Enter and `l` on a file open it
+- [ ] Smaller keys of vim's: in the viewer `0`, `$`, `z h`, `z l`, and search (`/`, `?`, `n`,
+      `N`); F1 and `g ?` close the help; Space goes back from the output of commands, as from
+      vim's hit-enter prompt; Ctrl+u and Ctrl+d in the lists of dialogs; Ctrl+e closes the
+      pull-down menu and the filters of lists, where Ctrl+y confirms; Backspace on an empty
+      command line closes it; Replace mode (`R`, Insert in Insert mode), `Z Q`, `' '`, and
+      marks (`m a`); a click or a paste gives up a command that waits, such as `d` or `"a`
 - [x] The location menu replaces the virtual root and the list of hosts: groups Favorites,
       Mounts, and SFTP, the places used last first (`recent.toml`), the first ten of each with
       a row for the rest; F4 and F8 on hosts there; a Retry dialog for failed connections, and

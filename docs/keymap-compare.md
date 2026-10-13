@@ -143,7 +143,7 @@ the marks.
 | Half a page down | `half_page_down` | ✅ | Ctrl+d | — | — | Ctrl+d<br>Shift+PgDn | J<br>Ctrl+d |
 | First row; after a count, the row of that number | `home` | ✅ | g g<br>Home | Home<br>A1<br>Alt+< | — | g g<br>Home | Home<br>g g |
 | Last row; after a count, the row of that number | `end` | ✅ | G<br>End | End<br>C1<br>Alt+> | — | G<br>End | End<br>G |
-| Open the directory or file under the cursor | `enter` | ✅ | l<br>Right<br>Enter<br>Ctrl+m | Enter<br>Ctrl+PgDn | Enter<br>Ctrl+PgDn | l<br>Right<br>o<br>Enter | Right<br>Enter<br>l |
+| Open the directory under the cursor; nothing on a file, which the others open | `enter` | ✅ | l<br>Right<br>Enter<br>Ctrl+m | Enter<br>Ctrl+PgDn | Enter<br>Ctrl+PgDn | l<br>Right<br>o<br>Enter | Right<br>Enter<br>l |
 | Parent directory; nothing in / | `parent` | ✅ | h<br>Left<br>Backspace<br>Ctrl+h | Ctrl+PgUp | Ctrl+PgUp | h<br>Left | Left<br>h |
 | Back through the jump list, as vim's Ctrl+o: to the directory before, or to the row before G, g g, n, N, or a search (mc, yazi, ranger: the directory before in the history) | `jump_back` | ⏳ | Ctrl+o | Alt+y | — | H | H |
 | Forward again through the jump list, as vim's Ctrl+i (mc, yazi, ranger: the next directory in the history) | `jump_forward` | ⏳ | Tab<br>Ctrl+i | Alt+u | — | L | L |

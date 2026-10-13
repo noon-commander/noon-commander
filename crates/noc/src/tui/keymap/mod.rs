@@ -420,9 +420,20 @@ impl Keymap {
             }
             Lookup::Unknown => {
                 state.keys.pop();
-                // The new key cannot continue the pending sequence: settle that one as if it
-                // had timed out, then take the new key as a key of its own, which may be a
-                // count, text, or the character an action waits for.
+                // In Normal and Visual mode, as in vim, a key that cannot go on with a
+                // sequence that does nothing alone gives up both, as `g x` or Ctrl+w and a key
+                // that names no panel: run alone, it would do what was never asked.
+                let own = matches!(
+                    self.lookup(mode, context, &state.keys),
+                    Lookup::Prefix(Some(_))
+                );
+                if mode != Mode::Insert && !own {
+                    state.drop_command();
+                    return Vec::new();
+                }
+                // Else the pending sequence settles as if it had timed out, and the new key is
+                // a key of its own, which may be a count, text, or the character an action
+                // waits for.
                 let mut typed = self.settle(state);
                 typed.extend(self.feed_key(state, (mode, context), event, now));
                 typed

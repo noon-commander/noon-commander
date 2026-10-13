@@ -37,7 +37,8 @@ no registers.
 - **Esc still acts at once**, as ADR 0020 decided: it never waits for a key after it. Typed
   while a command is pending, a sequence such as `g`, a count, a register, or an operator, it
   gives the command up, as in vim, instead of doing what it does alone; so does a key that
-  cannot go on with the command, such as one that is no motion after `d`.
+  cannot go on with the command, such as one that is no motion after `d`, or `x` after `g`, and
+  in Normal and Visual mode that key does nothing itself, as in vim.
 - **Alt and a key stand for Esc and the key** in Insert and Visual mode, as an Esc and a quick next
   key arrive in a terminal, and in the panels in Normal mode, unless something binds that Alt key or
   the key goes on with a command typed so far. Any key but Esc does, Enter, Backspace, and the

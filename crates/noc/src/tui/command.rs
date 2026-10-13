@@ -112,7 +112,7 @@ impl CommandLine {
     /// Puts `command`, from the window of the history, on the line in place of what was
     /// typed; `foreign` if it ran on another host.
     pub(crate) fn take(&mut self, command: &str, foreign: bool) {
-        self.set_text(command);
+        self.set_text(&self.recalled(command));
         self.browsing = None;
         self.foreign = foreign;
     }
@@ -140,7 +140,15 @@ impl CommandLine {
             self.draft = self.text().to_owned();
         }
         self.browsing = Some(next);
-        self.set_text(command);
+        self.set_text(&self.recalled(command));
+    }
+
+    /// A shell command of the history as this line runs it: after `!` on the line of `:`.
+    fn recalled(&self, command: &str) -> String {
+        match self.kind {
+            Kind::Shell => command.to_owned(),
+            Kind::Noc => format!("!{command}"),
+        }
     }
 
     pub(crate) fn kind(&self) -> Kind {
@@ -536,6 +544,25 @@ mod tests {
         );
         let mut empty = CommandLine::new(Kind::Noc);
         assert_eq!(press(&mut empty, Action::Confirm), CommandEvent::Close);
+    }
+
+    #[test]
+    fn colon_recalls_shell_commands_after_a_bang() {
+        // The history keeps shell commands, which the line of `:` runs after `!`.
+        let history = ["make"];
+        let mut line = CommandLine::new(Kind::Noc);
+        line.browse(true, &history);
+        assert_eq!(line.text(), "!make");
+        assert_eq!(
+            press(&mut line, Action::Confirm),
+            CommandEvent::Run("make".to_owned())
+        );
+        let mut taken = CommandLine::new(Kind::Noc);
+        taken.take("ls", false);
+        assert_eq!(taken.text(), "!ls");
+        let mut bang = shell("");
+        bang.take("ls", false);
+        assert_eq!(bang.text(), "ls", "the line of `!` runs them as they are");
     }
 
     #[test]

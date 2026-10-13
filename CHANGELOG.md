@@ -16,26 +16,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   mode, and in Normal mode closes; quick search and the command line close on Esc, as vim's search
   and command line do. Ctrl+c closes or cancels in every mode. Esc acts at once, where 0.1.0's
   panels waited a second after it: it never waits for a key after it, and gives up a command typed
-  so far. A line above the F-key bar shows `-- INSERT --` or `-- VISUAL --`, and the count,
-  register, operator, or keys of a command typed so far; the cursor is a bar in Insert mode and a
-  block in the others.
+  so far. So does a key that cannot go on with it, which does nothing itself, as in vim: g x and
+  Ctrl+w e do nothing. A line above the F-key bar shows `-- INSERT --` or `-- VISUAL --`, and the
+  count, register, operator, or keys of a command typed so far; the cursor is a bar in Insert mode
+  and a block in the others.
   - Panels: k, j, Ctrl+u, Ctrl+d, Ctrl+b, Ctrl+f, g g, and G move, l and Enter open, h and Backspace
     go up; a count repeats a motion (5j), and G, g g, and g t take it as a row or a tab (3G). v and
     V select rows in Visual mode, whose y, x, d, F5, F6, F8, and f # act on them as on marked
     entries, and Space marks them; o goes to the other end, g v selects them again, and the other
     F-keys and Ctrl+w end it and do what they do. Ctrl+o and Tab (Ctrl+i) go back and forth through
-    a jump list per tab, of the directories left and of G, g g, n, N, and searches. Ctrl+w w, Ctrl+w
-    p, Ctrl+w h, and Ctrl+w l switch panels, as vim's windows; Ctrl+w x swaps them, Ctrl+w f and
-    Ctrl+w v open the directory under the cursor or this one in the other panel, and Ctrl+w 1 and
-    Ctrl+w 2 change their locations. / starts quick search, typed as vim's search: Enter ends it on
-    the match, Esc gives it up, Ctrl+g and Ctrl+t go to the next and the previous match, and the
-    arrows, the page keys, and the F-keys end it and do what they do, as in mc. Space, J, and K
-    mark, + and - mark and unmark by a pattern, * inverts; i views, e edits, Y and y y copy, x
-    moves, r renames in the row, A makes a directory, d D deletes, R reads the directory again; t n,
-    t c, g t, g T, t h, t l, t w, and t W for tabs and workspaces; o n, o e, o m, o s sort and o h
-    shows hidden files; g z jumps with zoxide, g d is Quick cd, f j lists the jobs, q : opens the
-    command history, g m and g M the pull-down menu, g ? the help, g < the output of commands, and Z
-    Z quits.
+    a jump list per tab, of the directories left and of G, g g, and the n, N, and searches that
+    move. Ctrl+w w, Ctrl+w p, Ctrl+w h, and Ctrl+w l switch panels, as vim's windows; Ctrl+w x swaps
+    them, Ctrl+w f and Ctrl+w v open the directory under the cursor or this one in the other panel,
+    and Ctrl+w 1 and Ctrl+w 2 change their locations. / starts quick search, typed as vim's search:
+    Enter ends it on the match, Esc gives it up, Ctrl+g and Ctrl+t go to the next and the previous
+    match, and the arrows, the page keys, and the F-keys end it and do what they do, as in mc.
+    Space, J, and K mark, with a count as far as the listing goes, + and - mark and unmark by a
+    pattern, * inverts; i views, e edits, Y and y y copy, x moves, r renames in the row, A makes a
+    directory, d D deletes, R reads the directory again; t n, t c, g t, g T, t h, t l, t w, and t W
+    for tabs and workspaces; o n, o e, o m, o s sort and o h shows hidden files; g z jumps with
+    zoxide, g d is Quick cd, f j lists the jobs, q : opens the command history, g m and g M the
+    pull-down menu, g ? the help, g < the output of commands, and Z Z quits.
   - Text fields have vim's Normal mode after Esc: h, l, w, b, e, W, B, E, 0, ^, $, f, t, F, T,
     ;, and , move; d, c, and y act on a motion, or on the line when doubled, with counts (2d3w);
     x, X, s, S, C, D, r, and ~ change; p and P put; u and Ctrl+r undo and redo; i, a, I, and A
@@ -81,15 +82,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   gives way to `[exit N]`, bold and red, after a command that failed. `shell.pause` (Wait after a
   command in Options → Configuration) says when the output waits for a key: `always`,
   `on-error`, or `never`.
-- Command history: each command of the command line is kept in `history.toml` in the state
-  directory (`~/.local/state/noc/`), with the host it ran on. Up on the first line of the
-  command line, or Ctrl+p, brings back the commands of the panel's host, and Down, or Ctrl+n,
-  goes forward to what was typed. q : in a panel, or on the line in Normal mode, opens a window
-  of the history, which / filters: Tab shows every host, Enter puts the command on the line
-  without running it, its prompt standing out if it ran on another host, and d d or F8 removes
-  it. `shell.history_size` (500, as bash's `HISTSIZE`, or Command line → History size in
-  Options → Configuration) sets how many commands are kept; a command that starts with a space
-  is never kept.
+- Command history: each command of the command line is kept in `history.toml` in the state directory
+  (`~/.local/state/noc/`), with the host it ran on. Up on the first line of the command line, or
+  Ctrl+p, brings back the commands of the panel's host, and Down, or Ctrl+n, goes forward to what
+  was typed; on the line of :, they come after !, which runs them. q : in a panel, or on the line in
+  Normal mode, opens a window of the history, which / filters: Tab shows every host, Enter puts the
+  command on the line without running it, its prompt standing out if it ran on another host, and d d
+  or F8 removes it. `shell.history_size` (500, as bash's `HISTSIZE`, or Command line → History size
+  in Options → Configuration) sets how many commands are kept; a command that starts with a space is
+  never kept.
 - Input for the command line: Shift+Enter starts a new line where the terminal speaks the
   kitty keyboard protocol, which Noon Commander now asks for where the terminal has it, with
   the keys typed with Shift reported too, so that Alt and a symbol typed with Shift, such as

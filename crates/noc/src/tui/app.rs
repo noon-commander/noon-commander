@@ -1490,9 +1490,9 @@ impl App {
         effects
     }
 
-    /// Whether a count repeats `action` where keys go now: a motion over rows, a mark, or the
-    /// previous tab, outside the text fields, whose editor reads the count. `n` and `N` take
-    /// it themselves, as one jump.
+    /// Whether a count repeats `action` where keys go now: a motion over rows, or the previous
+    /// tab, outside the text fields, whose editor reads the count. `n` and `N` take it
+    /// themselves, as one jump, and marks, which stop at the end of the listing.
     fn repeats(&self, action: Action) -> bool {
         let text = matches!(
             self.context(),
@@ -1514,8 +1514,6 @@ impl App {
                     | Action::PageDown
                     | Action::HalfPageUp
                     | Action::HalfPageDown
-                    | Action::Mark
-                    | Action::MarkUp
                     | Action::PrevTab
             )
     }
@@ -2002,6 +2000,10 @@ impl App {
             Action::Home | Action::End if count.is_some() => {
                 self.panel_mut(id.side).go_to_row(count.unwrap_or(1));
             }
+            Action::Mark | Action::MarkUp if count.is_some() => {
+                let down = action == Action::Mark;
+                self.panel_mut(id.side).mark_rows(down, count.unwrap_or(1));
+            }
             // With a count, the tab of that number, as vim's `g t`.
             Action::NextTab if count.is_some() => {
                 self.end_search(id.side);
@@ -2166,9 +2168,8 @@ impl App {
         if let Some(last) = self.last_search.clone() {
             let fuzzy_search = self.config.ui.fuzzy_search;
             let times = self.extra.times();
-            let panel = self.panel_mut(self.active);
-            panel.remember();
-            panel.step_matches(&last, forward, fuzzy_search, times);
+            self.panel_mut(self.active)
+                .search_again(&last, forward, fuzzy_search, times);
         }
     }
 
@@ -6145,6 +6146,11 @@ mod tests {
         assert_eq!(cursor_name(&app, Side::Left), "a");
         keys(&mut app, &["2", "space"]);
         assert_eq!(chosen_names(&app, Side::Left), ["a", "b"]);
+        // Marks stop at the end of the listing: the last row turns once.
+        keys(&mut app, &["shift-g", "k", "4", "space"]);
+        assert_eq!(chosen_names(&app, Side::Left), ["a", "b", "d", "e"]);
+        keys(&mut app, &["9", "shift-k"]);
+        assert_eq!(chosen_names(&app, Side::Left), ["c"]);
         keys(&mut app, &["t", "n", "t", "n"]);
         assert_eq!(app.tabs(Side::Left).index(), 2);
         keys(&mut app, &["1", "g", "t"]);

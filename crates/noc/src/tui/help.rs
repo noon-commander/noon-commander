@@ -436,6 +436,8 @@ fn describe_text(context: Context, action: Action) -> Option<String> {
     let text = match action {
         Action::Left => fl!("help-field-left"),
         Action::Right => fl!("help-field-right"),
+        Action::CharForward => fl!("help-field-char-forward"),
+        Action::CharBackward => fl!("help-field-char-backward"),
         Action::TextStart => fl!("help-field-home"),
         Action::FirstNonBlank => fl!("help-field-first-non-blank"),
         Action::TextEnd => fl!("help-field-end"),

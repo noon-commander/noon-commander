@@ -123,7 +123,8 @@ pub(super) const PRESET: Preset = &[
             (Action::Mark, &["space"]),
             (Action::Copy, &["y", "f5"]),
             (Action::Move, &["x", "f6"]),
-            (Action::Delete, &["d", "f8"]),
+            // As vim's `D` and `X`, which delete the lines selected.
+            (Action::Delete, &["d", "shift-d", "shift-x", "f8"]),
             (Action::Checksum, &["f #"]),
             (
                 Action::NormalMode,
@@ -177,8 +178,10 @@ pub(super) const PRESET: Preset = &[
         Context::Input,
         &[
             // Motions
-            (Action::Left, &["h", "left", "backspace", "ctrl-h"]),
-            (Action::Right, &["l", "right", "space"]),
+            (Action::Left, &["h", "left"]),
+            (Action::Right, &["l", "right"]),
+            (Action::CharBackward, &["backspace", "ctrl-h"]),
+            (Action::CharForward, &["space"]),
             (Action::TextStart, &["0", "home"]),
             (Action::FirstNonBlank, &["^"]),
             (Action::TextEnd, &["$", "end"]),
@@ -223,8 +226,10 @@ pub(super) const PRESET: Preset = &[
         Mode::Visual,
         Context::Input,
         &[
-            (Action::Left, &["h", "left", "backspace", "ctrl-h"]),
-            (Action::Right, &["l", "right", "space"]),
+            (Action::Left, &["h", "left"]),
+            (Action::Right, &["l", "right"]),
+            (Action::CharBackward, &["backspace", "ctrl-h"]),
+            (Action::CharForward, &["space"]),
             (Action::TextStart, &["0", "home"]),
             (Action::FirstNonBlank, &["^"]),
             (Action::TextEnd, &["$", "end"]),
@@ -248,8 +253,8 @@ pub(super) const PRESET: Preset = &[
             (Action::NormalMode, &["esc", "ctrl-[", "v"]),
         ],
     ),
-    // Quick search in the active panel, as vim's search is typed: Enter ends it on the match,
-    // and Esc and Ctrl+c go back to where it started. Ctrl+g and Ctrl+t go to the next and the
+    // Quick search in the active panel, as vim's search is typed: Enter (Ctrl+j) ends it on the
+    // match, and Esc and Ctrl+c go back to where it started. Ctrl+g and Ctrl+t go to the next and the
     // previous match, and Ctrl+b and Ctrl+e to the start and the end, as on vim's command line.
     // The arrows and the page keys, and the F-keys, end it and do what they do in the panel,
     // as in mc; Shift+F7 goes to the next match.
@@ -257,7 +262,7 @@ pub(super) const PRESET: Preset = &[
         Mode::Insert,
         Context::QuickSearch,
         &[
-            (Action::Cancel, &["enter", "ctrl-m"]),
+            (Action::Cancel, &["enter", "ctrl-m", "ctrl-j"]),
             (Action::Abort, &["esc", "ctrl-[", "ctrl-c"]),
             (Action::QuickSearch, &["ctrl-g"]),
             (Action::PrevMatch, &["ctrl-t"]),

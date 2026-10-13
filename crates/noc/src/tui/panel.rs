@@ -231,6 +231,8 @@ pub(crate) struct Panel {
     search: Option<Field>,
     /// The row the cursor was on when quick search started, for Abort.
     search_origin: usize,
+    /// The count typed before `/`: quick search goes to that match, as vim's `3/` does.
+    search_count: usize,
     /// The entry under the cursor, while its name is edited in its row.
     renaming: Option<Renaming>,
     /// The row where Visual mode started, while it selects the rows from there to the cursor.
@@ -283,6 +285,7 @@ impl Panel {
             pending: None,
             search: None,
             search_origin: 0,
+            search_count: 1,
             renaming: None,
             visual: None,
             last_visual: None,
@@ -316,6 +319,7 @@ impl Panel {
             pending: None,
             search: None,
             search_origin: 0,
+            search_count: 1,
             renaming: None,
             visual: None,
             last_visual: None,
@@ -639,12 +643,14 @@ impl Panel {
         self.search.as_ref().map(Field::text)
     }
 
-    /// Starts quick search, or jumps to the next match while it runs: the next one down, round
-    /// to the top; `fuzzy` (`ui.fuzzy_search`), the next best, round to the best.
-    pub(crate) fn search_next(&mut self, fuzzy: bool) {
+    /// Starts quick search, which goes to match `count` of what is typed, or jumps to the next
+    /// match while it runs: the next one down, round to the top; `fuzzy` (`ui.fuzzy_search`),
+    /// the next best, round to the best.
+    pub(crate) fn search_next(&mut self, fuzzy: bool, count: usize) {
         let Some(text) = self.search_text().map(str::to_owned) else {
             self.search = Some(Field::plain(""));
             self.search_origin = self.cursor;
+            self.search_count = count.max(1);
             return;
         };
         self.step_match(&text, true, fuzzy);
@@ -677,42 +683,51 @@ impl Panel {
     /// the previous one, up and round to the bottom; `fuzzy`, to the next or the previous as fzf
     /// ranks them, round, or to the best from a row that does not match. Whether one matches.
     pub(crate) fn step_match(&mut self, text: &str, forward: bool, fuzzy: bool) -> bool {
-        self.step_matches(text, forward, fuzzy, 1)
+        self.step_matches(text, forward, fuzzy, 1).is_some()
     }
 
     /// Moves the cursor `times` matches on, as vim's `3n`, and puts where it was in the jump
     /// list, once; a search that finds nothing leaves the jumps as they are, as in vim.
+    /// Whether it went round past the end, or the start, if it found one.
     pub(crate) fn search_again(
         &mut self,
         text: &str,
         forward: bool,
         fuzzy: bool,
         times: usize,
-    ) -> bool {
+    ) -> Option<bool> {
         let here = self.here();
         let found = self.step_matches(text, forward, fuzzy, times);
-        if found {
+        if found.is_some() {
             self.push_jump(here);
         }
         found
     }
 
-    /// Moves the cursor `times` matches on, as [`step_match`](Self::step_match) does once.
-    fn step_matches(&mut self, text: &str, forward: bool, fuzzy: bool, times: usize) -> bool {
-        let found = if fuzzy {
+    /// Moves the cursor `times` matches on, as [`step_match`](Self::step_match) does once;
+    /// whether it went round, if it found one.
+    fn step_matches(
+        &mut self,
+        text: &str,
+        forward: bool,
+        fuzzy: bool,
+        times: usize,
+    ) -> Option<bool> {
+        let (found, round) = if fuzzy {
             let ranked = self.ranked(text);
             let count = ranked.len();
             let at = ranked.iter().position(|&(row, _)| row == self.cursor);
             let steps = times % count.max(1);
-            let index = match at {
-                Some(at) if forward => (at + steps) % count,
-                Some(at) => (at + count - steps) % count,
-                None => 0,
+            let (index, round) = match at {
+                Some(at) if forward => ((at + steps) % count, at + times >= count),
+                Some(at) => ((at + count - steps) % count, times > at),
+                None => (0, false),
             };
-            ranked.get(index).map(|&(row, _)| row)
+            (ranked.get(index).map(|&(row, _)| row), round)
         } else {
             let text = text.to_lowercase();
             let mut found = None;
+            let mut round = false;
             // No more steps than rows: round, they come back to where they were.
             for _ in 0..times.min(self.rows()) {
                 let from = found.unwrap_or(self.cursor);
@@ -721,17 +736,17 @@ impl Panel {
                 } else {
                     self.find_back(&text, from)
                 };
-                if next.is_none() {
+                let Some(next) = next else {
                     break;
-                }
-                found = next;
+                };
+                round |= if forward { next <= from } else { next >= from };
+                found = Some(next);
             }
-            found
+            (found, round)
         };
-        if let Some(row) = found {
-            self.cursor = row;
-        }
-        found.is_some()
+        let row = found?;
+        self.cursor = row;
+        Some(round)
     }
 
     /// Types `c` at the cursor of quick search, starting it if needed, and moves the cursor of
@@ -746,6 +761,10 @@ impl Panel {
             self.search_origin
         };
         let mut field = self.search.take().unwrap_or_else(|| Field::plain(""));
+        self.search_origin = origin;
+        if started {
+            self.search_count = 1;
+        }
         // Smart case needs the capitals.
         let typed: Vec<char> = if fuzzy {
             vec![c]
@@ -797,22 +816,27 @@ impl Panel {
         }
     }
 
-    /// The row that quick search goes to for `text`: the first from the cursor whose name
-    /// starts with it, ignoring case; `fuzzy`, the best as fzf ranks them, the first from the
-    /// cursor if several are as good.
+    /// The row that quick search goes to for `text`, as vim's search goes from the row after
+    /// where it started, round: the first whose name starts with it, ignoring case; `fuzzy`,
+    /// the best as fzf ranks them, the first of several as good. With a count before `/`, the
+    /// match of that number, round again.
     fn best_match(&self, text: &str, fuzzy: bool) -> Option<usize> {
-        if fuzzy {
-            let ranked = self.ranked(text);
-            let best = ranked.first().map(|&(_, score)| score);
-            let rows = self.rows().max(1);
-            ranked
-                .iter()
-                .take_while(|&&(_, score)| Some(score) == best)
-                .map(|&(row, _)| row)
-                .min_by_key(|&row| (row + rows - self.cursor) % rows)
+        let rows = self.rows().max(1);
+        let from = (self.search_origin + 1) % rows;
+        let after = |row: usize| (row + rows - from) % rows;
+        let matches: Vec<usize> = if fuzzy {
+            let mut ranked = self.ranked(text);
+            ranked.sort_by_key(|&(row, score)| (std::cmp::Reverse(score), after(row)));
+            ranked.into_iter().map(|(row, _)| row).collect()
         } else {
-            self.find(text, self.cursor)
-        }
+            let mut found: Vec<usize> = (0..self.rows())
+                .filter(|&row| self.starts_with(row, text))
+                .collect();
+            found.sort_by_key(|&row| after(row));
+            found
+        };
+        let count = matches.len();
+        (count > 0).then(|| matches[(self.search_count - 1) % count])
     }
 
     /// Ends quick search and puts the cursor back on the row it started from.
@@ -1080,10 +1104,15 @@ impl Panel {
     /// Goes back to where the panel was before its last jump, as vim's Ctrl+o, `count` times;
     /// the listing to request, if that is another location.
     pub(crate) fn jump_back(&mut self, count: usize) -> Option<ListRequest> {
-        if self.jump == 0 {
+        let here = self.here();
+        // As vim's, a count past the oldest jump goes nowhere, and keeps the list as it is.
+        let older = self.jumps[..self.jump.min(self.jumps.len())]
+            .iter()
+            .filter(|spot| **spot != here)
+            .count();
+        if older < count.max(1) {
             return None;
         }
-        let here = self.here();
         if self.jump == self.jumps.len() {
             self.jumps.push(here.clone());
             if self.jumps.len() > MAX_JUMPS {
@@ -1112,10 +1141,18 @@ impl Panel {
 
     /// Goes forward again where Ctrl+o came from, as vim's Ctrl+i, `count` times.
     pub(crate) fn jump_forward(&mut self, count: usize) -> Option<ListRequest> {
-        if self.jump + 1 >= self.jumps.len() {
+        let here = self.here();
+        // As vim's, a count past the newest jump goes nowhere.
+        let newer = self
+            .jumps
+            .get(self.jump + 1..)
+            .unwrap_or_default()
+            .iter()
+            .filter(|spot| **spot != here)
+            .count();
+        if newer < count.max(1) {
             return None;
         }
-        let here = self.here();
         self.jumps[self.jump] = here.clone();
         let mut target = self.jump;
         let mut left = count;
@@ -1146,9 +1183,15 @@ impl Panel {
         self.visual.is_some()
     }
 
-    /// Starts Visual mode on the row under the cursor.
-    pub(crate) fn start_visual(&mut self) {
+    /// Starts Visual mode on the row under the cursor, and selects `count` rows from it, as
+    /// vim's `3V` selects three lines.
+    pub(crate) fn start_visual(&mut self, count: usize) {
         self.visual = Some(self.cursor);
+        let last = self.rows().saturating_sub(1);
+        self.cursor = self
+            .cursor
+            .saturating_add(count.saturating_sub(1))
+            .min(last);
     }
 
     /// Ends Visual mode, and keeps what it selected for `g v`.
@@ -1174,9 +1217,14 @@ impl Panel {
         }
     }
 
-    /// How many rows Visual mode selects, as vim's `showcmd` shows them.
+    /// How many entries Visual mode selects, as vim's `showcmd` shows its lines: those the
+    /// commands of files act on, so not `..`.
     pub(crate) fn visual_size(&self) -> Option<usize> {
-        self.visual_rows().map(Iterator::count)
+        let rows = self.visual_rows()?;
+        Some(
+            rows.filter(|&index| matches!(self.row(index), Some(Row::Entry(_))))
+                .count(),
+        )
     }
 
     /// The rows Visual mode selects.
@@ -2203,7 +2251,7 @@ mod tests {
         assert_eq!(panel.search_text(), Some("bi"), "a miss is dropped");
         panel.search_edit(Action::Backspace, false);
         assert_eq!(under_cursor(&panel), "bin", "the cursor stays");
-        panel.search_next(false);
+        panel.search_next(false, 1);
         assert_eq!(under_cursor(&panel), "Beta", "round to the top");
         panel.search_type('e', false);
         let hosts = |_: &str| HostState::default();
@@ -2238,11 +2286,11 @@ mod tests {
             panel.search_type(c, true);
         }
         assert_eq!(under_cursor(&panel), "cfg-if", "together, at the start");
-        panel.search_next(true);
+        panel.search_next(true, 1);
         assert_eq!(under_cursor(&panel), "x.cfg", "together");
-        panel.search_next(true);
+        panel.search_next(true, 1);
         assert_eq!(under_cursor(&panel), "config.rs", "apart");
-        panel.search_next(true);
+        panel.search_next(true, 1);
         assert_eq!(under_cursor(&panel), "cfg-if", "round to the best");
         panel.search_type('q', true);
         assert_eq!(panel.search_text(), Some("cfg"), "a miss is dropped");
@@ -2266,11 +2314,11 @@ mod tests {
         panel.search_type('b', true);
         assert_eq!(
             under_cursor(&panel),
-            "baz",
-            "as good: the first from the cursor"
+            "bar",
+            "as good: the first after the cursor, round, as vim's search goes"
         );
         panel.search_type(' ', true);
-        assert_eq!(under_cursor(&panel), "baz", "a space stays");
+        assert_eq!(under_cursor(&panel), "bar", "a space stays");
         panel.end_search();
         panel.search_type('x', true);
         assert!(!panel.searching(), "no match, no search");
@@ -2315,7 +2363,7 @@ mod tests {
         let files = names.map(|name| entry(name, FileKind::File, 1));
         let mut panel = loaded("/srv", files.into());
         panel.handle(Action::End);
-        panel.search_next(false);
+        panel.search_next(false, 1);
         panel.search_type('b', false);
         panel.search_type('o', false);
         assert_eq!(under_cursor(&panel), "boot");
@@ -2597,7 +2645,7 @@ mod tests {
         let end = panel.cursor;
         assert!(panel.jump_back(1).is_none(), "in this directory");
         assert_eq!(panel.cursor, 0);
-        assert!(!panel.search_again("nothing", true, false, 1));
+        assert!(panel.search_again("nothing", true, false, 1).is_none());
         assert!(panel.jump_forward(1).is_none());
         assert_eq!(panel.cursor, end, "Tab still goes forward");
     }

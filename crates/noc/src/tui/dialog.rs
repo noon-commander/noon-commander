@@ -761,8 +761,12 @@ impl Dialog {
                 self.move_focus(action == Action::NextField, Mode::Insert);
                 DialogEvent::Pending
             }
+            // A count moves as many stops, past the fields too, as vim's `3j` moves three lines.
             Action::Right | Action::Down | Action::Left | Action::Up => {
-                self.move_focus(matches!(action, Action::Right | Action::Down), self.mode());
+                let mode = self.mode();
+                for _ in 0..extra.times() {
+                    self.move_focus(matches!(action, Action::Right | Action::Down), mode);
+                }
                 DialogEvent::Pending
             }
             // As vim's `g g` and `G` go to the first and the last line.

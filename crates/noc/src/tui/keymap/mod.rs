@@ -14,7 +14,7 @@
 //! As which-key does, the keymap lists the keys that can follow a pending sequence, or every
 //! key of a context, with what they do ([`Keymap::hints`]). While the hints show, the sequence
 //! waits for its next key without a deadline; `Esc` closes them, and `Backspace` takes back the
-//! last key of the sequence.
+//! last key of the sequence, or with none closes them.
 
 mod action;
 mod preset;
@@ -345,7 +345,12 @@ impl Keymap {
                 state.hinting = false;
                 return Vec::new();
             }
-            if !continues && (key == BACKSPACE || key == CTRL_H) && state.keys.pop().is_some() {
+            // Backspace takes back the last key typed; with none, it closes the hints, rather
+            // than doing what it does in what is in front.
+            if !continues && (key == BACKSPACE || key == CTRL_H) {
+                if state.keys.pop().is_none() {
+                    state.hinting = false;
+                }
                 state.deadline = None;
                 return Vec::new();
             }
@@ -407,6 +412,17 @@ impl Keymap {
         }
         state.keys.push(key);
         match self.lookup(mode, context, &state.keys) {
+            // The hints show what can follow a count or a register, which wait for it, as they
+            // do after the first key of a sequence.
+            Lookup::Exact(Action::KeyHints)
+                if state.keys.len() == 1
+                    && (state.count.is_some()
+                        || state.outer.is_some()
+                        || state.register.is_some()) =>
+            {
+                state.keys.clear();
+                vec![Typed::from(Resolved::Action(Action::KeyHints))]
+            }
             Lookup::Exact(action) => Self::resolve(state, action).into_iter().collect(),
             Lookup::Prefix(own) => {
                 state.since = Some(now);

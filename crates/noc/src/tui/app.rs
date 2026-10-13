@@ -635,6 +635,8 @@ pub(crate) struct App {
     history: Vec<HistoryEntry>,
     /// The window of the command history, over the panels and under the dialogs.
     history_window: Option<HistoryWindow>,
+    /// A message on the line of the mode until the next key, as vim's on its command line.
+    message: Option<String>,
     /// The working directory last handed to the event loop.
     work_dir: Option<PathBuf>,
     /// Where copies of remote files for the editor go.
@@ -795,6 +797,7 @@ impl App {
             command_line: None,
             history: Vec::new(),
             history_window: None,
+            message: None,
             work_dir: None,
             runtime_dir: std::env::temp_dir(),
             last_job: 0,
@@ -1392,6 +1395,7 @@ impl App {
     /// on a password they do nothing, as the Esc would close its dialog and send the key to the
     /// panels.
     pub(crate) fn key(&mut self, keys: &mut KeyState, key: KeyEvent, now: Instant) -> Vec<Effect> {
+        self.message = None;
         let split = if self.typing_secret() {
             None
         } else {
@@ -1509,10 +1513,26 @@ impl App {
         effects
     }
 
-    /// Whether a count repeats `action` where keys go now: a motion over rows, or the previous
-    /// tab, outside the text fields, whose editor reads the count. `n` and `N` take it
+    /// Whether a count repeats `action` where keys go now: a motion over rows, the previous
+    /// tab, or `d d` on a row of a list, outside the text fields, whose editor reads the count. `n` and `N` take it
     /// themselves, as one jump, and marks, which stop at the end of the listing.
     fn repeats(&self, action: Action) -> bool {
+        if self.counts_moves() {
+            return false;
+        }
+        // As vim's `3dd`, which deletes three lines: rows of the lists that `d d` removes.
+        let removes = matches!(
+            (self.context(), action),
+            (Context::TabMenu, Action::CloseTab)
+                | (Context::LocationMenu, Action::Disconnect)
+                | (
+                    Context::Workspaces | Context::CommandHistory,
+                    Action::Delete
+                )
+        );
+        if removes {
+            return true;
+        }
         let text = matches!(
             self.context(),
             Context::Rename
@@ -1535,6 +1555,24 @@ impl App {
                     | Action::HalfPageDown
                     | Action::PrevTab
             )
+    }
+
+    /// Whether a dialog or the configuration has the keys, which count their moves themselves,
+    /// past their text fields too, where a count would go to the field.
+    fn counts_moves(&self) -> bool {
+        if !self.dialogs.is_empty() {
+            return true;
+        }
+        let over = self.menu.is_some()
+            || self.tab_menu.is_some()
+            || self.jump.is_some()
+            || self.workspaces_window.is_some()
+            || self.history_window.is_some()
+            || !self.results.is_empty()
+            || self.in_front().is_some()
+            || self.jobs_list.is_some()
+            || self.help.is_some();
+        !over && self.configuration.is_some()
     }
 
     /// Whether the app does something for `action` now; the F-key bar shows only those.
@@ -2001,7 +2039,7 @@ impl App {
         let count = self.extra.count;
         let id = self.shown(self.active);
         match action {
-            Action::VisualMode => self.panel_mut(id.side).start_visual(),
+            Action::VisualMode => self.panel_mut(id.side).start_visual(count.unwrap_or(1)),
             Action::Reselect => self.panel_mut(id.side).reselect(),
             Action::JumpBack | Action::JumpForward => {
                 let times = count.unwrap_or(1);
@@ -2181,22 +2219,33 @@ impl App {
     fn quick_search(&mut self) {
         let fuzzy_search = self.config.ui.fuzzy_search;
         let last = self.last_search.clone();
+        let count = self.extra.times();
         let panel = self.panel_mut(self.active);
         let typed = panel.search_text().is_some_and(|text| !text.is_empty());
         match last {
             Some(last) if panel.searching() && !typed => panel.search_resume(&last, fuzzy_search),
-            _ => panel.search_next(fuzzy_search),
+            _ => panel.search_next(fuzzy_search, count),
         }
     }
 
     /// Moves the cursor of the active panel to the next name, or the previous one, that matches
     /// what the last quick search found; where it was goes to the jump list.
     fn search_again(&mut self, forward: bool) {
-        if let Some(last) = self.last_search.clone() {
-            let fuzzy_search = self.config.ui.fuzzy_search;
-            let times = self.extra.times();
-            self.panel_mut(self.active)
-                .search_again(&last, forward, fuzzy_search, times);
+        let Some(last) = self.last_search.clone() else {
+            self.message = Some(fl!("message-search-none"));
+            return;
+        };
+        let fuzzy_search = self.config.ui.fuzzy_search;
+        let times = self.extra.times();
+        let round = self
+            .panel_mut(self.active)
+            .search_again(&last, forward, fuzzy_search, times);
+        if round == Some(true) {
+            self.message = Some(if forward {
+                fl!("message-search-bottom")
+            } else {
+                fl!("message-search-top")
+            });
         }
     }
 
@@ -3343,9 +3392,12 @@ impl App {
             }
         };
         if opens {
-            self.command_line = Some(CommandLine::new(kind));
+            let line = CommandLine::new(kind);
             if action == Action::CommandHistory {
+                self.command_line = Some(line.for_history());
                 self.open_history();
+            } else {
+                self.command_line = Some(line);
             }
         }
     }
@@ -3454,6 +3506,9 @@ impl App {
             HistoryEvent::Pending => Vec::new(),
             HistoryEvent::Closed => {
                 self.history_window = None;
+                if self.command_line.as_ref().is_some_and(CommandLine::alone) {
+                    self.command_line = None;
+                }
                 Vec::new()
             }
             HistoryEvent::Take { command, host } => {
@@ -5466,8 +5521,11 @@ impl App {
         let typed = cells::sanitize(typed.as_bytes());
         let shown = cells::width(&typed).min(width);
         let room = width.saturating_sub(shown + 1);
-        let mode = mode.map(|mode| cells::fit(&mode, room, Align::Left));
-        if let Some(mode) = mode {
+        // A message takes the place of the mode, as on vim's command line.
+        if let Some(message) = &self.message {
+            let message = cells::fit(message, room, Align::Left);
+            frame.render_widget(Line::styled(message, self.theme.message), area);
+        } else if let Some(mode) = mode.map(|mode| cells::fit(&mode, room, Align::Left)) {
             frame.render_widget(Line::styled(mode, Style::new().bold()), area);
         }
         let x = area
@@ -6398,6 +6456,119 @@ mod tests {
         keys(&mut app, &["ctrl-l"]);
         assert_eq!(app.place(), (Mode::Insert, Context::Rename));
         assert!(screen(&mut app).contains("-- INSERT --"));
+    }
+
+    #[test]
+    fn counts_move_past_the_fields_of_dialogs_and_the_configuration() {
+        let mut once = with_files(&["a"]);
+        keys(&mut once, &["j", "f", "#", "esc", "g", "g", "9", "j"]);
+        let mut each = with_files(&["a"]);
+        keys(&mut each, &["j", "f", "#", "esc", "g", "g"]);
+        for _ in 0..9 {
+            keys(&mut each, &["j"]);
+        }
+        assert_eq!(once.place(), each.place());
+        assert_eq!(screen_of(&mut once, 30), screen_of(&mut each, 30));
+        let mut once = loaded();
+        open_configuration(&mut once);
+        keys(&mut once, &["esc", "3", "j"]);
+        let mut each = loaded();
+        open_configuration(&mut each);
+        keys(&mut each, &["esc", "j", "j", "j"]);
+        assert_eq!(
+            screen_of(&mut once, 30),
+            screen_of(&mut each, 30),
+            "from a text field"
+        );
+    }
+
+    #[test]
+    fn q_colon_from_a_panel_closes_with_the_window_of_the_history() {
+        let mut app = loaded();
+        keys(&mut app, &["q", ":"]);
+        assert_eq!(app.place(), (Mode::Normal, Context::CommandHistory));
+        keys(&mut app, &["q"]);
+        assert!(
+            app.command_line.is_none(),
+            "back to the panel, as from vim's :q"
+        );
+        assert_eq!(app.place().1, Context::Panel);
+        // From the command line, it goes back there.
+        keys(&mut app, &["!", "ctrl-f", "q", ":"]);
+        keys(&mut app, &["q"]);
+        assert_eq!(app.place().1, Context::CommandLine);
+    }
+
+    #[test]
+    fn a_count_past_the_jump_list_goes_nowhere() {
+        let mut app = with_files(&["f1", "f2", "f3", "f4", "f5", "f6"]);
+        keys(&mut app, &["2", "shift-g", "4", "shift-g", "6", "shift-g"]);
+        assert_eq!(cursor_name(&app, Side::Left), "f5");
+        keys(&mut app, &["9", "9", "ctrl-o"]);
+        assert_eq!(cursor_name(&app, Side::Left), "f5", "as vim's");
+        keys(&mut app, &["2", "ctrl-o"]);
+        assert_eq!(cursor_name(&app, Side::Left), "f1");
+        keys(&mut app, &["9", "9", "tab"]);
+        assert_eq!(cursor_name(&app, Side::Left), "f1");
+        keys(&mut app, &["tab"]);
+        assert_eq!(cursor_name(&app, Side::Left), "f3");
+    }
+
+    #[test]
+    fn counts_select_rows_and_remove_them_from_lists_as_vims_lines() {
+        let mut app = with_files(&["a", "b", "c", "d"]);
+        keys(&mut app, &["j", "3", "shift-v"]);
+        assert!(line_with(&screen(&mut app), "-- VISUAL --").ends_with(" 3\""));
+        keys(&mut app, &["esc", "t", "n", "t", "n", "t", "n"]);
+        assert_eq!(app.tabs(Side::Left).len(), 4);
+        keys(&mut app, &["t", "h", "g", "g", "3", "d", "d"]);
+        assert_eq!(app.tabs(Side::Left).len(), 1);
+    }
+
+    #[test]
+    fn quick_search_goes_from_the_row_after_the_cursor_and_to_the_match_of_its_count() {
+        let mut app = with_files(&["a1", "a2", "a3", "b"]);
+        keys(&mut app, &["j", "/", "a", "enter"]);
+        assert_eq!(
+            cursor_name(&app, Side::Left),
+            "a2",
+            "as vim's, not the row it is on"
+        );
+        keys(&mut app, &["g", "g", "2", "/", "a", "ctrl-j"]);
+        assert_eq!(
+            cursor_name(&app, Side::Left),
+            "a2",
+            "the second, and Ctrl+j is Enter"
+        );
+        assert!(!app.panel(Side::Left).searching());
+    }
+
+    #[test]
+    fn n_says_when_there_was_no_search_and_when_it_goes_round() {
+        let mut app = with_files(&["a1", "b2"]);
+        keys(&mut app, &["n"]);
+        assert!(screen(&mut app).contains("No previous search"));
+        keys(&mut app, &["j"]);
+        assert!(
+            !screen(&mut app).contains("No previous search"),
+            "until the next key"
+        );
+        keys(&mut app, &["/", "a", "enter", "n"]);
+        assert!(screen(&mut app).contains("Search hit BOTTOM, continuing at TOP"));
+        keys(&mut app, &["shift-n"]);
+        assert!(screen(&mut app).contains("Search hit TOP, continuing at BOTTOM"));
+    }
+
+    #[test]
+    fn visual_mode_counts_the_entries_and_d_and_x_delete_them() {
+        let mut app = with_files(&["a", "b"]);
+        keys(&mut app, &["v", "j"]);
+        assert!(
+            line_with(&screen(&mut app), "-- VISUAL --").ends_with(" 1\""),
+            "not .."
+        );
+        keys(&mut app, &["shift-d"]);
+        assert_eq!(app.dialogs.len(), 1, "the question of the delete");
     }
 
     #[test]

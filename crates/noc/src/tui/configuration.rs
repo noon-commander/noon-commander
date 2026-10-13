@@ -626,6 +626,8 @@ impl Configuration {
         let rows = self.settings().len();
         let last = rows.saturating_sub(1);
         let page = self.page.max(1);
+        // A count moves as many rows, past the text fields too, as vim's `3j` moves three lines.
+        let count = extra.times();
         match (self.focus, action) {
             (
                 Focus::Sidebar,
@@ -640,17 +642,19 @@ impl Configuration {
                     Focus::Sidebar | Focus::Settings => Focus::Sidebar,
                 };
             }
-            (Focus::Sidebar, Action::Up) => self.choose_category(self.category.saturating_sub(1)),
+            (Focus::Sidebar, Action::Up) => {
+                self.choose_category(self.category.saturating_sub(count));
+            }
             (Focus::Sidebar, Action::Down) => {
                 let last = self.categories.len() - 1;
-                self.choose_category((self.category + 1).min(last));
+                self.choose_category(self.category.saturating_add(count).min(last));
             }
             (Focus::Sidebar, Action::Home | Action::PageUp) => self.choose_category(0),
             (Focus::Sidebar, Action::End | Action::PageDown) => {
                 self.choose_category(self.categories.len() - 1);
             }
-            (Focus::Settings, Action::Up) => self.row = self.row.saturating_sub(1),
-            (Focus::Settings, Action::Down) => self.row = (self.row + 1).min(last),
+            (Focus::Settings, Action::Up) => self.row = self.row.saturating_sub(count),
+            (Focus::Settings, Action::Down) => self.row = self.row.saturating_add(count).min(last),
             (Focus::Settings, Action::PageUp) => self.row = self.row.saturating_sub(page),
             (Focus::Settings, Action::PageDown) => self.row = (self.row + page).min(last),
             (Focus::Settings, Action::Home) => self.row = 0,
@@ -663,10 +667,7 @@ impl Configuration {
             }
             (Focus::Settings, Action::Left | Action::Right) => {
                 let forward = action == Action::Right;
-                let cycled = self
-                    .setting_mut()
-                    .is_some_and(|setting| setting.cycle(forward));
-                if cycled {
+                if self.cycle(forward, count) {
                     event.change = self.apply().unwrap_or_default();
                 } else if !forward {
                     self.focus = Focus::Sidebar;
@@ -675,6 +676,22 @@ impl Configuration {
             _ => {}
         }
         event
+    }
+
+    /// Picks the next choice of the setting under the cursor, or the one before, `count` times;
+    /// whether it has choices.
+    fn cycle(&mut self, forward: bool, count: usize) -> bool {
+        let mut cycled = false;
+        for _ in 0..count {
+            if !self
+                .setting_mut()
+                .is_some_and(|setting| setting.cycle(forward))
+            {
+                break;
+            }
+            cycled = true;
+        }
+        cycled
     }
 
     /// Takes a press of the mouse, where the dialog was drawn last. A click on a category shows

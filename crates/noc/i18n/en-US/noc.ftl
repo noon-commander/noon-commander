@@ -38,6 +38,14 @@ mode-visual = -- VISUAL --
 mode-insert-once = -- (insert) --
 mode-insert-visual = -- (insert) VISUAL --
 
+## Messages on the line of the mode, in its place until the next key, as vim's on its command
+## line (src/tui/app): n or N with no search before, and a search that goes on round the end of
+## the rows or their start. Prefix: message-.
+
+message-search-none = No previous search
+message-search-bottom = Search hit BOTTOM, continuing at TOP
+message-search-top = Search hit TOP, continuing at BOTTOM
+
 ## The title of the terminal's window or tab (src/tui/app), with ui.terminal_title. Prefix:
 ## terminal-.
 
@@ -514,6 +522,8 @@ help-field-delete-to-end = Delete to the end of the line
 help-field-delete-word = Delete the word before the cursor
 help-field-left = One character left
 help-field-right = One character right
+help-field-char-forward = One character right; from the end of a line, to the start of the next
+help-field-char-backward = One character left; from the start of a line, to the end of the one before
 help-field-word-forward = The start of the next word
 help-field-word-backward = The start of the word before the cursor
 help-field-word-end = The end of the word
@@ -561,7 +571,7 @@ help-command-new-line = A new line in the command; Shift+Enter where the termina
 help-command-normal = Normal mode, to edit the command with vim's keys
 help-command-run = Run the command; after a \ at the end of the line, a new line
 help-command-close = Close the command line
-help-note-modes = Keys are vim's, in its modes; the F-keys of the panels are mc's, in Normal and Visual mode and in quick search. Text fields open in Insert mode, where characters are text, Esc goes to Normal mode, and Esc there closes; quick search and the command line close on Esc, as vim's search and command line do. The line above the F-key bar says -- INSERT -- and -- VISUAL --, and the cursor is a bar in Insert mode. Alt and a key stand for Esc and the key in Insert and Visual mode and in the panels, but on a password. Ctrl+c closes or cancels in every mode.
+help-note-modes = Keys are vim's, in its modes; the F-keys of the panels are mc's, in Normal and Visual mode and in quick search. Text fields open in Insert mode, where characters are text, Esc goes to Normal mode, and Esc there closes; quick search and the command line close on Esc, as vim's search and command line do. The line above the F-key bar says -- INSERT -- and -- VISUAL --, and -- (insert) -- for the one command of Normal mode after Ctrl+o, and the cursor is a bar in Insert mode. Alt and a key stand for Esc and the key in Insert and Visual mode and in the panels, but on a password. Ctrl+c closes or cancels in every mode.
 help-note-count = In Normal mode, a count goes before a command: 5j goes five rows down, 3G to the third row, 2g t to the second tab, and d3w deletes three words. In text fields, "a names a register, which every field shares, and A appends to it.
 help-note-menu = The lists open in Normal mode: / types in the filter, and Esc goes back to the rows.
 help-note-jump = In the zoxide window, / types keywords, as z takes them in a shell.
@@ -570,7 +580,7 @@ help-note-fuzzy = Quick search, the location menu, the tab menu, the zoxide wind
 help-note-workspaces = A workspace holds the tabs of both panels: where each is, its sort order, and the row under its cursor. t w and F9 → Workspace list them; restoring one replaces every tab.
 help-note-command = ! opens the command line, and : too, for commands of Noon Commander, of which :!command is the only one so far. A command runs with the terminal, in the panel's directory, then a key brings the panels back; cd and export last only as long as the command.
 help-note-pulldown = In the pull-down menu, Alt and the highlighted letter of a menu open it, and Alt and that of a command run it.
-help-note-key-hints = After a key that starts longer sequences, such as g or Ctrl+w, the keys that can follow show after a moment, and wait for one; Esc closes them, and Backspace takes back the last key.
+help-note-key-hints = After a key that starts longer sequences, such as g or Ctrl+w, the keys that can follow show after a moment, and wait for one; Esc closes them, and Backspace takes back the last key, or closes them when none is typed.
 help-key-hints = The keys that can be typed now, and what they do
 help-register = The register for the next command: a … z, which text fields share, and A … Z to append to it
 

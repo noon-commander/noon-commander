@@ -51,6 +51,8 @@ pub(crate) struct Theme {
     pub(crate) host_failed: Style,
     /// Host address from `ssh -G`.
     pub(crate) address: Style,
+    /// A message on the line of the mode, as vim's error and warning messages.
+    pub(crate) message: Style,
     /// The status of a host in the location menu, drawn over `dialog`, which the panel colors
     /// may not show on: idle, connecting, connected, failed.
     pub(crate) dialog_host: [Style; 4],
@@ -185,6 +187,7 @@ impl Theme {
             host_connected: fg(Color::LightGreen),
             host_failed: fg(Color::LightRed),
             address: fg(Color::Gray),
+            message: fg(Color::LightRed),
             // Dark colors, as mc draws on its gray dialogs; idle takes the dialog's black.
             dialog_host: [
                 Style::new(),
@@ -250,6 +253,7 @@ impl Theme {
             host_connected: plain.bold(),
             host_failed: plain,
             address: plain,
+            message: plain.bold(),
             dialog_host: [plain.dim(), plain, plain.bold(), plain],
             fkey_number: plain,
             fkey_label: reversed,
@@ -306,6 +310,7 @@ impl Theme {
             host_connected: fg(p.green),
             host_failed: fg(p.red),
             address: fg(p.subtext0),
+            message: fg(p.red),
             dialog_host: [fg(p.subtext0), fg(p.yellow), fg(p.green), fg(p.red)],
             fkey_number: on(p.text, p.crust),
             fkey_label: on(p.text, p.surface0),
@@ -366,6 +371,7 @@ impl Theme {
             host_connected: fg(p.green),
             host_failed: fg(p.red),
             address: fg(p.muted),
+            message: fg(p.red),
             dialog_host: [fg(p.muted), fg(p.accent), fg(p.green), fg(p.red)],
             fkey_number: on(p.accent, p.deep).bold(),
             fkey_label: on(p.text, p.deep),

@@ -889,11 +889,42 @@ fn esc_closes_the_hints_and_backspace_takes_back_a_key() {
         actions(&[Action::Quit])
     );
     assert_eq!(keymap.hints_of(&state, PANEL), None);
-    // Backspace with nothing typed does what it does.
+    // Backspace with nothing typed closes them, and does nothing in the panel.
     keymap.show_hints(&mut state, PANEL);
+    assert_eq!(keymap.feed(&mut state, PANEL, key("backspace"), now), []);
+    assert_eq!(keymap.hints_of(&state, PANEL), None);
+    // A count or a register typed before Ctrl+k waits for the key after the hints.
     assert_eq!(
-        keymap.feed(&mut state, PANEL, key("backspace"), now),
-        actions(&[Action::Parent])
+        feed(&keymap, &mut state, PANEL, &["3", "ctrl-k"]),
+        actions(&[Action::KeyHints]),
+        "without the count"
+    );
+    keymap.show_hints(&mut state, PANEL);
+    assert_eq!(state.showcmd(), "3");
+    assert_eq!(
+        feed(&keymap, &mut state, PANEL, &["j"]),
+        with(
+            Action::Down,
+            Extra {
+                count: Some(3),
+                ..Extra::default()
+            }
+        )
+    );
+    assert_eq!(
+        feed(&keymap, &mut state, FIELD, &["\"", "a", "ctrl-k"]),
+        actions(&[Action::KeyHints])
+    );
+    keymap.show_hints(&mut state, FIELD);
+    assert_eq!(
+        feed(&keymap, &mut state, FIELD, &["y"]),
+        with(
+            Action::YankOperator,
+            Extra {
+                register: Some('a'),
+                ..Extra::default()
+            }
+        )
     );
 }
 

@@ -148,8 +148,16 @@
       nvim's
 - [ ] A count repeats what `i`, `a`, `I`, and `A` type (`3ix` Esc)
 - [ ] The lines of the command line in Normal mode: `o`, `O`, `J`, `g g`, `G`, `d j`, `d k`,
-      `V`, and `r` Enter; `v $` takes the line break; a put of lines within a line leaves the
-      cursor at their start, and Ctrl+r of whole lines ends them with a line break
+      `V`, and `r` Enter; `v $` and Space in Visual mode take the line break; a put of lines
+      within a line leaves the cursor at their start, and Ctrl+r of whole lines ends them with a
+      line break
+- [ ] The command line shows its mode and the command typed, as vim's window of the command
+      line does: Normal and Visual mode after Ctrl+f, an operator or a register that waits
+      (`2d`, `"a`), and `-- (insert) --` after Ctrl+o
+- [ ] Ctrl+v and a code types the character of that code, as vim's: `065`, `x41`, `o101`,
+      `u20ac`, `U0001F600`
+- [ ] `:` and `!` in Visual mode in the panels open the command line for the rows selected, as
+      vim's `:'<,'>`
 - [ ] Ctrl+w with Ctrl held (`Ctrl+w Ctrl+h`, `Ctrl+l`, `Ctrl+x`, `Ctrl+r`, `Ctrl+p`,
       `Ctrl+v`, `Ctrl+f`) and with the arrows; a count before `Ctrl+w w` names the panel
 - [ ] After a count or a register, Ctrl+c only gives the command up, and Esc in Visual mode

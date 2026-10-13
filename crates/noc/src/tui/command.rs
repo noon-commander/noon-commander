@@ -91,6 +91,9 @@ pub(crate) struct CommandLine {
     /// The command came from the history of another host: the prompt stands out until the
     /// next key, so that it is clear where the command will run.
     foreign: bool,
+    /// The line opened for the window of the history alone, with `q :` from a panel: it
+    /// closes with the window, as vim's window of the command line does.
+    alone: bool,
 }
 
 /// A row of the command line as drawn: the prompt or the mark of a continued line, if it
@@ -113,7 +116,19 @@ impl CommandLine {
             browsed: String::new(),
             column: None,
             foreign: false,
+            alone: false,
         }
+    }
+
+    /// The same line, opened for the window of the history alone.
+    pub(crate) fn for_history(mut self) -> Self {
+        self.alone = true;
+        self
+    }
+
+    /// Whether the line opened for the window of the history alone, and nothing went on it.
+    pub(crate) fn alone(&self) -> bool {
+        self.alone
     }
 
     /// Puts `command`, from the window of the history, on the line in place of what was
@@ -122,6 +137,7 @@ impl CommandLine {
         self.set_text(&self.recalled(command));
         self.browsing = None;
         self.foreign = foreign;
+        self.alone = false;
     }
 
     /// Shows the command before in `commands`, the history of the panel's host newest first,

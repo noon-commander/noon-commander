@@ -18,26 +18,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   panels waited a second after it: it never waits for a key after it, and gives up a command typed
   so far. So does a key that cannot go on with it, which does nothing itself, as in vim: g x and
   Ctrl+w e do nothing. A line above the F-key bar shows `-- INSERT --` or `-- VISUAL --`, and the
-  count, register, operator, or keys of a command typed so far; the cursor is a bar in Insert mode
-  and a block in the others.
+  count, register, operator, or keys of a command typed so far, and messages, such as that n went
+  round past the last row, until the next key; the cursor is a bar in Insert mode and a block in the
+  others.
   - Panels: k, j, Ctrl+u, Ctrl+d, Ctrl+b, Ctrl+f, g g, and G move, l and Enter open, h and Backspace
     go up; a count repeats a motion (5j), and G, g g, and g t take it as a row or a tab (3G). v and
-    V select rows in Visual mode, whose y, x, d, F5, F6, F8, and f # act on them as on marked
-    entries, and Space marks them; o goes to the other end, g v selects them again, and the other
-    F-keys and Ctrl+w end it and do what they do. Ctrl+o and Tab (Ctrl+i) go back and forth through
-    a jump list per tab, of the directories left and of G, g g, and the n, N, and searches that
-    move. Ctrl+w w, Ctrl+w p, Ctrl+w h, and Ctrl+w l switch panels, as vim's windows; Ctrl+w x swaps
-    them, Ctrl+w f and Ctrl+w v open the directory under the cursor or this one in the other panel,
-    and Ctrl+w 1 and Ctrl+w 2 change their locations. / starts quick search, typed as vim's search:
-    Enter ends it on the match, Esc gives it up, Ctrl+g and Ctrl+t go to the next and the previous
-    match, and the arrows, the page keys, and the F-keys end it and do what they do, as in mc.
-    Space, J, and K mark, with a count as far as the listing goes, g + and g - mark and unmark by a
-    pattern, and g \* inverts, as mc's +, -, and \*, which noc leaves unbound, as Shift+Up and
-    Shift+Down; i views, e edits, Y and y y copy, x moves, r renames in the row, A makes a
-    directory, d D deletes, R reads the directory again; t n, t c, g t, g T, t h, t l, t w, and t W
-    for tabs and workspaces; o n, o e, o m, o s sort and o h shows hidden files; g z jumps with
-    zoxide, g d is Quick cd, f j lists the jobs, q : opens the command history, g m and g M the
-    pull-down menu, g ? the help, g < the output of commands, and Z Z quits.
+    V select rows in Visual mode, as many as a count says (3V), whose y, x, d, D, X, F5, F6, F8, and
+    f # act on them as on marked entries, and Space marks them; o goes to the other end, g v selects
+    them again, and the other F-keys and Ctrl+w end it and do what they do. Ctrl+o and Tab (Ctrl+i)
+    go back and forth through a jump list per tab, of the directories left and of G, g g, and the n,
+    N, and searches that move; a count past its end goes nowhere. Ctrl+w w, Ctrl+w p, Ctrl+w h, and
+    Ctrl+w l switch panels, as vim's windows; Ctrl+w x swaps them, Ctrl+w f and Ctrl+w v open the
+    directory under the cursor or this one in the other panel, and Ctrl+w 1 and Ctrl+w 2 change
+    their locations. / starts quick search, typed as vim's search, from the row after the cursor and
+    with a count to the match of that number (2/): Enter and Ctrl+j end it on the match, Esc gives
+    it up, Ctrl+g and Ctrl+t go to the next and the previous match, and the arrows, the page keys,
+    and the F-keys end it and do what they do, as in mc. Space, J, and K mark, with a count as far
+    as the listing goes, g + and g - mark and unmark by a pattern, and g \* inverts, as mc's +, -,
+    and \*, which noc leaves unbound, as Shift+Up and Shift+Down; i views, e edits, Y and y y copy,
+    x moves, r renames in the row, A makes a directory, d D deletes, R reads the directory again; t
+    n, t c, g t, g T, t h, t l, t w, and t W for tabs and workspaces; o n, o e, o m, o s sort and o
+    h shows hidden files; g z jumps with zoxide, g d is Quick cd, f j lists the jobs, q : opens the
+    command history, g m and g M the pull-down menu, g ? the help, g < the output of commands, and Z
+    Z quits.
   - Text fields have vim's Normal mode after Esc: h, l, w, b, e, W, B, E, 0, ^, $, f, t, F, T,
     ;, and , move; d, c, and y act on a motion, or on the line when doubled, with counts (2d3w);
     x, X, s, S, C, D, r, and ~ change; p and P put; u and Ctrl+r undo and redo; i, a, I, and A
@@ -46,22 +49,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     the command line share them, and Ctrl+r and a register puts one in Insert mode. " names a
     register wherever keys are commands, so that "x in a panel moves nothing. Ctrl+o runs one
     command of Normal mode from Insert mode, from after the end of a line on its last character,
-    as vim's; Ctrl+v types the next key as it is, and Alt and a key stand for Esc and the key, as
-    in vim in a terminal; on a password they do nothing. As nvim's, Ctrl+w and Ctrl+u stop once
-    where Insert mode started, a move of the cursor starts a new change for undo, and redo leaves
-    the cursor where the change was made.
+    and back after the text that p and P put or the end of the line that it deleted to, as vim's;
+    Ctrl+v types the next key as it is, and Alt and a key stand for Esc and the key, as in vim in
+    a terminal; on a password they do nothing. As nvim's, Ctrl+w and Ctrl+u stop once where
+    Insert mode started, after a move of the cursor too, which starts a new change for undo;
+    undo and redo leave the cursor where the change starts. On the command line, Space and
+    Backspace go on to the next line and back, and operators over lines follow vim's rules: d b
+    at the start of a line keeps its line break, and d 2 $ from the indent deletes the lines
+    whole.
   - The command line is vim's: Esc closes it, Ctrl+b and Ctrl+e go to the ends of the line,
-    Ctrl+p and Ctrl+n through the history, and Ctrl+f goes to Normal mode, where j and k go
-    through its lines, keeping their column, and the history, and q : opens the window of the
-    history.
+    Ctrl+p and Ctrl+n through the history, Delete at the end deletes the character before, and
+    Ctrl+f goes to Normal mode, where j and k go through its lines, keeping their column, and the
+    history, and q : opens the window of the history, which q closes back to where q : was
+    typed, a panel too.
   - The lists (the location menu, the tab menu, the zoxide window, the workspaces, the command
-    history) open in Normal mode: j, k, g g, G, Ctrl+d, and Ctrl+u move, Enter takes the row,
-    d d deletes it where F8 does, and q closes; / types in the filter, where Ctrl+r types a
-    register too, and Esc goes back to the rows with the filter kept.
-  - Dialogs: j, k, h, l, and Tab move between fields and buttons, g g and G to the first and the
-    last, Space switches, and q closes, in Normal mode; the focus comes to a field in Insert mode
-    with Tab or a click.
-  - The pull-down menu: h, j, k, and l move, and Alt and a highlighted letter run its command.
+    history) open in Normal mode: j, k, g g, G, Ctrl+d, and Ctrl+u move, Enter takes the row, d d
+    deletes it where F8 does, and with a count as many rows (3d d), and q closes; / types in the
+    filter, where Ctrl+r types a register too, and Esc goes back to the rows with the filter kept.
+  - Dialogs: j, k, h, l, and Tab move between fields and buttons, a count as many, past the fields
+    too, g g and G to the first and the last, Space switches, and q closes, in Normal mode; the
+    focus comes to a field in Insert mode with Tab or a click.
+  - The pull-down menu: h, j, k, and l move, g g and G go to the first and the last command, and
+    Alt and a highlighted letter run its command.
   - The F-keys of the panels stay mc's, in Normal and Visual mode and in quick search: F1 …
     F10, Shift+F6, Shift+F7, Shift+F9, Alt+F1, and Alt+F2.
 - When a connection to a host fails, or is lost, a dialog says why and offers Retry, the
@@ -70,14 +79,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   connects again. While a panel waits for a host, its status line starts with a spinner.
 - `recent.toml` in the state directory (`~/.local/state/noc/`) keeps the hosts and volumes used
   last, up to 50 of each, for the location menu.
-- Key hints, as which-key shows them: half a second after a key that starts longer sequences,
-  such as g or Ctrl+w, the keys that can follow it show at the bottom of the panels with what they
-  do, and the key waits for the next one instead of timing out. Ctrl+k shows every key of whatever
-  is in front the same way, in its mode: a panel, a dialog, a menu, a window, the viewer, or the
-  command line, which stays open under them. The next key runs as it would have, or shows the
-  keys that can follow it; Esc or Ctrl+[ closes the hints, and Backspace or Ctrl+h takes back the
-  last key. `ui.which_key` and `ui.which_key_delay_ms` (Key hints and Key hints delay in
-  Options → Configuration) turn them off and set the delay.
+- Key hints, as which-key shows them: half a second after a key that starts longer sequences, such
+  as g or Ctrl+w, the keys that can follow it show at the bottom of the panels with what they do,
+  and the key waits for the next one instead of timing out. Ctrl+k shows every key of whatever is in
+  front the same way, in its mode: a panel, a dialog, a menu, a window, the viewer, or the command
+  line, which stays open under them. The next key runs as it would have, or shows the keys that can
+  follow it; Esc or Ctrl+[ closes the hints, and Backspace or Ctrl+h takes back the last key, or
+  closes them when none is typed. Ctrl+k after a count or a register keeps them for the key after
+  it. `ui.which_key` and `ui.which_key_delay_ms` (Key hints and Key hints delay in Options →
+  Configuration) turn them off and set the delay.
 - The terminal's window or tab is titled with the active panel's directory, as the prompt of the
   command line shows it (`~/src — noc`, or `host:path`), and gets its own title back when Noon
   Commander quits or hands the terminal to a command, where the terminal keeps a stack of titles.

@@ -413,11 +413,9 @@ mod tests {
         assert_eq!(menu.keywords(), ["s", "rc"]);
         assert_eq!(press(&mut menu, Action::DeleteToEnd), JumpEvent::Query);
         assert_eq!(menu.keywords(), ["s"]);
-        assert_eq!(
-            press(&mut menu, Action::DeleteChar),
-            JumpEvent::Pending,
-            "at the end"
-        );
+        // At the end, the character before, as on vim's command line.
+        assert_eq!(press(&mut menu, Action::DeleteChar), JumpEvent::Query);
+        assert_eq!(menu.keywords(), ["s"]);
         assert_eq!(press(&mut menu, Action::DeleteToStart), JumpEvent::Query);
         assert_eq!(menu.keywords(), [] as [String; 0]);
         // Home goes to the first row, as in the other lists.

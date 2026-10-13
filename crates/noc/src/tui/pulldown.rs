@@ -594,9 +594,6 @@ impl PullDown {
                     self.open_at(selected, 0, status);
                 }
                 Action::Up | Action::Home if !self.open => {}
-                Action::Home if self.step(false, status).is_none() => {
-                    self.open = false;
-                }
                 Action::Up | Action::Down => {
                     if let Some(cursor) = self.step_round(action == Action::Down, status) {
                         self.cursor = cursor;
@@ -1014,8 +1011,8 @@ mod tests {
             "Home goes up"
         );
         menu.handle(action(Action::Home), &status);
-        assert!(!menu.open, "Home on the first command goes back to the bar");
-        menu.handle(action(Action::Down), &status);
+        assert!(menu.open, "Home on the first command stays, as vim's g g");
+        assert_eq!(chosen(&menu), Some(Command::Do(Action::View)));
         assert_eq!(
             menu.handle(action(Action::Confirm), &status),
             PullDownEvent::Run(Command::Do(Action::View))

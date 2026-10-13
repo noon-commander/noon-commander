@@ -153,6 +153,12 @@ pub(crate) enum Action {
     Left,
     /// The text cursor one character right, or the focus to the next button.
     Right,
+    /// The text cursor one character right, and from the end of a line to the next one: vim's
+    /// Space.
+    CharForward,
+    /// The text cursor one character left, and from the start of a line to the end of the one
+    /// before: vim's Backspace.
+    CharBackward,
     /// One page up.
     PageUp,
     /// One page down.
@@ -436,6 +442,8 @@ impl Action {
         Self::Down,
         Self::Left,
         Self::Right,
+        Self::CharForward,
+        Self::CharBackward,
         Self::PageUp,
         Self::PageDown,
         Self::HalfPageUp,

@@ -521,8 +521,8 @@ impl Keymap {
     /// The key without Alt, if Alt and `event` stand for Esc and that key, typed in `mode`
     /// where `context` has the keys: an Esc and the key right after it can reach a terminal
     /// program in one read, which crossterm reports as Alt and the key. In Insert and Visual
-    /// mode, Alt and a character that nothing binds leave it for Normal mode and do what the
-    /// character does there, as in vim in a terminal; in the panels, they cancel and do it too.
+    /// mode, Alt and a key that nothing binds leave it for Normal mode and do what the key does
+    /// there, as in nvim; in the panels, they cancel and do it too.
     /// A command typed so far is given up by the Esc, unless the key goes on with it.
     pub(crate) fn alt_as_esc(
         &self,
@@ -543,7 +543,7 @@ impl Keymap {
                 return None;
             }
         }
-        let plain = without_alt(event)?;
+        let plain = alt_off(event)?;
         (self.lookup(mode, context, &[key]) == Lookup::Unknown).then_some(plain)
     }
 
@@ -828,6 +828,13 @@ const BACKSPACE: KeyCombination = KeyCombination::one_key(KeyCode::Backspace, Ke
 const CTRL_BRACKET: KeyCombination =
     KeyCombination::one_key(KeyCode::Char('['), KeyModifiers::CONTROL);
 const CTRL_H: KeyCombination = KeyCombination::one_key(KeyCode::Char('h'), KeyModifiers::CONTROL);
+
+/// The same key without Alt, if `event` has Alt: any key but Esc, Enter and the arrows too, as
+/// nvim takes Alt and a key that nothing binds for Esc and the key.
+fn alt_off(event: KeyEvent) -> Option<KeyEvent> {
+    (event.modifiers.contains(KeyModifiers::ALT) && event.code != KeyCode::Esc)
+        .then(|| KeyEvent::new(event.code, event.modifiers - KeyModifiers::ALT))
+}
 
 /// The same character key without Alt, if `event` is Alt and a character.
 fn without_alt(event: KeyEvent) -> Option<KeyEvent> {

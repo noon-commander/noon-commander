@@ -64,7 +64,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   last, up to 50 of each, for the location menu.
 - Key hints, as which-key shows them: half a second after a key that starts longer sequences,
   such as g or Ctrl+w, the keys that can follow it show at the bottom of the panels with what they
-  do, and the key waits for the next one instead of timing out. Alt+/ shows every key of whatever
+  do, and the key waits for the next one instead of timing out. Ctrl+k shows every key of whatever
   is in front the same way, in its mode: a panel, a dialog, a menu, a window, the viewer, or the
   command line, which stays open under them. The next key runs as it would have, or shows the
   keys that can follow it; Esc or Ctrl+[ closes the hints, and Backspace or Ctrl+h takes back the
@@ -92,8 +92,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   is never kept.
 - Input for the command line: Shift+Enter starts a new line where the terminal speaks the
   kitty keyboard protocol, which Noon Commander now asks for where the terminal has it, with
-  the keys typed with Shift reported too, so that Alt with a symbol such as Alt+/ still
-  does what it does elsewhere; and pasted text arrives whole through bracketed paste, so a
+  the keys typed with Shift reported too, so that Alt and a symbol typed with Shift, such as
+  Alt+*, stand for Esc and that symbol; and pasted text arrives whole through bracketed paste, so a
   pasted line break never runs a command. Text fields take pasted text without its line breaks,
   as one change in any mode; quick search and the filters of the lists take it too, a list in
   Normal mode in its filter; panels ignore it rather than take its characters as keys.

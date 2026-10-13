@@ -560,21 +560,15 @@ impl Editor {
                 };
                 self.lines_operate(pending, count, registers);
             }
-            Action::ChangeToEnd => {
-                self.operate(
-                    Operator::Change,
-                    self.cursor..end,
-                    extra.register,
-                    registers,
-                );
-            }
-            Action::DeleteToEnd => {
-                self.operate(
-                    Operator::Delete,
-                    self.cursor..end,
-                    extra.register,
-                    registers,
-                );
+            // As `c $` and `d $`: to the end of the line, and of `count` - 1 lines more.
+            Action::ChangeToEnd | Action::DeleteToEnd => {
+                let operator = if action == Action::ChangeToEnd {
+                    Operator::Change
+                } else {
+                    Operator::Delete
+                };
+                let to = line_end_after(&chars, end, count);
+                self.operate(operator, self.cursor..to, extra.register, registers);
             }
             Action::ReplaceChar => {
                 if let Some(c) = extra.char
@@ -672,16 +666,7 @@ impl Editor {
             Action::Right => exclusive((self.cursor + count).min(end)),
             Action::TextStart => exclusive(start),
             Action::FirstNonBlank => exclusive(first_non_blank(&chars, start, end)),
-            Action::TextEnd => {
-                let end = (1..count).try_fold(end, |end, _| {
-                    if end < chars.len() {
-                        Ok(line_bounds(&chars, end + 1).1)
-                    } else {
-                        Err(end)
-                    }
-                });
-                exclusive(end.unwrap_or_else(|end| end))
-            }
+            Action::TextEnd => exclusive(line_end_after(&chars, end, count)),
             Action::WordForward | Action::BigWordForward => {
                 let big = action == Action::BigWordForward;
                 let (mut from, mut to) = (self.cursor, self.cursor);
@@ -994,7 +979,28 @@ fn class(c: char, big: bool) -> u8 {
     }
 }
 
-/// Where the next word after character `at` starts, or the end of the text: vim's `w`.
+/// The end of the line that ends at `end`, or of the line `count` - 1 lines after it, as vim's
+/// `$` with a count goes; the end of the text if there are fewer lines.
+fn line_end_after(chars: &[char], end: usize, count: usize) -> usize {
+    let end = (1..count).try_fold(end, |end, _| {
+        if end < chars.len() {
+            Ok(line_bounds(chars, end + 1).1)
+        } else {
+            Err(end)
+        }
+    });
+    end.unwrap_or_else(|end| end)
+}
+
+/// Whether character `index` of `chars` is where an empty line is, which vim's `w` and `b` take
+/// for a word of its own: a line break right after another one, or after nothing.
+fn empty_line(chars: &[char], index: usize) -> bool {
+    let starts = index == 0 || chars.get(index - 1) == Some(&'\n');
+    starts && chars.get(index).is_none_or(|&c| c == '\n') && !chars.is_empty()
+}
+
+/// Where the next word after character `at` starts, or the end of the text: vim's `w`. An
+/// empty line is a word.
 fn word_start(chars: &[char], at: usize, big: bool) -> usize {
     let mut index = at;
     if let Some(&c) = chars.get(index) {
@@ -1005,15 +1011,21 @@ fn word_start(chars: &[char], at: usize, big: bool) -> usize {
     }
     while chars.get(index).is_some_and(|&c| class(c, big) == 0) {
         index += 1;
+        if empty_line(chars, index) {
+            return index;
+        }
     }
     index.min(chars.len())
 }
 
-/// Where the word before character `at` starts: vim's `b`.
+/// Where the word before character `at` starts: vim's `b`. An empty line is a word.
 fn word_back(chars: &[char], at: usize, big: bool) -> usize {
     let mut index = at.min(chars.len());
     while index > 0 && class(chars[index - 1], big) == 0 {
         index -= 1;
+        if empty_line(chars, index) {
+            return index;
+        }
     }
     if index == 0 {
         return 0;
@@ -1676,6 +1688,62 @@ mod tests {
             &[(Action::DeleteOperator, huge), (Action::WordForward, huge)],
         );
         assert_eq!(editor.text(), "");
+    }
+
+    #[test]
+    fn an_empty_line_is_a_word_for_w_and_b() {
+        let mut registers = Registers::default();
+        let mut lines = at("ab\n\ncd\n\n\nef", 0).with_lines();
+        let mut go = |action: Action| {
+            run(&mut lines, &mut registers, &[plain(action)]);
+            lines.cursor()
+        };
+        assert_eq!(go(Action::WordForward), 3, "the empty line");
+        assert_eq!(go(Action::WordForward), 4, "cd");
+        assert_eq!(go(Action::WordForward), 7, "the first of two empty lines");
+        assert_eq!(go(Action::WordForward), 8, "the second");
+        assert_eq!(go(Action::WordForward), 9, "ef");
+        assert_eq!(go(Action::WordBackward), 8);
+        assert_eq!(go(Action::WordBackward), 7);
+        assert_eq!(go(Action::WordBackward), 4);
+        assert_eq!(go(Action::WordBackward), 3);
+        assert_eq!(go(Action::WordBackward), 0);
+        assert_eq!(go(Action::BigWordForward), 3, "for WORDs too");
+        // A line with blanks is no empty line.
+        let mut blanks = at("ab\n  \ncd", 0).with_lines();
+        run(&mut blanks, &mut registers, &[plain(Action::WordForward)]);
+        assert_eq!(blanks.cursor(), 6);
+    }
+
+    #[test]
+    fn c_and_d_take_a_count_of_lines_as_dollar_does() {
+        let mut registers = Registers::default();
+        let mut lines = at("one\ntwo\nthree", 1).with_lines();
+        run(
+            &mut lines,
+            &mut registers,
+            &[counted(Action::DeleteToEnd, 2)],
+        );
+        assert_eq!(lines.text(), "o\nthree");
+        assert_eq!(registers.text(None), Some("ne\ntwo"));
+        let mut lines = at("one\ntwo", 1).with_lines();
+        run(
+            &mut lines,
+            &mut registers,
+            &[counted(Action::ChangeToEnd, 5)],
+        );
+        assert_eq!(
+            (lines.text(), lines.mode()),
+            ("o", Mode::Insert),
+            "as far as there are lines"
+        );
+        let mut field = at("one two", 4);
+        run(
+            &mut field,
+            &mut registers,
+            &[counted(Action::DeleteToEnd, 3)],
+        );
+        assert_eq!(field.text(), "one ");
     }
 
     #[test]

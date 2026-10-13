@@ -410,7 +410,8 @@ impl Modes {
             return Ok(());
         }
         if on {
-            // Without alternate keys, Alt++ arrives as Alt+Shift+= and matches no binding.
+            // Without alternate keys, Alt+* arrives as Alt+Shift+8, which stands for Esc and a
+            // key that does nothing, rather than Esc and `*`.
             let flags = KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
                 | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS;
             crossterm::execute!(io::stdout(), PushKeyboardEnhancementFlags(flags))

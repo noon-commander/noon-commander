@@ -76,7 +76,7 @@ wheel = 3
 # and give the terminal its own title back on quitting, where it keeps a stack of titles.
 terminal_title = true
 # After a key that starts longer sequences, such as g or Ctrl+w, show the keys that can follow
-# it and what they do, as which-key does; the key then waits for the next one. Alt+/ shows every
+# it and what they do, as which-key does; the key then waits for the next one. Ctrl+k shows every
 # key of whatever is in front either way.
 which_key = true
 # How long after such a key the keys that can follow it show, in milliseconds.

@@ -305,8 +305,8 @@ as the dialog reads its text:
 - The last part, after the last `/`, is completed. One match goes in, with `/` after a
   directory and `:` after a host; several go in as far as they agree, and a Tab that gets no
   further lists them under the field (context `completion`), as vim's pop-up menu: Ctrl+n,
-  Ctrl+p, the arrows, and Tab choose, Ctrl+y or Enter takes one, Ctrl+e or Esc closes the list,
-  and any other key closes it and goes to the field.
+  Ctrl+p, the arrows, and Tab choose, Ctrl+y or Enter takes one, Ctrl+e closes the list, and any
+  other key closes it and goes to the field: Esc to Normal mode, as in vim.
 - Names that start with a dot count only after a typed dot. Case counts, unless nothing
   matches with it. Names that are not UTF-8 or hold control characters cannot be typed and
   are left out.
@@ -1081,7 +1081,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   (`KeyState::take_dropped`), and the app then gives up the part a text field holds, such as an
   operator that waits for its motion, or the one command after Ctrl+o. A count typed after a
   register multiplies the one typed before it. An `Esc` and a quick next key arrive as Alt and
-  that key, so in Insert and Visual mode, and in the panels, Alt and a key that nothing binds go
+  that key, so in Insert and Visual mode, and in the panels, Alt and a key that nothing binds, any
+  key but `Esc`, as in nvim, go
   to the keymap as `Esc`, then as the key in the mode `Esc` left (`App::key`, with
   `Keymap::alt_as_esc`), even while a command is pending, unless the key goes on with it. On a
   password they do nothing, as the `Esc` would close its dialog and send the key to the panels.
@@ -1091,35 +1092,34 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   and context, with what they do, for what the app can do already; a prompt from ssh shows over
   it.
 - **Text fields.** A text field (`dialog::Field`, and the command line) holds a `tui/edit.rs`
-  `Editor`: the text, the cursor, and vim's modes over it. In Insert mode characters go in at
-  the cursor, and Left, Right, Home, End, Shift+Left, Shift+Right, Backspace, Delete, Ctrl+w,
-  Ctrl+u, Ctrl+r and a register, and Ctrl+v edit around it; Ctrl+o, in the fields that have a
-  Normal mode, runs one command of it, after which, or after Esc, Insert mode is back. Esc goes
-  to Normal mode, with the cursor on the character before it. Normal mode has
-  vim's motions (`h`, `l`, `w`, `b`, `e`, `W`, `B`, `E`, `0`, `^`, `$`, `f`, `t`, `F`, `T`,
-  `;`, `,`), the operators `d`, `c`, and `y` on a motion or doubled for the line, `x`, `X`,
-  `s`, `S`, `C`, `D`, `r`, `~`, `p`, `P`, `u`, Ctrl+r, `i`, `a`, `I`, `A`, and `v`, Visual
-  mode, whose motions select and whose `d`, `c`, `y`, and `~` act on the selection. As in vim,
-  `cw` changes to the end of the word, which is the cursor on its last character, and `~` keeps
-  a character whose other case would take more than one. A count repeats a motion or a change,
-  and multiplies with the count of an operator (`2d3w`); it stops where the motion can go no
-  further. Undo
-  takes back one change at a time, and all that one stay in Insert mode typed, a change of
-  an operator `c` with it; it keeps 100. The registers (`edit::Registers`) live in the app,
-  which every field and the command line share: the unnamed one, which every yank and delete
-  fills, and `a` … `z`, of which `A` … `Z` append; `_` keeps nothing. None reads or writes the
-  system clipboard. Pasted text goes in at the cursor as one change, in any mode.
-  A field holds one line, and a line put in it becomes text, its breaks spaces; the command
-  line holds lines, and `d d`, `y y`, and `p` take and put them whole. A secret field stays in
-  Insert mode, keeps no undo, and never copies its text into a register; what reads its text
-  reads it into memory reserved up front and wiped when it goes.
+  `Editor`: the text, the cursor, and vim's modes over it. In Insert mode characters go in at the
+  cursor, and Left, Right, Home, End, Shift+Left, Shift+Right, Backspace, Delete, Ctrl+w, Ctrl+u,
+  Ctrl+r and a register, and Ctrl+v edit around it; Ctrl+o, in the fields that have a Normal mode,
+  runs one command of it, after which, or after Esc, Insert mode is back. Esc goes to Normal mode,
+  with the cursor on the character before it. Normal mode has vim's motions (`h`, `l`, `w`, `b`,
+  `e`, `W`, `B`, `E`, `0`, `^`, `$`, `f`, `t`, `F`, `T`, `;`, `,`), the operators `d`, `c`, and `y`
+  on a motion or doubled for the line, `x`, `X`, `s`, `S`, `C`, `D`, `r`, `~`, `p`, `P`, `u`,
+  Ctrl+r, `i`, `a`, `I`, `A`, and `v`, Visual mode, whose motions select and whose `d`, `c`, `y`,
+  and `~` act on the selection. As in vim, `w` and `b` stop on an empty line, as on a word, `C` and
+  `D` take a count of lines as `$` does, `cw` changes to the end of the word, which is the cursor on
+  its last character, and `~` keeps a character whose other case would take more than one. A count
+  repeats a motion or a change, and multiplies with the count of an operator (`2d3w`); it stops
+  where the motion can go no further. Undo takes back one change at a time, and all that one stay in
+  Insert mode typed, a change of an operator `c` with it; it keeps 100. The registers
+  (`edit::Registers`) live in the app, which every field and the command line share: the unnamed
+  one, which every yank and delete fills, and `a` … `z`, of which `A` … `Z` append; `_` keeps
+  nothing. None reads or writes the system clipboard. Pasted text goes in at the cursor as one
+  change, in any mode. A field holds one line, and a line put in it becomes text, its breaks spaces;
+  the command line holds lines, and `d d`, `y y`, and `p` take and put them whole. A secret field
+  stays in Insert mode, keeps no undo, and never copies its text into a register; what reads its
+  text reads it into memory reserved up front and wiped when it goes.
 - **Key hints.** As which-key does, the keymap lists the keys that can follow a pending sequence,
   or every key of a context, with what the help says they do (`Keymap::hints`, drawn by
   `tui/which_key.rs` in columns across the bottom of the panels). The event loop owns the
   `KeyState`: with `ui.which_key` on, a sequence that does nothing alone and does not start with
   `Esc` (such as `g` or Ctrl+w) does not time out; its hints show `ui.which_key_delay_ms` after
   its last key (`Keymap::hints_due`), and it then waits for the next key. The action `key_hints`
-  shows every key of the mode and context at once: `Alt+/` everywhere, in every mode, bound once
+  shows every key of the mode and context at once: Ctrl+k everywhere, in every mode, bound once
   in the `global` context. In Insert mode the hints leave out characters, which are text. The
   app takes it before whatever is in front, which stays open under the hints.
   While hints show, the next key runs as it would have, or shows the keys that can follow it;

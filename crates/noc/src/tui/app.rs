@@ -10702,6 +10702,18 @@ mod tests {
         assert_eq!(app.context(), Context::PathInput);
         assert_eq!(field(&app), "left/project-b/|");
 
+        // Esc closes the list and goes to Normal mode, as in vim; Ctrl+e only closes it.
+        let (generation, ..) = names_request(&app.handle(action(Action::Complete)));
+        app.names(generation, Ok(names_of(&[("x", true), ("y", true)])), &[]);
+        keys(&mut app, &["ctrl-e"]);
+        assert_eq!(app.place(), (Mode::Insert, Context::PathInput));
+        let (generation, ..) = names_request(&app.handle(action(Action::Complete)));
+        app.names(generation, Ok(names_of(&[("x", true), ("y", true)])), &[]);
+        keys(&mut app, &["esc"]);
+        assert_eq!(app.place(), (Mode::Normal, Context::PathInput));
+        keys(&mut app, &["shift-a"]);
+        assert_eq!(app.place(), (Mode::Insert, Context::PathInput));
+
         // Typing closes the list and edits the field.
         let (generation, ..) = names_request(&app.handle(action(Action::Complete)));
         app.names(generation, Ok(names_of(&[("x", true), ("y", true)])), &[]);

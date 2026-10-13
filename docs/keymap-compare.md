@@ -85,8 +85,9 @@ Keys that do the same wherever they are pressed, in every mode: in the panels, t
 menus, the windows, the viewer, and on the command line. Every other context falls back to this
 one last, after its own fallbacks, so a context that binds the same key itself takes it first.
 The output of commands is the exception: noc draws nothing there. In Insert mode characters are
-text, so g < works only where keys are commands; Alt+/ and Ctrl+l work in every mode. None of mc,
-Far, yazi, and ranger binds Alt+/; mc's Alt+?, which finds files, stays free for noc's Find file.
+text, so g < works only where keys are commands; Ctrl+k and Ctrl+l work in every mode, in every
+terminal. Ctrl+k is free in all of noc's modes and is no prefix of tmux or screen; vim's digraphs
+of Ctrl+k in Insert mode noc does not have.
 yazi and ranger show the keys that can follow on their own, once the first key of a sequence is
 pressed; yazi binds its help in every window, and F1 in mc and Far opens the help of the window
 in front. g <, vim's key for the output of the last command, shows the output of commands over
@@ -98,7 +99,7 @@ viewer, and editor.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
-| The keys that can be typed now, over whatever is in front, and what they do, as which-key shows them | `key_hints` | ✅ | Alt+/ | — | — | — | — |
+| The keys that can be typed now, over whatever is in front, and what they do, as which-key shows them | `key_hints` | ⏳ | Ctrl+k | — | — | — | — |
 | The output of commands, in place of the panels and what is in front of them (mc, Far: hide or show the panels) | `user_screen` | ⏳ | g < | Ctrl+o | Ctrl+o | — | — |
 | Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | — | — | Ctrl+l |
 | Help: the keys of what is in front, and what they do | — | ⏳ | — | F1 | F1 | \~<br>F1 | — |
@@ -106,11 +107,12 @@ viewer, and editor.
 ## Panels (`panel`, Normal mode)
 
 A panel that lists a directory, in Normal mode, where it starts. It falls back to `global`; keys
-that neither binds do nothing. Alt and a key stand for Esc and the key here, unless something
-binds that Alt key, as a quick Esc and the key arrive from a terminal. mc and Far have a command
-line under the panels that takes what is typed; noc opens one with `!` and `:`, yazi asks for a
-shell command in an input box, and ranger opens its console with `:`. mc's +, -, \\, and \*, on
-the numpad too, mark and unmark only while its command line is empty; with Alt, they always do.
+that neither binds do nothing. Alt and a key, any key but Esc, stand for Esc and the key here,
+unless something binds that Alt key, as a quick Esc and the key arrive from a terminal. mc and Far
+have a command line under the panels that takes what is typed; noc opens one with `!` and `:`, yazi
+asks for a shell command in an input box, and ranger opens its console with `:`. mc's +, -, \\, and
+\*, on the numpad too, mark and unmark only while its command line is empty; with Alt, they always
+do.
 
 noc groups keys under a first key: vim's g, q, and Ctrl+w, and its own t for the tabs and the
 workspaces, o for the sort order, as ranger's sort keys, and the hidden names, and f for the file
@@ -736,9 +738,9 @@ choices for a path as it is typed, without a key; ranger completes on its consol
 ## Completion list (`completion`, Insert mode)
 
 Under a path field after a Tab that gets no further, in Insert mode, as vim's pop-up menu: Ctrl+p
-and Ctrl+n move, Ctrl+y puts the choice in the field, and Ctrl+e closes the list. Keys it does
-not bind close it and go to the field. ranger has no list: Tab and Shift+Tab put the next and the
-previous choice in the console's line.
+and Ctrl+n move, Ctrl+y puts the choice in the field, and Ctrl+e closes the list. Keys it does not
+bind close it and go to the field: Esc to Normal mode, as in vim. ranger has no list: Tab and
+Shift+Tab put the next and the previous choice in the console's line.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -748,7 +750,7 @@ previous choice in the console's line.
 | One page down | `page_down` | ⏳ | PgDn | — | — | — | — |
 | Next choice, round | `complete` | ✅ | Tab<br>Ctrl+i | — | — | — | Tab |
 | Put the choice in the field | `confirm` | ✅ | Ctrl+y<br>Enter<br>Ctrl+m | — | — | Tab | — |
-| Close the list | `cancel` | ⏳ | Ctrl+e<br>Esc<br>Ctrl+[<br>Ctrl+c | — | — | Ctrl+c | — |
+| Close the list | `cancel` | ⏳ | Ctrl+e<br>Ctrl+c | — | — | Ctrl+c | — |
 | Put the choice in the field and run it | — | ⏳ | — | — | — | Enter | — |
 
 ## Viewer (`viewer`, Normal mode)

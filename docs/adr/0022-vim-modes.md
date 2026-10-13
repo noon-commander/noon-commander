@@ -38,11 +38,12 @@ no registers.
   while a command is pending, a sequence such as `g`, a count, a register, or an operator, it
   gives the command up, as in vim, instead of doing what it does alone; so does a key that
   cannot go on with the command, such as one that is no motion after `d`.
-- **Alt and a key stand for Esc and the key** in Insert and Visual mode, as an Esc and a quick
-  next key arrive in a terminal, and in the panels in Normal mode, unless something binds that
-  Alt key or the key goes on with a command typed so far. On a password they do nothing: the Esc
-  would close its dialog and send the key to the panels. The pull-down menu runs the command of a
-  letter with Alt and the letter; its plain letters move as `h`, `j`, `k`, and `l`.
+- **Alt and a key stand for Esc and the key** in Insert and Visual mode, as an Esc and a quick next
+  key arrive in a terminal, and in the panels in Normal mode, unless something binds that Alt key or
+  the key goes on with a command typed so far. Any key but Esc does, Enter, Backspace, and the
+  arrows too, as nvim takes Alt and a key that nothing maps for Esc and the key. On a password they
+  do nothing: the Esc would close its dialog and send the key to the panels. The pull-down menu runs
+  the command of a letter with Alt and the letter; its plain letters move as `h`, `j`, `k`, and `l`.
 - **Normal mode in text fields is vim's**: its motions, the operators `d`, `c`, and `y` on a
   motion or doubled for the line, `x`, `s`, `r`, `~`, `p`, `u`, Ctrl+r, and Visual mode. A text
   field opens in Insert mode with the cursor after its text, not selected: Ctrl+u clears it.
@@ -57,6 +58,10 @@ no registers.
 - **The lists** (the location menu, the tab menu, the zoxide window, the workspaces, the command
   history) take `j`, `k`, and `q` in Normal mode, and `d d` where a row can go; `/` types in
   their filter in Insert mode, and Esc goes back to the rows. Their digit hotkeys are gone.
+- **Ctrl+k shows the key hints** of whatever is in front, in every mode and every terminal, in
+  place of Alt+/, which an Esc and a quick `/` arrived as: Esc then `/` started key hints rather
+  than quick search. Ctrl+k comes as a byte of its own, without the kitty keyboard protocol, is
+  free in every mode, and is no prefix of tmux or screen.
 - **The mode shows** as vim's `showmode` and `showcmd` show it, on a line above the F-key bar
   that the command line takes when open: `-- INSERT --` or `-- VISUAL --` on the left, the
   count, register, operator, or keys of the pending command on the right. The cursor is a bar

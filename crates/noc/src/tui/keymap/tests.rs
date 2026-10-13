@@ -312,10 +312,29 @@ fn alt_and_a_key_stand_for_esc_and_the_key_in_insert_mode_and_the_panels() {
         None,
         "Esc would close the dialog"
     );
-    let alt_slash = KeyEvent::new(KeyCode::Char('/'), KeyModifiers::ALT);
-    assert_eq!(keymap.alt_as_esc(&state, TYPING, alt_slash), None, "bound");
     let alt_f1 = KeyEvent::new(KeyCode::F(1), KeyModifiers::ALT);
-    assert_eq!(keymap.alt_as_esc(&state, PANEL, alt_f1), None);
+    assert_eq!(keymap.alt_as_esc(&state, PANEL, alt_f1), None, "bound");
+    // Any key, as in nvim: an Esc and a quick Enter, Backspace, or arrow arrive with Alt too.
+    for code in [
+        KeyCode::Enter,
+        KeyCode::Backspace,
+        KeyCode::Left,
+        KeyCode::Tab,
+    ] {
+        let alt = KeyEvent::new(code, KeyModifiers::ALT);
+        let plain = Some(KeyEvent::new(code, KeyModifiers::NONE));
+        assert_eq!(keymap.alt_as_esc(&state, TYPING, alt), plain, "{code:?}");
+    }
+    let alt_esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::ALT);
+    assert_eq!(keymap.alt_as_esc(&state, TYPING, alt_esc), None);
+    let ctrl_alt_w = KeyEvent::new(
+        KeyCode::Char('w'),
+        KeyModifiers::ALT | KeyModifiers::CONTROL,
+    );
+    assert_eq!(
+        keymap.alt_as_esc(&state, TYPING, ctrl_alt_w),
+        Some(KeyEvent::new(KeyCode::Char('w'), KeyModifiers::CONTROL))
+    );
     assert_eq!(
         keymap.alt_as_esc(&state, VISUAL_PANEL, alt_j),
         plain,
@@ -536,7 +555,7 @@ fn global_keys_work_in_every_mode() {
         for &mode in Mode::ALL {
             let mut state = KeyState::default();
             assert_eq!(
-                feed(&keymap, &mut state, (mode, context), &["alt-/", "ctrl-l"]),
+                feed(&keymap, &mut state, (mode, context), &["ctrl-k", "ctrl-l"]),
                 actions(&[Action::KeyHints, Action::Redraw]),
                 "{mode:?} {context:?}"
             );
@@ -832,7 +851,14 @@ fn the_help_lists_the_keys_a_context_binds_in_a_mode() {
 #[test]
 fn alt_and_a_shifted_symbol_match_as_the_kitty_protocol_reports_alternate_keys() {
     // With alternate keys reported, crossterm gives the symbol typed and drops the Shift.
-    let keymap = Keymap::default();
+    let keymap = Keymap::of(&[(
+        Mode::Normal,
+        Context::Panel,
+        &[
+            (Action::KeyHints, &["alt-/"]),
+            (Action::SaveWorkspace, &["alt-shift-w"]),
+        ],
+    )]);
     let mut state = KeyState::default();
     let now = Instant::now();
     let alt = KeyEvent::new(KeyCode::Char('/'), KeyModifiers::ALT);
@@ -840,11 +866,6 @@ fn alt_and_a_shifted_symbol_match_as_the_kitty_protocol_reports_alternate_keys()
         keymap.feed(&mut state, PANEL, alt, now),
         actions(&[Action::KeyHints])
     );
-    let keymap = Keymap::of(&[(
-        Mode::Normal,
-        Context::Panel,
-        &[(Action::SaveWorkspace, &["alt-shift-w"])],
-    )]);
     let upper = KeyEvent::new(KeyCode::Char('W'), KeyModifiers::ALT);
     assert_eq!(
         keymap.feed(&mut KeyState::default(), PANEL, upper, now),

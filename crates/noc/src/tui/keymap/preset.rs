@@ -12,7 +12,7 @@ pub(super) const PRESET: Preset = &[
         Mode::Normal,
         Context::Global,
         &[
-            (Action::KeyHints, &["alt-/"]),
+            (Action::KeyHints, &["ctrl-k"]),
             (Action::UserScreen, &["g <"]),
             (Action::Redraw, &["ctrl-l"]),
         ],
@@ -376,7 +376,7 @@ pub(super) const PRESET: Preset = &[
     ),
     // The list of completions under a path field, as vim's pop-up menu: Ctrl+p and Ctrl+n move,
     // Ctrl+y takes the completion, Ctrl+e closes the list. Other keys close it and go to the
-    // field.
+    // field: Esc to Normal mode, as in vim.
     (
         Mode::Insert,
         Context::Completion,
@@ -387,7 +387,7 @@ pub(super) const PRESET: Preset = &[
             (Action::PageDown, &["pagedown"]),
             (Action::Complete, &["tab", "ctrl-i"]),
             (Action::Confirm, &["ctrl-y", "enter", "ctrl-m"]),
-            (Action::Cancel, &["ctrl-e", "esc", "ctrl-[", "ctrl-c"]),
+            (Action::Cancel, &["ctrl-e", "ctrl-c"]),
         ],
     ),
     // The viewer of F3. Space, f, and b turn the page, and u and d half of it, as in less.

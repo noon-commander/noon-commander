@@ -490,6 +490,16 @@ fn a_command_given_up_says_so_for_the_app_to_give_up_its_part() {
 }
 
 #[test]
+fn marks_by_pattern_are_under_g_and_mcs_own_keys_are_gone() {
+    assert_eq!(typed(PANEL, &["g", "+"]), actions(&[Action::Select]));
+    assert_eq!(typed(PANEL, &["g", "-"]), actions(&[Action::Unselect]));
+    assert_eq!(typed(PANEL, &["g", "*"]), actions(&[Action::InvertMarks]));
+    for key in ["+", "-", "*", "shift-up", "shift-down"] {
+        assert_eq!(typed(PANEL, &[key]), [], "{key}");
+    }
+}
+
+#[test]
 fn a_key_that_cannot_go_on_with_a_sequence_gives_it_up_in_normal_and_visual_mode() {
     // As vim beeps at `g x` and Ctrl+w and a key that names no window, neither runs.
     for keys in [

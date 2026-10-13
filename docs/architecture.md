@@ -255,7 +255,7 @@ menu:
 - Left and Right act on the panel drawn on that side, after Ctrl+w x too: its location menu,
   sort order (`•` marks the current one), Rescan, Disconnect while it shows a host, and its
   [tabs](#tabs): New tab, Close tab, and Tab list…. File
-  has F3 … F8, `+`, `-`, `*`, Checksums, and Exit; Command has quick search,
+  has F3 … F8, `g +`, `g -`, `g *`, Checksums, and Exit; Command has quick search,
   [Quick cd](#quick-cd), the [zoxide](#zoxide) window, the other-panel
   commands, the jobs, host settings and disconnect for the host the active panel shows, help,
   and redraw; Options has Configuration… and Show hidden files (`✓` while on); Workspace has Save
@@ -425,7 +425,7 @@ row and names the tab that shows by its whole location:
   tabs shrink first, then the one that shows, none below eight cells; then tabs far from it
   are left out, and `‹` and `›` say so.
 - Panels are named by a `PanelId`, their side and tab number, which is never used again.
-  Listings, new directories, and the dialogs of `+`, `-`, F5, F6, and F7 carry it, so a reply
+  Listings, new directories, and the dialogs of `g +`, `g -`, F5, F6, and F7 carry it, so a reply
   reaches the tab that asked even after a switch, and one for a closed tab is dropped. What
   acts on the other side (Ctrl+w f, Ctrl+w v, F5's target, `other_dir`) acts on the tab that shows
   there. Disconnecting or losing a host leaves every tab on it there, hidden or not, without
@@ -831,13 +831,13 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   SFTP it needs the `statvfs@openssh.com` extension, which OpenSSH's server has. A file system
   that reports no size, or a panel too narrow for it, shows none.
 - **Marks.** Space or `J` marks the entry under the cursor, or unmarks it, and moves down, as mc's
-  Insert does (Shift+Down too; `K` and Shift+Up move up), and a count marks that many, the row at
-  the end of the listing once; `*` inverts the marks on files, leaving directories as they are; `..`
+  Insert does (`K` moves up), and a count marks that many, the row at the end of the listing
+  once; `g *` inverts the marks on files, leaving directories as they are; `..`
   cannot be marked. Marked rows are underlined, and yellow in mc-classic (bold, which mc uses
   without colors, is for directories); the line below the listing shows the size of the marked files
   and how many entries are marked, such as `12,345 B in 3 files`. Marks are names, so they survive
   sorting and `R` (for names still there); another directory starts unmarked, and entries that get
-  hidden lose their marks, so that no operation acts on what is not shown. `+` marks and `-` unmarks
+  hidden lose their marks, so that no operation acts on what is not shown. `g +` marks and `g -` unmarks
   the names that match a shell pattern, in a dialog with mc's options: Files only (off) and Case
   sensitive (on). Patterns are read as mc reads them: `*`, `?`, `[a-z]` (`[!…]` or `[^…]` outside
   the set), `{a,b}`, and `\` for the next character as it is; the whole name must match, and what

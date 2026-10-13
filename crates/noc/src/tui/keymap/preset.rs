@@ -71,11 +71,12 @@ pub(super) const PRESET: Preset = &[
             // Marks
             (Action::VisualMode, &["v", "shift-v"]),
             (Action::Reselect, &["g v"]),
-            (Action::Mark, &["space", "shift-j", "shift-down"]),
-            (Action::MarkUp, &["shift-k", "shift-up"]),
-            (Action::Select, &["+"]),
-            (Action::Unselect, &["-"]),
-            (Action::InvertMarks, &["*"]),
+            (Action::Mark, &["space", "shift-j"]),
+            (Action::MarkUp, &["shift-k"]),
+            // mc's `+`, `-`, and `*`, under `g`, leaving vim's keys to vim.
+            (Action::Select, &["g +"]),
+            (Action::Unselect, &["g -"]),
+            (Action::InvertMarks, &["g *"]),
             // Search
             (Action::QuickSearch, &["/"]),
             (Action::NextMatch, &["n", "shift-f7"]),

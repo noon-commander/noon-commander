@@ -112,7 +112,8 @@ unless something binds that Alt key, as a quick Esc and the key arrive from a te
 have a command line under the panels that takes what is typed; noc opens one with `!` and `:`, yazi
 asks for a shell command in an input box, and ranger opens its console with `:`. mc's +, -, \\, and
 \*, on the numpad too, mark and unmark only while its command line is empty; with Alt, they always
-do.
+do. noc keeps them under g, as g +, g -, and g \*, and binds neither +, -, and \*, which are
+vim's motions and search, nor mc's Shift+Up and Shift+Down.
 
 noc groups keys under a first key: vim's g, q, and Ctrl+w, and its own t for the tabs and the
 workspaces, o for the sort order, as ranger's sort keys, and the hidden names, and f for the file
@@ -174,11 +175,11 @@ the marks.
 | Sort by size; again: reverse | `sort_by_size` | ✅ | o s | — | Ctrl+F6 | , s<br>, S (reverse) | o s<br>o S (reverse) |
 | Visual mode: select rows from here to the cursor, for the commands of files (yazi, ranger: mark the rows the cursor moves over) | `visual_mode` | ⏳ | v<br>V | — | — | v | V |
 | Select again the rows selected last | `reselect` | ⏳ | g v | — | — | — | — |
-| Mark or unmark, then the next row | `mark` | ⏳ | Space<br>J<br>Shift+Down | Insert<br>Ctrl+t<br>Shift+Down | Insert<br>Shift+Down | Space | Space |
-| Mark or unmark, then the row above | `mark_up` | ✅ | K<br>Shift+Up | Shift+Up | Shift+Up | — | — |
-| Mark the names that match a pattern | `select` | ✅ | + | +<br>Numpad+<br>Alt++ | Numpad+ | — | — |
-| Unmark the names that match a pattern | `unselect` | ✅ | - | -<br>\\<br>Numpad-<br>Alt+- | Numpad- | — | — |
-| Invert the marks on files; directories stay as they are | `invert_marks` | ✅ | \* | \*<br>Numpad\*<br>Alt+\* | Numpad* | — | — |
+| Mark or unmark, then the next row | `mark` | ⏳ | Space<br>J | Insert<br>Ctrl+t<br>Shift+Down | Insert<br>Shift+Down | Space | Space |
+| Mark or unmark, then the row above | `mark_up` | ⏳ | K | Shift+Up | Shift+Up | — | — |
+| Mark the names that match a pattern | `select` | ⏳ | g + | +<br>Numpad+<br>Alt++ | Numpad+ | — | — |
+| Unmark the names that match a pattern | `unselect` | ⏳ | g - | -<br>\\<br>Numpad-<br>Alt+- | Numpad- | — | — |
+| Invert the marks on files; directories stay as they are | `invert_marks` | ⏳ | g \* | \*<br>Numpad\*<br>Alt+\* | Numpad* | — | — |
 | Start quick search | `quick_search` | ✅ | / | Ctrl+s<br>Alt+s | Alt+characters<br>Alt+Shift+characters | / | f |
 | The next name that matches the last quick search | `next_match` | ✅ | n<br>Shift+F7 | — | — | n | n |
 | The previous name that matches the last quick search | `prev_match` | ✅ | N | — | — | N | N |

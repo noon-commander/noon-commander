@@ -40,8 +40,8 @@
 
 - [x] Panel actions that the keymap binds already: Ctrl+w x swaps the panels, Ctrl+w f opens
       the directory under the cursor in the other panel, Ctrl+w v shows this directory there
-- [x] Marks: Space, `J`, `K`, Shift+Up/Down, `*`; their total below the listing
-- [x] `+` and `-` mark and unmark by pattern
+- [x] Marks: Space, `J`, `K`, `g *`; their total below the listing
+- [x] `g +` and `g -` mark and unmark by pattern, as mc's `+` and `-`
 - [x] VFS: create and remove directories, remove files, rename, set permissions and times
 - [x] F7 mkdir
 - [x] Job engine (`noc-ops`): progress, a decision on each failure, cancellation; deleting,

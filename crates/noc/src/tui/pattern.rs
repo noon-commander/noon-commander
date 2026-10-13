@@ -1,7 +1,7 @@
-//! Shell patterns for marking by name, read as mc reads them for `+` and `-`: `*` matches any
-//! text, `?` one character, `[a-z]` one character of a set (`[!…]` or `[^…]` one outside it),
-//! `{a,b}` either alternative, and `\` takes the next character as it is. The whole name must
-//! match, case counts, and anything that does not parse is taken literally.
+//! Shell patterns for marking by name with `g +` and `g -`, read as mc reads them for its `+` and
+//! `-`: `*` matches any text, `?` one character, `[a-z]` one character of a set (`[!…]` or `[^…]`
+//! one outside it), `{a,b}` either alternative, and `\` takes the next character as it is. The
+//! whole name must match, case counts, and anything that does not parse is taken literally.
 
 /// Most alternatives that braces expand to; more are dropped, which no one types.
 const MAX_ALTERNATIVES: usize = 1024;

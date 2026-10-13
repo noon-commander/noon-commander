@@ -600,7 +600,7 @@ host-save-error = Cannot save the host settings: { $reason }
 # The other panel directory must be a local path.
 host-other-dir-invalid = the other panel directory must start with / or ~/
 
-## Marking by pattern, + and - (src/tui/app). Prefix: pattern-. As in mc.
+## Marking by pattern, g + and g - (src/tui/app). Prefix: pattern-. As mc's + and -.
 
 # Dialog titles.
 pattern-select = Select

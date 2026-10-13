@@ -289,7 +289,7 @@ const MAX_REPEAT: usize = 10_000;
 /// Cells of what a pending command has typed that the line above the F-key bar shows, as
 /// vim's `showcmd` shows at most.
 const SHOWCMD_WIDTH: usize = 10;
-/// Width of the dialogs of `+` and `-`, as in mc.
+/// Width of the dialogs of `g +` and `g -`, as of mc's `+` and `-`.
 const PATTERN_DIALOG_WIDTH: u16 = 50;
 /// Width of the dialogs of F7 and F5.
 const MKDIR_DIALOG_WIDTH: u16 = 60;
@@ -313,7 +313,7 @@ struct Open {
 enum Purpose {
     /// A prompt from ssh, or a notice, which has no `reply`.
     Ssh { id: u64, reply: Option<Reply> },
-    /// `+` (`mark`) or `-` in `panel`.
+    /// `g +` (`mark`) or `g -` in `panel`.
     Pattern { panel: PanelId, mark: bool },
     /// F7 in `panel`.
     Mkdir { panel: PanelId },
@@ -554,7 +554,7 @@ struct CopyChoices {
     atomic: bool,
 }
 
-/// What `+` and `-` asked for last; their dialogs start with it.
+/// What `g +` and `g -` asked for last; their dialogs start with it.
 #[derive(Debug, Clone)]
 struct PatternOptions {
     pattern: String,
@@ -4640,8 +4640,8 @@ impl App {
         });
     }
 
-    /// Opens the dialog of `+` (`mark`) or `-` for the active panel, as in mc: a pattern, and
-    /// whether it applies to files only and whether case counts.
+    /// Opens the dialog of `g +` (`mark`) or `g -` for the active panel, as mc's `+` and `-`:
+    /// a pattern, and whether it applies to files only and whether case counts.
     fn ask_pattern(&mut self, mark: bool) {
         let title = if mark {
             fl!("pattern-select")
@@ -4661,7 +4661,7 @@ impl App {
         });
     }
 
-    /// Marks, or unmarks, what the dialog of `+` or `-` asked for. An empty pattern does
+    /// Marks, or unmarks, what the dialog of `g +` or `g -` asked for. An empty pattern does
     /// nothing.
     fn mark_matching(&mut self, panel: PanelId, mark: bool, dialog: &Dialog) {
         if dialog.text().is_empty() {
@@ -6670,7 +6670,7 @@ mod tests {
     }
 
     #[test]
-    fn plus_and_minus_mark_and_unmark_by_pattern() {
+    fn g_plus_and_g_minus_mark_and_unmark_by_pattern() {
         let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
         let entries = vec![
             file("a.md", 10),
@@ -6701,7 +6701,7 @@ mod tests {
         }
         assert!(screen(&mut app).contains(" 30 B in 3 files "));
 
-        // `-` with Files only leaves the directory marked.
+        // `g -` with Files only leaves the directory marked.
         app.handle(action(Action::Unselect));
         assert!(screen(&mut app).contains("Unselect"));
         retype(&mut app, "*");

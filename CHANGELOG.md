@@ -31,8 +31,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     and Ctrl+w 1 and Ctrl+w 2 change their locations. / starts quick search, typed as vim's search:
     Enter ends it on the match, Esc gives it up, Ctrl+g and Ctrl+t go to the next and the previous
     match, and the arrows, the page keys, and the F-keys end it and do what they do, as in mc.
-    Space, J, and K mark, with a count as far as the listing goes, + and - mark and unmark by a
-    pattern, * inverts; i views, e edits, Y and y y copy, x moves, r renames in the row, A makes a
+    Space, J, and K mark, with a count as far as the listing goes, g + and g - mark and unmark by a
+    pattern, and g \* inverts, as mc's +, -, and \*, which noc leaves unbound, as Shift+Up and
+    Shift+Down; i views, e edits, Y and y y copy, x moves, r renames in the row, A makes a
     directory, d D deletes, R reads the directory again; t n, t c, g t, g T, t h, t l, t w, and t W
     for tabs and workspaces; o n, o e, o m, o s sort and o h shows hidden files; g z jumps with
     zoxide, g d is Quick cd, f j lists the jobs, q : opens the command history, g m and g M the

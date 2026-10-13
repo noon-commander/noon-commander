@@ -25,8 +25,10 @@ no registers.
   the rows selected end it first. Dialogs keep F10, which cancels, as mc's do. No other key of mc
   stays: not `Ctrl+x …`, `Ctrl+u`, `Alt+o`, Insert, or readline's keys in text fields. Alt+1 …
   Alt+0 no longer stand for F1 … F10. mc's `+`, `-`, and `*`, which mark by a pattern and invert
-  the marks, go under `g` as `g +`, `g -`, and `g *`, leaving vim's motions and search unbound
-  rather than giving them other meanings; Shift+Up and Shift+Down no longer mark.
+  the marks, go under `g` as `g +`, `g -`, and `g *`, which vim gives to its undo tree and to a
+  search for the word under the cursor, neither of which a listing has; `+`, `-`, and `*` alone,
+  vim's line motions and search, stay unbound rather than mark files where a vim user moves.
+  Shift+Up and Shift+Down no longer mark either.
 - **Where keys start.** The panels, the lists, the pull-down menu, the viewer, and the help
   start in Normal mode. Quick search, the command line of `:` and `!`, the field of a rename,
   and a dialog whose first focus is a text field start in Insert mode; a dialog whose first
@@ -53,7 +55,8 @@ no registers.
 - **Counts and registers.** In Normal and Visual mode, a count goes before a command: motions
   repeat, `G` and `g g` go to the row of that number, `g t` to the tab. Registers `a` … `z` and
   the unnamed one live in memory and every text field and the command line share them; `A` …
-  `Z` append. None reads or writes the system clipboard.
+  `Z` append. `"` names one wherever keys are commands, the panels and the lists too, so that the
+  name never runs as a command, as vim never runs it. None reads or writes the system clipboard.
 - **The panels in vim's way**: `v` and `V` select rows in Visual mode, whose commands of files
   act on the rows selected; Ctrl+o and Ctrl+i (Tab) go back and forth through a jump list per
   tab, of locations and of `G`, `g g`, and searches; Ctrl+w switches the panels, as vim's

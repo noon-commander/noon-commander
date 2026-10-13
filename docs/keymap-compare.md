@@ -82,24 +82,26 @@ Status, of noc as a whole:
 ## Everywhere (`global`, every mode)
 
 Keys that do the same wherever they are pressed, in every mode: in the panels, the dialogs, the
-menus, the windows, the viewer, and on the command line. Every other context falls back to this
-one last, after its own fallbacks, so a context that binds the same key itself takes it first.
-The output of commands is the exception: noc draws nothing there. In Insert mode characters are
-text, so g < works only where keys are commands; Ctrl+k and Ctrl+l work in every mode, in every
-terminal. Ctrl+k is free in all of noc's modes and is no prefix of tmux or screen; vim's digraphs
-of Ctrl+k in Insert mode noc does not have.
-yazi and ranger show the keys that can follow on their own, once the first key of a sequence is
-pressed; yazi binds its help in every window, and F1 in mc and Far opens the help of the window
+menus, the windows, the viewer, and on the command line. Every other context falls back to this one
+last, after its own fallbacks, so a context that binds the same key itself takes it first. The
+output of commands is the exception: noc draws nothing there. In Insert mode characters are text, so
+g < and " work only where keys are commands; Ctrl+k and Ctrl+l work in every mode, in every
+terminal. " names a register for the next command, as in vim, wherever keys are commands, so that
+the name never runs as a command; only text fields keep text in registers. Ctrl+k is free in all of
+noc's modes and is no prefix of tmux or screen; vim's digraphs of Ctrl+k in Insert mode noc does not
+have. yazi and ranger show the keys that can follow on their own, once the first key of a sequence
+is pressed; yazi binds its help in every window, and F1 in mc and Far opens the help of the window
 in front. g <, vim's key for the output of the last command, shows the output of commands over
 whatever is in front, which is there again afterwards; mc and Far hide or show the panels with
-Ctrl+o in the panels and on their command line, and mc in its viewer and editor too. noc's Ctrl+o
-is vim's, which goes back through the jump list. Ctrl+l redraws the screen under whatever is in
-front, which stays as it was, quick search too, as mc's Ctrl+l does in its panels, dialogs,
-viewer, and editor.
+Ctrl+o in the panels and on their command line, and mc in its viewer and editor too. noc's Ctrl+o is
+vim's, which goes back through the jump list. Ctrl+l redraws the screen under whatever is in front,
+which stays as it was, quick search too, as mc's Ctrl+l does in its panels, dialogs, viewer, and
+editor.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
 | The keys that can be typed now, over whatever is in front, and what they do, as which-key shows them | `key_hints` | ⏳ | Ctrl+k | — | — | — | — |
+| The register for the next command: a … z, which text fields share, and A … Z to append to it | `register` | ⏳ | " | — | — | — | — |
 | The output of commands, in place of the panels and what is in front of them (mc, Far: hide or show the panels) | `user_screen` | ⏳ | g < | Ctrl+o | Ctrl+o | — | — |
 | Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | — | — | Ctrl+l |
 | Help: the keys of what is in front, and what they do | — | ⏳ | — | F1 | F1 | \~<br>F1 | — |
@@ -462,8 +464,9 @@ What the text fields share after Esc, in Normal mode: vim's motions, and its com
 the text. The same fields fall back to it, and it falls back to `global`; keys that nothing binds
 do nothing. A count goes before a motion or a command: 3w goes three words on, and d3w deletes
 three words. d, c, and y take the motion typed after them, and act on the line when doubled, as
-d d. f, F, t, T, and r take the character typed after them, and " the register for the next
-command: a … z, whose uppercase A … Z append to it.
+d d. f, F, t, T, and r take the character typed after them, and " of `global` the register for
+the next command: a … z, whose uppercase A … Z append to it. As vim's, Shift+Right and Shift+Left
+are w and b, and Ctrl+Right and Ctrl+Left W and B.
 
 The yazi column has the keys of its input boxes that work only in normal mode: its letters,
 digits, and symbols, which are text in insert mode. mc, Far, and ranger have no modes; their keys
@@ -476,11 +479,11 @@ are under Insert mode, but where noc does the same only here, as D deletes to th
 | Start of the line | `text_start` | ⏳ | 0<br>Home | — | — | 0 | — |
 | The first character of the line that is not blank | `first_non_blank` | ⏳ | ^ | — | — | _<br>^ | — |
 | End of the line | `text_end` | ⏳ | $<br>End | — | — | $ | — |
-| The start of the next word | `word_forward` | ⏳ | w<br>Shift+Right<br>Ctrl+Right | — | — | w | — |
-| The start of the word before the cursor | `word_backward` | ⏳ | b<br>Shift+Left<br>Ctrl+Left | — | — | b | — |
+| The start of the next word | `word_forward` | ⏳ | w<br>Shift+Right | — | — | w | — |
+| The start of the word before the cursor | `word_backward` | ⏳ | b<br>Shift+Left | — | — | b | — |
 | The end of the word | `word_end` | ⏳ | e | — | — | e | — |
-| The start of the next word, where only blanks part words | `big_word_forward` | ⏳ | W | — | — | W | — |
-| The start of the word before, where only blanks part words | `big_word_backward` | ⏳ | B | — | — | B | — |
+| The start of the next word, where only blanks part words | `big_word_forward` | ⏳ | W<br>Ctrl+Right | — | — | W | — |
+| The start of the word before, where only blanks part words | `big_word_backward` | ⏳ | B<br>Ctrl+Left | — | — | B | — |
 | The end of the word, where only blanks part words | `big_word_end` | ⏳ | E | — | — | E | — |
 | The next character typed after it, in the line | `find_char` | ⏳ | f | — | — | — | — |
 | Back to the character typed after it | `find_char_back` | ⏳ | F | — | — | — | — |
@@ -508,7 +511,6 @@ are under Insert mode, but where noc does the same only here, as D deletes to th
 | Put the text of the register before the cursor | `put_before` | ⏳ | P | — | — | P | — |
 | Undo the last change | `undo` | ⏳ | u | — | — | u | — |
 | Redo what undo took back | `redo` | ⏳ | Ctrl+r | — | — | Ctrl+r | — |
-| The register, a … z, for the next command; A … Z append to it | `register` | ⏳ | " | — | — | — | — |
 | Select the whole text | — | ⏳ | — | — | — | V<br>Ctrl+A<br>Ctrl+E | — |
 
 ## Editing text (`input`, Visual mode)
@@ -543,7 +545,6 @@ selects. mc selects text with Shift and the arrows, under Insert mode.
 | Delete the selection, then Insert mode | `change_operator` | ⏳ | c<br>s | — | — | c | — |
 | Copy the selection to a register | `yank_operator` | ⏳ | y | — | — | y | — |
 | Switch the case of the selection | `toggle_case` | ⏳ | \~ | — | — | — | — |
-| The register, a … z, for the next command; A … Z append to it | `register` | ⏳ | " | — | — | — | — |
 | Normal mode again | `normal_mode` | ⏳ | Esc<br>Ctrl+[<br>v | — | — | — | — |
 | Uppercase / lowercase the selection | — | ⏳ | — | — | — | U / u | — |
 
@@ -630,7 +631,8 @@ mode, then to `global`.
 A dialog whose focus is on a button, a check box, or a list, and the windows of the jobs, a job,
 and checksums, in Normal mode, where they start; it falls back to `global`. The help falls back
 to it, so its keys scroll and close the help too, and so do the text fields of dialogs in Normal
-mode, after the keys of `input`: j and k move from a field, as Up and Down do, and q and Esc close
+mode, after the keys of `input`: j and k move from a field, as Up and Down do, g g and G to the
+first and the last field or button, as vim's to the first and the last line, and q and Esc close
 the dialog. Dialogs are modal: the panel's keys do nothing there. The yazi column has the keys of
 its confirmations (confirm), its list of tasks (tasks), and its help; the ranger column, those of
 its list of tasks, since ranger asks its questions on the console.
@@ -641,10 +643,10 @@ its list of tasks, since ranger asks its questions on the console.
 | Next button; in the help and lists, one row down | `down` | ✅ | j<br>Down<br>Ctrl+n | Down<br>Ctrl+n (help, lists) | Down (help) | j<br>Down<br>Ctrl+n (help) | Down<br>j<br>Ctrl+n<br>Enter |
 | Previous button | `left` | ✅ | h<br>Left | Left | — | — | — |
 | Next button | `right` | ✅ | l<br>Right | Right | — | — | — |
-| In the help and lists, one page up | `page_up` | ✅ | Ctrl+b<br>PgUp | PgUp<br>Alt+v<br>b (help)<br>Backspace (help) | — | — | p<br>b<br>Ctrl+b |
-| In the help and lists, one page down | `page_down` | ✅ | Ctrl+f<br>PgDn | PgDn<br>Ctrl+v<br>Space (help)<br>f (help) | — | — | n<br>f<br>Ctrl+f<br>Space |
-| In the help and lists, the first row | `home` | ✅ | g g<br>Home | Home<br>A1<br>g (help)<br>Ctrl+Home (help)<br>Ctrl+PgUp (help)<br>Alt+< | — | — | Home<br>g |
-| In the help and lists, the last row | `end` | ✅ | G<br>End | End<br>C1<br>G (help)<br>Ctrl+End (help)<br>Ctrl+PgDn (help)<br>Alt+> | — | — | End<br>G |
+| The first field or button; in the help and lists, one page up | `page_up` | ⏳ | Ctrl+b<br>PgUp | PgUp<br>Alt+v<br>b (help)<br>Backspace (help) | — | — | p<br>b<br>Ctrl+b |
+| The last field or button; in the help and lists, one page down | `page_down` | ⏳ | Ctrl+f<br>PgDn | PgDn<br>Ctrl+v<br>Space (help)<br>f (help) | — | — | n<br>f<br>Ctrl+f<br>Space |
+| The first field or button; in the help and lists, the first row | `home` | ⏳ | g g<br>Home | Home<br>A1<br>g (help)<br>Ctrl+Home (help)<br>Ctrl+PgUp (help)<br>Alt+< | — | — | Home<br>g |
+| The last field or button; in the help and lists, the last row | `end` | ⏳ | G<br>End | End<br>C1<br>G (help)<br>Ctrl+End (help)<br>Ctrl+PgDn (help)<br>Alt+> | — | — | End<br>G |
 | Next field or button | `next_field` | ✅ | Tab<br>Ctrl+i | Tab | — | — | — |
 | Previous field or button | `prev_field` | ✅ | Shift+Tab | Shift+Tab | — | — | — |
 | Press the focused button; from a text field or a check box, the default one; close the help | `confirm` | ✅ | Enter<br>Ctrl+m | Enter | Ctrl+Enter (default button) | Enter (confirm, help)<br>y (confirm) | — |

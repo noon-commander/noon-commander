@@ -169,21 +169,31 @@ impl Field {
         self.editor.pending()
     }
 
+    /// Whether Normal mode runs one command, after Ctrl+o, then goes back to Insert mode.
+    pub(crate) fn once(&self) -> bool {
+        self.editor.once()
+    }
+
+    /// The editor of the text, for what the line of the mode shows.
+    pub(crate) fn editor(&self) -> &Editor {
+        &self.editor
+    }
+
     /// Types `c` at the cursor.
     pub(crate) fn insert(&mut self, c: char) {
         self.editor.insert(c);
     }
 
-    /// Puts pasted `text` at the cursor as one change, in any mode, without its control
-    /// characters.
-    pub(crate) fn paste(&mut self, text: &str) {
+    /// Puts pasted `text` as one change, in any mode, without its control characters; in
+    /// Visual mode, what it replaces goes to the unnamed register of `registers`.
+    pub(crate) fn paste(&mut self, text: &str, registers: &mut Registers) {
         let typed = text.chars().filter(|c| !c.is_control());
         // A password goes in character by character, so that no copy of it is left behind.
         if self.editor.is_secret() {
             typed.for_each(|c| self.editor.insert(c));
             return;
         }
-        self.editor.paste(&typed.collect::<String>());
+        self.editor.paste(&typed.collect::<String>(), registers);
     }
 
     /// Gives up the command of Normal mode that waits, as the keymap gives up its keys.
@@ -654,9 +664,9 @@ impl Dialog {
     }
 
     /// Puts pasted `text` in the focused field, if any.
-    pub(crate) fn paste(&mut self, text: &str) {
+    pub(crate) fn paste(&mut self, text: &str, registers: &mut Registers) {
         if let Some(field) = self.focused_field_mut() {
-            field.paste(text);
+            field.paste(text, registers);
         }
     }
 
@@ -676,7 +686,7 @@ impl Dialog {
         }
     }
 
-    fn focused_field(&self) -> Option<&Field> {
+    pub(crate) fn focused_field(&self) -> Option<&Field> {
         match self.focus {
             Focus::Field(index) => self.fields.get(index).map(|field| &field.field),
             Focus::Choice(_) | Focus::Check(_) | Focus::Button(_) => None,
@@ -715,6 +725,9 @@ impl Dialog {
                 if action == Action::NormalMode {
                     return DialogEvent::Cancelled;
                 }
+                // A key of the dialog's is the one command after Ctrl+o, which leaves the field
+                // in Insert mode, so that one that moves the focus moves it there in Insert mode.
+                field.give_up();
                 action
             }
             (Resolved::Action(action), None) => action,
@@ -750,6 +763,11 @@ impl Dialog {
             }
             Action::Right | Action::Down | Action::Left | Action::Up => {
                 self.move_focus(matches!(action, Action::Right | Action::Down), self.mode());
+                DialogEvent::Pending
+            }
+            // As vim's `g g` and `G` go to the first and the last line.
+            Action::Home | Action::End | Action::PageUp | Action::PageDown => {
+                self.focus_end(matches!(action, Action::End | Action::PageDown));
                 DialogEvent::Pending
             }
             _ => DialogEvent::Pending,
@@ -798,22 +816,43 @@ impl Dialog {
         DialogEvent::Pending
     }
 
-    /// Moves the focus through the choices, the fields, the check boxes, and the buttons,
-    /// round; a field it comes to is in `mode`, Insert or Normal.
-    fn move_focus(&mut self, forward: bool, mode: Mode) {
-        let stops: Vec<Focus> = (0..self.choices.len())
+    /// Where the focus can be: the choices, the fields, the check boxes, and the buttons.
+    fn stops(&self) -> Vec<Focus> {
+        (0..self.choices.len())
             .map(Focus::Choice)
             .chain((0..self.fields.len()).map(Focus::Field))
             .chain((0..self.checks.len()).map(Focus::Check))
             .chain((0..self.buttons.len()).map(Focus::Button))
-            .collect();
+            .collect()
+    }
+
+    /// Moves the focus through the choices, the fields, the check boxes, and the buttons,
+    /// round; a field it comes to is in `mode`, Insert or Normal.
+    fn move_focus(&mut self, forward: bool, mode: Mode) {
+        let stops = self.stops();
         let current = stops
             .iter()
             .position(|stop| *stop == self.focus)
             .unwrap_or(0);
         let step = if forward { 1 } else { stops.len() - 1 };
+        self.focus_on(stops[(current + step) % stops.len()], mode);
+    }
+
+    /// Moves the focus to the first stop, or the last; a field it comes to is in Normal mode.
+    fn focus_end(&mut self, last: bool) {
+        let stops = self.stops();
+        let stop = if last { stops.last() } else { stops.first() };
+        if let Some(&stop) = stop
+            && stop != self.focus
+        {
+            self.focus_on(stop, Mode::Normal);
+        }
+    }
+
+    /// Moves the focus to `stop`; a field there is in `mode`, Insert or Normal.
+    fn focus_on(&mut self, stop: Focus, mode: Mode) {
         self.leave_field();
-        self.focus = stops[(current + step) % stops.len()];
+        self.focus = stop;
         let mode = if mode == Mode::Insert {
             Mode::Insert
         } else {
@@ -1355,6 +1394,25 @@ mod tests {
             "Esc gives the operator up first"
         );
         assert_eq!(dialog.pending(), None);
+    }
+
+    #[test]
+    fn a_key_of_the_dialog_after_ctrl_o_leaves_insert_mode_on_and_g_g_and_g_go_to_the_ends() {
+        let mut dialog = host_form();
+        dialog.handle(action(Action::NormalOnce));
+        dialog.handle(action(Action::Down));
+        assert_eq!(
+            (dialog.focus, dialog.mode()),
+            (Focus::Field(1), Mode::Insert)
+        );
+        dialog.handle(action(Action::NormalMode));
+        dialog.handle(action(Action::End));
+        assert_eq!(dialog.focus, Focus::Button(dialog.buttons.len() - 1));
+        dialog.handle(action(Action::Home));
+        assert_eq!(
+            (dialog.focus, dialog.mode()),
+            (Focus::Field(0), Mode::Normal)
+        );
     }
 
     #[test]

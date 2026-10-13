@@ -146,7 +146,7 @@ fn a_register_and_a_character_go_with_the_command() {
                 extra: Extra {
                     count: Some(2),
                     register: Some('a'),
-                    char: None
+                    ..Extra::default()
                 }
             },
             Typed::from(Resolved::Action(Action::WordForward))
@@ -362,6 +362,51 @@ fn the_pull_down_menu_runs_letters_with_alt_and_moves_with_hjkl() {
     );
     assert_eq!(typed(menu, &["alt-c", "alt-2"]), inserts("c2"));
     assert_eq!(typed(menu, &["q"]), actions(&[Action::Cancel]));
+    // A count goes with the letter, not with the key after it.
+    assert_eq!(
+        typed(menu, &["3", "alt-z", "j"]),
+        [
+            Typed::from(Resolved::Insert('z')),
+            Typed::from(Resolved::Action(Action::Down))
+        ]
+    );
+}
+
+#[test]
+fn a_register_is_named_wherever_keys_are_commands() {
+    // The name is never a command, as in vim: "x moves no files.
+    assert_eq!(typed(PANEL, &["\"", "x"]), []);
+    assert_eq!(typed(VISUAL_PANEL, &["\"", "d"]), []);
+    assert_eq!(
+        typed(PANEL, &["\"", "x", "j"]),
+        with(
+            Action::Down,
+            Extra {
+                register: Some('x'),
+                ..Extra::default()
+            }
+        )
+    );
+    assert_eq!(typed((Mode::Normal, Context::Viewer), &["\"", "q"]), []);
+    assert_eq!(typed(TYPING, &["\""]), inserts("\""), "text in Insert mode");
+    assert_eq!(
+        typed((Mode::Insert, Context::CommandLine), &["\""]),
+        inserts("\"")
+    );
+}
+
+#[test]
+fn ctrl_k_after_a_sequence_shows_what_can_follow_it() {
+    let keymap = Keymap::default();
+    let mut state = KeyState::default();
+    assert_eq!(feed(&keymap, &mut state, PANEL, &["g", "ctrl-k"]), []);
+    let hints = keymap.hints_of(&state, PANEL).expect("the hints of g");
+    assert_eq!(hints.typed.as_deref(), Some("g"));
+    assert!(!state.take_dropped());
+    assert_eq!(
+        feed(&keymap, &mut state, PANEL, &["g"]),
+        actions(&[Action::Home])
+    );
 }
 
 #[test]
@@ -458,6 +503,7 @@ fn a_count_before_a_register_and_one_after_it_multiply() {
             Extra {
                 count: Some(6),
                 register: Some('a'),
+                outer: Some(2),
                 char: None
             }
         )
@@ -866,7 +912,9 @@ fn the_help_lists_the_keys_a_context_binds_in_a_mode() {
         ]
     );
     let fields = keymap.help(Mode::Normal, Context::Input);
-    assert!(fields.contains(&(Action::WordForward, "w, Shift+Right, Ctrl+Right".to_owned())));
+    assert!(fields.contains(&(Action::WordForward, "w, Shift+Right".to_owned())));
+    // As vim's Ctrl+Right, a WORD.
+    assert!(fields.contains(&(Action::BigWordForward, "W, Ctrl+Right".to_owned())));
     // Keys that a context binds but its chain takes before them are left out.
     let filter = keymap.help(Mode::Insert, Context::List);
     assert!(filter.contains(&(Action::Up, "Up, Ctrl+p".to_owned())));

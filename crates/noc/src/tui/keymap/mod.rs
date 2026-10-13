@@ -51,6 +51,9 @@ pub(crate) struct Extra {
     pub(crate) count: Option<usize>,
     /// The register named before it: `a` in `"ayw`.
     pub(crate) register: Option<char>,
+    /// The count typed before the register, which `count` takes in: `2` in `2"a3d`, for the
+    /// command to show as typed.
+    pub(crate) outer: Option<usize>,
     /// The character typed after an action that takes one: `x` in `fx`.
     pub(crate) char: Option<char>,
 }
@@ -216,13 +219,15 @@ impl KeyState {
     /// The count and the register typed for the command that resolves now, which they leave:
     /// the counts before and after the register multiplied.
     fn take_extra(&mut self) -> Extra {
-        let count = match (self.outer.take(), self.count.take()) {
+        let outer = self.outer.take();
+        let count = match (outer, self.count.take()) {
             (Some(outer), Some(count)) => Some(outer.saturating_mul(count).min(MAX_COUNT)),
             (outer, count) => count.or(outer),
         };
         Extra {
             count,
             register: self.register.take(),
+            outer,
             char: None,
         }
     }
@@ -396,6 +401,8 @@ impl Keymap {
             && let Some(c) = text(plain)
             && self.lookup(mode, context, &[key]) == Lookup::Unknown
         {
+            // The letter is the command: a count typed before it goes with nothing.
+            state.reset();
             return vec![Typed::from(Resolved::Insert(c))];
         }
         state.keys.push(key);
@@ -420,6 +427,11 @@ impl Keymap {
             }
             Lookup::Unknown => {
                 state.keys.pop();
+                // The key of the hints shows what can follow the keys typed so far.
+                if self.lookup(mode, context, &[key]) == Lookup::Exact(Action::KeyHints) {
+                    self.show_hints(state, (mode, context));
+                    return Vec::new();
+                }
                 // In Normal and Visual mode, as in vim, a key that cannot go on with a
                 // sequence that does nothing alone gives up both, as `g x` or Ctrl+w and a key
                 // that names no panel: run alone, it would do what was never asked.

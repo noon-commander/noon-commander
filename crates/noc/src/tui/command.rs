@@ -83,6 +83,11 @@ pub(crate) struct CommandLine {
     /// going through the history, which comes back after the newest.
     browsing: Option<usize>,
     draft: String,
+    /// The text that going through the history showed last, to tell whether it changed since.
+    browsed: String,
+    /// The column that `j` and `k` keep, as vim's `curswant`, while one follows another; past
+    /// the end of every line after `$`.
+    column: Option<usize>,
     /// The command came from the history of another host: the prompt stands out until the
     /// next key, so that it is clear where the command will run.
     foreign: bool,
@@ -105,6 +110,8 @@ impl CommandLine {
             scroll: 0,
             browsing: None,
             draft: String::new(),
+            browsed: String::new(),
+            column: None,
             foreign: false,
         }
     }
@@ -121,6 +128,13 @@ impl CommandLine {
     /// or the one after; after the newest, what was typed. The cursor goes to the end, so
     /// that Up goes through the lines of a command before the commands before it.
     pub(crate) fn browse(&mut self, older: bool, commands: &[&str]) {
+        // The text changed since, by an edit or an undo: the command it is now, if it is one,
+        // is where the history goes on from; else it is what was typed.
+        if self.browsing.is_some() && self.text() != self.browsed {
+            self.browsing = commands
+                .iter()
+                .position(|command| self.shown(command) == self.text());
+        }
         let next = match (self.browsing, older) {
             (None, true) => 0,
             (Some(index), true) => index + 1,
@@ -141,6 +155,12 @@ impl CommandLine {
         }
         self.browsing = Some(next);
         self.set_text(&self.recalled(command));
+        self.browsed = self.text().to_owned();
+    }
+
+    /// A command of the history as the line shows it.
+    fn shown(&self, command: &str) -> String {
+        clean(self.recalled(command).trim_end_matches(['\n', '\r']))
     }
 
     /// A shell command of the history as this line runs it: after `!` on the line of `:`.
@@ -170,6 +190,11 @@ impl CommandLine {
         self.editor.pending()
     }
 
+    /// The editor of the command, for what the line of the mode shows.
+    pub(crate) fn editor(&self) -> &Editor {
+        &self.editor
+    }
+
     /// Replaces the command with `text`, without the line breaks at its end, and puts the
     /// cursor after it.
     pub(crate) fn set_text(&mut self, text: &str) {
@@ -177,9 +202,9 @@ impl CommandLine {
         self.editor.replace(&text, text.chars().count());
     }
 
-    /// Puts pasted `text` at the cursor as it is, line breaks included; nothing runs.
-    pub(crate) fn paste(&mut self, text: &str) {
-        self.editor.paste(&clean(text));
+    /// Puts pasted `text` as it is, line breaks included; nothing runs.
+    pub(crate) fn paste(&mut self, text: &str, registers: &mut Registers) {
+        self.editor.paste(&clean(text), registers);
     }
 
     /// Gives up the command of Normal mode that waits, as the keymap gives up its keys.
@@ -206,6 +231,8 @@ impl CommandLine {
     /// the rest.
     pub(crate) fn handle_typed(&mut self, typed: Typed, registers: &mut Registers) -> CommandEvent {
         self.foreign = false;
+        // `j` and `k` keep the column of the first of them.
+        let column = self.column.take();
         let Typed { resolved, extra } = typed;
         let action = match resolved {
             Resolved::Insert(c) => {
@@ -228,6 +255,9 @@ impl CommandLine {
         let event = match action {
             Action::Up | Action::Down => {
                 let mut event = CommandEvent::None;
+                let (start, _) = self.line_bounds();
+                let column = column.unwrap_or(self.editor.cursor() - start);
+                self.column = Some(column);
                 for _ in 0..extra.times() {
                     let (start, end) = self.line_bounds();
                     if action == Action::Up && start == 0 {
@@ -238,7 +268,10 @@ impl CommandLine {
                         event = CommandEvent::Newer;
                         break;
                     }
-                    self.move_line(action == Action::Down);
+                    self.move_line(action == Action::Down, column);
+                }
+                if event != CommandEvent::None {
+                    self.column = None;
                 }
                 event
             }
@@ -250,6 +283,12 @@ impl CommandLine {
                 CommandEvent::None
             }
             Action::Confirm => return self.confirm(end),
+            // Ctrl+f goes to Normal mode where the cursor is, as vim's window of the command
+            // line opens, rather than one character back, as Esc does.
+            Action::NormalMode if self.mode() == Mode::Insert => {
+                self.editor.set_mode(Mode::Normal);
+                return CommandEvent::None;
+            }
             // Esc after Ctrl+o goes back to Insert mode before it closes the line.
             Action::Cancel => {
                 if self.editor.handle(action, extra, registers) {
@@ -258,7 +297,14 @@ impl CommandLine {
                 return CommandEvent::Close;
             }
             _ => {
-                self.editor.handle(action, extra, registers);
+                // A key that is not the editor's is the one command after Ctrl+o too.
+                if !self.editor.handle(action, extra, registers) {
+                    self.editor.give_up();
+                }
+                // After `$`, `j` and `k` go to the ends of the lines.
+                if action == Action::TextEnd {
+                    self.column = Some(usize::MAX);
+                }
                 return CommandEvent::None;
             }
         };
@@ -267,12 +313,11 @@ impl CommandLine {
         event
     }
 
-    /// Puts the cursor on the next line, or the one before, in the same column or at the end
-    /// of a shorter line. From the last line or the first one, it stays.
-    fn move_line(&mut self, next: bool) {
+    /// Puts the cursor on the next line, or the one before, in `column` or at the end of a
+    /// shorter line. From the last line or the first one, it stays.
+    fn move_line(&mut self, next: bool, column: usize) {
         let chars = self.chars();
         let (start, end) = self.line_bounds();
-        let column = self.editor.cursor() - start;
         let (start, end) = if next {
             if end == chars.len() {
                 return;
@@ -284,7 +329,8 @@ impl CommandLine {
             }
             line_bounds(&chars, start - 1)
         };
-        self.editor.set_cursor((start + column).min(end));
+        self.editor
+            .set_cursor(start.saturating_add(column).min(end));
     }
 
     /// Enter: a new line after an odd number of `\` at the end of the line, as a shell
@@ -582,7 +628,7 @@ mod tests {
     fn pasted_text_goes_in_whole_and_never_runs() {
         let mut line = shell("echo ");
         press(&mut line, Action::Left);
-        line.paste("a\r\nb\rc\u{1b}[2J\td");
+        line.paste("a\r\nb\rc\u{1b}[2J\td", &mut Registers::default());
         assert_eq!(line.text(), "echoa\nb\nc[2J\td ");
         assert_eq!(line.editor.cursor(), 14, "after the pasted text");
         line.set_text("make\n  && ls\n\n");
@@ -617,11 +663,72 @@ mod tests {
     }
 
     #[test]
+    fn j_and_k_keep_their_column_and_go_to_the_ends_after_dollar() {
+        let mut line = shell("abcdef\nab\nabcdef");
+        press(&mut line, Action::NormalMode);
+        assert_eq!(line.mode(), Mode::Normal);
+        press(&mut line, Action::TextStart);
+        for _ in 0..5 {
+            press(&mut line, Action::Right);
+        }
+        assert_eq!(line.editor.cursor(), 15, "column 5 of the last line");
+        press(&mut line, Action::Up);
+        assert_eq!(line.editor.cursor(), 8, "the end of a shorter line");
+        press(&mut line, Action::Up);
+        assert_eq!(line.editor.cursor(), 5, "column 5 again, as vim's curswant");
+        press(&mut line, Action::Left);
+        press(&mut line, Action::Down);
+        press(&mut line, Action::Down);
+        assert_eq!(line.editor.cursor(), 14, "a move forgets it");
+        press(&mut line, Action::Up);
+        press(&mut line, Action::Up);
+        press(&mut line, Action::TextEnd);
+        press(&mut line, Action::Down);
+        press(&mut line, Action::Down);
+        assert_eq!(
+            line.editor.cursor(),
+            15,
+            "after $, the last character of each line"
+        );
+    }
+
+    #[test]
+    fn ctrl_f_goes_to_normal_mode_where_the_cursor_is() {
+        let mut line = shell("abc");
+        press(&mut line, Action::Left);
+        press(&mut line, Action::Left);
+        press(&mut line, Action::NormalMode);
+        assert_eq!((line.mode(), line.editor.cursor()), (Mode::Normal, 1));
+    }
+
+    #[test]
+    fn an_undo_after_the_history_goes_on_from_the_command_it_brings_back() {
+        let history = ["one", "two", "three"];
+        let mut line = shell("");
+        line.browse(true, &history);
+        line.browse(true, &history);
+        assert_eq!(line.text(), "two");
+        press(&mut line, Action::NormalMode);
+        press(&mut line, Action::Undo);
+        assert_eq!(line.text(), "one");
+        line.browse(true, &history);
+        assert_eq!(line.text(), "two", "after one, not after two");
+        // An edit makes the text what was typed.
+        press(&mut line, Action::DeleteChar);
+        line.browse(true, &history);
+        assert_eq!(line.text(), "one");
+        line.browse(false, &history);
+        assert_eq!(line.text(), "tw");
+    }
+
+    #[test]
     fn keys_edit_within_the_line_of_the_cursor() {
         let mut line = shell("first line\nsecond");
         press(&mut line, Action::TextStart);
         assert_eq!(line.editor.cursor(), 11, "the start of its line");
-        press(&mut line, Action::TextEnd);
+        for _ in 0..6 {
+            press(&mut line, Action::Right);
+        }
         press(&mut line, Action::Up);
         assert_eq!(line.editor.cursor(), 6, "the same column above");
         press(&mut line, Action::DeleteToEnd);

@@ -136,6 +136,10 @@
 - [ ] `.` repeats the last change, in text fields and of files
 - [ ] Yanks copied to the system clipboard through OSC 52, behind a setting
 - [ ] A key of vim's for editing the command line in `$EDITOR`
+- [ ] Words as vim's 'iskeyword' parts them: also where the script changes (Latin, Han, kana,
+      emoji), and with `×` and `÷` as letters
+- [ ] More of vim's commands in text fields: `r`, `u`, `U`, `D`, `X`, `C`, `S`, and `J` in
+      Visual mode, and `U` in Normal mode
 - [ ] Text objects in text fields: `iw`, `aw`, `iW`, `aW`, quotes, and brackets (`c i w`,
       `d i "`, `c i (`); `c i w` only moves the cursor until then
 - [ ] Registers as vim's: `"0` the last yank, `"1` … `"9` and `"-` the deletes; any other

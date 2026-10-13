@@ -43,18 +43,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     x, X, s, S, C, D, r, and ~ change; p and P put; u and Ctrl+r undo and redo; i, a, I, and A
     go to Insert mode, and v to Visual mode, whose d, c, y, and ~ act on what it selects. Text
     goes to registers: the unnamed one, and "a … "z, which "A … "Z append to; every field and
-    the command line share them, and Ctrl+r and a register puts one in Insert mode. Ctrl+o runs
-    one command of Normal mode from Insert mode, Ctrl+v types the next key as it is, and Alt and
-    a key stand for Esc and the key, as in vim in a terminal; on a password they do nothing.
+    the command line share them, and Ctrl+r and a register puts one in Insert mode. " names a
+    register wherever keys are commands, so that "x in a panel moves nothing. Ctrl+o runs one
+    command of Normal mode from Insert mode, from after the end of a line on its last character,
+    as vim's; Ctrl+v types the next key as it is, and Alt and a key stand for Esc and the key, as
+    in vim in a terminal; on a password they do nothing. As nvim's, Ctrl+w and Ctrl+u stop once
+    where Insert mode started, a move of the cursor starts a new change for undo, and redo leaves
+    the cursor where the change was made.
   - The command line is vim's: Esc closes it, Ctrl+b and Ctrl+e go to the ends of the line,
     Ctrl+p and Ctrl+n through the history, and Ctrl+f goes to Normal mode, where j and k go
-    through its lines and the history, and q : opens the window of the history.
+    through its lines, keeping their column, and the history, and q : opens the window of the
+    history.
   - The lists (the location menu, the tab menu, the zoxide window, the workspaces, the command
     history) open in Normal mode: j, k, g g, G, Ctrl+d, and Ctrl+u move, Enter takes the row,
     d d deletes it where F8 does, and q closes; / types in the filter, where Ctrl+r types a
     register too, and Esc goes back to the rows with the filter kept.
-  - Dialogs: j, k, h, l, and Tab move between fields and buttons, Space switches, and q closes,
-    in Normal mode; the focus comes to a field in Insert mode with Tab or a click.
+  - Dialogs: j, k, h, l, and Tab move between fields and buttons, g g and G to the first and the
+    last, Space switches, and q closes, in Normal mode; the focus comes to a field in Insert mode
+    with Tab or a click.
   - The pull-down menu: h, j, k, and l move, and Alt and a highlighted letter run its command.
   - The F-keys of the panels stay mc's, in Normal and Visual mode and in quick search: F1 …
     F10, Shift+F6, Shift+F7, Shift+F9, Alt+F1, and Alt+F2.
@@ -92,13 +98,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   or F8 removes it. `shell.history_size` (500, as bash's `HISTSIZE`, or Command line → History size
   in Options → Configuration) sets how many commands are kept; a command that starts with a space is
   never kept.
-- Input for the command line: Shift+Enter starts a new line where the terminal speaks the
-  kitty keyboard protocol, which Noon Commander now asks for where the terminal has it, with
-  the keys typed with Shift reported too, so that Alt and a symbol typed with Shift, such as
-  Alt+*, stand for Esc and that symbol; and pasted text arrives whole through bracketed paste, so a
-  pasted line break never runs a command. Text fields take pasted text without its line breaks,
-  as one change in any mode; quick search and the filters of the lists take it too, a list in
-  Normal mode in its filter; panels ignore it rather than take its characters as keys.
+- Input for the command line: Shift+Enter starts a new line where the terminal speaks the kitty
+  keyboard protocol, which Noon Commander now asks for where the terminal has it, with the keys
+  typed with Shift reported too, so that Alt and a symbol typed with Shift, such as Alt+*, stand for
+  Esc and that symbol; and pasted text arrives whole through bracketed paste, so a pasted line break
+  never runs a command. Text fields take pasted text without its line breaks, as one change in any
+  mode, as nvim puts it: after the cursor in Normal mode, and in place of the selection in Visual
+  mode; quick search and the filters of the lists take it too, a list in Normal mode in its filter;
+  panels ignore it rather than take its characters as keys.
 - A command line for shell commands: `!` opens it in a panel, and so does `:`, for commands of Noon
   Commander, of which `:!command` is the only one so far. The prompt shows the panel's directory,
   with the host's label or alias on a host, where the command runs over the host's connection with a

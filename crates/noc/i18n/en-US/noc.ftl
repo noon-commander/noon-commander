@@ -34,6 +34,9 @@ fkey-close-tab = Close
 
 mode-insert = -- INSERT --
 mode-visual = -- VISUAL --
+# After Ctrl+o in Insert mode, for the one command of Normal mode, as vim says it.
+mode-insert-once = -- (insert) --
+mode-insert-visual = -- (insert) VISUAL --
 
 ## The title of the terminal's window or tab (src/tui/app), with ui.terminal_title. Prefix:
 ## terminal-.
@@ -492,10 +495,10 @@ help-dialog-up = Previous button; in this help, one line up
 help-dialog-down = Next button; in this help, one line down
 help-dialog-left = Previous button
 help-dialog-right = Next button
-help-dialog-page-up = In this help, one page up
-help-dialog-page-down = In this help, one page down
-help-dialog-home = In this help, the top
-help-dialog-end = In this help, the end
+help-dialog-page-up = The first field or button; in a list or this help, one page up
+help-dialog-page-down = The last field or button; in a list or this help, one page down
+help-dialog-home = The first field or button; in a list or this help, the top
+help-dialog-end = The last field or button; in a list or this help, the end
 help-next-field = Next field or button
 help-prev-field = Previous field or button
 help-confirm = Press the button with the focus
@@ -542,7 +545,6 @@ help-field-put-after = Put the text of the register after the cursor
 help-field-put-before = Put the text of the register before the cursor
 help-field-undo = Undo the last change
 help-field-redo = Redo what undo took back
-help-field-register = The register, a … z, for the next command; A … Z append to it
 help-field-paste-register = Put the text of the register typed after it
 help-field-literal = Type the next key as it is
 help-rename-confirm = Rename to the name typed
@@ -570,6 +572,7 @@ help-note-command = ! opens the command line, and : too, for commands of Noon Co
 help-note-pulldown = In the pull-down menu, Alt and the highlighted letter of a menu open it, and Alt and that of a command run it.
 help-note-key-hints = After a key that starts longer sequences, such as g or Ctrl+w, the keys that can follow show after a moment, and wait for one; Esc closes them, and Backspace takes back the last key.
 help-key-hints = The keys that can be typed now, and what they do
+help-register = The register for the next command: a … z, which text fields share, and A … Z to append to it
 
 ## Key hints, as which-key shows them (src/tui/which_key): the keys that can follow those
 ## typed so far, at the bottom of the panels. Prefix: which-key-.

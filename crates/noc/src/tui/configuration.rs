@@ -483,7 +483,7 @@ impl Configuration {
     }
 
     /// The text field under the cursor, if the settings have the focus.
-    fn field(&self) -> Option<&Field> {
+    pub(crate) fn field(&self) -> Option<&Field> {
         if self.focus != Focus::Settings {
             return None;
         }
@@ -513,9 +513,9 @@ impl Configuration {
     }
 
     /// Puts pasted `text` in the text field under the cursor, if any.
-    pub(crate) fn paste(&mut self, text: &str) {
+    pub(crate) fn paste(&mut self, text: &str, registers: &mut Registers) {
         if let Some(field) = self.field_mut() {
-            field.paste(text);
+            field.paste(text, registers);
         }
     }
 
@@ -549,7 +549,12 @@ impl Configuration {
     /// the dialog, applying the text field under the cursor, or putting it back if invalid.
     pub(crate) fn handle_typed(&mut self, typed: Typed, registers: &mut Registers) -> ConfigEvent {
         let before = (self.focus, self.category, self.row);
-        let left = self.mode();
+        // A field after Ctrl+o is in Insert mode but for one command.
+        let left = if self.field().is_some_and(Field::once) {
+            Mode::Insert
+        } else {
+            self.mode()
+        };
         let event = self.take(typed, registers);
         if (self.focus, self.category, self.row) != before {
             let tab = matches!(
@@ -581,6 +586,8 @@ impl Configuration {
                 if field.handle(action, extra, registers) {
                     return event;
                 }
+                // A key of the dialog's is the one command after Ctrl+o.
+                field.give_up();
                 action
             }
             (Resolved::Action(action), None) => action,
@@ -601,6 +608,8 @@ impl Configuration {
                 | Action::Down
                 | Action::PageUp
                 | Action::PageDown
+                | Action::Home
+                | Action::End
                 | Action::NextField
                 | Action::PrevField
                 | Action::Confirm
@@ -1317,6 +1326,25 @@ mod tests {
         let event = dialog.handle(action(Action::Cancel));
         assert!(event.closed);
         assert_eq!(event.change.unwrap().1.transfer.parallel_jobs.get(), 3);
+    }
+
+    #[test]
+    fn g_g_and_g_apply_a_text_field_and_a_key_after_ctrl_o_leaves_insert_mode_on() {
+        let mut dialog = dialog();
+        category(&mut dialog, 1);
+        dialog.handle(action(Action::Down));
+        typed(&mut dialog, "4");
+        dialog.handle(action(Action::NormalMode));
+        let event = dialog.handle(action(Action::Home));
+        assert_eq!(dialog.row, 0, "g g");
+        assert_eq!(event.change.unwrap().1.transfer.parallel_jobs.get(), 4);
+        // After Ctrl+o, j is the one command, and the next field is in Insert mode.
+        category(&mut dialog, 2);
+        dialog.handle(action(Action::AppendAtEnd));
+        dialog.handle(action(Action::NormalOnce));
+        assert_eq!(dialog.mode(), Mode::Normal);
+        dialog.handle(action(Action::Down));
+        assert_eq!((dialog.row, dialog.mode()), (1, Mode::Insert));
     }
 
     /// Presses the mouse on the first cell of `text`, with `offset` cells more, where `dialog`

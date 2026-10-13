@@ -29,7 +29,7 @@ use super::complete::{self, Candidate, Choices, ChoicesEvent, Kind, Offer, Outco
 use super::configuration::{ConfigEvent, Configuration};
 use super::decor::Decor;
 use super::dialog::{Ask, Button, Dialog, DialogEvent, Field, Reply};
-use super::edit::Registers;
+use super::edit::{Editor, Registers};
 use super::help::Help;
 use super::history::{HistoryEvent, HistoryWindow};
 use super::jobs::{JobsEvent, JobsList, Row};
@@ -868,19 +868,21 @@ impl App {
         match self.place() {
             (_, Context::CommandLine) => {
                 if let Some(line) = &mut self.command_line {
-                    line.paste(text);
+                    line.paste(text, &mut self.registers);
                 }
             }
             (_, Context::Rename) => {
+                let mut registers = std::mem::take(&mut self.registers);
                 if let Some(field) = self.panel_mut(self.active).rename_field() {
-                    field.paste(text);
+                    field.paste(text, &mut registers);
                 }
+                self.registers = registers;
             }
             (_, Context::DialogInput | Context::PathInput | Context::Completion) => {
                 self.completion = None;
                 match (self.dialogs.front_mut(), &mut self.configuration) {
-                    (Some(open), _) => open.dialog.paste(text),
-                    (None, Some(configuration)) => configuration.paste(text),
+                    (Some(open), _) => open.dialog.paste(text, &mut self.registers),
+                    (None, Some(configuration)) => configuration.paste(text, &mut self.registers),
                     (None, None) => {}
                 }
             }
@@ -1352,6 +1354,23 @@ impl App {
 
     /// The operator that a text field with the keys has waiting for its motion, as `showcmd`
     /// shows it.
+    /// The editor of the text field that has the keys, if one does.
+    fn focused_editor(&self) -> Option<&Editor> {
+        let field = match self.place().1 {
+            Context::DialogInput | Context::PathInput | Context::Completion => {
+                match (self.dialogs.front(), &self.configuration) {
+                    (Some(open), _) => open.dialog.focused_field(),
+                    (None, Some(configuration)) => configuration.field(),
+                    (None, None) => None,
+                }
+            }
+            Context::Rename => self.panel(self.active).rename_field_ref(),
+            Context::CommandLine => return self.command_line.as_ref().map(CommandLine::editor),
+            _ => None,
+        };
+        field.map(Field::editor)
+    }
+
     fn pending_operator(&self) -> Option<String> {
         if let Some(open) = self.dialogs.front() {
             return open.dialog.pending();
@@ -2025,10 +2044,18 @@ impl App {
         match action {
             // The hints show their keys over what is in front, which stays open.
             Action::KeyHints => self.hints_asked = Some(self.place()),
-            // So does the output of commands, and what is in front is there again afterwards.
-            Action::UserScreen => self.handover = Some(Handover::UserScreen),
+            // So does the output of commands, and what is in front is there again afterwards;
+            // as a command of its own, it gives up an operator that waits, and is the one
+            // command after Ctrl+o.
+            Action::UserScreen => {
+                self.give_up_command();
+                self.handover = Some(Handover::UserScreen);
+            }
             // A redraw leaves what is in front as it was too; quick search goes on after it.
-            Action::Redraw => self.redraw = true,
+            Action::Redraw => {
+                self.give_up_command();
+                self.redraw = true;
+            }
             // As in a text field, Ctrl+r types the text of a register in the filter of a list.
             Action::PasteRegister if self.filtering() => {
                 let text = self.registers.text(self.extra.char).unwrap_or_default();
@@ -4535,7 +4562,13 @@ impl App {
             Some(Action::Cancel) => {
                 self.panel_mut(self.active).end_rename();
             }
-            _ => {}
+            // A key that is not the field's is the one command after Ctrl+o.
+            Some(_) => {
+                if let Some(field) = self.panel_mut(self.active).rename_field() {
+                    field.give_up();
+                }
+            }
+            None => {}
         }
         Vec::new()
     }
@@ -5398,16 +5431,28 @@ impl App {
         if area.is_empty() {
             return;
         }
+        let editor = self.focused_editor();
+        let once = editor.is_some_and(Editor::once);
         let mode = match self.place() {
             (Mode::Insert, context) if context != Context::QuickSearch => Some(fl!("mode-insert")),
+            (Mode::Normal, _) if once => Some(fl!("mode-insert-once")),
+            (Mode::Visual, _) if once => Some(fl!("mode-insert-visual")),
             (Mode::Visual, _) => Some(fl!("mode-visual")),
             _ => None,
         };
-        let typed = format!(
+        let mut typed = format!(
             "{}{}",
             self.pending_operator().unwrap_or_default(),
             self.showcmd
         );
+        // With nothing typed, Visual mode shows how much it selects, as vim's `showcmd` does.
+        if typed.is_empty() && self.mode() == Mode::Visual {
+            let size = match editor {
+                Some(editor) => editor.selection_size(),
+                None => self.panel(self.active).visual_size(),
+            };
+            typed = size.map(|size| size.to_string()).unwrap_or_default();
+        }
         // As vim's, the last ten cells of what is typed.
         let typed: String = typed
             .chars()
@@ -6333,6 +6378,39 @@ mod tests {
         assert_eq!(cursor_name(&app, Side::Left), "b4");
         keys(&mut app, &["ctrl-o"]);
         assert_eq!(cursor_name(&app, Side::Left), "b1");
+    }
+
+    #[test]
+    fn ctrl_l_gives_up_an_operator_and_is_the_one_command_after_ctrl_o() {
+        let mut app = with_files(&["report.pdf"]);
+        let text = |app: &mut App| {
+            let panel = app.panel_mut(Side::Left);
+            panel.rename_field().map(|field| field.text().to_owned())
+        };
+        keys(&mut app, &["j", "r", "esc", "0", "d", "ctrl-l", "w"]);
+        assert_eq!(
+            text(&mut app).as_deref(),
+            Some("report.pdf"),
+            "w only moved"
+        );
+        keys(&mut app, &["shift-a", "ctrl-o"]);
+        assert!(screen(&mut app).contains("-- (insert) --"));
+        keys(&mut app, &["ctrl-l"]);
+        assert_eq!(app.place(), (Mode::Insert, Context::Rename));
+        assert!(screen(&mut app).contains("-- INSERT --"));
+    }
+
+    #[test]
+    fn visual_mode_shows_how_much_it_selects() {
+        let mut app = with_files(&["abc", "bcd", "cde"]);
+        keys(&mut app, &["j", "v", "j"]);
+        let shown = screen(&mut app);
+        assert!(
+            line_with(&shown, "-- VISUAL --").ends_with(" 2\""),
+            "{shown}"
+        );
+        keys(&mut app, &["esc", "r", "esc", "0", "v", "l"]);
+        assert!(line_with(&screen(&mut app), "-- VISUAL --").ends_with(" 2\""));
     }
 
     #[test]

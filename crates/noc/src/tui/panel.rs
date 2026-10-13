@@ -1174,6 +1174,11 @@ impl Panel {
         }
     }
 
+    /// How many rows Visual mode selects, as vim's `showcmd` shows them.
+    pub(crate) fn visual_size(&self) -> Option<usize> {
+        self.visual_rows().map(Iterator::count)
+    }
+
     /// The rows Visual mode selects.
     fn visual_rows(&self) -> Option<RangeInclusive<usize>> {
         let anchor = self.visual?.min(self.rows().saturating_sub(1));

@@ -7,12 +7,15 @@
 use super::{Action, Context, Mode, Preset};
 
 pub(super) const PRESET: Preset = &[
-    // Everywhere but the output of commands: the other contexts fall back to it last.
+    // Everywhere but the output of commands: the other contexts fall back to it last. `"`
+    // names a register wherever keys are commands, as in vim, so that the name is never one;
+    // in Insert mode it is text.
     (
         Mode::Normal,
         Context::Global,
         &[
             (Action::KeyHints, &["ctrl-k"]),
+            (Action::Register, &["\""]),
             (Action::UserScreen, &["g <"]),
             (Action::Redraw, &["ctrl-l"]),
         ],
@@ -168,7 +171,7 @@ pub(super) const PRESET: Preset = &[
         ],
     ),
     // What the text fields share in Normal mode: vim's motions, and its commands that change
-    // the text. A count goes before them, a register after `"`.
+    // the text. A count goes before them, and a register after `"`, which `global` binds.
     (
         Mode::Normal,
         Context::Input,
@@ -179,11 +182,11 @@ pub(super) const PRESET: Preset = &[
             (Action::TextStart, &["0", "home"]),
             (Action::FirstNonBlank, &["^"]),
             (Action::TextEnd, &["$", "end"]),
-            (Action::WordForward, &["w", "shift-right", "ctrl-right"]),
-            (Action::WordBackward, &["b", "shift-left", "ctrl-left"]),
+            (Action::WordForward, &["w", "shift-right"]),
+            (Action::WordBackward, &["b", "shift-left"]),
             (Action::WordEnd, &["e"]),
-            (Action::BigWordForward, &["shift-w"]),
-            (Action::BigWordBackward, &["shift-b"]),
+            (Action::BigWordForward, &["shift-w", "ctrl-right"]),
+            (Action::BigWordBackward, &["shift-b", "ctrl-left"]),
             (Action::BigWordEnd, &["shift-e"]),
             (Action::FindChar, &["f"]),
             (Action::FindCharBack, &["shift-f"]),
@@ -213,7 +216,6 @@ pub(super) const PRESET: Preset = &[
             (Action::PutBefore, &["shift-p"]),
             (Action::Undo, &["u"]),
             (Action::Redo, &["ctrl-r"]),
-            (Action::Register, &["\""]),
         ],
     ),
     // Text selected in a field, from where Visual mode started to the cursor.
@@ -243,7 +245,6 @@ pub(super) const PRESET: Preset = &[
             (Action::ChangeOperator, &["c", "s"]),
             (Action::YankOperator, &["y"]),
             (Action::ToggleCase, &["~"]),
-            (Action::Register, &["\""]),
             (Action::NormalMode, &["esc", "ctrl-[", "v"]),
         ],
     ),

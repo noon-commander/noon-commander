@@ -256,6 +256,7 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Global, Action::KeyHints) => fl!("help-key-hints"),
         (Context::Global, Action::UserScreen) => fl!("help-user-screen"),
         (Context::Global, Action::Redraw) => fl!("help-redraw"),
+        (Context::Global, Action::Register) => fl!("help-register"),
         (Context::PullDown, Action::Cancel) => fl!("help-pulldown-close"),
         (Context::PullDown, Action::Up) => fl!("help-pulldown-up"),
         (Context::PullDown, Action::Down) => fl!("help-pulldown-down"),
@@ -475,7 +476,6 @@ fn describe_text(context: Context, action: Action) -> Option<String> {
         Action::PutBefore => fl!("help-field-put-before"),
         Action::Undo => fl!("help-field-undo"),
         Action::Redo => fl!("help-field-redo"),
-        Action::Register => fl!("help-field-register"),
         Action::PasteRegister => fl!("help-field-paste-register"),
         Action::InsertLiteral => fl!("help-field-literal"),
         _ => return None,
@@ -737,17 +737,17 @@ mod tests {
     #[test]
     fn scrolls_within_its_rows_and_closes() {
         let mut help = Help::new(&Keymap::default(), true);
-        let top = draw(&mut help, 60, 12);
+        let top = draw(&mut help, 60, 14);
         assert!(top.contains("Panels"), "{top}");
         assert!(!help.handle(action(Action::PageDown)));
-        assert_ne!(draw(&mut help, 60, 12), top);
+        assert_ne!(draw(&mut help, 60, 14), top);
         help.handle(action(Action::End));
-        let bottom = draw(&mut help, 60, 12);
+        let bottom = draw(&mut help, 60, 14);
         assert!(bottom.contains("Backspace takes back"), "{bottom}");
         help.handle(action(Action::Down));
-        assert_eq!(draw(&mut help, 60, 12), bottom, "no further than the end");
+        assert_eq!(draw(&mut help, 60, 14), bottom, "no further than the end");
         help.handle(action(Action::Home));
-        assert_eq!(draw(&mut help, 60, 12), top);
+        assert_eq!(draw(&mut help, 60, 14), top);
         assert!(help.handle(action(Action::Cancel)));
         assert!(help.handle(action(Action::Confirm)));
     }

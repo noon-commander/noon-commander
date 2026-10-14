@@ -137,7 +137,14 @@
 - [ ] Yanks copied to the system clipboard through OSC 52, behind a setting
 - [ ] A key of vim's for editing the command line in `$EDITOR`
 - [ ] Words as vim's 'iskeyword' parts them: also where the script changes (Latin, Han, kana,
-      emoji), and with `×` and `÷` as letters
+      emoji), with `×` and `÷` as letters, and with U+200B as a blank
+- [ ] A character and its combining marks as one, as vim's: an `e` with U+0301 (names in NFD,
+      as macOS has them) is moved over, deleted, replaced, yanked, and typed after as one
+      character, and the cursor never stops on the mark
+- [ ] `j` and `k` keep the column on the screen, as vim's, rather than the character: a wide
+      character takes two cells, and a tab goes to the next multiple of 8, as the command line
+      would show it
+- [ ] `~` switches the case of `ß` and `İ` as vim's does, to `ẞ` and `i`
 - [ ] More of vim's commands in text fields: `r`, `u`, `U`, `D`, `X`, `C`, `S`, and `J` in
       Visual mode, and `U` in Normal mode; Shift and Ctrl with Left and Right move in Visual mode
       as `w`, `W`, `b`, and `B`; Ctrl+r Ctrl+r, Ctrl+r Ctrl+o, and Ctrl+r Ctrl+p put a register
@@ -145,6 +152,11 @@
 - [ ] More of vim's keys: in text fields `g e`, `g E`, `|`, the operators `g u`, `g U`, and
       `g ~`, Ctrl+a and Ctrl+x, `g v`, `g i`, `g I`, `g p`, and `g P`; in the panels a count before
       `%`, and in Visual mode Ctrl+o, Tab, `O`, and `g v`
+- [ ] More of vim's keys in text fields: `g _`, `%`, `v` and `V` after an operator (`d v e`),
+      `V`, search (`*`, `#`, `/`, `?`, `n`, `N`), macros (`q`, `@`), and marks (`m`, `` ` ``),
+      so that `q a` no longer falls through to `a` and `m b` to `b`; in Insert mode Ctrl+a and
+      the register `.` (`" . p`, Ctrl+r `.`), Ctrl+q as Ctrl+v, and Ctrl+g `u`, where Ctrl+g
+      now does nothing and `u` is typed
 - [ ] The keys of vim's command line for completion: Shift+Tab with no list goes back from the
       last match, Ctrl+d lists the matches, Ctrl+l puts in what they share, and Ctrl+a all of them
 - [ ] Text objects in text fields: `iw`, `aw`, `iW`, `aW`, quotes, and brackets (`c i w`,

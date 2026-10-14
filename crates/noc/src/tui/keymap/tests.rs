@@ -323,7 +323,7 @@ fn the_list_of_completions_is_vims_wildmenu_and_passes_other_keys_to_the_field()
         actions(&[
             Action::AcceptCompletion,
             Action::CancelCompletion,
-            Action::CancelCompletion
+            Action::Cancel
         ])
     );
     // The path field's keys, which close the list.

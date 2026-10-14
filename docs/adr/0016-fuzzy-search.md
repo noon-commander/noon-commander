@@ -28,7 +28,8 @@ it does not rank items for a program that draws them itself.
   `nucleo-matcher`, the matcher of Helix: a port of fzf's algorithm with its scores and its
   extended search, MPL-2.0, with no dependencies beyond `memchr` and `unicode-segmentation`.
   Case counts once the text has a capital letter (smart case), and letters with accents match
-  those without. Off, each place matches as it did.
+  those without. Off, each place matches as it did (quick search now finds the text anywhere in
+  a name, as the filters do).
 - The code lives in `crates/noc/src/tui/fuzzy.rs`; no other crate needs it.
 - Quick search keeps the order of the listing and puts the cursor on the best match; of
   matches as good, the first from where the cursor is, as mc goes from there. Ctrl+s goes to

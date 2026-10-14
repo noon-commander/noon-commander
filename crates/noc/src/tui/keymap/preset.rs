@@ -258,7 +258,10 @@ pub(super) const PRESET: Preset = &[
             (Action::ChangeOperator, &["c", "s"]),
             (Action::YankOperator, &["y"]),
             (Action::ToggleCase, &["~"]),
-            (Action::NormalMode, &["esc", "ctrl-[", "v"]),
+            (Action::NormalMode, &["esc", "ctrl-["]),
+            // As vim's, `v` ends Visual mode keeping the column for `j` and `k`, where Esc
+            // does not.
+            (Action::VisualMode, &["v"]),
         ],
     ),
     // Quick search in the active panel, as vim's search is typed: Enter (Ctrl+j) ends it on the
@@ -392,9 +395,11 @@ pub(super) const PRESET: Preset = &[
     ),
     // The list of completions under a path field or over the command line, as vim's `wildmenu`:
     // Tab, Ctrl+n, and Down put the next match in the field, Shift+Tab, Ctrl+p, and Up the one
-    // before, round through what was typed; Ctrl+y keeps the match, and Ctrl+e puts back what
-    // was typed. Other keys close the list and go to the field: Enter confirms with the match
-    // in it, and Esc goes to Normal mode, or closes the command line, as in vim.
+    // before, round through what was typed; Left and Right complete in the directory above and
+    // in the one chosen, as vim's pop-up menu; Ctrl+y keeps the match, and Ctrl+e puts back
+    // what was typed. Other keys close the list and go to the field: Enter confirms with the
+    // match in it, Esc goes to Normal mode, or closes the command line, and Ctrl+c closes, as
+    // in vim.
     (
         Mode::Insert,
         Context::Completion,
@@ -403,8 +408,10 @@ pub(super) const PRESET: Preset = &[
             (Action::Up, &["backtab", "ctrl-p", "up"]),
             (Action::PageDown, &["pagedown"]),
             (Action::PageUp, &["pageup"]),
+            (Action::Left, &["left"]),
+            (Action::Right, &["right"]),
             (Action::AcceptCompletion, &["ctrl-y"]),
-            (Action::CancelCompletion, &["ctrl-e", "ctrl-c"]),
+            (Action::CancelCompletion, &["ctrl-e"]),
         ],
     ),
     // The viewer of F3. Space, f, and b turn the page, and u and d half of it, as in less.

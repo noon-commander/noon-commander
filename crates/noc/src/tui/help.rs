@@ -114,6 +114,14 @@ impl Help {
             return false;
         };
         let last = self.rows.saturating_sub(self.page);
+        // As vim's Ctrl+e and Ctrl+f scroll on until the last row is at the top; the others stop
+        // with it at the bottom, but never go back up.
+        let past_end = matches!(action, Action::Down | Action::PageDown);
+        let limit = if past_end {
+            self.rows.saturating_sub(1)
+        } else {
+            last.max(self.offset)
+        };
         self.offset = match action {
             Action::Up => self.offset.saturating_sub(1),
             Action::Down => self.offset + 1,
@@ -128,7 +136,7 @@ impl Help {
             Action::Cancel | Action::Confirm => return true,
             _ => self.offset,
         }
-        .min(last);
+        .min(if action == Action::End { last } else { limit });
         false
     }
 
@@ -186,7 +194,7 @@ impl Help {
             .collect();
         self.rows = lines.len();
         self.page = usize::from(inner.height).max(1);
-        self.offset = self.offset.min(self.rows.saturating_sub(self.page));
+        self.offset = self.offset.min(self.rows.saturating_sub(1));
         for (index, line) in lines
             .into_iter()
             .skip(self.offset)
@@ -613,6 +621,8 @@ fn describe_completion(context: Context, action: Action) -> Option<String> {
         (Context::Completion, Action::Up) => fl!("help-complete-prev"),
         (Context::Completion, Action::PageDown) => fl!("help-complete-page-down"),
         (Context::Completion, Action::PageUp) => fl!("help-complete-page-up"),
+        (Context::Completion, Action::Left) => fl!("help-complete-parent"),
+        (Context::Completion, Action::Right) => fl!("help-complete-into"),
         (Context::Completion, Action::AcceptCompletion) => fl!("help-complete-take"),
         (Context::Completion, Action::CancelCompletion) => fl!("help-complete-close"),
         _ => return None,
@@ -686,7 +696,7 @@ mod tests {
         assert!(has("Tab, Ctrl+i, Ctrl+n, Down", &fl!("help-complete-next")));
         assert!(has("Shift+Tab, Ctrl+p, Up", &fl!("help-complete-prev")));
         assert!(has("Ctrl+y", "Keep the match, and close the list"));
-        assert!(has("Ctrl+e, Ctrl+c", &fl!("help-complete-close")));
+        assert!(has("Ctrl+e", &fl!("help-complete-close")));
         assert!(has("/", "Type in the filter, in Insert mode"));
         // One key, three meanings, by mode and context.
         let ctrl_u: Vec<&str> = help
@@ -786,8 +796,19 @@ mod tests {
         help.handle(action(Action::End));
         let bottom = draw(&mut help, 60, 14);
         assert!(bottom.contains("Backspace takes back"), "{bottom}");
+        help.handle(action(Action::HalfPageDown));
+        help.handle(action(Action::WindowDown));
+        assert_eq!(
+            draw(&mut help, 60, 14),
+            bottom,
+            "Ctrl+d and Space stop at the end"
+        );
         help.handle(action(Action::Down));
-        assert_eq!(draw(&mut help, 60, 14), bottom, "no further than the end");
+        assert_ne!(
+            draw(&mut help, 60, 14),
+            bottom,
+            "Ctrl+e goes on until the last row is at the top, as vim's"
+        );
         help.handle(action(Action::Home));
         assert_eq!(draw(&mut help, 60, 14), top);
         assert!(help.handle(action(Action::Cancel)));

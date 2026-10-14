@@ -540,8 +540,9 @@ Text selected in a field, from where v started Visual mode to the cursor. The sa
 to it, and it falls back to `global`. The motions extend the selection, after a count too, and, as
 in vim, the cursor can go past the last character of a line, with l, Space, $, w, or a count before
 v, to take the line break too; d, c, y, and \~ act on what it selects, and " before them names the
-register. yazi's visual mode moves with the keys of its normal mode; the yazi column here has the
-keys that act on what it selects. mc selects text with Shift and the arrows, under Insert mode.
+register. Esc and v end it, but only after v do j and k keep their column, as vim's curswant. yazi's
+visual mode moves with the keys of its normal mode; the yazi column here has the keys that act on
+what it selects. mc selects text with Shift and the arrows, under Insert mode.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -572,7 +573,8 @@ keys that act on what it selects. mc selects text with Shift and the arrows, und
 | Delete the selection, then Insert mode | `change_operator` | ⏳ | c<br>s | — | — | c | — |
 | Copy the selection to a register | `yank_operator` | ⏳ | y | — | — | y | — |
 | Switch the case of the selection | `toggle_case` | ⏳ | \~ | — | — | — | — |
-| Normal mode again | `normal_mode` | ⏳ | Esc<br>Ctrl+[<br>v | — | — | — | — |
+| Normal mode again | `normal_mode` | ⏳ | Esc<br>Ctrl+[ | — | — | — | — |
+| Normal mode again, keeping the column of j and k, as vim's v | `visual_mode` | ⏳ | v | — | — | — | — |
 | Uppercase / lowercase the selection | — | ⏳ | — | — | — | U / u | — |
 
 ## Quick search (`quick_search`, Insert mode)
@@ -705,11 +707,11 @@ questions on the console.
 
 ## Help (`help`, Normal mode)
 
-g ? or F1: the keys of every mode and context, and notes on them, in Normal mode. It falls back
-to `dialog`, whose j, k, Ctrl+b, Ctrl+f, g g, G, Esc, and q scroll the help and close it, then to
-`global`; the keys of the other programs' help that do the same are there too. It adds the keys
-of the viewer: Ctrl+y, Ctrl+e, Ctrl+u, and Ctrl+d, as in vim, and Space, f, b, d, and u, as in
-less and ranger's pager; Space presses no button here.
+g ? or F1: the keys of every mode and context, and notes on them, in Normal mode. It falls back to
+`dialog`, whose j, k, Ctrl+b, Ctrl+f, g g, G, Esc, and q scroll the help and close it, then to
+`global`; the keys of the other programs' help that do the same are there too. It adds the keys of
+the viewer: Ctrl+y, Ctrl+e, Ctrl+u, and Ctrl+d, as in vim, and Space, f, b, d, and u, as in less and
+ranger's pager, which scroll as in the viewer; Space presses no button here.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -776,13 +778,15 @@ without a list.
 ## Completion list (`completion`, Insert mode)
 
 Under a path field, or over the command line, after a Tab that found several matches, in Insert
-mode, as vim's command-line completion with defaults.vim's 'wildmenu': the first match goes in
-with the Tab, and each move puts the next one in the field at once, round through what was typed;
-the list shows as a column, as vim's pop-up menu shows them. Ctrl+y keeps the match and Ctrl+e
-puts back what was typed. Keys it does not bind close it and go to the field with the match in
-it: Enter confirms, Esc goes to Normal mode, or closes the command line, as in vim. Over the
-command line the list falls back to `command_line`. ranger has no list: Tab and Shift+Tab put the
-next and the previous choice in the console's line.
+mode, as vim's command-line completion with defaults.vim's 'wildmenu': the first match goes in with
+the Tab, and each move puts the next one in the field at once, round through what was typed; the
+list shows as a column, as vim's pop-up menu ('wildoptions' pum) shows them, with its keys: Up and
+Down go through the matches, and Left and Right complete in the directory above and in the one
+chosen. Case never counts, as with vim's 'fileignorecase' on macOS. Ctrl+y keeps the match and
+Ctrl+e puts back what was typed. Keys it does not bind close it and go to the field with the match
+in it: Enter confirms, Esc goes to Normal mode, or closes the command line, and Ctrl+c closes the
+dialog or the command line, as in vim. Over the command line the list falls back to `command_line`.
+ranger has no list: Tab and Shift+Tab put the next and the previous choice in the console's line.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -790,8 +794,10 @@ next and the previous choice in the console's line.
 | The match before in the field; before the first, what was typed | `up` | ⏳ | Shift+Tab<br>Ctrl+p<br>Up | — | — | Alt+k<br>Up<br>Ctrl+p | Shift+Tab |
 | A page of matches down | `page_down` | ⏳ | PgDn | — | — | — | — |
 | A page of matches up | `page_up` | ⏳ | PgUp | — | — | — | — |
+| Complete in the directory above the one listed, as vim's pop-up menu | `left` | ⏳ | Left | — | — | — | — |
+| Complete in the directory chosen, as vim's pop-up menu | `right` | ⏳ | Right | — | — | — | — |
 | Keep the match, and close the list | `accept_completion` | ⏳ | Ctrl+y | — | — | Tab | — |
-| Put back what was typed, and close the list | `cancel_completion` | ⏳ | Ctrl+e<br>Ctrl+c | — | — | Ctrl+c | — |
+| Put back what was typed, and close the list | `cancel_completion` | ⏳ | Ctrl+e | — | — | Ctrl+c | — |
 | Put the choice in the field and run it | — | ⏳ | — | — | — | Enter | — |
 
 ## Viewer (`viewer`, Normal mode)
@@ -799,8 +805,10 @@ next and the previous choice in the console's line.
 i or F3, in Normal mode; it falls back to `global`. yazi has no viewer: it previews the file under
 the cursor beside the list. The ranger column has the keys of its pager, which shows files, the
 output of commands, and the log. The key that opens the viewer closes it too: F3, and i, as in
-ranger. Ctrl+f and Ctrl+b turn the page but for two rows, as in vim; Space, f, and b turn the whole
-page, and u and d half of it, as in less.
+ranger. Ctrl+f and Ctrl+b turn the page but for two rows, as in vim, and Ctrl+f, j, and Ctrl+e go
+on past the end until the last line is at the top, as vim's; Space, f, and b turn the whole page,
+and u and d half of it, as in less, and stop with the last line at the bottom, as Ctrl+d does in
+vim.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |

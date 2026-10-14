@@ -149,6 +149,8 @@ pub(crate) struct Word {
     pub(crate) prefix: String,
     /// It is the first word of the command, which names the command.
     pub(crate) first: bool,
+    /// Where the word starts in the text.
+    pub(crate) start: usize,
 }
 
 /// Cuts `before`, a shell command before the cursor, as sh reads its words: the word starts
@@ -174,7 +176,52 @@ pub(crate) fn word(before: &str) -> Word {
         dir: unescape(&typed[..cut]),
         prefix: unescape(&typed[cut..]),
         first: before[..start].chars().all(parts),
+        start,
     }
+}
+
+/// What vim's Left does in the list of a path completed, `word`, in its 'wildoptions' pum:
+/// the parent of the directory it lists, to complete in, as `wildmenu_process_key_filenames`
+/// works it out: `../` for the current directory, one more `../` after one.
+pub(crate) fn up_dir(word: &str) -> String {
+    let b = word.as_bytes();
+    let at = |k: usize, s: &[u8]| b.get(k..).is_some_and(|rest| rest.starts_with(s));
+    // The last `/` before the last character, and the one before it, if any.
+    let mut seps = b[..b.len().saturating_sub(1)]
+        .iter()
+        .enumerate()
+        .rev()
+        .filter(|&(k, &c)| k > 0 && c == b'/')
+        .map(|(k, _)| k);
+    let (first, second) = (seps.next(), seps.next());
+    let (start, j) = match (first, second) {
+        (None, _) => return "../".to_owned(),
+        (Some(_), Some(second)) => (second + 1, second),
+        (Some(_), None) => (0, 0),
+    };
+    if at(j, b"/../") {
+        format!("{}../", &word[..j + 4])
+    } else if j == start && at(j, b"../") {
+        format!("{}../", &word[..j + 3])
+    } else {
+        word[..start].to_owned()
+    }
+}
+
+/// What vim's Right does in the list of a path completed, `word`, in its 'wildoptions' pum:
+/// the directory to complete in, if `word` names one, or one `../` less after `../`; `None`
+/// leaves the key to the field.
+pub(crate) fn down_dir(word: &str) -> Option<String> {
+    if word.ends_with('/') && !word.ends_with("../") {
+        return Some(word.to_owned());
+    }
+    if !word.starts_with("../") {
+        return None;
+    }
+    let b = word.as_bytes();
+    let j = (1..b.len()).rev().find(|&k| b[k] == b'/')?;
+    let parent = j >= 2 && b[j - 1] == b'.' && b[j - 2] == b'.';
+    (parent && (j == 2 || b[j - 3] == b'/')).then(|| word[..j - 2].to_owned())
 }
 
 /// What a Tab finds for a prefix.
@@ -195,20 +242,12 @@ pub(crate) fn complete(prefix: &str, candidates: Vec<Candidate>) -> Outcome {
         .into_iter()
         .filter(|candidate| !candidate.name.starts_with('.') || prefix.starts_with('.'))
         .collect();
-    let exact: Vec<Candidate> = shown
-        .iter()
-        .filter(|candidate| candidate.name.starts_with(prefix))
-        .cloned()
+    // Case never counts, as vim's 'fileignorecase' has it on macOS.
+    let lower = prefix.to_lowercase();
+    let mut matches: Vec<Candidate> = shown
+        .into_iter()
+        .filter(|candidate| candidate.name.to_lowercase().starts_with(&lower))
         .collect();
-    let mut matches = if exact.is_empty() {
-        let lower = prefix.to_lowercase();
-        shown
-            .into_iter()
-            .filter(|candidate| candidate.name.to_lowercase().starts_with(&lower))
-            .collect()
-    } else {
-        exact
-    };
     matches.sort_by(|a, b| {
         let key = |candidate: &Candidate| candidate.name.to_lowercase();
         key(a)
@@ -458,6 +497,25 @@ mod tests {
     }
 
     #[test]
+    fn left_and_right_go_up_and_down_the_directories_as_vims_pop_up_menu() {
+        // Checked against vim 9.1 with 'wildoptions' pum.
+        assert_eq!(up_dir("alpha/one"), "");
+        assert_eq!(up_dir("alpha/sub/f1"), "alpha/");
+        assert_eq!(up_dir("alpha/sub/"), "");
+        assert_eq!(up_dir("a b"), "../");
+        assert_eq!(up_dir(""), "../");
+        assert_eq!(up_dir("../bin/"), "../../");
+        assert_eq!(up_dir("../bin/mycmd"), "../");
+        assert_eq!(up_dir("x/../y"), "x/../../");
+        assert_eq!(down_dir("alpha/"), Some("alpha/".to_owned()));
+        assert_eq!(down_dir("alpine.txt"), None);
+        assert_eq!(down_dir("../"), Some(String::new()));
+        assert_eq!(down_dir("../../A.patch"), Some("../".to_owned()));
+        assert_eq!(down_dir("../x"), Some(String::new()));
+        assert_eq!(down_dir("../bin/mycmd"), None);
+    }
+
+    #[test]
     fn splits_after_the_last_slash_or_a_host() {
         let hosts = |host: &str| host == "web";
         let cut = |before: &str| split(before, hosts);
@@ -501,6 +559,7 @@ mod tests {
                 dir: "src/".to_owned(),
                 prefix: "ma".to_owned(),
                 first: false,
+                start: 6,
             }
         );
         assert_eq!(
@@ -510,6 +569,7 @@ mod tests {
                 dir: String::new(),
                 prefix: "gi".to_owned(),
                 first: true,
+                start: 2,
             }
         );
         let escaped = word("cat my\\ dir/a\\ \\$b");
@@ -579,7 +639,7 @@ mod tests {
     }
 
     #[test]
-    fn dot_names_show_for_a_dot_and_case_counts_until_nothing_matches() {
+    fn dot_names_show_for_a_dot_and_case_never_counts() {
         let candidates = vec![dir(".git"), dir("src"), dir("Docs")];
         assert_eq!(
             complete("", candidates.clone()),
@@ -589,8 +649,8 @@ mod tests {
         assert_eq!(complete("d", candidates), Outcome::One(dir("Docs")));
         assert_eq!(
             complete("D", vec![dir("Desktop"), dir("dev")]),
-            Outcome::One(dir("Desktop")),
-            "an exact match comes first"
+            Outcome::List(vec![dir("Desktop"), dir("dev")]),
+            "as vim's 'fileignorecase'"
         );
         assert_eq!(
             complete("d", vec![dir("Dev"), dir("Desktop")]),

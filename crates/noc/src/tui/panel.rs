@@ -830,7 +830,7 @@ impl Panel {
     }
 
     /// Types `c` at the cursor of quick search and searches again, as vim's incremental search
-    /// does: from where the search goes from to the first name that starts with the text,
+    /// does: from where the search goes from to the first name that holds the text,
     /// ignoring case, or, `fuzzy` (`ui.fuzzy_search`), to the best match as fzf ranks them, the
     /// first from there of several as good. While nothing matches, the cursor stays where the
     /// search goes from, and the text stays as typed.
@@ -906,7 +906,7 @@ impl Panel {
     }
 
     /// The row of match `count` of `text` (lower case) from `from`, in half rows: down to the
-    /// first name after it that starts with the text, round to the top, or, `back`, up to the
+    /// first name after it that holds the text, round to the top, or, `back`, up to the
     /// first before it, round to the bottom; and whether the search went round.
     fn find_from(
         &self,
@@ -921,7 +921,7 @@ impl Panel {
         let mut round = false;
         // No more steps than rows: round, they come back to where they were.
         for _ in 0..count.clamp(1, rows.max(1)) {
-            let matches = |row: &usize| self.starts_with(*row, text);
+            let matches = |row: &usize| self.contains(*row, text);
             let next = if back {
                 (0..rows)
                     .rev()
@@ -990,10 +990,11 @@ impl Panel {
         })
     }
 
-    /// Whether the name of row `index` starts with `text` (lower case), ignoring case.
-    fn starts_with(&self, index: usize, text: &str) -> bool {
+    /// Whether the name of row `index` holds `text` (lower case) anywhere, ignoring case, as the
+    /// filters of the lists match without fzf.
+    fn contains(&self, index: usize, text: &str) -> bool {
         self.search_name(index)
-            .is_some_and(|name| name.to_lowercase().starts_with(text))
+            .is_some_and(|name| name.to_lowercase().contains(text))
     }
 
     /// The rows whose names match `text` as fzf matches it, with their scores, best first;
@@ -2540,6 +2541,19 @@ mod tests {
         panel.scroll(10);
         assert!(!panel.searching());
         assert_eq!((panel.cursor, panel.window.top()), (cursor, top));
+    }
+
+    #[test]
+    fn literal_quick_search_finds_the_text_anywhere_in_a_name_as_the_filters_do() {
+        let mut panel = search_files(&["bar", "cab", "Tabs"]);
+        panel.search_down(1);
+        typed(&mut panel, "AB", false);
+        assert_eq!(under_cursor(&panel), "cab");
+        panel.search_step(true, false);
+        assert_eq!(under_cursor(&panel), "Tabs", "ignoring case");
+        panel.end_search(false);
+        assert_eq!(panel.search_again("ab", true, false, 1), Some(true));
+        assert_eq!(under_cursor(&panel), "cab", "round");
     }
 
     #[test]

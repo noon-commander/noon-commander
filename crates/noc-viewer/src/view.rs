@@ -101,14 +101,16 @@ impl Viewer {
     pub fn handle(&mut self, command: Command) {
         match command {
             Command::Up => self.up(1),
-            Command::Down => self.down(1),
+            // As vim's Ctrl+e and Ctrl+f, which scroll on until the last line is at the top.
+            Command::Down => self.down(1, true),
             Command::PageUp => self.up(page_less_overlap(self.page)),
-            Command::PageDown => self.down(page_less_overlap(self.page)),
+            Command::PageDown => self.down(page_less_overlap(self.page), true),
             Command::WindowUp => self.up(self.page),
-            Command::WindowDown => self.down(self.page),
+            // As less's Space, and vim's Ctrl+d, which stop with the last line at the bottom.
+            Command::WindowDown => self.down(self.page, false),
             // Half of an odd page rounds down, as vim's 'scroll' and less's `d` do.
             Command::HalfPageUp => self.up((self.page / 2).max(1)),
-            Command::HalfPageDown => self.down((self.page / 2).max(1)),
+            Command::HalfPageDown => self.down((self.page / 2).max(1), false),
             Command::Home => {
                 self.top = (0, 0);
                 self.column = 0;
@@ -179,9 +181,15 @@ impl Viewer {
         self.before(end, self.page.saturating_sub(1))
     }
 
-    fn down(&mut self, count: usize) {
+    /// Scrolls `count` rows down: `past_end`, until the last row is at the top; else until
+    /// it is at the bottom, but never back up.
+    fn down(&mut self, count: usize, past_end: bool) {
         let moved = self.after(self.top, count);
-        self.top = moved.min(self.last_top());
+        self.top = if past_end {
+            moved
+        } else {
+            moved.min(self.last_top().max(self.top))
+        };
     }
 
     fn up(&mut self, count: usize) {
@@ -318,8 +326,25 @@ mod tests {
         viewer.handle(Command::End);
         let end = draw(&mut viewer, 30, 6);
         assert!(end.contains("16/20 100%"), "{end}");
+        viewer.handle(Command::HalfPageDown);
+        viewer.handle(Command::WindowDown);
+        assert_eq!(
+            draw(&mut viewer, 30, 6),
+            end,
+            "Ctrl+d and Space stop at the end"
+        );
+        // Ctrl+e and Ctrl+f go on until the last line is at the top, as vim's.
         viewer.handle(Command::Down);
-        assert_eq!(draw(&mut viewer, 30, 6), end, "no further than the end");
+        assert!(draw(&mut viewer, 30, 6).contains("17/20"));
+        viewer.handle(Command::PageDown);
+        let last = draw(&mut viewer, 30, 6);
+        assert!(
+            last.contains("20/20") && !last.contains("line 19"),
+            "{last}"
+        );
+        viewer.handle(Command::Down);
+        viewer.handle(Command::HalfPageDown);
+        assert_eq!(draw(&mut viewer, 30, 6), last, "no further");
         viewer.handle(Command::Home);
         assert!(draw(&mut viewer, 30, 6).contains("1/20"));
     }
@@ -331,11 +356,9 @@ mod tests {
         viewer.show(format!("{long}\nshort\n").as_bytes(), false);
         let wrapped = draw(&mut viewer, 20, 6);
         insta::assert_snapshot!(wrapped);
-        // Three rows of text: Down goes into the rows of the long line, and stops where the
-        // end is at the bottom.
+        // Three rows of text: Down goes into the rows of the long line.
         let small = |viewer: &mut Viewer| draw(viewer, 20, 4);
         small(&mut viewer);
-        viewer.handle(Command::Down);
         viewer.handle(Command::Down);
         let text = small(&mut viewer);
         assert!(text.contains("short"), "{text}");

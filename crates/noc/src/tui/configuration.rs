@@ -71,7 +71,8 @@ enum Value {
     },
     /// A text field, and the text it had when it was last applied; lists are words in it,
     /// see [`split_words`].
-    Text { field: Field, applied: String },
+    // Boxed: a field holds a whole editor.
+    Text { field: Box<Field>, applied: String },
 }
 
 #[derive(Debug)]
@@ -315,7 +316,7 @@ fn choice(values: &[(&str, String)], current: &str) -> Value {
 
 fn text(value: &str) -> Value {
     Value::Text {
-        field: Field::normal(value),
+        field: Box::new(Field::normal(value)),
         applied: value.to_owned(),
     }
 }
@@ -444,7 +445,7 @@ impl Configuration {
             ..
         }) = self.setting_mut()
         {
-            *field = Field::normal(applied);
+            **field = Field::normal(applied);
         }
     }
 
@@ -477,7 +478,7 @@ impl Configuration {
             return None;
         }
         match &mut self.setting_mut()?.value {
-            Value::Text { field, .. } => Some(field),
+            Value::Text { field, .. } => Some(&mut **field),
             Value::Toggle(_) | Value::Choice { .. } => None,
         }
     }
@@ -488,7 +489,7 @@ impl Configuration {
             return None;
         }
         match &self.settings().get(self.row)?.value {
-            Value::Text { field, .. } => Some(field),
+            Value::Text { field, .. } => Some(&**field),
             Value::Toggle(_) | Value::Choice { .. } => None,
         }
     }

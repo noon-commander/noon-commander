@@ -181,11 +181,13 @@ pub(crate) enum Effect {
         hosts: bool,
     },
     /// List the commands in `dirs`, the directories of `$PATH`, whose names start with
-    /// `prefix` regardless of case, for completion, and pass them to [`App::names`].
+    /// `prefix` regardless of case, for completion, and pass them to [`App::names`]; with
+    /// `with_dirs`, the directories in them too.
     ListCommands {
         generation: u64,
         dirs: Vec<PathBuf>,
         prefix: String,
+        with_dirs: bool,
     },
     /// Use `config` for new connections and listings, write to the config file the settings
     /// that differ between `old`, what the dialog showed, and `new`, both as the file writes
@@ -438,6 +440,9 @@ struct Completing {
     before: String,
     /// What stays of it, before the part completed.
     keep: String,
+    /// Where the path completed starts in it, for Left and Right in the list, which go up and
+    /// down its directories.
+    word: usize,
     /// The part completed, as names are matched: without the escapes of the command line.
     prefix: String,
     offer: Offer,
@@ -2426,6 +2431,9 @@ impl App {
     /// Gives a key to the dialog in front, and does what it was for once it closes. In a path
     /// field, Tab completes, and the list of completions takes the keys while it shows.
     fn handle_dialog(&mut self, input: Resolved) -> Vec<Effect> {
+        if let Some(effects) = self.change_dir(Completes::Field, input) {
+            return effects;
+        }
         if self.choose(Completes::Field, input) {
             return Vec::new();
         }
@@ -2456,6 +2464,36 @@ impl App {
             Resolved::Insert(_) => ChoicesEvent::Passed,
         };
         self.take_choices(event)
+    }
+
+    /// Left and Right in the list of completions for `target`, as in vim's pop-up menu of the
+    /// command line: Left completes again in the parent of the directory listed, and Right in
+    /// the directory chosen; `None` where the key is not one of them, or Right has no
+    /// directory to go into.
+    fn change_dir(&mut self, target: Completes, input: Resolved) -> Option<Vec<Effect>> {
+        let up = match input {
+            Resolved::Action(Action::Left) => true,
+            Resolved::Action(Action::Right) => false,
+            _ => return None,
+        };
+        let completing = self
+            .completion
+            .as_ref()
+            .filter(|completing| completing.target == target && completing.choices.is_some())?;
+        let before = self.before_cursor(target)?;
+        let (lead, word) = before.split_at(completing.word.min(before.len()));
+        let word = if up {
+            complete::up_dir(word)
+        } else {
+            complete::down_dir(word)?
+        };
+        let before = format!("{lead}{word}");
+        self.completion = None;
+        self.put_before_cursor(target, &before);
+        Some(match target {
+            Completes::Field => self.complete(),
+            Completes::CommandLine => self.complete_command(),
+        })
     }
 
     /// Does what a key or a press did to the list of completions: puts a match in, or what
@@ -2879,6 +2917,12 @@ impl App {
             FieldHosts::None => false,
         };
         let split = complete::split(&before, is_host);
+        let word = match before.split_once(':') {
+            Some((host, _)) if !host.is_empty() && !host.contains('/') && is_host(host) => {
+                host.len() + 1
+            }
+            _ => 0,
+        };
         let Some(shown) = self.panel_of(panel) else {
             return Vec::new();
         };
@@ -2891,6 +2935,7 @@ impl App {
             target: Completes::Field,
             before,
             keep: split.dir,
+            word,
             prefix: split.prefix,
             offer,
             quote: Quote::Plain,
@@ -2930,6 +2975,7 @@ impl App {
         };
         let word = complete::word(command);
         let keep = format!("{lead}{}", word.keep);
+        let start = lead.len() + word.start;
         let before = line.before_cursor().to_owned();
         if word.dir.is_empty() && &before[keep.len()..] == "~" {
             line.replace_before_cursor(&format!("{keep}~/"));
@@ -2942,6 +2988,7 @@ impl App {
             target: Completes::CommandLine,
             before,
             keep,
+            word: start,
             prefix: word.prefix.clone(),
             offer: Offer::Any,
             quote: Quote::Shell,
@@ -2954,9 +3001,21 @@ impl App {
                 generation,
                 dirs: self.command_dirs.clone(),
                 prefix: word.prefix,
+                with_dirs: false,
             }];
         }
         let dir = cd::directory(&word.dir, &here, &self.home, |_| false);
+        // A command named by its path, as vim's `:!` completes it: directories and programs.
+        if word.first
+            && let Location::Local(path) = &dir
+        {
+            return vec![Effect::ListCommands {
+                generation,
+                dirs: vec![path.clone()],
+                prefix: word.prefix,
+                with_dirs: true,
+            }];
+        }
         // The line opens on a host only while it is connected.
         let host = self.handle_for(&dir).unwrap_or(None);
         vec![Effect::ListNames {
@@ -3682,6 +3741,9 @@ impl App {
     /// the active panel's directory, Tab completes, and the list of completions takes the keys
     /// while it shows.
     fn handle_command_line(&mut self, input: Resolved) -> Vec<Effect> {
+        if let Some(effects) = self.change_dir(Completes::CommandLine, input) {
+            return effects;
+        }
         if self.choose(Completes::CommandLine, input) {
             return Vec::new();
         }
@@ -11356,6 +11418,18 @@ mod tests {
     }
 
     #[test]
+    fn ctrl_c_in_the_list_of_completions_closes_the_dialog_as_everywhere() {
+        let mut app = loaded();
+        app.handle(action(Action::QuickCd));
+        type_text(&mut app, "left/");
+        let (generation, ..) = names_request(&app.handle(action(Action::Complete)));
+        app.names(generation, Ok(names_of(&[("a", true), ("b", true)])), &[]);
+        assert_eq!(app.context(), Context::Completion);
+        keys(&mut app, &["ctrl-c"]);
+        assert!(app.dialogs.is_empty());
+    }
+
+    #[test]
     fn tab_completes_quick_cd_from_the_directory_typed() {
         let mut app = loaded();
         app.handle(action(Action::QuickCd));
@@ -11405,17 +11479,34 @@ mod tests {
         assert_eq!(after(&["ctrl-y"]), "left/project-b/|");
         assert_eq!(app.place(), (Mode::Insert, Context::PathInput));
 
-        // Ctrl+e and Ctrl+c put back what was typed.
+        // Ctrl+e puts back what was typed.
         let two = names_of(&[("x", true), ("y", true)]);
-        for key in ["ctrl-e", "ctrl-c"] {
-            let (generation, dir, ..) = names_request(&keys(&mut app, &["tab"]));
-            assert_eq!(dir, local("/srv/left/project-b"));
-            app.names(generation, Ok(two.clone()), &[]);
-            assert_eq!(field(&app), "left/project-b/x/|");
-            keys(&mut app, &["down", key]);
-            assert_eq!(field(&app), "left/project-b/|", "{key}");
-            assert_eq!(app.place(), (Mode::Insert, Context::PathInput), "{key}");
-        }
+        let (generation, dir, ..) = names_request(&keys(&mut app, &["tab"]));
+        assert_eq!(dir, local("/srv/left/project-b"));
+        app.names(generation, Ok(two.clone()), &[]);
+        assert_eq!(field(&app), "left/project-b/x/|");
+        keys(&mut app, &["down", "ctrl-e"]);
+        assert_eq!(field(&app), "left/project-b/|");
+        assert_eq!(app.place(), (Mode::Insert, Context::PathInput));
+
+        // Right completes in the directory chosen, and Left in the one above, as vim's
+        // pop-up menu of the command line.
+        let (generation, ..) = names_request(&keys(&mut app, &["tab"]));
+        app.names(generation, Ok(two.clone()), &[]);
+        let (generation, dir, ..) = names_request(&keys(&mut app, &["right"]));
+        assert_eq!(field(&app), "left/project-b/x/|");
+        assert_eq!(dir, local("/srv/left/project-b/x"));
+        app.names(generation, Ok(two.clone()), &[]);
+        assert_eq!(field(&app), "left/project-b/x/x/|");
+        let (generation, dir, ..) = names_request(&keys(&mut app, &["left"]));
+        assert_eq!(
+            (field(&app), dir),
+            ("left/project-b/|".to_owned(), local("/srv/left/project-b"))
+        );
+        app.names(generation, Ok(two.clone()), &[]);
+        assert_eq!(field(&app), "left/project-b/x/|");
+        keys(&mut app, &["down", "down", "ctrl-e"]);
+        assert_eq!(field(&app), "left/project-b/|");
 
         // Other keys close the list and go to the field, with the match in it: Esc to Normal
         // mode, as in vim; typing edits the field.
@@ -11552,6 +11643,7 @@ mod tests {
                     generation,
                     dirs,
                     prefix,
+                    with_dirs: false,
                 },
             ] => (*generation, dirs.clone(), prefix.clone()),
             other => panic!("expected a listing of commands, got {other:?}"),
@@ -11614,11 +11706,29 @@ mod tests {
         let run = app.take_run().expect("a command");
         assert_eq!(run.command, "mytool src\\ dir/a\\$b ~/ /usr/b");
 
-        // A first word with a slash names a file.
+        // A first word with a slash names a program, or a directory, as vim's `:!` has it.
         app.handle(action(Action::Shell));
         type_text(&mut app, "./scr");
-        let (_, dir, ..) = names_request(&keys(&mut app, &["tab"]));
-        assert_eq!(dir, local("/srv"));
+        let effects = keys(&mut app, &["tab"]);
+        let [
+            Effect::ListCommands {
+                dirs, with_dirs, ..
+            },
+        ] = &effects[..]
+        else {
+            panic!("expected a listing of programs, got {effects:?}");
+        };
+        assert_eq!(
+            (&dirs[..], *with_dirs),
+            (&[PathBuf::from("/srv")][..], true)
+        );
+        // Ctrl+c closes the line, from the list too.
+        let (generation, ..) =
+            names_request(&keys(&mut app, &["ctrl-u", "c", "a", "t", " ", "tab"]));
+        app.names(generation, Ok(names_of(&[("a", false), ("b", false)])), &[]);
+        assert_eq!(app.context(), Context::CommandCompletion);
+        keys(&mut app, &["ctrl-c"]);
+        assert!(app.command_line.is_none());
     }
 
     #[test]

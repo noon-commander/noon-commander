@@ -1,7 +1,7 @@
 //! Background work for the app: listings, new directories, jobs, and one task per connected
 //! host that owns its ssh session and SFTP channel.
 
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -358,7 +358,8 @@ impl Tasks {
                     generation,
                     dirs,
                     prefix,
-                } => self.list_commands(generation, dirs, prefix),
+                    with_dirs,
+                } => self.list_commands(generation, dirs, prefix, with_dirs),
                 Effect::ZoxideQuery {
                     generation,
                     keywords,
@@ -493,12 +494,13 @@ impl Tasks {
 
     /// Lists the commands in `dirs` whose names start with `prefix` regardless of case, for
     /// completion.
-    fn list_commands(&self, generation: u64, dirs: Vec<PathBuf>, prefix: String) {
+    fn list_commands(&self, generation: u64, dirs: Vec<PathBuf>, prefix: String, with_dirs: bool) {
         let done = self.done.clone();
         tokio::spawn(async move {
-            let entries = tokio::task::spawn_blocking(move || commands_in(&dirs, &prefix))
-                .await
-                .map_err(|error| error.to_string());
+            let entries =
+                tokio::task::spawn_blocking(move || commands_in(&dirs, &prefix, with_dirs))
+                    .await
+                    .map_err(|error| error.to_string());
             let _ = done.send(Done::Names {
                 generation,
                 entries,
@@ -918,11 +920,12 @@ fn discard(path: PathBuf) {
 }
 
 /// The commands in `dirs` whose names start with `prefix` regardless of case: the regular files,
-/// and links to them, with an execute bit, each name once. Directories that are not absolute,
-/// or cannot be read, hold none. Blocks.
-fn commands_in(dirs: &[PathBuf], prefix: &str) -> Vec<(Vec<u8>, bool)> {
+/// and links to them, with an execute bit, each name once; `with_dirs`, the directories too, as
+/// vim's `:!` offers them for a path. Directories that are not absolute, or cannot be read,
+/// hold none. Blocks.
+fn commands_in(dirs: &[PathBuf], prefix: &str, with_dirs: bool) -> Vec<(Vec<u8>, bool)> {
     let prefix = prefix.to_lowercase();
-    let mut names = BTreeSet::new();
+    let mut names = BTreeMap::new();
     for dir in dirs.iter().filter(|dir| dir.is_absolute()) {
         let Ok(entries) = std::fs::read_dir(dir) else {
             continue;
@@ -933,21 +936,23 @@ fn commands_in(dirs: &[PathBuf], prefix: &str) -> Vec<(Vec<u8>, bool)> {
             let Some(name) = name.to_str() else {
                 continue;
             };
-            if names.contains(name) || !name.to_lowercase().starts_with(&prefix) {
+            if names.contains_key(name) || !name.to_lowercase().starts_with(&prefix) {
                 continue;
             }
             // Follows links, as the shell does.
-            let runs = std::fs::metadata(entry.path()).is_ok_and(|metadata| {
-                metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
-            });
-            if runs {
-                names.insert(name.to_owned());
+            let Ok(metadata) = std::fs::metadata(entry.path()) else {
+                continue;
+            };
+            let runs = metadata.is_file() && metadata.permissions().mode() & 0o111 != 0;
+            let dir = with_dirs && metadata.is_dir();
+            if runs || dir {
+                names.insert(name.to_owned(), dir);
             }
         }
     }
     names
         .into_iter()
-        .map(|name| (name.into_bytes(), false))
+        .map(|(name, dir)| (name.into_bytes(), dir))
         .collect()
 }
 
@@ -1844,7 +1849,7 @@ mod tests {
         std::os::unix::fs::symlink("mynotes", bin.join("mynotelink")).unwrap();
         std::os::unix::fs::symlink("gone", bin.join("mygone")).unwrap();
         let names = |dirs: &[PathBuf], prefix: &str| -> Vec<String> {
-            commands_in(dirs, prefix)
+            commands_in(dirs, prefix, false)
                 .into_iter()
                 .map(|(name, dir)| {
                     assert!(!dir);
@@ -1860,7 +1865,20 @@ mod tests {
         ];
         assert_eq!(names(&path, "my"), ["MyCase", "mylink", "mytool"]);
         assert_eq!(names(&path, "MYT"), ["mytool"], "regardless of case");
-        assert_eq!(names(&[bin], ""), ["mylink", "mytool", "other"]);
+        assert_eq!(
+            names(std::slice::from_ref(&bin), ""),
+            ["mylink", "mytool", "other"]
+        );
+        // A path to a program offers the directories too, as vim's `:!` does.
+        let with_dirs: Vec<(String, bool)> = commands_in(&[bin], "my", true)
+            .into_iter()
+            .map(|(name, dir)| (String::from_utf8(name).unwrap(), dir))
+            .collect();
+        let expected = [("mydir", true), ("mylink", false), ("mytool", false)];
+        assert_eq!(
+            with_dirs,
+            expected.map(|(name, dir)| (name.to_owned(), dir))
+        );
     }
 
     #[tokio::test]

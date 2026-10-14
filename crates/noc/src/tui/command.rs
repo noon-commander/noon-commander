@@ -296,11 +296,16 @@ impl CommandLine {
             }
             Resolved::Action(action) => action,
         };
+        // As vim's, `-`, `+`, and `_` that find no line leave the column of `j` and `k` alone.
+        let fails = self.line_motion_fails(action, extra.times());
         // An operator that waits takes the next key, which gives it up if it is no motion;
         // Enter gives it up and runs the command.
         if self.editor.pending().is_some() {
             if action != Action::Confirm {
                 self.editor.handle(action, extra, registers);
+                if fails {
+                    self.column = column;
+                }
                 return CommandEvent::None;
             }
             self.editor.give_up();
@@ -311,7 +316,13 @@ impl CommandLine {
             Action::Up | Action::Down => {
                 let mut event = CommandEvent::None;
                 let (start, _) = self.line_bounds();
-                let column = column.unwrap_or(self.editor.cursor() - start);
+                // After Ctrl+o at the end of a line, vim's `curswant` is after its end.
+                let here = if self.editor.once_at_end() {
+                    self.line_bounds().1
+                } else {
+                    self.editor.cursor()
+                };
+                let column = column.unwrap_or(here - start);
                 self.column = Some(column);
                 // What Visual mode selects stays within the command, as in vim's window.
                 let history = self.mode() != Mode::Visual;
@@ -369,12 +380,14 @@ impl CommandLine {
                 if !self.editor.handle(action, extra, registers) {
                     self.editor.give_up();
                 }
-                // After `$`, `j` and `k` go to the ends of the lines. `v` that moves nothing
-                // keeps the column, as vim's curswant.
-                if action == Action::TextEnd {
-                    self.column = Some(usize::MAX);
-                } else if action == Action::VisualMode && extra.count.is_none() {
+                // After `$`, and a count before `v` that took the ends of lines, `j` and `k` go
+                // to the ends of the lines. `v` that moves nothing, or ends Visual mode, keeps
+                // the column, as vim's curswant, where Esc does not.
+                let waits = self.editor.pending().is_some();
+                if fails || waits || (action == Action::VisualMode && extra.count.is_none()) {
                     self.column = column;
+                } else if self.editor.end_wanted() {
+                    self.column = Some(usize::MAX);
                 }
                 return CommandEvent::None;
             }
@@ -382,6 +395,19 @@ impl CommandLine {
         // A key of the line's own is the one command after Ctrl+o.
         self.editor.give_up();
         event
+    }
+
+    /// Whether `action`, `count` times, is vim's `-`, `+`, or `_` with no line to go to: `-`
+    /// on the first line, `+` on the last, and `_` with a count on the last.
+    fn line_motion_fails(&self, action: Action, count: usize) -> bool {
+        let (start, end) = self.line_bounds();
+        let last = end == self.text().chars().count();
+        match action {
+            Action::PrevLine => start == 0,
+            Action::NextLine => last,
+            Action::ThisLine => count > 1 && last,
+            _ => false,
+        }
     }
 
     /// Puts the cursor on the next line, or the one before, in `column` or at the end of a
@@ -815,6 +841,62 @@ mod tests {
             line.editor.cursor(),
             6,
             "the column of the cursor after Esc"
+        );
+    }
+
+    #[test]
+    fn v_that_ends_visual_mode_keeps_the_column_where_esc_does_not() {
+        let mut line = shell("abcdef\nab\nabcdef");
+        press(&mut line, Action::NormalMode);
+        press(&mut line, Action::Up);
+        press(&mut line, Action::Up);
+        press(&mut line, Action::Down);
+        press(&mut line, Action::VisualMode);
+        press(&mut line, Action::VisualMode);
+        press(&mut line, Action::Down);
+        assert_eq!(line.editor.cursor(), 15, "column 5 again, as vim's");
+    }
+
+    #[test]
+    fn after_ctrl_o_at_the_end_of_a_line_j_and_k_keep_its_end() {
+        let mut line = shell("abcd\nefghij");
+        press(&mut line, Action::Up);
+        press(&mut line, Action::TextEnd);
+        press(&mut line, Action::NormalOnce);
+        press(&mut line, Action::Down);
+        assert_eq!(
+            (line.mode(), line.editor.cursor()),
+            (Mode::Insert, 9),
+            "efgh|ij"
+        );
+        let mut line = shell("abcdef\nab");
+        press(&mut line, Action::Up);
+        press(&mut line, Action::TextEnd);
+        press(&mut line, Action::NormalOnce);
+        press(&mut line, Action::Down);
+        assert_eq!(line.editor.cursor(), 9, "after the end of the shorter line");
+    }
+
+    #[test]
+    fn a_line_motion_that_finds_no_line_keeps_the_column_as_vims() {
+        let mut line = shell("ab cd\nef gh\nij");
+        press(&mut line, Action::NormalMode);
+        press(&mut line, Action::TextEnd);
+        press(&mut line, Action::NextLine);
+        press(&mut line, Action::Up);
+        assert_eq!(line.editor.cursor(), 10, "the end of ef gh");
+        press(&mut line, Action::Down);
+        press(&mut line, Action::DeleteOperator);
+        press(&mut line, Action::NextLine);
+        press(&mut line, Action::Up);
+        assert_eq!(line.editor.cursor(), 10, "after d + too");
+        press(&mut line, Action::FirstNonBlank);
+        press(&mut line, Action::NextLine);
+        press(&mut line, Action::Up);
+        assert_eq!(
+            line.editor.cursor(),
+            6,
+            "a + that moves takes the column it goes to"
         );
     }
 

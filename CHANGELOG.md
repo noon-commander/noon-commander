@@ -70,20 +70,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     started, after a move of the cursor too, which starts a new change for undo, as Home and End do
     where the cursor is already, and so does Ctrl+u, which vim's defaults.vim maps after Ctrl+g u,
     but not Ctrl+w; a change that changes nothing, such as x on an empty line, is one for undo too,
-    and a yank of nothing empties the register, as in vim; undo and redo leave the cursor where the
-    change starts, on its line and in its column, and after d d, c c, and S on the first character
-    that is not blank, as 'startofline' has it. On the command line, Space and Backspace go on to
-    the next line and back, and operators over lines follow vim's rules: d b at the start of a line
-    keeps its line break, and d 2 $ from the indent deletes the lines whole.
+    and a yank of nothing empties the register, and d w on an empty line deletes it whole, as in
+    vim; undo and redo leave the cursor where the change starts, on its line and in its column, and
+    after d d, c c, and S on the first character that is not blank, as 'startofline' has it. On the
+    command line, Space and Backspace go on to the next line and back, and operators over lines
+    follow vim's rules: d b at the start of a line keeps its line break, and d 2 $ from the indent
+    deletes the lines whole.
   - The command line is vim's: Esc closes it, Ctrl+b and Ctrl+e go to the ends of the line, Tab
-    completes the word before the cursor as vim's :! does (the first word as a command of $PATH, the
-    others as files, escaped for the shell; on a host, its files), Ctrl+p and Ctrl+n go through the
-    history, Delete at the end deletes the character before, Shift and Ctrl with Left and Right go
-    by what spaces part, as in quick search and the filters, and Ctrl+f goes to Normal mode, after
-    which Esc leaves Insert mode, as in vim's window of the command line, and Ctrl+c and F10 close
-    the line, where j and k go through its lines, keeping their column, and the history (in Visual
-    mode only its lines), and q : opens the window of the history, which q closes back to where q :
-    was typed, a panel too.
+    completes the word before the cursor as vim's :! does (the first word as a command of $PATH, or
+    with a / as a program or a directory, the others as files, escaped for the shell; on a host, its
+    files), Ctrl+p and Ctrl+n go through the history, Delete at the end deletes the character
+    before, Shift and Ctrl with Left and Right go by what spaces part, as in quick search and the
+    filters, and Ctrl+f goes to Normal mode, after which Esc leaves Insert mode, as in vim's window
+    of the command line, and Ctrl+c and F10 close the line, where j and k go through its lines,
+    keeping their column, after v ends Visual mode and after Ctrl+o at the end of a line too, and
+    the history (in Visual mode only its lines), and q : opens the window of the history, which q
+    closes back to where q : was typed, a panel too.
   - The lists (the location menu, the tab menu, the zoxide window, the workspaces, the command
     history) open in Normal mode: j, k, Ctrl+j, g g, G, Ctrl+d, Ctrl+u, Ctrl+f, and Ctrl+b move, and
     the rows scroll as the panels' do, Enter takes the row, d d deletes it where F8 does, and with a
@@ -163,7 +165,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Fuzzy search, as fzf does it: quick search, the filter of the location menu, and the zoxide
   window find `config.rs` from `cfg`, best match first, with fzf's `'`, `^`, `$`, and `!`.
   On by default; `ui.fuzzy_search = false`, or Fuzzy search in Options → Configuration,
-  brings back literal matching.
+  brings back literal matching, where quick search finds the text anywhere in a name, as the
+  filters do.
 - Shift+F6 or r (or F9 → File → Rename in place) renames the entry under the cursor in its row,
   in Insert mode with the cursor before the last extension: Enter renames, and Esc goes to
   Normal mode, then keeps the name. A taken file name asks before it is replaced; a directory's
@@ -200,13 +203,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   source with it.
 - Ctrl+e and Ctrl+y scroll the viewer by a line, and Ctrl+d and Ctrl+u by half a page, in the
   viewer and the help, as in vim and less; Ctrl+f and Ctrl+b turn the page but for the two rows
-  that vim keeps; Space and f turn the whole page down, b up, and d and u go half a page there, as
-  in less.
+  that vim keeps, and j, Ctrl+e, and Ctrl+f go on past the end until the last line is at the top,
+  as in vim; Space and f turn the whole page down, b up, and d and u go half a page there, as in
+  less, and stop with the last line at the bottom.
 - Tab completes paths as vim's command line does with defaults.vim's 'wildmenu', rather than as
   bash: the first of several matches goes in whole, and Tab, Ctrl+n, and Down put the next one in,
-  Shift+Tab, Ctrl+p, and Up the one before, round through what was typed; Ctrl+y keeps the match,
-  Ctrl+e puts back what was typed, and Enter confirms with the match in the field. The list of
-  matches still shows under the field.
+  Shift+Tab, Ctrl+p, and Up the one before, round through what was typed; Left and Right complete
+  in the directory above and in the one chosen, as in vim's pop-up menu; Ctrl+y keeps the match,
+  Ctrl+e puts back what was typed, Enter confirms with the match in the field, and Ctrl+c closes
+  the dialog. Case never counts, as with vim's 'fileignorecase' on macOS. The list of matches still
+  shows under the field.
 - Ctrl+l redraws the screen everywhere, not only in the panels and the viewer: in dialogs, menus,
   windows, and on the command line too. What is in front stays as it was, and quick search goes
   on; the help lists the key under Everywhere.

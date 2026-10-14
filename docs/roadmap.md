@@ -145,6 +145,8 @@
 - [ ] More of vim's keys: in text fields `g e`, `g E`, `|`, the operators `g u`, `g U`, and
       `g ~`, Ctrl+a and Ctrl+x, `g v`, `g i`, `g I`, `g p`, and `g P`; in the panels a count before
       `%`, and in Visual mode Ctrl+o, Tab, `O`, and `g v`
+- [ ] The keys of vim's command line for completion: Shift+Tab with no list goes back from the
+      last match, Ctrl+d lists the matches, Ctrl+l puts in what they share, and Ctrl+a all of them
 - [ ] Text objects in text fields: `iw`, `aw`, `iW`, `aW`, quotes, and brackets (`c i w`,
       `d i "`, `c i (`); `c i w` only moves the cursor until then
 - [ ] Registers as vim's: `"0` the last yank, `"1` … `"9` and `"-` the deletes; any other

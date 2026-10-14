@@ -228,6 +228,8 @@ pub(crate) fn describe_in((mode, context): (Mode, Context), action: Action) -> O
         (Mode::Visual, Context::Panel, Action::Move) => fl!("help-visual-move"),
         (Mode::Visual, Context::Panel, Action::Delete) => fl!("help-visual-delete"),
         (Mode::Visual, Context::Panel, Action::Checksum) => fl!("help-visual-checksum"),
+        (Mode::Visual, Context::CommandLine, Action::Up) => fl!("help-command-visual-up"),
+        (Mode::Visual, Context::CommandLine, Action::Down) => fl!("help-command-visual-down"),
         _ => return describe(context, action),
     };
     Some(text)
@@ -443,6 +445,9 @@ fn describe_text(context: Context, action: Action) -> Option<String> {
         Action::TextStart => fl!("help-field-home"),
         Action::FirstNonBlank => fl!("help-field-first-non-blank"),
         Action::TextEnd => fl!("help-field-end"),
+        Action::PrevLine => fl!("help-field-prev-line"),
+        Action::NextLine => fl!("help-field-next-line"),
+        Action::ThisLine => fl!("help-field-this-line"),
         Action::WordForward => fl!("help-field-word-forward"),
         Action::WordBackward => fl!("help-field-word-backward"),
         Action::WordEnd => fl!("help-field-word-end"),

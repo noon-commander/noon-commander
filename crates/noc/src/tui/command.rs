@@ -278,14 +278,20 @@ impl CommandLine {
                 let (start, _) = self.line_bounds();
                 let column = column.unwrap_or(self.editor.cursor() - start);
                 self.column = Some(column);
+                // What Visual mode selects stays within the command, as in vim's window.
+                let history = self.mode() != Mode::Visual;
                 for _ in 0..extra.times() {
                     let (start, end) = self.line_bounds();
                     if action == Action::Up && start == 0 {
-                        event = CommandEvent::Older;
+                        if history {
+                            event = CommandEvent::Older;
+                        }
                         break;
                     }
                     if action == Action::Down && end == length {
-                        event = CommandEvent::Newer;
+                        if history {
+                            event = CommandEvent::Newer;
+                        }
                         break;
                     }
                     self.move_line(action == Action::Down, column);
@@ -328,9 +334,12 @@ impl CommandLine {
                 if !self.editor.handle(action, extra, registers) {
                     self.editor.give_up();
                 }
-                // After `$`, `j` and `k` go to the ends of the lines.
+                // After `$`, `j` and `k` go to the ends of the lines. `v` that moves nothing
+                // keeps the column, as vim's curswant.
                 if action == Action::TextEnd {
                     self.column = Some(usize::MAX);
+                } else if action == Action::VisualMode && extra.count.is_none() {
+                    self.column = column;
                 }
                 return CommandEvent::None;
             }
@@ -716,6 +725,56 @@ mod tests {
             line.editor.cursor(),
             15,
             "after $, the last character of each line"
+        );
+    }
+
+    #[test]
+    fn in_visual_mode_j_and_k_keep_their_column_through_the_lines_only() {
+        let mut line = shell("abcdef\nab\nabcdef");
+        press(&mut line, Action::NormalMode);
+        press(&mut line, Action::TextStart);
+        for _ in 0..5 {
+            press(&mut line, Action::Right);
+        }
+        press(&mut line, Action::VisualMode);
+        assert_eq!(press(&mut line, Action::Up), CommandEvent::None);
+        assert_eq!(
+            line.editor.selection(),
+            Some(9..16),
+            "after the end of a shorter line, with its line break"
+        );
+        press(&mut line, Action::Up);
+        assert_eq!(line.editor.cursor(), 5, "column 5 again");
+        assert_eq!(
+            press(&mut line, Action::Up),
+            CommandEvent::None,
+            "the history stays"
+        );
+        assert_eq!(line.editor.cursor(), 5);
+        press(&mut line, Action::Down);
+        press(&mut line, Action::Down);
+        assert_eq!(press(&mut line, Action::Down), CommandEvent::None);
+        assert_eq!((line.mode(), line.editor.cursor()), (Mode::Visual, 15));
+    }
+
+    #[test]
+    fn v_keeps_the_column_of_j_and_k_and_esc_forgets_it() {
+        let mut line = shell("one\ntwo three\n four");
+        press(&mut line, Action::NormalMode);
+        press(&mut line, Action::Up);
+        press(&mut line, Action::Up);
+        assert_eq!(line.editor.cursor(), 2, "the end of a shorter line");
+        press(&mut line, Action::VisualMode);
+        press(&mut line, Action::Down);
+        assert_eq!(line.editor.cursor(), 8, "column 4 again");
+        press(&mut line, Action::Up);
+        assert_eq!(line.editor.cursor(), 3, "after the end of the line");
+        press(&mut line, Action::NormalMode);
+        press(&mut line, Action::Down);
+        assert_eq!(
+            line.editor.cursor(),
+            6,
+            "the column of the cursor after Esc"
         );
     }
 

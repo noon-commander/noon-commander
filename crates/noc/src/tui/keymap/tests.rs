@@ -438,6 +438,31 @@ fn the_command_line_is_vims() {
         actions(&[Action::Up, Action::WordForward, Action::CommandHistory])
     );
     assert_eq!(typed(normal, &["esc"]), actions(&[Action::Cancel]));
+    let visual = (Mode::Visual, Context::CommandLine);
+    assert_eq!(
+        typed(visual, &["k", "j", "up", "down", "+"]),
+        actions(&[
+            Action::Up,
+            Action::Down,
+            Action::Up,
+            Action::Down,
+            Action::NextLine
+        ])
+    );
+}
+
+#[test]
+fn minus_plus_and_underscore_go_to_lines_in_every_text_field() {
+    let lines = [Action::PrevLine, Action::NextLine, Action::ThisLine];
+    for place in [FIELD, SELECTING, (Mode::Normal, Context::Rename)] {
+        assert_eq!(typed(place, &["-", "+", "_"]), actions(&lines), "{place:?}");
+    }
+    assert_eq!(typed(TYPING, &["-", "+", "_"]), inserts("-+_"));
+    let counted = Extra {
+        count: Some(3),
+        ..Extra::default()
+    };
+    assert_eq!(typed(FIELD, &["3", "+"]), with(Action::NextLine, counted));
 }
 
 #[test]

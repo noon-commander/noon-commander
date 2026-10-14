@@ -135,6 +135,15 @@ struct Snapshot {
     /// The line and the column of the cursor, counted in characters from 0: vim keeps where
     /// the change started so, for undo and redo alike, whatever the lines became.
     cursor: (usize, usize),
+    /// Whether the text had no line, as [`Editor::no_line`].
+    no_line: bool,
+}
+
+/// After vim's Ctrl+o: Normal mode for one command, then Insert mode again.
+#[derive(Debug, Clone, Copy, Default)]
+struct Once {
+    /// The line, counted from 0, whose end the cursor was after when Ctrl+o left Insert mode.
+    eol: Option<usize>,
 }
 
 /// What a text holds.
@@ -169,10 +178,12 @@ pub(crate) struct Editor {
     redo: Vec<Snapshot>,
     /// Insert mode has changed the text since it started: one change for undo.
     changed: bool,
+    /// The text has no line, after `d d` deleted the last one, as vim's buffer with `ML_EMPTY`:
+    /// a delete has nothing to do there, not even a change for undo. Any change gives it its
+    /// empty line back.
+    no_line: bool,
     /// After vim's Ctrl+o: Insert mode again after one command.
-    once: bool,
-    /// The line, counted from 0, whose end the cursor was after when Ctrl+o left Insert mode.
-    once_eol: Option<usize>,
+    once: Option<Once>,
     /// Whether the command after Ctrl+o left the cursor before where Insert mode goes on: after
     /// the text it put, or after the end of the line it deleted to, as vim's does.
     once_after: bool,
@@ -205,6 +216,15 @@ impl Insert {
             start: at,
             stop_at: at,
             ..Self::default()
+        }
+    }
+
+    /// An insert that starts at `at`, with the cursor moved past it since: as vim's Insert mode
+    /// after Ctrl+o, which starts on the last character of the line before it goes after it.
+    fn moved_from(at: usize) -> Self {
+        Self {
+            moved: true,
+            ..Self::at(at)
         }
     }
 
@@ -256,8 +276,8 @@ impl Editor {
             undo: Vec::new(),
             redo: Vec::new(),
             changed: false,
-            once: false,
-            once_eol: None,
+            no_line: false,
+            once: None,
             once_after: false,
             insert: Insert::default(),
         };
@@ -340,8 +360,7 @@ impl Editor {
             return;
         }
         self.pending = None;
-        self.once = false;
-        self.once_eol = None;
+        self.once = None;
         self.once_after = false;
         // What is typed after the focus comes back is a change of its own.
         self.changed = false;
@@ -359,7 +378,7 @@ impl Editor {
 
     /// Whether Normal mode runs one command, after Ctrl+o, then goes back to Insert mode.
     pub(crate) fn once(&self) -> bool {
-        self.once
+        self.once.is_some()
     }
 
     /// The operator waiting for its motion, as vim's `showcmd` shows it, such as `2d`.
@@ -386,19 +405,13 @@ impl Editor {
     }
 
     /// How much Visual mode selects, as vim's `showcmd` shows it: the characters within a
-    /// line, else the lines.
+    /// line, after its end too, else the lines.
     pub(crate) fn selection_size(&self) -> Option<usize> {
-        let selected = self.selection()?;
-        let chars = self.chars();
-        let breaks = chars[selected.start..selected.end.saturating_sub(1).max(selected.start)]
-            .iter()
-            .filter(|&&c| c == '\n')
-            .count();
-        Some(if breaks == 0 {
-            selected.len()
-        } else {
-            breaks + 1
-        })
+        if self.mode != Mode::Visual {
+            return None;
+        }
+        let (lines, columns) = self.reselect_of();
+        Some(if lines > 1 { lines } else { columns })
     }
 
     /// What Visual mode selects, in characters.
@@ -463,8 +476,7 @@ impl Editor {
             return;
         }
         // The paste is the one command after Ctrl+o; Insert mode does not come back, as in vim.
-        self.once = false;
-        self.once_eol = None;
+        self.once = None;
         self.once_after = false;
         let text = if self.has_lines() {
             text.to_owned()
@@ -523,11 +535,12 @@ impl Editor {
     /// Insert mode, as vim does: after the end of the line if the cursor was there and is on
     /// its last character, or after `$`. Visual mode goes on until it ends.
     fn end_once(&mut self, action: Option<Action>) {
-        if !self.once || self.mode == Mode::Visual {
+        if self.mode == Mode::Visual {
             return;
         }
-        self.once = false;
-        let eol = self.once_eol.take();
+        let Some(Once { eol }) = self.once.take() else {
+            return;
+        };
         let after = std::mem::take(&mut self.once_after);
         if self.mode != Mode::Normal {
             return;
@@ -544,7 +557,9 @@ impl Editor {
         let back = (eol == Some(line_index(&chars, self.cursor)) && !to_start)
             || action == Some(Action::TextEnd);
         if back && self.cursor + 1 == end {
+            self.insert = Insert::moved_from(self.cursor);
             self.cursor = end;
+            return;
         }
         self.begin_insert(self.cursor);
     }
@@ -626,11 +641,14 @@ impl Editor {
             }
             Action::DeleteChar => {
                 self.insert_changes();
-                // On vim's command line, Delete at the end deletes the character before it.
+                // On vim's command line, Delete at the end deletes the character before it. In
+                // a text, it is a change to undo even with nothing after it.
                 if !stop && self.cursor == chars.len() {
                     self.delete(self.cursor.saturating_sub(1), self.cursor);
+                } else if self.cursor == chars.len() {
+                    self.save_undo();
                 } else {
-                    self.delete(self.cursor, (self.cursor + 1).min(chars.len()));
+                    self.delete(self.cursor, self.cursor + 1);
                 }
             }
             Action::DeleteToEnd => {
@@ -678,13 +696,14 @@ impl Editor {
             }
             // As vim's Ctrl+o, which puts the cursor on the last character from after it, and
             // back when the command is done.
+            // At the end of an empty line too, as vim's `ins_at_eol`.
             Action::NormalOnce if !self.is_secret() => {
-                let at_end = self.cursor == end && end > start;
-                self.once_eol = at_end.then(|| line_index(&chars, self.cursor));
+                self.once = Some(Once {
+                    eol: (self.cursor == end).then(|| line_index(&chars, self.cursor)),
+                });
                 self.once_after = false;
                 self.mode = Mode::Normal;
                 self.changed = false;
-                self.once = true;
                 self.clamp();
             }
             _ => return false,
@@ -716,6 +735,12 @@ impl Editor {
         }
         if let Some(pending) = self.pending.take() {
             let total = times(count, pending.count);
+            if is_line_motion(action) {
+                if let Some(line) = self.line_motion(action, total) {
+                    self.lines_to(pending, line, registers);
+                }
+                return true;
+            }
             // As vim's `b`, which fails at the start of the text, and the operator with it.
             if matches!(action, Action::WordBackward | Action::BigWordBackward) && self.cursor == 0
             {
@@ -745,7 +770,7 @@ impl Editor {
             return true;
         }
         // Esc after Ctrl+o goes back to Insert mode, as in vim.
-        if self.once && matches!(action, Action::Cancel | Action::NormalMode) {
+        if self.once.is_some() && matches!(action, Action::Cancel | Action::NormalMode) {
             return true;
         }
         if let Some(motion) = self.motion(action, count, extra.char, None) {
@@ -892,7 +917,7 @@ impl Editor {
         }
         let selected = self.selection().unwrap_or(self.cursor..self.cursor);
         if action == Action::ToggleCase || Operator::of(action).is_some() {
-            self.reselect = Some(self.reselect_of(&selected));
+            self.reselect = Some(self.reselect_of());
         }
         match action {
             Action::OtherEnd => std::mem::swap(&mut self.anchor, &mut self.cursor),
@@ -904,6 +929,10 @@ impl Editor {
                 self.mode = Mode::Normal;
                 // Undo puts the cursor back where the change starts.
                 self.cursor = selected.start;
+                if selected.is_empty() {
+                    // As vim's, which saves for undo before it looks.
+                    self.save_undo();
+                }
                 self.toggle_case(selected.clone());
                 self.clamp();
             }
@@ -936,15 +965,16 @@ impl Editor {
         self.clamp();
     }
 
-    /// The lines and the columns of `selected`, for a count before `v` later.
-    fn reselect_of(&self, selected: &Range<usize>) -> (usize, usize) {
+    /// The lines the selection takes, and on one line its characters, else the column where it
+    /// ends, as vim counts them, after the end of a line too: for a count before `v` later.
+    fn reselect_of(&self) -> (usize, usize) {
         let chars = self.chars();
-        let last = selected.end.saturating_sub(1).max(selected.start);
-        let lines = line_index(&chars, last) - line_index(&chars, selected.start) + 1;
+        let (first, last) = (self.anchor.min(self.cursor), self.anchor.max(self.cursor));
+        let lines = line_index(&chars, last) - line_index(&chars, first) + 1;
         if lines > 1 {
             (lines, last - line_bounds(&chars, last).0)
         } else {
-            (1, selected.len().max(1))
+            (1, last - first + 1)
         }
     }
 
@@ -981,15 +1011,26 @@ impl Editor {
             });
             to.unwrap_or_else(|at| at)
         };
+        // Visual mode goes after the end of a line, as vim's with 'selection' inclusive.
+        let past_end = self.mode == Mode::Visual;
         match action {
             Action::Left => exclusive(self.cursor.saturating_sub(count).max(start)),
             Action::Right => exclusive((self.cursor + count).min(end)),
-            Action::CharForward => Some(char_forward(&chars, self.cursor, count, operator)),
-            Action::CharBackward => Some(char_backward(&chars, self.cursor, count, operator)),
+            Action::CharForward => {
+                Some(char_forward(&chars, self.cursor, count, operator, past_end))
+            }
+            Action::CharBackward => Some(char_backward(
+                &chars,
+                self.cursor,
+                count,
+                operator,
+                past_end,
+            )),
             Action::TextStart => exclusive(start),
-            // On a line of blanks, the last of them, as vim's `^`.
-            Action::FirstNonBlank => {
-                exclusive(first_non_blank(&chars, start, end).min(end.saturating_sub(1).max(start)))
+            Action::FirstNonBlank => exclusive(line_first_non_blank(&chars, start)),
+            Action::PrevLine | Action::NextLine | Action::ThisLine => {
+                let start = line_start(&chars, self.line_motion(action, count)?)?;
+                exclusive(line_first_non_blank(&chars, start))
             }
             // As vim's `$`, which is inclusive: an operator ends at the end of the line, even an
             // empty one.
@@ -1042,6 +1083,37 @@ impl Editor {
         }
     }
 
+    /// The line, counted from 0, that vim's `-`, `+`, or `_` goes to `count` times, if there is
+    /// one: `-` and `+` fail on the first and the last line, and `_` with a count on the last;
+    /// short of that, a count goes as far as there are lines.
+    fn line_motion(&self, action: Action, count: usize) -> Option<usize> {
+        let chars = self.chars();
+        let line = line_index(&chars, self.cursor);
+        let last = line_index(&chars, chars.len());
+        let down = match action {
+            Action::PrevLine => return (line > 0).then(|| line.saturating_sub(count)),
+            Action::NextLine => count,
+            Action::ThisLine => count - 1,
+            _ => return None,
+        };
+        (down == 0 || line < last).then(|| line.saturating_add(down).min(last))
+    }
+
+    /// Does the operator of `pending` on the lines from the cursor's to `line`, as after vim's
+    /// linewise motions: on one line as `d d`; from a line above, where the operator starts on
+    /// its first character that is not blank, as the motion goes.
+    fn lines_to(&mut self, pending: Pending, line: usize, registers: &mut Registers) {
+        let chars = self.chars();
+        let here = line_index(&chars, self.cursor);
+        if line < here {
+            let start = line_start(&chars, line).unwrap_or(0);
+            self.cursor = line_first_non_blank(&chars, start);
+        }
+        let count = here.abs_diff(line) + 1;
+        self.back_to_first_non_blank(pending.operator, count);
+        self.lines_operate(pending, count, registers);
+    }
+
     /// Does `operator` on `range`: keeps its text in the registers, and deletes it, then goes
     /// to Insert mode for a change.
     fn operate(
@@ -1051,29 +1123,62 @@ impl Editor {
         register: Option<char>,
         registers: &mut Registers,
     ) {
-        let taken: String = self.chars()[range.clone()].iter().collect();
-        if !taken.is_empty() {
-            registers.keep(
-                register,
-                Register {
-                    text: taken,
-                    lines: false,
-                },
-                operator != Operator::Yank,
-            );
+        if range.is_empty() {
+            self.operate_on_nothing(operator, range.start, false, register, registers);
+            return;
         }
+        let taken: String = self.chars()[range.clone()].iter().collect();
+        registers.keep(
+            register,
+            Register {
+                text: taken,
+                lines: false,
+            },
+            operator != Operator::Yank,
+        );
         // Undo puts the cursor back where the change starts.
         self.cursor = range.start;
         match operator {
             Operator::Yank => {}
             Operator::Delete => {
-                if !range.is_empty() {
-                    self.begin_change();
-                    self.remove(range.start, range.end);
-                }
+                self.begin_change();
+                self.remove(range.start, range.end);
                 self.after_once_at_end();
             }
             Operator::Change => self.change_range(range.start, range.end, range.start),
+        }
+        self.clamp();
+    }
+
+    /// Does `operator` at `at`, where its motion or the selection takes no character, as vim's:
+    /// a yank keeps the empty text; a delete or a change is one to undo all the same, but for a
+    /// delete where the text has no line. An `inclusive` motion that takes the end of an empty
+    /// line, as `$` does there, is something to vim: a delete gives up, and a change keeps the
+    /// empty text it takes.
+    fn operate_on_nothing(
+        &mut self,
+        operator: Operator,
+        at: usize,
+        inclusive: bool,
+        register: Option<char>,
+        registers: &mut Registers,
+    ) {
+        let nothing = Register::default();
+        self.cursor = at;
+        match operator {
+            Operator::Yank => registers.keep(register, nothing, false),
+            Operator::Delete => {
+                if !inclusive && !self.no_line {
+                    self.save_undo();
+                }
+                self.after_once_at_end();
+            }
+            Operator::Change => {
+                if inclusive && !self.no_line {
+                    registers.keep(register, nothing, true);
+                }
+                self.change_range(at, at, at);
+            }
         }
         self.clamp();
     }
@@ -1116,13 +1221,21 @@ impl Editor {
             self.lines_operate(pending, lines, registers);
             return;
         }
+        if range.is_empty() {
+            let inclusive = motion.inclusive || motion.keep_end;
+            let Pending {
+                operator, register, ..
+            } = pending;
+            self.operate_on_nothing(operator, range.start, inclusive, register, registers);
+            return;
+        }
         self.operate(pending.operator, range, pending.register, registers);
     }
 
     /// After Ctrl+o, a change that leaves the cursor after the end of its line, where Normal
     /// mode cannot have it, goes back to Insert mode there, as vim's does.
     fn after_once_at_end(&mut self) {
-        if !self.once {
+        if self.once.is_none() {
             return;
         }
         let chars = self.chars();
@@ -1133,17 +1246,17 @@ impl Editor {
     }
 
     /// Deletes `start..end`, then Insert mode at `start`; one change with what it types, which
-    /// undo takes back with the cursor at `undo_at`. With nothing to delete, the change starts
-    /// with what it types, if anything.
+    /// undo takes back with the cursor at `undo_at`, even with nothing to delete, as in vim.
     fn change_range(&mut self, start: usize, end: usize, undo_at: usize) {
-        let deletes = start < end;
         self.cursor = undo_at;
-        if deletes {
+        if start < end {
             self.begin_change();
             self.remove(start, end);
+        } else {
+            self.save_undo();
         }
         self.mode = Mode::Insert;
-        self.changed = deletes;
+        self.changed = true;
         self.cursor = start;
         self.begin_insert(start);
     }
@@ -1163,14 +1276,18 @@ impl Editor {
             }
             end = line_bounds(&chars, end + 1).1;
         }
-        let text: String = chars[start..end].iter().collect();
-        registers.keep(
-            pending.register,
-            Register { text, lines: true },
-            pending.operator != Operator::Yank,
-        );
+        // Where the text has no line, vim's delete and change take none.
+        if !self.no_line || pending.operator == Operator::Yank {
+            let text: String = chars[start..end].iter().collect();
+            registers.keep(
+                pending.register,
+                Register { text, lines: true },
+                pending.operator != Operator::Yank,
+            );
+        }
         match pending.operator {
             Operator::Yank => {}
+            Operator::Delete if self.no_line => {}
             Operator::Delete => {
                 self.begin_change();
                 // The line break after the lines goes with them, or else the one before.
@@ -1180,6 +1297,8 @@ impl Editor {
                     (start.saturating_sub(1), end)
                 };
                 self.remove(from, to);
+                // Every line deleted, the text has none left, as vim's buffer.
+                self.no_line = start == 0 && end == chars.len();
                 let chars = self.chars();
                 let (start, end) = line_bounds(&chars, from.min(chars.len()));
                 self.cursor = first_non_blank(&chars, start, end);
@@ -1208,6 +1327,8 @@ impl Editor {
             .get(name)
             .filter(|register| register.lines || !register.text.is_empty())
         else {
+            // As vim's, which saves for undo before it looks at the register.
+            self.save_undo();
             return;
         };
         // Lines put more than once stay lines.
@@ -1247,7 +1368,7 @@ impl Editor {
             self.text.insert_str(offset, &text);
             self.cursor = at + text.chars().count() - 1;
             // As vim's Ctrl+o p, which goes back to Insert mode after the text put.
-            if self.once && !text.contains('\n') {
+            if self.once.is_some() && !text.contains('\n') {
                 self.once_after = true;
             }
         }
@@ -1294,6 +1415,13 @@ impl Editor {
 
     /// Keeps the text as it is for undo, before a change; once for all that Insert mode types.
     fn begin_change(&mut self) {
+        self.save_undo();
+        self.no_line = false;
+    }
+
+    /// Keeps the text as it is for undo, as [`begin_change`](Self::begin_change), for a command
+    /// that may change nothing: vim's change of nothing is one to undo all the same.
+    fn save_undo(&mut self) {
         if self.is_secret() || self.mode == Mode::Insert && self.changed {
             return;
         }
@@ -1318,6 +1446,7 @@ impl Editor {
         Snapshot {
             text: self.text.as_str().to_owned(),
             cursor: (line_index(&chars, cursor), cursor.min(chars.len()) - start),
+            no_line: self.no_line,
         }
     }
 
@@ -1327,6 +1456,7 @@ impl Editor {
     fn restore(&mut self, snapshot: &Snapshot) {
         self.text.clear();
         self.text.push_str(&snapshot.text);
+        self.no_line = snapshot.no_line;
         let chars = self.chars();
         let (line, column) = snapshot.cursor;
         self.cursor = if let Some(start) = line_start(&chars, line) {
@@ -1335,7 +1465,11 @@ impl Editor {
             let (start, end) = line_bounds(&chars, chars.len());
             first_non_blank(&chars, start, end)
         };
-        self.clamp();
+        // After Ctrl+o, as vim's `restart_edit`, the cursor may stay after the end of the line,
+        // where Insert mode goes on.
+        if self.once.is_none() {
+            self.clamp();
+        }
     }
 
     /// Takes back `count` changes. Undo and redo both leave the cursor where the change started,
@@ -1348,6 +1482,7 @@ impl Editor {
             self.redo.push(Snapshot {
                 text: self.text.as_str().to_owned(),
                 cursor: snapshot.cursor,
+                no_line: self.no_line,
             });
             self.restore(&snapshot);
         }
@@ -1361,16 +1496,18 @@ impl Editor {
             self.undo.push(Snapshot {
                 text: self.text.as_str().to_owned(),
                 cursor: snapshot.cursor,
+                no_line: self.no_line,
             });
             self.restore(&snapshot);
         }
     }
 
-    /// Keeps the cursor on a character outside Insert mode, as vim does: not after the end of
-    /// a line that has characters.
+    /// Keeps the cursor on a character in Normal mode, as vim does: not after the end of a line
+    /// that has characters. Insert mode may have it there, and Visual mode too, as vim's with
+    /// 'selection' inclusive, where it selects the line break.
     fn clamp(&mut self) {
         self.cursor = self.cursor.min(self.len());
-        if self.mode == Mode::Insert {
+        if self.mode != Mode::Normal {
             return;
         }
         let chars = self.chars();
@@ -1543,14 +1680,16 @@ fn word_back(chars: &[char], at: usize, big: bool) -> usize {
     index
 }
 
-/// Where the word ends that character `at` is before, or in: vim's `e`.
+/// Where the word ends that character `at` is before, or in: vim's `e`. Without one, the end
+/// of the text, where vim's stops: Visual mode keeps the cursor there, Normal mode puts it back
+/// on the last character.
 fn word_end(chars: &[char], at: usize, big: bool) -> usize {
     let mut index = at + 1;
     while chars.get(index).is_some_and(|&c| class(c, big) == 0) {
         index += 1;
     }
     let Some(&c) = chars.get(index) else {
-        return chars.len().saturating_sub(1).max(at.min(chars.len()));
+        return chars.len();
     };
     let kind = class(c, big);
     while chars.get(index + 1).is_some_and(|&c| class(c, big) == kind) {
@@ -1580,14 +1719,20 @@ fn times(motion: usize, operator: usize) -> usize {
 }
 
 /// Where vim's Space goes `count` times: a character right, and from the last character of a
-/// line to the start of the next, as 'whichwrap' has it. An operator takes the last character
-/// first, then the line break.
-fn char_forward(chars: &[char], cursor: usize, count: usize, operator: Option<Operator>) -> Motion {
+/// line to the start of the next, as 'whichwrap' has it; `past_end`, as in Visual mode, after
+/// the last character first. An operator takes the last character first, then the line break.
+fn char_forward(
+    chars: &[char],
+    cursor: usize,
+    count: usize,
+    operator: Option<Operator>,
+    past_end: bool,
+) -> Motion {
     let mut to = cursor;
     let mut inclusive = false;
     for _ in 0..count {
         let (start, end) = line_bounds(chars, to);
-        if to + 1 < end {
+        if to + 1 < end || past_end && to < end {
             to += 1;
         } else if end >= chars.len() {
             // On the last line, as `l`.
@@ -1609,12 +1754,13 @@ fn char_forward(chars: &[char], cursor: usize, count: usize, operator: Option<Op
 
 /// Where vim's Backspace goes `count` times: a character left, and from the start of a line to
 /// the end of the line before, as 'whichwrap' has it; `d` and `c` go onto its line break, which
-/// they take.
+/// they take, and so does `past_end`, as Visual mode.
 fn char_backward(
     chars: &[char],
     cursor: usize,
     count: usize,
     operator: Option<Operator>,
+    past_end: bool,
 ) -> Motion {
     let mut to = cursor;
     let mut keep_end = false;
@@ -1633,6 +1779,8 @@ fn char_backward(
         if takes_break && line_break > before {
             to = line_break;
             keep_end = true;
+        } else if past_end {
+            to = line_break;
         } else {
             to = line_break.saturating_sub(1).max(before);
         }
@@ -1676,6 +1824,13 @@ fn first_non_blank(chars: &[char], start: usize, end: usize) -> usize {
     (start..end)
         .find(|&index| !chars[index].is_whitespace())
         .unwrap_or(end)
+}
+
+/// The first character that is not blank of the line that starts at `start`, as vim's `^`
+/// goes: on a line of blanks, the last of them.
+fn line_first_non_blank(chars: &[char], start: usize) -> usize {
+    let (start, end) = line_bounds(chars, start);
+    first_non_blank(chars, start, end).min(end.saturating_sub(1).max(start))
 }
 
 /// The motion of `f`, `F`, `t`, or `T` for `c`, `count` times, within the line `bounds`; `again`
@@ -1740,6 +1895,14 @@ fn is_motion(action: Action) -> bool {
             | Action::TillCharBack
             | Action::RepeatFind
             | Action::RepeatFindBack
+    ) || is_line_motion(action)
+}
+
+/// Whether `action` is one of vim's motions over lines: `-`, `+`, and `_`.
+fn is_line_motion(action: Action) -> bool {
+    matches!(
+        action,
+        Action::PrevLine | Action::NextLine | Action::ThisLine
     )
 }
 
@@ -1797,6 +1960,20 @@ mod tests {
                 ..Extra::default()
             },
         )
+    }
+
+    fn line_register(text: &str) -> Register {
+        Register {
+            text: text.to_owned(),
+            lines: true,
+        }
+    }
+
+    fn text_register(text: &str) -> Register {
+        Register {
+            text: text.to_owned(),
+            lines: false,
+        }
     }
 
     #[test]
@@ -2418,20 +2595,454 @@ mod tests {
     }
 
     #[test]
-    fn a_change_that_deletes_nothing_is_one_with_what_it_types_or_none() {
+    fn a_change_that_deletes_nothing_is_one_with_what_it_types() {
         let mut registers = Registers::default();
         let mut editor = at("ab", 0);
+        run(&mut editor, &mut registers, &[plain(Action::DeleteChar)]);
         run(
             &mut editor,
             &mut registers,
             &[plain(Action::ChangeOperator), plain(Action::Left)],
         );
         assert_eq!(editor.mode(), Mode::Insert);
+        editor.insert('x');
         run(&mut editor, &mut registers, &[plain(Action::NormalMode)]);
-        run(&mut editor, &mut registers, &[plain(Action::DeleteChar)]);
+        assert_eq!(editor.text(), "xb");
         run(&mut editor, &mut registers, &[plain(Action::Undo)]);
+        assert_eq!(editor.text(), "b", "c h and what it typed, one change");
+        run(
+            &mut editor,
+            &mut registers,
+            &[
+                plain(Action::ChangeOperator),
+                plain(Action::Left),
+                plain(Action::NormalMode),
+                plain(Action::Undo),
+            ],
+        );
+        assert_eq!(editor.text(), "b", "c h alone is a change to undo too");
         run(&mut editor, &mut registers, &[plain(Action::Undo)]);
-        assert_eq!(editor.text(), "ab", "the empty change left no step to undo");
+        assert_eq!(editor.text(), "ab");
+    }
+
+    #[test]
+    fn deletes_of_nothing_are_changes_to_undo_but_where_the_text_has_no_line() {
+        let empty_then_undo = |keys: &[(Action, Extra)], cursor: usize| {
+            let mut editor = at("abc", cursor);
+            let mut registers = Registers::default();
+            run(&mut editor, &mut registers, keys);
+            run(&mut editor, &mut registers, &[plain(Action::Undo)]);
+            editor.text().to_owned()
+        };
+        // Emptied by D, the line is still there: x on it takes a step of its own to undo.
+        for (keys, cursor, text) in [
+            (
+                &[plain(Action::DeleteToEnd), plain(Action::DeleteChar)][..],
+                0,
+                "",
+            ),
+            (
+                &[plain(Action::DeleteToEnd), plain(Action::Backspace)],
+                0,
+                "",
+            ),
+            (
+                &[
+                    plain(Action::DeleteToEnd),
+                    plain(Action::VisualMode),
+                    plain(Action::DeleteOperator),
+                ],
+                0,
+                "",
+            ),
+            (
+                &[
+                    plain(Action::DeleteChar),
+                    plain(Action::DeleteOperator),
+                    plain(Action::TextStart),
+                ],
+                0,
+                "bc",
+            ),
+            (
+                &[
+                    plain(Action::DeleteChar),
+                    plain(Action::DeleteOperator),
+                    plain(Action::Left),
+                ],
+                0,
+                "bc",
+            ),
+            // D on an empty line has nothing to delete, and is no change.
+            (
+                &[plain(Action::DeleteToEnd), plain(Action::DeleteToEnd)],
+                0,
+                "abc",
+            ),
+            // d d deleted the last line: nothing is left to delete, and undo brings it back.
+            (
+                &[
+                    plain(Action::DeleteOperator),
+                    plain(Action::DeleteOperator),
+                    plain(Action::DeleteChar),
+                ],
+                0,
+                "abc",
+            ),
+            // C on an empty line, and v ~ even where the text has no line, are changes.
+            (
+                &[
+                    plain(Action::DeleteToEnd),
+                    plain(Action::ChangeToEnd),
+                    plain(Action::NormalMode),
+                ],
+                0,
+                "",
+            ),
+            (
+                &[
+                    plain(Action::DeleteOperator),
+                    plain(Action::DeleteOperator),
+                    plain(Action::VisualMode),
+                    plain(Action::ToggleCase),
+                ],
+                0,
+                "",
+            ),
+        ] {
+            assert_eq!(empty_then_undo(keys, cursor), text, "{keys:?}");
+        }
+    }
+
+    #[test]
+    fn a_put_of_nothing_and_delete_at_the_end_are_changes_to_undo_too() {
+        let mut registers = Registers::default();
+        // A put from an empty register, as vim's, which saves for undo first.
+        let mut editor = at("abc", 1);
+        let empty = Extra {
+            register: Some('b'),
+            ..Extra::default()
+        };
+        run(
+            &mut editor,
+            &mut registers,
+            &[
+                plain(Action::DeleteChar),
+                (Action::PutBefore, empty),
+                plain(Action::Undo),
+            ],
+        );
+        assert_eq!(editor.text(), "ac");
+        // Delete at the end of a field in Insert mode is a change too.
+        let mut editor = at("abc", 1);
+        run(
+            &mut editor,
+            &mut registers,
+            &[
+                plain(Action::DeleteToEnd),
+                plain(Action::Append),
+                plain(Action::DeleteChar),
+                plain(Action::NormalMode),
+                plain(Action::Undo),
+            ],
+        );
+        assert_eq!(editor.text(), "a");
+    }
+
+    #[test]
+    fn what_there_is_nothing_to_take_from_goes_to_the_registers_as_vims() {
+        let named = |name| Extra {
+            register: Some(name),
+            ..Extra::default()
+        };
+        let mut registers = Registers::default();
+        let mut editor = at("abc", 0);
+        run(
+            &mut editor,
+            &mut registers,
+            &[
+                (Action::YankOperator, named('a')),
+                plain(Action::YankOperator),
+                plain(Action::YankOperator),
+                plain(Action::TextStart),
+            ],
+        );
+        assert_eq!(
+            registers.text(None),
+            Some(""),
+            "y 0 at the start yanks nothing"
+        );
+        assert_eq!(registers.text(Some('a')), Some("abc"));
+        run(
+            &mut editor,
+            &mut registers,
+            &[
+                plain(Action::DeleteToEnd),
+                (Action::YankOperator, named('A')),
+                plain(Action::TextEnd),
+            ],
+        );
+        assert_eq!(
+            registers.text(Some('a')),
+            Some("abc\n"),
+            "\"A y $ appends an empty line to lines"
+        );
+        run(
+            &mut editor,
+            &mut registers,
+            &[plain(Action::YankOperator), plain(Action::YankOperator)],
+        );
+        run(&mut editor, &mut registers, &[plain(Action::ChangeToEnd)]);
+        assert_eq!(
+            registers.get(None).cloned(),
+            Some(text_register("")),
+            "C on an empty line takes it"
+        );
+        // d d on the empty line takes it as a line, then the text has none: d d, c c, S, and C
+        // take nothing more.
+        run(
+            &mut editor,
+            &mut registers,
+            &[
+                plain(Action::NormalMode),
+                plain(Action::DeleteOperator),
+                plain(Action::DeleteOperator),
+            ],
+        );
+        assert_eq!(registers.get(None).cloned(), Some(line_register("")));
+        assert!(editor.no_line);
+        let kept = line_register("abc");
+        for keys in [
+            &[plain(Action::DeleteOperator), plain(Action::DeleteOperator)][..],
+            &[
+                (Action::ChangeOperator, named('a')),
+                plain(Action::ChangeOperator),
+                plain(Action::NormalMode),
+            ],
+            &[plain(Action::SubstituteLine), plain(Action::NormalMode)],
+            &[plain(Action::ChangeToEnd), plain(Action::NormalMode)],
+        ] {
+            let mut editor = at("abc", 0);
+            run(
+                &mut editor,
+                &mut registers,
+                &[plain(Action::DeleteOperator), plain(Action::DeleteOperator)],
+            );
+            registers.keep(Some('a'), kept.clone(), false);
+            run(&mut editor, &mut registers, keys);
+            assert_eq!(registers.get(None).cloned(), Some(kept.clone()), "{keys:?}");
+            assert_eq!(
+                registers.get(Some('a')).cloned(),
+                Some(kept.clone()),
+                "{keys:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn visual_mode_goes_after_the_end_of_a_line_and_takes_its_line_break() {
+        let visual = |text: &str, cursor: usize, keys: &[(Action, Extra)]| {
+            let mut editor = at(text, cursor).with_lines();
+            let mut registers = Registers::default();
+            run(&mut editor, &mut registers, &[plain(Action::VisualMode)]);
+            run(&mut editor, &mut registers, keys);
+            (editor, registers)
+        };
+        let (editor, _) = visual("abc", 2, &[plain(Action::Right)]);
+        assert_eq!(editor.cursor(), 3, "l from the last character");
+        let (editor, _) = visual(
+            "abc",
+            2,
+            &[
+                plain(Action::Right),
+                plain(Action::Left),
+                plain(Action::DeleteOperator),
+            ],
+        );
+        assert_eq!(editor.text(), "ab", "h comes back to the last character");
+        let (_, registers) = visual(
+            "abc",
+            0,
+            &[
+                plain(Action::TextEnd),
+                plain(Action::Left),
+                plain(Action::YankOperator),
+            ],
+        );
+        assert_eq!(registers.text(None), Some("abc"), "$ goes after the end");
+        let (editor, _) = visual(
+            "a.b c-d  ef",
+            9,
+            &[
+                plain(Action::WordForward),
+                plain(Action::Left),
+                plain(Action::DeleteOperator),
+            ],
+        );
+        assert_eq!(editor.text(), "a.b c-d  ", "w past the last word");
+        let (editor, _) = visual("ab cd", 4, &[plain(Action::WordEnd)]);
+        assert_eq!(editor.cursor(), 5, "e at the end");
+        let (editor, _) = visual("ab\ncd", 1, &[plain(Action::CharForward)]);
+        assert_eq!(editor.cursor(), 2, "Space at the last character");
+        let (editor, _) = visual("ab\ncd", 1, &[counted(Action::CharForward, 2)]);
+        assert_eq!(editor.cursor(), 3, "then the next line");
+        let (editor, _) = visual("ab\ncd", 3, &[plain(Action::CharBackward)]);
+        assert_eq!(
+            editor.cursor(),
+            2,
+            "Backspace to the end of the line before"
+        );
+        // An operator takes the line break where a line follows, and nothing on the last line.
+        let (editor, registers) = visual(
+            "ab cd\nef",
+            1,
+            &[plain(Action::TextEnd), plain(Action::YankOperator)],
+        );
+        assert_eq!(registers.text(None), Some("b cd\n"));
+        assert_eq!((editor.mode(), editor.cursor()), (Mode::Normal, 1));
+        let (editor, _) = visual(
+            "ab cd\nef",
+            1,
+            &[counted(Action::Right, 9), plain(Action::DeleteOperator)],
+        );
+        assert_eq!(editor.text(), "aef");
+        let (editor, _) = visual(
+            "abc",
+            1,
+            &[plain(Action::TextEnd), plain(Action::NormalMode)],
+        );
+        assert_eq!(
+            editor.cursor(),
+            2,
+            "Esc puts the cursor back on a character"
+        );
+        // A count before v goes after the end as l does.
+        let mut registers = Registers::default();
+        let mut editor = at("ab", 1);
+        run(
+            &mut editor,
+            &mut registers,
+            &[
+                counted(Action::VisualMode, 5),
+                plain(Action::YankOperator),
+                counted(Action::VisualMode, 1),
+            ],
+        );
+        assert_eq!(editor.cursor(), 2, "the column after the end counts too");
+    }
+
+    #[test]
+    fn after_ctrl_o_at_the_end_ctrl_w_and_ctrl_u_stop_once_before_the_last_character() {
+        let mut registers = Registers::default();
+        let yanked = |typed: &str, keys: &[Action]| {
+            let mut editor = at("foo bar", 0);
+            let mut registers = Registers::default();
+            press(&mut editor, &mut registers, Action::AppendAtEnd);
+            for c in typed.chars() {
+                editor.insert(c);
+            }
+            let line = [
+                Action::NormalOnce,
+                Action::YankOperator,
+                Action::YankOperator,
+            ];
+            for &action in line.iter().chain(keys) {
+                press(&mut editor, &mut registers, action);
+            }
+            editor.text().to_owned()
+        };
+        assert_eq!(yanked("", &[Action::DeleteWord]), "foo ba");
+        assert_eq!(yanked("", &[Action::DeleteToStart]), "foo ba");
+        assert_eq!(yanked("xy", &[Action::DeleteWord]), "foo barx");
+        assert_eq!(
+            yanked("", &[Action::DeleteWord, Action::DeleteWord]),
+            "foo "
+        );
+        assert_eq!(yanked("", &[Action::Backspace, Action::Backspace]), "foo b");
+        // On an empty line too, as vim's.
+        let mut editor = Editor::new("", Mode::Insert);
+        registers.keep(None, text_register("x"), false);
+        run(
+            &mut editor,
+            &mut registers,
+            &[plain(Action::NormalOnce), plain(Action::PutBefore)],
+        );
+        assert_eq!((editor.text(), editor.cursor()), ("x", 1));
+    }
+
+    #[test]
+    fn minus_plus_and_underscore_go_to_lines_and_take_them_whole() {
+        let text = "ab\n  cd\nef";
+        let go = |cursor: usize, keys: &[(Action, Extra)]| {
+            let mut editor = at(text, cursor).with_lines();
+            let mut registers = Registers::default();
+            run(&mut editor, &mut registers, keys);
+            let taken = registers.get(None).cloned().unwrap_or_default();
+            (editor.text().to_owned(), editor.cursor(), taken)
+        };
+        let moved = |cursor, keys: &[(Action, Extra)]| go(cursor, keys).1;
+        assert_eq!(moved(4, &[plain(Action::PrevLine)]), 0);
+        assert_eq!(moved(4, &[plain(Action::NextLine)]), 8);
+        assert_eq!(moved(3, &[plain(Action::ThisLine)]), 5);
+        assert_eq!(moved(4, &[counted(Action::ThisLine, 2)]), 8);
+        assert_eq!(
+            moved(0, &[counted(Action::NextLine, 5)]),
+            8,
+            "as far as lines go"
+        );
+        assert_eq!(moved(8, &[counted(Action::PrevLine, 3)]), 0);
+        assert_eq!(moved(1, &[plain(Action::PrevLine)]), 1, "no line above");
+        assert_eq!(moved(8, &[plain(Action::NextLine)]), 8, "no line below");
+        assert_eq!(moved(8, &[counted(Action::ThisLine, 2)]), 8);
+        let delete = |motion| (Action::DeleteOperator, Extra::default(), motion);
+        for ((operator, extra, motion), cursor, want) in [
+            (delete(plain(Action::ThisLine)), 4, ("ab\nef", 3, "  cd")),
+            (
+                delete(counted(Action::ThisLine, 2)),
+                4,
+                ("ab", 0, "  cd\nef"),
+            ),
+            (delete(plain(Action::PrevLine)), 4, ("ef", 0, "ab\n  cd")),
+            (delete(plain(Action::NextLine)), 4, ("ab", 0, "  cd\nef")),
+            (delete(plain(Action::NextLine)), 8, (text, 8, "")),
+        ] {
+            let got = go(cursor, &[(operator, extra), motion]);
+            assert_eq!(
+                (got.0.as_str(), got.1, got.2.text.as_str()),
+                want,
+                "{motion:?}"
+            );
+            assert!(got.2.lines || got.2.text.is_empty(), "{motion:?}");
+        }
+        let (_, cursor, taken) = go(4, &[plain(Action::YankOperator), plain(Action::PrevLine)]);
+        assert_eq!(
+            (cursor, taken),
+            (0, line_register("ab\n  cd")),
+            "y - goes up"
+        );
+        let (_, cursor, _) = go(4, &[plain(Action::YankOperator), plain(Action::NextLine)]);
+        assert_eq!(cursor, 4, "y + stays");
+        let mut editor = at(text, 4).with_lines();
+        let mut registers = Registers::default();
+        run(
+            &mut editor,
+            &mut registers,
+            &[plain(Action::ChangeOperator), plain(Action::PrevLine)],
+        );
+        editor.insert('x');
+        assert_eq!(editor.text(), "x\nef", "c - as 2 c c from the line above");
+        // In a field of one line, - and + fail, and _ stays on the line.
+        let mut field = at("  ab", 3);
+        run(&mut field, &mut registers, &[plain(Action::PrevLine)]);
+        assert_eq!(field.cursor(), 3);
+        run(&mut field, &mut registers, &[plain(Action::ThisLine)]);
+        assert_eq!(field.cursor(), 2);
+        run(
+            &mut field,
+            &mut registers,
+            &[plain(Action::DeleteOperator), plain(Action::ThisLine)],
+        );
+        assert_eq!(field.text(), "", "d _ as d d");
     }
 
     #[test]
@@ -2876,6 +3487,8 @@ mod tests {
         );
         lines.set_cursor(7);
         assert_eq!(lines.selection_size(), Some(3), "lines");
+        lines.set_cursor(2);
+        assert_eq!(lines.selection_size(), Some(2), "and the end of the line");
     }
     #[test]
     fn undo_and_redo_put_the_cursor_where_the_change_starts() {

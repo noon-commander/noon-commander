@@ -321,6 +321,14 @@ pub(crate) enum Action {
     FirstNonBlank,
     /// The text cursor to the end of the line.
     TextEnd,
+    /// The text cursor to the first character that is not blank of the line above, or of the
+    /// line a count goes up to: vim's `-`. An operator takes the lines whole.
+    PrevLine,
+    /// The same, of the line below, or the line a count goes down to: vim's `+`.
+    NextLine,
+    /// The same, of the line of the cursor, or of the line a count less one goes down to: vim's
+    /// `_`, with which `d _` deletes the line as `d d`.
+    ThisLine,
     /// The text cursor to the start of the next word: vim's `w`.
     WordForward,
     /// The text cursor to the start of the word before it: vim's `b`.
@@ -522,6 +530,9 @@ impl Action {
         Self::TextStart,
         Self::FirstNonBlank,
         Self::TextEnd,
+        Self::PrevLine,
+        Self::NextLine,
+        Self::ThisLine,
         Self::WordForward,
         Self::WordBackward,
         Self::WordEnd,

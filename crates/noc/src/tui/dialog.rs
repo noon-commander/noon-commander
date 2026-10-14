@@ -1529,6 +1529,14 @@ mod tests {
         );
         field.handle(Action::NormalMode, Extra::default(), &mut registers);
         assert_eq!(parts(&field, 20).0[1], "", "nothing is selected any more");
+        // After the end of the text, as vim's with 'selection' inclusive.
+        for action in [Action::TextStart, Action::VisualMode, Action::TextEnd] {
+            assert!(field.handle(action, Extra::default(), &mut registers));
+        }
+        assert_eq!(
+            parts(&field, 20),
+            ([String::new(), "report.pdf".to_owned(), String::new()], 10)
+        );
     }
 
     /// Presses the mouse on the first cell of `text` where `dialog` is drawn at 40 by 12.

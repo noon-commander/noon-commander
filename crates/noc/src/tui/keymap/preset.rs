@@ -186,6 +186,9 @@ pub(super) const PRESET: Preset = &[
             (Action::TextStart, &["0", "home"]),
             (Action::FirstNonBlank, &["^"]),
             (Action::TextEnd, &["$", "end"]),
+            (Action::PrevLine, &["-"]),
+            (Action::NextLine, &["+"]),
+            (Action::ThisLine, &["_"]),
             (Action::WordForward, &["w", "shift-right"]),
             (Action::WordBackward, &["b", "shift-left"]),
             (Action::WordEnd, &["e"]),
@@ -234,6 +237,9 @@ pub(super) const PRESET: Preset = &[
             (Action::TextStart, &["0", "home"]),
             (Action::FirstNonBlank, &["^"]),
             (Action::TextEnd, &["$", "end"]),
+            (Action::PrevLine, &["-"]),
+            (Action::NextLine, &["+"]),
+            (Action::ThisLine, &["_"]),
             (Action::WordForward, &["w"]),
             (Action::WordBackward, &["b"]),
             (Action::WordEnd, &["e"]),
@@ -558,10 +564,13 @@ pub(super) const PRESET: Preset = &[
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c", "f10"]),
         ],
     ),
+    // In Visual mode, j and k go through its lines only.
     (
         Mode::Visual,
         Context::CommandLine,
         &[
+            (Action::Up, &["k", "up"]),
+            (Action::Down, &["j", "down"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Cancel, &["ctrl-c", "f10"]),
         ],

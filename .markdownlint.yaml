@@ -2,5 +2,8 @@ line-length:
   line_length: 100
   code_blocks: false
   tables: false
+# CHANGELOG.md repeats Added, Changed, and Fixed under every release.
+no-duplicate-heading:
+  siblings_only: true
 fenced-code-language: false
 no-inline-html: false

@@ -55,13 +55,17 @@ pub(crate) enum Context {
     DialogInput,
     /// A text field for a path, which Tab completes; falls back to `DialogInput`.
     PathInput,
-    /// The list of completions under a path field; keys it does not bind go to the field.
+    /// The list of completions under a path field, or over the command line; keys it does not
+    /// bind go to the field.
     Completion,
     /// The viewer of F3.
     Viewer,
     /// The command line of `!` and `:`; falls back to `Input`. Other keys, but the global ones,
     /// do nothing.
     CommandLine,
+    /// The list of completions over the command line: the keys of `Completion`, then those of
+    /// the command line. It binds none of its own.
+    CommandCompletion,
     /// The window of the command history; falls back as the location menu does.
     CommandHistory,
     /// The terminal's own screen, with the output of commands, in place of the panels; only
@@ -103,6 +107,13 @@ impl Context {
             ],
             Self::Viewer => &[Self::Viewer, Self::Global],
             Self::CommandLine => &[Self::CommandLine, Self::Input, Self::Global],
+            Self::CommandCompletion => &[
+                Self::CommandCompletion,
+                Self::Completion,
+                Self::CommandLine,
+                Self::Input,
+                Self::Global,
+            ],
             // The terminal's own screen: nothing of noc's draws there, the hints neither.
             Self::UserScreen => &[Self::UserScreen],
             // Menus are modal too.
@@ -395,8 +406,13 @@ pub(crate) enum Action {
     PasteRegister,
     /// Types the key after it as it is: vim's Ctrl+v.
     InsertLiteral,
-    /// Completes the path in a text field; in the list of completions, the next one.
+    /// Completes the word before the cursor, in a path field or on the command line: one match
+    /// goes in, or the first of several, which a list shows.
     Complete,
+    /// Keeps the match in the field and closes the list of completions: vim's Ctrl+y.
+    AcceptCompletion,
+    /// Closes the list of completions and puts back what was typed: vim's Ctrl+e.
+    CancelCompletion,
     /// Accepts the dialog, or activates the focused button.
     Confirm,
     /// Switches the focused check box, or presses the focused button.
@@ -566,6 +582,8 @@ impl Action {
         Self::PasteRegister,
         Self::InsertLiteral,
         Self::Complete,
+        Self::AcceptCompletion,
+        Self::CancelCompletion,
         Self::Confirm,
         Self::Toggle,
         Self::Cancel,
@@ -601,6 +619,7 @@ impl Context {
         Self::Completion,
         Self::Viewer,
         Self::CommandLine,
+        Self::CommandCompletion,
         Self::CommandHistory,
         Self::UserScreen,
     ];

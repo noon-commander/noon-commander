@@ -253,6 +253,8 @@ fn start_app(context: &Context, start: &Path, tz: &TimeZone) -> (App, Vec<app::E
     app.set_time_zone(tz.clone());
     app.set_runtime_dir(context.paths.runtime_dir.clone());
     app.set_hosts(context.hosts());
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    app.set_command_dirs(std::env::split_paths(&path).collect());
     (app, effects)
 }
 

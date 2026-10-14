@@ -1,7 +1,9 @@
-//! Tab completion of paths in the fields of Quick cd, F5, F6, and F7, as bash and mc do it:
-//! the last part of the path is completed from what its directory holds. One match is put in
-//! with `/` after a directory and `:` after a host; several are put in as far as they agree,
-//! and a Tab that gets no further lists them, to choose one.
+//! Tab completion, as vim's command line completes with `wildmenu` and `wildmode=full`: the
+//! last part of a path is completed from what its directory holds. One match goes in with `/`
+//! after a directory and `:` after a host; of several, the first goes in whole and a list of
+//! them shows by the field, where Tab and the arrows put the others in, round through what was
+//! typed. The fields of Quick cd, F5, F6, and F7 complete paths; the command line completes
+//! the word before the cursor, escaped for sh, as vim's `:!` does.
 
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
@@ -11,19 +13,30 @@ use ratatui::widgets::{Block, BorderType, Borders, Clear};
 use super::cells::{self, Align};
 use super::dialog::Colors;
 use super::keymap::Action;
-use super::mouse::{Drawn, Pointer};
+use super::mouse::{Drawn, Pointer, Press};
 use super::theme::Theme;
 
-/// Rows the list of choices shows at most.
+/// Rows the list of choices shows at most, and how far the page keys go in it.
 const MAX_ROWS: usize = 10;
+/// What sh reads as more than a character of a name, which a backslash goes before.
+const SHELL_SPECIAL: &str = " \t\\'\"$`&;|<>()*?[]#!{}";
 
 /// What a field takes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Offer {
     /// Directories, as `cd` and F7 take them.
     Dirs,
-    /// Directories and files, as the target of F5 and F6.
+    /// Directories and files, as the target of F5 and F6 and the command line.
     Any,
+}
+
+/// How a name goes in the text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Quote {
+    /// As it is, in a path field.
+    Plain,
+    /// With a backslash before what sh would read otherwise, on the command line.
+    Shell,
 }
 
 /// A name that completes the text, and what goes after it.
@@ -41,18 +54,55 @@ pub(crate) enum Kind {
 }
 
 impl Candidate {
-    /// The name as it goes in the field: `/` after a directory, `:` after a host.
+    /// The name as the list shows it: `/` after a directory, `:` after a host.
     fn text(&self) -> String {
+        self.typed(Quote::Plain)
+    }
+
+    /// The name as it goes in the text, quoted as `quote` says, with its mark after it.
+    pub(crate) fn typed(&self, quote: Quote) -> String {
+        let name = match quote {
+            Quote::Plain => self.name.clone(),
+            Quote::Shell => escape(&self.name),
+        };
         match self.kind {
-            Kind::File => self.name.clone(),
-            Kind::Dir => format!("{}/", self.name),
-            Kind::Host => format!("{}:", self.name),
+            Kind::File => name,
+            Kind::Dir => format!("{name}/"),
+            Kind::Host => format!("{name}:"),
         }
     }
 }
 
-/// The text before the cursor, cut where completion starts: the directory to read as typed,
-/// `dir`, which stays, and `prefix`, the part of a name to complete.
+/// `name` escaped for sh as vim's `:!` completion does: a backslash before blanks and the
+/// characters sh reads otherwise, and before a `~` at its start.
+pub(crate) fn escape(name: &str) -> String {
+    let mut escaped = String::with_capacity(name.len());
+    for (index, c) in name.chars().enumerate() {
+        if SHELL_SPECIAL.contains(c) || (index == 0 && c == '~') {
+            escaped.push('\\');
+        }
+        escaped.push(c);
+    }
+    escaped
+}
+
+/// `text` with its backslash escapes taken out, as sh reads a word: `\x` is `x`; a backslash
+/// at the end escapes nothing yet, and goes.
+fn unescape(text: &str) -> String {
+    let mut plain = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            plain.extend(chars.next());
+        } else {
+            plain.push(c);
+        }
+    }
+    plain
+}
+
+/// The text before the cursor in a path field, cut where completion starts: the directory to
+/// read as typed, `dir`, which stays, and `prefix`, the part of a name to complete.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Split {
     pub(crate) dir: String,
@@ -88,19 +138,58 @@ pub(crate) fn split(before: &str, is_host: impl Fn(&str) -> bool) -> Split {
     }
 }
 
-/// What a Tab does with the candidates for `prefix`.
+/// The word before the cursor on the command line, cut where completion starts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Word {
+    /// What stays, as typed: the words before, and the directory of this one.
+    pub(crate) keep: String,
+    /// The directory the word names, without escapes, up to its last `/`; empty for none.
+    pub(crate) dir: String,
+    /// The part of a name to complete, without escapes.
+    pub(crate) prefix: String,
+    /// It is the first word of the command, which names the command.
+    pub(crate) first: bool,
+}
+
+/// Cuts `before`, a shell command before the cursor, as sh reads its words: the word starts
+/// after the last blank or line break that no backslash escapes, and its name after its last
+/// `/`.
+pub(crate) fn word(before: &str) -> Word {
+    let parts = |c: char| matches!(c, ' ' | '\t' | '\n');
+    let mut start = 0;
+    let mut escaped = false;
+    for (offset, c) in before.char_indices() {
+        if escaped {
+            escaped = false;
+        } else if c == '\\' {
+            escaped = true;
+        } else if parts(c) {
+            start = offset + c.len_utf8();
+        }
+    }
+    let typed = &before[start..];
+    let cut = typed.rfind('/').map_or(0, |slash| slash + 1);
+    Word {
+        keep: before[..start + cut].to_owned(),
+        dir: unescape(&typed[..cut]),
+        prefix: unescape(&typed[cut..]),
+        first: before[..start].chars().all(parts),
+    }
+}
+
+/// What a Tab finds for a prefix.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Outcome {
     /// Nothing matches.
     Nothing,
-    /// Put this in place of the prefix.
-    Insert(String),
-    /// Several match and agree no further than the prefix: list them.
+    /// One match, which goes in, with no list.
+    One(Candidate),
+    /// Several, in the order of the list: the first goes in, and the list shows them all.
     List(Vec<Candidate>),
 }
 
-/// Completes `prefix` from `candidates`. Names that start with a dot count only if the prefix
-/// does, as in bash. Case counts, unless nothing matches with it.
+/// The candidates that complete `prefix`, in the order of the list. Names that start with a
+/// dot count only if the prefix does, as in bash. Case counts, unless nothing matches with it.
 pub(crate) fn complete(prefix: &str, candidates: Vec<Candidate>) -> Outcome {
     let shown: Vec<Candidate> = candidates
         .into_iter()
@@ -111,15 +200,14 @@ pub(crate) fn complete(prefix: &str, candidates: Vec<Candidate>) -> Outcome {
         .filter(|candidate| candidate.name.starts_with(prefix))
         .cloned()
         .collect();
-    let (mut matches, fold) = if exact.is_empty() {
+    let mut matches = if exact.is_empty() {
         let lower = prefix.to_lowercase();
-        let folded = shown
+        shown
             .into_iter()
             .filter(|candidate| candidate.name.to_lowercase().starts_with(&lower))
-            .collect();
-        (folded, true)
+            .collect()
     } else {
-        (exact, false)
+        exact
     };
     matches.sort_by(|a, b| {
         let key = |candidate: &Candidate| candidate.name.to_lowercase();
@@ -129,37 +217,11 @@ pub(crate) fn complete(prefix: &str, candidates: Vec<Candidate>) -> Outcome {
             .then_with(|| (a.kind as u8).cmp(&(b.kind as u8)))
     });
     matches.dedup();
-    match matches.as_slice() {
-        [] => Outcome::Nothing,
-        [one] => Outcome::Insert(one.text()),
-        [first, rest @ ..] => {
-            let common = rest.iter().fold(first.name.clone(), |common, candidate| {
-                common_prefix(&common, &candidate.name, fold)
-            });
-            // Case-folded matches may change the case of what was typed, but only to get further.
-            if common.chars().count() > prefix.chars().count() {
-                Outcome::Insert(common)
-            } else {
-                Outcome::List(matches)
-            }
-        }
+    match matches.len() {
+        0 => Outcome::Nothing,
+        1 => matches.pop().map_or(Outcome::Nothing, Outcome::One),
+        _ => Outcome::List(matches),
     }
-}
-
-/// The start that `a` and `b` share, as `a` spells it; with `fold`, regardless of case.
-fn common_prefix(a: &str, b: &str, fold: bool) -> String {
-    let same = |x: char, y: char| {
-        if fold {
-            x.to_lowercase().eq(y.to_lowercase())
-        } else {
-            x == y
-        }
-    };
-    a.chars()
-        .zip(b.chars())
-        .take_while(|(x, y)| same(*x, *y))
-        .map(|(x, _)| x)
-        .collect()
 }
 
 /// Names from a directory listing, as candidates: those that a field can hold, of what it
@@ -183,65 +245,88 @@ pub(crate) fn from_names(
         .collect()
 }
 
-/// The list of candidates under a field, after a Tab that got no further.
+/// The list of matches by a field, after a Tab that found several, as vim's `wildmenu`: the
+/// match on the row chosen is in the field; with no row chosen, what was typed is.
 #[derive(Debug)]
 pub(crate) struct Choices {
     items: Vec<Candidate>,
-    cursor: usize,
+    quote: Quote,
+    /// The row whose match is in the field; `None` while what was typed is.
+    chosen: Option<usize>,
     offset: usize,
     /// Where the last render drew it, for the mouse.
     drawn: Drawn,
 }
 
-/// What a key did to the list.
+/// What a key or a press did to the list.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ChoicesEvent {
-    Pending,
-    Closed,
-    /// Put this in place of the prefix.
-    Chosen(String),
-    /// The key is not for the list: it closes, and the key goes to the field.
+    /// Put this in place of the part completed: a match, or for `None` what was typed; and
+    /// with `close`, close the list.
+    Show { text: Option<String>, close: bool },
+    /// The key is not for the list: it closes, the text stays as it is, and the key goes to
+    /// the field.
     Passed,
 }
 
 impl Choices {
-    pub(crate) fn new(items: Vec<Candidate>) -> Self {
+    /// The list of `items`, whose first is in the field, quoted as `quote` says.
+    pub(crate) fn new(items: Vec<Candidate>, quote: Quote) -> Self {
         Self {
             items,
-            cursor: 0,
+            quote,
+            chosen: Some(0),
             offset: 0,
             drawn: Drawn::default(),
         }
     }
 
-    /// Arrows and Tab move, Enter takes the row, Esc closes the list.
+    /// The text of the match in the field; `None` while what was typed is.
+    pub(crate) fn current(&self) -> Option<String> {
+        let item = self.items.get(self.chosen?)?;
+        Some(item.typed(self.quote))
+    }
+
+    /// Down and Up put the next match in and the one before, and the page keys a page of them
+    /// on, round through what was typed; Ctrl+y keeps the match, and Ctrl+e puts back what was
+    /// typed.
     pub(crate) fn handle(&mut self, action: Action) -> ChoicesEvent {
-        let last = self.items.len().saturating_sub(1);
-        match action {
-            Action::Up => self.cursor = self.cursor.checked_sub(1).unwrap_or(last),
-            Action::Down | Action::Complete => {
-                self.cursor = if self.cursor >= last {
-                    0
-                } else {
-                    self.cursor + 1
+        self.chosen = match action {
+            Action::Down => self.moved(true, 1),
+            Action::Up => self.moved(false, 1),
+            Action::PageDown => self.moved(true, MAX_ROWS),
+            Action::PageUp => self.moved(false, MAX_ROWS),
+            Action::AcceptCompletion => return self.show(true),
+            Action::CancelCompletion => {
+                return ChoicesEvent::Show {
+                    text: None,
+                    close: true,
                 };
             }
-            Action::PageUp => self.cursor = self.cursor.saturating_sub(MAX_ROWS),
-            Action::PageDown => self.cursor = (self.cursor + MAX_ROWS).min(last),
-            Action::Home => self.cursor = 0,
-            Action::End => self.cursor = last,
-            Action::Confirm => {
-                return self
-                    .items
-                    .get(self.cursor)
-                    .map_or(ChoicesEvent::Closed, |item| {
-                        ChoicesEvent::Chosen(item.text())
-                    });
-            }
-            Action::Cancel => return ChoicesEvent::Closed,
             _ => return ChoicesEvent::Passed,
+        };
+        self.show(false)
+    }
+
+    fn show(&self, close: bool) -> ChoicesEvent {
+        ChoicesEvent::Show {
+            text: self.current(),
+            close,
         }
-        ChoicesEvent::Pending
+    }
+
+    /// The row `by` rows on, or back, as vim goes: from the last row, or the first going back,
+    /// to what was typed; from there, to the first row, or the last going back.
+    fn moved(&self, forward: bool, by: usize) -> Option<usize> {
+        let last = self.items.len().checked_sub(1)?;
+        match (self.chosen, forward) {
+            (None, true) => Some(0),
+            (None, false) => Some(last),
+            (Some(row), true) if row >= last => None,
+            (Some(row), true) => Some((row + by).min(last)),
+            (Some(0), false) => None,
+            (Some(row), false) => Some(row.saturating_sub(by)),
+        }
     }
 
     /// Whether the list was drawn over `at`.
@@ -249,10 +334,22 @@ impl Choices {
         self.drawn.frame.contains(at)
     }
 
-    /// Takes a press of the mouse on the list: a click puts the cursor on a row, and a double
-    /// click returns Enter, which takes it.
-    pub(crate) fn pointer(&mut self, pointer: Pointer) -> Option<Action> {
-        self.drawn.menu_press(pointer, &mut self.cursor)
+    /// Takes a press of the mouse on the list: a click puts the match of its row in, as a move
+    /// does, and a double click also closes the list, as Ctrl+y.
+    pub(crate) fn pointer(&mut self, pointer: Pointer) -> Option<ChoicesEvent> {
+        let close = match pointer.press {
+            Press::Click => false,
+            Press::DoubleClick => true,
+            Press::RightClick | Press::WheelUp | Press::WheelDown => return None,
+        };
+        self.chosen = Some(self.drawn.row_at(pointer.at)?);
+        Some(self.show(close))
+    }
+
+    /// The widest row, in cells.
+    pub(crate) fn width(&self) -> u16 {
+        let widest = self.items.iter().map(|item| row_text(item).1).max();
+        u16::try_from(widest.unwrap_or(0)).unwrap_or(u16::MAX)
     }
 
     /// Draws the list in a frame under `field`, or above it where there is no room below,
@@ -287,10 +384,13 @@ impl Choices {
         let inner = block.inner(outer);
         frame.render_widget(block, outer);
         let page = usize::from(inner.height);
-        self.offset = self
-            .offset
-            .min(self.cursor)
-            .max((self.cursor + 1).saturating_sub(page));
+        if let Some(chosen) = self.chosen {
+            self.offset = self
+                .offset
+                .min(chosen)
+                .max((chosen + 1).saturating_sub(page));
+        }
+        self.offset = self.offset.min(self.items.len().saturating_sub(page));
         let focused = Colors::of(theme, false).focused_style();
         let width = usize::from(inner.width);
         for (index, (row, item)) in self
@@ -301,8 +401,8 @@ impl Choices {
             .take(page)
             .enumerate()
         {
-            let text = cells::fit(&cells::sanitize(item.text().as_bytes()), width, Align::Left);
-            let style = if row == self.cursor {
+            let text = cells::fit(&row_text(item).0, width, Align::Left);
+            let style = if Some(row) == self.chosen {
                 focused
             } else {
                 theme.dialog
@@ -313,6 +413,13 @@ impl Choices {
             self.drawn.rows.push((row, line));
         }
     }
+}
+
+/// The row of `item` as the list shows it, safe for the terminal, and its width in cells.
+fn row_text(item: &Candidate) -> (String, usize) {
+    let text = cells::sanitize(item.text().as_bytes());
+    let width = cells::width(&text);
+    (text, width)
 }
 
 #[cfg(test)]
@@ -343,8 +450,11 @@ mod tests {
         }
     }
 
-    fn insert(text: &str) -> Outcome {
-        Outcome::Insert(text.to_owned())
+    fn show(text: Option<&str>, close: bool) -> ChoicesEvent {
+        ChoicesEvent::Show {
+            text: text.map(str::to_owned),
+            close,
+        }
     }
 
     #[test]
@@ -383,27 +493,88 @@ mod tests {
     }
 
     #[test]
+    fn the_word_before_the_cursor_starts_after_a_blank_no_backslash_escapes() {
+        assert_eq!(
+            word("ls -l src/ma"),
+            Word {
+                keep: "ls -l src/".to_owned(),
+                dir: "src/".to_owned(),
+                prefix: "ma".to_owned(),
+                first: false,
+            }
+        );
+        assert_eq!(
+            word("  gi"),
+            Word {
+                keep: "  ".to_owned(),
+                dir: String::new(),
+                prefix: "gi".to_owned(),
+                first: true,
+            }
+        );
+        let escaped = word("cat my\\ dir/a\\ \\$b");
+        assert_eq!(escaped.keep, "cat my\\ dir/");
+        assert_eq!(escaped.dir, "my dir/");
+        assert_eq!(escaped.prefix, "a $b");
+        assert!(!escaped.first);
+        // An escaped backslash escapes no blank after it.
+        assert_eq!(word("echo a\\\\ b").prefix, "b");
+        // A line break parts words too, and a backslash at the cursor waits for what it
+        // escapes.
+        assert_eq!(word("make \\\n  ins\\").prefix, "ins");
+        assert_eq!(word("make \\\n  ins\\").keep, "make \\\n  ");
+        assert_eq!(word("./run").keep, "./");
+        assert!(word("./run").first);
+        assert_eq!(word("").prefix, "");
+        assert!(word("").first);
+        assert!(word("ls ").prefix.is_empty() && !word("ls ").first);
+    }
+
+    #[test]
+    fn names_are_escaped_for_sh_as_vims_bang_completion_does() {
+        assert_eq!(escape("plain-name_1.txt"), "plain-name_1.txt");
+        assert_eq!(escape("my file"), "my\\ file");
+        assert_eq!(
+            escape("a\tb\\c'd\"e$f`g&h;i|j<k>l(m)n*o?p[q]r#s!t{u}"),
+            "a\\\tb\\\\c\\'d\\\"e\\$f\\`g\\&h\\;i\\|j\\<k\\>l\\(m\\)n\\*o\\?p\\[q\\]r\\#s\\!t\\{u\\}"
+        );
+        assert_eq!(escape("~notes~"), "\\~notes~", "a tilde only at the start");
+        assert_eq!(unescape(&escape("a b$~")), "a b$~");
+        assert_eq!(
+            dir("my dir").typed(Quote::Shell),
+            "my\\ dir/",
+            "the slash as it is"
+        );
+        assert_eq!(dir("my dir").typed(Quote::Plain), "my dir/");
+    }
+
+    #[test]
     fn one_match_goes_in_with_its_mark() {
         assert_eq!(
             complete("lo", vec![dir("logs"), file("x")]),
-            insert("logs/")
+            Outcome::One(dir("logs"))
         );
-        assert_eq!(complete("no", vec![file("notes.txt")]), insert("notes.txt"));
-        assert_eq!(complete("we", vec![host("web"), dir("x")]), insert("web:"));
+        assert_eq!(dir("logs").typed(Quote::Plain), "logs/");
+        assert_eq!(host("web").typed(Quote::Plain), "web:");
+        assert_eq!(file("notes.txt").typed(Quote::Plain), "notes.txt");
+        assert_eq!(
+            complete("we", vec![host("web"), dir("x")]),
+            Outcome::One(host("web"))
+        );
         assert_eq!(complete("zz", vec![dir("logs")]), Outcome::Nothing);
     }
 
     #[test]
-    fn several_go_in_as_far_as_they_agree_then_list() {
-        let candidates = vec![dir("project-a"), dir("project-b"), file("other")];
-        assert_eq!(complete("pr", candidates.clone()), insert("project-"));
+    fn several_go_in_a_list_in_its_order_with_no_common_part_first() {
+        let candidates = vec![dir("project-b"), dir("project-a"), file("other")];
         assert_eq!(
-            complete("project-", candidates),
+            complete("pr", candidates),
             Outcome::List(vec![dir("project-a"), dir("project-b")])
         );
         assert_eq!(
-            complete("", vec![dir("b"), dir("a")]),
-            Outcome::List(vec![dir("a"), dir("b")])
+            complete("", vec![dir("b"), dir("a"), dir("a")]),
+            Outcome::List(vec![dir("a"), dir("b")]),
+            "each once"
         );
     }
 
@@ -414,22 +585,16 @@ mod tests {
             complete("", candidates.clone()),
             Outcome::List(vec![dir("Docs"), dir("src")])
         );
-        assert_eq!(complete(".", candidates.clone()), insert(".git/"));
-        assert_eq!(complete("d", candidates.clone()), insert("Docs/"));
+        assert_eq!(complete(".", candidates.clone()), Outcome::One(dir(".git")));
+        assert_eq!(complete("d", candidates), Outcome::One(dir("Docs")));
         assert_eq!(
             complete("D", vec![dir("Desktop"), dir("dev")]),
-            insert("Desktop/"),
+            Outcome::One(dir("Desktop")),
             "an exact match comes first"
         );
         assert_eq!(
-            complete("d", vec![dir("Desktop"), dir("Documents")]),
-            Outcome::List(vec![dir("Desktop"), dir("Documents")]),
-            "a change of case alone gets no further"
-        );
-        assert_eq!(
-            complete("d", vec![dir("Desktop"), dir("Dev")]),
-            insert("De"),
-            "in the case of the names"
+            complete("d", vec![dir("Dev"), dir("Desktop")]),
+            Outcome::List(vec![dir("Desktop"), dir("Dev")])
         );
     }
 
@@ -449,32 +614,65 @@ mod tests {
     }
 
     #[test]
-    fn the_list_moves_round_and_takes_a_row() {
-        let mut choices = Choices::new(vec![dir("a"), dir("b"), host("c")]);
-        assert_eq!(choices.handle(Action::Up), ChoicesEvent::Pending);
+    fn moves_go_round_through_what_was_typed() {
+        let mut choices = Choices::new(vec![dir("a"), dir("b"), host("c")], Quote::Plain);
+        assert_eq!(choices.current().as_deref(), Some("a/"), "the first is in");
+        assert_eq!(choices.handle(Action::Down), show(Some("b/"), false));
+        assert_eq!(choices.handle(Action::Down), show(Some("c:"), false));
         assert_eq!(
-            choices.handle(Action::Confirm),
-            ChoicesEvent::Chosen("c:".to_owned())
+            choices.handle(Action::Down),
+            show(None, false),
+            "after the last, what was typed"
         );
-        choices.handle(Action::Complete);
+        assert_eq!(choices.handle(Action::Down), show(Some("a/"), false));
         assert_eq!(
-            choices.handle(Action::Confirm),
-            ChoicesEvent::Chosen("a/".to_owned())
+            choices.handle(Action::Up),
+            show(None, false),
+            "before the first, what was typed"
         );
+        assert_eq!(choices.handle(Action::Up), show(Some("c:"), false));
+        assert_eq!(choices.handle(Action::Up), show(Some("b/"), false));
+    }
+
+    #[test]
+    fn pages_stop_at_the_ends_then_go_round_through_what_was_typed() {
+        let items = (0..25).map(|n| file(&format!("f{n:02}"))).collect();
+        let mut choices = Choices::new(items, Quote::Plain);
+        assert_eq!(choices.handle(Action::PageDown), show(Some("f10"), false));
+        assert_eq!(choices.handle(Action::PageDown), show(Some("f20"), false));
+        assert_eq!(choices.handle(Action::PageDown), show(Some("f24"), false));
+        assert_eq!(choices.handle(Action::PageDown), show(None, false));
+        assert_eq!(choices.handle(Action::PageDown), show(Some("f00"), false));
+        assert_eq!(choices.handle(Action::PageUp), show(None, false));
+        assert_eq!(choices.handle(Action::PageUp), show(Some("f24"), false));
+        assert_eq!(choices.handle(Action::PageUp), show(Some("f14"), false));
+    }
+
+    #[test]
+    fn ctrl_y_keeps_the_match_ctrl_e_puts_back_what_was_typed_and_other_keys_pass() {
+        let mut choices = Choices::new(vec![dir("my dir"), file("x")], Quote::Shell);
+        assert_eq!(
+            choices.handle(Action::AcceptCompletion),
+            show(Some("my\\ dir/"), true)
+        );
+        choices.handle(Action::Down);
+        assert_eq!(choices.handle(Action::CancelCompletion), show(None, true));
         assert_eq!(choices.handle(Action::Backspace), ChoicesEvent::Passed);
-        assert_eq!(choices.handle(Action::Cancel), ChoicesEvent::Closed);
+        assert_eq!(choices.handle(Action::Confirm), ChoicesEvent::Passed);
+        assert_eq!(choices.handle(Action::NormalMode), ChoicesEvent::Passed);
+    }
+
+    fn draw(choices: &mut Choices, field: Rect) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(20, 8)).unwrap();
+        terminal
+            .draw(|frame| choices.render(frame, field, frame.area(), &Theme::terminal()))
+            .unwrap();
+        terminal.backend().to_string()
     }
 
     #[test]
     fn the_list_goes_under_the_field_or_above_it() {
-        let mut choices = Choices::new(vec![dir("alpha"), dir("beta")]);
-        let draw = |choices: &mut Choices, field: Rect| {
-            let mut terminal = Terminal::new(TestBackend::new(20, 8)).unwrap();
-            terminal
-                .draw(|frame| choices.render(frame, field, frame.area(), &Theme::terminal()))
-                .unwrap();
-            terminal.backend().to_string()
-        };
+        let mut choices = Choices::new(vec![dir("alpha"), dir("beta")], Quote::Plain);
         let below = draw(&mut choices, Rect::new(2, 1, 10, 1));
         let lines: Vec<&str> = below.lines().collect();
         assert!(
@@ -484,5 +682,26 @@ mod tests {
         let above = draw(&mut choices, Rect::new(2, 6, 10, 1));
         let lines: Vec<&str> = above.lines().collect();
         assert!(lines[3].contains("alpha/"), "{above}");
+        assert_eq!(choices.width(), 6);
+    }
+
+    #[test]
+    fn a_click_puts_a_match_in_and_a_double_click_keeps_it() {
+        let mut choices = Choices::new(vec![dir("alpha"), dir("beta")], Quote::Plain);
+        draw(&mut choices, Rect::new(2, 1, 10, 1));
+        let press = |press, y| Pointer {
+            press,
+            at: Position::new(4, y),
+        };
+        assert_eq!(
+            choices.pointer(press(Press::Click, 4)),
+            Some(show(Some("beta/"), false))
+        );
+        assert_eq!(
+            choices.pointer(press(Press::DoubleClick, 3)),
+            Some(show(Some("alpha/"), true))
+        );
+        assert_eq!(choices.pointer(press(Press::Click, 2)), None, "the frame");
+        assert_eq!(choices.pointer(press(Press::RightClick, 3)), None);
     }
 }

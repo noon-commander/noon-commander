@@ -1,6 +1,8 @@
 //! Background work for the app: listings, new directories, jobs, and one task per connected
 //! host that owns its ssh session and SFTP channel.
 
+use std::collections::BTreeSet;
+use std::os::unix::fs::PermissionsExt as _;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -304,13 +306,7 @@ impl Tasks {
                     replace,
                     host,
                 } => self.rename(panel, from, to, replace, host),
-                Effect::Discard(path) => {
-                    tokio::spawn(async move {
-                        if let Err(error) = tokio::fs::remove_file(&path).await {
-                            tracing::debug!(path = %path.display(), %error, "cannot remove");
-                        }
-                    });
-                }
+                Effect::Discard(path) => discard(path),
                 Effect::Read {
                     id,
                     location,
@@ -358,6 +354,11 @@ impl Tasks {
                     host,
                     hosts,
                 } => self.list_names(generation, dir, host, hosts),
+                Effect::ListCommands {
+                    generation,
+                    dirs,
+                    prefix,
+                } => self.list_commands(generation, dirs, prefix),
                 Effect::ZoxideQuery {
                     generation,
                     keywords,
@@ -486,6 +487,22 @@ impl Tasks {
                 generation,
                 entries,
                 hosts,
+            });
+        });
+    }
+
+    /// Lists the commands in `dirs` whose names start with `prefix` regardless of case, for
+    /// completion.
+    fn list_commands(&self, generation: u64, dirs: Vec<PathBuf>, prefix: String) {
+        let done = self.done.clone();
+        tokio::spawn(async move {
+            let entries = tokio::task::spawn_blocking(move || commands_in(&dirs, &prefix))
+                .await
+                .map_err(|error| error.to_string());
+            let _ = done.send(Done::Names {
+                generation,
+                entries,
+                hosts: Vec::new(),
             });
         });
     }
@@ -889,6 +906,49 @@ async fn names_in(
                 .collect()
         })
         .map_err(|error| describe::vfs_error(&error))
+}
+
+/// Removes a temporary file, if it is there, in a task of its own.
+fn discard(path: PathBuf) {
+    tokio::spawn(async move {
+        if let Err(error) = tokio::fs::remove_file(&path).await {
+            tracing::debug!(path = %path.display(), %error, "cannot remove");
+        }
+    });
+}
+
+/// The commands in `dirs` whose names start with `prefix` regardless of case: the regular files,
+/// and links to them, with an execute bit, each name once. Directories that are not absolute,
+/// or cannot be read, hold none. Blocks.
+fn commands_in(dirs: &[PathBuf], prefix: &str) -> Vec<(Vec<u8>, bool)> {
+    let prefix = prefix.to_lowercase();
+    let mut names = BTreeSet::new();
+    for dir in dirs.iter().filter(|dir| dir.is_absolute()) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            // Names that are not UTF-8 cannot be typed.
+            let Some(name) = name.to_str() else {
+                continue;
+            };
+            if names.contains(name) || !name.to_lowercase().starts_with(&prefix) {
+                continue;
+            }
+            // Follows links, as the shell does.
+            let runs = std::fs::metadata(entry.path()).is_ok_and(|metadata| {
+                metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
+            });
+            if runs {
+                names.insert(name.to_owned());
+            }
+        }
+    }
+    names
+        .into_iter()
+        .map(|name| (name.into_bytes(), false))
+        .collect()
 }
 
 /// Starts the task that adds directories to zoxide, one after another, so that no two zoxide
@@ -1761,6 +1821,46 @@ mod tests {
             path: RemotePath::from("/srv"),
         };
         assert_eq!(names_in(Some(remote), None).await, Ok(Vec::new()));
+    }
+
+    #[test]
+    fn commands_are_the_executable_files_of_path_each_once() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (bin, more) = (tmp.path().join("bin"), tmp.path().join("more"));
+        for dir in [&bin, &more] {
+            std::fs::create_dir(dir).unwrap();
+        }
+        let file = |path: PathBuf, mode: u32| {
+            std::fs::write(&path, "").unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+        };
+        file(bin.join("mytool"), 0o755);
+        file(bin.join("mynotes"), 0o644);
+        file(bin.join("other"), 0o755);
+        file(more.join("mytool"), 0o700);
+        file(more.join("MyCase"), 0o100);
+        std::fs::create_dir(bin.join("mydir")).unwrap();
+        std::os::unix::fs::symlink("mytool", bin.join("mylink")).unwrap();
+        std::os::unix::fs::symlink("mynotes", bin.join("mynotelink")).unwrap();
+        std::os::unix::fs::symlink("gone", bin.join("mygone")).unwrap();
+        let names = |dirs: &[PathBuf], prefix: &str| -> Vec<String> {
+            commands_in(dirs, prefix)
+                .into_iter()
+                .map(|(name, dir)| {
+                    assert!(!dir);
+                    String::from_utf8(name).unwrap()
+                })
+                .collect()
+        };
+        let path = [
+            bin.clone(),
+            PathBuf::from("relative"),
+            tmp.path().join("missing"),
+            more,
+        ];
+        assert_eq!(names(&path, "my"), ["MyCase", "mylink", "mytool"]);
+        assert_eq!(names(&path, "MYT"), ["mytool"], "regardless of case");
+        assert_eq!(names(&[bin], ""), ["mylink", "mytool", "other"]);
     }
 
     #[tokio::test]

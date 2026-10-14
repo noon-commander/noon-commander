@@ -296,6 +296,59 @@ fn tab_and_ctrl_i_go_forward_where_ctrl_o_goes_back() {
         typed((Mode::Insert, Context::PathInput), &["tab"]),
         actions(&[Action::Complete])
     );
+    assert_eq!(
+        typed((Mode::Insert, Context::CommandLine), &["tab", "ctrl-i"]),
+        actions(&[Action::Complete, Action::Complete])
+    );
+    assert_eq!(typed((Mode::Normal, Context::CommandLine), &["tab"]), []);
+}
+
+#[test]
+fn the_list_of_completions_is_vims_wildmenu_and_passes_other_keys_to_the_field() {
+    let list = (Mode::Insert, Context::Completion);
+    assert_eq!(
+        typed(list, &["tab", "ctrl-i", "ctrl-n", "down"]),
+        actions(&[Action::Down; 4])
+    );
+    assert_eq!(
+        typed(list, &["backtab", "ctrl-p", "up"]),
+        actions(&[Action::Up; 3])
+    );
+    assert_eq!(
+        typed(list, &["ctrl-y", "ctrl-e", "ctrl-c"]),
+        actions(&[
+            Action::AcceptCompletion,
+            Action::CancelCompletion,
+            Action::CancelCompletion
+        ])
+    );
+    // The path field's keys, which close the list.
+    assert_eq!(
+        typed(list, &["enter", "f10", "esc"]),
+        actions(&[Action::Confirm, Action::Cancel, Action::NormalMode])
+    );
+    // Over the command line, the list's keys, then the line's.
+    let line = (Mode::Insert, Context::CommandCompletion);
+    assert_eq!(
+        typed(line, &["tab", "backtab", "ctrl-y", "ctrl-e"]),
+        actions(&[
+            Action::Down,
+            Action::Up,
+            Action::AcceptCompletion,
+            Action::CancelCompletion
+        ])
+    );
+    assert_eq!(
+        typed(line, &["enter", "ctrl-b", "ctrl-j", "f10", "esc"]),
+        actions(&[
+            Action::Confirm,
+            Action::TextStart,
+            Action::NewLine,
+            Action::Abort,
+            Action::Cancel
+        ])
+    );
+    assert_eq!(typed(line, &["x"]), inserts("x"));
 }
 
 #[test]

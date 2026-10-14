@@ -222,6 +222,41 @@ impl CommandLine {
         self.editor.replace(&text, text.chars().count());
     }
 
+    /// The text before the cursor.
+    pub(crate) fn before_cursor(&self) -> &str {
+        let text = self.text();
+        let offset = text
+            .char_indices()
+            .nth(self.editor.cursor())
+            .map_or(text.len(), |(offset, _)| offset);
+        &text[..offset]
+    }
+
+    /// The shell command before the cursor, after what leads it on the line: `!` on the line
+    /// of `:`, without which that line holds no shell command, and `None`.
+    pub(crate) fn command_before_cursor(&self) -> Option<(&str, &str)> {
+        let before = self.before_cursor();
+        match self.kind {
+            Kind::Shell => Some(("", before)),
+            Kind::Noc => before.strip_prefix('!').map(|command| ("!", command)),
+        }
+    }
+
+    /// Replaces the text before the cursor with `before`, as a completion does, keeping what
+    /// is after it, with the cursor after `before`.
+    pub(crate) fn replace_before_cursor(&mut self, before: &str) {
+        let after = &self.text()[self.before_cursor().len()..];
+        let text = format!("{before}{after}");
+        self.editor.replace(&text, before.chars().count());
+    }
+
+    /// The column, from the left of a line `width` cells wide, where character `index` of the
+    /// command is drawn after `prompt`.
+    pub(crate) fn column_of(&self, prompt: &str, width: u16, index: usize) -> u16 {
+        let (_, (_, column)) = self.layout_at(prompt, usize::from(width), index);
+        u16::try_from(column).unwrap_or(u16::MAX)
+    }
+
     /// Puts pasted `text` as it is, line breaks included; nothing runs.
     pub(crate) fn paste(&mut self, text: &str, registers: &mut Registers) {
         self.editor.paste(&clean(text), registers);
@@ -402,8 +437,13 @@ impl CommandLine {
     /// The rows of the command in `width` cells, after `prompt`, and the row and column of the
     /// cursor. Long lines go on in the next row.
     fn layout(&self, prompt: &str, width: usize) -> (Vec<Row>, (usize, usize)) {
+        self.layout_at(prompt, width, self.editor.cursor())
+    }
+
+    /// The rows as [`layout`](Self::layout) has them, and the row and column of character
+    /// `cursor`.
+    fn layout_at(&self, prompt: &str, width: usize, cursor: usize) -> (Vec<Row>, (usize, usize)) {
         let width = width.max(1);
-        let cursor = self.editor.cursor();
         let selection = self.editor.selection();
         let mut rows = Vec::new();
         let mut at = (0, 0);
@@ -911,6 +951,28 @@ mod tests {
         // Ctrl+c and F10 close it in any mode.
         line.handle_typed(typed(Action::Append), &mut registers);
         assert_eq!(press(&mut line, Action::Abort), CommandEvent::Close);
+    }
+
+    #[test]
+    fn a_completion_replaces_the_text_before_the_cursor_of_the_shell_command() {
+        let mut line = shell("cat sr && ls");
+        for _ in 0..6 {
+            press(&mut line, Action::Left);
+        }
+        assert_eq!(line.before_cursor(), "cat sr");
+        assert_eq!(line.command_before_cursor(), Some(("", "cat sr")));
+        line.replace_before_cursor("cat src/");
+        assert_eq!(line.text(), "cat src/ && ls");
+        assert_eq!(line.before_cursor(), "cat src/");
+        // The column where a character is drawn, after the prompt, on the row it wraps to.
+        assert_eq!(line.column_of("$ ", 40, 4), 6);
+        assert_eq!(line.column_of("$ ", 8, 7), 1);
+        let mut colon = CommandLine::new(Kind::Noc);
+        typed(&mut colon, "!ls");
+        assert_eq!(colon.command_before_cursor(), Some(("!", "ls")));
+        let mut other = CommandLine::new(Kind::Noc);
+        typed(&mut other, "wq");
+        assert_eq!(other.command_before_cursor(), None, "no shell command");
     }
 
     #[test]

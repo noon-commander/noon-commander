@@ -496,7 +496,7 @@ fn describe_text(context: Context, action: Action) -> Option<String> {
 fn describe_rows(context: Context, action: Action) -> Option<String> {
     let rows = matches!(
         context,
-        Context::Panel | Context::Viewer | Context::Help | Context::List | Context::Completion
+        Context::Panel | Context::Viewer | Context::Help | Context::List
     );
     let text = match action {
         Action::Up if rows => fl!("help-row-up"),
@@ -587,13 +587,18 @@ fn describe_workspaces(context: Context, action: Action) -> Option<String> {
     Some(text)
 }
 
-/// What `action` does in path fields and the list of completions, beyond moving the cursor.
+/// What Tab does in path fields and on the command line, and the keys of the list of
+/// completions.
 fn describe_completion(context: Context, action: Action) -> Option<String> {
     let text = match (context, action) {
         (Context::PathInput, Action::Complete) => fl!("help-complete"),
-        (Context::Completion, Action::Complete) => fl!("help-complete-next"),
-        (Context::Completion, Action::Confirm) => fl!("help-complete-take"),
-        (Context::Completion, Action::Cancel) => fl!("help-complete-close"),
+        (Context::CommandLine, Action::Complete) => fl!("help-command-complete"),
+        (Context::Completion, Action::Down) => fl!("help-complete-next"),
+        (Context::Completion, Action::Up) => fl!("help-complete-prev"),
+        (Context::Completion, Action::PageDown) => fl!("help-complete-page-down"),
+        (Context::Completion, Action::PageUp) => fl!("help-complete-page-up"),
+        (Context::Completion, Action::AcceptCompletion) => fl!("help-complete-take"),
+        (Context::Completion, Action::CancelCompletion) => fl!("help-complete-close"),
         _ => return None,
     };
     Some(text)
@@ -654,6 +659,13 @@ mod tests {
             "The next match; with nothing typed, the last search"
         ));
         assert!(has("u", "Undo the last change"));
+        // Tab completes in path fields and on the command line, and goes on in the list.
+        assert!(has("Tab, Ctrl+i", &fl!("help-complete")));
+        assert!(has("Tab, Ctrl+i", &fl!("help-command-complete")));
+        assert!(has("Tab, Ctrl+i, Ctrl+n, Down", &fl!("help-complete-next")));
+        assert!(has("Shift+Tab, Ctrl+p, Up", &fl!("help-complete-prev")));
+        assert!(has("Ctrl+y", "Keep the match, and close the list"));
+        assert!(has("Ctrl+e, Ctrl+c", &fl!("help-complete-close")));
         assert!(has("/", "Type in the filter, in Insert mode"));
         // One key, three meanings, by mode and context.
         let ctrl_u: Vec<&str> = help

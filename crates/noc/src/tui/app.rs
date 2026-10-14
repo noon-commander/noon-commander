@@ -25,7 +25,7 @@ use tokio_util::sync::CancellationToken;
 use super::cd;
 use super::cells::{self, Align};
 use super::command::{self, CommandEvent, CommandLine, Place, Run};
-use super::complete::{self, Candidate, Choices, ChoicesEvent, Kind, Offer, Outcome};
+use super::complete::{self, Candidate, Choices, ChoicesEvent, Kind, Offer, Outcome, Quote};
 use super::configuration::{ConfigEvent, Configuration};
 use super::decor::Decor;
 use super::dialog::{Ask, Button, Dialog, DialogEvent, Field, Reply};
@@ -179,6 +179,13 @@ pub(crate) enum Effect {
         dir: Option<Location>,
         host: Option<HostHandle>,
         hosts: bool,
+    },
+    /// List the commands in `dirs`, the directories of `$PATH`, whose names start with
+    /// `prefix` regardless of case, for completion, and pass them to [`App::names`].
+    ListCommands {
+        generation: u64,
+        dirs: Vec<PathBuf>,
+        prefix: String,
     },
     /// Use `config` for new connections and listings, write to the config file the settings
     /// that differ between `old`, what the dialog showed, and `new`, both as the file writes
@@ -412,18 +419,42 @@ enum FieldHosts {
     None,
 }
 
-/// A Tab in the path field of the dialog in front: what it waits for, then the list it shows.
+/// Where a completion goes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Completes {
+    /// The path field of the dialog in front.
+    Field,
+    /// The command line of `!` and `:`.
+    CommandLine,
+}
+
+/// A Tab in a path field or on the command line: what it waits for, then the list it shows.
 #[derive(Debug)]
 struct Completing {
     generation: u64,
-    /// The text before the cursor at the Tab; a reply for other text is dropped.
+    target: Completes,
+    /// The text before the cursor at the Tab: a reply for other text is dropped, and Ctrl+e
+    /// puts it back.
     before: String,
-    split: complete::Split,
+    /// What stays of it, before the part completed.
+    keep: String,
+    /// The part completed, as names are matched: without the escapes of the command line.
+    prefix: String,
     offer: Offer,
+    quote: Quote,
+    /// The hosts whose aliases complete the part too.
     hosts: FieldHosts,
     /// The hosts that were connected at the Tab.
     connected: Vec<String>,
     choices: Option<Choices>,
+}
+
+/// The list of completions of `completion` for `target`, if it shows.
+fn choices_for(completion: &mut Option<Completing>, target: Completes) -> Option<&mut Choices> {
+    completion
+        .as_mut()
+        .filter(|completing| completing.target == target)
+        .and_then(|completing| completing.choices.as_mut())
 }
 
 /// What a job does.
@@ -655,10 +686,12 @@ pub(crate) struct App {
     menu_listings: u64,
     /// The tab menu of `t h` or `t l`, over the panels and under the dialogs.
     tab_menu: Option<TabMenu>,
-    /// Tab completion in the dialog in front.
+    /// Tab completion in the dialog in front, or on the command line.
     completion: Option<Completing>,
     /// The generation of the last listing for completion.
     completions: u64,
+    /// The directories of `$PATH`, whose commands the command line completes.
+    command_dirs: Vec<PathBuf>,
     /// The zoxide window of `g z`, over the panels and under the dialogs.
     jump: Option<JumpMenu>,
     /// The generation of the last query for the zoxide window.
@@ -809,6 +842,7 @@ impl App {
             tab_menu: None,
             completion: None,
             completions: 0,
+            command_dirs: Vec::new(),
             jump: None,
             jump_queries: 0,
             pulldown: None,
@@ -869,7 +903,8 @@ impl App {
     pub(crate) fn paste(&mut self, text: &str) -> Vec<Effect> {
         let typed = || text.chars().filter(|c| !c.is_control());
         match self.place() {
-            (_, Context::CommandLine) => {
+            (_, Context::CommandLine | Context::CommandCompletion) => {
+                self.completion = None;
                 if let Some(line) = &mut self.command_line {
                     line.paste(text, &mut self.registers);
                 }
@@ -931,6 +966,12 @@ impl App {
     /// Uses `hosts`, the settings from `hosts.toml`.
     pub(crate) fn set_hosts(&mut self, hosts: Arc<Hosts>) {
         self.host_settings = hosts;
+    }
+
+    /// Completes the first word on the command line from the commands in `dirs`, the
+    /// directories of `$PATH`.
+    pub(crate) fn set_command_dirs(&mut self, dirs: Vec<PathBuf>) {
+        self.command_dirs = dirs;
     }
 
     /// Draws in the colors that the terminal can show, `depth`.
@@ -1056,7 +1097,10 @@ impl App {
             Front::Panels => {}
             _ => return self.pointer_window(pointer),
         }
-        if self.panel(self.active).renaming() || self.command_line.is_some() {
+        if self.command_line.is_some() {
+            return self.pointer_command_line(pointer);
+        }
+        if self.panel(self.active).renaming() {
             return Vec::new();
         }
         if let Some(index) = self
@@ -1200,18 +1244,8 @@ impl App {
     /// closes; or to the list of completions under its field, which goes at a press outside
     /// it.
     fn pointer_dialog(&mut self, pointer: Pointer) -> Vec<Effect> {
-        let wheel = self.wheel_keys(pointer.press);
-        if let Some(completing) = &mut self.completion
-            && let Some(choices) = &mut completing.choices
-            && choices.contains(pointer.at)
-        {
-            if let Some(keys) = wheel {
-                return self.wheel(keys);
-            }
-            return match choices.pointer(pointer) {
-                Some(action) => self.handle(Resolved::Action(action)),
-                None => Vec::new(),
-            };
+        if let Some(effects) = self.pointer_choices(Completes::Field, pointer) {
+            return effects;
         }
         self.completion = None;
         let Some(open) = self.dialogs.front_mut() else {
@@ -1219,6 +1253,36 @@ impl App {
         };
         let event = open.dialog.pointer(pointer);
         self.dialog_event(event)
+    }
+
+    /// Gives a press of the mouse to the list of completions over the command line, which goes
+    /// at a press outside it; the line itself takes none.
+    fn pointer_command_line(&mut self, pointer: Pointer) -> Vec<Effect> {
+        if let Some(effects) = self.pointer_choices(Completes::CommandLine, pointer) {
+            return effects;
+        }
+        if choices_for(&mut self.completion, Completes::CommandLine).is_some() {
+            self.completion = None;
+        }
+        Vec::new()
+    }
+
+    /// Gives a press of the mouse to the list of completions for `target`, if it shows and the
+    /// press is on it: the wheel moves in it as Up and Down do, a click puts a match in, and a
+    /// double click keeps it, as Ctrl+y. `None` for a press elsewhere.
+    fn pointer_choices(&mut self, target: Completes, pointer: Pointer) -> Option<Vec<Effect>> {
+        let wheel = self.wheel_keys(pointer.press);
+        let choices = choices_for(&mut self.completion, target)?;
+        if !choices.contains(pointer.at) {
+            return None;
+        }
+        if let Some(keys) = wheel {
+            return Some(self.wheel(keys));
+        }
+        if let Some(event) = choices.pointer(pointer) {
+            self.take_choices(event);
+        }
+        Some(Vec::new())
     }
 
     /// Gives a press of the mouse to the pull-down menu; a command closes it, then runs.
@@ -1264,11 +1328,7 @@ impl App {
     /// Where keys go now.
     pub(crate) fn context(&self) -> Context {
         if let Some(open) = self.dialogs.front() {
-            let listing = self
-                .completion
-                .as_ref()
-                .is_some_and(|completing| completing.choices.is_some());
-            if listing && open.dialog.completes() {
+            if self.lists(Completes::Field) && open.dialog.completes() {
                 Context::Completion
             } else {
                 open.dialog.context()
@@ -1295,7 +1355,11 @@ impl App {
         } else if self.viewing.is_some() {
             Context::Viewer
         } else if self.command_line.is_some() {
-            Context::CommandLine
+            if self.lists(Completes::CommandLine) {
+                Context::CommandCompletion
+            } else {
+                Context::CommandLine
+            }
         } else if self.panel(self.active).renaming() {
             Context::Rename
         } else if self.panel(self.active).searching() {
@@ -1303,6 +1367,13 @@ impl App {
         } else {
             Context::Panel
         }
+    }
+
+    /// Whether the list of completions for `target` shows.
+    fn lists(&self, target: Completes) -> bool {
+        self.completion
+            .as_ref()
+            .is_some_and(|completing| completing.target == target && completing.choices.is_some())
     }
 
     /// The mode keys are typed in now, as vim's: that of the text field that has them, Visual
@@ -1368,7 +1439,9 @@ impl App {
                 }
             }
             Context::Rename => self.panel(self.active).rename_field_ref(),
-            Context::CommandLine => return self.command_line.as_ref().map(CommandLine::editor),
+            Context::CommandLine | Context::CommandCompletion => {
+                return self.command_line.as_ref().map(CommandLine::editor);
+            }
             _ => None,
         };
         field.map(Field::editor)
@@ -1541,6 +1614,7 @@ impl App {
                 | Context::PathInput
                 | Context::Completion
                 | Context::CommandLine
+                | Context::CommandCompletion
                 | Context::QuickSearch
         );
         !text
@@ -2294,29 +2368,8 @@ impl App {
     /// Gives a key to the dialog in front, and does what it was for once it closes. In a path
     /// field, Tab completes, and the list of completions takes the keys while it shows.
     fn handle_dialog(&mut self, input: Resolved) -> Vec<Effect> {
-        if let Some(completing) = &mut self.completion
-            && let Some(choices) = &mut completing.choices
-        {
-            let event = match input {
-                Resolved::Action(action) => choices.handle(action),
-                Resolved::Insert(_) => ChoicesEvent::Passed,
-            };
-            match event {
-                ChoicesEvent::Pending => return Vec::new(),
-                ChoicesEvent::Closed => {
-                    self.completion = None;
-                    return Vec::new();
-                }
-                ChoicesEvent::Chosen(text) => {
-                    let before = format!("{}{text}", completing.split.dir);
-                    self.completion = None;
-                    if let Some(open) = self.dialogs.front_mut() {
-                        open.dialog.replace_before_cursor(&before);
-                    }
-                    return Vec::new();
-                }
-                ChoicesEvent::Passed => {}
-            }
+        if self.choose(Completes::Field, input) {
+            return Vec::new();
         }
         if input == Resolved::Action(Action::Complete) {
             return self.complete();
@@ -2332,6 +2385,79 @@ impl App {
         };
         let event = open.dialog.handle_typed(typed, &mut self.registers);
         self.dialog_event(event)
+    }
+
+    /// Gives a key to the list of completions for `target`, if it shows; whether the key was
+    /// the list's. Any other key closes it, keeping the text, and goes on to the field.
+    fn choose(&mut self, target: Completes, input: Resolved) -> bool {
+        let Some(choices) = choices_for(&mut self.completion, target) else {
+            return false;
+        };
+        let event = match input {
+            Resolved::Action(action) => choices.handle(action),
+            Resolved::Insert(_) => ChoicesEvent::Passed,
+        };
+        self.take_choices(event)
+    }
+
+    /// Does what a key or a press did to the list of completions: puts a match in, or what
+    /// was typed, and closes the list if it is done. Whether it was the list's.
+    fn take_choices(&mut self, event: ChoicesEvent) -> bool {
+        let Some(completing) = &self.completion else {
+            return false;
+        };
+        let ChoicesEvent::Show { text, close } = event else {
+            self.completion = None;
+            return false;
+        };
+        let target = completing.target;
+        let before = match text {
+            Some(text) => format!("{}{text}", completing.keep),
+            None => completing.before.clone(),
+        };
+        if close {
+            self.completion = None;
+        }
+        self.put_before_cursor(target, &before);
+        true
+    }
+
+    /// The text before the cursor where a completion for `target` goes, if it can go there
+    /// now: the path field of the dialog in front, or the command line with the keys.
+    fn before_cursor(&self, target: Completes) -> Option<&str> {
+        match target {
+            Completes::Field => self
+                .dialogs
+                .front()
+                .filter(|open| open.dialog.completes())
+                .map(|open| open.dialog.around_cursor().0),
+            Completes::CommandLine => self
+                .command_line
+                .as_ref()
+                .filter(|_| {
+                    matches!(
+                        self.context(),
+                        Context::CommandLine | Context::CommandCompletion
+                    )
+                })
+                .map(CommandLine::before_cursor),
+        }
+    }
+
+    /// Replaces the text before the cursor where a completion for `target` goes with `before`.
+    fn put_before_cursor(&mut self, target: Completes, before: &str) {
+        match target {
+            Completes::Field => {
+                if let Some(open) = self.dialogs.front_mut() {
+                    open.dialog.replace_before_cursor(before);
+                }
+            }
+            Completes::CommandLine => {
+                if let Some(line) = &mut self.command_line {
+                    line.replace_before_cursor(before);
+                }
+            }
+        }
     }
 
     /// Does what the dialog in front was for, if `event` closes it.
@@ -2702,14 +2828,15 @@ impl App {
         // A host that is not connected has nothing to list.
         let host = self.handle_for(&dir).unwrap_or(None);
         let list_hosts = split.hosts && hosts == FieldHosts::All;
-        self.completions += 1;
-        let generation = self.completions;
-        self.completion = Some(Completing {
-            generation,
+        let generation = self.start_completion(Completing {
+            generation: 0,
+            target: Completes::Field,
             before,
-            split,
+            keep: split.dir,
+            prefix: split.prefix,
             offer,
-            hosts,
+            quote: Quote::Plain,
+            hosts: if split.hosts { hosts } else { FieldHosts::None },
             connected,
             choices: None,
         });
@@ -2721,52 +2848,118 @@ impl App {
         }]
     }
 
-    /// Takes the result of an [`Effect::ListNames`]: one match goes in the field, several go
-    /// in as far as they agree, or show in a list when they agree no further.
+    /// Waits for the listing of `completing`, under a new generation, which it returns.
+    fn start_completion(&mut self, completing: Completing) -> u64 {
+        self.completions += 1;
+        let generation = self.completions;
+        self.completion = Some(Completing {
+            generation,
+            ..completing
+        });
+        generation
+    }
+
+    /// Completes the word before the cursor on the command line, as vim's `:!` does: in a
+    /// local panel, the first word as a command of `$PATH`, unless it names a directory, and
+    /// the others as files from the panel's directory, where the command runs; on a host, every
+    /// word as files there, through its session. Names go in escaped for the shell.
+    fn complete_command(&mut self) -> Vec<Effect> {
+        let Some(line) = &mut self.command_line else {
+            return Vec::new();
+        };
+        let Some((lead, command)) = line.command_before_cursor() else {
+            return Vec::new();
+        };
+        let word = complete::word(command);
+        let keep = format!("{lead}{}", word.keep);
+        let before = line.before_cursor().to_owned();
+        if word.dir.is_empty() && &before[keep.len()..] == "~" {
+            line.replace_before_cursor(&format!("{keep}~/"));
+            return Vec::new();
+        }
+        let here = self.panel(self.active).location().clone();
+        let commands = word.first && word.dir.is_empty() && matches!(here, Location::Local(_));
+        let generation = self.start_completion(Completing {
+            generation: 0,
+            target: Completes::CommandLine,
+            before,
+            keep,
+            prefix: word.prefix.clone(),
+            offer: Offer::Any,
+            quote: Quote::Shell,
+            hosts: FieldHosts::None,
+            connected: Vec::new(),
+            choices: None,
+        });
+        if commands {
+            return vec![Effect::ListCommands {
+                generation,
+                dirs: self.command_dirs.clone(),
+                prefix: word.prefix,
+            }];
+        }
+        let dir = cd::directory(&word.dir, &here, &self.home, |_| false);
+        // The line opens on a host only while it is connected.
+        let host = self.handle_for(&dir).unwrap_or(None);
+        vec![Effect::ListNames {
+            generation,
+            dir: Some(dir),
+            host,
+            hosts: false,
+        }]
+    }
+
+    /// Takes the result of an [`Effect::ListNames`] or [`Effect::ListCommands`]: one match
+    /// goes in the field; of several, the first goes in, and a list of them shows.
     pub(crate) fn names(
         &mut self,
         generation: u64,
         entries: Result<Vec<(Vec<u8>, bool)>, String>,
         hosts: &[String],
     ) {
-        let Some(completing) = &mut self.completion else {
+        let Some(completing) = &self.completion else {
             return;
         };
         if completing.generation != generation || completing.choices.is_some() {
             return;
         }
-        let Some(open) = self
-            .dialogs
-            .front_mut()
-            .filter(|open| open.dialog.around_cursor().0 == completing.before)
-        else {
+        if self.before_cursor(completing.target) != Some(completing.before.as_str()) {
             self.completion = None;
             return;
-        };
+        }
         let entries = entries.unwrap_or_else(|reason| {
             tracing::debug!(%reason, "cannot list names to complete");
             Vec::new()
         });
         let mut candidates = complete::from_names(entries, completing.offer);
-        if completing.split.hosts {
-            let aliases = match completing.hosts {
-                FieldHosts::All => hosts,
-                FieldHosts::Connected => &completing.connected[..],
-                FieldHosts::None => &[],
-            };
-            candidates.extend(aliases.iter().map(|alias| Candidate {
-                name: alias.clone(),
-                kind: Kind::Host,
-            }));
-        }
-        match complete::complete(&completing.split.prefix, candidates) {
-            Outcome::Nothing => self.completion = None,
-            Outcome::Insert(text) => {
-                let before = format!("{}{text}", completing.split.dir);
-                self.completion = None;
-                open.dialog.replace_before_cursor(&before);
+        let aliases = match completing.hosts {
+            FieldHosts::All => hosts,
+            FieldHosts::Connected => &completing.connected[..],
+            FieldHosts::None => &[],
+        };
+        candidates.extend(aliases.iter().map(|alias| Candidate {
+            name: alias.clone(),
+            kind: Kind::Host,
+        }));
+        let (target, quote) = (completing.target, completing.quote);
+        let keep = completing.keep.clone();
+        let text = match complete::complete(&completing.prefix, candidates) {
+            Outcome::Nothing => None,
+            Outcome::One(candidate) => Some(candidate.typed(quote)),
+            Outcome::List(items) => {
+                let choices = Choices::new(items, quote);
+                let first = choices.current();
+                if let Some(completing) = &mut self.completion {
+                    completing.choices = Some(choices);
+                }
+                first
             }
-            Outcome::List(items) => completing.choices = Some(Choices::new(items)),
+        };
+        if !self.lists(target) {
+            self.completion = None;
+        }
+        if let Some(text) = text {
+            self.put_before_cursor(target, &format!("{keep}{text}"));
         }
     }
 
@@ -3428,8 +3621,17 @@ impl App {
     }
 
     /// Gives a key to the command line: Enter hands its command to the event loop, to run in
-    /// the active panel's directory.
+    /// the active panel's directory, Tab completes, and the list of completions takes the keys
+    /// while it shows.
     fn handle_command_line(&mut self, input: Resolved) -> Vec<Effect> {
+        if self.choose(Completes::CommandLine, input) {
+            return Vec::new();
+        }
+        if input == Resolved::Action(Action::Complete) {
+            return self.complete_command();
+        }
+        // Any other key makes a completion on its way too late.
+        self.completion = None;
         let Some(line) = &mut self.command_line else {
             return Vec::new();
         };
@@ -5398,6 +5600,7 @@ impl App {
             }
         }
         self.render_windows(frame, panels);
+        self.render_command_choices(frame, command_line, &prompt);
         if let Some(hints) = &self.hints {
             which_key::render(frame, panels, hints, &self.theme);
         }
@@ -5429,13 +5632,43 @@ impl App {
         }
         if let Some(open) = self.dialogs.front() {
             open.dialog.render(frame, panels, &self.theme);
-            if let Some(completing) = &mut self.completion
-                && let Some(choices) = &mut completing.choices
+            if let Some(choices) = choices_for(&mut self.completion, Completes::Field)
                 && let Some(field) = open.dialog.field_area()
             {
                 choices.render(frame, field, panels, &self.theme);
             }
         }
+    }
+
+    /// The list of completions over the command line in `line`, after `prompt`, if it shows:
+    /// its rows start where the names completed start on the line.
+    fn render_command_choices(&mut self, frame: &mut Frame<'_>, line: Rect, prompt: &str) {
+        let Some(command_line) = &self.command_line else {
+            return;
+        };
+        let Some(completing) = self
+            .completion
+            .as_mut()
+            .filter(|completing| completing.target == Completes::CommandLine)
+        else {
+            return;
+        };
+        let column = command_line.column_of(prompt, line.width, completing.keep.chars().count());
+        let Some(choices) = &mut completing.choices else {
+            return;
+        };
+        let width = choices.width().min(line.width.saturating_sub(2));
+        // On the screen, with room for the frame on both sides.
+        let x = line
+            .x
+            .saturating_add(column)
+            .min(line.right().saturating_sub(width + 1))
+            .max(line.x + 1);
+        let field = Rect::new(x, line.y, width, 1);
+        // Above the first row of the line.
+        let screen = frame.area();
+        let above = Rect::new(screen.x, screen.y, screen.width, field.bottom() - screen.y);
+        choices.render(frame, field, above, &self.theme);
     }
 
     /// Where the panels go in `area`, left side first, each with the line of its tabs if
@@ -5497,7 +5730,10 @@ impl App {
     /// The command line in `area`, after `prompt`, if it is open; else the mode and what the
     /// pending command has typed, on the line it takes.
     fn render_command_line(&mut self, frame: &mut Frame<'_>, area: Rect, prompt: &str) {
-        let focused = self.context() == Context::CommandLine;
+        let focused = matches!(
+            self.context(),
+            Context::CommandLine | Context::CommandCompletion
+        );
         match &mut self.command_line {
             Some(line) => line.render(frame, area, prompt, Style::default(), focused),
             None => self.render_mode(frame, area),
@@ -11029,56 +11265,125 @@ mod tests {
             names_request(&app.handle(action(Action::Complete)));
         assert_eq!((dir, through, hosts), (local("/srv/left"), false, false));
         let entries = [
-            ("project-a", true),
             ("project-b", true),
+            ("project-a", true),
             ("press.txt", false),
         ];
         app.names(generation, Ok(names_of(&entries)), &[]);
         assert_eq!(
             field(&app),
-            "left/project-|",
-            "as far as they agree; no files"
+            "left/project-a/|",
+            "the first in the list's order, whole; no files"
         );
-
-        // A Tab that gets no further lists them; arrows choose, Enter takes one.
-        let (generation, ..) = names_request(&app.handle(action(Action::Complete)));
-        app.names(generation, Ok(names_of(&entries)), &[]);
-        assert_eq!(app.context(), Context::Completion);
+        assert_eq!(app.place(), (Mode::Insert, Context::Completion));
         let text = screen_of(&mut app, 20);
         assert!(
             text.contains("project-a/") && text.contains("project-b/"),
             "{text}"
         );
-        app.handle(action(Action::Down));
-        app.handle(action(Action::Confirm));
-        assert_eq!(app.context(), Context::PathInput);
-        assert_eq!(field(&app), "left/project-b/|");
 
-        // Esc closes the list and goes to Normal mode, as in vim; Ctrl+e only closes it.
-        let (generation, ..) = names_request(&app.handle(action(Action::Complete)));
-        app.names(generation, Ok(names_of(&[("x", true), ("y", true)])), &[]);
-        keys(&mut app, &["ctrl-e"]);
+        // Moves put each match in at once, round through what was typed, as in vim.
+        let mut after = |keys_typed: &[&str]| {
+            keys(&mut app, keys_typed);
+            field(&app)
+        };
+        assert_eq!(after(&["tab"]), "left/project-b/|");
+        assert_eq!(
+            after(&["tab"]),
+            "left/pr|",
+            "after the last, what was typed"
+        );
+        assert_eq!(after(&["ctrl-n"]), "left/project-a/|");
+        assert_eq!(after(&["backtab"]), "left/pr|", "before the first, too");
+        assert_eq!(after(&["backtab"]), "left/project-b/|");
+        assert_eq!(after(&["ctrl-p"]), "left/project-a/|");
+        assert_eq!(after(&["up"]), "left/pr|");
+        assert_eq!(after(&["down"]), "left/project-a/|");
+        assert_eq!(after(&["pagedown"]), "left/project-b/|");
+        assert_eq!(after(&["pagedown"]), "left/pr|");
+        assert_eq!(after(&["pageup"]), "left/project-b/|");
+        // Ctrl+y keeps the match.
+        assert_eq!(after(&["ctrl-y"]), "left/project-b/|");
         assert_eq!(app.place(), (Mode::Insert, Context::PathInput));
+
+        // Ctrl+e and Ctrl+c put back what was typed.
+        let two = names_of(&[("x", true), ("y", true)]);
+        for key in ["ctrl-e", "ctrl-c"] {
+            let (generation, dir, ..) = names_request(&keys(&mut app, &["tab"]));
+            assert_eq!(dir, local("/srv/left/project-b"));
+            app.names(generation, Ok(two.clone()), &[]);
+            assert_eq!(field(&app), "left/project-b/x/|");
+            keys(&mut app, &["down", key]);
+            assert_eq!(field(&app), "left/project-b/|", "{key}");
+            assert_eq!(app.place(), (Mode::Insert, Context::PathInput), "{key}");
+        }
+
+        // Other keys close the list and go to the field, with the match in it: Esc to Normal
+        // mode, as in vim; typing edits the field.
         let (generation, ..) = names_request(&app.handle(action(Action::Complete)));
-        app.names(generation, Ok(names_of(&[("x", true), ("y", true)])), &[]);
+        app.names(generation, Ok(two.clone()), &[]);
         keys(&mut app, &["esc"]);
         assert_eq!(app.place(), (Mode::Normal, Context::PathInput));
-        keys(&mut app, &["shift-a"]);
-        assert_eq!(app.place(), (Mode::Insert, Context::PathInput));
-
-        // Typing closes the list and edits the field.
+        assert_eq!(app.dialogs[0].dialog.text(), "left/project-b/x/");
+        app.dialogs[0].dialog.set_text(0, "left/");
         let (generation, ..) = names_request(&app.handle(action(Action::Complete)));
-        app.names(generation, Ok(names_of(&[("x", true), ("y", true)])), &[]);
-        assert_eq!(app.context(), Context::Completion);
-        app.handle(Resolved::Insert('x'));
+        app.names(generation, Ok(two.clone()), &[]);
+        app.handle(Resolved::Insert('z'));
         assert_eq!(app.context(), Context::PathInput);
-        assert_eq!(field(&app), "left/project-b/x|");
+        assert_eq!(field(&app), "left/x/z|");
 
         // A reply to text that changed since is dropped.
         let (generation, ..) = names_request(&app.handle(action(Action::Complete)));
         app.handle(action(Action::Backspace));
         app.names(generation, Ok(names_of(&[("xyz", true)])), &[]);
-        assert_eq!(field(&app), "left/project-b/|");
+        assert_eq!(field(&app), "left/x/|");
+        // So is one that nothing matches.
+        let (generation, ..) = names_request(&app.handle(action(Action::Complete)));
+        app.names(generation, Ok(names_of(&[(".git", true)])), &[]);
+        assert_eq!(field(&app), "left/x/|");
+        assert_eq!(app.context(), Context::PathInput);
+    }
+
+    #[test]
+    fn enter_in_the_list_of_completions_confirms_with_the_match() {
+        let mut app = loaded();
+        app.handle(action(Action::QuickCd));
+        type_text(&mut app, "ri");
+        let (generation, ..) = names_request(&app.handle(action(Action::Complete)));
+        app.names(
+            generation,
+            Ok(names_of(&[("right", true), ("rig", true)])),
+            &[],
+        );
+        let effects = keys(&mut app, &["tab", "enter"]);
+        assert!(app.dialogs.is_empty());
+        let [Effect::List { request, .. }] = &effects[..] else {
+            panic!("expected a listing, got {effects:?}");
+        };
+        assert_eq!(request.location, local("/srv/right"));
+    }
+
+    #[test]
+    fn a_click_on_the_list_of_completions_puts_a_match_in_and_a_double_click_keeps_it() {
+        let mut app = loaded();
+        app.handle(action(Action::QuickCd));
+        let (generation, ..) = names_request(&app.handle(action(Action::Complete)));
+        let entries = names_of(&[("alpha", true), ("beta", true), ("gamma", true)]);
+        app.names(generation, Ok(entries), &[]);
+        assert_eq!(field(&app), "alpha/|");
+        let (x, y) = find(&mut app, "gamma/");
+        press(&mut app, Press::Click, x, y);
+        assert_eq!(field(&app), "gamma/|");
+        assert_eq!(app.context(), Context::Completion, "the list stays");
+        let (x, y) = find(&mut app, "beta/");
+        press(&mut app, Press::Click, x, y);
+        press(&mut app, Press::DoubleClick, x, y);
+        assert_eq!(field(&app), "beta/|");
+        assert_eq!(
+            app.context(),
+            Context::PathInput,
+            "a double click closes it"
+        );
     }
 
     #[test]
@@ -11131,5 +11436,170 @@ mod tests {
             remote("web", "/home/deploy/web:x"),
             "F7 names no hosts"
         );
+    }
+
+    /// The text of the command line, with `|` at the cursor.
+    fn line_text(app: &App) -> String {
+        let line = app.command_line.as_ref().expect("the command line");
+        let before = line.before_cursor();
+        format!("{before}|{}", &line.text()[before.len()..])
+    }
+
+    /// The listing of commands that a Tab asks for: its generation, directories, and prefix.
+    fn commands_request(effects: &[Effect]) -> (u64, Vec<PathBuf>, String) {
+        match effects {
+            [
+                Effect::ListCommands {
+                    generation,
+                    dirs,
+                    prefix,
+                },
+            ] => (*generation, dirs.clone(), prefix.clone()),
+            other => panic!("expected a listing of commands, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn tab_on_the_command_line_completes_a_command_then_files_escaped_for_the_shell() {
+        let mut app = loaded();
+        let path = vec![PathBuf::from("/opt/bin"), PathBuf::from("/usr/bin")];
+        app.set_command_dirs(path.clone());
+        app.handle(action(Action::Shell));
+        type_text(&mut app, "my");
+        let (generation, dirs, prefix) = commands_request(&keys(&mut app, &["tab"]));
+        assert_eq!((dirs, prefix.as_str()), (path, "my"));
+        let commands = names_of(&[("mytool", false), ("my tool", false)]);
+        app.names(generation, Ok(commands), &[]);
+        assert_eq!(line_text(&app), "my\\ tool|", "the first, escaped");
+        assert_eq!(app.place(), (Mode::Insert, Context::CommandCompletion));
+        // The list goes above the line, where the name starts, after the prompt `/srv $ `.
+        assert_eq!(find(&mut app, "mytool"), (7, 8));
+        assert_eq!(find(&mut app, "my tool"), (7, 7));
+        keys(&mut app, &["tab", "ctrl-y"]);
+        assert_eq!(line_text(&app), "mytool|");
+        assert_eq!(app.context(), Context::CommandLine);
+
+        // Later words are files and directories, from the panel's directory.
+        type_text(&mut app, " sr");
+        let (generation, dir, through, hosts) = names_request(&keys(&mut app, &["tab"]));
+        assert_eq!((dir, through, hosts), (local("/srv"), false, false));
+        let entries = [("src dir", true), ("srv.txt", false), ("other", false)];
+        app.names(generation, Ok(names_of(&entries)), &[]);
+        assert_eq!(line_text(&app), "mytool src\\ dir/|");
+        keys(&mut app, &["tab"]);
+        assert_eq!(line_text(&app), "mytool srv.txt|");
+        keys(&mut app, &["ctrl-e"]);
+        assert_eq!(line_text(&app), "mytool sr|");
+
+        // Escapes are taken out to match, and the word's directory is where it looks.
+        type_text(&mut app, "c\\ d");
+        let (generation, ..) = names_request(&keys(&mut app, &["tab"]));
+        app.names(generation, Ok(names_of(&[("src dir", true)])), &[]);
+        assert_eq!(line_text(&app), "mytool src\\ dir/|");
+        assert_eq!(app.context(), Context::CommandLine, "one match, no list");
+        let (generation, dir, ..) = names_request(&keys(&mut app, &["tab"]));
+        assert_eq!(dir, local("/srv/src dir"));
+        app.names(generation, Ok(names_of(&[("a$b", false)])), &[]);
+        assert_eq!(line_text(&app), "mytool src\\ dir/a\\$b|");
+
+        // `~` alone becomes `~/`, the home directory, as absolute paths are absolute.
+        type_text(&mut app, " ~");
+        assert!(keys(&mut app, &["tab"]).is_empty());
+        assert_eq!(line_text(&app), "mytool src\\ dir/a\\$b ~/|");
+        let (_, dir, ..) = names_request(&keys(&mut app, &["tab"]));
+        assert_eq!(dir, local("/home/me"));
+        type_text(&mut app, " /usr/b");
+        let (_, dir, ..) = names_request(&keys(&mut app, &["tab"]));
+        assert_eq!(dir, local("/usr"));
+        app.handle(action(Action::Confirm));
+        let run = app.take_run().expect("a command");
+        assert_eq!(run.command, "mytool src\\ dir/a\\$b ~/ /usr/b");
+
+        // A first word with a slash names a file.
+        app.handle(action(Action::Shell));
+        type_text(&mut app, "./scr");
+        let (_, dir, ..) = names_request(&keys(&mut app, &["tab"]));
+        assert_eq!(dir, local("/srv"));
+    }
+
+    #[test]
+    fn the_list_on_the_command_line_passes_other_keys_to_the_line() {
+        let mut app = loaded();
+        let two = names_of(&[("left", true), ("right", true)]);
+        // Enter runs the command with the match in it, as vim's.
+        app.handle(action(Action::Shell));
+        type_text(&mut app, "cat ");
+        let (generation, ..) = names_request(&keys(&mut app, &["ctrl-i"]));
+        app.names(generation, Ok(two.clone()), &[]);
+        assert_eq!(line_text(&app), "cat left/|");
+        keys(&mut app, &["tab", "enter"]);
+        assert_eq!(app.take_run().expect("a command").command, "cat right/");
+        // Esc closes the line, as vim's.
+        app.handle(action(Action::Shell));
+        type_text(&mut app, "cat ");
+        let (generation, ..) = names_request(&keys(&mut app, &["tab"]));
+        app.names(generation, Ok(two), &[]);
+        keys(&mut app, &["esc"]);
+        assert!(app.command_line.is_none());
+        // In Normal mode, Tab does nothing.
+        app.handle(action(Action::Shell));
+        type_text(&mut app, "cat ");
+        keys(&mut app, &["ctrl-f"]);
+        assert!(keys(&mut app, &["tab"]).is_empty());
+        assert!(app.completion.is_none());
+    }
+
+    #[test]
+    fn colon_completes_after_its_bang_and_a_host_completes_files_there() {
+        let mut app = loaded();
+        app.handle(action(Action::Command));
+        type_text(&mut app, "wq");
+        assert!(keys(&mut app, &["tab"]).is_empty(), "no shell command");
+        app.command_line.as_mut().unwrap().set_text("");
+        type_text(&mut app, "!gi");
+        let (generation, _, prefix) = commands_request(&keys(&mut app, &["tab"]));
+        assert_eq!(prefix, "gi");
+        app.names(generation, Ok(names_of(&[("git", false)])), &[]);
+        assert_eq!(line_text(&app), "!git|");
+
+        // On a host, every word completes as files there, through its session.
+        let (mut app, _) = on_a_host();
+        app.handle(action(Action::Shell));
+        type_text(&mut app, "no");
+        let (generation, dir, through, hosts) = names_request(&keys(&mut app, &["tab"]));
+        assert_eq!(
+            (dir, through, hosts),
+            (remote("web", "/home/deploy"), true, false)
+        );
+        app.names(generation, Ok(names_of(&[("notes", false)])), &[]);
+        assert_eq!(line_text(&app), "notes|");
+        type_text(&mut app, " ~/s");
+        let (_, dir, ..) = names_request(&keys(&mut app, &["tab"]));
+        assert_eq!(dir, remote("web", ""));
+    }
+
+    #[test]
+    fn a_click_on_the_list_over_the_command_line_puts_a_match_in() {
+        let mut app = loaded();
+        app.handle(action(Action::Shell));
+        type_text(&mut app, "cat ");
+        let (generation, ..) = names_request(&keys(&mut app, &["tab"]));
+        let entries = names_of(&[("alpha", false), ("beta", false), ("gamma", false)]);
+        app.names(generation, Ok(entries), &[]);
+        let (x, y) = find(&mut app, "beta");
+        press(&mut app, Press::Click, x, y);
+        assert_eq!(line_text(&app), "cat beta|");
+        assert_eq!(app.context(), Context::CommandCompletion);
+        let (x, y) = find(&mut app, "gamma");
+        // Three lines up: alpha, what was typed, and round to gamma.
+        press(&mut app, Press::WheelUp, x, y);
+        assert_eq!(line_text(&app), "cat gamma|", "the wheel moves as Up");
+        press(&mut app, Press::Click, 0, 0);
+        assert_eq!(
+            app.context(),
+            Context::CommandLine,
+            "a press elsewhere closes it"
+        );
+        assert_eq!(line_text(&app), "cat gamma|");
     }
 }

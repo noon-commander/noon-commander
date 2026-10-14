@@ -382,26 +382,28 @@ pub(super) const PRESET: Preset = &[
             (Action::Cancel, &["ctrl-c", "f10"]),
         ],
     ),
-    // Path fields: Tab completes, as in a shell; Shift+Tab and Down still leave the field.
+    // Path fields: Tab completes, as on vim's command line; Shift+Tab and Down still leave the
+    // field.
     (
         Mode::Insert,
         Context::PathInput,
         &[(Action::Complete, &["tab", "ctrl-i"])],
     ),
-    // The list of completions under a path field, as vim's pop-up menu: Ctrl+p and Ctrl+n move,
-    // Ctrl+y takes the completion, Ctrl+e closes the list. Other keys close it and go to the
-    // field: Esc to Normal mode, as in vim.
+    // The list of completions under a path field or over the command line, as vim's `wildmenu`:
+    // Tab, Ctrl+n, and Down put the next match in the field, Shift+Tab, Ctrl+p, and Up the one
+    // before, round through what was typed; Ctrl+y keeps the match, and Ctrl+e puts back what
+    // was typed. Other keys close the list and go to the field: Enter confirms with the match
+    // in it, and Esc goes to Normal mode, or closes the command line, as in vim.
     (
         Mode::Insert,
         Context::Completion,
         &[
-            (Action::Up, &["up", "ctrl-p"]),
-            (Action::Down, &["down", "ctrl-n"]),
-            (Action::PageUp, &["pageup"]),
+            (Action::Down, &["tab", "ctrl-i", "ctrl-n", "down"]),
+            (Action::Up, &["backtab", "ctrl-p", "up"]),
             (Action::PageDown, &["pagedown"]),
-            (Action::Complete, &["tab", "ctrl-i"]),
-            (Action::Confirm, &["ctrl-y", "enter", "ctrl-m"]),
-            (Action::Cancel, &["ctrl-e", "ctrl-c"]),
+            (Action::PageUp, &["pageup"]),
+            (Action::AcceptCompletion, &["ctrl-y"]),
+            (Action::CancelCompletion, &["ctrl-e", "ctrl-c"]),
         ],
     ),
     // The viewer of F3. Space, f, and b turn the page, and u and d half of it, as in less.
@@ -532,7 +534,8 @@ pub(super) const PRESET: Preset = &[
     // as LF where Enter arrives as CR, so it starts a new line in every terminal; Shift+Enter
     // does where the terminal speaks the kitty keyboard protocol. Ctrl+b and Ctrl+e go to the
     // start and the end of the line, Ctrl+p and Ctrl+n through the history, and Ctrl+f to
-    // Normal mode, in place of vim's window of the command line.
+    // Normal mode, in place of vim's window of the command line. Tab completes as vim's `:!`
+    // does.
     (
         Mode::Insert,
         Context::CommandLine,
@@ -546,6 +549,7 @@ pub(super) const PRESET: Preset = &[
             (Action::OlderCommand, &["ctrl-p"]),
             (Action::NewerCommand, &["ctrl-n"]),
             (Action::NormalOnce, &["ctrl-o"]),
+            (Action::Complete, &["tab", "ctrl-i"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Cancel, &["esc", "ctrl-["]),
             (Action::Abort, &["ctrl-c", "f10"]),

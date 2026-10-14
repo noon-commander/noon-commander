@@ -139,7 +139,39 @@ cargo build --release
 With [just](https://github.com/casey/just), `just release` builds the same binary and `just run`
 starts a development build; arguments after it go to `noc`, as in `just run --version`.
 
-The version line shows the compile-time features, e.g. `noc 0.1.0 (-forwarding)`.
+`noc -V` prints the version, as in `noc 0.2.0`. `noc --version` adds what a bug report needs,
+one fact per line: the key, spaces, and the value up to the end of the line, or `unknown`:
+
+```text
+name         Noon Commander
+version      0.2.0
+features     -forwarding
+commit       1a2b3c4d5e6f
+dirty        no
+commit-time  2026-10-12T14:03:27Z
+target       aarch64-apple-darwin
+profile      release
+os           macOS 26.0
+kernel       Darwin 25.0.0
+arch         arm64
+terminal     kitty 0.42.1
+term         xterm-kitty
+multiplexer  none
+colors       truecolor
+keyboard     kitty
+editor       nvim
+```
+
+`features` lists the compile-time features, `+` on and `-` off. `commit-time` is in UTC;
+`dirty` says whether the sources differed from the commit. `terminal` is the name the terminal
+answers with (XTVERSION), else what its environment variables say. `colors` is `truecolor` or
+`256`. `keyboard` is `kitty` where the terminal speaks the kitty keyboard protocol and `legacy`
+where it does not. The terminal is asked on `/dev/tty`, so `noc --version | pbcopy` asks it
+too. When stdin is not a terminal, or `noc` runs in the background, it is not asked: `keyboard`
+is `unchecked`, and `terminal` comes from the environment alone. `editor` is the command of F4:
+`$VISUAL`, else `$EDITOR`, else `vi`. Scripts can rely on the keys and their order; new keys
+are added at the end. For example, the commit:
+`noc --version | awk '$1 == "commit" { print $2 }'`.
 
 ### Install
 

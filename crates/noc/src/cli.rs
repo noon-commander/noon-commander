@@ -1,26 +1,24 @@
 //! Command-line interface.
 
 use std::path::PathBuf;
-use std::sync::LazyLock;
 
 use clap::{Parser, Subcommand};
 
-/// Package version plus compile-time features, e.g. `0.1.0 (-forwarding)`.
-static VERSION: LazyLock<String> = LazyLock::new(|| {
-    let forwarding = if noc_ssh::policy::FORWARDING_ENABLED {
-        '+'
-    } else {
-        '-'
-    };
-    format!("{} ({forwarding}forwarding)", env!("CARGO_PKG_VERSION"))
-});
-
+// clap builds its version text on every run; ours asks the terminal, so only when wanted.
 #[derive(Debug, Parser)]
-#[command(version = VERSION.as_str(), about)]
+#[command(about, disable_version_flag = true)]
 pub(crate) struct Cli {
     /// Use this configuration file instead of `~/.config/noc/config.toml`.
     #[arg(short, long, global = true, value_name = "FILE")]
     pub(crate) config: Option<PathBuf>,
+
+    /// Print version.
+    #[arg(short = 'V')]
+    pub(crate) short_version: bool,
+
+    /// Print version, build, system, and terminal details, one `key value` line each.
+    #[arg(long = "version")]
+    pub(crate) long_version: bool,
 
     #[command(subcommand)]
     pub(crate) command: Option<Command>,
@@ -62,12 +60,20 @@ pub(crate) enum ConfigCommand {
 
 #[cfg(test)]
 mod tests {
-    use clap::CommandFactory;
+    use clap::{CommandFactory, Parser as _};
 
     use super::Cli;
 
     #[test]
     fn cli_is_consistent() {
         Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn short_and_long_version_are_different_flags() {
+        let short = Cli::try_parse_from(["noc", "-V"]).unwrap();
+        assert!(short.short_version && !short.long_version);
+        let long = Cli::try_parse_from(["noc", "--version"]).unwrap();
+        assert!(long.long_version && !long.short_version);
     }
 }

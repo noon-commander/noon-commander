@@ -135,15 +135,73 @@ fn stderr(output: &Output) -> String {
 }
 
 #[test]
-fn version_shows_the_forwarding_feature() {
-    let output = Sandbox::new(&[]).run(&["--version"]);
+fn short_version_is_the_name_and_the_version() {
+    let output = Sandbox::new(&[]).run(&["-V"]);
     assert!(output.status.success());
-    let marker = if noc_ssh::policy::FORWARDING_ENABLED {
-        "(+forwarding)"
+    assert_eq!(
+        stdout(&output),
+        format!("noc {}\n", env!("CARGO_PKG_VERSION"))
+    );
+}
+
+#[test]
+fn long_version_has_one_line_per_key() {
+    let output = Sandbox::new(&[])
+        .command()
+        .arg("--version")
+        .env("VISUAL", "nano -w")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let text = stdout(&output);
+    let fields: Vec<(&str, &str)> = text
+        .lines()
+        .map(|line| {
+            let (key, value) = line.split_once(' ').unwrap();
+            (key, value.trim_start())
+        })
+        .collect();
+    let keys: Vec<&str> = fields.iter().map(|&(key, _)| key).collect();
+    assert_eq!(
+        keys,
+        [
+            "name",
+            "version",
+            "features",
+            "commit",
+            "dirty",
+            "commit-time",
+            "target",
+            "profile",
+            "os",
+            "kernel",
+            "arch",
+            "terminal",
+            "term",
+            "multiplexer",
+            "colors",
+            "keyboard",
+            "editor",
+        ],
+        "{text}"
+    );
+    let value = |key: &str| fields.iter().find(|&&(k, _)| k == key).unwrap().1;
+    assert_eq!(value("name"), "Noon Commander");
+    assert_eq!(value("version"), env!("CARGO_PKG_VERSION"));
+    let forwarding = if noc_ssh::policy::FORWARDING_ENABLED {
+        "+forwarding"
     } else {
-        "(-forwarding)"
+        "-forwarding"
     };
-    assert!(stdout(&output).contains(marker), "{}", stdout(&output));
+    assert!(
+        value("features")
+            .split(' ')
+            .any(|feature| feature == forwarding),
+        "{text}"
+    );
+    // stdin is not a terminal, so the terminal is not asked.
+    assert_eq!(value("keyboard"), "unchecked");
+    assert_eq!(value("editor"), "nano -w");
 }
 
 #[test]

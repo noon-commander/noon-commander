@@ -64,6 +64,7 @@ use crate::context::Context;
 use crate::i18n::fl;
 
 pub(crate) use places::read_volumes;
+pub(crate) use theme::ColorDepth;
 
 /// Whether `name` is a built-in theme, for `ui.theme`; and the names there are.
 pub(crate) fn is_valid_theme(name: &str) -> bool {

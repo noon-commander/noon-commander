@@ -7,6 +7,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `noc -V` prints only the version, as in `noc 0.2.0`. `noc --version` prints one `key value`
+  line per fact, for scripts and bug reports: the version, the compile-time features (the
+  `-forwarding` of the old version line), the commit and its time in UTC, the target, the
+  operating system, the terminal with its colors and keyboard protocol, and the editor of F4.
+  The terminal is asked for its name, so kitty, which sets no `TERM_PROGRAM`, is named too.
+
 ## [0.2.0] - 2026-10-14
 
 ### Added

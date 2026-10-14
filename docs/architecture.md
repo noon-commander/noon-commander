@@ -589,7 +589,15 @@ noc hosts [--resolve]  hosts from ssh_config with cached addresses; --resolve ru
 noc ls [LOCATION]      a local path or host:path; without one, the mount points and hosts
 noc config init        write the commented default config.toml
 noc config paths       show the files and directories in use
+noc -V                 the version: noc 0.2.0
+noc --version          version, build, system, and terminal, one `key value` line each
 ```
+
+`crates/noc/build.rs` records the commit, its time in UTC, and whether the sources differ from
+it, with `git`; without git they are `unknown`. clap's own version flag is off: it would build
+the text on every run, and `--version` asks the terminal. In raw mode on `/dev/tty`, and only
+when stdin is a terminal and `noc` is in the foreground, it sends XTVERSION, the kitty keyboard
+query, and primary device attributes, whose answer ends the wait (at most a second).
 
 `--config FILE` replaces `~/.config/noc/config.toml`. Logs go to
 `~/.local/state/noc/noc.log`; `NOC_LOG` sets the filter, for example

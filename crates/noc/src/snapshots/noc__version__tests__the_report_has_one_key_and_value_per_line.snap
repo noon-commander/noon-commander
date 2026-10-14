@@ -1,0 +1,21 @@
+---
+source: crates/noc/src/version.rs
+expression: "report(&build, &system, &terminal, Some(\"nvim -p\"))"
+---
+name         Noon Commander
+version      1.2.3
+features     -forwarding +other
+commit       0123456789ab
+dirty        no
+commit-time  2026-10-12T14:03:27Z
+target       aarch64-apple-darwin
+profile      release
+os           macOS 26.0
+kernel       Darwin 25.0.0
+arch         unknown
+terminal     kitty 0.35.2
+term         xterm-kitty
+multiplexer  tmux
+colors       truecolor
+keyboard     kitty
+editor       nvim -p

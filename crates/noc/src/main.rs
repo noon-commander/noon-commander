@@ -10,6 +10,7 @@ mod logging;
 mod prompt;
 mod tty;
 mod tui;
+mod version;
 
 use std::io::Write as _;
 use std::process::ExitCode;
@@ -24,6 +25,9 @@ fn main() -> ExitCode {
         return askpass(&invocation);
     }
     let cli = cli::Cli::parse();
+    if cli.short_version || cli.long_version {
+        return version::print(cli.long_version);
+    }
     let _ = color_eyre::install();
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()

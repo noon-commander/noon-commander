@@ -45,6 +45,11 @@ impl Editor {
         &self.program
     }
 
+    /// The words after the program, such as the `-w` of `code -w`.
+    pub fn args(&self) -> &[String] {
+        &self.args
+    }
+
     /// Runs the editor on `file` with this process's terminal, which the caller has handed
     /// over, and waits for it. `file` is absolute, so no editor takes it for an option.
     pub async fn edit(&self, file: &Path) -> Result<ExitStatus, ToolError> {

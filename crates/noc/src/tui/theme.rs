@@ -119,7 +119,7 @@ impl ColorDepth {
         depth
     }
 
-    fn from_colorterm(value: Option<&std::ffi::OsStr>) -> Self {
+    pub(crate) fn from_colorterm(value: Option<&std::ffi::OsStr>) -> Self {
         match value.and_then(std::ffi::OsStr::to_str) {
             Some(value) if value.eq_ignore_ascii_case("truecolor") => Self::TrueColor,
             Some(value) if value.eq_ignore_ascii_case("24bit") => Self::TrueColor,

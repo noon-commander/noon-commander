@@ -13,7 +13,7 @@ add false positives to `typos.toml`, with a comment if the reason is not obvious
 - Spawn `ssh` only from `noc-ssh`. Never through `sh -c`. Always `--` before the destination.
 - Spawn other programs only from `noc-tools` (ADR 0012). Never through a shell. `--` before
   paths. Kill on drop. Tests use a fake program. At build time, `crates/noc/build.rs` runs
-  `git` for `noc --version`.
+  `git` for `noc debug version`.
 - Sole shell exception: the command line's `$SHELL -c`, whose command is the user's (ADR 0019).
 - User-supplied ssh arguments must pass the validator (ADR 0004). Unknown flags are errors.
 - Never pass `StrictHostKeyChecking=no`. Never write to `~/.ssh/`.

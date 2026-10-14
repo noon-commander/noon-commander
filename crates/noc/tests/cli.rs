@@ -135,20 +135,37 @@ fn stderr(output: &Output) -> String {
 }
 
 #[test]
-fn short_version_is_the_name_and_the_version() {
-    let output = Sandbox::new(&[]).run(&["-V"]);
-    assert!(output.status.success());
-    assert_eq!(
-        stdout(&output),
-        format!("noc {}\n", env!("CARGO_PKG_VERSION"))
-    );
+fn version_is_the_name_and_the_version() {
+    let sandbox = Sandbox::new(&[]);
+    for flag in ["-V", "--version"] {
+        let output = sandbox.run(&[flag]);
+        assert!(output.status.success());
+        assert_eq!(
+            stdout(&output),
+            format!("noc {}\n", env!("CARGO_PKG_VERSION"))
+        );
+    }
 }
 
 #[test]
-fn long_version_has_one_line_per_key() {
+fn hosts_and_ls_are_only_debug_commands() {
+    let sandbox = Sandbox::new(&[]);
+    for command in ["hosts", "ls"] {
+        let output = sandbox.run(&[command]);
+        assert_eq!(output.status.code(), Some(2), "{}", stderr(&output));
+        assert!(
+            stderr(&output).contains("unrecognized subcommand"),
+            "{}",
+            stderr(&output)
+        );
+    }
+}
+
+#[test]
+fn debug_version_has_one_line_per_key() {
     let output = Sandbox::new(&[])
         .command()
-        .arg("--version")
+        .args(["debug", "version"])
         .env("VISUAL", "nano -w")
         .output()
         .unwrap();
@@ -294,7 +311,7 @@ fn config_init_writes_the_hosts_template_once() {
 fn hosts_in_config_toml_point_to_hosts_toml() {
     let sandbox = Sandbox::new(&[]);
     sandbox.write_config("[hosts.nas]\nlabel = \"Storage\"\n");
-    let output = sandbox.run(&["hosts"]);
+    let output = sandbox.run(&["debug", "hosts"]);
     assert_eq!(output.status.code(), Some(1));
     assert!(
         stderr(&output).contains("hosts.toml"),
@@ -319,7 +336,7 @@ fn config_paths_follow_xdg_variables() {
 fn rejects_an_invalid_config() {
     let sandbox = Sandbox::new(&[]);
     sandbox.write_config("unknown = 1\n");
-    let output = sandbox.run(&["hosts"]);
+    let output = sandbox.run(&["debug", "hosts"]);
     assert_eq!(output.status.code(), Some(1));
     assert!(
         stderr(&output).contains("invalid config"),
@@ -329,12 +346,12 @@ fn rejects_an_invalid_config() {
 
     // The keymap is vim's; `ui.keymap` is gone.
     sandbox.write_config("[ui]\nkeymap = \"vim\"\n");
-    let output = sandbox.run(&["hosts"]);
+    let output = sandbox.run(&["debug", "hosts"]);
     assert_eq!(output.status.code(), Some(1));
     assert!(stderr(&output).contains("keymap"), "{}", stderr(&output));
 
     sandbox.write_config("args = [\"-L\", \"8080:localhost:80\"]\n");
-    let output = sandbox.run(&["hosts"]);
+    let output = sandbox.run(&["debug", "hosts"]);
     if noc_ssh::policy::FORWARDING_ENABLED {
         assert!(output.status.success(), "{}", stderr(&output));
     } else {
@@ -348,7 +365,7 @@ fn rejects_an_invalid_config() {
 }
 
 #[test]
-fn hosts_lists_ssh_config_hosts() {
+fn debug_hosts_lists_ssh_config_hosts() {
     let sandbox = Sandbox::new(&[("FAKE_SSH_PORT", "2222")]);
     std::fs::create_dir_all(sandbox.path("conf.d")).unwrap();
     std::fs::write(
@@ -367,7 +384,7 @@ fn hosts_lists_ssh_config_hosts() {
     )
     .unwrap();
 
-    let output = sandbox.run(&["hosts"]);
+    let output = sandbox.run(&["debug", "hosts"]);
     assert!(output.status.success(), "{}", stderr(&output));
     let lines: Vec<String> = stdout(&output)
         .lines()
@@ -378,7 +395,7 @@ fn hosts_lists_ssh_config_hosts() {
         ["prod-web (also prod-web.example.com)", "nas Storage"]
     );
 
-    let output = sandbox.run(&["hosts", "--resolve"]);
+    let output = sandbox.run(&["debug", "hosts", "--resolve"]);
     assert!(output.status.success(), "{}", stderr(&output));
     assert!(
         stdout(&output).contains("tester@prod-web.example:2222"),
@@ -388,7 +405,7 @@ fn hosts_lists_ssh_config_hosts() {
 }
 
 #[test]
-fn hosts_shows_cached_addresses_until_ssh_config_changes() {
+fn debug_hosts_shows_cached_addresses_until_ssh_config_changes() {
     let sandbox = Sandbox::new(&[("FAKE_SSH_PORT", "2222")]);
     // The cache also watches the names next to ssh_config, so it gets a directory of its own.
     let ssh_config = sandbox.path("home/.ssh/config");
@@ -402,28 +419,28 @@ fn hosts_shows_cached_addresses_until_ssh_config_changes() {
         ),
     )
     .unwrap();
-    let resolved = sandbox.run(&["hosts", "--resolve"]);
+    let resolved = sandbox.run(&["debug", "hosts", "--resolve"]);
     assert!(resolved.status.success(), "{}", stderr(&resolved));
     assert_eq!(stdout(&resolved), "web  tester@web.example:2222\n");
     assert!(sandbox.path("cache/noc/resolve.json").is_file());
 
     // Without the fake ssh, the address can only come from the cache.
     std::fs::remove_file(sandbox.path("ssh")).unwrap();
-    let cached = sandbox.run(&["hosts"]);
+    let cached = sandbox.run(&["debug", "hosts"]);
     assert!(cached.status.success(), "{}", stderr(&cached));
     assert_eq!(stdout(&cached), stdout(&resolved));
 
     std::fs::write(&ssh_config, "Host web\n  Port 2200\n").unwrap();
-    let changed = sandbox.run(&["hosts"]);
+    let changed = sandbox.run(&["debug", "hosts"]);
     assert!(changed.status.success(), "{}", stderr(&changed));
     assert_eq!(stdout(&changed), "web\n");
 }
 
 #[test]
-fn ls_lists_the_virtual_root_and_local_directories() {
+fn debug_ls_lists_the_virtual_root_and_local_directories() {
     let sandbox = Sandbox::new(&[]);
     std::fs::write(sandbox.path("ssh_config"), "Host web\nHost db\n").unwrap();
-    let output = sandbox.run(&["ls"]);
+    let output = sandbox.run(&["debug", "ls"]);
     assert!(output.status.success(), "{}", stderr(&output));
     // The mount points of the volumes, which depend on the machine, the system volume first,
     // then the hosts.
@@ -440,7 +457,7 @@ fn ls_lists_the_virtual_root_and_local_directories() {
 
     std::fs::write(sandbox.path("root/notes.txt"), b"x").unwrap();
     std::fs::create_dir(sandbox.path("root/docs")).unwrap();
-    let output = sandbox.run(&["ls", sandbox.path("root").to_str().unwrap()]);
+    let output = sandbox.run(&["debug", "ls", sandbox.path("root").to_str().unwrap()]);
     assert!(output.status.success(), "{}", stderr(&output));
     let text = stdout(&output);
     let names: Vec<&str> = text
@@ -451,7 +468,7 @@ fn ls_lists_the_virtual_root_and_local_directories() {
 }
 
 #[test]
-fn ls_lists_a_remote_directory_over_sftp() {
+fn debug_ls_lists_a_remote_directory_over_sftp() {
     if sftp_server().is_none() {
         return;
     }
@@ -460,13 +477,13 @@ fn ls_lists_a_remote_directory_over_sftp() {
     std::fs::create_dir(sandbox.path("root/www")).unwrap();
     std::fs::write(sandbox.path("root/www/index.html"), b"<html>").unwrap();
 
-    let output = sandbox.run(&["ls", "web:"]);
+    let output = sandbox.run(&["debug", "ls", "web:"]);
     assert!(output.status.success(), "{}", stderr(&output));
     let text = stdout(&output);
     assert!(text.contains("www/"), "{text}");
     assert!(text.contains("hello.txt"), "{text}");
 
-    let output = sandbox.run(&["ls", "web:www"]);
+    let output = sandbox.run(&["debug", "ls", "web:www"]);
     assert!(output.status.success(), "{}", stderr(&output));
     assert!(
         stdout(&output).contains("index.html"),
@@ -481,12 +498,12 @@ fn ls_lists_a_remote_directory_over_sftp() {
 }
 
 #[test]
-fn ls_reports_connection_failures() {
+fn debug_ls_reports_connection_failures() {
     let sandbox = Sandbox::new(&[(
         "FAKE_SSH_FAIL",
         "deploy@web: Permission denied (publickey).",
     )]);
-    let output = sandbox.run(&["ls", "web:"]);
+    let output = sandbox.run(&["debug", "ls", "web:"]);
     assert_eq!(output.status.code(), Some(1));
     let text = stderr(&output);
     assert!(text.contains("cannot connect to web"), "{text}");
@@ -495,13 +512,13 @@ fn ls_reports_connection_failures() {
 }
 
 #[test]
-fn ls_declines_prompts_without_a_terminal() {
+fn debug_ls_declines_prompts_without_a_terminal() {
     if std::fs::File::open("/dev/tty").is_ok() {
         eprintln!("note: running with a controlling terminal, skipping");
         return;
     }
     let sandbox = Sandbox::new(&[("FAKE_SSH_PASSWORD", "hunter2")]);
-    let output = sandbox.run(&["ls", "web:"]);
+    let output = sandbox.run(&["debug", "ls", "web:"]);
     assert_eq!(output.status.code(), Some(1));
     assert!(
         stderr(&output).contains("Permission denied (password)"),

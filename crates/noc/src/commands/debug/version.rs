@@ -1,7 +1,6 @@
-//! What `noc -V` and `noc --version` print. `-V` prints `noc` and the version, as clap does.
-//! `--version` prints one fact per line, a key and then its value, for scripts and bug reports;
-//! a value that cannot be found is `unknown`. The keys are an interface: keep them and their
-//! order, and add new ones at the end.
+//! `noc debug version`: one fact per line, a key and then its value, for scripts and bug
+//! reports; a value that cannot be found is `unknown`. The keys are an interface: keep them and
+//! their order, and add new ones at the end. `noc --version` is clap's single line.
 
 use std::ffi::OsString;
 use std::fmt::Write as _;
@@ -18,20 +17,16 @@ use crate::tui::ColorDepth;
 
 const UNKNOWN: &str = "unknown";
 
-/// Prints the version: the long report when `long`, else one line.
-pub(crate) fn print(long: bool) -> ExitCode {
+/// Prints the report. Blocks while the terminal is asked.
+pub(super) fn print() -> ExitCode {
     // The terminal is in raw mode while it is asked, so the report is ready before printing.
-    let text = if long {
-        let editor = editor_command(&Editor::from_env());
-        report(
-            &Build::current(),
-            &System::current(),
-            &Terminal::current(),
-            editor.as_deref(),
-        )
-    } else {
-        format!("noc {}\n", env!("CARGO_PKG_VERSION"))
-    };
+    let editor = editor_command(&Editor::from_env());
+    let text = report(
+        &Build::current(),
+        &System::current(),
+        &Terminal::current(),
+        editor.as_deref(),
+    );
     let mut stdout = std::io::stdout().lock();
     match stdout
         .write_all(text.as_bytes())
@@ -238,7 +233,7 @@ const POLL: Duration = Duration::from_millis(10);
 
 impl Answers {
     /// Asks the terminal on `/dev/tty`, so that it is asked even when stdout is a pipe, as in
-    /// `noc --version | pbcopy`. Not when stdin is not a terminal: then no one is there.
+    /// `noc debug version | pbcopy`. Not when stdin is not a terminal: then no one is there.
     fn query() -> Self {
         let unchecked = Self {
             name: None,

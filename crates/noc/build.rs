@@ -1,4 +1,4 @@
-//! Records the commit the binary is built from, for `noc --version`. Sources without git, or
+//! Records the commit the binary is built from, for `noc debug version`. Sources without git, or
 //! inside another project's repository, give `unknown`.
 
 use std::path::{Path, PathBuf};

@@ -1,5 +1,5 @@
 ---
-source: crates/noc/src/version.rs
+source: crates/noc/src/commands/debug/version.rs
 expression: "report(&build, &system, &terminal, Some(\"nvim -p\"))"
 ---
 name         Noon Commander

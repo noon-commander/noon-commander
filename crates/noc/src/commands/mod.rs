@@ -1,20 +1,15 @@
 //! The command-line subcommands.
 
 mod config;
-mod hosts;
-mod ls;
+mod debug;
 
 use std::process::ExitCode;
 
 use color_eyre::eyre::{Result, WrapErr as _};
 use noc_config::Paths;
-use noc_ssh::discovery::Discovery;
 
 use crate::cli::{Cli, Command, ConfigCommand};
-use crate::context::{Context, describe};
-
-/// Exit code after Ctrl+c, as shells report a process killed by SIGINT.
-const INTERRUPTED: u8 = 130;
+use crate::context::Context;
 
 pub(crate) async fn run(cli: Cli) -> Result<ExitCode> {
     let paths = Paths::from_env()?;
@@ -29,32 +24,6 @@ pub(crate) async fn run(cli: Cli) -> Result<ExitCode> {
         }
         Some(Command::Config(ConfigCommand::Init { force })) => config::init(&config_path, force),
         Some(Command::Config(ConfigCommand::Paths)) => Ok(config::paths(&paths, &config_path)),
-        Some(Command::Hosts { resolve }) => {
-            let context = Context::load(paths, &config_path)?;
-            hosts::run(&context, resolve).await
-        }
-        Some(Command::Ls { location }) => {
-            let context = Context::load(paths, &config_path)?;
-            ls::run(&context, location.as_deref()).await
-        }
+        Some(Command::Debug(command)) => debug::run(command, paths, &config_path).await,
     }
-}
-
-/// Scans the `ssh_config` files and prints what was skipped.
-async fn discover(context: &Context) -> Result<Discovery> {
-    let scanner = context.clone();
-    let discovery = tokio::task::spawn_blocking(move || scanner.scan()).await?;
-    for warning in &discovery.warnings {
-        eprintln!("warning: {}", describe(warning));
-    }
-    Ok(discovery)
-}
-
-/// Visible host aliases in config order.
-async fn host_aliases(context: &Context) -> Result<Vec<String>> {
-    let discovery = discover(context).await?;
-    Ok(discovery
-        .visible(&context.config().discovery.hide)
-        .map(|host| host.alias.clone())
-        .collect())
 }

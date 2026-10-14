@@ -24,7 +24,7 @@ a ban has to cover the master, not only the SFTP channels.
 - Build with `--features forwarding`: the master and the console follow the user's ssh config and
   arguments.
 - SFTP channels always use `SFTP_CHANNEL_OPTIONS`, which mirror `sftp(1)`, in every build.
-- `noc --version` shows `+forwarding` or `-forwarding`. CI builds and tests both variants.
+- `noc debug version` shows `+forwarding` or `-forwarding`. CI builds and tests both variants.
 
 ### Validation of user-supplied arguments
 

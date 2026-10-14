@@ -1,4 +1,4 @@
-//! `noc hosts`.
+//! `noc debug hosts`.
 
 use std::fmt::Write as _;
 use std::process::ExitCode;

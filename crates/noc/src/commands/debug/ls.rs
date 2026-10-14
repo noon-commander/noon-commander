@@ -1,4 +1,4 @@
-//! `noc ls`.
+//! `noc debug ls`.
 
 use std::process::ExitCode;
 use std::time::Duration;
@@ -10,10 +10,12 @@ use noc_ssh::{Session, SftpChannel, SshError, Target, cleanup_stale};
 use noc_vfs::{DirEntry, FileKind, LocalFs, Location, RemotePath, SftpFs, Vfs};
 use tokio_util::sync::CancellationToken;
 
-use super::INTERRUPTED;
 use crate::context::Context;
 use crate::format;
 use crate::tui::read_volumes;
+
+/// Exit code after Ctrl+c, as shells report a process killed by SIGINT.
+const INTERRUPTED: u8 = 130;
 
 pub(super) async fn run(context: &Context, location: Option<&str>) -> Result<ExitCode> {
     let Some(location) = location else {

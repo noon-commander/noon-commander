@@ -16,7 +16,7 @@
 - [x] Master connection, SFTP channels, askpass bridge
       ([ADR 0002](adr/0002-controlmaster-per-host.md), [ADR 0003](adr/0003-askpass-bridge.md))
 - [x] `noc-vfs`: local and SFTP backends
-- [x] Debug commands: `noc hosts`, `noc ls <host>:<path>`
+- [x] Debug commands: `noc debug hosts`, `noc debug ls <host>:<path>`
 - [x] Tests: local `sftp-server` over pipes, fake `ssh` program
 
 ## M2: TUI for browsing (done)

@@ -557,7 +557,7 @@ predicates. So:
 2. Concrete patterns (no `*`, `?`, or `!`) become hosts. `Include` lines with `%` tokens cannot be
    expanded statically; they are skipped and logged.
 3. Effective values (user, hostname, port, proxy jump) come only from `ssh -G`, which runs
-   when the TUI connects to a host (or for `noc hosts --resolve`, with bounded
+   when the TUI connects to a host (or for `noc debug hosts --resolve`, with bounded
    parallelism), never for every host at startup. Results are cached in
    `~/.cache/noc/resolve.json`, valid while the ssh settings, the config files read
    (inode, mtime, size), and the names in their directories stay the same, so earlier
@@ -584,20 +584,20 @@ Messages from ssh, which may quote the server, are shown terminal-safe.
 ## Command line
 
 ```text
-noc                    the TUI (needs a terminal)
-noc hosts [--resolve]  hosts from ssh_config with cached addresses; --resolve runs ssh -G
-noc ls [LOCATION]      a local path or host:path; without one, the mount points and hosts
-noc config init        write the commented default config.toml
-noc config paths       show the files and directories in use
-noc -V                 the version: noc 0.2.0
-noc --version          version, build, system, and terminal, one `key value` line each
+noc                          the TUI (needs a terminal)
+noc -V, --version            the version: noc 0.2.0
+noc config init              write the commented default config.toml
+noc config paths             show the files and directories in use
+noc debug version            version, build, system, terminal, and editor, one `key value` line each
+noc debug hosts [--resolve]  hosts from ssh_config with cached addresses; --resolve runs ssh -G
+noc debug ls [LOCATION]      a local path or host:path; without one, the mount points and hosts
 ```
 
 `crates/noc/build.rs` records the commit, its time in UTC, and whether the sources differ from
-it, with `git`; without git they are `unknown`. clap's own version flag is off: it would build
-the text on every run, and `--version` asks the terminal. In raw mode on `/dev/tty`, and only
-when stdin is a terminal and `noc` is in the foreground, it sends XTVERSION, the kitty keyboard
-query, and primary device attributes, whose answer ends the wait (at most a second).
+it, with `git`; without git they are `unknown`. `noc debug version` asks the terminal, in a
+blocking task: in raw mode on `/dev/tty`, and only when stdin is a terminal and `noc` is in the
+foreground, it sends XTVERSION, the kitty keyboard query, and primary device attributes, whose
+answer ends the wait (at most a second).
 
 `--config FILE` replaces `~/.config/noc/config.toml`. Logs go to
 `~/.local/state/noc/noc.log`; `NOC_LOG` sets the filter, for example

@@ -7,13 +7,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Changed
+### Added
 
-- `noc -V` prints only the version, as in `noc 0.2.0`. `noc --version` prints one `key value`
-  line per fact, for scripts and bug reports: the version, the compile-time features (the
-  `-forwarding` of the old version line), the commit and its time in UTC, the target, the
+- `noc debug version` prints one `key value` line per fact, for scripts and bug reports: the
+  version, the compile-time features, the commit and its time in UTC, the target, the
   operating system, the terminal with its colors and keyboard protocol, and the editor of F4.
   The terminal is asked for its name, so kitty, which sets no `TERM_PROGRAM`, is named too.
+
+### Changed
+
+- `noc -V` and `noc --version` print only the version, as in `noc 0.2.0`; the compile-time
+  features (`-forwarding`) moved to `noc debug version`.
+- `noc hosts` and `noc ls` moved to `noc debug hosts` and `noc debug ls`.
 
 ## [0.2.0] - 2026-10-14
 

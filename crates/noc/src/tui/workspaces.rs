@@ -126,6 +126,11 @@ impl WorkspacesWindow {
     }
 
     /// The mode keys are typed in: Insert while the filter takes them.
+    /// The rows, for the count before a page key.
+    pub(crate) fn picker_mut(&mut self) -> &mut Picker {
+        &mut self.picker
+    }
+
     pub(crate) fn mode(&self) -> Mode {
         self.picker.mode()
     }

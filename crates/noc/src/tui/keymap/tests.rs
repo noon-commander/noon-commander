@@ -264,14 +264,18 @@ fn the_lists_take_their_filter_in_insert_mode() {
 
 #[test]
 fn visual_mode_selects_rows_and_acts_on_them() {
-    assert_eq!(typed(PANEL, &["shift-v"]), actions(&[Action::VisualMode]));
     assert_eq!(
-        typed(VISUAL_PANEL, &["j", "o", "y", "space", "v"]),
+        typed(PANEL, &["shift-v"]),
+        actions(&[Action::VisualLineMode])
+    );
+    assert_eq!(
+        typed(VISUAL_PANEL, &["j", "o", "y", "space", "v", "esc"]),
         actions(&[
             Action::Down,
             Action::OtherEnd,
             Action::Copy,
             Action::Mark,
+            Action::VisualMode,
             Action::NormalMode
         ])
     );

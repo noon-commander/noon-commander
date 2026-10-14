@@ -170,10 +170,14 @@ pub(crate) enum Action {
     /// The text cursor one character left, and from the start of a line to the end of the one
     /// before: vim's Backspace.
     CharBackward,
-    /// One page up.
+    /// One page up; in the viewer and the help, a window less two rows, as vim's Ctrl+b.
     PageUp,
-    /// One page down.
+    /// One page down; in the viewer and the help, a window less two rows, as vim's Ctrl+f.
     PageDown,
+    /// A whole window up in the viewer and the help, as less's `b`.
+    WindowUp,
+    /// A whole window down in the viewer and the help, as less's Space and `f`.
+    WindowDown,
     /// Half a page up.
     HalfPageUp,
     /// Half a page down.
@@ -320,6 +324,9 @@ pub(crate) enum Action {
     AppendAtEnd,
     /// Visual mode, which selects from the cursor to where it goes; again: Normal mode.
     VisualMode,
+    /// Visual mode by lines, as vim's `V`: in the panels, where rows are lines either way, the
+    /// mode line says so; `v` in it and `V` in `v`'s switch the kind, as in vim.
+    VisualLineMode,
     /// Puts the cursor at the other end of the selection.
     OtherEnd,
     /// Selects again the rows selected last.
@@ -472,6 +479,8 @@ impl Action {
         Self::CharBackward,
         Self::PageUp,
         Self::PageDown,
+        Self::WindowUp,
+        Self::WindowDown,
         Self::HalfPageUp,
         Self::HalfPageDown,
         Self::Home,
@@ -540,6 +549,7 @@ impl Action {
         Self::InsertAtStart,
         Self::AppendAtEnd,
         Self::VisualMode,
+        Self::VisualLineMode,
         Self::OtherEnd,
         Self::Reselect,
         Self::NormalOnce,

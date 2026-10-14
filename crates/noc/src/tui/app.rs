@@ -38,8 +38,8 @@ use super::keymap::{Action, Context, Extra, Hints, KeyState, Keymap, Mode, Resol
 use super::menu::{LocationMenu, MenuEvent};
 use super::mouse::{Pointer, Press};
 use super::panel::{
-    Destination, HostState, HostStatus, ListRequest, Listed, Panel, View, child, home_text,
-    location_text,
+    Destination, HostState, HostStatus, ListRequest, Listed, Panel, SearchEnd, View, child,
+    home_text, location_text,
 };
 use super::pattern::Pattern;
 use super::places::{Places, volume_of};
@@ -1571,6 +1571,12 @@ impl App {
         let Typed { resolved, extra } = typed;
         let times = match resolved {
             Resolved::Action(action) if self.repeats(action) => extra.times().min(MAX_REPEAT),
+            Resolved::Action(Action::PageUp | Action::PageDown) => {
+                if let Some(count) = extra.count {
+                    self.count_pages(count);
+                }
+                1
+            }
             _ => 1,
         };
         self.extra = extra;
@@ -1617,6 +1623,20 @@ impl App {
                 | Context::CommandCompletion
                 | Context::QuickSearch
         );
+        // A count before Ctrl+f and Ctrl+b scrolls that many pages at once in the panels and
+        // the lists, as in vim, rather than one at a time.
+        let pages = matches!(
+            self.context(),
+            Context::Panel
+                | Context::LocationMenu
+                | Context::TabMenu
+                | Context::Workspaces
+                | Context::CommandHistory
+                | Context::Jump
+        );
+        if pages && matches!(action, Action::PageUp | Action::PageDown) {
+            return false;
+        }
         !text
             && matches!(
                 action,
@@ -1630,6 +1650,30 @@ impl App {
                     | Action::HalfPageDown
                     | Action::PrevTab
             )
+    }
+
+    /// Gives the count before Ctrl+f or Ctrl+b to the list in front, which scrolls that many
+    /// pages at once, as vim's do. The panels read it themselves.
+    fn count_pages(&mut self, pages: usize) {
+        let picker = match self.context() {
+            Context::LocationMenu => self.menu.as_mut().map(LocationMenu::picker_mut),
+            Context::TabMenu => self.tab_menu.as_mut().map(TabMenu::picker_mut),
+            Context::Workspaces => self
+                .workspaces_window
+                .as_mut()
+                .map(WorkspacesWindow::picker_mut),
+            Context::CommandHistory => self.history_window.as_mut().map(HistoryWindow::picker_mut),
+            Context::Jump => {
+                if let Some(jump) = &mut self.jump {
+                    jump.count_pages(pages);
+                }
+                None
+            }
+            _ => None,
+        };
+        if let Some(picker) = picker {
+            picker.count_pages(pages);
+        }
     }
 
     /// Whether a dialog or the configuration has the keys, which count their moves themselves,
@@ -2118,7 +2162,10 @@ impl App {
         let count = self.extra.count;
         let id = self.shown(self.active);
         match action {
-            Action::VisualMode => self.panel_mut(id.side).start_visual(count),
+            Action::VisualMode | Action::VisualLineMode => {
+                let line = action == Action::VisualLineMode;
+                self.panel_mut(id.side).start_visual(count, line);
+            }
             Action::Reselect => self.panel_mut(id.side).reselect(),
             Action::JumpBack | Action::JumpForward => {
                 let times = count.unwrap_or(1);
@@ -2135,6 +2182,10 @@ impl App {
             // With a count, the row of that number, as vim's `G` and `g g` go to the line.
             Action::Home | Action::End if count.is_some() => {
                 self.panel_mut(id.side).go_to_row(count.unwrap_or(1));
+            }
+            Action::PageUp | Action::PageDown if count.is_some() => {
+                let down = action == Action::PageDown;
+                self.panel_mut(id.side).page_by(down, count.unwrap_or(1));
             }
             Action::Mark | Action::MarkUp if count.is_some() => {
                 let down = action == Action::Mark;
@@ -2198,6 +2249,9 @@ impl App {
         let panel = self.panel_mut(id.side);
         match action {
             Action::NormalMode => panel.end_visual(),
+            Action::VisualMode | Action::VisualLineMode => {
+                panel.switch_visual(action == Action::VisualLineMode);
+            }
             Action::OtherEnd => panel.other_end(),
             Action::Mark => panel.mark_visual(false),
             Action::Copy | Action::Move | Action::Delete | Action::Checksum => {
@@ -2206,6 +2260,9 @@ impl App {
             }
             Action::Home | Action::End if count.is_some() => {
                 panel.go_to_row(count.unwrap_or(1));
+            }
+            Action::PageUp | Action::PageDown if count.is_some() => {
+                panel.page_by(action == Action::PageDown, count.unwrap_or(1));
             }
             Action::Up
             | Action::Down
@@ -2280,15 +2337,16 @@ impl App {
                     self.panel_mut(side).search_step(forward, fuzzy_search);
                     None
                 }
+                // As vim's Enter, it says when the search went round or found nothing.
                 Action::Cancel => {
-                    if self.panel(side).search_went_round(fuzzy_search) {
-                        self.message = Some(if self.panel(side).search_goes_back() {
-                            fl!("message-search-top")
-                        } else {
-                            fl!("message-search-bottom")
-                        });
+                    if let Some(end) = self.end_search(side) {
+                        self.message = match end.found {
+                            None => Some(fl!("message-search-not-found", text = end.text)),
+                            Some(true) if end.back => Some(fl!("message-search-top")),
+                            Some(true) => Some(fl!("message-search-bottom")),
+                            Some(false) => None,
+                        };
                     }
-                    self.end_search(side);
                     None
                 }
                 // What it found is not kept, as vim keeps no pattern its Esc gives up.
@@ -2319,7 +2377,8 @@ impl App {
             Some((last, _)) if panel.searching() && !typed => {
                 panel.search_resume(&last, fuzzy_search);
             }
-            _ => panel.search_next(fuzzy_search, count),
+            _ if panel.searching() => panel.search_step(true, fuzzy_search),
+            _ => panel.search_down(count),
         }
     }
 
@@ -2337,13 +2396,12 @@ impl App {
         let round = self
             .panel_mut(self.active)
             .search_again(&last, forward, fuzzy_search, times);
-        if round == Some(true) {
-            self.message = Some(if forward {
-                fl!("message-search-bottom")
-            } else {
-                fl!("message-search-top")
-            });
-        }
+        self.message = match round {
+            None => Some(fl!("message-search-not-found", text = last)),
+            Some(true) if forward => Some(fl!("message-search-bottom")),
+            Some(true) => Some(fl!("message-search-top")),
+            Some(false) => None,
+        };
     }
 
     /// The side of the panel drawn on the left, or on the right: swapped panels are drawn on
@@ -2356,13 +2414,13 @@ impl App {
         }
     }
 
-    /// Ends quick search in the panel on `side`, and keeps what it found for `n` and `N`, with
-    /// the way it went.
-    fn end_search(&mut self, side: Side) {
-        let back = self.panel(side).search_goes_back();
-        if let Some(text) = self.panel_mut(side).end_search() {
-            self.last_search = Some((text, back));
-        }
+    /// Ends quick search in the panel on `side`, and keeps what it searched for for `n` and
+    /// `N`, with the way it went, found or not, as vim keeps its pattern; how it ended.
+    fn end_search(&mut self, side: Side) -> Option<SearchEnd> {
+        let fuzzy = self.config.ui.fuzzy_search;
+        let end = self.panel_mut(side).end_search(fuzzy)?;
+        self.last_search = Some((end.text.clone(), end.back));
+        Some(end)
     }
 
     /// Gives a key to the dialog in front, and does what it was for once it closes. In a path
@@ -5753,6 +5811,9 @@ impl App {
             (Mode::Insert, context) if context != Context::QuickSearch => Some(fl!("mode-insert")),
             (Mode::Normal, _) if once => Some(fl!("mode-insert-once")),
             (Mode::Visual, _) if once => Some(fl!("mode-insert-visual")),
+            (Mode::Visual, Context::Panel) if self.panel(self.active).visual_line() => {
+                Some(fl!("mode-visual-line"))
+            }
             (Mode::Visual, _) => Some(fl!("mode-visual")),
             _ => None,
         };
@@ -5871,6 +5932,8 @@ fn viewer_command(action: Action) -> Option<ViewerCommand> {
         Action::Down => ViewerCommand::Down,
         Action::PageUp => ViewerCommand::PageUp,
         Action::PageDown => ViewerCommand::PageDown,
+        Action::WindowUp => ViewerCommand::WindowUp,
+        Action::WindowDown => ViewerCommand::WindowDown,
         Action::HalfPageUp => ViewerCommand::HalfPageUp,
         Action::HalfPageDown => ViewerCommand::HalfPageDown,
         Action::Home => ViewerCommand::Home,
@@ -6677,9 +6740,9 @@ mod tests {
     }
 
     #[test]
-    fn jumps_skip_where_the_panel_already_is_and_n_jumps_once() {
+    fn a_failed_listing_is_no_jump_and_n_jumps_once() {
         let mut app = with_files(&["b1", "b2", "b3", "b4", "b5"]);
-        // A listing that fails leaves the panel where it was, which Ctrl+o skips.
+        // A listing that fails leaves the panel where it was, and no jump.
         keys(&mut app, &["shift-g"]);
         let effects = keys(&mut app, &["g", "g", "l"]);
         let [Effect::List { panel, request, .. }] = &effects[..] else {
@@ -6697,6 +6760,13 @@ mod tests {
         assert_eq!(cursor_name(&app, Side::Left), "b4");
         keys(&mut app, &["ctrl-o"]);
         assert_eq!(cursor_name(&app, Side::Left), "b1");
+        // A jump that goes nowhere is one too: Ctrl+o comes back to it first, as in vim.
+        keys(&mut app, &["shift-g", "shift-g", "ctrl-o"]);
+        assert_eq!(cursor_name(&app, Side::Left), "b5");
+        keys(&mut app, &["ctrl-o"]);
+        assert_eq!(cursor_name(&app, Side::Left), "b1");
+        keys(&mut app, &["tab"]);
+        assert_eq!(cursor_name(&app, Side::Left), "b5");
     }
 
     #[test]
@@ -6776,10 +6846,37 @@ mod tests {
     }
 
     #[test]
+    fn v_and_shift_v_switch_the_kind_of_visual_mode_and_end_it_as_vims() {
+        let mut app = with_files(&["a", "b", "c"]);
+        keys(&mut app, &["j", "shift-v", "j"]);
+        assert!(screen(&mut app).contains("-- VISUAL LINE --"));
+        keys(&mut app, &["v"]);
+        assert!(
+            screen(&mut app).contains("-- VISUAL --"),
+            "the other key switches"
+        );
+        assert_eq!(
+            app.panel(Side::Left).visual_size(),
+            Some(2),
+            "the rows stay"
+        );
+        keys(&mut app, &["v"]);
+        assert_eq!(app.mode(), Mode::Normal, "its own key ends it");
+        keys(&mut app, &["g", "v"]);
+        assert!(
+            screen(&mut app).contains("-- VISUAL --"),
+            "g v takes the kind back"
+        );
+        // After a command of files, the cursor is on the first row selected, as in vim.
+        keys(&mut app, &["f", "#"]);
+        assert_eq!(cursor_name(&app, Side::Left), "a");
+    }
+
+    #[test]
     fn counts_select_rows_and_remove_them_from_lists_as_vims_lines() {
         let mut app = with_files(&["a", "b", "c", "d"]);
         keys(&mut app, &["j", "3", "shift-v"]);
-        assert!(line_with(&screen(&mut app), "-- VISUAL --").ends_with(" 3\""));
+        assert!(line_with(&screen(&mut app), "-- VISUAL LINE --").ends_with(" 3\""));
         keys(&mut app, &["esc", "t", "n", "t", "n", "t", "n"]);
         assert_eq!(app.tabs(Side::Left).len(), 4);
         keys(&mut app, &["t", "h", "g", "g", "3", "d", "d"]);
@@ -11135,9 +11232,11 @@ mod tests {
         app.handle(action(Action::QuickSearch));
         app.handle(Resolved::Insert('r'));
         app.handle(Resolved::Insert('t'));
-        assert!(
-            screen(&mut app).contains("Search: r") && !screen(&mut app).contains("Search: rt"),
-            "names must start with the text"
+        assert!(screen(&mut app).contains("Search: rt"));
+        assert_eq!(
+            app.panel(app.active).name_under_cursor(),
+            Some(&b"right"[..]),
+            "names must start with the text: none does, the cursor stays"
         );
     }
 

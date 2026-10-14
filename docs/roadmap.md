@@ -142,16 +142,18 @@
       Visual mode, and `U` in Normal mode; Shift and Ctrl with Left and Right move in Visual mode
       as `w`, `W`, `b`, and `B`; Ctrl+r Ctrl+r, Ctrl+r Ctrl+o, and Ctrl+r Ctrl+p put a register
       in Insert mode, as Ctrl+r does
+- [ ] More of vim's keys: in text fields `g e`, `g E`, `|`, the operators `g u`, `g U`, and
+      `g ~`, Ctrl+a and Ctrl+x, `g v`, `g i`, `g I`, `g p`, and `g P`; in the panels a count before
+      `%`, and in Visual mode Ctrl+o, Tab, `O`, and `g v`
 - [ ] Text objects in text fields: `iw`, `aw`, `iW`, `aW`, quotes, and brackets (`c i w`,
       `d i "`, `c i (`); `c i w` only moves the cursor until then
 - [ ] Registers as vim's: `"0` the last yank, `"1` … `"9` and `"-` the deletes; any other
       name than these, `a` … `z`, `A` … `Z`, `"`, and `_` gives the command up
 - [ ] `p` in Visual mode puts in place of the selection; `Y` yanks the line, as vim's `y y`
 - [ ] A count repeats what `i`, `a`, `I`, and `A` type (`3ix` Esc)
-- [ ] The lines of the command line in Normal mode: `o`, `O`, `J`, `g g`, `G`, `d j`, `d k`,
-      `V`, and `r` Enter; `v $` and Space in Visual mode take the line break; a put of lines
-      within a line leaves the cursor at their start, and Ctrl+r of whole lines ends them with a
-      line break
+- [ ] The lines of the command line in Normal mode: `o`, `O`, `J`, `g g`, `G`, `d j`, `d k`, `V`,
+      and `r` Enter; a put of lines within a line leaves the cursor at their start, and Ctrl+r of
+      whole lines ends them with a line break
 - [ ] The command line shows its mode and the command typed, as vim's window of the command
       line does: Normal and Visual mode after Ctrl+f, an operator or a register that waits
       (`2d`, `"a`), and `-- (insert) --` after Ctrl+o

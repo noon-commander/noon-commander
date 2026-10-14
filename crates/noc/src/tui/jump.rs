@@ -65,6 +65,8 @@ pub(crate) struct JumpMenu {
     /// The rows on screen, as vim's window scrolls them, and how many at the last render.
     window: Window,
     page: usize,
+    /// The count before the next Ctrl+f or Ctrl+b, which scroll that many pages at once.
+    pages: usize,
     /// Where the last render drew it, for the mouse.
     drawn: RefCell<Drawn>,
 }
@@ -86,6 +88,7 @@ impl JumpMenu {
             cursor: 0,
             window: Window::default(),
             page: 1,
+            pages: 1,
             drawn: RefCell::default(),
         }
     }
@@ -174,6 +177,11 @@ impl JumpMenu {
         }
     }
 
+    /// Takes the count before Ctrl+f or Ctrl+b, which scroll that many pages at once, as vim's.
+    pub(crate) fn count_pages(&mut self, pages: usize) {
+        self.pages = pages.max(1);
+    }
+
     /// Takes a key: Up, Down, the page keys, Home, and End move, Enter opens, and Esc closes
     /// the window. `/` types the keywords: characters then are keywords, and the keys of text
     /// fields edit them, until Esc goes back to the rows.
@@ -193,7 +201,8 @@ impl JumpMenu {
                 // As vim's Ctrl+b, Ctrl+f, Ctrl+u, and Ctrl+d, which scroll the rows.
                 Action::PageUp | Action::PageDown => {
                     let down = action == Action::PageDown;
-                    self.window.page(down, &mut self.cursor, rows, page);
+                    let pages = std::mem::replace(&mut self.pages, 1);
+                    self.window.page(down, pages, &mut self.cursor, rows, page);
                 }
                 Action::HalfPageUp | Action::HalfPageDown => {
                     let down = action == Action::HalfPageDown;

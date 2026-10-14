@@ -15,8 +15,14 @@ use crate::text::{cut, lines_of, rows};
 pub enum Command {
     Up,
     Down,
+    /// A page up, less the two rows that vim's Ctrl+b keeps on screen.
     PageUp,
+    /// A page down, less the two rows that vim's Ctrl+f keeps on screen.
     PageDown,
+    /// A whole page up, as less's `b`.
+    WindowUp,
+    /// A whole page down, as less's Space and `f`.
+    WindowDown,
     HalfPageUp,
     HalfPageDown,
     /// The start of the file, and the first column.
@@ -96,8 +102,10 @@ impl Viewer {
         match command {
             Command::Up => self.up(1),
             Command::Down => self.down(1),
-            Command::PageUp => self.up(self.page),
-            Command::PageDown => self.down(self.page),
+            Command::PageUp => self.up(page_less_overlap(self.page)),
+            Command::PageDown => self.down(page_less_overlap(self.page)),
+            Command::WindowUp => self.up(self.page),
+            Command::WindowDown => self.down(self.page),
             // Half of an odd page rounds down, as vim's 'scroll' and less's `d` do.
             Command::HalfPageUp => self.up((self.page / 2).max(1)),
             Command::HalfPageDown => self.down((self.page / 2).max(1)),
@@ -247,6 +255,17 @@ impl Viewer {
     }
 }
 
+/// How far vim's Ctrl+f and Ctrl+b scroll a window of `height` rows: all but the two rows
+/// they keep on screen, one in a window of four, none in a lower one, as vim's
+/// `get_scroll_overlap` has it.
+fn page_less_overlap(height: usize) -> usize {
+    match height {
+        0..=3 => height.max(1),
+        4 => 3,
+        _ => height - 2,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use ratatui::Terminal;
@@ -281,8 +300,16 @@ mod tests {
         assert!(top.contains("1/20 25%"), "{top}");
         assert!(top.contains("line 5") && !top.contains("line 6"), "{top}");
 
+        // Ctrl+f keeps two of the five rows on screen, as vim's; Space turns the whole page, as
+        // less.
         viewer.handle(Command::PageDown);
-        assert!(draw(&mut viewer, 30, 6).contains("line 6"));
+        assert!(draw(&mut viewer, 30, 6).contains("4/20"));
+        viewer.handle(Command::WindowDown);
+        assert!(draw(&mut viewer, 30, 6).contains("9/20"));
+        viewer.handle(Command::WindowUp);
+        viewer.handle(Command::PageUp);
+        assert!(draw(&mut viewer, 30, 6).contains("1/20"));
+        viewer.handle(Command::WindowDown);
         // Half of the five rows, rounded down, as vim's 'scroll'.
         viewer.handle(Command::HalfPageDown);
         assert!(draw(&mut viewer, 30, 6).contains("8/20"));

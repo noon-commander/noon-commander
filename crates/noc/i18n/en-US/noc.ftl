@@ -34,6 +34,7 @@ fkey-close-tab = Close
 
 mode-insert = -- INSERT --
 mode-visual = -- VISUAL --
+mode-visual-line = -- VISUAL LINE --
 # After Ctrl+o in Insert mode, for the one command of Normal mode, as vim says it.
 mode-insert-once = -- (insert) --
 mode-insert-visual = -- (insert) VISUAL --
@@ -45,6 +46,8 @@ mode-insert-visual = -- (insert) VISUAL --
 message-search-none = No previous search
 message-search-bottom = search hit BOTTOM, continuing at TOP
 message-search-top = search hit TOP, continuing at BOTTOM
+# What quick search, n, or N looked for matches no name, as vim's E486.
+message-search-not-found = Pattern not found: { $text }
 
 ## The title of the terminal's window or tab (src/tui/app), with ui.terminal_title. Prefix:
 ## terminal-.
@@ -412,6 +415,8 @@ help-row-up = One row up
 help-row-down = One row down
 help-page-up = One page up
 help-page-down = One page down
+help-window-up = A whole page up, as less's b
+help-window-down = A whole page down, as less's Space and f
 help-half-page-up = Half a page up
 help-half-page-down = Half a page down
 help-first-row = First row
@@ -425,7 +430,8 @@ help-unselect = Unmark the names that match a pattern
 help-parent = Parent directory
 help-jump-back = Back to where the panel was before its last jump, as vim's jump list
 help-jump-forward = Forward again, where Ctrl+o came from
-help-visual = Visual mode: select rows from here to the cursor
+help-visual = Visual mode: select rows from here to the cursor; in Visual mode by lines, switch to it, else end it
+help-visual-line = Visual mode by lines, as vim's V: select rows from here to the cursor; in Visual mode, switch to it, else end it
 help-reselect = Select again the rows selected last
 help-other-end = The other end of the selection
 help-visual-end = Normal mode again

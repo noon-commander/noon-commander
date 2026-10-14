@@ -72,7 +72,8 @@ pub(super) const PRESET: Preset = &[
             (Action::SortByTime, &["o m"]),
             (Action::SortBySize, &["o s"]),
             // Marks
-            (Action::VisualMode, &["v", "shift-v"]),
+            (Action::VisualMode, &["v"]),
+            (Action::VisualLineMode, &["shift-v"]),
             (Action::Reselect, &["g v"]),
             (Action::Mark, &["space", "shift-j"]),
             (Action::MarkUp, &["shift-k"]),
@@ -127,10 +128,10 @@ pub(super) const PRESET: Preset = &[
             // As vim's `D` and `X`, which delete the lines selected.
             (Action::Delete, &["d", "shift-d", "shift-x", "f8"]),
             (Action::Checksum, &["f #"]),
-            (
-                Action::NormalMode,
-                &["esc", "ctrl-[", "ctrl-c", "v", "shift-v"],
-            ),
+            (Action::NormalMode, &["esc", "ctrl-[", "ctrl-c"]),
+            // The key that started Visual mode ends it; the other switches its kind, as vim's.
+            (Action::VisualMode, &["v"]),
+            (Action::VisualLineMode, &["shift-v"]),
             (Action::Help, &["f1"]),
             (Action::View, &["f3"]),
             (Action::Edit, &["f4"]),
@@ -353,8 +354,8 @@ pub(super) const PRESET: Preset = &[
         &[
             (Action::Up, &["ctrl-y"]),
             (Action::Down, &["ctrl-e"]),
-            (Action::PageUp, &["b"]),
-            (Action::PageDown, &["space", "f"]),
+            (Action::WindowUp, &["b"]),
+            (Action::WindowDown, &["space", "f"]),
             (Action::HalfPageUp, &["ctrl-u", "u"]),
             (Action::HalfPageDown, &["ctrl-d", "d"]),
         ],
@@ -416,8 +417,10 @@ pub(super) const PRESET: Preset = &[
                 Action::Down,
                 &["j", "ctrl-e", "down", "ctrl-n", "enter", "ctrl-m"],
             ),
-            (Action::PageUp, &["ctrl-b", "b", "pageup"]),
-            (Action::PageDown, &["ctrl-f", "space", "f", "pagedown"]),
+            (Action::PageUp, &["ctrl-b", "pageup"]),
+            (Action::PageDown, &["ctrl-f", "pagedown"]),
+            (Action::WindowUp, &["b"]),
+            (Action::WindowDown, &["space", "f"]),
             (Action::HalfPageUp, &["ctrl-u", "u"]),
             (Action::HalfPageDown, &["ctrl-d", "d"]),
             (Action::Home, &["g g", "home"]),

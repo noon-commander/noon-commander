@@ -100,6 +100,8 @@ pub(crate) struct Picker {
     page: usize,
     /// The row each line of the last render showed, if any: headings show none.
     rows_drawn: Vec<Option<usize>>,
+    /// The count before the next Ctrl+f or Ctrl+b, which scroll that many pages at once.
+    pages: usize,
     /// Where the last render drew the window, for the mouse.
     drawn: Drawn,
 }
@@ -119,6 +121,7 @@ impl Picker {
             window: Window::default(),
             page: 1,
             rows_drawn: Vec::new(),
+            pages: 1,
             drawn: Drawn::default(),
         }
     }
@@ -271,6 +274,11 @@ impl Picker {
         Pick::Pending
     }
 
+    /// Takes the count before Ctrl+f or Ctrl+b, which scroll that many pages at once, as vim's.
+    pub(crate) fn count_pages(&mut self, pages: usize) {
+        self.pages = pages.max(1);
+    }
+
     /// Ctrl+b, Ctrl+f, Ctrl+u, or Ctrl+d: scrolls the lines as vim's window, headings among
     /// them, and puts the cursor on the row where vim's goes, or the next one the way it went.
     fn scroll(&mut self, action: Action) {
@@ -288,7 +296,8 @@ impl Picker {
         let down = matches!(action, Action::PageDown | Action::HalfPageDown);
         let page = self.page.max(1);
         if matches!(action, Action::PageUp | Action::PageDown) {
-            self.window.page(down, &mut line, lines, page);
+            let pages = std::mem::replace(&mut self.pages, 1);
+            self.window.page(down, pages, &mut line, lines, page);
         } else {
             self.window.half_page(down, &mut line, lines, page);
         }
@@ -473,6 +482,18 @@ mod tests {
         headed.rows_drawn.insert(12, None);
         press(&mut headed, Action::PageDown);
         assert_eq!(headed.cursor(), 12, "on the line after the heading");
+        // A count scrolls that many pages at once, as vim's 2 Ctrl+f.
+        let mut counted = picker(&names, false);
+        counted.page = 10;
+        counted.count_pages(2);
+        press(&mut counted, Action::PageDown);
+        assert_eq!(counted.cursor(), 20);
+        press(&mut counted, Action::PageDown);
+        assert_eq!(
+            counted.cursor(),
+            28,
+            "one page, the count used up, as vim's"
+        );
     }
 
     #[test]

@@ -117,8 +117,10 @@ impl Help {
         self.offset = match action {
             Action::Up => self.offset.saturating_sub(1),
             Action::Down => self.offset + 1,
-            Action::PageUp => self.offset.saturating_sub(self.page),
-            Action::PageDown => self.offset + self.page,
+            Action::PageUp => self.offset.saturating_sub(page_less_overlap(self.page)),
+            Action::PageDown => self.offset + page_less_overlap(self.page),
+            Action::WindowUp => self.offset.saturating_sub(self.page),
+            Action::WindowDown => self.offset + self.page,
             Action::HalfPageUp => self.offset.saturating_sub((self.page / 2).max(1)),
             Action::HalfPageDown => self.offset + (self.page / 2).max(1),
             Action::Home => 0,
@@ -194,6 +196,17 @@ impl Help {
             let y = inner.y + u16::try_from(index).unwrap_or(u16::MAX);
             frame.render_widget(line, Rect::new(inner.x, y, inner.width, 1));
         }
+    }
+}
+
+/// How far vim's Ctrl+f and Ctrl+b scroll a window of `height` rows: all but the two rows
+/// they keep on screen, one in a window of four, none in a lower one, as vim's
+/// `get_scroll_overlap` has it.
+fn page_less_overlap(height: usize) -> usize {
+    match height {
+        0..=3 => height.max(1),
+        4 => 3,
+        _ => height - 2,
     }
 }
 
@@ -322,6 +335,7 @@ fn describe_panel(context: Context, action: Action) -> Option<String> {
         Action::JumpBack => fl!("help-jump-back"),
         Action::JumpForward => fl!("help-jump-forward"),
         Action::VisualMode => fl!("help-visual"),
+        Action::VisualLineMode => fl!("help-visual-line"),
         Action::Reselect => fl!("help-reselect"),
         Action::OtherEnd => fl!("help-other-end"),
         Action::NormalMode => fl!("help-visual-end"),
@@ -503,6 +517,8 @@ fn describe_rows(context: Context, action: Action) -> Option<String> {
         Action::Down if rows => fl!("help-row-down"),
         Action::PageUp if rows => fl!("help-page-up"),
         Action::PageDown if rows => fl!("help-page-down"),
+        Action::WindowUp if rows => fl!("help-window-up"),
+        Action::WindowDown if rows => fl!("help-window-down"),
         Action::HalfPageUp if rows => fl!("help-half-page-up"),
         Action::HalfPageDown if rows => fl!("help-half-page-down"),
         _ => return None,
@@ -624,6 +640,11 @@ mod tests {
     }
 
     #[test]
+    fn ctrl_f_keeps_two_rows_on_screen_as_vims_and_space_turns_a_whole_page_as_less() {
+        assert_eq!([1, 3, 4, 5, 23].map(page_less_overlap), [1, 3, 3, 3, 21]);
+    }
+
+    #[test]
     fn lists_what_the_app_can_do_by_mode_and_context() {
         let help = Help::new(&Keymap::default(), true);
         let has = |keys: &str, text: &str| {
@@ -686,7 +707,7 @@ mod tests {
             ]
         );
         // The help's own keys, which scroll it as less does.
-        assert!(has("Space, f", "One page down"));
+        assert!(has("Space, f", "A whole page down, as less's Space and f"));
         assert_eq!(
             help.entries.last(),
             Some(&Entry::Note(fl!("help-note-key-hints")))

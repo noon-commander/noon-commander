@@ -32,7 +32,8 @@ it does not rank items for a program that draws them itself.
 - The code lives in `crates/noc/src/tui/fuzzy.rs`; no other crate needs it.
 - Quick search keeps the order of the listing and puts the cursor on the best match; of
   matches as good, the first from where the cursor is, as mc goes from there. Ctrl+s goes to
-  the next best, round to the best. A character that nothing matches is still dropped.
+  the next best, round to the best. A character that nothing matches is still dropped (no
+  longer: [ADR 0022](0022-vim-modes.md) keeps it, as vim's search does).
 - The location menu keeps its order too, the home directory, the volumes, then the hosts,
   and puts the cursor on the best row. A row's texts (name and mount point; alias, label,
   and address) are matched as one line, as fzf matches the columns of one.
@@ -52,5 +53,6 @@ it does not rank items for a program that draws them itself.
   matches that are as good. `ui.fuzzy_search = false` brings back zoxide's own matching
   ([ADR 0012](0012-external-tools-and-zoxide.md)).
 - Tab completion still completes the start of a name: it inserts what candidates agree on,
-  which only works with a common prefix.
+  which only works with a common prefix (now the first match whole, as vim's: [ADR
+  0022](0022-vim-modes.md)).
 - Matched letters are not highlighted yet.

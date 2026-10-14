@@ -25,6 +25,18 @@ impl Window {
         self.top
     }
 
+    /// Puts back the rows that `saved` showed, as vim's `restore_viewstate`: whether they are
+    /// right for the cursor stays as it is here, as vim keeps its `VALID_TOPLINE`.
+    pub(crate) fn restore(&mut self, saved: Window) {
+        self.top = saved.top;
+    }
+
+    /// Makes the rows right for the cursor again at the next [`follow`](Self::follow), wherever
+    /// it is, as vim's `changed_cline_bef_curs`.
+    pub(crate) fn unsettle(&mut self) {
+        self.settled = None;
+    }
+
     /// Shows the list from its first row again, as a new listing does.
     pub(crate) fn reset(&mut self) {
         *self = Self::default();
@@ -40,13 +52,22 @@ impl Window {
     /// Ctrl+d (`down`) and Ctrl+u: scrolls half a window and moves the cursor as far, as vim's
     /// `pagescroll` with 'scroll' at half the height.
     pub(crate) fn half_page(&mut self, down: bool, cursor: &mut usize, rows: usize, height: usize) {
-        self.with(cursor, rows, height, |w| w.pagescroll(down, true));
+        self.with(cursor, rows, height, |w| w.pagescroll(down, true, 1));
     }
 
-    /// Ctrl+f (`down`) and Ctrl+b: scrolls a window less up to two rows, as vim's `pagescroll`.
-    /// Like vim, Ctrl+f at the end leaves only the last rows at the top.
-    pub(crate) fn page(&mut self, down: bool, cursor: &mut usize, rows: usize, height: usize) {
-        self.with(cursor, rows, height, |w| w.pagescroll(down, false));
+    /// Ctrl+f (`down`) and Ctrl+b: scrolls a window less up to two rows, `pages` times at once,
+    /// as vim's `pagescroll` with a count. Like vim, Ctrl+f at the end leaves only the last rows
+    /// at the top.
+    pub(crate) fn page(
+        &mut self,
+        down: bool,
+        pages: usize,
+        cursor: &mut usize,
+        rows: usize,
+        height: usize,
+    ) {
+        let pages = wide(pages.max(1));
+        self.with(cursor, rows, height, |w| w.pagescroll(down, false, pages));
     }
 
     /// The mouse wheel: scrolls `count` rows and keeps the cursor inside, as vim's
@@ -408,7 +429,7 @@ impl Win {
     }
 
     /// vim's `pagescroll`.
-    fn pagescroll(&mut self, forward: bool, half: bool) {
+    fn pagescroll(&mut self, forward: bool, half: bool, pages: i64) {
         if half {
             let prev = self.cur;
             let curscount = (self.h / 2).max(1);
@@ -429,7 +450,8 @@ impl Win {
             };
         } else {
             let prev_top = self.top;
-            self.scroll_redraw(forward, self.overlap(forward));
+            let count = self.overlap(forward).saturating_mul(pages).min(LIMIT);
+            self.scroll_redraw(forward, count);
             if self.top != prev_top {
                 self.cur = if forward { self.top } else { self.bot() - 1 };
             }
@@ -448,15 +470,15 @@ mod tests {
         let (mut window, mut cursor) = (Window::default(), 0);
         let mut out = Vec::new();
         for key in keys.split(' ') {
-            if let Some((count, wheel)) =
-                key.split_once('^').filter(|(_, k)| ["E", "Y"].contains(k))
-            {
+            if let Some((count, ctrl)) = key.split_once('^') {
                 let count = count.parse().unwrap_or(1);
-                window.scroll(wheel == "E", count, &mut cursor, rows, height);
+                match ctrl {
+                    "E" | "Y" => window.scroll(ctrl == "E", count, &mut cursor, rows, height),
+                    "F" | "B" => window.page(ctrl == "F", count, &mut cursor, rows, height),
+                    _ => window.half_page(ctrl == "D", &mut cursor, rows, height),
+                }
             } else {
                 match key {
-                    "^D" | "^U" => window.half_page(key == "^D", &mut cursor, rows, height),
-                    "^F" | "^B" => window.page(key == "^F", &mut cursor, rows, height),
                     "gg" => cursor = 0,
                     "G" => cursor = rows.saturating_sub(1),
                     _ => {
@@ -512,6 +534,14 @@ mod tests {
     }
 
     #[test]
+    fn a_count_before_ctrl_f_and_ctrl_b_scrolls_that_many_pages_at_once_as_vim() {
+        assert_eq!(replay(81, 23, "G ^F 3^B 3^F"), "80,58 80,80 28,11 79,74");
+        assert_eq!(replay(81, 23, "3^F 2^B"), "68,63 38,21");
+        assert_eq!(replay(81, 23, "40G 3^F 5^B"), "39,28 80,80 17,0");
+        assert_eq!(replay(30, 10, "2^F 2^F 2^B"), "20,16 29,29 13,9");
+    }
+
+    #[test]
     fn ctrl_b_goes_back_a_window_less_two_rows() {
         assert_eq!(replay(100, 10, "^F ^F ^B"), "12,8 20,16 12,8");
     }
@@ -541,7 +571,7 @@ mod tests {
         );
         let (mut window, mut cursor) = (Window::default(), usize::MAX);
         window.follow(&mut cursor, usize::MAX, 0);
-        window.page(true, &mut cursor, usize::MAX, usize::MAX);
+        window.page(true, usize::MAX, &mut cursor, usize::MAX, usize::MAX);
         window.half_page(true, &mut cursor, 3, usize::MAX);
         window.scroll(true, usize::MAX, &mut cursor, usize::MAX, 40);
         window.follow(&mut cursor, 3, 0);

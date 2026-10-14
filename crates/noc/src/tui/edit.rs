@@ -810,6 +810,14 @@ impl Editor {
         if let Some(motion) = self.motion(action, count, extra.char, None) {
             self.cursor = motion.to;
             self.clamp();
+            // After Ctrl+o, vim's `$` puts the cursor after the end of the line, where the
+            // insert then starts, so that Ctrl+w and Ctrl+u go on from there.
+            if action == Action::TextEnd
+                && self.cursor < motion.to
+                && let Some(once) = &mut self.once
+            {
+                once.after = true;
+            }
             return true;
         }
         if is_motion(action) {
@@ -1172,15 +1180,21 @@ impl Editor {
             self.operate_on_nothing(operator, range.start, false, register, registers);
             return;
         }
-        let taken: String = self.chars()[range.clone()].iter().collect();
-        registers.keep(
-            register,
-            Register {
-                text: taken,
-                lines: false,
-            },
-            operator != Operator::Yank,
-        );
+        let text: String = self.chars()[range.clone()].iter().collect();
+        let taken = Register { text, lines: false };
+        self.operate_taking(operator, range, register, taken, registers);
+    }
+
+    /// Does `operator` on `range`, which is not empty, keeping `taken` in the register.
+    fn operate_taking(
+        &mut self,
+        operator: Operator,
+        range: Range<usize>,
+        register: Option<char>,
+        taken: Register,
+        registers: &mut Registers,
+    ) {
+        registers.keep(register, taken, operator != Operator::Yank);
         // Undo puts the cursor back where the change starts.
         self.cursor = range.start;
         match operator {
@@ -1272,6 +1286,19 @@ impl Editor {
                 operator, register, ..
             } = pending;
             self.operate_on_nothing(operator, range.start, inclusive, register, registers);
+            return;
+        }
+        // Backspace onto the line break before a line, then on to the start of the line above,
+        // takes the lines' text but puts it in the register as lines, as vim's `op_yank` does
+        // with an exclusive motion from the start of one line to the start of another.
+        let as_lines = motion.keep_end
+            && !motion.inclusive
+            && chars[range.end - 1] == '\n'
+            && line_bounds(&chars, range.start).0 == range.start;
+        if as_lines {
+            let text: String = chars[range.start..range.end - 1].iter().collect();
+            let taken = Register { text, lines: true };
+            self.operate_taking(pending.operator, range, pending.register, taken, registers);
             return;
         }
         self.operate(pending.operator, range, pending.register, registers);
@@ -3186,6 +3213,37 @@ mod tests {
     }
 
     #[test]
+    fn after_ctrl_o_dollar_ctrl_w_and_ctrl_u_go_on_from_the_end_as_vims() {
+        let mut registers = Registers::default();
+        let after = |start: Action, end: Action, keys: &[Action]| {
+            let mut editor = at("foo bar baz", 0);
+            let mut registers = Registers::default();
+            for &action in [start, Action::NormalOnce, end].iter().chain(keys) {
+                press(&mut editor, &mut registers, action);
+            }
+            editor.text().to_owned()
+        };
+        // vim's `$` after Ctrl+o puts the cursor after the end, where the insert starts.
+        let (append, insert) = (Action::AppendAtEnd, Action::InsertMode);
+        assert_eq!(
+            after(append, Action::TextEnd, &[Action::DeleteWord]),
+            "foo bar "
+        );
+        assert_eq!(
+            after(insert, Action::TextEnd, &[Action::DeleteWord]),
+            "foo bar "
+        );
+        assert_eq!(after(append, Action::TextEnd, &[Action::DeleteToStart]), "");
+        let twice = [Action::DeleteWord, Action::DeleteWord];
+        assert_eq!(after(insert, Action::TextEnd, &twice), "foo ");
+        // A `$` that fails leaves it before the last character, as the end of the line does.
+        let mut editor = after_ctrl_o("foo bar baz");
+        run(&mut editor, &mut registers, &[counted(Action::TextEnd, 2)]);
+        run(&mut editor, &mut registers, &[plain(Action::DeleteWord)]);
+        assert_eq!(editor.text(), "foo bar ba");
+    }
+
+    #[test]
     fn after_ctrl_o_0_and_home_go_on_before_the_last_character_as_vim() {
         let mut registers = Registers::default();
         for (text, key) in [
@@ -3854,6 +3912,36 @@ mod tests {
                 text: String::new(),
                 lines: true,
             })
+        );
+    }
+
+    #[test]
+    fn backspace_from_the_start_of_a_line_to_the_start_of_another_keeps_lines_as_vims_yank() {
+        let lines = |text: &str, cursor: usize, keys: &[(Action, Extra)]| {
+            let mut editor = at(text, 0).with_lines();
+            editor.set_cursor(cursor);
+            let mut registers = Registers::default();
+            run(&mut editor, &mut registers, keys);
+            let register = registers.get(None).map(|r| (r.text.clone(), r.lines));
+            (editor.text().to_owned(), register)
+        };
+        let line = |text: &str| Some((text.to_owned(), true));
+        let chars = |text: &str| Some((text.to_owned(), false));
+        let d = plain(Action::DeleteOperator);
+        let back = |n| counted(Action::CharBackward, n);
+        assert_eq!(lines("x\ny", 2, &[d, back(2)]), ("y".to_owned(), line("x")));
+        assert_eq!(
+            lines("x\n\ny", 3, &[d, back(3)]),
+            ("y".to_owned(), line("x\n"))
+        );
+        // From within the line above, or onto its line break only, the characters.
+        assert_eq!(
+            lines("ab\ncd", 3, &[d, back(2)]),
+            ("acd".to_owned(), chars("b\n"))
+        );
+        assert_eq!(
+            lines("x\ny", 2, &[d, back(1)]),
+            ("xy".to_owned(), chars("\n"))
         );
     }
 

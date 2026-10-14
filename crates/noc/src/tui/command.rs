@@ -382,9 +382,12 @@ impl CommandLine {
                 }
                 // After `$`, and a count before `v` that took the ends of lines, `j` and `k` go
                 // to the ends of the lines. `v` that moves nothing, or ends Visual mode, keeps
-                // the column, as vim's curswant, where Esc does not.
+                // the column, as vim's curswant, where Esc does not; so does Ctrl+o, which
+                // goes on from the command before it.
                 let waits = self.editor.pending().is_some();
-                if fails || waits || (action == Action::VisualMode && extra.count.is_none()) {
+                let keeps = matches!(action, Action::NormalOnce)
+                    || (action == Action::VisualMode && extra.count.is_none());
+                if fails || waits || keeps {
                     self.column = column;
                 } else if self.editor.end_wanted() {
                     self.column = Some(usize::MAX);
@@ -859,9 +862,9 @@ mod tests {
 
     #[test]
     fn after_ctrl_o_at_the_end_of_a_line_j_and_k_keep_its_end() {
-        let mut line = shell("abcd\nefghij");
+        let mut line = shell("abc\nefghij");
         press(&mut line, Action::Up);
-        press(&mut line, Action::TextEnd);
+        line.handle(Resolved::Insert('d'));
         press(&mut line, Action::NormalOnce);
         press(&mut line, Action::Down);
         assert_eq!(
@@ -869,6 +872,13 @@ mod tests {
             (Mode::Insert, 9),
             "efgh|ij"
         );
+        // End wants the end of every line, as vim's.
+        let mut line = shell("abcd\nefghij");
+        press(&mut line, Action::Up);
+        press(&mut line, Action::TextEnd);
+        press(&mut line, Action::NormalOnce);
+        press(&mut line, Action::Down);
+        assert_eq!(line.editor.cursor(), 11, "efghij|");
         let mut line = shell("abcdef\nab");
         press(&mut line, Action::Up);
         press(&mut line, Action::TextEnd);
@@ -898,6 +908,31 @@ mod tests {
             6,
             "a + that moves takes the column it goes to"
         );
+    }
+
+    #[test]
+    fn ctrl_o_after_ctrl_o_keeps_the_column_of_j_and_k_as_vims() {
+        let mut line = shell("abcdef\nab\nabcdef");
+        press(&mut line, Action::Up);
+        press(&mut line, Action::Up);
+        press(&mut line, Action::TextEnd);
+        for _ in 0..2 {
+            press(&mut line, Action::NormalOnce);
+            press(&mut line, Action::Down);
+        }
+        assert_eq!(
+            (line.mode(), line.editor.cursor()),
+            (Mode::Insert, 16),
+            "after abcdef"
+        );
+        let mut line = shell("foo bar baz\nqux");
+        press(&mut line, Action::Up);
+        press(&mut line, Action::TextEnd);
+        press(&mut line, Action::NormalOnce);
+        press(&mut line, Action::Down);
+        press(&mut line, Action::NormalOnce);
+        press(&mut line, Action::Up);
+        assert_eq!(line.editor.cursor(), 11, "after baz");
     }
 
     #[test]

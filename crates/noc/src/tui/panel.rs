@@ -976,7 +976,9 @@ impl Panel {
         let jumped = match found {
             Some((row, _)) if fuzzy => row != search.origin,
             Some(_) => true,
-            None => search.origin != start,
+            // As vim's, which compares the positions with their columns: after Ctrl+g or Ctrl+t,
+            // where it searches from may be within the row it started on.
+            None => search.from != 2 * search.origin + 1,
         };
         if jumped {
             let origin = self.spot(search.origin);

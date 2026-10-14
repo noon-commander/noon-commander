@@ -154,8 +154,9 @@
 - [ ] `p` in Visual mode puts in place of the selection; `Y` yanks the line, as vim's `y y`
 - [ ] A count repeats what `i`, `a`, `I`, and `A` type (`3ix` Esc)
 - [ ] The lines of the command line in Normal mode: `o`, `O`, `J`, `g g`, `G`, `d j`, `d k`, `V`,
-      and `r` Enter; a put of lines within a line leaves the cursor at their start, and Ctrl+r of
-      whole lines ends them with a line break
+      `r` Enter, and Ctrl+d and Ctrl+u, which scroll in vim's window of the command line; a put of
+      lines within a line leaves the cursor at their start, and Ctrl+r of whole lines ends them with
+      a line break
 - [ ] The command line shows its mode and the command typed, as vim's window of the command
       line does: Normal and Visual mode after Ctrl+f, an operator or a register that waits
       (`2d`, `"a`), and `-- (insert) --` after Ctrl+o

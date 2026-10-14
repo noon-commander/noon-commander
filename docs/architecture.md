@@ -1037,20 +1037,21 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   to the next up, after `?` too, as in vim. The arrows, the page keys, and the F-keys of the panel
   end the search and do what they do, as in mc; Shift+F7 goes to the next match. While it runs,
   every character is text, even one that a panel binds, such as `*`. A search that finds a match
-  puts where it started in the jump list, as vim's. The app keeps what the last search found,
-  whichever panel it ran in, as vim keeps its last pattern: `n` and `N` (and Shift+F7, mc's and
-  Far's key to search again) go to the next and the previous name that matches it, round, the way it
-  went and the other way, so up after `?`, and Ctrl+g with nothing typed yet searches for it again,
-  as mc's Ctrl+s Ctrl+s does. As vim's, they say when they go round past the last row or the first
-  ("search hit BOTTOM, continuing at TOP"), when nothing matches ("Pattern not found: name"), and
-  that there was no search before, on the line of the mode until the next key; so does Enter in
-  quick search, when its last search went round (a count can take it round too; after Ctrl+g or
-  Ctrl+t it does not), but in fuzzy search, which ranks the rows rather than go down them. Long
-  names lose their middle, marked with `~`. Names are shown terminal-safe: control and bidi
-  characters become `?`. Listings run in background tasks; a reply carries the generation of its
-  request, so a stale one is dropped. If a directory cannot be read, the panel stays where it was
-  and says why below the listing. Going up puts the cursor on the directory just left. A panel shows
-  a [`Location`](#locations), always a directory.
+  puts where it started in the jump list, as vim's, and so does one that finds none after Ctrl+g or
+  Ctrl+t moved where it searches from. The app keeps what the last search found, whichever panel it
+  ran in, as vim keeps its last pattern: `n` and `N` (and Shift+F7, mc's and Far's key to search
+  again) go to the next and the previous name that matches it, round, the way it went and the other
+  way, so up after `?`, and Ctrl+g with nothing typed yet searches for it again, as mc's Ctrl+s
+  Ctrl+s does. As vim's, they say when they go round past the last row or the first ("search hit
+  BOTTOM, continuing at TOP"), when nothing matches ("Pattern not found: name"), and that there was
+  no search before, on the line of the mode until the next key; so does Enter in quick search, when
+  its last search went round (a count can take it round too; after Ctrl+g or Ctrl+t it does not),
+  but in fuzzy search, which ranks the rows rather than go down them. Long names lose their middle,
+  marked with `~`. Names are shown terminal-safe: control and bidi characters become `?`. Listings
+  run in background tasks; a reply carries the generation of its request, so a stale one is dropped.
+  If a directory cannot be read, the panel stays where it was and says why below the listing. Going
+  up puts the cursor on the directory just left. A panel shows a [`Location`](#locations), always a
+  directory.
 - <a id="command-line-of--and-"></a>**Command line of `!` and `:`** ([ADR
   0019](adr/0019-shell-command-line.md)). In a local panel, `!` opens a line above the F-key bar for
   a shell command, after a prompt with the panel's directory (`~` for home, its middle cut past a
@@ -1065,46 +1066,46 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   operators, registers, and undo edit the command there, Esc then leaves Insert mode, as in that
   window, rather than close the line, and Ctrl+c and F10 close it in any mode; `j` and `k` go
   through its lines, in the column of the first of them, or after `v` ended Visual mode, or after
-  the end of the line where Ctrl+o left Insert mode, or at the ends after `$`, as vim's `curswant`,
-  and then the history, which goes on from the command an undo brings back (in Visual mode only its
-  lines), and `q :` opens the window of the history. Enter hands the command to the event loop,
-  which suspends the TUI as for F4 and runs it with `noc-tools`' `Shell`: `$SHELL -c <command>`
-  (`/bin/sh` without `$SHELL`) in the panel's directory, the command in one argument as typed. On a
-  host, the host's task builds the ssh command from its session (`Session::command_in`) and the
-  event loop runs it with the terminal: over the master, with `cd -- '<dir>' || exit` before the
-  command. `tui/output.rs` shows the command after its prompt first, bold, and afterwards ends its
-  output on a line of its own as zsh does (a dim `⏎`, spaces to the last column, `\r`, a cleared
-  line); then a line in reverse video asks for a key, with the exit status of a failure, unless
-  `shell.pause` says not to wait, and after the key `[exit N]` takes its place for a command that
-  failed. The event loop then takes the terminal back; both panels read their directories again, as
-  in mc. Esc, Ctrl+c, or F10 closes the line, as on vim's command line, in Insert mode and in Normal
-  mode; Backspace on an empty line does not. `g <`, a `global` key, as vim shows the output of its
-  last command, hands the terminal over without a program wherever it is pressed but in Insert mode:
-  its own screen shows, with the output of the commands, until a key that the `user_screen` context
-  binds to Cancel (`g <`, Enter, `q`, Esc), and then whatever was in front, a dialog, a menu, the
-  viewer, or the line, is there again as it was. Shift+Enter starts a new line too where the
-  terminal speaks the kitty keyboard protocol: at start the event loop asks for it with
-  `supports_keyboard_enhancement` (in `spawn_blocking`, before the stream of events takes
-  crossterm's reader) and then pushes `DISAMBIGUATE_ESCAPE_CODES` and `REPORT_ALTERNATE_KEYS`, so
-  that Alt with a symbol typed with Shift, such as Alt++, arrives as that symbol (Ctrl+[, Ctrl+m,
-  and Ctrl+i then arrive apart from Esc, Enter, and Tab, so the keymap binds them wherever it binds
-  those); it pops them, and turns bracketed paste off, whenever another program gets the terminal,
-  on exit, and on a panic. With bracketed paste a paste arrives as one event: the command line takes
-  it whole, line breaks included, and runs nothing; text fields, quick search, and the menus'
-  filters take its characters without line breaks; panels, the pull-down menu, dialogs' buttons, and
-  the viewer ignore it. Each command that ran, unless it starts with a space, goes to `history.toml`
-  in the state directory with its host (the alias; none for a local one), directory, and time:
-  `noc-config`'s `add_command` reads the file again, replaces the same command on the same host,
-  keeps the newest `shell.history_size`, and writes it whole and atomically, mode 0600; one task
-  makes the changes in turn, and the app keeps the commands in memory. Up on the first line of a
-  command, or Ctrl+p, goes back through the commands of the panel's host, and Down on the last line,
-  or Ctrl+n, forward to what was typed, as on vim's command line; the line of `:` shows them after
-  `!`, which runs them. `q :` in a panel, or on the line in Normal mode, opens the window of the
-  history (`tui/history.rs`), one of the [lists](#lists): the commands of the panel's host, or of
-  all of them after Tab, newest first, filtered as quick search matches, each with its host's label
-  or alias, its directory, and its first line, and the whole command under the cursor below; Enter
-  puts it on the line, with the prompt reversed until the next key if it ran on another host, and `d
-  d` or F8 removes it.
+  the end of the line where Ctrl+o left Insert mode, or at the ends after `$` and End, as vim's
+  `curswant`, which the next Ctrl+o keeps, and then the history, which goes on from the command an
+  undo brings back (in Visual mode only its lines), and `q :` opens the window of the history. Enter
+  hands the command to the event loop, which suspends the TUI as for F4 and runs it with
+  `noc-tools`' `Shell`: `$SHELL -c <command>` (`/bin/sh` without `$SHELL`) in the panel's directory,
+  the command in one argument as typed. On a host, the host's task builds the ssh command from its
+  session (`Session::command_in`) and the event loop runs it with the terminal: over the master,
+  with `cd -- '<dir>' || exit` before the command. `tui/output.rs` shows the command after its
+  prompt first, bold, and afterwards ends its output on a line of its own as zsh does (a dim `⏎`,
+  spaces to the last column, `\r`, a cleared line); then a line in reverse video asks for a key,
+  with the exit status of a failure, unless `shell.pause` says not to wait, and after the key `[exit
+  N]` takes its place for a command that failed. The event loop then takes the terminal back; both
+  panels read their directories again, as in mc. Esc, Ctrl+c, or F10 closes the line, as on vim's
+  command line, in Insert mode and in Normal mode; Backspace on an empty line does not. `g <`, a
+  `global` key, as vim shows the output of its last command, hands the terminal over without a
+  program wherever it is pressed but in Insert mode: its own screen shows, with the output of the
+  commands, until a key that the `user_screen` context binds to Cancel (`g <`, Enter, `q`, Esc), and
+  then whatever was in front, a dialog, a menu, the viewer, or the line, is there again as it was.
+  Shift+Enter starts a new line too where the terminal speaks the kitty keyboard protocol: at start
+  the event loop asks for it with `supports_keyboard_enhancement` (in `spawn_blocking`, before the
+  stream of events takes crossterm's reader) and then pushes `DISAMBIGUATE_ESCAPE_CODES` and
+  `REPORT_ALTERNATE_KEYS`, so that Alt with a symbol typed with Shift, such as Alt++, arrives as
+  that symbol (Ctrl+[, Ctrl+m, and Ctrl+i then arrive apart from Esc, Enter, and Tab, so the keymap
+  binds them wherever it binds those); it pops them, and turns bracketed paste off, whenever another
+  program gets the terminal, on exit, and on a panic. With bracketed paste a paste arrives as one
+  event: the command line takes it whole, line breaks included, and runs nothing; text fields, quick
+  search, and the menus' filters take its characters without line breaks; panels, the pull-down
+  menu, dialogs' buttons, and the viewer ignore it. Each command that ran, unless it starts with a
+  space, goes to `history.toml` in the state directory with its host (the alias; none for a local
+  one), directory, and time: `noc-config`'s `add_command` reads the file again, replaces the same
+  command on the same host, keeps the newest `shell.history_size`, and writes it whole and
+  atomically, mode 0600; one task makes the changes in turn, and the app keeps the commands in
+  memory. Up on the first line of a command, or Ctrl+p, goes back through the commands of the
+  panel's host, and Down on the last line, or Ctrl+n, forward to what was typed, as on vim's command
+  line; the line of `:` shows them after `!`, which runs them. `q :` in a panel, or on the line in
+  Normal mode, opens the window of the history (`tui/history.rs`), one of the [lists](#lists): the
+  commands of the panel's host, or of all of them after Tab, newest first, filtered as quick search
+  matches, each with its host's label or alias, its directory, and its first line, and the whole
+  command under the cursor below; Enter puts it on the line, with the prompt reversed until the next
+  key if it ran on another host, and `d d` or F8 removes it.
 - **Keymap.** The keymap is vim's, in its modes, with mc's F-keys ([ADR
   0022](adr/0022-vim-modes.md)): one preset, `tui/keymap/preset.rs`, maps keys to `Action`s per mode
   (`Mode::Normal`, `Insert`, `Visual`) and context (`global`, `panel`, `input`, `quick_search`,
@@ -1191,32 +1192,34 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   give them: an exclusive motion that ends at the start of a line ends at the end of the line
   before, or takes the lines whole from the indent (`:help exclusive`, so `d w` on an empty line
   takes it), and a delete over lines from the indent to the end of a line takes them whole (`:help
-  d`, as `d 2 $`). A count repeats a motion or a change, and multiplies with the count of an
-  operator (`2d3w`); it stops where the motion can go no further. Undo takes back one change at a
-  time, and all that one stay in Insert mode typed, a change of an operator `c` with it, and, as in
-  vim, a change that changes nothing (`x` on an empty line, `d 0` at its start, Delete at the end in
-  Insert mode, `C` on an empty line) is one too, so that `u` after it takes back nothing to see; but
-  after `d d` deleted the only line, vim's `ML_EMPTY`, deletes are no change at all. It keeps 1000,
-  and undo and redo leave the cursor where the change starts, as vim's do, on its line and in its
-  column (after `d b` at the start of the word deleted; after `d d`, `c c`, and `S` of one line on
-  its first character that is not blank, if the cursor was after it, as 'startofline' moves it
-  first; from a line that is gone, on the first character of the last one that is not blank). The
-  registers (`edit::Registers`) live in the app, which every field and the command line share: the
-  unnamed one, which every yank and delete fills, a yank of nothing and `C` on an empty line with
-  nothing, as vim's, but not a delete after `d d` deleted the only line, and `a` … `z`, of which `A`
-  … `Z` append; `_` keeps nothing. `"` names one in `global`, wherever keys are commands, so that
-  the name never runs as a command; after an operator that waits, as in vim, `"` gives it up and
-  names none, and the key after it is a command of its own (the app tells the keymap,
-  `KeyState::set_operator`). None reads or writes the system clipboard. Pasted text is one change,
-  as vim puts it: at the cursor in Insert mode; in Normal mode as if typed in Insert mode, then Esc,
-  so before the cursor at the start of a line and after it elsewhere, with the cursor on its last
-  character; and in place of the selection in Visual mode, which goes to the unnamed register. After
-  Ctrl+o, Normal mode stays after it, and an operator that waits is given up, and the paste with it,
-  as in vim. What a delete appends to a register (`"Ad w`), the unnamed register keeps alone, as
-  vim's register 1, which it reads then. A field holds one line, and a line put in it becomes text,
-  its breaks spaces; the command line holds lines, and `d d`, `y y`, and `p` take and put them
-  whole. A secret field stays in Insert mode, keeps no undo, and never copies its text into a
-  register; what reads its text reads it into memory reserved up front and wiped when it goes.
+  d`, as `d 2 $`); Backspace from the start of a line to the start of a line above deletes the
+  characters but keeps lines in the register, as vim's `op_yank`. A count repeats a motion or a
+  change, and multiplies with the count of an operator (`2d3w`); it stops where the motion can go no
+  further. Undo takes back one change at a time, and all that one stay in Insert mode typed, a
+  change of an operator `c` with it, and, as in vim, a change that changes nothing (`x` on an empty
+  line, `d 0` at its start, Delete at the end in Insert mode, `C` on an empty line) is one too, so
+  that `u` after it takes back nothing to see; but after `d d` deleted the only line, vim's
+  `ML_EMPTY`, deletes are no change at all. It keeps 1000, and undo and redo leave the cursor where
+  the change starts, as vim's do, on its line and in its column (after `d b` at the start of the
+  word deleted; after `d d`, `c c`, and `S` of one line on its first character that is not blank, if
+  the cursor was after it, as 'startofline' moves it first; from a line that is gone, on the first
+  character of the last one that is not blank). The registers (`edit::Registers`) live in the app,
+  which every field and the command line share: the unnamed one, which every yank and delete fills,
+  a yank of nothing and `C` on an empty line with nothing, as vim's, but not a delete after `d d`
+  deleted the only line, and `a` … `z`, of which `A` … `Z` append; `_` keeps nothing. `"` names one
+  in `global`, wherever keys are commands, so that the name never runs as a command; after an
+  operator that waits, as in vim, `"` gives it up and names none, and the key after it is a command
+  of its own (the app tells the keymap, `KeyState::set_operator`). None reads or writes the system
+  clipboard. Pasted text is one change, as vim puts it: at the cursor in Insert mode; in Normal mode
+  as if typed in Insert mode, then Esc, so before the cursor at the start of a line and after it
+  elsewhere, with the cursor on its last character; and in place of the selection in Visual mode,
+  which goes to the unnamed register. After Ctrl+o, Normal mode stays after it, and an operator that
+  waits is given up, and the paste with it, as in vim. What a delete appends to a register (`"Ad
+  w`), the unnamed register keeps alone, as vim's register 1, which it reads then. A field holds one
+  line, and a line put in it becomes text, its breaks spaces; the command line holds lines, and `d
+  d`, `y y`, and `p` take and put them whole. A secret field stays in Insert mode, keeps no undo,
+  and never copies its text into a register; what reads its text reads it into memory reserved up
+  front and wiped when it goes.
 - **Key hints.** As which-key does, the keymap lists the keys that can follow a pending sequence, or
   every key of a context, with what the help says they do (`Keymap::hints`, drawn by
   `tui/which_key.rs` in columns across the bottom of the panels). The event loop owns the

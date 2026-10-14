@@ -8,12 +8,14 @@ named `noon-commander`; `noc` is the binary inside them.
 | --- | --- |
 | `homebrew/noon-commander.rb.in` | The Homebrew formula, rendered into `Formula/noon-commander.rb` of the tap |
 | `tarball/README.md` | The README of the release tarball, for users rather than contributors |
+| `release-notes.sh` | Prints a version's section of `CHANGELOG.md` as the notes of its release |
 
 ## Making a release
 
 1. Set `version` in the root `Cargo.toml`.
 2. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and start a new,
-   empty `## [Unreleased]` above it.
+   empty `## [Unreleased]` above it. `just release-notes X.Y.Z` prints the notes the release
+   will get: the section with its wrapped lines joined, since GitHub breaks lines where they do.
 3. Commit, tag, and push, after a question:
 
    ```sh

@@ -1331,7 +1331,8 @@ draft ──► build (aarch64, x86_64 macOS) ────┴──► publish �
 ```
 
 - `draft` checks the tag against `Cargo.toml` and its signature, takes the notes from
-  `CHANGELOG.md`, and creates a draft release.
+  `CHANGELOG.md` with `packaging/release-notes.sh`, which joins its wrapped lines, and creates
+  a draft release.
 - `build` compiles `noc` for each target without a cache, packs
   `noon-commander-X.Y.Z-<target>.tar.gz`, attests its build provenance, and uploads it.
 - `publish` verifies the tarballs' attestations and publishes the draft once CI and every

@@ -60,6 +60,10 @@ release-tag version:
     git tag -s "v$version" -m "Noon Commander $version"
     git push --atomic origin HEAD "v$version"
 
+# Print the release notes of a version, as release.yml takes them from CHANGELOG.md
+release-notes version:
+    @packaging/release-notes.sh {{ quote(version) }}
+
 # Run noc from the sources; arguments go to noc
 run *args:
     cargo run -p noc -- {{ args }}

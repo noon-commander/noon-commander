@@ -65,18 +65,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     after the end of a line on its last character, and back after the text that p and P put or the
     end of the line that it deleted to, but before the character that 0, ^, and Home go to, as
     vim's, and then the first Ctrl+w or Ctrl+u deletes only the last character, as in vim, but after
-    $ and End, which leave the cursor after the end; Ctrl+v types the next key as it is, and Alt and
-    a key stand for Esc and the key, as in vim in a terminal; on a password they do nothing. As
-    vim's, Ctrl+w and Ctrl+u stop once where Insert mode started, after a move of the cursor too,
-    which starts a new change for undo, as Home and End do where the cursor is already, and so does
-    Ctrl+u, which vim's defaults.vim maps after Ctrl+g u, but not Ctrl+w; a change that changes
-    nothing, such as x on an empty line, is one for undo too, and a yank of nothing empties the
-    register, and d w on an empty line deletes it whole, as in vim; undo and redo leave the cursor
-    where the change starts, on its line and in its column, and after d d, c c, and S on the first
-    character that is not blank, as 'startofline' has it. On the command line, Space and Backspace
-    go on to the next line and back, and operators over lines follow vim's rules: d b at the start
-    of a line keeps its line break, and d 2 $ from the indent deletes the lines whole, and Backspace
-    from the start of a line to the start of one above keeps lines in the register.
+    $, End, and Backspace onto the line above, which leave the cursor after the end; Ctrl+v types
+    the next character or Tab as it is, but no other control key, and Alt and a key stand for Esc
+    and the key, as in vim in a terminal; on a password they do nothing. As vim's, Ctrl+w and Ctrl+u
+    stop once where Insert mode started, after a move of the cursor too, which starts a new change
+    for undo, as Home and End do where the cursor is already, and so does Ctrl+u, which vim's
+    defaults.vim maps after Ctrl+g u, but not Ctrl+w; a change that changes nothing, such as x on an
+    empty line, is one for undo too, and a yank of nothing empties the register, and d w on an empty
+    line deletes it whole, as in vim; undo and redo leave the cursor where the change starts, on its
+    line and in its column, and after d d, c c, and S on the first character that is not blank, as
+    'startofline' has it. On the command line, Space and Backspace go on to the next line and back,
+    and operators over lines follow vim's rules: d b at the start of a line keeps its line break,
+    and d 2 $ from the indent deletes the lines whole, and Backspace from the start of a line to the
+    start of one above keeps lines in the register.
   - The command line is vim's: Esc closes it, Ctrl+b and Ctrl+e go to the ends of the line, Tab
     completes the word before the cursor as vim's :! does (the first word as a command of $PATH, or
     with a / as a program or a directory, the others as files, escaped for the shell; on a host, its

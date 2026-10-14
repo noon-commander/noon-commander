@@ -1152,29 +1152,33 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 - **Text fields.** A text field (`dialog::Field`, and the command line) holds a `tui/edit.rs`
   `Editor`: the text, the cursor, and vim's modes over it. In Insert mode characters go in at the
   cursor, and Left, Right, Home, End, Shift+Left, Shift+Right, Backspace, Delete, Ctrl+w, Ctrl+u,
-  Ctrl+r and a register, and Ctrl+v edit around it. As vim's 'backspace' has them, Ctrl+w and Ctrl+u
-  stop once where Insert mode started, but on the command line, whose keys are those of vim's, and
-  at the start of a line join it to the line above; a move of the cursor, Ctrl+u, and the focus
-  coming back start a new change for undo, and a new insert at the next change, as vim's `Insstart`
-  and `Insstart_orig`, and so do Home and End where the cursor is already, as vim's `start_arrow`:
-  right after a move, Ctrl+w and Ctrl+u still stop where the insert started, and after a move to the
-  right with something typed, or after Ctrl+u, they keep stopping there. Ctrl+u is a change of its
-  own because vim's `defaults.vim` maps it after Ctrl+g u; Ctrl+w, which it does not map, deletes
-  within the change, as in vim. On the command line, in quick search, and in the filters, as on
-  vim's command line, Delete at the end deletes the character before, and Shift and Ctrl with Left
-  and Right go by what spaces part, Right on to the space after. Ctrl+o, in the fields that have a
-  Normal mode, runs one command of it, after which, or after Esc, Insert mode is back; from after
-  the end of a line the command starts on its last character, and the cursor goes back after it if
-  it is still there, as in vim, and so after a command that deletes to the end of the line and after
-  the text that `p` and `P` put, but not after `0`, `^`, and Home, which vim's `ins_at_eol` leaves
-  before the character they go to, even the last; Insert mode then starts on that last character,
-  before the cursor goes past it, so the first Ctrl+w or Ctrl+u deletes only it, as vim's `Insstart`
-  is set. A key that is not the field's, such as `j` to the next field of a dialog, or Ctrl+l, is
-  that one command too. Esc goes to Normal mode, with the cursor on the character before it. Normal
-  mode has vim's motions (`h`, `l`, `w`, `b`, `e`, `W`, `B`, `E`, `0`, `^`, `$`, `f`, `t`, `F`, `T`,
-  `;`, `,`, and `-`, `+`, and `_`, which go to the first character that is not blank of the line
-  above, below, or this one, and take lines whole after an operator, so `d _` is `d d`), the
-  operators `d`, `c`, and `y` on a motion or doubled for the line, `x`, `X`, `s`, `S`, `C`, `D`,
+  Ctrl+r and a register, and Ctrl+v edit around it. Ctrl+v types the next character, or Tab, as it
+  is; unlike vim's, it gives up on any other control key, so that no control character gets into a
+  name or a command. As vim's 'backspace' has them, Ctrl+w and Ctrl+u stop once where Insert mode
+  started, but on the command line, whose keys are those of vim's, and at the start of a line join
+  it to the line above; a move of the cursor, Ctrl+u, and the focus coming back start a new change
+  for undo, and a new insert at the next change, as vim's `Insstart` and `Insstart_orig`, and so do
+  Home and End where the cursor is already, as vim's `start_arrow`: right after a move, Ctrl+w and
+  Ctrl+u still stop where the insert started, and after a move to the right with something typed, or
+  after Ctrl+u, they keep stopping there. Ctrl+u is a change of its own because vim's `defaults.vim`
+  maps it after Ctrl+g u; Ctrl+w, which it does not map, deletes within the change, as in vim. On
+  the command line, in quick search, and in the filters, as on vim's command line, Delete at the end
+  deletes the character before, and Shift and Ctrl with Left and Right go by what spaces part, Right
+  on to the space after. Ctrl+o, in the fields that have a Normal mode, runs one command of it,
+  after which, or after Esc, Insert mode is back; from after the end of a line the command starts on
+  its last character, and the cursor goes back after it if it is still there, as in vim, and so
+  after a command that deletes to the end of the line and after the text that `p` and `P` put, but
+  not after `0`, `^`, and Home, which vim's `ins_at_eol` leaves before the character they go to,
+  even the last; Insert mode then starts on that last character, before the cursor goes past it, so
+  the first Ctrl+w or Ctrl+u deletes only it, as vim's `Insstart` is set. `$`, End, and Backspace
+  onto the line above leave the cursor after the end of the line, as vim's do under `restart_edit`,
+  so Insert mode starts there; and the end of the line is a place for Backspace to stop, as in
+  Visual mode. A key that is not the field's, such as `j` to the next field of a dialog, or Ctrl+l,
+  is that one command too. Esc goes to Normal mode, with the cursor on the character before it.
+  Normal mode has vim's motions (`h`, `l`, `w`, `b`, `e`, `W`, `B`, `E`, `0`, `^`, `$`, `f`, `t`,
+  `F`, `T`, `;`, `,`, and `-`, `+`, and `_`, which go to the first character that is not blank of
+  the line above, below, or this one, and take lines whole after an operator, so `d _` is `d d`),
+  the operators `d`, `c`, and `y` on a motion or doubled for the line, `x`, `X`, `s`, `S`, `C`, `D`,
   `r`, `~`, `p`, `P`, `u`, Ctrl+r, `i`, `a`, `I`, `A`, and `v`, Visual mode, whose motions select
   and whose `d`, `c`, `y`, and `~` act on the selection, and where, as in vim, the cursor can go
   past the last character of a line (`l`, Space, `$`, `w`, `e` at the end, a count before `v`,

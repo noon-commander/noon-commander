@@ -810,9 +810,10 @@ impl Editor {
         if let Some(motion) = self.motion(action, count, extra.char, None) {
             self.cursor = motion.to;
             self.clamp();
-            // After Ctrl+o, vim's `$` puts the cursor after the end of the line, where the
-            // insert then starts, so that Ctrl+w and Ctrl+u go on from there.
-            if action == Action::TextEnd
+            // After Ctrl+o, vim's `$`, and Backspace onto the line above, put the cursor after
+            // the end of the line, where the insert then starts, so that Ctrl+w and Ctrl+u go
+            // on from there.
+            if matches!(action, Action::TextEnd | Action::CharBackward)
                 && self.cursor < motion.to
                 && let Some(once) = &mut self.once
             {
@@ -1072,12 +1073,14 @@ impl Editor {
             Action::CharForward => {
                 Some(char_forward(&chars, self.cursor, count, operator, past_end))
             }
+            // After Ctrl+o, as in Visual mode, vim's Backspace stops after the end of the line
+            // above, and `y` there takes nothing.
             Action::CharBackward => Some(char_backward(
                 &chars,
                 self.cursor,
                 count,
                 operator,
-                past_end,
+                past_end || (operator != Some(Operator::Change) && self.once.is_some()),
             )),
             Action::TextStart => exclusive(start),
             Action::FirstNonBlank => exclusive(line_first_non_blank(&chars, start)),
@@ -1225,7 +1228,10 @@ impl Editor {
         let nothing = Register::default();
         self.cursor = at;
         match operator {
-            Operator::Yank => registers.keep(register, nothing, false),
+            Operator::Yank => {
+                registers.keep(register, nothing, false);
+                self.after_once_at_end();
+            }
             Operator::Delete => {
                 if !inclusive && !self.no_line {
                     self.save_undo();
@@ -3241,6 +3247,31 @@ mod tests {
         run(&mut editor, &mut registers, &[counted(Action::TextEnd, 2)]);
         run(&mut editor, &mut registers, &[plain(Action::DeleteWord)]);
         assert_eq!(editor.text(), "foo bar ba");
+    }
+
+    #[test]
+    fn after_ctrl_o_backspace_stops_after_the_end_of_the_line_above_as_vims() {
+        let typed = |text: &str, cursor: usize, keys: &[(Action, Extra)]| {
+            let mut editor = at(text, 0).with_lines();
+            editor.set_cursor(cursor);
+            let mut registers = Registers::default();
+            run(&mut editor, &mut registers, &[plain(Action::InsertMode)]);
+            run(&mut editor, &mut registers, &[plain(Action::NormalOnce)]);
+            run(&mut editor, &mut registers, keys);
+            editor.insert('Q');
+            let register = registers.get(None).map(|r| r.text.clone());
+            (editor.text().to_owned(), register)
+        };
+        let back = |n| counted(Action::CharBackward, n);
+        assert_eq!(typed("ab cd\nef", 6, &[back(1)]).0, "ab cdQ\nef");
+        // The end of the line counts as a place to stop, as in Visual mode.
+        assert_eq!(typed("ab cd\nef", 6, &[back(3)]).0, "ab Qcd\nef");
+        assert_eq!(typed("ab\ncd\nef", 6, &[back(3)]).0, "ab\nQcd\nef");
+        assert_eq!(typed("ab\n\nef", 4, &[back(2)]).0, "abQ\n\nef");
+        // `y` onto the line above takes nothing, and the insert goes on after the end.
+        let yank = plain(Action::YankOperator);
+        let yanked = typed("ab cd\nef", 6, &[yank, back(1)]);
+        assert_eq!(yanked, ("ab cdQ\nef".to_owned(), Some(String::new())));
     }
 
     #[test]

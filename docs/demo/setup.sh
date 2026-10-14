@@ -34,7 +34,9 @@ if [ -e "$dir" ]; then
     fi
     # Masters of an earlier run that did not quit: the fake ssh keeps its pid in the socket.
     for socket in "$dir"/run/noc/*; do
-        [ -f "$socket" ] && kill "$(cat "$socket")" 2>/dev/null || true
+        if [ -f "$socket" ]; then
+            kill "$(cat "$socket")" 2>/dev/null || true
+        fi
     done
     chmod -R u+w "$dir"
     rm -rf "$dir"

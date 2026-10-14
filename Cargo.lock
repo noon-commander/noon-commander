@@ -1387,7 +1387,7 @@ dependencies = [
 
 [[package]]
 name = "noc"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "color-eyre",
@@ -1422,7 +1422,7 @@ dependencies = [
 
 [[package]]
 name = "noc-config"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "rustix",
  "serde",
@@ -1434,7 +1434,7 @@ dependencies = [
 
 [[package]]
 name = "noc-ops"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "blake3",
  "md-5",
@@ -1449,7 +1449,7 @@ dependencies = [
 
 [[package]]
 name = "noc-ssh"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "getrandom 0.4.3",
  "glob",
@@ -1468,14 +1468,14 @@ dependencies = [
 
 [[package]]
 name = "noc-text"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "unicode-width",
 ]
 
 [[package]]
 name = "noc-tools"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "tempfile",
  "thiserror 2.0.21",
@@ -1484,7 +1484,7 @@ dependencies = [
 
 [[package]]
 name = "noc-vfs"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bytes",
  "futures-util",
@@ -1498,7 +1498,7 @@ dependencies = [
 
 [[package]]
 name = "noc-viewer"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "i18n-embed",
  "i18n-embed-fl",

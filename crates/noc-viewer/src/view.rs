@@ -218,7 +218,7 @@ impl Viewer {
         for screen_row in 0..self.page {
             let y = u16::try_from(screen_row + 1).unwrap_or(u16::MAX);
             let Some(line) = self.lines().get(position.0) else {
-                let end = noc_text::fit(&self.end_text(), self.width, Align::Center);
+                let end = noc_text::rule(&self.end_text(), self.width);
                 let dim = styles.text.add_modifier(Modifier::DIM);
                 frame.render_widget(Line::styled(end, dim), text_row(y));
                 break;
@@ -356,7 +356,7 @@ mod tests {
         assert!(press(Motion::HalfPageUp).contains("6/20"));
         let end = press(Motion::End);
         assert!(end.contains("17/20 End"), "{end}");
-        assert!(end.contains("line 20") && end.contains("— end —"), "{end}");
+        assert!(end.contains("line 20") && end.contains("─ EOF ─"), "{end}");
         for motion in [
             Motion::Down,
             Motion::PageDown,
@@ -385,7 +385,7 @@ mod tests {
         assert_eq!(column(&end, 5), Some('█'), "{end}");
         viewer.handle(Command::Scroll(Motion::Up));
         let last = draw(&mut viewer, 20, 6);
-        assert!(last.contains("100%") && !last.contains("— end —"), "{last}");
+        assert!(last.contains("100%") && !last.contains("EOF"), "{last}");
         let bar = |screen: &str| (1..6).map(|row| column(screen, row)).collect::<Vec<_>>();
         assert_eq!(
             bar(&last),
@@ -418,7 +418,7 @@ mod tests {
         assert!(!short.contains('█') && !short.contains('░'), "{short}");
         assert!(short.contains("1/3 End"), "{short}");
         let end_row = short.lines().nth(4).unwrap_or_default();
-        assert!(end_row.contains("— end —"), "right after the text: {short}");
+        assert!(end_row.contains("─ EOF ─"), "right after the text: {short}");
     }
 
     #[test]
@@ -483,6 +483,6 @@ mod tests {
         viewer.show(&numbered(3), true);
         let text = draw(&mut viewer, 60, 6);
         assert!(text.contains("End of the first 16 MiB"), "{text}");
-        assert!(text.contains("— end of the first 16 MiB —"), "{text}");
+        assert!(text.contains("─ end of the first 16 MiB ─"), "{text}");
     }
 }

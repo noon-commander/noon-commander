@@ -934,10 +934,11 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   wrapped, whatever the size of the file. Keys follow vim and less: `j`/`k`, Ctrl+e/Ctrl+y, and the
   arrows a line, Ctrl+f/Ctrl+b and PgDn/PgUp a page but for the two rows that vim keeps, Space/`f`
   and `b` a whole page, as less, Ctrl+d/Ctrl+u and `d`/`u` half a page, rounded down as vim's
-  'scroll'; unlike vim's, every key down stops with the end at the bottom, where a dimmed
-  `— end —` follows the last line, as the help does too (`noc-scroll` has the steps of both and
-  the scroll bar, [ADR 0023](adr/0023-paging-stops-at-the-end.md)); `g g`/`G` and Home/End the
-  ends, and F3, F10, `q`, `i`, or Esc to close; F1 or `g ?` shows the help over it.
+  'scroll'; unlike vim's, every key down stops with the end at the bottom, where a dimmed line
+  across the text, `──── EOF ────`, follows the last line, as the help does too (`noc-scroll` has
+  the steps of both and the scroll bar, [ADR 0023](adr/0023-paging-stops-at-the-end.md)); `g g`/`G`
+  and Home/End the ends, and F3, F10, `q`, `i`, or Esc to close; F1 or `g ?` shows the help over
+  it.
 - **F4 edits** the file under the cursor in `$VISUAL`, else `$EDITOR`, else `vi`, split at
   spaces (`code -w`), without a shell. A local file is edited where it is. A remote one is
   copied, with its times and permission bits, to `edit-PID-N-name` in the runtime directory
@@ -1166,8 +1167,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   overrides of the keymap are planned. The F-key bar is generated from the keymap in the mode and
   context of the next key, and so is the help screen (F1): the keys of each mode and context, with
   what they do, for what the app can do already; a prompt from ssh shows over it. It scrolls as
-  the viewer does, with a scroll bar, `— end —` after its last line, and how far down it is in its
-  bottom frame.
+  the viewer does, with a scroll bar, `──── EOF ────` after its last line, and how far down it is
+  in its bottom frame.
 - **Text fields.** A text field (`dialog::Field`, and the command line) holds a `tui/edit.rs`
   `Editor`: the text, the cursor, and vim's modes over it. In Insert mode characters go in at the
   cursor, and Left, Right, Home, End, Shift+Left, Shift+Right, Backspace, Delete, Ctrl+w, Ctrl+u,

@@ -5,7 +5,7 @@ use std::time::SystemTime;
 
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
-pub(crate) use noc_text::{Align, fit, sanitize, split, width, wrap};
+pub(crate) use noc_text::{Align, fit, rule, sanitize, split, width, wrap};
 
 /// Width in cells of [`mtime`].
 pub(crate) const MTIME_WIDTH: usize = 12;

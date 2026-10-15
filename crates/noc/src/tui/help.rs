@@ -175,7 +175,7 @@ impl Help {
                 Entry::Blank => vec![Line::default()],
             })
             .collect();
-        let end = cells::fit(&fl!("help-end"), width, Align::Center);
+        let end = cells::rule(&fl!("help-end"), width);
         lines.push(Line::styled(end, theme.dialog.add_modifier(Modifier::DIM)));
         self.rows = lines.len();
         self.page = usize::from(inner.height).max(1);
@@ -795,7 +795,7 @@ mod tests {
         let bottom = draw(&mut help, 60, 14);
         assert!(bottom.contains("Backspace takes back"), "{bottom}");
         assert!(
-            bottom.contains("— end —") && bottom.contains(" End "),
+            bottom.contains("─ EOF ─") && bottom.contains(" End "),
             "{bottom}"
         );
         for key in [
@@ -816,10 +816,7 @@ mod tests {
         assert!(bar_at_bottom(&bottom), "{bottom}");
         help.handle(action(Action::Up));
         let last = draw(&mut help, 60, 14);
-        assert!(
-            !last.contains("— end —") && last.contains(" 100% "),
-            "{last}"
-        );
+        assert!(!last.contains("EOF") && last.contains(" 100% "), "{last}");
         assert!(bar_at_bottom(&last), "{last}");
         help.handle(action(Action::Up));
         assert!(!bar_at_bottom(&draw(&mut help, 60, 14)));

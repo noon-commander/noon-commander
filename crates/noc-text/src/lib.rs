@@ -61,6 +61,22 @@ pub fn fit(text: &str, width: usize, align: Align) -> String {
     format!("{head}~{}{tail}", " ".repeat(gap))
 }
 
+/// A line of exactly `width` cells drawn with `─`, with `text` in its middle between spaces,
+/// fitted as [`fit`] does where the line is too short for it.
+pub fn rule(text: &str, width: usize) -> String {
+    if text.is_empty() {
+        return "─".repeat(width);
+    }
+    let label = format!(" {text} ");
+    let label_width = label.width();
+    if label_width + 2 > width {
+        return fit(text, width, Align::Center);
+    }
+    let gap = width - label_width;
+    let (left, right) = (gap / 2, gap - gap / 2);
+    format!("{}{label}{}", "─".repeat(left), "─".repeat(right))
+}
+
 /// Breaks `text` into lines of at most `width` cells: at its newlines, then between words,
 /// and inside words longer than a line. Each line is made terminal-safe.
 pub fn wrap(text: &str, width: usize) -> Vec<String> {
@@ -165,6 +181,17 @@ mod tests {
         assert_eq!(fit("ab", 5, Align::Right), "   ab");
         assert_eq!(fit("ab", 5, Align::Center), " ab  ");
         assert_eq!(fit("abcde", 5, Align::Left), "abcde");
+    }
+
+    #[test]
+    fn rule_draws_a_line_with_text_in_its_middle() {
+        assert_eq!(rule("EOF", 11), "─── EOF ───");
+        assert_eq!(rule("EOF", 12), "─── EOF ────");
+        assert_eq!(rule("EOF", 7), "─ EOF ─");
+        assert_eq!(rule("EOF", 6), " EOF  ", "no room for the line");
+        assert_eq!(rule("EOF", 2), "E~");
+        assert_eq!(rule("", 3), "───");
+        assert_eq!(width(&rule("界", 10)), 10);
     }
 
     #[test]

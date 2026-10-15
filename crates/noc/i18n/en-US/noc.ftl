@@ -368,8 +368,8 @@ help-title = Help
 help-position = { $percent }%
 # The same, once the end of the help shows.
 help-position-end = End
-# The dimmed line after the last line of the help.
-help-end = — end —
+# In the middle of the dimmed line across the help after its last line.
+help-end = EOF
 help-everywhere = Everywhere
 help-panels = Panels
 help-panels-visual = Panels in Visual mode

@@ -24,9 +24,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Ctrl+f in the panels and the lists stops with the last row at the bottom, then goes to it,
   rather than scroll on until only the last row shows at the top, as vim's does.
 - The help and the viewer stop scrolling with the end at the bottom, for `j`, Ctrl+e, and
-  Ctrl+f too. A dimmed `— end —` follows the last line, a scroll bar shows on the right when the
-  text does not fit, and the position says `End` once the end shows: the viewer's on top, the
-  help's in its bottom frame.
+  Ctrl+f too. A dimmed `──── EOF ────` across the text follows the last line, a scroll bar
+  shows on the right when the text does not fit, and the position says `End` once the end
+  shows: the viewer's on top, the help's in its bottom frame.
 - The zoxide window (`g z`) opens in Insert mode, so keywords can be typed at once, as in `zi`,
   without `/` first. Esc goes to the rows, and Esc there closes the window.
 

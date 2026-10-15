@@ -1,6 +1,7 @@
 //! The help screen: the keys of what the app can do, read from the keymap.
 
-use noc_scroll::{scrollbar, scrolled};
+use noc_scroll::scrollbar::{self, Arrows, Bar};
+use noc_scroll::scrolled;
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::Modifier;
@@ -9,6 +10,7 @@ use ratatui::text::{Line, Span};
 use super::cells::{self, Align};
 use super::dialog::{Colors, draw_box};
 use super::keymap::{Action, Context, Keymap, Mode, Resolved};
+use super::mouse::Scroll;
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -35,6 +37,8 @@ pub(crate) struct Help {
     /// many fit on screen.
     rows: usize,
     page: usize,
+    /// The scroll bar of the last render, if the help did not fit.
+    bar: Option<Bar>,
 }
 
 impl Help {
@@ -108,7 +112,21 @@ impl Help {
             offset: 0,
             rows: 0,
             page: 1,
+            bar: None,
         }
+    }
+
+    /// The scroll bar of the last render, for the mouse.
+    pub(crate) fn bar(&self) -> Option<Bar> {
+        self.bar
+    }
+
+    /// Scrolls as a press on the scroll bar asks, never past the end at the bottom.
+    pub(crate) fn scroll(&mut self, scroll: Scroll) {
+        self.offset = match scroll {
+            Scroll::By(motion) => scrolled(motion, self.offset, self.rows, self.page),
+            Scroll::To(offset) => offset.min(self.rows.saturating_sub(self.page)),
+        };
     }
 
     /// Scrolls, never past its end at the bottom; `true` when the help should close.
@@ -117,13 +135,19 @@ impl Help {
             return false;
         };
         if let Some(motion) = action.motion() {
-            self.offset = scrolled(motion, self.offset, self.rows, self.page);
+            self.scroll(Scroll::By(motion));
         }
         matches!(action, Action::Cancel | Action::Confirm)
     }
 
-    /// Draws the help over most of `area`.
-    pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
+    /// Draws the help over most of `area`, with `arrows` at the ends of its scroll bar.
+    pub(crate) fn render(
+        &mut self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        theme: &Theme,
+        arrows: Arrows,
+    ) {
         let width = MAX_WIDTH.min(area.width.saturating_sub(4)).max(20);
         let height = area.height.saturating_sub(4).max(3);
         let colors = Colors::of(theme, false);
@@ -184,7 +208,7 @@ impl Help {
         // the bottom and 100 with its last line.
         let text = (self.rows - 1, self.page, self.offset);
         let bar = Rect::new(inner.right().saturating_sub(1), inner.y, 1, inner.height);
-        scrollbar::render(frame, bar, text, theme.dialog);
+        self.bar = scrollbar::render(frame, bar, text, theme.dialog, arrows);
         self.render_position(frame, inner, theme);
         for (index, line) in lines
             .into_iter()
@@ -634,6 +658,7 @@ fn describe_completion(context: Context, action: Action) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use noc_scroll::Motion;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
@@ -646,7 +671,7 @@ mod tests {
     fn draw(help: &mut Help, width: u16, height: u16) -> String {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         terminal
-            .draw(|frame| help.render(frame, frame.area(), &Theme::terminal()))
+            .draw(|frame| help.render(frame, frame.area(), &Theme::terminal(), Arrows::PLAIN))
             .unwrap();
         terminal.backend().to_string()
     }
@@ -807,11 +832,12 @@ mod tests {
             help.handle(action(key));
             assert_eq!(draw(&mut help, 60, 14), bottom, "{key:?} stops at the end");
         }
-        // The bar leaves out the end line: it is at the bottom with the last line of text.
+        // The bar leaves out the end line: it is at the bottom with the last line of text, just
+        // above the arrow down.
         let bar_at_bottom = |screen: &str| {
             let rows: Vec<&str> = screen.lines().collect();
             let frame = rows.iter().position(|row| row.contains('╚')).unwrap();
-            rows[frame - 1].contains("█ ║")
+            rows[frame - 1].contains("▼ ║") && rows[frame - 2].contains("█ ║")
         };
         assert!(bar_at_bottom(&bottom), "{bottom}");
         help.handle(action(Action::Up));
@@ -824,6 +850,30 @@ mod tests {
         assert_eq!(draw(&mut help, 60, 14), top);
         assert!(help.handle(action(Action::Cancel)));
         assert!(help.handle(action(Action::Confirm)));
+    }
+
+    #[test]
+    fn scrolls_as_its_scroll_bar_is_pressed_and_dragged() {
+        let mut help = Help::new(&Keymap::default(), true);
+        let top = draw(&mut help, 60, 14);
+        let bar = help.bar().unwrap();
+        help.scroll(Scroll::By(Motion::PageDown));
+        assert_eq!(help.offset, help.page - 2, "the page less vim's two rows");
+        help.scroll(Scroll::To(bar.dragged(0, u16::MAX)));
+        assert_eq!(
+            help.offset,
+            help.rows - 1 - help.page,
+            "the last line of text at the bottom, as the bar leaves out the end line"
+        );
+        help.scroll(Scroll::To(usize::MAX));
+        draw(&mut help, 60, 14);
+        assert_eq!(
+            help.offset,
+            help.rows - help.page,
+            "no further than the end"
+        );
+        help.scroll(Scroll::To(0));
+        assert_eq!(draw(&mut help, 60, 14), top);
     }
 
     #[test]

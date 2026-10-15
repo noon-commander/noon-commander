@@ -379,7 +379,7 @@ impl Choices {
         let close = match pointer.press {
             Press::Click => false,
             Press::DoubleClick => true,
-            Press::RightClick | Press::WheelUp | Press::WheelDown => return None,
+            Press::RightClick | Press::WheelUp | Press::WheelDown | Press::Drag => return None,
         };
         self.chosen = Some(self.drawn.row_at(pointer.at)?);
         Some(self.show(close))

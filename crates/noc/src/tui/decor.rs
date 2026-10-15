@@ -2,6 +2,7 @@
 
 use std::path::Path;
 
+use noc_scroll::scrollbar::Arrows;
 use noc_vfs::{DirEntry, FileKind, VolumeKind};
 
 use super::panel::HostStatus;
@@ -48,6 +49,17 @@ impl Decor {
             (false, _) => "+ ",
             (true, VolumeKind::Network) => "󰣳 ",
             (true, VolumeKind::System | VolumeKind::Local) => "󰋊 ",
+        }
+    }
+
+    /// The arrows at the ends of scroll bars: Nerd Font carets, or mc's triangles.
+    pub(crate) fn scroll_arrows(self) -> Arrows {
+        if self.icons {
+            Arrows {
+                up: "", down: ""
+            }
+        } else {
+            Arrows::PLAIN
         }
     }
 

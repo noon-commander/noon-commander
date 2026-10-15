@@ -13,6 +13,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   version, the compile-time features, the commit and its time in UTC, the target, the
   operating system, the terminal with its colors and keyboard protocol, and the editor of F4.
   The terminal is asked for its name, so kitty, which sets no `TERM_PROGRAM`, is named too.
+- The scroll bars of the help, the viewer, and the Configuration dialog take the mouse, as in
+  Far: they end in arrows (Nerd Font carets, or `▲` and `▼` without icons), a click on one
+  scrolls as a step of the wheel, a click on the track scrolls a page towards it, and the thumb
+  can be dragged.
 
 ### Changed
 

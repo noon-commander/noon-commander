@@ -1,6 +1,7 @@
 //! The viewer on screen: a file's text, scrolled, with long lines wrapped or cut.
 
-use noc_scroll::{Motion, Step, scrollbar};
+use noc_scroll::scrollbar::{self, Arrows, Bar};
+use noc_scroll::{Motion, Step};
 use noc_text::Align;
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -17,6 +18,9 @@ pub enum Command {
     /// Scrolls; never past the end of the file at the bottom of the screen. Home goes back to
     /// the first column too.
     Scroll(Motion),
+    /// Puts a line at the top, or as near as the end lets it: where the thumb of the scroll
+    /// bar was dragged, in its lines.
+    Top(usize),
     /// One column left, when lines are cut.
     Left,
     /// One column right, when lines are cut.
@@ -25,13 +29,15 @@ pub enum Command {
     ToggleWrap,
 }
 
-/// The colors of the viewer, from the app's theme.
+/// How the viewer looks: the colors of the app's theme, and the arrows of its icons.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Styles {
     /// The title line: the path and the position.
     pub header: Style,
     /// The text, the screen behind it, and the scroll bar; dimmed, the line that ends the text.
     pub text: Style,
+    /// The ends of the scroll bar.
+    pub arrows: Arrows,
 }
 
 #[derive(Debug)]
@@ -60,6 +66,8 @@ pub struct Viewer {
     /// Rows and columns of text at the last render.
     page: usize,
     width: usize,
+    /// The scroll bar of the last render, if the text did not fit.
+    bar: Option<Bar>,
 }
 
 impl Viewer {
@@ -74,7 +82,13 @@ impl Viewer {
             wrap: true,
             page: 1,
             width: 80,
+            bar: None,
         }
+    }
+
+    /// The scroll bar of the last render, for the mouse; `None` when the text fit.
+    pub fn bar(&self) -> Option<Bar> {
+        self.bar
     }
 
     /// Shows `bytes`, the start of the file if `truncated`.
@@ -90,6 +104,7 @@ impl Viewer {
     pub fn handle(&mut self, command: Command) {
         match command {
             Command::Scroll(motion) => self.scroll(motion),
+            Command::Top(line) => self.top = (line, 0).min(self.last_top()),
             Command::Left => self.column = self.column.saturating_sub(1),
             Command::Right if !self.wrap => self.column += 1,
             Command::Right => {}
@@ -185,6 +200,7 @@ impl Viewer {
 
     /// Draws the viewer over `area`: a title line, then the text.
     pub fn render(&mut self, frame: &mut Frame<'_>, area: Rect, styles: &Styles) {
+        self.bar = None;
         if area.height < 2 || area.width == 0 {
             return;
         }
@@ -212,7 +228,7 @@ impl Viewer {
         }
         if bar {
             let column = Rect::new(area.right() - 1, text_area.y, 1, text_area.height);
-            scrollbar::render(frame, column, self.thumb(), styles.text);
+            self.bar = scrollbar::render(frame, column, self.thumb(), styles.text, styles.arrows);
         }
         let mut position = self.top;
         for screen_row in 0..self.page {
@@ -377,12 +393,14 @@ mod tests {
             line.trim_end_matches('"').chars().last()
         };
         let top = draw(&mut viewer, 20, 6);
-        assert_eq!(column(&top, 1), Some('█'), "{top}");
-        assert_eq!(column(&top, 5), Some('░'), "{top}");
+        assert_eq!(column(&top, 1), Some('▲'), "{top}");
+        assert_eq!(column(&top, 2), Some('█'), "{top}");
+        assert_eq!(column(&top, 4), Some('░'), "{top}");
+        assert_eq!(column(&top, 5), Some('▼'), "{top}");
         viewer.handle(Command::Scroll(Motion::End));
         let end = draw(&mut viewer, 20, 6);
-        assert_eq!(column(&end, 1), Some('░'), "{end}");
-        assert_eq!(column(&end, 5), Some('█'), "{end}");
+        assert_eq!(column(&end, 2), Some('░'), "{end}");
+        assert_eq!(column(&end, 4), Some('█'), "{end}");
         viewer.handle(Command::Scroll(Motion::Up));
         let last = draw(&mut viewer, 20, 6);
         assert!(last.contains("100%") && !last.contains("EOF"), "{last}");
@@ -394,7 +412,7 @@ mod tests {
         );
         viewer.handle(Command::Scroll(Motion::Up));
         let before = draw(&mut viewer, 20, 6);
-        assert_eq!(column(&before, 5), Some('░'), "{before}");
+        assert_eq!(column(&before, 4), Some('░'), "{before}");
         // A long thumb keeps its length too, though the end line takes a row of the text.
         viewer.show(&numbered(10), false);
         let tall_bar = |viewer: &mut Viewer| {
@@ -422,6 +440,26 @@ mod tests {
     }
 
     #[test]
+    fn the_scroll_bar_is_kept_for_the_mouse_and_its_thumb_puts_a_line_at_the_top() {
+        let mut viewer = Viewer::new("f".to_owned());
+        viewer.show(&numbered(20), false);
+        draw(&mut viewer, 20, 12);
+        let bar = viewer.bar().unwrap();
+        assert_eq!(
+            bar.part(ratatui::layout::Position::new(19, 1)),
+            Some(scrollbar::Part::Up)
+        );
+        viewer.handle(Command::Top(bar.dragged(0, 5)));
+        assert!(draw(&mut viewer, 20, 12).contains("7/20"));
+        viewer.handle(Command::Top(99));
+        let end = draw(&mut viewer, 20, 12);
+        assert!(end.contains("11/20 End"), "no further than the end: {end}");
+        viewer.show(&numbered(3), false);
+        draw(&mut viewer, 20, 12);
+        assert_eq!(viewer.bar(), None, "the text fits");
+    }
+
+    #[test]
     fn the_end_line_leaves_the_scroll_bar_undimmed() {
         let mut viewer = Viewer::new("f".to_owned());
         viewer.show(&numbered(20), false);
@@ -437,8 +475,9 @@ mod tests {
         viewer.handle(Command::Scroll(Motion::End));
         let screen = render(&mut viewer);
         let end_row = 5;
-        assert_eq!(screen[(19, end_row)].symbol(), "█");
+        assert_eq!(screen[(19, end_row)].symbol(), "▼");
         assert!(!screen[(19, end_row)].modifier.contains(Modifier::DIM));
+        assert_eq!(screen[(19, end_row - 1)].symbol(), "█");
         assert!(screen[(8, end_row)].modifier.contains(Modifier::DIM));
     }
 

@@ -1151,6 +1151,8 @@ panel, its columns, and its tabs, and ranger in its pager too; neither has a dou
 | Menu or list in a window: move the cursor / open the row | — | ⏳ | Click / Double click | Click / Double click | Click / Click in a menu, Double click in a dialog's list | — | — |
 | Close a menu or the list of completions | — | ⏳ | Click outside it | Click outside a menu | Click outside it | — | — |
 | Scroll a menu, a list, or the help | — | ⏳ | Wheel | Wheel (not the help) | Wheel | — | — |
+| Scroll bar of the help, the viewer, the Configuration dialog: a step of the wheel / a page | — | ⏳ | Click on an arrow / Click on the track | — | Click on an arrow / Click on the track | — | — |
+| Scroll bar: scroll to where the thumb is dragged | — | ⏳ | Drag the thumb | — | Drag the thumb | — | — |
 | Back / forward in the directory history | — | ⏳ | — | Click on < / > in the panel's frame | — | Back button / Forward button | — |
 | Go up to a directory on the left, on the row clicked | — | ⏳ | — | — | — | Click in the parent column | Click in the parent column |
 | Enter the directory previewed, on the row clicked | — | ⏳ | — | — | — | Click in the preview | Click in the preview |

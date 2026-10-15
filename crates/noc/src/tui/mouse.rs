@@ -1,11 +1,13 @@
 //! The mouse, as the app sees it: presses at a cell of the screen. The event loop turns
 //! crossterm's events into [`Pointer`]s, so that widgets never see raw mouse events, as they
-//! never see raw keys. Moving and dragging do nothing, and terminals send no double clicks, so
-//! [`Clicks`] tells them from two clicks by their time and cell.
+//! never see raw keys. Moving does nothing, dragging only drags the thumb of a scroll bar, and
+//! terminals send no double clicks, so [`Clicks`] tells them from two clicks by their time and
+//! cell.
 
 use std::time::{Duration, Instant};
 
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+use noc_scroll::Motion;
 use ratatui::layout::{Position, Rect};
 
 use super::keymap::Action;
@@ -24,6 +26,8 @@ pub(crate) enum Press {
     RightClick,
     WheelUp,
     WheelDown,
+    /// The left button held down, moved to another cell.
+    Drag,
 }
 
 /// A press of the mouse at a cell.
@@ -31,6 +35,15 @@ pub(crate) enum Press {
 pub(crate) struct Pointer {
     pub(crate) press: Press,
     pub(crate) at: Position,
+}
+
+/// What a press on a scroll bar asks of what it scrolls.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Scroll {
+    /// A step of an arrow or a page of the track, as the keys move.
+    By(Motion),
+    /// The first row to show, where the thumb was dragged.
+    To(usize),
 }
 
 /// The last click, to tell a double click.
@@ -59,6 +72,12 @@ impl Clicks {
             MouseEventKind::Down(MouseButton::Right) => Press::RightClick,
             MouseEventKind::ScrollUp => Press::WheelUp,
             MouseEventKind::ScrollDown => Press::WheelDown,
+            MouseEventKind::Drag(MouseButton::Left) => {
+                return Some(Pointer {
+                    press: Press::Drag,
+                    at,
+                });
+            }
             _ => return None,
         };
         if press != Press::Click && press != Press::DoubleClick {
@@ -104,7 +123,7 @@ impl Drawn {
                 *cursor = row;
                 return Some(Action::Confirm);
             }
-            Press::RightClick | Press::WheelUp | Press::WheelDown => {}
+            Press::RightClick | Press::WheelUp | Press::WheelDown | Press::Drag => {}
         }
         None
     }
@@ -219,7 +238,7 @@ mod tests {
     }
 
     #[test]
-    fn takes_presses_and_the_wheel_only() {
+    fn takes_presses_the_wheel_and_dragging_with_the_left_button_only() {
         let mut clicks = Clicks::default();
         let now = Instant::now();
         let wheel = clicks.pointer(event(MouseEventKind::ScrollDown, 1, 2), now);
@@ -230,10 +249,12 @@ mod tests {
                 at: Position::new(1, 2)
             })
         );
+        let drag = clicks.pointer(event(MouseEventKind::Drag(MouseButton::Left), 1, 3), now);
+        assert_eq!(drag.map(|pointer| pointer.press), Some(Press::Drag));
         for kind in [
             MouseEventKind::Moved,
             MouseEventKind::Up(MouseButton::Left),
-            MouseEventKind::Drag(MouseButton::Left),
+            MouseEventKind::Drag(MouseButton::Right),
             MouseEventKind::Down(MouseButton::Middle),
             MouseEventKind::ScrollLeft,
         ] {

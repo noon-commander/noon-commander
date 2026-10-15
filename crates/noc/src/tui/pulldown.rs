@@ -529,12 +529,14 @@ impl PullDown {
                         _ => PullDownEvent::Pending,
                     }
                 }
-                Press::RightClick => PullDownEvent::Pending,
+                Press::RightClick | Press::Drag => PullDownEvent::Pending,
             };
         }
         match press {
             Press::Click | Press::RightClick => PullDownEvent::Closed,
-            Press::DoubleClick | Press::WheelUp | Press::WheelDown => PullDownEvent::Pending,
+            Press::DoubleClick | Press::WheelUp | Press::WheelDown | Press::Drag => {
+                PullDownEvent::Pending
+            }
         }
     }
 

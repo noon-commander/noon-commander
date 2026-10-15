@@ -26,8 +26,9 @@ presses, releases, drags, moves, and the wheel, but no double clicks.
   one only counts with a value of the other.
 - The event loop turns crossterm's mouse events into `Pointer`s (`tui/mouse.rs`): a click, a
   double click, a right click, or a step of the wheel, at a cell. Two clicks on the same cell
-  within 400 ms are a double click; a third starts again. Moves, drags, releases, and the
-  middle button are dropped without a redraw. A press ends a pending key sequence.
+  within 400 ms are a double click; a third starts again. Moves, releases, and the middle
+  button are dropped without a redraw, and so are drags but those of the thumb of a scroll
+  bar. A press ends a pending key sequence.
 - Rendering records where it drew what can be pressed (the F-key slots, the panels, their
   rows, and the tabs), and `App::pointer` looks there. What is in front takes the press, as it
   takes keys; a window or a menu over the panels keeps the mouse from them.
@@ -67,6 +68,15 @@ presses, releases, drags, moves, and the wheel, but no double clicks.
   the cursor there, and on its value switches a check box, picks the next choice (the one
   before at `<`), or puts the cursor in the text. Leaving a text field applies it, as a key
   that leaves it does.
+- The scroll bars of the help, the viewer, and the Configuration dialog end in an arrow each
+  (Nerd Font carets with `ui.icons`, `▲` and `▼` without), where they leave the track two rows
+  or more. As in Far, a click on an arrow scrolls as a step of the wheel, a click on the track
+  a page towards the click, as Ctrl+b and Ctrl+f, and the second click of a double click scrolls
+  again. The left button pressed on the thumb holds it, and its drags scroll to where they put
+  it, the least far that shows it there; any other press lets go, as the button went up
+  before it. In the Configuration dialog they move the cursor in the settings, as the wheel
+  does, onto the screen after a drag. `noc-scroll` says what a cell of the bar is
+  (`scrollbar::Bar`), and `App` turns it into a motion of what is in front.
 
 ## Consequences
 
@@ -75,6 +85,8 @@ presses, releases, drags, moves, and the wheel, but no double clicks.
 - With the mouse on, selecting text needs a modifier; `ui.mouse = false`, or Mouse in
   Options → Configuration, brings plain selection back.
 - Moves of the mouse arrive all the time while it is captured, so they must stay cheap: they
-  skip the redraw.
+  skip the redraw, and so do drags while no thumb is held.
+- Releases stay dropped: every drag follows a press, and that press holds the thumb or lets
+  it go.
 - Mouse bindings are not in `keymap.toml`; what a click does follows mc and Far, and the keys
   stay the way to do anything.

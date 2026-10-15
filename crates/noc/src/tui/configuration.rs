@@ -7,17 +7,19 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use noc_config::{Borders, Config, MenuBar, Pause, TabBar, UiConfig, Wheel};
-use noc_scroll::scrollbar;
+use noc_scroll::Motion;
+use noc_scroll::scrollbar::{self, Bar};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
+use super::decor::Decor;
 use super::dialog::{Colors, Field, draw_box, draw_separator};
 use super::edit::Registers;
 use super::keymap::{Action, Context, Mode, Resolved, Typed};
-use super::mouse::{Pointer, Press};
+use super::mouse::{Pointer, Press, Scroll};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -295,6 +297,8 @@ struct Drawn {
     categories: Vec<Rect>,
     /// The settings shown, by their rows: each row, and its value.
     settings: Vec<(usize, Rect, Rect)>,
+    /// Their scroll bar, if they do not fit.
+    bar: Option<Bar>,
 }
 
 /// The values of a choice with their texts; `current` is chosen, and added if it is not
@@ -766,6 +770,45 @@ impl Configuration {
         event
     }
 
+    /// The scroll bar of the settings at the last render, for the mouse.
+    pub(crate) fn bar(&self) -> Option<Bar> {
+        self.drawn.bar
+    }
+
+    /// Moves the cursor in the settings as a press on their scroll bar asks, as the wheel moves
+    /// it: a row or a page up or down, or onto the screen scrolled to where the thumb was
+    /// dragged. The settings get the focus. Leaving a text field applies it, and one that
+    /// holds something invalid keeps the cursor.
+    pub(crate) fn scroll(&mut self, scroll: Scroll) -> ConfigEvent {
+        let mut event = ConfigEvent::default();
+        let page = self.page.max(1);
+        let last = self.settings().len().saturating_sub(1);
+        let (row, offset) = match scroll {
+            Scroll::By(Motion::Up) => (self.row.saturating_sub(1), None),
+            Scroll::By(Motion::Down) => ((self.row + 1).min(last), None),
+            Scroll::By(Motion::PageUp) => (self.row.saturating_sub(page), None),
+            Scroll::By(Motion::PageDown) => ((self.row + page).min(last), None),
+            Scroll::By(_) => return event,
+            Scroll::To(offset) => {
+                let row = self.row.clamp(offset, offset + page - 1).min(last);
+                (row, Some(offset))
+            }
+        };
+        let stays = self.focus == Focus::Settings && row == self.row;
+        if self.field_mut().is_some() && !stays {
+            match self.apply() {
+                Ok(change) => event.change = change,
+                Err(()) => return event,
+            }
+        }
+        self.focus = Focus::Settings;
+        self.row = row;
+        if let Some(offset) = offset {
+            self.offset = offset;
+        }
+        event
+    }
+
     /// Draws the dialog centered in `area`, with the terminal cursor in a focused text field.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let colors = Colors::of(theme, false);
@@ -885,7 +928,9 @@ impl Configuration {
             .min(total.saturating_sub(page));
         self.page = page;
         let bar = Rect::new(area.right().saturating_sub(1), area.y, 1, area.height);
-        scrollbar::render(frame, bar, (total, page, self.offset), theme.dialog);
+        let arrows = Decor::new(self.icons).scroll_arrows();
+        self.drawn.bar =
+            scrollbar::render(frame, bar, (total, page, self.offset), theme.dialog, arrows);
         let room = usize::from(area.width.saturating_sub(2));
         let label_width = self
             .settings()
@@ -1594,6 +1639,32 @@ mod tests {
             "{top}"
         );
         assert!(top.contains("Takes effect after a restart"), "{top}");
+    }
+
+    #[test]
+    fn its_scroll_bar_moves_the_cursor_in_the_settings_as_the_wheel() {
+        let mut dialog = dialog();
+        let drawn = draw(&mut dialog, 72, 12);
+        assert!(drawn.contains('▲') && drawn.contains('▼'), "{drawn}");
+        let bar = dialog.bar().unwrap();
+        let last = dialog.settings().len() - 1;
+        dialog.handle(action(Action::NextField));
+        dialog.scroll(Scroll::By(Motion::Down));
+        assert_eq!((dialog.focus, dialog.row), (Focus::Settings, 1));
+        dialog.scroll(Scroll::By(Motion::PageDown));
+        assert_eq!(dialog.row, (1 + dialog.page).min(last));
+        dialog.scroll(Scroll::By(Motion::Up));
+        assert_eq!(dialog.row, dialog.page.min(last));
+        // Dragged to the bottom, the cursor comes onto the last page.
+        let end = bar.dragged(0, u16::MAX);
+        dialog.scroll(Scroll::To(end));
+        draw(&mut dialog, 72, 12);
+        assert_eq!(dialog.offset, last + 1 - dialog.page);
+        assert!(dialog.row >= dialog.offset, "{}", dialog.row);
+        dialog.scroll(Scroll::To(0));
+        draw(&mut dialog, 72, 12);
+        assert_eq!(dialog.offset, 0);
+        assert_eq!(dialog.row, dialog.page - 1, "the nearest row on screen");
     }
 
     #[test]

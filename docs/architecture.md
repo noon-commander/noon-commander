@@ -506,11 +506,11 @@ settings window: there is no OK or Cancel, and every change takes effect as it i
 
 ```text
   ╔═════════════════════════ Configuration ══════════════════════════╗
-  ║  󰍹 Interface │ Language           auto                         █ ║
+  ║  󰍹 Interface │ Language           auto                         ▲ ║
   ║  󰓡 Transfers │ Theme              < mc-classic >               █ ║
-  ║  󰣀 SSH       │ Borders            < Double ═ ║ ╔ >             ░ ║
+  ║  󰣀 SSH       │ Borders            < Double ═ ║ ╔ >             █ ║
   ║  󰋊 Volumes   │ Icons              [x]                          ░ ║
-  ║  󰥨 zoxide    │ Show hidden files  [x]                          ░ ║
+  ║  󰥨 zoxide    │ Show hidden files  [x]                          ▼ ║
   ╟──────────────┴───────────────────────────────────────────────────╢
   ║ A language tag, such as en-US, or auto for the system locale.    ║
   ║ Takes effect after a restart.                                    ║
@@ -525,10 +525,11 @@ settings window: there is no OK or Cancel, and every change takes effect as it i
 - Paths under the home directory show from `~`, and are written as typed. Lists, such as
   `ssh.args` and the hidden hosts and volumes, are words separated by spaces, as a shell
   reads them: `"…"` around a word with spaces, `\` before a character to take it as it is.
-- Settings that do not fit scroll with the cursor, and a scroll bar (`█` on `░`) shows in the
-  last column. The two lines below them, set apart by a line across the dialog, say what the
-  setting under the cursor does and whether it takes effect only after a restart, or, in
-  the colors of errors, why the text typed cannot be used.
+- Settings that do not fit scroll with the cursor, and a scroll bar (`█` on `░`, between `▲`
+  and `▼`, Nerd Font carets with `ui.icons`) shows in the last column. The two lines below
+  them, set apart by a line across the dialog, say what the setting under the cursor does and
+  whether it takes effect only after a restart, or, in the colors of errors, why the text
+  typed cannot be used.
 - Tab moves between the categories and the settings; `j` and `k` (Down and Up) move within
   them, and `g g` and `G` go to the first and last of them; `h` (Left) on anything but a text
   field goes back to the categories; Esc, `q`, or F10 closes the dialog, in Normal mode (a
@@ -1262,7 +1263,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 - **Mouse.** On by default (`ui.mouse`; [ADR 0018](adr/0018-mouse-support.md)). The event loop
   captures the mouse while it is on and turns crossterm's events into `Pointer`s
   (`tui/mouse.rs`): a click, a double click (the same cell within 400 ms), a right click, or a
-  step of the wheel; moves and drags are dropped without a redraw. Rendering records where the
+  step of the wheel, or a drag with the left button; moves are dropped without a redraw, and
+  so are drags while no thumb of a scroll bar is held. Rendering records where the
   F-key slots, the panels, their rows, the tabs, the menu bar, and each window's rows and
   buttons were drawn (`mouse::Drawn`), and `App::pointer` looks there, front first, as keys
   go. A click on an F-key slot presses its key; in a panel a click moves the cursor and gives
@@ -1272,7 +1274,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   a menu or runs a command; in a dialog a click chooses, puts the cursor in a field, switches
   a check box, or presses a button. Other windows and menus take the wheel as Up and Down, a
   click on a row or a button, and in menus a double click that opens and a click outside
-  that closes. Widgets move their own cursor or focus and return the key a press stands for,
+  that closes. The scroll bars of the help, the viewer, and the Configuration dialog end in
+  arrows; as in Far, a click on one scrolls as a step of the wheel, a click on the track a
+  page towards it, and the thumb, pressed, drags (`noc_scroll::scrollbar::Bar`). Widgets
+  move their own cursor or focus and return the key a press stands for,
   which they then take as if typed, so the mouse reuses what the keys do. A double click
   counts only if its first click left the same thing in front, so one that closed a menu or
   a dialog does not reach what is under it. While the mouse is captured, the terminal selects

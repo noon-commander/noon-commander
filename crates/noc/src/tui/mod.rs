@@ -56,7 +56,7 @@ use tokio::sync::mpsc;
 
 use app::{App, Handover};
 use keymap::{KeyState, Mode};
-use mouse::Clicks;
+use mouse::{Clicks, Press};
 use tasks::{Done, Tasks};
 
 use crate::context::Context;
@@ -509,8 +509,9 @@ impl Title {
     }
 }
 
-/// Hands `event` to the app if it is a press; whether it was. Moves of the mouse come all the
-/// time and do nothing. A press ends a key sequence.
+/// Hands `event` to the app if it is a press, or a drag of the thumb of a scroll bar; whether
+/// it was. Moves of the mouse come all the time and do nothing, and so do drags of anything
+/// else. A press ends a key sequence.
 fn take_mouse(
     app: &mut App,
     tasks: &mut Tasks,
@@ -521,6 +522,9 @@ fn take_mouse(
     let Some(pointer) = clicks.pointer(event, Instant::now()) else {
         return false;
     };
+    if pointer.press == Press::Drag && !app.dragging() {
+        return false;
+    }
     *keys = KeyState::default();
     tasks.run(app.pointer(pointer));
     true

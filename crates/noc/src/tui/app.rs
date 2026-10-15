@@ -13,6 +13,7 @@ use noc_config::{
 };
 use noc_ops::{Algorithm, Conflict, CopyOptions, Decision, Sum};
 use noc_scroll::Motion;
+use noc_scroll::scrollbar::{self, Part};
 use noc_tools::zoxide::Scored;
 use noc_vfs::{FileKind, Location, Metadata, RemotePath, Volume};
 use noc_viewer::{Command as ViewerCommand, Styles as ViewerStyles, Viewer};
@@ -37,7 +38,7 @@ use super::jobs::{JobsEvent, JobsList, Row};
 use super::jump::{JumpEvent, JumpMenu};
 use super::keymap::{Action, Context, Extra, Hints, KeyState, Keymap, Mode, Resolved, Typed};
 use super::menu::{LocationMenu, MenuEvent};
-use super::mouse::{Pointer, Press};
+use super::mouse::{Pointer, Press, Scroll};
 use super::panel::{
     Destination, HostState, HostStatus, ListRequest, Listed, Panel, SearchEnd, View, child,
     home_text, location_text,
@@ -741,6 +742,9 @@ pub(crate) struct App {
     /// What was in front after the last click, if that click left it there: a double click
     /// counts only then.
     clicked: Option<Front>,
+    /// The thumb of a scroll bar that the left button holds: in what is in front, and by which
+    /// of its rows.
+    grab: Option<(Front, u16)>,
     quit: bool,
     redraw: bool,
 }
@@ -869,6 +873,7 @@ impl App {
             registers: Registers::default(),
             spots: Spots::default(),
             clicked: None,
+            grab: None,
             quit: false,
             redraw: false,
         };
@@ -1034,6 +1039,11 @@ impl App {
         if !self.config.ui.mouse {
             return Vec::new();
         }
+        if pointer.press == Press::Drag {
+            return self.drag(pointer.at);
+        }
+        // Any other press lets go of the thumb, as the button that held it went up before.
+        self.grab = None;
         let front = self.front();
         // A first click that closed a menu or a dialog, or opened one, leaves the second click
         // of a double click nothing to do.
@@ -1079,10 +1089,10 @@ impl App {
         }
     }
 
-    /// The F-key bar presses its keys; then what is in front takes the press: a dialog, the
-    /// pull-down menu, the viewer, the menu bar that `ui.menu_bar` keeps, or the panels, where
-    /// a click moves the cursor, a double click opens, a right click marks, and the wheel
-    /// scrolls.
+    /// The F-key bar presses its keys, and the scroll bar of what is in front its parts; then
+    /// what is in front takes the press: a dialog, the pull-down menu, the viewer, the menu
+    /// bar that `ui.menu_bar` keeps, or the panels, where a click moves the cursor, a double
+    /// click opens, a right click marks, and the wheel scrolls.
     fn route_pointer(&mut self, pointer: Pointer) -> Vec<Effect> {
         let Pointer { press, at } = pointer;
         if let Some(slot) = self.spots.fkeys.iter().position(|slot| slot.contains(at)) {
@@ -1092,6 +1102,9 @@ impl App {
                 Some((action, _)) if press == Press::Click => self.handle(Resolved::Action(action)),
                 _ => Vec::new(),
             };
+        }
+        if let Some(effects) = self.pointer_scroll_bar(pointer) {
+            return effects;
         }
         match self.front() {
             Front::Dialog(_) => return self.pointer_dialog(pointer),
@@ -1142,6 +1155,7 @@ impl App {
             Press::Click | Press::DoubleClick | Press::RightClick => {
                 self.click_panel(side, press, at)
             }
+            Press::Drag => Vec::new(),
         }
     }
 
@@ -1151,7 +1165,7 @@ impl App {
         let down = match press {
             Press::WheelUp => false,
             Press::WheelDown => true,
-            Press::Click | Press::DoubleClick | Press::RightClick => return None,
+            Press::Click | Press::DoubleClick | Press::RightClick | Press::Drag => return None,
         };
         Some(match (self.config.ui.wheel, down) {
             (Wheel::Lines(count), false) => (Action::Up, count),
@@ -1228,22 +1242,112 @@ impl App {
 
     /// Scrolls the viewer by a step of the wheel, if `press` is one.
     fn wheel_viewer(&mut self, press: Press) {
+        let down = match press {
+            Press::WheelUp => false,
+            Press::WheelDown => true,
+            Press::Click | Press::DoubleClick | Press::RightClick | Press::Drag => return,
+        };
+        let (motion, count) = self.wheel_motion(down);
         let Some(viewing) = &mut self.viewing else {
             return;
         };
-        let (lines, page) = match press {
-            Press::WheelUp => (Motion::Up, Motion::PageUp),
-            Press::WheelDown => (Motion::Down, Motion::PageDown),
-            Press::Click | Press::DoubleClick | Press::RightClick => return,
-        };
-        match self.config.ui.wheel {
-            Wheel::Lines(count) => {
-                for _ in 0..count {
-                    viewing.viewer.handle(ViewerCommand::Scroll(lines));
+        for _ in 0..count {
+            viewing.viewer.handle(ViewerCommand::Scroll(motion));
+        }
+    }
+
+    /// How far a step of the wheel up or down scrolls text, and how many times: by `ui.wheel`
+    /// lines, or a page.
+    fn wheel_motion(&self, down: bool) -> (Motion, u8) {
+        match (self.config.ui.wheel, down) {
+            (Wheel::Lines(count), false) => (Motion::Up, count),
+            (Wheel::Lines(count), true) => (Motion::Down, count),
+            (Wheel::Page, false) => (Motion::PageUp, 1),
+            (Wheel::Page, true) => (Motion::PageDown, 1),
+        }
+    }
+
+    /// The scroll bar of what is in front, as it was last drawn: the help's, the Configuration
+    /// dialog's, or the viewer's.
+    fn scroll_bar(&self) -> Option<scrollbar::Bar> {
+        match self.front() {
+            Front::Help => self.help.as_ref()?.bar(),
+            Front::Configuration => self.configuration.as_ref()?.bar(),
+            Front::Viewer => self.viewing.as_ref()?.viewer.bar(),
+            _ => None,
+        }
+    }
+
+    /// Scrolls what is in front as a press on its scroll bar asks.
+    fn scroll_front(&mut self, scroll: Scroll) -> Vec<Effect> {
+        match self.front() {
+            Front::Help => {
+                if let Some(help) = &mut self.help {
+                    help.scroll(scroll);
                 }
             }
-            Wheel::Page => viewing.viewer.handle(ViewerCommand::Scroll(page)),
+            Front::Configuration => {
+                if let Some(configuration) = &mut self.configuration {
+                    let event = configuration.scroll(scroll);
+                    return self.configuration_event(event);
+                }
+            }
+            Front::Viewer => {
+                if let Some(viewing) = &mut self.viewing {
+                    viewing.viewer.handle(match scroll {
+                        Scroll::By(motion) => ViewerCommand::Scroll(motion),
+                        Scroll::To(line) => ViewerCommand::Top(line),
+                    });
+                }
+            }
+            _ => {}
         }
+        Vec::new()
+    }
+
+    /// Takes a click on the scroll bar of what is in front, if it is on one: an arrow scrolls
+    /// as a step of the wheel, the track a page towards the click, as in mc and Far, and the
+    /// thumb is held for dragging. The second click of a double click scrolls again.
+    fn pointer_scroll_bar(&mut self, Pointer { press, at }: Pointer) -> Option<Vec<Effect>> {
+        if !matches!(press, Press::Click | Press::DoubleClick) {
+            return None;
+        }
+        let (motion, count) = match self.scroll_bar()?.part(at)? {
+            Part::Up => self.wheel_motion(false),
+            Part::Down => self.wheel_motion(true),
+            Part::PageUp => (Motion::PageUp, 1),
+            Part::PageDown => (Motion::PageDown, 1),
+            Part::Thumb(row) => {
+                self.grab = Some((self.front(), row));
+                return Some(Vec::new());
+            }
+        };
+        let mut effects = Vec::new();
+        for _ in 0..count {
+            effects.extend(self.scroll_front(Scroll::By(motion)));
+        }
+        Some(effects)
+    }
+
+    /// Whether the left button holds the thumb of a scroll bar, which its drags move.
+    pub(crate) fn dragging(&self) -> bool {
+        self.grab.is_some()
+    }
+
+    /// Scrolls what is in front to where the thumb it holds was dragged, at the row of `at`;
+    /// nothing if no thumb is held, or what held it has gone.
+    fn drag(&mut self, at: Position) -> Vec<Effect> {
+        let Some((front, row)) = self.grab else {
+            return Vec::new();
+        };
+        if self.front() != front {
+            self.grab = None;
+            return Vec::new();
+        }
+        let Some(bar) = self.scroll_bar() else {
+            return Vec::new();
+        };
+        self.scroll_front(Scroll::To(bar.dragged(row, at.y)))
     }
 
     /// Gives a press of the mouse to the dialog in front, and does what it was for if it
@@ -5665,6 +5769,7 @@ impl App {
             let styles = ViewerStyles {
                 header: self.theme.cursor,
                 text: self.theme.panel,
+                arrows: self.decor.scroll_arrows(),
             };
             viewing.viewer.render(frame, panels, &styles);
         } else {
@@ -5735,7 +5840,7 @@ impl App {
             configuration.render(frame, panels, &self.theme);
         }
         if let Some(help) = &mut self.help {
-            help.render(frame, panels, &self.theme);
+            help.render(frame, panels, &self.theme, self.decor.scroll_arrows());
         }
         if let Some(list) = &self.jobs_list {
             list.render(frame, panels, &self.theme, &self.job_rows());
@@ -7266,6 +7371,60 @@ mod tests {
         let before = screen_of(&mut app, 12);
         press(&mut app, Press::WheelDown, 80, 5);
         assert_ne!(screen_of(&mut app, 12), before);
+    }
+
+    #[test]
+    fn the_mouse_scrolls_by_the_arrows_and_the_track_and_drags_the_thumb() {
+        let mut app = loaded();
+        app.handle(action(Action::Help));
+        let top = screen_of(&mut app, 12);
+        let (x, up) = find(&mut app, "▲");
+        let (_, down) = find(&mut app, "▼");
+        press(&mut app, Press::Click, x, down);
+        assert_ne!(screen_of(&mut app, 12), top, "the arrow down");
+        press(&mut app, Press::DoubleClick, x, up);
+        assert_eq!(screen_of(&mut app, 12), top, "the arrow up, as the wheel");
+        press(&mut app, Press::Click, x, down - 1);
+        let paged = screen_of(&mut app, 12);
+        app.handle(action(Action::PageDown));
+        app.handle(action(Action::PageUp));
+        assert_eq!(screen_of(&mut app, 12), paged, "a page, as PageDown");
+        app.handle(action(Action::PageUp));
+        assert_eq!(screen_of(&mut app, 12), top);
+
+        press(&mut app, Press::Drag, x, down - 1);
+        assert_eq!(screen_of(&mut app, 12), top, "no thumb is held");
+        press(&mut app, Press::Click, x, up + 1);
+        assert!(app.dragging());
+        press(&mut app, Press::Drag, x, down - 1);
+        let end = screen_of(&mut app, 12);
+        assert!(end.contains(" 100% "), "{end}");
+        press(&mut app, Press::Click, 10, 1);
+        assert!(!app.dragging(), "another press lets go");
+        press(&mut app, Press::Drag, x, up + 1);
+        assert_eq!(screen_of(&mut app, 12), end);
+
+        // The viewer's, through the same parts.
+        app.handle(action(Action::Cancel));
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
+        answer(&mut app, effects, &Listing::Dir(vec![file("log", 1)]));
+        app.handle(action(Action::Down));
+        let Effect::Read { id, .. } = one(app.handle(action(Action::View))) else {
+            panic!("expected a read");
+        };
+        let lines: Vec<String> = (1..=100).map(|n| format!("line {n}")).collect();
+        app.read(id, Ok((lines.join("\n").into_bytes(), false)));
+        let (x, down) = find(&mut app, "▼");
+        press(&mut app, Press::Click, x, down);
+        assert!(screen_of(&mut app, 12).contains(" 4/100 "), "three lines");
+        let (_, up) = find(&mut app, "▲");
+        press(&mut app, Press::Click, x, up + 1);
+        press(&mut app, Press::Drag, x, down - 1);
+        let end = screen_of(&mut app, 12);
+        assert!(
+            end.contains(" 92/100 100% "),
+            "the last line at the bottom: {end}"
+        );
     }
 
     #[test]

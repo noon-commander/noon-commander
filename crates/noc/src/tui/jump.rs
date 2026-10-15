@@ -73,13 +73,14 @@ pub(crate) struct JumpMenu {
 
 impl JumpMenu {
     /// A window for a panel on `exclude`, if it is local, waiting for the query `generation`.
+    /// It opens with the keywords taking what is typed, as `zi` does.
     pub(crate) fn new(home: PathBuf, exclude: Option<PathBuf>, generation: u64) -> Self {
         Self {
             home,
             exclude,
             generation,
             keywords: Field::plain(""),
-            typing: false,
+            typing: true,
             fuzzy: false,
             found: Vec::new(),
             rows: Vec::new(),
@@ -183,8 +184,9 @@ impl JumpMenu {
     }
 
     /// Takes a key: Up, Down, the page keys, Home, and End move, Enter opens, and Esc closes
-    /// the window. `/` types the keywords: characters then are keywords, and the keys of text
-    /// fields edit them, until Esc goes back to the rows.
+    /// the window. While the keywords take what is typed, as they do when the window opens,
+    /// characters are keywords and the keys of text fields edit them, until Esc goes back to the
+    /// rows; `/` types them again.
     pub(crate) fn handle(&mut self, input: Resolved) -> JumpEvent {
         let rows = self.rows.len();
         let last = rows.saturating_sub(1);
@@ -395,12 +397,14 @@ mod tests {
     }
 
     #[test]
-    fn slash_types_keywords_and_typing_asks_again() {
+    fn opens_typing_keywords_and_typing_asks_again() {
         let mut menu = menu();
-        assert_eq!(menu.handle(Resolved::Insert('2')), JumpEvent::Pending);
-        assert_eq!(menu.mode(), Mode::Normal);
-        press(&mut menu, Action::QuickSearch);
         assert_eq!(menu.mode(), Mode::Insert);
+        press(&mut menu, Action::NormalMode);
+        assert_eq!(menu.mode(), Mode::Normal, "Esc goes to the rows");
+        assert_eq!(menu.handle(Resolved::Insert('2')), JumpEvent::Pending);
+        press(&mut menu, Action::QuickSearch);
+        assert_eq!(menu.mode(), Mode::Insert, "/ types the keywords again");
         assert_eq!(menu.handle(Resolved::Insert('s')), JumpEvent::Query);
         assert_eq!(menu.handle(Resolved::Insert(' ')), JumpEvent::Query);
         assert_eq!(menu.handle(Resolved::Insert('2')), JumpEvent::Query);
@@ -416,7 +420,6 @@ mod tests {
     #[test]
     fn the_keywords_are_a_text_field_and_only_edits_ask_again() {
         let mut menu = menu();
-        press(&mut menu, Action::QuickSearch);
         for c in "src".chars() {
             menu.handle(Resolved::Insert(c));
         }
@@ -462,7 +465,6 @@ mod tests {
         let mut menu = JumpMenu::new(PathBuf::from("/home/me"), None, 1).fuzzy(true);
         menu.found(1, Ok(found()));
         assert_eq!(menu.keywords(), [] as [String; 0]);
-        press(&mut menu, Action::QuickSearch);
         for c in "dl".chars() {
             assert_eq!(menu.handle(Resolved::Insert(c)), JumpEvent::Pending);
         }
@@ -526,7 +528,6 @@ mod tests {
     #[test]
     fn the_cursor_stands_right_after_the_keywords() {
         let mut menu = menu();
-        press(&mut menu, Action::QuickSearch);
         let mut terminal = Terminal::new(TestBackend::new(70, 12)).unwrap();
         let mut cursor_after = |menu: &mut JumpMenu, text: &str| {
             for c in text.chars() {

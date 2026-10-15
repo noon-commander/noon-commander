@@ -10842,8 +10842,11 @@ mod tests {
         };
         assert_eq!(keywords, &[] as &[String]);
         assert_eq!(exclude.as_deref(), Some(Path::new("/srv")));
-        assert_eq!(app.place(), (Mode::Normal, Context::Jump));
-        app.handle(action(Action::QuickSearch));
+        assert_eq!(
+            app.place(),
+            (Mode::Insert, Context::Jump),
+            "it opens typing keywords"
+        );
         app.handle(Resolved::Insert('s'));
         let effects = app.handle(Resolved::Insert('c'));
         let [
@@ -10874,7 +10877,13 @@ mod tests {
             text.contains("~/src") && text.contains("/opt/scripts") && !text.contains("/stale"),
             "{text}"
         );
-        app.handle(action(Action::Down));
+        keys(&mut app, &["esc"]);
+        assert_eq!(
+            app.place(),
+            (Mode::Normal, Context::Jump),
+            "Esc goes to the rows"
+        );
+        keys(&mut app, &["j"]);
         let effects = app.handle(action(Action::Confirm));
         assert_eq!(app.context(), Context::Panel);
         assert_eq!(zoxide_adds(&effects), [PathBuf::from("/opt/scripts")]);
@@ -10890,11 +10899,11 @@ mod tests {
         let effects = app.handle(action(Action::View));
         assert_eq!(zoxide_adds(&effects), [] as [PathBuf; 0]);
         app.handle(action(Action::Quit));
-        // Esc closes the window; so does a failed query, after saying why.
+        // Esc on the rows closes the window; so does a failed query, after saying why.
         app.handle(action(Action::Jump));
         app.jumps(app.jump_queries, Err("zoxide is not installed".to_owned()));
         assert!(screen_of(&mut app, 12).contains("zoxide is not installed"));
-        app.handle(action(Action::Cancel));
+        keys(&mut app, &["esc", "esc"]);
         assert_eq!(app.context(), Context::Panel);
     }
 
@@ -10921,7 +10930,6 @@ mod tests {
             })
             .collect();
         app.jumps(*generation, Ok(found));
-        app.handle(action(Action::QuickSearch));
         for c in "src".chars() {
             assert!(app.handle(Resolved::Insert(c)).is_empty(), "no query");
         }

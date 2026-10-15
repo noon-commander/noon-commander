@@ -868,16 +868,16 @@ text at the bottom, where a dimmed line marks it; the help scrolls the same way.
 
 ## Lists (`list`, Normal mode)
 
-The keys that the windows listing items to choose from share, in Normal mode, where they start: the
-location menu, the tab menu, the zoxide window, the workspaces, and the command history fall back to
-it, then to `global`, and their sections list only the keys they add. Keys that nothing binds do
-nothing: no digit or letter picks an item. The rows scroll as the panels' do, as vim's window,
-headings among them. `/` types in the filter, or the keywords of the zoxide window, in Insert mode,
-and Esc there comes back with the filter kept. Keys never go to it alone; the help lists its keys
-with each of those windows, with what Enter takes there. The mc column has the keys of mc's lists,
-such as its histories and its hotlist; the far column, those of Far's menus; the yazi column, those
-of its pick window, which asks for the program to open files with. None of them has modes: their
-keys are here, not under Insert mode.
+The keys that the windows listing items to choose from share, in Normal mode, where all but the
+zoxide window start: the location menu, the tab menu, the zoxide window, the workspaces, and the
+command history fall back to it, then to `global`, and their sections list only the keys they add.
+Keys that nothing binds do nothing: no digit or letter picks an item. The rows scroll as the
+panels' do, as vim's window, headings among them. `/` types in the filter, or the keywords of the
+zoxide window, in Insert mode, and Esc there comes back with the filter kept. Keys never go to it
+alone; the help lists its keys with each of those windows, with what Enter takes there. The mc
+column has the keys of mc's lists, such as its histories and its hotlist; the far column, those of
+Far's menus; the yazi column, those of its pick window, which asks for the program to open files
+with. None of them has modes: their keys are here, not under Insert mode.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -966,9 +966,10 @@ While `/` has its filter take text. It falls back to `list`, then to `input`, th
 
 ## zoxide window (`jump`, Normal mode)
 
-g z: the directories that zoxide ranks; `/` types keywords, as z takes them in a shell. It binds
-no keys of its own, in either mode: it falls back to `list`, whose Enter opens the directory in
-the active panel, and, while the keywords take text, to `input` too.
+g z: the directories that zoxide ranks. It opens in Insert mode, its keywords taking text, as z
+takes them in a shell; Esc goes to the rows, in Normal mode, where `/` types again and Esc closes
+it. It binds no keys of its own, in either mode: it falls back to `list`, whose Enter opens the
+directory in the active panel, and, while the keywords take text, to `input` too.
 
 ## Workspaces window (`workspaces`, Normal mode)
 

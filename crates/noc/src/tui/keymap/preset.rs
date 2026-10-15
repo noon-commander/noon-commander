@@ -502,7 +502,8 @@ pub(super) const PRESET: Preset = &[
         Context::TabMenu,
         &[(Action::CloseTab, &["f8"])],
     ),
-    // The zoxide window, on top of the list's; its filter takes keywords.
+    // The zoxide window, on top of the list's; its filter takes keywords, in Insert mode as it
+    // opens.
     (Mode::Normal, Context::Jump, &[]),
     // The window of the saved workspaces, on top of the list's: a adds one; r and F6 rename,
     // and d d and F8 delete, as they rename and delete files.

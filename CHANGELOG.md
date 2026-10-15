@@ -27,6 +27,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Ctrl+f too. A dimmed `— end —` follows the last line, a scroll bar shows on the right when the
   text does not fit, and the position says `End` once the end shows: the viewer's on top, the
   help's in its bottom frame.
+- The zoxide window (`g z`) opens in Insert mode, so keywords can be typed at once, as in `zi`,
+  without `/` first. Esc goes to the rows, and Esc there closes the window.
 
 ## [0.2.0] - 2026-10-14
 

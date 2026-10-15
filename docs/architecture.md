@@ -351,12 +351,14 @@ directories, which Enter opens in the active panel:
 
 - With `ui.fuzzy_search` (the default), the window asks
   `zoxide query --list --score --exclude <dir> --` once, for every directory but the panel's,
-  and what `/` types filters them as [fzf](#fuzzy-search) does, best match first and those as
-  good in zoxide's order, as `zi` does with fzf. Otherwise what `/` types is zoxide keywords, as
+  and what is typed filters them as [fzf](#fuzzy-search) does, best match first and those as
+  good in zoxide's order, as `zi` does with fzf. Otherwise what is typed is zoxide keywords, as
   `z foo bar` in a shell; each change asks
   `zoxide query --list --score --exclude <dir> -- <keywords>` again, and a query still running
-  is dropped. The window opens in Normal mode, as the other [lists](#lists) do. Directories
-  under the home directory show from `~`, and fuzzy search matches them as shown.
+  is dropped. Unlike the other [lists](#lists), the window opens in Insert mode, typing
+  keywords, as `zi` does: Esc goes to the rows, in Normal mode, where `/` types again and Esc
+  closes the window. Directories under the home directory show from `~`, and fuzzy search
+  matches them as shown.
 - A local directory goes to zoxide (`zoxide add -- <dir>`) once the user does something in it,
   at most once a visit: a copy, move, or delete from it, a copy or move into it when a panel
   shows it, F7, F3 or F4 on a file, checksums, or a jump there. Passing through, marking,
@@ -389,14 +391,15 @@ fzf's algorithm:
 ### Lists
 
 The location menu, the tab menu, the zoxide window, the Workspaces window, and the command history
-list rows to choose from. They open in Normal mode (keymap context `list`, which each one's context
-falls back to): `j`, `k`, Ctrl+j, Ctrl+d, Ctrl+u, Ctrl+f, Ctrl+b, `g g`, and `G` move, and the rows
-scroll as the panels' do, headings among them, a count repeats a motion, Enter takes the row under
-the cursor, `d d` and F8 delete it where the window can, as many rows as a count says (`3d d`, as
-vim's deletes three lines), and Esc, `q`, Ctrl+c, or F10 closes the window. `/` types in the filter,
-in Insert mode, where characters are text, the keys of `input` edit it (Ctrl+r types a register,
-which the app reads, and Ctrl+o, which has no Normal mode to go to, does nothing), Up, Down, Ctrl+p,
-and Ctrl+n still move, and Esc goes back to the rows with the filter kept. Text pasted while the
+list rows to choose from. Their rows take keys in Normal mode (keymap context `list`, which each
+one's context falls back to), where all but the zoxide window open: `j`, `k`, Ctrl+j, Ctrl+d,
+Ctrl+u, Ctrl+f, Ctrl+b, `g g`, and `G` move, and the rows scroll as the panels' do, headings among
+them, a count repeats a motion, Enter takes the row under the cursor, `d d` and F8 delete it where
+the window can, as many rows as a count says (`3d d`, as vim's deletes three lines), and Esc, `q`,
+Ctrl+c, or F10 closes the window. `/` types in the filter, in Insert mode, where characters are
+text, the keys of `input` edit it (Ctrl+r types a register, which the app reads, and Ctrl+o, which
+has no Normal mode to go to, does nothing), Up, Down, Ctrl+p, and Ctrl+n still move, and Esc goes
+back to the rows with the filter kept. Text pasted while the
 rows have the keys goes to the filter, in Insert mode. There are no digit hotkeys.
 
 - All but the zoxide window share `tui/picker.rs`: the filter, a text field with a cursor
@@ -406,7 +409,7 @@ rows have the keys goes to the filter, in Insert mode. There are no digit hotkey
   while the filter is empty, as the rows of more in the location menu do, or only while it has
   text, as the places behind them do.
 - The zoxide window does not use it: zoxide, not a filter, picks its rows from the keywords
-  typed. It has the same modes.
+  typed. It has the same modes, but opens in Insert mode, with the keywords taking the keys.
 
 ### Tabs
 

@@ -21,3 +21,4 @@ keyboard     kitty
 editor       nvim -p
 zoxide       zoxide 0.9.8
 ripgrep      ripgrep 15.2.0
+fd           fd 10.5.0

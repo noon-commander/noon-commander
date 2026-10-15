@@ -351,6 +351,7 @@ fn fact_name(fact: Fact) -> Option<String> {
         Fact::Editor => fl!("help-about-editor"),
         Fact::Zoxide => fl!("help-about-zoxide"),
         Fact::Ripgrep => fl!("help-about-ripgrep"),
+        Fact::Fd => fl!("help-about-fd"),
     })
 }
 
@@ -1861,6 +1862,7 @@ mod tests {
             editor: Some("nvim -p".to_owned()),
             zoxide: Detected::Missing,
             ripgrep: Detected::Found("ripgrep 15.2.0".to_owned()),
+            fd: Detected::Found("fd 10.5.0".to_owned()),
         };
         let about = About {
             report,
@@ -1877,6 +1879,6 @@ mod tests {
         let mut help = Help::new(&Keymap::default(), true, &about);
         help.handle(action(Action::NextField));
         help.handle(action(Action::Home));
-        insta::assert_snapshot!(draw(&mut help, 120, 60));
+        insta::assert_snapshot!(draw(&mut help, 120, 62));
     }
 }

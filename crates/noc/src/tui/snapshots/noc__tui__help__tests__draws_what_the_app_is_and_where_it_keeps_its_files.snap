@@ -1,6 +1,6 @@
 ---
 source: crates/noc/src/tui/help.rs
-expression: "draw(&mut help, 120, 60)"
+expression: "draw(&mut help, 120, 62)"
 ---
 "                                                                                                                        "
 "                                                                                                                        "
@@ -44,6 +44,7 @@ expression: "draw(&mut help, 120, 60)"
 "                  ║                       │ Editor        nvim -p                                    ║                  "
 "                  ║                       │ zoxide        not found                                  ║                  "
 "                  ║                       │ ripgrep       ripgrep 15.2.0                             ║                  "
+"                  ║                       │ fd            fd 10.5.0                                  ║                  "
 "                  ║                       │                                                          ║                  "
 "                  ║                       │ ── Files ─────────────────────────────────────────────── ║                  "
 "                  ║                       │ Settings      ~/.config/noc/config.toml                  ║                  "
@@ -53,6 +54,7 @@ expression: "draw(&mut help, 120, 60)"
 "                  ║                       │ Recent places ~/.local/state/noc/recent.toml             ║                  "
 "                  ║                       │ Log           /var/log/noc/noc.log                       ║                  "
 "                  ╚════════════════════════════════════════════════════════════════════════════ End ═╝                  "
+"                                                                                                                        "
 "                                                                                                                        "
 "                                                                                                                        "
 "                                                                                                                        "

@@ -15,9 +15,9 @@ use crate::about::{
     Build, Detected, Fact, Keyboard, Report, System, Terminal, editor_command, known,
 };
 
-/// Prints the report, with what zoxide and ripgrep said they are. Blocks while the terminal is
-/// asked.
-pub(super) fn print((zoxide, ripgrep): (Detected, Detected)) -> ExitCode {
+/// Prints the report, with what zoxide, ripgrep, and fd said they are. Blocks while the
+/// terminal is asked.
+pub(super) fn print((zoxide, ripgrep, fd): (Detected, Detected, Detected)) -> ExitCode {
     // The terminal is in raw mode while it is asked, so the report is ready before printing.
     let answers = Answers::query();
     let report = Report {
@@ -30,6 +30,7 @@ pub(super) fn print((zoxide, ripgrep): (Detected, Detected)) -> ExitCode {
         editor: editor_command(&Editor::from_env()),
         zoxide,
         ripgrep,
+        fd,
         ..Report::new(Build::current())
     };
     let text = text(&report);
@@ -249,15 +250,19 @@ mod tests {
             editor: Some("nvim -p".to_owned()),
             zoxide: Detected::Found("zoxide 0.9.8".to_owned()),
             ripgrep: Detected::Found("ripgrep 15.2.0".to_owned()),
+            fd: Detected::Found("fd 10.5.0".to_owned()),
         };
         insta::assert_snapshot!(text(&report));
         let missing = Report {
             zoxide: Detected::Missing,
             ripgrep: Detected::Missing,
+            fd: Detected::Missing,
             ..report
         };
         assert!(
-            text(&missing).ends_with("zoxide       not found\nripgrep      not found\n"),
+            text(&missing).ends_with(
+                "zoxide       not found\nripgrep      not found\nfd           not found\n"
+            ),
             "{}",
             text(&missing)
         );

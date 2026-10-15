@@ -482,6 +482,7 @@ help-about-tools = External tools
 help-about-editor = Editor
 help-about-zoxide = zoxide
 help-about-ripgrep = ripgrep
+help-about-fd = fd
 help-about-files = Files
 help-about-config = Settings
 help-about-hosts = Host settings

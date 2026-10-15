@@ -64,7 +64,7 @@ use keymap::{KeyState, Keyboard, Mode};
 use mouse::{Clicks, Press};
 use tasks::{Done, Tasks};
 
-use crate::about::{self, Build, Report, System};
+use crate::about::{self, Build, Report, System, Tool};
 use crate::context::Context;
 use crate::i18n::fl;
 
@@ -96,8 +96,7 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
         } => tasks.run(app.created(panel, &location, result)),
         Done::Job { id, event } => tasks.run(app.job_event(id, event)),
         Done::Read { id, result } => app.read(id, result),
-        Done::Zoxide(zoxide) => app.set_zoxide(zoxide),
-        Done::Ripgrep(ripgrep) => app.set_ripgrep(ripgrep),
+        Done::Detected(tool, detected) => app.detected(tool, detected),
         Done::Connected {
             host,
             connection,
@@ -267,8 +266,7 @@ fn start_app(
     effects.push(app::Effect::Recent(app::RecentChange::Load));
     // No menu asks for this generation.
     effects.push(app::Effect::ListPlaces { generation: 0 });
-    effects.push(app::Effect::DetectZoxide);
-    effects.push(app::Effect::DetectRipgrep);
+    effects.extend([Tool::Zoxide, Tool::Ripgrep, Tool::Fd].map(app::Effect::Detect));
     app.set_color_depth(theme::ColorDepth::detect());
     app.set_keyboard(keyboard);
     app.set_time_zone(tz.clone());

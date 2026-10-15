@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use futures_util::StreamExt as _;
+use futures_util::future::{BoxFuture, FutureExt as _};
 use futures_util::stream::FuturesUnordered;
 use noc_config::{
     Config, ConfigError, History, HistoryEntry, HostConfig, Hosts, Recent, Workspaces, add_command,
@@ -43,7 +44,7 @@ use super::find::FindSummary;
 use super::panel::{ListRequest, Listed, Listing};
 use super::places::{self, Places};
 use super::tabs::PanelId;
-use crate::about::{self, Detected};
+use crate::about::{self, Detected, Tool};
 use crate::context::Context;
 use crate::i18n::fl;
 
@@ -141,10 +142,8 @@ pub(crate) enum Done {
         entries: Result<Vec<(Vec<u8>, bool)>, String>,
         hosts: Vec<String>,
     },
-    /// What zoxide said it is, after an [`Effect::DetectZoxide`].
-    Zoxide(Detected),
-    /// What ripgrep said it is, after an [`Effect::DetectRipgrep`].
-    Ripgrep(Detected),
+    /// What a tool said it is, after an [`Effect::Detect`].
+    Detected(Tool, Detected),
     /// zoxide's answer to the [`Effect::ZoxideQuery`] `generation`, or why there is none.
     Jumps {
         generation: u64,
@@ -390,8 +389,7 @@ impl Tasks {
                     prefix,
                     with_dirs,
                 } => self.list_commands(generation, dirs, prefix, with_dirs),
-                Effect::DetectZoxide => self.detect_zoxide(),
-                Effect::DetectRipgrep => self.detect_ripgrep(),
+                Effect::Detect(tool) => self.detect(tool),
                 Effect::ZoxideQuery {
                     generation,
                     keywords,
@@ -540,21 +538,25 @@ impl Tasks {
         });
     }
 
-    /// Asks zoxide what it is.
-    fn detect_zoxide(&self) {
-        let zoxide = self.context.zoxide();
+    /// Asks `tool` what it is.
+    fn detect(&self, tool: Tool) {
         let done = self.done.clone();
+        let detection: BoxFuture<'static, Detected> = match tool {
+            Tool::Zoxide => {
+                let zoxide = self.context.zoxide();
+                async move { about::detect_zoxide(&zoxide).await }.boxed()
+            }
+            Tool::Ripgrep => {
+                let ripgrep = self.context.ripgrep();
+                async move { about::detect_ripgrep(&ripgrep).await }.boxed()
+            }
+            Tool::Fd => {
+                let fd = self.context.fd();
+                async move { about::detect_fd(&fd).await }.boxed()
+            }
+        };
         tokio::spawn(async move {
-            let _ = done.send(Done::Zoxide(about::detect_zoxide(&zoxide).await));
-        });
-    }
-
-    /// Asks ripgrep what it is.
-    fn detect_ripgrep(&self) {
-        let ripgrep = self.context.ripgrep();
-        let done = self.done.clone();
-        tokio::spawn(async move {
-            let _ = done.send(Done::Ripgrep(about::detect_ripgrep(&ripgrep).await));
+            let _ = done.send(Done::Detected(tool, detection.await));
         });
     }
 

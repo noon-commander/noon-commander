@@ -168,6 +168,7 @@ keyboard     kitty
 editor       nvim
 zoxide       zoxide 0.9.8
 ripgrep      ripgrep 15.2.0
+fd           fd 10.5.0
 ```
 
 `features` lists the compile-time features, `+` on and `-` off. `commit-time` is in UTC; `dirty`
@@ -177,10 +178,10 @@ is `kitty` where the terminal speaks the kitty keyboard protocol and `legacy` wh
 terminal is asked on `/dev/tty`, so `noc debug version | pbcopy` asks it too. When stdin is not a
 terminal, or `noc` runs in the background, it is not asked: `keyboard` is `unchecked`, and
 `terminal` comes from the environment alone. `editor` is the command of F4: `$VISUAL`, else
-`$EDITOR`, else `vi`. `zoxide` and `ripgrep` are what the programs of `[zoxide] program` and
-`[search] program` say they are, or `not found`. The About page of the help (F1) shows the same
-facts. Scripts can rely on the keys and their order; new keys are added at the end. For example, the
-commit: `noc debug version | awk '$1 == "commit" { print $2 }'`.
+`$EDITOR`, else `vi`. `zoxide`, `ripgrep`, and `fd` are what the programs of `[zoxide] program`,
+`[search] program`, and `[search] fd` say they are, or `not found`. The About page of the help (F1)
+shows the same facts. Scripts can rely on the keys and their order; new keys are added at the end.
+For example, the commit: `noc debug version | awk '$1 == "commit" { print $2 }'`.
 
 ### Install
 

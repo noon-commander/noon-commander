@@ -7,6 +7,7 @@ use color_eyre::eyre::{Result, WrapErr as _, bail};
 use noc_config::{Config, ConfigError, Hosts, Paths};
 use noc_ssh::discovery::{Discovery, DiscoveryOptions, DiscoveryWarning, discover};
 use noc_ssh::{ConfigStamp, ResolveCache, SshSettings};
+use noc_tools::fd::Fd;
 use noc_tools::ripgrep::Ripgrep;
 use noc_tools::zoxide::Zoxide;
 
@@ -109,6 +110,11 @@ impl Context {
     /// How ripgrep is run now, for local directories.
     pub(crate) fn ripgrep(&self) -> Ripgrep {
         Ripgrep::new(self.config().search.program.clone())
+    }
+
+    /// How fd is run now, for local directories.
+    pub(crate) fn fd(&self) -> Fd {
+        Fd::new(self.config().search.fd.clone())
     }
 
     /// The host settings as they are now.

@@ -1247,66 +1247,66 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   0022](adr/0022-vim-modes.md)): one preset, `tui/keymap/preset.rs`, maps keys to `Action`s per mode
   (`Mode::Normal`, `Insert`, `Visual`) and context (`global`, `panel`, `input`, `quick_search`,
   `rename`, `command_line`, `command_history`, `find`, `user_screen`, `list`, `location_menu`,
-  `tab_menu`, `jump`, `workspaces`, `pull_down`, `dialog`, `help`, `dialog_input`, `path_input`, `completion`,
-  `viewer`), in the order the help lists them. The app says which mode and context the next key goes
-  to (`App::place`): the mode is that of the text field with the keys, Visual mode while a panel
-  selects rows, and else Normal mode. Each context falls back along a chain in its mode
-  (`Context::chain`), for example the help to the dialog, the text fields (`quick_search`, `rename`,
-  `dialog_input`, `command_line`) to `input`, which holds the keys that edit text in each mode, and
-  the windows that list items (`location_menu`, `tab_menu`, `jump`, `workspaces`, `command_history`,
-  `find`) to `list`, which holds the keys they share, then, in Insert mode only, to `input` for their
-  filters. Every one but `user_screen` falls back to `global` last, whose keys are the same in every
-  mode: the key hints, the output of commands, and Ctrl+l, which redraws the screen; the app takes
-  them before whatever is in front, which stays as it was. The first context that knows a key
-  sequence decides, except that a sequence it only starts does what a later context binds it to.
-  Bindings are key sequences matched by prefix with a 1-second timeout (`g g`, `Z Z`, `Ctrl+w h`).
-  The panels group keys under `g`, Ctrl+w (the other panel, as vim's windows), `t` (tabs and
-  workspaces), `o` (sort order and hidden names), and `f` (`f j` the jobs, `f #` the checksums, the
-  rest of mc's Ctrl+x letters left for later). In Insert mode a character is text unless the context
-  itself binds it, and in Normal and Visual mode a character nothing binds does nothing. The keymap
-  reads what vim lets come with a command and hands it to the app with the action (`Typed`,
-  `Extra`): a count before it (digits, `0` only after another), a register after `"`, and the
-  character after the actions that take one (`f`, `t`, `F`, `T`, `r`, `"`, and Ctrl+r and Ctrl+v in
-  Insert mode). The app repeats a motion over rows a count's times, and gives the count to what
-  takes it as a number (`G`, `g g`, `g t`, Ctrl+o) and to the text fields, whose editor
-  (`tui/edit.rs`) reads it itself. `Esc` acts at once: it never waits for a key after it, and while
-  a command is pending it gives the command up; so does a key that cannot go on with it, which in
-  Normal and Visual mode goes too, as in vim (`g x` and Ctrl+w `e` do nothing), unless what came
-  before it does something alone. The keymap says so (`KeyState::take_dropped`), and the app then
-  gives up the part a text field holds, such as an operator that waits for its motion, or the one
-  command after Ctrl+o. A count typed after a register multiplies the one typed before it. An `Esc`
-  and a quick next key arrive as Alt and that key, so in Insert and Visual mode, and in the panels,
-  Alt and a key that nothing binds, any key but `Esc`, go to the keymap as `Esc`, then as the key in
-  the mode `Esc` left (`App::key`, with `Keymap::alt_as_esc`), even while a command is pending,
-  unless the key goes on with it. vim gets them so without the kitty keyboard protocol; with it,
-  which Noon Commander asks for, vim would type the key with the eighth bit set, and Noon Commander
-  does as nvim does in Insert and Visual mode ([ADR 0022](adr/0022-vim-modes.md)). On a password
-  they do nothing, as the `Esc` would close its dialog and send the key to the panels. The pull-down
-  menu takes Alt and a letter as its hotkey instead. Keys are written with `crokey` names. User
-  overrides of the keymap are planned. The F-key bar is generated from the keymap in the mode and
-  context of the next key, and so is the help screen (F1): the keys of each mode and context, with
-  what they do, for what the app can do already; a prompt from ssh shows over it. It takes 70% of
-  the width and of the height of the screen, and, as the Configuration dialog, lists its sections
-  on the left (`tui/sidebar.rs`, which both draw): About, with the license and the report of
-  `crate::about` that `noc debug version` prints too (the build; the system, read once at start;
-  the terminal, from its variables and the keyboard protocol the TUI found, without asking for its
-  name; and the external tools, the editor, zoxide, and ripgrep, which are asked in the background
-  at start and again when `[zoxide] program` or `[search] program` changes), and the files the app
-  keeps; and
-  Keys, which folds, with a group for each part of the app (panels, text fields, search and
-  renaming, the command line, lists and menus, menus and dialogs, the viewer) and tips, each under
-  its title in points after a bullet (`•`, `-` without icons). It opens at
-  the top of About first, and then where it was when it closed last (`help::Spot`, which the app
-  keeps): the section, Keys open or folded, what had the keys, and how far down the text was. The
-  titles of the parts of a section are bold on a line across (`── Panels ──`), and the keys and the
-  names of the facts take the theme's `keys`, a color apart from the titles, as the keys of the
-  key hints and of their list (Ctrl+k) do, and those of the menus of F9 in `menu_keys`.
-  Tab moves between the sections and the text; in the sections `j` and `k` choose, `l` or Enter
-  opens Keys or goes to the text, and `h` goes up to Keys and folds it; in the text `h` goes back.
-  A click chooses a section, and one on Keys opens or folds it. The text scrolls as the viewer
-  does, with the keys it does not take in the sections and with the wheel too, stopping with its
-  last line at the bottom, with no line after it, a scroll bar, and how far down it is in its
-  bottom frame.
+  `tab_menu`, `jump`, `workspaces`, `pull_down`, `dialog`, `help`, `dialog_input`, `path_input`,
+  `completion`, `viewer`), in the order the help lists them. The app says which mode and context the
+  next key goes to (`App::place`): the mode is that of the text field with the keys, Visual mode
+  while a panel selects rows, and else Normal mode. Each context falls back along a chain in its
+  mode (`Context::chain`), for example the help to the dialog, the text fields (`quick_search`,
+  `rename`, `dialog_input`, `command_line`) to `input`, which holds the keys that edit text in each
+  mode, and the windows that list items (`location_menu`, `tab_menu`, `jump`, `workspaces`,
+  `command_history`) to `list`, which holds the keys they share, then, in Insert mode only, to
+  `input` for their filters; the search of a tree falls back as a dialog does, `find` to `dialog`
+  and its fields, `find_input`, to `dialog_input`. Every one but `user_screen` falls back to
+  `global` last, whose keys are the same in every mode: the key hints, the output of commands, and
+  Ctrl+l, which redraws the screen; the app takes them before whatever is in front, which stays as
+  it was. The first context that knows a key sequence decides, except that a sequence it only starts
+  does what a later context binds it to. Bindings are key sequences matched by prefix with a
+  1-second timeout (`g g`, `Z Z`, `Ctrl+w h`). The panels group keys under `g`, Ctrl+w (the other
+  panel, as vim's windows), `t` (tabs and workspaces), `o` (sort order and hidden names), and `f`
+  (`f j` the jobs, `f #` the checksums, the rest of mc's Ctrl+x letters left for later). In Insert
+  mode a character is text unless the context itself binds it, and in Normal and Visual mode a
+  character nothing binds does nothing. The keymap reads what vim lets come with a command and hands
+  it to the app with the action (`Typed`, `Extra`): a count before it (digits, `0` only after
+  another), a register after `"`, and the character after the actions that take one (`f`, `t`, `F`,
+  `T`, `r`, `"`, and Ctrl+r and Ctrl+v in Insert mode). The app repeats a motion over rows a count's
+  times, and gives the count to what takes it as a number (`G`, `g g`, `g t`, Ctrl+o) and to the
+  text fields, whose editor (`tui/edit.rs`) reads it itself. `Esc` acts at once: it never waits for
+  a key after it, and while a command is pending it gives the command up; so does a key that cannot
+  go on with it, which in Normal and Visual mode goes too, as in vim (`g x` and Ctrl+w `e` do
+  nothing), unless what came before it does something alone. The keymap says so
+  (`KeyState::take_dropped`), and the app then gives up the part a text field holds, such as an
+  operator that waits for its motion, or the one command after Ctrl+o. A count typed after a
+  register multiplies the one typed before it. An `Esc` and a quick next key arrive as Alt and that
+  key, so in Insert and Visual mode, and in the panels, Alt and a key that nothing binds, any key
+  but `Esc`, go to the keymap as `Esc`, then as the key in the mode `Esc` left (`App::key`, with
+  `Keymap::alt_as_esc`), even while a command is pending, unless the key goes on with it. vim gets
+  them so without the kitty keyboard protocol; with it, which Noon Commander asks for, vim would
+  type the key with the eighth bit set, and Noon Commander does as nvim does in Insert and Visual
+  mode ([ADR 0022](adr/0022-vim-modes.md)). On a password they do nothing, as the `Esc` would close
+  its dialog and send the key to the panels. The pull-down menu takes Alt and a letter as its hotkey
+  instead. Keys are written with `crokey` names. User overrides of the keymap are planned. The F-key
+  bar is generated from the keymap in the mode and context of the next key, and so is the help
+  screen (F1): the keys of each mode and context, with what they do, for what the app can do
+  already; a prompt from ssh shows over it. It takes 70% of the width and of the height of the
+  screen, and, as the Configuration dialog, lists its sections on the left (`tui/sidebar.rs`, which
+  both draw): About, with the license and the report of `crate::about` that `noc debug version`
+  prints too (the build; the system, read once at start; the terminal, from its variables and the
+  keyboard protocol the TUI found, without asking for its name; and the external tools, the editor,
+  zoxide, ripgrep, and fd, which are asked in the background at start and again when `[zoxide]
+  program`, `[search] program`, or `[search] fd` changes, `Effect::Detect`), and the files the app
+  keeps; and Keys, which folds, with a group for each part of the app (panels, text fields, search
+  and renaming, the command line, lists and menus, menus and dialogs, the viewer) and tips, each
+  under its title in points after a bullet (`•`, `-` without icons). It opens at the top of About
+  first, and then where it was when it closed last (`help::Spot`, which the app keeps): the section,
+  Keys open or folded, what had the keys, and how far down the text was. The titles of the parts of
+  a section are bold on a line across (`── Panels ──`), and the keys and the names of the facts take
+  the theme's `keys`, a color apart from the titles, as the keys of the key hints and of their list
+  (Ctrl+k) do, and those of the menus of F9 in `menu_keys`. Tab moves between the sections and the
+  text; in the sections `j` and `k` choose, `l` or Enter opens Keys or goes to the text, and `h`
+  goes up to Keys and folds it; in the text `h` goes back. A click chooses a section, and one on
+  Keys opens or folds it. The text scrolls as the viewer does, with the keys it does not take in the
+  sections and with the wheel too, stopping with its last line at the bottom, with no line after it,
+  a scroll bar, and how far down it is in its bottom frame.
 - **Text fields.** A text field (`dialog::Field`, and the command line) holds a `tui/edit.rs`
   `Editor`: the text, the cursor, and vim's modes over it. In Insert mode characters go in at the
   cursor, and Left, Right, Home, End, Shift+Left, Shift+Right, Backspace, Delete, Ctrl+w, Ctrl+u,

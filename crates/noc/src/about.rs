@@ -8,6 +8,7 @@ use std::os::unix::ffi::OsStrExt as _;
 
 use noc_tools::ToolError;
 use noc_tools::editor::Editor;
+use noc_tools::fd::Fd;
 use noc_tools::ripgrep::Ripgrep;
 use noc_tools::zoxide::Zoxide;
 
@@ -89,10 +90,11 @@ pub(crate) enum Fact {
     Editor,
     Zoxide,
     Ripgrep,
+    Fd,
 }
 
 impl Fact {
-    pub(crate) const ALL: [Self; 19] = [
+    pub(crate) const ALL: [Self; 20] = [
         Self::Name,
         Self::Version,
         Self::Features,
@@ -112,6 +114,7 @@ impl Fact {
         Self::Editor,
         Self::Zoxide,
         Self::Ripgrep,
+        Self::Fd,
     ];
 
     /// Its key in `noc debug version`.
@@ -136,6 +139,7 @@ impl Fact {
             Self::Editor => "editor",
             Self::Zoxide => "zoxide",
             Self::Ripgrep => "ripgrep",
+            Self::Fd => "fd",
         }
     }
 
@@ -152,7 +156,7 @@ impl Fact {
             Self::Terminal | Self::Term | Self::Multiplexer | Self::Colors | Self::Keyboard => {
                 Topic::Terminal
             }
-            Self::Editor | Self::Zoxide | Self::Ripgrep => Topic::Tools,
+            Self::Editor | Self::Zoxide | Self::Ripgrep | Self::Fd => Topic::Tools,
         }
     }
 }
@@ -192,6 +196,8 @@ pub(crate) struct Report {
     pub(crate) zoxide: Detected,
     /// The ripgrep of `g /`, for local directories.
     pub(crate) ripgrep: Detected,
+    /// The fd of `g /`, likewise.
+    pub(crate) fd: Detected,
 }
 
 impl Report {
@@ -204,6 +210,16 @@ impl Report {
             editor: None,
             zoxide: Detected::Unchecked,
             ripgrep: Detected::Unchecked,
+            fd: Detected::Unchecked,
+        }
+    }
+
+    /// Takes what `tool` said it is.
+    pub(crate) fn set(&mut self, tool: Tool, detected: Detected) {
+        match tool {
+            Tool::Zoxide => self.zoxide = detected,
+            Tool::Ripgrep => self.ripgrep = detected,
+            Tool::Fd => self.fd = detected,
         }
     }
 
@@ -244,6 +260,7 @@ impl Report {
             Fact::Editor => known(&self.editor),
             Fact::Zoxide => self.zoxide.value(),
             Fact::Ripgrep => self.ripgrep.value(),
+            Fact::Fd => self.fd.value(),
         }
     }
 }
@@ -343,6 +360,14 @@ pub(crate) fn editor_command(editor: &Editor) -> Option<String> {
     known(words.join(" ").as_bytes())
 }
 
+/// An external program that the report says the version of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Tool {
+    Zoxide,
+    Ripgrep,
+    Fd,
+}
+
 /// Whether a program is there, and what it says it is.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Detected {
@@ -384,6 +409,11 @@ pub(crate) async fn detect_zoxide(zoxide: &Zoxide) -> Detected {
 /// Asks `rg` what it is.
 pub(crate) async fn detect_ripgrep(ripgrep: &Ripgrep) -> Detected {
     Detected::of("rg", ripgrep.version().await)
+}
+
+/// Asks `fd` what it is.
+pub(crate) async fn detect_fd(fd: &Fd) -> Detected {
+    Detected::of("fd", fd.version().await)
 }
 
 /// The system the binary runs on.
@@ -514,15 +544,12 @@ mod tests {
             Fact::Editor => 16,
             Fact::Zoxide => 17,
             Fact::Ripgrep => 18,
+            Fact::Fd => 19,
         };
         for (index, fact) in Fact::ALL.into_iter().enumerate() {
             assert_eq!(place(fact), index, "{fact:?}");
         }
-        assert_eq!(
-            place(Fact::Ripgrep) + 1,
-            Fact::ALL.len(),
-            "the last is last"
-        );
+        assert_eq!(place(Fact::Fd) + 1, Fact::ALL.len(), "the last is last");
     }
 
     #[test]

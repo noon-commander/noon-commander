@@ -1,16 +1,20 @@
 //! The list of jobs, as mc's Background jobs (`f j`): how far each is, with buttons that
 //! bring the selected one to the front or abort it.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
+use noc_scroll::Motion;
+use noc_scroll::scrollbar::{self, Bar};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::text::Line;
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, button_line, button_spots, draw_box, draw_separator, frame_around};
+use super::dialog::{
+    Colors, button_line, button_spots, draw_box, draw_separator, frame_around, right_frame,
+};
 use super::keymap::{Action, Resolved};
-use super::mouse::{Drawn, Pointer, Press};
+use super::mouse::{Drawn, Pointer, Press, Scroll};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -64,8 +68,13 @@ pub(crate) struct JobsList {
     row: usize,
     /// The button with the focus.
     focus: usize,
+    /// The first row shown, and how many show, at the last render.
+    top: Cell<usize>,
+    page: Cell<usize>,
     /// Where the last render drew it, for the mouse.
     drawn: RefCell<Drawn>,
+    /// The scroll bar of the last render, on the right of the frame.
+    bar: Cell<Option<Bar>>,
 }
 
 impl JobsList {
@@ -112,6 +121,31 @@ impl JobsList {
         JobsEvent::Pending
     }
 
+    /// The scroll bar of the last render, for the mouse.
+    pub(crate) fn bar(&self) -> Option<Bar> {
+        self.bar.get()
+    }
+
+    /// Chooses a job as a press on the scroll bar asks: the next one or the one before, a page
+    /// on or back, or the nearest on the screen scrolled to where the thumb was dragged.
+    pub(crate) fn scroll(&mut self, scroll: Scroll, rows: &[Row]) {
+        let index = self.index(rows);
+        let last = rows.len().saturating_sub(1);
+        let page = self.page.get().max(1);
+        let index = match scroll {
+            Scroll::By(Motion::Up) => index.saturating_sub(1),
+            Scroll::By(Motion::Down) => index + 1,
+            Scroll::By(Motion::PageUp) => index.saturating_sub(page),
+            Scroll::By(Motion::PageDown) => index + page,
+            Scroll::By(_) => index,
+            Scroll::To(top) => {
+                self.top.set(top);
+                index.clamp(top, top + page - 1)
+            }
+        };
+        self.select(rows, index.min(last));
+    }
+
     /// Takes a press of the mouse, where the list was drawn last: a click chooses a job, and one
     /// on a button returns Enter, which presses it.
     pub(crate) fn pointer(&mut self, pointer: Pointer, rows: &[Row]) -> Option<Action> {
@@ -148,7 +182,19 @@ impl JobsList {
             ..Drawn::default()
         };
         let index = self.index(rows);
-        let top = (index + 1).saturating_sub(visible);
+        let top = self
+            .top
+            .get()
+            .min(index)
+            .max((index + 1).saturating_sub(visible))
+            .min(rows.len().saturating_sub(visible));
+        self.top.set(top);
+        self.page.set(visible);
+        let height = u16::try_from(visible).unwrap_or(u16::MAX);
+        let bar = right_frame(inner, inner.y, height);
+        let position = (rows.len(), visible, top);
+        let bar = scrollbar::render(frame, bar, position, theme.dialog, theme.scroll_arrows);
+        self.bar.set(bar);
         for (shown, (number, row)) in rows.iter().enumerate().skip(top).take(visible).enumerate() {
             let text = format!(
                 "{} {} {}  {}",
@@ -274,5 +320,29 @@ mod tests {
         let text = draw(&list, &rows, 7);
         assert!(text.contains("/srv/file6"), "{text}");
         assert!(!text.contains("/srv/file1"), "{text}");
+    }
+
+    #[test]
+    fn the_scroll_bar_chooses_a_job_on_the_screen() {
+        let rows = rows(&[1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        let mut list = JobsList::default();
+        let top = draw(&list, &rows, 9);
+        assert!(top.contains('▲') && top.contains('█'), "{top}");
+        let bar = list.bar().unwrap();
+        list.scroll(Scroll::By(Motion::Down), &rows);
+        assert_eq!(press(&mut list, Action::Confirm, &rows), JobsEvent::Show(2));
+        list.scroll(Scroll::To(bar.dragged(0, u16::MAX)), &rows);
+        let end = draw(&list, &rows, 9);
+        assert!(
+            end.contains("/srv/file9") && !end.contains("/srv/file1"),
+            "{end}"
+        );
+        assert_eq!(
+            press(&mut list, Action::Confirm, &rows),
+            JobsEvent::Show(5),
+            "the nearest job on the screen"
+        );
+        list.scroll(Scroll::By(Motion::PageUp), &rows);
+        assert_eq!(press(&mut list, Action::Confirm, &rows), JobsEvent::Show(1));
     }
 }

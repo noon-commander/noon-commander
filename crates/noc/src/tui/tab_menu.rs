@@ -2,6 +2,7 @@
 //! is, to show one, or to close one. Typing filters it; while the filter is empty, `1` … `9` and
 //! `0` show the first ten tabs.
 
+use noc_scroll::scrollbar::Bar;
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::text::Line;
@@ -90,6 +91,16 @@ impl TabMenu {
             }
             Pick::Pending | Pick::Other(_) => TabMenuEvent::Pending,
         }
+    }
+
+    /// The scroll bar of the last render, for the mouse.
+    pub(crate) fn bar(&self) -> Option<Bar> {
+        self.picker.bar()
+    }
+
+    /// Shows the rows from `top`, where the thumb of the scroll bar was dragged.
+    pub(crate) fn scroll_to(&mut self, top: usize) {
+        self.picker.scroll_to(top);
     }
 
     /// Takes a press of the mouse, where the menu was drawn last: a click puts the cursor on

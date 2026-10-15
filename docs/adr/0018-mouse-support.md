@@ -68,15 +68,15 @@ presses, releases, drags, moves, and the wheel, but no double clicks.
   the cursor there, and on its value switches a check box, picks the next choice (the one
   before at `<`), or puts the cursor in the text. Leaving a text field applies it, as a key
   that leaves it does.
-- The scroll bars of the help, the viewer, and the Configuration dialog end in an arrow each
-  (Nerd Font carets with `ui.icons`, `▲` and `▼` without), where they leave the track two rows
-  or more. As in Far, a click on an arrow scrolls as a step of the wheel, a click on the track
-  a page towards the click, as Ctrl+b and Ctrl+f, and the second click of a double click scrolls
-  again. The left button pressed on the thumb holds it, and its drags scroll to where they put
-  it, the least far that shows it there; any other press lets go, as the button went up
-  before it. In the Configuration dialog they move the cursor in the settings, as the wheel
-  does, onto the screen after a drag. `noc-scroll` says what a cell of the bar is
-  (`scrollbar::Bar`), and `App` turns it into a motion of what is in front.
+- Scroll bars, wherever rows scroll ([ADR 0024](0024-scroll-bars-on-the-frames.md)), end in an
+  arrow each (Nerd Font carets with `ui.icons`, `▲` and `▼` without), where they leave the
+  track two rows or more. As in Far, a click on an arrow scrolls as a step of the wheel, a click
+  on the track a page towards the click, as Ctrl+b and Ctrl+f, and the second click of a double
+  click scrolls again. The left button pressed on the thumb holds it, and its drags scroll to
+  where they put it, the least far that shows it there; any other press lets go, as the button
+  went up before it. Where the wheel moves a cursor, as in the lists and the Configuration
+  dialog, so do they, onto the screen after a drag. `noc-scroll` says what a cell of the bar is
+  (`scrollbar::Bar`), and `App` turns it into a motion of what the bar scrolls.
 
 ## Consequences
 

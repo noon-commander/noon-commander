@@ -78,6 +78,11 @@ impl Bar {
         bar.thumb().map(|_| bar)
     }
 
+    /// The cells of the bar.
+    pub fn area(&self) -> Rect {
+        self.area
+    }
+
     fn arrows(&self) -> bool {
         self.area.height >= ROWS_WITH_ARROWS
     }
@@ -160,7 +165,8 @@ impl Bar {
 }
 
 /// Draws a scroll bar down the single column `area` for `total` rows of which `page` show
-/// from `offset`, and returns it for the mouse; nothing when everything fits.
+/// from `offset`, with `arrows` at its ends, and returns it for the mouse; nothing when
+/// everything fits.
 pub fn render(
     frame: &mut Frame<'_>,
     area: Rect,

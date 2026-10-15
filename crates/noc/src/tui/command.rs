@@ -5,6 +5,8 @@ use std::ops::Range;
 use std::path::PathBuf;
 
 use noc_config::Pause;
+use noc_scroll::Motion;
+use noc_scroll::scrollbar::{self, Arrows, Bar};
 use noc_vfs::RemotePath;
 
 use ratatui::Frame;
@@ -17,6 +19,7 @@ use unicode_width::UnicodeWidthChar as _;
 use super::cells;
 use super::edit::{Editor, Registers, line_bounds};
 use super::keymap::{Action, Mode, Resolved, Typed};
+use super::mouse::Scroll;
 use super::tasks::HostHandle;
 
 /// Rows the command line takes at most, however tall the screen.
@@ -77,8 +80,14 @@ pub(crate) enum Place {
 pub(crate) struct CommandLine {
     kind: Kind,
     editor: Editor,
-    /// The first row shown, when the command has more rows than fit.
+    /// The first row shown, when the command has more rows than fit, and how many show.
     scroll: usize,
+    page: usize,
+    /// The cursor, and the length of the text, the rows last scrolled for: they scroll to the
+    /// cursor again once either changes, and stay where the scroll bar put them until then.
+    followed: Option<(usize, usize)>,
+    /// The scroll bar of the last render, in the last column, when the rows did not fit.
+    bar: Option<Bar>,
     /// The command of the history shown, counted from the newest, and what was typed before
     /// going through the history, which comes back after the newest.
     browsing: Option<usize>,
@@ -114,6 +123,9 @@ impl CommandLine {
             kind,
             editor: Editor::new("", Mode::Insert).with_lines(),
             scroll: 0,
+            page: 1,
+            followed: None,
+            bar: None,
             browsing: None,
             draft: String::new(),
             browsed: String::new(),
@@ -528,27 +540,65 @@ impl CommandLine {
         u16::try_from(rows).unwrap_or(u16::MAX).min(most)
     }
 
+    /// The scroll bar of the last render, for the mouse.
+    pub(crate) fn bar(&self) -> Option<Bar> {
+        self.bar
+    }
+
+    /// Scrolls the rows as a press on the scroll bar asks, a row, a page, or to where the
+    /// thumb was dragged; the cursor stays where it is.
+    pub(crate) fn scroll(&mut self, scroll: Scroll) {
+        let page = self.page.max(1);
+        self.scroll = match scroll {
+            Scroll::By(Motion::Up) => self.scroll.saturating_sub(1),
+            Scroll::By(Motion::Down) => self.scroll + 1,
+            Scroll::By(Motion::PageUp) => self.scroll.saturating_sub(page),
+            Scroll::By(Motion::PageDown) => self.scroll + page,
+            Scroll::By(_) => self.scroll,
+            Scroll::To(top) => top,
+        };
+    }
+
     /// Draws the line in `area`, after `prompt`, and puts the cursor there if it has the keys.
+    /// Rows that do not fit leave the last column to a scroll bar with `arrows`.
     pub(crate) fn render(
         &mut self,
         frame: &mut Frame<'_>,
         area: Rect,
-        prompt: &str,
-        style: Style,
+        (prompt, style): (&str, Style),
+        arrows: Arrows,
         focused: bool,
     ) {
+        self.bar = None;
         if area.is_empty() {
             return;
         }
-        let (rows, (row, column)) = self.layout(prompt, usize::from(area.width));
         let height = usize::from(area.height);
-        if row < self.scroll {
-            self.scroll = row;
-        } else if row >= self.scroll + height {
-            self.scroll = row + 1 - height;
+        let mut width = area.width;
+        let (mut rows, mut at) = self.layout(prompt, usize::from(width));
+        let overflows = rows.len() > height && width > 1;
+        if overflows {
+            width -= 1;
+            (rows, at) = self.layout(prompt, usize::from(width));
+        }
+        let (row, column) = at;
+        let followed = (self.editor.cursor(), self.editor.text().len());
+        if self.followed != Some(followed) {
+            if row < self.scroll {
+                self.scroll = row;
+            } else if row >= self.scroll + height {
+                self.scroll = row + 1 - height;
+            }
+            self.followed = Some(followed);
         }
         self.scroll = self.scroll.min(rows.len().saturating_sub(height));
+        self.page = height;
         frame.render_widget(Block::default().style(style), area);
+        if overflows {
+            let bar = Rect::new(area.right() - 1, area.y, 1, area.height);
+            let position = (rows.len(), height, self.scroll);
+            self.bar = scrollbar::render(frame, bar, position, style, arrows);
+        }
         let lead = if self.foreign {
             style.add_modifier(Modifier::REVERSED)
         } else {
@@ -571,13 +621,15 @@ impl CommandLine {
                 None => spans.push(Span::raw(shown.text)),
             }
             let line = Line::from(spans);
-            frame.render_widget(line.style(style), Rect::new(area.x, y, area.width, 1));
+            frame.render_widget(line.style(style), Rect::new(area.x, y, width, 1));
         }
-        if focused {
+        // A cursor scrolled off the screen by the scroll bar does not show.
+        let shown = row.checked_sub(self.scroll).filter(|&shown| shown < height);
+        if let (true, Some(shown)) = (focused, shown) {
             let x = u16::try_from(column).unwrap_or(u16::MAX);
-            let y = u16::try_from(row - self.scroll).unwrap_or(u16::MAX);
+            let y = u16::try_from(shown).unwrap_or(u16::MAX);
             frame.set_cursor_position(Position::new(
-                area.x.saturating_add(x).min(area.right() - 1),
+                area.x.saturating_add(x).min(area.x + width - 1),
                 area.y + y,
             ));
         }
@@ -639,7 +691,10 @@ mod tests {
         let height = line.height(prompt, width, 30);
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         terminal
-            .draw(|frame| line.render(frame, frame.area(), prompt, Style::default(), true))
+            .draw(|frame| {
+                let text = (prompt, Style::default());
+                line.render(frame, frame.area(), text, Arrows::PLAIN, true);
+            })
             .unwrap();
         terminal.backend().to_string()
     }
@@ -1134,6 +1189,26 @@ mod tests {
         }
         let top = draw(&mut line, "$ ", 12);
         assert!(top.contains("$ 1") && !top.contains("> 12"), "{top}");
+    }
+
+    #[test]
+    fn rows_that_do_not_fit_take_a_scroll_bar_that_scrolls_without_the_cursor() {
+        let text: Vec<String> = (1..=12).map(|n| n.to_string()).collect();
+        let mut line = shell(&text.join("\n"));
+        let bottom = draw(&mut line, "$ ", 12);
+        assert!(bottom.contains('▼') && bottom.contains('█'), "{bottom}");
+        let bar = line.bar().unwrap();
+        assert_eq!(bar.area().x, 11, "the last column");
+        line.scroll(Scroll::To(0));
+        let top = draw(&mut line, "$ ", 12);
+        assert!(top.contains("$ 1") && !top.contains("> 12"), "{top}");
+        line.scroll(Scroll::By(Motion::Down));
+        assert!(!draw(&mut line, "$ ", 12).contains("$ 1"));
+        // The cursor, still on the last row, brings it back when it moves.
+        press(&mut line, Action::Left);
+        assert!(draw(&mut line, "$ ", 12).contains("> 12"));
+        let short = draw(&mut shell("ls"), "$ ", 12);
+        assert!(!short.contains('▼'), "{short}");
     }
 
     #[test]

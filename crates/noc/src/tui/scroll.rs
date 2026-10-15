@@ -92,6 +92,13 @@ impl Window {
         });
     }
 
+    /// The thumb of a scroll bar dragged: shows the rows from `top`, as the wheel would scroll
+    /// there, and keeps the cursor inside with its margin.
+    pub(crate) fn scroll_to(&mut self, top: usize, cursor: &mut usize, rows: usize, height: usize) {
+        let from = self.top;
+        self.scroll(top > from, top.abs_diff(from), cursor, rows, height);
+    }
+
     fn with(&mut self, cursor: &mut usize, rows: usize, height: usize, f: impl FnOnce(&mut Win)) {
         if let Some(mut win) = Win::load(*self, *cursor, rows, height) {
             f(&mut win);

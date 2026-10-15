@@ -15,8 +15,7 @@ use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
-use super::decor::Decor;
-use super::dialog::{Colors, Field, draw_box, draw_separator};
+use super::dialog::{Colors, Field, draw_box, draw_separator, right_frame};
 use super::edit::Registers;
 use super::keymap::{Action, Context, Mode, Resolved, Typed};
 use super::mouse::{Pointer, Press, Scroll};
@@ -910,7 +909,7 @@ impl Configuration {
     }
 
     /// The settings of the chosen category in `area`, scrolled to the cursor, with a scroll
-    /// bar in its last column when they do not fit.
+    /// bar on the right of the frame.
     fn render_settings(
         &mut self,
         frame: &mut Frame<'_>,
@@ -927,11 +926,10 @@ impl Configuration {
             .max((self.row + 1).saturating_sub(page))
             .min(total.saturating_sub(page));
         self.page = page;
-        let bar = Rect::new(area.right().saturating_sub(1), area.y, 1, area.height);
-        let arrows = Decor::new(self.icons).scroll_arrows();
-        self.drawn.bar =
-            scrollbar::render(frame, bar, (total, page, self.offset), theme.dialog, arrows);
-        let room = usize::from(area.width.saturating_sub(2));
+        let bar = right_frame(area, area.y, area.height);
+        let position = (total, page, self.offset);
+        self.drawn.bar = scrollbar::render(frame, bar, position, theme.dialog, theme.scroll_arrows);
+        let room = usize::from(area.width);
         let label_width = self
             .settings()
             .iter()

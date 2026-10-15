@@ -112,6 +112,8 @@
       has no trash, so what hosts do needs an ADR
 - [x] Mouse support ([ADR 0018](adr/0018-mouse-support.md)): panels, tabs, the F-key bar, the
       viewer, the pull-down menu, dialogs, and every window; `ui.mouse` and `ui.wheel`
+- [x] Scroll bars on the frames wherever rows do not fit, which the mouse presses and drags
+      ([ADR 0024](adr/0024-scroll-bars-on-the-frames.md))
 - [ ] Restore panel state on start, with the tabs
 - [x] Typing in a panel no longer starts quick search; `ui.type_to_search` is gone
 - [x] Shell command line ([ADR 0019](adr/0019-shell-command-line.md)): `!` (and `:!`) runs a

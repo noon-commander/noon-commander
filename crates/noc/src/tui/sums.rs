@@ -1,17 +1,21 @@
 //! The window with the checksums a job found: the full checksum of the selected file, whether
 //! it matches what was expected or the other file, and buttons to copy or save them.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
+use noc_scroll::Motion;
+use noc_scroll::scrollbar::{self, Bar};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, button_line, button_spots, draw_box, draw_separator, frame_around};
+use super::dialog::{
+    Colors, button_line, button_spots, draw_box, draw_separator, frame_around, right_frame,
+};
 use super::keymap::{Action, Resolved};
-use super::mouse::{Drawn, Pointer, Press};
+use super::mouse::{Drawn, Pointer, Press, Scroll};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -94,8 +98,13 @@ pub(crate) struct SumsWindow {
     status: Option<String>,
     buttons: Vec<SumsButton>,
     focus: usize,
+    /// The first file of the list shown, and how many show, at the last render.
+    top: Cell<usize>,
+    page: Cell<usize>,
     /// Where the last render drew it, for the mouse.
     drawn: RefCell<Drawn>,
+    /// The scroll bar of the list at the last render, on the right of the frame.
+    bar: Cell<Option<Bar>>,
 }
 
 impl SumsWindow {
@@ -114,7 +123,10 @@ impl SumsWindow {
             status: None,
             buttons,
             focus: 0,
+            top: Cell::new(0),
+            page: Cell::new(1),
             drawn: RefCell::default(),
+            bar: Cell::new(None),
         }
     }
 
@@ -154,6 +166,30 @@ impl SumsWindow {
         SumsEvent::Pending
     }
 
+    /// The scroll bar of the list at the last render, for the mouse.
+    pub(crate) fn bar(&self) -> Option<Bar> {
+        self.bar.get()
+    }
+
+    /// Chooses a file as a press on the scroll bar asks: the next one or the one before, a page
+    /// on or back, or the nearest in the list scrolled to where the thumb was dragged.
+    pub(crate) fn scroll(&mut self, scroll: Scroll) {
+        let last = self.rows.len().saturating_sub(1);
+        let page = self.page.get().max(1);
+        let selected = match scroll {
+            Scroll::By(Motion::Up) => self.selected.saturating_sub(1),
+            Scroll::By(Motion::Down) => self.selected + 1,
+            Scroll::By(Motion::PageUp) => self.selected.saturating_sub(page),
+            Scroll::By(Motion::PageDown) => self.selected + page,
+            Scroll::By(_) => self.selected,
+            Scroll::To(top) => {
+                self.top.set(top);
+                self.selected.clamp(top, top + page - 1)
+            }
+        };
+        self.selected = selected.min(last);
+    }
+
     /// Takes a press of the mouse, where the window was drawn last: a click chooses a file, and
     /// one on a button returns Enter, which presses it.
     pub(crate) fn pointer(&mut self, pointer: Pointer) -> Option<Action> {
@@ -178,7 +214,14 @@ impl SumsWindow {
         let mut listed = Vec::new();
         if self.rows.len() > 1 {
             let shown = self.rows.len().min(LIST_ROWS);
-            let top = (self.selected + 1).saturating_sub(shown);
+            let top = self
+                .top
+                .get()
+                .min(self.selected)
+                .max((self.selected + 1).saturating_sub(shown))
+                .min(self.rows.len() - shown);
+            self.top.set(top);
+            self.page.set(shown);
             listed.extend(top..top + shown);
             for (index, row) in self.rows.iter().enumerate().skip(top).take(shown) {
                 let text = cells::fit(&list_line(row), room, Align::Left);
@@ -227,6 +270,15 @@ impl SumsWindow {
                 drawn.rows.push((*file, row));
             }
         }
+        let list = u16::try_from(listed.len().min(visible)).unwrap_or(u16::MAX);
+        let bar = right_frame(inner, inner.y, list);
+        let position = (self.rows.len(), listed.len(), self.top.get());
+        let bar = if listed.is_empty() {
+            None
+        } else {
+            scrollbar::render(frame, bar, position, theme.dialog, theme.scroll_arrows)
+        };
+        self.bar.set(bar);
         if inner.height >= 2 {
             let labels: Vec<String> = self.buttons.iter().map(|button| button.label()).collect();
             let buttons = button_line(&labels, 0, Some(self.focus), colors);
@@ -331,6 +383,28 @@ mod tests {
         let mut window = many();
         press(&mut window, Action::Down);
         insta::assert_snapshot!(draw(&window, 80, 14));
+    }
+
+    #[test]
+    fn the_scroll_bar_of_a_long_list_chooses_a_file_on_the_screen() {
+        let rows = (1..=15)
+            .map(|n| row(&format!("file{n:02}"), Some(ABC), Mark::None))
+            .collect();
+        let mut window = SumsWindow::new("SHA-256".to_owned(), rows, None, vec![]);
+        let top = draw(&window, 80, 30);
+        assert!(top.contains('▲') && top.contains('█'), "{top}");
+        let bar = window.bar().unwrap();
+        window.scroll(Scroll::By(Motion::Down));
+        assert_eq!(window.selected, 1);
+        window.scroll(Scroll::To(bar.dragged(0, u16::MAX)));
+        let end = draw(&window, 80, 30);
+        assert!(end.contains("file15") && !end.contains("file01"), "{end}");
+        assert_eq!(window.selected, 5, "the nearest file on the screen");
+        window.scroll(Scroll::By(Motion::PageUp));
+        assert_eq!(window.selected, 0);
+        let few = many();
+        draw(&few, 80, 14);
+        assert_eq!(few.bar(), None, "three files fit");
     }
 
     #[test]

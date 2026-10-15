@@ -1,6 +1,7 @@
-//! Colors, text styles, and frame lines of the UI.
+//! Colors, text styles, frame lines, and scroll bar arrows of the UI.
 
 use noc_config::Borders;
+use noc_scroll::scrollbar::Arrows;
 use noc_vfs::{DirEntry, FileKind};
 use ratatui::style::{Color, Style};
 use ratatui::widgets::BorderType;
@@ -99,6 +100,8 @@ pub(crate) struct Theme {
     pub(crate) shadow: Option<Style>,
     /// The lines that frame panels and dialogs.
     pub(crate) borders: Borders,
+    /// The arrows at the ends of scroll bars.
+    pub(crate) scroll_arrows: Arrows,
 }
 
 /// The colors the terminal can show: 24-bit RGB, or only its 256-color palette, to which
@@ -221,6 +224,7 @@ impl Theme {
             tab_number: fg(Color::LightYellow),
             shadow: Some(on(Color::DarkGray, Color::Black)),
             borders: Borders::default(),
+            scroll_arrows: Arrows::PLAIN,
         }
     }
 
@@ -279,6 +283,7 @@ impl Theme {
             tab_number: plain,
             shadow: None,
             borders: Borders::default(),
+            scroll_arrows: Arrows::PLAIN,
         }
     }
 
@@ -337,6 +342,7 @@ impl Theme {
             tab_number: fg(p.blue),
             shadow: Some(on(p.overlay0, p.crust)),
             borders: Borders::default(),
+            scroll_arrows: Arrows::PLAIN,
         }
     }
 
@@ -398,12 +404,21 @@ impl Theme {
             tab_number: fg(p.accent),
             shadow: Some(on(p.faint, p.deep)),
             borders: Borders::default(),
+            scroll_arrows: Arrows::PLAIN,
         }
     }
 
     /// This theme framed with `borders`, from `ui.borders`.
     pub(crate) fn with_borders(self, borders: Borders) -> Self {
         Self { borders, ..self }
+    }
+
+    /// This theme with `scroll_arrows` at the ends of scroll bars, as `ui.icons` picks them.
+    pub(crate) fn with_scroll_arrows(self, scroll_arrows: Arrows) -> Self {
+        Self {
+            scroll_arrows,
+            ..self
+        }
     }
 
     /// The frame of a panel or a dialog.

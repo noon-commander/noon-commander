@@ -3,12 +3,13 @@
 //! command history. They open in Normal mode, where keys move and act; `/` types in the filter,
 //! in Insert mode, and Esc goes back to the rows with the filter kept.
 
+use noc_scroll::scrollbar::{self, Bar};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::text::Line;
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, Field, draw_box, frame_around};
+use super::dialog::{Colors, Field, draw_box, frame_around, right_frame};
 use super::fuzzy::Fuzzy;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::{Drawn, Pointer};
@@ -104,6 +105,8 @@ pub(crate) struct Picker {
     pages: usize,
     /// Where the last render drew the window, for the mouse.
     drawn: Drawn,
+    /// The scroll bar of the lines at the last render, on the right of the frame.
+    bar: Option<Bar>,
 }
 
 impl Picker {
@@ -123,6 +126,7 @@ impl Picker {
             rows_drawn: Vec::new(),
             pages: 1,
             drawn: Drawn::default(),
+            bar: None,
         }
     }
 
@@ -316,6 +320,37 @@ impl Picker {
         self.cursor = found.unwrap_or(0);
     }
 
+    /// The scroll bar of the last render, for the mouse.
+    pub(crate) fn bar(&self) -> Option<Bar> {
+        self.bar
+    }
+
+    /// Shows the lines from `top`, where the thumb of the scroll bar was dragged, and puts the
+    /// cursor on the row nearest to where the window left it, the way the lines went.
+    pub(crate) fn scroll_to(&mut self, top: usize) {
+        let lines = self.rows_drawn.len();
+        if lines == 0 {
+            return;
+        }
+        let mut line = self
+            .rows_drawn
+            .iter()
+            .position(|&row| row == Some(self.cursor))
+            .unwrap_or(0);
+        let down = top > self.window.top();
+        self.window
+            .scroll_to(top, &mut line, lines, self.page.max(1));
+        let row = |line: usize| self.rows_drawn.get(line).copied().flatten();
+        let after = (line..lines).find_map(row);
+        let before = (0..=line).rev().find_map(row);
+        let found = if down {
+            after.or(before)
+        } else {
+            before.or(after)
+        };
+        self.cursor = found.unwrap_or(self.cursor);
+    }
+
     /// Takes a press of the mouse, where the window was drawn last: a click puts the cursor on
     /// a row, and returns the key that a double click on one, or a click outside the window,
     /// stands for: Enter or Esc.
@@ -351,6 +386,7 @@ impl Picker {
             frame: frame_around(inner),
             ..Drawn::default()
         };
+        self.bar = None;
         if inner.height < 3 || inner.width < 4 {
             return;
         }
@@ -385,6 +421,10 @@ impl Picker {
         // Five lines around the cursor show the heading of its rows with them too.
         self.window.follow(&mut at, lines.len(), self.page);
         let offset = self.window.top();
+        let height = u16::try_from(self.page).unwrap_or(u16::MAX);
+        let bar = right_frame(inner, inner.y + 2, height);
+        let position = (lines.len(), self.page, offset);
+        self.bar = scrollbar::render(frame, bar, position, theme.dialog, theme.scroll_arrows);
         for (index, shown) in lines.iter().skip(offset).take(self.page).enumerate() {
             let y = u16::try_from(index + 2).unwrap_or(u16::MAX);
             let text = match shown {
@@ -496,6 +536,28 @@ mod tests {
         );
         press(&mut counted, Action::PageDown);
         assert_eq!(counted.cursor(), 29, "then the last row");
+    }
+
+    #[test]
+    fn a_dragged_thumb_scrolls_the_lines_and_the_cursor_stays_on_screen() {
+        let names: Vec<String> = (0..30).map(|n| format!("row{n}")).collect();
+        let names: Vec<&str> = names.iter().map(String::as_str).collect();
+        let mut picker = picker(&names, false);
+        picker.page = 10;
+        picker.rows_drawn = (0..30).map(Some).collect();
+        picker.scroll_to(15);
+        assert_eq!(picker.window.top(), 15);
+        assert_eq!(
+            picker.cursor(),
+            19,
+            "four lines from the top, as vim's scrolloff in ten"
+        );
+        picker.scroll_to(0);
+        assert_eq!((picker.window.top(), picker.cursor()), (0, 4));
+        // A heading where the cursor would go: the row after it, the way the lines went.
+        picker.rows_drawn.insert(19, None);
+        picker.scroll_to(15);
+        assert_eq!(picker.cursor(), 19, "the row on the line after the heading");
     }
 
     #[test]

@@ -1,6 +1,6 @@
 //! The help screen: the keys of what the app can do, read from the keymap.
 
-use noc_scroll::scrollbar::{self, Arrows, Bar};
+use noc_scroll::scrollbar::{self, Bar};
 use noc_scroll::scrolled;
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -8,7 +8,7 @@ use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, draw_box};
+use super::dialog::{Colors, draw_box, right_frame};
 use super::keymap::{Action, Context, Keymap, Mode, Resolved};
 use super::mouse::Scroll;
 use super::theme::Theme;
@@ -140,21 +140,14 @@ impl Help {
         matches!(action, Action::Cancel | Action::Confirm)
     }
 
-    /// Draws the help over most of `area`, with `arrows` at the ends of its scroll bar.
-    pub(crate) fn render(
-        &mut self,
-        frame: &mut Frame<'_>,
-        area: Rect,
-        theme: &Theme,
-        arrows: Arrows,
-    ) {
+    /// Draws the help over most of `area`, with its scroll bar on the right of the frame.
+    pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let width = MAX_WIDTH.min(area.width.saturating_sub(4)).max(20);
         let height = area.height.saturating_sub(4).max(3);
         let colors = Colors::of(theme, false);
         let size = (width, height);
         let inner = draw_box(frame, area, size, &fl!("help-title"), colors, theme);
-        // The last column is the scroll bar's, after a gap.
-        let width = usize::from(inner.width.saturating_sub(2));
+        let width = usize::from(inner.width);
         let keys_width = self
             .entries
             .iter()
@@ -207,8 +200,8 @@ impl Help {
         // The bar and the percentage leave out the line that ends the help, so that they reach
         // the bottom and 100 with its last line.
         let text = (self.rows - 1, self.page, self.offset);
-        let bar = Rect::new(inner.right().saturating_sub(1), inner.y, 1, inner.height);
-        self.bar = scrollbar::render(frame, bar, text, theme.dialog, arrows);
+        let bar = right_frame(inner, inner.y, inner.height);
+        self.bar = scrollbar::render(frame, bar, text, theme.dialog, theme.scroll_arrows);
         self.render_position(frame, inner, theme);
         for (index, line) in lines
             .into_iter()
@@ -217,8 +210,7 @@ impl Help {
             .enumerate()
         {
             let y = inner.y + u16::try_from(index).unwrap_or(u16::MAX);
-            let width = inner.width.saturating_sub(2);
-            frame.render_widget(line, Rect::new(inner.x, y, width, 1));
+            frame.render_widget(line, Rect::new(inner.x, y, inner.width, 1));
         }
     }
 
@@ -671,7 +663,7 @@ mod tests {
     fn draw(help: &mut Help, width: u16, height: u16) -> String {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         terminal
-            .draw(|frame| help.render(frame, frame.area(), &Theme::terminal(), Arrows::PLAIN))
+            .draw(|frame| help.render(frame, frame.area(), &Theme::terminal()))
             .unwrap();
         terminal.backend().to_string()
     }
@@ -837,7 +829,8 @@ mod tests {
         let bar_at_bottom = |screen: &str| {
             let rows: Vec<&str> = screen.lines().collect();
             let frame = rows.iter().position(|row| row.contains('╚')).unwrap();
-            rows[frame - 1].contains("▼ ║") && rows[frame - 2].contains("█ ║")
+            let edge = |row: &str| row.trim_end_matches(['"', ' ']).chars().last();
+            edge(rows[frame - 1]) == Some('▼') && edge(rows[frame - 2]) == Some('█')
         };
         assert!(bar_at_bottom(&bottom), "{bottom}");
         help.handle(action(Action::Up));

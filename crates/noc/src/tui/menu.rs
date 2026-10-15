@@ -9,6 +9,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use noc_config::Recent;
+use noc_scroll::scrollbar::Bar;
 use noc_vfs::{Location, Space, Volume};
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -298,6 +299,16 @@ impl LocationMenu {
             Pick::Other(Action::Reload) => MenuEvent::Reload,
             Pick::Pending | Pick::Other(_) => MenuEvent::Pending,
         }
+    }
+
+    /// The scroll bar of the last render, for the mouse.
+    pub(crate) fn bar(&self) -> Option<Bar> {
+        self.picker.bar()
+    }
+
+    /// Shows the rows from `top`, where the thumb of the scroll bar was dragged.
+    pub(crate) fn scroll_to(&mut self, top: usize) {
+        self.picker.scroll_to(top);
     }
 
     /// Takes a press of the mouse, where the menu was drawn last: a click puts the cursor on

@@ -742,9 +742,9 @@ pub(crate) struct App {
     /// What was in front after the last click, if that click left it there: a double click
     /// counts only then.
     clicked: Option<Front>,
-    /// The thumb of a scroll bar that the left button holds: in what is in front, and by which
-    /// of its rows.
-    grab: Option<(Front, u16)>,
+    /// The thumb of a scroll bar that the left button holds: what its bar scrolls, and by
+    /// which of its rows.
+    grab: Option<(Scrolled, u16)>,
     quit: bool,
     redraw: bool,
 }
@@ -761,6 +761,29 @@ struct Spots {
     tabs: Vec<(Side, usize, Rect)>,
     /// The titles of the menu bar that `ui.menu_bar` keeps.
     menu_bar: Vec<Rect>,
+}
+
+/// What a scroll bar scrolls.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Scrolled {
+    Help,
+    Configuration,
+    Viewer,
+    Panel(Side),
+    Menu,
+    TabMenu,
+    Jump,
+    Workspaces,
+    History,
+    PullDown,
+    /// The list of completions.
+    Choices,
+    JobsList,
+    /// The window of a checksum job's results.
+    Results,
+    CommandLine,
+    /// The message of the dialog in front.
+    Dialog,
 }
 
 /// What is in front, and takes the mouse.
@@ -1267,32 +1290,127 @@ impl App {
         }
     }
 
-    /// The scroll bar of what is in front, as it was last drawn: the help's, the Configuration
-    /// dialog's, or the viewer's.
-    fn scroll_bar(&self) -> Option<scrollbar::Bar> {
-        match self.front() {
-            Front::Help => self.help.as_ref()?.bar(),
-            Front::Configuration => self.configuration.as_ref()?.bar(),
-            Front::Viewer => self.viewing.as_ref()?.viewer.bar(),
-            _ => None,
-        }
+    /// The scroll bars of what is in front, as they were last drawn, with what each scrolls:
+    /// the list of completions first, which shows over its field.
+    fn scroll_bars(&self) -> Vec<(Scrolled, scrollbar::Bar)> {
+        let choices = |target: Completes| {
+            let completing = self.completion.as_ref()?;
+            let choices = completing.choices.as_ref()?;
+            let bar = choices.bar().filter(|_| completing.target == target)?;
+            Some((Scrolled::Choices, bar))
+        };
+        let one = |target: Scrolled, bar: Option<scrollbar::Bar>| bar.map(|bar| (target, bar));
+        let bars = match self.front() {
+            Front::Dialog(_) => {
+                let dialog = self.dialogs.front().and_then(|open| open.dialog.bar());
+                vec![choices(Completes::Field), one(Scrolled::Dialog, dialog)]
+            }
+            Front::Menu => vec![one(
+                Scrolled::Menu,
+                self.menu.as_ref().and_then(LocationMenu::bar),
+            )],
+            Front::TabMenu => {
+                let bar = self.tab_menu.as_ref().and_then(TabMenu::bar);
+                vec![one(Scrolled::TabMenu, bar)]
+            }
+            Front::Jump => vec![one(
+                Scrolled::Jump,
+                self.jump.as_ref().and_then(JumpMenu::bar),
+            )],
+            Front::Workspaces => {
+                let bar = self
+                    .workspaces_window
+                    .as_ref()
+                    .and_then(WorkspacesWindow::bar);
+                vec![one(Scrolled::Workspaces, bar)]
+            }
+            Front::History => {
+                let bar = self.history_window.as_ref().and_then(HistoryWindow::bar);
+                vec![one(Scrolled::History, bar)]
+            }
+            Front::Results(_) => {
+                let bar = self
+                    .results
+                    .front()
+                    .and_then(|results| results.window.bar());
+                vec![one(Scrolled::Results, bar)]
+            }
+            Front::Job => Vec::new(),
+            Front::JobsList => {
+                let bar = self.jobs_list.as_ref().and_then(JobsList::bar);
+                vec![one(Scrolled::JobsList, bar)]
+            }
+            Front::Help => vec![one(Scrolled::Help, self.help.as_ref().and_then(Help::bar))],
+            Front::Configuration => {
+                let bar = self.configuration.as_ref().and_then(Configuration::bar);
+                vec![one(Scrolled::Configuration, bar)]
+            }
+            Front::PullDown => {
+                let bar = self.pulldown.as_ref().and_then(PullDown::bar);
+                vec![one(Scrolled::PullDown, bar)]
+            }
+            Front::Viewer => {
+                let bar = self
+                    .viewing
+                    .as_ref()
+                    .and_then(|viewing| viewing.viewer.bar());
+                vec![one(Scrolled::Viewer, bar)]
+            }
+            Front::Panels if self.command_line.is_some() => {
+                let line = self.command_line.as_ref().and_then(CommandLine::bar);
+                vec![
+                    choices(Completes::CommandLine),
+                    one(Scrolled::CommandLine, line),
+                ]
+            }
+            Front::Panels if self.panel(self.active).renaming() => Vec::new(),
+            Front::Panels => [Side::Left, Side::Right]
+                .into_iter()
+                .map(|side| one(Scrolled::Panel(side), self.panel(side).bar()))
+                .collect(),
+        };
+        bars.into_iter().flatten().collect()
     }
 
-    /// Scrolls what is in front as a press on its scroll bar asks.
-    fn scroll_front(&mut self, scroll: Scroll) -> Vec<Effect> {
-        match self.front() {
-            Front::Help => {
+    /// Scrolls `target` as a press on its scroll bar asks. The lists that the wheel moves by
+    /// their keys take the keys of the arrows and the track too.
+    fn scroll_target(&mut self, target: Scrolled, scroll: Scroll) -> Vec<Effect> {
+        let keys = matches!(
+            target,
+            Scrolled::Menu
+                | Scrolled::TabMenu
+                | Scrolled::Jump
+                | Scrolled::Workspaces
+                | Scrolled::History
+                | Scrolled::Choices
+        );
+        if let (true, Scroll::By(motion)) = (keys, scroll) {
+            let action = match motion {
+                Motion::Up => Action::Up,
+                Motion::Down => Action::Down,
+                Motion::PageUp => Action::PageUp,
+                Motion::PageDown => Action::PageDown,
+                _ => return Vec::new(),
+            };
+            return self.handle(Resolved::Action(action));
+        }
+        if let (true, Scroll::To(top)) = (keys, scroll) {
+            self.scroll_list_to(target, top);
+            return Vec::new();
+        }
+        match target {
+            Scrolled::Help => {
                 if let Some(help) = &mut self.help {
                     help.scroll(scroll);
                 }
             }
-            Front::Configuration => {
+            Scrolled::Configuration => {
                 if let Some(configuration) = &mut self.configuration {
                     let event = configuration.scroll(scroll);
                     return self.configuration_event(event);
                 }
             }
-            Front::Viewer => {
+            Scrolled::Viewer => {
                 if let Some(viewing) = &mut self.viewing {
                     viewing.viewer.handle(match scroll {
                         Scroll::By(motion) => ViewerCommand::Scroll(motion),
@@ -1300,31 +1418,109 @@ impl App {
                     });
                 }
             }
-            _ => {}
+            Scrolled::Panel(side) => self.panel_mut(side).scroll_bar(scroll),
+            Scrolled::PullDown => {
+                if let Some(mut pulldown) = self.pulldown.take() {
+                    pulldown.scroll(scroll, &|command| self.command_status(command));
+                    self.pulldown = Some(pulldown);
+                }
+            }
+            Scrolled::JobsList => {
+                let rows = self.job_rows();
+                if let Some(list) = &mut self.jobs_list {
+                    list.scroll(scroll, &rows);
+                }
+            }
+            Scrolled::Results => {
+                if let Some(results) = self.results.front_mut() {
+                    results.window.scroll(scroll);
+                }
+            }
+            Scrolled::CommandLine => {
+                if let Some(line) = &mut self.command_line {
+                    line.scroll(scroll);
+                }
+            }
+            Scrolled::Dialog => {
+                if let Some(open) = self.dialogs.front_mut() {
+                    open.dialog.scroll(scroll);
+                }
+            }
+            Scrolled::Menu
+            | Scrolled::TabMenu
+            | Scrolled::Jump
+            | Scrolled::Workspaces
+            | Scrolled::History
+            | Scrolled::Choices => {}
         }
         Vec::new()
     }
 
-    /// Takes a click on the scroll bar of what is in front, if it is on one: an arrow scrolls
-    /// as a step of the wheel, the track a page towards the click, as in mc and Far, and the
-    /// thumb is held for dragging. The second click of a double click scrolls again.
+    /// Shows the rows of the list `target` from `top`, where the thumb of its scroll bar was
+    /// dragged.
+    fn scroll_list_to(&mut self, target: Scrolled, top: usize) {
+        match target {
+            Scrolled::Menu => {
+                if let Some(menu) = &mut self.menu {
+                    menu.scroll_to(top);
+                }
+            }
+            Scrolled::TabMenu => {
+                if let Some(menu) = &mut self.tab_menu {
+                    menu.scroll_to(top);
+                }
+            }
+            Scrolled::Jump => {
+                if let Some(jump) = &mut self.jump {
+                    jump.scroll_to(top);
+                }
+            }
+            Scrolled::Workspaces => {
+                if let Some(window) = &mut self.workspaces_window {
+                    window.scroll_to(top);
+                }
+            }
+            Scrolled::History => {
+                if let Some(window) = &mut self.history_window {
+                    window.scroll_to(top);
+                }
+            }
+            Scrolled::Choices => {
+                let target = self.completion.as_ref().map(|completing| completing.target);
+                if let Some(choices) =
+                    target.and_then(|target| choices_for(&mut self.completion, target))
+                {
+                    choices.scroll_to(top);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Takes a click on a scroll bar of what is in front, if it is on one: an arrow scrolls as
+    /// a step of the wheel, the track a page towards the click, as in Far, and the thumb is
+    /// held for dragging. The second click of a double click scrolls again.
     fn pointer_scroll_bar(&mut self, Pointer { press, at }: Pointer) -> Option<Vec<Effect>> {
         if !matches!(press, Press::Click | Press::DoubleClick) {
             return None;
         }
-        let (motion, count) = match self.scroll_bar()?.part(at)? {
+        let (target, bar) = self
+            .scroll_bars()
+            .into_iter()
+            .find(|(_, bar)| bar.area().contains(at))?;
+        let (motion, count) = match bar.part(at)? {
             Part::Up => self.wheel_motion(false),
             Part::Down => self.wheel_motion(true),
             Part::PageUp => (Motion::PageUp, 1),
             Part::PageDown => (Motion::PageDown, 1),
             Part::Thumb(row) => {
-                self.grab = Some((self.front(), row));
+                self.grab = Some((target, row));
                 return Some(Vec::new());
             }
         };
         let mut effects = Vec::new();
         for _ in 0..count {
-            effects.extend(self.scroll_front(Scroll::By(motion)));
+            effects.extend(self.scroll_target(target, Scroll::By(motion)));
         }
         Some(effects)
     }
@@ -1334,33 +1530,46 @@ impl App {
         self.grab.is_some()
     }
 
-    /// Scrolls what is in front to where the thumb it holds was dragged, at the row of `at`;
-    /// nothing if no thumb is held, or what held it has gone.
+    /// Scrolls what holds the thumb to where it was dragged, at the row of `at`; nothing if no
+    /// thumb is held, or its bar has gone.
     fn drag(&mut self, at: Position) -> Vec<Effect> {
-        let Some((front, row)) = self.grab else {
+        let Some((target, row)) = self.grab else {
             return Vec::new();
         };
-        if self.front() != front {
+        let bar = self
+            .scroll_bars()
+            .into_iter()
+            .find_map(|(scrolled, bar)| (scrolled == target).then_some(bar));
+        let Some(bar) = bar else {
             self.grab = None;
             return Vec::new();
-        }
-        let Some(bar) = self.scroll_bar() else {
-            return Vec::new();
         };
-        self.scroll_front(Scroll::To(bar.dragged(row, at.y)))
+        self.scroll_target(target, Scroll::To(bar.dragged(row, at.y)))
     }
 
     /// Gives a press of the mouse to the dialog in front, and does what it was for if it
     /// closes; or to the list of completions under its field, which goes at a press outside
-    /// it.
+    /// it. The wheel scrolls a message that does not fit.
     fn pointer_dialog(&mut self, pointer: Pointer) -> Vec<Effect> {
         if let Some(effects) = self.pointer_choices(Completes::Field, pointer) {
             return effects;
         }
         self.completion = None;
+        let down = match pointer.press {
+            Press::WheelUp => Some(false),
+            Press::WheelDown => Some(true),
+            Press::Click | Press::DoubleClick | Press::RightClick | Press::Drag => None,
+        };
+        let (motion, count) = self.wheel_motion(down == Some(true));
         let Some(open) = self.dialogs.front_mut() else {
             return Vec::new();
         };
+        if down.is_some() && open.dialog.bar().is_some() {
+            for _ in 0..count {
+                open.dialog.scroll(Scroll::By(motion));
+            }
+            return Vec::new();
+        }
         let event = open.dialog.pointer(pointer);
         self.dialog_event(event)
     }
@@ -5769,7 +5978,7 @@ impl App {
             let styles = ViewerStyles {
                 header: self.theme.cursor,
                 text: self.theme.panel,
-                arrows: self.decor.scroll_arrows(),
+                arrows: self.theme.scroll_arrows,
             };
             viewing.viewer.render(frame, panels, &styles);
         } else {
@@ -5840,7 +6049,7 @@ impl App {
             configuration.render(frame, panels, &self.theme);
         }
         if let Some(help) = &mut self.help {
-            help.render(frame, panels, &self.theme, self.decor.scroll_arrows());
+            help.render(frame, panels, &self.theme);
         }
         if let Some(list) = &self.jobs_list {
             list.render(frame, panels, &self.theme, &self.job_rows());
@@ -5956,7 +6165,10 @@ impl App {
             Context::CommandLine | Context::CommandCompletion
         );
         match &mut self.command_line {
-            Some(line) => line.render(frame, area, prompt, Style::default(), focused),
+            Some(line) => {
+                let arrows = self.theme.scroll_arrows;
+                line.render(frame, area, (prompt, Style::default()), arrows, focused);
+            }
             None => self.render_mode(frame, area),
         }
     }
@@ -6101,12 +6313,14 @@ fn viewer_command(action: Action) -> Option<ViewerCommand> {
     })
 }
 
-/// The theme that `ui` picks, in the colors of `depth`. `ui.theme` was checked when the config
-/// was loaded, and the dialog offers only the built-in themes.
+/// The theme that `ui` picks, in the colors of `depth`, with its frames and the arrows of its
+/// scroll bars. `ui.theme` was checked when the config was loaded, and the dialog offers only
+/// the built-in themes.
 fn theme_of(ui: &UiConfig, depth: ColorDepth) -> Theme {
     Theme::by_name(&ui.theme, depth)
         .unwrap_or_else(Theme::mc_classic)
         .with_borders(ui.borders)
+        .with_scroll_arrows(Decor::new(ui.icons).scroll_arrows())
 }
 
 /// What a job does after a failure, by the button `event` pressed.
@@ -7373,13 +7587,20 @@ mod tests {
         assert_ne!(screen_of(&mut app, 12), before);
     }
 
+    /// The column of the first scroll bar of what is in front, and the rows of its arrows, as
+    /// the last render drew it.
+    fn bar_ends(app: &App) -> (u16, u16, u16) {
+        let (_, bar) = app.scroll_bars()[0];
+        let area = bar.area();
+        (area.x, area.y, area.bottom() - 1)
+    }
+
     #[test]
     fn the_mouse_scrolls_by_the_arrows_and_the_track_and_drags_the_thumb() {
         let mut app = loaded();
         app.handle(action(Action::Help));
         let top = screen_of(&mut app, 12);
-        let (x, up) = find(&mut app, "▲");
-        let (_, down) = find(&mut app, "▼");
+        let (x, up, down) = bar_ends(&app);
         press(&mut app, Press::Click, x, down);
         assert_ne!(screen_of(&mut app, 12), top, "the arrow down");
         press(&mut app, Press::DoubleClick, x, up);
@@ -7414,10 +7635,10 @@ mod tests {
         };
         let lines: Vec<String> = (1..=100).map(|n| format!("line {n}")).collect();
         app.read(id, Ok((lines.join("\n").into_bytes(), false)));
-        let (x, down) = find(&mut app, "▼");
+        screen_of(&mut app, 12);
+        let (x, up, down) = bar_ends(&app);
         press(&mut app, Press::Click, x, down);
         assert!(screen_of(&mut app, 12).contains(" 4/100 "), "three lines");
-        let (_, up) = find(&mut app, "▲");
         press(&mut app, Press::Click, x, up + 1);
         press(&mut app, Press::Drag, x, down - 1);
         let end = screen_of(&mut app, 12);
@@ -7425,6 +7646,50 @@ mod tests {
             end.contains(" 92/100 100% "),
             "the last line at the bottom: {end}"
         );
+    }
+
+    #[test]
+    fn the_scroll_bars_of_the_panels_are_on_their_frames() {
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
+        let files: Vec<DirEntry> = (10..60).map(|n| file(&format!("file{n}"), 1)).collect();
+        answer(&mut app, effects, &Listing::Dir(files));
+        let halves = |screen: &str| -> (Vec<String>, Vec<String>) {
+            let rows = screen.lines();
+            let half = |skip: usize| {
+                rows.clone()
+                    .map(|row| row.chars().skip(skip).take(80).collect())
+                    .collect()
+            };
+            (half(0), half(81))
+        };
+        let before = halves(&screen_of(&mut app, 12));
+        let bars = app.scroll_bars();
+        assert_eq!(bars.len(), 2, "one on each panel");
+        let (target, bar) = bars[0];
+        assert_eq!(target, Scrolled::Panel(Side::Left));
+        let area = bar.area();
+        assert_eq!(area.x, 79, "on the right of the left panel's frame");
+        press(&mut app, Press::Click, area.x, area.bottom() - 1);
+        let scrolled = halves(&screen_of(&mut app, 12));
+        assert_ne!(scrolled.0, before.0, "the left panel scrolled");
+        assert_eq!(scrolled.1, before.1, "the right one did not");
+        assert_eq!(app.active, Side::Left);
+        press(&mut app, Press::Click, area.x, area.y + 1);
+        assert!(app.dragging());
+        press(&mut app, Press::Drag, area.x, area.bottom());
+        let end = screen_of(&mut app, 12);
+        assert!(end.contains("file59"), "{end}");
+        assert!(
+            cursor_name(&app, Side::Left).starts_with("file5"),
+            "on screen"
+        );
+
+        // A panel that fits has none.
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
+        answer(&mut app, effects, &Listing::Dir(vec![file("one", 1)]));
+        let screen = screen_of(&mut app, 12);
+        assert!(!screen.contains('░'), "{screen}");
+        assert_eq!(app.scroll_bars(), Vec::new());
     }
 
     #[test]

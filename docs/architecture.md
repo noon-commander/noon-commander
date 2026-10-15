@@ -506,11 +506,11 @@ settings window: there is no OK or Cancel, and every change takes effect as it i
 
 ```text
   ╔═════════════════════════ Configuration ══════════════════════════╗
-  ║  󰍹 Interface │ Language           auto                         ▲ ║
-  ║  󰓡 Transfers │ Theme              < mc-classic >               █ ║
-  ║  󰣀 SSH       │ Borders            < Double ═ ║ ╔ >             █ ║
-  ║  󰋊 Volumes   │ Icons              [x]                          ░ ║
-  ║  󰥨 zoxide    │ Show hidden files  [x]                          ▼ ║
+  ║  󰍹 Interface │ Language           auto                           ▲
+  ║  󰓡 Transfers │ Theme              < mc-classic >                 █
+  ║  󰣀 SSH       │ Borders            < Double ═ ║ ╔ >               █
+  ║  󰋊 Volumes   │ Icons              [x]                            ░
+  ║  󰥨 zoxide    │ Show hidden files  [x]                            ▼
   ╟──────────────┴───────────────────────────────────────────────────╢
   ║ A language tag, such as en-US, or auto for the system locale.    ║
   ║ Takes effect after a restart.                                    ║
@@ -526,7 +526,8 @@ settings window: there is no OK or Cancel, and every change takes effect as it i
   `ssh.args` and the hidden hosts and volumes, are words separated by spaces, as a shell
   reads them: `"…"` around a word with spaces, `\` before a character to take it as it is.
 - Settings that do not fit scroll with the cursor, and a scroll bar (`█` on `░`, between `▲`
-  and `▼`, Nerd Font carets with `ui.icons`) shows in the last column. The two lines below
+  and `▼`, Nerd Font carets with `ui.icons`) shows on the right of the frame, as everywhere
+  ([ADR 0024](adr/0024-scroll-bars-on-the-frames.md)). The two lines below
   them, set apart by a line across the dialog, say what the setting under the cursor does and
   whether it takes effect only after a restart, or, in the colors of errors, why the text
   typed cannot be used.
@@ -858,7 +859,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   and put the cursor at its top or bottom. Unlike vim's, Ctrl+f stops with the last row at the
   bottom, and once it shows, puts the cursor on it, as mc's PgDn does. The wheel scrolls as vim's
   Ctrl+e and Ctrl+y, but never past the last row either. The view is worked out before each frame,
-  as vim does it before it redraws.
+  as vim does it before it redraws. When the rows do not fit, a scroll bar runs down the right of
+  the frame along them, as in Far ([ADR 0024](adr/0024-scroll-bars-on-the-frames.md)).
 - **The cursor of the inactive panel.** Unlike mc, the inactive panel shows where its cursor
   is (the checksum comparison reads the file there): its row gets a background of its own
   under the row's colors, which stay (a mark too). The theme sets it as `cursor_inactive`:
@@ -1274,9 +1276,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   a menu or runs a command; in a dialog a click chooses, puts the cursor in a field, switches
   a check box, or presses a button. Other windows and menus take the wheel as Up and Down, a
   click on a row or a button, and in menus a double click that opens and a click outside
-  that closes. The scroll bars of the help, the viewer, and the Configuration dialog end in
-  arrows; as in Far, a click on one scrolls as a step of the wheel, a click on the track a
-  page towards it, and the thumb, pressed, drags (`noc_scroll::scrollbar::Bar`). Widgets
+  that closes. Scroll bars end in arrows; as in Far, a click on one does what a step of the
+  wheel does there, a click on the track pages towards it, and the thumb, pressed, drags
+  (`noc_scroll::scrollbar::Bar`); `App::scroll_bars` lists those of what is in front, with
+  what each scrolls (`Scrolled`). Widgets
   move their own cursor or focus and return the key a press stands for,
   which they then take as if typed, so the mouse reuses what the keys do. A double click
   counts only if its first click left the same thing in front, so one that closed a menu or
@@ -1300,7 +1303,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   or F10 cancels; in Normal mode, Esc gives up an operator that waits, then cancels. The focus comes
   to a field in Insert mode with Tab, a click, or from a field in Insert mode, and else in Normal
   mode. Long text stays where it is while the cursor shows, and else scrolls to put the cursor in
-  the middle, as vim's 'sidescroll' 0 does; what Visual mode selects shows in reverse.
+  the middle, as vim's 'sidescroll' 0 does; what Visual mode selects shows in reverse. A message
+  taller than the screen scrolls between the top and the rest of the dialog, which keeps its
+  buttons, with a scroll bar on the frame that the mouse and the wheel move.
 - **Text.** Fluent files under `crates/noc/i18n/`, embedded in the binary and read with
   `fl!` from `i18n-embed-fl`, which checks message IDs against `en-US` at compile time; only
   `en-US` for now. `ui.language = "auto"` follows the system locale (through `sys-locale`).

@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 
 use noc_config::HistoryEntry;
+use noc_scroll::scrollbar::Bar;
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::Modifier;
@@ -150,6 +151,16 @@ impl HistoryWindow {
                 .map_or(HistoryEvent::Pending, |entry| event(entry, true)),
             Pick::Pending | Pick::Other(_) => HistoryEvent::Pending,
         }
+    }
+
+    /// The scroll bar of the last render, for the mouse.
+    pub(crate) fn bar(&self) -> Option<Bar> {
+        self.picker.bar()
+    }
+
+    /// Shows the rows from `top`, where the thumb of the scroll bar was dragged.
+    pub(crate) fn scroll_to(&mut self, top: usize) {
+        self.picker.scroll_to(top);
     }
 
     /// Takes a press of the mouse, where the window was drawn last: a click puts the cursor on

@@ -42,5 +42,6 @@ scroll bar of the Configuration dialog lived in the binary, out of reach of `noc
   thumb stays as it is with the last line at the bottom, though the end line takes a row of the
   text. A text that fits but for the end line gets no scroll bar.
 - The scroll bar takes a column of the viewer only while the text does not fit; the help always
-  keeps that column, and a gap before it.
+  keeps that column, and a gap before it. (Since [ADR 0024](0024-scroll-bars-on-the-frames.md),
+  the help's bar is on its frame.)
 - `noc-scroll` is a second library crate with UI code, after `noc-viewer` (ADR 0015).

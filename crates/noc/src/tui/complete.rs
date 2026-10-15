@@ -5,6 +5,7 @@
 //! typed. The fields of Quick cd, F5, F6, and F7 complete paths; the command line completes
 //! the word before the cursor, escaped for sh, as vim's `:!` does.
 
+use noc_scroll::scrollbar::{self, Bar};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::text::Line;
@@ -292,9 +293,15 @@ pub(crate) struct Choices {
     quote: Quote,
     /// The row whose match is in the field; `None` while what was typed is.
     chosen: Option<usize>,
+    /// The first row shown, and how many show, at the last render.
     offset: usize,
+    page: usize,
+    /// The rows scroll to the one chosen, until the thumb of the scroll bar scrolls them.
+    follow: bool,
     /// Where the last render drew it, for the mouse.
     drawn: Drawn,
+    /// The scroll bar of the last render, on the right of the frame.
+    bar: Option<Bar>,
 }
 
 /// What a key or a press did to the list.
@@ -316,7 +323,10 @@ impl Choices {
             quote,
             chosen: Some(0),
             offset: 0,
+            page: 1,
+            follow: true,
             drawn: Drawn::default(),
+            bar: None,
         }
     }
 
@@ -330,6 +340,7 @@ impl Choices {
     /// on, round through what was typed; Ctrl+y keeps the match, and Ctrl+e puts back what was
     /// typed.
     pub(crate) fn handle(&mut self, action: Action) -> ChoicesEvent {
+        self.follow = true;
         self.chosen = match action {
             Action::Down => self.moved(true, 1),
             Action::Up => self.moved(false, 1),
@@ -368,6 +379,18 @@ impl Choices {
         }
     }
 
+    /// The scroll bar of the last render, for the mouse.
+    pub(crate) fn bar(&self) -> Option<Bar> {
+        self.bar
+    }
+
+    /// Shows the rows from `top`, where the thumb of the scroll bar was dragged, and leaves the
+    /// match in the field as it is.
+    pub(crate) fn scroll_to(&mut self, top: usize) {
+        self.offset = top.min(self.items.len().saturating_sub(self.page.max(1)));
+        self.follow = false;
+    }
+
     /// Whether the list was drawn over `at`.
     pub(crate) fn contains(&self, at: Position) -> bool {
         self.drawn.frame.contains(at)
@@ -382,6 +405,7 @@ impl Choices {
             Press::RightClick | Press::WheelUp | Press::WheelDown | Press::Drag => return None,
         };
         self.chosen = Some(self.drawn.row_at(pointer.at)?);
+        self.follow = true;
         Some(self.show(close))
     }
 
@@ -411,6 +435,7 @@ impl Choices {
             .min(area.right().saturating_sub(x));
         let outer = Rect::new(x, y, width, height);
         self.drawn = Drawn::default();
+        self.bar = None;
         if outer.height < 3 || outer.width < 4 {
             return;
         }
@@ -423,13 +448,17 @@ impl Choices {
         let inner = block.inner(outer);
         frame.render_widget(block, outer);
         let page = usize::from(inner.height);
-        if let Some(chosen) = self.chosen {
+        self.page = page;
+        if let Some(chosen) = self.chosen.filter(|_| self.follow) {
             self.offset = self
                 .offset
                 .min(chosen)
                 .max((chosen + 1).saturating_sub(page));
         }
         self.offset = self.offset.min(self.items.len().saturating_sub(page));
+        let bar = Rect::new(outer.right() - 1, inner.y, 1, inner.height);
+        let position = (self.items.len(), page, self.offset);
+        self.bar = scrollbar::render(frame, bar, position, theme.dialog, theme.scroll_arrows);
         let focused = Colors::of(theme, false).focused_style();
         let width = usize::from(inner.width);
         for (index, (row, item)) in self
@@ -763,5 +792,23 @@ mod tests {
         );
         assert_eq!(choices.pointer(press(Press::Click, 2)), None, "the frame");
         assert_eq!(choices.pointer(press(Press::RightClick, 3)), None);
+    }
+
+    #[test]
+    fn its_thumb_scrolls_the_list_and_leaves_the_match_until_the_next_move() {
+        let names = ["a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9"];
+        let mut choices = Choices::new(names.iter().map(|name| dir(name)).collect(), Quote::Plain);
+        let field = Rect::new(2, 1, 10, 1);
+        let top = draw(&mut choices, field);
+        assert!(top.contains('▲') && top.contains('█'), "{top}");
+        choices.scroll_to(99);
+        let end = draw(&mut choices, field);
+        assert!(end.contains("a9/") && !end.contains("a0/"), "{end}");
+        assert_eq!(choices.current().as_deref(), Some("a0/"), "the match stays");
+        choices.handle(Action::Down);
+        assert!(
+            draw(&mut choices, field).contains("a1/"),
+            "back to the match"
+        );
     }
 }

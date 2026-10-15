@@ -9,6 +9,8 @@ use std::time::SystemTime;
 
 use jiff::tz::TimeZone;
 use noc_config::Wheel;
+use noc_scroll::Motion;
+use noc_scroll::scrollbar::{self, Bar};
 use noc_vfs::{DirEntry, Location, RemotePath, Space};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
@@ -21,6 +23,7 @@ use super::decor::{self, Decor};
 use super::dialog::Field;
 use super::fuzzy::Fuzzy;
 use super::keymap::Action;
+use super::mouse::Scroll;
 use super::scroll::Window;
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -278,6 +281,8 @@ pub(crate) struct Panel {
     page: usize,
     /// Where the rows were at the last render, for the mouse.
     list: Rect,
+    /// The scroll bar of the last render, on the right of the frame.
+    bar: Option<Bar>,
     generation: u64,
     pending: Option<Pending>,
     /// Quick search, while it runs.
@@ -335,6 +340,7 @@ impl Panel {
             window: Window::default(),
             page: 1,
             list: Rect::default(),
+            bar: None,
             generation: 0,
             pending: None,
             search: None,
@@ -369,6 +375,7 @@ impl Panel {
             window: self.window,
             page: self.page,
             list: Rect::default(),
+            bar: None,
             generation: 0,
             pending: None,
             search: None,
@@ -1514,6 +1521,7 @@ impl Panel {
         frame.render_widget(block, area);
         self.column_lines.clear();
         self.list = Rect::default();
+        self.bar = None;
         if inner.height < 3 || inner.width < 2 {
             return;
         }
@@ -1523,6 +1531,10 @@ impl Panel {
         self.page = list_height;
         self.list = Rect::new(inner.x, inner.y + 1, inner.width, inner.height - 3);
         self.scroll(list_height);
+        let bar = Rect::new(area.right() - 1, self.list.y, 1, self.list.height);
+        let position = (self.rows(), list_height, self.window.top());
+        let (style, arrows) = (theme.panel_border, theme.scroll_arrows);
+        self.bar = scrollbar::render(frame, bar, position, style, arrows);
 
         let columns = DirColumns::for_width(width);
         let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
@@ -1814,6 +1826,29 @@ impl Panel {
         let count = self.rows();
         self.window
             .scroll(down, rows, &mut self.cursor, count, page);
+    }
+
+    /// The scroll bar of the last render, for the mouse.
+    pub(crate) fn bar(&self) -> Option<Bar> {
+        self.bar
+    }
+
+    /// Scrolls as a press on the scroll bar asks: its arrows as a row of the wheel, its track
+    /// a page as Ctrl+b and Ctrl+f, and its thumb to where it was dragged; the cursor moves
+    /// only to stay on screen, or as Ctrl+f moves it.
+    pub(crate) fn scroll_bar(&mut self, scroll: Scroll) {
+        let rows = self.rows();
+        let page = self.page.max(1);
+        match scroll {
+            Scroll::By(Motion::Up | Motion::Down) => {
+                let down = scroll == Scroll::By(Motion::Down);
+                self.window.scroll(down, 1, &mut self.cursor, rows, page);
+            }
+            Scroll::By(Motion::PageUp) => self.page_by(false, 1),
+            Scroll::By(Motion::PageDown) => self.page_by(true, 1),
+            Scroll::By(_) => {}
+            Scroll::To(top) => self.window.scroll_to(top, &mut self.cursor, rows, page),
+        }
     }
 
     /// Keeps the cursor within the rows and on screen, as vim's window does.
@@ -3208,6 +3243,39 @@ mod tests {
         assert_eq!(separator, "╟────── 10,012,345 B in 2 files ───────╢");
         assert_eq!(colors(7, 9), (Color::LightYellow, Color::Blue));
         assert_eq!(colors(6, 9), (Color::Gray, Color::Blue));
+    }
+
+    #[test]
+    fn the_scroll_bar_runs_down_the_right_of_the_frame_along_the_rows() {
+        let hosts = |_: &str| HostState::default();
+        let mut short = loaded("/srv", vec![entry("one", FileKind::File, 1)]);
+        let fits = render_with(&mut short, (40, 12), true, &hosts, Decor::new(false));
+        assert!(!fits.backend().to_string().contains('░'));
+        assert_eq!(short.bar(), None, "everything fits");
+        let files = (0..40).map(|n| entry(&format!("f{n:02}"), FileKind::File, 1));
+        let mut long = loaded("/srv", files.collect());
+        render_with(&mut long, (40, 12), true, &hosts, Decor::new(false));
+        let area = long.bar().unwrap().area();
+        assert_eq!(
+            (area.x, area.y, area.height),
+            (39, 2, 7),
+            "between the header and the line"
+        );
+        long.scroll_bar(Scroll::By(Motion::Down));
+        assert_eq!(
+            (long.window.top(), long.cursor),
+            (1, 4),
+            "a row, as the wheel"
+        );
+        long.scroll_bar(Scroll::By(Motion::PageDown));
+        assert!(long.window.top() > 1, "a page, as Ctrl+f");
+        long.scroll_bar(Scroll::To(30));
+        assert_eq!(long.window.top(), 30);
+        assert!(
+            (30..37).contains(&long.cursor),
+            "on the screen: {}",
+            long.cursor
+        );
     }
 
     #[test]

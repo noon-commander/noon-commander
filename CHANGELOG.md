@@ -13,13 +13,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   version, the compile-time features, the commit and its time in UTC, the target, the
   operating system, the terminal with its colors and keyboard protocol, and the editor of F4.
   The terminal is asked for its name, so kitty, which sets no `TERM_PROGRAM`, is named too.
-- The scroll bars of the help, the viewer, and the Configuration dialog take the mouse, as in
-  Far: they end in arrows (Nerd Font carets, or `▲` and `▼` without icons), a click on one
-  scrolls as a step of the wheel, a click on the track scrolls a page towards it, and the thumb
-  can be dragged.
+- Scroll bars on the right of the frames wherever the rows do not fit, as in Far: the panels,
+  the help, the Configuration dialog, the location and tab menus, the Workspaces, history, and
+  zoxide windows, the menus of F9, the list of completions, the jobs, and the checksums; the
+  viewer has one in its last column.
+- Scroll bars take the mouse: they end in arrows (Nerd Font carets, or `▲` and `▼` without
+  icons), a click on one does what a step of the wheel does, a click on the track pages towards
+  it, and the thumb can be dragged.
+- A dialog's message taller than the screen scrolls, with the mouse and the wheel, and keeps the
+  buttons on screen; so do the rows of a command line that do not fit.
 
 ### Changed
 
+- The scroll bars of the help and the Configuration dialog moved from a column inside onto the
+  frame, which gives their text two more cells.
+- A menu of F9 taller than the screen, the list of jobs, and the list of checksums scroll as
+  little as shows the cursor, rather than keeping it on their last row.
 - `noc -V` and `noc --version` print only the version, as in `noc 0.2.0`; the compile-time
   features (`-forwarding`) moved to `noc debug version`.
 - `noc hosts` and `noc ls` moved to `noc debug hosts` and `noc debug ls`.

@@ -10,8 +10,10 @@
 //! menu's letter open it, and Esc in an open menu goes back to the bar; Shift+F9 opens it on the
 //! command that ran last.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
+use noc_scroll::Motion;
+use noc_scroll::scrollbar::{self, Bar};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
@@ -21,7 +23,7 @@ use ratatui::widgets::{Block, Clear};
 use super::app::Side;
 use super::cells::{self, Align};
 use super::keymap::{Action, Resolved};
-use super::mouse::{Pointer, Press};
+use super::mouse::{Pointer, Press, Scroll};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -167,6 +169,10 @@ pub(crate) struct PullDown {
     open: bool,
     /// The entry under the cursor in that menu.
     cursor: usize,
+    /// The first entry shown of a menu taller than the screen, and how many show, at the last
+    /// render.
+    offset: Cell<usize>,
+    page: Cell<usize>,
     /// Where the last render drew it, for the mouse.
     drawn: RefCell<Drawn>,
 }
@@ -180,6 +186,8 @@ struct Drawn {
     menu: Rect,
     /// Its rows shown, by the index of their entries.
     rows: Vec<(usize, Rect)>,
+    /// Its scroll bar, on the right of its frame.
+    bar: Option<Bar>,
 }
 
 /// The titles of the menu bar, left to right.
@@ -408,6 +416,8 @@ impl PullDown {
             selected,
             open: false,
             cursor: 0,
+            offset: Cell::new(0),
+            page: Cell::new(1),
             drawn: RefCell::default(),
         };
         if let Some((index, entry)) = found {
@@ -538,6 +548,46 @@ impl PullDown {
                 PullDownEvent::Pending
             }
         }
+    }
+
+    /// The scroll bar of the open menu at the last render, for the mouse.
+    pub(crate) fn bar(&self) -> Option<Bar> {
+        self.drawn.borrow().bar
+    }
+
+    /// Moves the cursor in the open menu as a press on its scroll bar asks: an arrow to the
+    /// next command that runs now, as the wheel, stopping at the ends; the track a page; the
+    /// thumb onto the screen scrolled to where it was dragged.
+    pub(crate) fn scroll(&mut self, scroll: Scroll, status: &dyn Fn(Command) -> Status) {
+        if !self.open {
+            return;
+        }
+        let page = self.page.get().max(1);
+        let near = |entry: usize, forward: bool| {
+            self.next_enabled(entry, forward, status)
+                .or_else(|| self.next_enabled(entry, !forward, status))
+        };
+        let cursor = match scroll {
+            Scroll::By(Motion::Up) => self.step(false, status),
+            Scroll::By(Motion::Down) => self.step(true, status),
+            Scroll::By(Motion::PageUp) => near(self.cursor.saturating_sub(page), false),
+            Scroll::By(Motion::PageDown) => {
+                let last = self.menu().entries.len().saturating_sub(1);
+                near((self.cursor + page).min(last), true)
+            }
+            Scroll::By(_) => None,
+            Scroll::To(top) => {
+                self.offset.set(top);
+                if self.cursor < top {
+                    near(top, true)
+                } else if self.cursor >= top + page {
+                    near(top + page - 1, false)
+                } else {
+                    None
+                }
+            }
+        };
+        self.cursor = cursor.unwrap_or(self.cursor);
     }
 
     /// Selects the menu `index` on the bar, and opens it if a menu is open.
@@ -732,9 +782,17 @@ impl PullDown {
         let room = usize::from(rows.width);
         let (left_tee, right_tee) = theme.tees();
         let marks = if icons { ('•', '✓') } else { ('*', 'x') };
-        // A menu taller than the screen shows the rows down to the cursor.
+        // A menu taller than the screen scrolls to the cursor.
         let page = usize::from(rows.height);
-        let first = (self.cursor + 1).saturating_sub(page);
+        let total = menu.entries.len();
+        let first = self
+            .offset
+            .get()
+            .min(self.cursor)
+            .max((self.cursor + 1).saturating_sub(page))
+            .min(total.saturating_sub(page));
+        self.offset.set(first);
+        self.page.set(page);
         for (line, (index, (entry, status))) in menu
             .entries
             .iter()
@@ -759,6 +817,9 @@ impl PullDown {
                 frame.render_widget(Line::styled(line, theme.menu), row);
             }
         }
+        let bar = Rect::new(outer.right() - 1, rows.y, 1, rows.height);
+        let position = (total, page, first);
+        drawn.bar = scrollbar::render(frame, bar, position, theme.menu, theme.scroll_arrows);
     }
 }
 
@@ -1275,6 +1336,34 @@ mod tests {
             text.contains("w30") && !text.contains("Save workspace"),
             "{text}"
         );
+    }
+
+    #[test]
+    fn the_scroll_bar_of_a_tall_menu_moves_the_cursor_onto_the_screen() {
+        let mut menu = workspace_menu(30);
+        draw(&menu, &Theme::terminal());
+        let bar = menu.bar().unwrap();
+        let first = menu.cursor;
+        menu.scroll(Scroll::By(Motion::Up), &status);
+        assert_eq!(
+            menu.cursor, first,
+            "the arrow stops at the first, as the wheel"
+        );
+        menu.scroll(Scroll::By(Motion::Down), &status);
+        assert!(menu.cursor > first);
+        menu.scroll(Scroll::To(bar.dragged(0, u16::MAX)), &status);
+        let end = draw(&menu, &Theme::terminal());
+        assert!(
+            end.contains("w30") && !end.contains("Save workspace"),
+            "{end}"
+        );
+        assert!(menu.cursor >= menu.offset.get(), "on the screen");
+        assert!(matches!(chosen(&menu), Some(Command::Workspace(_))));
+        menu.scroll(Scroll::To(0), &status);
+        assert!(draw(&menu, &Theme::terminal()).contains("Save workspace"));
+        let cursor = menu.cursor;
+        menu.scroll(Scroll::By(Motion::PageDown), &status);
+        assert!(menu.cursor >= cursor + menu.page.get() - 1, "a page on");
     }
 
     #[test]

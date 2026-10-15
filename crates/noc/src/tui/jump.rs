@@ -7,13 +7,14 @@ use std::cell::RefCell;
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 
+use noc_scroll::scrollbar::{self, Bar};
 use noc_tools::zoxide::Scored;
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::text::Line;
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, Field, draw_box, frame_around};
+use super::dialog::{Colors, Field, draw_box, frame_around, right_frame};
 use super::fuzzy::Fuzzy;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::{Drawn, Pointer};
@@ -69,6 +70,8 @@ pub(crate) struct JumpMenu {
     pages: usize,
     /// Where the last render drew it, for the mouse.
     drawn: RefCell<Drawn>,
+    /// The scroll bar of the rows at the last render, on the right of the frame.
+    bar: Option<Bar>,
 }
 
 impl JumpMenu {
@@ -91,6 +94,7 @@ impl JumpMenu {
             page: 1,
             pages: 1,
             drawn: RefCell::default(),
+            bar: None,
         }
     }
 
@@ -275,11 +279,29 @@ impl JumpMenu {
     /// Draws the window centered over `area`, the panels: the keywords, then the directories,
     /// scrolled to the cursor.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        let (page, cursor, window) = self.draw(frame, area, theme);
-        (self.page, self.cursor, self.window) = (page, cursor, window);
+        let (page, cursor, window, bar) = self.draw(frame, area, theme);
+        (self.page, self.cursor, self.window, self.bar) = (page, cursor, window, bar);
     }
 
-    fn draw(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) -> (usize, usize, Window) {
+    /// The scroll bar of the last render, for the mouse.
+    pub(crate) fn bar(&self) -> Option<Bar> {
+        self.bar
+    }
+
+    /// Shows the rows from `top`, where the thumb of the scroll bar was dragged; the cursor
+    /// moves only to stay on screen.
+    pub(crate) fn scroll_to(&mut self, top: usize) {
+        let rows = self.rows.len();
+        self.window
+            .scroll_to(top, &mut self.cursor, rows, self.page.max(1));
+    }
+
+    fn draw(
+        &self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        theme: &Theme,
+    ) -> (usize, usize, Window, Option<Bar>) {
         let rows = u16::try_from(self.rows.len().max(1))
             .unwrap_or(u16::MAX)
             .min(MAX_ROWS);
@@ -293,7 +315,7 @@ impl JumpMenu {
             ..Drawn::default()
         };
         if inner.height < 3 || inner.width < 4 {
-            return (self.page, self.cursor, self.window);
+            return (self.page, self.cursor, self.window, None);
         }
         let width = usize::from(inner.width);
         let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
@@ -325,11 +347,15 @@ impl JumpMenu {
             for (index, text) in (2..inner.height).zip(cells::wrap(&message, width)) {
                 frame.render_widget(Line::styled(text, theme.dialog), line(index));
             }
-            return (page, self.cursor, self.window);
+            return (page, self.cursor, self.window, None);
         }
         let (mut window, mut cursor) = (self.window, self.cursor);
         window.follow(&mut cursor, self.rows.len(), page);
         let offset = window.top();
+        let height = u16::try_from(page).unwrap_or(u16::MAX);
+        let bar = right_frame(inner, inner.y + 2, height);
+        let position = (self.rows.len(), page, offset);
+        let bar = scrollbar::render(frame, bar, position, theme.dialog, theme.scroll_arrows);
         let found: Vec<&Scored> = self.rows.iter().map(|&index| &self.found[index]).collect();
         let scores: Vec<String> = found
             .iter()
@@ -351,7 +377,7 @@ impl JumpMenu {
             frame.render_widget(text, line(y));
             drawn.rows.push((row, line(y)));
         }
-        (page, cursor, window)
+        (page, cursor, window, bar)
     }
 }
 
@@ -440,6 +466,27 @@ mod tests {
         assert_eq!(
             press(&mut menu, Action::Confirm),
             JumpEvent::Open(PathBuf::from("/home/me/src/noc"))
+        );
+    }
+
+    #[test]
+    fn its_thumb_scrolls_the_rows_and_the_cursor_stays_on_screen() {
+        let mut menu = JumpMenu::new(PathBuf::from("/home/me"), None, 1);
+        let many = (0..30).map(|n| scored(f64::from(30 - n), &format!("/d/{n:02}")));
+        menu.found(1, Ok(many.collect()));
+        let top = draw(&mut menu, 16);
+        assert!(top.contains('▲') && top.contains('█'), "{top}");
+        let bar = menu.bar().unwrap();
+        menu.scroll_to(bar.dragged(0, u16::MAX));
+        let end = draw(&mut menu, 16);
+        assert!(end.contains("/d/29") && !end.contains("/d/00"), "{end}");
+        press(&mut menu, Action::NormalMode);
+        let JumpEvent::Open(path) = press(&mut menu, Action::Confirm) else {
+            panic!("expected a directory");
+        };
+        assert!(
+            end.contains(&*path.to_string_lossy()),
+            "on the screen: {path:?}"
         );
     }
 

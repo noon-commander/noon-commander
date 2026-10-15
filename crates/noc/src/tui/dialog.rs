@@ -6,6 +6,8 @@ use std::fmt;
 use std::ops::Range;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use noc_scroll::Motion;
+use noc_scroll::scrollbar::{self, Bar};
 use noc_ssh::askpass::PromptKind;
 use ratatui::Frame;
 use ratatui::layout::{Margin, Position, Rect};
@@ -18,7 +20,7 @@ use unicode_width::UnicodeWidthChar as _;
 use super::cells;
 use super::edit::{Editor, Registers};
 use super::keymap::{Action, Context, Extra, Mode, Resolved, Typed};
-use super::mouse::{Pointer, Press};
+use super::mouse::{Pointer, Press, Scroll};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -408,6 +410,12 @@ pub(crate) struct Dialog {
     field_area: Cell<Option<Rect>>,
     /// Where each choice, field, check box, and button was drawn last, for the mouse.
     spots: RefCell<Vec<(Focus, Rect)>>,
+    /// The first line of a message taller than the screen shown, and how many show, at the
+    /// last render.
+    offset: Cell<usize>,
+    page: Cell<usize>,
+    /// The scroll bar of such a message at the last render, on the right of the frame.
+    bar: Cell<Option<Bar>>,
 }
 
 impl Dialog {
@@ -533,7 +541,29 @@ impl Dialog {
             completes: false,
             field_area: Cell::new(None),
             spots: RefCell::new(Vec::new()),
+            offset: Cell::new(0),
+            page: Cell::new(1),
+            bar: Cell::new(None),
         }
+    }
+
+    /// The scroll bar of a message that did not fit at the last render, for the mouse.
+    pub(crate) fn bar(&self) -> Option<Bar> {
+        self.bar.get()
+    }
+
+    /// Scrolls a message that does not fit as a press on its scroll bar asks, or the wheel: a
+    /// line, a page, or to where the thumb was dragged.
+    pub(crate) fn scroll(&mut self, scroll: Scroll) {
+        let (offset, page) = (self.offset.get(), self.page.get().max(1));
+        self.offset.set(match scroll {
+            Scroll::By(Motion::Up) => offset.saturating_sub(1),
+            Scroll::By(Motion::Down) => offset + 1,
+            Scroll::By(Motion::PageUp) => offset.saturating_sub(page),
+            Scroll::By(Motion::PageDown) => offset + page,
+            Scroll::By(_) => offset,
+            Scroll::To(top) => top,
+        });
     }
 
     /// Tells this dialog from every other one.
@@ -882,6 +912,36 @@ impl Dialog {
         }
     }
 
+    /// Draws the lines of the message at the top of `inner`, as many as the `rest` of the
+    /// dialog leaves room for, scrolled, with a scroll bar on the right of the frame in `style`
+    /// when they do not all fit. Returns how many rows they took.
+    fn render_message(
+        &self,
+        frame: &mut Frame<'_>,
+        inner: Rect,
+        lines: &[String],
+        rest: u16,
+        style: Style,
+        theme: &Theme,
+    ) -> u16 {
+        let room = usize::from(inner.height.saturating_sub(rest)).max(1);
+        let page = lines.len().min(room);
+        let offset = self.offset.get().min(lines.len() - page);
+        self.offset.set(offset);
+        self.page.set(page);
+        let rows = u16::try_from(page).unwrap_or(u16::MAX).min(inner.height);
+        let bar = right_frame(inner, inner.y, rows);
+        let position = (lines.len(), page, offset);
+        let arrows = theme.scroll_arrows;
+        self.bar
+            .set(scrollbar::render(frame, bar, position, style, arrows));
+        for (index, line) in (0..rows).zip(lines.iter().skip(offset)) {
+            let row = Rect::new(inner.x, inner.y + index, inner.width, 1);
+            frame.render_widget(Line::raw(line.as_str()), row);
+        }
+        rows
+    }
+
     /// Draws the dialog centered in `area`, with the terminal cursor in the focused field.
     pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let width = self.width.min(area.width.saturating_sub(4)).max(20);
@@ -901,14 +961,9 @@ impl Dialog {
         let row = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
         let mut spots = self.spots.borrow_mut();
         spots.clear();
-        let mut index = 0;
-        for line in &lines {
-            if index >= inner.height {
-                return;
-            }
-            frame.render_widget(Line::raw(line.as_str()), row(index));
-            index += 1;
-        }
+        // The line and the buttons below the rest.
+        let rest = height.saturating_sub(rows(lines.len())).saturating_add(2);
+        let mut index = self.render_message(frame, inner, &lines, rest, colors.body, theme);
         let room = usize::from(inner.width).max(1);
         for (number, choice) in self.choices.iter().enumerate() {
             if index >= inner.height {
@@ -1065,6 +1120,12 @@ pub(crate) fn draw_separator(
     );
     let row = Rect::new(x, y, width, 1).intersection(frame.area());
     frame.render_widget(Line::styled(line, colors.body), row);
+}
+
+/// The cells of the right side of the frame around `inner`, the room inside a box that
+/// [`draw_box`] drew, from the row `y` down `height` rows: where its scroll bar goes.
+pub(crate) fn right_frame(inner: Rect, y: u16, height: u16) -> Rect {
+    Rect::new(inner.right().saturating_add(1), y, 1, height)
 }
 
 /// The frame around `inner`, the room inside a box that [`draw_box`] drew.
@@ -1320,6 +1381,29 @@ mod tests {
             Color::Reset,
             "the shadow starts two columns in"
         );
+    }
+
+    #[test]
+    fn a_message_taller_than_the_screen_scrolls_and_keeps_the_buttons() {
+        let lines: Vec<String> = (1..=30).map(|n| format!("line {n}")).collect();
+        let mut dialog = Dialog::question("Long", &lines.join("\n"), vec![Button::Ok], 0, false);
+        let shown = |dialog: &Dialog| draw(dialog, 40, 12).backend().to_string();
+        let top = shown(&dialog);
+        assert!(top.contains("line 1 ") && top.contains("[< OK >]"), "{top}");
+        assert!(top.contains('▲') && top.contains('█'), "{top}");
+        assert!(!top.contains("line 30"), "{top}");
+        dialog.scroll(Scroll::By(Motion::Down));
+        let down = shown(&dialog);
+        assert!(
+            !down.contains("line 1 ") && down.contains("line 2 "),
+            "{down}"
+        );
+        dialog.scroll(Scroll::To(usize::MAX));
+        let end = shown(&dialog);
+        assert!(end.contains("line 30") && end.contains("[< OK >]"), "{end}");
+        let short = Dialog::question("Short", "one line", vec![Button::Ok], 0, false);
+        let text = shown(&short);
+        assert!(!text.contains('░') && short.bar().is_none(), "{text}");
     }
 
     #[test]

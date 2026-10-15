@@ -6,6 +6,7 @@
 use std::path::Path;
 
 use noc_config::{Place, SavedTab, SortBy, Workspace, Workspaces};
+use noc_scroll::scrollbar::Bar;
 use noc_vfs::{Location, RemotePath};
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -154,6 +155,16 @@ impl WorkspacesWindow {
             Pick::Other(Action::Delete) => chosen(self, WorkspacesEvent::Delete),
             Pick::Pending | Pick::Other(_) => WorkspacesEvent::Pending,
         }
+    }
+
+    /// The scroll bar of the last render, for the mouse.
+    pub(crate) fn bar(&self) -> Option<Bar> {
+        self.picker.bar()
+    }
+
+    /// Shows the rows from `top`, where the thumb of the scroll bar was dragged.
+    pub(crate) fn scroll_to(&mut self, top: usize) {
+        self.picker.scroll_to(top);
     }
 
     /// Takes a press of the mouse, where the window was drawn last: a click puts the cursor on

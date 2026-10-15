@@ -118,6 +118,11 @@
 - [x] Text cut short marked with `»` and `«` (Nerd Font chevrons with icons) in an accent, `K`
       for the whole name or row under the cursor, the z keys to scroll names and cut lines
       sideways, the same marks in the viewer ([ADR 0025](adr/0025-marks-of-text-cut-short.md))
+- [x] `g x` opens the marked entries, or the one under the cursor, externally, as vim's `gx`:
+      `open` on macOS, `xdg-open` on Linux, local files only
+      ([ADR 0026](adr/0026-open-externally.md))
+- [ ] `g x` on a host: a copy of the remote file in the runtime directory, which the desktop's
+      program then opens, as F4 edits a copy
 - [ ] Restore panel state on start, with the tabs
 - [x] Typing in a panel no longer starts quick search; `ui.type_to_search` is gone
 - [x] Shell command line ([ADR 0019](adr/0019-shell-command-line.md)): `!` (and `:!`) runs a

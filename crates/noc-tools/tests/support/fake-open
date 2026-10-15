@@ -1,0 +1,30 @@
+#!/bin/sh
+# Fake opener (open, xdg-open) for Noon Commander tests. Tests wrap it in a script that sets
+# these variables:
+#
+#   FAKE_OPEN_LOG   append each command line here, one argument per line, then --end--
+#   FAKE_OPEN_FAIL  exit with this code, as xdg-open does (2: no such file, 3: no program)
+set -eu
+
+if [ -n "${FAKE_OPEN_LOG:-}" ]; then
+    record=
+    for arg in "$@"; do
+        record="$record$arg
+"
+    done
+    cat >>"$FAKE_OPEN_LOG" <<EOF
+${record}--end--
+EOF
+fi
+
+if [ -n "${FAKE_OPEN_FAIL:-}" ]; then
+    echo "fake-open: failing" >&2
+    exit "$FAKE_OPEN_FAIL"
+fi
+
+[ $# -eq 1 ] || { echo "fake-open: expected one path" >&2; exit 1; }
+case $1 in
+/*) ;;
+*) echo "fake-open: not an absolute path: $1" >&2; exit 1 ;;
+esac
+[ -e "$1" ] || exit 2

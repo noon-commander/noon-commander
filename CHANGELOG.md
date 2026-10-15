@@ -9,6 +9,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `g x` opens the marked entries, or the one under the cursor, externally, as vim's `gx` does:
+  with the program the desktop has for each, through `open` on macOS and `xdg-open` on Linux;
+  a directory opens in the desktop's file manager. In Visual mode it opens the rows selected,
+  and F9 → File has it as Open externally. Only local files open; on a host the line of the
+  mode says so.
 - Ctrl+k while the key hints show gives them the keys, as `K K` does to nvim's hover window: a
   list of every key sequence whole, `Ctrl+w h` rather than a `Ctrl+w` group, with what each does,
   over whatever is in front. `/` filters it by keys and by what they do, Enter runs the command

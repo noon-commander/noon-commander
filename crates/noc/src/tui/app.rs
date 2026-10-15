@@ -172,6 +172,9 @@ pub(crate) enum Effect {
     },
     /// Add the local directory to zoxide, after the ones before; failures only go to the log.
     ZoxideAdd(PathBuf),
+    /// Open the local files and directories, absolute paths, with the programs of the desktop,
+    /// one after another, and report the first that fails to [`App::open_failed`].
+    Open(Vec<PathBuf>),
     /// Ask zoxide for the directories that match `keywords`, without `exclude`, and pass them
     /// to [`App::jumps`].
     ZoxideQuery {
@@ -2505,6 +2508,7 @@ impl App {
             Action::Delete => self.ask_delete(),
             Action::View => return self.view(),
             Action::Edit => return self.edit(),
+            Action::SystemOpen => return self.system_open(),
             Action::Copy => self.ask_transfer(JobKind::Copy),
             Action::Move => self.ask_transfer(JobKind::Move),
             Action::Rename => self.start_rename(),
@@ -2658,7 +2662,11 @@ impl App {
             }
             Action::OtherEnd => panel.other_end(),
             Action::Mark => panel.mark_visual(false),
-            Action::Copy | Action::Move | Action::Delete | Action::Checksum => {
+            Action::Copy
+            | Action::Move
+            | Action::Delete
+            | Action::Checksum
+            | Action::SystemOpen => {
                 panel.mark_visual(true);
                 return Some(self.handle(Resolved::Action(action)));
             }
@@ -3717,6 +3725,10 @@ impl App {
             Command::Do(action) => Status {
                 enabled: match action {
                     Action::Checksum => !active.chosen().is_empty(),
+                    Action::SystemOpen => {
+                        matches!(active.location(), Location::Local(_))
+                            && !active.chosen().is_empty()
+                    }
                     Action::Disconnect => self
                         .chosen_host()
                         .is_some_and(|host| self.hosts.contains_key(&host)),
@@ -4050,6 +4062,36 @@ impl App {
             },
             cancel,
         }]
+    }
+
+    /// Opens the marked entries of the active panel, or the one under the cursor, with the
+    /// programs of the desktop, as vim's `gx`. On a host, the line of the mode says that only
+    /// local files open so.
+    fn system_open(&mut self) -> Vec<Effect> {
+        let panel = self.panel(self.active);
+        let dir = panel.location().clone();
+        let chosen = panel.chosen();
+        if chosen.is_empty() {
+            return Vec::new();
+        }
+        let Location::Local(here) = &dir else {
+            self.message = Some(fl!("message-open-remote"));
+            return Vec::new();
+        };
+        let paths = chosen
+            .iter()
+            .map(|entry| here.join(std::ffi::OsStr::from_bytes(&entry.name)))
+            .collect();
+        let mut effects = vec![Effect::Open(paths)];
+        effects.extend(self.note(&dir));
+        effects
+    }
+
+    /// Takes the failure of an [`Effect::Open`]: the path that did not open, and why.
+    pub(crate) fn open_failed(&mut self, path: &Path, reason: &str) {
+        let path = location_text(&Location::Local(path.to_path_buf()));
+        let reason = cells::sanitize(reason.as_bytes());
+        self.show_error(&fl!("open-error", path = path, reason = reason));
     }
 
     /// Takes the end of the editor: whether the file changed, or why it could not run. A
@@ -9021,6 +9063,47 @@ mod tests {
             text.contains("Cannot edit /srv/notes: cannot run nano: not found"),
             "{text}"
         );
+    }
+
+    #[test]
+    fn g_x_opens_the_marked_entries_or_the_one_under_the_cursor_externally() {
+        let mut app = with_files(&["a b", "c", "d"]);
+        assert!(keys(&mut app, &["g", "x"]).is_empty(), "nothing on ..");
+        let effects = keys(&mut app, &["j", "g", "x"]);
+        let [Effect::Open(paths)] = &effects[..] else {
+            panic!("expected an open, got {effects:?}");
+        };
+        assert_eq!(paths, &[PathBuf::from("/srv/a b")]);
+        // In Visual mode, the rows selected, which become the marks.
+        let effects = keys(&mut app, &["j", "shift-v", "j", "g", "x"]);
+        let [Effect::Open(paths)] = &effects[..] else {
+            panic!("expected an open, got {effects:?}");
+        };
+        assert_eq!(paths, &[PathBuf::from("/srv/c"), PathBuf::from("/srv/d")]);
+        assert_eq!(app.mode(), Mode::Normal);
+        assert_eq!(chosen_names(&app, Side::Left), ["c", "d"]);
+
+        app.open_failed(Path::new("/srv/c"), "xdg-open exited with exit status: 3");
+        let text = screen(&mut app);
+        assert!(
+            text.contains("Cannot open /srv/c: xdg-open exited with exit status: 3"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn g_x_counts_in_zoxide() {
+        let mut app = recording();
+        let effects = keys(&mut app, &["shift-g", "g", "x"]);
+        assert_eq!(zoxide_adds(&effects), [PathBuf::from("/srv")]);
+    }
+
+    #[test]
+    fn g_x_on_a_host_says_that_only_local_files_open_externally() {
+        let (mut app, _) = on_a_host();
+        assert!(keys(&mut app, &["g", "x"]).is_empty());
+        let text = screen(&mut app);
+        assert!(text.contains("Only local files open externally"), "{text}");
     }
 
     /// An app whose left panel is on `web:/home/deploy`, which holds `notes`.

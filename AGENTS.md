@@ -15,6 +15,8 @@ add false positives to `typos.toml`, with a comment if the reason is not obvious
   paths. Kill on drop. Tests use a fake program. At build time, `crates/noc/build.rs` runs
   `git` for `noc debug version`.
 - Sole shell exception: the command line's `$SHELL -c`, whose command is the user's (ADR 0019).
+- Sole exception to kill on drop: the opener of `g x` (`open`, `xdg-open`), detached, output to
+  `/dev/null`; it takes an absolute path without `--`, which `xdg-open` refuses (ADR 0026).
 - User-supplied ssh arguments must pass the validator (ADR 0004). Unknown flags are errors.
 - Never pass `StrictHostKeyChecking=no`. Never write to `~/.ssh/`.
 - Clipboard: write through OSC 52 only. Never read it. Never call `pbcopy`/`xclip` (ADR 0008).
@@ -72,7 +74,7 @@ client; the system `ssh` is the single source of truth for connections and auth.
 | `crates/noc-ssh` | Host discovery, `ssh -G`, argument validation, forwarding policy, ControlMaster, SFTP channels, askpass bridge |
 | `crates/noc-vfs` | `Vfs` trait and backends (local, SFTP), mounted volumes |
 | `crates/noc-ops` | Job engine: copy, move, delete, mkdir, checksums; progress, cancellation, conflicts |
-| `crates/noc-tools` | External programs other than ssh: zoxide, the editor, the shell of `!` |
+| `crates/noc-tools` | External programs other than ssh: zoxide, the editor, the opener, the shell of `!` |
 | `crates/noc-text` | Terminal-safe text: sanitizing, widths in cells, fitting, wrapping |
 | `crates/noc-scroll` | Paging the help and the viewer: how far the page keys go, the scroll bar |
 | `crates/noc-viewer` | The F3 viewer: reading through the `Vfs`, scrolling, wrapping; its own Fluent text |

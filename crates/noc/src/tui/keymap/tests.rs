@@ -724,19 +724,19 @@ fn z_scrolls_sideways_as_in_vim() {
 
 #[test]
 fn a_key_that_cannot_go_on_with_a_sequence_gives_it_up_in_normal_and_visual_mode() {
-    // As vim beeps at `g x` and Ctrl+w and a key that names no window, neither runs.
+    // As vim beeps at `g y` and Ctrl+w and a key that names no window, neither runs.
     for keys in [
-        &["g", "x"][..],
+        &["g", "y"][..],
         &["ctrl-w", "e"],
         &["ctrl-w", "ctrl-h"],
-        &["3", "g", "x"],
+        &["3", "g", "y"],
     ] {
         assert_eq!(typed(PANEL, keys), [], "{keys:?}");
     }
     assert_eq!(typed(VISUAL_PANEL, &["ctrl-w", "x"]), [], "no Move");
     assert_eq!(typed(FIELD, &["g", "u"]), [], "no undo");
     // The next key is a command of its own, as `j` after vim's `g3`.
-    assert_eq!(typed(PANEL, &["g", "x", "j"]), actions(&[Action::Down]));
+    assert_eq!(typed(PANEL, &["g", "y", "j"]), actions(&[Action::Down]));
     assert_eq!(typed(PANEL, &["g", "3", "j"]), actions(&[Action::Down]));
     // A sequence that does something alone does it, and the key goes on as its own, as a
     // mapping of vim's that starts a longer one.

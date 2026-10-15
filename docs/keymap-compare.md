@@ -219,6 +219,7 @@ section says: the commands of files act on the rows it selects, which become the
 | Quick cd: type a path as for cd | `quick_cd` | ✅ | g d | Alt+c | — | g Space | c d |
 | View the file under the cursor | `view` | ✅ | i<br>F3 | F3 | F3<br>Numpad5<br>Ctrl+Shift+F3 (always internal) | — | i<br>F3 |
 | Edit the file under the cursor in $VISUAL or $EDITOR | `edit` | ✅ | e<br>F4 | F4 | F4<br>Ctrl+Shift+F4 (always internal) | — | F4<br>E |
+| Open the marked entries, or the one under the cursor, with the programs of the desktop (`open`, `xdg-open`), as vim's gx; local ones only (Far: in a window of its own; yazi, ranger: through their openers) | `system_open` | ✅ | g x | — | Shift+Enter | o<br>Enter | l<br>Right<br>Enter |
 | Copy the marked entries, or the one under the cursor | `copy` | ✅ | Y<br>y y<br>F5 | F5 | F5 | y, then p | y y, then p p<br>F5, then p p |
 | Move or rename the marked entries, or the one under the cursor | `move` | ✅ | x<br>F6 | F6 | F6 | x, then p | d d, then p p<br>F6, then p p |
 | Rename the entry under the cursor in its row | `rename` | ✅ | r<br>Shift+F6 | Shift+F6 | Shift+F6 | r | F2 (before the extension)<br>c w (a new name)<br>a (before the extension)<br>A (at the end)<br>I (at the start) |
@@ -231,7 +232,6 @@ section says: the commands of files act on the rows it selects, which become the
 | F1…F10 on terminals without function keys | — | 🚫 | — | Esc, then 1…9, 0 | — | — | — |
 | Alt+key on terminals without Alt | — | 🚫 | — | Esc, then the key | — | — | — |
 | Enter the archive under the cursor as a directory | — | ⏳ | — | Ctrl+PgDn | Ctrl+PgDn<br>Ctrl+Shift+PgDn (always as archive) | — | — |
-| Execute in separate window | — | ⏳ | — | — | Shift+Enter | — | — |
 | Run as administrator | — | ⏳ | — | — | Ctrl+Alt+Enter | — | — |
 | Open the marked files, or the one under the cursor, with a program chosen from a list | — | ⏳ | — | — | — | O<br>Shift+Enter | r |
 | User menu | — | ⏳ | — | F2 | F2 | — | — |
@@ -401,16 +401,16 @@ Rows selected in a panel, from the row where v or V started Visual mode to the c
 linewise Visual mode selects lines; with a count, 3V selects three rows. After V the line of the
 mode says VISUAL LINE, as vim's. It falls back to `global`. The motions extend the selection, after
 a count too, and G and g g after a count go to the row of that number. The commands of files, y, x,
-d, D, X, F5, F6, F8, and f #, act on the rows selected: they become the marks, the only ones, Visual
-mode ends, and the cursor goes to the first row, as after vim's operators; D and X delete them as d
-does, as vim's delete the lines selected. Space marks them beside the marks already there, and Esc
-and Ctrl+c leave Visual mode, as does the key of v and V that started it, while the other switches
-its kind, as in vim; g v, in Normal mode, selects the same rows again. The other F-keys, Alt+F1,
-Alt+F2, and the keys of Ctrl+w that go to another panel end Visual mode and do what they do in
-Normal mode, and so do Alt and a key, as Esc and the key; other keys that neither binds do nothing.
-yazi's and ranger's visual modes mark the rows that the cursor moves over with the keys of their
-panels, whose commands then act on the marks, so their columns here have only the keys that leave
-it.
+d, D, X, F5, F6, F8, f #, and g x, act on the rows selected: they become the marks, the only ones,
+Visual mode ends, and the cursor goes to the first row, as after vim's operators; D and X delete
+them as d does, as vim's delete the lines selected. Space marks them beside the marks already
+there, and Esc and Ctrl+c leave Visual mode, as does the key of v and V that started it, while the
+other switches its kind, as in vim; g v, in Normal mode, selects the same rows again. The other
+F-keys, Alt+F1, Alt+F2, and the keys of Ctrl+w that go to another panel end Visual mode and do what
+they do in Normal mode, and so do Alt and a key, as Esc and the key; other keys that neither binds
+do nothing. yazi's and ranger's visual modes mark the rows that the cursor moves over with the
+keys of their panels, whose commands then act on the marks, so their columns here have only the
+keys that leave it.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -428,6 +428,7 @@ it.
 | Move or rename the rows selected | `move` | ⏳ | x<br>F6 | — | — | — | — |
 | Delete the rows selected | `delete` | ⏳ | d<br>D<br>X<br>F8 | — | — | — | — |
 | Checksums of the files selected | `checksum` | ⏳ | f # | — | — | — | — |
+| Open the rows selected with the programs of the desktop | `system_open` | ⏳ | g x | — | — | — | — |
 | Leave Visual mode (yazi: or else unmark everything, or leave the search or the filter) | `normal_mode` | ⏳ | Esc<br>Ctrl+[<br>Ctrl+c | — | — | Esc<br>Ctrl+[ | Esc |
 | Leave Visual mode started with v; in Visual mode by lines, switch to it, as vim's | `visual_mode` | ⏳ | v | — | — | — | — |
 | Leave Visual mode by lines; in Visual mode started with v, switch to it, as vim's | `visual_line_mode` | ⏳ | V | — | — | — | V |

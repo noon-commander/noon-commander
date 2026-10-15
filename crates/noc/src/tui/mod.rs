@@ -116,6 +116,7 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
         Done::History(result) => app.history_changed(result),
         Done::Recent(result) => app.recent_loaded(result),
         Done::Jumps { generation, result } => app.jumps(generation, result),
+        Done::OpenFailed { path, reason } => app.open_failed(&path, &reason),
         Done::Names {
             generation,
             entries,

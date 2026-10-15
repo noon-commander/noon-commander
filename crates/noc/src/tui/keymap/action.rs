@@ -226,6 +226,9 @@ pub(crate) enum Action {
     ShowFull,
     /// Edits the file under the cursor in the editor of `$VISUAL` or `$EDITOR`.
     Edit,
+    /// Opens the marked entries, or the one under the cursor, with the programs the desktop has
+    /// for them (`open`, `xdg-open`), as vim's `gx`; local ones only.
+    SystemOpen,
     /// Asks where to, and copies the marked entries or the one under the cursor.
     Copy,
     /// Asks where to, and moves or renames the marked entries or the one under the cursor.
@@ -541,6 +544,7 @@ impl Action {
         Self::ScrollEnd,
         Self::ShowFull,
         Self::Edit,
+        Self::SystemOpen,
         Self::Copy,
         Self::Move,
         Self::Rename,

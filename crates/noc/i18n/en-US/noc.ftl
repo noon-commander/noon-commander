@@ -40,14 +40,16 @@ mode-insert-once = -- (insert) --
 mode-insert-visual = -- (insert) VISUAL --
 
 ## Messages on the line of the mode, in its place until the next key, as vim's on its command
-## line (src/tui/app): n or N with no search before, and a search that goes on round the end of
-## the rows or their start. Prefix: message-.
+## line (src/tui/app): n or N with no search before, a search that goes on round the end of the
+## rows or their start, and g x on a host. Prefix: message-.
 
 message-search-none = No previous search
 message-search-bottom = search hit BOTTOM, continuing at TOP
 message-search-top = search hit TOP, continuing at BOTTOM
 # What quick search, n, or N looked for matches no name, as vim's E486.
 message-search-not-found = Pattern not found: { $text }
+# g x on a host: the programs of the desktop open local files only.
+message-open-remote = Only local files open externally
 
 ## The title of the terminal's window or tab (src/tui/app), with ui.terminal_title. Prefix:
 ## terminal-.
@@ -215,6 +217,8 @@ pulldown-tab-list = Tab l&ist…
 # File.
 pulldown-view = &View
 pulldown-edit = &Edit
+# g x: with the program the desktop has for the file, as a double click (open, xdg-open).
+pulldown-system-open = &Open externally
 pulldown-copy = &Copy
 pulldown-move = &Rename/Move
 # Shift+F6: the new name is typed in the entry's row.
@@ -463,6 +467,7 @@ help-visual-copy = Copy the rows selected
 help-visual-move = Move or rename the rows selected
 help-visual-delete = Delete the rows selected
 help-visual-checksum = Checksums of the files selected
+help-visual-system-open = Open the rows selected with the programs of the desktop
 help-switch-panel = The other panel
 help-focus-left = The left panel
 help-focus-right = The right panel
@@ -484,6 +489,8 @@ help-shell = Open the command line for a shell command, run in this directory
 help-command = Open the command line for a command of Noon Commander; :!command runs a shell command
 help-view = View the file under the cursor; on a directory, open it
 help-edit = Edit the file under the cursor in $VISUAL or $EDITOR
+# open on macOS, xdg-open on Linux: the program a double click would start.
+help-system-open = Open the marked entries, or the one under the cursor, with the programs of the desktop
 help-copy = Copy the marked entries, or the one under the cursor
 help-move = Move or rename the marked entries, or the one under the cursor
 help-rename = Rename the entry under the cursor in its row
@@ -832,6 +839,13 @@ edit-error = Cannot edit { $path }: { $reason }
 edit-kept = The changes to { $path } did not go back; they are in { $copy }
 # Why the editor did not run.
 edit-cannot-run = cannot run { $program }: { $reason }
+
+## Opening externally, g x (src/tui). Prefix: open-. The program the desktop has for the file:
+## open on macOS, xdg-open on Linux.
+
+open-error = Cannot open { $path }: { $reason }
+# Why the opener did not run.
+open-cannot-run = cannot run { $program }: { $reason }
 
 ## The command line of ! and : (src/tui). Prefix: command-. Commands run in $SHELL, or /bin/sh.
 

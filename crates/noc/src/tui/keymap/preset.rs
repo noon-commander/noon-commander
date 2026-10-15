@@ -106,6 +106,7 @@ pub(super) const PRESET: Preset = &[
             (Action::QuickCd, &["g d"]),
             (Action::View, &["i", "f3"]),
             (Action::Edit, &["e", "f4"]),
+            (Action::SystemOpen, &["g x"]),
             (Action::Copy, &["shift-y", "y y", "f5"]),
             (Action::Move, &["x", "f6"]),
             (Action::Rename, &["r", "shift-f6"]),
@@ -140,6 +141,7 @@ pub(super) const PRESET: Preset = &[
             // As vim's `D` and `X`, which delete the lines selected.
             (Action::Delete, &["d", "shift-d", "shift-x", "f8"]),
             (Action::Checksum, &["f #"]),
+            (Action::SystemOpen, &["g x"]),
             (Action::NormalMode, &["esc", "ctrl-[", "ctrl-c"]),
             // The key that started Visual mode ends it; the other switches its kind, as vim's.
             (Action::VisualMode, &["v"]),

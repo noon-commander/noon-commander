@@ -22,6 +22,7 @@ use noc_ssh::askpass::{AskpassEnv, AskpassEvent, AskpassServer};
 use noc_ssh::resolve::resolve;
 use noc_ssh::version::check_version;
 use noc_ssh::{CachedHost, ChannelProcess, Session, SftpChannel, SshError, Target, cleanup_stale};
+use noc_tools::opener::Opener;
 use noc_tools::zoxide::Scored;
 use noc_vfs::{
     FileKind, FileWriter as _, LocalFs, Location, Metadata, RemotePath, SftpFs, Space, Vfs,
@@ -140,6 +141,9 @@ pub(crate) enum Done {
         generation: u64,
         result: Result<Vec<Scored>, String>,
     },
+    /// The path of [`Effect::Open`] that did not open, and why; the ones after it were not
+    /// tried.
+    OpenFailed { path: PathBuf, reason: String },
 }
 
 /// A report from a job, with its paths as locations and its errors in words.
@@ -348,6 +352,7 @@ impl Tasks {
                 Effect::ZoxideAdd(dir) => {
                     let _ = self.zoxide_adds.send(dir);
                 }
+                Effect::Open(paths) => self.open(paths),
                 Effect::ListNames {
                     generation,
                     dir,
@@ -525,6 +530,21 @@ impl Tasks {
             let _ = done.send(Done::Jumps { generation, result });
         });
         self.zoxide_query = Some(task.abort_handle());
+    }
+
+    /// Opens `paths` with the programs of the desktop, one after another, until one fails.
+    fn open(&self, paths: Vec<PathBuf>) {
+        let done = self.done.clone();
+        tokio::spawn(async move {
+            let opener = Opener::default();
+            for path in paths {
+                if let Err(error) = opener.open(&path).await {
+                    let reason = describe::open_error(&error);
+                    let _ = done.send(Done::OpenFailed { path, reason });
+                    return;
+                }
+            }
+        });
     }
 
     /// Writes the settings of the host `name` to `hosts.toml` and reads them all again.

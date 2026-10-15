@@ -19,7 +19,7 @@ crates/
 │                  ControlMaster, SFTP channels, askpass bridge
 ├── noc-vfs/       Vfs trait: local and SFTP backends, mounted volumes
 ├── noc-ops/       job engine: copy, move, rename, delete, mkdir, checksums; progress, cancellation, conflicts
-├── noc-tools/     external programs other than ssh: zoxide, the editor, the shell
+├── noc-tools/     external programs other than ssh: zoxide, the editor, the opener, the shell
 ├── noc-text/      terminal-safe text: sanitizing, widths in cells, fitting, wrapping
 ├── noc-scroll/    paging text that ends: how far the page keys go, the scroll bar
 └── noc-viewer/    the F3 viewer: reading through the Vfs, scrolling, wrapping; its own text
@@ -48,7 +48,10 @@ ssh runs only from `noc-ssh`, and every other program only from `noc-tools`
 without input for background ones, and killed when their future is dropped or they time out.
 A program that is not installed is told apart from one that fails. The shell of the command
 line is the one program started through a shell, since the command is the user's
-([ADR 0019](adr/0019-shell-command-line.md)).
+([ADR 0019](adr/0019-shell-command-line.md)). The desktop's opener of `g x` is the one program
+left running: it starts programs that outlive it and Noon Commander, so its output goes nowhere,
+it is never killed, and it takes absolute paths without `--`, which `xdg-open` refuses
+([ADR 0026](adr/0026-open-externally.md)).
 
 ## Processes
 
@@ -256,8 +259,8 @@ menu:
 
 - Left and Right act on the panel drawn on that side, after Ctrl+w x too: its location menu,
   sort order (`•` marks the current one), Rescan, Disconnect while it shows a host, and its
-  [tabs](#tabs): New tab, Close tab, and Tab list…. File
-  has F3 … F8, `g +`, `g -`, `g *`, Checksums, and Exit; Command has quick search,
+  [tabs](#tabs): New tab, Close tab, and Tab list…. File has F3, F4, Open externally
+  (`g x`), F5 … F8, `g +`, `g -`, `g *`, Checksums, and Exit; Command has quick search,
   [Quick cd](#quick-cd), the [zoxide](#zoxide) window, the other-panel
   commands, the jobs, host settings and disconnect for the host the active panel shows, help,
   and redraw; Options has Configuration… and Show hidden files (`✓` while on); Workspace has Save
@@ -361,7 +364,7 @@ directories, which Enter opens in the active panel:
   matches them as shown.
 - A local directory goes to zoxide (`zoxide add -- <dir>`) once the user does something in it,
   at most once a visit: a copy, move, or delete from it, a copy or move into it when a panel
-  shows it, F7, F3 or F4 on a file, checksums, or a jump there. Passing through, marking,
+  shows it, F7, F3 or F4 on a file, `g x`, checksums, or a jump there. Passing through, marking,
   searching, sorting, and `R` do not count. Each tab remembers whether its visit counted;
   going to another directory starts a new one. One task adds them in turn, so no two zoxide
   processes write its database at once.
@@ -913,12 +916,12 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   the other end, `g v` selects the rows selected last again, and Esc ends it, as does the key of `v`
   and `V` that started it, while the other switches its kind, as vim's; after `V` the line of the
   mode says `-- VISUAL LINE --`. Space marks the rows selected; `y`, `x`, `d`, `D`, `X`, F5, F6, F8,
-  and `f #` make them the marked entries and act on them, as on any marks, and put the cursor on the
-  first row, as vim's operators do. The line of the mode shows how many entries it selects, without
-  `..`. The other F-keys, Ctrl+w to the other panel, and the commands of the pull-down menu end
-  Visual mode and do what they do in Normal mode, and so does the panel losing the keys to the other
-  one or to another tab. The selection is held by the entries on its ends, so that a listing of the
-  same directory or another sort order keeps it on them.
+  `f #`, and `g x` make them the marked entries and act on them, as on any marks, and put the
+  cursor on the first row, as vim's operators do. The line of the mode shows how many entries it
+  selects, without `..`. The other F-keys, Ctrl+w to the other panel, and the commands of the
+  pull-down menu end Visual mode and do what they do in Normal mode, and so does the panel losing
+  the keys to the other one or to another tab. The selection is held by the entries on its ends,
+  so that a listing of the same directory or another sort order keeps it on them.
 - **Jumps.** Each tab keeps a jump list, as vim does with `jumpoptions=stack`: going to another
   directory (Enter, `h`, Quick cd, a menu, zoxide, a workspace's tab), `G`, `g g`, `n`, `N`, and a
   quick search that found a match put where the panel was on it, up to 100 places, even when they
@@ -975,6 +978,16 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   copies show the job's window. The local copy is removed once it went back, or at once if
   it did not change; one that did not go back (a failure, Abort, or the host gone) stays, and
   a red dialog says where. Panels on the file's directory read it again.
+- **`g x` opens externally** the marked entries, or the one under the cursor, as vim's `gx`
+  opens what is under its cursor: each with the program the desktop has for it, as a double
+  click would, through `open` on macOS and `xdg-open` on Linux, one after another
+  (`noc_tools::opener`). A directory opens in the desktop's file manager. The opener runs
+  without a shell, input, or output, in a process group of its own, and is never killed: a
+  program it starts runs on after Noon Commander quits. One still running after five seconds
+  counts as having opened its file. The first failure stops the rest and shows in a red dialog,
+  with the exit code, since the opener's output goes nowhere. Remote entries do not open yet:
+  on a host, the line of the mode says that only local files open externally, and the command
+  is dimmed in the File menu.
 - **F6 moves or renames** the marked entries, or the one under the cursor, with the dialog
   of F5 (`Move "x" to:`, without Preserve attributes: moves keep them); a new name in the
   field renames in place, as in mc. Locally, and within one host, the job renames

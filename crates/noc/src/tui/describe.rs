@@ -61,6 +61,19 @@ pub(crate) fn zoxide_error(error: &ToolError) -> String {
     }
 }
 
+/// Why the desktop's opener did not open a file: it could not run, or how it exited, since its
+/// output goes nowhere.
+pub(crate) fn open_error(error: &ToolError) -> String {
+    match error {
+        ToolError::Spawn { program, source } => fl!(
+            "open-cannot-run",
+            program = program.display().to_string(),
+            reason = source.to_string()
+        ),
+        other => chain(other),
+    }
+}
+
 /// An error and its sources, joined by `: `.
 pub(crate) fn chain(error: &(dyn Error + 'static)) -> String {
     let mut text = error.to_string();
@@ -164,6 +177,24 @@ mod tests {
             program: PathBuf::from("zoxide"),
         };
         assert_eq!(zoxide_error(&slow), "zoxide did not finish in time");
+    }
+
+    #[test]
+    fn describes_opener_errors() {
+        let missing = ToolError::Spawn {
+            program: PathBuf::from("xdg-open"),
+            source: io::ErrorKind::NotFound.into(),
+        };
+        assert_eq!(
+            open_error(&missing),
+            "cannot run xdg-open: entity not found"
+        );
+        let failed = ToolError::Failed {
+            program: PathBuf::from("xdg-open"),
+            status: ExitStatus::from_raw(3 << 8),
+            stderr: String::new(),
+        };
+        assert_eq!(open_error(&failed), "xdg-open exited with exit status: 3");
     }
 
     #[test]

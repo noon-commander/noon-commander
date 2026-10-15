@@ -12,6 +12,7 @@ repository = "https://github.com/noon-commander/noon-commander"
 [workspace.dependencies]
 noc-config = { path = "crates/noc-config" }
 noc-ops = { path = "crates/noc-ops" }
+noc-pattern = { path = "crates/noc-pattern" }
 noc-scroll = { path = "crates/noc-scroll" }
 noc-ssh = { path = "crates/noc-ssh" }
 noc-text = { path = "crates/noc-text" }

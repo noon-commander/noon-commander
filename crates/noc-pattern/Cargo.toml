@@ -1,0 +1,16 @@
+[package]
+name = "noc-pattern"
+description = "Patterns typed to match names in Noon Commander: regular expressions or text as it is, with smart case"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+regex.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

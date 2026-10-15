@@ -76,12 +76,14 @@ client; the system `ssh` is the single source of truth for connections and auth.
 | `crates/noc-ops` | Job engine: copy, move, delete, mkdir, checksums; progress, cancellation, conflicts |
 | `crates/noc-tools` | External programs other than ssh: zoxide, ripgrep, fd, the editor, the opener, the shell of `!` |
 | `crates/noc-text` | Terminal-safe text: sanitizing, widths in cells, fitting, wrapping |
+| `crates/noc-pattern` | Patterns typed to match names: regular expressions or text as it is, smart case |
 | `crates/noc-scroll` | Paging the help and the viewer: how far the page keys go, the scroll bar |
 | `crates/noc-viewer` | The F3 viewer: reading through the `Vfs`, scrolling, wrapping; its own Fluent text |
 
-- `noc-config`, `noc-ssh`, `noc-vfs`, `noc-tools`, `noc-text`, `noc-scroll` depend on no other
-  `noc-*` crate.
-- `noc-ops` → `noc-vfs`. `noc-viewer` → `noc-vfs`, `noc-text`, `noc-scroll`. The binary → all.
+- `noc-config`, `noc-ssh`, `noc-vfs`, `noc-text`, `noc-scroll`, `noc-pattern` depend on no
+  other `noc-*` crate.
+- `noc-tools` → `noc-pattern`. `noc-ops` → `noc-vfs`. `noc-viewer` → `noc-vfs`, `noc-text`,
+  `noc-scroll`. The binary → all.
 - Library crates: no UI code, no user-facing text. Exceptions: `noc-viewer`, which knows nothing
   of the keymap, theme, or app (ADR 0015); `noc-scroll`, which draws the scroll bar but has no
   text (ADR 0023).

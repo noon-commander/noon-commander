@@ -21,6 +21,7 @@ crates/
 ├── noc-ops/       job engine: copy, move, rename, delete, mkdir, checksums; progress, cancellation, conflicts
 ├── noc-tools/     external programs other than ssh: zoxide, ripgrep, fd, the editor, the opener, the shell
 ├── noc-text/      terminal-safe text: sanitizing, widths in cells, fitting, wrapping
+├── noc-pattern/   patterns typed to match names: regular expressions or text, smart case
 ├── noc-scroll/    paging text that ends: how far the page keys go, the scroll bar
 └── noc-viewer/    the F3 viewer: reading through the Vfs, scrolling, wrapping; its own text
 ```
@@ -28,7 +29,8 @@ crates/
 Dependencies point one way, toward the binary:
 
 ```text
-noc-config  noc-ssh  noc-tools  noc-text  noc-vfs  noc-scroll    no other noc-* crate
+noc-config  noc-ssh  noc-text  noc-vfs  noc-scroll  noc-pattern  no other noc-* crate
+noc-tools   → noc-pattern
 noc-ops     → noc-vfs
 noc-viewer  → noc-vfs, noc-text, noc-scroll
 noc         → all of them
@@ -41,7 +43,9 @@ that knows nothing of the keymap, the theme, or the app. The app maps its keys t
 commands, gives it the styles of its theme, reads the file with `noc_viewer::read_start` in a
 task of its own, and closes the viewer itself. `noc-scroll` draws too, the scroll bar, but has
 no text ([ADR 0023](adr/0023-paging-stops-at-the-end.md)). Code that two crates need goes into a
-crate of its own topic, such as `noc-text`, rather than into a common `core` crate.
+crate of its own topic, such as `noc-text`, or `noc-pattern`, which builds the regular
+expressions of fd's search in `noc-tools` and of the regex mode in the app, rather than into a
+common `core` crate.
 
 ssh runs only from `noc-ssh`, and every other program only from `noc-tools`
 ([ADR 0012](adr/0012-external-tools-and-zoxide.md)): without a shell, with `--` before paths,

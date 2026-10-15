@@ -17,7 +17,7 @@ use std::process::{ExitStatus, Stdio};
 use std::time::Duration;
 
 use globset::{Glob, GlobBuilder, GlobSet, GlobSetBuilder};
-use regex::bytes::{Regex, RegexBuilder};
+use regex::bytes::Regex;
 use tokio::io::AsyncRead;
 use tokio::process::{Child, Command};
 
@@ -97,16 +97,12 @@ impl Query {
         let pattern = if self.pattern.is_empty() {
             None
         } else {
-            let source = if self.regex {
-                self.pattern.clone()
-            } else {
-                regex::escape(&self.pattern)
+            let options = noc_pattern::Options {
+                regex: self.regex,
+                match_case: self.match_case,
             };
-            let caseless = !self.match_case && !has_capital(&self.pattern, self.regex);
-            let built = RegexBuilder::new(&source)
-                .case_insensitive(caseless)
-                .build()
-                .map_err(|error| PatternError::Regex(last_line(&error.to_string())))?;
+            let built = noc_pattern::bytes(&self.pattern, options)
+                .map_err(|error| PatternError::Regex(error.to_string()))?;
             Some(built)
         };
         Ok(Names {
@@ -115,28 +111,6 @@ impl Query {
             pattern,
         })
     }
-}
-
-/// Whether `pattern` has a capital letter, as fd's smart case asks; in a regular expression,
-/// one not escaped, as `\S` is a class rather than a letter.
-fn has_capital(pattern: &str, regex: bool) -> bool {
-    let mut escaped = false;
-    pattern.chars().any(|c| {
-        let literal = !escaped;
-        escaped = regex && !escaped && c == '\\';
-        literal && c.is_uppercase()
-    })
-}
-
-/// The last line of a message that has text, trimmed: what is wrong with a regular
-/// expression, after the lines that show where.
-fn last_line(message: &str) -> String {
-    message
-        .lines()
-        .map(str::trim)
-        .rfind(|line| !line.is_empty())
-        .unwrap_or_default()
-        .to_owned()
 }
 
 /// Why the search cannot start.

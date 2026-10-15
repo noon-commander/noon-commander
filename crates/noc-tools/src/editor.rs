@@ -1,5 +1,6 @@
 //! The editor of F4: `$VISUAL`, else `$EDITOR`, else `vi`.
 
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
 
@@ -53,16 +54,49 @@ impl Editor {
     /// Runs the editor on `file` with this process's terminal, which the caller has handed
     /// over, and waits for it. `file` is absolute, so no editor takes it for an option.
     pub async fn edit(&self, file: &Path) -> Result<ExitStatus, ToolError> {
+        self.edit_at(file, None).await
+    }
+
+    /// The same, with the cursor on `line` (1-based) if there is one.
+    pub async fn edit_at(&self, file: &Path, line: Option<u64>) -> Result<ExitStatus, ToolError> {
         debug_assert!(file.is_absolute());
         Command::new(&self.program)
             .args(&self.args)
-            .arg(file)
+            .args(self.file_args(file, line))
             .status()
             .await
             .map_err(|source| ToolError::Spawn {
                 program: self.program.clone(),
                 source,
             })
+    }
+}
+
+impl Editor {
+    /// How the editor takes `file` and the `line` it starts at: `+N file`, as vi, vim, Neovim,
+    /// nano, Emacs, micro, and kak do; `-g file:N` for VS Code and its kin; `file:N` for Helix,
+    /// Sublime Text, and Zed.
+    fn file_args(&self, file: &Path, line: Option<u64>) -> Vec<OsString> {
+        let Some(line) = line else {
+            return vec![file.into()];
+        };
+        let name = self
+            .program
+            .file_name()
+            .and_then(OsStr::to_str)
+            .unwrap_or_default();
+        let at = || {
+            let mut at = file.as_os_str().to_owned();
+            at.push(format!(":{line}"));
+            at
+        };
+        match name {
+            "code" | "code-insiders" | "codium" | "cursor" | "windsurf" => {
+                vec!["-g".into(), at()]
+            }
+            "hx" | "helix" | "subl" | "zed" => vec![at()],
+            _ => vec![format!("+{line}").into(), file.into()],
+        }
     }
 }
 
@@ -87,6 +121,22 @@ mod tests {
         assert_eq!(blank.program(), Path::new("nano"));
         assert_eq!(blank.args, [] as [String; 0]);
         assert_eq!(editor(&[]).program(), Path::new("vi"));
+    }
+
+    #[test]
+    fn a_line_goes_as_each_editor_takes_it() {
+        let file = Path::new("/tmp/a b.rs");
+        let args = |program: &str, line| -> Vec<String> {
+            editor(&[("EDITOR", program)])
+                .file_args(file, line)
+                .iter()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect()
+        };
+        assert_eq!(args("nvim", None), ["/tmp/a b.rs"]);
+        assert_eq!(args("/usr/bin/vim", Some(7)), ["+7", "/tmp/a b.rs"]);
+        assert_eq!(args("code -w", Some(7)), ["-g", "/tmp/a b.rs:7"]);
+        assert_eq!(args("hx", Some(7)), ["/tmp/a b.rs:7"]);
     }
 
     #[tokio::test]

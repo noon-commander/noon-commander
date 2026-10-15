@@ -6,30 +6,18 @@ use ratatui::layout::{Position, Rect};
 use ratatui::style::Style;
 use ratatui::text::Line;
 
-const TRACK: &str = "░";
-const THUMB: &str = "█";
 /// Fewest rows that take the arrows: they leave the track two, so that it still tells where
 /// the page is.
 const ROWS_WITH_ARROWS: u16 = 4;
 
-/// The arrows at the two ends of a scroll bar, one cell each.
+/// What a scroll bar is drawn with, one cell each: the arrows at its ends, its track, and its
+/// thumb. The app picks them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Arrows {
+pub struct BarGlyphs {
     pub up: &'static str,
     pub down: &'static str,
-}
-
-impl Arrows {
-    /// Arrows that every font has, as mc's and Far's.
-    pub const PLAIN: Self = Self {
-        up: "▲", down: "▼"
-    };
-}
-
-impl Default for Arrows {
-    fn default() -> Self {
-        Self::PLAIN
-    }
+    pub track: &'static str,
+    pub thumb: &'static str,
 }
 
 /// What the mouse pressed on a scroll bar.
@@ -141,23 +129,23 @@ impl Bar {
         (first * (self.total - self.page)).div_ceil(room)
     }
 
-    /// Draws the bar in `style`, with `arrows` at its ends where they fit.
-    pub fn render(&self, frame: &mut Frame<'_>, style: Style, arrows: Arrows) {
+    /// Draws the bar in `style` with `glyphs`, its arrows at its ends where they fit.
+    pub fn render(&self, frame: &mut Frame<'_>, style: Style, glyphs: BarGlyphs) {
         let Some((first, length)) = self.thumb() else {
             return;
         };
         let cell = |y| Rect::new(self.area.x, y, 1, 1);
         if self.arrows() {
-            frame.render_widget(Line::styled(arrows.up, style), cell(self.area.y));
+            frame.render_widget(Line::styled(glyphs.up, style), cell(self.area.y));
             let bottom = self.area.bottom() - 1;
-            frame.render_widget(Line::styled(arrows.down, style), cell(bottom));
+            frame.render_widget(Line::styled(glyphs.down, style), cell(bottom));
         }
         let (top, rows) = self.track();
         for row in 0..rows {
             let symbol = if (first..first + length).contains(&usize::from(row)) {
-                THUMB
+                glyphs.thumb
             } else {
-                TRACK
+                glyphs.track
             };
             frame.render_widget(Line::styled(symbol, style), cell(top + row));
         }
@@ -165,17 +153,17 @@ impl Bar {
 }
 
 /// Draws a scroll bar down the single column `area` for `total` rows of which `page` show
-/// from `offset`, with `arrows` at its ends, and returns it for the mouse; nothing when
-/// everything fits.
+/// from `offset`, drawn with `glyphs`, and returns it for the mouse; nothing when everything
+/// fits.
 pub fn render(
     frame: &mut Frame<'_>,
     area: Rect,
     position: (usize, usize, usize),
     style: Style,
-    arrows: Arrows,
+    glyphs: BarGlyphs,
 ) -> Option<Bar> {
     let bar = Bar::new(area, position)?;
-    bar.render(frame, style, arrows);
+    bar.render(frame, style, glyphs);
     Some(bar)
 }
 
@@ -185,6 +173,13 @@ mod tests {
     use ratatui::backend::TestBackend;
 
     use super::*;
+
+    const GLYPHS: BarGlyphs = BarGlyphs {
+        up: "^",
+        down: "v",
+        track: ".",
+        thumb: "#",
+    };
 
     #[test]
     fn the_thumb_shows_how_much_shows_and_where() {
@@ -204,7 +199,7 @@ mod tests {
         let mut terminal = Terminal::new(TestBackend::new(1, height)).unwrap();
         terminal
             .draw(|frame| {
-                render(frame, frame.area(), position, Style::new(), Arrows::PLAIN);
+                render(frame, frame.area(), position, Style::new(), GLYPHS);
             })
             .unwrap();
         let buffer = terminal.backend().buffer();
@@ -213,10 +208,10 @@ mod tests {
 
     #[test]
     fn arrows_end_the_bar_where_they_leave_the_track_two_rows() {
-        assert_eq!(drawn(12, (20, 10, 0)), "▲█████░░░░░▼");
-        assert_eq!(drawn(12, (20, 10, 10)), "▲░░░░░█████▼");
-        assert_eq!(drawn(4, (20, 10, 0)), "▲█░▼");
-        assert_eq!(drawn(3, (20, 10, 0)), "█░░", "no room for arrows");
+        assert_eq!(drawn(12, (20, 10, 0)), "^#####.....v");
+        assert_eq!(drawn(12, (20, 10, 10)), "^.....#####v");
+        assert_eq!(drawn(4, (20, 10, 0)), "^#.v");
+        assert_eq!(drawn(3, (20, 10, 0)), "#..", "no room for arrows");
         assert_eq!(drawn(12, (10, 10, 0)), "            ", "everything fits");
     }
 

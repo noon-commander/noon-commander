@@ -11,6 +11,7 @@ mod describe;
 mod dialog;
 mod edit;
 mod fuzzy;
+mod glyphs;
 mod help;
 mod history;
 mod jobs;

@@ -116,6 +116,7 @@ mod tests {
     use std::time::{Duration, UNIX_EPOCH};
 
     use super::*;
+    use crate::tui::glyphs::Glyphs;
 
     #[test]
     fn whole_text_takes_as_many_lines_as_asked_and_marks_the_rest() {
@@ -129,16 +130,22 @@ mod tests {
                 (9, 2),
                 Some('/'),
                 styles,
-                Marks::PLAIN
+                Glyphs::PLAIN.marks
             )),
             ["/srv/www/", "site     "]
         );
         assert_eq!(
-            text(whole("ab", (4, 2), None, styles, Marks::PLAIN)),
+            text(whole("ab", (4, 2), None, styles, Glyphs::PLAIN.marks)),
             ["ab  ", "    "]
         );
         assert_eq!(
-            text(whole("abcdefghij", (4, 2), None, styles, Marks::PLAIN)),
+            text(whole(
+                "abcdefghij",
+                (4, 2),
+                None,
+                styles,
+                Glyphs::PLAIN.marks
+            )),
             ["abcd", "efg»"],
             "the last line ends with the mark where the text goes on"
         );

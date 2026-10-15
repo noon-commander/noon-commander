@@ -36,7 +36,7 @@ pub fn width(text: &str) -> usize {
     text.width()
 }
 
-/// The marks of text that goes on past where it shows: each takes one cell.
+/// The marks of text that goes on past where it shows, one cell each. The app picks them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Marks {
     /// Text hidden before: a path that lost its start, a line scrolled left.
@@ -44,20 +44,6 @@ pub struct Marks {
     /// Text cut short or going on after: a name that lost its middle, a line past the right
     /// edge, a wrapped line going on in the next row.
     pub after: &'static str,
-}
-
-impl Marks {
-    /// Without a Nerd Font.
-    pub const PLAIN: Self = Self {
-        before: "«",
-        after: "»",
-    };
-}
-
-impl Default for Marks {
-    fn default() -> Self {
-        Self::PLAIN
-    }
 }
 
 /// Where text that does not fit loses cells.
@@ -99,9 +85,9 @@ impl Fitted {
 }
 
 /// Fits `text` into exactly `width` cells: shorter text is padded; longer text loses its
-/// middle, marked with [`Marks::PLAIN`].
-pub fn fit(text: &str, width: usize, align: Align) -> String {
-    fit_cut(text, width, align, Cut::Middle).text(Marks::PLAIN)
+/// middle, to the mark of `marks`.
+pub fn fit(text: &str, width: usize, align: Align, marks: Marks) -> String {
+    fit_cut(text, width, align, Cut::Middle).text(marks)
 }
 
 /// Fits `text` into exactly `width` cells: shorter text is padded as `align` says; longer text
@@ -173,20 +159,21 @@ pub fn chop(text: &str, width: usize, after: Option<char>) -> Vec<String> {
     rows
 }
 
-/// A line of exactly `width` cells drawn with `─`, with `text` in its middle between spaces,
-/// fitted as [`fit`] does where the line is too short for it.
-pub fn rule(text: &str, width: usize) -> String {
+/// A line of exactly `width` cells drawn with `line`, a character of one cell, with `text` in
+/// its middle between spaces, fitted as [`fit`] does with `marks` where the line is too short
+/// for it.
+pub fn rule(text: &str, width: usize, line: &str, marks: Marks) -> String {
     if text.is_empty() {
-        return "─".repeat(width);
+        return line.repeat(width);
     }
     let label = format!(" {text} ");
     let label_width = label.width();
     if label_width + 2 > width {
-        return fit(text, width, Align::Center);
+        return fit(text, width, Align::Center, marks);
     }
     let gap = width - label_width;
     let (left, right) = (gap / 2, gap - gap / 2);
-    format!("{}{label}{}", "─".repeat(left), "─".repeat(right))
+    format!("{}{label}{}", line.repeat(left), line.repeat(right))
 }
 
 /// Breaks `text` into lines of at most `width` cells: at its newlines, then between words,
@@ -269,6 +256,11 @@ pub fn split(text: &str, at: usize) -> (String, String) {
 mod tests {
     use super::*;
 
+    const MARKS: Marks = Marks {
+        before: "<",
+        after: ">",
+    };
+
     #[test]
     fn sanitize_hides_what_could_drive_the_terminal() {
         assert_eq!(sanitize(b"notes.txt"), "notes.txt");
@@ -289,21 +281,21 @@ mod tests {
 
     #[test]
     fn fit_pads_short_text() {
-        assert_eq!(fit("ab", 5, Align::Left), "ab   ");
-        assert_eq!(fit("ab", 5, Align::Right), "   ab");
-        assert_eq!(fit("ab", 5, Align::Center), " ab  ");
-        assert_eq!(fit("abcde", 5, Align::Left), "abcde");
+        assert_eq!(fit("ab", 5, Align::Left, MARKS), "ab   ");
+        assert_eq!(fit("ab", 5, Align::Right, MARKS), "   ab");
+        assert_eq!(fit("ab", 5, Align::Center, MARKS), " ab  ");
+        assert_eq!(fit("abcde", 5, Align::Left, MARKS), "abcde");
     }
 
     #[test]
     fn rule_draws_a_line_with_text_in_its_middle() {
-        assert_eq!(rule("EOF", 11), "─── EOF ───");
-        assert_eq!(rule("EOF", 12), "─── EOF ────");
-        assert_eq!(rule("EOF", 7), "─ EOF ─");
-        assert_eq!(rule("EOF", 6), " EOF  ", "no room for the line");
-        assert_eq!(rule("EOF", 2), "E»");
-        assert_eq!(rule("", 3), "───");
-        assert_eq!(width(&rule("界", 10)), 10);
+        assert_eq!(rule("EOF", 11, "-", MARKS), "--- EOF ---");
+        assert_eq!(rule("EOF", 12, "-", MARKS), "--- EOF ----");
+        assert_eq!(rule("EOF", 7, "-", MARKS), "- EOF -");
+        assert_eq!(rule("EOF", 6, "-", MARKS), " EOF  ", "no room for the line");
+        assert_eq!(rule("EOF", 2, "-", MARKS), "E>");
+        assert_eq!(rule("", 3, "-", MARKS), "---");
+        assert_eq!(width(&rule("界", 10, "-", MARKS)), 10);
     }
 
     #[test]
@@ -320,14 +312,14 @@ mod tests {
 
     #[test]
     fn fit_cuts_the_middle_of_long_text() {
-        assert_eq!(fit("verylongname.txt", 9, Align::Left), "very».txt");
-        assert_eq!(fit("abcdef", 4, Align::Right), "ab»f");
-        assert_eq!(fit("abc", 1, Align::Left), "»");
-        assert_eq!(fit("abc", 0, Align::Left), "");
-        let wide = fit("文件文件文件", 6, Align::Left);
+        assert_eq!(fit("verylongname.txt", 9, Align::Left, MARKS), "very>.txt");
+        assert_eq!(fit("abcdef", 4, Align::Right, MARKS), "ab>f");
+        assert_eq!(fit("abc", 1, Align::Left, MARKS), ">");
+        assert_eq!(fit("abc", 0, Align::Left, MARKS), "");
+        let wide = fit("文件文件文件", 6, Align::Left, MARKS);
         assert_eq!(width(&wide), 6, "{wide:?}");
         assert_eq!(
-            wide, "文» 件",
+            wide, "文> 件",
             "a wide character never splits; its cell stays blank"
         );
     }
@@ -352,7 +344,7 @@ mod tests {
         assert_eq!(parts("文件b", 3, Cut::End), owned("文", true, ""));
         assert_eq!(parts("文件", 2, Cut::End), owned(" ", true, ""));
         for cut in [Cut::Start, Cut::Middle, Cut::End] {
-            let fitted = fit_cut("文件文件文件x", 7, Align::Left, cut).text(Marks::PLAIN);
+            let fitted = fit_cut("文件文件文件x", 7, Align::Left, cut).text(MARKS);
             assert_eq!(width(&fitted), 7, "{fitted:?}");
         }
     }
@@ -360,7 +352,7 @@ mod tests {
     #[test]
     fn a_path_cut_at_its_start_takes_the_mark_before() {
         let path = fit_cut("/srv/www/site", 8, Align::Left, Cut::Start);
-        assert_eq!(path.text(Marks::PLAIN), "«ww/site");
+        assert_eq!(path.text(MARKS), "<ww/site");
         let name = fit_cut("abcdef", 4, Align::Left, Cut::End);
         let marks = Marks {
             before: "<",

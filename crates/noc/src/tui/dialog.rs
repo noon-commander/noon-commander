@@ -19,6 +19,7 @@ use unicode_width::UnicodeWidthChar as _;
 
 use super::cells;
 use super::edit::{Editor, Registers};
+use super::glyphs;
 use super::keymap::{Action, Context, Extra, Mode, Resolved, Typed};
 use super::mouse::{Pointer, Press, Scroll};
 use super::theme::Theme;
@@ -273,7 +274,7 @@ impl Field {
     /// as vim's 'sidescroll' 0 has it.
     fn window(&self, room: usize) -> (usize, String, usize) {
         let chars: Vec<char> = if self.editor.is_secret() {
-            vec!['*'; self.editor.text().chars().count()]
+            vec![glyphs::SECRET; self.editor.text().chars().count()]
         } else {
             self.editor.text().chars().collect()
         };
@@ -932,7 +933,7 @@ impl Dialog {
         let rows = u16::try_from(page).unwrap_or(u16::MAX).min(inner.height);
         let bar = right_frame(inner, inner.y, rows);
         let position = (lines.len(), page, offset);
-        let arrows = theme.scroll_arrows;
+        let arrows = theme.glyphs.scroll_bar;
         self.bar
             .set(scrollbar::render(frame, bar, position, style, arrows));
         for (index, line) in (0..rows).zip(lines.iter().skip(offset)) {
@@ -969,8 +970,7 @@ impl Dialog {
             if index >= inner.height {
                 return;
             }
-            let mark = if number == self.chosen { '*' } else { ' ' };
-            let text = format!("({mark}) {choice}");
+            let text = format!("({}) {choice}", mark(number == self.chosen, glyphs::CHOSEN));
             let style = if self.focus == Focus::Choice(number) {
                 colors.focused
             } else {
@@ -985,7 +985,7 @@ impl Dialog {
                 if index >= inner.height {
                     return;
                 }
-                let label = cells::fit(label, room, cells::Align::Left, theme.marks);
+                let label = cells::fit(label, room, cells::Align::Left, theme.glyphs.marks);
                 frame.render_widget(Line::raw(label), row(index));
                 index += 1;
             }
@@ -998,7 +998,7 @@ impl Dialog {
                 &after,
                 room.saturating_sub(used),
                 cells::Align::Left,
-                theme.marks,
+                theme.glyphs.marks,
             );
             let line = Line::from(vec![
                 Span::raw(before),
@@ -1023,8 +1023,7 @@ impl Dialog {
             if index >= inner.height {
                 return;
             }
-            let mark = if check.on { 'x' } else { ' ' };
-            let text = format!("[{mark}] {}", check.label);
+            let text = format!("[{}] {}", mark(check.on, glyphs::CHECKED), check.label);
             let style = if self.focus == Focus::Check(number) {
                 colors.focused
             } else {
@@ -1121,7 +1120,7 @@ pub(crate) fn draw_separator(
     let width = inner.width.saturating_add(4);
     let line = format!(
         "{left}{}{right}",
-        "─".repeat(usize::from(width.saturating_sub(2)))
+        glyphs::LINE.repeat(usize::from(width.saturating_sub(2)))
     );
     let row = Rect::new(x, y, width, 1).intersection(frame.area());
     frame.render_widget(Line::styled(line, colors.body), row);
@@ -1186,6 +1185,11 @@ pub(crate) fn draw_box(
     let inner = block.inner(framed).inner(Margin::new(1, 0));
     frame.render_widget(block, framed);
     inner
+}
+
+/// `glyph` in a radio button or a check box that is on, `on`; a blank in one that is off.
+fn mark(on: bool, glyph: char) -> char {
+    if on { glyph } else { ' ' }
 }
 
 #[cfg(test)]

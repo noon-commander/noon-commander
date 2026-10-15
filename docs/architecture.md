@@ -855,7 +855,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   dot are shown unless `ui.show_hidden` is off; `o h` switches them in both panels.
   Sorting and hiding keep the cursor on its entry.
 - **Names that do not fit** ([ADR 0025](adr/0025-marks-of-text-cut-short.md)) lose their middle to
-  `»` (a Nerd Font chevron with icons, `Theme.marks`), in the theme's bold accent (`truncated`;
+  `»` (a Nerd Font chevron with icons, `Theme.glyphs.marks`), in the theme's bold accent (`truncated`;
   `truncated_cursor` under the cursor, `truncated_dialog` in lists), and paths their start, as
   titles do (`«/deploy/site`); `noc_text::fit_cut` says where the mark goes, and `cells::fitted`
   draws it. `K` shows the whole name under the cursor in a frame of two rows below the panels,
@@ -1368,6 +1368,18 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   icons, mc's markers: `/` directory, `~` link to a directory, `@` link, `!` broken link, `*`
   executable, `|` FIFO, `=` socket, `-` character device, `+` block device and volume; the
   home directory is `~`.
+- **Glyphs.** Every special character the UI draws is in `tui/glyphs.rs`: `Glyphs::NERD` and
+  `Glyphs::PLAIN`, which `ui.icons` picks and the theme carries (`Theme.glyphs`), with the icons
+  and markers of kinds, hosts, and volumes, the scroll bars, the marks of text cut short, and the
+  marks of the pull-down menu; `Lines::DOUBLE` and `Lines::SINGLE` by `ui.borders`, with the
+  tees that join lines to frames; and the characters that are the same either way: the single
+  line, the line between columns, the spinner, the arrows of the sort order, the checks of
+  checksums, the progress bar, the marks of dialogs' radio buttons, check boxes, and secrets,
+  and the icons of the Configuration dialog's categories. `decor.rs` picks among them by kind,
+  and asks devicons for files. `noc-scroll`, `noc-text`, and `noc-viewer` hold none: they take
+  what they draw with as parameters (`BarGlyphs`, `Marks`, the viewer's `Styles`). `just
+  glyphs`, part of `just lint`, fails on a special character written in Rust code that draws,
+  outside `glyphs.rs` and the tests.
 
 ## Releases
 

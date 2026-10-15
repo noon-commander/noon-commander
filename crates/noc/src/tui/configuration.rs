@@ -17,6 +17,7 @@ use ratatui::text::{Line, Span};
 use super::cells::{self, Align};
 use super::dialog::{Colors, Field, draw_box, draw_separator, right_frame};
 use super::edit::Registers;
+use super::glyphs::{self, categories};
 use super::keymap::{Action, Context, Mode, Resolved, Typed};
 use super::mouse::{Pointer, Press, Scroll};
 use super::theme::Theme;
@@ -828,7 +829,8 @@ impl Configuration {
         let sidebar = self.render_sidebar(frame, body, theme, colors);
         let x = sidebar.right();
         for y in body.y..body.bottom() {
-            frame.render_widget(Line::styled("│", theme.dialog), Rect::new(x, y, 1, 1));
+            let line = Line::styled(glyphs::COLUMN.to_string(), theme.dialog);
+            frame.render_widget(line, Rect::new(x, y, 1, 1));
         }
         let content = Rect::new(
             x + 2,
@@ -840,7 +842,7 @@ impl Configuration {
         draw_separator(frame, inner, body.bottom(), colors, theme);
         // The line between the categories and the settings meets it.
         frame.render_widget(
-            Line::styled("┴", theme.dialog),
+            Line::styled(glyphs::COLUMN_FOOT.to_string(), theme.dialog),
             Rect::new(x, body.bottom(), 1, 1),
         );
 
@@ -858,7 +860,12 @@ impl Configuration {
         };
         let lines = cells::wrap(&hint, usize::from(inner.width));
         for (row, line) in (0..HINT_ROWS).zip(lines) {
-            let line = cells::fit(&line, usize::from(inner.width), Align::Left, theme.marks);
+            let line = cells::fit(
+                &line,
+                usize::from(inner.width),
+                Align::Left,
+                theme.glyphs.marks,
+            );
             let area = Rect::new(inner.x, body.bottom() + 1 + row, inner.width, 1);
             frame.render_widget(Line::styled(line, style), area);
         }
@@ -900,7 +907,7 @@ impl Configuration {
                 (true, false) => theme.dialog_title.bold(),
                 (false, _) => theme.dialog,
             };
-            let text = cells::fit(name, usize::from(width), Align::Left, theme.marks);
+            let text = cells::fit(name, usize::from(width), Align::Left, theme.glyphs.marks);
             let row = Rect::new(area.x, area.y + y, width, 1);
             frame.render_widget(Line::styled(text, style), row);
             self.drawn.categories.push(row);
@@ -928,7 +935,8 @@ impl Configuration {
         self.page = page;
         let bar = right_frame(area, area.y, area.height);
         let position = (total, page, self.offset);
-        self.drawn.bar = scrollbar::render(frame, bar, position, theme.dialog, theme.scroll_arrows);
+        self.drawn.bar =
+            scrollbar::render(frame, bar, position, theme.dialog, theme.glyphs.scroll_bar);
         let room = usize::from(area.width);
         let label_width = self
             .settings()
@@ -953,7 +961,7 @@ impl Configuration {
                 &setting.label,
                 label_width + LABEL_GAP,
                 Align::Left,
-                theme.marks,
+                theme.glyphs.marks,
             );
             let label_style = if focused && !matches!(setting.value, Value::Text { .. }) {
                 colors.focused_style()
@@ -971,7 +979,7 @@ impl Configuration {
                         text,
                         value_width.saturating_sub(4),
                         Align::Left,
-                        theme.marks,
+                        theme.glyphs.marks,
                     );
                     vec![Span::styled(
                         format!("< {} >", text.trim_end()),
@@ -991,7 +999,7 @@ impl Configuration {
                         &after,
                         value_width.saturating_sub(used),
                         Align::Left,
-                        theme.marks,
+                        theme.glyphs.marks,
                     );
                     let reversed = theme.dialog_input.add_modifier(Modifier::REVERSED);
                     vec![
@@ -1108,7 +1116,7 @@ fn interface(config: &Config, themes: &[&str]) -> Category {
     ];
     settings.extend(bars(ui));
     Category {
-        icon: "󰍹",
+        icon: categories::INTERFACE,
         title: fl!("config-interface"),
         settings,
     }
@@ -1154,7 +1162,7 @@ fn bars(ui: &UiConfig) -> [Setting; 2] {
 fn transfers(config: &Config) -> Category {
     let transfer = &config.transfer;
     Category {
-        icon: "󰓡",
+        icon: categories::TRANSFERS,
         title: fl!("config-transfers"),
         settings: vec![
             Setting::new(
@@ -1185,7 +1193,7 @@ fn ssh(config: &Config, home: &Path) -> Category {
         .as_deref()
         .map_or_else(|| text(""), |file| path_text(file, home));
     Category {
-        icon: "󰣀",
+        icon: categories::SSH,
         title: fl!("config-ssh"),
         settings: vec![
             Setting::new(
@@ -1223,7 +1231,7 @@ fn ssh(config: &Config, home: &Path) -> Category {
 /// Volumes, `[volumes]`.
 fn volumes(config: &Config) -> Category {
     Category {
-        icon: "󰋊",
+        icon: categories::VOLUMES,
         title: fl!("config-volumes"),
         settings: vec![Setting::new(
             Key::HideVolumes,
@@ -1237,7 +1245,7 @@ fn volumes(config: &Config) -> Category {
 fn zoxide(config: &Config, home: &Path) -> Category {
     let zoxide = &config.zoxide;
     Category {
-        icon: "󰥨",
+        icon: categories::ZOXIDE,
         title: fl!("config-zoxide"),
         settings: vec![
             Setting::new(
@@ -1263,7 +1271,7 @@ fn zoxide(config: &Config, home: &Path) -> Category {
 /// Command line, `[shell]`.
 fn shell(config: &Config) -> Category {
     Category {
-        icon: "󰆍",
+        icon: categories::SHELL,
         title: fl!("config-shell"),
         settings: vec![
             Setting::new(

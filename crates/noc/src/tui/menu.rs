@@ -527,13 +527,13 @@ impl Look<'_> {
             &format!("{prefix}{name}"),
             name_width,
             Align::Left,
-            self.theme.marks,
+            self.theme.glyphs.marks,
         );
         let info = cells::fit(
             &info(item, self.hosts),
             info_width,
             Align::Right,
-            self.theme.marks,
+            self.theme.glyphs.marks,
         );
         if selected {
             return Line::styled(format!("{name} {info}"), self.focused);

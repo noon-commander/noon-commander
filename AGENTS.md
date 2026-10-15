@@ -153,6 +153,10 @@ Paths come from `crates/noc-config/src/paths.rs`.
 
 ### Look
 
+- Special characters (icons, markers, lines and tees of frames, scroll bars, marks of text cut
+  short, checks, spinner) live only in `crates/noc/src/tui/glyphs.rs`: Nerd and plain sets by
+  `ui.icons`, lines by `ui.borders`. Library crates take them as parameters. `just glyphs`
+  checks; Fluent text is text and does not count.
 - Icons: Nerd Fonts v3 as literal glyphs in Rust and TOML, never escape sequences.
 - Icons are optional (`ui.icons`, on by default). Without them use mc markers: `/` directory,
   `*` executable, `@` symlink, `~` symlink to a directory.

@@ -9,6 +9,7 @@ use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
 use super::dialog::{Colors, draw_box, right_frame};
+use super::glyphs;
 use super::keymap::{Action, Context, Keymap, Mode, Resolved};
 use super::mouse::Scroll;
 use super::theme::Theme;
@@ -166,17 +167,18 @@ impl Help {
             .flat_map(|entry| match entry {
                 Entry::Heading(title) => {
                     vec![Line::styled(
-                        cells::fit(title, width, Align::Left, theme.marks),
+                        cells::fit(title, width, Align::Left, theme.glyphs.marks),
                         theme.dialog_title,
                     )]
                 }
                 Entry::Keys { keys, text } => {
-                    let text = cells::fit(text, text_width, Align::Left, theme.marks);
+                    let text = cells::fit(text, text_width, Align::Left, theme.glyphs.marks);
                     key_lines(keys, keys_width)
                         .into_iter()
                         .zip(std::iter::once(text).chain(std::iter::repeat(String::new())))
                         .map(|(keys, text)| {
-                            let keys = cells::fit(&keys, keys_width, Align::Left, theme.marks);
+                            let keys =
+                                cells::fit(&keys, keys_width, Align::Left, theme.glyphs.marks);
                             Line::from(vec![
                                 Span::styled(keys, theme.dialog_title),
                                 Span::raw(" "),
@@ -192,7 +194,7 @@ impl Help {
                 Entry::Blank => vec![Line::default()],
             })
             .collect();
-        let end = cells::rule(&fl!("help-end"), width);
+        let end = cells::rule(&fl!("help-end"), width, glyphs::LINE, theme.glyphs.marks);
         lines.push(Line::styled(end, theme.dialog.add_modifier(Modifier::DIM)));
         self.rows = lines.len();
         self.page = usize::from(inner.height).max(1);
@@ -201,7 +203,7 @@ impl Help {
         // the bottom and 100 with its last line.
         let text = (self.rows - 1, self.page, self.offset);
         let bar = right_frame(inner, inner.y, inner.height);
-        self.bar = scrollbar::render(frame, bar, text, theme.dialog, theme.scroll_arrows);
+        self.bar = scrollbar::render(frame, bar, text, theme.dialog, theme.glyphs.scroll_bar);
         self.render_position(frame, inner, theme);
         for (index, line) in lines
             .into_iter()

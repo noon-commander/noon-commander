@@ -22,6 +22,7 @@ use ratatui::widgets::{Block, Clear};
 
 use super::app::Side;
 use super::cells::{self, Align, Marks};
+use super::glyphs;
 use super::keymap::{Action, Resolved};
 use super::mouse::{Pointer, Press, Scroll};
 use super::theme::Theme;
@@ -684,14 +685,12 @@ impl PullDown {
     }
 
     /// Draws the bar on `bar` with the selected menu's title set apart, and that menu below it
-    /// if it is open, within `screen`. `icons` picks the marks: `•` and `✓`, or `*` and `x` as
-    /// mc's.
+    /// if it is open, within `screen`, with the marks of the theme's glyphs.
     pub(crate) fn render(
         &self,
         frame: &mut Frame<'_>,
         (bar, screen): (Rect, Rect),
         theme: &Theme,
-        icons: bool,
         status: &dyn Fn(Command) -> Status,
     ) {
         let titles: Vec<&Label> = self.menus.iter().map(|menu| &menu.title).collect();
@@ -710,7 +709,7 @@ impl PullDown {
             screen.width,
             screen.bottom().saturating_sub(bar.bottom()),
         );
-        self.render_menu(frame, x, below, theme, icons, status);
+        self.render_menu(frame, x, below, theme, status);
     }
 
     /// The open menu, framed, from the column `x` at the top of `area`.
@@ -720,7 +719,6 @@ impl PullDown {
         x: u16,
         area: Rect,
         theme: &Theme,
-        icons: bool,
         status: &dyn Fn(Command) -> Status,
     ) {
         let menu = self.menu();
@@ -786,7 +784,7 @@ impl PullDown {
         frame.render_widget(block, outer);
         let room = usize::from(rows.width);
         let (left_tee, right_tee) = theme.tees();
-        let marks = if icons { ('•', '✓') } else { ('*', 'x') };
+        let marks = theme.glyphs.menu_marks;
         // A menu taller than the screen scrolls to the cursor.
         let page = usize::from(rows.height);
         let total = menu.entries.len();
@@ -817,14 +815,14 @@ impl PullDown {
                 frame.render_widget(line, row);
                 drawn.rows.push((index, row));
             } else {
-                let line = format!("{left_tee}{}{right_tee}", "─".repeat(room));
+                let line = format!("{left_tee}{}{right_tee}", glyphs::LINE.repeat(room));
                 let row = Rect::new(outer.x, y, outer.width, 1);
                 frame.render_widget(Line::styled(line, theme.menu), row);
             }
         }
         let bar = Rect::new(outer.right() - 1, rows.y, 1, rows.height);
         let position = (total, page, first);
-        drawn.bar = scrollbar::render(frame, bar, position, theme.menu, theme.scroll_arrows);
+        drawn.bar = scrollbar::render(frame, bar, position, theme.menu, theme.glyphs.scroll_bar);
     }
 }
 
@@ -855,7 +853,10 @@ fn item_line(
     let used = 3 + cells::width(&item.label.text);
     let rest = room.saturating_sub(used + 1);
     spans.push(Span::styled(
-        format!("{} ", cells::fit(key, rest, Align::Right, theme.marks)),
+        format!(
+            "{} ",
+            cells::fit(key, rest, Align::Right, theme.glyphs.marks)
+        ),
         style,
     ));
     Line::from(spans)
@@ -911,7 +912,7 @@ fn render_bar(
             frame.render_widget(Line::from(spans), Rect::new(x, area.y, width, 1));
         } else if room > 0 {
             let text = format!(" {} ", title.text);
-            let fitted = cells::fit(&text, usize::from(room), Align::Left, theme.marks);
+            let fitted = cells::fit(&text, usize::from(room), Align::Left, theme.glyphs.marks);
             frame.render_widget(Line::styled(fitted, shown), Rect::new(x, area.y, room, 1));
         }
         x = x.saturating_add(width).saturating_add(3);
@@ -927,6 +928,7 @@ mod tests {
     use ratatui::backend::TestBackend;
 
     use super::*;
+    use crate::tui::glyphs::Glyphs;
     use crate::tui::keymap::{Context, Keymap};
 
     /// Every command runs but Delete, the panels sort by name, and only View and Checksums
@@ -950,7 +952,7 @@ mod tests {
 
     /// The menu bar at the `active` panel's menu, opened.
     fn open(active: Side) -> PullDown {
-        let mut menu = PullDown::new(active, false, None, &[], Marks::PLAIN, &status);
+        let mut menu = PullDown::new(active, false, None, &[], Glyphs::PLAIN.marks, &status);
         assert!(!menu.open, "the bar alone");
         menu.handle(action(Action::Down), &status);
         menu
@@ -983,7 +985,14 @@ mod tests {
     #[test]
     fn every_command_has_a_letter_of_its_own_in_its_menu() {
         let names: Vec<String> = (1..=10).map(|index| format!("w{index}")).collect();
-        let menu = PullDown::new(Side::Left, false, None, &names, Marks::PLAIN, &status);
+        let menu = PullDown::new(
+            Side::Left,
+            false,
+            None,
+            &names,
+            Glyphs::PLAIN.marks,
+            &status,
+        );
         let titles: HashSet<_> = menu
             .menus
             .iter()
@@ -1016,7 +1025,7 @@ mod tests {
         assert_eq!(right.selected, 5);
         assert_eq!(chosen(&right), Some(Command::Location(Side::Right)));
         // Swapped, the right panel is drawn on the left, under Left.
-        let mut swapped = PullDown::new(Side::Right, true, None, &[], Marks::PLAIN, &status);
+        let mut swapped = PullDown::new(Side::Right, true, None, &[], Glyphs::PLAIN.marks, &status);
         swapped.handle(action(Action::Confirm), &status);
         assert_eq!(swapped.selected, 0);
         assert_eq!(chosen(&swapped), Some(Command::Location(Side::Right)));
@@ -1099,7 +1108,7 @@ mod tests {
 
     #[test]
     fn on_the_bar_keys_select_menus_and_letters_open_them() {
-        let mut menu = PullDown::new(Side::Left, false, None, &[], Marks::PLAIN, &status);
+        let mut menu = PullDown::new(Side::Left, false, None, &[], Glyphs::PLAIN.marks, &status);
         menu.handle(action(Action::Right), &status);
         assert_eq!((menu.selected, menu.open), (1, false));
         menu.handle(action(Action::Left), &status);
@@ -1126,7 +1135,7 @@ mod tests {
     fn opens_on_the_command_that_ran_last() {
         // The active panel does not matter then.
         let swap = Some(Command::Do(Action::SwapPanels));
-        let mut menu = PullDown::new(Side::Right, false, swap, &[], Marks::PLAIN, &status);
+        let mut menu = PullDown::new(Side::Right, false, swap, &[], Glyphs::PLAIN.marks, &status);
         assert_eq!(menu.menu().title.text, "Command");
         assert!(menu.open);
         assert_eq!(chosen(&menu), Some(Command::Do(Action::SwapPanels)));
@@ -1138,19 +1147,33 @@ mod tests {
         );
         // One that cannot run now is passed by.
         let delete = Some(Command::Do(Action::Delete));
-        let menu = PullDown::new(Side::Left, false, delete, &[], Marks::PLAIN, &status);
+        let menu = PullDown::new(Side::Left, false, delete, &[], Glyphs::PLAIN.marks, &status);
         assert_eq!(chosen(&menu), Some(Command::Do(Action::Select)));
         // A command on a panel stays with the panel when the panels swap sides.
         let sort = Some(Command::On(Side::Left, Action::SortBySize));
-        let menu = PullDown::new(Side::Left, true, sort, &[], Marks::PLAIN, &status);
+        let menu = PullDown::new(Side::Left, true, sort, &[], Glyphs::PLAIN.marks, &status);
         assert_eq!(menu.menu().title.text, "Right");
         assert_eq!(chosen(&menu), sort);
         // Without it, the bar alone at the active panel's menu: a workspace no longer saved.
         let gone = Some(Command::Workspace(3));
         let names = ["w1".to_owned()];
-        let menu = PullDown::new(Side::Right, false, gone, &names, Marks::PLAIN, &status);
+        let menu = PullDown::new(
+            Side::Right,
+            false,
+            gone,
+            &names,
+            Glyphs::PLAIN.marks,
+            &status,
+        );
         assert_eq!((menu.selected, menu.open), (5, false));
-        let menu = PullDown::new(Side::Left, false, None, &names, Marks::PLAIN, &status);
+        let menu = PullDown::new(
+            Side::Left,
+            false,
+            None,
+            &names,
+            Glyphs::PLAIN.marks,
+            &status,
+        );
         assert_eq!((menu.selected, menu.open), (0, false));
     }
 
@@ -1196,7 +1219,7 @@ mod tests {
             .draw(|frame| {
                 let screen = frame.area();
                 let bar = Rect::new(0, 0, screen.width, 1);
-                menu.render(frame, (bar, screen), theme, false, &status);
+                menu.render(frame, (bar, screen), theme, &status);
             })
             .unwrap();
         terminal.backend().to_string()
@@ -1212,7 +1235,7 @@ mod tests {
     fn the_mouse_opens_menus_and_runs_commands() {
         // On the 64 columns of `draw`: ` File ` takes columns 10 … 15, and its menu's rows
         // start on line 2, View first.
-        let mut menu = PullDown::new(Side::Left, false, None, &[], Marks::PLAIN, &status);
+        let mut menu = PullDown::new(Side::Left, false, None, &[], Glyphs::PLAIN.marks, &status);
         assert_eq!(
             press(&mut menu, Press::Click, 12, 0),
             PullDownEvent::Pending
@@ -1256,7 +1279,7 @@ mod tests {
 
     #[test]
     fn draws_the_bar_alone_with_the_letters_of_the_menus() {
-        let menu = PullDown::new(Side::Left, false, None, &[], Marks::PLAIN, &status);
+        let menu = PullDown::new(Side::Left, false, None, &[], Glyphs::PLAIN.marks, &status);
         let theme = Theme::mc_classic();
         let text = draw(&menu, &theme);
         assert!(!text.contains('╔'), "{text}");
@@ -1264,7 +1287,7 @@ mod tests {
         terminal
             .draw(|frame| {
                 let bar = Rect::new(0, 0, frame.area().width, 1);
-                menu.render(frame, (bar, frame.area()), &theme, false, &status);
+                menu.render(frame, (bar, frame.area()), &theme, &status);
             })
             .unwrap();
         let buffer = terminal.backend().buffer();
@@ -1292,7 +1315,14 @@ mod tests {
     /// The Workspace menu, open, with `count` workspaces named `w1`, `w2`, ….
     fn workspace_menu(count: usize) -> PullDown {
         let names: Vec<String> = (1..=count).map(|index| format!("w{index}")).collect();
-        let mut menu = PullDown::new(Side::Left, false, None, &names, Marks::PLAIN, &status);
+        let mut menu = PullDown::new(
+            Side::Left,
+            false,
+            None,
+            &names,
+            Glyphs::PLAIN.marks,
+            &status,
+        );
         menu.handle(Resolved::Insert('w'), &status);
         assert_eq!(menu.menu().title.text, "Workspace");
         menu
@@ -1374,7 +1404,14 @@ mod tests {
     #[test]
     fn names_with_ampersands_keep_them_and_no_letter() {
         let names = ["R&D".to_owned()];
-        let menu = PullDown::new(Side::Left, false, None, &names, Marks::PLAIN, &status);
+        let menu = PullDown::new(
+            Side::Left,
+            false,
+            None,
+            &names,
+            Glyphs::PLAIN.marks,
+            &status,
+        );
         let menu = &menu.menus[4];
         let Some(Entry::Item(item)) = menu.entries.last() else {
             panic!("{menu:?}");

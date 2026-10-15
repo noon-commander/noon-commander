@@ -458,7 +458,7 @@ impl Choices {
         self.offset = self.offset.min(self.items.len().saturating_sub(page));
         let bar = Rect::new(outer.right() - 1, inner.y, 1, inner.height);
         let position = (self.items.len(), page, self.offset);
-        self.bar = scrollbar::render(frame, bar, position, theme.dialog, theme.scroll_arrows);
+        self.bar = scrollbar::render(frame, bar, position, theme.dialog, theme.glyphs.scroll_bar);
         let focused = Colors::of(theme, false).focused_style();
         let width = usize::from(inner.width);
         for (index, (row, item)) in self
@@ -469,7 +469,7 @@ impl Choices {
             .take(page)
             .enumerate()
         {
-            let text = cells::fit(&row_text(item).0, width, Align::Left, theme.marks);
+            let text = cells::fit(&row_text(item).0, width, Align::Left, theme.glyphs.marks);
             let style = if Some(row) == self.chosen {
                 focused
             } else {

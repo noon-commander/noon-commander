@@ -251,21 +251,26 @@ impl HistoryWindow {
                 .width
                 .saturating_sub(host_width + dir_width + 4 + cells::width(&more));
             let first = if more.is_empty() {
-                cells::fit(&first, room, Align::Left, theme.marks)
+                cells::fit(&first, room, Align::Left, theme.glyphs.marks)
             } else {
                 cells::fit(
-                    &format!("{first} {}", theme.marks.after),
+                    &format!("{first} {}", theme.glyphs.marks.after),
                     room,
                     Align::Left,
-                    theme.marks,
+                    theme.glyphs.marks,
                 )
             };
-            let host = cells::fit(&hosts[row.index], host_width, Align::Left, theme.marks);
+            let host = cells::fit(
+                &hosts[row.index],
+                host_width,
+                Align::Left,
+                theme.glyphs.marks,
+            );
             let dir = cells::fit(
                 &cells::sanitize(entry.dir.as_bytes()),
                 dir_width,
                 Align::Left,
-                theme.marks,
+                theme.glyphs.marks,
             );
             let style = if row.selected {
                 focused

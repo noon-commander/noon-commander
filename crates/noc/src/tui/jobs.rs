@@ -174,7 +174,7 @@ impl JobsList {
             Rect::new(inner.x, y, inner.width, 1)
         };
         if rows.is_empty() && visible > 0 {
-            let none = cells::fit(&fl!("jobs-none"), width, Align::Left, theme.marks);
+            let none = cells::fit(&fl!("jobs-none"), width, Align::Left, theme.glyphs.marks);
             frame.render_widget(Line::raw(none), line(0));
         }
         let mut drawn = Drawn {
@@ -193,17 +193,17 @@ impl JobsList {
         let height = u16::try_from(visible).unwrap_or(u16::MAX);
         let bar = right_frame(inner, inner.y, height);
         let position = (rows.len(), visible, top);
-        let bar = scrollbar::render(frame, bar, position, theme.dialog, theme.scroll_arrows);
+        let bar = scrollbar::render(frame, bar, position, theme.dialog, theme.glyphs.scroll_bar);
         self.bar.set(bar);
         for (shown, (number, row)) in rows.iter().enumerate().skip(top).take(visible).enumerate() {
             let text = format!(
                 "{} {} {}  {}",
-                cells::fit(&row.title, TITLE, Align::Left, theme.marks),
-                cells::fit(&row.state, STATE, Align::Right, theme.marks),
-                cells::fit(&row.left, LEFT, Align::Right, theme.marks),
+                cells::fit(&row.title, TITLE, Align::Left, theme.glyphs.marks),
+                cells::fit(&row.state, STATE, Align::Right, theme.glyphs.marks),
+                cells::fit(&row.left, LEFT, Align::Right, theme.glyphs.marks),
                 row.current
             );
-            let text = cells::fit(&text, width, Align::Left, theme.marks);
+            let text = cells::fit(&text, width, Align::Left, theme.glyphs.marks);
             let text = if number == index {
                 Line::styled(text, colors.focused_style())
             } else {

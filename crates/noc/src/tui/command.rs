@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use noc_config::Pause;
 use noc_scroll::Motion;
-use noc_scroll::scrollbar::{self, Arrows, Bar};
+use noc_scroll::scrollbar::{self, Bar, BarGlyphs};
 use noc_vfs::RemotePath;
 
 use ratatui::Frame;
@@ -560,13 +560,13 @@ impl CommandLine {
     }
 
     /// Draws the line in `area`, after `prompt`, and puts the cursor there if it has the keys.
-    /// Rows that do not fit leave the last column to a scroll bar with `arrows`.
+    /// Rows that do not fit leave the last column to a scroll bar drawn with `bar`.
     pub(crate) fn render(
         &mut self,
         frame: &mut Frame<'_>,
         area: Rect,
         (prompt, style): (&str, Style),
-        arrows: Arrows,
+        bar_glyphs: BarGlyphs,
         focused: bool,
     ) {
         self.bar = None;
@@ -597,7 +597,7 @@ impl CommandLine {
         if overflows {
             let bar = Rect::new(area.right() - 1, area.y, 1, area.height);
             let position = (rows.len(), height, self.scroll);
-            self.bar = scrollbar::render(frame, bar, position, style, arrows);
+            self.bar = scrollbar::render(frame, bar, position, style, bar_glyphs);
         }
         let lead = if self.foreign {
             style.add_modifier(Modifier::REVERSED)
@@ -665,6 +665,7 @@ mod tests {
     use ratatui::backend::TestBackend;
 
     use super::*;
+    use crate::tui::glyphs::Glyphs;
 
     fn typed(line: &mut CommandLine, text: &str) {
         for c in text.chars() {
@@ -693,7 +694,7 @@ mod tests {
         terminal
             .draw(|frame| {
                 let text = (prompt, Style::default());
-                line.render(frame, frame.area(), text, Arrows::PLAIN, true);
+                line.render(frame, frame.area(), text, Glyphs::PLAIN.scroll_bar, true);
             })
             .unwrap();
         terminal.backend().to_string()

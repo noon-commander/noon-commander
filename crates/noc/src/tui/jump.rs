@@ -16,6 +16,7 @@ use ratatui::text::{Line, Span};
 use super::cells::{self, Align, Cut};
 use super::dialog::{Colors, Field, draw_box, frame_around, right_frame};
 use super::fuzzy::Fuzzy;
+use super::glyphs;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::{Drawn, Pointer};
 use super::picker::{FULL_ROWS, Whole};
@@ -339,7 +340,7 @@ impl JumpMenu {
             &fl!("jump-keywords", text = shown),
             width,
             Align::Left,
-            theme.marks,
+            theme.glyphs.marks,
         );
         frame.render_widget(Line::styled(prompt, theme.dialog), line(0));
         if self.typing {
@@ -348,7 +349,10 @@ impl JumpMenu {
                 inner.y,
             ));
         }
-        frame.render_widget(Line::styled("─".repeat(width), theme.dialog), line(1));
+        frame.render_widget(
+            Line::styled(glyphs::LINE.repeat(width), theme.dialog),
+            line(1),
+        );
 
         let page = usize::from(inner.height.saturating_sub(2 + below)).max(1);
         let message = if !self.loaded {
@@ -372,7 +376,7 @@ impl JumpMenu {
         let height = u16::try_from(page).unwrap_or(u16::MAX);
         let bar = right_frame(inner, inner.y + 2, height);
         let position = (self.rows.len(), page, offset);
-        let bar = scrollbar::render(frame, bar, position, theme.dialog, theme.scroll_arrows);
+        let bar = scrollbar::render(frame, bar, position, theme.dialog, theme.glyphs.scroll_bar);
         let found: Vec<&Scored> = self.rows.iter().map(|&index| &self.found[index]).collect();
         let scores: Vec<String> = found
             .iter()
@@ -393,9 +397,9 @@ impl JumpMenu {
                 path_width,
                 fit,
                 styles,
-                theme.marks,
+                theme.glyphs.marks,
             );
-            let score = cells::fit(&scores[row], score_width, Align::Right, theme.marks);
+            let score = cells::fit(&scores[row], score_width, Align::Right, theme.glyphs.marks);
             text.spans.push(Span::styled(format!(" {score}"), styles.0));
             let y = u16::try_from(index + 2).unwrap_or(u16::MAX);
             frame.render_widget(text, line(y));
@@ -415,10 +419,13 @@ fn draw_whole(frame: &mut Frame<'_>, inner: Rect, path: &str, theme: &Theme) {
     let width = usize::from(inner.width);
     let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
     let top = inner.height.saturating_sub(FULL_ROWS + 1);
-    frame.render_widget(Line::styled("─".repeat(width), theme.dialog), line(top));
+    frame.render_widget(
+        Line::styled(glyphs::LINE.repeat(width), theme.dialog),
+        line(top),
+    );
     let styles = (theme.dialog, theme.truncated_dialog);
     let size = (width, usize::from(FULL_ROWS));
-    let rows = cells::whole(path, size, Some('/'), styles, theme.marks);
+    let rows = cells::whole(path, size, Some('/'), styles, theme.glyphs.marks);
     for (index, text) in (top + 1..inner.height).zip(rows) {
         frame.render_widget(text, line(index));
     }

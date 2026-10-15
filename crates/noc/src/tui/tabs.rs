@@ -8,10 +8,10 @@ use noc_vfs::Location;
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::BorderType;
 
 use super::app::Side;
 use super::cells::{self, Align, Marks};
+use super::glyphs;
 use super::panel::{ListRequest, Panel, home_text, location_text};
 use super::theme::Theme;
 
@@ -260,19 +260,16 @@ impl Bar<'_> {
             return spots;
         }
         let edge = area.right() - 1;
-        let vertical = match theme.border_type() {
-            BorderType::Double => "║",
-            _ => "│",
-        };
+        let vertical = theme.lines().vertical.to_string();
         for x in [area.x, edge] {
             frame.render_widget(
-                Line::styled(vertical, theme.panel_border),
+                Line::styled(vertical.clone(), theme.panel_border),
                 Rect::new(x, area.y, 1, 1),
             );
         }
         let inside = Rect::new(area.x + 1, area.y, area.width - 2, 1);
         let room = usize::from(inside.width);
-        let mut shown = fit(self.names, self.active, room, self.theme.marks);
+        let mut shown = fit(self.names, self.active, room, self.theme.glyphs.marks);
         let more = |shown: &[(usize, String)]| {
             let before = shown.first().is_some_and(|(index, _)| *index > 0);
             let after = shown
@@ -285,7 +282,7 @@ impl Bar<'_> {
                 self.names,
                 self.active,
                 room.saturating_sub(2),
-                self.theme.marks,
+                self.theme.glyphs.marks,
             );
         }
         let (before, after) = more(&shown);
@@ -297,12 +294,12 @@ impl Bar<'_> {
         };
         let mut x = inside.x;
         if before {
-            mark(frame, x, self.theme.marks.before);
+            mark(frame, x, self.theme.glyphs.marks.before);
             x += 1;
         }
         for (position, (index, label)) in shown.into_iter().enumerate() {
             if position > 0 {
-                mark(frame, x, "│");
+                mark(frame, x, &glyphs::COLUMN.to_string());
                 x += 1;
             }
             let start = x;
@@ -310,7 +307,7 @@ impl Bar<'_> {
             spots.push((index, Rect::new(start, area.y, x - start, 1)));
         }
         if after && inside.width > 0 {
-            mark(frame, inside.right() - 1, self.theme.marks.after);
+            mark(frame, inside.right() - 1, self.theme.glyphs.marks.after);
         }
         spots
     }
@@ -326,18 +323,16 @@ impl Bar<'_> {
         }
         let line = Rect::new(area.x + 1, area.y, area.width - 3, 1);
         // The title of the panel's frame goes, and the line comes back in its place.
-        let horizontal = match self.theme.border_type() {
-            BorderType::Double => "═",
-            _ => "─",
-        };
+        let horizontal = self.theme.lines().horizontal.to_string();
         frame.render_widget(
             Line::styled(horizontal.repeat(room), self.theme.panel_border),
             line,
         );
         let mut x = line.x;
-        for (position, (index, label)) in fit(self.names, self.active, room, self.theme.marks)
-            .into_iter()
-            .enumerate()
+        for (position, (index, label)) in
+            fit(self.names, self.active, room, self.theme.glyphs.marks)
+                .into_iter()
+                .enumerate()
         {
             if position > 0 {
                 x += 1;
@@ -356,13 +351,10 @@ pub(crate) fn join_frame(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
     if area.width < 2 || area.height == 0 {
         return;
     }
-    let (left, right) = match theme.border_type() {
-        BorderType::Double => ("╠", "╣"),
-        _ => ("├", "┤"),
-    };
+    let (left, right) = theme.lines().corner_tees;
     for (x, tee) in [(area.x, left), (area.right() - 1, right)] {
         frame.render_widget(
-            Line::styled(tee, theme.panel_border),
+            Line::styled(tee.to_string(), theme.panel_border),
             Rect::new(x, area.y, 1, 1),
         );
     }
@@ -452,6 +444,7 @@ mod tests {
     use noc_vfs::RemotePath;
 
     use super::*;
+    use crate::tui::glyphs::Glyphs;
 
     fn labels(texts: &[&str]) -> Vec<String> {
         texts.iter().map(|text| (*text).to_owned()).collect()
@@ -481,7 +474,7 @@ mod tests {
             fitted.into_iter().map(|(_, text)| text).collect()
         };
         assert_eq!(
-            texts(fit(&names, 2, 62, Marks::PLAIN)),
+            texts(fit(&names, 2, 62, Glyphs::PLAIN.marks)),
             [
                 "1 projects",
                 "2 documents-archive",
@@ -489,22 +482,22 @@ mod tests {
             ]
         );
         assert_eq!(
-            texts(fit(&names, 2, 55, Marks::PLAIN)),
+            texts(fit(&names, 2, 55, Glyphs::PLAIN.marks)),
             ["1 projects", "2 docum»hive", "3 /Users/me/projects/noon"],
             "a hidden tab first"
         );
         assert_eq!(
-            texts(fit(&names, 2, 45, Marks::PLAIN)),
+            texts(fit(&names, 2, 45, Glyphs::PLAIN.marks)),
             ["1 projects", "2 docu»ive", "3 /Users/»ts/noon"],
             "then the one that shows, but no name below eight cells"
         );
         assert_eq!(
-            texts(fit(&names, 2, 30, Marks::PLAIN)),
+            texts(fit(&names, 2, 30, Glyphs::PLAIN.marks)),
             ["2 docu»ive", "3 /Users»s/noon"],
             "then tabs far from the one that shows go"
         );
         assert_eq!(
-            texts(fit(&labels(&["~", "srv"]), 0, 4, Marks::PLAIN)),
+            texts(fit(&labels(&["~", "srv"]), 0, 4, Glyphs::PLAIN.marks)),
             ["1 ~"]
         );
     }

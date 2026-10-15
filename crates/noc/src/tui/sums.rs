@@ -14,6 +14,7 @@ use super::cells::{self, Align, Marks};
 use super::dialog::{
     Colors, button_line, button_spots, draw_box, draw_separator, frame_around, right_frame,
 };
+use super::glyphs;
 use super::keymap::{Action, Resolved};
 use super::mouse::{Drawn, Pointer, Press, Scroll};
 use super::theme::Theme;
@@ -224,7 +225,12 @@ impl SumsWindow {
             self.page.set(shown);
             listed.extend(top..top + shown);
             for (index, row) in self.rows.iter().enumerate().skip(top).take(shown) {
-                let text = cells::fit(&list_line(row, theme.marks), room, Align::Left, theme.marks);
+                let text = cells::fit(
+                    &list_line(row, theme.glyphs.marks),
+                    room,
+                    Align::Left,
+                    theme.glyphs.marks,
+                );
                 let style = if index == self.selected {
                     colors.focused_style()
                 } else {
@@ -239,7 +245,7 @@ impl SumsWindow {
                 &row.name,
                 room,
                 Align::Left,
-                theme.marks,
+                theme.glyphs.marks,
             )));
             match &row.hex {
                 Some(hex) => lines.extend(hex_lines(hex, room).into_iter().map(Line::raw)),
@@ -261,7 +267,7 @@ impl SumsWindow {
                 status,
                 room,
                 Align::Left,
-                theme.marks,
+                theme.glyphs.marks,
             )));
         }
         let height = u16::try_from(lines.len() + 2).unwrap_or(u16::MAX);
@@ -286,7 +292,7 @@ impl SumsWindow {
         let bar = if listed.is_empty() {
             None
         } else {
-            scrollbar::render(frame, bar, position, theme.dialog, theme.scroll_arrows)
+            scrollbar::render(frame, bar, position, theme.dialog, theme.glyphs.scroll_bar)
         };
         self.bar.set(bar);
         if inner.height >= 2 {
@@ -306,9 +312,9 @@ impl SumsWindow {
 fn list_line(row: &SumRow, marks: Marks) -> String {
     let mark = match row.mark {
         Mark::None => ' ',
-        Mark::Match => '✓',
-        Mark::Mismatch => '✗',
-        Mark::Skipped => '-',
+        Mark::Match => glyphs::MATCH,
+        Mark::Mismatch => glyphs::MISMATCH,
+        Mark::Skipped => glyphs::SKIPPED,
     };
     let sum = match &row.hex {
         Some(hex) if hex.len() > 2 * SHORT + 1 => {

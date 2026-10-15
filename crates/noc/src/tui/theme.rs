@@ -1,12 +1,11 @@
 //! Colors, text styles, frame lines, and scroll bar arrows of the UI.
 
 use noc_config::Borders;
-use noc_scroll::scrollbar::Arrows;
-use noc_text::Marks;
 use noc_vfs::{DirEntry, FileKind};
 use ratatui::style::{Color, Style};
 use ratatui::widgets::BorderType;
 
+use super::glyphs::{Glyphs, Lines};
 use super::panel::HostStatus;
 
 /// Styles for every part of the UI. Entry and host styles carry a foreground color only; they
@@ -108,10 +107,8 @@ pub(crate) struct Theme {
     pub(crate) shadow: Option<Style>,
     /// The lines that frame panels and dialogs.
     pub(crate) borders: Borders,
-    /// The arrows at the ends of scroll bars.
-    pub(crate) scroll_arrows: Arrows,
-    /// The marks of text cut short or going on past the screen.
-    pub(crate) marks: Marks,
+    /// What it draws with, as `ui.icons` picks them; the lines of frames go by `borders`.
+    pub(crate) glyphs: &'static Glyphs,
 }
 
 /// The colors the terminal can show: 24-bit RGB, or only its 256-color palette, to which
@@ -238,8 +235,7 @@ impl Theme {
             tab_number: fg(Color::LightYellow),
             shadow: Some(on(Color::DarkGray, Color::Black)),
             borders: Borders::default(),
-            scroll_arrows: Arrows::PLAIN,
-            marks: Marks::PLAIN,
+            glyphs: &Glyphs::PLAIN,
         }
     }
 
@@ -302,8 +298,7 @@ impl Theme {
             tab_number: plain,
             shadow: None,
             borders: Borders::default(),
-            scroll_arrows: Arrows::PLAIN,
-            marks: Marks::PLAIN,
+            glyphs: &Glyphs::PLAIN,
         }
     }
 
@@ -365,8 +360,7 @@ impl Theme {
             tab_number: fg(p.blue),
             shadow: Some(on(p.overlay0, p.crust)),
             borders: Borders::default(),
-            scroll_arrows: Arrows::PLAIN,
-            marks: Marks::PLAIN,
+            glyphs: &Glyphs::PLAIN,
         }
     }
 
@@ -431,8 +425,7 @@ impl Theme {
             tab_number: fg(p.accent),
             shadow: Some(on(p.faint, p.deep)),
             borders: Borders::default(),
-            scroll_arrows: Arrows::PLAIN,
-            marks: Marks::PLAIN,
+            glyphs: &Glyphs::PLAIN,
         }
     }
 
@@ -441,17 +434,9 @@ impl Theme {
         Self { borders, ..self }
     }
 
-    /// This theme with `scroll_arrows` at the ends of scroll bars, as `ui.icons` picks them.
-    pub(crate) fn with_scroll_arrows(self, scroll_arrows: Arrows) -> Self {
-        Self {
-            scroll_arrows,
-            ..self
-        }
-    }
-
-    /// This theme with `marks` for text cut short, as `ui.icons` picks them.
-    pub(crate) fn with_marks(self, marks: Marks) -> Self {
-        Self { marks, ..self }
+    /// This theme drawn with `glyphs`, as `ui.icons` picks them.
+    pub(crate) fn with_glyphs(self, glyphs: &'static Glyphs) -> Self {
+        Self { glyphs, ..self }
     }
 
     /// The frame of a panel or a dialog.
@@ -462,21 +447,20 @@ impl Theme {
         }
     }
 
+    /// The lines of frames, by `borders`.
+    pub(crate) fn lines(&self) -> &'static Lines {
+        Lines::of(self.borders)
+    }
+
     /// The ends of a single line across a frame, as mc joins them: `╟` and `╢` on a double one.
     pub(crate) fn tees(&self) -> (char, char) {
-        match self.borders {
-            Borders::Double => ('╟', '╢'),
-            Borders::Single => ('├', '┤'),
-        }
+        self.lines().tees
     }
 
     /// Where a line between columns meets the top of the frame and the single line above the
     /// status line: `╤` and `┴` on a double frame.
     pub(crate) fn column_tees(&self) -> (char, char) {
-        match self.borders {
-            Borders::Double => ('╤', '┴'),
-            Borders::Single => ('┬', '┴'),
-        }
+        self.lines().column_tees
     }
 
     /// The style of an entry's name by its kind, as mc highlights files.

@@ -140,7 +140,7 @@ impl TabMenu {
                 (theme.dialog, theme.truncated_dialog)
             };
             let fit = (Align::Left, Cut::Start);
-            cells::fitted(shown[row.index], row.width, fit, styles, theme.marks)
+            cells::fitted(shown[row.index], row.width, fit, styles, theme.glyphs.marks)
         });
     }
 }

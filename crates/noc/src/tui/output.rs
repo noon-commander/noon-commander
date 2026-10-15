@@ -14,6 +14,7 @@ use noc_tools::ToolError;
 use noc_tools::shell::Shell;
 
 use super::command::{Place, Run};
+use super::glyphs;
 use super::keymap::{Action, Context, KeyState, Keymap, Mode, Resolved};
 use super::{describe, tasks};
 use crate::i18n::fl;
@@ -146,7 +147,7 @@ fn end_line(out: &mut impl io::Write) {
     let _ = crossterm::queue!(
         out,
         SetAttribute(Attribute::Dim),
-        Print("⏎"),
+        Print(glyphs::NO_NEWLINE),
         SetAttribute(Attribute::Reset),
         Print(" ".repeat(usize::from(columns.saturating_sub(1)))),
         Print("\r"),

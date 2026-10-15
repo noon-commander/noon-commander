@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use noc_scroll::scrollbar::{self, Arrows, Bar};
+use noc_scroll::scrollbar::{self, Bar, BarGlyphs};
 use noc_scroll::{Motion, Step};
 use noc_text::{Align, Cut, Marks};
 use ratatui::Frame;
@@ -67,15 +67,17 @@ pub enum Command {
     ToggleWrap,
 }
 
-/// How the viewer looks: the colors of the app's theme, and the arrows of its icons.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+/// How the viewer looks: the colors of the app's theme, and the characters it draws with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Styles {
     /// The title line: the path and the position.
     pub header: Style,
     /// The text, the screen behind it, and the scroll bar; dimmed, the line that ends the text.
     pub text: Style,
-    /// The ends of the scroll bar.
-    pub arrows: Arrows,
+    /// The scroll bar.
+    pub bar: BarGlyphs,
+    /// The line across the screen after the end of the text, a character of one cell.
+    pub line: &'static str,
     /// The style of the marks of text that goes on past the screen.
     pub mark: Style,
     /// The marks: [`Marks::before`] over the first cell of a cut line with text hidden on the
@@ -350,13 +352,13 @@ impl Viewer {
         if bar {
             self.measure();
             let column = Rect::new(area.right() - 1, text_area.y, 1, text_area.height);
-            self.bar = scrollbar::render(frame, column, self.thumb(), styles.text, styles.arrows);
+            self.bar = scrollbar::render(frame, column, self.thumb(), styles.text, styles.bar);
         }
         let mut position = self.top;
         for screen_row in 0..self.page {
             let y = u16::try_from(screen_row + 1).unwrap_or(u16::MAX);
             let Some(line) = self.lines().get(position.0) else {
-                let end = noc_text::rule(&self.end_text(), self.width);
+                let end = noc_text::rule(&self.end_text(), self.width, styles.line, styles.marks);
                 let dim = styles.text.add_modifier(Modifier::DIM);
                 frame.render_widget(Line::styled(end, dim), text_row(y));
                 break;
@@ -487,10 +489,27 @@ mod tests {
 
     use super::*;
 
+    const STYLES: Styles = Styles {
+        header: Style::new(),
+        text: Style::new(),
+        bar: BarGlyphs {
+            up: "▲",
+            down: "▼",
+            track: "░",
+            thumb: "█",
+        },
+        line: "─",
+        mark: Style::new(),
+        marks: Marks {
+            before: "«",
+            after: "»",
+        },
+    };
+
     fn draw(viewer: &mut Viewer, width: u16, height: u16) -> String {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         terminal
-            .draw(|frame| viewer.render(frame, frame.area(), &Styles::default()))
+            .draw(|frame| viewer.render(frame, frame.area(), &STYLES))
             .unwrap();
         terminal.backend().to_string()
     }
@@ -673,7 +692,7 @@ mod tests {
         let mut terminal = Terminal::new(TestBackend::new(20, 6)).unwrap();
         let mut render = |viewer: &mut Viewer| {
             terminal
-                .draw(|frame| viewer.render(frame, frame.area(), &Styles::default()))
+                .draw(|frame| viewer.render(frame, frame.area(), &STYLES))
                 .unwrap()
                 .buffer
                 .clone()
@@ -727,7 +746,7 @@ mod tests {
     fn draw_marks(viewer: &mut Viewer, width: u16, height: u16) -> (String, Vec<String>) {
         let styles = Styles {
             mark: Style::new().add_modifier(Modifier::UNDERLINED),
-            ..Styles::default()
+            ..STYLES
         };
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         let buffer = terminal

@@ -33,6 +33,7 @@ use super::configuration::{ConfigEvent, Configuration};
 use super::decor::Decor;
 use super::dialog::{Ask, Button, Dialog, DialogEvent, Field, Reply};
 use super::edit::{Editor, Registers};
+use super::glyphs::{self, Glyphs};
 use super::help::Help;
 use super::history::{HistoryEvent, HistoryWindow};
 use super::jobs::{JobsEvent, JobsList, Row};
@@ -3502,7 +3503,7 @@ impl App {
             self.swapped,
             self.pulldown_last.filter(|_| last),
             &workspaces::names(&self.workspaces),
-            self.theme.marks,
+            self.theme.glyphs.marks,
             &|command| self.command_status(command),
         );
         self.pulldown = Some(pulldown);
@@ -4300,7 +4301,7 @@ impl App {
         let dir = self.active_place();
         let room = usize::from(width / 3).max(1);
         let dir = if cells::width(&dir) > room {
-            cells::fit(&dir, room, Align::Left, self.theme.marks)
+            cells::fit(&dir, room, Align::Left, self.theme.glyphs.marks)
         } else {
             dir
         };
@@ -6003,9 +6004,10 @@ impl App {
             let styles = ViewerStyles {
                 header: self.theme.cursor,
                 text: self.theme.panel,
-                arrows: self.theme.scroll_arrows,
+                bar: self.theme.glyphs.scroll_bar,
+                line: glyphs::LINE,
                 mark: self.theme.truncated,
-                marks: self.theme.marks,
+                marks: self.theme.glyphs.marks,
             };
             viewing.viewer.render(frame, panels, &styles);
         } else {
@@ -6062,8 +6064,7 @@ impl App {
                 height: frame.area().height.saturating_sub(1),
                 ..frame.area()
             };
-            let icons = self.decor.icons();
-            pulldown.render(frame, (menu_bar, screen), &self.theme, icons, &|command| {
+            pulldown.render(frame, (menu_bar, screen), &self.theme, &|command| {
                 self.command_status(command)
             });
         }
@@ -6096,7 +6097,7 @@ impl App {
         let name = self.panel(self.active).full_name().unwrap_or_default();
         let size = (usize::from(inner.width), usize::from(inner.height));
         let styles = (theme.dialog, theme.truncated_dialog);
-        let rows = cells::whole(&name, size, None, styles, theme.marks);
+        let rows = cells::whole(&name, size, None, styles, theme.glyphs.marks);
         for (y, row) in (inner.y..inner.bottom()).zip(rows) {
             frame.render_widget(row, Rect::new(inner.x, y, inner.width, 1));
         }
@@ -6220,7 +6221,7 @@ impl App {
             &text,
             cells::width(&text).min(room),
             cells::Align::Left,
-            self.theme.marks,
+            self.theme.glyphs.marks,
         );
         let width = u16::try_from(cells::width(&text)).unwrap_or(0);
         let x = area.right().saturating_sub(width + 1);
@@ -6237,8 +6238,8 @@ impl App {
         );
         match &mut self.command_line {
             Some(line) => {
-                let arrows = self.theme.scroll_arrows;
-                line.render(frame, area, (prompt, Style::default()), arrows, focused);
+                let bar = self.theme.glyphs.scroll_bar;
+                line.render(frame, area, (prompt, Style::default()), bar, focused);
             }
             None => self.render_mode(frame, area),
         }
@@ -6291,10 +6292,10 @@ impl App {
         let room = width.saturating_sub(shown + 1);
         // A message takes the place of the mode, as on vim's command line.
         if let Some(message) = &self.message {
-            let message = cells::fit(message, room, Align::Left, self.theme.marks);
+            let message = cells::fit(message, room, Align::Left, self.theme.glyphs.marks);
             frame.render_widget(Line::styled(message, self.theme.message), area);
         } else if let Some(mode) =
-            mode.map(|mode| cells::fit(&mode, room, Align::Left, self.theme.marks))
+            mode.map(|mode| cells::fit(&mode, room, Align::Left, self.theme.glyphs.marks))
         {
             frame.render_widget(Line::styled(mode, Style::new().bold()), area);
         }
@@ -6332,7 +6333,7 @@ impl App {
             let line = Line::from(vec![
                 Span::styled(number, self.theme.fkey_number),
                 Span::styled(
-                    cells::fit(&label, room, Align::Left, self.theme.marks),
+                    cells::fit(&label, room, Align::Left, self.theme.glyphs.marks),
                     self.theme.fkey_label,
                 ),
             ]);
@@ -6396,15 +6397,14 @@ fn viewer_command(action: Action) -> Option<ViewerCommand> {
     })
 }
 
-/// The theme that `ui` picks, in the colors of `depth`, with its frames and the arrows of its
+/// The theme that `ui` picks, in the colors of `depth`, with its frames and the glyphs of its
 /// scroll bars. `ui.theme` was checked when the config was loaded, and the dialog offers only
 /// the built-in themes.
 fn theme_of(ui: &UiConfig, depth: ColorDepth) -> Theme {
     Theme::by_name(&ui.theme, depth)
         .unwrap_or_else(Theme::mc_classic)
         .with_borders(ui.borders)
-        .with_scroll_arrows(Decor::new(ui.icons).scroll_arrows())
-        .with_marks(Decor::new(ui.icons).marks())
+        .with_glyphs(Glyphs::of(ui.icons))
 }
 
 /// What a job does after a failure, by the button `event` pressed.

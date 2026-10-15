@@ -155,11 +155,11 @@ fn render_cells(frame: &mut Frame<'_>, inner: Rect, grid: Grid, rows: &[Row], th
             };
             let cell = Line::from(vec![
                 Span::styled(
-                    fit_keys(&row.keys, keys_width, theme.marks),
+                    fit_keys(&row.keys, keys_width, theme.glyphs.marks),
                     theme.dialog_title,
                 ),
                 Span::raw(" "),
-                Span::styled(cut(&row.text, text_width, theme.marks), style),
+                Span::styled(cut(&row.text, text_width, theme.glyphs.marks), style),
             ]);
             frame.render_widget(cell, cell_area(inner, grid, column, line));
         }
@@ -169,7 +169,10 @@ fn render_cells(frame: &mut Frame<'_>, inner: Rect, grid: Grid, rows: &[Row], th
         let more = fl!("which-key-hidden", count = hidden);
         let at = cell_area(inner, grid, shown / grid.rows, shown % grid.rows);
         frame.render_widget(
-            Line::styled(cut(&more, grid.width, theme.marks), theme.dialog_title),
+            Line::styled(
+                cut(&more, grid.width, theme.glyphs.marks),
+                theme.dialog_title,
+            ),
             at,
         );
     }
@@ -216,6 +219,7 @@ mod tests {
     use ratatui::backend::TestBackend;
 
     use super::*;
+    use crate::tui::glyphs::Glyphs;
     use crate::tui::keymap::{KeyState, Keymap};
 
     fn draw(hints: &Hints, width: u16, height: u16) -> String {
@@ -266,14 +270,17 @@ mod tests {
     #[test]
     fn keys_fit_whole_and_texts_lose_their_end() {
         assert_eq!(
-            fit_keys("Insert, Ctrl+t, Shift+Down", 16, Marks::PLAIN),
+            fit_keys("Insert, Ctrl+t, Shift+Down", 16, Glyphs::PLAIN.marks),
             "Insert, Ctrl+t  "
         );
-        assert_eq!(fit_keys("F10", 5, Marks::PLAIN), "F10  ");
-        assert_eq!(fit_keys("Shift+Down", 6, Marks::PLAIN), "Shift»");
-        assert_eq!(cut("Open the directory", 10, Marks::PLAIN), "Open the »");
-        assert_eq!(cut("Quit", 6, Marks::PLAIN), "Quit  ");
-        assert_eq!(cut("Quit", 0, Marks::PLAIN), "");
+        assert_eq!(fit_keys("F10", 5, Glyphs::PLAIN.marks), "F10  ");
+        assert_eq!(fit_keys("Shift+Down", 6, Glyphs::PLAIN.marks), "Shift»");
+        assert_eq!(
+            cut("Open the directory", 10, Glyphs::PLAIN.marks),
+            "Open the »"
+        );
+        assert_eq!(cut("Quit", 6, Glyphs::PLAIN.marks), "Quit  ");
+        assert_eq!(cut("Quit", 0, Glyphs::PLAIN.marks), "");
     }
 
     #[test]

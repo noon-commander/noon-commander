@@ -1,11 +1,11 @@
-//! What goes in front of names: Nerd Font icons, or mc's type markers without them.
+//! What goes in front of names: Nerd Font icons, or mc's type markers without them, as
+//! [`glyphs`](super::glyphs) has them.
 
 use std::path::Path;
 
-use noc_scroll::scrollbar::Arrows;
-use noc_text::Marks;
 use noc_vfs::{DirEntry, FileKind, VolumeKind};
 
+use super::glyphs::{Glyphs, SPINNER};
 use super::panel::HostStatus;
 
 /// Icons on (`ui.icons`) or off.
@@ -24,115 +24,84 @@ impl Decor {
         self.icons
     }
 
+    fn glyphs(self) -> &'static Glyphs {
+        Glyphs::of(self.icons)
+    }
+
     /// The prefix of an entry's name: its icon and a space, or its mc marker.
     pub(crate) fn entry(self, entry: &DirEntry) -> String {
+        let glyph = self.kind(entry);
         if self.icons {
-            format!("{} ", icon(entry))
+            format!("{glyph} ")
         } else {
-            marker(entry).to_string()
+            glyph.to_string()
         }
     }
 
     /// The prefix of the `..` row.
     pub(crate) fn parent(self) -> &'static str {
-        if self.icons { " " } else { "/" }
+        self.glyphs().parent
     }
 
     /// The prefix of the home directory in the location menu.
     pub(crate) fn home(self) -> &'static str {
-        if self.icons { "󰋜 " } else { "~ " }
+        self.glyphs().home
     }
 
     /// The prefix of a volume in the location menu: a disk, a network drive, or mc's marker of
     /// block devices.
     pub(crate) fn volume(self, kind: VolumeKind) -> &'static str {
-        match (self.icons, kind) {
-            (false, _) => "+ ",
-            (true, VolumeKind::Network) => "󰣳 ",
-            (true, VolumeKind::System | VolumeKind::Local) => "󰋊 ",
-        }
-    }
-
-    /// The arrows at the ends of scroll bars: Nerd Font carets, or mc's triangles.
-    pub(crate) fn scroll_arrows(self) -> Arrows {
-        if self.icons {
-            Arrows {
-                up: "", down: ""
-            }
-        } else {
-            Arrows::PLAIN
-        }
-    }
-
-    /// The marks of text cut short or going on past the screen: Nerd Font double chevrons, or
-    /// `«` and `»`.
-    pub(crate) fn marks(self) -> Marks {
-        if self.icons {
-            Marks {
-                before: "󰄽",
-                after: "󰄾",
-            }
-        } else {
-            Marks::PLAIN
+        match kind {
+            VolumeKind::Network => self.glyphs().network_volume,
+            VolumeKind::System | VolumeKind::Local => self.glyphs().volume,
         }
     }
 
     /// The prefix of a host, which tells its status in one cell, as every prefix takes one:
     /// with icons a server, a server with a cross after a failure, or the spinner while
-    /// connecting, which `tick` turns; without them `○`, `●`, `✗`, or the spinner. The theme
-    /// colors it by the status.
+    /// connecting, which `tick` turns; without them a circle, a dot, a cross, or the spinner.
+    /// The theme colors it by the status.
     pub(crate) fn host(self, status: HostStatus, tick: u64) -> String {
-        let marker = match (self.icons, status) {
-            (_, HostStatus::Connecting) => spinner(tick),
-            (true, HostStatus::Idle | HostStatus::Connected) => '󰒋',
-            (true, HostStatus::Failed | HostStatus::Stalled) => '󰒑',
-            (false, HostStatus::Idle) => '○',
-            (false, HostStatus::Connected) => '●',
-            (false, HostStatus::Failed | HostStatus::Stalled) => '✗',
+        let hosts = self.glyphs().hosts;
+        let marker = match status {
+            HostStatus::Connecting => spinner(tick),
+            HostStatus::Idle => hosts.idle,
+            HostStatus::Connected => hosts.connected,
+            HostStatus::Failed | HostStatus::Stalled => hosts.failed,
         };
         format!("{marker} ")
+    }
+
+    /// The icon or the marker of an entry's kind; with icons, devicons' for a file it knows.
+    fn kind(self, entry: &DirEntry) -> char {
+        let kinds = self.glyphs().kinds;
+        match entry.metadata.kind {
+            FileKind::Dir => kinds.dir,
+            FileKind::Symlink => match entry.target_kind {
+                Some(FileKind::Dir) => kinds.link_to_dir,
+                Some(_) => kinds.link,
+                None => kinds.broken_link,
+            },
+            FileKind::Fifo => kinds.fifo,
+            FileKind::Socket => kinds.socket,
+            FileKind::CharDevice => kinds.char_device,
+            FileKind::BlockDevice => kinds.block_device,
+            FileKind::File | FileKind::Unknown if self.icons => {
+                file_icon(&entry.name).unwrap_or(if is_executable(entry) {
+                    kinds.executable
+                } else {
+                    kinds.file
+                })
+            }
+            FileKind::File if is_executable(entry) => kinds.executable,
+            FileKind::File | FileKind::Unknown => kinds.file,
+        }
     }
 }
 
 /// Frame `tick` of the spinner shown while connecting.
 pub(crate) fn spinner(tick: u64) -> char {
-    ['|', '/', '-', '\\'][usize::try_from(tick % 4).unwrap_or(0)]
-}
-
-/// mc's type marker: `/` directory, `~` link to a directory, `@` link, `!` broken link,
-/// `*` executable, `|` FIFO, `=` socket, `-` character device, `+` block device.
-fn marker(entry: &DirEntry) -> char {
-    match entry.metadata.kind {
-        FileKind::Dir => '/',
-        FileKind::Symlink => match entry.target_kind {
-            Some(FileKind::Dir) => '~',
-            Some(_) => '@',
-            None => '!',
-        },
-        FileKind::Fifo => '|',
-        FileKind::Socket => '=',
-        FileKind::CharDevice => '-',
-        FileKind::BlockDevice => '+',
-        FileKind::File if is_executable(entry) => '*',
-        FileKind::File | FileKind::Unknown => ' ',
-    }
-}
-
-fn icon(entry: &DirEntry) -> char {
-    match entry.metadata.kind {
-        FileKind::Dir => '',
-        FileKind::Symlink => match entry.target_kind {
-            Some(FileKind::Dir) => '',
-            Some(_) => '',
-            None => '',
-        },
-        FileKind::Fifo => '󰟥',
-        FileKind::Socket => '󰐧',
-        FileKind::CharDevice | FileKind::BlockDevice => '󰋊',
-        FileKind::File | FileKind::Unknown => {
-            file_icon(&entry.name).unwrap_or(if is_executable(entry) { '' } else { '' })
-        }
-    }
+    SPINNER[usize::try_from(tick % 4).unwrap_or(0)]
 }
 
 /// The devicons glyph for a file name, if it knows the name or its extension.
@@ -181,19 +150,6 @@ mod tests {
 
     fn file(name: &str) -> DirEntry {
         entry(name, FileKind::File, 0o644, None)
-    }
-
-    #[test]
-    fn marks_of_text_cut_short_are_double_chevrons() {
-        let code = |mark: &str| mark.chars().map(u32::from).collect::<Vec<_>>();
-        let nerd = Decor::new(true).marks();
-        // nf-md-chevron_double_left and nf-md-chevron_double_right.
-        assert_eq!(
-            (code(nerd.before), code(nerd.after)),
-            (vec![0xf013d], vec![0xf013e])
-        );
-        assert_eq!(Decor::new(false).marks(), Marks::PLAIN);
-        assert_eq!((Marks::PLAIN.before, Marks::PLAIN.after), ("«", "»"));
     }
 
     #[test]

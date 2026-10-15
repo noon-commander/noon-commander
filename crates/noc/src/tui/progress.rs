@@ -9,6 +9,7 @@ use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
 use super::dialog::{Colors, button_line, button_spots, draw_box, draw_separator, frame_around};
+use super::glyphs;
 use super::keymap::{Action, Resolved};
 use super::mouse::{Drawn, Pointer};
 use super::theme::Theme;
@@ -331,21 +332,21 @@ impl JobView {
         };
         put(
             0,
-            Line::raw(cells::fit(&doing, width, Align::Left, theme.marks)),
+            Line::raw(cells::fit(&doing, width, Align::Left, theme.glyphs.marks)),
         );
         put(
             1,
-            Line::raw(cells::fit(&current, width, Align::Left, theme.marks)),
+            Line::raw(cells::fit(&current, width, Align::Left, theme.glyphs.marks)),
         );
         put(2, gauge(ratio, width, theme));
         put(
             3,
-            Line::raw(cells::fit(&count, width, Align::Left, theme.marks)),
+            Line::raw(cells::fit(&count, width, Align::Left, theme.glyphs.marks)),
         );
         let time = self.time_line(now);
         put(
             4,
-            Line::raw(cells::fit(&time, width, Align::Left, theme.marks)),
+            Line::raw(cells::fit(&time, width, Align::Left, theme.glyphs.marks)),
         );
         let labels: Vec<String> = self
             .buttons
@@ -447,7 +448,8 @@ fn gauge(ratio: f64, width: usize, theme: &Theme) -> Line<'static> {
         clippy::cast_precision_loss
     )]
     let filled = ((bar as f64 * ratio).round() as usize).min(bar);
-    let text = format!("{}{}", "█".repeat(filled), "░".repeat(bar - filled));
+    let done = glyphs::GAUGE_DONE.repeat(filled);
+    let text = format!("{done}{}", glyphs::GAUGE_LEFT.repeat(bar - filled));
     Line::from(vec![Span::styled(text, theme.gauge), Span::raw(percent)])
 }
 

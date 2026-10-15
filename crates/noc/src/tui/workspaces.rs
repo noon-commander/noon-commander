@@ -220,8 +220,13 @@ impl WorkspacesWindow {
             };
             let name = cells::sanitize(shown[row.index].name.as_bytes());
             let fit = (Align::Left, Cut::End);
-            let mut line = cells::fitted(&name, name_width, fit, (style, mark), theme.marks);
-            let count = cells::fit(&counts[row.index], count_width, Align::Right, theme.marks);
+            let mut line = cells::fitted(&name, name_width, fit, (style, mark), theme.glyphs.marks);
+            let count = cells::fit(
+                &counts[row.index],
+                count_width,
+                Align::Right,
+                theme.glyphs.marks,
+            );
             line.spans.push(Span::styled(format!(" {count}"), style));
             line
         });

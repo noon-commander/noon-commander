@@ -22,6 +22,7 @@ use super::cells::{self, Align, Cut, MTIME_WIDTH, Marks};
 use super::decor::{self, Decor};
 use super::dialog::Field;
 use super::fuzzy::Fuzzy;
+use super::glyphs;
 use super::keymap::Action;
 use super::mouse::Scroll;
 use super::scroll::Window;
@@ -178,7 +179,11 @@ impl Sort {
     }
 
     fn arrow(self) -> char {
-        if self.descending { '↓' } else { '↑' }
+        if self.descending {
+            glyphs::DESCENDING
+        } else {
+            glyphs::ASCENDING
+        }
     }
 }
 
@@ -1560,7 +1565,7 @@ impl Panel {
         // A path that does not fit keeps its last directories.
         let room = usize::from(area.width.saturating_sub(4)).min(cells::width(&title));
         let fit = (Align::Left, Cut::Start);
-        let mut title = cells::fitted(&title, room, fit, (title_style, mark), theme.marks);
+        let mut title = cells::fitted(&title, room, fit, (title_style, mark), theme.glyphs.marks);
         title.spans.insert(0, Span::styled(" ", title_style));
         title.spans.push(Span::styled(" ", title_style));
         let block = Block::bordered()
@@ -1584,13 +1589,13 @@ impl Panel {
         self.scroll(list_height);
         let bar = Rect::new(area.right() - 1, self.list.y, 1, self.list.height);
         let position = (self.rows(), list_height, self.window.top());
-        let (style, arrows) = (theme.panel_border, theme.scroll_arrows);
+        let (style, arrows) = (theme.panel_border, theme.glyphs.scroll_bar);
         self.bar = scrollbar::render(frame, bar, position, style, arrows);
 
         let columns = DirColumns::for_width(width);
         self.names = (view.decor, columns.name);
         let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
-        let header = Line::styled(columns.header(self.sort, theme.marks), theme.header);
+        let header = Line::styled(columns.header(self.sort, theme.glyphs.marks), theme.header);
         frame.render_widget(header, line(inner.y));
         let visual = self.visual_rows();
         for (screen_row, index) in (self.window.top()..self.rows())
@@ -1695,14 +1700,19 @@ impl Panel {
         let status = match waiting {
             Some(waiting) => {
                 let spinner = format!("{} ", decor::spinner(view.tick));
-                let status = cells::fit(&status, width.saturating_sub(2), Align::Left, theme.marks);
+                let status = cells::fit(
+                    &status,
+                    width.saturating_sub(2),
+                    Align::Left,
+                    theme.glyphs.marks,
+                );
                 Line::from(vec![
                     Span::styled(spinner, theme.host_status(waiting)),
                     Span::raw(status),
                 ])
             }
             None => Line::styled(
-                cells::fit(&status, width, Align::Left, theme.marks),
+                cells::fit(&status, width, Align::Left, theme.glyphs.marks),
                 status_style,
             ),
         };
@@ -1761,7 +1771,7 @@ impl Panel {
     fn render_separator(&self, frame: &mut Frame<'_>, area: Rect, y: u16, theme: &Theme) {
         let inside = area.width.saturating_sub(2);
         let (left, right) = theme.tees();
-        let separator = format!("{left}{}{right}", "─".repeat(usize::from(inside)));
+        let separator = format!("{left}{}{right}", glyphs::LINE.repeat(usize::from(inside)));
         frame.render_widget(
             Line::styled(separator, theme.panel_border),
             Rect::new(area.x, y, area.width, 1),
@@ -1773,7 +1783,7 @@ impl Panel {
         let total = fl!("panel-marked", size = cells::grouped(bytes), count = count);
         let mut total = format!(" {total} ");
         if cells::width(&total) > usize::from(inside) {
-            total = cells::fit(&total, usize::from(inside), Align::Left, theme.marks);
+            total = cells::fit(&total, usize::from(inside), Align::Left, theme.glyphs.marks);
         }
         let total_width = u16::try_from(cells::width(&total)).unwrap_or(u16::MAX);
         let x = area.x + area.width.saturating_sub(total_width) / 2;
@@ -1795,12 +1805,12 @@ impl Panel {
         for &x in &self.column_lines {
             for y in inner.y..inner.bottom() - 2 {
                 if let Some(cell) = buffer.cell_mut((x, y)) {
-                    cell.set_char('│').set_fg(color);
+                    cell.set_char(glyphs::COLUMN).set_fg(color);
                     cell.modifier.remove(Modifier::UNDERLINED | Modifier::BOLD);
                 }
             }
             if let Some(cell) = buffer.cell_mut((x, inner.bottom() - 2))
-                && cell.symbol() == "─"
+                && cell.symbol() == glyphs::LINE
             {
                 cell.set_char(bottom);
             }
@@ -1812,10 +1822,11 @@ impl Panel {
     /// panel's, as the tabs do; where it shows a title or tabs, the line stops short of it.
     pub(crate) fn join_columns(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let (top, _) = theme.column_tees();
+        let horizontal = theme.lines().horizontal.to_string();
         let buffer = frame.buffer_mut();
         for &x in &self.column_lines {
             if let Some(cell) = buffer.cell_mut((x, area.y))
-                && matches!(cell.symbol(), "═" | "─")
+                && [horizontal.as_str(), glyphs::LINE].contains(&cell.symbol())
             {
                 cell.set_char(top);
             }
@@ -1968,7 +1979,7 @@ impl DirColumns {
                 (size, time, theme.entry(entry))
             }
         };
-        let (_, rest) = self.join("", &size, &time, ALIGN, view.theme.marks);
+        let (_, rest) = self.join("", &size, &time, ALIGN, view.theme.glyphs.marks);
         let (mut spans, marks) = name_spans(&prefix, &name, (self.name, shift), style, view);
         spans.push(Span::raw(rest));
         (Line::from(spans), marks)
@@ -1996,7 +2007,7 @@ fn name_spans(
     view: &View<'_>,
 ) -> (Vec<Span<'static>>, Vec<usize>) {
     let text = format!("{prefix}{name}");
-    let shown_marks = view.theme.marks;
+    let shown_marks = view.theme.glyphs.marks;
     let mut spans = Vec::new();
     let mut marks = Vec::new();
     let fitted = if shift > 0 && cells > 0 {

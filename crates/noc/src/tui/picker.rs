@@ -11,6 +11,7 @@ use ratatui::text::Line;
 use super::cells::{self, Align};
 use super::dialog::{Colors, Field, draw_box, frame_around, right_frame};
 use super::fuzzy::Fuzzy;
+use super::glyphs;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::{Drawn, Pointer};
 use super::scroll::Window;
@@ -465,15 +466,11 @@ impl Picker {
         let height = u16::try_from(self.page).unwrap_or(u16::MAX);
         let bar = right_frame(inner, inner.y + 2, height);
         let position = (lines.len(), self.page, offset);
-        self.bar = scrollbar::render(frame, bar, position, theme.dialog, theme.scroll_arrows);
+        self.bar = scrollbar::render(frame, bar, position, theme.dialog, theme.glyphs.scroll_bar);
         for (index, shown) in lines.iter().skip(offset).take(self.page).enumerate() {
             let y = u16::try_from(index + 2).unwrap_or(u16::MAX);
             let text = match shown {
-                MenuLine::Heading(heading) => {
-                    let heading = format!("─ {heading} ");
-                    let rest = width.saturating_sub(cells::width(&heading));
-                    Line::styled(format!("{heading}{}", "─".repeat(rest)), theme.dialog)
-                }
+                MenuLine::Heading(heading) => heading_line(heading, width, theme),
                 MenuLine::Row(index) => {
                     self.drawn.rows.push((*index, line(y)));
                     row(ShownRow {
@@ -487,7 +484,10 @@ impl Picker {
         }
         if below > 0 {
             let top = inner.height.saturating_sub(below);
-            frame.render_widget(Line::styled("─".repeat(width), theme.dialog), line(top));
+            frame.render_widget(
+                Line::styled(glyphs::LINE.repeat(width), theme.dialog),
+                line(top),
+            );
             let footer: Vec<Line<'static>> = match full {
                 Some(full) => {
                     let styles = (theme.dialog, theme.truncated_dialog);
@@ -496,7 +496,7 @@ impl Picker {
                         (width, usize::from(FULL_ROWS)),
                         Some('/'),
                         styles,
-                        theme.marks,
+                        theme.glyphs.marks,
                     )
                 }
                 None => body
@@ -529,7 +529,7 @@ impl Picker {
             &fl!("picker-filter", text = shown),
             room,
             Align::Left,
-            theme.marks,
+            theme.glyphs.marks,
         );
         let top = match note {
             Some(note) => format!("{filter} {note}"),
@@ -542,8 +542,18 @@ impl Picker {
                 inner.y,
             ));
         }
-        frame.render_widget(Line::styled("─".repeat(width), theme.dialog), line(1));
+        frame.render_widget(
+            Line::styled(glyphs::LINE.repeat(width), theme.dialog),
+            line(1),
+        );
     }
+}
+
+/// A heading over the rows after it, `width` cells across, on a line.
+fn heading_line(heading: &str, width: usize, theme: &Theme) -> Line<'static> {
+    let heading = format!("{} {heading} ", glyphs::LINE);
+    let rest = glyphs::LINE.repeat(width.saturating_sub(cells::width(&heading)));
+    Line::styled(format!("{heading}{rest}"), theme.dialog)
 }
 
 #[cfg(test)]

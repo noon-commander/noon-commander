@@ -303,16 +303,16 @@ fn start_app(
     (app, effects)
 }
 
-/// Runs the editor on `file`, with the terminal handed over, and tells whether the file changed
-/// (its size or time), or why the editor could not run.
-async fn edit(file: &Path) -> Result<bool, String> {
+/// Runs the editor on `file`, at `line` if there is one, with the terminal handed over, and
+/// tells whether the file changed (its size or time), or why the editor could not run.
+async fn edit(file: &Path, line: Option<u64>) -> Result<bool, String> {
     let stamp = |metadata: std::fs::Metadata| (metadata.len(), metadata.modified().ok());
     let before = tokio::fs::metadata(file)
         .await
         .map(stamp)
         .map_err(|error| error.to_string())?;
     let editor = Editor::from_env();
-    if let Err(error) = editor.edit(file).await {
+    if let Err(error) = editor.edit_at(file, line).await {
         let reason = match &error {
             ToolError::Spawn { source, .. } => source.to_string(),
             other => describe::chain(other),
@@ -354,9 +354,9 @@ async fn hand_over(
         .and_then(|()| suspend(terminal, asked.modes))
         .map_err(|error| error.to_string());
     let (events, effects) = match handover {
-        Handover::Edit(file) => {
+        Handover::Edit { file, line } => {
             let result = match suspended {
-                Ok(()) => edit(&file).await,
+                Ok(()) => edit(&file, line).await,
                 Err(error) => Err(error),
             };
             (EventStream::new(), app.edited(result))

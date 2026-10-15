@@ -229,8 +229,8 @@ pub(crate) enum Effect {
 /// What the event loop hands the terminal to, with the panels hidden.
 #[derive(Debug)]
 pub(crate) enum Handover {
-    /// The editor of F4, on a local file.
-    Edit(PathBuf),
+    /// The editor of F4, on a local file, at `line` if there is one.
+    Edit { file: PathBuf, line: Option<u64> },
     /// A shell command of the command line.
     Run(Run),
     /// Nothing: the terminal's own screen shows, with the output of commands, until `g <`;
@@ -534,6 +534,8 @@ struct Editing {
     remote: Option<Location>,
     /// Panels on this directory read it again afterwards.
     dir: Location,
+    /// The line the editor starts at, if not the first.
+    line: Option<u64>,
 }
 
 /// A running job: in front, in its window over the panels, or in the background.
@@ -4068,13 +4070,20 @@ impl App {
     fn edit(&mut self) -> Vec<Effect> {
         let panel = self.panel(self.active);
         let dir = panel.location().clone();
-        let Some((name, location)) = panel
+        let Some(name) = panel
             .entry_under_cursor()
             .filter(|entry| !entry.is_dir_like())
-            .map(|entry| (entry.name.clone(), child(&dir, &entry.name)))
+            .map(|entry| entry.name.clone())
         else {
             return Vec::new();
         };
+        self.edit_file(dir, &name, None)
+    }
+
+    /// Edits the file `name` in `dir`, at `line` if there is one: a local one where it is, a
+    /// remote one as a local copy, which goes back if it changes.
+    fn edit_file(&mut self, dir: Location, name: &[u8], line: Option<u64>) -> Vec<Effect> {
+        let location = child(&dir, name);
         let Location::Remote { host, .. } = &location else {
             if let Location::Local(path) = location {
                 let noted = self.note(&dir);
@@ -4082,8 +4091,9 @@ impl App {
                     file: path.clone(),
                     remote: None,
                     dir,
+                    line,
                 });
-                self.handover = Some(Handover::Edit(path));
+                self.handover = Some(Handover::Edit { file: path, line });
                 return noted;
             }
             return Vec::new();
@@ -4102,7 +4112,7 @@ impl App {
         let id = self.last_job;
         // Its own name last, so that the editor knows what kind of file it is.
         let mut temporary = format!("edit-{}-{id}-", std::process::id()).into_bytes();
-        temporary.extend_from_slice(&name);
+        temporary.extend_from_slice(name);
         let file = self
             .runtime_dir
             .join(std::ffi::OsStr::from_bytes(&temporary));
@@ -4114,6 +4124,7 @@ impl App {
             file: file.clone(),
             remote: Some(location.clone()),
             dir,
+            line,
         });
         vec![Effect::Copy {
             id,
@@ -4943,10 +4954,10 @@ impl App {
     fn follow_up(&mut self, then: Then, complete: bool) -> Vec<Effect> {
         match (then, complete) {
             (Then::Edit, true) => {
-                self.handover = self
-                    .editing
-                    .as_ref()
-                    .map(|editing| Handover::Edit(editing.file.clone()));
+                self.handover = self.editing.as_ref().map(|editing| Handover::Edit {
+                    file: editing.file.clone(),
+                    line: editing.line,
+                });
                 Vec::new()
             }
             (Then::Edit, false) => self
@@ -6885,7 +6896,7 @@ mod tests {
         /// The file the editor of F4 is to open now, if that is what comes next.
         fn take_edit(&mut self) -> Option<PathBuf> {
             match self.handover.take() {
-                Some(Handover::Edit(file)) => Some(file),
+                Some(Handover::Edit { file, .. }) => Some(file),
                 other => {
                     self.handover = other;
                     None
@@ -9124,6 +9135,16 @@ mod tests {
             screen.contains("line 3") && !screen.contains("line 2 "),
             "{screen}"
         );
+    }
+
+    #[test]
+    fn a_file_edited_at_a_line_hands_the_line_to_the_editor() {
+        let mut app = with_files(&["a1"]);
+        app.edit_file(local("/srv"), b"a1", Some(7));
+        assert!(matches!(
+            app.take_handover(),
+            Some(Handover::Edit { file, line: Some(7) }) if file == Path::new("/srv/a1")
+        ));
     }
 
     #[test]

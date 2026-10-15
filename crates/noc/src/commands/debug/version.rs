@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 use noc_tools::editor::Editor;
 use rustix::termios::{OptionalActions, Termios, tcgetattr, tcgetpgrp, tcsetattr};
 
+use crate::about::{Build, System, known};
 use crate::tui::ColorDepth;
 
 const UNKNOWN: &str = "unknown";
@@ -35,112 +36,6 @@ pub(super) fn print() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(_) => ExitCode::FAILURE,
     }
-}
-
-/// What was decided when the binary was built.
-struct Build {
-    version: &'static str,
-    /// Cargo features and whether they are on.
-    features: &'static [(&'static str, bool)],
-    commit: &'static str,
-    dirty: &'static str,
-    commit_time: &'static str,
-    target: &'static str,
-    profile: &'static str,
-}
-
-impl Build {
-    fn current() -> Self {
-        Self {
-            version: env!("CARGO_PKG_VERSION"),
-            features: &[("forwarding", noc_ssh::policy::FORWARDING_ENABLED)],
-            commit: env!("NOC_BUILD_COMMIT"),
-            dirty: env!("NOC_BUILD_DIRTY"),
-            commit_time: env!("NOC_BUILD_COMMIT_TIME"),
-            target: env!("NOC_BUILD_TARGET"),
-            profile: env!("NOC_BUILD_PROFILE"),
-        }
-    }
-}
-
-/// The system the binary runs on.
-struct System {
-    /// The distribution, or macOS and its version.
-    os: Option<String>,
-    kernel: Option<String>,
-    arch: Option<String>,
-}
-
-impl System {
-    fn current() -> Self {
-        let uname = rustix::system::uname();
-        let sysname = known(uname.sysname().to_bytes());
-        let release = known(uname.release().to_bytes());
-        let kernel = match (sysname, release) {
-            (Some(sysname), Some(release)) => Some(format!("{sysname} {release}")),
-            (sysname, _) => sysname,
-        };
-        Self {
-            os: os_name(),
-            kernel,
-            arch: known(uname.machine().to_bytes()),
-        }
-    }
-}
-
-/// The macOS version, which `uname` does not give, or the Linux distribution.
-fn os_name() -> Option<String> {
-    if cfg!(target_os = "macos") {
-        let plist =
-            std::fs::read_to_string("/System/Library/CoreServices/SystemVersion.plist").ok()?;
-        let name = plist_string(&plist, "ProductName")?;
-        let version = plist_string(&plist, "ProductVersion")?;
-        Some(format!("{name} {version}"))
-    } else {
-        ["/etc/os-release", "/usr/lib/os-release"]
-            .into_iter()
-            .find_map(|path| std::fs::read_to_string(path).ok())
-            .and_then(|text| os_release_name(&text))
-    }
-}
-
-/// The `<string>` after `<key>key</key>` in a property list.
-fn plist_string(plist: &str, key: &str) -> Option<String> {
-    let tag = format!("<key>{key}</key>");
-    let rest = plist[plist.find(&tag)? + tag.len()..].trim_start();
-    let rest = rest.strip_prefix("<string>")?;
-    known(&rest.as_bytes()[..rest.find("</string>")?])
-}
-
-/// `PRETTY_NAME` from `os-release`, or `NAME` where it is missing.
-fn os_release_name(text: &str) -> Option<String> {
-    let value = |key: &str| {
-        text.lines()
-            .find_map(|line| line.trim().strip_prefix(key)?.strip_prefix('='))
-            .and_then(|value| known(unquote(value).as_bytes()))
-    };
-    value("PRETTY_NAME").or_else(|| value("NAME"))
-}
-
-/// An `os-release` value without its quotes and backslashes, as a shell would read it.
-fn unquote(value: &str) -> String {
-    let value = value.trim();
-    if let Some(inner) = value.strip_prefix('\'').and_then(|v| v.strip_suffix('\'')) {
-        return inner.to_owned();
-    }
-    let inner = value
-        .strip_prefix('"')
-        .and_then(|v| v.strip_suffix('"'))
-        .unwrap_or(value);
-    let mut text = String::with_capacity(inner.len());
-    let mut chars = inner.chars();
-    while let Some(c) = chars.next() {
-        match c {
-            '\\' => text.extend(chars.next()),
-            c => text.push(c),
-        }
-    }
-    text
 }
 
 /// What the terminal says of itself, and what it answers.
@@ -350,12 +245,7 @@ fn editor_command(editor: &Editor) -> Option<String> {
 }
 
 fn report(build: &Build, system: &System, terminal: &Terminal, editor: Option<&str>) -> String {
-    let features = build
-        .features
-        .iter()
-        .map(|&(name, on)| format!("{}{name}", if on { '+' } else { '-' }))
-        .collect::<Vec<_>>()
-        .join(" ");
+    let features = build.features_text();
     let colors = match terminal.colors {
         ColorDepth::TrueColor => "truecolor",
         ColorDepth::Indexed => "256",
@@ -388,13 +278,6 @@ fn report(build: &Build, system: &System, terminal: &Terminal, editor: Option<&s
     text
 }
 
-/// Text from the system, made safe to print on one line; `None` when empty.
-fn known(bytes: &[u8]) -> Option<String> {
-    let text = noc_text::sanitize(bytes);
-    let text = text.trim();
-    (!text.is_empty()).then(|| text.to_owned())
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -402,10 +285,7 @@ mod tests {
 
     use noc_tools::editor::Editor;
 
-    use super::{
-        Answers, Build, ColorDepth, Keyboard, System, Terminal, editor_command, os_release_name,
-        plist_string, report,
-    };
+    use super::{Answers, Build, ColorDepth, Keyboard, System, Terminal, editor_command, report};
 
     fn env_with(vars: &[(&str, &str)], answers: Answers) -> Terminal {
         let vars: HashMap<String, OsString> = vars
@@ -433,6 +313,8 @@ mod tests {
             commit_time: "2026-10-12T14:03:27Z",
             target: "aarch64-apple-darwin",
             profile: "release",
+            license: "GPL-3.0-or-later",
+            repository: "https://example.com/noc",
         };
         let system = System {
             os: Some("macOS 26.0".to_owned()),
@@ -527,42 +409,5 @@ mod tests {
     fn control_characters_from_the_environment_cannot_break_a_line() {
         let terminal = terminal(&[("TERM", "xterm\nkeyboard kitty\x1b[2J")]);
         assert_eq!(terminal.term.as_deref(), Some("xterm?keyboard kitty?[2J"));
-    }
-
-    #[test]
-    fn macos_version_comes_from_the_property_list() {
-        let plist = "<dict>\n\t<key>ProductName</key>\n\t<string>macOS</string>\n\t\
-                     <key>ProductVersion</key>\n\t<string>26.0.1</string>\n</dict>";
-        assert_eq!(plist_string(plist, "ProductName").as_deref(), Some("macOS"));
-        assert_eq!(
-            plist_string(plist, "ProductVersion").as_deref(),
-            Some("26.0.1")
-        );
-        assert_eq!(plist_string(plist, "ProductBuildVersion"), None);
-        assert_eq!(
-            plist_string("<key>ProductName</key><true/>", "ProductName"),
-            None
-        );
-        assert_eq!(plist_string("", "ProductName"), None);
-    }
-
-    #[test]
-    fn linux_distribution_comes_from_os_release() {
-        let text = "NAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nPRETTY_NAME=\"Ubuntu 24.04.1 LTS\"\n";
-        assert_eq!(os_release_name(text).as_deref(), Some("Ubuntu 24.04.1 LTS"));
-        assert_eq!(os_release_name("NAME=Arch\n").as_deref(), Some("Arch"));
-        assert_eq!(
-            os_release_name("PRETTY_NAME=\"Say \\\"hi\\\"\"\n").as_deref(),
-            Some("Say \"hi\"")
-        );
-        assert_eq!(
-            os_release_name("PRETTY_NAME='C:\\\\'\n").as_deref(),
-            Some("C:\\\\")
-        );
-        assert_eq!(
-            os_release_name("PRETTY_NAME=\"\"\nNAME=Foo"),
-            Some("Foo".to_owned())
-        );
-        assert_eq!(os_release_name(""), None);
     }
 }

@@ -34,7 +34,7 @@ use super::decor::Decor;
 use super::dialog::{Ask, Button, Dialog, DialogEvent, Field, Reply};
 use super::edit::{Editor, Registers};
 use super::glyphs::{self, Glyphs};
-use super::help::Help;
+use super::help::{About, Help, Spot};
 use super::history::{HistoryEvent, HistoryWindow};
 use super::jobs::{JobsEvent, JobsList, Row};
 use super::jump::{JumpEvent, JumpMenu};
@@ -60,6 +60,7 @@ use super::tasks::{HostHandle, JobEvent};
 use super::theme::{ColorDepth, Theme};
 use super::which_key;
 use super::workspaces::{self, WorkspacesEvent, WorkspacesWindow};
+use crate::about::Build;
 use crate::i18n::fl;
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -699,6 +700,10 @@ pub(crate) struct App {
     jobs_list: Option<JobsList>,
     /// Over the panels, under the dialogs.
     help: Option<Help>,
+    /// Where the help was when it closed last, where it opens the next time.
+    help_spot: Spot,
+    /// What the About page of the help tells.
+    about: About,
     /// The location menu of Alt+F1 or Alt+F2, over the panels and under the dialogs.
     menu: Option<LocationMenu>,
     /// The generation of the last listing for the menu.
@@ -888,6 +893,8 @@ impl App {
             parallel_jobs: transfer.parallel_jobs.get(),
             jobs_list: None,
             help: None,
+            help_spot: Spot::default(),
+            about: About::new(Build::current()),
             menu: None,
             menu_listings: 0,
             tab_menu: None,
@@ -1015,6 +1022,11 @@ impl App {
         }
         self.work_dir = Some(dir.clone());
         self.work_dir.clone()
+    }
+
+    /// Tells `about` on the About page of the help.
+    pub(crate) fn set_about(&mut self, about: About) {
+        self.about = about;
     }
 
     /// Uses `hosts`, the settings from `hosts.toml`.
@@ -1241,10 +1253,17 @@ impl App {
     fn pointer_window(&mut self, pointer: Pointer) -> Vec<Effect> {
         let front = self.front();
         if let Some(keys) = self.wheel_keys(pointer.press) {
-            return if front == Front::Job {
-                Vec::new()
-            } else {
-                self.wheel(keys)
+            return match (front, &mut self.help) {
+                (Front::Job, _) => Vec::new(),
+                // The wheel scrolls the help's text, wherever its keys go.
+                (Front::Help, Some(help)) => {
+                    let (action, count) = keys;
+                    for _ in 0..count {
+                        help.wheel(action);
+                    }
+                    Vec::new()
+                }
+                _ => self.wheel(keys),
             };
         }
         let action = match front {
@@ -1287,9 +1306,13 @@ impl App {
                 let event = configuration.pointer(pointer);
                 return self.configuration_event(event);
             }
-            Front::Dialog(_) | Front::Help | Front::PullDown | Front::Viewer | Front::Panels => {
+            Front::Help => {
+                if let Some(help) = &mut self.help {
+                    help.pointer(pointer);
+                }
                 None
             }
+            Front::Dialog(_) | Front::PullDown | Front::Viewer | Front::Panels => None,
         };
         action.map_or_else(Vec::new, |action| self.handle(Resolved::Action(action)))
     }
@@ -2194,9 +2217,9 @@ impl App {
         self.jobs.iter().find(|job| !job.background)
     }
 
-    /// The help screen, for the keymap and the settings.
+    /// The help screen, for the keymap and the settings, where it was when it closed last.
     fn help_screen(&self) -> Help {
-        Help::new(&self.keymap, self.config.ui.fuzzy_search)
+        Help::new(&self.keymap, self.config.ui.fuzzy_search, &self.about).at(self.help_spot)
     }
 
     /// Quits, after asking if jobs would stop.
@@ -2423,6 +2446,7 @@ impl App {
         }
         if let Some(help) = &mut self.help {
             if help.handle(input) {
+                self.help_spot = help.spot();
                 self.help = None;
             }
             return Some(Vec::new());
@@ -7918,7 +7942,7 @@ mod tests {
         assert!(app.dragging());
         press(&mut app, Press::Drag, x, down - 1);
         let end = screen_of(&mut app, 12);
-        assert!(end.contains(" 100% "), "{end}");
+        assert!(end.contains(" End "), "{end}");
         press(&mut app, Press::Click, 10, 1);
         assert!(!app.dragging(), "another press lets go");
         press(&mut app, Press::Drag, x, up + 1);
@@ -10278,6 +10302,48 @@ mod tests {
         app.notice(4, "web", "Touch your key");
         app.prompt_closed(4);
         assert_eq!(app.context(), Context::Panel);
+    }
+
+    #[test]
+    fn the_help_opens_on_about_and_then_where_it_was_left() {
+        let mut app = loaded();
+        app.handle(action(Action::Help));
+        let text = screen_of(&mut app, 30);
+        assert!(
+            text.contains("Noon Commander") && text.contains("Search and renaming"),
+            "{text}"
+        );
+        // The section and how far down it was last until the help opens again, from anywhere.
+        app.handle(action(Action::NextField));
+        for _ in 0..4 {
+            app.handle(action(Action::Down));
+        }
+        app.handle(action(Action::Confirm));
+        let top = screen_of(&mut app, 30);
+        assert!(top.contains("Text fields in Insert mode"), "{top}");
+        app.handle(action(Action::Down));
+        let left = screen_of(&mut app, 30);
+        assert!(!left.contains("Text fields in Insert mode"), "{left}");
+        app.handle(action(Action::Cancel));
+        app.handle(action(Action::Help));
+        assert_eq!(screen_of(&mut app, 30), left);
+        // So does Keys folded; a click on it opens it again.
+        app.handle(action(Action::NextField));
+        app.handle(action(Action::Left));
+        app.handle(action(Action::Left));
+        app.handle(action(Action::Cancel));
+        app.handle(action(Action::Help));
+        let text = screen_of(&mut app, 30);
+        assert!(
+            !text.contains("Search and renaming") && text.contains("Keys ▸"),
+            "{text}"
+        );
+        let (x, y) = find(&mut app, " Keys ");
+        press(&mut app, Press::Click, x, y);
+        assert!(screen_of(&mut app, 30).contains("Search and renaming"));
+        app.handle(action(Action::Cancel));
+        app.handle(action(Action::Help));
+        assert!(screen_of(&mut app, 30).contains("Search and renaming"));
     }
 
     #[test]

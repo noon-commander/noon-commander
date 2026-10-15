@@ -51,6 +51,8 @@ pub(crate) struct Glyphs {
     /// The marks of the pull-down menu's commands: the choice taken among others, and a setting
     /// that is on.
     pub(crate) menu_marks: (char, char),
+    /// After a section of the help that has sections of its own: closed, and open.
+    pub(crate) folds: (char, char),
 }
 
 impl Glyphs {
@@ -89,6 +91,8 @@ impl Glyphs {
             after: "󰄾",
         },
         menu_marks: ('•', '✓'),
+        // nf-md-chevron_right and nf-md-chevron_down.
+        folds: ('󰅂', '󰅀'),
     };
 
     /// Without a Nerd Font: what every font has, mc's markers and Far's arrows.
@@ -128,6 +132,7 @@ impl Glyphs {
             after: "»",
         },
         menu_marks: ('*', 'x'),
+        folds: ('▸', '▾'),
     };
 
     /// The glyphs of `ui.icons`.
@@ -136,7 +141,8 @@ impl Glyphs {
     }
 }
 
-/// The icons of the categories of the Configuration dialog, shown with `ui.icons` only.
+/// The icons of the categories of the Configuration dialog and of the sections of the help,
+/// shown with `ui.icons` only.
 pub(crate) mod categories {
     pub(crate) const INTERFACE: &str = "󰍹";
     pub(crate) const TRANSFERS: &str = "󰓡";
@@ -144,6 +150,8 @@ pub(crate) mod categories {
     pub(crate) const VOLUMES: &str = "󰋊";
     pub(crate) const ZOXIDE: &str = "󰥨";
     pub(crate) const SHELL: &str = "󰆍";
+    pub(crate) const ABOUT: &str = "󰋽";
+    pub(crate) const KEYS: &str = "󰌌";
 }
 
 /// The track of a scroll bar.
@@ -248,6 +256,8 @@ mod tests {
                 assert_eq!(noc_text::width(text), 1, "{text:?}");
             }
             assert_eq!(noc_text::width(glyphs.marks.after), 1);
+            let (closed, open) = glyphs.folds;
+            assert_eq!(noc_text::width(&format!("{closed}{open}")), 2);
         }
     }
 }

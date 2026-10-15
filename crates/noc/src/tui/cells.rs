@@ -5,9 +5,7 @@ use std::time::SystemTime;
 
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
-pub(crate) use noc_text::{
-    Align, Cut, Fitted, Marks, chop, fit_cut, rule, sanitize, split, width, wrap,
-};
+pub(crate) use noc_text::{Align, Cut, Fitted, Marks, chop, fit_cut, sanitize, split, width, wrap};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 

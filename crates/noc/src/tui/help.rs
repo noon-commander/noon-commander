@@ -1,81 +1,178 @@
-//! The help screen: the keys of what the app can do, read from the keymap.
+//! The help of F1, laid out as the Configuration dialog: its sections down the left, and the
+//! text of the chosen one on the right, which scrolls. About says what the app is, what it was
+//! built from, what it runs on, and where it keeps its files. Keys, which folds, has the keys of
+//! each part of the app, read from the keymap, and tips.
+
+use std::path::{Path, PathBuf};
 
 use noc_scroll::scrollbar::{self, Bar};
 use noc_scroll::scrolled;
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
 use super::dialog::{Colors, draw_box, right_frame};
-use super::glyphs;
+use super::glyphs::categories;
 use super::keymap::{Action, Context, Keymap, Mode, Resolved};
-use super::mouse::Scroll;
+use super::mouse::{Pointer, Press, Scroll};
+use super::panel::home_text;
+use super::sidebar::{self, Sidebar};
 use super::theme::Theme;
+use crate::about::{Build, System};
 use crate::i18n::fl;
 
-/// Widest the help gets, in cells, borders included.
-const MAX_WIDTH: u16 = 80;
+/// How much of the screen the help takes, in percent of its width and of its height.
+const WIDTH_PERCENT: u16 = 70;
+const HEIGHT_PERCENT: u16 = 70;
 /// Widest the key column gets; longer lists of keys go on to the next lines.
 const MAX_KEYS_WIDTH: usize = 16;
+/// How far the groups of keys are indented under Keys in the sidebar.
+const GROUP_INDENT: &str = "  ";
+/// What `build.rs` and the build give for what they could not find.
+const UNKNOWN: &str = "unknown";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Entry {
     Heading(String),
-    Keys { keys: String, text: String },
+    Keys {
+        keys: String,
+        text: String,
+    },
+    /// A fact on the About page: what it is, and its value.
+    Fact {
+        name: String,
+        value: String,
+    },
     Note(String),
     Blank,
 }
 
-/// The help screen, scrolled to `offset`.
-#[derive(Debug)]
-pub(crate) struct Help {
-    entries: Vec<Entry>,
-    /// First screen row shown.
-    offset: usize,
-    /// Rows the help had at the last render, the one that marks its end among them, and how
-    /// many fit on screen.
-    rows: usize,
-    page: usize,
-    /// The scroll bar of the last render, if the help did not fit.
-    bar: Option<Bar>,
+/// What the About page tells.
+#[derive(Debug, Clone)]
+pub(crate) struct About {
+    pub(crate) build: Build,
+    pub(crate) system: System,
+    /// Where the files are, once the app knows.
+    pub(crate) files: Option<Files>,
 }
 
-impl Help {
-    /// The keys `keymap` binds to what the app can do, by mode and context. `fuzzy_search`
-    /// adds a note on matching as fzf does.
-    pub(crate) fn new(keymap: &Keymap, fuzzy_search: bool) -> Self {
-        let sections = [
-            (Mode::Normal, Context::Global, fl!("help-everywhere")),
-            (Mode::Normal, Context::Panel, fl!("help-panels")),
-            (Mode::Visual, Context::Panel, fl!("help-panels-visual")),
-            (Mode::Insert, Context::Input, fl!("help-text-insert")),
-            (Mode::Normal, Context::Input, fl!("help-text-normal")),
-            (Mode::Visual, Context::Input, fl!("help-text-visual")),
-            (Mode::Insert, Context::QuickSearch, fl!("help-quick-search")),
-            (Mode::Insert, Context::Rename, fl!("help-renaming-insert")),
-            (Mode::Normal, Context::Rename, fl!("help-renaming")),
-            (Mode::Insert, Context::CommandLine, fl!("help-command-line")),
-            (
-                Mode::Normal,
-                Context::CommandLine,
-                fl!("help-command-line-normal"),
-            ),
-            (Mode::Normal, Context::List, fl!("help-lists")),
-            (Mode::Insert, Context::List, fl!("help-lists-filter")),
-            (Mode::Normal, Context::LocationMenu, fl!("help-menu")),
-            (Mode::Normal, Context::TabMenu, fl!("help-tab-menu")),
-            (Mode::Normal, Context::Workspaces, fl!("help-workspaces")),
-            (Mode::Normal, Context::CommandHistory, fl!("help-history")),
-            (Mode::Normal, Context::PullDown, fl!("help-pulldown")),
-            (Mode::Normal, Context::Dialog, fl!("help-dialogs")),
-            (Mode::Normal, Context::Help, fl!("help-this-help")),
-            (Mode::Insert, Context::DialogInput, fl!("help-text-fields")),
-            (Mode::Insert, Context::PathInput, fl!("help-path-fields")),
-            (Mode::Insert, Context::Completion, fl!("help-completion")),
-            (Mode::Normal, Context::Viewer, fl!("help-viewer")),
-        ];
+impl About {
+    /// What the app knows before it asks the system.
+    pub(crate) fn new(build: Build) -> Self {
+        Self {
+            build,
+            system: System::default(),
+            files: None,
+        }
+    }
+}
+
+/// The files the app keeps, and the home directory, from which they are shown with `~`.
+#[derive(Debug, Clone)]
+pub(crate) struct Files {
+    pub(crate) home: PathBuf,
+    pub(crate) config: PathBuf,
+    pub(crate) hosts: PathBuf,
+    pub(crate) workspaces: PathBuf,
+    pub(crate) history: PathBuf,
+    pub(crate) recent: PathBuf,
+    pub(crate) log: PathBuf,
+}
+
+/// A part of the app with keys of its own, a group under Keys; the tips come last.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Part {
+    Everywhere,
+    Panels,
+    TextFields,
+    SearchAndRenaming,
+    CommandLine,
+    ListsAndMenus,
+    MenusAndDialogs,
+    Viewer,
+    Tips,
+}
+
+impl Part {
+    const ALL: [Self; 9] = [
+        Self::Everywhere,
+        Self::Panels,
+        Self::TextFields,
+        Self::SearchAndRenaming,
+        Self::CommandLine,
+        Self::ListsAndMenus,
+        Self::MenusAndDialogs,
+        Self::Viewer,
+        Self::Tips,
+    ];
+
+    fn title(self) -> String {
+        match self {
+            Self::Everywhere => fl!("help-group-everywhere"),
+            Self::Panels => fl!("help-group-panels"),
+            Self::TextFields => fl!("help-group-text"),
+            Self::SearchAndRenaming => fl!("help-group-search"),
+            Self::CommandLine => fl!("help-group-command-line"),
+            Self::ListsAndMenus => fl!("help-group-lists"),
+            Self::MenusAndDialogs => fl!("help-group-dialogs"),
+            Self::Viewer => fl!("help-group-viewer"),
+            Self::Tips => fl!("help-group-tips"),
+        }
+    }
+
+    /// The modes and contexts whose keys the part lists, each under its heading.
+    fn sections(self) -> Vec<(Mode, Context, String)> {
+        match self {
+            Self::Everywhere => vec![(Mode::Normal, Context::Global, fl!("help-everywhere"))],
+            Self::Panels => vec![
+                (Mode::Normal, Context::Panel, fl!("help-panels")),
+                (Mode::Visual, Context::Panel, fl!("help-panels-visual")),
+            ],
+            Self::TextFields => vec![
+                (Mode::Insert, Context::Input, fl!("help-text-insert")),
+                (Mode::Normal, Context::Input, fl!("help-text-normal")),
+                (Mode::Visual, Context::Input, fl!("help-text-visual")),
+                (Mode::Insert, Context::DialogInput, fl!("help-text-fields")),
+                (Mode::Insert, Context::PathInput, fl!("help-path-fields")),
+                (Mode::Insert, Context::Completion, fl!("help-completion")),
+            ],
+            Self::SearchAndRenaming => vec![
+                (Mode::Insert, Context::QuickSearch, fl!("help-quick-search")),
+                (Mode::Insert, Context::Rename, fl!("help-renaming-insert")),
+                (Mode::Normal, Context::Rename, fl!("help-renaming")),
+            ],
+            Self::CommandLine => vec![
+                (Mode::Insert, Context::CommandLine, fl!("help-command-line")),
+                (
+                    Mode::Normal,
+                    Context::CommandLine,
+                    fl!("help-command-line-normal"),
+                ),
+                (Mode::Normal, Context::CommandHistory, fl!("help-history")),
+            ],
+            Self::ListsAndMenus => vec![
+                (Mode::Normal, Context::List, fl!("help-lists")),
+                (Mode::Insert, Context::List, fl!("help-lists-filter")),
+                (Mode::Normal, Context::LocationMenu, fl!("help-menu")),
+                (Mode::Normal, Context::TabMenu, fl!("help-tab-menu")),
+                (Mode::Normal, Context::Workspaces, fl!("help-workspaces")),
+            ],
+            Self::MenusAndDialogs => vec![
+                (Mode::Normal, Context::PullDown, fl!("help-pulldown")),
+                (Mode::Normal, Context::Dialog, fl!("help-dialogs")),
+                (Mode::Normal, Context::Help, fl!("help-this-help")),
+            ],
+            Self::Viewer => vec![(Mode::Normal, Context::Viewer, fl!("help-viewer"))],
+            Self::Tips => Vec::new(),
+        }
+    }
+
+    /// Its text: the keys `keymap` binds in each of its sections, under the section's heading
+    /// when it has more than one.
+    fn entries(self, keymap: &Keymap) -> Vec<Entry> {
+        let sections = self.sections();
+        let headed = sections.len() > 1;
         let mut entries = Vec::new();
         for (mode, context, title) in sections {
             let rows: Vec<Entry> = keymap
@@ -86,35 +183,313 @@ impl Help {
                     Some(Entry::Keys { keys, text })
                 })
                 .collect();
-            if !rows.is_empty() {
-                if !entries.is_empty() {
-                    entries.push(Entry::Blank);
-                }
-                entries.push(Entry::Heading(title));
-                entries.extend(rows);
+            if rows.is_empty() {
+                continue;
             }
+            if !entries.is_empty() {
+                entries.push(Entry::Blank);
+            }
+            if headed {
+                entries.push(Entry::Heading(title));
+            }
+            entries.extend(rows);
         }
-        entries.push(Entry::Blank);
-        entries.push(Entry::Note(fl!("help-note-modes")));
-        entries.push(Entry::Note(fl!("help-note-count")));
-        entries.push(Entry::Note(fl!("help-note-menu")));
-        if fuzzy_search {
-            entries.push(Entry::Note(fl!("help-note-jump-fuzzy")));
-            entries.push(Entry::Note(fl!("help-note-fuzzy")));
+        entries
+    }
+}
+
+/// The tips, after the keys: how the modes, counts, and the windows work.
+fn tips(fuzzy_search: bool) -> Vec<Entry> {
+    let mut notes = vec![
+        fl!("help-note-modes"),
+        fl!("help-note-count"),
+        fl!("help-note-menu"),
+    ];
+    if fuzzy_search {
+        notes.push(fl!("help-note-jump-fuzzy"));
+        notes.push(fl!("help-note-fuzzy"));
+    } else {
+        notes.push(fl!("help-note-jump"));
+    }
+    notes.extend([
+        fl!("help-note-workspaces"),
+        fl!("help-note-command"),
+        fl!("help-note-pulldown"),
+        fl!("help-note-key-hints"),
+    ]);
+    let mut entries = Vec::new();
+    for note in notes {
+        if !entries.is_empty() {
+            entries.push(Entry::Blank);
+        }
+        entries.push(Entry::Note(note));
+    }
+    entries
+}
+
+/// The About page.
+fn about_entries(about: &About) -> Vec<Entry> {
+    let fact = |name: String, value: &str| Entry::Fact {
+        name,
+        value: if value == UNKNOWN {
+            fl!("help-about-unknown")
         } else {
-            entries.push(Entry::Note(fl!("help-note-jump")));
-        }
-        entries.push(Entry::Note(fl!("help-note-workspaces")));
-        entries.push(Entry::Note(fl!("help-note-command")));
-        entries.push(Entry::Note(fl!("help-note-pulldown")));
-        entries.push(Entry::Note(fl!("help-note-key-hints")));
+            value.to_owned()
+        },
+    };
+    let known =
+        |name: String, value: &Option<String>| fact(name, value.as_deref().unwrap_or(UNKNOWN));
+    let build = &about.build;
+    let commit = if build.dirty == "yes" {
+        fl!("help-about-commit-dirty", commit = build.commit)
+    } else {
+        build.commit.to_owned()
+    };
+    let system = &about.system;
+    let mut entries = vec![
+        Entry::Heading(fl!("help-about-name", version = build.version)),
+        Entry::Note(fl!("help-about-description")),
+        Entry::Blank,
+        fact(fl!("help-about-license"), build.license),
+        fact(fl!("help-about-source"), build.repository),
+        Entry::Blank,
+        Entry::Heading(fl!("help-about-build")),
+        fact(fl!("help-about-commit"), &commit),
+        fact(fl!("help-about-commit-time"), build.commit_time),
+        fact(fl!("help-about-target"), build.target),
+        fact(fl!("help-about-profile"), build.profile),
+        fact(fl!("help-about-features"), &build.features_text()),
+        Entry::Blank,
+        Entry::Heading(fl!("help-about-system")),
+        known(fl!("help-about-os"), &system.os),
+        known(fl!("help-about-kernel"), &system.kernel),
+        known(fl!("help-about-arch"), &system.arch),
+    ];
+    if let Some(files) = &about.files {
+        let path = |name: String, path: &Path| Entry::Fact {
+            name,
+            value: home_text(path, &files.home),
+        };
+        entries.extend([
+            Entry::Blank,
+            Entry::Heading(fl!("help-about-files")),
+            path(fl!("help-about-config"), &files.config),
+            path(fl!("help-about-hosts"), &files.hosts),
+            path(fl!("help-about-workspaces"), &files.workspaces),
+            path(fl!("help-about-history"), &files.history),
+            path(fl!("help-about-recent"), &files.recent),
+            path(fl!("help-about-log"), &files.log),
+        ]);
+    }
+    entries
+}
+
+/// Where the help was when it closed, to open there again: the section, whether Keys was open,
+/// what had the keys, and how far down the text was. At first, the top of About, with Keys
+/// open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Spot {
+    row: Row,
+    group: usize,
+    keys_open: bool,
+    focus: Focus,
+    offset: usize,
+}
+
+impl Default for Spot {
+    fn default() -> Self {
         Self {
-            entries,
+            row: Row::About,
+            group: 0,
+            keys_open: true,
+            focus: Focus::Text,
+            offset: 0,
+        }
+    }
+}
+
+/// A group of keys under Keys: its title in the sidebar, and its text.
+#[derive(Debug)]
+struct Group {
+    title: String,
+    entries: Vec<Entry>,
+}
+
+/// A row of the sidebar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Row {
+    About,
+    Keys,
+    /// A group of keys, by its index, shown while Keys is open.
+    Group(usize),
+}
+
+/// Where the keys go.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Focus {
+    Sidebar,
+    Text,
+}
+
+/// The help, its sections and the text of the one chosen, scrolled to `offset`.
+#[derive(Debug)]
+pub(crate) struct Help {
+    about: Vec<Entry>,
+    groups: Vec<Group>,
+    /// The row of the sidebar with the cursor: a group only while Keys is open.
+    row: Row,
+    /// The group of keys chosen last, which shows while Keys has the cursor.
+    group: usize,
+    keys_open: bool,
+    focus: Focus,
+    /// First screen row of the text shown.
+    offset: usize,
+    /// Rows the text had at the last render, the one that marks its end among them, and how
+    /// many fit on screen.
+    rows: usize,
+    page: usize,
+    /// The scroll bar of the last render, if the text did not fit.
+    bar: Option<Bar>,
+    /// Where the last render drew the rows of the sidebar and the text, for the mouse.
+    drawn_rows: Vec<(Row, Rect)>,
+    drawn_text: Rect,
+}
+
+impl Help {
+    /// The help with the keys `keymap` binds to what the app can do, by part of the app, and
+    /// `about` on its About page; `fuzzy_search` adds a tip on matching as fzf does. It opens
+    /// at the top of About, with Keys open and the text having the keys.
+    pub(crate) fn new(keymap: &Keymap, fuzzy_search: bool, about: &About) -> Self {
+        let groups = Part::ALL
+            .into_iter()
+            .map(|part| Group {
+                title: part.title(),
+                entries: match part {
+                    Part::Tips => tips(fuzzy_search),
+                    part => part.entries(keymap),
+                },
+            })
+            .collect();
+        Self {
+            about: about_entries(about),
+            groups,
+            row: Row::About,
+            group: 0,
+            keys_open: true,
+            focus: Focus::Text,
             offset: 0,
             rows: 0,
             page: 1,
             bar: None,
+            drawn_rows: Vec::new(),
+            drawn_text: Rect::default(),
         }
+    }
+
+    /// Opens at `spot`, where it was when it closed last.
+    pub(crate) fn at(mut self, spot: Spot) -> Self {
+        let Spot {
+            row,
+            group,
+            keys_open,
+            focus,
+            offset,
+        } = spot;
+        self.group = group.min(self.groups.len().saturating_sub(1));
+        self.keys_open = keys_open;
+        self.row = match row {
+            Row::Group(_) => self.keys_row(),
+            row => row,
+        };
+        self.focus = focus;
+        self.offset = offset;
+        self
+    }
+
+    /// Where it is, to open there the next time.
+    pub(crate) fn spot(&self) -> Spot {
+        Spot {
+            row: self.row,
+            group: self.group,
+            keys_open: self.keys_open,
+            focus: self.focus,
+            offset: self.offset,
+        }
+    }
+
+    /// The row of the group chosen last: its own while Keys is open, else that of Keys.
+    fn keys_row(&self) -> Row {
+        if self.keys_open {
+            Row::Group(self.group)
+        } else {
+            Row::Keys
+        }
+    }
+
+    /// The rows the sidebar shows.
+    fn sidebar_rows(&self) -> Vec<Row> {
+        let mut rows = vec![Row::About, Row::Keys];
+        if self.keys_open {
+            rows.extend((0..self.groups.len()).map(Row::Group));
+        }
+        rows
+    }
+
+    /// The text shown: the About page, or a group of keys.
+    fn entries(&self) -> &[Entry] {
+        match self.row {
+            Row::About => &self.about,
+            Row::Keys | Row::Group(_) => self
+                .groups
+                .get(self.group)
+                .map_or(&[], |group| group.entries.as_slice()),
+        }
+    }
+
+    /// Puts the cursor of the sidebar on `row`, and the text at its top if it shows another.
+    fn choose(&mut self, row: Row) {
+        let shown = self.shown();
+        self.row = row;
+        if let Row::Group(group) = row {
+            self.group = group;
+        }
+        if self.shown() != shown {
+            self.offset = 0;
+        }
+    }
+
+    /// What the text shows: the About page, or the group of keys by its index.
+    fn shown(&self) -> Option<usize> {
+        match self.row {
+            Row::About => None,
+            Row::Keys | Row::Group(_) => Some(self.group),
+        }
+    }
+
+    /// Opens Keys under the cursor, or gives the keys to the text.
+    fn open(&mut self) {
+        if self.row == Row::Keys && !self.keys_open {
+            self.keys_open = true;
+        } else {
+            self.focus = Focus::Text;
+        }
+    }
+
+    /// Goes up from a group to Keys, or folds Keys.
+    fn fold(&mut self) {
+        match self.row {
+            Row::Group(_) => self.choose(Row::Keys),
+            Row::Keys => self.keys_open = false,
+            Row::About => {}
+        }
+    }
+
+    /// Moves the cursor of the sidebar `by` rows, up when negative, within them.
+    fn move_by(&mut self, by: isize) {
+        let rows = self.sidebar_rows();
+        let at = rows.iter().position(|row| *row == self.row).unwrap_or(0);
+        let to = at.saturating_add_signed(by).min(rows.len() - 1);
+        self.choose(rows[to]);
     }
 
     /// The scroll bar of the last render, for the mouse.
@@ -122,7 +497,7 @@ impl Help {
         self.bar
     }
 
-    /// Scrolls as a press on the scroll bar asks, never past the end at the bottom.
+    /// Scrolls the text as a press on the scroll bar asks, never past the end at the bottom.
     pub(crate) fn scroll(&mut self, scroll: Scroll) {
         self.offset = match scroll {
             Scroll::By(motion) => scrolled(motion, self.offset, self.rows, self.page),
@@ -130,94 +505,129 @@ impl Help {
         };
     }
 
-    /// Scrolls, never past its end at the bottom; `true` when the help should close.
+    /// Scrolls the text as a step of the wheel does, whatever has the keys.
+    pub(crate) fn wheel(&mut self, action: Action) {
+        if let Some(motion) = action.motion() {
+            self.scroll(Scroll::By(motion));
+        }
+    }
+
+    /// Takes a key; `true` when the help should close. Tab moves between the sidebar and the
+    /// text. In the sidebar, Up and Down choose a section, Right and Enter open Keys or give
+    /// the keys to the text, and Left goes up to Keys and folds it; the other motions scroll
+    /// the text. In the text, the motions scroll it, never past its end at the bottom, Left
+    /// goes back to the sidebar, and Enter closes.
     pub(crate) fn handle(&mut self, input: Resolved) -> bool {
         let Resolved::Action(action) = input else {
             return false;
         };
-        if let Some(motion) = action.motion() {
-            self.scroll(Scroll::By(motion));
+        match (self.focus, action) {
+            (_, Action::Cancel) | (Focus::Text, Action::Confirm) => return true,
+            (Focus::Sidebar, Action::NextField | Action::PrevField) => self.focus = Focus::Text,
+            (Focus::Text, Action::NextField | Action::PrevField | Action::Left) => {
+                self.focus = Focus::Sidebar;
+            }
+            (Focus::Sidebar, Action::Up) => self.move_by(-1),
+            (Focus::Sidebar, Action::Down) => self.move_by(1),
+            (Focus::Sidebar, Action::Home | Action::PageUp) => self.move_by(isize::MIN),
+            (Focus::Sidebar, Action::End | Action::PageDown) => self.move_by(isize::MAX),
+            (Focus::Sidebar, Action::Right | Action::Confirm | Action::Toggle) => self.open(),
+            (Focus::Sidebar, Action::Left) => self.fold(),
+            (_, action) => {
+                if let Some(motion) = action.motion() {
+                    self.scroll(Scroll::By(motion));
+                }
+            }
         }
-        matches!(action, Action::Cancel | Action::Confirm)
+        false
     }
 
-    /// Draws the help over most of `area`, with its scroll bar on the right of the frame.
+    /// Takes a press of the mouse, where the help was drawn last: a click on a section shows
+    /// it, and one on Keys also opens or folds it; a click on the text gives it the keys.
+    pub(crate) fn pointer(&mut self, Pointer { press, at }: Pointer) {
+        if !matches!(press, Press::Click | Press::DoubleClick) {
+            return;
+        }
+        let clicked = self
+            .drawn_rows
+            .iter()
+            .find(|(_, area)| area.contains(at))
+            .map(|(row, _)| *row);
+        if let Some(row) = clicked {
+            self.focus = Focus::Sidebar;
+            if row == Row::Keys {
+                self.choose(Row::Keys);
+                self.keys_open = !self.keys_open;
+            } else {
+                self.choose(row);
+            }
+        } else if self.drawn_text.contains(at) {
+            self.focus = Focus::Text;
+        }
+    }
+
+    /// The rows of the sidebar as it draws them, and the cells the widest of them takes, of all
+    /// the rows it can show, so that it keeps its width as Keys opens and folds.
+    fn sidebar_texts(&self, theme: &Theme) -> (Vec<String>, usize) {
+        let icons = theme.glyphs.icons;
+        let top = |icon: &str, title: String| {
+            if icons {
+                format!(" {icon} {title} ")
+            } else {
+                format!(" {title} ")
+            }
+        };
+        let (closed, open) = theme.glyphs.folds;
+        let fold = if self.keys_open { open } else { closed };
+        let about = top(categories::ABOUT, fl!("help-section-about"));
+        let keys = format!("{}{fold} ", top(categories::KEYS, fl!("help-section-keys")));
+        let groups: Vec<String> = self
+            .groups
+            .iter()
+            .map(|group| format!("{GROUP_INDENT}{} ", group.title))
+            .collect();
+        let width = sidebar::width(&groups)
+            .max(cells::width(&about))
+            .max(cells::width(&keys));
+        let mut texts = vec![about, keys];
+        if self.keys_open {
+            texts.extend(groups);
+        }
+        (texts, width)
+    }
+
+    /// Draws the help centered in `area`, over [`WIDTH_PERCENT`] of its width and
+    /// [`HEIGHT_PERCENT`] of its height, with the scroll bar of its text on the right of the
+    /// frame.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        let width = MAX_WIDTH.min(area.width.saturating_sub(4)).max(20);
-        let height = area.height.saturating_sub(4).max(3);
+        let width = percent(area.width, WIDTH_PERCENT).max(20);
+        let height = percent(area.height, HEIGHT_PERCENT).max(3);
         let colors = Colors::of(theme, false);
         let size = (width, height);
         let inner = draw_box(frame, area, size, &fl!("help-title"), colors, theme);
-        let width = usize::from(inner.width);
-        let keys_width = self
-            .entries
+        let rows = self.sidebar_rows();
+        let (texts, sidebar_width) = self.sidebar_texts(theme);
+        let sidebar = Sidebar {
+            rows: &texts,
+            width: sidebar_width,
+            chosen: rows.iter().position(|row| *row == self.row).unwrap_or(0),
+            focused: self.focus == Focus::Sidebar,
+        };
+        let drawn = sidebar::render(frame, inner, sidebar, theme, colors);
+        self.drawn_rows = drawn
+            .rows
             .iter()
-            .filter_map(|entry| match entry {
-                Entry::Keys { keys, .. } => Some(cells::width(keys)),
-                _ => None,
-            })
-            .max()
-            .unwrap_or(0)
-            .min(MAX_KEYS_WIDTH)
-            .min(width / 2);
-        let text_width = width.saturating_sub(keys_width + 1);
-        let mut lines: Vec<Line<'static>> = self
-            .entries
-            .iter()
-            .flat_map(|entry| match entry {
-                Entry::Heading(title) => {
-                    let styles = (theme.dialog_title, theme.truncated_dialog);
-                    vec![Line::from(cells::fit(
-                        title,
-                        width,
-                        Align::Left,
-                        styles,
-                        theme.glyphs.marks,
-                    ))]
-                }
-                Entry::Keys { keys, text } => {
-                    let styles = (theme.dialog, theme.truncated_dialog);
-                    let text =
-                        cells::fit(text, text_width, Align::Left, styles, theme.glyphs.marks);
-                    key_lines(keys, keys_width)
-                        .into_iter()
-                        .zip(std::iter::once(text).chain(std::iter::repeat(Vec::new())))
-                        .map(|(keys, text)| {
-                            let styles = (theme.dialog_title, theme.truncated_dialog);
-                            let mut spans = cells::fit(
-                                &keys,
-                                keys_width,
-                                Align::Left,
-                                styles,
-                                theme.glyphs.marks,
-                            );
-                            spans.push(Span::raw(" "));
-                            spans.extend(text);
-                            Line::from(spans)
-                        })
-                        .collect()
-                }
-                Entry::Note(text) => cells::wrap(text, width)
-                    .into_iter()
-                    .map(Line::raw)
-                    .collect(),
-                Entry::Blank => vec![Line::default()],
-            })
+            .filter_map(|(index, area)| Some((*rows.get(*index)?, *area)))
             .collect();
-        let end = cells::rule(&fl!("help-end"), width, glyphs::LINE);
-        let styles = (
-            theme.dialog.add_modifier(Modifier::DIM),
-            theme.truncated_dialog.remove_modifier(Modifier::DIM),
-        );
-        lines.push(Line::from(cells::spans(end, styles, theme.glyphs.marks)));
+        let text = drawn.content;
+        self.drawn_text = text;
+        let lines = self.lines(usize::from(text.width), theme);
         self.rows = lines.len();
         self.page = usize::from(inner.height).max(1);
-        self.offset = self.offset.min(self.rows.saturating_sub(1));
-        // The bar and the percentage leave out the line that ends the help, so that they reach
-        // the bottom and 100 with its last line.
-        let text = (self.rows - 1, self.page, self.offset);
+        self.offset = self.offset.min(self.rows.saturating_sub(self.page));
+        let position = (self.rows, self.page, self.offset);
         let bar = right_frame(inner, inner.y, inner.height);
-        self.bar = scrollbar::render(frame, bar, text, theme.dialog, theme.glyphs.scroll_bar);
+        self.bar = scrollbar::render(frame, bar, position, theme.dialog, theme.glyphs.scroll_bar);
         self.render_position(frame, inner, theme);
         for (index, line) in lines
             .into_iter()
@@ -225,20 +635,90 @@ impl Help {
             .take(self.page)
             .enumerate()
         {
-            let y = inner.y + u16::try_from(index).unwrap_or(u16::MAX);
-            frame.render_widget(line, Rect::new(inner.x, y, inner.width, 1));
+            let y = text.y + u16::try_from(index).unwrap_or(u16::MAX);
+            frame.render_widget(line, Rect::new(text.x, y, text.width, 1));
         }
     }
 
-    /// How far down the help is, in the frame below `inner`, on the right: the last row of text
+    /// The lines of the text shown, in `width` cells.
+    fn lines(&self, width: usize, theme: &Theme) -> Vec<Line<'static>> {
+        let entries = self.entries();
+        let column = |names: &mut dyn Iterator<Item = &String>, most: usize| {
+            names
+                .map(|name| cells::width(name))
+                .max()
+                .unwrap_or(0)
+                .min(most)
+                .min(width / 2)
+        };
+        let keys_width = column(
+            &mut entries.iter().filter_map(|entry| match entry {
+                Entry::Keys { keys, .. } => Some(keys),
+                _ => None,
+            }),
+            MAX_KEYS_WIDTH,
+        );
+        let names_width = column(
+            &mut entries.iter().filter_map(|entry| match entry {
+                Entry::Fact { name, .. } => Some(name),
+                _ => None,
+            }),
+            usize::MAX,
+        );
+        let marks = theme.glyphs.marks;
+        let title = (theme.dialog_title, theme.truncated_dialog);
+        let body = (theme.dialog, theme.truncated_dialog);
+        entries
+            .iter()
+            .flat_map(|entry| match entry {
+                Entry::Heading(heading) => {
+                    vec![Line::from(cells::fit(
+                        heading,
+                        width,
+                        Align::Left,
+                        title,
+                        marks,
+                    ))]
+                }
+                Entry::Keys { keys, text } => {
+                    let room = width.saturating_sub(keys_width + 1);
+                    let text = cells::fit(text, room, Align::Left, body, marks);
+                    key_lines(keys, keys_width)
+                        .into_iter()
+                        .zip(std::iter::once(text).chain(std::iter::repeat(Vec::new())))
+                        .map(|(keys, text)| {
+                            let mut spans =
+                                cells::fit(&keys, keys_width, Align::Left, title, marks);
+                            spans.push(Span::raw(" "));
+                            spans.extend(text);
+                            Line::from(spans)
+                        })
+                        .collect()
+                }
+                Entry::Fact { name, value } => {
+                    let room = width.saturating_sub(names_width + 1);
+                    let mut spans = cells::fit(name, names_width, Align::Left, title, marks);
+                    spans.push(Span::raw(" "));
+                    spans.extend(cells::fit(value, room, Align::Left, body, marks));
+                    vec![Line::from(spans)]
+                }
+                Entry::Note(text) => cells::wrap(text, width)
+                    .into_iter()
+                    .map(Line::raw)
+                    .collect(),
+                Entry::Blank => vec![Line::default()],
+            })
+            .collect()
+    }
+
+    /// How far down the text is, in the frame below `inner`, on the right: the last row of text
     /// on screen in percent, or that the end shows.
     fn render_position(&self, frame: &mut Frame<'_>, inner: Rect, theme: &Theme) {
         let bottom = self.offset + self.page;
         let position = if bottom >= self.rows {
             fl!("help-position-end")
         } else {
-            let text = self.rows - 1;
-            let percent = (bottom.min(text) * 100).checked_div(text).unwrap_or(100);
+            let percent = (bottom * 100).checked_div(self.rows).unwrap_or(100);
             fl!("help-position", percent = percent.to_string())
         };
         let position = format!(" {position} ");
@@ -250,6 +730,11 @@ impl Help {
         let line = Line::styled(position, theme.dialog);
         frame.render_widget(line, Rect::new(x, inner.bottom(), width, 1));
     }
+}
+
+/// `percent` of `cells`, rounded down.
+fn percent(cells: u16, percent: u16) -> u16 {
+    u16::try_from(u32::from(cells) * u32::from(percent) / 100).unwrap_or(cells)
 }
 
 /// `keys`, a list such as `Space, Shift+Down`, in lines of at most `width` cells, broken after
@@ -687,11 +1172,39 @@ mod tests {
     use noc_scroll::Motion;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
+    use ratatui::layout::Position;
 
     use super::*;
 
     fn action(action: Action) -> Resolved {
         Resolved::Action(action)
+    }
+
+    fn build() -> Build {
+        Build {
+            version: "1.2.3",
+            features: &[("forwarding", false)],
+            commit: "0123456789ab",
+            dirty: "yes",
+            commit_time: "2026-10-12T14:03:27Z",
+            target: "aarch64-apple-darwin",
+            profile: "release",
+            license: "GPL-3.0-or-later",
+            repository: "https://example.com/noc",
+        }
+    }
+
+    fn help() -> Help {
+        Help::new(&Keymap::default(), true, &About::new(build()))
+    }
+
+    /// The help on the group of keys `group`, with Keys open.
+    fn on(group: usize) -> Help {
+        help().at(Spot {
+            row: Row::Group(group),
+            group,
+            ..Spot::default()
+        })
     }
 
     fn draw(help: &mut Help, width: u16, height: u16) -> String {
@@ -702,13 +1215,30 @@ mod tests {
         terminal.backend().to_string()
     }
 
+    fn all_entries(help: &Help) -> impl Iterator<Item = &Entry> {
+        help.groups.iter().flat_map(|group| &group.entries)
+    }
+
+    fn headings(entries: &[Entry]) -> Vec<&str> {
+        entries
+            .iter()
+            .filter_map(|entry| match entry {
+                Entry::Heading(title) => Some(title.as_str()),
+                _ => None,
+            })
+            .collect()
+    }
+
     #[test]
     fn lists_what_the_app_can_do_by_mode_and_context() {
-        let help = Help::new(&Keymap::default(), true);
+        let help = help();
         let has = |keys: &str, text: &str| {
-            help.entries.contains(&Entry::Keys {
-                keys: keys.to_owned(),
-                text: text.to_owned(),
+            all_entries(&help).any(|entry| {
+                *entry
+                    == Entry::Keys {
+                        keys: keys.to_owned(),
+                        text: text.to_owned(),
+                    }
             })
         };
         assert!(has("Z Z, F10", "Quit"));
@@ -747,9 +1277,7 @@ mod tests {
         assert!(has("Ctrl+e", &fl!("help-complete-close")));
         assert!(has("/", "Type in the filter, in Insert mode"));
         // One key, three meanings, by mode and context.
-        let ctrl_u: Vec<&str> = help
-            .entries
-            .iter()
+        let ctrl_u: Vec<&str> = all_entries(&help)
             .filter_map(|entry| match entry {
                 Entry::Keys { keys, text } if keys == "Ctrl+u" => Some(text.as_str()),
                 _ => None,
@@ -766,88 +1294,179 @@ mod tests {
         );
         // The help's own keys, which scroll it as less does.
         assert!(has("Space, f", "A whole page down, as less's Space and f"));
-        assert_eq!(
-            help.entries.last(),
-            Some(&Entry::Note(fl!("help-note-key-hints")))
-        );
+        let tips = &help.groups.last().unwrap().entries;
+        assert_eq!(tips.last(), Some(&Entry::Note(fl!("help-note-key-hints"))));
         let fuzzy = Entry::Note(fl!("help-note-fuzzy"));
-        assert!(help.entries.contains(&fuzzy));
-        let keywords = Help::new(&Keymap::default(), false);
-        assert!(!keywords.entries.contains(&fuzzy));
-        assert!(
-            keywords
-                .entries
-                .contains(&Entry::Note(fl!("help-note-jump")))
-        );
+        assert!(tips.contains(&fuzzy));
+        let keywords = Help::new(&Keymap::default(), false, &About::new(build()));
+        let tips = &keywords.groups.last().unwrap().entries;
+        assert!(!tips.contains(&fuzzy));
+        assert!(tips.contains(&Entry::Note(fl!("help-note-jump"))));
     }
 
     #[test]
-    fn heads_each_mode_and_context_with_keys() {
-        let help = Help::new(&Keymap::default(), true);
-        let headings: Vec<&str> = help
-            .entries
+    fn groups_the_keys_by_part_of_the_app() {
+        let help = help();
+        let groups: Vec<(&str, Vec<&str>)> = help
+            .groups
             .iter()
-            .filter_map(|entry| match entry {
-                Entry::Heading(title) => Some(title.as_str()),
-                _ => None,
-            })
+            .map(|group| (group.title.as_str(), headings(&group.entries)))
             .collect();
         assert_eq!(
-            headings,
+            groups,
             [
-                "Everywhere",
-                "Panels",
-                "Panels in Visual mode",
-                "Text fields in Insert mode",
-                "Text fields in Normal mode",
-                "Text fields in Visual mode",
-                "Quick search",
-                "Renaming in place",
-                "Renaming in place, in Normal mode",
-                "Command line",
-                "Command line in Normal mode",
-                "Lists",
-                "The filter of a list",
-                "Location menu",
-                "Tab menu",
-                "Workspaces",
-                "Command history",
-                "Pull-down menu",
-                "Dialogs and help",
-                "This help",
-                "Text fields of dialogs",
-                "Path fields",
-                "Completion list",
-                "Viewer"
+                ("Everywhere", vec![]),
+                ("Panels", vec!["Panels", "Panels in Visual mode"]),
+                (
+                    "Text fields",
+                    vec![
+                        "Text fields in Insert mode",
+                        "Text fields in Normal mode",
+                        "Text fields in Visual mode",
+                        "Text fields of dialogs",
+                        "Path fields",
+                        "Completion list"
+                    ]
+                ),
+                (
+                    "Search and renaming",
+                    vec![
+                        "Quick search",
+                        "Renaming in place",
+                        "Renaming in place, in Normal mode"
+                    ]
+                ),
+                (
+                    "Command line",
+                    vec![
+                        "Command line",
+                        "Command line in Normal mode",
+                        "Command history"
+                    ]
+                ),
+                (
+                    "Lists and menus",
+                    vec![
+                        "Lists",
+                        "The filter of a list",
+                        "Location menu",
+                        "Tab menu",
+                        "Workspaces"
+                    ]
+                ),
+                (
+                    "Menus and dialogs",
+                    vec!["Pull-down menu", "Dialogs and help", "This help"]
+                ),
+                ("Viewer", vec![]),
+                ("Tips", vec![]),
             ]
         );
+        assert!(help.groups.iter().all(|group| !group.entries.is_empty()));
     }
 
     #[test]
-    fn long_lists_of_keys_go_on_to_the_next_lines() {
-        assert_eq!(key_lines("F10", 16), ["F10"]);
-        assert_eq!(key_lines("PgDn, Ctrl+v", 16), ["PgDn, Ctrl+v"]);
+    fn opens_at_the_top_of_about_and_then_where_it_was_left() {
+        let first = help();
+        assert_eq!((first.row, first.shown()), (Row::About, None));
+        assert_eq!(first.focus, Focus::Text);
+        assert_eq!(first.spot(), Spot::default());
+        let mut help = on(7);
+        draw(&mut help, 120, 30);
+        help.handle(action(Action::PageDown));
+        help.handle(action(Action::NextField));
+        let spot = help.spot();
+        let mut again = self::help().at(spot);
         assert_eq!(
-            key_lines("Insert, Ctrl+t, Shift+Down", 16),
-            ["Insert, Ctrl+t,", "Shift+Down"]
+            (again.row, again.shown(), again.focus, again.offset),
+            (Row::Group(7), Some(7), Focus::Sidebar, help.offset)
         );
-        assert_eq!(key_lines("Esc, Esc Esc", 4), ["Esc,", "Esc Esc"]);
+        assert_eq!(draw(&mut again, 120, 30), draw(&mut help, 120, 30));
+    }
+
+    #[test]
+    fn keys_stay_folded_and_show_the_group_chosen_last() {
+        let mut help = on(7);
+        help.handle(action(Action::NextField));
+        help.handle(action(Action::Left));
+        help.handle(action(Action::Left));
+        let mut help = self::help().at(help.spot());
+        assert_eq!(help.row, Row::Keys);
+        assert_eq!(help.shown(), Some(7));
+        assert_eq!(help.sidebar_rows(), [Row::About, Row::Keys]);
+        let screen = draw(&mut help, 120, 30);
+        assert!(!screen.contains("Panels"), "{screen}");
+        assert!(screen.contains("Keys ▸"), "{screen}");
+        assert!(!help.keys_open);
+    }
+
+    #[test]
+    fn the_sidebar_chooses_opens_and_folds_sections() {
+        let mut help = on(1);
+        assert_eq!(help.row, Row::Group(1));
+        help.handle(action(Action::NextField));
+        assert_eq!(help.focus, Focus::Sidebar);
+        help.handle(action(Action::Down));
+        assert_eq!((help.row, help.shown()), (Row::Group(2), Some(2)));
+        // Left goes up to Keys, which shows the group chosen last; Left again folds it.
+        help.handle(action(Action::Left));
+        assert_eq!((help.row, help.shown()), (Row::Keys, Some(2)));
+        help.handle(action(Action::Left));
+        assert!(!help.keys_open);
+        assert_eq!(help.sidebar_rows(), [Row::About, Row::Keys]);
+        help.handle(action(Action::Up));
+        assert_eq!((help.row, help.shown()), (Row::About, None));
+        help.handle(action(Action::End));
+        assert_eq!(help.row, Row::Keys);
+        // Right opens Keys, and then gives the keys to the text.
+        help.handle(action(Action::Right));
+        assert!(help.keys_open);
+        assert_eq!(help.focus, Focus::Sidebar);
+        help.handle(action(Action::End));
+        assert_eq!(help.row, Row::Group(8));
+        assert!(!help.handle(action(Action::Confirm)));
+        assert_eq!(help.focus, Focus::Text);
+        // In the text, Left goes back to the sidebar, and Enter closes.
+        help.handle(action(Action::Left));
+        assert_eq!(help.focus, Focus::Sidebar);
+        help.handle(action(Action::Home));
+        assert_eq!(help.row, Row::About);
+        help.handle(action(Action::NextField));
+        assert!(help.handle(action(Action::Confirm)));
+        assert!(help.handle(action(Action::Cancel)));
+    }
+
+    #[test]
+    fn another_section_shows_from_its_top() {
+        let mut help = on(1);
+        draw(&mut help, 100, 20);
+        help.handle(action(Action::PageDown));
+        assert!(help.offset > 0);
+        help.handle(action(Action::Left));
+        help.handle(action(Action::Down));
+        assert_eq!(help.offset, 0);
+        // Keys shows the same group as its last one, where it was.
+        help.handle(action(Action::Up));
+        help.handle(action(Action::PageDown));
+        let offset = help.offset;
+        help.handle(action(Action::Left));
+        assert_eq!((help.row, help.offset), (Row::Keys, offset));
     }
 
     #[test]
     fn scrolls_within_its_rows_and_closes() {
-        let mut help = Help::new(&Keymap::default(), true);
-        let top = draw(&mut help, 60, 14);
+        let mut help = on(1);
+        let top = draw(&mut help, 100, 20);
         assert!(top.contains("Panels"), "{top}");
-        assert!(top.contains(" 1% ") && top.contains('█'), "{top}");
+        assert!(top.contains("% ") && top.contains('█'), "{top}");
         assert!(!help.handle(action(Action::PageDown)));
-        assert_ne!(draw(&mut help, 60, 14), top);
+        assert_ne!(draw(&mut help, 100, 20), top);
         help.handle(action(Action::End));
-        let bottom = draw(&mut help, 60, 14);
-        assert!(bottom.contains("Backspace takes back"), "{bottom}");
+        let bottom = draw(&mut help, 100, 20);
+        assert!(bottom.contains("The right panel"), "{bottom}");
         assert!(
-            bottom.contains("─ EOF ─") && bottom.contains(" End "),
-            "{bottom}"
+            !bottom.contains("EOF") && bottom.contains(" End "),
+            "no line after the text, and the frame says it ends: {bottom}"
         );
         for key in [
             Action::Down,
@@ -856,10 +1475,9 @@ mod tests {
             Action::WindowDown,
         ] {
             help.handle(action(key));
-            assert_eq!(draw(&mut help, 60, 14), bottom, "{key:?} stops at the end");
+            assert_eq!(draw(&mut help, 100, 20), bottom, "{key:?} stops at the end");
         }
-        // The bar leaves out the end line: it is at the bottom with the last line of text, just
-        // above the arrow down.
+        // The bar is at the bottom with the last line of text, just above the arrow down.
         let bar_at_bottom = |screen: &str| {
             let rows: Vec<&str> = screen.lines().collect();
             let frame = rows.iter().position(|row| row.contains('╚')).unwrap();
@@ -868,44 +1486,143 @@ mod tests {
         };
         assert!(bar_at_bottom(&bottom), "{bottom}");
         help.handle(action(Action::Up));
-        let last = draw(&mut help, 60, 14);
-        assert!(!last.contains("EOF") && last.contains(" 100% "), "{last}");
-        assert!(bar_at_bottom(&last), "{last}");
-        help.handle(action(Action::Up));
-        assert!(!bar_at_bottom(&draw(&mut help, 60, 14)));
+        let above = draw(&mut help, 100, 20);
+        assert!(!above.contains(" End "), "{above}");
+        assert!(!bar_at_bottom(&above), "{above}");
         help.handle(action(Action::Home));
-        assert_eq!(draw(&mut help, 60, 14), top);
+        assert_eq!(draw(&mut help, 100, 20), top);
         assert!(help.handle(action(Action::Cancel)));
         assert!(help.handle(action(Action::Confirm)));
     }
 
     #[test]
+    fn the_sidebar_scrolls_the_text_by_the_keys_it_does_not_take() {
+        let mut help = on(1);
+        draw(&mut help, 100, 20);
+        help.handle(action(Action::NextField));
+        help.handle(action(Action::WindowDown));
+        assert!(help.offset > 0);
+        assert_eq!(help.row, Row::Group(1));
+        let offset = help.offset;
+        help.wheel(Action::Down);
+        assert_eq!(help.offset, offset + 1, "the wheel scrolls the text");
+        assert_eq!(help.row, Row::Group(1));
+    }
+
+    #[test]
     fn scrolls_as_its_scroll_bar_is_pressed_and_dragged() {
-        let mut help = Help::new(&Keymap::default(), true);
-        let top = draw(&mut help, 60, 14);
+        let mut help = on(1);
+        let top = draw(&mut help, 100, 20);
         let bar = help.bar().unwrap();
         help.scroll(Scroll::By(Motion::PageDown));
         assert_eq!(help.offset, help.page - 2, "the page less vim's two rows");
         help.scroll(Scroll::To(bar.dragged(0, u16::MAX)));
         assert_eq!(
             help.offset,
-            help.rows - 1 - help.page,
-            "the last line of text at the bottom, as the bar leaves out the end line"
+            help.rows - help.page,
+            "the last line of text at the bottom"
         );
         help.scroll(Scroll::To(usize::MAX));
-        draw(&mut help, 60, 14);
+        draw(&mut help, 100, 20);
         assert_eq!(
             help.offset,
             help.rows - help.page,
             "no further than the end"
         );
         help.scroll(Scroll::To(0));
-        assert_eq!(draw(&mut help, 60, 14), top);
+        assert_eq!(draw(&mut help, 100, 20), top);
+    }
+
+    #[test]
+    fn clicks_choose_sections_and_fold_keys() {
+        let mut help = on(1);
+        let screen = draw(&mut help, 120, 30);
+        let at = |text: &str| {
+            let (y, row) = screen
+                .lines()
+                .enumerate()
+                .find(|(_, row)| row.contains(text))
+                .unwrap();
+            let x = row[..row.find(text).unwrap()].chars().count() - 1;
+            Position::new(u16::try_from(x).unwrap(), u16::try_from(y).unwrap())
+        };
+        let click = |at| Pointer {
+            press: Press::Click,
+            at,
+        };
+        help.pointer(click(at(" Viewer ")));
+        assert_eq!((help.row, help.focus), (Row::Group(7), Focus::Sidebar));
+        help.pointer(click(at(" About ")));
+        assert_eq!(help.row, Row::About);
+        help.pointer(click(at(" Keys ")));
+        assert_eq!(help.row, Row::Keys);
+        assert!(!help.keys_open);
+        assert_eq!(help.shown(), Some(7));
+        help.pointer(click(Position::new(80, 15)));
+        assert_eq!(help.focus, Focus::Text);
+        draw(&mut help, 120, 30);
+        help.pointer(click(at(" Keys ")));
+        assert!(help.keys_open);
+    }
+
+    #[test]
+    fn takes_a_share_of_the_screen() {
+        let mut help = on(1);
+        let screen = draw(&mut help, 160, 40);
+        let rows: Vec<Vec<char>> = screen
+            .lines()
+            .map(|row| row.trim_matches('"').chars().collect())
+            .collect();
+        let top = rows.iter().position(|row| row.contains(&'╔')).unwrap();
+        let bottom = rows.iter().position(|row| row.contains(&'╚')).unwrap();
+        let left = rows[top].iter().position(|c| *c == '╔').unwrap();
+        let right = rows[top].iter().position(|c| *c == '╗').unwrap();
+        // 70% of 160 columns and of 40 rows.
+        assert_eq!(right - left + 1, 112, "{screen}");
+        assert_eq!(bottom - top + 1, 28, "{screen}");
+        assert!(
+            screen.contains("Open the directory under the cursor"),
+            "{screen}"
+        );
     }
 
     #[test]
     fn draws_keys_and_what_they_do() {
-        let mut help = Help::new(&Keymap::default(), true);
-        insta::assert_snapshot!(draw(&mut help, 70, 16));
+        let mut help = on(1);
+        insta::assert_snapshot!(draw(&mut help, 120, 26));
+    }
+
+    #[test]
+    fn draws_the_sidebar_with_the_keys_and_keys_folded() {
+        let mut help = on(7);
+        help.handle(action(Action::NextField));
+        help.handle(action(Action::Left));
+        help.handle(action(Action::Left));
+        insta::assert_snapshot!(draw(&mut help, 120, 26));
+    }
+
+    #[test]
+    fn draws_what_the_app_is_and_where_it_keeps_its_files() {
+        let about = About {
+            build: build(),
+            system: System {
+                os: Some("macOS 26.0".to_owned()),
+                kernel: Some("Darwin 25.0.0".to_owned()),
+                arch: None,
+            },
+            files: Some(Files {
+                home: PathBuf::from("/home/me"),
+                config: PathBuf::from("/home/me/.config/noc/config.toml"),
+                hosts: PathBuf::from("/home/me/.config/noc/hosts.toml"),
+                workspaces: PathBuf::from("/home/me/.local/share/noc/workspaces.toml"),
+                history: PathBuf::from("/home/me/.local/state/noc/history.toml"),
+                recent: PathBuf::from("/home/me/.local/state/noc/recent.toml"),
+                log: PathBuf::from("/var/log/noc/noc.log"),
+            }),
+        };
+        let mut help = Help::new(&Keymap::default(), true, &about);
+        help.handle(action(Action::NextField));
+        help.handle(action(Action::Home));
+        insta::assert_snapshot!(draw(&mut help, 120, 44));
     }
 }

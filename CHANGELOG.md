@@ -9,6 +9,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- The help (F1) takes 70% of the screen and has sections down its left, as the Configuration
+  dialog: About, with the version, the commit and build, the system, the license, and where the
+  settings, workspaces, history, and log are; and Keys, which folds, with the keys grouped by part
+  of the app (panels, text fields, search and renaming, the command line, lists and menus, menus
+  and dialogs, the viewer) and tips. It opens where it was left: the section, Keys open or folded,
+  and how far down the text was. Tab moves between the sections and the text, and a click chooses
+  a section.
 - `g x` opens the marked entries, or the one under the cursor, externally, as vim's `gx` does:
   with the program the desktop has for each, through `open` on macOS and `xdg-open` on Linux;
   a directory opens in the desktop's file manager. In Visual mode it opens the rows selected,
@@ -61,9 +68,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Ctrl+f in the panels and the lists stops with the last row at the bottom, then goes to it,
   rather than scroll on until only the last row shows at the top, as vim's does.
 - The help and the viewer stop scrolling with the end at the bottom, for `j`, Ctrl+e, and
-  Ctrl+f too. A dimmed `──── EOF ────` across the text follows the last line, a scroll bar
-  shows on the right when the text does not fit, and the position says `End` once the end
-  shows: the viewer's on top, the help's in its bottom frame.
+  Ctrl+f too. In the viewer a dimmed `──── EOF ────` across the text follows the last line; a
+  scroll bar shows on the right when the text does not fit, and the position says `End` once the
+  end shows: the viewer's on top, the help's in its bottom frame.
 - Text cut short ends or breaks with `»` instead of `~`, in a bold accent of the theme, so that it
   no longer looks like part of a name nor like mc's marker of a symlink to a directory; with
   icons, a Nerd Font double chevron. The accent shows everywhere text is cut: the panels, the

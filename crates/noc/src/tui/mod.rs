@@ -28,6 +28,7 @@ mod places;
 mod progress;
 mod pulldown;
 mod scroll;
+mod sidebar;
 mod sums;
 mod tab_menu;
 mod tabs;
@@ -57,10 +58,12 @@ use tokio::signal::unix::{Signal, SignalKind, signal};
 use tokio::sync::mpsc;
 
 use app::{App, Handover};
+use help::{About, Files};
 use keymap::{KeyState, Keyboard, Mode};
 use mouse::{Clicks, Press};
 use tasks::{Done, Tasks};
 
+use crate::about::{Build, System};
 use crate::context::Context;
 use crate::i18n::fl;
 
@@ -148,6 +151,8 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     let mut interrupt = signal(SignalKind::interrupt())?;
     // Reads /etc/localtime.
     let tz = tokio::task::spawn_blocking(TimeZone::system).await?;
+    // Reads the macOS version or the Linux distribution, for the About page of the help.
+    let system = tokio::task::spawn_blocking(System::current).await?;
     let restore = Restore::default();
     let mut terminal = ratatui::try_init()?;
     release_mouse_on_panic();
@@ -165,7 +170,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     let context = Arc::new(context);
     let (done_tx, mut done) = mpsc::unbounded_channel();
     let mut tasks = Tasks::start(Arc::clone(&context), done_tx).await;
-    let (mut app, effects) = start_app(&context, &start, &tz, asked.modes.keys());
+    let (mut app, effects) = start_app(&context, &start, (&tz, system), asked.modes.keys());
     tasks.run(effects);
     let result = loop {
         if app.quits() {
@@ -242,13 +247,13 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     result
 }
 
-/// The app with both panels on `start`, set up for this terminal, and the work it asks for
-/// first: the saved workspaces, the history, the places used last, and the volumes, which
-/// tell which one a panel is on.
+/// The app with both panels on `start`, set up for this terminal and `system`, and the work it
+/// asks for first: the saved workspaces, the history, the places used last, and the volumes,
+/// which tell which one a panel is on.
 fn start_app(
     context: &Context,
     start: &Path,
-    tz: &TimeZone,
+    (tz, system): (&TimeZone, System),
     keyboard: Keyboard,
 ) -> (App, Vec<app::Effect>) {
     let (mut app, mut effects) = App::new(start, &context.paths.home, &context.config());
@@ -262,6 +267,20 @@ fn start_app(
     app.set_time_zone(tz.clone());
     app.set_runtime_dir(context.paths.runtime_dir.clone());
     app.set_hosts(context.hosts());
+    let paths = &context.paths;
+    app.set_about(About {
+        build: Build::current(),
+        system,
+        files: Some(Files {
+            home: paths.home.clone(),
+            config: context.config_file.clone(),
+            hosts: context.hosts_file.clone(),
+            workspaces: paths.workspaces_file(),
+            history: paths.history_file(),
+            recent: paths.recent_file(),
+            log: paths.log_file(),
+        }),
+    });
     let path = std::env::var_os("PATH").unwrap_or_default();
     app.set_command_dirs(std::env::split_paths(&path).collect());
     (app, effects)

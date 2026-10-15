@@ -373,8 +373,46 @@ help-title = Help
 help-position = { $percent }%
 # The same, once the end of the help shows.
 help-position-end = End
-# In the middle of the dimmed line across the help after its last line.
-help-end = EOF
+# The sections down the left of the help, as the categories of the Configuration dialog. Keys
+# folds, and has a group for each part of the app; keep their names short, for a narrow column.
+help-section-about = About
+help-section-keys = Keys
+help-group-everywhere = Everywhere
+help-group-panels = Panels
+help-group-text = Text fields
+help-group-search = Search and renaming
+help-group-command-line = Command line
+help-group-lists = Lists and menus
+help-group-dialogs = Menus and dialogs
+help-group-viewer = Viewer
+help-group-tips = Tips
+# The About page: what the app is, what it was built from, what it runs on, and its files. Each
+# fact has a short name on the left.
+help-about-name = Noon Commander { $version }
+help-about-description = A two-panel terminal file manager in the style of Midnight Commander, for local files and SFTP alike, through the system's OpenSSH client.
+help-about-license = License
+help-about-source = Source
+help-about-build = Build
+help-about-commit = Commit
+# The commit, when the sources it was built from had changes not in it.
+help-about-commit-dirty = { $commit }, with changes
+help-about-commit-time = Commit time
+help-about-target = Target
+help-about-profile = Profile
+help-about-features = Features
+help-about-system = System
+help-about-os = OS
+help-about-kernel = Kernel
+help-about-arch = Architecture
+help-about-files = Files
+help-about-config = Settings
+help-about-hosts = Host settings
+help-about-workspaces = Workspaces
+help-about-history = History
+help-about-recent = Recent places
+help-about-log = Log
+# A fact that could not be found.
+help-about-unknown = unknown
 help-everywhere = Everywhere
 help-panels = Panels
 help-panels-visual = Panels in Visual mode
@@ -541,16 +579,16 @@ help-search-abort = Give the search up and go back to where it started
 help-search-next = The next match; with nothing typed, the last search
 help-search-next-match = The next match
 help-search-prev = The previous match
-help-dialog-up = Previous button; in this help, one line up
-help-dialog-down = Next button; in this help, one line down
-help-dialog-left = Previous button
-help-dialog-right = Next button
+help-dialog-up = Previous button; in this help, the section above, or one line up
+help-dialog-down = Next button; in this help, the section below, or one line down
+help-dialog-left = Previous button; in this help, back to the sections, then up to Keys, and fold it
+help-dialog-right = Next button; in this help, open Keys, or go to the text
 help-dialog-page-up = The first field or button; in a list or this help, one page up
 help-dialog-page-down = The last field or button; in a list or this help, one page down
 help-dialog-home = The first field or button; in a list or this help, the top
 help-dialog-end = The last field or button; in a list or this help, the end
-help-next-field = Next field or button
-help-prev-field = Previous field or button
+help-next-field = Next field or button; in this help, the sections or the text
+help-prev-field = Previous field or button; in this help, the sections or the text
 help-confirm = Press the button with the focus
 help-toggle = Switch the check box, or press the button
 help-dialog-cancel = Cancel, or close this help

@@ -20,6 +20,7 @@ use super::edit::Registers;
 use super::glyphs::{self, categories};
 use super::keymap::{Action, Context, Mode, Resolved, Typed};
 use super::mouse::{Pointer, Press, Scroll};
+use super::sidebar::{self, Sidebar};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -294,7 +295,8 @@ pub(crate) struct Configuration {
 /// Where the categories and the settings were drawn.
 #[derive(Debug, Default)]
 struct Drawn {
-    categories: Vec<Rect>,
+    /// The categories shown, by their index.
+    categories: Vec<(usize, Rect)>,
     /// The settings shown, by their rows: each row, and its value.
     settings: Vec<(usize, Rect, Rect)>,
     /// Their scroll bar, if they do not fit.
@@ -714,7 +716,8 @@ impl Configuration {
             .drawn
             .categories
             .iter()
-            .position(|row| row.contains(at));
+            .find(|(_, row)| row.contains(at))
+            .map(|(index, _)| *index);
         let setting = self
             .drawn
             .settings
@@ -826,18 +829,16 @@ impl Configuration {
             height: inner.height - HINT_ROWS - 1,
             ..inner
         };
-        let sidebar = self.render_sidebar(frame, body, theme, colors);
-        let x = sidebar.right();
-        for y in body.y..body.bottom() {
-            let line = Line::styled(glyphs::COLUMN.to_string(), theme.dialog);
-            frame.render_widget(line, Rect::new(x, y, 1, 1));
-        }
-        let content = Rect::new(
-            x + 2,
-            body.y,
-            body.right().saturating_sub(x + 2),
-            body.height,
-        );
+        let names = self.category_names();
+        let sidebar = Sidebar {
+            rows: &names,
+            width: sidebar::width(&names),
+            chosen: self.category,
+            focused: self.focus == Focus::Sidebar,
+        };
+        let sidebar = sidebar::render(frame, body, sidebar, theme, colors);
+        self.drawn.categories = sidebar.rows;
+        let (x, content) = (sidebar.line, sidebar.content);
         self.render_settings(frame, content, theme, colors);
         draw_separator(frame, inner, body.bottom(), colors, theme);
         // The line between the categories and the settings meets it.
@@ -870,16 +871,9 @@ impl Configuration {
         }
     }
 
-    /// The categories down the left of `body`; returns where they are.
-    fn render_sidebar(
-        &mut self,
-        frame: &mut Frame<'_>,
-        body: Rect,
-        theme: &Theme,
-        colors: Colors,
-    ) -> Rect {
-        let names: Vec<String> = self
-            .categories
+    /// The names of the categories, as the sidebar shows them.
+    fn category_names(&self) -> Vec<String> {
+        self.categories
             .iter()
             .map(|category| {
                 if self.icons {
@@ -888,36 +882,7 @@ impl Configuration {
                     format!(" {} ", category.title)
                 }
             })
-            .collect();
-        let width = names
-            .iter()
-            .map(|name| cells::width(name))
-            .max()
-            .unwrap_or(0);
-        let width = u16::try_from(width).unwrap_or(u16::MAX).min(body.width / 3);
-        let area = Rect { width, ..body };
-        for (index, name) in names.iter().enumerate() {
-            let Ok(y) = u16::try_from(index) else { break };
-            if y >= area.height {
-                break;
-            }
-            let styles = match (index == self.category, self.focus == Focus::Sidebar) {
-                (true, true) => (colors.focused_style(), theme.truncated_cursor),
-                (true, false) => (theme.dialog_title.bold(), theme.truncated_dialog),
-                (false, _) => (theme.dialog, theme.truncated_dialog),
-            };
-            let text = cells::fit(
-                name,
-                usize::from(width),
-                Align::Left,
-                styles,
-                theme.glyphs.marks,
-            );
-            let row = Rect::new(area.x, area.y + y, width, 1);
-            frame.render_widget(Line::from(text).style(styles.0), row);
-            self.drawn.categories.push(row);
-        }
-        area
+            .collect()
     }
 
     /// The settings of the chosen category in `area`, scrolled to the cursor, with a scroll

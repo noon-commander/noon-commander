@@ -965,7 +965,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   arrows a line, Ctrl+f/Ctrl+b and PgDn/PgUp a page but for the two rows that vim keeps, Space/`f`
   and `b` a whole page, as less, Ctrl+d/Ctrl+u and `d`/`u` half a page, rounded down as vim's
   'scroll'; unlike vim's, every key down stops with the end at the bottom, where a dimmed line
-  across the text, `──── EOF ────`, follows the last line, as the help does too (`noc-scroll` has
+  across the text, `──── EOF ────`, follows the last line (`noc-scroll` has
   the steps of both and the scroll bar, [ADR 0023](adr/0023-paging-stops-at-the-end.md)); `g g`/`G`
   and Home/End the ends, and F3, F10, `q`, `i`, or Esc to close; F1 or `g ?` shows the help over
   it.
@@ -1211,9 +1211,21 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   menu takes Alt and a letter as its hotkey instead. Keys are written with `crokey` names. User
   overrides of the keymap are planned. The F-key bar is generated from the keymap in the mode and
   context of the next key, and so is the help screen (F1): the keys of each mode and context, with
-  what they do, for what the app can do already; a prompt from ssh shows over it. It scrolls as
-  the viewer does, with a scroll bar, `──── EOF ────` after its last line, and how far down it is
-  in its bottom frame.
+  what they do, for what the app can do already; a prompt from ssh shows over it. It takes 70% of
+  the width and of the height of the screen, and, as the Configuration dialog, lists its sections
+  on the left
+  (`tui/sidebar.rs`, which both draw): About, with the version, the build (`crate::about`, which
+  `noc debug version` reads too), the system, read once at start, and the files the app keeps; and
+  Keys, which folds, with a group for each part of the app (panels, text fields, search and
+  renaming, the command line, lists and menus, menus and dialogs, the viewer) and tips. It opens at
+  the top of About first, and then where it was when it closed last (`help::Spot`, which the app
+  keeps): the section, Keys open or folded, what had the keys, and how far down the text was.
+  Tab moves between the sections and the text; in the sections `j` and `k` choose, `l` or Enter
+  opens Keys or goes to the text, and `h` goes up to Keys and folds it; in the text `h` goes back.
+  A click chooses a section, and one on Keys opens or folds it. The text scrolls as the viewer
+  does, with the keys it does not take in the sections and with the wheel too, stopping with its
+  last line at the bottom, with no line after it, a scroll bar, and how far down it is in its
+  bottom frame.
 - **Text fields.** A text field (`dialog::Field`, and the command line) holds a `tui/edit.rs`
   `Editor`: the text, the cursor, and vim's modes over it. In Insert mode characters go in at the
   cursor, and Left, Right, Home, End, Shift+Left, Shift+Right, Backspace, Delete, Ctrl+w, Ctrl+u,

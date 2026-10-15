@@ -696,15 +696,15 @@ questions on the console.
 | --- | --- | :-: | --- | --- | --- | --- | --- |
 | Previous button; in the help and lists, one row up | `up` | ✅ | k<br>Up<br>Ctrl+p | Up<br>Ctrl+p (help, lists) | Up (help) | k<br>Up<br>Ctrl+p (help) | Up<br>k<br>Ctrl+p |
 | Next button; in the help and lists, one row down | `down` | ✅ | j<br>Down<br>Ctrl+n | Down<br>Ctrl+n (help, lists) | Down (help) | j<br>Down<br>Ctrl+n (help) | Down<br>j<br>Ctrl+n<br>Enter |
-| Previous button | `left` | ✅ | h<br>Left | Left | — | — | — |
-| Next button | `right` | ✅ | l<br>Right | Right | — | — | — |
+| Previous button; in the help, back to the sections, then up to Keys and fold it | `left` | ✅ | h<br>Left | Left | — | — | — |
+| Next button; in the help, open Keys, or go to the text | `right` | ✅ | l<br>Right | Right | — | — | — |
 | The first field or button; in the help and lists, one page up | `page_up` | ⏳ | Ctrl+b<br>PgUp | PgUp<br>Alt+v<br>b (help)<br>Backspace (help) | — | — | p<br>b<br>Ctrl+b |
 | The last field or button; in the help and lists, one page down | `page_down` | ⏳ | Ctrl+f<br>PgDn | PgDn<br>Ctrl+v<br>Space (help)<br>f (help) | — | — | n<br>f<br>Ctrl+f<br>Space |
 | The first field or button; in the help and lists, the first row | `home` | ⏳ | g g<br>Home | Home<br>A1<br>g (help)<br>Ctrl+Home (help)<br>Ctrl+PgUp (help)<br>Alt+< | — | — | Home<br>g |
 | The last field or button; in the help and lists, the last row | `end` | ⏳ | G<br>End | End<br>C1<br>G (help)<br>Ctrl+End (help)<br>Ctrl+PgDn (help)<br>Alt+> | — | — | End<br>G |
-| Next field or button | `next_field` | ✅ | Tab<br>Ctrl+i | Tab | — | — | — |
-| Previous field or button | `prev_field` | ✅ | Shift+Tab | Shift+Tab | — | — | — |
-| Press the focused button; from a text field or a check box, the default one; close the help | `confirm` | ✅ | Enter<br>Ctrl+m | Enter | Ctrl+Enter (default button) | Enter (confirm, help)<br>y (confirm) | — |
+| Next field or button; in the help, the sections or the text | `next_field` | ✅ | Tab<br>Ctrl+i | Tab | — | — | — |
+| Previous field or button; in the help, the sections or the text | `prev_field` | ✅ | Shift+Tab | Shift+Tab | — | — | — |
+| Press the focused button; from a text field or a check box, the default one; in the help, open the section, or close the help from its text | `confirm` | ✅ | Enter<br>Ctrl+m | Enter | Ctrl+Enter (default button) | Enter (confirm, help)<br>y (confirm) | — |
 | Switch the check box, choose the radio button, or press the focused button | `toggle` | ✅ | Space | Space | — | — | — |
 | Cancel; abort the job in front; close the help or the window | `cancel` | ⏳ | Esc<br>Ctrl+[<br>Ctrl+c<br>q<br>F10 | Esc<br>Esc Esc<br>F10<br>Ctrl+g<br>Ctrl+c (abort copy/delete) | Esc | Esc<br>Ctrl+[<br>Ctrl+c<br>n (confirm)<br>w (tasks) | Esc<br>q<br>Q<br>w<br>Ctrl+c |
 | Copy/move in background (in dialog) | — | ⏳ | — | Alt+b | — | — | — |
@@ -727,11 +727,13 @@ questions on the console.
 
 ## Help (`help`, Normal mode)
 
-g ? or F1: the keys of every mode and context, and notes on them, in Normal mode. It falls back to
-`dialog`, whose j, k, Ctrl+b, Ctrl+f, g g, G, Esc, and q scroll the help and close it, then to
-`global`; the keys of the other programs' help that do the same are there too. It adds the keys of
-the viewer: Ctrl+y, Ctrl+e, Ctrl+u, and Ctrl+d, as in vim, and Space, f, b, d, and u, as in less and
-ranger's pager, which scroll as in the viewer; Space presses no button here.
+g ? or F1: About, and the keys of every mode and context, grouped by part of the app, and tips, in
+Normal mode, in sections on the left, as the Configuration dialog. It opens where it was left. It
+falls back to `dialog`, whose j, k, Ctrl+b, Ctrl+f, g g, G, Esc, and q choose a section or scroll
+the help and close it, Tab moves between the sections and the text, h and l fold and open Keys,
+then to `global`; the keys of the other programs' help that do the same are there too. It adds the
+keys of the viewer: Ctrl+y, Ctrl+e, Ctrl+u, and Ctrl+d, as in vim, and Space, f, b, d, and u, as
+in less and ranger's pager, which scroll as in the viewer; Space presses no button here.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |

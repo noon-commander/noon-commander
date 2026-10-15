@@ -17,6 +17,7 @@ use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear};
+use unicode_width::UnicodeWidthChar as _;
 
 use super::cells::{self, Align, Cut, MTIME_WIDTH, Marks};
 use super::decor::{self, Decor};
@@ -149,6 +150,52 @@ pub(crate) struct View<'a> {
     pub(crate) tick: u64,
     pub(crate) now: SystemTime,
     pub(crate) tz: &'a TimeZone,
+    /// Quick search matches as fzf does (`ui.fuzzy_search`).
+    pub(crate) fuzzy: bool,
+}
+
+/// What quick search looks for, to show where the names on screen match it: the text, in
+/// lower case, anywhere in a name, or as fzf matches it.
+enum Finder {
+    Text(Vec<char>),
+    Fuzzy(Fuzzy),
+}
+
+impl Finder {
+    /// The characters of `name` that match, by their indexes, in order.
+    fn positions(&mut self, name: &str) -> Vec<usize> {
+        match self {
+            Self::Text(text) => text_positions(name, text),
+            Self::Fuzzy(fuzzy) => fuzzy.positions(name).unwrap_or_default(),
+        }
+    }
+}
+
+/// The characters of `name` that hold `text`, in lower case, ignoring case, each place it
+/// does, as quick search finds names that hold it.
+fn text_positions(name: &str, text: &[char]) -> Vec<usize> {
+    if text.is_empty() {
+        return Vec::new();
+    }
+    // A character may lower to several, each with the one it came from.
+    let lowered: Vec<(char, usize)> = name
+        .chars()
+        .enumerate()
+        .flat_map(|(index, c)| c.to_lowercase().map(move |lower| (lower, index)))
+        .collect();
+    let mut positions = Vec::new();
+    let mut at = 0;
+    while at + text.len() <= lowered.len() {
+        let window = &lowered[at..at + text.len()];
+        if window.iter().map(|&(c, _)| c).eq(text.iter().copied()) {
+            positions.extend(window.iter().map(|&(_, index)| index));
+            at += text.len();
+        } else {
+            at += 1;
+        }
+    }
+    positions.dedup();
+    positions
 }
 
 /// What a directory is sorted by. Directories always come first.
@@ -1076,6 +1123,20 @@ impl Panel {
         ranked
     }
 
+    /// What quick search looks for while it runs with something typed, to show where names
+    /// match it.
+    fn finder(&self, fuzzy: bool) -> Option<Finder> {
+        let text = self.search.as_ref()?.field.text();
+        if text.trim().is_empty() {
+            return None;
+        }
+        Some(if fuzzy {
+            Finder::Fuzzy(Fuzzy::names(text))
+        } else {
+            Finder::Text(text.to_lowercase().chars().collect())
+        })
+    }
+
     /// The name that quick search finds a row by: the name it shows.
     fn search_name(&self, index: usize) -> Option<String> {
         match self.row(index)? {
@@ -1612,6 +1673,7 @@ impl Panel {
         let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
         frame.render_widget(columns.header(self.sort, theme), line(inner.y));
         let visual = self.visual_rows();
+        let mut finder = self.finder(view.fuzzy);
         for (screen_row, index) in (self.window.top()..self.rows())
             .take(list_height)
             .enumerate()
@@ -1620,8 +1682,12 @@ impl Panel {
             let marked = matches!(row, Row::Entry(entry) if self.marked.contains(&entry.name));
             let cursor = (index == self.cursor).then_some(active);
             let selected = visual.as_ref().is_some_and(|rows| rows.contains(&index));
+            let found = match (&mut finder, self.search_name(index)) {
+                (Some(finder), Some(name)) => finder.positions(&name),
+                _ => Vec::new(),
+            };
             let text = row_style(
-                columns.row(row, self.shift, view),
+                columns.row(row, (self.shift, &found), view),
                 cursor,
                 (marked, selected),
                 theme,
@@ -1978,8 +2044,8 @@ impl DirColumns {
     }
 
     /// A row, with the name in the color of its kind, as mc highlights files, scrolled `shift`
-    /// cells left; and which of its spans are marks of a name cut short.
-    fn row(self, row: Row<'_>, shift: usize, view: &View<'_>) -> (Line<'static>, Vec<usize>) {
+    /// cells left, the characters of the name that quick search `found` in spans of their own.
+    fn row(self, row: Row<'_>, (shift, found): (usize, &[usize]), view: &View<'_>) -> Shown {
         const ALIGN: [Align; 3] = [Align::Left, Align::Right, Align::Left];
         let theme = view.theme;
         let [prefix, name] = shown_name(row, view.decor);
@@ -2002,10 +2068,17 @@ impl DirColumns {
         let styles = (Style::new(), Style::new());
         let cells = ["", &size, &time];
         let (_, rest, cut) = self.join(cells, ALIGN, styles, view.theme.glyphs.marks);
-        let (mut spans, mut marks) = name_spans(&prefix, &name, (self.name, shift), style, view);
-        marks.extend(cut.into_iter().map(|index| spans.len() + index));
-        spans.extend(rest);
-        (Line::from(spans), marks)
+        let mut shown = name_spans(&prefix, &name, (self.name, shift), (style, found), view);
+        let after = shown.spans.len();
+        shown
+            .marks
+            .extend(cut.into_iter().map(|index| after + index));
+        shown.spans.extend(rest);
+        Shown {
+            line: Line::from(shown.spans),
+            marks: shown.marks,
+            found: shown.found,
+        }
     }
 }
 
@@ -2017,47 +2090,166 @@ fn shown_name(row: Row<'_>, decor: Decor) -> [String; 2] {
     }
 }
 
+/// A row as drawn, before [`row_style`] gives it its colors, with the indexes of its spans that
+/// are marks of a name cut short, and of those that show what quick search found.
+struct Shown {
+    line: Line<'static>,
+    marks: Vec<usize>,
+    found: Vec<usize>,
+}
+
+/// The spans of a name cell, with the indexes of those that are marks, and of those that show
+/// what quick search found.
+#[derive(Default)]
+struct NameSpans {
+    spans: Vec<Span<'static>>,
+    marks: Vec<usize>,
+    found: Vec<usize>,
+}
+
+/// Which characters of a text a part of its cell shows.
+#[derive(Clone, Copy)]
+enum Shows {
+    Nothing,
+    /// From character `start` of the text on, after `skip` blanks; blanks after what it shows
+    /// show nothing, as the characters they stand for differ.
+    From {
+        start: usize,
+        skip: usize,
+    },
+    /// The last `count` characters of the text, at its end.
+    Last(usize),
+}
+
+impl NameSpans {
+    /// Puts `part` of a cell of `text` in `style`, cut in spans where it goes from characters
+    /// that quick search `found` to others, as `shows` says which of them it shows.
+    fn push(&mut self, part: &str, style: Style, shows: Shows, (text, found): (&[char], &[bool])) {
+        let chars: Vec<char> = part.chars().collect();
+        let source = |index: usize| {
+            let at = match shows {
+                Shows::From { start, skip } if index >= skip => start + index - skip,
+                Shows::Last(count) if index + count >= chars.len() => {
+                    (text.len() + index).checked_sub(chars.len())?
+                }
+                Shows::Nothing | Shows::From { .. } | Shows::Last(_) => return None,
+            };
+            (text.get(at) == Some(&chars[index])).then_some(at)
+        };
+        let mut run = String::new();
+        let mut in_found = false;
+        for (index, &c) in chars.iter().enumerate() {
+            let hit = source(index).is_some_and(|at| found.get(at) == Some(&true));
+            if hit != in_found && !run.is_empty() {
+                self.run(std::mem::take(&mut run), style, in_found);
+            }
+            in_found = hit;
+            run.push(c);
+        }
+        if !run.is_empty() || chars.is_empty() {
+            self.run(run, style, in_found);
+        }
+    }
+
+    fn run(&mut self, text: String, style: Style, found: bool) {
+        if found {
+            self.found.push(self.spans.len());
+        }
+        self.spans.push(Span::styled(text, style));
+    }
+
+    /// Puts a mark of text cut short.
+    fn mark(&mut self, mark: &str, style: Style) {
+        self.marks.push(self.spans.len());
+        self.spans.push(Span::styled(mark.to_owned(), style));
+    }
+}
+
+/// How many characters at the end of `text` fit in `cells`, as [`cells::fit_cut`] keeps them.
+fn last_fitting(text: &[char], cells: usize) -> usize {
+    let mut used = 0;
+    text.iter()
+        .rev()
+        .take_while(|c| {
+            used += c.width().unwrap_or(0);
+            used <= cells
+        })
+        .count()
+}
+
+/// The index of the first character of `text` that starts at cell `cells` or after.
+fn first_from(text: &[char], cells: usize) -> usize {
+    let mut at = 0;
+    text.iter()
+        .take_while(|c| {
+            let before = at;
+            at += c.width().unwrap_or(0);
+            before < cells
+        })
+        .count()
+}
+
 /// The name cell, `cells` wide, in `style`, with the icon of its `prefix` in a toned-down
 /// `style`, and the indexes of the spans that are marks: `…` where a name that does not fit
 /// loses its middle, as in mc; scrolled `shift` cells left, `‹` over its first cell and `…`
 /// where it goes on past the right one. A cell cut so short that the prefix lost its end, mc's
-/// markers, and a scrolled name are drawn whole in `style`.
+/// markers, and a scrolled name are drawn whole in `style`. The characters of the name that
+/// quick search `found` get spans of their own.
 fn name_spans(
     prefix: &str,
     name: &str,
     (cells, shift): (usize, usize),
-    style: Style,
+    (style, found): (Style, &[usize]),
     view: &View<'_>,
-) -> (Vec<Span<'static>>, Vec<usize>) {
+) -> NameSpans {
     let text = format!("{prefix}{name}");
+    let chars: Vec<char> = text.chars().collect();
+    let offset = prefix.chars().count();
+    let mut hits = vec![false; chars.len()];
+    for &index in found {
+        if let Some(hit) = hits.get_mut(offset + index) {
+            *hit = true;
+        }
+    }
+    let of = (chars.as_slice(), hits.as_slice());
     let shown_marks = view.theme.glyphs.marks;
-    let mut spans = Vec::new();
-    let mut marks = Vec::new();
+    let mut spans = NameSpans::default();
     let fitted = if shift > 0 && cells > 0 {
         let (_, shown) = cells::split(&text, shift);
         let (_, rest) = cells::split(&shown, 1);
-        marks.push(spans.len());
-        spans.push(Span::styled(shown_marks.before, style));
+        spans.mark(shown_marks.before, style);
         let fitted = cells::fit_cut(&rest, cells - 1, Align::Left, Cut::End);
-        spans.push(Span::styled(fitted.head.clone(), style));
+        // The characters that start past the cells scrolled and the mark, after the blanks
+        // left of a wide character cut.
+        let start = first_from(&chars, shift + 1);
+        let skip = rest.chars().count().saturating_sub(chars.len() - start);
+        spans.push(&fitted.head, style, Shows::From { start, skip }, of);
         fitted
     } else {
         let fitted = cells::fit_cut(&text, cells, Align::Left, Cut::Middle);
         match fitted.head.strip_prefix(prefix) {
             Some(rest) if view.decor.icons() && !prefix.is_empty() => {
-                spans.push(Span::styled(prefix.to_owned(), Theme::icon(style)));
-                spans.push(Span::styled(rest.to_owned(), style));
+                spans.push(prefix, Theme::icon(style), Shows::Nothing, of);
+                let shows = Shows::From {
+                    start: offset,
+                    skip: 0,
+                };
+                spans.push(rest, style, shows, of);
             }
-            _ => spans.push(Span::styled(fitted.head.clone(), style)),
+            _ => spans.push(&fitted.head, style, Shows::From { start: 0, skip: 0 }, of),
         }
         fitted
     };
+    let tail = if fitted.cut == Some(Cut::Middle) {
+        Shows::Last(last_fitting(&chars, cells.saturating_sub(1) / 2))
+    } else {
+        Shows::Nothing
+    };
     if fitted.cut.is_some() {
-        marks.push(spans.len());
-        spans.push(Span::styled(fitted.mark(shown_marks), style));
+        spans.mark(fitted.mark(shown_marks), style);
     }
-    spans.push(Span::styled(fitted.tail, style));
-    (spans, marks)
+    spans.push(&fitted.tail, style, tail, of);
+    spans
 }
 
 /// Column widths of a directory: the name takes what the size and time columns leave, and
@@ -2234,16 +2426,21 @@ fn stem_chars(name: &str, dir: bool) -> usize {
     }
 }
 
-/// `text` as a row under the cursor, `Some(true)` in the active panel, `marked`, and `selected`
+/// `shown` as a row under the cursor, `Some(true)` in the active panel, `marked`, and `selected`
 /// by Visual mode. The cursor and marks replace the colors of the row, as in mc, and a selection
-/// reverses them; the cursor of the inactive panel only puts a background under them. The spans
-/// at `marks`, the marks of a name cut short, keep an accent over them.
+/// reverses them; the cursor of the inactive panel only puts a background under them. The marks
+/// of a name cut short keep an accent over them, and what quick search found its own colors.
 fn row_style(
-    (mut text, marks): (Line<'static>, Vec<usize>),
+    shown: Shown,
     cursor: Option<bool>,
     (marked, selected): (bool, bool),
     theme: &Theme,
 ) -> Line<'static> {
+    let Shown {
+        line: mut text,
+        marks,
+        found,
+    } = shown;
     let style = match (cursor == Some(true), marked, selected) {
         (true, true, _) => Some(theme.marked_cursor),
         (true, false, _) => Some(theme.cursor),
@@ -2269,6 +2466,11 @@ fn row_style(
     for index in marks {
         if let Some(span) = text.spans.get_mut(index) {
             span.style = span.style.patch(mark);
+        }
+    }
+    for index in found {
+        if let Some(span) = text.spans.get_mut(index) {
+            span.style = span.style.patch(theme.find_match);
         }
     }
     text
@@ -2409,6 +2611,7 @@ mod tests {
             tick: 0,
             now: UNIX_EPOCH + Duration::from_secs(NOW),
             tz: &TimeZone::UTC,
+            fuzzy: false,
         };
         terminal
             .draw(|frame| panel.render(frame, frame.area(), active, &view))
@@ -2740,6 +2943,93 @@ mod tests {
         panel.end_search(false);
         assert_eq!(panel.search_again("ab", true, false, 1), Some(true));
         assert_eq!(under_cursor(&panel), "cab", "round");
+    }
+
+    /// What each row of `panel`, active, drawn `width` cells wide in mc's colors, shows in the
+    /// colors of what quick search found, for the rows that show some.
+    fn found(panel: &mut Panel, width: u16, fuzzy: bool) -> Vec<String> {
+        let theme = Theme::mc_classic();
+        let mut terminal = Terminal::new(TestBackend::new(width, 10)).unwrap();
+        let hosts = |_: &str| HostState::default();
+        let view = View {
+            hosts: &hosts,
+            decor: Decor::new(false),
+            theme: &theme,
+            reload_key: None,
+            tick: 0,
+            now: UNIX_EPOCH + Duration::from_secs(NOW),
+            tz: &TimeZone::UTC,
+            fuzzy,
+        };
+        terminal
+            .draw(|frame| panel.render(frame, frame.area(), true, &view))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        (0..10)
+            .map(|y| {
+                (0..width)
+                    .filter(|&x| buffer[(x, y)].bg == Color::Green)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .filter(|row| !row.is_empty())
+            .collect()
+    }
+
+    #[test]
+    fn quick_search_shows_where_each_name_on_screen_holds_the_text() {
+        let mut panel = search_files(&["abab", "cab", "Tabs", "note"]);
+        panel.search_down(1);
+        assert!(found(&mut panel, 60, false).is_empty(), "nothing typed");
+        typed(&mut panel, "AB", false);
+        // On the cursor's row too, which is cab's, and ignoring case.
+        assert_eq!(found(&mut panel, 60, false), ["abab", "ab", "ab"]);
+        panel.end_search(false);
+        assert!(
+            found(&mut panel, 60, false).is_empty(),
+            "only while it runs"
+        );
+    }
+
+    #[test]
+    fn fuzzy_quick_search_shows_the_characters_it_matched() {
+        let mut panel = search_files(&["abab", "cab", "config.rs"]);
+        panel.search_down(1);
+        typed(&mut panel, "cb", true);
+        assert_eq!(found(&mut panel, 60, true), ["cb"]);
+        let mut panel = search_files(&["config.rs"]);
+        panel.search_down(1);
+        typed(&mut panel, "cfg", true);
+        assert_eq!(found(&mut panel, 60, true), ["cfg"]);
+    }
+
+    #[test]
+    fn a_name_cut_short_shows_what_it_found_where_it_shows() {
+        let name = format!("ab{}ab.md", "x".repeat(60));
+        let mut panel = search_files(&[&name]);
+        panel.search_down(1);
+        typed(&mut panel, "ab", false);
+        // The start and the end of the name show, not what it found in the middle.
+        assert_eq!(found(&mut panel, 40, false), ["abab"]);
+        typed(&mut panel, ".", false);
+        assert_eq!(found(&mut panel, 40, false), ["ab."]);
+        // Scrolled past the blank of the marker and the x, the mark over the a: the b after it
+        // shows what it found.
+        let mut panel = search_files(&[&format!("x{name}")]);
+        panel.shift_names(2);
+        panel.search_down(1);
+        typed(&mut panel, "ab", false);
+        assert_eq!(found(&mut panel, 40, false), ["b"]);
+    }
+
+    #[test]
+    fn text_positions_are_each_place_the_text_is_ignoring_case() {
+        let text = |text: &str| text.chars().collect::<Vec<_>>();
+        assert_eq!(text_positions("ReadMe.md", &text("e")), [1, 5]);
+        assert_eq!(text_positions("aaaa", &text("aa")), [0, 1, 2, 3]);
+        assert_eq!(text_positions("aaa", &text("aa")), [0, 1]);
+        assert_eq!(text_positions("ДОКУМЕНТ.txt", &text("кум")), [2, 3, 4]);
+        assert_eq!(text_positions("abc", &text("x")), Vec::<usize>::new());
     }
 
     #[test]

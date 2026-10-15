@@ -11,6 +11,7 @@
 
 use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
 use nucleo_matcher::{Config, Matcher, Utf32Str};
+use unicode_segmentation::UnicodeSegmentation as _;
 
 /// What was typed, ready to score texts with.
 #[derive(Debug)]
@@ -45,6 +46,42 @@ impl Fuzzy {
         let text = Utf32Str::new(text, &mut self.chars);
         self.pattern.score(text, &mut self.matcher)
     }
+
+    /// The characters of `text` that match, by their indexes, in order; `None` if it does not
+    /// match.
+    pub(crate) fn positions(&mut self, text: &str) -> Option<Vec<usize>> {
+        let haystack = Utf32Str::new(text, &mut self.chars);
+        let ascii = matches!(haystack, Utf32Str::Ascii(_));
+        let mut indices = Vec::new();
+        self.pattern
+            .indices(haystack, &mut self.matcher, &mut indices)?;
+        indices.sort_unstable();
+        indices.dedup();
+        let indices = indices.into_iter().map(|index| index as usize);
+        // nucleo matches the bytes of a text whose graphemes start with ASCII, and else the
+        // first character of each grapheme.
+        let positions = if ascii {
+            let chars: Vec<usize> = text.char_indices().map(|(byte, _)| byte).collect();
+            indices
+                .filter_map(|byte| chars.binary_search(&byte).ok())
+                .collect()
+        } else {
+            let graphemes: Vec<(usize, usize)> = text
+                .graphemes(true)
+                .scan(0, |at, grapheme| {
+                    let chars = grapheme.chars().count();
+                    let start = *at;
+                    *at += chars;
+                    Some((start, chars))
+                })
+                .collect();
+            indices
+                .filter_map(|index| graphemes.get(index))
+                .flat_map(|&(start, chars)| start..start + chars)
+                .collect()
+        };
+        Some(positions)
+    }
 }
 
 #[cfg(test)]
@@ -72,6 +109,25 @@ mod tests {
             .into_iter()
             .map(|(_, text)| text.to_owned())
             .collect()
+    }
+
+    #[test]
+    fn positions_are_those_of_the_characters_that_match() {
+        let mut fuzzy = Fuzzy::names("cfg");
+        assert_eq!(fuzzy.positions("config.rs"), Some(vec![0, 3, 5]));
+        assert_eq!(fuzzy.positions("src"), None);
+        // A grapheme of two characters takes both; the characters after it count on.
+        let mut fuzzy = Fuzzy::names("ét");
+        assert_eq!(fuzzy.positions("caf\u{e9}.txt"), Some(vec![3, 5]));
+        assert_eq!(
+            fuzzy.positions("cafe\u{301} \u{e9}t\u{e9}"),
+            Some(vec![6, 7])
+        );
+        let mut fuzzy = Fuzzy::names("документ");
+        assert_eq!(fuzzy.positions("мой документ.txt"), Some((4..12).collect()));
+        let mut fuzzy = Fuzzy::names("'ab !x");
+        assert_eq!(fuzzy.positions("cab"), Some(vec![1, 2]));
+        assert_eq!(fuzzy.positions("xab"), None);
     }
 
     #[test]

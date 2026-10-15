@@ -21,6 +21,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   whose count then shows as `100+`; they and `program` (`rg`) are in the new Search category of
   the Configuration dialog. Hidden files are searched while the panels show them, and
   `.gitignore` is respected.
+- Quick search highlights where each name on screen matches what is typed: each place it holds
+  the text, or the letters that fuzzy search matched, on the cursor's row too.
 - The help (F1) takes 70% of the screen and has sections down its left, as the Configuration
   dialog: About, with the license and every fact of `noc debug version` (the build, the system,
   the terminal, and the external tools: the editor, zoxide, and ripgrep), and where the settings,

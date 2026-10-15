@@ -31,8 +31,9 @@ pub(crate) struct Theme {
     pub(crate) marked_cursor: Style,
     /// What quick search has matched so far.
     pub(crate) quick_search: Style,
-    /// What the search of a tree found in a line: apart from the cursor, so that it shows on
-    /// the cursor's row too, and from the dialog it is drawn on.
+    /// What a search found: in the lines of the search of a tree, and in the names that quick
+    /// search matches. Apart from the cursor, so that it shows on the cursor's row too, and from
+    /// the panels and the dialogs it is drawn on.
     pub(crate) find_match: Style,
     /// Regular file.
     pub(crate) file: Style,
@@ -877,11 +878,16 @@ mod tests {
     }
 
     #[test]
-    fn matches_found_stand_out_on_the_dialog_and_on_the_cursor() {
+    fn matches_found_stand_out_on_the_panels_the_dialogs_and_the_cursor() {
         for name in Theme::NAMES {
             for depth in [ColorDepth::TrueColor, ColorDepth::Indexed] {
                 let theme = Theme::by_name(name, depth).unwrap();
-                for (surface, style) in [("dialog", theme.dialog), ("cursor", theme.cursor)] {
+                let surfaces = [
+                    ("panel", theme.panel),
+                    ("dialog", theme.dialog),
+                    ("cursor", theme.cursor),
+                ];
+                for (surface, style) in surfaces {
                     let found = style.patch(theme.find_match);
                     assert_ne!(found, style, "{name} {depth:?}: {surface}");
                     assert!(
@@ -896,6 +902,7 @@ mod tests {
                 if on_cursor.bg.is_some() {
                     assert_ne!(on_cursor.bg, theme.cursor.bg, "{name} {depth:?}");
                     assert_ne!(on_cursor.bg, theme.dialog.bg, "{name} {depth:?}");
+                    assert_ne!(on_cursor.bg, theme.panel.bg, "{name} {depth:?}");
                 }
             }
         }

@@ -1153,13 +1153,16 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   from, with the rows on screen as they were before it; while nothing matches, the cursor stays
   there and the text as typed. Ctrl+g and Ctrl+t move where it searches from as vim's do, so that an
   edit after them searches on from the match before, and Enter stays on the match. The listing keeps
-  its order. The text is a field with a cursor, edited with the keys that every text field shares in
-  Insert mode (`input`): Left, Right, Shift+Left, Shift+Right, Home, End (and Ctrl+b, Ctrl+e, as on
-  vim's command line), Backspace, Delete, Ctrl+u, Ctrl+w, and Ctrl+r and a register; as on vim's
+  its order. While it runs, every name on screen shows where it matches in the colors of what is
+  found (`find_match`, as in the [search of a whole tree](#search-of-a-whole-tree)), the cursor's
+  too: each place it holds the text, or the letters fzf matched (`Fuzzy::positions`), in what of the
+  name shows. The text is a field with a cursor, edited with the keys that every text field shares
+  in Insert mode (`input`): Left, Right, Shift+Left, Shift+Right, Home, End (and Ctrl+b, Ctrl+e, as
+  on vim's command line), Backspace, Delete, Ctrl+u, Ctrl+w, and Ctrl+r and a register; as on vim's
   command line, Delete at the end of the text deletes the character before, Shift and Ctrl with Left
   and Right go by what spaces part. Unlike vim's, Backspace and Delete with nothing typed keep the
-  search open, as on the command line, so that one too many does not go to the parent directory.
-  As in vim, Enter (and Ctrl+j) ends the search: it searches once more from where it searches from,
+  search open, as on the command line, so that one too many does not go to the parent directory. As
+  in vim, Enter (and Ctrl+j) ends the search: it searches once more from where it searches from,
   with the count, and goes to the match, or says "Pattern not found", keeping the text for `n`
   either way; Esc or Ctrl+c (`abort`) gives it up and puts back the cursor and the rows on screen as
   they were when it started, keeping nothing for `n`. Ctrl+g goes to the next match down and Ctrl+t
@@ -1178,10 +1181,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   but in fuzzy search, which ranks the rows rather than go down them. Long names lose their middle,
   marked with `»` in an accent. Names are shown terminal-safe: control and bidi characters become
   `?`. Listings run in background tasks; a reply carries the generation of its request, so a stale
-  one is dropped.
-  If a directory cannot be read, the panel stays where it was and says why below the listing. Going
-  up puts the cursor on the directory just left. A panel shows a [`Location`](#locations), always a
-  directory.
+  one is dropped. If a directory cannot be read, the panel stays where it was and says why below the
+  listing. Going up puts the cursor on the directory just left. A panel shows a
+  [`Location`](#locations), always a directory.
 - <a id="command-line-of--and-"></a>**Command line of `!` and `:`** ([ADR
   0019](adr/0019-shell-command-line.md)). In a local panel, `!` opens a line above the F-key bar for
   a shell command, after a prompt with the panel's directory (`~` for home, its middle cut past a

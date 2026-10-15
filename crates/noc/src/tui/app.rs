@@ -6406,6 +6406,7 @@ impl App {
             tick: self.tick,
             now,
             tz,
+            fuzzy: self.config.ui.fuzzy_search,
         };
         if let Some(viewing) = &mut self.viewing {
             let styles = ViewerStyles {

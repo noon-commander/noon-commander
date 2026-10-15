@@ -38,7 +38,9 @@ use super::help::Help;
 use super::history::{HistoryEvent, HistoryWindow};
 use super::jobs::{JobsEvent, JobsList, Row};
 use super::jump::{JumpEvent, JumpMenu};
-use super::keymap::{Action, Context, Extra, Hints, KeyState, Keymap, Mode, Resolved, Typed};
+use super::keymap::{
+    Action, Context, Extra, Hints, KeyState, Keyboard, Keymap, Mode, Resolved, Typed,
+};
 use super::menu::{LocationMenu, MenuEvent};
 use super::mouse::{Pointer, Press, Scroll};
 use super::panel::{
@@ -1024,6 +1026,11 @@ impl App {
     /// Shows times in `tz`.
     pub(crate) fn set_time_zone(&mut self, tz: TimeZone) {
         self.tz = tz;
+    }
+
+    /// Reads keys as a terminal that sends them as `keyboard` says.
+    pub(crate) fn set_keyboard(&mut self, keyboard: Keyboard) {
+        self.keymap = Keymap::new(keyboard);
     }
 
     /// What turns keys into actions.

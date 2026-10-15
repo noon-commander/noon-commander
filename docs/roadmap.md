@@ -137,7 +137,8 @@
       `ui.keymap`, one modelled on mc ([ADR 0022](adr/0022-vim-modes.md)): Normal, Insert, and
       Visual mode in the panels, the lists, the dialogs, and the text fields; vim's motions,
       operators, registers, counts, and undo in text fields; Visual mode and a jump list
-      (Ctrl+o, Tab) in the panels; the mode and the command typed on a line above the F-key
+      (Ctrl+o, Ctrl+i) in the panels, where Tab goes to the other panel if the terminal tells it
+      from Ctrl+i; the mode and the command typed on a line above the F-key
       bar, and the cursor's shape
 - [ ] `.` repeats the last change, in text fields and of files
 - [ ] Yanks copied to the system clipboard through OSC 52, behind a setting

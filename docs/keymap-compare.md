@@ -69,7 +69,10 @@ Keys are written the same way in every column, whatever notation the source uses
   other F-keys, so that the Linux console's Shift+F9 would arrive as F16.
 - noc binds Ctrl+[ wherever it binds Esc, Ctrl+m wherever it binds Enter, and Ctrl+i wherever
   it binds Tab: terminals send them as Esc, Enter, and Tab, but tell them apart where they speak
-  the kitty keyboard protocol.
+  the kitty keyboard protocol. The noc column lists the keys of such a terminal. In the panels,
+  Tab and Ctrl+i do different things there: Tab goes to the other panel, as in mc, and Ctrl+i
+  forward through the jump list, as in vim. Without the protocol Tab is Ctrl+i, so Tab does what
+  Ctrl+i does, and nothing where Ctrl+i does nothing.
 
 Status, of noc as a whole:
 
@@ -135,9 +138,10 @@ A count goes before a motion, a mark, n, or N, and repeats it: 3j goes three row
 g g, it goes to the row of that number, 5G to the fifth; before g t, to the tab of that number, 2g t
 to the second. Each tab keeps a jump list, as vim's windows do: changing the directory, G, g g, n,
 N, and a quick search that finds a match put where it was in the list, even when they stay on the
-row, as in vim, but a directory that cannot be read does not. Ctrl+o goes back through it, and Tab
-forward again, as Ctrl+i does, since terminals send Tab as Ctrl+i; a count goes that many jumps, and
-one past the end of the list goes nowhere, as in vim. The rows scroll as vim's window does, with
+row, as in vim, but a directory that cannot be read does not. Ctrl+o goes back through it, and
+Ctrl+i forward again; without the kitty keyboard protocol, Tab too, which such terminals send as
+Ctrl+i, and which goes to the other panel where they tell them apart. A count goes that many jumps,
+and one past the end of the list goes nowhere, as in vim. The rows scroll as vim's window does, with
 five rows kept above and below the cursor, as vim's defaults.vim sets 'scrolloff': Ctrl+d and Ctrl+u
 scroll half a page and move the cursor as far, and Ctrl+f and Ctrl+b scroll a page less two rows,
 with a count that many pages at once, and put the cursor at its top or bottom, where mc's and Far's
@@ -160,12 +164,12 @@ section says: the commands of files act on the rows it selects, which become the
 | Open the directory under the cursor; nothing on a file, which the others open | `enter` | ✅ | l<br>Right<br>Enter<br>Ctrl+m | Enter<br>Ctrl+PgDn | Enter<br>Ctrl+PgDn | l<br>Right<br>o<br>Enter | Right<br>Enter<br>l |
 | Parent directory; nothing in / | `parent` | ✅ | h<br>Left<br>Backspace<br>Ctrl+h | Ctrl+PgUp | Ctrl+PgUp | h<br>Left | Left<br>h |
 | Back through the jump list, as vim's Ctrl+o: to the directory before, or to the row before G, g g, n, N, or a search (mc, yazi, ranger: the directory before in the history) | `jump_back` | ⏳ | Ctrl+o | Alt+y | — | H | H |
-| Forward again through the jump list, as vim's Ctrl+i (mc, yazi, ranger: the next directory in the history) | `jump_forward` | ⏳ | Tab<br>Ctrl+i | Alt+u | — | L | L |
+| Forward again through the jump list, as vim's Ctrl+i (mc, yazi, ranger: the next directory in the history) | `jump_forward` | ⏳ | Ctrl+i | Alt+u | — | L | L |
 | Read the directory again | `reload` | ✅ | R | Ctrl+r | Ctrl+r | — | R |
 | Stop loading or connecting | `cancel` | ✅ | Esc<br>Ctrl+[<br>Ctrl+c | — | — | — | Ctrl+c |
 | The pull-down menu | `pull_down` | ✅ | g m<br>F9 | F9 | F9 | — | — |
 | The pull-down menu, on the command that ran from it last | `pull_down_last` | ✅ | g M<br>Shift+F9 | Shift+F9 | Shift+F10 | — | — |
-| The other panel | `switch_panel` | ⏳ | Ctrl+w w<br>Ctrl+w Ctrl+w<br>Ctrl+w p | Tab<br>Ctrl+i | Tab | — | — |
+| The other panel | `switch_panel` | ⏳ | Ctrl+w w<br>Ctrl+w Ctrl+w<br>Ctrl+w p<br>Tab | Tab<br>Ctrl+i | Tab | — | — |
 | The left panel, wherever the panels were swapped | `focus_left` | ⏳ | Ctrl+w h | — | — | — | — |
 | The right panel, wherever the panels were swapped | `focus_right` | ⏳ | Ctrl+w l | — | — | — | — |
 | Swap the panels | `swap_panels` | ✅ | Ctrl+w x<br>Ctrl+w r | Ctrl+u | Ctrl+u | — | — |
@@ -435,7 +439,7 @@ it.
 | Leave Visual mode, and quit | `quit` | ⏳ | F10 | — | — | — | — |
 | Leave Visual mode, and change the location of the panel drawn on the left | `location_menu_left` | ⏳ | Alt+F1 | — | — | — | — |
 | Leave Visual mode, and change the location of the panel drawn on the right | `location_menu_right` | ⏳ | Alt+F2 | — | — | — | — |
-| Leave Visual mode, and go to the other panel | `switch_panel` | ⏳ | Ctrl+w w<br>Ctrl+w Ctrl+w<br>Ctrl+w p | — | — | — | — |
+| Leave Visual mode, and go to the other panel | `switch_panel` | ⏳ | Ctrl+w w<br>Ctrl+w Ctrl+w<br>Ctrl+w p<br>Tab | — | — | — | — |
 | Leave Visual mode, and go to the left panel, wherever the panels were swapped | `focus_left` | ⏳ | Ctrl+w h | — | — | — | — |
 | Leave Visual mode, and go to the right panel, wherever the panels were swapped | `focus_right` | ⏳ | Ctrl+w l | — | — | — | — |
 

@@ -56,7 +56,7 @@ use tokio::signal::unix::{Signal, SignalKind, signal};
 use tokio::sync::mpsc;
 
 use app::{App, Handover};
-use keymap::{KeyState, Mode};
+use keymap::{KeyState, Keyboard, Mode};
 use mouse::{Clicks, Press};
 use tasks::{Done, Tasks};
 
@@ -163,7 +163,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     let context = Arc::new(context);
     let (done_tx, mut done) = mpsc::unbounded_channel();
     let mut tasks = Tasks::start(Arc::clone(&context), done_tx).await;
-    let (mut app, effects) = start_app(&context, &start, &tz);
+    let (mut app, effects) = start_app(&context, &start, &tz, asked.modes.keys());
     tasks.run(effects);
     let result = loop {
         if app.quits() {
@@ -243,7 +243,12 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
 /// The app with both panels on `start`, set up for this terminal, and the work it asks for
 /// first: the saved workspaces, the history, the places used last, and the volumes, which
 /// tell which one a panel is on.
-fn start_app(context: &Context, start: &Path, tz: &TimeZone) -> (App, Vec<app::Effect>) {
+fn start_app(
+    context: &Context,
+    start: &Path,
+    tz: &TimeZone,
+    keyboard: Keyboard,
+) -> (App, Vec<app::Effect>) {
     let (mut app, mut effects) = App::new(start, &context.paths.home, &context.config());
     effects.push(app::Effect::Workspaces(app::WorkspaceChange::Load));
     effects.push(app::Effect::History(app::HistoryChange::Load));
@@ -251,6 +256,7 @@ fn start_app(context: &Context, start: &Path, tz: &TimeZone) -> (App, Vec<app::E
     // No menu asks for this generation.
     effects.push(app::Effect::ListPlaces { generation: 0 });
     app.set_color_depth(theme::ColorDepth::detect());
+    app.set_keyboard(keyboard);
     app.set_time_zone(tz.clone());
     app.set_runtime_dir(context.paths.runtime_dir.clone());
     app.set_hosts(context.hosts());
@@ -388,6 +394,15 @@ impl Modes {
         modes.enter()?;
         restore.modes.set(modes);
         Ok(modes)
+    }
+
+    /// How the terminal sends keys while the TUI has it.
+    fn keys(self) -> Keyboard {
+        if self.keyboard {
+            Keyboard::Kitty
+        } else {
+            Keyboard::Legacy
+        }
     }
 
     fn enter(self) -> io::Result<()> {

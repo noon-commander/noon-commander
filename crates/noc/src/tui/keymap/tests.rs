@@ -305,6 +305,74 @@ fn tab_and_ctrl_i_go_forward_where_ctrl_o_goes_back() {
         actions(&[Action::Complete, Action::Complete])
     );
     assert_eq!(typed((Mode::Normal, Context::CommandLine), &["tab"]), []);
+    assert_eq!(typed(VISUAL_PANEL, &["tab"]), []);
+}
+
+#[test]
+fn with_the_kitty_protocol_tab_switches_the_panels_and_ctrl_i_goes_forward() {
+    let keymap = Keymap::new(Keyboard::Kitty);
+    let typed = |place, keys: &[&str]| feed(&keymap, &mut KeyState::default(), place, keys);
+    assert_eq!(
+        typed(PANEL, &["ctrl-o", "tab", "ctrl-i"]),
+        actions(&[Action::JumpBack, Action::SwitchPanel, Action::JumpForward])
+    );
+    assert_eq!(
+        typed(VISUAL_PANEL, &["tab"]),
+        actions(&[Action::SwitchPanel])
+    );
+    assert_eq!(
+        typed((Mode::Normal, Context::Dialog), &["tab", "ctrl-i"]),
+        actions(&[Action::NextField, Action::NextField])
+    );
+    assert_eq!(
+        typed((Mode::Insert, Context::CommandLine), &["tab", "ctrl-i"]),
+        actions(&[Action::Complete, Action::Complete])
+    );
+}
+
+#[test]
+fn the_help_shows_tab_where_it_does_what_it_does() {
+    let keys = |keyboard, mode, action| {
+        Keymap::new(keyboard)
+            .help(mode, Context::Panel)
+            .into_iter()
+            .find(|(bound, _)| *bound == action)
+            .map(|(_, keys)| keys)
+    };
+    let switch = "Ctrl+w w, Ctrl+w Ctrl+w, Ctrl+w p";
+    assert_eq!(
+        keys(Keyboard::Legacy, Mode::Normal, Action::SwitchPanel).as_deref(),
+        Some(switch)
+    );
+    assert_eq!(
+        keys(Keyboard::Legacy, Mode::Visual, Action::SwitchPanel).as_deref(),
+        Some(switch)
+    );
+    assert_eq!(
+        keys(Keyboard::Legacy, Mode::Normal, Action::JumpForward).as_deref(),
+        Some("Tab, Ctrl+i")
+    );
+    assert_eq!(
+        keys(Keyboard::Kitty, Mode::Normal, Action::SwitchPanel),
+        Some(format!("{switch}, Tab"))
+    );
+    assert_eq!(
+        keys(Keyboard::Kitty, Mode::Visual, Action::SwitchPanel),
+        Some(format!("{switch}, Tab"))
+    );
+    assert_eq!(
+        keys(Keyboard::Kitty, Mode::Normal, Action::JumpForward).as_deref(),
+        Some("Ctrl+i")
+    );
+    // The pull-down menu shows Ctrl+w w either way.
+    for keyboard in [Keyboard::Legacy, Keyboard::Kitty] {
+        assert_eq!(
+            Keymap::new(keyboard)
+                .key(Context::Panel, Action::SwitchPanel)
+                .as_deref(),
+            Some("Ctrl+w w")
+        );
+    }
 }
 
 #[test]

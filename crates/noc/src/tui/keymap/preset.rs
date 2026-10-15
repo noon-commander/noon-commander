@@ -3,6 +3,9 @@
 //! Each mode and context with its actions, and each action with its key sequences in crokey's
 //! syntax, the keys of a sequence apart; the help lists them in this order, and the pull-down
 //! menu shows an action's first key. The keys of `Global` are the same in every mode.
+//!
+//! The keys are those of a terminal that speaks the kitty keyboard protocol, where Ctrl+i
+//! arrives apart from Tab; elsewhere the keymap gives Tab what Ctrl+i does (`Keyboard`).
 
 use super::{Action, Context, Mode, Preset};
 
@@ -36,18 +39,18 @@ pub(super) const PRESET: Preset = &[
             (Action::End, &["shift-g", "end"]),
             (Action::Enter, &["l", "right", "enter", "ctrl-m"]),
             (Action::Parent, &["h", "left", "backspace", "ctrl-h"]),
-            // Tab and Ctrl+i are one key, as in vim, but where the terminal tells them apart.
             (Action::JumpBack, &["ctrl-o"]),
-            (Action::JumpForward, &["tab", "ctrl-i"]),
+            (Action::JumpForward, &["ctrl-i"]),
             (Action::Reload, &["shift-r"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c"]),
             // The pull-down menu
             (Action::PullDown, &["g m", "f9"]),
             (Action::PullDownLast, &["g shift-m", "shift-f9"]),
-            // Panels, as vim's windows.
+            // Panels, as vim's windows; Tab too, as in mc, where the terminal tells it from
+            // Ctrl+i.
             (
                 Action::SwitchPanel,
-                &["ctrl-w w", "ctrl-w ctrl-w", "ctrl-w p"],
+                &["ctrl-w w", "ctrl-w ctrl-w", "ctrl-w p", "tab"],
             ),
             (Action::FocusLeft, &["ctrl-w h"]),
             (Action::FocusRight, &["ctrl-w l"]),
@@ -154,7 +157,7 @@ pub(super) const PRESET: Preset = &[
             (Action::LocationMenuRight, &["alt-f2"]),
             (
                 Action::SwitchPanel,
-                &["ctrl-w w", "ctrl-w ctrl-w", "ctrl-w p"],
+                &["ctrl-w w", "ctrl-w ctrl-w", "ctrl-w p", "tab"],
             ),
             (Action::FocusLeft, &["ctrl-w h"]),
             (Action::FocusRight, &["ctrl-w l"]),

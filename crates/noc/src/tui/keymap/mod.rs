@@ -89,6 +89,17 @@ type Bound = &'static [(Action, &'static [&'static str])];
 /// A built-in preset: each mode and context with its bindings.
 type Preset = &'static [(Mode, Context, Bound)];
 
+/// Whether the terminal tells Ctrl+i from Tab. Both send the same byte, unless the terminal
+/// speaks the kitty keyboard protocol, which reports Ctrl+i apart.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum Keyboard {
+    /// Ctrl+i arrives as Tab, and Tab does what Ctrl+i does, as in vim.
+    #[default]
+    Legacy,
+    /// The kitty keyboard protocol: Tab and Ctrl+i do what the preset binds each to.
+    Kitty,
+}
+
 /// Bindings for every mode and context.
 #[derive(Debug, Clone)]
 pub(crate) struct Keymap {
@@ -273,11 +284,22 @@ pub(crate) struct Hints {
 
 impl Default for Keymap {
     fn default() -> Self {
-        Self::of(preset::PRESET)
+        Self::new(Keyboard::default())
     }
 }
 
 impl Keymap {
+    /// The preset, for a terminal that sends its keys as `keyboard` says.
+    pub(crate) fn new(keyboard: Keyboard) -> Self {
+        let mut keymap = Self::of(preset::PRESET);
+        if keyboard == Keyboard::Legacy {
+            for bindings in keymap.bindings.values_mut() {
+                bindings.0 = tab_as_ctrl_i(std::mem::take(&mut bindings.0));
+            }
+        }
+        keymap
+    }
+
     fn of(preset: Preset) -> Self {
         let mut bindings = HashMap::new();
         for (mode, context, bound) in preset {
@@ -881,6 +903,8 @@ const BACKSPACE: KeyCombination = KeyCombination::one_key(KeyCode::Backspace, Ke
 const CTRL_BRACKET: KeyCombination =
     KeyCombination::one_key(KeyCode::Char('['), KeyModifiers::CONTROL);
 const CTRL_H: KeyCombination = KeyCombination::one_key(KeyCode::Char('h'), KeyModifiers::CONTROL);
+const TAB: KeyCombination = KeyCombination::one_key(KeyCode::Tab, KeyModifiers::NONE);
+const CTRL_I: KeyCombination = KeyCombination::one_key(KeyCode::Char('i'), KeyModifiers::CONTROL);
 
 /// The same key without Alt, if `event` has Alt: any key but Esc, Enter and the arrows too, as an
 /// Esc and a quick key arrive without the kitty keyboard protocol.
@@ -916,6 +940,28 @@ fn parse_sequence(text: &str) -> Option<Sequence> {
         })
         .collect::<Option<_>>()?;
     (!sequence.is_empty()).then_some(sequence)
+}
+
+/// The bindings of a context as a terminal without the kitty keyboard protocol sends their keys:
+/// Ctrl+i arrives as Tab, so Tab does what Ctrl+i does, right before it in the help, and nothing
+/// where Ctrl+i does nothing. Ctrl+i keeps its own bindings, for a terminal that reports it
+/// apart without having said so.
+fn tab_as_ctrl_i(bound: Vec<(Sequence, Action)>) -> Vec<(Sequence, Action)> {
+    let mut legacy = Vec::with_capacity(bound.len());
+    for (sequence, action) in bound {
+        if sequence.contains(&TAB) {
+            continue;
+        }
+        if sequence.contains(&CTRL_I) {
+            let tab = sequence
+                .iter()
+                .map(|key| if *key == CTRL_I { TAB } else { *key })
+                .collect();
+            legacy.push((tab, action));
+        }
+        legacy.push((sequence, action));
+    }
+    legacy
 }
 
 /// Terminals send Shift+Tab as `BackTab`, never as Tab with Shift, so `shift-tab` means `backtab`.

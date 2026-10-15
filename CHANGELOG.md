@@ -35,6 +35,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Tab in the panels goes to the other panel, as in mc, where the terminal speaks the kitty
+  keyboard protocol and so tells Tab from Ctrl+i, which still goes forward through the jump list.
+  Elsewhere Tab is Ctrl+i, as before.
 - The scroll bars of the help and the Configuration dialog moved from a column inside onto the
   frame, which gives their text two more cells.
 - A menu of F9 taller than the screen, the list of jobs, and the list of checksums scroll as

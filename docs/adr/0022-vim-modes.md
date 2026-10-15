@@ -67,7 +67,7 @@ no registers.
   `Z` append. `"` names one wherever keys are commands, the panels and the lists too, so that the
   name never runs as a command, as vim never runs it. None reads or writes the system clipboard.
 - **The panels in vim's way**: `v` and `V` select rows in Visual mode, whose commands of files act
-  on the rows selected; Ctrl+o and Ctrl+i (Tab) go back and forth through a jump list per tab, of
+  on the rows selected; Ctrl+o and Ctrl+i go back and forth through a jump list per tab, of
   locations and of `G`, `g g`, and searches; Ctrl+w switches the panels, as vim's windows. The rows
   scroll as vim 9.1 scrolls a window, with the 'scrolloff' of its `defaults.vim`, five rows, fixed:
   Ctrl+d, Ctrl+u, Ctrl+f, and Ctrl+b scroll the rows and move the cursor as vim's do, rather than
@@ -75,6 +75,13 @@ no registers.
   the last row at the bottom rather than scroll on until it is alone at the top, which left a
   nearly empty panel; once the last row shows, Ctrl+f goes to it
   ([ADR 0023](0023-paging-stops-at-the-end.md)).
+- **Tab in the panels goes to the other panel, where the terminal tells it from Ctrl+i**, in
+  Normal and Visual mode, as mc's Tab does; Ctrl+i stays vim's. Without the kitty keyboard
+  protocol both send the same byte, so Tab is Ctrl+i there: it goes forward through the jump list,
+  and does nothing in Visual mode, as in vim. The preset lists the keys of a terminal with the
+  protocol; without it, the keymap drops the bindings of Tab and gives Tab those of Ctrl+i. Still
+  one preset, but the same key does different things in different terminals; the help, the key
+  hints, and the F-key bar show what it does in this one, and the pull-down menu keeps Ctrl+w w.
 - **Quick search is vim's incremental search**, not mc's: a character that matches nothing stays
   typed while the cursor goes back to where the search started, an edit searches again from there,
   Enter says "Pattern not found" and keeps the text for `n`, and Esc puts back the rows on screen

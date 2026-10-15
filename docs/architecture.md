@@ -920,10 +920,11 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   quick search that found a match put where the panel was on it, up to 100 places, even when they
   stay on the row, as vim's; a jump after Ctrl+o keeps the place Ctrl+o went to, and drops those
   after it. `n` with a count puts it there once, and one that finds nothing, never; nor does a
-  directory that cannot be read. Ctrl+o goes back, and Tab or Ctrl+i forward again, with a count
-  too, without changing the places, as vim's; after a jump that stayed on the row, the first Ctrl+o
-  stays there too. A count past the end of the list goes nowhere and keeps it as it is, as vim's; a
-  place in this directory moves the cursor at once, another one reads its directory.
+  directory that cannot be read. Ctrl+o goes back, and Ctrl+i forward again (Tab too without the
+  kitty keyboard protocol), with a count too, without changing the places, as vim's; after a jump
+  that stayed on the row, the first Ctrl+o stays there too. A count past the end of the list goes
+  nowhere and keeps it as it is, as vim's; a place in this directory moves the cursor at once,
+  another one reads its directory.
 - **F7 makes a directory**, as in mc: the dialog opens with the name under the cursor, in Insert
   mode with the cursor after it; Ctrl+u clears it. The name may be a relative path, an absolute
   one, or start with `~` for the home directory (the remote one on a host; `\~` for a name that
@@ -1129,7 +1130,11 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   stream of events takes crossterm's reader) and then pushes `DISAMBIGUATE_ESCAPE_CODES` and
   `REPORT_ALTERNATE_KEYS`, so that Alt with a symbol typed with Shift, such as Alt++, arrives as
   that symbol (Ctrl+[, Ctrl+m, and Ctrl+i then arrive apart from Esc, Enter, and Tab, so the keymap
-  binds them wherever it binds those); it pops them, and turns bracketed paste off, whenever another
+  binds them wherever it binds those). The preset lists the keys of such a terminal, where Tab in
+  the panels goes to the other panel and Ctrl+i forward through the jump list; the app builds its
+  keymap with `Keyboard::Kitty` there, and else with `Keyboard::Legacy`, which drops the bindings of
+  Tab and gives Tab those of Ctrl+i, the key it arrives as. The event loop pops the modes, and turns
+  bracketed paste off, whenever another
   program gets the terminal, on exit, and on a panic. With bracketed paste a paste arrives as one
   event: the command line takes it whole, line breaks included, and runs nothing; text fields, quick
   search, and the menus' filters take its characters without line breaks; panels, the pull-down

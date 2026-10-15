@@ -1,7 +1,9 @@
 //! The help screen: the keys of what the app can do, read from the keymap.
 
+use noc_scroll::{scrollbar, scrolled};
 use ratatui::Frame;
 use ratatui::layout::Rect;
+use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
@@ -29,7 +31,8 @@ pub(crate) struct Help {
     entries: Vec<Entry>,
     /// First screen row shown.
     offset: usize,
-    /// Rows the help had at the last render, and how many fit on screen.
+    /// Rows the help had at the last render, the one that marks its end among them, and how
+    /// many fit on screen.
     rows: usize,
     page: usize,
 }
@@ -108,36 +111,15 @@ impl Help {
         }
     }
 
-    /// Scrolls; `true` when the help should close.
+    /// Scrolls, never past its end at the bottom; `true` when the help should close.
     pub(crate) fn handle(&mut self, input: Resolved) -> bool {
         let Resolved::Action(action) = input else {
             return false;
         };
-        let last = self.rows.saturating_sub(self.page);
-        // As vim's Ctrl+e and Ctrl+f scroll on until the last row is at the top; the others stop
-        // with it at the bottom, but never go back up.
-        let past_end = matches!(action, Action::Down | Action::PageDown);
-        let limit = if past_end {
-            self.rows.saturating_sub(1)
-        } else {
-            last.max(self.offset)
-        };
-        self.offset = match action {
-            Action::Up => self.offset.saturating_sub(1),
-            Action::Down => self.offset + 1,
-            Action::PageUp => self.offset.saturating_sub(page_less_overlap(self.page)),
-            Action::PageDown => self.offset + page_less_overlap(self.page),
-            Action::WindowUp => self.offset.saturating_sub(self.page),
-            Action::WindowDown => self.offset + self.page,
-            Action::HalfPageUp => self.offset.saturating_sub((self.page / 2).max(1)),
-            Action::HalfPageDown => self.offset + (self.page / 2).max(1),
-            Action::Home => 0,
-            Action::End => last,
-            Action::Cancel | Action::Confirm => return true,
-            _ => self.offset,
+        if let Some(motion) = action.motion() {
+            self.offset = scrolled(motion, self.offset, self.rows, self.page);
         }
-        .min(if action == Action::End { last } else { limit });
-        false
+        matches!(action, Action::Cancel | Action::Confirm)
     }
 
     /// Draws the help over most of `area`.
@@ -147,7 +129,8 @@ impl Help {
         let colors = Colors::of(theme, false);
         let size = (width, height);
         let inner = draw_box(frame, area, size, &fl!("help-title"), colors, theme);
-        let width = usize::from(inner.width);
+        // The last column is the scroll bar's, after a gap.
+        let width = usize::from(inner.width.saturating_sub(2));
         let keys_width = self
             .entries
             .iter()
@@ -160,7 +143,7 @@ impl Help {
             .min(MAX_KEYS_WIDTH)
             .min(width / 2);
         let text_width = width.saturating_sub(keys_width + 1);
-        let lines: Vec<Line<'static>> = self
+        let mut lines: Vec<Line<'static>> = self
             .entries
             .iter()
             .flat_map(|entry| match entry {
@@ -192,9 +175,19 @@ impl Help {
                 Entry::Blank => vec![Line::default()],
             })
             .collect();
+        let end = cells::fit(&fl!("help-end"), width, Align::Center);
+        lines.push(Line::styled(end, theme.dialog.add_modifier(Modifier::DIM)));
         self.rows = lines.len();
         self.page = usize::from(inner.height).max(1);
         self.offset = self.offset.min(self.rows.saturating_sub(1));
+        let bar = Rect::new(inner.right().saturating_sub(1), inner.y, 1, inner.height);
+        scrollbar::render(
+            frame,
+            bar,
+            (self.rows, self.page, self.offset),
+            theme.dialog,
+        );
+        self.render_position(frame, inner, theme);
         for (index, line) in lines
             .into_iter()
             .skip(self.offset)
@@ -202,19 +195,29 @@ impl Help {
             .enumerate()
         {
             let y = inner.y + u16::try_from(index).unwrap_or(u16::MAX);
-            frame.render_widget(line, Rect::new(inner.x, y, inner.width, 1));
+            let width = inner.width.saturating_sub(2);
+            frame.render_widget(line, Rect::new(inner.x, y, width, 1));
         }
     }
-}
 
-/// How far vim's Ctrl+f and Ctrl+b scroll a window of `height` rows: all but the two rows
-/// they keep on screen, one in a window of four, none in a lower one, as vim's
-/// `get_scroll_overlap` has it.
-fn page_less_overlap(height: usize) -> usize {
-    match height {
-        0..=3 => height.max(1),
-        4 => 3,
-        _ => height - 2,
+    /// How far down the help is, in the frame below `inner`, on the right: the last row on
+    /// screen in percent, or that the end shows.
+    fn render_position(&self, frame: &mut Frame<'_>, inner: Rect, theme: &Theme) {
+        let bottom = (self.offset + self.page).min(self.rows);
+        let position = if bottom == self.rows {
+            fl!("help-position-end")
+        } else {
+            let percent = (bottom * 100).checked_div(self.rows).unwrap_or(100);
+            fl!("help-position", percent = percent.to_string())
+        };
+        let position = format!(" {position} ");
+        let width = u16::try_from(cells::width(&position)).unwrap_or(u16::MAX);
+        if width > inner.width || inner.bottom() >= frame.area().bottom() {
+            return;
+        }
+        let x = inner.right() - width;
+        let line = Line::styled(position, theme.dialog);
+        frame.render_widget(line, Rect::new(x, inner.bottom(), width, 1));
     }
 }
 
@@ -650,11 +653,6 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_f_keeps_two_rows_on_screen_as_vims_and_space_turns_a_whole_page_as_less() {
-        assert_eq!([1, 3, 4, 5, 23].map(page_less_overlap), [1, 3, 3, 3, 21]);
-    }
-
-    #[test]
     fn lists_what_the_app_can_do_by_mode_and_context() {
         let help = Help::new(&Keymap::default(), true);
         let has = |keys: &str, text: &str| {
@@ -791,24 +789,25 @@ mod tests {
         let mut help = Help::new(&Keymap::default(), true);
         let top = draw(&mut help, 60, 14);
         assert!(top.contains("Panels"), "{top}");
+        assert!(top.contains(" 1% ") && top.contains('█'), "{top}");
         assert!(!help.handle(action(Action::PageDown)));
         assert_ne!(draw(&mut help, 60, 14), top);
         help.handle(action(Action::End));
         let bottom = draw(&mut help, 60, 14);
         assert!(bottom.contains("Backspace takes back"), "{bottom}");
-        help.handle(action(Action::HalfPageDown));
-        help.handle(action(Action::WindowDown));
-        assert_eq!(
-            draw(&mut help, 60, 14),
-            bottom,
-            "Ctrl+d and Space stop at the end"
+        assert!(
+            bottom.contains("— end —") && bottom.contains(" End "),
+            "{bottom}"
         );
-        help.handle(action(Action::Down));
-        assert_ne!(
-            draw(&mut help, 60, 14),
-            bottom,
-            "Ctrl+e goes on until the last row is at the top, as vim's"
-        );
+        for key in [
+            Action::Down,
+            Action::PageDown,
+            Action::HalfPageDown,
+            Action::WindowDown,
+        ] {
+            help.handle(action(key));
+            assert_eq!(draw(&mut help, 60, 14), bottom, "{key:?} stops at the end");
+        }
         help.handle(action(Action::Home));
         assert_eq!(draw(&mut help, 60, 14), top);
         assert!(help.handle(action(Action::Cancel)));

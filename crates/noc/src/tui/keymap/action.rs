@@ -1,5 +1,7 @@
 //! What keys do: actions, the contexts they are bound in, and vim's modes.
 
+use noc_scroll::Motion;
+
 /// Which of vim's modes keys are typed in. The app says which from what has the keys: a text
 /// field in Insert mode takes characters as text, the panels and the lists take them as
 /// commands, and a selection takes the keys that act on it.
@@ -458,6 +460,23 @@ impl Action {
                 | Self::PasteRegister
                 | Self::InsertLiteral
         )
+    }
+
+    /// How the action moves a page of text, the help's and the viewer's, if it does.
+    pub(crate) fn motion(self) -> Option<Motion> {
+        Some(match self {
+            Self::Up => Motion::Up,
+            Self::Down => Motion::Down,
+            Self::PageUp => Motion::PageUp,
+            Self::PageDown => Motion::PageDown,
+            Self::WindowUp => Motion::WindowUp,
+            Self::WindowDown => Motion::WindowDown,
+            Self::HalfPageUp => Motion::HalfPageUp,
+            Self::HalfPageDown => Motion::HalfPageDown,
+            Self::Home => Motion::Home,
+            Self::End => Motion::End,
+            _ => return None,
+        })
     }
 }
 

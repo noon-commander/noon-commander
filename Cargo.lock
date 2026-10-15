@@ -1401,6 +1401,7 @@ dependencies = [
  "jiff",
  "noc-config",
  "noc-ops",
+ "noc-scroll",
  "noc-ssh",
  "noc-text",
  "noc-tools",
@@ -1445,6 +1446,13 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tokio-util",
+]
+
+[[package]]
+name = "noc-scroll"
+version = "0.2.0"
+dependencies = [
+ "ratatui",
 ]
 
 [[package]]
@@ -1503,6 +1511,7 @@ dependencies = [
  "i18n-embed",
  "i18n-embed-fl",
  "insta",
+ "noc-scroll",
  "noc-text",
  "noc-vfs",
  "ratatui",

@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use noc_config::{Borders, Config, MenuBar, Pause, TabBar, UiConfig, Wheel};
+use noc_scroll::scrollbar;
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::Modifier;
@@ -17,7 +18,6 @@ use super::dialog::{Colors, Field, draw_box, draw_separator};
 use super::edit::Registers;
 use super::keymap::{Action, Context, Mode, Resolved, Typed};
 use super::mouse::{Pointer, Press};
-use super::scrollbar;
 use super::theme::Theme;
 use crate::i18n::fl;
 

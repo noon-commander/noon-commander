@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 i18n-embed.workspace = true
 i18n-embed-fl.workspace = true
+noc-scroll.workspace = true
 noc-text.workspace = true
 noc-vfs.workspace = true
 ratatui.workspace = true

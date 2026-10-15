@@ -33,6 +33,7 @@ secrecy.workspace = true
 noc-config.workspace = true
 noc-ssh.workspace = true
 noc-ops.workspace = true
+noc-scroll.workspace = true
 noc-text.workspace = true
 noc-tools.workspace = true
 noc-vfs.workspace = true

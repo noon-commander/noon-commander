@@ -1,0 +1,15 @@
+[package]
+name = "noc-scroll"
+description = "Paging for Noon Commander: how far the keys of vim and less scroll a page, and a scroll bar"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+ratatui.workspace = true
+
+[lints]
+workspace = true

@@ -21,15 +21,16 @@ crates/
 ├── noc-ops/       job engine: copy, move, rename, delete, mkdir, checksums; progress, cancellation, conflicts
 ├── noc-tools/     external programs other than ssh: zoxide, the editor, the shell
 ├── noc-text/      terminal-safe text: sanitizing, widths in cells, fitting, wrapping
+├── noc-scroll/    paging text that ends: how far the page keys go, the scroll bar
 └── noc-viewer/    the F3 viewer: reading through the Vfs, scrolling, wrapping; its own text
 ```
 
 Dependencies point one way, toward the binary:
 
 ```text
-noc-config  noc-ssh  noc-tools  noc-text  noc-vfs    no other noc-* crate
+noc-config  noc-ssh  noc-tools  noc-text  noc-vfs  noc-scroll    no other noc-* crate
 noc-ops     → noc-vfs
-noc-viewer  → noc-vfs, noc-text
+noc-viewer  → noc-vfs, noc-text, noc-scroll
 noc         → all of them
 ```
 
@@ -38,8 +39,9 @@ and the UI turns them into messages. `noc-viewer` is the exception
 ([ADR 0015](adr/0015-viewer-and-text-crates.md)): a piece of the UI, with Fluent text of its own,
 that knows nothing of the keymap, the theme, or the app. The app maps its keys to the viewer's
 commands, gives it the styles of its theme, reads the file with `noc_viewer::read_start` in a
-task of its own, and closes the viewer itself. Code that two crates need goes into a crate of
-its own topic, such as `noc-text`, rather than into a common `core` crate.
+task of its own, and closes the viewer itself. `noc-scroll` draws too, the scroll bar, but has
+no text ([ADR 0023](adr/0023-paging-stops-at-the-end.md)). Code that two crates need goes into a
+crate of its own topic, such as `noc-text`, rather than into a common `core` crate.
 
 ssh runs only from `noc-ssh`, and every other program only from `noc-tools`
 ([ADR 0012](adr/0012-external-tools-and-zoxide.md)): without a shell, with `--` before paths,
@@ -920,7 +922,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   again.
 - **F3 views** the file under the cursor, as mc does (on a directory it opens it): the viewer
   (`noc-viewer`) takes the screen, with the path and the position (first line, lines, and how far
-  the last line on screen is) on top, and its own F-key bar. It reads the first 16 MiB, locally or
+  the last line on screen is, or `End` once the end shows) on top, a scroll bar on the right when
+  the text does not fit, and its own F-key bar. It reads the first 16 MiB, locally or
   through the host's shared session, in the background (closing the viewer stops that), and says so
   when the file is longer. Text is UTF-8 with invalid bytes replaced, tabs go to stops of 8, `\r\n`
   ends lines, and control characters are shown safely. Long lines wrap (F2 cuts them, and Left and
@@ -928,9 +931,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   wrapped, whatever the size of the file. Keys follow vim and less: `j`/`k`, Ctrl+e/Ctrl+y, and the
   arrows a line, Ctrl+f/Ctrl+b and PgDn/PgUp a page but for the two rows that vim keeps, Space/`f`
   and `b` a whole page, as less, Ctrl+d/Ctrl+u and `d`/`u` half a page, rounded down as vim's
-  'scroll'; as in vim, `j`, Ctrl+e, and Ctrl+f go on past the end until the last line is at the top,
-  while Ctrl+d, `d`, Space, and `f` stop with it at the bottom, as the help does too; `g g`/`G` and
-  Home/End the ends, and F3, F10, `q`, `i`, or Esc to close; F1 or `g ?` shows the help over it.
+  'scroll'; unlike vim's, every key down stops with the end at the bottom, where a dimmed
+  `— end —` follows the last line, as the help does too (`noc-scroll` has the steps of both and
+  the scroll bar, [ADR 0023](adr/0023-paging-stops-at-the-end.md)); `g g`/`G` and Home/End the
+  ends, and F3, F10, `q`, `i`, or Esc to close; F1 or `g ?` shows the help over it.
 - **F4 edits** the file under the cursor in `$VISUAL`, else `$EDITOR`, else `vi`, split at
   spaces (`code -w`), without a shell. A local file is edited where it is. A remote one is
   copied, with its times and permission bits, to `edit-PID-N-name` in the runtime directory
@@ -1158,7 +1162,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   menu takes Alt and a letter as its hotkey instead. Keys are written with `crokey` names. User
   overrides of the keymap are planned. The F-key bar is generated from the keymap in the mode and
   context of the next key, and so is the help screen (F1): the keys of each mode and context, with
-  what they do, for what the app can do already; a prompt from ssh shows over it.
+  what they do, for what the app can do already; a prompt from ssh shows over it. It scrolls as
+  the viewer does, with a scroll bar, `— end —` after its last line, and how far down it is in its
+  bottom frame.
 - **Text fields.** A text field (`dialog::Field`, and the command line) holds a `tui/edit.rs`
   `Editor`: the text, the cursor, and vim's modes over it. In Insert mode characters go in at the
   cursor, and Left, Right, Home, End, Shift+Left, Shift+Right, Backspace, Delete, Ctrl+w, Ctrl+u,

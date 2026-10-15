@@ -2,9 +2,9 @@
 source: crates/noc-viewer/src/view.rs
 expression: wrapped
 ---
-" f         1/2 100% "
+" f          1/2 End "
 "abcdefghijklmnopqrst"
 "uvwxyzabcdefghijklmn"
 "opqrstuvwx          "
 "short               "
-"                    "
+"      — end —       "

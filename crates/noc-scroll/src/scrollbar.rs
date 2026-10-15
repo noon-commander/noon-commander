@@ -10,12 +10,7 @@ const THUMB: &str = "█";
 
 /// Where the thumb is in a track of `track` rows for `total` rows of which `page` show from
 /// `offset`: its first row and its length. `None` when everything fits.
-pub(crate) fn thumb(
-    track: usize,
-    total: usize,
-    page: usize,
-    offset: usize,
-) -> Option<(usize, usize)> {
+pub fn thumb(track: usize, total: usize, page: usize, offset: usize) -> Option<(usize, usize)> {
     if track == 0 || total <= page {
         return None;
     }
@@ -27,7 +22,7 @@ pub(crate) fn thumb(
 
 /// Draws a scroll bar down the single column `area` for `total` rows of which `page` show
 /// from `offset`; nothing when everything fits.
-pub(crate) fn render(
+pub fn render(
     frame: &mut Frame<'_>,
     area: Rect,
     (total, page, offset): (usize, usize, usize),

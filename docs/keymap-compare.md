@@ -807,10 +807,9 @@ ranger has no list: Tab and Shift+Tab put the next and the previous choice in th
 i or F3, in Normal mode; it falls back to `global`. yazi has no viewer: it previews the file under
 the cursor beside the list. The ranger column has the keys of its pager, which shows files, the
 output of commands, and the log. The key that opens the viewer closes it too: F3, and i, as in
-ranger. Ctrl+f and Ctrl+b turn the page but for two rows, as in vim, and Ctrl+f, j, and Ctrl+e go
-on past the end until the last line is at the top, as vim's; Space, f, and b turn the whole page,
-and u and d half of it, as in less, and stop with the last line at the bottom, as Ctrl+d does in
-vim.
+ranger. Ctrl+f and Ctrl+b turn the page but for two rows, as in vim; Space, f, and b turn the whole
+page, and u and d half of it, as in less. Unlike vim's, every key down stops with the end of the
+text at the bottom, where a dimmed line marks it; the help scrolls the same way.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |

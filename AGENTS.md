@@ -74,12 +74,15 @@ client; the system `ssh` is the single source of truth for connections and auth.
 | `crates/noc-ops` | Job engine: copy, move, delete, mkdir, checksums; progress, cancellation, conflicts |
 | `crates/noc-tools` | External programs other than ssh: zoxide, the editor, the shell of `!` |
 | `crates/noc-text` | Terminal-safe text: sanitizing, widths in cells, fitting, wrapping |
+| `crates/noc-scroll` | Paging the help and the viewer: how far the page keys go, the scroll bar |
 | `crates/noc-viewer` | The F3 viewer: reading through the `Vfs`, scrolling, wrapping; its own Fluent text |
 
-- `noc-config`, `noc-ssh`, `noc-vfs`, `noc-tools`, `noc-text` depend on no other `noc-*` crate.
-- `noc-ops` → `noc-vfs`. `noc-viewer` → `noc-vfs`, `noc-text`. The binary → all.
-- Library crates: no UI code, no user-facing text. Exception: `noc-viewer`, which knows nothing
-  of the keymap, theme, or app (ADR 0015).
+- `noc-config`, `noc-ssh`, `noc-vfs`, `noc-tools`, `noc-text`, `noc-scroll` depend on no other
+  `noc-*` crate.
+- `noc-ops` → `noc-vfs`. `noc-viewer` → `noc-vfs`, `noc-text`, `noc-scroll`. The binary → all.
+- Library crates: no UI code, no user-facing text. Exceptions: `noc-viewer`, which knows nothing
+  of the keymap, theme, or app (ADR 0015); `noc-scroll`, which draws the scroll bar but has no
+  text (ADR 0023).
 - No `core` or `utils` crate. Shared code stays where it is used until a second crate needs it,
   then moves to a crate named for its topic.
 

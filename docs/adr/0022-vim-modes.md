@@ -70,7 +70,8 @@ no registers.
   Ctrl+d, Ctrl+u, Ctrl+f, and Ctrl+b scroll the rows and move the cursor as vim's do, rather than
   move the cursor by a page as mc's keys do, in the lists too. One exception: Ctrl+f stops with
   the last row at the bottom rather than scroll on until it is alone at the top, which left a
-  nearly empty panel; once the last row shows, Ctrl+f goes to it.
+  nearly empty panel; once the last row shows, Ctrl+f goes to it
+  ([ADR 0023](0023-paging-stops-at-the-end.md)).
 - **Quick search is vim's incremental search**, not mc's: a character that matches nothing stays
   typed while the cursor goes back to where the search started, an edit searches again from there,
   Enter says "Pattern not found" and keeps the text for `n`, and Esc puts back the rows on screen

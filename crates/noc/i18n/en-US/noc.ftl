@@ -364,6 +364,12 @@ dialog-use-current = Use current
 ## Help screen (src/tui/help). Prefix: help-. One line per key: say what it does, briefly.
 
 help-title = Help
+# In the bottom frame, on the right: how far the last row on screen is.
+help-position = { $percent }%
+# The same, once the end of the help shows.
+help-position-end = End
+# The dimmed line after the last line of the help.
+help-end = — end —
 help-everywhere = Everywhere
 help-panels = Panels
 help-panels-visual = Panels in Visual mode

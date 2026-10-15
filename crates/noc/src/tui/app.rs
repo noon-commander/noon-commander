@@ -12,6 +12,7 @@ use noc_config::{
     UiConfig, Wheel, Workspace, Workspaces,
 };
 use noc_ops::{Algorithm, Conflict, CopyOptions, Decision, Sum};
+use noc_scroll::Motion;
 use noc_tools::zoxide::Scored;
 use noc_vfs::{FileKind, Location, Metadata, RemotePath, Volume};
 use noc_viewer::{Command as ViewerCommand, Styles as ViewerStyles, Viewer};
@@ -1231,17 +1232,17 @@ impl App {
             return;
         };
         let (lines, page) = match press {
-            Press::WheelUp => (ViewerCommand::Up, ViewerCommand::PageUp),
-            Press::WheelDown => (ViewerCommand::Down, ViewerCommand::PageDown),
+            Press::WheelUp => (Motion::Up, Motion::PageUp),
+            Press::WheelDown => (Motion::Down, Motion::PageDown),
             Press::Click | Press::DoubleClick | Press::RightClick => return,
         };
         match self.config.ui.wheel {
             Wheel::Lines(count) => {
                 for _ in 0..count {
-                    viewing.viewer.handle(lines);
+                    viewing.viewer.handle(ViewerCommand::Scroll(lines));
                 }
             }
-            Wheel::Page => viewing.viewer.handle(page),
+            Wheel::Page => viewing.viewer.handle(ViewerCommand::Scroll(page)),
         }
     }
 
@@ -5984,17 +5985,10 @@ fn render_side(
 
 /// What the viewer does for `action`, if anything.
 fn viewer_command(action: Action) -> Option<ViewerCommand> {
+    if let Some(motion) = action.motion() {
+        return Some(ViewerCommand::Scroll(motion));
+    }
     Some(match action {
-        Action::Up => ViewerCommand::Up,
-        Action::Down => ViewerCommand::Down,
-        Action::PageUp => ViewerCommand::PageUp,
-        Action::PageDown => ViewerCommand::PageDown,
-        Action::WindowUp => ViewerCommand::WindowUp,
-        Action::WindowDown => ViewerCommand::WindowDown,
-        Action::HalfPageUp => ViewerCommand::HalfPageUp,
-        Action::HalfPageDown => ViewerCommand::HalfPageDown,
-        Action::Home => ViewerCommand::Home,
-        Action::End => ViewerCommand::End,
         Action::Left => ViewerCommand::Left,
         Action::Right => ViewerCommand::Right,
         Action::ToggleWrap => ViewerCommand::ToggleWrap,

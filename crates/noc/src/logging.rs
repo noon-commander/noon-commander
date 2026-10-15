@@ -18,7 +18,7 @@ pub(crate) fn init(paths: &Paths) {
     let Ok(file) = OpenOptions::new()
         .create(true)
         .append(true)
-        .open(paths.state_dir.join("noc.log"))
+        .open(paths.log_file())
     else {
         return;
     };

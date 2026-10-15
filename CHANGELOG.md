@@ -10,10 +10,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - The help (F1) takes 70% of the screen and has sections down its left, as the Configuration
-  dialog: About, with the version, the commit and build, the system, the license, and where the
-  settings, workspaces, history, and log are; and Keys, which folds, with the keys grouped by part
-  of the app (panels, text fields, search and renaming, the command line, lists and menus, menus
-  and dialogs, the viewer) and tips, each under its title in points. The parts of a section have
+  dialog: About, with the license and every fact of `noc debug version` (the build, the system,
+  the terminal, and the external tools: the editor and zoxide), and where the settings,
+  workspaces, history, and log are; and Keys, which folds, with the keys grouped by part of the
+  app (panels, text fields, search and renaming, the command line, lists and menus, menus and
+  dialogs, the viewer) and tips, each under its title in points. The parts of a section have
   their titles in bold on a line across, `── Panels ──`. It opens where it was left: the section,
   Keys open or folded, and how far down the text was. Tab moves between the sections and the
   text, and a click chooses a section.
@@ -30,8 +31,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   under the cursor with the count typed before Ctrl+k, and Esc closes it.
 - `noc debug version` prints one `key value` line per fact, for scripts and bug reports: the
   version, the compile-time features, the commit and its time in UTC, the target, the
-  operating system, the terminal with its colors and keyboard protocol, and the editor of F4.
-  The terminal is asked for its name, so kitty, which sets no `TERM_PROGRAM`, is named too.
+  operating system, the terminal with its colors and keyboard protocol, the editor of F4, and
+  zoxide, as `zoxide --version` says, or `not found`. The terminal is asked for its name, so
+  kitty, which sets no `TERM_PROGRAM`, is named too.
 - Scroll bars on the right of the frames wherever the rows do not fit, as in Far: the panels,
   the help, the Configuration dialog, the location and tab menus, the Workspaces, history, and
   zoxide windows, the menus of F9, the list of completions, the jobs, and the checksums; the

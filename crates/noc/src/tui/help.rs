@@ -19,7 +19,7 @@ use super::mouse::{Pointer, Press, Scroll};
 use super::panel::home_text;
 use super::sidebar::{self, Sidebar};
 use super::theme::Theme;
-use crate::about::{Build, System};
+use crate::about::{Build, Fact, Report, Topic, Value};
 use crate::i18n::fl;
 
 /// How much of the screen the help takes, in percent of its width and of its height.
@@ -29,8 +29,6 @@ const HEIGHT_PERCENT: u16 = 70;
 const MAX_KEYS_WIDTH: usize = 16;
 /// How far the groups of keys are indented under Keys in the sidebar.
 const GROUP_INDENT: &str = "  ";
-/// What `build.rs` and the build give for what they could not find.
-const UNKNOWN: &str = "unknown";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Entry {
@@ -50,11 +48,10 @@ enum Entry {
     Blank,
 }
 
-/// What the About page tells.
+/// What the About page tells: the report of `noc debug version`, and where the files are.
 #[derive(Debug, Clone)]
 pub(crate) struct About {
-    pub(crate) build: Build,
-    pub(crate) system: System,
+    pub(crate) report: Report,
     /// Where the files are, once the app knows.
     pub(crate) files: Option<Files>,
 }
@@ -63,8 +60,7 @@ impl About {
     /// What the app knows before it asks the system.
     pub(crate) fn new(build: Build) -> Self {
         Self {
-            build,
-            system: System::default(),
+            report: Report::new(build),
             files: None,
         }
     }
@@ -274,44 +270,44 @@ fn tips(fuzzy_search: bool) -> Vec<Entry> {
     entries
 }
 
-/// The About page.
+/// The About page: what the app is, every fact of the report of `noc debug version` under
+/// the title of its topic, and where the files are.
 fn about_entries(about: &About) -> Vec<Entry> {
-    let fact = |name: String, value: &str| Entry::Fact {
+    let report = &about.report;
+    let build = &report.build;
+    let fact = |name: String, value: Value| Entry::Fact {
         name,
-        value: if value == UNKNOWN {
-            fl!("help-about-unknown")
-        } else {
-            value.to_owned()
+        value: match value {
+            Value::Text(text) => text,
+            Value::Unknown => fl!("help-about-unknown"),
+            Value::Missing => fl!("help-about-missing"),
         },
     };
-    let known =
-        |name: String, value: &Option<String>| fact(name, value.as_deref().unwrap_or(UNKNOWN));
-    let build = &about.build;
-    let commit = if build.dirty == "yes" {
-        fl!("help-about-commit-dirty", commit = build.commit)
-    } else {
-        build.commit.to_owned()
-    };
-    let system = &about.system;
     let mut entries = vec![
         Entry::Heading(fl!("help-about-name", version = build.version)),
         Entry::Note(fl!("help-about-description")),
         Entry::Blank,
-        fact(fl!("help-about-license"), build.license),
-        fact(fl!("help-about-source"), build.repository),
-        Entry::Blank,
-        Entry::Heading(fl!("help-about-build")),
-        fact(fl!("help-about-commit"), &commit),
-        fact(fl!("help-about-commit-time"), build.commit_time),
-        fact(fl!("help-about-target"), build.target),
-        fact(fl!("help-about-profile"), build.profile),
-        fact(fl!("help-about-features"), &build.features_text()),
-        Entry::Blank,
-        Entry::Heading(fl!("help-about-system")),
-        known(fl!("help-about-os"), &system.os),
-        known(fl!("help-about-kernel"), &system.kernel),
-        known(fl!("help-about-arch"), &system.arch),
+        fact(
+            fl!("help-about-license"),
+            Value::Text(build.license.to_owned()),
+        ),
+        fact(
+            fl!("help-about-source"),
+            Value::Text(build.repository.to_owned()),
+        ),
     ];
+    let mut topic = None;
+    for each in Fact::ALL {
+        let Some(name) = fact_name(each) else {
+            continue;
+        };
+        if topic != Some(each.topic()) {
+            topic = Some(each.topic());
+            entries.push(Entry::Blank);
+            entries.extend(topic_title(each.topic()).map(Entry::Heading));
+        }
+        entries.push(fact(name, report.value(each)));
+    }
     if let Some(files) = &about.files {
         let path = |name: String, path: &Path| Entry::Fact {
             name,
@@ -329,6 +325,41 @@ fn about_entries(about: &About) -> Vec<Entry> {
         ]);
     }
     entries
+}
+
+/// The name of `fact` on the About page; `None` for the name and the version, which its first
+/// title has.
+fn fact_name(fact: Fact) -> Option<String> {
+    Some(match fact {
+        Fact::Name | Fact::Version => return None,
+        Fact::Features => fl!("help-about-features"),
+        Fact::Commit => fl!("help-about-commit"),
+        Fact::Dirty => fl!("help-about-dirty"),
+        Fact::CommitTime => fl!("help-about-commit-time"),
+        Fact::Target => fl!("help-about-target"),
+        Fact::Profile => fl!("help-about-profile"),
+        Fact::Os => fl!("help-about-os"),
+        Fact::Kernel => fl!("help-about-kernel"),
+        Fact::Arch => fl!("help-about-arch"),
+        Fact::Terminal => fl!("help-about-terminal-program"),
+        Fact::Term => fl!("help-about-term"),
+        Fact::Multiplexer => fl!("help-about-multiplexer"),
+        Fact::Colors => fl!("help-about-colors"),
+        Fact::Keyboard => fl!("help-about-keyboard"),
+        Fact::Editor => fl!("help-about-editor"),
+        Fact::Zoxide => fl!("help-about-zoxide"),
+    })
+}
+
+/// The title of `topic` on the About page; `None` for the name and the version.
+fn topic_title(topic: Topic) -> Option<String> {
+    Some(match topic {
+        Topic::App => return None,
+        Topic::Build => fl!("help-about-build"),
+        Topic::System => fl!("help-about-system"),
+        Topic::Terminal => fl!("help-about-terminal"),
+        Topic::Tools => fl!("help-about-tools"),
+    })
 }
 
 /// Where the help was when it closed, to open there again: the section, whether Keys was open,
@@ -1263,6 +1294,8 @@ mod tests {
     use ratatui::layout::Position;
 
     use super::*;
+    use crate::about::{self, Detected, Keyboard, System};
+    use crate::tui::ColorDepth;
 
     fn action(action: Action) -> Resolved {
         Resolved::Action(action)
@@ -1788,13 +1821,25 @@ mod tests {
 
     #[test]
     fn draws_what_the_app_is_and_where_it_keeps_its_files() {
-        let about = About {
+        let report = Report {
             build: build(),
             system: System {
                 os: Some("macOS 26.0".to_owned()),
                 kernel: Some("Darwin 25.0.0".to_owned()),
                 arch: None,
             },
+            terminal: about::Terminal {
+                program: Some("kitty 0.35.2".to_owned()),
+                term: Some("xterm-kitty".to_owned()),
+                multiplexer: "tmux",
+                colors: ColorDepth::TrueColor,
+                keyboard: Keyboard::Kitty,
+            },
+            editor: Some("nvim -p".to_owned()),
+            zoxide: Detected::Missing,
+        };
+        let about = About {
+            report,
             files: Some(Files {
                 home: PathBuf::from("/home/me"),
                 config: PathBuf::from("/home/me/.config/noc/config.toml"),
@@ -1808,6 +1853,6 @@ mod tests {
         let mut help = Help::new(&Keymap::default(), true, &about);
         help.handle(action(Action::NextField));
         help.handle(action(Action::Home));
-        insta::assert_snapshot!(draw(&mut help, 120, 44));
+        insta::assert_snapshot!(draw(&mut help, 120, 60));
     }
 }

@@ -60,7 +60,7 @@ use super::tasks::{HostHandle, JobEvent};
 use super::theme::{ColorDepth, Theme};
 use super::which_key;
 use super::workspaces::{self, WorkspacesEvent, WorkspacesWindow};
-use crate::about::Build;
+use crate::about::{Build, Detected};
 use crate::i18n::fl;
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -176,6 +176,9 @@ pub(crate) enum Effect {
     /// Open the local files and directories, absolute paths, with the programs of the desktop,
     /// one after another, and report the first that fails to [`App::open_failed`].
     Open(Vec<PathBuf>),
+    /// Ask zoxide what it is, for the About page of the help, and pass it to
+    /// [`App::set_zoxide`].
+    DetectZoxide,
     /// Ask zoxide for the directories that match `keywords`, without `exclude`, and pass them
     /// to [`App::jumps`].
     ZoxideQuery {
@@ -1027,6 +1030,15 @@ impl App {
     /// Tells `about` on the About page of the help.
     pub(crate) fn set_about(&mut self, about: About) {
         self.about = about;
+    }
+
+    /// Tells what zoxide is on the About page of the help, open or not.
+    pub(crate) fn set_zoxide(&mut self, zoxide: Detected) {
+        self.about.report.zoxide = zoxide;
+        if let Some(help) = &self.help {
+            let spot = help.spot();
+            self.help = Some(self.help_screen().at(spot));
+        }
     }
 
     /// Uses `hosts`, the settings from `hosts.toml`.
@@ -3716,11 +3728,15 @@ impl App {
         self.copy_choices.atomic = config.transfer.atomic_upload;
         self.parallel_jobs = config.transfer.parallel_jobs.get();
         self.config = config.clone();
+        let zoxide = old.zoxide.program != new.zoxide.program;
         let mut effects = vec![Effect::SaveConfig {
             old: Box::new(old),
             new: Box::new(new),
             config: Box::new(config),
         }];
+        if zoxide {
+            effects.push(Effect::DetectZoxide);
+        }
         effects.extend(self.start_queued());
         effects
     }
@@ -10344,6 +10360,41 @@ mod tests {
         app.handle(action(Action::Cancel));
         app.handle(action(Action::Help));
         assert!(screen_of(&mut app, 30).contains("Search and renaming"));
+    }
+
+    #[test]
+    fn about_shows_zoxide_once_it_answers_and_asks_again_for_another_program() {
+        let mut app = loaded();
+        app.handle(action(Action::Help));
+        screen_of(&mut app, 40);
+        app.handle(action(Action::End));
+        let text = screen_of(&mut app, 40);
+        assert!(text.contains("External tools"), "{text}");
+        app.set_zoxide(Detected::Found("zoxide 0.9.8".to_owned()));
+        let text = screen_of(&mut app, 40);
+        assert!(
+            text.contains("zoxide 0.9.8"),
+            "the open help shows it: {text}"
+        );
+        assert_eq!(app.context(), Context::Help);
+
+        let mut new = config();
+        new.zoxide.program = PathBuf::from("/opt/zoxide");
+        let effects = app.apply_config(config(), new);
+        assert!(
+            effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::DetectZoxide)),
+            "{effects:?}"
+        );
+        let mut new = config();
+        new.ui.show_hidden = !new.ui.show_hidden;
+        let effects = app.apply_config(config(), new);
+        assert!(
+            !effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::DetectZoxide))
+        );
     }
 
     #[test]

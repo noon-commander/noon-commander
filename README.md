@@ -161,6 +161,7 @@ multiplexer  none
 colors       truecolor
 keyboard     kitty
 editor       nvim
+zoxide       zoxide 0.9.8
 ```
 
 `features` lists the compile-time features, `+` on and `-` off. `commit-time` is in UTC;
@@ -170,8 +171,9 @@ answers with (XTVERSION), else what its environment variables say. `colors` is `
 where it does not. The terminal is asked on `/dev/tty`, so `noc debug version | pbcopy` asks
 it too. When stdin is not a terminal, or `noc` runs in the background, it is not asked: `keyboard`
 is `unchecked`, and `terminal` comes from the environment alone. `editor` is the command of F4:
-`$VISUAL`, else `$EDITOR`, else `vi`. Scripts can rely on the keys and their order; new keys
-are added at the end. For example, the commit:
+`$VISUAL`, else `$EDITOR`, else `vi`. `zoxide` is what the program of `[zoxide] program` says
+it is, or `not found`. The About page of the help (F1) shows the same facts. Scripts can rely on
+the keys and their order; new keys are added at the end. For example, the commit:
 `noc debug version | awk '$1 == "commit" { print $2 }'`.
 
 ### Install

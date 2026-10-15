@@ -39,7 +39,7 @@ pub(crate) enum ConfigCommand {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum DebugCommand {
-    /// Print the version, build, system, terminal, and editor, one `key value` line each.
+    /// Print the version, build, system, terminal, editor, and zoxide, one `key value` line each.
     Version,
     /// List the hosts from `ssh_config`.
     Hosts {

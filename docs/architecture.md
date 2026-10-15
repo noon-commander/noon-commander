@@ -602,7 +602,7 @@ noc                          the TUI (needs a terminal)
 noc -V, --version            the version: noc 0.2.0
 noc config init              write the commented default config.toml
 noc config paths             show the files and directories in use
-noc debug version            version, build, system, terminal, and editor, one `key value` line each
+noc debug version            version, build, system, terminal, editor, zoxide: one `key value` line each
 noc debug hosts [--resolve]  hosts from ssh_config with cached addresses; --resolve runs ssh -G
 noc debug ls [LOCATION]      a local path or host:path; without one, the mount points and hosts
 ```
@@ -611,7 +611,10 @@ noc debug ls [LOCATION]      a local path or host:path; without one, the mount p
 it, with `git`; without git they are `unknown`. `noc debug version` asks the terminal, in a
 blocking task: in raw mode on `/dev/tty`, and only when stdin is a terminal and `noc` is in the
 foreground, it sends XTVERSION, the kitty keyboard query, and primary device attributes, whose
-answer ends the wait (at most a second).
+answer ends the wait (at most a second). It asks zoxide too, `zoxide --version`, as `[zoxide]
+program` names it. The facts are `about::Fact::ALL`, in order, which the About page of the help
+shows too, each under the title of its `Topic`; the help names each in a `match` that a new fact
+does not compile without.
 
 `--config FILE` replaces `~/.config/noc/config.toml`. Logs go to
 `~/.local/state/noc/noc.log`; `NOC_LOG` sets the filter, for example
@@ -1213,9 +1216,11 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   context of the next key, and so is the help screen (F1): the keys of each mode and context, with
   what they do, for what the app can do already; a prompt from ssh shows over it. It takes 70% of
   the width and of the height of the screen, and, as the Configuration dialog, lists its sections
-  on the left
-  (`tui/sidebar.rs`, which both draw): About, with the version, the build (`crate::about`, which
-  `noc debug version` reads too), the system, read once at start, and the files the app keeps; and
+  on the left (`tui/sidebar.rs`, which both draw): About, with the license and the report of
+  `crate::about` that `noc debug version` prints too (the build; the system, read once at start;
+  the terminal, from its variables and the keyboard protocol the TUI found, without asking for its
+  name; and the external tools, the editor and zoxide, which is asked in the background at start
+  and again when `[zoxide] program` changes), and the files the app keeps; and
   Keys, which folds, with a group for each part of the app (panels, text fields, search and
   renaming, the command line, lists and menus, menus and dialogs, the viewer) and tips, each under
   its title in points after a bullet (`•`, `-` without icons). It opens at

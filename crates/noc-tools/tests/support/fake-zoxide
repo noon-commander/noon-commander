@@ -30,6 +30,9 @@ if [ -n "${FAKE_ZOXIDE_FAIL:-}" ]; then
 fi
 
 case ${1:-} in
+--version)
+    echo "zoxide 0.9.8-fake"
+    ;;
 add)
     shift
     [ "${1:-}" = -- ] || { echo "fake-zoxide: add without --" >&2; exit 2; }

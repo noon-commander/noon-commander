@@ -39,6 +39,7 @@ use super::dialog::{Ask, Reply};
 use super::panel::{ListRequest, Listed, Listing};
 use super::places::{self, Places};
 use super::tabs::PanelId;
+use crate::about::{self, Detected};
 use crate::context::Context;
 use crate::i18n::fl;
 
@@ -136,6 +137,8 @@ pub(crate) enum Done {
         entries: Result<Vec<(Vec<u8>, bool)>, String>,
         hosts: Vec<String>,
     },
+    /// What zoxide said it is, after an [`Effect::DetectZoxide`].
+    Zoxide(Detected),
     /// zoxide's answer to the [`Effect::ZoxideQuery`] `generation`, or why there is none.
     Jumps {
         generation: u64,
@@ -365,15 +368,13 @@ impl Tasks {
                     prefix,
                     with_dirs,
                 } => self.list_commands(generation, dirs, prefix, with_dirs),
+                Effect::DetectZoxide => self.detect_zoxide(),
                 Effect::ZoxideQuery {
                     generation,
                     keywords,
                     exclude,
                 } => self.query_zoxide(generation, keywords, exclude),
-                Effect::SaveConfig { old, new, config } => {
-                    self.context.set_config(*config);
-                    self.save_config(*old, *new);
-                }
+                Effect::SaveConfig { old, new, config } => self.save_config(*old, *new, *config),
                 Effect::Workspaces(change) => self.change_workspaces(change),
                 Effect::History(change) => {
                     let _ = self.history_changes.send(change);
@@ -454,9 +455,10 @@ impl Tasks {
         self.hosts.spawn(task.run(askpass));
     }
 
-    /// Writes to the config file the settings that differ between `old` and `new`, after
-    /// the changes before.
-    fn save_config(&self, old: Config, new: Config) {
+    /// Uses `config` from now on, and writes to the config file the settings that differ
+    /// between `old` and `new`, after the changes before.
+    fn save_config(&self, old: Config, new: Config, config: Config) {
+        self.context.set_config(config);
         let _ = self.config_saves.send((old, new));
     }
 
@@ -516,6 +518,14 @@ impl Tasks {
 
     /// Asks zoxide for the directories that match `keywords`, without `exclude`; a query that
     /// is still running is dropped, which stops zoxide.
+    fn detect_zoxide(&self) {
+        let zoxide = self.context.zoxide();
+        let done = self.done.clone();
+        tokio::spawn(async move {
+            let _ = done.send(Done::Zoxide(about::detect_zoxide(&zoxide).await));
+        });
+    }
+
     fn query_zoxide(&mut self, generation: u64, keywords: Vec<String>, exclude: Option<PathBuf>) {
         if let Some(previous) = self.zoxide_query.take() {
             previous.abort();

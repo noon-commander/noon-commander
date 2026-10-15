@@ -163,7 +163,13 @@ fn hosts_and_ls_are_only_debug_commands() {
 
 #[test]
 fn debug_version_has_one_line_per_key() {
-    let output = Sandbox::new(&[])
+    let sandbox = Sandbox::new(&[]);
+    let fake_zoxide = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../noc-tools/tests/support/fake-zoxide"
+    );
+    sandbox.write_config(&format!("[zoxide]\nprogram = {}\n", quote(fake_zoxide)));
+    let output = sandbox
         .command()
         .args(["debug", "version"])
         .env("VISUAL", "nano -w")
@@ -199,6 +205,7 @@ fn debug_version_has_one_line_per_key() {
             "colors",
             "keyboard",
             "editor",
+            "zoxide",
         ],
         "{text}"
     );
@@ -219,6 +226,16 @@ fn debug_version_has_one_line_per_key() {
     // stdin is not a terminal, so the terminal is not asked.
     assert_eq!(value("keyboard"), "unchecked");
     assert_eq!(value("editor"), "nano -w");
+    assert_eq!(value("zoxide"), "zoxide 0.9.8-fake");
+
+    sandbox.write_config("[zoxide]\nprogram = '/nonexistent/zoxide'\n");
+    let output = sandbox
+        .command()
+        .args(["debug", "version"])
+        .output()
+        .unwrap();
+    let text = stdout(&output);
+    assert!(text.ends_with("zoxide       not found\n"), "{text}");
 }
 
 #[test]

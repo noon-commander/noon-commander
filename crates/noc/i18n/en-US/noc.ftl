@@ -394,8 +394,8 @@ help-about-license = License
 help-about-source = Source
 help-about-build = Build
 help-about-commit = Commit
-# The commit, when the sources it was built from had changes not in it.
-help-about-commit-dirty = { $commit }, with changes
+# Whether the sources it was built from had changes not in the commit: yes or no.
+help-about-dirty = Modified
 help-about-commit-time = Commit time
 help-about-target = Target
 help-about-profile = Profile
@@ -404,6 +404,18 @@ help-about-system = System
 help-about-os = OS
 help-about-kernel = Kernel
 help-about-arch = Architecture
+help-about-terminal = Terminal
+# The terminal's name and version, as it answers or as its variables tell.
+help-about-terminal-program = Program
+help-about-term = TERM
+help-about-multiplexer = Multiplexer
+help-about-colors = Colors
+# Whether the terminal speaks the kitty keyboard protocol: kitty or legacy.
+help-about-keyboard = Keyboard
+# The programs other than ssh that Noon Commander runs, and what each says it is.
+help-about-tools = External tools
+help-about-editor = Editor
+help-about-zoxide = zoxide
 help-about-files = Files
 help-about-config = Settings
 help-about-hosts = Host settings
@@ -413,6 +425,8 @@ help-about-recent = Recent places
 help-about-log = Log
 # A fact that could not be found.
 help-about-unknown = unknown
+# A program that is not there.
+help-about-missing = not found
 help-everywhere = Everywhere
 help-panels = Panels
 help-panels-visual = Panels in Visual mode

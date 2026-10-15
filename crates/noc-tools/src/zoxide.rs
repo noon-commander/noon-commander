@@ -53,6 +53,14 @@ impl Zoxide {
         Ok(())
     }
 
+    /// What zoxide says it is, such as `zoxide 0.9.8`: `zoxide --version`, its first line.
+    /// A program that is not there is [`ToolError::is_not_found`].
+    pub async fn version(&self) -> Result<String, ToolError> {
+        let output = process::output(&self.program, ["--version"], TIMEOUT).await?;
+        let text = String::from_utf8_lossy(&output);
+        Ok(text.lines().next().unwrap_or_default().trim().to_owned())
+    }
+
     /// The directories that match all `keywords`, best first, without `exclude`, the
     /// directory the panel shows: `zoxide query --list --score --exclude <dir> -- <keywords>`.
     /// No keywords list every directory. zoxide leaves out directories that are gone.

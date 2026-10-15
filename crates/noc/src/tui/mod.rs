@@ -63,7 +63,7 @@ use keymap::{KeyState, Keyboard, Mode};
 use mouse::{Clicks, Press};
 use tasks::{Done, Tasks};
 
-use crate::about::{Build, System};
+use crate::about::{self, Build, Report, System};
 use crate::context::Context;
 use crate::i18n::fl;
 
@@ -95,6 +95,7 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
         } => tasks.run(app.created(panel, &location, result)),
         Done::Job { id, event } => tasks.run(app.job_event(id, event)),
         Done::Read { id, result } => app.read(id, result),
+        Done::Zoxide(zoxide) => app.set_zoxide(zoxide),
         Done::Connected {
             host,
             connection,
@@ -262,15 +263,29 @@ fn start_app(
     effects.push(app::Effect::Recent(app::RecentChange::Load));
     // No menu asks for this generation.
     effects.push(app::Effect::ListPlaces { generation: 0 });
+    effects.push(app::Effect::DetectZoxide);
     app.set_color_depth(theme::ColorDepth::detect());
     app.set_keyboard(keyboard);
     app.set_time_zone(tz.clone());
     app.set_runtime_dir(context.paths.runtime_dir.clone());
     app.set_hosts(context.hosts());
     let paths = &context.paths;
+    let keyboard_protocol = match keyboard {
+        Keyboard::Kitty => about::Keyboard::Kitty,
+        Keyboard::Legacy => about::Keyboard::Legacy,
+    };
     app.set_about(About {
-        build: Build::current(),
-        system,
+        report: Report {
+            system,
+            // Without the terminal's answer with its name, which the TUI does not ask for.
+            terminal: about::Terminal::from_env(
+                |name| std::env::var_os(name),
+                None,
+                keyboard_protocol,
+            ),
+            editor: about::editor_command(&Editor::from_env()),
+            ..Report::new(Build::current())
+        },
         files: Some(Files {
             home: paths.home.clone(),
             config: context.config_file.clone(),

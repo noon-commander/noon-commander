@@ -62,6 +62,18 @@ fn strings(words: &[&str]) -> Vec<String> {
 }
 
 #[tokio::test]
+async fn version_is_the_first_line_of_what_zoxide_says() {
+    let fake = Fake::new(&[]);
+    assert_eq!(fake.zoxide.version().await.unwrap(), "zoxide 0.9.8-fake");
+    assert_eq!(fake.invocations(), [strings(&["--version"])]);
+    let missing = Zoxide::new("/nonexistent/zoxide")
+        .version()
+        .await
+        .unwrap_err();
+    assert!(missing.is_not_found(), "{missing:?}");
+}
+
+#[tokio::test]
 async fn add_passes_the_directory_after_a_separator() {
     let fake = Fake::new(&[]);
     let dir = tempfile::tempdir().unwrap();

@@ -1,6 +1,6 @@
 ---
 source: crates/noc/src/commands/debug/version.rs
-expression: "report(&build, &system, &terminal, Some(\"nvim -p\"))"
+expression: text(&report)
 ---
 name         Noon Commander
 version      1.2.3
@@ -19,3 +19,4 @@ multiplexer  tmux
 colors       truecolor
 keyboard     kitty
 editor       nvim -p
+zoxide       zoxide 0.9.8

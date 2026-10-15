@@ -10,6 +10,7 @@ use std::process::ExitCode;
 use color_eyre::eyre::Result;
 use noc_config::Paths;
 use noc_ssh::discovery::Discovery;
+use noc_tools::zoxide::Zoxide;
 
 use crate::cli::DebugCommand;
 use crate::context::{Context, describe};
@@ -20,8 +21,15 @@ pub(super) async fn run(
     config_path: &Path,
 ) -> Result<ExitCode> {
     match command {
-        // It waits for the terminal's answers.
-        DebugCommand::Version => Ok(tokio::task::spawn_blocking(version::print).await?),
+        DebugCommand::Version => {
+            // zoxide as the settings name it, or by its name if they cannot be read.
+            let zoxide = noc_config::Config::load(config_path, &paths.home)
+                .map(|config| Zoxide::new(config.zoxide.program))
+                .unwrap_or_default();
+            let zoxide = crate::about::detect_zoxide(&zoxide).await;
+            // It waits for the terminal's answers.
+            Ok(tokio::task::spawn_blocking(move || version::print(zoxide)).await?)
+        }
         DebugCommand::Hosts { resolve } => {
             let context = Context::load(paths, config_path)?;
             hosts::run(&context, resolve).await

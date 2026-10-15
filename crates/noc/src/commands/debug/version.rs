@@ -2,32 +2,35 @@
 //! reports; a value that cannot be found is `unknown`. The keys are an interface: keep them and
 //! their order, and add new ones at the end. `noc --version` is clap's single line.
 
-use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::fs::{File, OpenOptions};
 use std::io::{self, IsTerminal as _, Read as _, Write as _};
-use std::os::unix::ffi::OsStrExt as _;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use noc_tools::editor::Editor;
 use rustix::termios::{OptionalActions, Termios, tcgetattr, tcgetpgrp, tcsetattr};
 
-use crate::about::{Build, System, known};
-use crate::tui::ColorDepth;
+use crate::about::{
+    Build, Detected, Fact, Keyboard, Report, System, Terminal, editor_command, known,
+};
 
-const UNKNOWN: &str = "unknown";
-
-/// Prints the report. Blocks while the terminal is asked.
-pub(super) fn print() -> ExitCode {
+/// Prints the report, with what zoxide said it is. Blocks while the terminal is asked.
+pub(super) fn print(zoxide: Detected) -> ExitCode {
     // The terminal is in raw mode while it is asked, so the report is ready before printing.
-    let editor = editor_command(&Editor::from_env());
-    let text = report(
-        &Build::current(),
-        &System::current(),
-        &Terminal::current(),
-        editor.as_deref(),
-    );
+    let answers = Answers::query();
+    let report = Report {
+        system: System::current(),
+        terminal: Terminal::from_env(
+            |name| std::env::var_os(name),
+            answers.name,
+            answers.keyboard,
+        ),
+        editor: editor_command(&Editor::from_env()),
+        zoxide,
+        ..Report::new(Build::current())
+    };
+    let text = text(&report);
     let mut stdout = std::io::stdout().lock();
     match stdout
         .write_all(text.as_bytes())
@@ -35,80 +38,6 @@ pub(super) fn print() -> ExitCode {
     {
         Ok(()) => ExitCode::SUCCESS,
         Err(_) => ExitCode::FAILURE,
-    }
-}
-
-/// What the terminal says of itself, and what it answers.
-struct Terminal {
-    /// The name the terminal answers with, else `TERM_PROGRAM` and `TERM_PROGRAM_VERSION`,
-    /// else a variable that only one terminal sets.
-    program: Option<String>,
-    term: Option<String>,
-    multiplexer: &'static str,
-    colors: ColorDepth,
-    keyboard: Keyboard,
-}
-
-/// Variables by which terminals that set no `TERM_PROGRAM` can be told.
-const TERMINAL_VARS: &[(&str, &str)] = &[
-    ("KITTY_WINDOW_ID", "kitty"),
-    ("ALACRITTY_WINDOW_ID", "Alacritty"),
-    ("GHOSTTY_RESOURCES_DIR", "ghostty"),
-    ("WEZTERM_PANE", "WezTerm"),
-    ("KONSOLE_VERSION", "Konsole"),
-];
-
-impl Terminal {
-    fn current() -> Self {
-        Self::from_env(|name| std::env::var_os(name), Answers::query())
-    }
-
-    fn from_env(var: impl Fn(&str) -> Option<OsString>, answers: Answers) -> Self {
-        let text = |name: &str| var(name).and_then(|value| known(value.as_bytes()));
-        let program =
-            answers.name.or_else(
-                || match (text("TERM_PROGRAM"), text("TERM_PROGRAM_VERSION")) {
-                    (Some(program), Some(version)) => Some(format!("{program} {version}")),
-                    (Some(program), None) => Some(program),
-                    (None, _) => TERMINAL_VARS
-                        .iter()
-                        .find(|(name, _)| var(name).is_some())
-                        .map(|(_, terminal)| (*terminal).to_owned()),
-                },
-            );
-        let multiplexer = [("TMUX", "tmux"), ("STY", "screen"), ("ZELLIJ", "zellij")]
-            .into_iter()
-            .find(|(name, _)| var(name).is_some())
-            .map_or("none", |(_, multiplexer)| multiplexer);
-        Self {
-            program,
-            term: text("TERM"),
-            multiplexer,
-            colors: ColorDepth::from_colorterm(var("COLORTERM").as_deref()),
-            keyboard: answers.keyboard,
-        }
-    }
-}
-
-/// Whether the terminal speaks the kitty keyboard protocol, which the TUI turns on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Keyboard {
-    Kitty,
-    Legacy,
-    /// The terminal gave no answer that could be read.
-    Unknown,
-    /// stdin is not a terminal, or noc runs in the background, so it was not asked.
-    Unchecked,
-}
-
-impl Keyboard {
-    fn name(self) -> &'static str {
-        match self {
-            Self::Kitty => "kitty",
-            Self::Legacy => "legacy",
-            Self::Unknown => UNKNOWN,
-            Self::Unchecked => "unchecked",
-        }
     }
 }
 
@@ -237,43 +166,17 @@ fn xtversion(reply: &[u8]) -> Option<String> {
     )
 }
 
-/// The command of F4, as `noc_tools` picks it.
-fn editor_command(editor: &Editor) -> Option<String> {
-    let mut words = vec![editor.program().to_string_lossy().into_owned()];
-    words.extend(editor.args().iter().cloned());
-    known(words.join(" ").as_bytes())
-}
-
-fn report(build: &Build, system: &System, terminal: &Terminal, editor: Option<&str>) -> String {
-    let features = build.features_text();
-    let colors = match terminal.colors {
-        ColorDepth::TrueColor => "truecolor",
-        ColorDepth::Indexed => "256",
-    };
-    let or_unknown = |value: &Option<String>| value.as_deref().unwrap_or(UNKNOWN).to_owned();
-    let fields = [
-        ("name", "Noon Commander".to_owned()),
-        ("version", build.version.to_owned()),
-        ("features", features),
-        ("commit", build.commit.to_owned()),
-        ("dirty", build.dirty.to_owned()),
-        ("commit-time", build.commit_time.to_owned()),
-        ("target", build.target.to_owned()),
-        ("profile", build.profile.to_owned()),
-        ("os", or_unknown(&system.os)),
-        ("kernel", or_unknown(&system.kernel)),
-        ("arch", or_unknown(&system.arch)),
-        ("terminal", or_unknown(&terminal.program)),
-        ("term", or_unknown(&terminal.term)),
-        ("multiplexer", terminal.multiplexer.to_owned()),
-        ("colors", colors.to_owned()),
-        ("keyboard", terminal.keyboard.name().to_owned()),
-        ("editor", editor.unwrap_or(UNKNOWN).to_owned()),
-    ];
-    let width = fields.iter().map(|(key, _)| key.len()).max().unwrap_or(0) + 2;
+/// Each fact of `report` on a line of its own: its key, and its value.
+fn text(report: &Report) -> String {
+    let width = Fact::ALL
+        .iter()
+        .map(|fact| fact.key().len())
+        .max()
+        .unwrap_or(0)
+        + 2;
     let mut text = String::new();
-    for (key, value) in fields {
-        let _ = writeln!(text, "{key:<width$}{value}");
+    for fact in Fact::ALL {
+        let _ = writeln!(text, "{:<width$}{}", fact.key(), report.value(fact).text());
     }
     text
 }
@@ -285,14 +188,21 @@ mod tests {
 
     use noc_tools::editor::Editor;
 
-    use super::{Answers, Build, ColorDepth, Keyboard, System, Terminal, editor_command, report};
+    use super::{
+        Answers, Build, Detected, Keyboard, Report, System, Terminal, editor_command, text,
+    };
+    use crate::tui::ColorDepth;
 
     fn env_with(vars: &[(&str, &str)], answers: Answers) -> Terminal {
         let vars: HashMap<String, OsString> = vars
             .iter()
             .map(|&(name, value)| (name.to_owned(), OsString::from(value)))
             .collect();
-        Terminal::from_env(|name| vars.get(name).cloned(), answers)
+        Terminal::from_env(
+            |name| vars.get(name).cloned(),
+            answers.name,
+            answers.keyboard,
+        )
     }
 
     fn terminal(vars: &[(&str, &str)]) -> Terminal {
@@ -330,7 +240,23 @@ mod tests {
             ],
             answers,
         );
-        insta::assert_snapshot!(report(&build, &system, &terminal, Some("nvim -p")));
+        let report = Report {
+            build,
+            system,
+            terminal,
+            editor: Some("nvim -p".to_owned()),
+            zoxide: Detected::Found("zoxide 0.9.8".to_owned()),
+        };
+        insta::assert_snapshot!(text(&report));
+        let missing = Report {
+            zoxide: Detected::Missing,
+            ..report
+        };
+        assert!(
+            text(&missing).ends_with("zoxide       not found\n"),
+            "{}",
+            text(&missing)
+        );
     }
 
     #[test]

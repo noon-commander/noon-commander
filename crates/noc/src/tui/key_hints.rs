@@ -3,6 +3,7 @@
 //! list that `/` filters. Enter closes it and runs the command under the cursor where the keys
 //! went before; Esc closes it.
 
+use noc_config::SearchMode;
 use noc_scroll::scrollbar::Bar;
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -60,9 +61,9 @@ pub(crate) struct KeyHintsWindow {
 
 impl KeyHintsWindow {
     /// A window on the commands of `hints` in `keymap`, each sequence whole, after the keys
-    /// the hints had typed; the command run from it gets `extra`. Its filter matches as fzf
-    /// does if `fuzzy` (`ui.fuzzy_search`).
-    pub(crate) fn new(keymap: &Keymap, hints: &Hints, extra: Extra, fuzzy: bool) -> Self {
+    /// the hints had typed; the command run from it gets `extra`. Its filter matches in `mode`
+    /// (`ui.search_mode`).
+    pub(crate) fn new(keymap: &Keymap, hints: &Hints, extra: Extra, mode: SearchMode) -> Self {
         let place = (hints.mode, hints.context);
         let rows: Vec<Row> = keymap
             .sequences(place, &hints.prefix)
@@ -77,7 +78,7 @@ impl KeyHintsWindow {
                 })
             })
             .collect();
-        let mut picker = Picker::new(fuzzy);
+        let mut picker = Picker::new(mode);
         picker.set_rows(
             rows.iter()
                 .map(|row| vec![row.keys.clone(), row.text.clone()])
@@ -210,7 +211,7 @@ mod tests {
         let mut state = KeyState::default();
         keymap.show_hints(&mut state, place);
         let hints = keymap.hints_of(&state, place).unwrap();
-        KeyHintsWindow::new(&keymap, &hints, extra, true)
+        KeyHintsWindow::new(&keymap, &hints, extra, SearchMode::Fzf)
     }
 
     fn press(window: &mut KeyHintsWindow, action: Action) -> KeyHintsEvent {

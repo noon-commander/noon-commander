@@ -220,9 +220,9 @@ grouped under headings:
   that panel, which becomes active.
 - `/` types in the filter, in Insert mode, which finds the places by name, path or mount point,
   alias, label, and address, and finds every one, hidden ones too; the rows of more go away while
-  the filter has text. With `ui.fuzzy_search` (the default) it matches them as
-  [fzf](#fuzzy-search) does, and the cursor goes to the best row; otherwise a row's text must
-  contain the filter, ignoring case, and the cursor goes to the first. The rows keep their order
+  the filter has text. It matches them in the [search mode](#search-modes): as fzf does, the
+  default, with the cursor on the best row; or a row's text must hold the filter, ignoring case,
+  or match it as a regular expression, with the cursor on the first. The rows keep their order
   either way. The filter is a text field, edited with the keys of `input`; Esc goes back to the
   rows with the filter kept. F4 edits the settings of the host under the cursor, F8 or `d d`
   disconnects it or stops connecting to it, `R` reads the volumes and hosts again, and Esc, `q`,
@@ -355,16 +355,16 @@ directories, which Enter opens in the active panel:
 ╚══════════════════════════════════════════════════════════════════╝
 ```
 
-- With `ui.fuzzy_search` (the default), the window asks
+- In the fzf and regex [search modes](#search-modes), the window asks
   `zoxide query --list --score --exclude <dir> --` once, for every directory but the panel's,
-  and what is typed filters them as [fzf](#fuzzy-search) does, best match first and those as
-  good in zoxide's order, as `zi` does with fzf. Otherwise what is typed is zoxide keywords, as
-  `z foo bar` in a shell; each change asks
+  and what is typed filters them: as fzf does, best match first and those as good in zoxide's
+  order, as `zi` does with fzf, or as a regular expression, in zoxide's order. In the plain
+  mode what is typed is zoxide keywords, as `z foo bar` in a shell; each change asks
   `zoxide query --list --score --exclude <dir> -- <keywords>` again, and a query still running
-  is dropped. Unlike the other [lists](#lists), the window opens in Insert mode, typing
-  keywords, as `zi` does: Esc goes to the rows, in Normal mode, where `/` types again and Esc
-  closes the window. Directories under the home directory show from `~`, and fuzzy search
-  matches them as shown.
+  is dropped. Alt+r going to or from the plain mode asks zoxide again. Unlike the other
+  [lists](#lists), the window opens in Insert mode, typing keywords, as `zi` does: Esc goes to
+  the rows, in Normal mode, where `/` types again and Esc closes the window. Directories under
+  the home directory show from `~`, and the window matches them as shown.
 - A local directory goes to zoxide (`zoxide add -- <dir>`) once the user does something in it,
   at most once a visit: a copy, move, or delete from it, a copy or move into it when a panel
   shows it, F7, F3 or F4 on a file, `g x`, checksums, or a jump there. Passing through, marking,
@@ -374,12 +374,32 @@ directories, which Enter opens in the active panel:
 - `zoxide.record` turns recording off; without zoxide the window says it is not installed,
   and recording is logged once and stops until `zoxide.program` changes.
 
-### Fuzzy search
+### Search modes
 
-Quick search, the filters of the location menu and the tab menu, the zoxide window, and the
-Workspaces window match what is typed as fzf does while `ui.fuzzy_search` is on, which it is by default
-([ADR 0016](adr/0016-fuzzy-search.md)). `tui/fuzzy.rs` wraps `nucleo-matcher`, Helix's port of
-fzf's algorithm:
+Quick search and the filters of the lists (the location menu, the tab menu, the zoxide window,
+the Workspaces window, the command history, and the list of the key hints) match what is typed
+in one of three modes ([ADR 0030](adr/0030-search-modes.md)). Each search and each window starts
+in `ui.search_mode`, `fzf` by default, and Alt+r switches its own, round: plain, fzf, regex. The
+mode is not kept: the next search or window starts in `ui.search_mode` again, but `n` and `N`
+match as the last search did. A glyph after the word of the prompt says which mode
+(`Search ~:`, `Filter ~:`, `Jump to ~:`; in `glyphs.rs`: nf-cod-whole_word,
+nf-md-approximately_equal, nf-cod-regex; `=`, `~`, `.*` without icons); crossed out, in the color
+of a broken link, while the text is no regular expression, when the lists say what is wrong with
+it in place of the rows. The [search of a whole tree](#search-of-a-whole-tree) starts in the
+search mode too, but has no fzf mode: there `fzf` is the regex mode, Alt+r switches between it
+and the plain one, and its Text field shows which (`Text .*:`). `tui/search_mode.rs` holds the
+`Matcher` of each mode:
+
+- **Plain**: the text anywhere, ignoring case. The rows keep their order, and quick search goes
+  down them as vim's search does.
+- **fzf**: as below.
+- **Regex**: a regular expression, built by the `noc-pattern` crate as the search of a tree
+  builds its patterns for fd: the `regex` crate, smart case (case counts only once the
+  expression has a capital letter that is not escaped, as `\S` is not), and the last line of
+  what the engine says is wrong. The rows keep their order, as in the plain mode.
+
+The fzf mode follows [ADR 0016](adr/0016-fuzzy-search.md). `tui/fuzzy.rs` wraps
+`nucleo-matcher`, Helix's port of fzf's algorithm:
 
 - The letters typed must come in order, not necessarily together: `cfg` finds `config.rs`.
   Runs of them, and letters that start a word (after a space, `/`, or punctuation, or a
@@ -404,11 +424,10 @@ panels ([ADR 0027](adr/0027-search-of-a-whole-tree.md),
 ```text
 ╔════════════════════════ Find in ~/src/noc ═════════════════════════╗
 ║ (*) Text   ( ) Files and dirs                                      ║
-║ Text:                                                              ║
+║ Text .*:                                                           ║
 ║ handle                                                             ║
 ║ Files:                                                             ║
 ║ *.rs !target                                                       ║
-║ [x] Regular expression                                             ║
 ║ [ ] Match case                                                     ║
 ╟────────────────────────────────────────────────────────────────────╢
 ║   crates/noc/src/tui/app.rs                                     2  ║
@@ -425,16 +444,18 @@ panels ([ADR 0027](adr/0027-search-of-a-whole-tree.md),
 ```
 
 - A `Dialog` (`tui/dialog.rs`) with a list (`Dialog::with_list`): two fields, the text and the
-  globs of the files, split at blanks, `!` before one leaving those out; two check boxes, the text
-  as a regular expression, and matching case rather than only when the text has a capital letter;
-  the rows; and four buttons. With no text it lists the files. The dialog keeps the cursor of the
+  globs of the files, split at blanks, `!` before one leaving those out; a check box, matching
+  case rather than only when the text has a capital letter; the rows; and four buttons. The text
+  is a regular expression in the regex and fzf [search modes](#search-modes) and as it is in the
+  plain one; Alt+r switches it for this dialog, and the glyph after `Text` says which
+  (`Dialog::set_label`). With no text it lists the files. The dialog keeps the cursor of the
   rows and scrolls them; `FindWindow` (`tui/find.rs`) keeps what was found and draws each row
   (`ListView`).
 - Two modes, radio buttons on a line above the fields (`Dialog::in_a_row`): Text, with ripgrep
   (`FindQuery::Lines`), and Files and dirs, with fd (`FindQuery::Names`), whose buttons are Go to
   and Cancel (`Dialog::set_buttons`). By name, fd matches the text against the names, as a
-  regular expression or as it is, with smart case or case, as the check boxes say; `!` globs go
-  to it as `--exclude`, and `noc_tools::fd::Names` keeps what the other globs let through and
+  regular expression or as it is, with smart case or case, as Alt+r and the check box say; `!`
+  globs go to it as `--exclude`, and `noc_tools::fd::Names` keeps what the other globs let through and
   finds where the name matches, with fd's regex engine, for `find_match`. On a host `fd` runs,
   or `fdfind` where the shell says 127. Its rows (`Finding::Entry`) are the files and
   directories, each with its icon and its path, which loses its start when too long
@@ -450,7 +471,7 @@ panels ([ADR 0027](adr/0027-search-of-a-whole-tree.md),
   search has a generation, so the reports of an earlier one are dropped; the dialog holds the
   `CancellationToken` of the last, so a new search or closing the dialog stops it.
 - Its keys are those of dialogs (contexts `find_input` in a field, `find` elsewhere): it opens in
-  Insert mode, typing in the text; Tab, Up, and Down go through the fields, the check boxes, the
+  Insert mode, typing in the text; Tab, Up, and Down go through the fields, the check box, the
   rows, and the buttons; Esc leaves Insert mode in a field, and again closes the dialog. While the
   rows have the focus, the motions and the page keys move their cursor. F3, F4, Alt+r, and Alt+c
   work wherever the focus is. The wheel scrolls the rows.
@@ -483,7 +504,7 @@ back to the rows with the filter kept. Text pasted while the
 rows have the keys goes to the filter, in Insert mode. There are no digit hotkeys.
 
 - All but the zoxide window share `tui/picker.rs`: the filter, a text field with a cursor
-  (`dialog::Field`), which matches as fzf does with `ui.fuzzy_search`; the cursor, scrolling,
+  (`dialog::Field`), which matches in the [search mode](#search-modes); the cursor, scrolling,
   the mouse, and the box, which the menus draw over their panel and the windows over both. Each
   holds its own rows, says what the filter finds them by, and draws them. A row may show only
   while the filter is empty, as the rows of more in the location menu do, or only while it has
@@ -558,8 +579,8 @@ sort order, and the name under its cursor, and the tab that shows; and the side 
   such as a name that is not UTF-8, is saved as the nearest directory above it that it can
   hold, or else as `~`.
 - `t w`, or F9 → Workspace → Workspace list…, opens a window of the saved
-  workspaces, one of the [lists](#lists), with a filter, which matches as [fzf](#fuzzy-search)
-  does with `ui.fuzzy_search` (keymap context `workspaces`): Enter restores, `a` saves the tabs
+  workspaces, one of the [lists](#lists), with a filter, which matches in the
+  [search mode](#search-modes) (keymap context `workspaces`): Enter restores, `a` saves the tabs
   as a new workspace, starting with an empty name, `r` or F6 renames, and `d d` or F8 deletes
   after a question. A workspace just saved there gets the cursor.
 
@@ -848,7 +869,7 @@ theme = "mc-classic"             # "terminal", "noon-dark", "noon-light", "catpp
 borders = "double"               # frames of panels and dialogs: ═ ║ ╔; "single": ─ │ ┌
 icons = true                     # Nerd Font icons; false: mc's markers (/ * @ ~ …)
 show_hidden = true               # names that start with a dot; o h switches while running
-fuzzy_search = true              # quick search and filters match as fzf; false: literally
+search_mode = "fzf"              # quick search and filters; "plain": the text; "regex"; Alt+r
 menu_bar = "on-demand"           # the F9 menu bar while a menu is open; "always": above the panels
 tab_bar = "line"                 # tabs on a line above the panels; "frame": in the panel's frame
 terminal_title = true            # the window's title shows the active panel's directory
@@ -1159,22 +1180,24 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   it up the rows; typing in a panel in Normal mode does nothing but its commands, and `!` and `:`
   open the [command line](#command-line-of--and-). As vim's search, it looks from the row after the
   one where it started, round, or after `?` up from the row before it, round to the bottom, and a
-  count before `/` or `?` goes to the match of that number (`2/`). With `ui.fuzzy_search` (the
-  default) the cursor jumps to the best match as [fzf](#fuzzy-search) ranks it, the first after
-  where it started of those as good, and Ctrl+g to the next best, round to the best; otherwise to
-  the first name after where it started that holds the text anywhere, ignoring case, as the filters
-  of the lists match without fzf, and Ctrl+g to the next one, round to the top, as many as the
-  count. It runs as vim's incremental search (`panel::Search`, with vim's `search_start`,
+  count before `/` or `?` goes to the match of that number (`2/`). It matches in the
+  [search mode](#search-modes), which Alt+r switches while it runs. As fzf, the default, the cursor
+  jumps to the best match as fzf ranks it, the first after where it started of those as good, and
+  Ctrl+g to the next best, round to the best; in the plain and regex modes, to the first name after
+  where it started that holds the text anywhere, ignoring case, or that matches it as a regular
+  expression, as the filters of the lists match, and Ctrl+g to the next one, round to the top, as
+  many as the count. It runs as vim's incremental search (`panel::Search`, with vim's `search_start`,
   `match_start`, and `old_viewstate`): every edit of the text searches again from where it searches
   from, with the rows on screen as they were before it; while nothing matches, the cursor stays
   there and the text as typed. Ctrl+g and Ctrl+t move where it searches from as vim's do, so that an
   edit after them searches on from the match before, and Enter stays on the match. The listing keeps
   its order. While it runs, every name on screen shows where it matches in the colors of what is
   found (`find_match`, as in the [search of a whole tree](#search-of-a-whole-tree)), the cursor's
-  too: each place it holds the text, or the letters fzf matched (`Fuzzy::positions`), in what of the
-  name shows. The text is a field with a cursor, edited with the keys that every text field shares
-  in Insert mode (`input`): Left, Right, Shift+Left, Shift+Right, Home, End (and Ctrl+b, Ctrl+e, as
-  on vim's command line), Backspace, Delete, Ctrl+u, Ctrl+w, and Ctrl+r and a register; as on vim's
+  too: each place it holds the text or matches the regular expression, or the letters fzf matched
+  (`Matcher::positions`), in what of the name shows. The text, kept as typed, is a field with a
+  cursor, edited with the keys that every text field shares in Insert mode (`input`): Left,
+  Right, Shift+Left, Shift+Right, Home, End (and Ctrl+b, Ctrl+e, as on vim's command line),
+  Backspace, Delete, Ctrl+u, Ctrl+w, and Ctrl+r and a register; as on vim's
   command line, Delete at the end of the text deletes the character before, Shift and Ctrl with Left
   and Right go by what spaces part. Unlike vim's, Backspace and Delete with nothing typed keep the
   search open, as on the command line, so that one too many does not go to the parent directory. As
@@ -1194,7 +1217,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   BOTTOM, continuing at TOP"), when nothing matches ("Pattern not found: name"), and that there was
   no search before, on the line of the mode until the next key; so does Enter in quick search, when
   its last search went round (a count can take it round too; after Ctrl+g or Ctrl+t it does not),
-  but in fuzzy search, which ranks the rows rather than go down them. Long names lose their middle,
+  but in the fzf mode, which ranks the rows rather than go down them. Long names lose their middle,
   marked with `»` in an accent. Names are shown terminal-safe: control and bidi characters become
   `?`. Listings run in background tasks; a reply carries the generation of its request, so a stale
   one is dropped. If a directory cannot be read, the panel stays where it was and says why below the

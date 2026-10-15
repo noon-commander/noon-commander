@@ -1,12 +1,14 @@
 //! The zoxide window of `g z`: the directories zoxide ranks highest for the keywords typed,
-//! best first, as `z foo bar` picks them in a shell; or, with `ui.fuzzy_search`, all of them,
-//! filtered and ranked by what is typed as fzf does. It opens in Normal mode, as the other
-//! lists do, and `/` types the keywords, in Insert mode; Enter opens one in the active panel.
+//! best first, as `z foo bar` picks them in a shell, in the plain mode of `ui.search_mode`; or
+//! all of them, filtered by what is typed, as fzf ranks them or as a regular expression in
+//! zoxide's order. It opens in Insert mode, as `zi` does, and Esc goes to the rows, where `/`
+//! types the keywords again; Enter opens one in the active panel.
 
 use std::cell::RefCell;
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 
+use noc_config::SearchMode;
 use noc_scroll::scrollbar::{self, Bar};
 use noc_tools::zoxide::Scored;
 use ratatui::Frame;
@@ -15,12 +17,12 @@ use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Cut};
 use super::dialog::{Colors, Field, draw_box, frame_around, right_frame};
-use super::fuzzy::Fuzzy;
 use super::glyphs;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::{Drawn, Pointer};
 use super::picker::{FULL_ROWS, Whole};
 use super::scroll::Window;
+use super::search_mode::{self, Matcher};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -53,9 +55,12 @@ pub(crate) struct JumpMenu {
     keywords: Field,
     /// The keywords take what is typed, in Insert mode.
     typing: bool,
-    /// The window asks zoxide once for every directory and filters them itself, as fzf does
-    /// (`ui.fuzzy_search`), instead of asking zoxide for each change of the keywords.
-    fuzzy: bool,
+    /// How it matches the keywords: `ui.search_mode` until Alt+r switches it. In the plain
+    /// mode it asks zoxide for each change of the keywords; in the others, once for every
+    /// directory, which it filters itself.
+    mode: SearchMode,
+    /// Why the keywords are not a regular expression, in the regex mode.
+    invalid: Option<String>,
     /// zoxide's answer, best first.
     found: Vec<Scored>,
     /// The rows: indices into `found` of the directories that match, best first.
@@ -88,7 +93,8 @@ impl JumpMenu {
             generation,
             keywords: Field::plain(""),
             typing: true,
-            fuzzy: false,
+            mode: SearchMode::Plain,
+            invalid: None,
             found: Vec::new(),
             rows: Vec::new(),
             loaded: false,
@@ -103,17 +109,21 @@ impl JumpMenu {
         }
     }
 
-    /// The same window, which filters zoxide's directories as fzf does if `fuzzy`
-    /// (`ui.fuzzy_search`).
-    pub(crate) fn fuzzy(mut self, fuzzy: bool) -> Self {
-        self.fuzzy = fuzzy;
+    /// The same window, which matches in `mode` (`ui.search_mode`).
+    pub(crate) fn search_mode(mut self, mode: SearchMode) -> Self {
+        self.mode = mode;
         self
+    }
+
+    /// Whether the window filters zoxide's directories itself, rather than zoxide.
+    fn filters(&self) -> bool {
+        self.mode != SearchMode::Plain
     }
 
     /// The keywords to ask zoxide for: those typed, separated by spaces; none, for every
     /// directory, if the window filters them itself.
     pub(crate) fn keywords(&self) -> Vec<String> {
-        if self.fuzzy {
+        if self.filters() {
             return Vec::new();
         }
         self.keywords
@@ -153,21 +163,23 @@ impl JumpMenu {
     }
 
     /// Picks the rows again, with the cursor on the best: every directory zoxide found; if the
-    /// window filters them itself, those that match the keywords as fzf matches a path, best
-    /// first, and those as good in zoxide's order.
+    /// window filters them itself, those whose paths match the keywords, as fzf ranks them,
+    /// and those as good in zoxide's order.
     fn refilter(&mut self) {
         self.cursor = 0;
         self.window.reset();
-        if !self.fuzzy {
+        self.invalid = None;
+        if !self.filters() {
             self.rows = (0..self.found.len()).collect();
             return;
         }
-        let mut fuzzy = Fuzzy::paths(self.keywords.text());
+        let mut matcher = Matcher::paths(self.mode, self.keywords.text());
+        self.invalid = matcher.error().map(ToString::to_string);
         let mut scored: Vec<(usize, u32)> = self
             .found
             .iter()
             .enumerate()
-            .filter_map(|(index, found)| Some((index, fuzzy.score(&self.shown(&found.path))?)))
+            .filter_map(|(index, found)| Some((index, matcher.score(&self.shown(&found.path))?)))
             .collect();
         scored.sort_by_key(|&(_, score)| std::cmp::Reverse(score));
         self.rows = scored.into_iter().map(|(index, _)| index).collect();
@@ -224,6 +236,15 @@ impl JumpMenu {
                 Action::QuickSearch => self.typing = true,
                 Action::NormalMode => self.typing = false,
                 Action::ShowFull => self.full = self.full.toggled(),
+                Action::SearchMode => {
+                    let before = self.filters();
+                    self.mode = search_mode::next(self.mode);
+                    // zoxide gives every directory, or what matches the keywords, anew.
+                    if before != self.filters() {
+                        return JumpEvent::Query;
+                    }
+                    self.refilter();
+                }
                 Action::Left
                 | Action::Right
                 | Action::TextStart
@@ -265,7 +286,7 @@ impl JumpMenu {
 
     /// The keywords changed: the window filters zoxide's directories again, or asks zoxide.
     fn changed(&mut self) -> JumpEvent {
-        if self.fuzzy {
+        if self.filters() {
             self.refilter();
             JumpEvent::Pending
         } else {
@@ -288,6 +309,32 @@ impl JumpMenu {
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let (page, cursor, window, bar) = self.draw(frame, area, theme);
         (self.page, self.cursor, self.window, self.bar) = (page, cursor, window, bar);
+    }
+
+    /// The keywords, with the glyph of the mode before them, at `area`, with the cursor while
+    /// they take text.
+    fn draw_keywords(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
+        let mark = search_mode::marked(self.mode, self.invalid.is_some(), theme.dialog, theme);
+        let room = usize::from(area.width);
+        let prefix = fl!("jump-keywords", mode = mark.glyph, text = String::new());
+        let (shown, column) = self
+            .keywords
+            .visible(room.saturating_sub(cells::width(&prefix)));
+        let column = u16::try_from(cells::width(&prefix) + column).unwrap_or(u16::MAX);
+        let text = fl!("jump-keywords", mode = mark.glyph, text = shown);
+        let prompt = cells::fit_spans(
+            mark.spans(&text, &prefix, theme.dialog),
+            room,
+            (theme.dialog, theme.truncated_dialog),
+            theme.glyphs.marks,
+        );
+        frame.render_widget(Line::from(prompt).style(theme.dialog), area);
+        if self.typing {
+            frame.set_cursor_position(Position::new(
+                area.x.saturating_add(column).min(area.right() - 1),
+                area.y,
+            ));
+        }
     }
 
     /// The scroll bar of the last render, for the mouse.
@@ -333,23 +380,7 @@ impl JumpMenu {
         let width = usize::from(inner.width);
         let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
 
-        let prefix = cells::width(&fl!("jump-keywords", text = String::new()));
-        let (shown, column) = self.keywords.visible(width.saturating_sub(prefix));
-        let column = u16::try_from(prefix + column).unwrap_or(u16::MAX);
-        let prompt = cells::fit(
-            &fl!("jump-keywords", text = shown),
-            width,
-            Align::Left,
-            (theme.dialog, theme.truncated_dialog),
-            theme.glyphs.marks,
-        );
-        frame.render_widget(Line::from(prompt).style(theme.dialog), line(0));
-        if self.typing {
-            frame.set_cursor_position(Position::new(
-                inner.x.saturating_add(column).min(inner.right() - 1),
-                inner.y,
-            ));
-        }
+        self.draw_keywords(frame, line(0), theme);
         frame.render_widget(
             Line::styled(glyphs::LINE.repeat(width), theme.dialog),
             line(1),
@@ -360,6 +391,11 @@ impl JumpMenu {
             Some(fl!("panel-loading"))
         } else if let Some(error) = &self.error {
             Some(error.clone())
+        } else if let Some(reason) = &self.invalid {
+            Some(fl!(
+                "picker-not-regex",
+                reason = cells::sanitize(reason.as_bytes())
+            ))
         } else if self.rows.is_empty() {
             Some(fl!("jump-nothing"))
         } else {
@@ -562,7 +598,8 @@ mod tests {
 
     #[test]
     fn fuzzy_keywords_filter_without_asking_zoxide() {
-        let mut menu = JumpMenu::new(PathBuf::from("/home/me"), None, 1).fuzzy(true);
+        let mut menu =
+            JumpMenu::new(PathBuf::from("/home/me"), None, 1).search_mode(SearchMode::Fzf);
         menu.found(1, Ok(found()));
         assert_eq!(menu.keywords(), [] as [String; 0]);
         for c in "dl".chars() {
@@ -587,6 +624,43 @@ mod tests {
             JumpEvent::Open(PathBuf::from("/home/me/src/noc")),
             "as good: in zoxide's order"
         );
+    }
+
+    #[test]
+    fn a_regular_expression_filters_in_zoxides_order_and_alt_r_switches_the_mode() {
+        let mut menu =
+            JumpMenu::new(PathBuf::from("/home/me"), None, 1).search_mode(SearchMode::Regex);
+        menu.found(1, Ok(found()));
+        for c in "^~/[sD]".chars() {
+            assert_eq!(menu.handle(Resolved::Insert(c)), JumpEvent::Pending);
+        }
+        assert_eq!(menu.keywords(), [] as [String; 0], "zoxide gets none");
+        assert_eq!(menu.rows, [0, 3], "zoxide's order");
+        menu.handle(Resolved::Insert('('));
+        assert_eq!(menu.rows, [] as [usize; 0]);
+        assert!(draw(&mut menu, 10).contains("Not a regular expression: error: unclosed group"));
+        assert_eq!(
+            press(&mut menu, Action::SearchMode),
+            JumpEvent::Query,
+            "zoxide matches"
+        );
+        assert_eq!(menu.keywords(), ["^~/[sD]("]);
+        assert_eq!(
+            press(&mut menu, Action::SearchMode),
+            JumpEvent::Query,
+            "every directory"
+        );
+        assert_eq!(menu.keywords(), [] as [String; 0]);
+        menu.wait(2);
+        menu.found(2, Ok(found()));
+        press(&mut menu, Action::DeleteToStart);
+        assert_eq!(menu.rows.len(), 4);
+        assert_eq!(
+            press(&mut menu, Action::SearchMode),
+            JumpEvent::Pending,
+            "fzf to regex"
+        );
+        assert_eq!(menu.mode, SearchMode::Regex);
     }
 
     #[test]
@@ -638,9 +712,10 @@ mod tests {
                 .unwrap();
             terminal.get_cursor_position().unwrap()
         };
-        // The frame is in column 0, a blank in column 1, and `Jump to: ` is 9 cells.
+        // The frame is in column 0, a blank in column 1, the glyph of the mode and a blank 2
+        // cells, and `Jump to: ` 9.
         let empty = cursor_after(&mut menu, "");
-        assert_eq!(empty.x, 2 + 9);
+        assert_eq!(empty.x, 2 + 2 + 9);
         assert_eq!(cursor_after(&mut menu, "src").x, empty.x + 3);
         assert_eq!(
             cursor_after(&mut menu, " ").x,

@@ -542,6 +542,16 @@ impl Theme {
         name.not_bold().dim()
     }
 
+    /// `style` for what says that what was typed is wrong, such as the glyph of the regex mode
+    /// before a text that is no regular expression: crossed out, in the color of a broken link.
+    pub(crate) fn invalid(&self, style: Style) -> Style {
+        let color = Style {
+            fg: self.stale_link.fg,
+            ..Style::new()
+        };
+        style.patch(color).crossed_out()
+    }
+
     /// The style of a host's status marker.
     pub(crate) fn host_status(&self, status: HostStatus) -> Style {
         match status {

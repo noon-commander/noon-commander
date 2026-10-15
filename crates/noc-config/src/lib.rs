@@ -22,8 +22,8 @@ mod workspaces;
 mod write;
 
 pub use config::{
-    Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, Pause, SearchConfig, ShellConfig,
-    SshConfig, TabBar, TransferConfig, UiConfig, VolumesConfig, Wheel, ZoxideConfig,
+    Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, Pause, SearchConfig, SearchMode,
+    ShellConfig, SshConfig, TabBar, TransferConfig, UiConfig, VolumesConfig, Wheel, ZoxideConfig,
     write_default_config,
 };
 pub use edit::save_config;

@@ -612,7 +612,9 @@ as the count before / or ?, and the search goes on from there, and Ctrl+b and Ct
 and the end of the text, as on vim's command line. Up, Down, PgUp, PgDn, and the F-keys, Alt+F1 and
 Alt+F2 among them, end the search and do what they do in the panel, as in mc, but Shift+F7, which
 goes to the next match; Left, Right, Home, and End move in the text, and other keys that none of
-them binds do nothing. The last search stays for n, N, and Shift+F7 in the panel. yazi searches as
+them binds do nothing. Alt+r switches how this search matches, round: as it is, as fzf does, or as
+a regular expression; the next one starts in `ui.search_mode` again. The last search stays for n,
+N, and Shift+F7 in the panel, which match as it did. yazi searches as
 the name is typed in an input box, and ranger as it is typed on its console; both go to the next and
 previous match with keys of the panel, once the search is over.
 
@@ -622,6 +624,7 @@ previous match with keys of the panel, once the search is over.
 | Give the search up: the cursor goes back to where it started, and the search is not kept | `abort` | ✅ | Esc<br>Ctrl+[<br>Ctrl+c | — | — | — | — |
 | Next match; with nothing typed, the last search again, as mc's Ctrl+s Ctrl+s | `quick_search` | ✅ | Ctrl+g | Ctrl+s<br>Alt+s | Ctrl+Enter | n | n |
 | Previous match | `prev_match` | ✅ | Ctrl+t | — | Ctrl+Shift+Enter | N | N |
+| Match the next way: as it is, as fzf does, or as a regular expression | `search_mode` | ⏳ | Alt+r | — | — | — | — |
 | Start of the line | `text_start` | ⏳ | Ctrl+b | — | — | — | — |
 | End of the line | `text_end` | ⏳ | Ctrl+e | — | — | — | — |
 | End the search, and one row up | `up` | ⏳ | Up | — | — | — | — |
@@ -897,8 +900,10 @@ z keys scroll them as vim's do; wrapped lines start each row after the first wit
 ## Lists (`list`, Normal mode)
 
 The keys that the windows listing items to choose from share, in Normal mode, where all but the
-zoxide window start: the location menu, the tab menu, the zoxide window, the workspaces, and the
-command history fall back to it, then to `global`, and their sections list only the keys they add.
+zoxide window start: the location menu, the tab menu, the zoxide window, the workspaces, the
+command history, and the list of the key hints fall back to it, then to `global`, and their
+sections list only the keys they add. Alt+r switches how the filter matches, in the window it is
+pressed in, until it closes.
 Keys that nothing binds do nothing: no digit or letter picks an item. The rows scroll as the
 panels' do, as vim's window, headings among them. `/` types in the filter, or the keywords of the
 zoxide window, in Insert mode, and Esc there comes back with the filter kept. Keys never go to it
@@ -918,6 +923,7 @@ with. None of them has modes: their keys are here, not under Insert mode.
 | First item | `home` | ⏳ | g g<br>Home | Home<br>A1<br>Alt+< | — | — | — |
 | Last item | `end` | ⏳ | G<br>End | End<br>C1<br>Alt+> | — | — | — |
 | Type in the filter, in Insert mode | `quick_search` | ⏳ | / | — | Ctrl+Alt+f<br>RightAlt | — | — |
+| Match the filter the next way: as it is, as fzf does, or as a regular expression | `search_mode` | ⏳ | Alt+r | — | — | — | — |
 | Show the whole row under the cursor under the rows, until asked again | `show_full` | ⏳ | K | — | — | — | — |
 | Take the item, as the window's section says | `confirm` | ⏳ | Enter<br>Ctrl+m | Enter | Enter | Enter | — |
 | Close the window | `cancel` | ⏳ | Esc<br>Ctrl+[<br>Ctrl+c<br>q<br>F10 | Esc<br>F10<br>Ctrl+g | Esc | Esc<br>Ctrl+[<br>Ctrl+c | — |
@@ -939,6 +945,7 @@ are under Normal mode.
 | One page up | `page_up` | ⏳ | PgUp | — | — | — | — |
 | One page down | `page_down` | ⏳ | PgDn | — | — | — | — |
 | Take the item, as the window's section says | `confirm` | ⏳ | Enter<br>Ctrl+m<br>Ctrl+y | — | — | — | — |
+| Match the filter the next way: as it is, as fzf does, or as a regular expression | `search_mode` | ⏳ | Alt+r | — | — | — | — |
 | Back to the rows, with the filter kept | `normal_mode` | ⏳ | Esc<br>Ctrl+[ | — | — | — | — |
 | Close the window | `cancel` | ⏳ | Ctrl+c<br>F10 | — | — | — | — |
 
@@ -1152,21 +1159,22 @@ Tab and F8 still switch the hosts and remove the command.
 
 g / in a panel, or F9 → Command → Find file…: ripgrep searches the files under the panel's
 directory, local or on a host, for the text of the first field, among those the globs of the second
-let through, again as either changes or a check box switches; with no text it lists the files. It is
-a dialog: two fields, two check boxes, the rows, and the buttons Go to, View, Edit, and Cancel, as
-in the results of mc's Find File, which, as Far's Find file, asks for a mask and a text in a dialog
-first. Its other mode, Files and dirs, a radio button above the fields, finds files and directories
-by name with fd, and Go to goes into a directory. Its focus on a check box, the rows, or a button,
-it falls back to `dialog`, whose motions move the cursor of the rows while they have the focus, and
-Tab leaves them. F3, F4, and the switches of regular expressions and case, VS Code's keys, work
-wherever the focus is. yazi's s and S find with fd and rg, and show the result as a directory of its
-own.
+let through, again as either changes, the check box switches, or Alt+r; with no text it lists the
+files. It is a dialog: two fields, a check box, the rows, and the buttons Go to, View, Edit, and
+Cancel, as in the results of mc's Find File, which, as Far's Find file, asks for a mask and a text
+in a dialog first. Its other mode, Files and dirs, a radio button above the fields, finds files and
+directories by name with fd, and Go to goes into a directory. Its focus on a check box, the rows, or
+a button, it falls back to `dialog`, whose motions move the cursor of the rows while they have the
+focus, and Tab leaves them. F3, F4, and the switches of regular expressions and case, VS Code's
+keys, work wherever the focus is: Alt+r takes the text as it is or as a regular expression,
+starting from the search mode (`ui.search_mode`, where fzf is regex), and the glyph after Text says
+which. yazi's s and S find with fd and rg, and show the result as a directory of its own.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
 | View the file, from the line | `view` | ⏳ | F3 | F3 | F3 | — | — |
 | Edit the file, at the line | `edit` | ⏳ | F4 | F4 | F4 | — | — |
-| The text as a regular expression, or as it is | `toggle_regex` | ⏳ | Alt+r | — | — | — | — |
+| The text as a regular expression, or as it is | `search_mode` | ⏳ | Alt+r | — | — | — | — |
 | Match case, or ignore it unless the text has a capital | `match_case` | ⏳ | Alt+c | — | — | — | — |
 | Half a page up | `half_page_up` | ⏳ | Ctrl+u | — | — | — | — |
 | Half a page down | `half_page_down` | ⏳ | Ctrl+d | — | — | — | — |
@@ -1181,7 +1189,7 @@ do: to `dialog_input`, then to `input`, then to `dialog`, then to `global`.
 | --- | --- | :-: | --- | --- | --- | --- | --- |
 | View the file, from the line | `view` | ⏳ | F3 | F3 | F3 | — | — |
 | Edit the file, at the line | `edit` | ⏳ | F4 | F4 | F4 | — | — |
-| The text as a regular expression, or as it is | `toggle_regex` | ⏳ | Alt+r | — | — | — | — |
+| The text as a regular expression, or as it is | `search_mode` | ⏳ | Alt+r | — | — | — | — |
 | Match case, or ignore it unless the text has a capital | `match_case` | ⏳ | Alt+c | — | — | — | — |
 
 ## Key hints list (`key_hints`, Normal and Insert mode)

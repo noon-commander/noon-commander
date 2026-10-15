@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use noc_config::HistoryEntry;
+use noc_config::{HistoryEntry, SearchMode};
 use noc_scroll::scrollbar::Bar;
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -64,19 +64,19 @@ pub(crate) struct HistoryWindow {
 
 impl HistoryWindow {
     /// A window on `history`, oldest first as `history.toml` keeps it, for a panel on `here`;
-    /// `labels` name hosts, and the filter matches as fzf does if `fuzzy`.
+    /// `labels` name hosts, and the filter matches in `mode` (`ui.search_mode`).
     pub(crate) fn new(
         history: &[HistoryEntry],
         here: Option<String>,
         labels: HashMap<String, String>,
-        fuzzy: bool,
+        mode: SearchMode,
     ) -> Self {
         let mut window = Self {
             entries: history.iter().rev().cloned().collect(),
             here,
             labels,
             all: false,
-            picker: Picker::new(fuzzy),
+            picker: Picker::new(mode),
         };
         window.picker.set_rows(window.texts());
         window
@@ -365,7 +365,7 @@ mod tests {
 
     fn window(here: Option<&str>) -> HistoryWindow {
         let labels = HashMap::from([("web".to_owned(), "Site".to_owned())]);
-        HistoryWindow::new(&history(), here.map(str::to_owned), labels, true)
+        HistoryWindow::new(&history(), here.map(str::to_owned), labels, SearchMode::Fzf)
     }
 
     fn press(window: &mut HistoryWindow, action: Action) -> HistoryEvent {

@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use noc_config::{Place, SavedTab, SortBy, Workspace, Workspaces};
+use noc_config::{Place, SavedTab, SearchMode, SortBy, Workspace, Workspaces};
 use noc_scroll::scrollbar::Bar;
 use noc_vfs::{Location, RemotePath};
 use ratatui::Frame;
@@ -82,12 +82,12 @@ pub(crate) struct WorkspacesWindow {
 }
 
 impl WorkspacesWindow {
-    /// A window on `rows`, whose filter matches as fzf does if `fuzzy` (`ui.fuzzy_search`).
-    pub(crate) fn new(rows: Vec<Row>, fuzzy: bool) -> Self {
+    /// A window on `rows`, whose filter matches in `mode` (`ui.search_mode`).
+    pub(crate) fn new(rows: Vec<Row>, mode: SearchMode) -> Self {
         let mut window = Self {
             rows,
             wanted: None,
-            picker: Picker::new(fuzzy),
+            picker: Picker::new(mode),
         };
         window.picker.set_rows(window.texts());
         window
@@ -353,7 +353,10 @@ mod tests {
     }
 
     fn window() -> WorkspacesWindow {
-        WorkspacesWindow::new(rows(&["noon", "deploy", "photos", "Notes"]), false)
+        WorkspacesWindow::new(
+            rows(&["noon", "deploy", "photos", "Notes"]),
+            SearchMode::Plain,
+        )
     }
 
     fn press(window: &mut WorkspacesWindow, action: Action) -> WorkspacesEvent {
@@ -395,7 +398,7 @@ mod tests {
             WorkspacesEvent::Delete("deploy".to_owned())
         );
         assert_eq!(press(&mut window, Action::Cancel), WorkspacesEvent::Closed);
-        let mut empty = WorkspacesWindow::new(Vec::new(), false);
+        let mut empty = WorkspacesWindow::new(Vec::new(), SearchMode::Plain);
         assert_eq!(press(&mut empty, Action::Confirm), WorkspacesEvent::Pending);
         assert_eq!(press(&mut empty, Action::Delete), WorkspacesEvent::Pending);
         assert_eq!(
@@ -430,7 +433,7 @@ mod tests {
 
     #[test]
     fn a_fuzzy_filter_puts_the_cursor_on_the_best() {
-        let mut window = WorkspacesWindow::new(rows(&["photos", "deploy"]), true);
+        let mut window = WorkspacesWindow::new(rows(&["photos", "deploy"]), SearchMode::Fzf);
         typed(&mut window, "dpl");
         assert_eq!(
             press(&mut window, Action::Confirm),
@@ -464,7 +467,7 @@ mod tests {
 
     #[test]
     fn says_how_to_save_one_when_there_are_none() {
-        let mut window = WorkspacesWindow::new(Vec::new(), false);
+        let mut window = WorkspacesWindow::new(Vec::new(), SearchMode::Plain);
         assert!(draw(&mut window, 10).contains("a here"));
     }
 

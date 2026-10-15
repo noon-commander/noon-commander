@@ -2,6 +2,7 @@
 //! is, to show one, or to close one. Typing filters it; while the filter is empty, `1` … `9` and
 //! `0` show the first ten tabs.
 
+use noc_config::SearchMode;
 use noc_scroll::scrollbar::Bar;
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -41,10 +42,9 @@ pub(crate) struct TabMenu {
 
 impl TabMenu {
     /// A menu of the tabs on `side`, which are where `titles` say, with the cursor on the one
-    /// at `current`, which shows; its filter matches as fzf does if `fuzzy`
-    /// (`ui.fuzzy_search`).
-    pub(crate) fn new(side: Side, titles: Vec<String>, current: usize, fuzzy: bool) -> Self {
-        let mut picker = Picker::new(fuzzy);
+    /// at `current`, which shows; its filter matches in `mode` (`ui.search_mode`).
+    pub(crate) fn new(side: Side, titles: Vec<String>, current: usize, mode: SearchMode) -> Self {
+        let mut picker = Picker::new(mode);
         picker.set_rows(titles.iter().map(|title| vec![title.clone()]).collect());
         picker.set_cursor(current);
         Self {
@@ -154,7 +154,7 @@ mod tests {
 
     fn menu() -> TabMenu {
         let titles = ["~/src", "/var/log", "web:/var/www", "~/src/noc"].map(str::to_owned);
-        TabMenu::new(Side::Left, titles.to_vec(), 1, false)
+        TabMenu::new(Side::Left, titles.to_vec(), 1, SearchMode::Plain)
     }
 
     fn typed(menu: &mut TabMenu, text: &str) {
@@ -233,7 +233,7 @@ mod tests {
         typed(&mut menu, "www");
         let text = draw(&mut menu, 40, 10);
         assert!(
-            text.contains("Filter: www")
+            text.contains("Filter =: www")
                 && text.contains("web:/var/www")
                 && !text.contains("~/src"),
             "{text}"

@@ -53,12 +53,15 @@ borders = "double"
 icons = true
 # Show files whose names begin with a dot. o h switches it while Noon Commander runs.
 show_hidden = true
-# Quick search, the filter of the location menu (Alt+F1, Alt+F2), and the zoxide window
-# (g z) match what is typed as fzf does: its characters in order, not necessarily together,
-# best matches first; words separated by spaces must all match, and fzf's ' ^ $ ! work. When
-# off, quick search finds names that start with the text, the location menu those that contain
-# it, and zoxide matches it as keywords, as z does.
-fuzzy_search = true
+# How quick search and the filters of the lists (the location menu, the tab menu, the zoxide
+# window, the workspaces, the command history, the list of the key hints) match what is typed.
+# "fzf": its characters in order, not necessarily together, best matches first; words
+# separated by spaces must all match, and fzf's ' ^ $ ! work. "plain": the text anywhere,
+# ignoring case; the zoxide window gives it to zoxide as keywords, as z does. "regex": a
+# regular expression, whose case counts only once it has a capital letter. Each search and each
+# window starts with it; Alt+r switches it there. The search of a tree (g /) starts with it too,
+# taking "fzf" as "regex", and Alt+r switches it between "plain" and "regex".
+search_mode = "fzf"
 # The menu bar of F9 (Left, File, Command, Options, Right): "on-demand" shows it only while a
 # menu is open, over the panels, as Far Manager does; "always" keeps it above the panels, as
 # Midnight Commander does.

@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use noc_config::{Borders, Config, MenuBar, Pause, TabBar, UiConfig, Wheel};
+use noc_config::{Borders, Config, MenuBar, Pause, SearchMode, TabBar, UiConfig, Wheel};
 use noc_scroll::Motion;
 use noc_scroll::scrollbar::{self, Bar};
 use ratatui::Frame;
@@ -40,7 +40,7 @@ enum Key {
     Borders,
     Icons,
     ShowHidden,
-    FuzzySearch,
+    SearchMode,
     Mouse,
     Wheel,
     TerminalTitle,
@@ -163,7 +163,13 @@ impl Setting {
             }
             Key::Icons => ui.icons = self.on(),
             Key::ShowHidden => ui.show_hidden = self.on(),
-            Key::FuzzySearch => ui.fuzzy_search = self.on(),
+            Key::SearchMode => {
+                ui.search_mode = match text {
+                    "plain" => SearchMode::Plain,
+                    "regex" => SearchMode::Regex,
+                    _ => SearchMode::Fzf,
+                };
+            }
             Key::Mouse => ui.mouse = self.on(),
             Key::Wheel => {
                 ui.wheel = Wheel::parse(text.trim()).ok_or_else(|| {
@@ -1065,6 +1071,11 @@ fn interface(config: &Config, themes: &[&str]) -> Category {
         Borders::Double => "double",
         Borders::Single => "single",
     };
+    let search_mode = match ui.search_mode {
+        SearchMode::Plain => "plain",
+        SearchMode::Fzf => "fzf",
+        SearchMode::Regex => "regex",
+    };
     let mut settings = vec![
         Setting {
             restart: true,
@@ -1101,9 +1112,16 @@ fn interface(config: &Config, themes: &[&str]) -> Category {
             Value::Toggle(ui.show_hidden),
         ),
         Setting::new(
-            Key::FuzzySearch,
-            (fl!("config-fuzzy-search"), fl!("config-fuzzy-search-hint")),
-            Value::Toggle(ui.fuzzy_search),
+            Key::SearchMode,
+            (fl!("config-search-mode"), fl!("config-search-mode-hint")),
+            choice(
+                &[
+                    ("plain", fl!("config-search-mode-plain")),
+                    ("fzf", fl!("config-search-mode-fzf")),
+                    ("regex", fl!("config-search-mode-regex")),
+                ],
+                search_mode,
+            ),
         ),
         Setting::new(
             Key::Mouse,

@@ -1,7 +1,7 @@
 //! The search of a whole tree: `g /` in a panel, or F9 → Command → Find file…. ripgrep searches
 //! the files under the panel's directory, local or on a host, for the text of the first field,
-//! among the files that the globs of the second let through, again as either changes or a check
-//! box switches. The dialog lists each file it found, in the order of their paths, with the lines
+//! among the files that the globs of the second let through, again as either changes, the check
+//! box of case switches, or Alt+r takes the text as it is or as a regular expression. The dialog lists each file it found, in the order of their paths, with the lines
 //! that match under it, the matches highlighted; with no text it lists the files. Its buttons go
 //! to the file in the panel, and view and edit it at the line, as in the results of mc's Find
 //! File. Its other mode, Files and dirs, finds files and directories whose names match the text
@@ -9,6 +9,7 @@
 
 use std::ops::Range;
 
+use noc_config::SearchMode;
 use noc_scroll::scrollbar::Bar;
 use noc_tools::fd;
 use noc_tools::ripgrep::{self, Hit};
@@ -23,9 +24,11 @@ use super::cells::{self, Align};
 use super::decor::{self, Decor};
 use super::dialog::{Button, Dialog, DialogEvent, Field, ListView};
 use super::edit::Registers;
+use super::glyphs::Glyphs;
 use super::keymap::{Action, Context, Mode, Resolved, Typed};
 use super::mouse::Pointer;
 use super::panel::child;
+use super::search_mode;
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -36,8 +39,7 @@ const BEFORE_MATCH: usize = 8;
 /// The fields of the dialog, and its check boxes.
 const TEXT: usize = 0;
 const FILES: usize = 1;
-const REGEX: usize = 0;
-const MATCH_CASE: usize = 1;
+const MATCH_CASE: usize = 0;
 /// Its modes, as its choices: text in the files, or files and directories by name.
 const TEXT_MODE: usize = 0;
 const NAMES_MODE: usize = 1;
@@ -161,8 +163,8 @@ type Settings = (usize, String, String, bool, bool);
 pub(crate) struct FindWindow {
     /// Where it searches.
     root: Location,
-    /// The text and the globs of the files in its fields, regular expressions and case in its
-    /// check boxes, the rows in its list, and its buttons.
+    /// The text and the globs of the files in its fields, case in its check box, the rows in
+    /// its list, and its buttons.
     dialog: Dialog,
     /// Hidden files too, as the panels show them, and how much it finds: in all, and in a
     /// file.
@@ -182,6 +184,9 @@ pub(crate) struct FindWindow {
     /// before it; `None` is the first row.
     cursor: Option<(Vec<u8>, Option<usize>)>,
     decor: Decor,
+    /// The text is a regular expression, rather than as it is: the regex mode of `ui.search_mode`
+    /// (its fzf mode too, which has no meaning here), or the plain one, until Alt+r switches it.
+    regex: bool,
     /// Stops the search, which the dialog does when it goes or a new one starts.
     cancel: CancellationToken,
 }
@@ -195,17 +200,20 @@ impl Drop for FindWindow {
 impl FindWindow {
     /// The dialog of the search in `root`, shown as `title`, typing in its text, which takes
     /// as many results as `[search]` says, in all and in a file; hidden files too if `hidden`.
+    /// The text is a regular expression unless `mode` (`ui.search_mode`) is the plain one.
     pub(crate) fn new(
         (root, title): (Location, String),
         (max_results, max_per_file): (usize, usize),
         hidden: bool,
+        mode: SearchMode,
         decor: Decor,
     ) -> Self {
+        let regex = mode != SearchMode::Plain;
         let fields = [
-            (fl!("find-text"), String::new()),
+            (text_label(regex, decor), String::new()),
             (fl!("find-files"), String::new()),
         ];
-        let checks = [(fl!("find-regex"), true), (fl!("find-match-case"), false)];
+        let checks = [(fl!("find-match-case"), false)];
         let title = fl!("find-title", dir = title);
         let modes = vec![fl!("find-mode-text"), fl!("find-mode-names")];
         let dialog = Dialog::fields(&title, &fields, &checks, buttons(TEXT_MODE), WIDTH)
@@ -225,6 +233,7 @@ impl FindWindow {
             state: State::Searching,
             cursor: None,
             decor,
+            regex,
             cancel: CancellationToken::new(),
         }
     }
@@ -244,7 +253,7 @@ impl FindWindow {
             .split_whitespace()
             .map(str::to_owned)
             .collect();
-        let (regex, match_case) = (self.dialog.checked(REGEX), self.dialog.checked(MATCH_CASE));
+        let (regex, match_case) = (self.regex, self.dialog.checked(MATCH_CASE));
         if self.dialog.chosen() == NAMES_MODE {
             return FindQuery::Names(fd::Query {
                 pattern,
@@ -415,7 +424,7 @@ impl FindWindow {
             self.dialog.chosen(),
             self.dialog.text_of(TEXT).to_owned(),
             self.dialog.text_of(FILES).to_owned(),
-            self.dialog.checked(REGEX),
+            self.regex,
             self.dialog.checked(MATCH_CASE),
         )
     }
@@ -536,15 +545,18 @@ impl FindWindow {
 
     /// Takes a key as a dialog does: the fields edit, Tab and the motions move the focus, and
     /// over the list they move its cursor; Enter presses Go to, the default. F3 and F4 view and
-    /// edit the file of the row, and Alt+r and Alt+c switch the check boxes, from anywhere.
+    /// edit the file of the row, Alt+r takes the text as it is or as a regular expression, and
+    /// Alt+c switches the check box of case, from anywhere.
     pub(crate) fn handle(&mut self, typed: Typed, registers: &mut Registers) -> FindEvent {
         let before = self.settings();
         let cursor = self.dialog.list_cursor();
         let event = match typed.resolved {
             Resolved::Action(Action::View) => return self.press(Button::View),
             Resolved::Action(Action::Edit) => return self.press(Button::Edit),
-            Resolved::Action(Action::ToggleRegex) => {
-                self.dialog.toggle_check(REGEX);
+            Resolved::Action(Action::SearchMode) => {
+                self.regex = !self.regex;
+                let label = text_label(self.regex, self.decor);
+                self.dialog.set_label(TEXT, &label);
                 DialogEvent::Pending
             }
             Resolved::Action(Action::MatchCase) => {
@@ -682,6 +694,18 @@ impl FindWindow {
         };
         self.dialog.render_list(frame, area, theme, &view);
     }
+}
+
+/// The label of the text field: `Text`, and the glyph of the regex mode, or of the plain one
+/// unless `regex`, as quick search and the filters show how they match.
+fn text_label(regex: bool, decor: Decor) -> String {
+    let mode = if regex {
+        SearchMode::Regex
+    } else {
+        SearchMode::Plain
+    };
+    let glyphs = Glyphs::of(decor.icons()).search_modes;
+    fl!("find-text", mode = search_mode::glyph(mode, glyphs))
 }
 
 /// The buttons of `mode`: by name, nothing to view or edit at a line.
@@ -859,6 +883,7 @@ mod tests {
             (Location::Local("/src/noc".into()), "~/src/noc".to_owned()),
             (50, 2),
             true,
+            SearchMode::Fzf,
             Decor::new(false),
         )
     }
@@ -910,9 +935,9 @@ mod tests {
         }
     }
 
-    /// Tab from the text to the rows: past the files and the two check boxes.
+    /// Tab from the text to the rows: past the files and the check box.
     fn to_rows(window: &mut FindWindow) {
-        for _ in 0..4 {
+        for _ in 0..3 {
             press(window, Action::NextField);
         }
         assert_eq!(window.context(), Context::Find);
@@ -927,6 +952,34 @@ mod tests {
     }
 
     #[test]
+    fn the_search_mode_says_how_the_text_matches_and_alt_r_switches_it() {
+        let mut window = window();
+        let glyphs = Glyphs::of(window.decor.icons()).search_modes;
+        assert!(
+            window.query().lines().regex,
+            "fzf has no meaning here: regex"
+        );
+        assert!(draw(&mut window, 80).contains(&format!("Text {}:", glyphs.regex)));
+        assert_eq!(press(&mut window, Action::SearchMode), FindEvent::Search);
+        assert!(!window.query().lines().regex);
+        assert!(draw(&mut window, 80).contains(&format!("Text {}:", glyphs.plain)));
+        press(&mut window, Action::SearchMode);
+        assert!(window.query().lines().regex, "and back");
+        let plain = FindWindow::new(
+            (Location::Local("/src/noc".into()), "~/src/noc".to_owned()),
+            (50, 2),
+            true,
+            SearchMode::Plain,
+            Decor::new(false),
+        );
+        assert!(!plain.query().lines().regex);
+        assert!(
+            !draw(&mut window, 80).contains("Regular expression"),
+            "no check box"
+        );
+    }
+
+    #[test]
     fn the_fields_and_the_check_boxes_make_the_query_as_in_a_dialog() {
         let mut window = window();
         assert_eq!(
@@ -938,20 +991,18 @@ mod tests {
         press(&mut window, Action::Down);
         typed(&mut window, "*.rs  !target");
         assert_eq!(press(&mut window, Action::Backspace), FindEvent::Search);
-        assert_eq!(press(&mut window, Action::ToggleRegex), FindEvent::Search);
+        assert_eq!(press(&mut window, Action::SearchMode), FindEvent::Search);
         let query = window.query();
         let query = query.lines();
         assert_eq!(query.pattern, "fn x");
         assert_eq!(query.globs, ["*.rs", "!targe"]);
         assert!(!query.regex && !query.match_case && query.hidden);
         assert_eq!(query.max_per_file, 2);
-        // Tab goes on to the check boxes, where Space switches one.
-        press(&mut window, Action::NextField);
+        // Tab goes on to the check box, where Space switches it.
         press(&mut window, Action::NextField);
         assert_eq!(window.context(), Context::Find);
         assert_eq!(press(&mut window, Action::Toggle), FindEvent::Search);
         assert!(window.query().lines().match_case);
-        press(&mut window, Action::Up);
         press(&mut window, Action::Up);
         press(&mut window, Action::Up);
         assert_eq!(
@@ -1078,8 +1129,8 @@ mod tests {
                 line: None
             }
         );
-        // Back to the text, the first mode, six stops before the rows: its buttons come back.
-        for _ in 0..6 {
+        // Back to the text, the first mode, five stops before the rows: its buttons come back.
+        for _ in 0..5 {
             press(&mut window, Action::PrevField);
         }
         press(&mut window, Action::Toggle);
@@ -1087,9 +1138,9 @@ mod tests {
         assert!(draw(&mut window, 70).contains("View"));
     }
 
-    /// Tab from the second mode to the rows: past the fields and the check boxes.
+    /// Tab from the second mode to the rows: past the fields and the check box.
     fn to_rows_from_the_modes(window: &mut FindWindow) {
-        for _ in 0..5 {
+        for _ in 0..4 {
             press(window, Action::NextField);
         }
         assert_eq!(window.context(), Context::Find);

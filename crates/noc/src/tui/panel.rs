@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use jiff::tz::TimeZone;
-use noc_config::Wheel;
+use noc_config::{SearchMode, Wheel};
 use noc_scroll::Motion;
 use noc_scroll::scrollbar::{self, Bar};
 use noc_vfs::{DirEntry, Location, RemotePath, Space};
@@ -22,11 +22,11 @@ use unicode_width::UnicodeWidthChar as _;
 use super::cells::{self, Align, Cut, MTIME_WIDTH, Marks};
 use super::decor::{self, Decor};
 use super::dialog::Field;
-use super::fuzzy::Fuzzy;
 use super::glyphs;
 use super::keymap::Action;
 use super::mouse::Scroll;
 use super::scroll::Window;
+use super::search_mode::{self, Matcher};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -108,10 +108,12 @@ struct Search {
     back: bool,
     /// The rows on screen that Esc puts back, as vim's `old_viewstate`.
     view: Window,
+    /// How it matches what is typed: `ui.search_mode` until Alt+r switches it.
+    mode: SearchMode,
 }
 
 impl Search {
-    fn new(origin: usize, count: usize, back: bool, view: Window) -> Self {
+    fn new(origin: usize, count: usize, back: bool, view: Window, mode: SearchMode) -> Self {
         Self {
             field: Field::plain(""),
             origin,
@@ -120,6 +122,7 @@ impl Search {
             count: count.max(1),
             back,
             view,
+            mode,
         }
     }
 
@@ -134,6 +137,8 @@ impl Search {
 pub(crate) struct SearchEnd {
     pub(crate) text: String,
     pub(crate) back: bool,
+    /// How it matched, which `n` and `N` match the same way.
+    pub(crate) mode: SearchMode,
     /// Whether it went round past the end, or the start, if it found a match.
     pub(crate) found: Option<bool>,
 }
@@ -150,52 +155,6 @@ pub(crate) struct View<'a> {
     pub(crate) tick: u64,
     pub(crate) now: SystemTime,
     pub(crate) tz: &'a TimeZone,
-    /// Quick search matches as fzf does (`ui.fuzzy_search`).
-    pub(crate) fuzzy: bool,
-}
-
-/// What quick search looks for, to show where the names on screen match it: the text, in
-/// lower case, anywhere in a name, or as fzf matches it.
-enum Finder {
-    Text(Vec<char>),
-    Fuzzy(Fuzzy),
-}
-
-impl Finder {
-    /// The characters of `name` that match, by their indexes, in order.
-    fn positions(&mut self, name: &str) -> Vec<usize> {
-        match self {
-            Self::Text(text) => text_positions(name, text),
-            Self::Fuzzy(fuzzy) => fuzzy.positions(name).unwrap_or_default(),
-        }
-    }
-}
-
-/// The characters of `name` that hold `text`, in lower case, ignoring case, each place it
-/// does, as quick search finds names that hold it.
-fn text_positions(name: &str, text: &[char]) -> Vec<usize> {
-    if text.is_empty() {
-        return Vec::new();
-    }
-    // A character may lower to several, each with the one it came from.
-    let lowered: Vec<(char, usize)> = name
-        .chars()
-        .enumerate()
-        .flat_map(|(index, c)| c.to_lowercase().map(move |lower| (lower, index)))
-        .collect();
-    let mut positions = Vec::new();
-    let mut at = 0;
-    while at + text.len() <= lowered.len() {
-        let window = &lowered[at..at + text.len()];
-        if window.iter().map(|&(c, _)| c).eq(text.iter().copied()) {
-            positions.extend(window.iter().map(|&(_, index)| index));
-            at += text.len();
-        } else {
-            at += 1;
-        }
-    }
-    positions.dedup();
-    positions
 }
 
 /// What a directory is sorted by. Directories always come first.
@@ -819,22 +778,31 @@ impl Panel {
     }
 
     /// Starts quick search down the rows, as vim's `/`: to match `count` of what is typed,
-    /// from the row after the cursor, round to the top.
-    pub(crate) fn search_down(&mut self, count: usize) {
-        self.search = Some(Search::new(self.cursor, count, false, self.window));
+    /// from the row after the cursor, round to the top, in `mode`.
+    pub(crate) fn search_down(&mut self, count: usize, mode: SearchMode) {
+        self.search = Some(Search::new(self.cursor, count, false, self.window, mode));
     }
 
     /// Starts quick search up the rows, as vim's `?`: to match `count` of what is typed, from
-    /// the row before the cursor, round to the bottom.
-    pub(crate) fn search_up(&mut self, count: usize) {
-        self.search = Some(Search::new(self.cursor, count, true, self.window));
+    /// the row before the cursor, round to the bottom, in `mode`.
+    pub(crate) fn search_up(&mut self, count: usize, mode: SearchMode) {
+        self.search = Some(Search::new(self.cursor, count, true, self.window, mode));
+    }
+
+    /// Switches how quick search matches to the next mode, as Alt+r does, and searches again.
+    pub(crate) fn switch_search_mode(&mut self) {
+        let Some(search) = &mut self.search else {
+            return;
+        };
+        search.mode = search_mode::next(search.mode);
+        self.search_again_typed();
     }
 
     /// Jumps to the next match down, or the next up, of the search that runs, as vim's Ctrl+g
     /// and Ctrl+t: the count before `/` matches on, from the match the cursor is on. Where the
     /// search goes from moves along, so that Enter stays on this match and an edit searches
-    /// on from the match before it; `fuzzy`, the next best or the one before, round.
-    pub(crate) fn search_step(&mut self, forward: bool, fuzzy: bool) {
+    /// on from the match before it; as fzf, the next best or the one before, round.
+    pub(crate) fn search_step(&mut self, forward: bool) {
         let Some(search) = &self.search else {
             return;
         };
@@ -842,12 +810,14 @@ impl Panel {
         if text.trim().is_empty() {
             return;
         }
-        let (count, back) = (search.count, search.back);
+        let (count, back, mode) = (search.count, search.back, search.mode);
         let current = search.found.unwrap_or_else(|| search.start_row());
-        let target = if fuzzy {
-            self.step_fuzzy(&text, current, forward, count)
+        let mut matcher = Matcher::names(mode, &text);
+        let ranks = matcher.ranks();
+        let target = if ranks {
+            self.step_ranked(&mut matcher, current, forward, count)
         } else {
-            self.find_from(&text.to_lowercase(), 2 * current + 1, !forward, count)
+            self.find_from(&mut matcher, 2 * current + 1, !forward, count)
                 .map(|(row, _)| row)
         };
         let Some(row) = target else {
@@ -865,7 +835,7 @@ impl Panel {
         self.window.follow(&mut self.cursor, rows, page);
         search.view = self.window;
         // Fuzzy search ranks the rows: where it goes from stays.
-        if fuzzy {
+        if ranks {
             return;
         }
         // As vim's may_adjust_incsearch_highlighting moves search_start.
@@ -882,35 +852,31 @@ impl Panel {
         }
     }
 
-    /// Searches for `text`, what an earlier search found, as if it were typed: Ctrl+g with
-    /// nothing typed yet, as mc's Ctrl+s Ctrl+s.
-    pub(crate) fn search_resume(&mut self, text: &str, fuzzy: bool) {
+    /// Searches for `text`, what an earlier search found in `mode`, as if it were typed in that
+    /// mode: Ctrl+g with nothing typed yet, as mc's Ctrl+s Ctrl+s.
+    pub(crate) fn search_resume(&mut self, text: &str, mode: SearchMode) {
         let Some(search) = &mut self.search else {
             return;
         };
-        let text = if fuzzy {
-            text.to_owned()
-        } else {
-            text.to_lowercase()
-        };
-        search.field = Field::plain(&text);
-        self.search_again_typed(fuzzy);
+        search.field = Field::plain(text);
+        search.mode = mode;
+        self.search_again_typed();
     }
 
-    /// Moves the cursor `times` matches on, as vim's `3n`, and puts where it was in the jump
-    /// list, once, even if the match is on the same row, as vim does; a search that finds
-    /// nothing leaves the jumps as they are. Whether it went round past the end, or the
-    /// start, if it found one.
+    /// Moves the cursor `times` matches of `text` in `mode` on, as vim's `3n`, and puts where
+    /// it was in the jump list, once, even if the match is on the same row, as vim does; a
+    /// search that finds nothing leaves the jumps as they are. Whether it went round past the
+    /// end, or the start, if it found one.
     pub(crate) fn search_again(
         &mut self,
-        text: &str,
+        (text, mode): (&str, SearchMode),
         forward: bool,
-        fuzzy: bool,
         times: usize,
     ) -> Option<bool> {
         let here = self.here();
-        let (row, round) = if fuzzy {
-            let ranked = self.ranked(text);
+        let mut matcher = Matcher::names(mode, text);
+        let (row, round) = if matcher.ranks() {
+            let ranked = self.ranked(&mut matcher);
             let count = ranked.len();
             let at = ranked.iter().position(|&(row, _)| row == self.cursor);
             let steps = times % count.max(1);
@@ -921,17 +887,23 @@ impl Panel {
             };
             (ranked.get(index).map(|&(row, _)| row)?, round)
         } else {
-            self.find_from(&text.to_lowercase(), 2 * self.cursor + 1, !forward, times)?
+            self.find_from(&mut matcher, 2 * self.cursor + 1, !forward, times)?
         };
         self.push_jump(here);
         self.cursor = row;
         Some(round)
     }
 
-    /// The next fuzzy match from `current` as fzf ranks them, `count` on or back, round; the
-    /// best from a row that does not match.
-    fn step_fuzzy(&self, text: &str, current: usize, forward: bool, count: usize) -> Option<usize> {
-        let ranked = self.ranked(text);
+    /// The next match from `current` as fzf ranks them, `count` on or back, round; the best
+    /// from a row that does not match.
+    fn step_ranked(
+        &self,
+        matcher: &mut Matcher,
+        current: usize,
+        forward: bool,
+        count: usize,
+    ) -> Option<usize> {
+        let ranked = self.ranked(matcher);
         let total = ranked.len();
         let steps = count % total.max(1);
         let index = match ranked.iter().position(|&(row, _)| row == current) {
@@ -943,52 +915,47 @@ impl Panel {
     }
 
     /// Types `c` at the cursor of quick search and searches again, as vim's incremental search
-    /// does: from where the search goes from to the first name that holds the text,
-    /// ignoring case, or, `fuzzy` (`ui.fuzzy_search`), to the best match as fzf ranks them, the
-    /// first from there of several as good. While nothing matches, the cursor stays where the
-    /// search goes from, and the text stays as typed.
-    pub(crate) fn search_type(&mut self, c: char, fuzzy: bool) {
+    /// does: from where the search goes from to the first name that matches the text, or, as
+    /// fzf, to the best match, the first from there of several as good. While nothing matches,
+    /// the cursor stays where the search goes from, and the text stays as typed.
+    pub(crate) fn search_type(&mut self, c: char) {
         let Some(search) = &mut self.search else {
             return;
         };
-        // Smart case needs the capitals.
-        if fuzzy {
-            search.field.insert(c);
-        } else {
-            for c in c.to_lowercase() {
-                search.field.insert(c);
-            }
-        }
-        self.search_again_typed(fuzzy);
+        search.field.insert(c);
+        self.search_again_typed();
     }
 
     /// Edits the text of quick search with a key of the text fields; an edit searches again,
     /// as typing does. Moves of the text cursor leave the panel's where it is.
-    pub(crate) fn search_edit(&mut self, action: Action, fuzzy: bool) {
+    pub(crate) fn search_edit(&mut self, action: Action) {
         let Some(search) = &mut self.search else {
             return;
         };
         let before = search.field.text().to_owned();
         search.field.edit(action);
         if search.field.text() != before {
-            self.search_again_typed(fuzzy);
+            self.search_again_typed();
         }
     }
 
     /// Searches for the text typed, from where the search goes from, and puts the rows on
     /// screen back as they were before it, for the cursor to move from there, as vim does.
-    fn search_again_typed(&mut self, fuzzy: bool) {
+    fn search_again_typed(&mut self) {
         let Some(search) = &self.search else {
             return;
         };
         let text = search.field.text().to_owned();
         let found = if text.trim().is_empty() {
             None
-        } else if fuzzy {
-            self.best_fuzzy(&text, search)
         } else {
-            self.find_from(&text, search.from, search.back, search.count)
-                .map(|(row, _)| row)
+            let mut matcher = Matcher::names(search.mode, &text);
+            if matcher.ranks() {
+                self.best_ranked(&mut matcher, search)
+            } else {
+                self.find_from(&mut matcher, search.from, search.back, search.count)
+                    .map(|(row, _)| row)
+            }
         };
         let Some(search) = &mut self.search else {
             return;
@@ -999,9 +966,9 @@ impl Panel {
         self.cursor = found.unwrap_or_else(|| search.start_row());
     }
 
-    /// The best fuzzy match for `text`, the first from where `search` goes from of several as
+    /// The best match as fzf ranks them, the first from where `search` goes from of several as
     /// good; with a count before `/` or `?`, the match of that number, round.
-    fn best_fuzzy(&self, text: &str, search: &Search) -> Option<usize> {
+    fn best_ranked(&self, matcher: &mut Matcher, search: &Search) -> Option<usize> {
         let rows = self.rows().max(1);
         let start = search.start_row() % rows;
         let back = search.back;
@@ -1012,18 +979,18 @@ impl Panel {
                 (row + rows - start - 1) % rows
             }
         };
-        let mut ranked = self.ranked(text);
+        let mut ranked = self.ranked(matcher);
         ranked.sort_by_key(|&(row, score)| (std::cmp::Reverse(score), after(row)));
         let count = ranked.len();
         (count > 0).then(|| ranked[(search.count - 1) % count].0)
     }
 
-    /// The row of match `count` of `text` (lower case) from `from`, in half rows: down to the
-    /// first name after it that holds the text, round to the top, or, `back`, up to the
-    /// first before it, round to the bottom; and whether the search went round.
+    /// The row of match `count` of `matcher` from `from`, in half rows: down to the first name
+    /// after it that matches, round to the top, or, `back`, up to the first before it, round to
+    /// the bottom; and whether the search went round.
     fn find_from(
         &self,
-        text: &str,
+        matcher: &mut Matcher,
         from: usize,
         back: bool,
         count: usize,
@@ -1034,18 +1001,21 @@ impl Panel {
         let mut round = false;
         // No more steps than rows: round, they come back to where they were.
         for _ in 0..count.clamp(1, rows.max(1)) {
-            let matches = |row: &usize| self.contains(*row, text);
+            let mut hit = |row: &usize| {
+                self.search_name(*row)
+                    .is_some_and(|name| matcher.score(&name).is_some())
+            };
             let next = if back {
                 (0..rows)
                     .rev()
                     .filter(|row| 2 * row + 1 < from)
                     .chain((0..rows).rev())
-                    .find(matches)
+                    .find(&mut hit)
             } else {
                 (0..rows)
                     .filter(|row| 2 * row + 1 > from)
                     .chain(0..rows)
-                    .find(matches)
+                    .find(&mut hit)
             }?;
             let at = 2 * next + 1;
             round |= if back { at >= from } else { at <= from };
@@ -1066,16 +1036,18 @@ impl Panel {
 
     /// Ends quick search as Enter does in vim: it searches once more from where it goes from,
     /// for the match of the count, and goes there, or stays there if nothing matches. Where it
-    /// started goes to the jump list, even if the match is on that row, as vim's; `fuzzy`, the
+    /// started goes to the jump list, even if the match is on that row, as vim's; as fzf, the
     /// cursor stays on the match. What it searched for and found, unless nothing was typed.
-    pub(crate) fn end_search(&mut self, fuzzy: bool) -> Option<SearchEnd> {
+    pub(crate) fn end_search(&mut self) -> Option<SearchEnd> {
         let search = self.search.take()?;
         let text = search.field.text().to_owned();
         if text.trim().is_empty() {
             return None;
         }
         let start = search.start_row();
-        let found = if fuzzy {
+        let mut matcher = Matcher::names(search.mode, &text);
+        let ranks = matcher.ranks();
+        let found = if ranks {
             search.found.map(|row| (row, false))
         } else {
             // As vim's Enter: the rows as they were, made right for where it searches from,
@@ -1084,10 +1056,10 @@ impl Panel {
             let (rows, page) = (self.rows(), self.page.max(1));
             let mut at = start;
             self.window.follow(&mut at, rows, page);
-            self.find_from(&text, search.from, search.back, search.count)
+            self.find_from(&mut matcher, search.from, search.back, search.count)
         };
         let jumped = match found {
-            Some((row, _)) if fuzzy => row != search.origin,
+            Some((row, _)) if ranks => row != search.origin,
             Some(_) => true,
             // As vim's, which compares the positions with their columns: after Ctrl+g or Ctrl+t,
             // where it searches from may be within the row it started on.
@@ -1101,23 +1073,16 @@ impl Panel {
         Some(SearchEnd {
             text,
             back: search.back,
+            mode: search.mode,
             found: found.map(|(_, round)| round),
         })
     }
 
-    /// Whether the name of row `index` holds `text` (lower case) anywhere, ignoring case, as the
-    /// filters of the lists match without fzf.
-    fn contains(&self, index: usize, text: &str) -> bool {
-        self.search_name(index)
-            .is_some_and(|name| name.to_lowercase().contains(text))
-    }
-
-    /// The rows whose names match `text` as fzf matches it, with their scores, best first;
-    /// rows as good keep their order. `..` never matches.
-    fn ranked(&self, text: &str) -> Vec<(usize, u32)> {
-        let mut fuzzy = Fuzzy::names(text);
+    /// The rows whose names match as fzf matches them, with their scores, best first; rows as
+    /// good keep their order. `..` never matches.
+    fn ranked(&self, matcher: &mut Matcher) -> Vec<(usize, u32)> {
         let mut ranked: Vec<(usize, u32)> = (0..self.rows())
-            .filter_map(|index| Some((index, fuzzy.score(&self.search_name(index)?)?)))
+            .filter_map(|index| Some((index, matcher.score(&self.search_name(index)?)?)))
             .collect();
         ranked.sort_by_key(|&(_, score)| std::cmp::Reverse(score));
         ranked
@@ -1125,16 +1090,13 @@ impl Panel {
 
     /// What quick search looks for while it runs with something typed, to show where names
     /// match it.
-    fn finder(&self, fuzzy: bool) -> Option<Finder> {
-        let text = self.search.as_ref()?.field.text();
+    fn finder(&self) -> Option<Matcher> {
+        let search = self.search.as_ref()?;
+        let text = search.field.text();
         if text.trim().is_empty() {
             return None;
         }
-        Some(if fuzzy {
-            Finder::Fuzzy(Fuzzy::names(text))
-        } else {
-            Finder::Text(text.to_lowercase().chars().collect())
-        })
+        Some(Matcher::names(search.mode, text))
     }
 
     /// The name that quick search finds a row by: the name it shows.
@@ -1673,7 +1635,7 @@ impl Panel {
         let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
         frame.render_widget(columns.header(self.sort, theme), line(inner.y));
         let visual = self.visual_rows();
-        let mut finder = self.finder(view.fuzzy);
+        let mut finder = self.finder();
         for (screen_row, index) in (self.window.top()..self.rows())
             .take(list_height)
             .enumerate()
@@ -1718,26 +1680,32 @@ impl Panel {
         let mut status_style = (Style::new(), theme.truncated);
         // A host the panel waits for turns a spinner in front, in the color of its status.
         let mut waiting = None;
+        // Quick search, whose glyph of its mode has a style of its own.
+        let mut searching = None;
         let status = if let Some(renaming) = &self.renaming {
             fl!("panel-rename", name = cells::sanitize(&renaming.name))
         } else if let Some(search) = &self.search {
             let field = &search.field;
             status_style = (theme.quick_search, theme.truncated_cursor);
+            let invalid = self.finder().is_some_and(|finder| finder.error().is_some());
+            let mark = search_mode::marked(search.mode, invalid, theme.quick_search, theme);
             let prompt = |text: String| {
                 if search.back {
-                    fl!("panel-search-back", text = text)
+                    fl!("panel-search-back", mode = mark.glyph, text = text)
                 } else {
-                    fl!("panel-search", text = text)
+                    fl!("panel-search", mode = mark.glyph, text = text)
                 }
             };
-            let prefix = cells::width(&prompt(String::new()));
-            let (shown, column) = field.visible(width.saturating_sub(prefix));
+            let prefix = prompt(String::new());
+            let (shown, column) = field.visible(width.saturating_sub(cells::width(&prefix)));
             if active {
-                let column = u16::try_from(prefix + column).unwrap_or(u16::MAX);
+                let column = u16::try_from(cells::width(&prefix) + column).unwrap_or(u16::MAX);
                 let x = area.x.saturating_add(column).min(area.right() - 1);
                 frame.set_cursor_position((x, area.y));
             }
-            prompt(shown)
+            let status = prompt(shown);
+            searching = Some(mark.spans(&status, &prefix, theme.quick_search));
+            status
         } else if let Some(error) = &self.error {
             error.clone()
         } else if let Some(pending) = &self.pending {
@@ -1785,8 +1753,11 @@ impl Panel {
             room = room.saturating_sub(2);
         }
         let marks = theme.glyphs.marks;
-        line.spans
-            .extend(cells::fit(&status, room, Align::Left, status_style, marks));
+        let fitted = match searching {
+            Some(spans) => cells::fit_spans(spans, room, status_style, marks),
+            None => cells::fit(&status, room, Align::Left, status_style, marks),
+        };
+        line.spans.extend(fitted);
         frame.render_widget(line, area);
     }
 
@@ -2611,7 +2582,6 @@ mod tests {
             tick: 0,
             now: UNIX_EPOCH + Duration::from_secs(NOW),
             tz: &TimeZone::UTC,
-            fuzzy: false,
         };
         terminal
             .draw(|frame| panel.render(frame, frame.area(), active, &view))
@@ -2753,60 +2723,63 @@ mod tests {
         loaded("/srv", files)
     }
 
-    fn typed(panel: &mut Panel, text: &str, fuzzy: bool) {
+    fn typed(panel: &mut Panel, text: &str) {
         for c in text.chars() {
-            panel.search_type(c, fuzzy);
+            panel.search_type(c);
         }
     }
 
     #[test]
     fn quick_search_searches_from_where_it_started_as_vims_incremental_search() {
         let mut panel = search_files(&["bar", "bin", "boot", "cab"]);
-        panel.search_down(1);
+        panel.search_down(1, SearchMode::Plain);
         assert!(panel.searching());
-        typed(&mut panel, "B", false);
+        typed(&mut panel, "B");
         assert_eq!(under_cursor(&panel), "bar", "case does not matter");
-        typed(&mut panel, "i", false);
+        typed(&mut panel, "i");
         assert_eq!(under_cursor(&panel), "bin");
-        typed(&mut panel, "x", false);
-        assert_eq!(panel.search_text(), Some("bix"), "a miss stays typed");
+        typed(&mut panel, "x");
+        assert_eq!(panel.search_text(), Some("Bix"), "a miss stays as typed");
         assert_eq!(panel.cursor, 0, "and the cursor goes back where it started");
-        panel.search_edit(Action::Backspace, false);
+        panel.search_edit(Action::Backspace);
         assert_eq!(under_cursor(&panel), "bin");
-        panel.search_edit(Action::Backspace, false);
+        panel.search_edit(Action::Backspace);
         assert_eq!(
             under_cursor(&panel),
             "bar",
             "an edit searches from the start again"
         );
-        typed(&mut panel, "o", false);
+        typed(&mut panel, "o");
         let hosts = |_: &str| HostState::default();
         let mut terminal = render_with(&mut panel, (40, 6), true, &hosts, Decor::new(false));
-        assert!(terminal.backend().to_string().contains("║Search: bo"));
+        let plain = Theme::terminal().glyphs.search_modes.plain;
+        let status = format!("║Search {plain}: Bo");
+        assert!(terminal.backend().to_string().contains(&status));
         assert_eq!(
             terminal.get_cursor_position().unwrap(),
-            Position::new(11, 4),
+            Position::new(13, 4),
             "after the text"
         );
-        let end = panel.end_search(false);
+        let end = panel.end_search();
         assert_eq!(
             end,
             Some(SearchEnd {
-                text: "bo".to_owned(),
+                text: "Bo".to_owned(),
                 back: false,
+                mode: SearchMode::Plain,
                 found: Some(false),
             })
         );
         assert!(!panel.searching());
         // Enter on a text that nothing matches stays where the search started.
-        panel.search_up(1);
-        typed(&mut panel, "z", false);
+        panel.search_up(1, SearchMode::Plain);
+        typed(&mut panel, "z");
         assert_eq!(under_cursor(&panel), "boot");
-        assert_eq!(panel.end_search(false).map(|end| end.found), Some(None));
+        assert_eq!(panel.end_search().map(|end| end.found), Some(None));
         assert_eq!(under_cursor(&panel), "boot");
         // Opening another directory ends a search.
-        panel.search_down(1);
-        typed(&mut panel, "b", false);
+        panel.search_down(1, SearchMode::Plain);
+        typed(&mut panel, "b");
         panel.handle(Action::Reload);
         assert!(!panel.searching());
     }
@@ -2814,100 +2787,101 @@ mod tests {
     #[test]
     fn fuzzy_quick_search_goes_to_the_best_match_and_on_to_the_next_best() {
         let mut panel = search_files(&["Cargo.toml", "config.rs", "cfg-if", "notes", "x.cfg"]);
-        panel.search_down(1);
-        typed(&mut panel, "cfg", true);
+        panel.search_down(1, SearchMode::Fzf);
+        typed(&mut panel, "cfg");
         assert_eq!(under_cursor(&panel), "cfg-if", "together, at the start");
-        panel.search_step(true, true);
+        panel.search_step(true);
         assert_eq!(under_cursor(&panel), "x.cfg", "together");
-        panel.search_step(true, true);
+        panel.search_step(true);
         assert_eq!(under_cursor(&panel), "config.rs", "apart");
-        panel.search_step(true, true);
+        panel.search_step(true);
         assert_eq!(under_cursor(&panel), "cfg-if", "round to the best");
-        typed(&mut panel, "q", true);
+        typed(&mut panel, "q");
         assert_eq!(panel.search_text(), Some("cfgq"), "a miss stays typed");
         assert_eq!(panel.cursor, 0);
-        panel.search_edit(Action::DeleteToStart, true);
+        panel.search_edit(Action::DeleteToStart);
         assert_eq!(panel.search_text(), Some(""));
-        typed(&mut panel, "C", true);
+        typed(&mut panel, "C");
         assert_eq!(
             under_cursor(&panel),
             "Cargo.toml",
             "case counts with a capital"
         );
-        panel.end_search(true);
+        panel.end_search();
 
         let mut panel = search_files(&["bar", "bat", "baz"]);
         panel.handle(Action::End);
-        panel.search_down(1);
-        typed(&mut panel, "b", true);
+        panel.search_down(1, SearchMode::Fzf);
+        typed(&mut panel, "b");
         assert_eq!(
             under_cursor(&panel),
             "bar",
             "as good: the first after the cursor, round, as vim's search goes"
         );
-        typed(&mut panel, " ", true);
+        typed(&mut panel, " ");
         assert_eq!(under_cursor(&panel), "bar", "a space stays");
     }
 
     #[test]
     fn matches_go_both_ways_round_and_an_ended_search_says_what_it_found() {
         let mut panel = search_files(&["bar", "bin", "cat", "boot"]);
-        panel.search_down(1);
-        typed(&mut panel, "B", false);
+        panel.search_down(1, SearchMode::Plain);
+        typed(&mut panel, "B");
         assert_eq!(under_cursor(&panel), "bar");
-        panel.search_step(false, false);
+        panel.search_step(false);
         assert_eq!(under_cursor(&panel), "boot", "up, round to the bottom");
-        panel.search_step(true, false);
+        panel.search_step(true);
         assert_eq!(under_cursor(&panel), "bar", "down, round to the top");
-        let end = panel.end_search(false).expect("a search");
+        let end = panel.end_search().expect("a search");
         assert_eq!(
             (end.text.as_str(), end.found),
-            ("b", Some(false)),
+            ("B", Some(false)),
             "after Ctrl+g, Enter stays on the match without going round, as vim's"
         );
-        assert_eq!(panel.search_again("x", true, false, 1), None, "no match");
+        assert_eq!(
+            panel.search_again(("x", SearchMode::Plain), true, 1),
+            None,
+            "no match"
+        );
         assert_eq!(under_cursor(&panel), "bar", "the cursor stays");
-        assert_eq!(panel.search_again("B", false, false, 1), Some(true));
+        assert_eq!(
+            panel.search_again(("B", SearchMode::Plain), false, 1),
+            Some(true)
+        );
         assert_eq!(under_cursor(&panel), "boot", "ignoring case, round");
 
         // Fuzzy: the previous one as fzf ranks them, round to the worst.
-        panel.search_down(1);
-        panel.search_resume("bt", true);
+        panel.search_down(1, SearchMode::Plain);
+        panel.search_resume("bt", SearchMode::Fzf);
         assert_eq!(panel.search_text(), Some("bt"));
         let best = under_cursor(&panel);
-        panel.search_step(false, true);
-        panel.search_step(true, true);
+        panel.search_step(false);
+        panel.search_step(true);
         assert_eq!(under_cursor(&panel), best, "back and forth");
-        panel.search_edit(Action::Backspace, true);
-        panel.search_edit(Action::Backspace, true);
-        assert_eq!(panel.end_search(true), None, "nothing typed, nothing kept");
+        panel.search_edit(Action::Backspace);
+        panel.search_edit(Action::Backspace);
+        assert_eq!(panel.end_search(), None, "nothing typed, nothing kept");
     }
 
     #[test]
     fn a_count_before_the_search_and_ctrl_g_go_that_many_matches_on() {
         let mut panel = search_files(&["a1", "a2", "a3", "a4"]);
-        panel.search_down(2);
-        typed(&mut panel, "a", false);
+        panel.search_down(2, SearchMode::Plain);
+        typed(&mut panel, "a");
         assert_eq!(under_cursor(&panel), "a2");
-        panel.search_step(true, false);
+        panel.search_step(true);
         assert_eq!(under_cursor(&panel), "a4");
-        panel.search_step(true, false);
+        panel.search_step(true);
         assert_eq!(under_cursor(&panel), "a2", "round");
         // Enter searches once more from the match before, with the count, as vim's does.
-        assert_eq!(
-            panel.end_search(false).map(|end| end.found),
-            Some(Some(false))
-        );
+        assert_eq!(panel.end_search().map(|end| end.found), Some(Some(false)));
         assert_eq!(under_cursor(&panel), "a3");
         // A count that goes round the end says so.
         panel.handle(Action::Home);
-        panel.search_down(5);
-        typed(&mut panel, "a", false);
+        panel.search_down(5, SearchMode::Plain);
+        typed(&mut panel, "a");
         assert_eq!(under_cursor(&panel), "a1");
-        assert_eq!(
-            panel.end_search(false).map(|end| end.found),
-            Some(Some(true))
-        );
+        assert_eq!(panel.end_search().map(|end| end.found), Some(Some(true)));
     }
 
     #[test]
@@ -2921,8 +2895,8 @@ mod tests {
         }
         panel.scroll(10);
         let (cursor, top) = (panel.cursor, panel.window.top());
-        panel.search_down(1);
-        typed(&mut panel, "f5", false);
+        panel.search_down(1, SearchMode::Plain);
+        typed(&mut panel, "f5");
         panel.scroll(10);
         assert_eq!(under_cursor(&panel), "f50");
         assert_ne!(panel.window.top(), top, "the rows scrolled to the match");
@@ -2935,19 +2909,22 @@ mod tests {
     #[test]
     fn literal_quick_search_finds_the_text_anywhere_in_a_name_as_the_filters_do() {
         let mut panel = search_files(&["bar", "cab", "Tabs"]);
-        panel.search_down(1);
-        typed(&mut panel, "AB", false);
+        panel.search_down(1, SearchMode::Plain);
+        typed(&mut panel, "AB");
         assert_eq!(under_cursor(&panel), "cab");
-        panel.search_step(true, false);
+        panel.search_step(true);
         assert_eq!(under_cursor(&panel), "Tabs", "ignoring case");
-        panel.end_search(false);
-        assert_eq!(panel.search_again("ab", true, false, 1), Some(true));
+        panel.end_search();
+        assert_eq!(
+            panel.search_again(("ab", SearchMode::Plain), true, 1),
+            Some(true)
+        );
         assert_eq!(under_cursor(&panel), "cab", "round");
     }
 
     /// What each row of `panel`, active, drawn `width` cells wide in mc's colors, shows in the
     /// colors of what quick search found, for the rows that show some.
-    fn found(panel: &mut Panel, width: u16, fuzzy: bool) -> Vec<String> {
+    fn found(panel: &mut Panel, width: u16) -> Vec<String> {
         let theme = Theme::mc_classic();
         let mut terminal = Terminal::new(TestBackend::new(width, 10)).unwrap();
         let hosts = |_: &str| HostState::default();
@@ -2959,7 +2936,6 @@ mod tests {
             tick: 0,
             now: UNIX_EPOCH + Duration::from_secs(NOW),
             tz: &TimeZone::UTC,
-            fuzzy,
         };
         terminal
             .draw(|frame| panel.render(frame, frame.area(), true, &view))
@@ -2979,94 +2955,83 @@ mod tests {
     #[test]
     fn quick_search_shows_where_each_name_on_screen_holds_the_text() {
         let mut panel = search_files(&["abab", "cab", "Tabs", "note"]);
-        panel.search_down(1);
-        assert!(found(&mut panel, 60, false).is_empty(), "nothing typed");
-        typed(&mut panel, "AB", false);
+        panel.search_down(1, SearchMode::Plain);
+        assert!(found(&mut panel, 60).is_empty(), "nothing typed");
+        typed(&mut panel, "AB");
         // On the cursor's row too, which is cab's, and ignoring case.
-        assert_eq!(found(&mut panel, 60, false), ["abab", "ab", "ab"]);
-        panel.end_search(false);
-        assert!(
-            found(&mut panel, 60, false).is_empty(),
-            "only while it runs"
-        );
+        assert_eq!(found(&mut panel, 60), ["abab", "ab", "ab"]);
+        panel.end_search();
+        assert!(found(&mut panel, 60).is_empty(), "only while it runs");
     }
 
     #[test]
     fn fuzzy_quick_search_shows_the_characters_it_matched() {
         let mut panel = search_files(&["abab", "cab", "config.rs"]);
-        panel.search_down(1);
-        typed(&mut panel, "cb", true);
-        assert_eq!(found(&mut panel, 60, true), ["cb"]);
+        panel.search_down(1, SearchMode::Fzf);
+        typed(&mut panel, "cb");
+        assert_eq!(found(&mut panel, 60), ["cb"]);
         let mut panel = search_files(&["config.rs"]);
-        panel.search_down(1);
-        typed(&mut panel, "cfg", true);
-        assert_eq!(found(&mut panel, 60, true), ["cfg"]);
+        panel.search_down(1, SearchMode::Fzf);
+        typed(&mut panel, "cfg");
+        assert_eq!(found(&mut panel, 60), ["cfg"]);
     }
 
     #[test]
     fn a_name_cut_short_shows_what_it_found_where_it_shows() {
         let name = format!("ab{}ab.md", "x".repeat(60));
         let mut panel = search_files(&[&name]);
-        panel.search_down(1);
-        typed(&mut panel, "ab", false);
+        panel.search_down(1, SearchMode::Plain);
+        typed(&mut panel, "ab");
         // The start and the end of the name show, not what it found in the middle.
-        assert_eq!(found(&mut panel, 40, false), ["abab"]);
-        typed(&mut panel, ".", false);
-        assert_eq!(found(&mut panel, 40, false), ["ab."]);
+        assert_eq!(found(&mut panel, 40), ["abab"]);
+        typed(&mut panel, ".");
+        assert_eq!(found(&mut panel, 40), ["ab."]);
         // Scrolled past the blank of the marker and the x, the mark over the a: the b after it
         // shows what it found.
         let mut panel = search_files(&[&format!("x{name}")]);
         panel.shift_names(2);
-        panel.search_down(1);
-        typed(&mut panel, "ab", false);
-        assert_eq!(found(&mut panel, 40, false), ["b"]);
-    }
-
-    #[test]
-    fn text_positions_are_each_place_the_text_is_ignoring_case() {
-        let text = |text: &str| text.chars().collect::<Vec<_>>();
-        assert_eq!(text_positions("ReadMe.md", &text("e")), [1, 5]);
-        assert_eq!(text_positions("aaaa", &text("aa")), [0, 1, 2, 3]);
-        assert_eq!(text_positions("aaa", &text("aa")), [0, 1]);
-        assert_eq!(text_positions("ДОКУМЕНТ.txt", &text("кум")), [2, 3, 4]);
-        assert_eq!(text_positions("abc", &text("x")), Vec::<usize>::new());
+        panel.search_down(1, SearchMode::Plain);
+        typed(&mut panel, "ab");
+        assert_eq!(found(&mut panel, 40), ["b"]);
     }
 
     #[test]
     fn quick_search_edits_its_text_as_a_text_field_does() {
         let mut panel = search_files(&["bar", "bat", "boot", "cab"]);
-        panel.search_down(1);
-        typed(&mut panel, "bt", false);
+        panel.search_down(1, SearchMode::Plain);
+        typed(&mut panel, "bt");
         assert_eq!(panel.cursor, 0, "no name starts with bt");
-        panel.search_edit(Action::Backspace, false);
+        panel.search_edit(Action::Backspace);
         assert_eq!(under_cursor(&panel), "bar");
-        typed(&mut panel, "o", false);
+        typed(&mut panel, "o");
         assert_eq!(under_cursor(&panel), "boot");
         // Typed in the middle, a character searches again.
-        panel.search_edit(Action::TextStart, false);
-        panel.search_edit(Action::Right, false);
+        panel.search_edit(Action::TextStart);
+        panel.search_edit(Action::Right);
         assert_eq!(under_cursor(&panel), "boot", "a move of the text cursor");
-        typed(&mut panel, "a", false);
+        typed(&mut panel, "a");
         assert_eq!(panel.search_text(), Some("bao"));
         assert_eq!(panel.cursor, 0);
-        panel.search_edit(Action::DeleteChar, false);
+        panel.search_edit(Action::DeleteChar);
         assert_eq!(panel.search_text(), Some("ba"));
         assert_eq!(under_cursor(&panel), "bar");
-        panel.search_edit(Action::TextEnd, false);
-        typed(&mut panel, "t", false);
+        panel.search_edit(Action::TextEnd);
+        typed(&mut panel, "t");
         assert_eq!(under_cursor(&panel), "bat");
-        panel.search_edit(Action::TextStart, false);
-        panel.search_edit(Action::DeleteToEnd, false);
+        panel.search_edit(Action::TextStart);
+        panel.search_edit(Action::DeleteToEnd);
         assert_eq!(panel.search_text(), Some(""));
         assert_eq!(panel.cursor, 0, "nothing typed: where it started");
         let hosts = |_: &str| HostState::default();
-        typed(&mut panel, "c", false);
-        panel.search_edit(Action::TextStart, false);
+        typed(&mut panel, "c");
+        panel.search_edit(Action::TextStart);
         let mut terminal = render_with(&mut panel, (40, 6), true, &hosts, Decor::new(false));
-        assert!(terminal.backend().to_string().contains("║Search: c"));
+        let plain = Theme::terminal().glyphs.search_modes.plain;
+        let status = format!("║Search {plain}: c");
+        assert!(terminal.backend().to_string().contains(&status));
         assert_eq!(
             terminal.get_cursor_position().unwrap(),
-            Position::new(9, 4),
+            Position::new(11, 4),
             "on the text cursor"
         );
     }
@@ -3314,7 +3279,11 @@ mod tests {
         let end = panel.cursor;
         assert!(panel.jump_back(1).is_none(), "in this directory");
         assert_eq!(panel.cursor, 0);
-        assert!(panel.search_again("nothing", true, false, 1).is_none());
+        assert!(
+            panel
+                .search_again(("nothing", SearchMode::Plain), true, 1)
+                .is_none()
+        );
         assert!(panel.jump_forward(1).is_none());
         assert_eq!(panel.cursor, end, "Tab still goes forward");
     }

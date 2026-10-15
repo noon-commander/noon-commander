@@ -29,6 +29,7 @@ mod places;
 mod progress;
 mod pulldown;
 mod scroll;
+mod search_mode;
 mod sidebar;
 mod sums;
 mod tab_menu;

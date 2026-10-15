@@ -69,10 +69,11 @@ panel-name-by-extension = Name, by extension
 # The size column of the `..` row and of directories.
 panel-up-dir = UP--DIR
 panel-dir = DIR
-# Status line during quick search: what was typed so far.
-panel-search = Search: { $text }
-# Status line during quick search up the rows, as vim's ?: what was typed so far.
-panel-search-back = Search up: { $text }
+# Status line during quick search: the glyph of how it matches (plain, fzf, or regex; Alt+r
+# switches it), and what was typed so far.
+panel-search = Search { $mode }: { $text }
+# Status line during quick search up the rows, as vim's ?: the same.
+panel-search-back = Search up { $mode }: { $text }
 # Status line while the entry under the cursor is renamed in its row: its name until now.
 panel-rename = Rename: { $name }
 # Status line while a directory is read.
@@ -117,12 +118,17 @@ error-ssh-too-old = OpenSSH { $found } is too old; Noon Commander needs { $requi
 error-not-openssh = { $program } is not OpenSSH
 
 ## What the windows that list rows to choose from share (src/tui/picker): the location menu,
-## the tab menu, the workspaces, and the command history. Prefix: picker-.
+## the tab menu, the workspaces, the command history, and the list of the key hints. Prefix:
+## picker-.
 
-# The first line: what was typed to filter the window.
-picker-filter = Filter: { $text }
+# The first line: the glyph of how the filter matches (plain, fzf, or regex; Alt+r switches
+# it), and what was typed to filter the window.
+picker-filter = Filter { $mode }: { $text }
 # When the filter leaves no row.
 picker-nothing = Nothing matches.
+# In the regex mode of the filter (Alt+r), when what is typed is no regular expression: what is
+# wrong with it, as the regex engine says.
+picker-not-regex = Not a regular expression: { $reason }
 
 ## The location menu of Alt+F1 and Alt+F2 (src/tui/menu), as Far Manager's menu to change
 ## drives. Prefix: menu-.
@@ -144,8 +150,9 @@ menu-more = { $count } more…
 ## keywords typed, as `z` picks them in a shell. Prefix: jump-.
 
 jump-title = zoxide
-# The first line: the keywords typed, separated by spaces.
-jump-keywords = Jump to: { $text }
+# The first line: the glyph of how they match (plain, fzf, or regex; Alt+r switches it), and the
+# keywords typed, separated by spaces.
+jump-keywords = Jump to { $mode }: { $text }
 # When zoxide lists no directory.
 jump-nothing = zoxide knows no directory that matches. It learns the directories you work in.
 # The zoxide program is not there.
@@ -161,12 +168,11 @@ find-title = Find in { $dir }
 # with fd.
 find-mode-text = Text
 find-mode-names = Files and dirs
-# The labels of the fields: the text to find, and the globs of the files to search.
-find-text = Text:
+# The labels of the fields: the text to find, with the glyph of how it matches, as it is or as a
+# regular expression (Alt+r), and the globs of the files to search.
+find-text = Text { $mode }:
 find-files = Files:
-# The check boxes: the text as a regular expression rather than as it is (Alt+r), and matching
-# case rather than only when the text has a capital letter (Alt+c).
-find-regex = Regular expression
+# The check box: matching case rather than only when the text has a capital letter (Alt+c).
 find-match-case = Match case
 # Under the rows: how many lines matched, in how many files.
 find-count = { $lines ->
@@ -331,8 +337,11 @@ config-icons = Icons
 config-icons-hint = Nerd Font icons in front of names; without them, mc's markers.
 config-show-hidden = Show hidden files
 config-show-hidden-hint = Names that begin with a dot; o h switches them.
-config-fuzzy-search = Fuzzy search
-config-fuzzy-search-hint = Quick search, the location menu, and the zoxide and Workspaces windows match as fzf does: the letters typed in order, best matches first.
+config-search-mode = Search mode
+config-search-mode-hint = How quick search and the filters of the lists match what is typed: the text anywhere, the letters in order as fzf does, or a regular expression. Alt+r switches it in one of them until it closes. g / starts in it too, fzf as a regular expression.
+config-search-mode-plain = Plain
+config-search-mode-fzf = fzf
+config-search-mode-regex = Regular expression
 config-mouse = Mouse
 config-mouse-hint = Clicks move the cursor, open, and mark, and the wheel scrolls. The terminal then selects text with Shift held, or Option in iTerm2.
 config-wheel = Mouse wheel
@@ -514,6 +523,7 @@ help-text-visual = Text fields in Visual mode
 help-lists = Lists
 help-lists-filter = The filter of a list
 help-list-filter = Type in the filter, in Insert mode
+help-list-search-mode = Match the filter the next way: as it is, as fzf does, or as a regular expression
 help-list-rows = Back to the rows, with the filter kept
 help-list-take = Take the row under the cursor
 help-list-close = Close the window
@@ -638,7 +648,7 @@ help-jump-open = Jump to a directory that zoxide ranks, in this panel
 help-jump-go = Open the directory in the active panel
 help-find-view = View the file, from the line
 help-find-edit = Edit the file, at the line
-help-find-regex = The text as a regular expression, or as it is
+help-find-regex = The text as a regular expression, or as it is; the glyph after Text says which
 help-find-case = Match case, or ignore it unless the text has a capital
 help-new-tab = A new tab in this panel, on the same directory
 help-close-tab = Close this tab; the last one stays
@@ -678,6 +688,7 @@ help-search-abort = Give the search up and go back to where it started
 help-search-next = The next match; with nothing typed, the last search
 help-search-next-match = The next match
 help-search-prev = The previous match
+help-search-mode = Match the next way: as it is, as fzf does, or as a regular expression
 help-dialog-up = Previous button; in this help, the section above, or one line up
 help-dialog-down = Next button; in this help, the section below, or one line down
 help-dialog-left = Previous button; in this help, back to the sections, then up to Keys, and fold it
@@ -770,11 +781,12 @@ help-tip-counts-count = In Normal mode, a count goes before a command: 5j goes f
 help-tip-counts-register = In text fields, "a names a register, which every field shares, and A appends to it.
 help-tip-lists = Lists
 help-tip-lists-open = The lists open in Normal mode: / types in the filter, and Esc goes back to the rows.
-help-tip-lists-jump = The zoxide window opens in Insert mode, typing keywords, as z takes them in a shell; Esc goes to the rows, and / types again.
-help-tip-lists-jump-fuzzy = The zoxide window opens in Insert mode, typing what filters its directories; Esc goes to the rows, and / types again.
-help-tip-fuzzy = Fuzzy matching
-help-tip-fuzzy-where = Quick search, the location menu, the tab menu, the zoxide window, and the Workspaces window match as fzf does: the letters typed in order, not necessarily together, best match first.
-help-tip-fuzzy-words = Words separated by spaces must all match; 'word matches as it is, ^word at the start, word$ at the end, and !word where it is not.
+help-tip-lists-jump = The zoxide window opens in Insert mode, typing what filters its directories, or, in the plain search mode, keywords, as z takes them in a shell; Esc goes to the rows, and / types again.
+help-tip-search = Search modes
+help-tip-search-where = Quick search and the filters of the lists (the location menu, the tab menu, the zoxide window, the workspaces, the command history, and the key hints) start in the search mode of Configuration; Alt+r switches it there, and the glyph after the word of the prompt says which, as in the Text field of g /.
+help-tip-search-plain = Plain: the text anywhere, ignoring case.
+help-tip-search-fzf = fzf: the letters typed in order, not necessarily together, best match first. Words separated by spaces must all match; 'word matches as it is, ^word at the start, word$ at the end, and !word where it is not.
+help-tip-search-regex = Regular expression: case counts only once it has a capital letter, as in the search of a tree; a glyph crossed out says it is none.
 help-tip-workspaces = Workspaces
 help-tip-workspaces-what = A workspace holds the tabs of both panels: where each is, its sort order, and the row under its cursor.
 help-tip-workspaces-list = t w and F9 → Workspace list them; restoring one replaces every tab.

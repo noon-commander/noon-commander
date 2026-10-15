@@ -161,11 +161,9 @@ pub struct UiConfig {
     pub icons: bool,
     /// Whether panels start out showing files whose names begin with a dot. Default: `true`.
     pub show_hidden: bool,
-    /// Whether quick search, the location menu, and the zoxide window match what is typed as
-    /// fzf does: its characters in order, not necessarily together, best matches first.
-    /// Otherwise names must start with it in quick search and contain it in the location menu,
-    /// and zoxide matches it as keywords. Default: `true`.
-    pub fuzzy_search: bool,
+    /// How quick search, the filters of the lists, and the search of a tree match what is
+    /// typed, until Alt+r switches it in one of them. Default: `fzf`.
+    pub search_mode: SearchMode,
     /// When the menu bar of F9 shows. Default: `on-demand`.
     pub menu_bar: MenuBar,
     /// Where a panel with more than one tab shows them. Default: `line`.
@@ -195,7 +193,7 @@ impl Default for UiConfig {
             borders: Borders::default(),
             icons: true,
             show_hidden: true,
-            fuzzy_search: true,
+            search_mode: SearchMode::default(),
             menu_bar: MenuBar::default(),
             tab_bar: TabBar::default(),
             mouse: true,
@@ -307,6 +305,23 @@ pub enum Borders {
     Double,
     /// `─`, `│`, `┌`, ….
     Single,
+}
+
+/// How quick search, the filters of the lists (the location menu, the tab menu, the zoxide
+/// window, the workspaces, the command history, the list of the key hints) match what is typed:
+/// `ui.search_mode`. Each search and each window starts with it; the search of a tree too, which
+/// has no fzf mode and takes it as the regex one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SearchMode {
+    /// The text as it is, anywhere, ignoring case; the zoxide window gives it to zoxide as
+    /// keywords.
+    Plain,
+    /// As fzf does: the characters in order, not necessarily together, best matches first.
+    #[default]
+    Fzf,
+    /// A regular expression, with smart case: case counts only once it has a capital letter.
+    Regex,
 }
 
 /// When the menu bar of F9 shows: `ui.menu_bar`.
@@ -464,7 +479,7 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, Pause, SearchConfig,
+        Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, Pause, SearchConfig, SearchMode,
         ShellConfig, SshConfig, TabBar, TransferConfig, UiConfig, VolumesConfig, Wheel,
         ZoxideConfig,
     };
@@ -506,7 +521,7 @@ mod tests {
         borders = "single"
         icons = false
         show_hidden = false
-        fuzzy_search = false
+        search_mode = "regex"
         menu_bar = "always"
         tab_bar = "frame"
         mouse = false
@@ -554,7 +569,7 @@ mod tests {
                 borders: Borders::Single,
                 icons: false,
                 show_hidden: false,
-                fuzzy_search: false,
+                search_mode: SearchMode::Regex,
                 menu_bar: MenuBar::Always,
                 tab_bar: TabBar::Frame,
                 mouse: false,
@@ -600,7 +615,7 @@ mod tests {
         assert_eq!(config.ui.borders, Borders::Double);
         assert!(config.ui.icons);
         assert!(config.ui.show_hidden);
-        assert!(config.ui.fuzzy_search);
+        assert_eq!(config.ui.search_mode, SearchMode::Fzf);
         assert_eq!(config.ui.menu_bar, MenuBar::OnDemand);
         assert_eq!(config.ui.tab_bar, TabBar::Line);
         assert!(config.ui.mouse);
@@ -817,7 +832,7 @@ mod tests {
         assert!(table["ui"].get("borders").is_some());
         assert!(table["ui"].get("icons").is_some());
         assert!(table["ui"].get("show_hidden").is_some());
-        assert!(table["ui"].get("fuzzy_search").is_some());
+        assert!(table["ui"].get("search_mode").is_some());
         assert!(table["ui"].get("menu_bar").is_some());
         assert!(table["ui"].get("tab_bar").is_some());
         assert!(table["ui"].get("mouse").is_some());

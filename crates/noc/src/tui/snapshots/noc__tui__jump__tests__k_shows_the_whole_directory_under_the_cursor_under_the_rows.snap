@@ -1,10 +1,10 @@
 ---
 source: crates/noc/src/tui/jump.rs
-expression: "draw_full(&mut menu, 12, true)"
+expression: "draw(&mut menu, 12)"
 ---
 "                                                                      "
 "╔══════════════════════════════ zoxide ══════════════════════════════╗"
-"║ Jump to:                                                           ║"
+"║ Jump to =:                                                         ║"
 "║ ────────────────────────────────────────────────────────────────── ║"
 "║ «nts/acme-corporation-international/deploy/releases/2026-10-15 9.0 ║"
 "║ /srv                                                           1.0 ║"

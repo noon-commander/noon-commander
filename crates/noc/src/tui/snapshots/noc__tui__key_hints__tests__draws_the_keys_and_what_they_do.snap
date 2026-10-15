@@ -5,7 +5,7 @@ expression: draw(&mut window)
 "                                                                                "
 "                                                                                "
 "  ╔══════════════════════════════════ Keys ══════════════════════════════════╗  "
-"  ║ Filter: 'ctrl+w                                                          ║  "
+"  ║ Filter ~: 'ctrl+w                                                        ║  "
 "  ║ ──────────────────────────────────────────────────────────────────────── ║  "
 "  ║  Ctrl+w w, Ctrl+w Ctrl+w   The other panel                               ║  "
 "  ║  Ctrl+w h                  The left panel                                ║  "

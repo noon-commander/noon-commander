@@ -330,8 +330,10 @@ pub(crate) enum Action {
     PrevMatch,
     /// Searches the files under the panel's directory for text, in a window.
     FindFile,
-    /// In the search of a tree, takes the text as a regular expression, or as it is.
-    ToggleRegex,
+    /// In quick search and the filters of the lists, matches what is typed the next way: as
+    /// it is, as fzf does, or as a regular expression, round; in the search of a tree, as it is
+    /// or as a regular expression.
+    SearchMode,
     /// In the search of a tree, matches case, or ignores it unless the text has a capital
     /// letter.
     MatchCase,
@@ -607,7 +609,7 @@ impl Action {
         Self::NextMatch,
         Self::PrevMatch,
         Self::FindFile,
-        Self::ToggleRegex,
+        Self::SearchMode,
         Self::MatchCase,
         Self::JumpBack,
         Self::JumpForward,

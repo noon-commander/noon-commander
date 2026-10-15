@@ -200,13 +200,8 @@ impl Part {
 
 /// The tips, after the keys: how the modes, counts, and the windows work, each under its title
 /// in points.
-fn tips(fuzzy_search: bool) -> Vec<Entry> {
-    let jump = if fuzzy_search {
-        fl!("help-tip-lists-jump-fuzzy")
-    } else {
-        fl!("help-tip-lists-jump")
-    };
-    let mut tips = vec![
+fn tips() -> Vec<Entry> {
+    let tips = vec![
         (
             fl!("help-tip-modes"),
             vec![
@@ -227,16 +222,17 @@ fn tips(fuzzy_search: bool) -> Vec<Entry> {
         ),
         (
             fl!("help-tip-lists"),
-            vec![fl!("help-tip-lists-open"), jump],
+            vec![fl!("help-tip-lists-open"), fl!("help-tip-lists-jump")],
         ),
-    ];
-    if fuzzy_search {
-        tips.push((
-            fl!("help-tip-fuzzy"),
-            vec![fl!("help-tip-fuzzy-where"), fl!("help-tip-fuzzy-words")],
-        ));
-    }
-    tips.extend([
+        (
+            fl!("help-tip-search"),
+            vec![
+                fl!("help-tip-search-where"),
+                fl!("help-tip-search-plain"),
+                fl!("help-tip-search-fzf"),
+                fl!("help-tip-search-regex"),
+            ],
+        ),
         (
             fl!("help-tip-workspaces"),
             vec![
@@ -260,7 +256,7 @@ fn tips(fuzzy_search: bool) -> Vec<Entry> {
                 fl!("help-tip-key-hints-list"),
             ],
         ),
-    ]);
+    ];
     let mut entries = Vec::new();
     for (title, points) in tips {
         if !entries.is_empty() {
@@ -439,15 +435,15 @@ pub(crate) struct Help {
 
 impl Help {
     /// The help with the keys `keymap` binds to what the app can do, by part of the app, and
-    /// `about` on its About page; `fuzzy_search` adds a tip on matching as fzf does. It opens
-    /// at the top of About, with Keys open and the text having the keys.
-    pub(crate) fn new(keymap: &Keymap, fuzzy_search: bool, about: &About) -> Self {
+    /// `about` on its About page. It opens at the top of About, with Keys open and the text
+    /// having the keys.
+    pub(crate) fn new(keymap: &Keymap, about: &About) -> Self {
         let groups = Part::ALL
             .into_iter()
             .map(|part| Group {
                 title: part.title(),
                 entries: match part {
-                    Part::Tips => tips(fuzzy_search),
+                    Part::Tips => tips(),
                     part => part.entries(keymap),
                 },
             })
@@ -936,6 +932,7 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::QuickSearch, Action::Abort) => fl!("help-search-abort"),
         (Context::QuickSearch, Action::QuickSearch) => fl!("help-search-next"),
         (Context::QuickSearch, Action::PrevMatch) => fl!("help-search-prev"),
+        (Context::QuickSearch, Action::SearchMode) => fl!("help-search-mode"),
         (Context::QuickSearch, Action::TextStart) => fl!("help-field-home"),
         (Context::QuickSearch, Action::TextEnd) => fl!("help-field-end"),
         (Context::Dialog | Context::DialogInput, Action::Up) => fl!("help-dialog-up"),
@@ -1076,7 +1073,7 @@ fn describe_find(context: Context, action: Action) -> Option<String> {
     let text = match action {
         Action::View => fl!("help-find-view"),
         Action::Edit => fl!("help-find-edit"),
-        Action::ToggleRegex => fl!("help-find-regex"),
+        Action::SearchMode => fl!("help-find-regex"),
         Action::MatchCase => fl!("help-find-case"),
         _ => return None,
     };
@@ -1219,6 +1216,7 @@ fn describe_list(context: Context, action: Action) -> Option<String> {
         Action::Home => fl!("help-first-row"),
         Action::End => fl!("help-last-row"),
         Action::QuickSearch => fl!("help-list-filter"),
+        Action::SearchMode => fl!("help-list-search-mode"),
         Action::ShowFull => fl!("help-list-show-full"),
         Action::NormalMode => fl!("help-list-rows"),
         Action::Confirm => fl!("help-list-take"),
@@ -1337,7 +1335,7 @@ mod tests {
     }
 
     fn help() -> Help {
-        Help::new(&Keymap::default(), true, &About::new(build()))
+        Help::new(&Keymap::default(), &About::new(build()))
     }
 
     /// The help on the group of keys `group`, with Keys open.
@@ -1442,11 +1440,7 @@ mod tests {
             tips.last(),
             Some(&Entry::Point(fl!("help-tip-key-hints-list")))
         );
-        let fuzzy = Entry::Heading(fl!("help-tip-fuzzy"));
-        assert!(tips.contains(&fuzzy));
-        let keywords = Help::new(&Keymap::default(), false, &About::new(build()));
-        let tips = &keywords.groups.last().unwrap().entries;
-        assert!(!tips.contains(&fuzzy));
+        assert!(tips.contains(&Entry::Heading(fl!("help-tip-search"))));
         assert!(tips.contains(&Entry::Point(fl!("help-tip-lists-jump"))));
     }
 
@@ -1460,7 +1454,7 @@ mod tests {
                 "Modes",
                 "Counts and registers",
                 "Lists",
-                "Fuzzy matching",
+                "Search modes",
                 "Workspaces",
                 "Command line",
                 "Pull-down menu",
@@ -1552,7 +1546,7 @@ mod tests {
                         "Modes",
                         "Counts and registers",
                         "Lists",
-                        "Fuzzy matching",
+                        "Search modes",
                         "Workspaces",
                         "Command line",
                         "Pull-down menu",
@@ -1876,7 +1870,7 @@ mod tests {
                 log: PathBuf::from("/var/log/noc/noc.log"),
             }),
         };
-        let mut help = Help::new(&Keymap::default(), true, &about);
+        let mut help = Help::new(&Keymap::default(), &about);
         help.handle(action(Action::NextField));
         help.handle(action(Action::Home));
         insta::assert_snapshot!(draw(&mut help, 120, 62));

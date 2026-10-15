@@ -1,6 +1,5 @@
 ---
 source: crates/noc/src/tui/help.rs
-assertion_line: 1774
 expression: "draw(&mut help, 120, 40)"
 ---
 "                                                                                                                        "
@@ -19,7 +18,7 @@ expression: "draw(&mut help, 120, 40)"
 "                  ║   Command line        │ - Quick search and the command line close on Esc, as     █                  "
 "                  ║   Lists and menus     │   vim's search and command line do.                      █                  "
 "                  ║   Menus and dialogs   │ - The line above the F-key bar says -- INSERT -- and --  █                  "
-"                  ║   Viewer              │   VISUAL --, and -- (insert) -- for the one command of   █                  "
+"                  ║   Viewer              │   VISUAL --, and -- (insert) -- for the one command of   ░                  "
 "                  ║   Tips                │   Normal mode after Ctrl+o; the cursor is a bar in       ░                  "
 "                  ║                       │   Insert mode.                                           ░                  "
 "                  ║                       │ - Alt and a key stand for Esc and the key in Insert and  ░                  "
@@ -36,7 +35,7 @@ expression: "draw(&mut help, 120, 40)"
 "                  ║                       │ ── Lists ─────────────────────────────────────────────── ░                  "
 "                  ║                       │ - The lists open in Normal mode: / types in the filter,  ░                  "
 "                  ║                       │   and Esc goes back to the rows.                         ▼                  "
-"                  ╚════════════════════════════════════════════════════════════════════════════ 39% ═╝                  "
+"                  ╚════════════════════════════════════════════════════════════════════════════ 35% ═╝                  "
 "                                                                                                                        "
 "                                                                                                                        "
 "                                                                                                                        "

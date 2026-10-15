@@ -8,8 +8,8 @@ use std::time::{Duration, Instant, SystemTime};
 
 use jiff::tz::TimeZone;
 use noc_config::{
-    Config, HistoryEntry, HostConfig, Hosts, MenuBar, PanelSide, Recent, SftpHost, TabBar,
-    UiConfig, Wheel, Workspace, Workspaces,
+    Config, HistoryEntry, HostConfig, Hosts, MenuBar, PanelSide, Recent, SearchMode, SftpHost,
+    TabBar, UiConfig, Wheel, Workspace, Workspaces,
 };
 use noc_ops::{Algorithm, Conflict, CopyOptions, Decision, Sum};
 use noc_scroll::Motion;
@@ -665,8 +665,9 @@ pub(crate) struct App {
     /// again; for this run only. Each list has its own.
     whole: Whole,
     /// What the last quick search found, in any panel, for `n` and `N`, as vim keeps the last
-    /// pattern; and whether it went up the rows, as `?` does, which `n` then does too.
-    last_search: Option<(String, bool)>,
+    /// pattern; whether it went up the rows, as `?` does, which `n` then does too; and how it
+    /// matched, as `n` matches too.
+    last_search: Option<(String, bool, SearchMode)>,
     hosts: HashMap<String, Host>,
     connections: u64,
     /// The settings, with `~` expanded; `ui.show_hidden` follows `o h`.
@@ -2316,7 +2317,7 @@ impl App {
 
     /// The help screen, for the keymap and the settings, where it was when it closed last.
     fn help_screen(&self) -> Help {
-        Help::new(&self.keymap, self.config.ui.fuzzy_search, &self.about).at(self.help_spot)
+        Help::new(&self.keymap, &self.about).at(self.help_spot)
     }
 
     /// Quits, after asking if jobs would stop.
@@ -2452,9 +2453,9 @@ impl App {
     /// Opens the tab menu for the panel on `side`, which lists where its tabs are.
     fn open_tab_menu(&mut self, side: Side) {
         let titles = self.tab_titles(side);
-        let fuzzy = self.config.ui.fuzzy_search;
+        let mode = self.config.ui.search_mode;
         let current = self.tabs(side).index();
-        self.tab_menu = Some(TabMenu::new(side, titles, current, fuzzy));
+        self.tab_menu = Some(TabMenu::new(side, titles, current, mode));
     }
 
     /// Where the tabs on `side` are, as the tab menu lists them.
@@ -2587,8 +2588,8 @@ impl App {
         match action {
             Action::QuickSearch => self.quick_search(),
             Action::QuickSearchBack => {
-                let count = self.extra.times();
-                self.panel_mut(self.active).search_up(count);
+                let (count, mode) = (self.extra.times(), self.config.ui.search_mode);
+                self.panel_mut(self.active).search_up(count, mode);
             }
             Action::NextMatch | Action::PrevMatch => self.search_again(action == Action::NextMatch),
             Action::Shell | Action::Command | Action::CommandHistory => {
@@ -2734,8 +2735,8 @@ impl App {
                 let place = self.place();
                 match self.hints.take() {
                     Some(hints) if (hints.mode, hints.context) == place => {
-                        let fuzzy = self.config.ui.fuzzy_search;
-                        let window = KeyHintsWindow::new(&self.keymap, &hints, self.extra, fuzzy);
+                        let mode = self.config.ui.search_mode;
+                        let window = KeyHintsWindow::new(&self.keymap, &hints, self.extra, mode);
                         self.key_hints = Some(window);
                     }
                     _ => self.hints_asked = Some(place),
@@ -2824,13 +2825,12 @@ impl App {
     /// Gives a key to quick search in the active panel, if it runs; the action that the panel
     /// does next, if any. Characters go nowhere else: typing in a panel does nothing.
     fn search_key(&mut self, input: Resolved) -> Option<Action> {
-        let fuzzy_search = self.config.ui.fuzzy_search;
         let side = self.active;
         let searching = self.panel(side).searching();
         match input {
             Resolved::Insert(c) => {
                 if searching {
-                    self.panel_mut(side).search_type(c, fuzzy_search);
+                    self.panel_mut(side).search_type(c);
                 }
                 None
             }
@@ -2848,7 +2848,11 @@ impl App {
                 | Action::DeleteToStart
                 | Action::DeleteToEnd
                 | Action::DeleteWord => {
-                    self.panel_mut(side).search_edit(action, fuzzy_search);
+                    self.panel_mut(side).search_edit(action);
+                    None
+                }
+                Action::SearchMode => {
+                    self.panel_mut(side).switch_search_mode();
                     None
                 }
                 Action::QuickSearch => {
@@ -2860,13 +2864,13 @@ impl App {
                     let text = self.registers.text(self.extra.char).unwrap_or_default();
                     let text: Vec<char> = text.chars().filter(|c| !c.is_control()).collect();
                     for c in text {
-                        self.panel_mut(side).search_type(c, fuzzy_search);
+                        self.panel_mut(side).search_type(c);
                     }
                     None
                 }
                 Action::NextMatch | Action::PrevMatch => {
                     let forward = action == Action::NextMatch;
-                    self.panel_mut(side).search_step(forward, fuzzy_search);
+                    self.panel_mut(side).search_step(forward);
                     None
                 }
                 // As vim's Enter, it says when the search went round or found nothing.
@@ -2900,17 +2904,17 @@ impl App {
     /// with nothing typed yet, searches for what the last search found, as mc's Ctrl+s Ctrl+s
     /// does.
     fn quick_search(&mut self) {
-        let fuzzy_search = self.config.ui.fuzzy_search;
+        let mode = self.config.ui.search_mode;
         let last = self.last_search.clone();
         let count = self.extra.times();
         let panel = self.panel_mut(self.active);
         let typed = panel.search_text().is_some_and(|text| !text.is_empty());
         match last {
-            Some((last, _)) if panel.searching() && !typed => {
-                panel.search_resume(&last, fuzzy_search);
+            Some((last, _, mode)) if panel.searching() && !typed => {
+                panel.search_resume(&last, mode);
             }
-            _ if panel.searching() => panel.search_step(true, fuzzy_search),
-            _ => panel.search_down(count),
+            _ if panel.searching() => panel.search_step(true),
+            _ => panel.search_down(count, mode),
         }
     }
 
@@ -2918,16 +2922,15 @@ impl App {
     /// what the last quick search found, `next` the way it went; where it was goes to the jump
     /// list.
     fn search_again(&mut self, next: bool) {
-        let Some((last, back)) = self.last_search.clone() else {
+        let Some((last, back, mode)) = self.last_search.clone() else {
             self.message = Some(fl!("message-search-none"));
             return;
         };
         let forward = next != back;
-        let fuzzy_search = self.config.ui.fuzzy_search;
         let times = self.extra.times();
         let round = self
             .panel_mut(self.active)
-            .search_again(&last, forward, fuzzy_search, times);
+            .search_again((&last, mode), forward, times);
         self.message = match round {
             None => Some(fl!("message-search-not-found", text = last)),
             Some(true) if forward => Some(fl!("message-search-bottom")),
@@ -2949,9 +2952,8 @@ impl App {
     /// Ends quick search in the panel on `side`, and keeps what it searched for for `n` and
     /// `N`, with the way it went, found or not, as vim keeps its pattern; how it ended.
     fn end_search(&mut self, side: Side) -> Option<SearchEnd> {
-        let fuzzy = self.config.ui.fuzzy_search;
-        let end = self.panel_mut(side).end_search(fuzzy)?;
-        self.last_search = Some((end.text.clone(), end.back));
+        let end = self.panel_mut(side).end_search()?;
+        self.last_search = Some((end.text.clone(), end.back, end.mode));
         Some(end)
     }
 
@@ -3102,7 +3104,7 @@ impl App {
         let drawn = if self.swapped { side.other() } else { side };
         let mut menu = LocationMenu::new(side, current, self.home.clone(), generation)
             .drawn(drawn)
-            .fuzzy(self.config.ui.fuzzy_search)
+            .search_mode(self.config.ui.search_mode)
             .recent(&self.recent);
         menu.set_connected(self.hosts.keys().cloned().collect());
         self.menu = Some(menu);
@@ -3278,7 +3280,7 @@ impl App {
     /// Opens the window of the saved workspaces.
     fn open_workspaces(&mut self) {
         let rows = workspaces::Row::all(&self.workspaces);
-        let window = WorkspacesWindow::new(rows, self.config.ui.fuzzy_search);
+        let window = WorkspacesWindow::new(rows, self.config.ui.search_mode);
         self.workspaces_window = Some(window);
     }
 
@@ -3608,13 +3610,14 @@ impl App {
     }
 
     /// Opens the zoxide window for the active panel, and asks zoxide for its best directories;
-    /// with `ui.fuzzy_search`, for all of them, which the window filters itself.
+    /// in a search mode but the plain one, for all of them, which the window filters itself.
     fn open_jump(&mut self) -> Vec<Effect> {
         let exclude = match self.panel(self.active).location() {
             Location::Local(path) => Some(path.clone()),
             Location::Remote { .. } => None,
         };
-        let jump = JumpMenu::new(self.home.clone(), exclude, 0).fuzzy(self.config.ui.fuzzy_search);
+        let jump =
+            JumpMenu::new(self.home.clone(), exclude, 0).search_mode(self.config.ui.search_mode);
         self.jump = Some(jump);
         self.query_jump()
     }
@@ -3684,6 +3687,7 @@ impl App {
             (location, title),
             (search.max_results.get(), search.max_per_file.get()),
             self.config.ui.show_hidden,
+            self.config.ui.search_mode,
             self.decor,
         ));
         self.search_tree(Duration::ZERO)
@@ -4548,8 +4552,8 @@ impl App {
                 Some((host.to_owned(), label.to_owned()))
             })
             .collect();
-        let fuzzy = self.config.ui.fuzzy_search;
-        self.history_window = Some(HistoryWindow::new(&self.history, here, labels, fuzzy));
+        let mode = self.config.ui.search_mode;
+        self.history_window = Some(HistoryWindow::new(&self.history, here, labels, mode));
     }
 
     /// Gives a key to the window of the command history: a command it takes goes on the command
@@ -6405,7 +6409,6 @@ impl App {
             tick: self.tick,
             now,
             tz,
-            fuzzy: self.config.ui.fuzzy_search,
         };
         if let Some(viewing) = &mut self.viewing {
             let styles = ViewerStyles {
@@ -7227,6 +7230,14 @@ mod tests {
         screen_of(app, 9)
     }
 
+    /// What the prompt of quick search or of a filter shows in the search mode of the
+    /// settings: `prompt`, the glyph of the mode, and `text`.
+    fn prompt(app: &App, prompt: &str, text: &str) -> String {
+        let glyphs = app.theme.glyphs.search_modes;
+        let glyph = crate::tui::search_mode::glyph(app.config.ui.search_mode, glyphs);
+        format!("{prompt} {glyph}: {text}")
+    }
+
     fn screen_of(app: &mut App, height: u16) -> String {
         let mut terminal = Terminal::new(TestBackend::new(160, height)).unwrap();
         let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
@@ -7846,7 +7857,7 @@ mod tests {
         // So does Enter in quick search, typed as vim's search, on a match before where it
         // started; fuzzy search ranks the rows instead.
         let mut app = with_files(&["a1", "b2", "c3"]);
-        app.config.ui.fuzzy_search = false;
+        app.config.ui.search_mode = SearchMode::Plain;
         keys(&mut app, &["shift-g", "/", "b", "enter"]);
         assert_eq!(cursor_name(&app, Side::Left), "b2");
         assert!(screen(&mut app).contains("search hit BOTTOM, continuing at TOP"));
@@ -7857,9 +7868,9 @@ mod tests {
     #[test]
     fn question_mark_searches_up_and_n_goes_the_same_way_as_vims() {
         let mut app = with_files(&["a1", "b2", "a3", "b4"]);
-        app.config.ui.fuzzy_search = false;
+        app.config.ui.search_mode = SearchMode::Plain;
         keys(&mut app, &["shift-g", "?"]);
-        assert!(screen(&mut app).contains("Search up: "));
+        assert!(screen(&mut app).contains(&prompt(&app, "Search up", "")));
         keys(&mut app, &["a", "enter"]);
         assert_eq!(cursor_name(&app, Side::Left), "a3");
         keys(&mut app, &["n"]);
@@ -7933,7 +7944,7 @@ mod tests {
         let text = screen_of(&mut app, 24);
         assert!(
             text.contains("Find in /srv")
-                && text.contains("[x] Regular")
+                && text.contains(&format!("Text {}:", app.theme.glyphs.search_modes.regex))
                 && text.contains("1 line"),
             "{text}"
         );
@@ -7989,8 +8000,8 @@ mod tests {
             ]),
         );
         app.find_ended(generation, Ok(FindSummary::default()));
-        // Past the two fields and the two check boxes.
-        keys(app, &["tab", "tab", "tab", "tab", "down"]);
+        // Past the two fields and the check box.
+        keys(app, &["tab", "tab", "tab", "down"]);
         assert_eq!(app.context(), Context::Find);
     }
 
@@ -8093,7 +8104,7 @@ mod tests {
     #[test]
     fn backspace_and_delete_with_nothing_typed_keep_quick_search_open() {
         let mut app = with_files(&["a1", "b2"]);
-        app.config.ui.fuzzy_search = false;
+        app.config.ui.search_mode = SearchMode::Plain;
         let location = app.panel(Side::Left).location().clone();
         for key in ["backspace", "delete"] {
             keys(&mut app, &["g", "g", "j", "/", "b"]);
@@ -8184,10 +8195,10 @@ mod tests {
         keys(&mut app, &["\"", "a", "y", "y", "esc", "t", "n", "t", "h"]);
         app.paste("srv");
         assert_eq!(app.place(), (Mode::Insert, Context::TabMenu));
-        assert!(screen_of(&mut app, 16).contains("Filter: srv"));
+        assert!(screen_of(&mut app, 16).contains(&prompt(&app, "Filter", "srv")));
         // Ctrl+r types a register there, as in a text field.
         keys(&mut app, &["ctrl-u", "ctrl-r", "a"]);
-        assert!(screen_of(&mut app, 16).contains("Filter: report.pdf"));
+        assert!(screen_of(&mut app, 16).contains(&prompt(&app, "Filter", "report.pdf")));
     }
 
     #[test]
@@ -8197,7 +8208,7 @@ mod tests {
         assert_eq!(app.place(), (Mode::Normal, Context::TabMenu));
         keys(&mut app, &["/", "x"]);
         assert_eq!(app.place(), (Mode::Insert, Context::TabMenu));
-        assert!(screen_of(&mut app, 16).contains("Filter: x"));
+        assert!(screen_of(&mut app, 16).contains(&prompt(&app, "Filter", "x")));
         keys(&mut app, &["backspace", "esc"]);
         assert_eq!(app.place(), (Mode::Normal, Context::TabMenu));
         keys(&mut app, &["g", "g", "d", "d"]);
@@ -10975,7 +10986,7 @@ mod tests {
         assert_eq!(app.context(), Context::Panel, "typing does nothing");
         assert!(keys(&mut app, &["/", "r"]).is_empty());
         assert_eq!(app.context(), Context::QuickSearch);
-        assert!(screen(&mut app).contains("Search: r"));
+        assert!(screen(&mut app).contains(&prompt(&app, "Search", "r")));
         // Enter ends the search on what it found, as in vim; l opens it.
         assert!(keys(&mut app, &["enter"]).is_empty());
         assert_eq!(app.context(), Context::Panel);
@@ -10993,7 +11004,7 @@ mod tests {
         );
         app.handle(Resolved::Insert('l'));
         app.handle(action(Action::Backspace));
-        assert!(screen(&mut app).contains("Search: "));
+        assert!(screen(&mut app).contains(&prompt(&app, "Search", "")));
         assert!(app.handle(action(Action::Cancel)).is_empty());
         assert_eq!(app.context(), Context::Panel, "Esc ends it");
     }
@@ -11003,7 +11014,7 @@ mod tests {
         let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
         let names = ["bar", "bin", "boot", "dev"];
         answer(&mut app, effects, &Listing::Dir(names.map(dir).to_vec()));
-        app.config.ui.fuzzy_search = false;
+        app.config.ui.search_mode = SearchMode::Plain;
         let under = |app: &App| cursor_name(app, Side::Left);
         app.handle(action(Action::QuickSearch));
         for c in "bo".chars() {
@@ -11015,9 +11026,9 @@ mod tests {
         assert_eq!(under(&app), "boot");
         assert_eq!(app.context(), Context::QuickSearch);
         app.handle(action(Action::DeleteChar));
-        assert!(screen(&mut app).contains("Search: o"));
+        assert!(screen(&mut app).contains(&prompt(&app, "Search", "o")));
         app.handle(action(Action::DeleteToEnd));
-        assert!(screen(&mut app).contains("Search: "));
+        assert!(screen(&mut app).contains(&prompt(&app, "Search", "")));
         assert_eq!(app.context(), Context::QuickSearch, "still searching");
         app.handle(Resolved::Insert('d'));
         assert_eq!(under(&app), "dev");
@@ -11044,7 +11055,7 @@ mod tests {
         let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
         let names = ["bar", "bin", "boot", "dev"];
         answer(&mut app, effects, &Listing::Dir(names.map(dir).to_vec()));
-        app.config.ui.fuzzy_search = false;
+        app.config.ui.search_mode = SearchMode::Plain;
         let under = |app: &App| cursor_name(app, Side::Left);
         app.handle(action(Action::NextMatch));
         assert_eq!(under(&app), "", "no search yet: the cursor stays on ..");
@@ -11070,7 +11081,7 @@ mod tests {
         // With nothing typed, Ctrl+g searches for what the last search found.
         keys(&mut app, &["/", "ctrl-g"]);
         assert_eq!(under(&app), "bar");
-        assert!(screen(&mut app).contains("Search: b"));
+        assert!(screen(&mut app).contains(&prompt(&app, "Search", "b")));
         // A key that ends a search keeps it too.
         keys(&mut app, &["i", "down"]);
         app.handle(action(Action::Home));
@@ -12213,7 +12224,7 @@ mod tests {
     fn alt_z_asks_zoxide_and_jumps_in_the_active_panel() {
         let mut app = recording();
         // zoxide matches the keywords.
-        app.config.ui.fuzzy_search = false;
+        app.config.ui.search_mode = SearchMode::Plain;
         app.active = Side::Right;
         let effects = app.handle(action(Action::Jump));
         let [
@@ -12258,7 +12269,7 @@ mod tests {
         app.jumps(*first, found(&["/stale"]));
         app.jumps(*generation, found(&["/home/me/src", "/opt/scripts"]));
         let text = screen_of(&mut app, 12);
-        assert!(text.contains("Jump to: sc"), "{text}");
+        assert!(text.contains(&prompt(&app, "Jump to", "sc")), "{text}");
         assert!(
             text.contains("~/src") && text.contains("/opt/scripts") && !text.contains("/stale"),
             "{text}"
@@ -12294,7 +12305,7 @@ mod tests {
     }
 
     #[test]
-    fn with_fuzzy_search_the_zoxide_window_asks_once_and_filters_as_fzf() {
+    fn in_the_fzf_mode_the_zoxide_window_asks_once_and_filters_as_fzf() {
         let mut app = recording();
         let effects = app.handle(action(Action::Jump));
         let [
@@ -12579,7 +12590,7 @@ mod tests {
         app.handle(action(Action::Cancel));
         app.handle(action(Action::QuickSearch));
         app.paste("ri\nght");
-        assert!(screen(&mut app).contains("Search: right"));
+        assert!(screen(&mut app).contains(&prompt(&app, "Search", "right")));
     }
 
     #[test]
@@ -12695,7 +12706,7 @@ mod tests {
         assert!(app.hints.is_none(), "the list takes the place of the hints");
         let text = screen_of(&mut app, 30);
         assert!(
-            text.contains("Ctrl+w h") && text.contains("Filter:"),
+            text.contains("Ctrl+w h") && text.contains(&prompt(&app, "Filter", "")),
             "{text}"
         );
         // `/` filters, and Enter runs the command in the panel, with the count.
@@ -12752,26 +12763,68 @@ mod tests {
     }
 
     #[test]
-    fn quick_search_is_fuzzy_unless_turned_off() {
+    fn alt_r_switches_how_one_quick_search_matches_and_n_matches_as_it_did() {
+        let mut app = loaded();
+        app.config.ui.search_mode = SearchMode::Plain;
+        let start = app
+            .panel(app.active)
+            .name_under_cursor()
+            .map(<[u8]>::to_vec);
+        app.handle(action(Action::QuickSearch));
+        type_text(&mut app, "^r");
+        assert_eq!(
+            app.panel(app.active)
+                .name_under_cursor()
+                .map(<[u8]>::to_vec),
+            start,
+            "as it is: no name holds it"
+        );
+        keys(&mut app, &["alt-r"]);
+        assert_eq!(
+            app.panel(app.active).name_under_cursor(),
+            Some(&b"right"[..]),
+            "fzf"
+        );
+        keys(&mut app, &["alt-r"]);
+        let glyphs = app.theme.glyphs.search_modes;
+        assert!(screen(&mut app).contains(&format!("Search {}: ^r", glyphs.regex)));
+        keys(&mut app, &["enter"]);
+        app.handle(action(Action::QuickSearch));
+        assert!(
+            screen(&mut app).contains(&format!("Search {}: ", glyphs.plain)),
+            "the next search starts in the search mode"
+        );
+        keys(&mut app, &["esc"]);
+        app.handle(action(Action::Home));
+        app.handle(action(Action::NextMatch));
+        assert_eq!(
+            app.panel(app.active).name_under_cursor(),
+            Some(&b"right"[..]),
+            "a regular expression, as the last search"
+        );
+    }
+
+    #[test]
+    fn quick_search_matches_as_fzf_does_or_as_the_search_mode_says() {
         let mut app = loaded();
         app.handle(action(Action::QuickSearch));
         app.handle(Resolved::Insert('r'));
         app.handle(Resolved::Insert('t'));
-        assert!(screen(&mut app).contains("Search: rt"));
+        assert!(screen(&mut app).contains(&prompt(&app, "Search", "rt")));
         let Effect::List { request, .. } = one(app.handle(action(Action::Enter))) else {
             panic!("expected a listing");
         };
         assert_eq!(request.location, local("/srv/right"));
 
-        app.config.ui.fuzzy_search = false;
+        app.config.ui.search_mode = SearchMode::Plain;
         app.handle(action(Action::QuickSearch));
         app.handle(Resolved::Insert('r'));
         app.handle(Resolved::Insert('t'));
-        assert!(screen(&mut app).contains("Search: rt"));
+        assert!(screen(&mut app).contains(&prompt(&app, "Search", "rt")));
         assert_eq!(
             app.panel(app.active).name_under_cursor(),
             Some(&b"right"[..]),
-            "names must start with the text: none does, the cursor stays"
+            "no name holds the text: the cursor stays"
         );
     }
 

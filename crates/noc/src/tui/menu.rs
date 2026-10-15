@@ -8,7 +8,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use noc_config::Recent;
+use noc_config::{Recent, SearchMode};
 use noc_scroll::scrollbar::Bar;
 use noc_vfs::{Location, Space, Volume};
 use ratatui::Frame;
@@ -139,16 +139,16 @@ impl LocationMenu {
             },
             loaded: false,
             error: None,
-            picker: Picker::new(false),
+            picker: Picker::new(SearchMode::Plain),
         };
         // The home directory, before the listing.
         menu.picker.set_rows_showing(menu.texts());
         menu
     }
 
-    /// The same menu, whose filter matches as fzf does if `fuzzy` (`ui.fuzzy_search`).
-    pub(crate) fn fuzzy(mut self, fuzzy: bool) -> Self {
-        self.picker.set_fuzzy(fuzzy);
+    /// The same menu, whose filter matches in `mode` (`ui.search_mode`).
+    pub(crate) fn search_mode(mut self, mode: SearchMode) -> Self {
+        self.picker.set_mode(mode);
         self
     }
 
@@ -819,8 +819,8 @@ mod tests {
 
     #[test]
     fn a_fuzzy_filter_keeps_the_order_and_puts_the_cursor_on_the_best() {
-        let mut menu =
-            LocationMenu::new(Side::Left, home(), PathBuf::from("/Users/me"), 1).fuzzy(true);
+        let mut menu = LocationMenu::new(Side::Left, home(), PathBuf::from("/Users/me"), 1)
+            .search_mode(SearchMode::Fzf);
         menu.listed(1, Ok(places()));
         typed(&mut menu, "pxy");
         assert_eq!(

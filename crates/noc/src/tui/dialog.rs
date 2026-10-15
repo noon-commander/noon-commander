@@ -791,6 +791,13 @@ impl Dialog {
         self
     }
 
+    /// Puts `label` over text field `index`.
+    pub(crate) fn set_label(&mut self, index: usize, label: &str) {
+        if let Some(field) = self.fields.get_mut(index) {
+            field.label = cells::sanitize(label.as_bytes());
+        }
+    }
+
     /// Puts `buttons` in place of the buttons, the first the default; the focus on one of them
     /// stays on one.
     pub(crate) fn set_buttons(&mut self, buttons: Vec<Button>) {

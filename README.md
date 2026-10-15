@@ -37,8 +37,9 @@ The same panels in the theme `mc-classic`, with the blue of Midnight Commander:
   whole layout back with t w.
 - **zoxide built in.** `g z` jumps to the directories [zoxide](https://github.com/ajeetdsouza/zoxide)
   ranks, and the directories you work in from Noon Commander count there too.
-- **Fuzzy search, as in fzf.** Quick search, the location menu, and the zoxide window find
-  `config.rs` from `cfg`, best match first.
+- **Fuzzy search, as in fzf.** Quick search and the filters of every list (the location menu,
+  the tab menu, the zoxide window, the workspaces, the command history) find `config.rs` from
+  `cfg`, best match first. Alt+r switches to the plain text or a regular expression.
 - **Search with ripgrep and fd.** `g /` finds text in the files below, as you type, on a server
   too, where [ripgrep](https://github.com/BurntSushi/ripgrep) runs; F3 and F4 open a file at the
   line. Its Files and dirs mode finds names with [fd](https://github.com/sharkdp/fd).

@@ -31,6 +31,15 @@ pub(crate) struct Hosts {
     pub(crate) failed: char,
 }
 
+/// In front of the prompt of quick search and of the filters of the lists: how they match what
+/// is typed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SearchModes {
+    pub(crate) plain: &'static str,
+    pub(crate) fzf: &'static str,
+    pub(crate) regex: &'static str,
+}
+
 /// The characters that differ with icons and without.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Glyphs {
@@ -55,6 +64,7 @@ pub(crate) struct Glyphs {
     pub(crate) folds: (char, char),
     /// In front of each point of a tip in the help.
     pub(crate) bullet: char,
+    pub(crate) search_modes: SearchModes,
 }
 
 impl Glyphs {
@@ -96,6 +106,12 @@ impl Glyphs {
         // nf-md-chevron_right and nf-md-chevron_down.
         folds: ('󰅂', '󰅀'),
         bullet: '•',
+        // nf-cod-whole_word, nf-md-approximately_equal, and nf-cod-regex.
+        search_modes: SearchModes {
+            plain: "",
+            fzf: "󰾞",
+            regex: "",
+        },
     };
 
     /// Without a Nerd Font: what every font has, mc's markers and Far's arrows.
@@ -137,6 +153,11 @@ impl Glyphs {
         menu_marks: ('*', 'x'),
         folds: ('▸', '▾'),
         bullet: '-',
+        search_modes: SearchModes {
+            plain: "=",
+            fzf: "~",
+            regex: ".*",
+        },
     };
 
     /// The glyphs of `ui.icons`.

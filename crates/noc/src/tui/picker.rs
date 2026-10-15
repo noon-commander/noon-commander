@@ -3,18 +3,19 @@
 //! command history. They open in Normal mode, where keys move and act; `/` types in the filter,
 //! in Insert mode, and Esc goes back to the rows with the filter kept.
 
+use noc_config::SearchMode;
 use noc_scroll::scrollbar::{self, Bar};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::text::{Line, Span};
 
-use super::cells::{self, Align};
+use super::cells;
 use super::dialog::{Colors, Field, draw_box, frame_around, right_frame};
-use super::fuzzy::Fuzzy;
 use super::glyphs;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::{Drawn, Pointer};
 use super::scroll::Window;
+use super::search_mode::{self, Matcher};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -115,8 +116,10 @@ pub(crate) struct Picker {
     shows: Vec<Shows>,
     /// The filter, a text field.
     filter: Field,
-    /// The filter matches as fzf does: `ui.fuzzy_search`.
-    fuzzy: bool,
+    /// How the filter matches: `ui.search_mode` until Alt+r switches it.
+    mode: SearchMode,
+    /// Why the filter is not a regular expression, in the regex mode.
+    error: Option<String>,
     /// The filter takes what is typed, in Insert mode.
     filtering: bool,
     /// How well each row, shown or not, matches the filter, higher for better; `None` hides
@@ -140,14 +143,14 @@ pub(crate) struct Picker {
 }
 
 impl Picker {
-    /// A picker without rows, whose filter matches as fzf does if `fuzzy`
-    /// (`ui.fuzzy_search`).
-    pub(crate) fn new(fuzzy: bool) -> Self {
+    /// A picker without rows, whose filter matches in `mode` (`ui.search_mode`).
+    pub(crate) fn new(mode: SearchMode) -> Self {
         Self {
             texts: Vec::new(),
             shows: Vec::new(),
             filter: Field::plain(""),
-            fuzzy,
+            mode,
+            error: None,
             filtering: false,
             matches: Vec::new(),
             cursor: 0,
@@ -176,9 +179,9 @@ impl Picker {
         }
     }
 
-    /// Matches as fzf does from now on if `fuzzy`.
-    pub(crate) fn set_fuzzy(&mut self, fuzzy: bool) {
-        self.fuzzy = fuzzy;
+    /// Matches in `mode` from now on.
+    pub(crate) fn set_mode(&mut self, mode: SearchMode) {
+        self.mode = mode;
         self.refilter();
     }
 
@@ -218,8 +221,8 @@ impl Picker {
         self.cursor = row;
     }
 
-    /// Puts the cursor on the first of the rows that match best. Without `fuzzy`, all match as
-    /// well, so it is the first.
+    /// Puts the cursor on the first of the rows that match best. But as fzf, all match as well,
+    /// so it is the first.
     pub(crate) fn focus_best(&mut self) {
         let shown: Vec<u32> = self.matches.iter().flatten().copied().collect();
         let best = shown.iter().max();
@@ -229,24 +232,24 @@ impl Picker {
             .unwrap_or(0);
     }
 
-    /// Matches the rows against the filter again. A row shows if one of its texts contains the
-    /// filter, ignoring case; `fuzzy`, if they match it as fzf matches a line. Then only rows
-    /// for an empty filter, or for one with text, show as `shows` says.
+    /// Matches the rows against the filter again. A row shows if one of its texts matches the
+    /// filter; as fzf, if they match it as one line. Then only rows for an empty filter, or for
+    /// one with text, show as `shows` says.
     fn refilter(&mut self) {
-        let scores: Vec<Option<u32>> = if self.fuzzy {
-            let mut fuzzy = Fuzzy::names(self.filter.text());
+        let mut matcher = Matcher::names(self.mode, self.filter.text());
+        self.error = matcher.error().map(ToString::to_string);
+        let scores: Vec<Option<u32>> = if matcher.ranks() {
             self.texts
                 .iter()
-                .map(|texts| fuzzy.score(&texts.join(" ")))
+                .map(|texts| matcher.score(&texts.join(" ")))
                 .collect()
         } else {
-            let filter = self.filter.text().to_lowercase();
             self.texts
                 .iter()
                 .map(|texts| {
                     texts
                         .iter()
-                        .any(|text| text.to_lowercase().contains(&filter))
+                        .any(|text| matcher.score(text).is_some())
                         .then_some(0)
                 })
                 .collect()
@@ -287,6 +290,11 @@ impl Picker {
                 Action::QuickSearch => self.filtering = true,
                 Action::NormalMode => self.filtering = false,
                 Action::ShowFull => self.full = self.full.toggled(),
+                Action::SearchMode => {
+                    self.mode = search_mode::next(self.mode);
+                    self.refilter();
+                    self.focus_best();
+                }
                 Action::Left
                 | Action::Right
                 | Action::TextStart
@@ -438,9 +446,7 @@ impl Picker {
 
         self.page = usize::from(inner.height.saturating_sub(2 + below)).max(1);
         let rows = self.len();
-        let message = body
-            .message
-            .or_else(|| (rows == 0).then(|| fl!("picker-nothing")));
+        let message = body.message.or_else(|| self.nothing());
         if let Some(message) = message {
             let room = 2..inner.height.saturating_sub(below);
             for (index, text) in room.zip(cells::wrap(&message, width)) {
@@ -512,6 +518,18 @@ impl Picker {
         self.cursor = cursor;
     }
 
+    /// What shows in place of the rows once the filter hides every row: why the filter is no
+    /// regular expression, or that nothing matches.
+    fn nothing(&self) -> Option<String> {
+        (self.len() == 0).then(|| match &self.error {
+            Some(reason) => fl!(
+                "picker-not-regex",
+                reason = cells::sanitize(reason.as_bytes())
+            ),
+            None => fl!("picker-nothing"),
+        })
+    }
+
     /// The filter, with its cursor while it takes text, and `note` at the right, on the first
     /// line of `inner`; a line under them.
     fn draw_filter(&self, frame: &mut Frame<'_>, inner: Rect, theme: &Theme, note: Option<&str>) {
@@ -522,13 +540,16 @@ impl Picker {
             Some(note) => width.saturating_sub(cells::width(note) + 1),
             None => width,
         };
-        let prefix = cells::width(&fl!("picker-filter", text = String::new()));
-        let (shown, column) = self.filter.visible(room.saturating_sub(prefix));
-        let column = u16::try_from(prefix + column).unwrap_or(u16::MAX);
-        let mut top = cells::fit(
-            &fl!("picker-filter", text = shown),
+        let mark = search_mode::marked(self.mode, self.error.is_some(), theme.dialog, theme);
+        let prefix = fl!("picker-filter", mode = mark.glyph, text = String::new());
+        let (shown, column) = self
+            .filter
+            .visible(room.saturating_sub(cells::width(&prefix)));
+        let column = u16::try_from(cells::width(&prefix) + column).unwrap_or(u16::MAX);
+        let prompt = fl!("picker-filter", mode = mark.glyph, text = shown);
+        let mut top = cells::fit_spans(
+            mark.spans(&prompt, &prefix, theme.dialog),
             room,
-            Align::Left,
             (theme.dialog, theme.truncated_dialog),
             theme.glyphs.marks,
         );
@@ -560,8 +581,8 @@ fn heading_line(heading: &str, width: usize, theme: &Theme) -> Line<'static> {
 mod tests {
     use super::*;
 
-    fn picker(rows: &[&str], fuzzy: bool) -> Picker {
-        let mut picker = Picker::new(fuzzy);
+    fn picker(rows: &[&str], mode: SearchMode) -> Picker {
+        let mut picker = Picker::new(mode);
         picker.set_rows(rows.iter().map(|row| vec![(*row).to_owned()]).collect());
         picker
     }
@@ -582,21 +603,21 @@ mod tests {
     fn page_keys_scroll_as_vims_and_skip_the_headings() {
         let names: Vec<String> = (0..30).map(|n| format!("row{n}")).collect();
         let names: Vec<&str> = names.iter().map(String::as_str).collect();
-        let mut plain = picker(&names, false);
+        let mut plain = picker(&names, SearchMode::Plain);
         plain.page = 10;
         press(&mut plain, Action::PageDown);
         assert_eq!(plain.cursor(), 12, "as vim's Ctrl+f in ten lines");
         press(&mut plain, Action::HalfPageDown);
         assert_eq!(plain.cursor(), 17, "as vim's Ctrl+d");
         // A heading where the cursor would go: the row after it, the way the keys went.
-        let mut headed = picker(&names, false);
+        let mut headed = picker(&names, SearchMode::Plain);
         headed.page = 10;
         headed.rows_drawn = (0..30).map(Some).collect();
         headed.rows_drawn.insert(12, None);
         press(&mut headed, Action::PageDown);
         assert_eq!(headed.cursor(), 12, "on the line after the heading");
         // A count scrolls that many pages at once, as vim's 2 Ctrl+f.
-        let mut counted = picker(&names, false);
+        let mut counted = picker(&names, SearchMode::Plain);
         counted.page = 10;
         counted.count_pages(2);
         press(&mut counted, Action::PageDown);
@@ -615,7 +636,7 @@ mod tests {
     fn a_dragged_thumb_scrolls_the_lines_and_the_cursor_stays_on_screen() {
         let names: Vec<String> = (0..30).map(|n| format!("row{n}")).collect();
         let names: Vec<&str> = names.iter().map(String::as_str).collect();
-        let mut picker = picker(&names, false);
+        let mut picker = picker(&names, SearchMode::Plain);
         picker.page = 10;
         picker.rows_drawn = (0..30).map(Some).collect();
         picker.scroll_to(15);
@@ -635,7 +656,7 @@ mod tests {
 
     #[test]
     fn the_rows_take_the_keys_until_slash_types_in_the_filter() {
-        let mut picker = picker(&["one", "two", "three"], false);
+        let mut picker = picker(&["one", "two", "three"], SearchMode::Plain);
         assert_eq!(picker.mode(), Mode::Normal);
         assert_eq!(picker.handle(Resolved::Insert('t')), Pick::Pending);
         assert_eq!(picker.shown(0..3), [0, 1, 2], "no filter yet");
@@ -660,7 +681,7 @@ mod tests {
 
     #[test]
     fn rows_show_while_the_filter_is_empty_or_has_text_as_they_say() {
-        let mut picker = Picker::new(false);
+        let mut picker = Picker::new(SearchMode::Plain);
         let row = |text: &str, shows| (vec![text.to_owned()], shows);
         picker.set_rows_showing(vec![
             row("web", Shows::Always),
@@ -677,7 +698,7 @@ mod tests {
 
     #[test]
     fn keys_move_filter_and_pass_on_what_they_do_not_take() {
-        let mut picker = picker(&["src", "docs", "target"], false);
+        let mut picker = picker(&["src", "docs", "target"], SearchMode::Plain);
         press(&mut picker, Action::End);
         assert_eq!(press(&mut picker, Action::Confirm), Pick::Chosen(2));
         press(&mut picker, Action::Down);
@@ -696,7 +717,7 @@ mod tests {
 
     #[test]
     fn the_filter_is_a_text_field_and_delete_is_the_windows() {
-        let mut picker = picker(&["src", "docs", "target"], false);
+        let mut picker = picker(&["src", "docs", "target"], SearchMode::Plain);
         typed(&mut picker, "sc");
         assert!(picker.shown(0..3).is_empty(), "no name contains sc");
         press(&mut picker, Action::Left);
@@ -729,7 +750,7 @@ mod tests {
 
     #[test]
     fn a_fuzzy_filter_puts_the_cursor_on_the_best_match() {
-        let mut picker = picker(&["Macintosh HD", "share"], true);
+        let mut picker = picker(&["Macintosh HD", "share"], SearchMode::Fzf);
         typed(&mut picker, "sh");
         assert_eq!(picker.shown(0..2), [0, 1]);
         assert_eq!(
@@ -737,7 +758,32 @@ mod tests {
             1,
             "the start of a word beats the end of one"
         );
-        picker.set_fuzzy(false);
+        picker.set_mode(SearchMode::Plain);
         assert_eq!(picker.shown(0..2), [0, 1], "both contain sh");
+    }
+
+    #[test]
+    fn alt_r_switches_how_the_filter_matches() {
+        let mut picker = picker(&["main.rs", "Cargo.toml", "rs.md"], SearchMode::Plain);
+        typed(&mut picker, "ms");
+        assert_eq!(picker.len(), 0, "as it is");
+        press(&mut picker, Action::SearchMode);
+        assert_eq!(picker.mode, SearchMode::Fzf);
+        assert_eq!(picker.shown(0..3), [0], "m, then s");
+        press(&mut picker, Action::SearchMode);
+        assert_eq!(picker.mode, SearchMode::Regex);
+        assert_eq!(picker.len(), 0);
+        press(&mut picker, Action::DeleteToStart);
+        typed(&mut picker, "^r|toml$");
+        assert_eq!(picker.shown(0..3), [1, 2]);
+        assert_eq!(picker.error, None);
+        typed(&mut picker, "(");
+        assert_eq!(picker.len(), 0);
+        assert_eq!(picker.error.as_deref(), Some("error: unclosed group"));
+        press(&mut picker, Action::SearchMode);
+        assert_eq!(
+            (picker.mode, picker.error.as_deref()),
+            (SearchMode::Plain, None)
+        );
     }
 }

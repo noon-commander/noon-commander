@@ -283,7 +283,8 @@ pub(super) const PRESET: Preset = &[
     // match, and Esc and Ctrl+c go back to where it started. Ctrl+g and Ctrl+t go to the next and the
     // previous match, and Ctrl+b and Ctrl+e to the start and the end, as on vim's command line.
     // The arrows and the page keys, and the F-keys, end it and do what they do in the panel,
-    // as in mc; Shift+F7 goes to the next match.
+    // as in mc; Shift+F7 goes to the next match. Alt+r switches how it matches, as the search of
+    // a tree switches regular expressions.
     (
         Mode::Insert,
         Context::QuickSearch,
@@ -292,6 +293,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Abort, &["esc", "ctrl-[", "ctrl-c"]),
             (Action::QuickSearch, &["ctrl-g"]),
             (Action::PrevMatch, &["ctrl-t"]),
+            (Action::SearchMode, &["alt-r"]),
             (Action::TextStart, &["ctrl-b"]),
             (Action::TextEnd, &["ctrl-e"]),
             (Action::Up, &["up"]),
@@ -464,8 +466,9 @@ pub(super) const PRESET: Preset = &[
         ],
     ),
     // What the windows that list items to choose from share: the location menu, the tab menu,
-    // the zoxide window, the workspaces, and the command history fall back to it. `/` types in
-    // the filter, in Insert mode, where Esc goes back to the list.
+    // the zoxide window, the workspaces, the command history, and the list of the key hints
+    // fall back to it. `/` types in the filter, in Insert mode, where Esc goes back to the list.
+    // Alt+r switches how the filter matches, in either mode.
     (
         Mode::Normal,
         Context::List,
@@ -479,6 +482,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Home, &["g g", "home"]),
             (Action::End, &["shift-g", "end"]),
             (Action::QuickSearch, &["/"]),
+            (Action::SearchMode, &["alt-r"]),
             (Action::ShowFull, &["shift-k"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c", "q", "f10"]),
@@ -493,6 +497,7 @@ pub(super) const PRESET: Preset = &[
             (Action::PageUp, &["pageup"]),
             (Action::PageDown, &["pagedown"]),
             (Action::Confirm, &["enter", "ctrl-m", "ctrl-y"]),
+            (Action::SearchMode, &["alt-r"]),
             (Action::NormalMode, &["esc", "ctrl-["]),
             (Action::Cancel, &["ctrl-c", "f10"]),
         ],
@@ -640,7 +645,7 @@ pub(super) const PRESET: Preset = &[
         &[
             (Action::View, &["f3"]),
             (Action::Edit, &["f4"]),
-            (Action::ToggleRegex, &["alt-r"]),
+            (Action::SearchMode, &["alt-r"]),
             (Action::MatchCase, &["alt-c"]),
             (Action::HalfPageUp, &["ctrl-u"]),
             (Action::HalfPageDown, &["ctrl-d"]),
@@ -652,7 +657,7 @@ pub(super) const PRESET: Preset = &[
         &[
             (Action::View, &["f3"]),
             (Action::Edit, &["f4"]),
-            (Action::ToggleRegex, &["alt-r"]),
+            (Action::SearchMode, &["alt-r"]),
             (Action::MatchCase, &["alt-c"]),
         ],
     ),
@@ -662,7 +667,7 @@ pub(super) const PRESET: Preset = &[
         &[
             (Action::View, &["f3"]),
             (Action::Edit, &["f4"]),
-            (Action::ToggleRegex, &["alt-r"]),
+            (Action::SearchMode, &["alt-r"]),
             (Action::MatchCase, &["alt-c"]),
         ],
     ),

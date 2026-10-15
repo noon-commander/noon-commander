@@ -116,7 +116,10 @@ have a command line under the panels that takes what is typed; noc opens one wit
 asks for a shell command in an input box, and ranger opens its console with `:`. mc's +, -, \\, and
 \*, on the numpad too, mark and unmark only while its command line is empty; with Alt, they always
 do. noc keeps them under g, as g +, g -, and g \*, and binds neither +, -, and \*, which are
-vim's motions and search, nor mc's Shift+Up and Shift+Down.
+vim's motions and search. mc's Shift+Up and Shift+Down mark, as in Far, the one exception to vim's
+keys, so that `K` can show what is under the cursor, as vim's does: the whole name, below the
+panels. As vim scrolls lines that do not wrap, the z keys scroll the names: `«` marks a name that
+goes on to the left, and `»` one cut short.
 
 noc groups keys under a first key: vim's g, q, and Ctrl+w, and its own t for the tabs and the
 workspaces, o for the sort order, as ranger's sort keys, and the hidden names, and f for the file
@@ -186,8 +189,15 @@ section says: the commands of files act on the rows it selects, which become the
 | Visual mode: select rows from here to the cursor, for the commands of files (yazi, ranger: mark the rows the cursor moves over) | `visual_mode` | ⏳ | v | — | — | v | — |
 | Visual mode by lines, as vim's V: the same rows, the mode line says VISUAL LINE | `visual_line_mode` | ⏳ | V | — | — | — | V |
 | Select again the rows selected last | `reselect` | ⏳ | g v | — | — | — | — |
-| Mark or unmark, then the next row | `mark` | ⏳ | Space<br>J | Insert<br>Ctrl+t<br>Shift+Down | Insert<br>Shift+Down | Space | Space |
-| Mark or unmark, then the row above | `mark_up` | ⏳ | K | Shift+Up | Shift+Up | — | — |
+| Mark or unmark, then the next row | `mark` | ⏳ | Space<br>Shift+Down | Insert<br>Ctrl+t<br>Shift+Down | Insert<br>Shift+Down | Space | Space |
+| Mark or unmark, then the row above | `mark_up` | ⏳ | Shift+Up | Shift+Up | Shift+Up | — | — |
+| The names a column left, as vim's zh; with a count, that many | `scroll_left` | ⏳ | z h<br>z Left | — | Alt+Left | — | — |
+| The names a column right, as vim's zl, until the last character of the name under the cursor is at the left edge; with a count, that many | `scroll_right` | ⏳ | z l<br>z Right | — | Alt+Right | — | — |
+| The names half their column left, as vim's zH | `scroll_half_left` | ⏳ | z H | — | — | — | — |
+| The names half their column right, as vim's zL | `scroll_half_right` | ⏳ | z L | — | — | — | — |
+| The names from their start, as vim's zs | `scroll_start` | ⏳ | z s | — | Alt+Home | — | — |
+| The end of the name under the cursor at the right edge, as vim's ze | `scroll_end` | ⏳ | z e | — | Alt+End | — | — |
+| Show the whole name under the cursor in a frame below the panels, until asked again or Esc (mc and Far: the mini status line, cut too) | `show_full` | ⏳ | K | — | — | — | — |
 | Mark the names that match a pattern | `select` | ⏳ | g + | +<br>Numpad+<br>Alt++ | Numpad+ | — | — |
 | Unmark the names that match a pattern | `unselect` | ⏳ | g - | -<br>\\<br>Numpad-<br>Alt+- | Numpad- | — | — |
 | Invert the marks on files; directories stay as they are | `invert_marks` | ⏳ | g \* | \*<br>Numpad\*<br>Alt+\* | Numpad* | — | — |
@@ -809,7 +819,10 @@ the cursor beside the list. The ranger column has the keys of its pager, which s
 output of commands, and the log. The key that opens the viewer closes it too: F3, and i, as in
 ranger. Ctrl+f and Ctrl+b turn the page but for two rows, as in vim; Space, f, and b turn the whole
 page, and u and d half of it, as in less. Unlike vim's, every key down stops with the end of the
-text at the bottom, where a dimmed line marks it; the help scrolls the same way.
+text at the bottom, where a dimmed line marks it; the help scrolls the same way. Lines cut show
+`«` and `»` where they go on past the screen, as vim's 'listchars' `precedes` and `extends`, and the
+z keys scroll them as vim's do; wrapped lines start each row after the first with `»`, as vim's
+'showbreak'.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -824,7 +837,13 @@ text at the bottom, where a dimmed line marks it; the help scrolls the same way.
 | The start of the file | `home` | ✅ | g g<br>Home | Home<br>A1<br>g<br>Ctrl+Home<br>Ctrl+PgUp<br>Alt+< | Home<br>Ctrl+Home | — | Home<br>g |
 | The end of the file | `end` | ✅ | G<br>End | End<br>C1<br>G<br>Ctrl+End<br>Ctrl+PgDn<br>Alt+> | End<br>Ctrl+End | — | End<br>G |
 | One column left, when lines are cut (ranger: four) | `left` | ✅ | h<br>Left | Left<br>h | Left | — | Left<br>h |
-| One column right, when lines are cut (ranger: four) | `right` | ✅ | l<br>Right | Right<br>l | Right | — | Right<br>l |
+| One column right, when lines are cut, until the last character of the longest line on screen is at the left edge (ranger: four) | `right` | ⏳ | l<br>Right | Right<br>l | Right | — | Right<br>l |
+| A column left, when lines are cut, as vim's zh; with a count, that many | `scroll_left` | ⏳ | z h<br>z Left | — | — | — | — |
+| A column right, when lines are cut, as vim's zl and as far as l; with a count, that many | `scroll_right` | ⏳ | z l<br>z Right | — | — | — | — |
+| Half the screen left, when lines are cut, as vim's zH | `scroll_half_left` | ⏳ | z H | — | — | — | — |
+| Half the screen right, when lines are cut, as vim's zL | `scroll_half_right` | ⏳ | z L | — | — | — | — |
+| The start of the lines, when they are cut, as vim's zs | `scroll_start` | ⏳ | z s | — | — | — | — |
+| The end of the longest line on screen at the right edge, when lines are cut, as vim's ze | `scroll_end` | ⏳ | z e | — | — | — | — |
 | Wrap long lines, or cut them | `toggle_wrap` | ✅ | F2 | F2 | F2 | — | — |
 | Help | `help` | ✅ | g ?<br>F1 | F1 | F1 | — | — |
 | Close the viewer | `quit` | ✅ | q<br>i<br>Esc<br>Ctrl+[<br>Ctrl+c<br>F3<br>F10 | F3<br>F10<br>q<br>Esc | F10<br>F3<br>Numpad5<br>Esc | — | Esc<br>q<br>Q<br>i<br>F3 |
@@ -890,6 +909,7 @@ with. None of them has modes: their keys are here, not under Insert mode.
 | First item | `home` | ⏳ | g g<br>Home | Home<br>A1<br>Alt+< | — | — | — |
 | Last item | `end` | ⏳ | G<br>End | End<br>C1<br>Alt+> | — | — | — |
 | Type in the filter, in Insert mode | `quick_search` | ⏳ | / | — | Ctrl+Alt+f<br>RightAlt | — | — |
+| Show the whole row under the cursor under the rows, until asked again | `show_full` | ⏳ | K | — | — | — | — |
 | Take the item, as the window's section says | `confirm` | ⏳ | Enter<br>Ctrl+m | Enter | Enter | Enter | — |
 | Close the window | `cancel` | ⏳ | Esc<br>Ctrl+[<br>Ctrl+c<br>q<br>F10 | Esc<br>F10<br>Ctrl+g | Esc | Esc<br>Ctrl+[<br>Ctrl+c | — |
 | F1…F10 on terminals without function keys, in the windows that bind them | — | 🚫 | — | Esc, then 1…9, 0 | — | — | — |

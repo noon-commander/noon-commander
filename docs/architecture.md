@@ -410,6 +410,10 @@ rows have the keys goes to the filter, in Insert mode. There are no digit hotkey
   text, as the places behind them do.
 - The zoxide window does not use it: zoxide, not a filter, picks its rows from the keywords
   typed. It has the same modes, but opens in Insert mode, with the keywords taking the keys.
+- `K` shows the whole row under the cursor in two lines under the rows, until `K` again, in each
+  list on its own (`picker::Whole`), and not in the panels, which have theirs: the directory of the
+  zoxide window, the place of the location menu, the title of a tab, where the tabs of a workspace
+  go. The command history always shows the whole command there.
 
 ### Tabs
 
@@ -445,7 +449,7 @@ row and names the tab that shows by its whole location:
   verticals close each side's line, and its top corners become tees (`╠`, `╣`) that join it,
   so the two sides stay apart. When the tabs do not fit, the names of hidden
   tabs shrink first, then the one that shows, none below eight cells; then tabs far from it
-  are left out, and `‹` and `›` say so.
+  are left out, and `«` and `»` say so.
 - Panels are named by a `PanelId`, their side and tab number, which is never used again.
   Listings, new directories, and the dialogs of `g +`, `g -`, F5, F6, and F7 carry it, so a reply
   reaches the tab that asked even after a switch, and one for a closed tab is dropped. What
@@ -850,6 +854,17 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   and an arrow in the header marks the order. Directories stay first. Names that start with a
   dot are shown unless `ui.show_hidden` is off; `o h` switches them in both panels.
   Sorting and hiding keep the cursor on its entry.
+- **Names that do not fit** ([ADR 0025](adr/0025-marks-of-text-cut-short.md)) lose their middle to
+  `»` (a Nerd Font chevron with icons, `Theme.marks`), in the theme's bold accent (`truncated`;
+  `truncated_cursor` under the cursor, `truncated_dialog` in lists), and paths their start, as
+  titles do (`«/deploy/site`); `noc_text::fit_cut` says where the mark goes, and `cells::fitted`
+  draws it. `K` shows the whole name under the cursor in a frame of two rows below the panels,
+  single lines in the colors of dialogs, following the cursor until `K` or Esc (`App.whole`, not
+  saved). The z keys scroll the names of all rows as vim scrolls lines that do not wrap
+  (`Panel.shift`, back to 0 in another directory): `z h`/`z l` a column, `z H`/`z L` half the
+  column, `z s` the start, `z e` the end of the name under the cursor into view; `z l` stops with
+  the last character of that name at the left edge, as vim's with the cursor line's. A scrolled name
+  shows `«` over its first cell and `»` where it is cut.
 - **Scrolling.** The rows of a panel and of the lists scroll as vim 9.1 scrolls a window
   (`tui/scroll.rs`, a port of vim's `move.c` for lines one row high, checked against vim on random
   keys): five rows stay above and below the cursor, as vim's `defaults.vim` sets 'scrolloff'
@@ -875,8 +890,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   most as long as a volume in the location menu, so a dead network mount leaves it out; over
   SFTP it needs the `statvfs@openssh.com` extension, which OpenSSH's server has. A file system
   that reports no size, or a panel too narrow for it, shows none.
-- **Marks.** Space or `J` marks the entry under the cursor, or unmarks it, and moves down, as mc's
-  Insert does (`K` moves up), and a count marks that many, the row at the end of the listing
+- **Marks.** Space or Shift+Down marks the entry under the cursor, or unmarks it, and moves down,
+  as mc's Insert does (Shift+Up moves up), and a count marks that many, the row at the end of the listing
   once; `g *` inverts the marks on files, leaving directories as they are; `..`
   cannot be marked. Marked rows are underlined, and yellow in mc-classic (bold, which mc uses
   without colors, is for directories); the line below the listing shows the size of the marked files
@@ -932,9 +947,12 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   the text does not fit, and its own F-key bar. It reads the first 16 MiB, locally or
   through the host's shared session, in the background (closing the viewer stops that), and says so
   when the file is longer. Text is UTF-8 with invalid bytes replaced, tabs go to stops of 8, `\r\n`
-  ends lines, and control characters are shown safely. Long lines wrap (F2 cuts them, and Left and
-  Right scroll then); the position is a line and a row within it, so that only the lines in view are
-  wrapped, whatever the size of the file. Keys follow vim and less: `j`/`k`, Ctrl+e/Ctrl+y, and the
+  ends lines, and control characters are shown safely. Long lines wrap, each row after the first
+  starting with `»`, as vim's 'showbreak' (F2 cuts them, `«` and `»` mark where they go on past
+  the screen, as vim's 'listchars', and Left and Right, `h`, `l`, and the z keys as vim's scroll
+  then, no further than the last character of the longest line on screen at the left edge); the
+  position is a line and a row within it, so that only the lines in view are wrapped, whatever
+  the size of the file. Keys follow vim and less: `j`/`k`, Ctrl+e/Ctrl+y, and the
   arrows a line, Ctrl+f/Ctrl+b and PgDn/PgUp a page but for the two rows that vim keeps, Space/`f`
   and `b` a whole page, as less, Ctrl+d/Ctrl+u and `d`/`u` half a page, rounded down as vim's
   'scroll'; unlike vim's, every key down stops with the end at the bottom, where a dimmed line
@@ -1068,8 +1086,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   no search before, on the line of the mode until the next key; so does Enter in quick search, when
   its last search went round (a count can take it round too; after Ctrl+g or Ctrl+t it does not),
   but in fuzzy search, which ranks the rows rather than go down them. Long names lose their middle,
-  marked with `~`. Names are shown terminal-safe: control and bidi characters become `?`. Listings
-  run in background tasks; a reply carries the generation of its request, so a stale one is dropped.
+  marked with `»` in an accent. Names are shown terminal-safe: control and bidi characters become
+  `?`. Listings run in background tasks; a reply carries the generation of its request, so a stale
+  one is dropped.
   If a directory cannot be read, the panel stays where it was and says why below the listing. Going
   up puts the cursor on the directory just left. A panel shows a [`Location`](#locations), always a
   directory.

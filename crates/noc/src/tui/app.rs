@@ -21,6 +21,7 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, BorderType};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
@@ -44,6 +45,7 @@ use super::panel::{
     home_text, location_text,
 };
 use super::pattern::Pattern;
+use super::picker::{FULL_ROWS, Whole};
 use super::places::{Places, volume_of};
 use super::progress::{Counts, JobButton, JobView};
 use super::pulldown::{self, Command, PullDown, PullDownEvent, Status};
@@ -622,6 +624,9 @@ pub(crate) struct App {
     active: Side,
     /// The right panel is drawn on the left.
     swapped: bool,
+    /// Whether `K` shows the whole name under the cursor below the panels, until it is asked
+    /// again; for this run only. Each list has its own.
+    whole: Whole,
     /// What the last quick search found, in any panel, for `n` and `N`, as vim keeps the last
     /// pattern; and whether it went up the rows, as `?` does, which `n` then does too.
     last_search: Option<(String, bool)>,
@@ -832,6 +837,7 @@ impl App {
             last_tab: 2,
             active: Side::Left,
             swapped: false,
+            whole: Whole::Cut,
             last_search: None,
             hosts: HashMap::new(),
             connections: 0,
@@ -1963,6 +1969,10 @@ impl App {
                     | Action::Down
                     | Action::Left
                     | Action::Right
+                    | Action::ScrollLeft
+                    | Action::ScrollRight
+                    | Action::ScrollHalfLeft
+                    | Action::ScrollHalfRight
                     | Action::PageUp
                     | Action::PageDown
                     | Action::HalfPageUp
@@ -2444,6 +2454,10 @@ impl App {
             Action::Rename => self.start_rename(),
             Action::Select => self.ask_pattern(true),
             Action::Unselect => self.ask_pattern(false),
+            // Esc closes the whole name below the panels when it waits for no listing.
+            Action::Cancel if self.panel(self.active).pending_request().is_none() => {
+                self.whole = Whole::Cut;
+            }
             Action::Cancel => self.cancel(self.active),
             Action::Disconnect => self.disconnect_chosen(),
             Action::EditHost => {
@@ -2531,6 +2545,10 @@ impl App {
         match action {
             // The hints show their keys over what is in front, which stays open.
             Action::KeyHints => self.hints_asked = Some(self.place()),
+            // The lists take it themselves, each for itself.
+            Action::ShowFull if self.context() == Context::Panel => {
+                self.whole = self.whole.toggled();
+            }
             // So does the output of commands, and what is in front is there again afterwards;
             // as a command of its own, it gives up an operator that waits, and is the one
             // command after Ctrl+o.
@@ -3484,6 +3502,7 @@ impl App {
             self.swapped,
             self.pulldown_last.filter(|_| last),
             &workspaces::names(&self.workspaces),
+            self.theme.marks,
             &|command| self.command_status(command),
         );
         self.pulldown = Some(pulldown);
@@ -3646,10 +3665,15 @@ impl App {
                     | Action::Jobs
                     | Action::SaveWorkspace
                     | Action::Workspaces
-                    | Action::ToggleHidden => true,
+                    | Action::ToggleHidden
+                    | Action::ShowFull => true,
                     _ => self.supports(action),
                 },
-                checked: action == Action::ToggleHidden && self.config.ui.show_hidden,
+                checked: match action {
+                    Action::ToggleHidden => self.config.ui.show_hidden,
+                    Action::ShowFull => self.whole == Whole::Shown,
+                    _ => false,
+                },
                 key: self.keymap.key(context, action),
             },
             Command::On(side, action) => Status {
@@ -4276,7 +4300,7 @@ impl App {
         let dir = self.active_place();
         let room = usize::from(width / 3).max(1);
         let dir = if cells::width(&dir) > room {
-            cells::fit(&dir, room, Align::Left)
+            cells::fit(&dir, room, Align::Left, self.theme.marks)
         } else {
             dir
         };
@@ -5942,9 +5966,10 @@ impl App {
             .command_line
             .as_ref()
             .map_or(1, |line| line.height(&prompt, screen.width, screen.height));
-        let [menu_bar, panels, command_line, key_bar] = Layout::vertical([
+        let [menu_bar, panels, full, command_line, key_bar] = Layout::vertical([
             Constraint::Length(bar_height),
             Constraint::Fill(1),
+            Constraint::Length(self.full_height()),
             Constraint::Length(line_height),
             Constraint::Length(1),
         ])
@@ -5979,6 +6004,8 @@ impl App {
                 header: self.theme.cursor,
                 text: self.theme.panel,
                 arrows: self.theme.scroll_arrows,
+                mark: self.theme.truncated,
+                marks: self.theme.marks,
             };
             viewing.viewer.render(frame, panels, &styles);
         } else {
@@ -5994,22 +6021,14 @@ impl App {
                 let tabs = spots.into_iter().map(|(index, spot)| (side, index, spot));
                 self.spots.tabs.extend(tabs);
             }
+            self.render_full(frame, full);
         }
         self.spots.fkeys = self.render_fkeys(frame, key_bar);
         self.render_command_line(frame, command_line, &prompt);
         if always {
             self.spots.menu_bar = pulldown::render_idle(frame, menu_bar, &self.theme);
         }
-        if let Some(pulldown) = &self.pulldown {
-            let screen = Rect {
-                height: frame.area().height.saturating_sub(1),
-                ..frame.area()
-            };
-            let icons = self.decor.icons();
-            pulldown.render(frame, (menu_bar, screen), &self.theme, icons, &|command| {
-                self.command_status(command)
-            });
-        }
+        self.render_pulldown(frame, menu_bar);
         if self.viewing.is_none() {
             // On the menu bar, or on the top line of the panels without it.
             self.render_jobs(frame, menu_bar);
@@ -6033,6 +6052,53 @@ impl App {
         self.render_command_choices(frame, command_line, &prompt);
         if let Some(hints) = &self.hints {
             which_key::render(frame, panels, hints, &self.theme);
+        }
+    }
+
+    /// The pull-down menu of F9, if it is open: its bar at `menu_bar`, its menu below.
+    fn render_pulldown(&self, frame: &mut Frame<'_>, menu_bar: Rect) {
+        if let Some(pulldown) = &self.pulldown {
+            let screen = Rect {
+                height: frame.area().height.saturating_sub(1),
+                ..frame.area()
+            };
+            let icons = self.decor.icons();
+            pulldown.render(frame, (menu_bar, screen), &self.theme, icons, &|command| {
+                self.command_status(command)
+            });
+        }
+    }
+
+    /// The rows of the frame below the panels with the whole name under the cursor, while `K`
+    /// asks for it.
+    fn full_height(&self) -> u16 {
+        if self.whole == Whole::Shown && self.viewing.is_none() {
+            FULL_ROWS + 2
+        } else {
+            0
+        }
+    }
+
+    /// The whole name under the cursor of the active panel, in a frame at `area`, below the
+    /// panels, as `K` asks for it: single lines, in the colors of dialogs, which set it apart
+    /// from the panels.
+    fn render_full(&self, frame: &mut Frame<'_>, area: Rect) {
+        if area.height < 3 {
+            return;
+        }
+        let theme = &self.theme;
+        let block = Block::bordered()
+            .border_type(BorderType::Plain)
+            .style(theme.dialog)
+            .border_style(theme.dialog);
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+        let name = self.panel(self.active).full_name().unwrap_or_default();
+        let size = (usize::from(inner.width), usize::from(inner.height));
+        let styles = (theme.dialog, theme.truncated_dialog);
+        let rows = cells::whole(&name, size, None, styles, theme.marks);
+        for (y, row) in (inner.y..inner.bottom()).zip(rows) {
+            frame.render_widget(row, Rect::new(inner.x, y, inner.width, 1));
         }
     }
 
@@ -6150,7 +6216,12 @@ impl App {
         );
         // Inside the corner of the right panel's frame.
         let room = usize::from(area.width.saturating_sub(2));
-        let text = cells::fit(&text, cells::width(&text).min(room), cells::Align::Left);
+        let text = cells::fit(
+            &text,
+            cells::width(&text).min(room),
+            cells::Align::Left,
+            self.theme.marks,
+        );
         let width = u16::try_from(cells::width(&text)).unwrap_or(0);
         let x = area.right().saturating_sub(width + 1);
         let row = Rect::new(x, area.y, width, 1.min(area.height));
@@ -6220,9 +6291,11 @@ impl App {
         let room = width.saturating_sub(shown + 1);
         // A message takes the place of the mode, as on vim's command line.
         if let Some(message) = &self.message {
-            let message = cells::fit(message, room, Align::Left);
+            let message = cells::fit(message, room, Align::Left, self.theme.marks);
             frame.render_widget(Line::styled(message, self.theme.message), area);
-        } else if let Some(mode) = mode.map(|mode| cells::fit(&mode, room, Align::Left)) {
+        } else if let Some(mode) =
+            mode.map(|mode| cells::fit(&mode, room, Align::Left, self.theme.marks))
+        {
             frame.render_widget(Line::styled(mode, Style::new().bold()), area);
         }
         let x = area
@@ -6258,7 +6331,10 @@ impl App {
             let room = usize::from(slot.width).saturating_sub(number.len());
             let line = Line::from(vec![
                 Span::styled(number, self.theme.fkey_number),
-                Span::styled(cells::fit(&label, room, Align::Left), self.theme.fkey_label),
+                Span::styled(
+                    cells::fit(&label, room, Align::Left, self.theme.marks),
+                    self.theme.fkey_label,
+                ),
             ]);
             frame.render_widget(line, *slot);
         }
@@ -6308,6 +6384,13 @@ fn viewer_command(action: Action) -> Option<ViewerCommand> {
     Some(match action {
         Action::Left => ViewerCommand::Left,
         Action::Right => ViewerCommand::Right,
+        // A count repeats them, as it does `h` and `l`.
+        Action::ScrollLeft => ViewerCommand::ScrollLeft(1),
+        Action::ScrollRight => ViewerCommand::ScrollRight(1),
+        Action::ScrollHalfLeft => ViewerCommand::HalfLeft(1),
+        Action::ScrollHalfRight => ViewerCommand::HalfRight(1),
+        Action::ScrollStart => ViewerCommand::ScrollStart,
+        Action::ScrollEnd => ViewerCommand::ScrollEnd,
         Action::ToggleWrap => ViewerCommand::ToggleWrap,
         _ => return None,
     })
@@ -6321,6 +6404,7 @@ fn theme_of(ui: &UiConfig, depth: ColorDepth) -> Theme {
         .unwrap_or_else(Theme::mc_classic)
         .with_borders(ui.borders)
         .with_scroll_arrows(Decor::new(ui.icons).scroll_arrows())
+        .with_marks(Decor::new(ui.icons).marks())
 }
 
 /// What a job does after a failure, by the button `event` pressed.
@@ -6931,6 +7015,66 @@ mod tests {
     }
 
     #[test]
+    fn k_shows_the_whole_name_under_the_cursor_below_the_panels_until_asked_again() {
+        let long = format!("{}.txt", "a-very-long-name-".repeat(6));
+        let mut app = with_files(&[&long, "b"]);
+        keys(&mut app, &["j"]);
+        let shown = |app: &mut App| screen_of(app, 14).contains(&long);
+        assert!(!shown(&mut app), "the panel cuts it");
+        keys(&mut app, &["shift-k"]);
+        let screen = screen_of(&mut app, 14);
+        assert!(screen.contains(&long), "{screen}");
+        keys(&mut app, &["j"]);
+        let screen = screen_of(&mut app, 14);
+        assert!(!screen.contains(&long), "it follows the cursor: {screen}");
+        keys(&mut app, &["k"]);
+        assert!(shown(&mut app), "and stays open");
+        keys(&mut app, &["esc"]);
+        assert!(!shown(&mut app), "Esc closes it");
+        keys(&mut app, &["shift-k"]);
+        assert!(shown(&mut app));
+        keys(&mut app, &["shift-k"]);
+        assert!(!shown(&mut app), "so does K again");
+    }
+
+    #[test]
+    fn k_goes_for_what_is_in_front_alone() {
+        let mut app = with_files(&["a"]);
+        keys(&mut app, &["t", "h", "shift-k"]);
+        let full = |app: &mut App| app.tab_menu.as_mut().map(|menu| menu.picker_mut().full());
+        assert_eq!(full(&mut app), Some(Whole::Shown));
+        assert_eq!(app.whole, Whole::Cut, "the panels keep theirs");
+        keys(&mut app, &["esc", "shift-k", "t", "h"]);
+        assert_eq!(app.whole, Whole::Shown);
+        assert_eq!(
+            full(&mut app),
+            Some(Whole::Cut),
+            "a list opens with its own"
+        );
+    }
+
+    #[test]
+    fn a_count_scrolls_the_names_that_many_columns_as_vims_zl() {
+        let mut app = with_files(&[&"x".repeat(100)]);
+        keys(&mut app, &["j", "3", "z", "l"]);
+        assert_eq!(app.panel(Side::Left).shift(), 3);
+        keys(&mut app, &["2", "z", "h"]);
+        assert_eq!(app.panel(Side::Left).shift(), 1);
+        keys(&mut app, &["z", "e"]);
+        assert!(app.panel(Side::Left).shift() > 1);
+        keys(&mut app, &["z", "s"]);
+        assert_eq!(app.panel(Side::Left).shift(), 0);
+        assert_eq!(
+            viewer_command(Action::ScrollHalfRight),
+            Some(ViewerCommand::HalfRight(1))
+        );
+        assert_eq!(
+            viewer_command(Action::ScrollEnd),
+            Some(ViewerCommand::ScrollEnd)
+        );
+    }
+
+    #[test]
     fn a_count_repeats_a_motion_and_numbers_a_row_or_a_tab() {
         let mut app = with_files(&["a", "b", "c", "d", "e"]);
         keys(&mut app, &["3", "j"]);
@@ -6946,7 +7090,7 @@ mod tests {
         // Marks stop at the end of the listing: the last row turns once.
         keys(&mut app, &["shift-g", "k", "4", "space"]);
         assert_eq!(chosen_names(&app, Side::Left), ["a", "b", "d", "e"]);
-        keys(&mut app, &["9", "shift-k"]);
+        keys(&mut app, &["9", "shift-up"]);
         assert_eq!(chosen_names(&app, Side::Left), ["c"]);
         keys(&mut app, &["t", "n", "t", "n"]);
         assert_eq!(app.tabs(Side::Left).index(), 2);
@@ -11629,7 +11773,7 @@ mod tests {
         );
         app.handle(action(Action::Shell));
         assert_eq!(app.command_prompt(80), "~/src/noc $ ");
-        assert_eq!(app.command_prompt(18), "~/s~oc $ ", "a third of the width");
+        assert_eq!(app.command_prompt(18), "~/s»oc $ ", "a third of the width");
         app.command_line = Some(CommandLine::new(command::Kind::Noc));
         assert_eq!(app.command_prompt(80), ":");
     }

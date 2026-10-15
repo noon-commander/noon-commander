@@ -10,9 +10,9 @@ use noc_scroll::scrollbar::Bar;
 use noc_vfs::{Location, RemotePath};
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::text::Line;
+use ratatui::text::Span;
 
-use super::cells::{self, Align};
+use super::cells::{self, Align, Cut};
 use super::dialog::Colors;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
@@ -47,6 +47,8 @@ pub(crate) struct Row {
     pub(crate) name: String,
     /// The tabs of both panels together.
     pub(crate) tabs: usize,
+    /// Where the tabs are, those of the left panel first.
+    pub(crate) places: Vec<String>,
 }
 
 impl Row {
@@ -58,6 +60,12 @@ impl Row {
             .map(|workspace| Self {
                 name: workspace.name.clone(),
                 tabs: workspace.left.len() + workspace.right.len(),
+                places: workspace
+                    .left
+                    .iter()
+                    .chain(&workspace.right)
+                    .map(|tab| tab.place.to_string())
+                    .collect(),
             })
             .collect()
     }
@@ -195,20 +203,27 @@ impl WorkspacesWindow {
             lines: &lines,
             max_lines: Some(MAX_ROWS),
             message: self.rows.is_empty().then(|| fl!("workspaces-none")),
+            full: shown.get(self.picker.cursor()).map(|row| {
+                let places = row.places.join("  ");
+                cells::sanitize(places.as_bytes())
+            }),
             ..Body::default()
         };
         let focused = Colors::of(theme, false).focused_style();
         self.picker.render(frame, area, theme, body, &mut |row| {
             // The name, a space, the tabs.
             let name_width = row.width.saturating_sub(count_width + 1);
-            let name = cells::fit(
-                &cells::sanitize(shown[row.index].name.as_bytes()),
-                name_width,
-                Align::Left,
-            );
-            let count = cells::fit(&counts[row.index], count_width, Align::Right);
-            let style = if row.selected { focused } else { theme.dialog };
-            Line::styled(format!("{name} {count}"), style)
+            let (style, mark) = if row.selected {
+                (focused, theme.truncated_cursor)
+            } else {
+                (theme.dialog, theme.truncated_dialog)
+            };
+            let name = cells::sanitize(shown[row.index].name.as_bytes());
+            let fit = (Align::Left, Cut::End);
+            let mut line = cells::fitted(&name, name_width, fit, (style, mark), theme.marks);
+            let count = cells::fit(&counts[row.index], count_width, Align::Right, theme.marks);
+            line.spans.push(Span::styled(format!(" {count}"), style));
+            line
         });
     }
 }
@@ -324,6 +339,7 @@ mod tests {
             .map(|(index, name)| Row {
                 name: (*name).to_owned(),
                 tabs: index + 2,
+                places: vec!["~/src/noc".to_owned(); index + 2],
             })
             .collect()
     }
@@ -448,6 +464,13 @@ mod tests {
     fn draws_names_and_their_tabs() {
         let mut window = window();
         insta::assert_snapshot!(draw(&mut window, 12));
+    }
+
+    #[test]
+    fn k_shows_where_the_tabs_under_the_cursor_are_under_the_rows() {
+        let mut window = window();
+        press(&mut window, Action::ShowFull);
+        insta::assert_snapshot!(draw(&mut window, 14));
     }
 
     #[test]

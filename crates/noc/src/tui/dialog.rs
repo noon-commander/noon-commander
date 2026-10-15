@@ -985,7 +985,7 @@ impl Dialog {
                 if index >= inner.height {
                     return;
                 }
-                let label = cells::fit(label, room, cells::Align::Left);
+                let label = cells::fit(label, room, cells::Align::Left, theme.marks);
                 frame.render_widget(Line::raw(label), row(index));
                 index += 1;
             }
@@ -994,7 +994,12 @@ impl Dialog {
             }
             let ([before, selected, after], column) = field.visible_parts(room);
             let used = cells::width(&before) + cells::width(&selected);
-            let after = cells::fit(&after, room.saturating_sub(used), cells::Align::Left);
+            let after = cells::fit(
+                &after,
+                room.saturating_sub(used),
+                cells::Align::Left,
+                theme.marks,
+            );
             let line = Line::from(vec![
                 Span::raw(before),
                 Span::styled(

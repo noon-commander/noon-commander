@@ -3,6 +3,7 @@
 use std::path::Path;
 
 use noc_scroll::scrollbar::Arrows;
+use noc_text::Marks;
 use noc_vfs::{DirEntry, FileKind, VolumeKind};
 
 use super::panel::HostStatus;
@@ -60,6 +61,19 @@ impl Decor {
             }
         } else {
             Arrows::PLAIN
+        }
+    }
+
+    /// The marks of text cut short or going on past the screen: Nerd Font double chevrons, or
+    /// `«` and `»`.
+    pub(crate) fn marks(self) -> Marks {
+        if self.icons {
+            Marks {
+                before: "󰄽",
+                after: "󰄾",
+            }
+        } else {
+            Marks::PLAIN
         }
     }
 
@@ -167,6 +181,19 @@ mod tests {
 
     fn file(name: &str) -> DirEntry {
         entry(name, FileKind::File, 0o644, None)
+    }
+
+    #[test]
+    fn marks_of_text_cut_short_are_double_chevrons() {
+        let code = |mark: &str| mark.chars().map(u32::from).collect::<Vec<_>>();
+        let nerd = Decor::new(true).marks();
+        // nf-md-chevron_double_left and nf-md-chevron_double_right.
+        assert_eq!(
+            (code(nerd.before), code(nerd.after)),
+            (vec![0xf013d], vec![0xf013e])
+        );
+        assert_eq!(Decor::new(false).marks(), Marks::PLAIN);
+        assert_eq!((Marks::PLAIN.before, Marks::PLAIN.after), ("«", "»"));
     }
 
     #[test]

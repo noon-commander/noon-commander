@@ -858,7 +858,7 @@ impl Configuration {
         };
         let lines = cells::wrap(&hint, usize::from(inner.width));
         for (row, line) in (0..HINT_ROWS).zip(lines) {
-            let line = cells::fit(&line, usize::from(inner.width), Align::Left);
+            let line = cells::fit(&line, usize::from(inner.width), Align::Left, theme.marks);
             let area = Rect::new(inner.x, body.bottom() + 1 + row, inner.width, 1);
             frame.render_widget(Line::styled(line, style), area);
         }
@@ -900,7 +900,7 @@ impl Configuration {
                 (true, false) => theme.dialog_title.bold(),
                 (false, _) => theme.dialog,
             };
-            let text = cells::fit(name, usize::from(width), Align::Left);
+            let text = cells::fit(name, usize::from(width), Align::Left, theme.marks);
             let row = Rect::new(area.x, area.y + y, width, 1);
             frame.render_widget(Line::styled(text, style), row);
             self.drawn.categories.push(row);
@@ -949,7 +949,12 @@ impl Configuration {
         {
             let y = area.y + u16::try_from(index - self.offset).unwrap_or(0);
             let focused = self.focus == Focus::Settings && index == self.row;
-            let label = cells::fit(&setting.label, label_width + LABEL_GAP, Align::Left);
+            let label = cells::fit(
+                &setting.label,
+                label_width + LABEL_GAP,
+                Align::Left,
+                theme.marks,
+            );
             let label_style = if focused && !matches!(setting.value, Value::Text { .. }) {
                 colors.focused_style()
             } else {
@@ -962,7 +967,12 @@ impl Configuration {
                 }
                 Value::Choice { options, chosen } => {
                     let text = options.get(*chosen).map_or("", |(_, text)| text.as_str());
-                    let text = cells::fit(text, value_width.saturating_sub(4), Align::Left);
+                    let text = cells::fit(
+                        text,
+                        value_width.saturating_sub(4),
+                        Align::Left,
+                        theme.marks,
+                    );
                     vec![Span::styled(
                         format!("< {} >", text.trim_end()),
                         label_style,
@@ -977,7 +987,12 @@ impl Configuration {
                     }
                     // What Visual mode selects shows in reverse.
                     let used = cells::width(&before) + cells::width(&selected);
-                    let after = cells::fit(&after, value_width.saturating_sub(used), Align::Left);
+                    let after = cells::fit(
+                        &after,
+                        value_width.saturating_sub(used),
+                        Align::Left,
+                        theme.marks,
+                    );
                     let reversed = theme.dialog_input.add_modifier(Modifier::REVERSED);
                     vec![
                         Span::styled(before, theme.dialog_input),

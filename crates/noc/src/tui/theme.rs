@@ -2,6 +2,7 @@
 
 use noc_config::Borders;
 use noc_scroll::scrollbar::Arrows;
+use noc_text::Marks;
 use noc_vfs::{DirEntry, FileKind};
 use ratatui::style::{Color, Style};
 use ratatui::widgets::BorderType;
@@ -54,6 +55,13 @@ pub(crate) struct Theme {
     pub(crate) address: Style,
     /// A message on the line of the mode, as vim's error and warning messages.
     pub(crate) message: Style,
+    /// The marks of text cut short or going on past the screen, `…`, `‹`, `›`, and `↪`, over
+    /// the style of their row: an accent that stands out from names of every kind.
+    pub(crate) truncated: Style,
+    /// The same marks on the row under the cursor or a selected row of a list.
+    pub(crate) truncated_cursor: Style,
+    /// The same marks in dialogs and the lists, over `dialog`.
+    pub(crate) truncated_dialog: Style,
     /// The status of a host in the location menu, drawn over `dialog`, which the panel colors
     /// may not show on: idle, connecting, connected, failed.
     pub(crate) dialog_host: [Style; 4],
@@ -102,6 +110,8 @@ pub(crate) struct Theme {
     pub(crate) borders: Borders,
     /// The arrows at the ends of scroll bars.
     pub(crate) scroll_arrows: Arrows,
+    /// The marks of text cut short or going on past the screen.
+    pub(crate) marks: Marks,
 }
 
 /// The colors the terminal can show: 24-bit RGB, or only its 256-color palette, to which
@@ -191,6 +201,10 @@ impl Theme {
             host_failed: fg(Color::LightRed),
             address: fg(Color::Gray),
             message: fg(Color::LightRed),
+            truncated: fg(Color::LightYellow).bold(),
+            truncated_cursor: on(Color::LightYellow, Color::Black).bold(),
+            // Yellow does not read on the gray of dialogs.
+            truncated_dialog: fg(Color::Red).bold(),
             // Dark colors, as mc draws on its gray dialogs; idle takes the dialog's black.
             dialog_host: [
                 Style::new(),
@@ -225,6 +239,7 @@ impl Theme {
             shadow: Some(on(Color::DarkGray, Color::Black)),
             borders: Borders::default(),
             scroll_arrows: Arrows::PLAIN,
+            marks: Marks::PLAIN,
         }
     }
 
@@ -258,6 +273,10 @@ impl Theme {
             host_failed: plain,
             address: plain,
             message: plain.bold(),
+            // Reversed on plain rows, and plain in the reversed cursor.
+            truncated: reversed.bold(),
+            truncated_cursor: plain.not_reversed().bold(),
+            truncated_dialog: reversed.bold(),
             dialog_host: [plain.dim(), plain, plain.bold(), plain],
             fkey_number: plain,
             fkey_label: reversed,
@@ -284,6 +303,7 @@ impl Theme {
             shadow: None,
             borders: Borders::default(),
             scroll_arrows: Arrows::PLAIN,
+            marks: Marks::PLAIN,
         }
     }
 
@@ -316,6 +336,9 @@ impl Theme {
             host_failed: fg(p.red),
             address: fg(p.subtext0),
             message: fg(p.red),
+            truncated: fg(p.yellow).bold(),
+            truncated_cursor: on(p.yellow, p.crust).bold(),
+            truncated_dialog: fg(p.yellow).bold(),
             dialog_host: [fg(p.subtext0), fg(p.yellow), fg(p.green), fg(p.red)],
             fkey_number: on(p.text, p.crust),
             fkey_label: on(p.text, p.surface0),
@@ -343,6 +366,7 @@ impl Theme {
             shadow: Some(on(p.overlay0, p.crust)),
             borders: Borders::default(),
             scroll_arrows: Arrows::PLAIN,
+            marks: Marks::PLAIN,
         }
     }
 
@@ -378,6 +402,9 @@ impl Theme {
             host_failed: fg(p.red),
             address: fg(p.muted),
             message: fg(p.red),
+            truncated: fg(p.pink).bold(),
+            truncated_cursor: on(p.sun, p.ink).bold(),
+            truncated_dialog: fg(p.pink).bold(),
             dialog_host: [fg(p.muted), fg(p.accent), fg(p.green), fg(p.red)],
             fkey_number: on(p.accent, p.deep).bold(),
             fkey_label: on(p.text, p.deep),
@@ -405,6 +432,7 @@ impl Theme {
             shadow: Some(on(p.faint, p.deep)),
             borders: Borders::default(),
             scroll_arrows: Arrows::PLAIN,
+            marks: Marks::PLAIN,
         }
     }
 
@@ -419,6 +447,11 @@ impl Theme {
             scroll_arrows,
             ..self
         }
+    }
+
+    /// This theme with `marks` for text cut short, as `ui.icons` picks them.
+    pub(crate) fn with_marks(self, marks: Marks) -> Self {
+        Self { marks, ..self }
     }
 
     /// The frame of a panel or a dialog.

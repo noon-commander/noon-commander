@@ -36,9 +36,78 @@ pub fn width(text: &str) -> usize {
     text.width()
 }
 
+/// The marks of text that goes on past where it shows: each takes one cell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Marks {
+    /// Text hidden before: a path that lost its start, a line scrolled left.
+    pub before: &'static str,
+    /// Text cut short or going on after: a name that lost its middle, a line past the right
+    /// edge, a wrapped line going on in the next row.
+    pub after: &'static str,
+}
+
+impl Marks {
+    /// Without a Nerd Font.
+    pub const PLAIN: Self = Self {
+        before: "«",
+        after: "»",
+    };
+}
+
+impl Default for Marks {
+    fn default() -> Self {
+        Self::PLAIN
+    }
+}
+
+/// Where text that does not fit loses cells.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Cut {
+    /// Its middle, so that a name keeps its start and its extension, as mc cuts names.
+    Middle,
+    /// Its start, so that a path keeps its last directories.
+    Start,
+    /// Its end.
+    End,
+}
+
+/// Text fitted into a width: `head`, a mark where text was cut, then `tail`. Together they
+/// take exactly the width.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Fitted {
+    pub head: String,
+    /// Where text was cut, if it was: the mark goes between `head` and `tail`.
+    pub cut: Option<Cut>,
+    pub tail: String,
+}
+
+impl Fitted {
+    /// The mark of the text cut, of `marks`: [`Marks::before`] where the text lost its start,
+    /// else [`Marks::after`]; empty where nothing was cut.
+    pub fn mark(&self, marks: Marks) -> &'static str {
+        match self.cut {
+            None => "",
+            Some(Cut::Start) => marks.before,
+            Some(Cut::Middle | Cut::End) => marks.after,
+        }
+    }
+
+    /// The text, with the mark of `marks`.
+    pub fn text(&self, marks: Marks) -> String {
+        format!("{}{}{}", self.head, self.mark(marks), self.tail)
+    }
+}
+
 /// Fits `text` into exactly `width` cells: shorter text is padded; longer text loses its
-/// middle, marked with `~` as mc does.
+/// middle, marked with [`Marks::PLAIN`].
 pub fn fit(text: &str, width: usize, align: Align) -> String {
+    fit_cut(text, width, align, Cut::Middle).text(Marks::PLAIN)
+}
+
+/// Fits `text` into exactly `width` cells: shorter text is padded as `align` says; longer text
+/// loses cells where `cut` says, and a mark takes one of them. A wide character that does not
+/// fit leaves a blank next to the mark.
+pub fn fit_cut(text: &str, width: usize, align: Align, cut: Cut) -> Fitted {
     let text_width = text.width();
     if text_width <= width {
         let gap = width - text_width;
@@ -47,18 +116,61 @@ pub fn fit(text: &str, width: usize, align: Align) -> String {
             Align::Center => (gap / 2, gap - gap / 2),
             Align::Right => (gap, 0),
         };
-        return format!("{}{text}{}", " ".repeat(left), " ".repeat(right));
+        return Fitted {
+            head: format!("{}{text}{}", " ".repeat(left), " ".repeat(right)),
+            ..Fitted::default()
+        };
     }
     if width == 0 {
-        return String::new();
+        return Fitted::default();
     }
     let kept = width - 1;
-    let (head, head_width) = take_width(text.chars(), kept - kept / 2);
-    let (tail, tail_width) = take_width(text.chars().rev(), kept / 2);
+    let (head_cells, tail_cells) = match cut {
+        Cut::Middle => (kept - kept / 2, kept / 2),
+        Cut::Start => (0, kept),
+        Cut::End => (kept, 0),
+    };
+    let (head, head_width) = take_width(text.chars(), head_cells);
+    let (tail, tail_width) = take_width(text.chars().rev(), tail_cells);
     let tail: String = tail.chars().rev().collect();
-    // A wide character that does not fit leaves a gap.
-    let gap = width - 1 - head_width - tail_width;
-    format!("{head}~{}{tail}", " ".repeat(gap))
+    let gap = " ".repeat(kept - head_width - tail_width);
+    let (head, tail) = match cut {
+        Cut::End => (head + &gap, tail),
+        Cut::Middle | Cut::Start => (head, gap + &tail),
+    };
+    Fitted {
+        head,
+        cut: Some(cut),
+        tail,
+    }
+}
+
+/// `text` broken into rows of at most `width` cells, keeping every character: after the last
+/// `after` that fits in a row where there is one, as a path breaks after a `/`, otherwise
+/// anywhere. A character wider than a row gets one of its own.
+pub fn chop(text: &str, width: usize, after: Option<char>) -> Vec<String> {
+    let width = width.max(1);
+    let mut rows = Vec::new();
+    let mut rest = text;
+    while rest.width() > width {
+        let (head, _) = take_width(rest.chars(), width);
+        let mut end = head
+            .len()
+            .max(rest.chars().next().map_or(0, char::len_utf8));
+        if let Some(after) = after
+            && let Some(at) = head.rfind(after)
+            && at > 0
+            && at + after.len_utf8() < head.len()
+        {
+            end = at + after.len_utf8();
+        }
+        rows.push(rest[..end].to_owned());
+        rest = &rest[end..];
+    }
+    if !rest.is_empty() || rows.is_empty() {
+        rows.push(rest.to_owned());
+    }
+    rows
 }
 
 /// A line of exactly `width` cells drawn with `─`, with `text` in its middle between spaces,
@@ -189,7 +301,7 @@ mod tests {
         assert_eq!(rule("EOF", 12), "─── EOF ────");
         assert_eq!(rule("EOF", 7), "─ EOF ─");
         assert_eq!(rule("EOF", 6), " EOF  ", "no room for the line");
-        assert_eq!(rule("EOF", 2), "E~");
+        assert_eq!(rule("EOF", 2), "E»");
         assert_eq!(rule("", 3), "───");
         assert_eq!(width(&rule("界", 10)), 10);
     }
@@ -208,16 +320,72 @@ mod tests {
 
     #[test]
     fn fit_cuts_the_middle_of_long_text() {
-        assert_eq!(fit("verylongname.txt", 9, Align::Left), "very~.txt");
-        assert_eq!(fit("abcdef", 4, Align::Right), "ab~f");
-        assert_eq!(fit("abc", 1, Align::Left), "~");
+        assert_eq!(fit("verylongname.txt", 9, Align::Left), "very».txt");
+        assert_eq!(fit("abcdef", 4, Align::Right), "ab»f");
+        assert_eq!(fit("abc", 1, Align::Left), "»");
         assert_eq!(fit("abc", 0, Align::Left), "");
         let wide = fit("文件文件文件", 6, Align::Left);
         assert_eq!(width(&wide), 6, "{wide:?}");
         assert_eq!(
-            wide, "文~ 件",
+            wide, "文» 件",
             "a wide character never splits; its cell stays blank"
         );
+    }
+
+    #[test]
+    fn fit_cut_cuts_where_it_is_asked_and_says_where() {
+        let parts = |text, width, cut| {
+            let fitted = fit_cut(text, width, Align::Left, cut);
+            (fitted.head, fitted.cut.is_some(), fitted.tail)
+        };
+        let owned = |head: &str, cut, tail: &str| (head.to_owned(), cut, tail.to_owned());
+        assert_eq!(
+            parts("/srv/www/site", 8, Cut::Start),
+            owned("", true, "ww/site")
+        );
+        assert_eq!(parts("abcdef", 4, Cut::End), owned("abc", true, ""));
+        assert_eq!(parts("abcdef", 4, Cut::Middle), owned("ab", true, "f"));
+        assert_eq!(parts("abc", 4, Cut::Start), owned("abc ", false, ""));
+        assert_eq!(parts("abc", 0, Cut::End), owned("", false, ""));
+        assert_eq!(parts("a文件", 3, Cut::Start), owned("", true, "件"));
+        assert_eq!(parts("文件", 2, Cut::Start), owned("", true, " "));
+        assert_eq!(parts("文件b", 3, Cut::End), owned("文", true, ""));
+        assert_eq!(parts("文件", 2, Cut::End), owned(" ", true, ""));
+        for cut in [Cut::Start, Cut::Middle, Cut::End] {
+            let fitted = fit_cut("文件文件文件x", 7, Align::Left, cut).text(Marks::PLAIN);
+            assert_eq!(width(&fitted), 7, "{fitted:?}");
+        }
+    }
+
+    #[test]
+    fn a_path_cut_at_its_start_takes_the_mark_before() {
+        let path = fit_cut("/srv/www/site", 8, Align::Left, Cut::Start);
+        assert_eq!(path.text(Marks::PLAIN), "«ww/site");
+        let name = fit_cut("abcdef", 4, Align::Left, Cut::End);
+        let marks = Marks {
+            before: "<",
+            after: ">",
+        };
+        assert_eq!(name.text(marks), "abc>");
+        assert_eq!(fit_cut("ab", 4, Align::Left, Cut::End).text(marks), "ab  ");
+    }
+
+    #[test]
+    fn chop_keeps_every_character_and_breaks_after_a_separator() {
+        assert_eq!(chop("abcdefg", 3, None), ["abc", "def", "g"]);
+        assert_eq!(chop("a b", 10, None), ["a b"]);
+        assert_eq!(chop("", 3, None), [""]);
+        assert_eq!(
+            chop("/srv/www/clients/acme", 12, Some('/')),
+            ["/srv/www/", "clients/acme"]
+        );
+        assert_eq!(
+            chop("/averyverylongname", 6, Some('/')),
+            ["/avery", "verylo", "ngname"],
+            "with no separator inside a row, anywhere"
+        );
+        assert_eq!(chop("文件文", 3, None), ["文", "件", "文"]);
+        assert_eq!(chop("文", 1, None), ["文"]);
     }
 
     #[test]

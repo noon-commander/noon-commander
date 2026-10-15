@@ -4,7 +4,7 @@ expression: wrapped
 ---
 " f          1/2 End "
 "abcdefghijklmnopqrst"
-"uvwxyzabcdefghijklmn"
-"opqrstuvwx          "
+"»uvwxyzabcdefghijklm"
+"»nopqrstuvwx        "
 "short               "
 "─────── EOF ────────"

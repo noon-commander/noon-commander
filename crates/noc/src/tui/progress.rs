@@ -329,12 +329,24 @@ impl JobView {
         } else {
             doing
         };
-        put(0, Line::raw(cells::fit(&doing, width, Align::Left)));
-        put(1, Line::raw(cells::fit(&current, width, Align::Left)));
+        put(
+            0,
+            Line::raw(cells::fit(&doing, width, Align::Left, theme.marks)),
+        );
+        put(
+            1,
+            Line::raw(cells::fit(&current, width, Align::Left, theme.marks)),
+        );
         put(2, gauge(ratio, width, theme));
-        put(3, Line::raw(cells::fit(&count, width, Align::Left)));
+        put(
+            3,
+            Line::raw(cells::fit(&count, width, Align::Left, theme.marks)),
+        );
         let time = self.time_line(now);
-        put(4, Line::raw(cells::fit(&time, width, Align::Left)));
+        put(
+            4,
+            Line::raw(cells::fit(&time, width, Align::Left, theme.marks)),
+        );
         let labels: Vec<String> = self
             .buttons
             .iter()

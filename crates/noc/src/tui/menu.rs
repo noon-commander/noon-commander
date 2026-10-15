@@ -364,11 +364,16 @@ impl LocationMenu {
             tick,
             focused: Colors::of(theme, false).focused_style(),
         };
+        let full = items.get(self.picker.cursor()).map(|item| {
+            let texts = texts(*item).join("  ");
+            cells::sanitize(texts.as_bytes())
+        });
         let body = Body {
             title: &title,
             width: WIDTH,
             lines: &lines,
             message,
+            full,
             ..Body::default()
         };
         self.picker.render(frame, area, theme, body, &mut |row| {
@@ -518,8 +523,18 @@ impl Look<'_> {
             }
             Item::More(_, count) => (String::new(), fl!("menu-more", count = count), None),
         };
-        let name = cells::fit(&format!("{prefix}{name}"), name_width, Align::Left);
-        let info = cells::fit(&info(item, self.hosts), info_width, Align::Right);
+        let name = cells::fit(
+            &format!("{prefix}{name}"),
+            name_width,
+            Align::Left,
+            self.theme.marks,
+        );
+        let info = cells::fit(
+            &info(item, self.hosts),
+            info_width,
+            Align::Right,
+            self.theme.marks,
+        );
         if selected {
             return Line::styled(format!("{name} {info}"), self.focused);
         }

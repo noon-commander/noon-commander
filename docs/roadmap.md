@@ -40,7 +40,8 @@
 
 - [x] Panel actions that the keymap binds already: Ctrl+w x swaps the panels, Ctrl+w f opens
       the directory under the cursor in the other panel, Ctrl+w v shows this directory there
-- [x] Marks: Space, `J`, `K`, `g *`; their total below the listing
+- [x] Marks: Space, Shift+Down, Shift+Up (were `J` and `K`), `g *`; their total below the
+      listing
 - [x] `g +` and `g -` mark and unmark by pattern, as mc's `+` and `-`
 - [x] VFS: create and remove directories, remove files, rename, set permissions and times
 - [x] F7 mkdir
@@ -114,6 +115,9 @@
       viewer, the pull-down menu, dialogs, and every window; `ui.mouse` and `ui.wheel`
 - [x] Scroll bars on the frames wherever rows do not fit, which the mouse presses and drags
       ([ADR 0024](adr/0024-scroll-bars-on-the-frames.md))
+- [x] Text cut short marked with `»` and `«` (Nerd Font chevrons with icons) in an accent, `K`
+      for the whole name or row under the cursor, the z keys to scroll names and cut lines
+      sideways, the same marks in the viewer ([ADR 0025](adr/0025-marks-of-text-cut-short.md))
 - [ ] Restore panel state on start, with the tabs
 - [x] Typing in a panel no longer starts quick search; `ui.type_to_search` is gone
 - [x] Shell command line ([ADR 0019](adr/0019-shell-command-line.md)): `!` (and `:!`) runs a

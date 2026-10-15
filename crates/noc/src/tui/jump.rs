@@ -11,13 +11,14 @@ use noc_scroll::scrollbar::{self, Bar};
 use noc_tools::zoxide::Scored;
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
-use ratatui::text::Line;
+use ratatui::text::{Line, Span};
 
-use super::cells::{self, Align};
+use super::cells::{self, Align, Cut};
 use super::dialog::{Colors, Field, draw_box, frame_around, right_frame};
 use super::fuzzy::Fuzzy;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::{Drawn, Pointer};
+use super::picker::{FULL_ROWS, Whole};
 use super::scroll::Window;
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -72,6 +73,8 @@ pub(crate) struct JumpMenu {
     drawn: RefCell<Drawn>,
     /// The scroll bar of the rows at the last render, on the right of the frame.
     bar: Option<Bar>,
+    /// Whether `K` asks for the whole directory under the cursor under the rows.
+    full: Whole,
 }
 
 impl JumpMenu {
@@ -95,6 +98,7 @@ impl JumpMenu {
             pages: 1,
             drawn: RefCell::default(),
             bar: None,
+            full: Whole::Cut,
         }
     }
 
@@ -218,6 +222,7 @@ impl JumpMenu {
                 Action::End => self.cursor = last,
                 Action::QuickSearch => self.typing = true,
                 Action::NormalMode => self.typing = false,
+                Action::ShowFull => self.full = self.full.toggled(),
                 Action::Left
                 | Action::Right
                 | Action::TextStart
@@ -277,7 +282,8 @@ impl JumpMenu {
     }
 
     /// Draws the window centered over `area`, the panels: the keywords, then the directories,
-    /// scrolled to the cursor.
+    /// scrolled to the cursor, and the whole directory under the cursor below them if `K` asks
+    /// for it.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let (page, cursor, window, bar) = self.draw(frame, area, theme);
         (self.page, self.cursor, self.window, self.bar) = (page, cursor, window, bar);
@@ -306,8 +312,14 @@ impl JumpMenu {
             .unwrap_or(u16::MAX)
             .min(MAX_ROWS);
         let colors = Colors::of(theme, false);
+        // A line between the rows and the whole directory under the cursor.
+        let below = if self.full == Whole::Shown && !self.rows.is_empty() {
+            FULL_ROWS + 1
+        } else {
+            0
+        };
         // Borders, the keywords, the line under them, the rows.
-        let size = (WIDTH, rows.saturating_add(4));
+        let size = (WIDTH, rows.saturating_add(4).saturating_add(below));
         let inner = draw_box(frame, area, size, &fl!("jump-title"), colors, theme);
         let mut drawn = self.drawn.borrow_mut();
         *drawn = Drawn {
@@ -323,7 +335,12 @@ impl JumpMenu {
         let prefix = cells::width(&fl!("jump-keywords", text = String::new()));
         let (shown, column) = self.keywords.visible(width.saturating_sub(prefix));
         let column = u16::try_from(prefix + column).unwrap_or(u16::MAX);
-        let prompt = cells::fit(&fl!("jump-keywords", text = shown), width, Align::Left);
+        let prompt = cells::fit(
+            &fl!("jump-keywords", text = shown),
+            width,
+            Align::Left,
+            theme.marks,
+        );
         frame.render_widget(Line::styled(prompt, theme.dialog), line(0));
         if self.typing {
             frame.set_cursor_position(Position::new(
@@ -333,7 +350,7 @@ impl JumpMenu {
         }
         frame.render_widget(Line::styled("─".repeat(width), theme.dialog), line(1));
 
-        let page = usize::from(inner.height - 2);
+        let page = usize::from(inner.height.saturating_sub(2 + below)).max(1);
         let message = if !self.loaded {
             Some(fl!("panel-loading"))
         } else if let Some(error) = &self.error {
@@ -365,19 +382,45 @@ impl JumpMenu {
         // The directory, a space, the score.
         let path_width = width.saturating_sub(score_width + 1);
         for (index, (row, scored)) in found.iter().enumerate().skip(offset).take(page).enumerate() {
-            let path = cells::fit(&self.shown(&scored.path), path_width, Align::Left);
-            let score = cells::fit(&scores[row], score_width, Align::Right);
-            let style = if row == cursor {
-                colors.focused_style()
+            let styles = if row == cursor {
+                (colors.focused_style(), theme.truncated_cursor)
             } else {
-                theme.dialog
+                (theme.dialog, theme.truncated_dialog)
             };
-            let text = Line::styled(format!("{path} {score}"), style);
+            let fit = (Align::Left, Cut::Start);
+            let mut text = cells::fitted(
+                &self.shown(&scored.path),
+                path_width,
+                fit,
+                styles,
+                theme.marks,
+            );
+            let score = cells::fit(&scores[row], score_width, Align::Right, theme.marks);
+            text.spans.push(Span::styled(format!(" {score}"), styles.0));
             let y = u16::try_from(index + 2).unwrap_or(u16::MAX);
             frame.render_widget(text, line(y));
             drawn.rows.push((row, line(y)));
         }
+        if below > 0
+            && let Some(scored) = found.get(cursor)
+        {
+            draw_whole(frame, inner, &self.shown(&scored.path), theme);
+        }
         (page, cursor, window, bar)
+    }
+}
+
+/// `path`, whole, in the last lines of `inner`, below a line across it.
+fn draw_whole(frame: &mut Frame<'_>, inner: Rect, path: &str, theme: &Theme) {
+    let width = usize::from(inner.width);
+    let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
+    let top = inner.height.saturating_sub(FULL_ROWS + 1);
+    frame.render_widget(Line::styled("─".repeat(width), theme.dialog), line(top));
+    let styles = (theme.dialog, theme.truncated_dialog);
+    let size = (width, usize::from(FULL_ROWS));
+    let rows = cells::whole(path, size, Some('/'), styles, theme.marks);
+    for (index, text) in (top + 1..inner.height).zip(rows) {
+        frame.render_widget(text, line(index));
     }
 }
 
@@ -599,6 +642,15 @@ mod tests {
     #[test]
     fn draws_directories_from_home_with_their_scores() {
         let mut menu = menu();
+        insta::assert_snapshot!(draw(&mut menu, 12));
+    }
+
+    #[test]
+    fn k_shows_the_whole_directory_under_the_cursor_under_the_rows() {
+        let mut menu = JumpMenu::new(PathBuf::from("/home/me"), None, 1);
+        let long = "/srv/www/clients/acme-corporation-international/deploy/releases/2026-10-15";
+        menu.found(1, Ok(vec![scored(9.0, long), scored(1.0, "/srv")]));
+        menu.handle(Resolved::Action(Action::ShowFull));
         insta::assert_snapshot!(draw(&mut menu, 12));
     }
 }

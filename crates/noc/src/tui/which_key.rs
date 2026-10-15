@@ -5,7 +5,7 @@ use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 
-use super::cells::{self, Align};
+use super::cells::{self, Align, Cut, Marks};
 use super::dialog::{Colors, draw_box};
 use super::help;
 use super::keymap::{Action, Context, Hint, Hints, Mode};
@@ -154,9 +154,12 @@ fn render_cells(frame: &mut Frame<'_>, inner: Rect, grid: Grid, rows: &[Row], th
                 theme.dialog
             };
             let cell = Line::from(vec![
-                Span::styled(fit_keys(&row.keys, keys_width), theme.dialog_title),
+                Span::styled(
+                    fit_keys(&row.keys, keys_width, theme.marks),
+                    theme.dialog_title,
+                ),
                 Span::raw(" "),
-                Span::styled(cut(&row.text, text_width), style),
+                Span::styled(cut(&row.text, text_width, theme.marks), style),
             ]);
             frame.render_widget(cell, cell_area(inner, grid, column, line));
         }
@@ -165,13 +168,16 @@ fn render_cells(frame: &mut Frame<'_>, inner: Rect, grid: Grid, rows: &[Row], th
         let hidden = rows.len() - shown;
         let more = fl!("which-key-hidden", count = hidden);
         let at = cell_area(inner, grid, shown / grid.rows, shown % grid.rows);
-        frame.render_widget(Line::styled(cut(&more, grid.width), theme.dialog_title), at);
+        frame.render_widget(
+            Line::styled(cut(&more, grid.width, theme.marks), theme.dialog_title),
+            at,
+        );
     }
 }
 
-/// `keys`, a list such as `Space, J`, in `width` cells: as many of them as fit whole,
+/// `keys`, a list such as `Space, Shift+Down`, in `width` cells: as many of them as fit whole,
 /// and the first cut where not even that one does.
-fn fit_keys(keys: &str, width: usize) -> String {
+fn fit_keys(keys: &str, width: usize, marks: Marks) -> String {
     let mut fitted = String::new();
     for key in keys.split(", ") {
         let next = if fitted.is_empty() {
@@ -185,21 +191,14 @@ fn fit_keys(keys: &str, width: usize) -> String {
         fitted = next;
     }
     if fitted.is_empty() {
-        return cut(keys, width);
+        return cut(keys, width, marks);
     }
-    cells::fit(&fitted, width, Align::Left)
+    cells::fit(&fitted, width, Align::Left, marks)
 }
 
-/// `text` in `width` cells, cut at the end with `…` where it is longer.
-fn cut(text: &str, width: usize) -> String {
-    if cells::width(text) <= width {
-        return cells::fit(text, width, Align::Left);
-    }
-    if width == 0 {
-        return String::new();
-    }
-    let (head, _) = cells::split(text, width - 1);
-    format!("{head}…")
+/// `text` in `width` cells, cut at the end with the mark of `marks` where it is longer.
+fn cut(text: &str, width: usize, marks: Marks) -> String {
+    cells::fit_cut(text, width, Align::Left, Cut::End).text(marks)
 }
 
 /// Where the cell of `column` and `line` is in `inner`.
@@ -267,14 +266,14 @@ mod tests {
     #[test]
     fn keys_fit_whole_and_texts_lose_their_end() {
         assert_eq!(
-            fit_keys("Insert, Ctrl+t, Shift+Down", 16),
+            fit_keys("Insert, Ctrl+t, Shift+Down", 16, Marks::PLAIN),
             "Insert, Ctrl+t  "
         );
-        assert_eq!(fit_keys("F10", 5), "F10  ");
-        assert_eq!(fit_keys("Shift+Down", 6), "Shift…");
-        assert_eq!(cut("Open the directory", 10), "Open the …");
-        assert_eq!(cut("Quit", 6), "Quit  ");
-        assert_eq!(cut("Quit", 0), "");
+        assert_eq!(fit_keys("F10", 5, Marks::PLAIN), "F10  ");
+        assert_eq!(fit_keys("Shift+Down", 6, Marks::PLAIN), "Shift»");
+        assert_eq!(cut("Open the directory", 10, Marks::PLAIN), "Open the »");
+        assert_eq!(cut("Quit", 6, Marks::PLAIN), "Quit  ");
+        assert_eq!(cut("Quit", 0, Marks::PLAIN), "");
     }
 
     #[test]

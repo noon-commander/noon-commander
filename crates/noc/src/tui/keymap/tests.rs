@@ -626,8 +626,31 @@ fn marks_by_pattern_are_under_g_and_mcs_own_keys_are_gone() {
     assert_eq!(typed(PANEL, &["g", "+"]), actions(&[Action::Select]));
     assert_eq!(typed(PANEL, &["g", "-"]), actions(&[Action::Unselect]));
     assert_eq!(typed(PANEL, &["g", "*"]), actions(&[Action::InvertMarks]));
-    for key in ["+", "-", "*", "shift-up", "shift-down"] {
+    for key in ["+", "-", "*", "shift-j"] {
         assert_eq!(typed(PANEL, &[key]), [], "{key}");
+    }
+    // The one exception: Shift+Up and Shift+Down mark, as in mc and Far, so that `K` shows
+    // whole names.
+    assert_eq!(typed(PANEL, &["shift-down"]), actions(&[Action::Mark]));
+    assert_eq!(typed(PANEL, &["shift-up"]), actions(&[Action::MarkUp]));
+    assert_eq!(typed(PANEL, &["shift-k"]), actions(&[Action::ShowFull]));
+}
+
+#[test]
+fn z_scrolls_sideways_as_in_vim() {
+    for (keys, action) in [
+        (&["z", "h"], Action::ScrollLeft),
+        (&["z", "left"], Action::ScrollLeft),
+        (&["z", "l"], Action::ScrollRight),
+        (&["z", "right"], Action::ScrollRight),
+        (&["z", "shift-h"], Action::ScrollHalfLeft),
+        (&["z", "shift-l"], Action::ScrollHalfRight),
+        (&["z", "s"], Action::ScrollStart),
+        (&["z", "e"], Action::ScrollEnd),
+    ] {
+        for place in [PANEL, (Mode::Normal, Context::Viewer)] {
+            assert_eq!(typed(place, keys), actions(&[action]), "{keys:?} {place:?}");
+        }
     }
 }
 

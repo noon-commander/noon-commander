@@ -6,20 +6,31 @@ use std::rc::Rc;
 
 use noc_scroll::scrollbar::{self, Arrows, Bar};
 use noc_scroll::{Motion, Step};
-use noc_text::Align;
+use noc_text::{Align, Cut, Marks};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use crate::i18n::fl;
-use crate::text::{cut, lines_of, row_count, row_of, row_starts};
+use crate::text::{cut, lines_of, row_count, row_of, row_starts, wider_than, width};
 
 /// Long lines whose rows are kept, as wrapped: more than a few screens take.
 const WRAPPED_LINES: usize = 1024;
 
 /// Where the rows of lines start, by line.
 type Wrapped = HashMap<usize, Rc<[usize]>>;
+
+/// Whether rows after the first of a wrapped line start with a mark in `width` cells: not
+/// where it would leave no room for text.
+fn breaks(width: usize) -> bool {
+    width >= 2
+}
+
+/// The cells of text in each row after the first of a line wrapped in `width` cells.
+fn continued(width: usize) -> usize {
+    if breaks(width) { width - 1 } else { width }
+}
 
 /// What the viewer is asked to do. The app maps its keys to these; closing the viewer is the
 /// app's own business.
@@ -33,8 +44,25 @@ pub enum Command {
     Top(usize),
     /// One column left, when lines are cut.
     Left,
-    /// One column right, when lines are cut.
+    /// One column right, when lines are cut; no further than the last character of the longest
+    /// line on screen at the left edge.
     Right,
+    /// Count columns left, when lines are cut, as vim's `zh`.
+    ScrollLeft(usize),
+    /// Count columns right, when lines are cut, as vim's `zl`; no further than
+    /// [`Right`](Self::Right) goes.
+    ScrollRight(usize),
+    /// Count half widths of the text left, when lines are cut, as vim's `zH`.
+    HalfLeft(usize),
+    /// Count half widths of the text right, when lines are cut, as vim's `zL`; no further than
+    /// [`Right`](Self::Right) goes.
+    HalfRight(usize),
+    /// Back to the first column, when lines are cut, as vim's `zs` with the cursor at the start
+    /// of the lines.
+    ScrollStart,
+    /// The end of the longest line on screen to the right edge, when lines are cut, as vim's
+    /// `ze`.
+    ScrollEnd,
     /// Wraps long lines, or cuts them.
     ToggleWrap,
 }
@@ -48,6 +76,13 @@ pub struct Styles {
     pub text: Style,
     /// The ends of the scroll bar.
     pub arrows: Arrows,
+    /// The style of the marks of text that goes on past the screen.
+    pub mark: Style,
+    /// The marks: [`Marks::before`] over the first cell of a cut line with text hidden on the
+    /// left, as vim's 'listchars' `precedes`; [`Marks::after`] over the last cell of one that
+    /// goes on to the right, as `extends`, and in front of each row of a wrapped line after its
+    /// first, as vim's 'showbreak'; and where the title is cut.
+    pub marks: Marks,
 }
 
 #[derive(Debug)]
@@ -125,12 +160,25 @@ impl Viewer {
             Command::Scroll(motion) => self.scroll(motion),
             Command::Top(line) => self.top = (line, 0).min(self.last_top()),
             Command::Left => self.column = self.column.saturating_sub(1),
-            Command::Right if !self.wrap => self.column += 1,
-            Command::Right => {}
             Command::ToggleWrap => {
                 self.wrap = !self.wrap;
                 self.top.1 = 0;
                 self.column = 0;
+            }
+            // Wrapped lines hold still sideways, as in vim.
+            _ if self.wrap => {}
+            Command::Right => self.go_right(1),
+            Command::ScrollLeft(count) => self.column = self.column.saturating_sub(count),
+            Command::ScrollRight(count) => self.go_right(count),
+            Command::HalfLeft(count) => {
+                self.column = self
+                    .column
+                    .saturating_sub(count.saturating_mul(self.width / 2));
+            }
+            Command::HalfRight(count) => self.go_right(count.saturating_mul(self.width / 2)),
+            Command::ScrollStart => self.column = 0,
+            Command::ScrollEnd => {
+                self.column = self.longest_on_screen().saturating_sub(self.width);
             }
         }
     }
@@ -140,6 +188,19 @@ impl Viewer {
             State::Text { lines, .. } => lines,
             State::Loading => &[],
         }
+    }
+
+    /// The cells of the longest line on screen at the last render, lines cut.
+    fn longest_on_screen(&self) -> usize {
+        let lines = self.lines().iter().skip(self.top.0).take(self.page);
+        lines.map(|line| width(line)).max().unwrap_or(0)
+    }
+
+    /// `count` columns right, as vim's `zl`: no further than the last character of the longest
+    /// line on screen at the left edge, and never back left.
+    fn go_right(&mut self, count: usize) {
+        let last = self.longest_on_screen().saturating_sub(1);
+        self.column = self.column.max(self.column.saturating_add(count).min(last));
     }
 
     /// The rows line `index` takes on screen.
@@ -163,7 +224,7 @@ impl Viewer {
         }
         let starts = lines
             .entry(index)
-            .or_insert_with(|| row_starts(line, self.width).into());
+            .or_insert_with(|| row_starts(line, self.width, continued(self.width)).into());
         Some(Rc::clone(starts))
     }
 
@@ -217,7 +278,12 @@ impl Viewer {
         if !self.wrap || self.measured.is_some_and(|(_, counted)| counted == width) {
             return;
         }
-        let rows = self.lines().iter().map(|line| row_count(line, width)).sum();
+        let rest = continued(width);
+        let rows = self
+            .lines()
+            .iter()
+            .map(|line| row_count(line, width, rest))
+            .sum();
         self.measured = Some((rows, width));
     }
 
@@ -273,7 +339,7 @@ impl Viewer {
         // Rows of text leave the scroll bar's column alone, which the end line's style would dim.
         let text_width = u16::try_from(self.width).unwrap_or(area.width);
         let text_row = |index: u16| Rect::new(area.x, area.y + index, text_width, 1);
-        let header = self.header(usize::from(area.width));
+        let header = self.header(usize::from(area.width), styles.marks);
         frame.render_widget(Line::styled(header, styles.header), row(0));
         let text_area = Rect::new(area.x, area.y + 1, area.width, area.height - 1);
         frame.buffer_mut().set_style(text_area, styles.text);
@@ -296,21 +362,52 @@ impl Viewer {
                 break;
             };
             let text = if self.wrap {
-                match self.row_starts(position.0) {
+                let text = match self.row_starts(position.0) {
                     Some(starts) => row_of(line, &starts, position.1).to_owned(),
                     None if position.1 == 0 => line.clone(),
                     None => String::new(),
+                };
+                if position.1 > 0 && breaks(self.width) {
+                    let mark = Span::styled(styles.marks.after, styles.mark);
+                    Line::from(vec![mark, Span::raw(text)])
+                } else {
+                    Line::raw(text)
                 }
             } else {
-                cut(line, self.column, self.width)
+                self.cut_line(line, styles)
             };
-            frame.render_widget(Line::from(Span::raw(text)), text_row(y));
+            frame.render_widget(text, text_row(y));
             let next = self.after(position, 1);
             if next == position {
                 break;
             }
             position = next;
         }
+    }
+
+    /// The cells of `line` that show from the column on, with the marks of `styles` where text
+    /// goes on past either edge: a mark takes the place of the cell of text under it.
+    fn cut_line(&self, line: &str, styles: &Styles) -> Line<'static> {
+        let (marks, mark) = (styles.marks, styles.mark);
+        let extends = wider_than(line, self.column + self.width);
+        let precedes = self.column > 0 && wider_than(line, 0) && (self.width > 1 || !extends);
+        let taken = usize::from(precedes) + usize::from(extends);
+        let room = self.width.saturating_sub(taken);
+        let mut spans = Vec::with_capacity(3);
+        if precedes {
+            spans.push(Span::styled(marks.before, mark));
+        }
+        let mut text = cut(line, self.column + usize::from(precedes), room);
+        if extends {
+            // A wide character that does not fit leaves a gap before the mark at the edge.
+            let gap = room.saturating_sub(width(&text));
+            text.extend(std::iter::repeat_n(' ', gap));
+        }
+        spans.push(Span::raw(text));
+        if extends {
+            spans.push(Span::styled(marks.after, mark));
+        }
+        Line::from(spans)
     }
 
     /// The line that marks the end of the text.
@@ -350,7 +447,7 @@ impl Viewer {
     /// The path on the left, and where the screen is on the right, `width` cells wide in all:
     /// its first line, the lines, and how far the last one on screen is, in percent, or that the
     /// end shows.
-    fn header(&self, width: usize) -> String {
+    fn header(&self, width: usize, marks: Marks) -> String {
         let lines = self.lines().len();
         let mut position = String::new();
         if let State::Text { truncated, .. } = &self.state {
@@ -377,7 +474,8 @@ impl Viewer {
         }
         let position = format!(" {position} ");
         let room = width.saturating_sub(noc_text::width(&position));
-        let title = noc_text::fit(&format!(" {}", self.title), room, Align::Left);
+        let title = format!(" {}", self.title);
+        let title = noc_text::fit_cut(&title, room, Align::Left, Cut::Middle).text(marks);
         title + &position
     }
 }
@@ -604,7 +702,7 @@ mod tests {
         viewer.handle(Command::Scroll(Motion::Down));
         let text = small(&mut viewer);
         assert!(text.contains("short"), "{text}");
-        assert!(text.contains("\"uvwxyzabcdefghijklmn"), "{text}");
+        assert!(text.contains("\"»uvwxyzabcdefghijklm "), "{text}");
         let first_row = |text: String| {
             text.contains("\"abcdefghijklmnopqrst") && !text.contains("abcdefghijklmnopqrstu")
         };
@@ -621,8 +719,171 @@ mod tests {
         viewer.handle(Command::Right);
         viewer.handle(Command::Right);
         let cut = draw(&mut viewer, 20, 6);
-        assert!(cut.contains("\"cdefghijklmnopqrstuv\""), "{cut}");
-        assert!(cut.contains("ort"), "{cut}");
+        assert!(cut.contains("\"«defghijklmnopqrstu»\""), "{cut}");
+        assert!(cut.contains("\"«rt "), "{cut}");
+    }
+
+    /// The screen, and whether each of its cells is drawn as a mark.
+    fn draw_marks(viewer: &mut Viewer, width: u16, height: u16) -> (String, Vec<String>) {
+        let styles = Styles {
+            mark: Style::new().add_modifier(Modifier::UNDERLINED),
+            ..Styles::default()
+        };
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        let buffer = terminal
+            .draw(|frame| viewer.render(frame, frame.area(), &styles))
+            .unwrap()
+            .buffer
+            .clone();
+        let marks = (0..height)
+            .map(|y| {
+                (0..width)
+                    .filter(|&x| buffer[(x, y)].modifier.contains(Modifier::UNDERLINED))
+                    .map(|x| buffer[(x, y)].symbol().to_owned())
+                    .collect()
+            })
+            .collect();
+        (terminal.backend().to_string(), marks)
+    }
+
+    #[test]
+    fn cut_lines_mark_text_hidden_past_either_edge() {
+        let mut viewer = Viewer::new("f".to_owned());
+        viewer.show(
+            "abcdefghijklmnopqrstuvwxyz\nshort\n\nabcdefghij\nabcdefgh文x\n".as_bytes(),
+            false,
+        );
+        viewer.handle(Command::ToggleWrap);
+        let (screen, marks) = draw_marks(&mut viewer, 10, 8);
+        let rows: Vec<&str> = screen.lines().collect();
+        assert_eq!(rows[1], "\"abcdefghi»\"", "{screen}");
+        assert_eq!(rows[2], "\"short     \"", "{screen}");
+        assert_eq!(rows[4], "\"abcdefghij\"", "a line that fits: {screen}");
+        assert_eq!(
+            rows[5], "\"abcdefgh »\"",
+            "a wide character that does not fit leaves a gap: {screen}"
+        );
+        assert_eq!(marks[1], "»");
+        assert_eq!(marks[2..=4], ["", "", ""]);
+        assert_eq!(marks[5], "»");
+        assert_eq!(marks[6], "", "the end line has no marks");
+
+        for _ in 0..3 {
+            viewer.handle(Command::Right);
+        }
+        let (screen, marks) = draw_marks(&mut viewer, 10, 8);
+        let rows: Vec<&str> = screen.lines().collect();
+        assert_eq!(rows[1], "\"«efghijkl»\"", "{screen}");
+        assert_eq!(rows[2], "\"«t        \"", "{screen}");
+        assert_eq!(
+            rows[3], "\"          \"",
+            "an empty line hides nothing: {screen}"
+        );
+        assert_eq!(rows[4], "\"«efghij   \"", "{screen}");
+        assert!(rows[6].contains("EOF") && marks[6].is_empty(), "{screen}");
+        assert_eq!(marks[1], "«»");
+        assert_eq!(marks[2], "«");
+        assert_eq!(marks[3], "");
+
+        viewer.handle(Command::ScrollEnd);
+        let (screen, _) = draw_marks(&mut viewer, 10, 8);
+        assert!(screen.contains("\"«rstuvwxyz\""), "{screen}");
+    }
+
+    #[test]
+    fn wrapped_rows_after_the_first_start_with_a_break_mark() {
+        let mut viewer = Viewer::new("f".to_owned());
+        viewer.show(format!("{}\nab\n", "x".repeat(12)).as_bytes(), false);
+        let (screen, marks) = draw_marks(&mut viewer, 5, 7);
+        let rows: Vec<&str> = screen.lines().skip(1).take(4).collect();
+        assert_eq!(
+            rows,
+            ["\"xxxxx\"", "\"»xxxx\"", "\"»xxx \"", "\"ab   \""],
+            "{screen}"
+        );
+        assert_eq!(marks[1..=4], ["", "»", "»", ""]);
+
+        let (screen, marks) = draw_marks(&mut viewer, 1, 6);
+        let rows: Vec<&str> = screen.lines().skip(1).take(3).collect();
+        assert_eq!(rows, ["\"x\"", "\"x\"", "\"x\""], "no room for the mark");
+        assert!(marks.iter().all(String::is_empty));
+    }
+
+    #[test]
+    fn scrolls_sideways_as_vims_z_commands() {
+        let mut viewer = Viewer::new("f".to_owned());
+        let mut text = format!("{}\n", "x".repeat(40));
+        text.push_str(&"y\n".repeat(10));
+        viewer.show(text.as_bytes(), false);
+        viewer.handle(Command::ToggleWrap);
+        // Three rows of text, nineteen cells wide beside the scroll bar.
+        draw(&mut viewer, 20, 4);
+        assert_eq!(viewer.width, 19);
+        let mut press = |command| {
+            viewer.handle(command);
+            viewer.column
+        };
+        assert_eq!(press(Command::ScrollRight(3)), 3);
+        assert_eq!(press(Command::ScrollLeft(2)), 1);
+        assert_eq!(
+            press(Command::ScrollLeft(5)),
+            0,
+            "not below the first column"
+        );
+        assert_eq!(
+            press(Command::HalfRight(2)),
+            18,
+            "two halves of 19 cells, rounded down"
+        );
+        assert_eq!(press(Command::HalfLeft(1)), 9);
+        assert_eq!(press(Command::HalfLeft(3)), 0);
+        assert_eq!(
+            press(Command::ScrollEnd),
+            21,
+            "the end of the longest line at the edge"
+        );
+        assert_eq!(press(Command::ScrollStart), 0);
+        assert_eq!(
+            press(Command::ScrollRight(100)),
+            39,
+            "the last character at the left edge"
+        );
+        assert_eq!(press(Command::Right), 39, "Right stops there too");
+        assert_eq!(press(Command::HalfRight(1)), 39);
+        assert_eq!(press(Command::Left), 38);
+
+        viewer.handle(Command::Scroll(Motion::Down));
+        draw(&mut viewer, 20, 4);
+        assert_eq!(
+            viewer.column, 38,
+            "the long line is off screen; nothing scrolls back"
+        );
+        viewer.handle(Command::ScrollRight(1));
+        assert_eq!(viewer.column, 38, "nor further than the lines on screen");
+        viewer.handle(Command::ScrollEnd);
+        assert_eq!(viewer.column, 0, "the lines on screen fit");
+        viewer.handle(Command::ScrollRight(5));
+        assert_eq!(viewer.column, 0, "one character, at the left edge already");
+    }
+
+    #[test]
+    fn wrapped_lines_hold_still_sideways() {
+        let mut viewer = Viewer::new("f".to_owned());
+        viewer.show("x".repeat(40).as_bytes(), false);
+        let before = draw(&mut viewer, 20, 6);
+        for command in [
+            Command::Right,
+            Command::ScrollRight(3),
+            Command::HalfRight(1),
+            Command::ScrollEnd,
+            Command::ScrollLeft(1),
+            Command::HalfLeft(1),
+            Command::ScrollStart,
+        ] {
+            viewer.handle(command);
+            assert_eq!(viewer.column, 0, "{command:?}");
+            assert_eq!(draw(&mut viewer, 20, 6), before, "{command:?}");
+        }
     }
 
     #[test]

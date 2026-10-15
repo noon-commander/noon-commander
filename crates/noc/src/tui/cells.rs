@@ -5,7 +5,9 @@ use std::time::SystemTime;
 
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
-pub(crate) use noc_text::{Align, fit, rule, sanitize, split, width, wrap};
+pub(crate) use noc_text::{Align, Cut, Marks, chop, fit_cut, rule, sanitize, split, width, wrap};
+use ratatui::style::Style;
+use ratatui::text::{Line, Span};
 
 /// Width in cells of [`mtime`].
 pub(crate) const MTIME_WIDTH: usize = 12;
@@ -62,11 +64,85 @@ pub(crate) fn mtime(time: Option<SystemTime>, now: SystemTime, tz: &TimeZone) ->
     stamp.to_zoned(tz.clone()).strftime(format).to_string()
 }
 
+/// Fits `text` into exactly `width` cells: shorter text is padded; longer text loses its
+/// middle, to the mark of `marks`.
+pub(crate) fn fit(text: &str, width: usize, align: Align, marks: Marks) -> String {
+    fit_cut(text, width, align, Cut::Middle).text(marks)
+}
+
+/// `text` fitted into `width` cells as [`fit_cut`] fits it, in `style`, with the mark of
+/// `marks` where it was cut in `mark` over `style`.
+pub(crate) fn fitted(
+    text: &str,
+    width: usize,
+    (align, cut): (Align, Cut),
+    (style, mark): (Style, Style),
+    marks: Marks,
+) -> Line<'static> {
+    let fitted = fit_cut(text, width, align, cut);
+    let mut spans = vec![Span::styled(fitted.head.clone(), style)];
+    if fitted.cut.is_some() {
+        spans.push(Span::styled(fitted.mark(marks), style.patch(mark)));
+    }
+    spans.push(Span::styled(fitted.tail, style));
+    Line::from(spans)
+}
+
+/// `text` in exactly `rows` lines of `width` cells, broken after `after` where it can be, as
+/// [`chop`] breaks it: the last one cut at its end with the mark in `mark`, if the text goes
+/// on, and blank ones under a short text.
+pub(crate) fn whole(
+    text: &str,
+    (width, rows): (usize, usize),
+    after: Option<char>,
+    (style, mark): (Style, Style),
+    marks: Marks,
+) -> Vec<Line<'static>> {
+    let mut chopped = chop(text, width, after);
+    if chopped.len() > rows {
+        let rest = chopped.split_off(rows.saturating_sub(1)).concat();
+        chopped.push(rest);
+    }
+    let mut lines: Vec<Line<'static>> = chopped
+        .iter()
+        .map(|row| fitted(row, width, (Align::Left, Cut::End), (style, mark), marks))
+        .collect();
+    lines.resize(rows, Line::styled(" ".repeat(width), style));
+    lines
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::{Duration, UNIX_EPOCH};
 
     use super::*;
+
+    #[test]
+    fn whole_text_takes_as_many_lines_as_asked_and_marks_the_rest() {
+        let styles = (Style::new(), Style::new());
+        let text = |lines: Vec<Line<'static>>| -> Vec<String> {
+            lines.iter().map(ToString::to_string).collect()
+        };
+        assert_eq!(
+            text(whole(
+                "/srv/www/site",
+                (9, 2),
+                Some('/'),
+                styles,
+                Marks::PLAIN
+            )),
+            ["/srv/www/", "site     "]
+        );
+        assert_eq!(
+            text(whole("ab", (4, 2), None, styles, Marks::PLAIN)),
+            ["ab  ", "    "]
+        );
+        assert_eq!(
+            text(whole("abcdefghij", (4, 2), None, styles, Marks::PLAIN)),
+            ["abcd", "efg»"],
+            "the last line ends with the mark where the text goes on"
+        );
+    }
 
     #[test]
     fn groups_digits_in_threes() {

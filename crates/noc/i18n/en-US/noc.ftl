@@ -242,6 +242,7 @@ pulldown-redraw = Red&raw screen
 # Options.
 pulldown-configuration = &Configuration…
 pulldown-hidden = Show &hidden files
+pulldown-full = Show &whole names
 # Workspace. Below these come the saved workspaces, which restore; the first ten have the
 # digits 1 … 9 and 0 as their letters, so these two must not use a digit.
 pulldown-save-workspace = &Save workspace…
@@ -417,6 +418,12 @@ help-viewer-top = The start of the file
 help-viewer-end = The end of the file
 help-viewer-left = One column left, when lines are cut
 help-viewer-right = One column right, when lines are cut
+help-viewer-scroll-left = A column left, when lines are cut; with a count, that many
+help-viewer-scroll-right = A column right, when lines are cut; with a count, that many
+help-viewer-scroll-half-left = Half the screen left, when lines are cut
+help-viewer-scroll-half-right = Half the screen right, when lines are cut
+help-viewer-scroll-start = The start of the lines, when they are cut
+help-viewer-scroll-end = The end of the longest line on screen, when lines are cut
 help-viewer-wrap = Wrap long lines, or cut them
 help-viewer-quit = Close the viewer
 help-row-up = One row up
@@ -432,6 +439,14 @@ help-last-row = Last row
 help-enter = Open the directory under the cursor
 help-mark = Mark or unmark, then the next row
 help-mark-up = Mark or unmark, then the row above
+help-names-left = The names a column left; with a count, that many
+help-names-right = The names a column right; with a count, that many
+help-names-half-left = The names half their column left
+help-names-half-right = The names half their column right
+help-names-start = The names from their start
+help-names-end = The end of the name under the cursor at the right edge
+help-show-full = Show the whole name under the cursor below the panels, or stop
+help-list-show-full = Show the whole row under the cursor below the rows, or stop
 help-invert-marks = Invert the marks on files
 help-select = Mark the names that match a pattern
 help-unselect = Unmark the names that match a pattern

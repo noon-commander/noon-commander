@@ -22,6 +22,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   it, and the thumb can be dragged.
 - A dialog's message taller than the screen scrolls, with the mouse and the wheel, and keeps the
   buttons on screen; so do the rows of a command line that do not fit.
+- `K` shows the whole name under the cursor in a frame below the panels, in the colors of dialogs,
+  following the cursor until `K` or Esc, and the whole row under the cursor under the rows of the
+  location menu, the tab menu, the zoxide window, and the Workspaces window, where the paths of a
+  workspace's tabs show. Each of them shows it on its own; Options → Show whole names does it for
+  the panels.
+- The z keys scroll sideways as vim's do on lines that do not wrap: `z h` and `z l` a column,
+  with a count that many, `z H` and `z L` half the width, `z s` to the start, and `z e` the end
+  into view; the names in the panels, and the lines in the viewer while they are cut.
+- The viewer marks lines cut at the edges with `«` and `»`, and starts each wrapped row after the
+  first with `»`, as vim's 'listchars' and 'showbreak'.
 
 ### Changed
 
@@ -40,6 +50,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Ctrl+f too. A dimmed `──── EOF ────` across the text follows the last line, a scroll bar
   shows on the right when the text does not fit, and the position says `End` once the end
   shows: the viewer's on top, the help's in its bottom frame.
+- Text cut short ends or breaks with `»` instead of `~`, in a bold accent of the theme, so that it
+  no longer looks like part of a name nor like mc's marker of a symlink to a directory; with
+  icons, a Nerd Font double chevron. Paths that do not fit lose their start rather than their
+  middle, as in `«/deploy/site`.
+- Shift+Down and Shift+Up mark a row and move down or up, as in mc and Far; `J` and `K` no longer
+  mark, and `K` shows the whole name under the cursor.
+- `l` in the viewer stops once the last character of the longest line on screen reaches the left
+  edge, as `z l` does.
 - The zoxide window (`g z`) opens in Insert mode, so keywords can be typed at once, as in `zi`,
   without `/` first. Esc goes to the rows, and Esc there closes the window.
 

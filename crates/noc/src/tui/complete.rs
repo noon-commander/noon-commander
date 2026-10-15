@@ -469,7 +469,7 @@ impl Choices {
             .take(page)
             .enumerate()
         {
-            let text = cells::fit(&row_text(item).0, width, Align::Left);
+            let text = cells::fit(&row_text(item).0, width, Align::Left, theme.marks);
             let style = if Some(row) == self.chosen {
                 focused
             } else {

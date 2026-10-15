@@ -233,6 +233,7 @@ impl HistoryWindow {
             note: Some(scope),
             message,
             footer,
+            full: None,
         };
         let focused = Colors::of(theme, false).focused_style();
         self.picker.render(frame, area, theme, body, &mut |row| {
@@ -250,15 +251,21 @@ impl HistoryWindow {
                 .width
                 .saturating_sub(host_width + dir_width + 4 + cells::width(&more));
             let first = if more.is_empty() {
-                cells::fit(&first, room, Align::Left)
+                cells::fit(&first, room, Align::Left, theme.marks)
             } else {
-                cells::fit(&format!("{first} …"), room, Align::Left)
+                cells::fit(
+                    &format!("{first} {}", theme.marks.after),
+                    room,
+                    Align::Left,
+                    theme.marks,
+                )
             };
-            let host = cells::fit(&hosts[row.index], host_width, Align::Left);
+            let host = cells::fit(&hosts[row.index], host_width, Align::Left, theme.marks);
             let dir = cells::fit(
                 &cells::sanitize(entry.dir.as_bytes()),
                 dir_width,
                 Align::Left,
+                theme.marks,
             );
             let style = if row.selected {
                 focused

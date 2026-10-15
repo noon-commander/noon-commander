@@ -166,17 +166,17 @@ impl Help {
             .flat_map(|entry| match entry {
                 Entry::Heading(title) => {
                     vec![Line::styled(
-                        cells::fit(title, width, Align::Left),
+                        cells::fit(title, width, Align::Left, theme.marks),
                         theme.dialog_title,
                     )]
                 }
                 Entry::Keys { keys, text } => {
-                    let text = cells::fit(text, text_width, Align::Left);
+                    let text = cells::fit(text, text_width, Align::Left, theme.marks);
                     key_lines(keys, keys_width)
                         .into_iter()
                         .zip(std::iter::once(text).chain(std::iter::repeat(String::new())))
                         .map(|(keys, text)| {
-                            let keys = cells::fit(&keys, keys_width, Align::Left);
+                            let keys = cells::fit(&keys, keys_width, Align::Left, theme.marks);
                             Line::from(vec![
                                 Span::styled(keys, theme.dialog_title),
                                 Span::raw(" "),
@@ -236,7 +236,7 @@ impl Help {
     }
 }
 
-/// `keys`, a list such as `Space, J`, in lines of at most `width` cells, broken after
+/// `keys`, a list such as `Space, Shift+Down`, in lines of at most `width` cells, broken after
 /// the commas. A single key wider than that gets a line of its own.
 fn key_lines(keys: &str, width: usize) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
@@ -333,6 +333,12 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Viewer, Action::End) => fl!("help-viewer-end"),
         (Context::Viewer, Action::Left) => fl!("help-viewer-left"),
         (Context::Viewer, Action::Right) => fl!("help-viewer-right"),
+        (Context::Viewer, Action::ScrollLeft) => fl!("help-viewer-scroll-left"),
+        (Context::Viewer, Action::ScrollRight) => fl!("help-viewer-scroll-right"),
+        (Context::Viewer, Action::ScrollHalfLeft) => fl!("help-viewer-scroll-half-left"),
+        (Context::Viewer, Action::ScrollHalfRight) => fl!("help-viewer-scroll-half-right"),
+        (Context::Viewer, Action::ScrollStart) => fl!("help-viewer-scroll-start"),
+        (Context::Viewer, Action::ScrollEnd) => fl!("help-viewer-scroll-end"),
         (Context::Viewer, Action::ToggleWrap) => fl!("help-viewer-wrap"),
         (Context::Viewer, Action::Quit) => fl!("help-viewer-quit"),
         (Context::QuickSearch, Action::NextMatch) => fl!("help-search-next-match"),
@@ -354,6 +360,13 @@ fn describe_panel(context: Context, action: Action) -> Option<String> {
         Action::Enter => fl!("help-enter"),
         Action::Mark => fl!("help-mark"),
         Action::MarkUp => fl!("help-mark-up"),
+        Action::ScrollLeft => fl!("help-names-left"),
+        Action::ScrollRight => fl!("help-names-right"),
+        Action::ScrollHalfLeft => fl!("help-names-half-left"),
+        Action::ScrollHalfRight => fl!("help-names-half-right"),
+        Action::ScrollStart => fl!("help-names-start"),
+        Action::ScrollEnd => fl!("help-names-end"),
+        Action::ShowFull => fl!("help-show-full"),
         Action::InvertMarks => fl!("help-invert-marks"),
         Action::Select => fl!("help-select"),
         Action::Unselect => fl!("help-unselect"),
@@ -561,6 +574,7 @@ fn describe_list(context: Context, action: Action) -> Option<String> {
         Action::Home => fl!("help-first-row"),
         Action::End => fl!("help-last-row"),
         Action::QuickSearch => fl!("help-list-filter"),
+        Action::ShowFull => fl!("help-list-show-full"),
         Action::NormalMode => fl!("help-list-rows"),
         Action::Confirm => fl!("help-list-take"),
         Action::Cancel => fl!("help-list-close"),

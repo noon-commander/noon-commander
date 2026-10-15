@@ -174,7 +174,7 @@ impl JobsList {
             Rect::new(inner.x, y, inner.width, 1)
         };
         if rows.is_empty() && visible > 0 {
-            let none = cells::fit(&fl!("jobs-none"), width, Align::Left);
+            let none = cells::fit(&fl!("jobs-none"), width, Align::Left, theme.marks);
             frame.render_widget(Line::raw(none), line(0));
         }
         let mut drawn = Drawn {
@@ -198,12 +198,12 @@ impl JobsList {
         for (shown, (number, row)) in rows.iter().enumerate().skip(top).take(visible).enumerate() {
             let text = format!(
                 "{} {} {}  {}",
-                cells::fit(&row.title, TITLE, Align::Left),
-                cells::fit(&row.state, STATE, Align::Right),
-                cells::fit(&row.left, LEFT, Align::Right),
+                cells::fit(&row.title, TITLE, Align::Left, theme.marks),
+                cells::fit(&row.state, STATE, Align::Right, theme.marks),
+                cells::fit(&row.left, LEFT, Align::Right, theme.marks),
                 row.current
             );
-            let text = cells::fit(&text, width, Align::Left);
+            let text = cells::fit(&text, width, Align::Left, theme.marks);
             let text = if number == index {
                 Line::styled(text, colors.focused_style())
             } else {

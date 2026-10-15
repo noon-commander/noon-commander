@@ -28,7 +28,9 @@ no registers.
   the marks, go under `g` as `g +`, `g -`, and `g *`, which vim gives to its undo tree and to a
   search for the word under the cursor, neither of which a listing has; `+`, `-`, and `*` alone,
   vim's line motions and search, stay unbound rather than mark files where a vim user moves.
-  Shift+Up and Shift+Down no longer mark either.
+  Shift+Up and Shift+Down no longer mark either; since
+  [ADR 0025](0025-marks-of-text-cut-short.md) they do again, so that `K` can show the whole name
+  under the cursor.
 - **Where keys start.** The panels, the lists but the zoxide window, the pull-down menu, the
   viewer, and the help start in Normal mode. Quick search, the command line of `:` and `!`, the
   field of a rename, the keywords of the zoxide window, and a dialog whose first focus is a text

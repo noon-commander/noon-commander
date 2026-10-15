@@ -202,6 +202,23 @@ pub(crate) enum Action {
     View,
     /// Wraps long lines in the viewer, or cuts them.
     ToggleWrap,
+    /// The names of a panel, or the lines of the viewer that are cut, a column left, as vim's
+    /// `zh`; with a count, that many.
+    ScrollLeft,
+    /// A column right, as vim's `zl`; with a count, that many.
+    ScrollRight,
+    /// Half their width left, as vim's `zH`.
+    ScrollHalfLeft,
+    /// Half their width right, as vim's `zL`.
+    ScrollHalfRight,
+    /// Back to their start, as vim's `zs` with the cursor at the start of the line.
+    ScrollStart,
+    /// The end of the name under the cursor, or of the longest line on screen, at the right
+    /// edge, as vim's `ze`.
+    ScrollEnd,
+    /// Shows the whole name under the cursor of the panels, and the whole row under the cursor
+    /// of the lists, until it is asked again.
+    ShowFull,
     /// Edits the file under the cursor in the editor of `$VISUAL` or `$EDITOR`.
     Edit,
     /// Asks where to, and copies the marked entries or the one under the cursor.
@@ -510,6 +527,13 @@ impl Action {
         Self::InvertMarks,
         Self::View,
         Self::ToggleWrap,
+        Self::ScrollLeft,
+        Self::ScrollRight,
+        Self::ScrollHalfLeft,
+        Self::ScrollHalfRight,
+        Self::ScrollStart,
+        Self::ScrollEnd,
+        Self::ShowFull,
         Self::Edit,
         Self::Copy,
         Self::Move,

@@ -11,7 +11,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::BorderType;
 
 use super::app::Side;
-use super::cells::{self, Align};
+use super::cells::{self, Align, Marks};
 use super::panel::{ListRequest, Panel, home_text, location_text};
 use super::theme::Theme;
 
@@ -272,7 +272,7 @@ impl Bar<'_> {
         }
         let inside = Rect::new(area.x + 1, area.y, area.width - 2, 1);
         let room = usize::from(inside.width);
-        let mut shown = fit(self.names, self.active, room);
+        let mut shown = fit(self.names, self.active, room, self.theme.marks);
         let more = |shown: &[(usize, String)]| {
             let before = shown.first().is_some_and(|(index, _)| *index > 0);
             let after = shown
@@ -281,7 +281,12 @@ impl Bar<'_> {
             (before, after)
         };
         if more(&shown) != (false, false) {
-            shown = fit(self.names, self.active, room.saturating_sub(2));
+            shown = fit(
+                self.names,
+                self.active,
+                room.saturating_sub(2),
+                self.theme.marks,
+            );
         }
         let (before, after) = more(&shown);
         let mark = |frame: &mut Frame<'_>, x: u16, text: &str| {
@@ -292,7 +297,7 @@ impl Bar<'_> {
         };
         let mut x = inside.x;
         if before {
-            mark(frame, x, "‹");
+            mark(frame, x, self.theme.marks.before);
             x += 1;
         }
         for (position, (index, label)) in shown.into_iter().enumerate() {
@@ -305,7 +310,7 @@ impl Bar<'_> {
             spots.push((index, Rect::new(start, area.y, x - start, 1)));
         }
         if after && inside.width > 0 {
-            mark(frame, inside.right() - 1, "›");
+            mark(frame, inside.right() - 1, self.theme.marks.after);
         }
         spots
     }
@@ -330,7 +335,9 @@ impl Bar<'_> {
             line,
         );
         let mut x = line.x;
-        for (position, (index, label)) in fit(self.names, self.active, room).into_iter().enumerate()
+        for (position, (index, label)) in fit(self.names, self.active, room, self.theme.marks)
+            .into_iter()
+            .enumerate()
         {
             if position > 0 {
                 x += 1;
@@ -367,7 +374,7 @@ const LEAST: usize = 8;
 /// The tabs that fit in `room` cells, by index, each as ` number name ` with a cell between
 /// them: the names of hidden tabs shrink first, the widest first, then the name of the tab
 /// that shows, but none below [`LEAST`] cells; then tabs far from it are left out.
-fn fit(names: &[String], active: usize, room: usize) -> Vec<(usize, String)> {
+fn fit(names: &[String], active: usize, room: usize, marks: Marks) -> Vec<(usize, String)> {
     if names.is_empty() {
         return Vec::new();
     }
@@ -432,7 +439,7 @@ fn fit(names: &[String], active: usize, room: usize) -> Vec<(usize, String)> {
     shown
         .into_iter()
         .map(|index| {
-            let name = cells::fit(&names[index], widths[index], Align::Left);
+            let name = cells::fit(&names[index], widths[index], Align::Left, marks);
             (index, format!("{} {name}", index + 1))
         })
         .collect()
@@ -474,7 +481,7 @@ mod tests {
             fitted.into_iter().map(|(_, text)| text).collect()
         };
         assert_eq!(
-            texts(fit(&names, 2, 62)),
+            texts(fit(&names, 2, 62, Marks::PLAIN)),
             [
                 "1 projects",
                 "2 documents-archive",
@@ -482,21 +489,24 @@ mod tests {
             ]
         );
         assert_eq!(
-            texts(fit(&names, 2, 55)),
-            ["1 projects", "2 docum~hive", "3 /Users/me/projects/noon"],
+            texts(fit(&names, 2, 55, Marks::PLAIN)),
+            ["1 projects", "2 docum»hive", "3 /Users/me/projects/noon"],
             "a hidden tab first"
         );
         assert_eq!(
-            texts(fit(&names, 2, 45)),
-            ["1 projects", "2 docu~ive", "3 /Users/~ts/noon"],
+            texts(fit(&names, 2, 45, Marks::PLAIN)),
+            ["1 projects", "2 docu»ive", "3 /Users/»ts/noon"],
             "then the one that shows, but no name below eight cells"
         );
         assert_eq!(
-            texts(fit(&names, 2, 30)),
-            ["2 docu~ive", "3 /Users~s/noon"],
+            texts(fit(&names, 2, 30, Marks::PLAIN)),
+            ["2 docu»ive", "3 /Users»s/noon"],
             "then tabs far from the one that shows go"
         );
-        assert_eq!(texts(fit(&labels(&["~", "srv"]), 0, 4)), ["1 ~"]);
+        assert_eq!(
+            texts(fit(&labels(&["~", "srv"]), 0, 4, Marks::PLAIN)),
+            ["1 ~"]
+        );
     }
 
     #[test]

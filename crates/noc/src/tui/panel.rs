@@ -18,7 +18,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear};
 
-use super::cells::{self, Align, MTIME_WIDTH};
+use super::cells::{self, Align, Cut, MTIME_WIDTH, Marks};
 use super::decor::{self, Decor};
 use super::dialog::Field;
 use super::fuzzy::Fuzzy;
@@ -306,6 +306,12 @@ pub(crate) struct Panel {
     /// Where the lines between columns ran at the last render, so that they can be joined to
     /// a top of the frame drawn again over the panel's.
     column_lines: Vec<u16>,
+    /// How far the names are scrolled left, in cells, as vim's `zl` scrolls lines that do not
+    /// wrap; from their start again in another directory.
+    shift: usize,
+    /// The icons and the width of the names at the last render, which the scrolling of the
+    /// names goes by.
+    names: (Decor, usize),
 }
 
 impl Panel {
@@ -353,6 +359,8 @@ impl Panel {
             jump: 0,
             error: None,
             column_lines: Vec::new(),
+            shift: 0,
+            names: (Decor::new(false), 0),
         };
         let request = panel.open(location, focus);
         (panel, request)
@@ -388,6 +396,8 @@ impl Panel {
             jump: 0,
             error: None,
             column_lines: Vec::new(),
+            shift: 0,
+            names: (Decor::new(false), 0),
         };
         let request = self
             .pending
@@ -435,6 +445,7 @@ impl Panel {
             }) => {
                 // Reading the same directory again keeps the marks on names still there.
                 if location != self.location {
+                    self.shift = 0;
                     self.marked.clear();
                     self.renaming = None;
                     self.visual = None;
@@ -649,6 +660,36 @@ impl Panel {
                 self.marked.insert(name);
             }
         }
+    }
+
+    /// Scrolls the names `to` cells left, but no further than vim's `zl` goes: until the last
+    /// character of the name under the cursor is at the left edge.
+    fn shift_names(&mut self, to: usize) {
+        let name = self.cursor_name().unwrap_or_default();
+        let last = name
+            .chars()
+            .next_back()
+            .map_or(0, |c| cells::width(&c.to_string()));
+        self.shift = to.min(cells::width(&name) - last);
+    }
+
+    /// The name under the cursor as its row shows it, after its icon or marker, as the last
+    /// render drew them.
+    fn cursor_name(&self) -> Option<String> {
+        self.row(self.cursor)
+            .map(|row| shown_name(row, self.names.0).concat())
+    }
+
+    /// How far the names are scrolled left, in cells.
+    #[cfg(test)]
+    pub(crate) fn shift(&self) -> usize {
+        self.shift
+    }
+
+    /// The whole name under the cursor, terminal-safe, without its icon or marker.
+    pub(crate) fn full_name(&self) -> Option<String> {
+        self.row(self.cursor)
+            .map(|row| shown_name(row, self.names.0)[1].clone())
     }
 
     /// Marks or unmarks `count` rows from the cursor down, or up, as Space or `K` typed that
@@ -1116,6 +1157,15 @@ impl Panel {
                 self.toggle_mark();
                 self.cursor = self.cursor.saturating_sub(1);
             }
+            Action::ScrollLeft => self.shift = self.shift.saturating_sub(1),
+            Action::ScrollRight => self.shift_names(self.shift + 1),
+            Action::ScrollHalfLeft => self.shift = self.shift.saturating_sub(self.names.1 / 2),
+            Action::ScrollHalfRight => self.shift_names(self.shift + self.names.1 / 2),
+            Action::ScrollStart => self.shift = 0,
+            Action::ScrollEnd => {
+                let width = cells::width(&self.cursor_name().unwrap_or_default());
+                self.shift = width.saturating_sub(self.names.1);
+            }
             Action::InvertMarks => self.invert_marks(),
             Action::Enter => return self.row_destination().map(|to| self.go(to)),
             Action::Parent => return self.parent_destination().map(|to| self.go(to)),
@@ -1498,20 +1548,21 @@ impl Panel {
         view: &View<'_>,
     ) {
         let theme = view.theme;
-        let mut title = match &self.location {
+        let title = match &self.location {
             Location::Local(path) => home_text(path, &self.home),
             Location::Remote { .. } => location_text(&self.location),
         };
-        let room = usize::from(area.width.saturating_sub(4));
-        if cells::width(&title) > room {
-            title = cells::fit(&title, room, Align::Left);
-        }
-        let title_style = if active {
-            theme.panel_title_active
+        let (title_style, mark) = if active {
+            (theme.panel_title_active, theme.truncated_cursor)
         } else {
-            theme.panel_border
+            (theme.panel_border, theme.truncated)
         };
-        let title = Line::styled(format!(" {title} "), title_style);
+        // A path that does not fit keeps its last directories.
+        let room = usize::from(area.width.saturating_sub(4)).min(cells::width(&title));
+        let fit = (Align::Left, Cut::Start);
+        let mut title = cells::fitted(&title, room, fit, (title_style, mark), theme.marks);
+        title.spans.insert(0, Span::styled(" ", title_style));
+        title.spans.push(Span::styled(" ", title_style));
         let block = Block::bordered()
             .border_type(theme.border_type())
             .title(title)
@@ -1537,8 +1588,9 @@ impl Panel {
         self.bar = scrollbar::render(frame, bar, position, style, arrows);
 
         let columns = DirColumns::for_width(width);
+        self.names = (view.decor, columns.name);
         let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
-        let header = Line::styled(columns.header(self.sort), theme.header);
+        let header = Line::styled(columns.header(self.sort, theme.marks), theme.header);
         frame.render_widget(header, line(inner.y));
         let visual = self.visual_rows();
         for (screen_row, index) in (self.window.top()..self.rows())
@@ -1549,7 +1601,12 @@ impl Panel {
             let marked = matches!(row, Row::Entry(entry) if self.marked.contains(&entry.name));
             let cursor = (index == self.cursor).then_some(active);
             let selected = visual.as_ref().is_some_and(|rows| rows.contains(&index));
-            let text = row_style(columns.row(row, view), cursor, (marked, selected), theme);
+            let text = row_style(
+                columns.row(row, self.shift, view),
+                cursor,
+                (marked, selected),
+                theme,
+            );
             let y = inner.y + 1 + u16::try_from(screen_row).unwrap_or(u16::MAX);
             frame.render_widget(text, line(y));
         }
@@ -1638,13 +1695,16 @@ impl Panel {
         let status = match waiting {
             Some(waiting) => {
                 let spinner = format!("{} ", decor::spinner(view.tick));
-                let status = cells::fit(&status, width.saturating_sub(2), Align::Left);
+                let status = cells::fit(&status, width.saturating_sub(2), Align::Left, theme.marks);
                 Line::from(vec![
                     Span::styled(spinner, theme.host_status(waiting)),
                     Span::raw(status),
                 ])
             }
-            None => Line::styled(cells::fit(&status, width, Align::Left), status_style),
+            None => Line::styled(
+                cells::fit(&status, width, Align::Left, theme.marks),
+                status_style,
+            ),
         };
         frame.render_widget(status, area);
     }
@@ -1713,7 +1773,7 @@ impl Panel {
         let total = fl!("panel-marked", size = cells::grouped(bytes), count = count);
         let mut total = format!(" {total} ");
         if cells::width(&total) > usize::from(inside) {
-            total = cells::fit(&total, usize::from(inside), Align::Left);
+            total = cells::fit(&total, usize::from(inside), Align::Left, theme.marks);
         }
         let total_width = u16::try_from(cells::width(&total)).unwrap_or(u16::MAX);
         let x = area.x + area.width.saturating_sub(total_width) / 2;
@@ -1873,7 +1933,7 @@ impl DirColumns {
     }
 
     /// The column titles; an arrow marks the one the directory is sorted by, and its direction.
-    fn header(self, sort: Sort) -> String {
+    fn header(self, sort: Sort, marks: Marks) -> String {
         let mut titles = [fl!("panel-name"), fl!("panel-size"), fl!("panel-time")];
         let (column, title) = match sort.key {
             SortKey::Name => (0, fl!("panel-name")),
@@ -1883,29 +1943,18 @@ impl DirColumns {
         };
         titles[column] = format!("{}{title}", sort.arrow());
         let [name, size, time] = titles;
-        let (name, rest) = self.join(&name, &size, &time, [Align::Center; 3]);
+        let (name, rest) = self.join(&name, &size, &time, [Align::Center; 3], marks);
         name + &rest
     }
 
-    /// A row, with the name in the color of its kind, as mc highlights files.
-    fn row(self, row: Row<'_>, view: &View<'_>) -> Line<'static> {
+    /// A row, with the name in the color of its kind, as mc highlights files, scrolled `shift`
+    /// cells left; and which of its spans are marks of a name cut short.
+    fn row(self, row: Row<'_>, shift: usize, view: &View<'_>) -> (Line<'static>, Vec<usize>) {
         const ALIGN: [Align; 3] = [Align::Left, Align::Right, Align::Left];
-        let (decor, theme) = (view.decor, view.theme);
-        let styled = |(name, rest): (String, String), prefix: &str, style: Style| {
-            let mut spans = icon_spans(name, prefix, style, view);
-            spans.push(Span::raw(rest));
-            Line::from(spans)
-        };
-        match row {
-            Row::Parent => {
-                let prefix = decor.parent();
-                let name = format!("{prefix}..");
-                styled(
-                    self.join(&name, &fl!("panel-up-dir"), "", ALIGN),
-                    prefix,
-                    theme.directory,
-                )
-            }
+        let theme = view.theme;
+        let [prefix, name] = shown_name(row, view.decor);
+        let (size, time, style) = match row {
+            Row::Parent => (fl!("panel-up-dir"), String::new(), theme.directory),
             Row::Entry(entry) => {
                 let size = if entry.is_dir_like() {
                     fl!("panel-dir")
@@ -1916,28 +1965,65 @@ impl DirColumns {
                         .map_or_else(String::new, |size| cells::size(size, SIZE_WIDTH))
                 };
                 let time = cells::mtime(entry.metadata.modified, view.now, view.tz);
-                let prefix = decor.entry(entry);
-                let name = format!("{prefix}{}", cells::sanitize(&entry.name));
-                styled(
-                    self.join(&name, &size, &time, ALIGN),
-                    &prefix,
-                    theme.entry(entry),
-                )
+                (size, time, theme.entry(entry))
             }
-        }
+        };
+        let (_, rest) = self.join("", &size, &time, ALIGN, view.theme.marks);
+        let (mut spans, marks) = name_spans(&prefix, &name, (self.name, shift), style, view);
+        spans.push(Span::raw(rest));
+        (Line::from(spans), marks)
     }
 }
 
-/// A name cell in `style`, with the icon of its `prefix` in a toned-down `style`. A cell cut so
-/// short that the prefix lost its end, and mc's markers, are drawn whole in `style`.
-fn icon_spans(name: String, prefix: &str, style: Style, view: &View<'_>) -> Vec<Span<'static>> {
-    match name.strip_prefix(prefix) {
-        Some(rest) if view.decor.icons() && !prefix.is_empty() => vec![
-            Span::styled(prefix.to_owned(), Theme::icon(style)),
-            Span::styled(rest.to_owned(), style),
-        ],
-        _ => vec![Span::styled(name, style)],
+/// A row's name, as its row shows it: the icon or marker in front, and the name.
+fn shown_name(row: Row<'_>, decor: Decor) -> [String; 2] {
+    match row {
+        Row::Parent => [decor.parent().to_owned(), "..".to_owned()],
+        Row::Entry(entry) => [decor.entry(entry), cells::sanitize(&entry.name)],
     }
+}
+
+/// The name cell, `cells` wide, in `style`, with the icon of its `prefix` in a toned-down
+/// `style`, and the indexes of the spans that are marks: `…` where a name that does not fit
+/// loses its middle, as in mc; scrolled `shift` cells left, `‹` over its first cell and `…`
+/// where it goes on past the right one. A cell cut so short that the prefix lost its end, mc's
+/// markers, and a scrolled name are drawn whole in `style`.
+fn name_spans(
+    prefix: &str,
+    name: &str,
+    (cells, shift): (usize, usize),
+    style: Style,
+    view: &View<'_>,
+) -> (Vec<Span<'static>>, Vec<usize>) {
+    let text = format!("{prefix}{name}");
+    let shown_marks = view.theme.marks;
+    let mut spans = Vec::new();
+    let mut marks = Vec::new();
+    let fitted = if shift > 0 && cells > 0 {
+        let (_, shown) = cells::split(&text, shift);
+        let (_, rest) = cells::split(&shown, 1);
+        marks.push(spans.len());
+        spans.push(Span::styled(shown_marks.before, style));
+        let fitted = cells::fit_cut(&rest, cells - 1, Align::Left, Cut::End);
+        spans.push(Span::styled(fitted.head.clone(), style));
+        fitted
+    } else {
+        let fitted = cells::fit_cut(&text, cells, Align::Left, Cut::Middle);
+        match fitted.head.strip_prefix(prefix) {
+            Some(rest) if view.decor.icons() && !prefix.is_empty() => {
+                spans.push(Span::styled(prefix.to_owned(), Theme::icon(style)));
+                spans.push(Span::styled(rest.to_owned(), style));
+            }
+            _ => spans.push(Span::styled(fitted.head.clone(), style)),
+        }
+        fitted
+    };
+    if fitted.cut.is_some() {
+        marks.push(spans.len());
+        spans.push(Span::styled(fitted.mark(shown_marks), style));
+    }
+    spans.push(Span::styled(fitted.tail, style));
+    (spans, marks)
 }
 
 /// Column widths of a directory: the name takes what the size and time columns leave, and
@@ -1975,17 +2061,24 @@ impl DirColumns {
     }
 
     /// The name cell, and the other cells with the blanks the lines between them go on.
-    fn join(self, name: &str, size: &str, time: &str, align: [Align; 3]) -> (String, String) {
+    fn join(
+        self,
+        name: &str,
+        size: &str,
+        time: &str,
+        align: [Align; 3],
+        marks: Marks,
+    ) -> (String, String) {
         let mut rest = String::new();
         if self.size {
             rest.push(' ');
-            rest.push_str(&cells::fit(size, SIZE_WIDTH, align[1]));
+            rest.push_str(&cells::fit(size, SIZE_WIDTH, align[1], marks));
         }
         if self.time {
             rest.push(' ');
-            rest.push_str(&cells::fit(time, MTIME_WIDTH, align[2]));
+            rest.push_str(&cells::fit(time, MTIME_WIDTH, align[2], marks));
         }
-        (cells::fit(name, self.name, align[0]), rest)
+        (cells::fit(name, self.name, align[0], marks), rest)
     }
 }
 
@@ -2098,9 +2191,10 @@ fn stem_chars(name: &str, dir: bool) -> usize {
 
 /// `text` as a row under the cursor, `Some(true)` in the active panel, `marked`, and `selected`
 /// by Visual mode. The cursor and marks replace the colors of the row, as in mc, and a selection
-/// reverses them; the cursor of the inactive panel only puts a background under them.
+/// reverses them; the cursor of the inactive panel only puts a background under them. The spans
+/// at `marks`, the marks of a name cut short, keep an accent over them.
 fn row_style(
-    mut text: Line<'static>,
+    (mut text, marks): (Line<'static>, Vec<usize>),
     cursor: Option<bool>,
     (marked, selected): (bool, bool),
     theme: &Theme,
@@ -2121,6 +2215,16 @@ fn row_style(
     }
     if cursor == Some(false) {
         text = text.patch_style(theme.cursor_inactive);
+    }
+    let mark = if cursor == Some(true) || selected {
+        theme.truncated_cursor
+    } else {
+        theme.truncated
+    };
+    for index in marks {
+        if let Some(span) = text.spans.get_mut(index) {
+            span.style = span.style.patch(mark);
+        }
     }
     text
 }
@@ -3187,6 +3291,131 @@ mod tests {
             available: 0,
         });
         assert!(!bottom(&mut panel, 30).contains('0'));
+    }
+
+    /// The rows of `panel` drawn 14 cells wide, a name column of 12, four of them, inside the
+    /// frame.
+    fn name_rows(panel: &mut Panel) -> Vec<String> {
+        let screen = draw(panel, 14, 9, true).to_string();
+        screen
+            .lines()
+            .skip(2)
+            .take(4)
+            .map(|line| {
+                let inside: String = line.trim_matches('"').chars().skip(1).collect();
+                inside.chars().take(12).collect()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn z_scrolls_the_names_as_vim_scrolls_lines_that_do_not_wrap() {
+        let mut panel = loaded(
+            "/srv",
+            vec![
+                entry("dir", FileKind::Dir, 0),
+                entry("abcdefghijklmnopqrst", FileKind::File, 1),
+                entry("short", FileKind::File, 1),
+            ],
+        );
+        panel.handle(Action::Down);
+        panel.handle(Action::Down);
+        assert_eq!(under_cursor(&panel), "abcdefghijklmnopqrst");
+        assert_eq!(
+            name_rows(&mut panel),
+            [
+                "/..         ",
+                "/dir        ",
+                " abcde»pqrst",
+                " short      "
+            ],
+            "a name that does not fit loses its middle"
+        );
+        let press = |panel: &mut Panel, actions: &[Action]| {
+            for action in actions {
+                panel.handle(*action);
+            }
+            name_rows(panel)
+        };
+        // `zl`: a column, `«` over the first cell, and a name cut short at its end.
+        assert_eq!(
+            press(&mut panel, &[Action::ScrollRight]),
+            [
+                "«.          ",
+                "«ir         ",
+                "«bcdefghijk»",
+                "«hort       "
+            ]
+        );
+        // `zL`: half the column of 12.
+        assert_eq!(
+            press(&mut panel, &[Action::ScrollHalfRight])[2],
+            "«hijklmnopq»"
+        );
+        assert_eq!(panel.shift, 7);
+        // `zh` and `zH`, never past the start.
+        assert_eq!(press(&mut panel, &[Action::ScrollLeft])[2], "«ghijklmnop»");
+        press(
+            &mut panel,
+            &[Action::ScrollHalfLeft, Action::ScrollHalfLeft],
+        );
+        assert_eq!(panel.shift, 0);
+        // `ze`: the end of the name under the cursor at the right edge.
+        assert_eq!(press(&mut panel, &[Action::ScrollEnd])[2], "«jklmnopqrst");
+        // `zl` stops where the last character of the name under the cursor is at the left
+        // edge, as vim's stops at the end of the cursor line.
+        press(&mut panel, &[Action::ScrollRight; 40]);
+        assert_eq!(panel.shift, 20, "' abcdefghijklmnopqrst' is 21 cells");
+        // `zs`: from the start again.
+        press(&mut panel, &[Action::ScrollStart]);
+        assert_eq!(panel.shift, 0);
+        // On a shorter name, `zl` brings the names back to its end, as vim's does.
+        press(&mut panel, &[Action::ScrollEnd, Action::ScrollRight]);
+        assert_eq!(panel.shift, 10);
+        panel.handle(Action::Down);
+        panel.handle(Action::ScrollRight);
+        assert_eq!(panel.shift, 5, "' short' is 6 cells");
+        // Moving the cursor keeps the names where they are.
+        panel.handle(Action::Up);
+        assert_eq!(panel.shift, 5);
+        // Another directory shows its names from their start.
+        panel.cursor = 1;
+        let request = panel.handle(Action::Enter).unwrap();
+        answer(&mut panel, &request, Listing::Dir(vec![]));
+        assert_eq!(panel.shift, 0);
+    }
+
+    #[test]
+    fn the_marks_of_names_cut_short_have_an_accent_on_every_row() {
+        use ratatui::style::{Color, Modifier};
+
+        let mut panel = loaded(
+            "/srv",
+            vec![
+                entry("abcdefghijklmnopqrst", FileKind::File, 1),
+                entry("bcdefghijklmnopqrstu", FileKind::File, 1),
+            ],
+        );
+        panel.handle(Action::Down);
+        let hosts = |_: &str| HostState::default();
+        let theme = Theme::mc_classic();
+        let terminal = render_themed(&mut panel, (14, 8), true, &hosts, Decor::new(false), &theme);
+        let buffer = terminal.backend().buffer();
+        // The mark: after the frame, the marker, and five letters.
+        let cell = |y: u16| &buffer[(7, y)];
+        assert_eq!(cell(3).symbol(), "»");
+        assert_eq!(
+            (cell(3).fg, cell(3).bg),
+            (Color::LightYellow, Color::Black),
+            "under the cursor"
+        );
+        assert_eq!((cell(4).fg, cell(4).bg), (Color::LightYellow, Color::Blue));
+        assert!(cell(4).modifier.contains(Modifier::BOLD));
+        assert_eq!(
+            buffer[(8, 4)].fg,
+            Color::Gray,
+            "the name goes on in its color"
+        );
     }
 
     #[test]

@@ -30,17 +30,17 @@ pub(crate) fn lines_of(bytes: &[u8]) -> Vec<String> {
         .collect()
 }
 
-/// Where the rows of `line` start, in bytes, wrapped in rows of at most `width` cells, broken
-/// anywhere, as mc wraps: at least one row, and at least one character in each.
-pub(crate) fn row_starts(line: &str, width: usize) -> Vec<usize> {
-    let width = width.max(1);
+/// Where the rows of `line` start, in bytes, wrapped in a first row of at most `first` cells and
+/// further rows of at most `rest`, broken anywhere, as mc wraps: at least one row, and at least
+/// one character in each.
+pub(crate) fn row_starts(line: &str, first: usize, rest: usize) -> Vec<usize> {
     let mut starts = vec![0];
-    let (mut start, mut used) = (0, 0);
+    let (mut start, mut used, mut room) = (0, 0, first.max(1));
     for (index, c) in line.char_indices() {
         let char_width = c.width().unwrap_or(0);
-        if used + char_width > width && index > start {
+        if used + char_width > room && index > start {
             starts.push(index);
-            (start, used) = (index, 0);
+            (start, used, room) = (index, 0, rest.max(1));
         }
         used += char_width;
     }
@@ -57,19 +57,32 @@ pub(crate) fn row_of<'a>(line: &'a str, starts: &[usize], row: usize) -> &'a str
 }
 
 /// How many rows [`row_starts`] breaks `line` into, without keeping where.
-pub(crate) fn row_count(line: &str, width: usize) -> usize {
-    let width = width.max(1);
-    let (mut count, mut used, mut empty) = (1, 0, true);
+pub(crate) fn row_count(line: &str, first: usize, rest: usize) -> usize {
+    let (mut count, mut used, mut room, mut empty) = (1, 0, first.max(1), true);
     for c in line.chars() {
         let char_width = c.width().unwrap_or(0);
-        if used + char_width > width && !empty {
+        if used + char_width > room && !empty {
             count += 1;
-            used = 0;
+            (used, room) = (0, rest.max(1));
         }
         used += char_width;
         empty = false;
     }
     count
+}
+
+/// The cells `line` takes, counted as [`cut`] counts them.
+pub(crate) fn width(line: &str) -> usize {
+    line.chars().map(|c| c.width().unwrap_or(0)).sum()
+}
+
+/// Whether `line` takes more than `cells` cells; it stops counting there, however long the line.
+pub(crate) fn wider_than(line: &str, cells: usize) -> bool {
+    let mut used = 0;
+    line.chars().any(|c| {
+        used += c.width().unwrap_or(0);
+        used > cells
+    })
 }
 
 /// The cells `skip` … `skip + width` of `line`; a wide character cut in two shows as a space.
@@ -106,7 +119,11 @@ mod tests {
     use super::*;
 
     fn rows(line: &str, width: usize) -> Vec<&str> {
-        let starts = row_starts(line, width);
+        rows_in(line, width, width)
+    }
+
+    fn rows_in(line: &str, first: usize, rest: usize) -> Vec<&str> {
+        let starts = row_starts(line, first, rest);
         (0..starts.len())
             .map(|row| row_of(line, &starts, row))
             .collect()
@@ -126,14 +143,23 @@ mod tests {
     #[test]
     fn wraps_and_cuts_by_cells() {
         assert_eq!(rows("abcdefg", 3), ["abc", "def", "g"]);
-        for (line, width) in [
-            ("abcdefg", 3),
-            ("", 3),
-            ("文文文", 5),
-            ("文", 1),
-            ("a\u{301}bc", 1),
+        for (line, first, rest) in [
+            ("abcdefg", 3, 3),
+            ("", 3, 3),
+            ("文文文", 5, 5),
+            ("文", 1, 1),
+            ("a\u{301}bc", 1, 1),
+            ("abcdefg", 3, 2),
+            ("abcdefgh", 4, 3),
+            ("文文文文", 4, 3),
+            ("文文", 2, 1),
+            ("", 3, 2),
         ] {
-            assert_eq!(row_count(line, width), rows(line, width).len(), "{line:?}");
+            assert_eq!(
+                row_count(line, first, rest),
+                rows_in(line, first, rest).len(),
+                "{line:?} in {first} then {rest}"
+            );
         }
         assert_eq!(rows("", 3), [""]);
         assert_eq!(rows("文文文", 5), ["文文", "文"]);
@@ -149,5 +175,32 @@ mod tests {
             "a cut half is a space, and what does not fit is left out"
         );
         assert_eq!(cut("ab", 5, 3), "");
+    }
+
+    #[test]
+    fn rows_after_the_first_take_their_own_width() {
+        assert_eq!(rows_in("abcdefgh", 4, 3), ["abcd", "efg", "h"]);
+        assert_eq!(rows_in("abcd", 4, 3), ["abcd"], "a full first row only");
+        assert_eq!(
+            rows_in("文文文", 4, 3),
+            ["文文", "文"],
+            "a wide character goes on to the next row whole"
+        );
+        assert_eq!(
+            rows_in("文文", 2, 1),
+            ["文", "文"],
+            "a character wider than a row gets one"
+        );
+    }
+
+    #[test]
+    fn counts_cells_as_cut_does() {
+        assert_eq!(width("a文\u{301}b"), 4);
+        assert_eq!(width(""), 0);
+        assert!(wider_than("abc", 2));
+        assert!(!wider_than("abc", 3));
+        assert!(wider_than("文", 1));
+        assert!(!wider_than("", 0));
+        assert!(!wider_than("\u{301}", 0), "nothing shows");
     }
 }

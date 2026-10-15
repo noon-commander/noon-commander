@@ -5,10 +5,9 @@
 use noc_scroll::scrollbar::Bar;
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::text::Line;
 
 use super::app::Side;
-use super::cells::{self, Align};
+use super::cells::{self, Align, Cut};
 use super::dialog::Colors;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
@@ -128,13 +127,20 @@ impl TabMenu {
             title: &title,
             width,
             lines: &lines,
+            full: shown
+                .get(self.picker.cursor())
+                .map(|title| (*title).clone()),
             ..Body::default()
         };
         let focused = Colors::of(theme, false).focused_style();
         self.picker.render(frame, area, theme, body, &mut |row| {
-            let text = cells::fit(shown[row.index], row.width, Align::Left);
-            let style = if row.selected { focused } else { theme.dialog };
-            Line::styled(text, style)
+            let styles = if row.selected {
+                (focused, theme.truncated_cursor)
+            } else {
+                (theme.dialog, theme.truncated_dialog)
+            };
+            let fit = (Align::Left, Cut::Start);
+            cells::fitted(shown[row.index], row.width, fit, styles, theme.marks)
         });
     }
 }

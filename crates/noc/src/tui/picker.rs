@@ -17,6 +17,30 @@ use super::scroll::Window;
 use super::theme::Theme;
 use crate::i18n::fl;
 
+/// The lines the whole text of the row under the cursor takes, under the rows, and the whole
+/// name under the cursor of the panels, under them: always as many, so that nothing moves as
+/// the cursor goes from one to the next.
+pub(crate) const FULL_ROWS: u16 = 2;
+
+/// Whether text that does not fit shows whole too, as `K` asks: below the panels, or under the
+/// rows of a list. The panels and each list have their own.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum Whole {
+    /// Only cut, in its rows.
+    #[default]
+    Cut,
+    Shown,
+}
+
+impl Whole {
+    pub(crate) fn toggled(self) -> Self {
+        match self {
+            Self::Cut => Self::Shown,
+            Self::Shown => Self::Cut,
+        }
+    }
+}
+
 /// What a key did in a window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Pick {
@@ -65,6 +89,9 @@ pub(crate) struct Body<'a> {
     pub(crate) message: Option<String>,
     /// Lines under the rows, apart from them, such as the whole command under the cursor.
     pub(crate) footer: Vec<String>,
+    /// The whole text of the row under the cursor, which shows under the rows while `K` asks
+    /// for it, in the place of a footer.
+    pub(crate) full: Option<String>,
 }
 
 /// A row to draw.
@@ -107,6 +134,8 @@ pub(crate) struct Picker {
     drawn: Drawn,
     /// The scroll bar of the lines at the last render, on the right of the frame.
     bar: Option<Bar>,
+    /// Whether `K` asks for the whole text of the row under the cursor under the rows.
+    full: Whole,
 }
 
 impl Picker {
@@ -127,7 +156,14 @@ impl Picker {
             pages: 1,
             drawn: Drawn::default(),
             bar: None,
+            full: Whole::Cut,
         }
+    }
+
+    /// Whether `K` shows the whole row under the cursor.
+    #[cfg(test)]
+    pub(crate) fn full(&self) -> Whole {
+        self.full
     }
 
     /// The mode keys are typed in: Insert while the filter takes them.
@@ -249,6 +285,7 @@ impl Picker {
                 Action::End => self.cursor = last,
                 Action::QuickSearch => self.filtering = true,
                 Action::NormalMode => self.filtering = false,
+                Action::ShowFull => self.full = self.full.toggled(),
                 Action::Left
                 | Action::Right
                 | Action::TextStart
@@ -373,10 +410,14 @@ impl Picker {
         let shown = u16::try_from(lines.len().max(1))
             .unwrap_or(u16::MAX)
             .min(body.max_lines.unwrap_or(u16::MAX));
+        let full = body
+            .full
+            .filter(|_| self.full == Whole::Shown && body.footer.is_empty() && !lines.is_empty());
         // A line between the rows and the footer.
-        let below = match body.footer.len() {
-            0 => 0,
-            footer => u16::try_from(footer + 1).unwrap_or(u16::MAX),
+        let below = match (body.footer.len(), &full) {
+            (0, Some(_)) => FULL_ROWS + 1,
+            (0, None) => 0,
+            (footer, _) => u16::try_from(footer + 1).unwrap_or(u16::MAX),
         };
         let colors = Colors::of(theme, false);
         // Borders, the filter, the line under it, the rows, the footer.
@@ -447,8 +488,25 @@ impl Picker {
         if below > 0 {
             let top = inner.height.saturating_sub(below);
             frame.render_widget(Line::styled("─".repeat(width), theme.dialog), line(top));
-            for (index, text) in (top + 1..inner.height).zip(body.footer) {
-                frame.render_widget(Line::styled(text, theme.dialog), line(index));
+            let footer: Vec<Line<'static>> = match full {
+                Some(full) => {
+                    let styles = (theme.dialog, theme.truncated_dialog);
+                    cells::whole(
+                        &full,
+                        (width, usize::from(FULL_ROWS)),
+                        Some('/'),
+                        styles,
+                        theme.marks,
+                    )
+                }
+                None => body
+                    .footer
+                    .into_iter()
+                    .map(|text| Line::styled(text, theme.dialog))
+                    .collect(),
+            };
+            for (index, text) in (top + 1..inner.height).zip(footer) {
+                frame.render_widget(text, line(index));
             }
         }
         self.cursor = cursor;
@@ -467,7 +525,12 @@ impl Picker {
         let prefix = cells::width(&fl!("picker-filter", text = String::new()));
         let (shown, column) = self.filter.visible(room.saturating_sub(prefix));
         let column = u16::try_from(prefix + column).unwrap_or(u16::MAX);
-        let filter = cells::fit(&fl!("picker-filter", text = shown), room, Align::Left);
+        let filter = cells::fit(
+            &fl!("picker-filter", text = shown),
+            room,
+            Align::Left,
+            theme.marks,
+        );
         let top = match note {
             Some(note) => format!("{filter} {note}"),
             None => filter,

@@ -10,7 +10,7 @@ use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
-use super::cells::{self, Align};
+use super::cells::{self, Align, Marks};
 use super::dialog::{
     Colors, button_line, button_spots, draw_box, draw_separator, frame_around, right_frame,
 };
@@ -224,7 +224,7 @@ impl SumsWindow {
             self.page.set(shown);
             listed.extend(top..top + shown);
             for (index, row) in self.rows.iter().enumerate().skip(top).take(shown) {
-                let text = cells::fit(&list_line(row), room, Align::Left);
+                let text = cells::fit(&list_line(row, theme.marks), room, Align::Left, theme.marks);
                 let style = if index == self.selected {
                     colors.focused_style()
                 } else {
@@ -235,7 +235,12 @@ impl SumsWindow {
             lines.push(Line::default());
         }
         if let Some(row) = self.rows.get(self.selected) {
-            lines.push(Line::raw(cells::fit(&row.name, room, Align::Left)));
+            lines.push(Line::raw(cells::fit(
+                &row.name,
+                room,
+                Align::Left,
+                theme.marks,
+            )));
             match &row.hex {
                 Some(hex) => lines.extend(hex_lines(hex, room).into_iter().map(Line::raw)),
                 None => lines.push(Line::raw(fl!("checksum-skipped"))),
@@ -252,7 +257,12 @@ impl SumsWindow {
         }
         if let Some(status) = &self.status {
             lines.push(Line::default());
-            lines.push(Line::raw(cells::fit(status, room, Align::Left)));
+            lines.push(Line::raw(cells::fit(
+                status,
+                room,
+                Align::Left,
+                theme.marks,
+            )));
         }
         let height = u16::try_from(lines.len() + 2).unwrap_or(u16::MAX);
         // Borders, the lines, a line, the buttons.
@@ -293,7 +303,7 @@ impl SumsWindow {
 }
 
 /// A row of the list: its mark, its checksum shortened in the middle, and its name.
-fn list_line(row: &SumRow) -> String {
+fn list_line(row: &SumRow, marks: Marks) -> String {
     let mark = match row.mark {
         Mark::None => ' ',
         Mark::Match => '✓',
@@ -302,12 +312,17 @@ fn list_line(row: &SumRow) -> String {
     };
     let sum = match &row.hex {
         Some(hex) if hex.len() > 2 * SHORT + 1 => {
-            format!("{}…{}", &hex[..SHORT], &hex[hex.len() - SHORT..])
+            format!(
+                "{}{}{}",
+                &hex[..SHORT],
+                marks.after,
+                &hex[hex.len() - SHORT..]
+            )
         }
         Some(hex) => hex.clone(),
         None => fl!("checksum-skipped"),
     };
-    let sum = cells::fit(&sum, 2 * SHORT + 1, Align::Left);
+    let sum = cells::fit(&sum, 2 * SHORT + 1, Align::Left, marks);
     format!("{mark} {sum}  {}", row.name)
 }
 

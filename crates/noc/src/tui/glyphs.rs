@@ -154,6 +154,7 @@ pub(crate) mod categories {
     pub(crate) const VOLUMES: &str = "󰋊";
     pub(crate) const ZOXIDE: &str = "󰥨";
     pub(crate) const SHELL: &str = "󰆍";
+    pub(crate) const SEARCH: &str = "󰍉";
     pub(crate) const ABOUT: &str = "󰋽";
     pub(crate) const KEYS: &str = "󰌌";
 }

@@ -33,6 +33,32 @@ pub struct Config {
     pub zoxide: ZoxideConfig,
     /// `[shell]`: the command line of `!` and `:`.
     pub shell: ShellConfig,
+    /// `[search]`: the search of the files below the panel's directory, `g /`.
+    pub search: SearchConfig,
+}
+
+/// The `[search]` section: the search of a whole tree with ripgrep, which `g /` starts in a
+/// panel.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct SearchConfig {
+    /// The ripgrep program for local directories: a name looked up in `PATH`, or a path. On a
+    /// host, `rg` in the host's `PATH` runs. Default: `rg`.
+    pub program: PathBuf,
+    /// It stops after finding this many lines, or files when it lists them. Default: `10000`.
+    pub max_results: NonZeroUsize,
+    /// The most lines it finds in one file. Default: `100`.
+    pub max_per_file: NonZeroUsize,
+}
+
+impl Default for SearchConfig {
+    fn default() -> Self {
+        Self {
+            program: PathBuf::from("rg"),
+            max_results: NonZeroUsize::new(10_000).unwrap_or(NonZeroUsize::MIN),
+            max_per_file: NonZeroUsize::new(100).unwrap_or(NonZeroUsize::MIN),
+        }
+    }
 }
 
 /// The `[shell]` section.
@@ -392,13 +418,15 @@ impl Config {
     }
 
     /// Expands a leading `~` or `~/` to `home` in [`SshConfig::program`],
-    /// [`SshConfig::config_file`], and [`ZoxideConfig::program`]. `~user` is left alone.
+    /// [`SshConfig::config_file`], [`ZoxideConfig::program`], and [`SearchConfig::program`].
+    /// `~user` is left alone.
     pub fn expand_tilde(&mut self, home: &Path) {
         expand_tilde_in(&mut self.ssh.program, home);
         if let Some(config_file) = &mut self.ssh.config_file {
             expand_tilde_in(config_file, home);
         }
         expand_tilde_in(&mut self.zoxide.program, home);
+        expand_tilde_in(&mut self.search.program, home);
     }
 }
 
@@ -430,8 +458,9 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, Pause, ShellConfig, SshConfig,
-        TabBar, TransferConfig, UiConfig, VolumesConfig, Wheel, ZoxideConfig,
+        Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, Pause, SearchConfig,
+        ShellConfig, SshConfig, TabBar, TransferConfig, UiConfig, VolumesConfig, Wheel,
+        ZoxideConfig,
     };
     use crate::{ConfigError, write_default_config};
 
@@ -491,6 +520,11 @@ mod tests {
         [shell]
         history_size = 50
         pause = "on-error"
+
+        [search]
+        program = "/opt/homebrew/bin/rg"
+        max_results = 1000
+        max_per_file = 20
     "#;
 
     fn full() -> Config {
@@ -534,6 +568,11 @@ mod tests {
                 history_size: 50,
                 pause: Pause::OnError,
             },
+            search: SearchConfig {
+                program: PathBuf::from("/opt/homebrew/bin/rg"),
+                max_results: NonZeroUsize::new(1000).unwrap(),
+                max_per_file: NonZeroUsize::new(20).unwrap(),
+            },
         }
     }
 
@@ -567,12 +606,23 @@ mod tests {
         assert!(config.zoxide.record);
         assert_eq!(config.shell.history_size, 500);
         assert_eq!(config.shell.pause, Pause::Always);
+        assert_eq!(config.search.program, Path::new("rg"));
+        assert_eq!(config.search.max_results.get(), 10_000);
+        assert_eq!(config.search.max_per_file.get(), 100);
     }
 
     #[test]
     fn at_least_one_job_runs() {
         let error = toml::from_str::<Config>("[transfer]\nparallel_jobs = 0").unwrap_err();
         assert!(error.to_string().contains("nonzero"), "{error}");
+    }
+
+    #[test]
+    fn a_search_finds_a_result_at_least() {
+        for text in ["[search]\nmax_results = 0", "[search]\nmax_per_file = 0"] {
+            let error = toml::from_str::<Config>(text).unwrap_err();
+            assert!(error.to_string().contains("nonzero"), "{error}");
+        }
     }
 
     #[test]
@@ -674,8 +724,10 @@ mod tests {
         config.ssh.program = PathBuf::from("~/bin/ssh");
         config.ssh.config_file = Some(PathBuf::from("~/.ssh/work_config"));
         config.zoxide.program = PathBuf::from("~/.cargo/bin/zoxide");
+        config.search.program = PathBuf::from("~/.cargo/bin/rg");
         config.expand_tilde(Path::new("/home/u"));
         assert_eq!(config.ssh.program.as_os_str(), "/home/u/bin/ssh");
+        assert_eq!(config.search.program.as_os_str(), "/home/u/.cargo/bin/rg");
         assert_eq!(
             config.zoxide.program.as_os_str(),
             "/home/u/.cargo/bin/zoxide"
@@ -696,6 +748,10 @@ mod tests {
                 zoxide: ZoxideConfig {
                     program: PathBuf::from("/home/u/.cargo/bin/zoxide"),
                     ..full().zoxide
+                },
+                search: SearchConfig {
+                    program: PathBuf::from("/home/u/.cargo/bin/rg"),
+                    ..full().search
                 },
                 ..full()
             }
@@ -762,6 +818,9 @@ mod tests {
         assert!(table["zoxide"].get("record").is_some());
         assert!(table["shell"].get("history_size").is_some());
         assert!(table["shell"].get("pause").is_some());
+        assert!(table["search"].get("max_per_file").is_some());
+        assert!(table["search"].get("max_results").is_some());
+        assert!(table["search"].get("program").is_some());
     }
 
     #[test]

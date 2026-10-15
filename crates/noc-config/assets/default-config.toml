@@ -110,4 +110,15 @@ history_size = 500
 # command that failed), or "never". g < shows it again later either way.
 pause = "always"
 
+[search]
+# g / searches the files below the panel's directory for text with ripgrep
+# (https://github.com/BurntSushi/ripgrep), in a window of its own. The program for local
+# directories: a name looked up in PATH, or a path; a leading ~/ stands for the home directory.
+# On a host, rg runs there, as the host's PATH finds it.
+program = "rg"
+# It stops after finding this many lines, or files when it lists them; at least 1.
+max_results = 10000
+# The most lines it finds in one file, so that one large file leaves room for others; at least 1.
+max_per_file = 100
+
 # Per-host settings (labels, start directories) live in hosts.toml next to this file.

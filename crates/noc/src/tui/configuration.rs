@@ -60,6 +60,9 @@ enum Key {
     ZoxideProgram,
     HistorySize,
     Pause,
+    SearchProgram,
+    MaxResults,
+    MaxPerFile,
 }
 
 /// A value and how it is edited.
@@ -169,11 +172,11 @@ impl Setting {
             }
             Key::TerminalTitle => ui.terminal_title = self.on(),
             Key::Hints => ui.which_key = self.on(),
-            Key::HintsDelay => {
-                ui.which_key_delay_ms = number(text, |text| {
-                    fl!("config-which-key-delay-invalid", text = text)
-                })?;
-            }
+            Key::HintsDelay
+            | Key::ParallelJobs
+            | Key::HistorySize
+            | Key::MaxResults
+            | Key::MaxPerFile => self.apply_number(config)?,
             Key::MenuBar => {
                 ui.menu_bar = match text {
                     "always" => MenuBar::Always,
@@ -187,11 +190,6 @@ impl Setting {
                 };
             }
             Key::AtomicUpload => transfer.atomic_upload = self.on(),
-            Key::ParallelJobs => {
-                transfer.parallel_jobs = number(text, |text| {
-                    fl!("config-parallel-jobs-invalid", text = text)
-                })?;
-            }
             Key::SshProgram => {
                 let program = text.trim();
                 if program.is_empty() {
@@ -222,6 +220,13 @@ impl Setting {
                 }
                 config.zoxide.program = PathBuf::from(program);
             }
+            Key::SearchProgram => {
+                let program = text.trim();
+                if program.is_empty() {
+                    return Err(fl!("config-search-program-empty"));
+                }
+                config.search.program = PathBuf::from(program);
+            }
             Key::Pause => {
                 config.shell.pause = match text {
                     "on-error" => Pause::OnError,
@@ -229,10 +234,37 @@ impl Setting {
                     _ => Pause::Always,
                 };
             }
+        }
+        Ok(())
+    }
+
+    /// Writes a number into `config`, or says why the text is not one.
+    fn apply_number(&self, config: &mut Config) -> Result<(), String> {
+        let text = self.text();
+        match self.key {
+            Key::HintsDelay => {
+                config.ui.which_key_delay_ms = number(text, |text| {
+                    fl!("config-which-key-delay-invalid", text = text)
+                })?;
+            }
+            Key::ParallelJobs => {
+                config.transfer.parallel_jobs = number(text, |text| {
+                    fl!("config-parallel-jobs-invalid", text = text)
+                })?;
+            }
             Key::HistorySize => {
                 config.shell.history_size =
                     number(text, |text| fl!("config-history-size-invalid", text = text))?;
             }
+            Key::MaxResults => {
+                config.search.max_results =
+                    number(text, |text| fl!("config-max-results-invalid", text = text))?;
+            }
+            Key::MaxPerFile => {
+                config.search.max_per_file =
+                    number(text, |text| fl!("config-max-per-file-invalid", text = text))?;
+            }
+            _ => {}
         }
         Ok(())
     }
@@ -392,6 +424,7 @@ impl Configuration {
                 volumes(config),
                 zoxide(config, home),
                 shell(config),
+                search(config, home),
             ],
             category: 0,
             focus: Focus::Settings,
@@ -1279,6 +1312,35 @@ fn shell(config: &Config) -> Category {
                 Key::HistorySize,
                 (fl!("config-history-size"), fl!("config-history-size-hint")),
                 text(&config.shell.history_size.to_string()),
+            ),
+        ],
+    }
+}
+
+/// Search, `[search]`: ripgrep, and how much the search of a whole tree finds.
+fn search(config: &Config, home: &Path) -> Category {
+    let search = &config.search;
+    Category {
+        icon: categories::SEARCH,
+        title: fl!("config-search"),
+        settings: vec![
+            Setting::new(
+                Key::SearchProgram,
+                (
+                    fl!("config-search-program"),
+                    fl!("config-search-program-hint"),
+                ),
+                path_text(&search.program, home),
+            ),
+            Setting::new(
+                Key::MaxResults,
+                (fl!("config-max-results"), fl!("config-max-results-hint")),
+                text(&search.max_results.to_string()),
+            ),
+            Setting::new(
+                Key::MaxPerFile,
+                (fl!("config-max-per-file"), fl!("config-max-per-file-hint")),
+                text(&search.max_per_file.to_string()),
             ),
         ],
     }

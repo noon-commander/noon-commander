@@ -337,6 +337,16 @@ config-pause-never = Never
 config-history-size = History size
 config-history-size-hint = How many commands of ! and : the history keeps, of all hosts together; 0 keeps none.
 config-history-size-invalid = "{ $text }" is not a number of commands: it takes a whole number, 0 or more.
+config-search = Search
+config-search-program = Program
+config-search-program-hint = The ripgrep program for local directories: a name in PATH, or a path. On a host, rg runs as the host's PATH finds it.
+config-search-program-empty = The ripgrep program cannot be empty.
+config-max-results = Most results
+config-max-results-hint = The search stops after finding so many lines, or files when it lists them; 1 or more.
+config-max-results-invalid = "{ $text }" is not a number of results: it takes a whole number, 1 or more.
+config-max-per-file = Most lines in a file
+config-max-per-file-hint = The search finds no more lines in one file than so many, so that a large file leaves room for others; 1 or more.
+config-max-per-file-invalid = "{ $text }" is not a number of lines: it takes a whole number, 1 or more.
 # After the hint of a setting that the running Noon Commander cannot change.
 config-restart = Takes effect after a restart.
 # The reason names the file.

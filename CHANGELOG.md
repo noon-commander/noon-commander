@@ -43,6 +43,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The zoxide window (`g z`) opens in Insert mode, so keywords can be typed at once, as in `zi`,
   without `/` first. Esc goes to the rows, and Esc there closes the window.
 
+### Fixed
+
+- The viewer no longer lags in files with very long lines, such as binary files, while it
+  wraps them: each line wraps once for each width, rather than again for every row it scrolls.
+
 ## [0.2.0] - 2026-10-14
 
 ### Added

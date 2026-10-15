@@ -1,5 +1,9 @@
 //! The viewer on screen: a file's text, scrolled, with long lines wrapped or cut.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
+
 use noc_scroll::scrollbar::{self, Arrows, Bar};
 use noc_scroll::{Motion, Step};
 use noc_text::Align;
@@ -9,7 +13,13 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use crate::i18n::fl;
-use crate::text::{cut, lines_of, row_count, rows};
+use crate::text::{cut, lines_of, row_count, row_of, row_starts};
+
+/// Long lines whose rows are kept, as wrapped: more than a few screens take.
+const WRAPPED_LINES: usize = 1024;
+
+/// Where the rows of lines start, by line.
+type Wrapped = HashMap<usize, Rc<[usize]>>;
 
 /// What the viewer is asked to do. The app maps its keys to these; closing the viewer is the
 /// app's own business.
@@ -70,6 +80,9 @@ pub struct Viewer {
     bar: Option<Bar>,
     /// The rows of the whole text wrapped, and the width they were counted in.
     measured: Option<(usize, usize)>,
+    /// Where the rows of the long lines wrapped lately start, by line, and the width they were
+    /// wrapped in: moving a row on in a line of megabytes must not wrap it all again.
+    wrapped: RefCell<(usize, Wrapped)>,
 }
 
 impl Viewer {
@@ -86,6 +99,7 @@ impl Viewer {
             width: 80,
             bar: None,
             measured: None,
+            wrapped: RefCell::default(),
         }
     }
 
@@ -102,6 +116,7 @@ impl Viewer {
         };
         self.top = (0, 0);
         self.measured = None;
+        self.wrapped.borrow_mut().1.clear();
     }
 
     /// Scrolls, or switches wrapping.
@@ -129,10 +144,27 @@ impl Viewer {
 
     /// The rows line `index` takes on screen.
     fn rows_of(&self, index: usize) -> usize {
-        match self.lines().get(index) {
-            Some(line) if self.wrap => rows(line, self.width).len(),
-            _ => 1,
+        self.row_starts(index).map_or(1, |starts| starts.len())
+    }
+
+    /// Where the rows of line `index` start, wrapped; `None` for a line of one row however it
+    /// wraps. A line wraps once for each width, while it is among the last ones wrapped.
+    fn row_starts(&self, index: usize) -> Option<Rc<[usize]>> {
+        let line = self.lines().get(index)?;
+        // No cell takes less than a byte.
+        if !self.wrap || line.len() <= self.width {
+            return None;
         }
+        let mut wrapped = self.wrapped.borrow_mut();
+        let (width, lines) = &mut *wrapped;
+        if *width != self.width || lines.len() >= WRAPPED_LINES {
+            *width = self.width;
+            lines.clear();
+        }
+        let starts = lines
+            .entry(index)
+            .or_insert_with(|| row_starts(line, self.width).into());
+        Some(Rc::clone(starts))
     }
 
     /// The position `count` rows after `from`, or the end of the text.
@@ -264,11 +296,11 @@ impl Viewer {
                 break;
             };
             let text = if self.wrap {
-                rows(line, self.width)
-                    .get(position.1)
-                    .copied()
-                    .unwrap_or_default()
-                    .to_owned()
+                match self.row_starts(position.0) {
+                    Some(starts) => row_of(line, &starts, position.1).to_owned(),
+                    None if position.1 == 0 => line.clone(),
+                    None => String::new(),
+                }
             } else {
                 cut(line, self.column, self.width)
             };
@@ -409,6 +441,25 @@ mod tests {
             assert_eq!(press(motion), end, "{motion:?} stops at the end");
         }
         assert!(press(Motion::Home).contains("1/20"));
+    }
+
+    #[test]
+    fn long_lines_wrap_again_in_a_new_width_and_for_a_new_file() {
+        let mut viewer = Viewer::new("f".to_owned());
+        viewer.show(&[b'a'; 50], false);
+        let narrow = draw(&mut viewer, 10, 8);
+        assert!(
+            narrow.contains(&format!("\"{}\"", "a".repeat(10))),
+            "{narrow}"
+        );
+        let wide = draw(&mut viewer, 30, 8);
+        assert!(wide.contains(&format!("\"{}\"", "a".repeat(30))), "{wide}");
+        viewer.show(&[b'b'; 50], false);
+        let other = draw(&mut viewer, 30, 8);
+        assert!(
+            other.contains(&"b".repeat(30)) && !other.contains('a'),
+            "{other}"
+        );
     }
 
     #[test]

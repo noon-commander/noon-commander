@@ -30,25 +30,33 @@ pub(crate) fn lines_of(bytes: &[u8]) -> Vec<String> {
         .collect()
 }
 
-/// `line` in rows of at most `width` cells, broken anywhere, as mc wraps; at least one row,
-/// and at least one character in each.
-pub(crate) fn rows(line: &str, width: usize) -> Vec<&str> {
+/// Where the rows of `line` start, in bytes, wrapped in rows of at most `width` cells, broken
+/// anywhere, as mc wraps: at least one row, and at least one character in each.
+pub(crate) fn row_starts(line: &str, width: usize) -> Vec<usize> {
     let width = width.max(1);
-    let mut rows = Vec::new();
+    let mut starts = vec![0];
     let (mut start, mut used) = (0, 0);
     for (index, c) in line.char_indices() {
         let char_width = c.width().unwrap_or(0);
         if used + char_width > width && index > start {
-            rows.push(&line[start..index]);
+            starts.push(index);
             (start, used) = (index, 0);
         }
         used += char_width;
     }
-    rows.push(&line[start..]);
-    rows
+    starts
 }
 
-/// How many rows [`rows`] breaks `line` into, without making them.
+/// The row `row` of `line`, whose rows start at `starts`; empty past the last.
+pub(crate) fn row_of<'a>(line: &'a str, starts: &[usize], row: usize) -> &'a str {
+    let Some(&start) = starts.get(row) else {
+        return "";
+    };
+    let end = starts.get(row + 1).copied().unwrap_or(line.len());
+    &line[start..end]
+}
+
+/// How many rows [`row_starts`] breaks `line` into, without keeping where.
 pub(crate) fn row_count(line: &str, width: usize) -> usize {
     let width = width.max(1);
     let (mut count, mut used, mut empty) = (1, 0, true);
@@ -96,6 +104,13 @@ pub(crate) fn cut(line: &str, skip: usize, width: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn rows(line: &str, width: usize) -> Vec<&str> {
+        let starts = row_starts(line, width);
+        (0..starts.len())
+            .map(|row| row_of(line, &starts, row))
+            .collect()
+    }
 
     #[test]
     fn makes_lines_safe_and_expands_tabs() {

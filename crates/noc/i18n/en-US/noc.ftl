@@ -157,6 +157,10 @@ jump-not-installed = zoxide is not installed: cannot run { $program }. Get it fr
 
 # The title: where it searches, as the panel's title shows it.
 find-title = Find in { $dir }
+# Its modes, as radio buttons: text in the files, with ripgrep, or files and directories by name,
+# with fd.
+find-mode-text = Text
+find-mode-names = Files and dirs
 # The labels of the fields: the text to find, and the globs of the files to search.
 find-text = Text:
 find-files = Files:
@@ -182,12 +186,19 @@ find-count-files = { $files ->
     }
 # While nothing is found yet.
 find-searching = Searching…
+# Under the rows, by name: how many files and directories it found.
+find-count-entries = { $count ->
+        [one] 1 file or directory
+       *[other] { $count } files and directories
+    }
 # Nothing matches.
 find-none = Nothing found.
 # It cannot search: no ripgrep, or a host that is not connected.
 find-failed = Cannot search here: { $reason }
 # ripgrep is not installed where it searches.
 find-not-installed = ripgrep is not installed: cannot run { $program }. Get it from https://github.com/BurntSushi/ripgrep, or set its path in Options → Configuration.
+# fd is not installed where it searches; on a host, neither fd nor fdfind.
+find-fd-not-installed = fd is not installed: cannot run { $program }. Get it from https://github.com/sharkdp/fd, or set its path in Options → Configuration.
 # Under the rows: it stopped at [search] max_results.
 find-limit = Stopped after { $count } results: Configuration → Search.
 # Under the rows: what ripgrep could not do, such as read a file, and the last of it.

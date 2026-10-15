@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::os::unix::fs::PermissionsExt as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -24,8 +24,10 @@ use noc_ssh::askpass::{AskpassEnv, AskpassEvent, AskpassServer};
 use noc_ssh::resolve::resolve;
 use noc_ssh::version::check_version;
 use noc_ssh::{CachedHost, ChannelProcess, Session, SftpChannel, SshError, Target, cleanup_stale};
+use noc_tools::ToolError;
+use noc_tools::fd::{self, Entries, Fd, Names};
 use noc_tools::opener::Opener;
-use noc_tools::ripgrep::{self, Hit, Hits, Query, Ripgrep};
+use noc_tools::ripgrep::{self, Hits, Query, Ripgrep};
 use noc_tools::zoxide::Scored;
 use noc_vfs::{
     FileKind, FileWriter as _, LocalFs, Location, Metadata, RemotePath, SftpFs, Space, Vfs,
@@ -40,7 +42,7 @@ use tokio_util::sync::CancellationToken;
 use super::app::{Effect, FindRequest, HistoryChange, RecentChange, WorkspaceChange};
 use super::describe;
 use super::dialog::{Ask, Reply};
-use super::find::FindSummary;
+use super::find::{FindQuery, FindSummary, Finding};
 use super::panel::{ListRequest, Listed, Listing};
 use super::places::{self, Places};
 use super::tabs::PanelId;
@@ -150,7 +152,10 @@ pub(crate) enum Done {
         result: Result<Vec<Scored>, String>,
     },
     /// What the search `generation` of [`Effect::Find`] found since its last report.
-    Found { generation: u64, hits: Vec<Hit> },
+    Found {
+        generation: u64,
+        found: Vec<Finding>,
+    },
     /// How the search `generation` of [`Effect::Find`] ended, after what it found, or why it
     /// could not search.
     FindEnded {
@@ -578,8 +583,8 @@ impl Tasks {
         self.zoxide_query = Some(task.abort_handle());
     }
 
-    /// Searches the files under `location` with ripgrep after `delay`, in a task of its own,
-    /// through the session of `host` if it is remote, until `cancel`.
+    /// Searches the files under `location` with ripgrep, or their names with fd, after `delay`,
+    /// in a task of its own, through the session of `host` if it is remote, until `cancel`.
     fn find(&self, request: FindRequest) {
         let FindRequest {
             generation,
@@ -590,22 +595,29 @@ impl Tasks {
             delay,
             cancel,
         } = request;
-        let ripgrep = self.context.ripgrep();
+        let (ripgrep, fd) = (self.context.ripgrep(), self.context.fd());
         let done = self.done.clone();
         tokio::spawn(async move {
             let search = async {
                 tokio::time::sleep(delay).await;
                 let mut batches = Batches {
                     generation,
-                    hits: Vec::new(),
+                    found: Vec::new(),
                     sent: None,
                     done: done.clone(),
                 };
-                let found = Searched {
-                    query: &query,
-                    max_results,
+                let result = match &query {
+                    FindQuery::Lines(query) => {
+                        let searched = Searched { query, max_results };
+                        searched
+                            .search(&ripgrep, location, host, &mut batches)
+                            .await
+                    }
+                    FindQuery::Names(query) => {
+                        let named = Named { query, max_results };
+                        named.search(&fd, location, host, &mut batches).await
+                    }
                 };
-                let result = found.search(&ripgrep, location, host, &mut batches).await;
                 batches.flush();
                 result
             };
@@ -1431,37 +1443,40 @@ async fn share(handle: Option<HostHandle>) -> Option<Option<Arc<SftpFs>>> {
 const FIND_REPORTS: Duration = Duration::from_millis(50);
 /// ripgrep on a host, as the host's `PATH` finds it.
 const REMOTE_RIPGREP: &str = "rg";
-/// The most of ripgrep's stderr that is kept, for why it failed.
-const RIPGREP_STDERR: u64 = 64 * 1024;
+/// fd on a host, as the host's `PATH` finds it; Debian and Ubuntu name it `fdfind`.
+const REMOTE_FD: [&str; 2] = ["fd", "fdfind"];
+/// The most of the stderr of ripgrep or fd that is kept, for why it failed.
+const SEARCH_STDERR: u64 = 64 * 1024;
 
-/// What ripgrep found and has not been reported yet.
+/// What ripgrep or fd found and has not been reported yet.
 struct Batches {
     generation: u64,
-    hits: Vec<Hit>,
+    found: Vec<Finding>,
     /// When it reported last.
     sent: Option<Instant>,
     done: mpsc::UnboundedSender<Done>,
 }
 
 impl Batches {
-    /// Takes a hit, and reports it with those before if the last report was long enough ago.
-    fn take(&mut self, hit: Hit) {
-        self.hits.push(hit);
+    /// Takes what was found, and reports it with what came before if the last report was long
+    /// enough ago.
+    fn take(&mut self, finding: Finding) {
+        self.found.push(finding);
         if self.sent.is_none_or(|sent| sent.elapsed() >= FIND_REPORTS) {
             self.flush();
         }
     }
 
-    /// Reports the hits not reported yet, if there are any.
+    /// Reports what was found and not reported yet, if anything.
     fn flush(&mut self) {
-        if self.hits.is_empty() {
+        if self.found.is_empty() {
             return;
         }
         self.sent = Some(Instant::now());
-        let hits = std::mem::take(&mut self.hits);
+        let found = std::mem::take(&mut self.found);
         let _ = self.done.send(Done::Found {
             generation: self.generation,
-            hits,
+            found,
         });
     }
 }
@@ -1502,7 +1517,7 @@ impl Searched<'_> {
         // ripgrep stops once a pipe is full: its stderr is read while its stdout is.
         let stderr = tokio::spawn(async move {
             let mut bytes = Vec::new();
-            let _ = stderr.take(RIPGREP_STDERR).read_to_end(&mut bytes).await;
+            let _ = stderr.take(SEARCH_STDERR).read_to_end(&mut bytes).await;
             bytes
         });
         let limit = self.read(stdout, batches).await?;
@@ -1545,13 +1560,150 @@ impl Searched<'_> {
             let Some(hit) = next.map_err(|error| describe::chain(&error))? else {
                 return Ok(false);
             };
-            let counts = files || matches!(hit, Hit::Line { .. });
-            batches.take(hit);
+            let counts = files || matches!(hit, ripgrep::Hit::Line { .. });
+            batches.take(Finding::Hit(hit));
             if counts {
                 results += 1;
                 if results >= self.max_results {
                     return Ok(true);
                 }
+            }
+        }
+    }
+}
+
+/// A search of a tree for names with fd: what it looks for, and the most it takes.
+struct Named<'a> {
+    query: &'a fd::Query,
+    max_results: usize,
+}
+
+impl Named<'_> {
+    /// Runs fd in `location`, locally as `fd`, or on its host through `host`, as `fd` or, where
+    /// the host has none, as `fdfind`, and passes what it finds to `batches`; then how it
+    /// ended, or why it could not search. A glob or a pattern that is not one says so in place
+    /// of the rows, as ripgrep's error does.
+    async fn search(
+        &self,
+        fd: &Fd,
+        location: Location,
+        host: Option<HostHandle>,
+        batches: &mut Batches,
+    ) -> Result<FindSummary, String> {
+        let names = match self.query.names() {
+            Ok(names) => names,
+            Err(error) => {
+                return Ok(FindSummary {
+                    limit: false,
+                    errors: 1,
+                    last_error: Some(error.to_string()),
+                });
+            }
+        };
+        let ended = match location {
+            Location::Local(path) => {
+                let child = fd
+                    .spawn(&path, self.query)
+                    .map_err(|error| describe::fd_error(&error))?;
+                self.run(child, fd.program(), &names, batches).await?
+            }
+            Location::Remote { path, .. } => {
+                let handle = host.ok_or_else(|| fl!("error-connection-closed"))?;
+                let mut ended = Ok(FindSummary::default());
+                for program in REMOTE_FD {
+                    let args = self.query.args();
+                    let child = remote_spawn(&handle, path.clone(), program, args).await?;
+                    ended = self.run(child, Path::new(program), &names, batches).await?;
+                    // The host's shell says 127 for a program it does not find.
+                    let missing = matches!(&ended, Err(ToolError::Failed { status, .. })
+                        if status.code() == Some(127));
+                    if !missing {
+                        break;
+                    }
+                }
+                ended
+            }
+        };
+        ended.map_err(|error| describe::fd_error(&error))
+    }
+
+    /// Reads what `child`, fd as `program`, prints, its stderr at the same time, and how it
+    /// ended: why reading failed, or else how fd ended, or that it stopped at the limit.
+    async fn run(
+        &self,
+        mut child: tokio::process::Child,
+        program: &Path,
+        names: &Names,
+        batches: &mut Batches,
+    ) -> Result<Result<FindSummary, ToolError>, String> {
+        let closed = || fl!("error-connection-closed");
+        let stdout = child.stdout.take().ok_or_else(closed)?;
+        let stderr = child.stderr.take().ok_or_else(closed)?;
+        let stderr = tokio::spawn(async move {
+            let mut bytes = Vec::new();
+            let _ = stderr.take(SEARCH_STDERR).read_to_end(&mut bytes).await;
+            bytes
+        });
+        if self.read(stdout, names, batches).await? {
+            let _ = child.start_kill();
+            let _ = child.wait().await;
+            return Ok(Ok(FindSummary {
+                limit: true,
+                ..FindSummary::default()
+            }));
+        }
+        let status = child.wait().await.map_err(|error| error.to_string())?;
+        let stderr = stderr.await.unwrap_or_default();
+        Ok(
+            fd::ended(program, status, &stderr).map(|ended| FindSummary {
+                limit: false,
+                errors: ended.errors,
+                last_error: ended.last_error,
+            }),
+        )
+    }
+
+    /// Reads what fd prints into `batches`, the entries that `names` keeps, with where their
+    /// names match, reporting them at least every [`FIND_REPORTS`] while it is slow; `true`
+    /// once it found `max_results`.
+    async fn read(
+        &self,
+        stdout: impl tokio::io::AsyncRead + Unpin,
+        names: &Names,
+        batches: &mut Batches,
+    ) -> Result<bool, String> {
+        let mut entries = Entries::new(stdout);
+        let mut results = 0;
+        loop {
+            // Reading is cancel-safe: what a timeout cut off is read on the next turn.
+            let Ok(next) = tokio::time::timeout(FIND_REPORTS, entries.next()).await else {
+                batches.flush();
+                continue;
+            };
+            let Some(entry) = next.map_err(|error| describe::chain(&error))? else {
+                return Ok(false);
+            };
+            if !names.keeps(&entry.path) {
+                continue;
+            }
+            let name = entry
+                .path
+                .iter()
+                .rposition(|&byte| byte == b'/')
+                .map_or(0, |slash| slash + 1);
+            let matches = names
+                .found(&entry.path[name..])
+                .into_iter()
+                .map(|found| found.start + name..found.end + name)
+                .collect();
+            batches.take(Finding::Entry {
+                path: entry.path,
+                dir: entry.dir,
+                matches,
+            });
+            results += 1;
+            if results >= self.max_results {
+                return Ok(true);
             }
         }
     }
@@ -1968,6 +2120,7 @@ mod tests {
     use std::process::Stdio;
 
     use noc_config::{Config, HostConfig, Hosts, Paths, SftpHost};
+    use noc_tools::ripgrep::Hit;
     use noc_vfs::RemotePath;
     use tokio::process::Command;
 
@@ -2163,7 +2316,7 @@ mod tests {
         let (done, mut reports) = mpsc::unbounded_channel();
         let mut batches = Batches {
             generation: 1,
-            hits: Vec::new(),
+            found: Vec::new(),
             sent: None,
             done,
         };
@@ -2182,13 +2335,21 @@ mod tests {
             return None;
         }
         batches.flush();
+        Some((hits_of(&mut reports), result))
+    }
+
+    /// What ripgrep found, from the reports of a search.
+    fn hits_of(reports: &mut mpsc::UnboundedReceiver<Done>) -> Vec<Hit> {
         let mut hits = Vec::new();
         while let Ok(report) = reports.try_recv() {
-            if let Done::Found { hits: found, .. } = report {
-                hits.extend(found);
+            if let Done::Found { found, .. } = report {
+                hits.extend(found.into_iter().map(|finding| match finding {
+                    Finding::Hit(hit) => hit,
+                    entry @ Finding::Entry { .. } => panic!("expected a hit, got {entry:?}"),
+                }));
             }
         }
-        Some((hits, result))
+        hits
     }
 
     #[tokio::test]
@@ -2265,7 +2426,7 @@ mod tests {
         let (done, mut reports) = mpsc::unbounded_channel();
         let mut batches = Batches {
             generation: 1,
-            hits: Vec::new(),
+            found: Vec::new(),
             sent: None,
             done,
         };
@@ -2284,10 +2445,152 @@ mod tests {
         host.await.unwrap();
         assert_eq!(result.unwrap(), FindSummary::default());
         batches.flush();
-        let Ok(Done::Found { hits, .. }) = reports.try_recv() else {
-            panic!("expected what it found");
+        assert_eq!(hits_of(&mut reports), [Hit::File(b"a".to_vec())]);
+    }
+
+    /// Looks for `query` in `location` with the fd of `fd`, through `host` if remote, taking
+    /// `max_results`: what it found, and how it ended.
+    async fn fd_in(
+        (fd, location, host): (&Fd, Location, Option<HostHandle>),
+        query: &fd::Query,
+        max_results: usize,
+    ) -> (Vec<Finding>, Result<FindSummary, String>) {
+        let (done, mut reports) = mpsc::unbounded_channel();
+        let mut batches = Batches {
+            generation: 1,
+            found: Vec::new(),
+            sent: None,
+            done,
         };
-        assert_eq!(hits, [Hit::File(b"a".to_vec())]);
+        let named = Named { query, max_results };
+        let result = named.search(fd, location, host, &mut batches).await;
+        batches.flush();
+        let mut found = Vec::new();
+        while let Ok(report) = reports.try_recv() {
+            if let Done::Found { found: more, .. } = report {
+                found.extend(more);
+            }
+        }
+        (found, result)
+    }
+
+    fn names(pattern: &str) -> fd::Query {
+        fd::Query {
+            pattern: pattern.to_owned(),
+            globs: Vec::new(),
+            regex: false,
+            match_case: false,
+            hidden: false,
+        }
+    }
+
+    fn entry(path: &str, dir: bool, matches: &[std::ops::Range<usize>]) -> Finding {
+        Finding::Entry {
+            path: path.as_bytes().to_vec(),
+            dir,
+            matches: matches.to_vec(),
+        }
+    }
+
+    /// The paths of what fd found, in their order.
+    fn sorted(mut found: Vec<Finding>) -> Vec<Finding> {
+        found.sort_by_key(|finding| match finding {
+            Finding::Entry { path, .. } => path.clone(),
+            Finding::Hit(_) => Vec::new(),
+        });
+        found
+    }
+
+    #[tokio::test]
+    #[allow(clippy::single_range_in_vec_init)]
+    async fn fd_finds_names_keeps_what_the_globs_let_through_and_stops_at_the_limit() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join("src/find")).unwrap();
+        std::fs::write(root.join("src/find.rs"), "").unwrap();
+        std::fs::write(root.join("src/main.rs"), "").unwrap();
+        std::fs::write(root.join("Find.md"), "").unwrap();
+        let fd = Fd::new(PathBuf::from("fd"));
+        let local = || Location::Local(root.to_path_buf());
+        let (found, result) = fd_in((&fd, local(), None), &names("find"), 100).await;
+        if result
+            .as_ref()
+            .is_err_and(|reason| reason.contains("not installed"))
+        {
+            return;
+        }
+        assert_eq!(result.unwrap(), FindSummary::default());
+        assert_eq!(
+            sorted(found),
+            [
+                entry("Find.md", false, &[0..4]),
+                entry("src/find", true, &[4..8]),
+                entry("src/find.rs", false, &[4..8]),
+            ]
+        );
+        let files = fd::Query {
+            globs: vec!["*.rs".to_owned()],
+            ..names("")
+        };
+        let (found, _) = fd_in((&fd, local(), None), &files, 100).await;
+        assert_eq!(
+            sorted(found),
+            [
+                entry("src/find.rs", false, &[]),
+                entry("src/main.rs", false, &[])
+            ]
+        );
+        let (found, result) = fd_in((&fd, local(), None), &names(""), 2).await;
+        assert_eq!(found.len(), 2);
+        assert!(result.unwrap().limit);
+        let bad = fd::Query {
+            regex: true,
+            ..names("(")
+        };
+        let (found, result) = fd_in((&fd, local(), None), &bad, 10).await;
+        assert_eq!(found, []);
+        let result = result.unwrap();
+        assert_eq!(result.last_error.as_deref(), Some("error: unclosed group"));
+        let missing = Fd::new(PathBuf::from("/nonexistent/fd"));
+        let (_, result) = fd_in((&missing, local(), None), &names("x"), 10).await;
+        assert!(result.unwrap_err().contains("fd is not installed"));
+    }
+
+    #[tokio::test]
+    async fn on_a_host_without_fd_fdfind_runs_in_its_place() {
+        let (handle, mut requests) = HostHandle::channel();
+        let host = tokio::spawn(async move {
+            let mut programs = Vec::new();
+            while let Some(HostRequest::Spawn { program, reply, .. }) = requests.recv().await {
+                programs.push(program);
+                // The host has fdfind only: its shell says 127 for fd.
+                let script = if program == "fd" {
+                    "echo 'sh: fd: not found' >&2; exit 127"
+                } else {
+                    "printf 'src/\\0src/a.rs\\0'"
+                };
+                let child = tokio::process::Command::new("/bin/sh")
+                    .args(["-c", script])
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .spawn()
+                    .map_err(|error| error.to_string());
+                let _ = reply.send(child);
+            }
+            programs
+        });
+        let location = Location::Remote {
+            host: "web".to_owned(),
+            path: RemotePath::from("/srv"),
+        };
+        let fd = Fd::new(PathBuf::from("/nonexistent/fd"));
+        let (found, result) = fd_in((&fd, location, Some(handle)), &names(""), 10).await;
+        assert_eq!(result.unwrap(), FindSummary::default());
+        assert_eq!(
+            found,
+            [entry("src", true, &[]), entry("src/a.rs", false, &[])]
+        );
+        assert_eq!(host.await.unwrap(), ["fd", "fdfind"]);
     }
 
     #[tokio::test]

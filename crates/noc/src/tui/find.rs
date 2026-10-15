@@ -4,10 +4,14 @@
 //! box switches. The dialog lists each file it found, in the order of their paths, with the lines
 //! that match under it, the matches highlighted; with no text it lists the files. Its buttons go
 //! to the file in the panel, and view and edit it at the line, as in the results of mc's Find
-//! File.
+//! File. Its other mode, Files and dirs, finds files and directories whose names match the text
+//! with fd, and goes to them.
+
+use std::ops::Range;
 
 use noc_scroll::scrollbar::Bar;
-use noc_tools::ripgrep::{Hit, Query};
+use noc_tools::fd;
+use noc_tools::ripgrep::{self, Hit};
 use noc_vfs::{DirEntry, FileKind, Location, Metadata};
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -34,6 +38,39 @@ const TEXT: usize = 0;
 const FILES: usize = 1;
 const REGEX: usize = 0;
 const MATCH_CASE: usize = 1;
+/// Its modes, as its choices: text in the files, or files and directories by name.
+const TEXT_MODE: usize = 0;
+const NAMES_MODE: usize = 1;
+
+/// What a search looks for: lines with ripgrep, or names with fd.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum FindQuery {
+    Lines(ripgrep::Query),
+    Names(fd::Query),
+}
+
+#[cfg(test)]
+impl FindQuery {
+    /// The query of a search of lines.
+    pub(crate) fn lines(&self) -> &ripgrep::Query {
+        match self {
+            Self::Lines(query) => query,
+            Self::Names(query) => panic!("expected lines, got {query:?}"),
+        }
+    }
+}
+
+/// What a search found: a file or a line of it, as ripgrep reports them, or a file or a
+/// directory whose name fd matched at `matches`, byte ranges in its path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Finding {
+    Hit(Hit),
+    Entry {
+        path: Vec<u8>,
+        dir: bool,
+        matches: Vec<Range<usize>>,
+    },
+}
 
 /// What a key did in the dialog.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,6 +83,10 @@ pub(crate) enum FindEvent {
     Go {
         location: Location,
         name: Vec<u8>,
+    },
+    /// Open the directory at `location`, found by its name.
+    Open {
+        location: Location,
     },
     /// View the file `name` in the directory at `location`, from `line` (1-based), the line
     /// under the cursor or the first that matched.
@@ -79,7 +120,7 @@ struct LineRow {
     parts: Vec<(String, bool)>,
 }
 
-/// A file found, with the lines of it that matched.
+/// A file found, with the lines of it that matched; or a file or a directory found by name.
 #[derive(Debug)]
 struct FileRow {
     /// Relative to where the search started, its names joined by `/`.
@@ -87,6 +128,17 @@ struct FileRow {
     /// Its icon, or its marker, and its path, terminal-safe.
     shown: String,
     lines: Vec<LineRow>,
+    /// Found by name: whether it is a directory, its icon or its marker, and its path in parts
+    /// that match or not.
+    entry: Option<EntryRow>,
+}
+
+/// A file or a directory that fd found.
+#[derive(Debug)]
+struct EntryRow {
+    dir: bool,
+    prefix: String,
+    parts: Vec<(String, bool)>,
 }
 
 /// A row of the list: a file, or one of its lines, by their indexes.
@@ -101,8 +153,8 @@ enum State {
     Failed(String),
 }
 
-/// What the search depends on in the dialog: the fields and the check boxes.
-type Settings = (String, String, bool, bool);
+/// What the search depends on in the dialog: the mode, the fields, and the check boxes.
+type Settings = (usize, String, String, bool, bool);
 
 /// The dialog, with what the last search found.
 #[derive(Debug)]
@@ -154,9 +206,12 @@ impl FindWindow {
             (fl!("find-files"), String::new()),
         ];
         let checks = [(fl!("find-regex"), true), (fl!("find-match-case"), false)];
-        let buttons = vec![Button::GoTo, Button::View, Button::Edit, Button::Cancel];
         let title = fl!("find-title", dir = title);
-        let dialog = Dialog::fields(&title, &fields, &checks, buttons, WIDTH).with_list();
+        let modes = vec![fl!("find-mode-text"), fl!("find-mode-names")];
+        let dialog = Dialog::fields(&title, &fields, &checks, buttons(TEXT_MODE), WIDTH)
+            .with_choices(modes, TEXT_MODE)
+            .in_a_row()
+            .with_list();
         Self {
             root,
             dialog,
@@ -179,22 +234,34 @@ impl FindWindow {
         &self.root
     }
 
-    /// What ripgrep searches for: the text, how it matches, and the globs of the files, split
-    /// at blanks.
-    pub(crate) fn query(&self) -> Query {
-        Query {
-            pattern: self.dialog.text_of(TEXT).to_owned(),
-            globs: self
-                .dialog
-                .text_of(FILES)
-                .split_whitespace()
-                .map(str::to_owned)
-                .collect(),
-            regex: self.dialog.checked(REGEX),
-            match_case: self.dialog.checked(MATCH_CASE),
+    /// What it searches for, by its mode: lines with ripgrep, or names with fd; the text, how
+    /// it matches, and the globs of the files, split at blanks.
+    pub(crate) fn query(&self) -> FindQuery {
+        let pattern = self.dialog.text_of(TEXT).to_owned();
+        let globs = self
+            .dialog
+            .text_of(FILES)
+            .split_whitespace()
+            .map(str::to_owned)
+            .collect();
+        let (regex, match_case) = (self.dialog.checked(REGEX), self.dialog.checked(MATCH_CASE));
+        if self.dialog.chosen() == NAMES_MODE {
+            return FindQuery::Names(fd::Query {
+                pattern,
+                globs,
+                regex,
+                match_case,
+                hidden: self.hidden,
+            });
+        }
+        FindQuery::Lines(ripgrep::Query {
+            pattern,
+            globs,
+            regex,
+            match_case,
             hidden: self.hidden,
             max_per_file: self.max_per_file,
-        }
+        })
     }
 
     /// The most results a search takes.
@@ -231,13 +298,21 @@ impl FindWindow {
     }
 
     /// Takes what the search `generation` found.
-    pub(crate) fn found(&mut self, generation: u64, hits: Vec<Hit>) {
+    pub(crate) fn found(&mut self, generation: u64, found: Vec<Finding>) {
         if !self.show(generation) {
             return;
         }
-        for hit in hits {
+        for finding in found {
+            let hit = match finding {
+                Finding::Hit(hit) => hit,
+                Finding::Entry { path, dir, matches } => {
+                    let parts = parts_of(&path, 0, &matches);
+                    self.add_file(path, Some((dir, parts)));
+                    continue;
+                }
+            };
             match hit {
-                Hit::File(path) => self.add_file(path),
+                Hit::File(path) => self.add_file(path, None),
                 Hit::Line {
                     number,
                     text,
@@ -256,15 +331,17 @@ impl FindWindow {
         self.put_cursor();
     }
 
-    /// Puts the file at `path` among the rows, in the order of the paths.
-    fn add_file(&mut self, path: Vec<u8>) {
+    /// Puts the file at `path` among the rows, in the order of the paths; one found by name
+    /// with whether it is a directory and its path in parts that match or not.
+    fn add_file(&mut self, path: Vec<u8>, entry: Option<(bool, Vec<(String, bool)>)>) {
         let at = match self.rows.binary_search_by(|row| row.path.cmp(&path)) {
             Ok(at) => at,
             Err(at) => {
-                let entry = DirEntry {
+                let dir = entry.as_ref().is_some_and(|&(dir, _)| dir);
+                let entry_of = DirEntry {
                     name: Vec::new(),
                     metadata: Metadata {
-                        kind: FileKind::File,
+                        kind: if dir { FileKind::Dir } else { FileKind::File },
                         size: None,
                         permissions: None,
                         modified: None,
@@ -273,13 +350,16 @@ impl FindWindow {
                     },
                     target_kind: None,
                 };
-                let shown = format!("{}{}", self.decor.entry(&entry), cells::sanitize(&path));
+                let prefix = self.decor.entry(&entry_of);
+                let shown = format!("{prefix}{}", cells::sanitize(&path));
+                let entry = entry.map(|(dir, parts)| EntryRow { dir, prefix, parts });
                 self.rows.insert(
                     at,
                     FileRow {
                         path,
                         shown,
                         lines: Vec::new(),
+                        entry,
                     },
                 );
                 at
@@ -332,6 +412,7 @@ impl FindWindow {
     /// What the search depends on now.
     fn settings(&self) -> Settings {
         (
+            self.dialog.chosen(),
             self.dialog.text_of(TEXT).to_owned(),
             self.dialog.text_of(FILES).to_owned(),
             self.dialog.checked(REGEX),
@@ -425,13 +506,19 @@ impl FindWindow {
         (location, name.to_vec())
     }
 
-    /// What `button` does to the row under the cursor: go to its file, view it, or edit it.
+    /// What `button` does to the row under the cursor: go to its file, or into a directory
+    /// found by name, view it, or edit it.
     fn press(&self, button: Button) -> FindEvent {
         let Some((row, line)) = self.chosen() else {
             return FindEvent::Pending;
         };
         let (location, name) = self.place(&row.path);
+        let dir = row.entry.as_ref().is_some_and(|entry| entry.dir);
         match button {
+            Button::GoTo if dir => FindEvent::Open {
+                location: child(&location, &name),
+            },
+            Button::View | Button::Edit if dir => FindEvent::Pending,
             Button::GoTo => FindEvent::Go { location, name },
             Button::View => FindEvent::View {
                 location,
@@ -470,8 +557,17 @@ impl FindWindow {
         self.event(event, &before)
     }
 
+    /// The buttons of the mode chosen now.
+    fn follow_mode(&mut self, before: &Settings) {
+        let mode = self.dialog.chosen();
+        if mode != before.0 {
+            self.dialog.set_buttons(buttons(mode));
+        }
+    }
+
     /// What `event` of the dialog does, its settings `before` it.
-    fn event(&self, event: DialogEvent, before: &Settings) -> FindEvent {
+    fn event(&mut self, event: DialogEvent, before: &Settings) -> FindEvent {
+        self.follow_mode(before);
         match event {
             DialogEvent::Pending => self.changed(before),
             DialogEvent::Cancelled | DialogEvent::Pressed(Button::Cancel) => FindEvent::Closed,
@@ -550,10 +646,12 @@ impl FindWindow {
         }
     }
 
-    /// How many it found: lines in files, or files.
+    /// How many it found: lines in files, files, or files and directories by name.
     fn count(&self) -> String {
         let lines: usize = self.rows.iter().map(|row| row.lines.len()).sum();
-        if lines == 0 {
+        if self.rows.first().is_some_and(|row| row.entry.is_some()) {
+            fl!("find-count-entries", count = self.rows.len())
+        } else if lines == 0 {
             fl!("find-count-files", files = self.rows.len())
         } else {
             fl!("find-count", lines = lines, files = self.rows.len())
@@ -570,9 +668,10 @@ impl FindWindow {
                 return Line::default();
             };
             let row = &self.rows[file];
-            let spans = match number {
-                None => file_spans(row, (width, self.max_per_file), style, theme),
-                Some(number) => line_spans(row, number, width, style, theme),
+            let spans = match (number, &row.entry) {
+                (None, Some(entry)) => entry_spans(entry, width, style, theme),
+                (None, None) => file_spans(row, (width, self.max_per_file), style, theme),
+                (Some(number), _) => line_spans(row, number, width, style, theme),
             };
             Line::from(spans).style(style)
         };
@@ -585,13 +684,28 @@ impl FindWindow {
     }
 }
 
+/// The buttons of `mode`: by name, nothing to view or edit at a line.
+fn buttons(mode: usize) -> Vec<Button> {
+    if mode == NAMES_MODE {
+        vec![Button::GoTo, Button::Cancel]
+    } else {
+        vec![Button::GoTo, Button::View, Button::Edit, Button::Cancel]
+    }
+}
+
 /// The text of a line that matched, without the blanks it starts with, in parts that are a
 /// match of `matches`, byte ranges in `text`, or not; each terminal-safe.
-fn parts(text: &[u8], matches: &[std::ops::Range<usize>]) -> Vec<(String, bool)> {
+fn parts(text: &[u8], matches: &[Range<usize>]) -> Vec<(String, bool)> {
     let start = text
         .iter()
         .position(|byte| !byte.is_ascii_whitespace())
         .unwrap_or(text.len());
+    parts_of(text, start, matches)
+}
+
+/// `text` from byte `start` on, in parts that are a match of `matches`, byte ranges in `text`,
+/// or not; each terminal-safe.
+fn parts_of(text: &[u8], start: usize, matches: &[Range<usize>]) -> Vec<(String, bool)> {
     let mut parts = Vec::new();
     let mut at = start;
     for range in matches {
@@ -609,6 +723,30 @@ fn parts(text: &[u8], matches: &[std::ops::Range<usize>]) -> Vec<(String, bool)>
         parts.push((cells::sanitize(&text[at..]), false));
     }
     parts
+}
+
+/// The row of a file or a directory found by name in `width` cells: its icon or marker, then
+/// its path with what matched highlighted, losing its start where it is too long, as its name
+/// is at the end.
+fn entry_spans(entry: &EntryRow, width: usize, style: Style, theme: &Theme) -> Vec<Span<'static>> {
+    let room = width.saturating_sub(2 + cells::width(&entry.prefix));
+    let path = entry.parts.iter().map(|(part, matched)| {
+        let style = if *matched {
+            style.patch(theme.find_match)
+        } else {
+            style
+        };
+        Span::styled(part.clone(), style)
+    });
+    let mut spans = vec![
+        Span::styled(" ", style),
+        Span::styled(entry.prefix.clone(), style),
+    ];
+    let marks = theme.glyphs.marks;
+    let fitted = cells::fit_spans_end(path.collect(), room, (style, theme.truncated_dialog), marks);
+    spans.extend(fitted);
+    spans.push(Span::styled(" ", style));
+    spans
 }
 
 /// The row of a file in `width` cells: its path, cut in its middle where it is too long, and
@@ -725,19 +863,27 @@ mod tests {
         )
     }
 
-    fn line(number: u64, text: &str, matches: &[std::ops::Range<usize>]) -> Hit {
-        Hit::Line {
+    fn line(number: u64, text: &str, matches: &[Range<usize>]) -> Finding {
+        Finding::Hit(Hit::Line {
             number,
             text: text.as_bytes().to_vec(),
+            matches: matches.to_vec(),
+        })
+    }
+
+    fn file(path: &str) -> Finding {
+        Finding::Hit(Hit::File(path.as_bytes().to_vec()))
+    }
+
+    fn entry(path: &str, dir: bool, matches: &[Range<usize>]) -> Finding {
+        Finding::Entry {
+            path: path.as_bytes().to_vec(),
+            dir,
             matches: matches.to_vec(),
         }
     }
 
-    fn file(path: &str) -> Hit {
-        Hit::File(path.as_bytes().to_vec())
-    }
-
-    fn hits() -> Vec<Hit> {
+    fn hits() -> Vec<Finding> {
         vec![
             file("crates/noc/src/tui/app.rs"),
             line(
@@ -794,6 +940,7 @@ mod tests {
         assert_eq!(press(&mut window, Action::Backspace), FindEvent::Search);
         assert_eq!(press(&mut window, Action::ToggleRegex), FindEvent::Search);
         let query = window.query();
+        let query = query.lines();
         assert_eq!(query.pattern, "fn x");
         assert_eq!(query.globs, ["*.rs", "!targe"]);
         assert!(!query.regex && !query.match_case && query.hidden);
@@ -803,7 +950,7 @@ mod tests {
         press(&mut window, Action::NextField);
         assert_eq!(window.context(), Context::Find);
         assert_eq!(press(&mut window, Action::Toggle), FindEvent::Search);
-        assert!(window.query().match_case);
+        assert!(window.query().lines().match_case);
         press(&mut window, Action::Up);
         press(&mut window, Action::Up);
         press(&mut window, Action::Up);
@@ -814,7 +961,7 @@ mod tests {
         );
         press(&mut window, Action::Append);
         typed(&mut window, "y");
-        assert_eq!(window.query().pattern, "fn xy");
+        assert_eq!(window.query().lines().pattern, "fn xy");
         // Esc leaves Insert mode in the field, and again closes the dialog.
         press(&mut window, Action::NormalMode);
         assert_eq!(
@@ -875,6 +1022,89 @@ mod tests {
             press(&mut window, Action::Right);
         }
         assert_eq!(press(&mut window, Action::Confirm), FindEvent::Closed);
+    }
+
+    #[test]
+    #[allow(clippy::single_range_in_vec_init)]
+    fn by_name_it_finds_files_and_directories_and_goes_into_one() {
+        let mut window = window();
+        // Shift+Tab from the text goes to the modes, where Space chooses one.
+        press(&mut window, Action::PrevField);
+        assert_eq!(press(&mut window, Action::Toggle), FindEvent::Search);
+        let FindQuery::Names(query) = window.query() else {
+            panic!("expected a search by name");
+        };
+        assert!(query.pattern.is_empty() && query.regex && query.hidden);
+        window.restart(1, CancellationToken::new());
+        window.found(
+            1,
+            vec![
+                entry("src/find.rs", false, &[4..8]),
+                entry("src/find", true, &[4..8]),
+                entry("Find.md", false, &[0..4]),
+            ],
+        );
+        window.finished(1, Ok(FindSummary::default()));
+        let screen = draw(&mut window, 70);
+        assert!(screen.contains("Files and dirs"), "{screen}");
+        assert!(screen.contains("3 files and directories"), "{screen}");
+        assert!(
+            screen.contains("Go to") && !screen.contains("View"),
+            "{screen}"
+        );
+        to_rows_from_the_modes(&mut window);
+        // Find.md first, then src/find, a directory, which Go to goes into, and F3 views none.
+        assert_eq!(
+            press(&mut window, Action::Confirm),
+            FindEvent::Go {
+                location: Location::Local("/src/noc".into()),
+                name: b"Find.md".to_vec()
+            }
+        );
+        press(&mut window, Action::Down);
+        assert_eq!(press(&mut window, Action::View), FindEvent::Pending);
+        assert_eq!(
+            press(&mut window, Action::Confirm),
+            FindEvent::Open {
+                location: Location::Local("/src/noc/src/find".into())
+            }
+        );
+        press(&mut window, Action::Down);
+        assert_eq!(
+            press(&mut window, Action::Edit),
+            FindEvent::Edit {
+                location: Location::Local("/src/noc/src".into()),
+                name: b"find.rs".to_vec(),
+                line: None
+            }
+        );
+        // Back to the text, the first mode, six stops before the rows: its buttons come back.
+        for _ in 0..6 {
+            press(&mut window, Action::PrevField);
+        }
+        press(&mut window, Action::Toggle);
+        assert!(matches!(window.query(), FindQuery::Lines(_)));
+        assert!(draw(&mut window, 70).contains("View"));
+    }
+
+    /// Tab from the second mode to the rows: past the fields and the check boxes.
+    fn to_rows_from_the_modes(window: &mut FindWindow) {
+        for _ in 0..5 {
+            press(window, Action::NextField);
+        }
+        assert_eq!(window.context(), Context::Find);
+    }
+
+    #[test]
+    fn a_long_path_found_by_name_keeps_its_name() {
+        let mut window = window();
+        window.restart(1, CancellationToken::new());
+        let path = format!("{}/needle.txt", "deep/".repeat(30));
+        let at = path.len() - "needle.txt".len();
+        window.found(1, vec![entry(&path, false, &[at..at + 6])]);
+        window.finished(1, Ok(FindSummary::default()));
+        let screen = draw(&mut window, 60);
+        assert!(screen.contains("needle.txt"), "{screen}");
     }
 
     #[test]

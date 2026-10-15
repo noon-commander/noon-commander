@@ -80,6 +80,25 @@ pub(crate) fn ripgrep_error(error: &ToolError) -> String {
     }
 }
 
+/// Why fd could not search: it is not installed, here or on the host, whose shell says so
+/// with 127, or what it said last.
+pub(crate) fn fd_error(error: &ToolError) -> String {
+    match error {
+        ToolError::Spawn { program, .. } if error.is_not_found() => fl!(
+            "find-fd-not-installed",
+            program = program.display().to_string()
+        ),
+        ToolError::Failed {
+            program, status, ..
+        } if status.code() == Some(127) => fl!(
+            "find-fd-not-installed",
+            program = program.display().to_string()
+        ),
+        ToolError::Failed { stderr, .. } if !stderr.is_empty() => stderr.clone(),
+        other => chain(other),
+    }
+}
+
 /// Why the desktop's opener did not open a file: it could not run, or how it exited, since its
 /// output goes nowhere.
 pub(crate) fn open_error(error: &ToolError) -> String {

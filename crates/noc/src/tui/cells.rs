@@ -140,6 +140,41 @@ pub(crate) fn fit_spans(
     fitted
 }
 
+/// `spans` in exactly `width` cells: padded in `pad` where they are shorter; where longer, cut
+/// at their start, which the mark of text hidden before of `marks` stands for, in `mark` over
+/// the style of the span it cuts: a path whose name, at its end, matters most.
+pub(crate) fn fit_spans_end(
+    spans: Vec<Span<'static>>,
+    width: usize,
+    (pad, mark): (Style, Style),
+    marks: Marks,
+) -> Vec<Span<'static>> {
+    let total: usize = spans.iter().map(Span::width).sum();
+    if total <= width {
+        return fit_spans(spans, width, (pad, mark), marks);
+    }
+    let room = width.saturating_sub(1);
+    let mut used = 0;
+    let mut kept = Vec::with_capacity(spans.len() + 1);
+    for span in spans.into_iter().rev() {
+        let cells = span.width();
+        if used + cells <= room {
+            used += cells;
+            kept.push(span);
+            continue;
+        }
+        let style = span.style;
+        let (_, tail) = split(&span.content, cells - (room - used));
+        kept.push(Span::styled(tail, style));
+        if width > 0 {
+            kept.push(Span::styled(marks.before, style.patch(mark)));
+        }
+        break;
+    }
+    kept.reverse();
+    kept
+}
+
 /// The text of `spans`, without their styles: for widths, and where nothing can be styled.
 pub(crate) fn text_of(spans: &[Span<'_>]) -> String {
     spans.iter().map(|span| span.content.as_ref()).collect()
@@ -174,6 +209,27 @@ mod tests {
 
     use super::*;
     use crate::tui::glyphs::Glyphs;
+
+    #[test]
+    fn spans_too_long_lose_their_start_and_keep_their_styles() {
+        let bold = Style::new().bold();
+        let spans = || {
+            vec![
+                Span::raw("src/tui/"),
+                Span::styled("find", bold),
+                Span::raw(".rs"),
+            ]
+        };
+        let marks = Glyphs::PLAIN.marks;
+        let styles = (Style::new(), Style::new());
+        let fitted = fit_spans_end(spans(), 9, styles, marks);
+        assert_eq!(text_of(&fitted), format!("{}/find.rs", marks.before));
+        assert_eq!(fitted[2].style, bold, "the match keeps its style");
+        let short = fit_spans_end(spans(), 17, styles, marks);
+        assert_eq!(text_of(&short), "src/tui/find.rs  ");
+        let wide = vec![Span::raw("文件/a")];
+        assert_eq!(width(&text_of(&fit_spans_end(wide, 4, styles, marks))), 4);
+    }
 
     #[test]
     fn whole_text_takes_as_many_lines_as_asked_and_marks_the_rest() {

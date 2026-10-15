@@ -438,6 +438,8 @@ pub(crate) struct Dialog {
     /// Radio buttons, as mc draws them: `(*)` on the chosen one.
     choices: Vec<String>,
     chosen: usize,
+    /// The choices on one line, rather than one under another.
+    in_a_row: bool,
     fields: Vec<LabelledField>,
     checks: Vec<Check>,
     buttons: Vec<Button>,
@@ -577,6 +579,7 @@ impl Dialog {
             message: message.trim_end().to_owned(),
             choices: Vec::new(),
             chosen: 0,
+            in_a_row: false,
             fields: Vec::new(),
             checks: Vec::new(),
             buttons,
@@ -780,6 +783,23 @@ impl Dialog {
         }
         self.choices = choices;
         self
+    }
+
+    /// The same dialog with its choices on one line.
+    pub(crate) fn in_a_row(mut self) -> Self {
+        self.in_a_row = true;
+        self
+    }
+
+    /// Puts `buttons` in place of the buttons, the first the default; the focus on one of them
+    /// stays on one.
+    pub(crate) fn set_buttons(&mut self, buttons: Vec<Button>) {
+        let last = buttons.len().saturating_sub(1);
+        self.buttons = buttons;
+        self.default = self.default.min(last);
+        if let Focus::Button(index) = &mut self.focus {
+            *index = (*index).min(last);
+        }
     }
 
     /// The choice that is chosen.
@@ -1148,8 +1168,13 @@ impl Dialog {
         // Borders, the message, the choices, the fields under their labels, the check boxes, a
         // line, the buttons.
         let labels = self.fields.iter().filter(|f| !f.label.is_empty()).count();
+        let choice_rows = if self.in_a_row {
+            self.choices.len().min(1)
+        } else {
+            self.choices.len()
+        };
         let height = rows(lines.len())
-            .saturating_add(rows(self.choices.len()))
+            .saturating_add(rows(choice_rows))
             .saturating_add(rows(self.fields.len() + labels))
             .saturating_add(rows(self.checks.len()));
         // A line, a row at least, and a line over the status, under the rest.
@@ -1174,20 +1199,10 @@ impl Dialog {
             .saturating_add(below);
         let mut index = self.render_message(frame, inner, &lines, rest, colors.body, theme);
         let room = usize::from(inner.width).max(1);
-        for (number, choice) in self.choices.iter().enumerate() {
-            if index >= inner.height {
-                return;
-            }
-            let text = format!("({}) {choice}", mark(number == self.chosen, glyphs::CHOSEN));
-            let style = if self.focus == Focus::Choice(number) {
-                colors.focused
-            } else {
-                colors.body
-            };
-            frame.render_widget(Line::from(Span::styled(text, style)), row(index));
-            spots.push((Focus::Choice(number), row(index)));
-            index += 1;
-        }
+        let Some(after) = self.draw_choices(frame, (inner, index), colors, &mut spots) else {
+            return;
+        };
+        index = after;
         for (number, LabelledField { label, field }) in self.fields.iter().enumerate() {
             if !label.is_empty() {
                 if index >= inner.height {
@@ -1249,6 +1264,48 @@ impl Dialog {
 }
 
 impl Dialog {
+    /// Draws the choices from row `index` of `inner`, the room inside the frame, one under
+    /// another or on one line, and keeps where for the mouse in `spots`. Returns the row after
+    /// them, or `None` without room.
+    fn draw_choices(
+        &self,
+        frame: &mut Frame<'_>,
+        (inner, mut index): (Rect, u16),
+        colors: Colors,
+        spots: &mut Vec<(Focus, Rect)>,
+    ) -> Option<u16> {
+        let mut x = inner.x;
+        for (number, choice) in self.choices.iter().enumerate() {
+            if index >= inner.height {
+                return None;
+            }
+            let text = format!("({}) {choice}", mark(number == self.chosen, glyphs::CHOSEN));
+            let style = if self.focus == Focus::Choice(number) {
+                colors.focused
+            } else {
+                colors.body
+            };
+            let width = u16::try_from(cells::width(&text)).unwrap_or(u16::MAX);
+            let area = if self.in_a_row {
+                Rect::new(x, inner.y + index, width, 1).intersection(inner)
+            } else {
+                Rect::new(inner.x, inner.y + index, inner.width, 1)
+            };
+            frame.render_widget(Line::from(Span::styled(text, style)), area);
+            spots.push((Focus::Choice(number), area));
+            if self.in_a_row {
+                // Three blanks apart, as mc sets its radio buttons on a line.
+                x = x.saturating_add(width).saturating_add(3);
+            } else {
+                index += 1;
+            }
+        }
+        if self.in_a_row && !self.choices.is_empty() {
+            index += 1;
+        }
+        Some(index)
+    }
+
     /// Draws the list from row `index` of `inner`, the room inside the frame, to the line over
     /// the buttons: a line, the rows, and the status of `view` over a line of its own. Returns
     /// where the buttons go, or `None` without room for a row.

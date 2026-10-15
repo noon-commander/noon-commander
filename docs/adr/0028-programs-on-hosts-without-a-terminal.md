@@ -28,8 +28,10 @@ one string, so its words need quoting there.
   that a master gone never makes ssh ask; and `session_options()`. The order of the command line
   is as ever: program → forced options → `-F` and `ssh.args` → role options → `--` → destination
   → remote command.
-- **The program is Noon Commander's choice**, never text the user typed as a command: only
-  ripgrep for now, and its arguments as `noc-tools` builds them.
+- **The program is Noon Commander's choice**, never text the user typed as a command: ripgrep
+  (`rg`), and fd (`fd`, then `fdfind` as Debian and Ubuntu name it,
+  [ADR 0029](0029-files-and-directories-with-fd.md)), with their arguments as `noc-tools` builds
+  them.
 
 ## Consequences
 

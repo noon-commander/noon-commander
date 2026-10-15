@@ -1152,13 +1152,15 @@ Tab and F8 still switch the hosts and remove the command.
 
 g / in a panel, or F9 → Command → Find file…: ripgrep searches the files under the panel's
 directory, local or on a host, for the text of the first field, among those the globs of the second
-let through, again as either changes or a check box switches; with no text it lists the files. It
-is a dialog: two fields, two check boxes, the rows, and the buttons Go to, View, Edit, and Cancel,
-as in the results of mc's Find File, which, as Far's Find file, asks for a mask and a text in a
-dialog first. Its focus on a check box, the rows, or a button, it falls back to `dialog`, whose
-motions move the cursor of the rows while they have the focus, and Tab leaves them. F3, F4, and the
-switches of regular expressions and case, VS Code's keys, work wherever the focus is. yazi's s and
-S find with fd and rg, and show the result as a directory of its own.
+let through, again as either changes or a check box switches; with no text it lists the files. It is
+a dialog: two fields, two check boxes, the rows, and the buttons Go to, View, Edit, and Cancel, as
+in the results of mc's Find File, which, as Far's Find file, asks for a mask and a text in a dialog
+first. Its other mode, Files and dirs, a radio button above the fields, finds files and directories
+by name with fd, and Go to goes into a directory. Its focus on a check box, the rows, or a button,
+it falls back to `dialog`, whose motions move the cursor of the rows while they have the focus, and
+Tab leaves them. F3, F4, and the switches of regular expressions and case, VS Code's keys, work
+wherever the focus is. yazi's s and S find with fd and rg, and show the result as a directory of its
+own.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |

@@ -1,6 +1,7 @@
 # 0027. Searching a whole tree with ripgrep
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0029](0029-files-and-directories-with-fd.md), which adds a
+  mode that finds files and directories by name with fd
 - Date: 2026-10-15
 - Amends: [ADR 0012](0012-external-tools-and-zoxide.md), [ADR 0022](0022-vim-modes.md)
 

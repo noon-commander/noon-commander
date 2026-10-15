@@ -14,7 +14,6 @@ use noc_config::{
 use noc_ops::{Algorithm, Conflict, CopyOptions, Decision, Sum};
 use noc_scroll::Motion;
 use noc_scroll::scrollbar::{self, Part};
-use noc_tools::ripgrep::{Hit, Query};
 use noc_tools::zoxide::Scored;
 use noc_vfs::{FileKind, Location, Metadata, RemotePath, Volume};
 use noc_viewer::{Command as ViewerCommand, Styles as ViewerStyles, Viewer};
@@ -34,7 +33,7 @@ use super::configuration::{ConfigEvent, Configuration};
 use super::decor::Decor;
 use super::dialog::{Ask, Button, Dialog, DialogEvent, Field, Reply};
 use super::edit::{Editor, Registers};
-use super::find::{FindEvent, FindSummary, FindWindow};
+use super::find::{FindEvent, FindQuery, FindSummary, FindWindow, Finding};
 use super::glyphs::{self, Glyphs};
 use super::help::{About, Help, Spot};
 use super::history::{HistoryEvent, HistoryWindow};
@@ -237,7 +236,7 @@ pub(crate) struct FindRequest {
     pub(crate) generation: u64,
     pub(crate) location: Location,
     pub(crate) host: Option<HostHandle>,
-    pub(crate) query: Query,
+    pub(crate) query: FindQuery,
     pub(crate) max_results: usize,
     pub(crate) delay: Duration,
     pub(crate) cancel: CancellationToken,
@@ -3731,9 +3730,9 @@ impl App {
     }
 
     /// Does what `event` of the dialog of the search of a tree says: a change searches again,
-    /// Go to goes to the file in the active panel, which puts where it was in the jump list,
-    /// and View and Edit view and edit it at the line, the dialog kept. Closing it stops the
-    /// search.
+    /// Go to goes to the file in the active panel, which puts where it was in the jump list, or
+    /// into a directory found by name, and View and Edit view and edit a file at the line, the
+    /// dialog kept. Closing it stops the search.
     fn find_event(&mut self, event: FindEvent) -> Vec<Effect> {
         match event {
             FindEvent::Pending => Vec::new(),
@@ -3752,6 +3751,11 @@ impl App {
                 }
                 self.go(id, Destination::onto_entry(location, &name))
             }
+            FindEvent::Open { location } => {
+                self.find = None;
+                let id = self.shown(self.active);
+                self.go(id, Destination::to(location))
+            }
             FindEvent::View {
                 location,
                 name,
@@ -3766,9 +3770,9 @@ impl App {
     }
 
     /// Takes what the search `generation` of [`Effect::Find`] found.
-    pub(crate) fn found(&mut self, generation: u64, hits: Vec<Hit>) {
+    pub(crate) fn found(&mut self, generation: u64, found: Vec<Finding>) {
         if let Some(window) = &mut self.find {
-            window.found(generation, hits);
+            window.found(generation, found);
         }
     }
 
@@ -7027,6 +7031,8 @@ mod tests {
 
     use super::super::panel::Listing;
     use super::super::places::KnownHost;
+    use noc_tools::ripgrep::Hit;
+
     use super::*;
     use crossterm::event::KeyEvent;
 
@@ -7872,6 +7878,11 @@ mod tests {
         assert_eq!(cursor_name(&app, Side::Left), "a1");
     }
 
+    /// What ripgrep found, as the search reports it.
+    fn findings(hits: Vec<Hit>) -> Vec<Finding> {
+        hits.into_iter().map(Finding::Hit).collect()
+    }
+
     /// The search the effects start, which must be one.
     fn find_request(effects: &[Effect]) -> &FindRequest {
         let [Effect::Find(request)] = effects else {
@@ -7889,9 +7900,9 @@ mod tests {
         assert_eq!(request.location, local("/srv"));
         assert!(request.host.is_none());
         assert_eq!(request.delay, Duration::ZERO, "the files show at once");
-        assert!(request.query.lists_files());
-        assert_eq!(request.query.max_per_file, 100);
-        assert!(request.query.hidden, "as the panels show them");
+        assert!(request.query.lines().lists_files());
+        assert_eq!(request.query.lines().max_per_file, 100);
+        assert!(request.query.lines().hidden, "as the panels show them");
         assert_eq!(request.max_results, 10_000);
         let (first, cancel) = (request.generation, request.cancel.clone());
         assert_eq!(
@@ -7902,21 +7913,21 @@ mod tests {
         assert!(screen_of(&mut app, 24).contains("Searching…"));
         let effects = keys(&mut app, &["r"]);
         let request = find_request(&effects);
-        assert_eq!(request.query.pattern, "r");
+        assert_eq!(request.query.lines().pattern, "r");
         assert_eq!(request.delay, FIND_DELAY);
         assert!(cancel.is_cancelled(), "the search before stops");
         let generation = request.generation;
-        app.found(first, vec![Hit::File(b"stale".to_vec())]);
+        app.found(first, vec![Finding::Hit(Hit::File(b"stale".to_vec()))]);
         app.found(
             generation,
-            vec![
+            findings(vec![
                 Hit::File(b"src/run/main.rs".to_vec()),
                 Hit::Line {
                     number: 3,
                     text: b"fn run() {}".to_vec(),
                     matches: vec![3..4],
                 },
-            ],
+            ]),
         );
         app.find_ended(generation, Ok(FindSummary::default()));
         let text = screen_of(&mut app, 24);
@@ -7933,7 +7944,7 @@ mod tests {
         // Tab goes to the files, whose globs search again.
         let effects = keys(&mut app, &["tab", "*", "."]);
         assert_eq!(effects.len(), 2);
-        assert_eq!(find_request(&effects[1..]).query.globs, ["*."]);
+        assert_eq!(find_request(&effects[1..]).query.lines().globs, ["*."]);
         // Esc leaves Insert mode in the field, and again closes the dialog, which stops the
         // search.
         let cancel = find_request(&effects[1..]).cancel.clone();
@@ -7968,14 +7979,14 @@ mod tests {
         let generation = find_request(&effects).generation;
         app.found(
             generation,
-            vec![
+            findings(vec![
                 Hit::File(b"src/run/main.rs".to_vec()),
                 Hit::Line {
                     number: 3,
                     text: b"fn run() {}".to_vec(),
                     matches: vec![3..6],
                 },
-            ],
+            ]),
         );
         app.find_ended(generation, Ok(FindSummary::default()));
         // Past the two fields and the two check boxes.
@@ -8035,12 +8046,40 @@ mod tests {
     }
 
     #[test]
+    fn files_and_dirs_find_names_with_fd_and_enter_opens_a_directory() {
+        let mut app = with_files(&["a1", "b2"]);
+        keys(&mut app, &["g", "/"]);
+        let effects = keys(&mut app, &["backtab", "space"]);
+        let request = find_request(&effects);
+        let FindQuery::Names(query) = &request.query else {
+            panic!("expected a search by name, got {:?}", request.query);
+        };
+        assert!(query.pattern.is_empty() && query.hidden);
+        let generation = request.generation;
+        let found = Finding::Entry {
+            path: b"src/run".to_vec(),
+            dir: true,
+            matches: Vec::new(),
+        };
+        app.found(generation, vec![found]);
+        app.find_ended(generation, Ok(FindSummary::default()));
+        // Past the fields and the check boxes, to the rows.
+        keys(&mut app, &["tab", "tab", "tab", "tab", "tab"]);
+        let effects = keys(&mut app, &["enter"]);
+        assert_eq!(app.context(), Context::Panel);
+        let [Effect::List { request, .. }] = &effects[..] else {
+            panic!("expected a listing, got {effects:?}");
+        };
+        assert_eq!(request.location, local("/srv/src/run"));
+    }
+
+    #[test]
     fn the_wheel_scrolls_the_rows_of_the_search_wherever_the_focus_is() {
         let mut app = with_files(&["a1"]);
         let effects = app.handle(action(Action::FindFile));
         let generation = find_request(&effects).generation;
         let hits = (0..60)
-            .map(|n| Hit::File(format!("f{n:02}").into_bytes()))
+            .map(|n| Finding::Hit(Hit::File(format!("f{n:02}").into_bytes())))
             .collect();
         app.found(generation, hits);
         app.find_ended(generation, Ok(FindSummary::default()));

@@ -393,11 +393,13 @@ fzf's algorithm:
 ### Search of a whole tree
 
 `g /` in a panel, next to quick search's `/`, or F9 → Command → Find file…, searches the files
-below the active panel's directory with ripgrep, in a dialog over both panels
-([ADR 0027](adr/0027-search-of-a-whole-tree.md)):
+below the active panel's directory with ripgrep, or their names with fd, in a dialog over both
+panels ([ADR 0027](adr/0027-search-of-a-whole-tree.md),
+[ADR 0029](adr/0029-files-and-directories-with-fd.md)):
 
 ```text
 ╔════════════════════════ Find in ~/src/noc ═════════════════════════╗
+║ (*) Text   ( ) Files and dirs                                      ║
 ║ Text:                                                              ║
 ║ handle                                                             ║
 ║ Files:                                                             ║
@@ -424,6 +426,15 @@ below the active panel's directory with ripgrep, in a dialog over both panels
   the rows; and four buttons. With no text it lists the files. The dialog keeps the cursor of the
   rows and scrolls them; `FindWindow` (`tui/find.rs`) keeps what was found and draws each row
   (`ListView`).
+- Two modes, radio buttons on a line above the fields (`Dialog::in_a_row`): Text, with ripgrep
+  (`FindQuery::Lines`), and Files and dirs, with fd (`FindQuery::Names`), whose buttons are Go to
+  and Cancel (`Dialog::set_buttons`). By name, fd matches the text against the names, as a
+  regular expression or as it is, with smart case or case, as the check boxes say; `!` globs go
+  to it as `--exclude`, and `noc_tools::fd::Names` keeps what the other globs let through and
+  finds where the name matches, with fd's regex engine, for `find_match`. On a host `fd` runs,
+  or `fdfind` where the shell says 127. Its rows (`Finding::Entry`) are the files and
+  directories, each with its icon and its path, which loses its start when too long
+  (`cells::fit_spans_end`); Go to goes into a directory (`FindEvent::Open`).
 - Each change starts a search 150 ms after the last key (`FIND_DELAY`), the first at once. A task
   (`Effect::Find`) runs ripgrep through `noc_tools::ripgrep`: locally in the directory, as
   `[search] program`; on a host, `rg` through the host's task and `Session::spawn_in`, over the

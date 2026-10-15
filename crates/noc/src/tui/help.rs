@@ -45,6 +45,8 @@ enum Entry {
         value: String,
     },
     Note(String),
+    /// A point of a tip, after a bullet, its lines indented under its first.
+    Point(String),
     Blank,
 }
 
@@ -198,31 +200,76 @@ impl Part {
     }
 }
 
-/// The tips, after the keys: how the modes, counts, and the windows work.
+/// The tips, after the keys: how the modes, counts, and the windows work, each under its title
+/// in points.
 fn tips(fuzzy_search: bool) -> Vec<Entry> {
-    let mut notes = vec![
-        fl!("help-note-modes"),
-        fl!("help-note-count"),
-        fl!("help-note-menu"),
+    let jump = if fuzzy_search {
+        fl!("help-tip-lists-jump-fuzzy")
+    } else {
+        fl!("help-tip-lists-jump")
+    };
+    let mut tips = vec![
+        (
+            fl!("help-tip-modes"),
+            vec![
+                fl!("help-tip-modes-keys"),
+                fl!("help-tip-modes-fields"),
+                fl!("help-tip-modes-close"),
+                fl!("help-tip-modes-line"),
+                fl!("help-tip-modes-alt"),
+                fl!("help-tip-modes-cancel"),
+            ],
+        ),
+        (
+            fl!("help-tip-counts"),
+            vec![
+                fl!("help-tip-counts-count"),
+                fl!("help-tip-counts-register"),
+            ],
+        ),
+        (
+            fl!("help-tip-lists"),
+            vec![fl!("help-tip-lists-open"), jump],
+        ),
     ];
     if fuzzy_search {
-        notes.push(fl!("help-note-jump-fuzzy"));
-        notes.push(fl!("help-note-fuzzy"));
-    } else {
-        notes.push(fl!("help-note-jump"));
+        tips.push((
+            fl!("help-tip-fuzzy"),
+            vec![fl!("help-tip-fuzzy-where"), fl!("help-tip-fuzzy-words")],
+        ));
     }
-    notes.extend([
-        fl!("help-note-workspaces"),
-        fl!("help-note-command"),
-        fl!("help-note-pulldown"),
-        fl!("help-note-key-hints"),
+    tips.extend([
+        (
+            fl!("help-tip-workspaces"),
+            vec![
+                fl!("help-tip-workspaces-what"),
+                fl!("help-tip-workspaces-list"),
+            ],
+        ),
+        (
+            fl!("help-tip-command"),
+            vec![fl!("help-tip-command-open"), fl!("help-tip-command-run")],
+        ),
+        (
+            fl!("help-tip-pulldown"),
+            vec![fl!("help-tip-pulldown-letters")],
+        ),
+        (
+            fl!("help-tip-key-hints"),
+            vec![
+                fl!("help-tip-key-hints-show"),
+                fl!("help-tip-key-hints-keys"),
+                fl!("help-tip-key-hints-list"),
+            ],
+        ),
     ]);
     let mut entries = Vec::new();
-    for note in notes {
+    for (title, points) in tips {
         if !entries.is_empty() {
             entries.push(Entry::Blank);
         }
-        entries.push(Entry::Note(note));
+        entries.push(Entry::Heading(title));
+        entries.extend(points.into_iter().map(Entry::Point));
     }
     entries
 }
@@ -698,6 +745,7 @@ impl Help {
                     .into_iter()
                     .map(Line::raw)
                     .collect(),
+                Entry::Point(text) => point_lines(text, width, theme),
                 Entry::Blank => vec![Line::default()],
             })
             .collect()
@@ -722,6 +770,25 @@ impl Help {
         let line = Line::styled(position, theme.dialog);
         frame.render_widget(line, Rect::new(x, inner.bottom(), width, 1));
     }
+}
+
+/// The lines of a point of a tip in `width` cells: a bullet in the color of keys, and the text
+/// wrapped beside it, its lines after the first indented as far.
+fn point_lines(text: &str, width: usize, theme: &Theme) -> Vec<Line<'static>> {
+    const INDENT: usize = 2;
+    let bullet = format!("{:<INDENT$}", theme.glyphs.bullet);
+    cells::wrap(text, width.saturating_sub(INDENT).max(1))
+        .into_iter()
+        .enumerate()
+        .map(|(index, line)| {
+            let lead = if index == 0 {
+                Span::styled(bullet.clone(), theme.keys)
+            } else {
+                Span::raw(" ".repeat(INDENT))
+            };
+            Line::from(vec![lead, Span::raw(line)])
+        })
+        .collect()
 }
 
 /// `title` on a line across `width` cells, as `── Panels ──────`: the line as the frame is, the
@@ -1316,13 +1383,55 @@ mod tests {
         // The help's own keys, which scroll it as less does.
         assert!(has("Space, f", "A whole page down, as less's Space and f"));
         let tips = &help.groups.last().unwrap().entries;
-        assert_eq!(tips.last(), Some(&Entry::Note(fl!("help-note-key-hints"))));
-        let fuzzy = Entry::Note(fl!("help-note-fuzzy"));
+        assert_eq!(
+            tips.last(),
+            Some(&Entry::Point(fl!("help-tip-key-hints-list")))
+        );
+        let fuzzy = Entry::Heading(fl!("help-tip-fuzzy"));
         assert!(tips.contains(&fuzzy));
         let keywords = Help::new(&Keymap::default(), false, &About::new(build()));
         let tips = &keywords.groups.last().unwrap().entries;
         assert!(!tips.contains(&fuzzy));
-        assert!(tips.contains(&Entry::Note(fl!("help-note-jump"))));
+        assert!(tips.contains(&Entry::Point(fl!("help-tip-lists-jump"))));
+    }
+
+    #[test]
+    fn tips_have_titles_and_points_under_them() {
+        let help = help();
+        let tips = &help.groups.last().unwrap().entries;
+        assert_eq!(
+            headings(tips),
+            [
+                "Modes",
+                "Counts and registers",
+                "Lists",
+                "Fuzzy matching",
+                "Workspaces",
+                "Command line",
+                "Pull-down menu",
+                "Key hints"
+            ]
+        );
+        // Each title has points, and a blank line goes before the next.
+        for (index, entry) in tips.iter().enumerate() {
+            match entry {
+                Entry::Heading(_) => assert!(matches!(tips[index + 1], Entry::Point(_))),
+                Entry::Blank => assert!(matches!(tips[index + 1], Entry::Heading(_))),
+                Entry::Point(_) => {}
+                entry => panic!("{entry:?}"),
+            }
+        }
+        let theme = Theme::terminal();
+        let lines: Vec<String> = point_lines("one two three four", 9, &theme)
+            .into_iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect()
+            })
+            .collect();
+        assert_eq!(lines, ["- one two", "  three", "  four"]);
     }
 
     #[test]
@@ -1380,7 +1489,19 @@ mod tests {
                     vec!["Pull-down menu", "Dialogs and help", "This help"]
                 ),
                 ("Viewer", vec![]),
-                ("Tips", vec![]),
+                (
+                    "Tips",
+                    vec![
+                        "Modes",
+                        "Counts and registers",
+                        "Lists",
+                        "Fuzzy matching",
+                        "Workspaces",
+                        "Command line",
+                        "Pull-down menu",
+                        "Key hints"
+                    ]
+                ),
             ]
         );
         assert!(help.groups.iter().all(|group| !group.entries.is_empty()));
@@ -1657,6 +1778,12 @@ mod tests {
         help.handle(action(Action::Left));
         help.handle(action(Action::Left));
         insta::assert_snapshot!(draw(&mut help, 120, 26));
+    }
+
+    #[test]
+    fn draws_the_tips() {
+        let mut help = on(8);
+        insta::assert_snapshot!(draw(&mut help, 120, 40));
     }
 
     #[test]

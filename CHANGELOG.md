@@ -13,10 +13,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dialog: About, with the version, the commit and build, the system, the license, and where the
   settings, workspaces, history, and log are; and Keys, which folds, with the keys grouped by part
   of the app (panels, text fields, search and renaming, the command line, lists and menus, menus
-  and dialogs, the viewer) and tips. The parts of a section have their titles in bold on a line
-  across, `── Panels ──`. It opens where it was left: the section, Keys open or folded, and how
-  far down the text was. Tab moves between the sections and the text, and a click chooses a
-  section.
+  and dialogs, the viewer) and tips, each under its title in points. The parts of a section have
+  their titles in bold on a line across, `── Panels ──`. It opens where it was left: the section,
+  Keys open or folded, and how far down the text was. Tab moves between the sections and the
+  text, and a click chooses a section.
 - Keys have a color of their own wherever they are listed with what they do, apart from titles:
   in the help, the key hints, their list of Ctrl+k, and the menus of F9.
 - `g x` opens the marked entries, or the one under the cursor, externally, as vim's `gx` does:

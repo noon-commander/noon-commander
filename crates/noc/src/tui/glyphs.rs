@@ -53,6 +53,8 @@ pub(crate) struct Glyphs {
     pub(crate) menu_marks: (char, char),
     /// After a section of the help that has sections of its own: closed, and open.
     pub(crate) folds: (char, char),
+    /// In front of each point of a tip in the help.
+    pub(crate) bullet: char,
 }
 
 impl Glyphs {
@@ -93,6 +95,7 @@ impl Glyphs {
         menu_marks: ('•', '✓'),
         // nf-md-chevron_right and nf-md-chevron_down.
         folds: ('󰅂', '󰅀'),
+        bullet: '•',
     };
 
     /// Without a Nerd Font: what every font has, mc's markers and Far's arrows.
@@ -133,6 +136,7 @@ impl Glyphs {
         },
         menu_marks: ('*', 'x'),
         folds: ('▸', '▾'),
+        bullet: '-',
     };
 
     /// The glyphs of `ui.icons`.
@@ -257,7 +261,10 @@ mod tests {
             }
             assert_eq!(noc_text::width(glyphs.marks.after), 1);
             let (closed, open) = glyphs.folds;
-            assert_eq!(noc_text::width(&format!("{closed}{open}")), 2);
+            assert_eq!(
+                noc_text::width(&format!("{closed}{open}{}", glyphs.bullet)),
+                3
+            );
         }
     }
 }

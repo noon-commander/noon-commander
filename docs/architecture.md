@@ -1217,7 +1217,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   (`tui/sidebar.rs`, which both draw): About, with the version, the build (`crate::about`, which
   `noc debug version` reads too), the system, read once at start, and the files the app keeps; and
   Keys, which folds, with a group for each part of the app (panels, text fields, search and
-  renaming, the command line, lists and menus, menus and dialogs, the viewer) and tips. It opens at
+  renaming, the command line, lists and menus, menus and dialogs, the viewer) and tips, each under
+  its title in points after a bullet (`•`, `-` without icons). It opens at
   the top of About first, and then where it was when it closed last (`help::Spot`, which the app
   keeps): the section, Keys open or folded, what had the keys, and how far down the text was. The
   titles of the parts of a section are bold on a line across (`── Panels ──`), and the keys and the

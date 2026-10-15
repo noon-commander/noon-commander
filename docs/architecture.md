@@ -849,9 +849,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   (`scroll::SCROLLOFF`, no setting), fewer at the ends and in a low window; a jump far off the
   screen puts the cursor in the middle. Ctrl+d and Ctrl+u scroll half a window and move the cursor
   as far, Ctrl+f and Ctrl+b scroll a window less two rows, with a count that many windows at once,
-  and put the cursor at its top or bottom, and Ctrl+f at the end leaves only the last rows at the
-  top, as in vim. The wheel scrolls as vim's Ctrl+e and Ctrl+y, but never past the last row. The
-  view is worked out before each frame, as vim does it before it redraws.
+  and put the cursor at its top or bottom. Unlike vim's, Ctrl+f stops with the last row at the
+  bottom, and once it shows, puts the cursor on it, as mc's PgDn does. The wheel scrolls as vim's
+  Ctrl+e and Ctrl+y, but never past the last row either. The view is worked out before each frame,
+  as vim does it before it redraws.
 - **The cursor of the inactive panel.** Unlike mc, the inactive panel shows where its cursor
   is (the checksum comparison reads the file there): its row gets a background of its own
   under the row's colors, which stay (a mark too). The theme sets it as `cursor_inactive`:

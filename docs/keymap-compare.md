@@ -138,7 +138,8 @@ one past the end of the list goes nowhere, as in vim. The rows scroll as vim's w
 five rows kept above and below the cursor, as vim's defaults.vim sets 'scrolloff': Ctrl+d and Ctrl+u
 scroll half a page and move the cursor as far, and Ctrl+f and Ctrl+b scroll a page less two rows,
 with a count that many pages at once, and put the cursor at its top or bottom, where mc's and Far's
-page keys move the cursor a page. n and N say when they go round past the last row or the first, or
+page keys move the cursor a page. Unlike vim's, Ctrl+f stops with the last row at the bottom and
+then goes to it, as mc's PgDn. n and N say when they go round past the last row or the first, or
 find nothing, and n with no search before says so, on the line of the mode until the next key, as
 vim's messages. v and V start Visual mode, which selects rows from there to the cursor, as the next
 section says: the commands of files act on the rows it selects, which become the marks.

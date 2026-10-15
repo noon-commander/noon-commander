@@ -56,8 +56,8 @@ impl Window {
     }
 
     /// Ctrl+f (`down`) and Ctrl+b: scrolls a window less up to two rows, `pages` times at once,
-    /// as vim's `pagescroll` with a count. Like vim, Ctrl+f at the end leaves only the last rows
-    /// at the top.
+    /// as vim's `pagescroll` with a count. Unlike vim's, Ctrl+f stops with the last row at the
+    /// bottom; once it shows, Ctrl+f puts the cursor on it.
     pub(crate) fn page(
         &mut self,
         down: bool,
@@ -83,12 +83,8 @@ impl Window {
     ) {
         self.with(cursor, rows, height, |w| {
             let mut count = wide(count);
-            if count == 0 {
-                return;
-            }
             if down {
-                let last_top = (w.n - w.h + 1).max(1);
-                count = count.min(last_top - w.top).max(0);
+                count = w.at_most_to_the_end(count);
             }
             if count > 0 {
                 w.scroll_redraw(down, count);
@@ -159,6 +155,13 @@ impl Win {
     /// vim's `w_botline`: the first line below the window.
     fn bot(&self) -> i64 {
         (self.top + self.h).min(self.n + 1)
+    }
+
+    /// `count`, or fewer: as many lines as the window can move down before the last line shows
+    /// at its bottom.
+    fn at_most_to_the_end(&self, count: i64) -> i64 {
+        let last_top = (self.n - self.h + 1).max(1);
+        count.min(last_top - self.top).max(0)
     }
 
     /// vim's `check_cursor_moved`.
@@ -433,12 +436,12 @@ impl Win {
         if half {
             let prev = self.cur;
             let curscount = (self.h / 2).max(1);
-            let mut count = curscount;
             // Like vim, Ctrl+d stops scrolling when the last line shows.
-            if forward && self.top + self.h + count > self.n {
-                let lines = 1 + (self.n - self.top).min(self.h + count);
-                count = count.min(lines - self.h);
-            }
+            let count = if forward {
+                self.at_most_to_the_end(curscount)
+            } else {
+                curscount
+            };
             if count > 0 {
                 self.scroll_redraw(forward, count);
                 self.cur = prev;
@@ -450,10 +453,17 @@ impl Win {
             };
         } else {
             let prev_top = self.top;
-            let count = self.overlap(forward).saturating_mul(pages).min(LIMIT);
-            self.scroll_redraw(forward, count);
+            let mut count = self.overlap(forward).saturating_mul(pages).min(LIMIT);
+            if forward {
+                count = self.at_most_to_the_end(count);
+            }
+            if count > 0 {
+                self.scroll_redraw(forward, count);
+            }
             if self.top != prev_top {
                 self.cur = if forward { self.top } else { self.bot() - 1 };
+            } else if forward {
+                self.cur = self.n;
             }
         }
         self.cursor_correct();
@@ -529,16 +539,17 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_f_at_the_end_leaves_the_last_rows_at_the_top_as_vim() {
-        assert_eq!(replay(10, 8, "^F ^F"), "9,6 9,9");
+    fn ctrl_f_stops_with_the_last_row_at_the_bottom_then_goes_to_it() {
+        // vim goes on to "9,6 9,9".
+        assert_eq!(replay(10, 8, "^F ^F"), "5,2 9,2");
     }
 
     #[test]
     fn a_count_before_ctrl_f_and_ctrl_b_scrolls_that_many_pages_at_once_as_vim() {
-        assert_eq!(replay(81, 23, "G ^F 3^B 3^F"), "80,58 80,80 28,11 79,74");
-        assert_eq!(replay(81, 23, "3^F 2^B"), "68,63 38,21");
-        assert_eq!(replay(81, 23, "40G 3^F 5^B"), "39,28 80,80 17,0");
-        assert_eq!(replay(30, 10, "2^F 2^F 2^B"), "20,16 29,29 13,9");
+        assert_eq!(replay(81, 23, "G ^F 3^B 3^F"), "80,58 80,58 17,0 63,58");
+        assert_eq!(replay(81, 23, "3^F 2^B"), "63,58 33,16");
+        assert_eq!(replay(81, 23, "40G 3^F 5^B"), "39,28 63,58 17,0");
+        assert_eq!(replay(30, 10, "2^F 2^F 2^B"), "20,16 24,20 8,4");
     }
 
     #[test]
@@ -559,8 +570,9 @@ mod tests {
     }
 
     #[test]
-    fn a_list_shorter_than_the_window_scrolls_only_with_ctrl_f() {
-        assert_eq!(replay(8, 23, "^D ^D ^F ^F ^B"), "7,0 7,0 7,7 7,7 7,0");
+    fn a_list_shorter_than_the_window_never_scrolls() {
+        assert_eq!(replay(8, 23, "^D ^D ^F ^F ^B"), "7,0 7,0 7,0 7,0 7,0");
+        assert_eq!(replay(8, 23, "^F"), "7,0", "Ctrl+f goes to the last row");
     }
 
     #[test]

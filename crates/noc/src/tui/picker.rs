@@ -491,9 +491,11 @@ mod tests {
         press(&mut counted, Action::PageDown);
         assert_eq!(
             counted.cursor(),
-            28,
-            "one page, the count used up, as vim's"
+            24,
+            "one page, the count used up, until the last row shows"
         );
+        press(&mut counted, Action::PageDown);
+        assert_eq!(counted.cursor(), 29, "then the last row");
     }
 
     #[test]

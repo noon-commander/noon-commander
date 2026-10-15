@@ -2631,10 +2631,10 @@ mod tests {
         assert_eq!(press(Action::HalfPageDown), (29, 20), "the last row shows");
         assert_eq!(
             press(Action::PageDown),
-            (29, 29),
-            "only the last row, as vim's"
+            (29, 20),
+            "unlike vim's, the last row stays at the bottom"
         );
-        assert_eq!(press(Action::HalfPageUp), (28, 24));
+        assert_eq!(press(Action::HalfPageUp), (19, 15));
         assert_eq!(press(Action::Home), (0, 0));
         for _ in 0..5 {
             press(Action::Down);

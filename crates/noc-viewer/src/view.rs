@@ -151,6 +151,14 @@ impl Viewer {
         (self.lines().len(), 0)
     }
 
+    /// The position of the last row of the text, before the line that marks its end.
+    fn last_row(&self) -> (usize, usize) {
+        match self.lines().len().checked_sub(1) {
+            Some(last) => (last, self.rows_of(last) - 1),
+            None => (0, 0),
+        }
+    }
+
     /// The top that shows the end of the text at the bottom of the screen.
     fn last_top(&self) -> (usize, usize) {
         self.before(self.end(), self.page.saturating_sub(1))
@@ -182,15 +190,18 @@ impl Viewer {
         }
         self.width = usize::from(area.width);
         self.page = usize::from(area.height - 1);
-        // The scroll bar takes the last column when the text does not fit, which, wrapped
-        // narrower, fits even less.
-        let bar = area.width > 1 && self.after((0, 0), self.page - 1) != self.end();
+        // The scroll bar takes the last column when the text, without the line that ends it,
+        // does not fit; wrapped narrower, it fits even less.
+        let bar = area.width > 1 && self.after((0, 0), self.page - 1) < self.last_row();
         if bar {
             self.width -= 1;
         }
         // The width may have changed since the position was taken.
         self.top.1 = self.top.1.min(self.rows_of(self.top.0).saturating_sub(1));
         let row = |index: u16| Rect::new(area.x, area.y + index, area.width, 1);
+        // Rows of text leave the scroll bar's column alone, which the end line's style would dim.
+        let text_width = u16::try_from(self.width).unwrap_or(area.width);
+        let text_row = |index: u16| Rect::new(area.x, area.y + index, text_width, 1);
         let header = self.header(usize::from(area.width));
         frame.render_widget(Line::styled(header, styles.header), row(0));
         let text_area = Rect::new(area.x, area.y + 1, area.width, area.height - 1);
@@ -209,7 +220,7 @@ impl Viewer {
             let Some(line) = self.lines().get(position.0) else {
                 let end = noc_text::fit(&self.end_text(), self.width, Align::Center);
                 let dim = styles.text.add_modifier(Modifier::DIM);
-                frame.render_widget(Line::styled(end, dim), row(y));
+                frame.render_widget(Line::styled(end, dim), text_row(y));
                 break;
             };
             let text = if self.wrap {
@@ -221,7 +232,7 @@ impl Viewer {
             } else {
                 cut(line, self.column, self.width)
             };
-            frame.render_widget(Line::from(Span::raw(text)), row(y));
+            frame.render_widget(Line::from(Span::raw(text)), text_row(y));
             let next = self.after(position, 1);
             if next == position {
                 break;
@@ -240,18 +251,25 @@ impl Viewer {
         }
     }
 
-    /// For the scroll bar, in lines of the file and the line that ends it: how many, how many
-    /// show, and the first on screen, which is the last there can be once the end shows.
+    /// For the scroll bar, in lines of the file, without the line that ends it, so that the bar
+    /// reaches its bottom with the last line as the percentage reaches 100: how many, how many
+    /// show, and the first on screen. Once the last line shows, the end line too or not, they
+    /// stay as they are with it at the bottom, so that the thumb holds still.
     fn thumb(&self) -> (usize, usize, usize) {
-        let total = self.lines().len() + 1;
-        let bottom = self.bottom();
-        let shown = (bottom.0 + 1 - self.top.0).clamp(1, total.saturating_sub(1).max(1));
-        let first = if bottom == self.end() {
-            total - shown
+        let total = self.lines().len();
+        let last_row = self.last_row();
+        let rows = self.page.saturating_sub(1);
+        let top = if self.bottom() >= last_row {
+            self.before(last_row, rows)
         } else {
-            self.top.0
+            self.top
         };
-        (total, shown, first)
+        let bottom = self.after(top, rows).min(last_row);
+        let shown = (bottom.0 + 1)
+            .saturating_sub(top.0)
+            .min(total.saturating_sub(1))
+            .max(1);
+        (total, shown, top.0.min(total - shown))
     }
 
     /// The path on the left, and where the screen is on the right, `width` cells wide in all:
@@ -365,13 +383,63 @@ mod tests {
         let end = draw(&mut viewer, 20, 6);
         assert_eq!(column(&end, 1), Some('░'), "{end}");
         assert_eq!(column(&end, 5), Some('█'), "{end}");
+        viewer.handle(Command::Scroll(Motion::Up));
+        let last = draw(&mut viewer, 20, 6);
+        assert!(last.contains("100%") && !last.contains("— end —"), "{last}");
+        let bar = |screen: &str| (1..6).map(|row| column(screen, row)).collect::<Vec<_>>();
+        assert_eq!(
+            bar(&last),
+            bar(&end),
+            "at the bottom with the last line, and still, the end line or not: {last}"
+        );
+        viewer.handle(Command::Scroll(Motion::Up));
+        let before = draw(&mut viewer, 20, 6);
+        assert_eq!(column(&before, 5), Some('░'), "{before}");
+        // A long thumb keeps its length too, though the end line takes a row of the text.
+        viewer.show(&numbered(10), false);
+        let tall_bar = |viewer: &mut Viewer| {
+            let screen = draw(viewer, 20, 9);
+            (1..9).map(|row| column(&screen, row)).collect::<Vec<_>>()
+        };
+        tall_bar(&mut viewer);
+        viewer.handle(Command::Scroll(Motion::End));
+        let tall_end = tall_bar(&mut viewer);
+        viewer.handle(Command::Scroll(Motion::Up));
+        assert_eq!(tall_bar(&mut viewer), tall_end);
 
+        viewer.show(&numbered(5), false);
+        let filled = draw(&mut viewer, 20, 6);
+        assert!(
+            !filled.contains('█'),
+            "the end line alone needs no bar: {filled}"
+        );
         viewer.show(&numbered(3), false);
         let short = draw(&mut viewer, 20, 6);
         assert!(!short.contains('█') && !short.contains('░'), "{short}");
         assert!(short.contains("1/3 End"), "{short}");
         let end_row = short.lines().nth(4).unwrap_or_default();
         assert!(end_row.contains("— end —"), "right after the text: {short}");
+    }
+
+    #[test]
+    fn the_end_line_leaves_the_scroll_bar_undimmed() {
+        let mut viewer = Viewer::new("f".to_owned());
+        viewer.show(&numbered(20), false);
+        let mut terminal = Terminal::new(TestBackend::new(20, 6)).unwrap();
+        let mut render = |viewer: &mut Viewer| {
+            terminal
+                .draw(|frame| viewer.render(frame, frame.area(), &Styles::default()))
+                .unwrap()
+                .buffer
+                .clone()
+        };
+        render(&mut viewer);
+        viewer.handle(Command::Scroll(Motion::End));
+        let screen = render(&mut viewer);
+        let end_row = 5;
+        assert_eq!(screen[(19, end_row)].symbol(), "█");
+        assert!(!screen[(19, end_row)].modifier.contains(Modifier::DIM));
+        assert!(screen[(8, end_row)].modifier.contains(Modifier::DIM));
     }
 
     #[test]
@@ -388,13 +456,16 @@ mod tests {
         viewer.handle(Command::Scroll(Motion::Down));
         let text = small(&mut viewer);
         assert!(text.contains("short"), "{text}");
-        assert!(text.contains("\"uvwxyzabcdefghijklmn█"), "{text}");
+        assert!(text.contains("\"uvwxyzabcdefghijklmn"), "{text}");
+        let first_row = |text: String| {
+            text.contains("\"abcdefghijklmnopqrst") && !text.contains("abcdefghijklmnopqrstu")
+        };
         viewer.handle(Command::Scroll(Motion::Up));
-        assert!(small(&mut viewer).contains("\"abcdefghijklmnopqrst█"));
+        assert!(first_row(small(&mut viewer)));
 
         viewer.handle(Command::Right);
         assert!(
-            small(&mut viewer).contains("\"abcdefghijklmnopqrst█"),
+            first_row(small(&mut viewer)),
             "wrapped lines do not scroll sideways"
         );
         viewer.handle(Command::ToggleWrap);

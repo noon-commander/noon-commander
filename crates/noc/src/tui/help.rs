@@ -180,13 +180,11 @@ impl Help {
         self.rows = lines.len();
         self.page = usize::from(inner.height).max(1);
         self.offset = self.offset.min(self.rows.saturating_sub(1));
+        // The bar and the percentage leave out the line that ends the help, so that they reach
+        // the bottom and 100 with its last line.
+        let text = (self.rows - 1, self.page, self.offset);
         let bar = Rect::new(inner.right().saturating_sub(1), inner.y, 1, inner.height);
-        scrollbar::render(
-            frame,
-            bar,
-            (self.rows, self.page, self.offset),
-            theme.dialog,
-        );
+        scrollbar::render(frame, bar, text, theme.dialog);
         self.render_position(frame, inner, theme);
         for (index, line) in lines
             .into_iter()
@@ -200,14 +198,15 @@ impl Help {
         }
     }
 
-    /// How far down the help is, in the frame below `inner`, on the right: the last row on
-    /// screen in percent, or that the end shows.
+    /// How far down the help is, in the frame below `inner`, on the right: the last row of text
+    /// on screen in percent, or that the end shows.
     fn render_position(&self, frame: &mut Frame<'_>, inner: Rect, theme: &Theme) {
-        let bottom = (self.offset + self.page).min(self.rows);
-        let position = if bottom == self.rows {
+        let bottom = self.offset + self.page;
+        let position = if bottom >= self.rows {
             fl!("help-position-end")
         } else {
-            let percent = (bottom * 100).checked_div(self.rows).unwrap_or(100);
+            let text = self.rows - 1;
+            let percent = (bottom.min(text) * 100).checked_div(text).unwrap_or(100);
             fl!("help-position", percent = percent.to_string())
         };
         let position = format!(" {position} ");
@@ -808,6 +807,22 @@ mod tests {
             help.handle(action(key));
             assert_eq!(draw(&mut help, 60, 14), bottom, "{key:?} stops at the end");
         }
+        // The bar leaves out the end line: it is at the bottom with the last line of text.
+        let bar_at_bottom = |screen: &str| {
+            let rows: Vec<&str> = screen.lines().collect();
+            let frame = rows.iter().position(|row| row.contains('╚')).unwrap();
+            rows[frame - 1].contains("█ ║")
+        };
+        assert!(bar_at_bottom(&bottom), "{bottom}");
+        help.handle(action(Action::Up));
+        let last = draw(&mut help, 60, 14);
+        assert!(
+            !last.contains("— end —") && last.contains(" 100% "),
+            "{last}"
+        );
+        assert!(bar_at_bottom(&last), "{last}");
+        help.handle(action(Action::Up));
+        assert!(!bar_at_bottom(&draw(&mut help, 60, 14)));
         help.handle(action(Action::Home));
         assert_eq!(draw(&mut help, 60, 14), top);
         assert!(help.handle(action(Action::Cancel)));

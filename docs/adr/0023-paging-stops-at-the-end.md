@@ -35,7 +35,11 @@ scroll bar of the Configuration dialog lived in the binary, out of reach of `noc
 - No screen ends in an empty page; `G` and Ctrl+f at the end show the same rows.
 - The viewer counts its scroll bar in lines of the file, not rows on screen: wrapping the whole
   file to measure it would read up to 16 MiB of text on every frame. With long wrapped lines the
-  thumb is approximate, but it reaches the bottom exactly when the end shows.
+  thumb is approximate.
+- The scroll bars and the percentages leave out the end line: they reach the bottom and 100 with
+  the last line of text, one row before the end line shows, and then hold still: the viewer's
+  thumb stays as it is with the last line at the bottom, though the end line takes a row of the
+  text. A text that fits but for the end line gets no scroll bar.
 - The scroll bar takes a column of the viewer only while the text does not fit; the help always
   keeps that column, and a gap before it.
 - `noc-scroll` is a second library crate with UI code, after `noc-viewer` (ADR 0015).

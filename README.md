@@ -39,8 +39,8 @@ The same panels in the theme `mc-classic`, with the blue of Midnight Commander:
   ranks, and the directories you work in from Noon Commander count there too.
 - **Fuzzy search, as in fzf.** Quick search, the location menu, and the zoxide window find
   `config.rs` from `cfg`, best match first.
-- **Search with ripgrep.** `g /` finds text in the files below, as you type, with
-  [ripgrep](https://github.com/BurntSushi/ripgrep).
+- **Search with ripgrep.** `g /` finds text in the files below, as you type, on a server too,
+  where [ripgrep](https://github.com/BurntSushi/ripgrep) runs.
 
 ## Philosophy
 
@@ -72,8 +72,8 @@ Non-goals: forwarding of any kind, a built-in SSH implementation, a password man
 
 - macOS (Linux support is planned).
 - OpenSSH 8.7 or newer: check with `ssh -V`.
-- Optional: [ripgrep](https://github.com/BurntSushi/ripgrep) for `g /`;
-  [zoxide](https://github.com/ajeetdsouza/zoxide) for `g z`.
+- Optional: [ripgrep](https://github.com/BurntSushi/ripgrep) for `g /`, locally and on the hosts
+  searched; [zoxide](https://github.com/ajeetdsouza/zoxide) for `g z`.
 - Rust 1.88 or newer to build from source.
 
 ## Installing

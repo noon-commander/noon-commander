@@ -415,10 +415,11 @@ below the active panel's directory with ripgrep, in a window over both panels
   those out; Tab and Shift+Tab go between them. With no text the window lists the files. The
   text is a regular expression, whose case counts only once it has a capital letter.
 - Each change starts a search 150 ms after the last key (`FIND_DELAY`), the first at once. A task
-  (`Effect::Find`) runs ripgrep through `noc_tools::ripgrep` in the directory, as
-  `[search] program`; a panel on a host says that it searches local directories only. It reads
-  ripgrep's JSON (`Hits`) while a task of its own drains stderr, reports what it found at most
-  every 50 ms (`Done::Found`), stops ripgrep after `[search] max_results` lines (or files),
+  (`Effect::Find`) runs ripgrep through `noc_tools::ripgrep`: locally in the directory, as
+  `[search] program`; on a host, `rg` through the host's task and `Session::spawn_in`, over the
+  master without a terminal ([ADR 0028](adr/0028-programs-on-hosts-without-a-terminal.md)). It
+  reads ripgrep's JSON (`Hits`) while a task of its own drains stderr, reports what it found at
+  most every 50 ms (`Done::Found`), stops ripgrep after `[search] max_results` lines (or files),
   takes `[search] max_per_file` lines of a file at most (`--max-count`, `100+` by the file),
   then reports how it ended (`Done::FindEnded`): the limit, and the errors ripgrep told of. Each
   search has a generation, so the reports of an earlier one are dropped; the window holds the
@@ -431,7 +432,8 @@ below the active panel's directory with ripgrep, in a window over both panels
   and `/` go back to the field, and Esc again closes the window.
 - Right of the files, how many lines it found in how many files, after the spinner while it
   searches; under the rows, that it stopped at the limit, and the errors. A pattern that is not a
-  regular expression, or a missing ripgrep, says why in place of the rows.
+  regular expression, a missing ripgrep, or a host that is not connected says why in place of the
+  rows.
 - Enter goes to the file in the active panel: its directory, with the cursor on it; where the
   panel was goes to the jump list.
 

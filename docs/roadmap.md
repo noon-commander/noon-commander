@@ -102,8 +102,10 @@
       before the last extension
 - [x] Fuzzy search as fzf does it in quick search, the location menu, and the zoxide window,
       `ui.fuzzy_search` ([ADR 0016](adr/0016-fuzzy-search.md))
-- [x] `g /` searches the files below for text with ripgrep, in a window with a field for the
-      text and one for the files; `[search]` ([ADR 0027](adr/0027-search-of-a-whole-tree.md))
+- [x] `g /` searches the files below for text with ripgrep, local or on the host, in a window
+      with a field for the text and one for the files; `[search]`
+      ([ADR 0027](adr/0027-search-of-a-whole-tree.md),
+      [ADR 0028](adr/0028-programs-on-hosts-without-a-terminal.md))
 - [ ] Panelize what the search of a tree found, as mc and Far do, to act on it in a panel
 - [x] Workspaces: the tabs of both panels saved under a name (t W), restored from
       F9 → Workspace or their window (t w), which also saves, renames, and deletes them;

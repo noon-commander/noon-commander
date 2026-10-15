@@ -232,12 +232,14 @@ pub(crate) enum Effect {
     Recent(RecentChange),
 }
 
-/// The search of the files under `location` for `query`, after `delay`, so that typing fast starts one search rather than many; it takes `max_results` at
+/// The search of the files under `location` for `query`, through `host` if it is remote, after
+/// `delay`, so that typing fast starts one search rather than many; it takes `max_results` at
 /// most, until `cancel`.
 #[derive(Debug)]
 pub(crate) struct FindRequest {
     pub(crate) generation: u64,
     pub(crate) location: Location,
+    pub(crate) host: Option<HostHandle>,
     pub(crate) query: Query,
     pub(crate) max_results: usize,
     pub(crate) delay: Duration,
@@ -3697,6 +3699,8 @@ impl App {
             return Vec::new();
         };
         let location = window.root().clone();
+        // A host that is not connected has no session to search with: the window says so.
+        let host = self.handle_for(&location).ok().flatten();
         self.finds += 1;
         let generation = self.finds;
         let cancel = CancellationToken::new();
@@ -3707,6 +3711,7 @@ impl App {
         vec![Effect::Find(FindRequest {
             generation,
             location,
+            host,
             query: window.query(),
             max_results: window.max_results(),
             delay,
@@ -7858,6 +7863,7 @@ mod tests {
         let effects = keys(&mut app, &["g", "/"]);
         let request = find_request(&effects);
         assert_eq!(request.location, local("/srv"));
+        assert!(request.host.is_none());
         assert_eq!(request.delay, Duration::ZERO, "the files show at once");
         assert!(request.query.lists_files());
         assert_eq!(request.query.max_per_file, 100);
@@ -7909,6 +7915,22 @@ mod tests {
         keys(&mut app, &["esc"]);
         assert_eq!(app.context(), Context::Panel);
         assert!(cancel.is_cancelled());
+    }
+
+    #[test]
+    fn g_slash_on_a_host_searches_through_its_connection() {
+        let mut app = at_slash();
+        let effects = enter_host(&mut app, Side::Left, 1);
+        let Effect::Connect { connection, .. } = one(effects) else {
+            panic!("expected a connection");
+        };
+        let (handle, _requests) = HostHandle::channel();
+        let effects = app.connected("web", connection, handle);
+        answer(&mut app, effects, &Listing::Dir(Vec::new()));
+        let effects = keys(&mut app, &["g", "/"]);
+        let request = find_request(&effects);
+        assert!(matches!(request.location, Location::Remote { .. }));
+        assert!(request.host.is_some(), "its connection");
     }
 
     /// The app with the search of a tree open on `/srv`, which found `src/run/main.rs` with a

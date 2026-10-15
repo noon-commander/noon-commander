@@ -182,8 +182,6 @@ find-searching = Searching…
 find-none = Nothing found.
 # It cannot search: no ripgrep, or a host that is not connected.
 find-failed = Cannot search here: { $reason }
-# The panel shows a host, where it cannot search yet.
-find-local-only = It searches local directories only, for now.
 # ripgrep is not installed where it searches.
 find-not-installed = ripgrep is not installed: cannot run { $program }. Get it from https://github.com/BurntSushi/ripgrep, or set its path in Options → Configuration.
 # Under the rows: it stopped at [search] max_results.

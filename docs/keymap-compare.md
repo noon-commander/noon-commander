@@ -1151,12 +1151,12 @@ Tab and F8 still switch the hosts and remove the command.
 ## Search of a whole tree (`find`, Normal mode)
 
 g / in a panel, or F9 → Command → Find file…: ripgrep searches the files under the panel's
-directory for the text of the first field, among those the globs of the second let through, again
-as either changes; with no text it lists the files. Each file found shows with the lines that match
-under it. Esc in a field goes to the rows, in Normal mode, where i and / go back, and it falls back
-to `list`, whose Enter goes to the file in the panel, as in the results of mc's Find File, which, as
-Far's Find file, asks for a mask and a text in a dialog first. yazi's s and S find with fd and rg,
-and show the result as a directory of its own.
+directory, local or on a host, for the text of the first field, among those the globs of the second
+let through, again as either changes; with no text it lists the files. Each file found shows with
+the lines that match under it. Esc in a field goes to the rows, in Normal mode, where i and / go
+back, and it falls back to `list`, whose Enter goes to the file in the panel, as in the results of
+mc's Find File, which, as Far's Find file, asks for a mask and a text in a dialog first. yazi's s
+and S find with fd and rg, and show the result as a directory of its own.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |

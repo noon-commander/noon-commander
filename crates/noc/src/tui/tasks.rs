@@ -2,6 +2,7 @@
 //! host that owns its ssh session and SFTP channel.
 
 use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -218,6 +219,14 @@ pub(crate) enum HostRequest {
         dir: RemotePath,
         command: String,
         reply: oneshot::Sender<Result<tokio::process::Command, String>>,
+    },
+    /// Starts `program` with `args` in `dir` on the host without a terminal, its stdout and
+    /// stderr piped, or says why it cannot (ADR 0028).
+    Spawn {
+        dir: RemotePath,
+        program: &'static str,
+        args: Vec<OsString>,
+        reply: oneshot::Sender<Result<tokio::process::Child, String>>,
     },
 }
 
@@ -568,11 +577,12 @@ impl Tasks {
     }
 
     /// Searches the files under `location` with ripgrep after `delay`, in a task of its own,
-    /// until `cancel`.
+    /// through the session of `host` if it is remote, until `cancel`.
     fn find(&self, request: FindRequest) {
         let FindRequest {
             generation,
             location,
+            host,
             query,
             max_results,
             delay,
@@ -593,7 +603,7 @@ impl Tasks {
                     query: &query,
                     max_results,
                 };
-                let result = found.search(&ripgrep, location, &mut batches).await;
+                let result = found.search(&ripgrep, location, host, &mut batches).await;
                 batches.flush();
                 result
             };
@@ -1417,6 +1427,8 @@ async fn share(handle: Option<HostHandle>) -> Option<Option<Arc<SftpFs>>> {
 /// How often a search of a tree reports what it found, at most: the window takes its rows
 /// then, not after each line.
 const FIND_REPORTS: Duration = Duration::from_millis(50);
+/// ripgrep on a host, as the host's `PATH` finds it.
+const REMOTE_RIPGREP: &str = "rg";
 /// The most of ripgrep's stderr that is kept, for why it failed.
 const RIPGREP_STDERR: u64 = 64 * 1024;
 
@@ -1459,12 +1471,13 @@ struct Searched<'a> {
 }
 
 impl Searched<'_> {
-    /// Runs ripgrep in `location`, locally as `ripgrep`, and passes what it finds to
-    /// `batches`; then how it ended, or why it could not search.
+    /// Runs ripgrep in `location`, locally as `ripgrep`, or on its host through `host`, and
+    /// passes what it finds to `batches`; then how it ended, or why it could not search.
     async fn search(
         &self,
         ripgrep: &Ripgrep,
         location: Location,
+        host: Option<HostHandle>,
         batches: &mut Batches,
     ) -> Result<FindSummary, String> {
         let (mut child, program) = match location {
@@ -1474,7 +1487,12 @@ impl Searched<'_> {
                     .map_err(|error| describe::ripgrep_error(&error))?;
                 (child, ripgrep.program().to_path_buf())
             }
-            Location::Remote { .. } => return Err(fl!("find-local-only")),
+            Location::Remote { path, .. } => {
+                let handle = host.ok_or_else(|| fl!("error-connection-closed"))?;
+                let args = self.query.args();
+                let child = remote_spawn(&handle, path, REMOTE_RIPGREP, args).await?;
+                (child, PathBuf::from(REMOTE_RIPGREP))
+            }
         };
         let closed = || fl!("error-connection-closed");
         let stdout = child.stdout.take().ok_or_else(closed)?;
@@ -1535,6 +1553,26 @@ impl Searched<'_> {
             }
         }
     }
+}
+
+/// Starts `program` with `args` in `dir` on the host of `handle`, over its connection, or why
+/// it cannot.
+async fn remote_spawn(
+    handle: &HostHandle,
+    dir: RemotePath,
+    program: &'static str,
+    args: Vec<OsString>,
+) -> Result<tokio::process::Child, String> {
+    let (reply, answer) = oneshot::channel();
+    let request = HostRequest::Spawn {
+        dir,
+        program,
+        args,
+        reply,
+    };
+    let closed = || fl!("error-connection-closed");
+    handle.0.send(request).map_err(|_| closed())?;
+    answer.await.map_err(|_| closed())?
 }
 
 /// How a side of a copy reports its paths.
@@ -1816,6 +1854,13 @@ impl HostTask {
                                 .unwrap_or_else(|| fl!("error-connection-closed"))
                         });
                         let _ = reply.send(built);
+                    }
+                    HostRequest::Spawn { dir, program, args, reply } => {
+                        let started = session.spawn_in(dir.as_bytes(), program, &args).map_err(|error| {
+                            describe::ssh_error(&error)
+                                .unwrap_or_else(|| fl!("error-connection-closed"))
+                        });
+                        let _ = reply.send(started);
                     }
                 },
                 Some(done) = running.next() => {
@@ -2125,7 +2170,9 @@ mod tests {
             max_results,
         };
         let location = Location::Local(dir.to_path_buf());
-        let result = searched.search(&ripgrep, location, &mut batches).await;
+        let result = searched
+            .search(&ripgrep, location, None, &mut batches)
+            .await;
         if result
             .as_ref()
             .is_err_and(|reason| reason.contains("not installed"))
@@ -2178,6 +2225,67 @@ mod tests {
                 .is_some_and(|error| error.contains("unclosed")),
             "{summary:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn on_a_host_ripgrep_runs_there_through_its_task() {
+        let (handle, mut requests) = HostHandle::channel();
+        let host = tokio::spawn(async move {
+            let Some(HostRequest::Spawn {
+                dir,
+                program,
+                args,
+                reply,
+            }) = requests.recv().await
+            else {
+                panic!("expected a program to start");
+            };
+            assert_eq!(dir.as_bytes(), b"/srv");
+            assert_eq!(program, "rg");
+            assert!(args.iter().any(|arg| arg == "--json"), "{args:?}");
+            let json = r#"{"type":"begin","data":{"path":{"text":"./a"}}}"#;
+            let child = tokio::process::Command::new("/bin/sh")
+                .args(["-c", "printf '%s\n' \"$0\"", json])
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .map_err(|error| error.to_string());
+            let _ = reply.send(child);
+        });
+        let query = Query {
+            pattern: "x".to_owned(),
+            globs: Vec::new(),
+            regex: true,
+            match_case: false,
+            hidden: false,
+            max_per_file: 10,
+        };
+        let (done, mut reports) = mpsc::unbounded_channel();
+        let mut batches = Batches {
+            generation: 1,
+            hits: Vec::new(),
+            sent: None,
+            done,
+        };
+        let searched = Searched {
+            query: &query,
+            max_results: 10,
+        };
+        let location = Location::Remote {
+            host: "web".to_owned(),
+            path: RemotePath::from("/srv"),
+        };
+        let ripgrep = Ripgrep::new(PathBuf::from("/nonexistent/rg"));
+        let result = searched
+            .search(&ripgrep, location, Some(handle), &mut batches)
+            .await;
+        host.await.unwrap();
+        assert_eq!(result.unwrap(), FindSummary::default());
+        batches.flush();
+        let Ok(Done::Found { hits, .. }) = reports.try_recv() else {
+            panic!("expected what it found");
+        };
+        assert_eq!(hits, [Hit::File(b"a".to_vec())]);
     }
 
     #[tokio::test]

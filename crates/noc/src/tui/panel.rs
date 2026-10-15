@@ -236,9 +236,14 @@ impl Destination {
 
     /// `location`, with the cursor on the entry `name`; on the first row if it is not there.
     pub(crate) fn onto(location: Location, name: &str) -> Self {
+        Self::onto_entry(location, name.as_bytes())
+    }
+
+    /// The same, for a name as the directory lists it, which need not be UTF-8.
+    pub(crate) fn onto_entry(location: Location, name: &[u8]) -> Self {
         Self {
             location,
-            focus: Focus::Name(name.as_bytes().to_vec()),
+            focus: Focus::Name(name.to_vec()),
         }
     }
 }

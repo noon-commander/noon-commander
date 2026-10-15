@@ -6,7 +6,7 @@ use std::os::unix::fs::PermissionsExt as _;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures_util::StreamExt as _;
 use futures_util::stream::FuturesUnordered;
@@ -23,19 +23,22 @@ use noc_ssh::resolve::resolve;
 use noc_ssh::version::check_version;
 use noc_ssh::{CachedHost, ChannelProcess, Session, SftpChannel, SshError, Target, cleanup_stale};
 use noc_tools::opener::Opener;
+use noc_tools::ripgrep::{self, Hit, Hits, Query, Ripgrep};
 use noc_tools::zoxide::Scored;
 use noc_vfs::{
     FileKind, FileWriter as _, LocalFs, Location, Metadata, RemotePath, SftpFs, Space, Vfs,
     VfsError, VfsPath as _,
 };
 use noc_viewer::read_start;
+use tokio::io::AsyncReadExt as _;
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::task::{AbortHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 
-use super::app::{Effect, HistoryChange, RecentChange, WorkspaceChange};
+use super::app::{Effect, FindRequest, HistoryChange, RecentChange, WorkspaceChange};
 use super::describe;
 use super::dialog::{Ask, Reply};
+use super::find::FindSummary;
 use super::panel::{ListRequest, Listed, Listing};
 use super::places::{self, Places};
 use super::tabs::PanelId;
@@ -145,6 +148,14 @@ pub(crate) enum Done {
     Jumps {
         generation: u64,
         result: Result<Vec<Scored>, String>,
+    },
+    /// What the search `generation` of [`Effect::Find`] found since its last report.
+    Found { generation: u64, hits: Vec<Hit> },
+    /// How the search `generation` of [`Effect::Find`] ended, after what it found, or why it
+    /// could not search.
+    FindEnded {
+        generation: u64,
+        result: Result<FindSummary, String>,
     },
     /// The path of [`Effect::Open`] that did not open, and why; the ones after it were not
     /// tried.
@@ -377,6 +388,7 @@ impl Tasks {
                     keywords,
                     exclude,
                 } => self.query_zoxide(generation, keywords, exclude),
+                Effect::Find(request) => self.find(request),
                 Effect::SaveConfig { old, new, config } => self.save_config(*old, *new, *config),
                 Effect::Workspaces(change) => self.change_workspaces(change),
                 Effect::History(change) => {
@@ -553,6 +565,44 @@ impl Tasks {
             let _ = done.send(Done::Jumps { generation, result });
         });
         self.zoxide_query = Some(task.abort_handle());
+    }
+
+    /// Searches the files under `location` with ripgrep after `delay`, in a task of its own,
+    /// until `cancel`.
+    fn find(&self, request: FindRequest) {
+        let FindRequest {
+            generation,
+            location,
+            query,
+            max_results,
+            delay,
+            cancel,
+        } = request;
+        let ripgrep = self.context.ripgrep();
+        let done = self.done.clone();
+        tokio::spawn(async move {
+            let search = async {
+                tokio::time::sleep(delay).await;
+                let mut batches = Batches {
+                    generation,
+                    hits: Vec::new(),
+                    sent: None,
+                    done: done.clone(),
+                };
+                let found = Searched {
+                    query: &query,
+                    max_results,
+                };
+                let result = found.search(&ripgrep, location, &mut batches).await;
+                batches.flush();
+                result
+            };
+            let result = tokio::select! {
+                () = cancel.cancelled() => return,
+                result = search => result,
+            };
+            let _ = done.send(Done::FindEnded { generation, result });
+        });
     }
 
     /// Opens `paths` with the programs of the desktop, one after another, until one fails.
@@ -1364,6 +1414,129 @@ async fn share(handle: Option<HostHandle>) -> Option<Option<Arc<SftpFs>>> {
     shared.await.ok().map(Some)
 }
 
+/// How often a search of a tree reports what it found, at most: the window takes its rows
+/// then, not after each line.
+const FIND_REPORTS: Duration = Duration::from_millis(50);
+/// The most of ripgrep's stderr that is kept, for why it failed.
+const RIPGREP_STDERR: u64 = 64 * 1024;
+
+/// What ripgrep found and has not been reported yet.
+struct Batches {
+    generation: u64,
+    hits: Vec<Hit>,
+    /// When it reported last.
+    sent: Option<Instant>,
+    done: mpsc::UnboundedSender<Done>,
+}
+
+impl Batches {
+    /// Takes a hit, and reports it with those before if the last report was long enough ago.
+    fn take(&mut self, hit: Hit) {
+        self.hits.push(hit);
+        if self.sent.is_none_or(|sent| sent.elapsed() >= FIND_REPORTS) {
+            self.flush();
+        }
+    }
+
+    /// Reports the hits not reported yet, if there are any.
+    fn flush(&mut self) {
+        if self.hits.is_empty() {
+            return;
+        }
+        self.sent = Some(Instant::now());
+        let hits = std::mem::take(&mut self.hits);
+        let _ = self.done.send(Done::Found {
+            generation: self.generation,
+            hits,
+        });
+    }
+}
+
+/// A search of a tree with ripgrep: what it looks for, and the most results it takes.
+struct Searched<'a> {
+    query: &'a Query,
+    max_results: usize,
+}
+
+impl Searched<'_> {
+    /// Runs ripgrep in `location`, locally as `ripgrep`, and passes what it finds to
+    /// `batches`; then how it ended, or why it could not search.
+    async fn search(
+        &self,
+        ripgrep: &Ripgrep,
+        location: Location,
+        batches: &mut Batches,
+    ) -> Result<FindSummary, String> {
+        let (mut child, program) = match location {
+            Location::Local(path) => {
+                let child = ripgrep
+                    .spawn(&path, self.query)
+                    .map_err(|error| describe::ripgrep_error(&error))?;
+                (child, ripgrep.program().to_path_buf())
+            }
+            Location::Remote { .. } => return Err(fl!("find-local-only")),
+        };
+        let closed = || fl!("error-connection-closed");
+        let stdout = child.stdout.take().ok_or_else(closed)?;
+        let stderr = child.stderr.take().ok_or_else(closed)?;
+        // ripgrep stops once a pipe is full: its stderr is read while its stdout is.
+        let stderr = tokio::spawn(async move {
+            let mut bytes = Vec::new();
+            let _ = stderr.take(RIPGREP_STDERR).read_to_end(&mut bytes).await;
+            bytes
+        });
+        let limit = self.read(stdout, batches).await?;
+        if limit {
+            // What is left is never read: ripgrep goes.
+            let _ = child.start_kill();
+            let _ = child.wait().await;
+            return Ok(FindSummary {
+                limit: true,
+                ..FindSummary::default()
+            });
+        }
+        let status = child.wait().await.map_err(|error| error.to_string())?;
+        let stderr = stderr.await.unwrap_or_default();
+        let ended = ripgrep::ended(&program, status, &stderr)
+            .map_err(|error| describe::ripgrep_error(&error))?;
+        Ok(FindSummary {
+            limit: false,
+            errors: ended.errors,
+            last_error: ended.last_error,
+        })
+    }
+
+    /// Reads what ripgrep prints into `batches`, reporting them at least every
+    /// [`FIND_REPORTS`] while it is slow; `true` once it found `max_results`.
+    async fn read(
+        &self,
+        stdout: impl tokio::io::AsyncRead + Unpin,
+        batches: &mut Batches,
+    ) -> Result<bool, String> {
+        let files = self.query.lists_files();
+        let mut hits = Hits::new(stdout, files);
+        let mut results = 0;
+        loop {
+            // Reading is cancel-safe: what a timeout cut off is read on the next turn.
+            let Ok(next) = tokio::time::timeout(FIND_REPORTS, hits.next()).await else {
+                batches.flush();
+                continue;
+            };
+            let Some(hit) = next.map_err(|error| describe::chain(&error))? else {
+                return Ok(false);
+            };
+            let counts = files || matches!(hit, Hit::Line { .. });
+            batches.take(hit);
+            if counts {
+                results += 1;
+                if results >= self.max_results {
+                    return Ok(true);
+                }
+            }
+        }
+    }
+}
+
 /// How a side of a copy reports its paths.
 type Report<'a, P> = &'a (dyn Fn(&P) -> Location + Send + Sync);
 
@@ -1921,6 +2094,89 @@ mod tests {
         assert_eq!(
             with_dirs,
             expected.map(|(name, dir)| (name.to_owned(), dir))
+        );
+    }
+
+    /// Searches `dir` for `pattern` with the rg in `PATH`, taking `max_results`: what it
+    /// found, and how it ended; `None` without rg.
+    async fn rg(
+        dir: &std::path::Path,
+        pattern: &str,
+        max_results: usize,
+    ) -> Option<(Vec<Hit>, Result<FindSummary, String>)> {
+        let ripgrep = Ripgrep::new(PathBuf::from("rg"));
+        let query = Query {
+            pattern: pattern.to_owned(),
+            globs: Vec::new(),
+            regex: true,
+            match_case: false,
+            hidden: true,
+            max_per_file: 1000,
+        };
+        let (done, mut reports) = mpsc::unbounded_channel();
+        let mut batches = Batches {
+            generation: 1,
+            hits: Vec::new(),
+            sent: None,
+            done,
+        };
+        let searched = Searched {
+            query: &query,
+            max_results,
+        };
+        let location = Location::Local(dir.to_path_buf());
+        let result = searched.search(&ripgrep, location, &mut batches).await;
+        if result
+            .as_ref()
+            .is_err_and(|reason| reason.contains("not installed"))
+        {
+            return None;
+        }
+        batches.flush();
+        let mut hits = Vec::new();
+        while let Ok(report) = reports.try_recv() {
+            if let Done::Found { hits: found, .. } = report {
+                hits.extend(found);
+            }
+        }
+        Some((hits, result))
+    }
+
+    #[tokio::test]
+    async fn ripgrep_finds_lines_stops_at_the_limit_and_says_what_is_wrong() {
+        let tmp = tempfile::tempdir().unwrap();
+        let lines: String = (0..100)
+            .map(|n| format!("needle {n}\n"))
+            .collect::<Vec<_>>()
+            .concat();
+        std::fs::write(tmp.path().join("many"), lines).unwrap();
+        std::fs::write(tmp.path().join("one"), "a needle\n").unwrap();
+        let Some((hits, result)) = rg(tmp.path(), "needle", 1000).await else {
+            return;
+        };
+        assert_eq!(result.unwrap(), FindSummary::default());
+        let lines = hits
+            .iter()
+            .filter(|hit| matches!(hit, Hit::Line { .. }))
+            .count();
+        assert_eq!(lines, 101);
+        assert!(hits.contains(&Hit::File(b"one".to_vec())));
+        let (hits, result) = rg(tmp.path(), "needle", 10).await.unwrap();
+        assert!(result.unwrap().limit);
+        let lines = hits
+            .iter()
+            .filter(|hit| matches!(hit, Hit::Line { .. }))
+            .count();
+        assert_eq!(lines, 10);
+        let (hits, result) = rg(tmp.path(), "needle (", 10).await.unwrap();
+        assert_eq!(hits, []);
+        let summary = result.unwrap();
+        assert!(
+            summary
+                .last_error
+                .as_deref()
+                .is_some_and(|error| error.contains("unclosed")),
+            "{summary:?}"
         );
     }
 

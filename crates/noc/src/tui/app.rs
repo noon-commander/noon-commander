@@ -14,6 +14,7 @@ use noc_config::{
 use noc_ops::{Algorithm, Conflict, CopyOptions, Decision, Sum};
 use noc_scroll::Motion;
 use noc_scroll::scrollbar::{self, Part};
+use noc_tools::ripgrep::{Hit, Query};
 use noc_tools::zoxide::Scored;
 use noc_vfs::{FileKind, Location, Metadata, RemotePath, Volume};
 use noc_viewer::{Command as ViewerCommand, Styles as ViewerStyles, Viewer};
@@ -33,6 +34,7 @@ use super::configuration::{ConfigEvent, Configuration};
 use super::decor::Decor;
 use super::dialog::{Ask, Button, Dialog, DialogEvent, Field, Reply};
 use super::edit::{Editor, Registers};
+use super::find::{FindEvent, FindSummary, FindWindow};
 use super::glyphs::{self, Glyphs};
 use super::help::{About, Help, Spot};
 use super::history::{HistoryEvent, HistoryWindow};
@@ -198,6 +200,10 @@ pub(crate) enum Effect {
         host: Option<HostHandle>,
         hosts: bool,
     },
+    /// Search the files under `location` with ripgrep, through `host` if it is remote, and
+    /// pass what it finds to [`App::found`] as it comes, then how it ended to
+    /// [`App::find_ended`]; `cancel` stops it.
+    Find(FindRequest),
     /// List the commands in `dirs`, the directories of `$PATH`, whose names start with
     /// `prefix` regardless of case, for completion, and pass them to [`App::names`]; with
     /// `with_dirs`, the directories in them too.
@@ -224,6 +230,18 @@ pub(crate) enum Effect {
     /// Read or write `recent.toml`, after the changes before, and report what it read to
     /// [`App::recent_loaded`].
     Recent(RecentChange),
+}
+
+/// The search of the files under `location` for `query`, after `delay`, so that typing fast starts one search rather than many; it takes `max_results` at
+/// most, until `cancel`.
+#[derive(Debug)]
+pub(crate) struct FindRequest {
+    pub(crate) generation: u64,
+    pub(crate) location: Location,
+    pub(crate) query: Query,
+    pub(crate) max_results: usize,
+    pub(crate) delay: Duration,
+    pub(crate) cancel: CancellationToken,
 }
 
 /// What the event loop hands the terminal to, with the panels hidden.
@@ -313,6 +331,9 @@ impl Host {
 
 /// Most times a count repeats a motion, so that a long count cannot keep the app busy.
 const MAX_REPEAT: usize = 10_000;
+/// How long the search of a tree waits after a key before it starts again, so that typing a
+/// word starts one search rather than one for each letter.
+const FIND_DELAY: Duration = Duration::from_millis(150);
 /// Cells of what a pending command has typed that the line above the F-key bar shows, as
 /// vim's `showcmd` shows at most.
 const SHOWCMD_WIDTH: usize = 10;
@@ -696,6 +717,10 @@ pub(crate) struct App {
     history: Vec<HistoryEntry>,
     /// The window of the command history, over the panels and under the dialogs.
     history_window: Option<HistoryWindow>,
+    /// The window of the search of a whole tree, over the panels and under the dialogs.
+    find: Option<FindWindow>,
+    /// The generation of the last search of a tree.
+    finds: u64,
     /// A message on the line of the mode until the next key, as vim's on its command line.
     message: Option<String>,
     /// The working directory last handed to the event loop.
@@ -805,6 +830,7 @@ enum Scrolled {
     Jump,
     Workspaces,
     History,
+    Find,
     KeyHints,
     PullDown,
     /// The list of completions.
@@ -828,6 +854,7 @@ enum Front {
     Jump,
     Workspaces,
     History,
+    Find,
     Results(usize),
     Job,
     JobsList,
@@ -896,6 +923,8 @@ impl App {
             command_line: None,
             history: Vec::new(),
             history_window: None,
+            find: None,
+            finds: 0,
             message: None,
             work_dir: None,
             runtime_dir: std::env::temp_dir(),
@@ -998,6 +1027,15 @@ impl App {
                 return typed()
                     .flat_map(|c| self.handle(Resolved::Insert(c)))
                     .collect();
+            }
+            (_, Context::Find) => {
+                // One search for all of it, in the field typed in last.
+                if let Some(window) = &mut self.find {
+                    window.handle(Resolved::Action(Action::InsertMode));
+                    if window.paste(text) == FindEvent::Search {
+                        return self.search_tree(FIND_DELAY);
+                    }
+                }
             }
             (
                 mode,
@@ -1176,6 +1214,8 @@ impl App {
             Front::PullDown
         } else if self.viewing.is_some() {
             Front::Viewer
+        } else if self.find.is_some() {
+            Front::Find
         } else {
             Front::Panels
         }
@@ -1315,6 +1355,10 @@ impl App {
                 .history_window
                 .as_mut()
                 .and_then(|window| window.pointer(pointer)),
+            Front::Find => self
+                .find
+                .as_mut()
+                .and_then(|window| window.pointer(pointer)),
             Front::Results(_) => self
                 .results
                 .front_mut()
@@ -1416,6 +1460,10 @@ impl App {
                 let bar = self.history_window.as_ref().and_then(HistoryWindow::bar);
                 vec![one(Scrolled::History, bar)]
             }
+            Front::Find => vec![one(
+                Scrolled::Find,
+                self.find.as_ref().and_then(FindWindow::bar),
+            )],
             Front::Results(_) => {
                 let bar = self
                     .results
@@ -1470,6 +1518,7 @@ impl App {
                 | Scrolled::Jump
                 | Scrolled::Workspaces
                 | Scrolled::History
+                | Scrolled::Find
                 | Scrolled::KeyHints
                 | Scrolled::Choices
         );
@@ -1540,6 +1589,7 @@ impl App {
             | Scrolled::Jump
             | Scrolled::Workspaces
             | Scrolled::History
+            | Scrolled::Find
             | Scrolled::KeyHints
             | Scrolled::Choices => {}
         }
@@ -1572,6 +1622,11 @@ impl App {
             }
             Scrolled::History => {
                 if let Some(window) = &mut self.history_window {
+                    window.scroll_to(top);
+                }
+            }
+            Scrolled::Find => {
+                if let Some(window) = &mut self.find {
                     window.scroll_to(top);
                 }
             }
@@ -1770,6 +1825,8 @@ impl App {
             Context::PullDown
         } else if self.viewing.is_some() {
             Context::Viewer
+        } else if self.find.is_some() {
+            Context::Find
         } else if self.command_line.is_some() {
             if self.lists(Completes::CommandLine) {
                 Context::CommandCompletion
@@ -1823,6 +1880,8 @@ impl App {
             configuration.mode()
         } else if self.pulldown.is_some() || self.viewing.is_some() {
             Mode::Normal
+        } else if let Some(window) = &self.find {
+            window.mode()
         } else if let Some(line) = &self.command_line {
             line.mode()
         } else {
@@ -1943,6 +2002,7 @@ impl App {
                     | Context::Jump
                     | Context::Workspaces
                     | Context::CommandHistory
+                    | Context::Find
                     | Context::KeyHints
             )
         )
@@ -2061,6 +2121,7 @@ impl App {
                 | Context::TabMenu
                 | Context::Workspaces
                 | Context::CommandHistory
+                | Context::Find
                 | Context::KeyHints
                 | Context::Jump
         );
@@ -2097,6 +2158,12 @@ impl App {
                 .as_mut()
                 .map(WorkspacesWindow::picker_mut),
             Context::CommandHistory => self.history_window.as_mut().map(HistoryWindow::picker_mut),
+            Context::Find => {
+                if let Some(window) = &mut self.find {
+                    window.count_pages(pages);
+                }
+                None
+            }
             Context::KeyHints => self.key_hints.as_mut().map(KeyHintsWindow::picker_mut),
             Context::Jump => {
                 if let Some(jump) = &mut self.jump {
@@ -2125,6 +2192,7 @@ impl App {
             || self.jump.is_some()
             || self.workspaces_window.is_some()
             || self.history_window.is_some()
+            || self.find.is_some()
             || !self.results.is_empty()
             || self.in_front().is_some()
             || self.jobs_list.is_some()
@@ -2491,6 +2559,9 @@ impl App {
             self.handle_viewer(input);
             return Some(Vec::new());
         }
+        if self.find.is_some() {
+            return Some(self.handle_find(input));
+        }
         None
     }
 
@@ -2583,6 +2654,7 @@ impl App {
             Action::LocationMenuLeft => return self.open_menu(self.drawn_on(true)),
             Action::LocationMenuRight => return self.open_menu(self.drawn_on(false)),
             Action::Jump => return self.open_jump(),
+            Action::FindFile => return self.open_find(),
             Action::QuickCd => self.ask_cd(),
             Action::SaveWorkspace => self.ask_save_workspace(true),
             Action::Workspaces => self.open_workspaces(),
@@ -3599,6 +3671,91 @@ impl App {
         }
     }
 
+    /// Opens the window of the search of the files under the active panel's directory (`g /`,
+    /// F9 → Command → Find file…), as far as `[search]` lets it go, with the hidden files if
+    /// the panels show them, and lists the files at once.
+    fn open_find(&mut self) -> Vec<Effect> {
+        let location = self.panel(self.active).location().clone();
+        let title = match &location {
+            Location::Local(path) => home_text(path, &self.home),
+            Location::Remote { .. } => location_text(&location),
+        };
+        let search = &self.config.search;
+        self.find = Some(FindWindow::new(
+            (location, title),
+            (search.max_results.get(), search.max_per_file.get()),
+            self.config.ui.show_hidden,
+            self.decor,
+        ));
+        self.search_tree(Duration::ZERO)
+    }
+
+    /// Starts the search of the window of the search of a tree again, after `delay`; the one
+    /// before stops.
+    fn search_tree(&mut self, delay: Duration) -> Vec<Effect> {
+        let Some(window) = &self.find else {
+            return Vec::new();
+        };
+        let location = window.root().clone();
+        self.finds += 1;
+        let generation = self.finds;
+        let cancel = CancellationToken::new();
+        let Some(window) = &mut self.find else {
+            return Vec::new();
+        };
+        window.restart(generation, cancel.clone());
+        vec![Effect::Find(FindRequest {
+            generation,
+            location,
+            query: window.query(),
+            max_results: window.max_results(),
+            delay,
+            cancel,
+        })]
+    }
+
+    /// Gives a key to the window of the search of a tree: what is typed searches again, and
+    /// Enter goes to the file in the active panel, which puts where it was in the jump list.
+    /// Closing it stops the search.
+    fn handle_find(&mut self, input: Resolved) -> Vec<Effect> {
+        let Some(window) = &mut self.find else {
+            return Vec::new();
+        };
+        match window.handle(input) {
+            FindEvent::Pending => Vec::new(),
+            FindEvent::Search => self.search_tree(FIND_DELAY),
+            FindEvent::Closed => {
+                self.find = None;
+                Vec::new()
+            }
+            FindEvent::Go { location, name } => {
+                self.find = None;
+                let id = self.shown(self.active);
+                let panel = self.panel_mut(id.side);
+                // Another location goes in the jump list on the way; so does a row of this one.
+                if *panel.location() == location {
+                    panel.remember();
+                }
+                self.go(id, Destination::onto_entry(location, &name))
+            }
+        }
+    }
+
+    /// Takes what the search `generation` of [`Effect::Find`] found.
+    pub(crate) fn found(&mut self, generation: u64, hits: Vec<Hit>) {
+        if let Some(window) = &mut self.find {
+            window.found(generation, hits);
+        }
+    }
+
+    /// Takes how the search `generation` of [`Effect::Find`] ended, or why it could not
+    /// search.
+    pub(crate) fn find_ended(&mut self, generation: u64, result: Result<FindSummary, String>) {
+        if let Some(window) = &mut self.find {
+            window.finished(generation, result);
+        }
+    }
+
     /// The user did something in `dir`, such as copy from it: a local directory that a panel
     /// shows goes to zoxide, once a visit (`zoxide.record`). Directories that no panel shows,
     /// such as a target typed in a dialog, and passing through, do not count.
@@ -3798,6 +3955,7 @@ impl App {
                     | Action::Unselect
                     | Action::InvertMarks
                     | Action::QuickSearch
+                    | Action::FindFile
                     | Action::Jump
                     | Action::QuickCd
                     | Action::SwapPanels
@@ -6145,7 +6303,8 @@ impl App {
             .jobs
             .iter()
             .any(|job| job.view.ticking() && (!job.background || self.jobs_list.is_some()));
-        connecting || timed
+        let searching = self.find.as_ref().is_some_and(FindWindow::searching);
+        connecting || timed || searching
     }
 
     /// Moves spinners on by a frame.
@@ -6330,6 +6489,11 @@ impl App {
         }
         if let Some(window) = &mut self.history_window {
             window.render(frame, panels, &self.theme);
+        }
+        if let Some(window) = &mut self.find
+            && self.viewing.is_none()
+        {
+            window.render(frame, panels, &self.theme, self.tick);
         }
         if let Some(configuration) = &mut self.configuration {
             configuration.render(frame, panels, &self.theme);
@@ -7677,6 +7841,115 @@ mod tests {
         assert!(screen(&mut app).contains("search hit TOP, continuing at BOTTOM"));
         keys(&mut app, &["2", "?", "a", "enter"]);
         assert_eq!(cursor_name(&app, Side::Left), "a1");
+    }
+
+    /// The search the effects start, which must be one.
+    fn find_request(effects: &[Effect]) -> &FindRequest {
+        let [Effect::Find(request)] = effects else {
+            panic!("expected a search, got {effects:?}");
+        };
+        request
+    }
+
+    #[test]
+    #[allow(clippy::single_range_in_vec_init)]
+    fn g_slash_lists_the_files_then_searches_as_the_text_is_typed() {
+        let mut app = with_files(&["a1", "b2"]);
+        let effects = keys(&mut app, &["g", "/"]);
+        let request = find_request(&effects);
+        assert_eq!(request.location, local("/srv"));
+        assert_eq!(request.delay, Duration::ZERO, "the files show at once");
+        assert!(request.query.lists_files());
+        assert_eq!(request.query.max_per_file, 100);
+        assert!(request.query.hidden, "as the panels show them");
+        assert_eq!(request.max_results, 10_000);
+        let (first, cancel) = (request.generation, request.cancel.clone());
+        assert_eq!(
+            app.place(),
+            (Mode::Insert, Context::Find),
+            "typing in its text"
+        );
+        assert!(screen_of(&mut app, 12).contains("Searching…"));
+        let effects = keys(&mut app, &["r"]);
+        let request = find_request(&effects);
+        assert_eq!(request.query.pattern, "r");
+        assert_eq!(request.delay, FIND_DELAY);
+        assert!(cancel.is_cancelled(), "the search before stops");
+        let generation = request.generation;
+        app.found(first, vec![Hit::File(b"stale".to_vec())]);
+        app.found(
+            generation,
+            vec![
+                Hit::File(b"src/run/main.rs".to_vec()),
+                Hit::Line {
+                    number: 3,
+                    text: b"fn run() {}".to_vec(),
+                    matches: vec![3..4],
+                },
+            ],
+        );
+        app.find_ended(generation, Ok(FindSummary::default()));
+        let text = screen_of(&mut app, 12);
+        assert!(
+            text.contains("Find in /srv") && text.contains("Text:  r") && text.contains("1 line"),
+            "{text}"
+        );
+        assert!(
+            text.contains("src/run/main.rs") && !text.contains("stale"),
+            "{text}"
+        );
+        // Tab goes to the files, whose globs search again.
+        let effects = keys(&mut app, &["tab", "*", "."]);
+        assert_eq!(effects.len(), 2);
+        assert_eq!(find_request(&effects[1..]).query.globs, ["*."]);
+        // Esc goes to the rows, and again closes the window, which stops the search.
+        let cancel = find_request(&effects[1..]).cancel.clone();
+        keys(&mut app, &["esc"]);
+        assert_eq!(app.place(), (Mode::Normal, Context::Find));
+        keys(&mut app, &["esc"]);
+        assert_eq!(app.context(), Context::Panel);
+        assert!(cancel.is_cancelled());
+    }
+
+    /// The app with the search of a tree open on `/srv`, which found `src/run/main.rs` with a
+    /// line 3 that matches, under the cursor.
+    #[allow(clippy::single_range_in_vec_init)]
+    fn found_main(app: &mut App) {
+        let effects = app.handle(action(Action::FindFile));
+        let generation = find_request(&effects).generation;
+        app.found(
+            generation,
+            vec![
+                Hit::File(b"src/run/main.rs".to_vec()),
+                Hit::Line {
+                    number: 3,
+                    text: b"fn run() {}".to_vec(),
+                    matches: vec![3..6],
+                },
+            ],
+        );
+        app.find_ended(generation, Ok(FindSummary::default()));
+        keys(app, &["down"]);
+    }
+
+    #[test]
+    fn enter_on_a_file_found_goes_there_and_the_jump_list_keeps_where_the_panel_was() {
+        let mut app = with_files(&["a1", "b2"]);
+        found_main(&mut app);
+        let effects = keys(&mut app, &["enter"]);
+        assert_eq!(app.context(), Context::Panel);
+        let [Effect::List { request, .. }] = &effects[..] else {
+            panic!("expected a listing, got {effects:?}");
+        };
+        assert_eq!(request.location, local("/srv/src/run"));
+        answer(
+            &mut app,
+            effects,
+            &Listing::Dir(vec![file("lib.rs", 1), file("main.rs", 1)]),
+        );
+        assert_eq!(cursor_name(&app, Side::Left), "main.rs");
+        keys(&mut app, &["ctrl-o"]);
+        assert_eq!(app.panel(Side::Left).heading().0, local("/srv"));
     }
 
     #[test]

@@ -19,7 +19,7 @@ crates/
 │                  ControlMaster, SFTP channels, askpass bridge
 ├── noc-vfs/       Vfs trait: local and SFTP backends, mounted volumes
 ├── noc-ops/       job engine: copy, move, rename, delete, mkdir, checksums; progress, cancellation, conflicts
-├── noc-tools/     external programs other than ssh: zoxide, the editor, the opener, the shell
+├── noc-tools/     external programs other than ssh: zoxide, ripgrep, the editor, the opener, the shell
 ├── noc-text/      terminal-safe text: sanitizing, widths in cells, fitting, wrapping
 ├── noc-scroll/    paging text that ends: how far the page keys go, the scroll bar
 └── noc-viewer/    the F3 viewer: reading through the Vfs, scrolling, wrapping; its own text
@@ -257,17 +257,16 @@ menu:
  ╚══════════════════════════════╝
 ```
 
-- Left and Right act on the panel drawn on that side, after Ctrl+w x too: its location menu,
-  sort order (`•` marks the current one), Rescan, Disconnect while it shows a host, and its
-  [tabs](#tabs): New tab, Close tab, and Tab list…. File has F3, F4, Open externally
-  (`g x`), F5 … F8, `g +`, `g -`, `g *`, Checksums, and Exit; Command has quick search,
-  [Quick cd](#quick-cd), the [zoxide](#zoxide) window, the other-panel
-  commands, the jobs, host settings and disconnect for the host the active panel shows, help,
-  and redraw; Options has Configuration… and Show hidden files (`✓` while on); Workspace has Save
-  workspace…, Workspace list…, and the saved [workspaces](#workspaces), with digits as their
+- Left and Right act on the panel drawn on that side, after Ctrl+w x too: its location menu, sort
+  order (`•` marks the current one), Rescan, Disconnect while it shows a host, and its
+  [tabs](#tabs): New tab, Close tab, and Tab list…. File has F3, F4, Open externally (`g x`), F5 …
+  F8, `g +`, `g -`, `g *`, Checksums, and Exit; Command has quick search, Find file… (the [search of
+  a whole tree](#search-of-a-whole-tree)), [Quick cd](#quick-cd), the [zoxide](#zoxide) window, the
+  other-panel commands, the jobs, host settings and disconnect for the host the active panel shows,
+  help, and redraw; Options has Configuration… and Show hidden files (`✓` while on); Workspace has
+  Save workspace…, Workspace list…, and the saved [workspaces](#workspaces), with digits as their
   letters, typed with Alt. Without icons, the marks are `*` and `x`. A menu taller than the screen
-  scrolls
-  with the cursor.
+  scrolls with the cursor.
 - Commands do what their keys do, through the same `Action`s. Each shows the key that does
   it in the active panel's context (`Keymap::key`); Left and Right show sort and rescan keys
   only for the active panel, as keys act there. Commands that cannot run now are dimmed, and
@@ -390,6 +389,51 @@ fzf's algorithm:
   order is zoxide's rank, sorts by the match instead, and keeps zoxide's order among matches
   as good.
 - Tab completion in path fields still completes the start of a name.
+
+### Search of a whole tree
+
+`g /` in a panel, next to quick search's `/`, or F9 → Command → Find file…, searches the files
+below the active panel's directory with ripgrep, in a window over both panels
+([ADR 0027](adr/0027-search-of-a-whole-tree.md)):
+
+```text
+╔════════════════════════ Find in ~/src/noc ═════════════════════════╗
+║ Text:  handle                                                      ║
+║ Files: *.rs !target                           ⠹ 3 lines in 2 files ║
+║ ────────────────────────────────────────────────────────────────── ║
+║   crates/noc/src/tui/app.rs                                     2  ║
+║    2599  fn handle(&mut self, input: Resolved) {                   ║
+║    3700  fn handle_find(&mut self) {                               ║
+║   crates/noc/src/tui/find.rs                                    1  ║
+║     172  pub(crate) fn handle(&mut self, input: Resolved) {        ║
+║ ────────────────────────────────────────────────────────────────── ║
+║ 2 errors: rg: ./secret: Permission denied (os error 13)            ║
+╚════════════════════════════════════════════════════════════════════╝
+```
+
+- Two fields: the text, and the globs of the files, split at blanks, `!` before one leaving
+  those out; Tab and Shift+Tab go between them. With no text the window lists the files. The
+  text is a regular expression, whose case counts only once it has a capital letter.
+- Each change starts a search 150 ms after the last key (`FIND_DELAY`), the first at once. A task
+  (`Effect::Find`) runs ripgrep through `noc_tools::ripgrep` in the directory, as
+  `[search] program`; a panel on a host says that it searches local directories only. It reads
+  ripgrep's JSON (`Hits`) while a task of its own drains stderr, reports what it found at most
+  every 50 ms (`Done::Found`), stops ripgrep after `[search] max_results` lines (or files),
+  takes `[search] max_per_file` lines of a file at most (`--max-count`, `100+` by the file),
+  then reports how it ended (`Done::FindEnded`): the limit, and the errors ripgrep told of. Each
+  search has a generation, so the reports of an earlier one are dropped; the window holds the
+  `CancellationToken` of the last, so a new search or closing the window stops it.
+- The window (`tui/find.rs`, context `find`) opens in Insert mode, typing in the text. Its rows
+  are the files, in the order of their paths, each with how many lines matched, and their lines
+  with their numbers, the matches in the style of quick search; a line too long starts a little
+  before its first match. The rows of a search stay until the next one finds something or ends.
+  Up, Down, and the page keys move in either mode; Esc goes to the rows, in Normal mode, where `i`
+  and `/` go back to the field, and Esc again closes the window.
+- Right of the files, how many lines it found in how many files, after the spinner while it
+  searches; under the rows, that it stopped at the limit, and the errors. A pattern that is not a
+  regular expression, or a missing ripgrep, says why in place of the rows.
+- Enter goes to the file in the active panel: its directory, with the cursor on it; where the
+  panel was goes to the jump list.
 
 ### Lists
 
@@ -528,7 +572,8 @@ settings window: there is no OK or Cancel, and every change takes effect as it i
   the settings of the chosen one are on the right: check boxes `[x]`, choices `< … >`, and
   text fields. Every option of `config.toml` is there, so that nobody has to edit the file:
   Interface (`[ui]`), Transfers (`[transfer]`), SSH (`[ssh]` and the hidden hosts of
-  `[discovery]`), Volumes (`[volumes]`), and zoxide (`[zoxide]`).
+  `[discovery]`), Volumes (`[volumes]`), zoxide (`[zoxide]`), Command line (`[shell]`), and
+  Search (`[search]`).
 - Paths under the home directory show from `~`, and are written as typed. Lists, such as
   `ssh.args` and the hidden hosts and volumes, are words separated by spaces, as a shell
   reads them: `"…"` around a word with spaces, `\` before a character to take it as it is.
@@ -788,6 +833,11 @@ record = true                    # add directories where the user did something
 [shell]
 history_size = 500               # commands of ! and : in history.toml, of all hosts together
 pause = "always"                 # output waits for a key: "always", "on-error", or "never"
+
+[search]
+program = "rg"                   # ripgrep for g /, name in PATH or a path; rg on hosts
+max_results = 10000              # it stops after finding so many lines
+max_per_file = 100               # and takes no more lines of one file
 ```
 
 Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
@@ -1175,15 +1225,15 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 - **Keymap.** The keymap is vim's, in its modes, with mc's F-keys ([ADR
   0022](adr/0022-vim-modes.md)): one preset, `tui/keymap/preset.rs`, maps keys to `Action`s per mode
   (`Mode::Normal`, `Insert`, `Visual`) and context (`global`, `panel`, `input`, `quick_search`,
-  `rename`, `command_line`, `command_history`, `user_screen`, `list`, `location_menu`, `tab_menu`,
-  `jump`, `workspaces`, `pull_down`, `dialog`, `help`, `dialog_input`, `path_input`, `completion`,
+  `rename`, `command_line`, `command_history`, `find`, `user_screen`, `list`, `location_menu`,
+  `tab_menu`, `jump`, `workspaces`, `pull_down`, `dialog`, `help`, `dialog_input`, `path_input`, `completion`,
   `viewer`), in the order the help lists them. The app says which mode and context the next key goes
   to (`App::place`): the mode is that of the text field with the keys, Visual mode while a panel
   selects rows, and else Normal mode. Each context falls back along a chain in its mode
   (`Context::chain`), for example the help to the dialog, the text fields (`quick_search`, `rename`,
   `dialog_input`, `command_line`) to `input`, which holds the keys that edit text in each mode, and
-  the windows that list items (`location_menu`, `tab_menu`, `jump`, `workspaces`, `command_history`)
-  to `list`, which holds the keys they share, then, in Insert mode only, to `input` for their
+  the windows that list items (`location_menu`, `tab_menu`, `jump`, `workspaces`, `command_history`,
+  `find`) to `list`, which holds the keys they share, then, in Insert mode only, to `input` for their
   filters. Every one but `user_screen` falls back to `global` last, whose keys are the same in every
   mode: the key hints, the output of commands, and Ctrl+l, which redraws the screen; the app takes
   them before whatever is in front, which stays as it was. The first context that knows a key

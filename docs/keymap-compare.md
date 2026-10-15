@@ -212,6 +212,7 @@ section says: the commands of files act on the rows it selects, which become the
 | Start quick search up the rows, as vim's ?; n then goes up too, and N down | `quick_search_back` | ⏳ | ? | — | — | ? | — |
 | The next name that matches the last quick search | `next_match` | ✅ | n<br>Shift+F7 | — | — | n | n |
 | The previous name that matches the last quick search | `prev_match` | ✅ | N | — | — | N | N |
+| Search the files below for text, or list them, in a window | `find_file` | ⏳ | g / | Alt+? | Alt+F7 | s<br>S | — |
 | Open the command line for a shell command | `shell` | ✅ | ! | Typing | Typing | ; (in the background)<br>: | !<br>s |
 | Open the command line for a command of noc | `command` | ✅ | : | — | — | — | :<br>; |
 | The command history | `command_history` | ✅ | q : | Alt+h | Alt+F8 | — | — |
@@ -263,8 +264,6 @@ section says: the commands of files act on the rows it selects, which become the
 | Save setup (noc: the Configuration dialog saves each change) | — | 🚫 | — | — | Shift+F9 | — | — |
 | Print files | — | ⏳ | — | — | Alt+F5 | — | — |
 | Create link | — | ⏳ | — | Ctrl+x l (hard)<br>Ctrl+x s (absolute symlink)<br>Ctrl+x v (relative symlink) | Alt+F6 | - (absolute symlink)<br>_ (relative symlink)<br>Ctrl+- (hard) | p l (absolute symlink)<br>p L (relative symlink)<br>p h l (hard)<br>p h t (hard, in a copy of the tree) |
-| Find file | — | ⏳ | — | Alt+? | Alt+F7 | s | — |
-| Find files by their content | — | ⏳ | — | — | — | S | — |
 | Stop finding files | — | ⏳ | — | — | — | Ctrl+s | — |
 | Jump to a file or directory found with fzf | — | ⏳ | — | — | — | z | — |
 | Find folder | — | ⏳ | — | — | Alt+F10 | — | — |
@@ -1148,6 +1147,33 @@ Tab and F8 still switch the hosts and remove the command.
 | --- | --- | :-: | --- | --- | --- | --- | --- |
 | The commands of the panel's host, or of all hosts | `next_field` | ⏳ | Tab<br>Ctrl+i | — | — | — | — |
 | Remove the command from the history | `delete` | ⏳ | F8 | — | — | — | — |
+
+## Search of a whole tree (`find`, Normal mode)
+
+g / in a panel, or F9 → Command → Find file…: ripgrep searches the files under the panel's
+directory for the text of the first field, among those the globs of the second let through, again
+as either changes; with no text it lists the files. Each file found shows with the lines that match
+under it. Esc in a field goes to the rows, in Normal mode, where i and / go back, and it falls back
+to `list`, whose Enter goes to the file in the panel, as in the results of mc's Find File, which, as
+Far's Find file, asks for a mask and a text in a dialog first. yazi's s and S find with fd and rg,
+and show the result as a directory of its own.
+
+| Description | Action | Status | noc | mc | far | yazi | ranger |
+| --- | --- | :-: | --- | --- | --- | --- | --- |
+| Back to the field | `insert_mode` | ⏳ | i | — | — | — | — |
+| To a field: the text, or the files | `next_field` | ⏳ | Tab<br>Ctrl+i | — | — | — | — |
+| To a field, back | `prev_field` | ⏳ | Shift+Tab | — | — | — | — |
+| The files found in a panel | — | ⏳ | — | Panelize | Panel (F2) | — | — |
+
+## Search of a whole tree (`find`, Insert mode)
+
+While a field takes text, as when the window opens. It falls back to `list`, then to `input`, then
+to `global`.
+
+| Description | Action | Status | noc | mc | far | yazi | ranger |
+| --- | --- | :-: | --- | --- | --- | --- | --- |
+| The other field: the text, or the files | `next_field` | ⏳ | Tab<br>Ctrl+i | — | — | — | — |
+| The other field, back | `prev_field` | ⏳ | Shift+Tab | — | — | — | — |
 
 ## Key hints list (`key_hints`, Normal and Insert mode)
 

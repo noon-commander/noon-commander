@@ -27,7 +27,8 @@ pub(crate) enum Context {
     /// A panel that lists a directory.
     Panel,
     /// Keys that the windows listing items to choose from share: the menus, the zoxide window,
-    /// the workspaces, the command history fall back to it. Keys never go to it alone.
+    /// the workspaces, the command history, and the search of a tree fall back to it. Keys
+    /// never go to it alone.
     List,
     /// The location menu of Alt+F1 and Alt+F2; falls back to `List`, and, while its filter
     /// takes text, to `Input`.
@@ -70,6 +71,8 @@ pub(crate) enum Context {
     CommandCompletion,
     /// The window of the command history; falls back as the location menu does.
     CommandHistory,
+    /// The window of the search of a whole tree; falls back as the location menu does.
+    Find,
     /// The key hints with the keys, after a second Ctrl+k: every key of what is under them, to
     /// filter and run; falls back as the location menu does.
     KeyHints,
@@ -139,6 +142,8 @@ impl Context {
                 &[Self::CommandHistory, Self::List, Self::Input, Self::Global]
             }
             Self::CommandHistory => &[Self::CommandHistory, Self::List, Self::Global],
+            Self::Find if filtering => &[Self::Find, Self::List, Self::Input, Self::Global],
+            Self::Find => &[Self::Find, Self::List, Self::Global],
             Self::KeyHints if filtering => &[Self::KeyHints, Self::List, Self::Input, Self::Global],
             Self::KeyHints => &[Self::KeyHints, Self::List, Self::Global],
             Self::PullDown => &[Self::PullDown, Self::Global],
@@ -314,6 +319,8 @@ pub(crate) enum Action {
     NextMatch,
     /// Moves to the previous name that matches quick search, likewise.
     PrevMatch,
+    /// Searches the files under the panel's directory for text, in a window.
+    FindFile,
     /// Goes back to where the panel was before its last jump, as vim's Ctrl+o.
     JumpBack,
     /// Goes forward again to where a jump back came from, as vim's Ctrl+i.
@@ -585,6 +592,7 @@ impl Action {
         Self::QuickSearchBack,
         Self::NextMatch,
         Self::PrevMatch,
+        Self::FindFile,
         Self::JumpBack,
         Self::JumpForward,
         Self::Shell,
@@ -684,6 +692,7 @@ impl Context {
         Self::CommandLine,
         Self::CommandCompletion,
         Self::CommandHistory,
+        Self::Find,
         Self::KeyHints,
         Self::UserScreen,
     ];

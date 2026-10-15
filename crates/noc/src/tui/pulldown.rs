@@ -408,6 +408,7 @@ impl PullDown {
                 command,
                 vec![
                     Some((fl!("pulldown-quick-search"), Action::QuickSearch)),
+                    Some((fl!("pulldown-find"), Action::FindFile)),
                     Some((fl!("pulldown-quick-cd"), Action::QuickCd)),
                     Some((fl!("pulldown-jump"), Action::Jump)),
                     None,

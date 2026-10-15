@@ -137,6 +137,8 @@ impl Part {
             ],
             Self::SearchAndRenaming => vec![
                 (Mode::Insert, Context::QuickSearch, fl!("help-quick-search")),
+                (Mode::Insert, Context::Find, fl!("help-find-fields")),
+                (Mode::Normal, Context::Find, fl!("help-find")),
                 (Mode::Insert, Context::Rename, fl!("help-renaming-insert")),
                 (Mode::Normal, Context::Rename, fl!("help-renaming")),
             ],
@@ -899,7 +901,8 @@ pub(crate) fn describe_in((mode, context): (Mode, Context), action: Action) -> O
 /// What `action` does in `context`; `None` for what the app cannot do yet, which the help
 /// and the key hints leave out.
 pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
-    if let Some(text) = describe_rows(context, action)
+    if let Some(text) = describe_find(context, action)
+        .or_else(|| describe_rows(context, action))
         .or_else(|| describe_panel(context, action))
         .or_else(|| describe_tabs(context, action))
         .or_else(|| describe_completion(context, action))
@@ -1019,6 +1022,7 @@ fn describe_panel(context: Context, action: Action) -> Option<String> {
         Action::QuickSearchBack => fl!("help-quick-search-back"),
         Action::NextMatch => fl!("help-match-next"),
         Action::PrevMatch => fl!("help-match-prev"),
+        Action::FindFile => fl!("help-find-open"),
         Action::Shell => fl!("help-shell"),
         Action::Command => fl!("help-command"),
         Action::CommandHistory => fl!("help-command-history"),
@@ -1058,6 +1062,21 @@ fn describe_tabs(context: Context, action: Action) -> Option<String> {
         Action::TabListRight => fl!("help-tab-list-right"),
         Action::SaveWorkspace => fl!("help-save-workspace"),
         Action::Workspaces => fl!("help-workspaces-open"),
+        _ => return None,
+    };
+    Some(text)
+}
+
+/// What keys do in the window of the search of a whole tree.
+fn describe_find(context: Context, action: Action) -> Option<String> {
+    if context != Context::Find {
+        return None;
+    }
+    let text = match action {
+        Action::Confirm => fl!("help-find-go"),
+        Action::NextField | Action::PrevField => fl!("help-find-field"),
+        Action::InsertMode | Action::QuickSearch => fl!("help-find-back"),
+        Action::NormalMode => fl!("help-find-rows"),
         _ => return None,
     };
     Some(text)
@@ -1496,6 +1515,8 @@ mod tests {
                     "Search and renaming",
                     vec![
                         "Quick search",
+                        "Search of a whole tree, in its fields",
+                        "Search of a whole tree",
                         "Renaming in place",
                         "Renaming in place, in Normal mode"
                     ]

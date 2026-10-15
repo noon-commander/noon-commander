@@ -151,6 +151,49 @@ jump-nothing = zoxide knows no directory that matches. It learns the directories
 # The zoxide program is not there.
 jump-not-installed = zoxide is not installed: cannot run { $program }. Get it from https://github.com/ajeetdsouza/zoxide, or set its path in Options → Configuration.
 
+## The search of a whole tree (src/tui/find): g / in a panel, or F9 → Command → Find file….
+## ripgrep finds the lines that match the text in the files under the panel's directory. Prefix:
+## find-.
+
+# The title: where it searches, as the panel's title shows it.
+find-title = Find in { $dir }
+# The labels of the fields: the text to find, and the globs of the files to search.
+find-text = Text:
+find-files = Files:
+# Right of the files: how many lines matched, in how many files.
+find-count = { $lines ->
+        [one] 1 line
+       *[other] { $lines } lines
+    } in { $files ->
+        [one] 1 file
+       *[other] { $files } files
+    }
+# Right of a file: how many of its lines matched, once they are [search] max_per_file, after
+# which the search takes no more of them.
+find-file-count-more = { $count }+
+# The same with no text, which lists the files.
+find-count-files = { $files ->
+        [one] 1 file
+       *[other] { $files } files
+    }
+# While nothing is found yet.
+find-searching = Searching…
+# Nothing matches.
+find-none = Nothing found.
+# It cannot search: no ripgrep, or a host that is not connected.
+find-failed = Cannot search here: { $reason }
+# The panel shows a host, where it cannot search yet.
+find-local-only = It searches local directories only, for now.
+# ripgrep is not installed where it searches.
+find-not-installed = ripgrep is not installed: cannot run { $program }. Get it from https://github.com/BurntSushi/ripgrep, or set its path in Options → Configuration.
+# Under the rows: it stopped at [search] max_results.
+find-limit = Stopped after { $count } results: Configuration → Search.
+# Under the rows: what ripgrep could not do, such as read a file, and the last of it.
+find-errors = { $count ->
+        [one] 1 error
+       *[other] { $count } errors
+    }: { $last }
+
 ## Tabs (src/tui/tabs, src/tui/app). Prefix: tabs-. Each side has tabs of its own.
 
 # Titles of the tab menu of t h and t l, drawn over the panel whose tabs it lists;
@@ -232,6 +275,8 @@ pulldown-checksum = Chec&ksums…
 pulldown-exit = E&xit
 # Command.
 pulldown-quick-search = &Quick search
+# Searches the whole tree under the panel's directory, as g / does.
+pulldown-find = &Find file…
 pulldown-swap = S&wap panels
 pulldown-other-open = &Open in the other panel
 pulldown-other-sync = &This directory in the other panel
@@ -453,6 +498,8 @@ help-list-close = Close the window
 help-menu = Location menu
 help-tab-menu = Tab menu
 help-workspaces = Workspaces
+help-find = Search of a whole tree
+help-find-fields = Search of a whole tree, in its fields
 help-history = Command history
 help-history-hosts = The commands of the panel's host, or of all hosts
 help-history-take = Put the command on the command line, without running it
@@ -546,6 +593,7 @@ help-sort-time = Sort by modification time, newest first; again: reverse
 help-sort-size = Sort by size, largest first; again: reverse
 help-quick-search-start = Quick search, typed as vim's search
 help-quick-search-back = Quick search up the rows, as vim's ?; n then goes up too, and N down
+help-find-open = Search the files below for text, in a window
 help-match-next = The next name that matches the last quick search, the way it went
 help-match-prev = The previous name that matches the last quick search, the other way
 help-shell = Open the command line for a shell command, run in this directory
@@ -566,6 +614,10 @@ help-menu-right = Change the right panel's location: a volume or a host
 help-quick-cd = Quick cd: type a path as for cd, with ~, .., -, or host:path
 help-jump-open = Jump to a directory that zoxide ranks, in this panel
 help-jump-go = Open the directory in the active panel
+help-find-go = Go to the file, its directory in the active panel
+help-find-field = The other field: the text, or the files
+help-find-rows = To the rows; i and / go back to the field
+help-find-back = Back to the field
 help-new-tab = A new tab in this panel, on the same directory
 help-close-tab = Close this tab; the last one stays
 help-next-tab = The next tab in this panel

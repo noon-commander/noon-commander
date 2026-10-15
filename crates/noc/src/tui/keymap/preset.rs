@@ -98,6 +98,7 @@ pub(super) const PRESET: Preset = &[
             (Action::QuickSearchBack, &["?"]),
             (Action::NextMatch, &["n", "shift-f7"]),
             (Action::PrevMatch, &["shift-n"]),
+            (Action::FindFile, &["g /"]),
             // Tools
             (Action::Shell, &["!"]),
             (Action::Command, &[":"]),
@@ -627,6 +628,26 @@ pub(super) const PRESET: Preset = &[
         &[
             (Action::NextField, &["tab", "ctrl-i"]),
             (Action::Delete, &["f8"]),
+        ],
+    ),
+    // The window of the search of a whole tree, on top of the list's: Tab and Shift+Tab go between
+    // its fields, the text and the files, and Esc to the rows, where i and / go back to the field.
+    // Enter goes to the file in the panel.
+    (
+        Mode::Normal,
+        Context::Find,
+        &[
+            (Action::InsertMode, &["i"]),
+            (Action::NextField, &["tab", "ctrl-i"]),
+            (Action::PrevField, &["backtab"]),
+        ],
+    ),
+    (
+        Mode::Insert,
+        Context::Find,
+        &[
+            (Action::NextField, &["tab", "ctrl-i"]),
+            (Action::PrevField, &["backtab"]),
         ],
     ),
     // The terminal's own screen, with the output of commands. Enter and q go back, as from the

@@ -48,6 +48,22 @@ pub(crate) fn rows(line: &str, width: usize) -> Vec<&str> {
     rows
 }
 
+/// How many rows [`rows`] breaks `line` into, without making them.
+pub(crate) fn row_count(line: &str, width: usize) -> usize {
+    let width = width.max(1);
+    let (mut count, mut used, mut empty) = (1, 0, true);
+    for c in line.chars() {
+        let char_width = c.width().unwrap_or(0);
+        if used + char_width > width && !empty {
+            count += 1;
+            used = 0;
+        }
+        used += char_width;
+        empty = false;
+    }
+    count
+}
+
 /// The cells `skip` … `skip + width` of `line`; a wide character cut in two shows as a space.
 pub(crate) fn cut(line: &str, skip: usize, width: usize) -> String {
     let mut text = String::new();
@@ -95,6 +111,15 @@ mod tests {
     #[test]
     fn wraps_and_cuts_by_cells() {
         assert_eq!(rows("abcdefg", 3), ["abc", "def", "g"]);
+        for (line, width) in [
+            ("abcdefg", 3),
+            ("", 3),
+            ("文文文", 5),
+            ("文", 1),
+            ("a\u{301}bc", 1),
+        ] {
+            assert_eq!(row_count(line, width), rows(line, width).len(), "{line:?}");
+        }
         assert_eq!(rows("", 3), [""]);
         assert_eq!(rows("文文文", 5), ["文文", "文"]);
         assert_eq!(

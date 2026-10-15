@@ -34,9 +34,11 @@ scroll bar of the Configuration dialog lived in the binary, out of reach of `noc
 ## Consequences
 
 - No screen ends in an empty page; `G` and Ctrl+f at the end show the same rows.
-- The viewer counts its scroll bar in lines of the file, not rows on screen: wrapping the whole
-  file to measure it would read up to 16 MiB of text on every frame. With long wrapped lines the
-  thumb is approximate.
+- The viewer moves its thumb in lines of the file, not rows on screen: finding the row on top
+  among the rows of the whole file would wrap up to 16 MiB of text on every frame. With long
+  wrapped lines its place is approximate. Its length is the share of the rows of the whole text
+  that show, counted once for each width, so that it holds still however many lines wrapped
+  lines leave on screen.
 - The scroll bars and the percentages leave out the end line: they reach the bottom and 100 with
   the last line of text, one row before the end line shows, and then hold still: the viewer's
   thumb stays as it is with the last line at the bottom, though the end line takes a row of the

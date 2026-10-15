@@ -9,7 +9,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use crate::i18n::fl;
-use crate::text::{cut, lines_of, rows};
+use crate::text::{cut, lines_of, row_count, rows};
 
 /// What the viewer is asked to do. The app maps its keys to these; closing the viewer is the
 /// app's own business.
@@ -68,6 +68,8 @@ pub struct Viewer {
     width: usize,
     /// The scroll bar of the last render, if the text did not fit.
     bar: Option<Bar>,
+    /// The rows of the whole text wrapped, and the width they were counted in.
+    measured: Option<(usize, usize)>,
 }
 
 impl Viewer {
@@ -83,6 +85,7 @@ impl Viewer {
             page: 1,
             width: 80,
             bar: None,
+            measured: None,
         }
     }
 
@@ -98,6 +101,7 @@ impl Viewer {
             truncated,
         };
         self.top = (0, 0);
+        self.measured = None;
     }
 
     /// Scrolls, or switches wrapping.
@@ -174,6 +178,25 @@ impl Viewer {
         }
     }
 
+    /// Counts the rows of the whole text in the width of this render, if it wraps and they were
+    /// not counted in it yet: once for each width, not for each frame.
+    fn measure(&mut self) {
+        let width = self.width;
+        if !self.wrap || self.measured.is_some_and(|(_, counted)| counted == width) {
+            return;
+        }
+        let rows = self.lines().iter().map(|line| row_count(line, width)).sum();
+        self.measured = Some((rows, width));
+    }
+
+    /// The rows of the whole text, as [`measure`](Self::measure) counted them.
+    fn total_rows(&self) -> usize {
+        match self.measured {
+            Some((rows, width)) if self.wrap && width == self.width => rows,
+            _ => self.lines().len(),
+        }
+    }
+
     /// The top that shows the end of the text at the bottom of the screen.
     fn last_top(&self) -> (usize, usize) {
         self.before(self.end(), self.page.saturating_sub(1))
@@ -227,6 +250,7 @@ impl Viewer {
             return;
         }
         if bar {
+            self.measure();
             let column = Rect::new(area.right() - 1, text_area.y, 1, text_area.height);
             self.bar = scrollbar::render(frame, column, self.thumb(), styles.text, styles.arrows);
         }
@@ -267,25 +291,28 @@ impl Viewer {
         }
     }
 
-    /// For the scroll bar, in lines of the file, without the line that ends it, so that the bar
-    /// reaches its bottom with the last line as the percentage reaches 100: how many, how many
-    /// show, and the first on screen. Once the last line shows, the end line too or not, they
-    /// stay as they are with it at the bottom, so that the thumb holds still.
+    /// For the scroll bar, without the line that ends the text, so that the bar reaches its
+    /// bottom with the last line as the percentage reaches 100: how many, how many show, and
+    /// the first on screen. The thumb goes in lines of the file, from the first to the one on
+    /// top when the last shows at the bottom, where it holds still, the end line shown too or
+    /// not. Its length is the share of the rows of the whole text that show, so that it keeps
+    /// it however many lines wrapped lines leave on screen.
     fn thumb(&self) -> (usize, usize, usize) {
-        let total = self.lines().len();
         let last_row = self.last_row();
-        let rows = self.page.saturating_sub(1);
+        let last_top = self.before(last_row, self.page.saturating_sub(1)).0;
         let top = if self.bottom() >= last_row {
-            self.before(last_row, rows)
+            last_top
         } else {
-            self.top
+            self.top.0.min(last_top)
         };
-        let bottom = self.after(top, rows).min(last_row);
-        let shown = (bottom.0 + 1)
-            .saturating_sub(top.0)
-            .min(total.saturating_sub(1))
+        // The page, in lines, that gives the thumb `page` rows of the whole text over the
+        // `last_top` lines it moves across: as many lines as rows, where none wraps.
+        let others = self.total_rows().saturating_sub(self.page);
+        let page = (self.page * last_top + others / 2)
+            .checked_div(others)
+            .unwrap_or(0)
             .max(1);
-        (total, shown, top.0.min(total - shown))
+        (last_top + page, page, top)
     }
 
     /// The path on the left, and where the screen is on the right, `width` cells wide in all:
@@ -382,6 +409,37 @@ mod tests {
             assert_eq!(press(motion), end, "{motion:?} stops at the end");
         }
         assert!(press(Motion::Home).contains("1/20"));
+    }
+
+    #[test]
+    fn the_thumb_keeps_its_length_through_wrapped_lines_of_every_length() {
+        let mut viewer = Viewer::new("f".to_owned());
+        // Short lines first, then lines of three rows each.
+        let text = format!(
+            "{}{}",
+            "x\n".repeat(15),
+            format!("{}\n", "x".repeat(50)).repeat(15)
+        );
+        viewer.show(text.as_bytes(), false);
+        let bar = |screen: &str| -> String {
+            let rows = screen.lines().skip(1);
+            rows.filter_map(|line| line.trim_end_matches('"').chars().last())
+                .collect()
+        };
+        let mut lengths = std::collections::BTreeSet::new();
+        let mut screens = Vec::new();
+        for _ in 0..60 {
+            let screen = bar(&draw(&mut viewer, 20, 24));
+            lengths.insert(screen.matches('█').count());
+            screens.push(screen);
+            viewer.handle(Command::Scroll(Motion::Down));
+        }
+        assert_eq!(lengths.len(), 1, "{lengths:?}");
+        let (first, last) = (&screens[0], &screens[screens.len() - 1]);
+        assert!(
+            first.starts_with("▲█") && last.ends_with("█▼"),
+            "{first} {last}"
+        );
     }
 
     #[test]

@@ -439,13 +439,13 @@ below the active panel's directory with ripgrep, in a dialog over both panels
   rows, and the buttons; Esc leaves Insert mode in a field, and again closes the dialog. While the
   rows have the focus, the motions and the page keys move their cursor. F3, F4, Alt+r, and Alt+c
   work wherever the focus is. The wheel scrolls the rows.
-- The rows are the files, in the order of their paths, each with how many lines matched, and
-  their lines with their numbers, the matches in the style of quick search; a line too long starts
-  a little before its first match. The rows of a search stay until the next one finds something
-  or ends, the cursor on the row it was on. Under them, how many lines it found in how many files,
-  after the spinner while it searches; that it stopped at the limit; and the errors. A pattern
-  that is not a regular expression, a missing ripgrep, or a host that is not connected says why
-  in place of the rows.
+- The rows are the files, in the order of their paths, each with how many lines matched, and their
+  lines with their numbers, the matches in a color of their own (`find_match`), apart from the
+  cursor's; a line too long starts a little before its first match. The rows of a search stay until
+  the next one finds something or ends, the cursor on the row it was on. Under them, how many lines
+  it found in how many files, after the spinner while it searches; that it stopped at the limit; and
+  the errors. A pattern that is not a regular expression, a missing ripgrep, or a host that is not
+  connected says why in place of the rows.
 - Go to, the default button, goes to the file in the active panel: its directory, with the cursor
   on it; where the panel was goes to the jump list. View (F3) views it with the line at the top,
   and Edit (F4) edits it at the line (`Editor::edit_at`), a remote one through a local copy; the

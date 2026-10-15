@@ -692,7 +692,7 @@ fn line_spans(
     }
     text.extend(parts.into_iter().map(|(part, matched)| {
         if matched {
-            Span::styled(part, theme.quick_search)
+            Span::styled(part, style.patch(theme.find_match))
         } else {
             Span::styled(part, style)
         }
@@ -918,6 +918,21 @@ mod tests {
             }),
         );
         insta::assert_snapshot!(draw(&mut window, 70));
+    }
+
+    #[test]
+    fn a_match_has_a_color_of_its_own_on_the_cursor_too() {
+        let mut window = window();
+        window.restart(1, CancellationToken::new());
+        window.found(1, hits());
+        let theme = Theme::mc_classic();
+        let row = &window.rows[1];
+        for style in [theme.dialog, theme.cursor] {
+            let spans = line_spans(row, 0, 60, style, &theme);
+            let found = spans.iter().find(|span| span.content == "handle").unwrap();
+            assert_eq!(found.style, style.patch(theme.find_match));
+            assert_ne!(found.style.bg, theme.cursor.bg);
+        }
     }
 
     #[test]

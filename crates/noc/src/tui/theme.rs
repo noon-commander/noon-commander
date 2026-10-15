@@ -31,6 +31,9 @@ pub(crate) struct Theme {
     pub(crate) marked_cursor: Style,
     /// What quick search has matched so far.
     pub(crate) quick_search: Style,
+    /// What the search of a tree found in a line: apart from the cursor, so that it shows on
+    /// the cursor's row too, and from the dialog it is drawn on.
+    pub(crate) find_match: Style,
     /// Regular file.
     pub(crate) file: Style,
     /// Directory, and symlink to a directory.
@@ -199,6 +202,8 @@ impl Theme {
             marked: on(Color::LightYellow, Color::Blue).underlined(),
             marked_cursor: on(Color::LightYellow, Color::Cyan).underlined(),
             quick_search: on(Color::Black, Color::Cyan),
+            // As mc's editor shows a bookmark found (`bookmarkfound`).
+            find_match: on(Color::Black, Color::Green),
             file: fg(Color::Gray),
             directory: fg(Color::White).bold(),
             executable: fg(Color::LightGreen),
@@ -275,6 +280,8 @@ impl Theme {
             marked: Style::new().underlined(),
             marked_cursor: reversed.underlined(),
             quick_search: reversed,
+            // Reversed is the cursor; this shows on it.
+            find_match: plain.bold().underlined(),
             file: plain,
             directory: plain.bold(),
             executable: plain,
@@ -345,6 +352,7 @@ impl Theme {
             marked: on(p.mauve, p.base).underlined(),
             marked_cursor: on(p.base, p.mauve).underlined(),
             quick_search: cursor,
+            find_match: on(p.base, p.yellow),
             file: fg(p.text),
             directory: fg(p.blue).bold(),
             executable: fg(p.green),
@@ -416,6 +424,8 @@ impl Theme {
             marked: on(p.mark, p.panel).underlined(),
             marked_cursor: on(p.panel, p.mark).underlined(),
             quick_search: cursor,
+            // The golds are the cursor's and the menu bar's.
+            find_match: on(p.panel, p.teal),
             file: fg(p.text),
             directory: fg(p.bright).bold(),
             executable: fg(p.green),
@@ -861,6 +871,31 @@ mod tests {
                     if let (Some(fg), Some(bg)) = (marked.fg, marked.bg) {
                         assert_ne!(fg, bg, "{name} {depth:?}: {surface}");
                     }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn matches_found_stand_out_on_the_dialog_and_on_the_cursor() {
+        for name in Theme::NAMES {
+            for depth in [ColorDepth::TrueColor, ColorDepth::Indexed] {
+                let theme = Theme::by_name(name, depth).unwrap();
+                for (surface, style) in [("dialog", theme.dialog), ("cursor", theme.cursor)] {
+                    let found = style.patch(theme.find_match);
+                    assert_ne!(found, style, "{name} {depth:?}: {surface}");
+                    assert!(
+                        found.bg.is_none() || found.bg != style.bg || found.fg != style.fg,
+                        "{name} {depth:?}: {surface}"
+                    );
+                    if let (Some(fg), Some(bg)) = (found.fg, found.bg) {
+                        assert_ne!(fg, bg, "{name} {depth:?}: {surface}");
+                    }
+                }
+                let on_cursor = theme.cursor.patch(theme.find_match);
+                if on_cursor.bg.is_some() {
+                    assert_ne!(on_cursor.bg, theme.cursor.bg, "{name} {depth:?}");
+                    assert_ne!(on_cursor.bg, theme.dialog.bg, "{name} {depth:?}");
                 }
             }
         }

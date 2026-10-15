@@ -160,20 +160,25 @@ pub fn chop(text: &str, width: usize, after: Option<char>) -> Vec<String> {
 }
 
 /// A line of exactly `width` cells drawn with `line`, a character of one cell, with `text` in
-/// its middle between spaces, fitted as [`fit`] does with `marks` where the line is too short
+/// its middle between spaces, its middle cut as [`fit`] cuts it where the line is too short
 /// for it.
-pub fn rule(text: &str, width: usize, line: &str, marks: Marks) -> String {
-    if text.is_empty() {
-        return line.repeat(width);
+pub fn rule(text: &str, width: usize, line: &str) -> Fitted {
+    let head = if text.is_empty() {
+        line.repeat(width)
+    } else {
+        let label = format!(" {text} ");
+        let label_width = label.width();
+        if label_width + 2 > width {
+            return fit_cut(text, width, Align::Center, Cut::Middle);
+        }
+        let gap = width - label_width;
+        let (left, right) = (gap / 2, gap - gap / 2);
+        format!("{}{label}{}", line.repeat(left), line.repeat(right))
+    };
+    Fitted {
+        head,
+        ..Fitted::default()
     }
-    let label = format!(" {text} ");
-    let label_width = label.width();
-    if label_width + 2 > width {
-        return fit(text, width, Align::Center, marks);
-    }
-    let gap = width - label_width;
-    let (left, right) = (gap / 2, gap - gap / 2);
-    format!("{}{label}{}", line.repeat(left), line.repeat(right))
 }
 
 /// Breaks `text` into lines of at most `width` cells: at its newlines, then between words,
@@ -289,13 +294,15 @@ mod tests {
 
     #[test]
     fn rule_draws_a_line_with_text_in_its_middle() {
-        assert_eq!(rule("EOF", 11, "-", MARKS), "--- EOF ---");
-        assert_eq!(rule("EOF", 12, "-", MARKS), "--- EOF ----");
-        assert_eq!(rule("EOF", 7, "-", MARKS), "- EOF -");
-        assert_eq!(rule("EOF", 6, "-", MARKS), " EOF  ", "no room for the line");
-        assert_eq!(rule("EOF", 2, "-", MARKS), "E>");
-        assert_eq!(rule("", 3, "-", MARKS), "---");
-        assert_eq!(width(&rule("界", 10, "-", MARKS)), 10);
+        let rule = |text, width, line| rule(text, width, line).text(MARKS);
+        assert_eq!(rule("EOF", 11, "-"), "--- EOF ---");
+        assert_eq!(rule("EOF", 12, "-"), "--- EOF ----");
+        assert_eq!(rule("EOF", 7, "-"), "- EOF -");
+        assert_eq!(rule("EOF", 6, "-"), " EOF  ", "no room for the line");
+        assert_eq!(rule("EOF", 2, "-"), "E>");
+        assert_eq!(rule("", 3, "-"), "---");
+        assert_eq!(width(&rule("界", 10, "-")), 10);
+        assert_eq!(super::rule("EOF", 2, "-").cut, Some(Cut::Middle));
     }
 
     #[test]

@@ -17,13 +17,17 @@ rows looked like lines of their own.
 
 - **Double chevrons mark text that goes on**: `»` where text is cut short or goes on after,
   `«` where it goes on before; with icons (`ui.icons`), Nerd Font's `nf-md-chevron_double_right`
-  and `nf-md-chevron_double_left`. They are drawn in an accent of the theme (`truncated`), bold,
-  that shows on plain rows, and in styles of their own under the cursor and the selection
-  (`truncated_cursor`) and in dialogs and lists (`truncated_dialog`), whose background the
-  accent may not read on. Names lose their middle, so that the extension shows; paths lose their
-  start, so that the last directories show (`«/deploy/site`); the rest loses its end.
-  `noc-text` returns what shows before and after the mark, and where the text was cut, so that
-  each widget draws the mark of the theme in its style.
+  and `nf-md-chevron_double_left`. They are drawn everywhere in an accent of the theme, bold, never
+  in the style of the text around them, so that a mark always reads as one: `truncated` on the
+  panels, the viewer, and the line of the mode; and styles of their own where that accent may not
+  read on the background: under the cursor, the selection, a selected command or title, and in
+  text fields (`truncated_cursor`); in dialogs and lists, which-key and the help among them
+  (`truncated_dialog`); in the menus of F9 (`truncated_menu`); on the F-key bar, the menu bar,
+  and the line of tabs (`truncated_bar`); and in error dialogs (`truncated_error`). Names lose
+  their middle, so that the extension shows; paths lose their start, so that the last
+  directories show (`«/deploy/site`); the rest loses its end. `noc-text` returns what shows
+  before and after the mark, and where the text was cut, so that each widget draws the mark of
+  the theme in its style; the app's `cells::fit` gives spans, never a string with the mark in it.
 - **`K` shows the whole name** under the cursor of the active panel in a frame of two rows below the
   panels, of single lines in the colors of dialogs, which set it apart from the panels, and the
   whole row under the cursor of the lists under their rows: the directory of the zoxide window, the
@@ -53,8 +57,12 @@ rows looked like lines of their own.
 
 ## Consequences
 
-- Every widget that cuts text draws the mark in the accent where it can; those that draw a whole
-  line in one style, such as the menus, the F-key bar, and which-key, show the mark in it.
+- Every widget that cuts text draws the mark in its accent, the menus, the F-key bar, and
+  which-key too. A row made of several cells cuts each cell on its own, or cuts the styled row
+  at its end (`cells::fit_spans`), so that no mark ends up inside text cut again. Text with no
+  styles, such as the title of the terminal's window, is the only place a mark is plain.
+- Six styles of marks in each theme rather than one: each reads on its own background, which
+  the theme tests check for every theme.
 - Every place that cuts text takes the marks from the theme, which `ui.icons` sets, as it sets
   the arrows of the scroll bars.
 - Without icons, mc's `~` marks only a symlink to a directory again.

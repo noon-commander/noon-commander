@@ -855,15 +855,17 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   dot are shown unless `ui.show_hidden` is off; `o h` switches them in both panels.
   Sorting and hiding keep the cursor on its entry.
 - **Names that do not fit** ([ADR 0025](adr/0025-marks-of-text-cut-short.md)) lose their middle to
-  `»` (a Nerd Font chevron with icons, `Theme.glyphs.marks`), in the theme's bold accent (`truncated`;
-  `truncated_cursor` under the cursor, `truncated_dialog` in lists), and paths their start, as
-  titles do (`«/deploy/site`); `noc_text::fit_cut` says where the mark goes, and `cells::fitted`
-  draws it. `K` shows the whole name under the cursor in a frame of two rows below the panels,
-  single lines in the colors of dialogs, following the cursor until `K` or Esc (`App.whole`, not
-  saved). The z keys scroll the names of all rows as vim scrolls lines that do not wrap
-  (`Panel.shift`, back to 0 in another directory): `z h`/`z l` a column, `z H`/`z L` half the
-  column, `z s` the start, `z e` the end of the name under the cursor into view; `z l` stops with
-  the last character of that name at the left edge, as vim's with the cursor line's. A scrolled name
+  `»` (a Nerd Font chevron with icons, `Theme.glyphs.marks`), in the theme's bold accent
+  everywhere (`truncated`; `truncated_cursor` under the cursor, `truncated_dialog` in dialogs and
+  lists, `truncated_menu` in the menus of F9, `truncated_bar` on the bars, `truncated_error` in
+  error dialogs), and paths their start, as titles do (`«/deploy/site`); `noc_text::fit_cut` says
+  where the mark goes, and `cells::fit`, `cells::fitted`, and `cells::spans` draw it as spans.
+  `K` shows the whole name under the cursor in a frame of two rows below the panels, single lines
+  in the colors of dialogs, following the cursor until `K` or Esc (`App.whole`, not saved). The
+  z keys scroll the names of all rows as vim scrolls lines that do not wrap (`Panel.shift`, back
+  to 0 in another directory): `z h`/`z l` a column, `z H`/`z L` half the column, `z s` the
+  start, `z e` the end of the name under the cursor into view; `z l` stops with the last
+  character of that name at the left edge, as vim's with the cursor line's. A scrolled name
   shows `«` over its first cell and `»` where it is cut.
 - **Scrolling.** The rows of a panel and of the lists scroll as vim 9.1 scrolls a window
   (`tui/scroll.rs`, a port of vim's `move.c` for lines one row high, checked against vim on random

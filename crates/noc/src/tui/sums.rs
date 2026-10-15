@@ -225,26 +225,22 @@ impl SumsWindow {
             self.page.set(shown);
             listed.extend(top..top + shown);
             for (index, row) in self.rows.iter().enumerate().skip(top).take(shown) {
-                let text = cells::fit(
-                    &list_line(row, theme.glyphs.marks),
-                    room,
-                    Align::Left,
-                    theme.glyphs.marks,
-                );
-                let style = if index == self.selected {
-                    colors.focused_style()
+                let styles = if index == self.selected {
+                    (colors.focused_style(), theme.truncated_cursor)
                 } else {
-                    Style::default()
+                    colors.body_styles()
                 };
-                lines.push(Line::styled(text, style));
+                let text = list_line(row, room, styles, theme.glyphs.marks);
+                lines.push(Line::from(text).style(styles.0));
             }
             lines.push(Line::default());
         }
         if let Some(row) = self.rows.get(self.selected) {
-            lines.push(Line::raw(cells::fit(
+            lines.push(Line::from(cells::fit(
                 &row.name,
                 room,
                 Align::Left,
+                colors.body_styles(),
                 theme.glyphs.marks,
             )));
             match &row.hex {
@@ -263,10 +259,11 @@ impl SumsWindow {
         }
         if let Some(status) = &self.status {
             lines.push(Line::default());
-            lines.push(Line::raw(cells::fit(
+            lines.push(Line::from(cells::fit(
                 status,
                 room,
                 Align::Left,
+                colors.body_styles(),
                 theme.glyphs.marks,
             )));
         }
@@ -308,28 +305,41 @@ impl SumsWindow {
     }
 }
 
-/// A row of the list: its mark, its checksum shortened in the middle, and its name.
-fn list_line(row: &SumRow, marks: Marks) -> String {
-    let mark = match row.mark {
+/// A row of the list in `room` cells: its mark, its checksum shortened in the middle, and its
+/// name, in `style` with the marks of text cut short in `mark` over it.
+fn list_line(
+    row: &SumRow,
+    room: usize,
+    (style, mark): (Style, Style),
+    marks: Marks,
+) -> Vec<Span<'static>> {
+    let sign = match row.mark {
         Mark::None => ' ',
         Mark::Match => glyphs::MATCH,
         Mark::Mismatch => glyphs::MISMATCH,
         Mark::Skipped => glyphs::SKIPPED,
     };
-    let sum = match &row.hex {
+    let styles = (style, mark);
+    let mut spans = vec![Span::styled(format!("{sign} "), style)];
+    match &row.hex {
         Some(hex) if hex.len() > 2 * SHORT + 1 => {
-            format!(
-                "{}{}{}",
-                &hex[..SHORT],
-                marks.after,
-                &hex[hex.len() - SHORT..]
-            )
+            spans.push(Span::styled(hex[..SHORT].to_owned(), style));
+            spans.push(Span::styled(marks.after, style.patch(mark)));
+            spans.push(Span::styled(hex[hex.len() - SHORT..].to_owned(), style));
         }
-        Some(hex) => hex.clone(),
-        None => fl!("checksum-skipped"),
-    };
-    let sum = cells::fit(&sum, 2 * SHORT + 1, Align::Left, marks);
-    format!("{mark} {sum}  {}", row.name)
+        Some(hex) => spans.extend(cells::fit(hex, 2 * SHORT + 1, Align::Left, styles, marks)),
+        None => spans.extend(cells::fit(
+            &fl!("checksum-skipped"),
+            2 * SHORT + 1,
+            Align::Left,
+            styles,
+            marks,
+        )),
+    }
+    spans.push(Span::styled("  ", style));
+    let name_room = room.saturating_sub(2 * SHORT + 5);
+    spans.extend(cells::fit(&row.name, name_room, Align::Left, styles, marks));
+    cells::fit_spans(spans, room, styles, marks)
 }
 
 /// A checksum in lines of at most `width` hex digits, of equal length where it breaks.

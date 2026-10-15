@@ -6,7 +6,7 @@
 use noc_scroll::scrollbar::{self, Bar};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
-use ratatui::text::Line;
+use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
 use super::dialog::{Colors, Field, draw_box, frame_around, right_frame};
@@ -525,17 +525,17 @@ impl Picker {
         let prefix = cells::width(&fl!("picker-filter", text = String::new()));
         let (shown, column) = self.filter.visible(room.saturating_sub(prefix));
         let column = u16::try_from(prefix + column).unwrap_or(u16::MAX);
-        let filter = cells::fit(
+        let mut top = cells::fit(
             &fl!("picker-filter", text = shown),
             room,
             Align::Left,
+            (theme.dialog, theme.truncated_dialog),
             theme.glyphs.marks,
         );
-        let top = match note {
-            Some(note) => format!("{filter} {note}"),
-            None => filter,
-        };
-        frame.render_widget(Line::styled(top, theme.dialog), line(0));
+        if let Some(note) = note {
+            top.push(Span::styled(format!(" {note}"), theme.dialog));
+        }
+        frame.render_widget(Line::from(top).style(theme.dialog), line(0));
         if self.filtering {
             frame.set_cursor_position(Position::new(
                 inner.x.saturating_add(column).min(inner.right() - 1),

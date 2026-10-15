@@ -10,7 +10,7 @@ use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 
 use super::app::Side;
-use super::cells::{self, Align, Marks};
+use super::cells::{self, Align, Cut, Fitted};
 use super::glyphs;
 use super::panel::{ListRequest, Panel, home_text, location_text};
 use super::theme::Theme;
@@ -226,7 +226,7 @@ impl Bar<'_> {
         frame: &mut Frame<'_>,
         x: u16,
         area: Rect,
-        (index, label): (usize, &str),
+        (index, name): (usize, Fitted),
     ) -> u16 {
         let theme = self.theme;
         let (style, number) = match (index == self.active, self.focused) {
@@ -234,12 +234,20 @@ impl Bar<'_> {
             (true, false) => (theme.tab_active_idle, theme.tab_active_idle),
             (false, _) => (theme.tab, theme.tab),
         };
-        let (digits, name) = label.split_once(' ').unwrap_or((label, ""));
-        let line = Line::from(vec![
+        // The tab that shows takes the panel's colors, and the panel's mark with them.
+        let mark = if index == self.active {
+            theme.truncated
+        } else {
+            theme.truncated_bar
+        };
+        let mut line = Line::from(vec![
             Span::styled(" ", style),
-            Span::styled(digits.to_owned(), number),
-            Span::styled(format!(" {name} "), style),
+            Span::styled((index + 1).to_string(), number),
+            Span::styled(" ", style),
         ]);
+        line.spans
+            .extend(cells::spans(name, (style, mark), theme.glyphs.marks));
+        line.spans.push(Span::styled(" ", style));
         let width = u16::try_from(line.width()).unwrap_or(u16::MAX);
         let width = width.min(area.right().saturating_sub(x));
         frame.render_widget(line, Rect::new(x, area.y, width, 1));
@@ -269,8 +277,8 @@ impl Bar<'_> {
         }
         let inside = Rect::new(area.x + 1, area.y, area.width - 2, 1);
         let room = usize::from(inside.width);
-        let mut shown = fit(self.names, self.active, room, self.theme.glyphs.marks);
-        let more = |shown: &[(usize, String)]| {
+        let mut shown = fit(self.names, self.active, room);
+        let more = |shown: &[(usize, Fitted)]| {
             let before = shown.first().is_some_and(|(index, _)| *index > 0);
             let after = shown
                 .last()
@@ -278,36 +286,37 @@ impl Bar<'_> {
             (before, after)
         };
         if more(&shown) != (false, false) {
-            shown = fit(
-                self.names,
-                self.active,
-                room.saturating_sub(2),
-                self.theme.glyphs.marks,
-            );
+            shown = fit(self.names, self.active, room.saturating_sub(2));
         }
         let (before, after) = more(&shown);
-        let mark = |frame: &mut Frame<'_>, x: u16, text: &str| {
+        let cell = |frame: &mut Frame<'_>, x: u16, text: &str, style| {
             frame.render_widget(
-                Line::styled(text.to_owned(), theme.tab),
+                Line::styled(text.to_owned(), style),
                 Rect::new(x, area.y, 1, 1),
             );
         };
+        let mark = theme.tab.patch(theme.truncated_bar);
         let mut x = inside.x;
         if before {
-            mark(frame, x, self.theme.glyphs.marks.before);
+            cell(frame, x, self.theme.glyphs.marks.before, mark);
             x += 1;
         }
-        for (position, (index, label)) in shown.into_iter().enumerate() {
+        for (position, (index, name)) in shown.into_iter().enumerate() {
             if position > 0 {
-                mark(frame, x, &glyphs::COLUMN.to_string());
+                cell(frame, x, &glyphs::COLUMN.to_string(), theme.tab);
                 x += 1;
             }
             let start = x;
-            x = self.draw_tab(frame, x, inside, (index, &label));
+            x = self.draw_tab(frame, x, inside, (index, name));
             spots.push((index, Rect::new(start, area.y, x - start, 1)));
         }
         if after && inside.width > 0 {
-            mark(frame, inside.right() - 1, self.theme.glyphs.marks.after);
+            cell(
+                frame,
+                inside.right() - 1,
+                self.theme.glyphs.marks.after,
+                mark,
+            );
         }
         spots
     }
@@ -329,16 +338,13 @@ impl Bar<'_> {
             line,
         );
         let mut x = line.x;
-        for (position, (index, label)) in
-            fit(self.names, self.active, room, self.theme.glyphs.marks)
-                .into_iter()
-                .enumerate()
+        for (position, (index, name)) in fit(self.names, self.active, room).into_iter().enumerate()
         {
             if position > 0 {
                 x += 1;
             }
             let start = x;
-            x = self.draw_tab(frame, x, line, (index, &label));
+            x = self.draw_tab(frame, x, line, (index, name));
             spots.push((index, Rect::new(start, area.y, x - start, 1)));
         }
         spots
@@ -364,9 +370,10 @@ pub(crate) fn join_frame(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
 const LEAST: usize = 8;
 
 /// The tabs that fit in `room` cells, by index, each as ` number name ` with a cell between
-/// them: the names of hidden tabs shrink first, the widest first, then the name of the tab
-/// that shows, but none below [`LEAST`] cells; then tabs far from it are left out.
-fn fit(names: &[String], active: usize, room: usize, marks: Marks) -> Vec<(usize, String)> {
+/// them, with their names as they fit: the names of hidden tabs shrink first, the widest
+/// first, then the name of the tab that shows, but none below [`LEAST`] cells; then tabs far
+/// from it are left out.
+fn fit(names: &[String], active: usize, room: usize) -> Vec<(usize, Fitted)> {
     if names.is_empty() {
         return Vec::new();
     }
@@ -431,8 +438,8 @@ fn fit(names: &[String], active: usize, room: usize, marks: Marks) -> Vec<(usize
     shown
         .into_iter()
         .map(|index| {
-            let name = cells::fit(&names[index], widths[index], Align::Left, marks);
-            (index, format!("{} {name}", index + 1))
+            let name = cells::fit_cut(&names[index], widths[index], Align::Left, Cut::Middle);
+            (index, name)
         })
         .collect()
 }
@@ -470,11 +477,14 @@ mod tests {
     #[test]
     fn fits_hidden_tabs_first_then_drops_far_tabs() {
         let names = labels(&["projects", "documents-archive", "/Users/me/projects/noon"]);
-        let texts = |fitted: Vec<(usize, String)>| -> Vec<String> {
-            fitted.into_iter().map(|(_, text)| text).collect()
+        let texts = |fitted: Vec<(usize, Fitted)>| -> Vec<String> {
+            let text = |(index, name): (usize, Fitted)| {
+                format!("{} {}", index + 1, name.text(Glyphs::PLAIN.marks))
+            };
+            fitted.into_iter().map(text).collect()
         };
         assert_eq!(
-            texts(fit(&names, 2, 62, Glyphs::PLAIN.marks)),
+            texts(fit(&names, 2, 62)),
             [
                 "1 projects",
                 "2 documents-archive",
@@ -482,24 +492,21 @@ mod tests {
             ]
         );
         assert_eq!(
-            texts(fit(&names, 2, 55, Glyphs::PLAIN.marks)),
+            texts(fit(&names, 2, 55)),
             ["1 projects", "2 docum»hive", "3 /Users/me/projects/noon"],
             "a hidden tab first"
         );
         assert_eq!(
-            texts(fit(&names, 2, 45, Glyphs::PLAIN.marks)),
+            texts(fit(&names, 2, 45)),
             ["1 projects", "2 docu»ive", "3 /Users/»ts/noon"],
             "then the one that shows, but no name below eight cells"
         );
         assert_eq!(
-            texts(fit(&names, 2, 30, Glyphs::PLAIN.marks)),
+            texts(fit(&names, 2, 30)),
             ["2 docu»ive", "3 /Users»s/noon"],
             "then tabs far from the one that shows go"
         );
-        assert_eq!(
-            texts(fit(&labels(&["~", "srv"]), 0, 4, Glyphs::PLAIN.marks)),
-            ["1 ~"]
-        );
+        assert_eq!(texts(fit(&labels(&["~", "srv"]), 0, 4)), ["1 ~"]);
     }
 
     #[test]

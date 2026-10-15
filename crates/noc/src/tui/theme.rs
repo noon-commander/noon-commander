@@ -54,13 +54,21 @@ pub(crate) struct Theme {
     pub(crate) address: Style,
     /// A message on the line of the mode, as vim's error and warning messages.
     pub(crate) message: Style,
-    /// The marks of text cut short or going on past the screen, `…`, `‹`, `›`, and `↪`, over
-    /// the style of their row: an accent that stands out from names of every kind.
+    /// The marks of text cut short or going on past the screen, over the style of their row:
+    /// an accent that stands out from names of every kind, in the panels, the viewer, and the
+    /// line of the mode.
     pub(crate) truncated: Style,
-    /// The same marks on the row under the cursor or a selected row of a list.
+    /// The same marks on the row under the cursor or a selected row of a list or a menu, the
+    /// title of the active panel, and the viewer's title.
     pub(crate) truncated_cursor: Style,
     /// The same marks in dialogs and the lists, over `dialog`.
     pub(crate) truncated_dialog: Style,
+    /// The same marks in the pull-down menus, over `menu`.
+    pub(crate) truncated_menu: Style,
+    /// The same marks on the bars: the F-key bar, the menu bar, and the line of tabs.
+    pub(crate) truncated_bar: Style,
+    /// The same marks in error dialogs, over `error_dialog`.
+    pub(crate) truncated_error: Style,
     /// The status of a host in the location menu, drawn over `dialog`, which the panel colors
     /// may not show on: idle, connecting, connected, failed.
     pub(crate) dialog_host: [Style; 4],
@@ -200,8 +208,12 @@ impl Theme {
             message: fg(Color::LightRed),
             truncated: fg(Color::LightYellow).bold(),
             truncated_cursor: on(Color::LightYellow, Color::Black).bold(),
-            // Yellow does not read on the gray of dialogs.
+            // Yellow does not read on the gray of dialogs, nor on the cyan of menus.
             truncated_dialog: fg(Color::Red).bold(),
+            truncated_menu: fg(Color::Red).bold(),
+            // A cell of its own, which reads on the cyan bars and the black line of tabs.
+            truncated_bar: on(Color::LightYellow, Color::Black).bold(),
+            truncated_error: fg(Color::LightYellow).bold(),
             // Dark colors, as mc draws on its gray dialogs; idle takes the dialog's black.
             dialog_host: [
                 Style::new(),
@@ -273,6 +285,10 @@ impl Theme {
             truncated: reversed.bold(),
             truncated_cursor: plain.not_reversed().bold(),
             truncated_dialog: reversed.bold(),
+            truncated_menu: reversed.bold(),
+            // Plain on the reversed bars, and neither dim nor reversed on the line of tabs.
+            truncated_bar: plain.not_reversed().not_dim().bold(),
+            truncated_error: reversed.bold(),
             dialog_host: [plain.dim(), plain, plain.bold(), plain],
             fkey_number: plain,
             fkey_label: reversed,
@@ -334,6 +350,10 @@ impl Theme {
             truncated: fg(p.yellow).bold(),
             truncated_cursor: on(p.yellow, p.crust).bold(),
             truncated_dialog: fg(p.yellow).bold(),
+            truncated_menu: fg(p.yellow).bold(),
+            truncated_bar: fg(p.yellow).bold(),
+            // Yellow does not read on red: the colors of the dialog, the other way round.
+            truncated_error: on(p.red, p.base).bold(),
             dialog_host: [fg(p.subtext0), fg(p.yellow), fg(p.green), fg(p.red)],
             fkey_number: on(p.text, p.crust),
             fkey_label: on(p.text, p.surface0),
@@ -399,6 +419,10 @@ impl Theme {
             truncated: fg(p.pink).bold(),
             truncated_cursor: on(p.sun, p.ink).bold(),
             truncated_dialog: fg(p.pink).bold(),
+            truncated_menu: fg(p.pink).bold(),
+            // A cell of its own, which reads on the amber menu bar and the deep F-key bar.
+            truncated_bar: on(p.sun, p.ink).bold(),
+            truncated_error: on(p.red, p.panel).bold(),
             dialog_host: [fg(p.muted), fg(p.accent), fg(p.green), fg(p.red)],
             fkey_number: on(p.accent, p.deep).bold(),
             fkey_label: on(p.text, p.deep),
@@ -798,6 +822,33 @@ mod tests {
             theme.dialog_host_status(HostStatus::Connected).fg,
             Some(Color::Green)
         );
+    }
+
+    #[test]
+    fn marks_of_text_cut_short_stand_out_where_they_are_drawn() {
+        for name in Theme::NAMES {
+            for depth in [ColorDepth::TrueColor, ColorDepth::Indexed] {
+                let theme = Theme::by_name(name, depth).unwrap();
+                let surfaces = [
+                    ("panel", theme.panel, theme.truncated),
+                    ("cursor", theme.cursor, theme.truncated_cursor),
+                    ("dialog", theme.dialog, theme.truncated_dialog),
+                    ("menu", theme.menu, theme.truncated_menu),
+                    ("selected", theme.menu_selected, theme.truncated_cursor),
+                    ("F-key bar", theme.fkey_label, theme.truncated_bar),
+                    ("menu bar", theme.menu_bar_inactive, theme.truncated_bar),
+                    ("tabs", theme.tab, theme.truncated_bar),
+                    ("error", theme.error_dialog, theme.truncated_error),
+                ];
+                for (surface, style, mark) in surfaces {
+                    let marked = style.patch(mark);
+                    assert_ne!(marked, style, "{name} {depth:?}: {surface}");
+                    if let (Some(fg), Some(bg)) = (marked.fg, marked.bg) {
+                        assert_ne!(fg, bg, "{name} {depth:?}: {surface}");
+                    }
+                }
+            }
+        }
     }
 
     #[test]

@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use noc_scroll::scrollbar::{self, Bar, BarGlyphs};
 use noc_scroll::{Motion, Step};
-use noc_text::{Align, Cut, Marks};
+use noc_text::{Align, Cut, Fitted, Marks};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -72,6 +72,8 @@ pub enum Command {
 pub struct Styles {
     /// The title line: the path and the position.
     pub header: Style,
+    /// The style of the mark where the title is cut, over `header`.
+    pub header_mark: Style,
     /// The text, the screen behind it, and the scroll bar; dimmed, the line that ends the text.
     pub text: Style,
     /// The scroll bar.
@@ -341,8 +343,7 @@ impl Viewer {
         // Rows of text leave the scroll bar's column alone, which the end line's style would dim.
         let text_width = u16::try_from(self.width).unwrap_or(area.width);
         let text_row = |index: u16| Rect::new(area.x, area.y + index, text_width, 1);
-        let header = self.header(usize::from(area.width), styles.marks);
-        frame.render_widget(Line::styled(header, styles.header), row(0));
+        frame.render_widget(self.header(usize::from(area.width), styles), row(0));
         let text_area = Rect::new(area.x, area.y + 1, area.width, area.height - 1);
         frame.buffer_mut().set_style(text_area, styles.text);
         if matches!(self.state, State::Loading) {
@@ -358,9 +359,11 @@ impl Viewer {
         for screen_row in 0..self.page {
             let y = u16::try_from(screen_row + 1).unwrap_or(u16::MAX);
             let Some(line) = self.lines().get(position.0) else {
-                let end = noc_text::rule(&self.end_text(), self.width, styles.line, styles.marks);
+                let end = noc_text::rule(&self.end_text(), self.width, styles.line);
                 let dim = styles.text.add_modifier(Modifier::DIM);
-                frame.render_widget(Line::styled(end, dim), text_row(y));
+                let mark = styles.text.patch(styles.mark);
+                let line = fitted_line(end, (dim, mark), styles.marks);
+                frame.render_widget(line, text_row(y));
                 break;
             };
             let text = if self.wrap {
@@ -449,7 +452,7 @@ impl Viewer {
     /// The path on the left, and where the screen is on the right, `width` cells wide in all:
     /// its first line, the lines, and how far the last one on screen is, in percent, or that the
     /// end shows.
-    fn header(&self, width: usize, marks: Marks) -> String {
+    fn header(&self, width: usize, styles: &Styles) -> Line<'static> {
         let lines = self.lines().len();
         let mut position = String::new();
         if let State::Text { truncated, .. } = &self.state {
@@ -477,9 +480,22 @@ impl Viewer {
         let position = format!(" {position} ");
         let room = width.saturating_sub(noc_text::width(&position));
         let title = format!(" {}", self.title);
-        let title = noc_text::fit_cut(&title, room, Align::Left, Cut::Middle).text(marks);
-        title + &position
+        let title = noc_text::fit_cut(&title, room, Align::Left, Cut::Middle);
+        let mark = styles.header.patch(styles.header_mark);
+        let mut line = fitted_line(title, (styles.header, mark), styles.marks).style(styles.header);
+        line.push_span(Span::styled(position, styles.header));
+        line
     }
+}
+
+/// `fitted` in `style`, with its mark of `marks`, if it was cut, in `mark`.
+fn fitted_line(fitted: Fitted, (style, mark): (Style, Style), marks: Marks) -> Line<'static> {
+    let mut spans = vec![Span::styled(fitted.head.clone(), style)];
+    if fitted.cut.is_some() {
+        spans.push(Span::styled(fitted.mark(marks), mark));
+    }
+    spans.push(Span::styled(fitted.tail, style));
+    Line::from(spans)
 }
 
 #[cfg(test)]
@@ -491,6 +507,7 @@ mod tests {
 
     const STYLES: Styles = Styles {
         header: Style::new(),
+        header_mark: Style::new(),
         text: Style::new(),
         bar: BarGlyphs {
             up: "▲",
@@ -744,8 +761,10 @@ mod tests {
 
     /// The screen, and whether each of its cells is drawn as a mark.
     fn draw_marks(viewer: &mut Viewer, width: u16, height: u16) -> (String, Vec<String>) {
+        let mark = Style::new().add_modifier(Modifier::UNDERLINED);
         let styles = Styles {
-            mark: Style::new().add_modifier(Modifier::UNDERLINED),
+            header_mark: mark,
+            mark,
             ..STYLES
         };
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
@@ -807,6 +826,21 @@ mod tests {
         viewer.handle(Command::ScrollEnd);
         let (screen, _) = draw_marks(&mut viewer, 10, 8);
         assert!(screen.contains("\"«rstuvwxyz\""), "{screen}");
+    }
+
+    #[test]
+    fn a_title_and_an_end_line_cut_short_draw_their_marks_as_marks() {
+        let mut viewer = Viewer::new("/a/very/long/path/to/the/file.txt".to_owned());
+        viewer.show(b"x\n", false);
+        let (screen, marks) = draw_marks(&mut viewer, 30, 4);
+        let rows: Vec<&str> = screen.lines().collect();
+        assert!(rows[0].contains('»'), "{screen}");
+        assert_eq!(marks[0], "»", "{screen}");
+        viewer.show(b"x\n", true);
+        let (screen, marks) = draw_marks(&mut viewer, 10, 4);
+        let rows: Vec<&str> = screen.lines().collect();
+        assert!(rows[2].contains('»'), "{screen}");
+        assert_eq!(marks[2], "»", "{screen}");
     }
 
     #[test]

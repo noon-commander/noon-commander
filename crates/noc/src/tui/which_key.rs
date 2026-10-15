@@ -3,9 +3,10 @@
 
 use ratatui::Frame;
 use ratatui::layout::Rect;
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
-use super::cells::{self, Align, Cut, Marks};
+use super::cells::{self, Align, Cut, Fitted};
 use super::dialog::{Colors, draw_box};
 use super::help;
 use super::keymap::{Action, Context, Hint, Hints, Mode};
@@ -153,34 +154,29 @@ fn render_cells(frame: &mut Frame<'_>, inner: Rect, grid: Grid, rows: &[Row], th
             } else {
                 theme.dialog
             };
-            let cell = Line::from(vec![
-                Span::styled(
-                    fit_keys(&row.keys, keys_width, theme.glyphs.marks),
-                    theme.dialog_title,
-                ),
-                Span::raw(" "),
-                Span::styled(cut(&row.text, text_width, theme.glyphs.marks), style),
-            ]);
-            frame.render_widget(cell, cell_area(inner, grid, column, line));
+            let mut spans = styled(fit_keys(&row.keys, keys_width), theme.dialog_title, theme);
+            spans.push(Span::styled(" ", theme.dialog));
+            spans.extend(styled(cut(&row.text, text_width), style, theme));
+            frame.render_widget(Line::from(spans), cell_area(inner, grid, column, line));
         }
     }
     if shown < rows.len() {
         let hidden = rows.len() - shown;
         let more = fl!("which-key-hidden", count = hidden);
         let at = cell_area(inner, grid, shown / grid.rows, shown % grid.rows);
-        frame.render_widget(
-            Line::styled(
-                cut(&more, grid.width, theme.glyphs.marks),
-                theme.dialog_title,
-            ),
-            at,
-        );
+        let spans = styled(cut(&more, grid.width), theme.dialog_title, theme);
+        frame.render_widget(Line::from(spans), at);
     }
+}
+
+/// `fitted` in `style`, with its mark of text cut short in the accent of dialogs.
+fn styled(fitted: Fitted, style: Style, theme: &Theme) -> Vec<Span<'static>> {
+    cells::spans(fitted, (style, theme.truncated_dialog), theme.glyphs.marks)
 }
 
 /// `keys`, a list such as `Space, Shift+Down`, in `width` cells: as many of them as fit whole,
 /// and the first cut where not even that one does.
-fn fit_keys(keys: &str, width: usize, marks: Marks) -> String {
+fn fit_keys(keys: &str, width: usize) -> Fitted {
     let mut fitted = String::new();
     for key in keys.split(", ") {
         let next = if fitted.is_empty() {
@@ -194,14 +190,14 @@ fn fit_keys(keys: &str, width: usize, marks: Marks) -> String {
         fitted = next;
     }
     if fitted.is_empty() {
-        return cut(keys, width, marks);
+        return cut(keys, width);
     }
-    cells::fit(&fitted, width, Align::Left, marks)
+    cells::fit_cut(&fitted, width, Align::Left, Cut::Middle)
 }
 
-/// `text` in `width` cells, cut at the end with the mark of `marks` where it is longer.
-fn cut(text: &str, width: usize, marks: Marks) -> String {
-    cells::fit_cut(text, width, Align::Left, Cut::End).text(marks)
+/// `text` in `width` cells, cut at the end where it is longer.
+fn cut(text: &str, width: usize) -> Fitted {
+    cells::fit_cut(text, width, Align::Left, Cut::End)
 }
 
 /// Where the cell of `column` and `line` is in `inner`.
@@ -269,18 +265,38 @@ mod tests {
 
     #[test]
     fn keys_fit_whole_and_texts_lose_their_end() {
+        let marks = Glyphs::PLAIN.marks;
         assert_eq!(
-            fit_keys("Insert, Ctrl+t, Shift+Down", 16, Glyphs::PLAIN.marks),
+            fit_keys("Insert, Ctrl+t, Shift+Down", 16).text(marks),
             "Insert, Ctrl+t  "
         );
-        assert_eq!(fit_keys("F10", 5, Glyphs::PLAIN.marks), "F10  ");
-        assert_eq!(fit_keys("Shift+Down", 6, Glyphs::PLAIN.marks), "Shift»");
-        assert_eq!(
-            cut("Open the directory", 10, Glyphs::PLAIN.marks),
-            "Open the »"
-        );
-        assert_eq!(cut("Quit", 6, Glyphs::PLAIN.marks), "Quit  ");
-        assert_eq!(cut("Quit", 0, Glyphs::PLAIN.marks), "");
+        assert_eq!(fit_keys("F10", 5).text(marks), "F10  ");
+        assert_eq!(fit_keys("Shift+Down", 6).text(marks), "Shift»");
+        assert_eq!(cut("Open the directory", 10).text(marks), "Open the »");
+        assert_eq!(cut("Quit", 6).text(marks), "Quit  ");
+        assert_eq!(cut("Quit", 0).text(marks), "");
+    }
+
+    #[test]
+    fn marks_of_text_cut_short_stand_out() {
+        let keymap = Keymap::default();
+        let hints = root(&keymap, Context::Panel);
+        let theme = Theme::mc_classic();
+        let mut terminal = Terminal::new(TestBackend::new(40, 14)).unwrap();
+        terminal
+            .draw(|frame| render(frame, frame.area(), &hints, &theme))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let marks: Vec<_> = buffer
+            .content()
+            .iter()
+            .filter(|cell| cell.symbol() == theme.glyphs.marks.after)
+            .collect();
+        assert!(!marks.is_empty(), "{}", terminal.backend());
+        for cell in marks {
+            assert_eq!(cell.fg, theme.truncated_dialog.fg.unwrap());
+            assert_eq!(cell.bg, theme.dialog.bg.unwrap());
+        }
     }
 
     #[test]

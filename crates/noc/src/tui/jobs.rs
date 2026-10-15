@@ -7,7 +7,7 @@ use noc_scroll::Motion;
 use noc_scroll::scrollbar::{self, Bar};
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::text::Line;
+use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
 use super::dialog::{
@@ -174,8 +174,14 @@ impl JobsList {
             Rect::new(inner.x, y, inner.width, 1)
         };
         if rows.is_empty() && visible > 0 {
-            let none = cells::fit(&fl!("jobs-none"), width, Align::Left, theme.glyphs.marks);
-            frame.render_widget(Line::raw(none), line(0));
+            let none = cells::fit(
+                &fl!("jobs-none"),
+                width,
+                Align::Left,
+                colors.body_styles(),
+                theme.glyphs.marks,
+            );
+            frame.render_widget(Line::from(none), line(0));
         }
         let mut drawn = Drawn {
             frame: frame_around(inner),
@@ -196,20 +202,23 @@ impl JobsList {
         let bar = scrollbar::render(frame, bar, position, theme.dialog, theme.glyphs.scroll_bar);
         self.bar.set(bar);
         for (shown, (number, row)) in rows.iter().enumerate().skip(top).take(visible).enumerate() {
-            let text = format!(
-                "{} {} {}  {}",
-                cells::fit(&row.title, TITLE, Align::Left, theme.glyphs.marks),
-                cells::fit(&row.state, STATE, Align::Right, theme.glyphs.marks),
-                cells::fit(&row.left, LEFT, Align::Right, theme.glyphs.marks),
-                row.current
-            );
-            let text = cells::fit(&text, width, Align::Left, theme.glyphs.marks);
-            let text = if number == index {
-                Line::styled(text, colors.focused_style())
+            let styles = if number == index {
+                (colors.focused_style(), theme.truncated_cursor)
             } else {
-                Line::raw(text)
+                colors.body_styles()
             };
-            frame.render_widget(text, line(shown));
+            let marks = theme.glyphs.marks;
+            let gap = |cells: usize| Span::styled(" ".repeat(cells), styles.0);
+            let mut spans = cells::fit(&row.title, TITLE, Align::Left, styles, marks);
+            spans.push(gap(1));
+            spans.extend(cells::fit(&row.state, STATE, Align::Right, styles, marks));
+            spans.push(gap(1));
+            spans.extend(cells::fit(&row.left, LEFT, Align::Right, styles, marks));
+            spans.push(gap(2));
+            let room = width.saturating_sub(TITLE + STATE + LEFT + 4);
+            spans.extend(cells::fit(&row.current, room, Align::Left, styles, marks));
+            let text = cells::fit_spans(spans, width, styles, marks);
+            frame.render_widget(Line::from(text), line(shown));
             drawn.rows.push((number, line(shown)));
         }
         if inner.height >= 2 {

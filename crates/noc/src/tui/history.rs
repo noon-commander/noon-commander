@@ -9,10 +9,10 @@ use noc_config::HistoryEntry;
 use noc_scroll::scrollbar::Bar;
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::Modifier;
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
-use super::cells::{self, Align};
+use super::cells::{self, Align, Marks};
 use super::dialog::Colors;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
@@ -250,38 +250,63 @@ impl HistoryWindow {
             let room = row
                 .width
                 .saturating_sub(host_width + dir_width + 4 + cells::width(&more));
-            let first = if more.is_empty() {
-                cells::fit(&first, room, Align::Left, theme.glyphs.marks)
-            } else {
-                cells::fit(
-                    &format!("{first} {}", theme.glyphs.marks.after),
-                    room,
-                    Align::Left,
-                    theme.glyphs.marks,
+            let styles = if row.selected {
+                (focused, theme.truncated_cursor)
+            } else if entry.host != *here {
+                (
+                    theme.dialog.add_modifier(Modifier::DIM),
+                    theme.truncated_dialog.remove_modifier(Modifier::DIM),
                 )
+            } else {
+                (theme.dialog, theme.truncated_dialog)
             };
-            let host = cells::fit(
+            let marks = theme.glyphs.marks;
+            let gap = || Span::styled(" ", styles.0);
+            let mut spans = vec![gap()];
+            spans.extend(cells::fit(
                 &hosts[row.index],
                 host_width,
                 Align::Left,
-                theme.glyphs.marks,
-            );
-            let dir = cells::fit(
-                &cells::sanitize(entry.dir.as_bytes()),
-                dir_width,
-                Align::Left,
-                theme.glyphs.marks,
-            );
-            let style = if row.selected {
-                focused
-            } else if entry.host != *here {
-                theme.dialog.add_modifier(Modifier::DIM)
-            } else {
-                theme.dialog
-            };
-            Line::from(vec![Span::raw(format!(" {host} {dir} {first}{more} "))]).style(style)
+                styles,
+                marks,
+            ));
+            spans.push(gap());
+            let dir = cells::sanitize(entry.dir.as_bytes());
+            spans.extend(cells::fit(&dir, dir_width, Align::Left, styles, marks));
+            spans.push(gap());
+            spans.extend(command_spans(&first, &more, room, styles, marks));
+            spans.push(gap());
+            Line::from(spans).style(styles.0)
         });
     }
+}
+
+/// The `first` line of a command in `room` cells, its middle cut where it is longer, in
+/// `style`; where `more` lines follow it, the mark of `marks` after it, then `more`. Marks are
+/// in `mark` over `style`.
+fn command_spans(
+    first: &str,
+    more: &str,
+    room: usize,
+    (style, mark): (Style, Style),
+    marks: Marks,
+) -> Vec<Span<'static>> {
+    let styles = (style, mark);
+    if more.is_empty() {
+        return cells::fit(first, room, Align::Left, styles, marks);
+    }
+    // The mark says that the command goes on in lines after its first.
+    let text_room = room.saturating_sub(2);
+    let mut spans = if cells::width(first) > text_room {
+        cells::fit(first, text_room, Align::Left, styles, marks)
+    } else {
+        vec![Span::styled(first.to_owned(), style)]
+    };
+    spans.push(Span::styled(" ", style));
+    spans.push(Span::styled(marks.after, style.patch(mark)));
+    let mut spans = cells::fit_spans(spans, room, styles, marks);
+    spans.push(Span::styled(more.to_owned(), style));
+    spans
 }
 
 /// The first [`PREVIEW_ROWS`] rows of `command` in `width` cells: its lines, cut where they
@@ -361,6 +386,43 @@ mod tests {
             .draw(|frame| window.render(frame, frame.area(), &Theme::terminal()))
             .unwrap();
         terminal.backend().to_string()
+    }
+
+    #[test]
+    fn a_command_of_several_lines_ends_its_first_with_a_mark() {
+        let marks = crate::tui::glyphs::Glyphs::PLAIN.marks;
+        let (style, mark) = (Style::new(), Style::new().bold());
+        let shown = |first, more, room| -> Vec<(String, Style)> {
+            command_spans(first, more, room, (style, mark), marks)
+                .into_iter()
+                .filter(|span| !span.content.is_empty())
+                .map(|span| (span.content.into_owned(), span.style))
+                .collect()
+        };
+        let owned = |text: &str, style| (text.to_owned(), style);
+        assert_eq!(
+            shown("for f", " +2", 9),
+            [
+                owned("for f", style),
+                owned(" ", style),
+                owned("»", mark),
+                owned("  ", style),
+                owned(" +2", style)
+            ]
+        );
+        assert_eq!(
+            shown("for f in *.log", " +2", 9),
+            [
+                owned("for", style),
+                owned("»", mark),
+                owned("log", style),
+                owned(" ", style),
+                owned("»", mark),
+                owned(" +2", style)
+            ],
+            "cut in its middle, the mark of the lines after it kept"
+        );
+        assert_eq!(shown("ls", "", 4), [owned("ls  ", style)]);
     }
 
     #[test]

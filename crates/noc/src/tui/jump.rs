@@ -340,9 +340,10 @@ impl JumpMenu {
             &fl!("jump-keywords", text = shown),
             width,
             Align::Left,
+            (theme.dialog, theme.truncated_dialog),
             theme.glyphs.marks,
         );
-        frame.render_widget(Line::styled(prompt, theme.dialog), line(0));
+        frame.render_widget(Line::from(prompt).style(theme.dialog), line(0));
         if self.typing {
             frame.set_cursor_position(Position::new(
                 inner.x.saturating_add(column).min(inner.right() - 1),
@@ -399,8 +400,10 @@ impl JumpMenu {
                 styles,
                 theme.glyphs.marks,
             );
-            let score = cells::fit(&scores[row], score_width, Align::Right, theme.glyphs.marks);
-            text.spans.push(Span::styled(format!(" {score}"), styles.0));
+            text.spans.push(Span::styled(" ", styles.0));
+            let score = &scores[row];
+            let score = cells::fit(score, score_width, Align::Right, styles, theme.glyphs.marks);
+            text.spans.extend(score);
             let y = u16::try_from(index + 2).unwrap_or(u16::MAX);
             frame.render_widget(text, line(y));
             drawn.rows.push((row, line(y)));

@@ -330,24 +330,21 @@ impl JobView {
         } else {
             doing
         };
-        put(
-            0,
-            Line::raw(cells::fit(&doing, width, Align::Left, theme.glyphs.marks)),
-        );
-        put(
-            1,
-            Line::raw(cells::fit(&current, width, Align::Left, theme.glyphs.marks)),
-        );
+        let text = |text: &str| {
+            let styles = colors.body_styles();
+            Line::from(cells::fit(
+                text,
+                width,
+                Align::Left,
+                styles,
+                theme.glyphs.marks,
+            ))
+        };
+        put(0, text(&doing));
+        put(1, text(&current));
         put(2, gauge(ratio, width, theme));
-        put(
-            3,
-            Line::raw(cells::fit(&count, width, Align::Left, theme.glyphs.marks)),
-        );
-        let time = self.time_line(now);
-        put(
-            4,
-            Line::raw(cells::fit(&time, width, Align::Left, theme.glyphs.marks)),
-        );
+        put(3, text(&count));
+        put(4, text(&self.time_line(now)));
         let labels: Vec<String> = self
             .buttons
             .iter()

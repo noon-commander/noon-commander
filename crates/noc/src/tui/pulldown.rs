@@ -21,7 +21,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear};
 
 use super::app::Side;
-use super::cells::{self, Align, Marks};
+use super::cells::{self, Align, Cut, Marks};
 use super::glyphs;
 use super::keymap::{Action, Resolved};
 use super::mouse::{Pointer, Press, Scroll};
@@ -87,6 +87,8 @@ struct Label {
     text: String,
     /// The index among the characters of `text`, and the letter in lower case.
     hotkey: Option<(usize, char)>,
+    /// The index among the characters of `text` of the mark of a name cut short in it.
+    cut: Option<usize>,
 }
 
 impl Label {
@@ -112,23 +114,37 @@ impl Label {
             text.push(c);
             index += 1;
         }
-        Self { text, hotkey }
+        Self {
+            text,
+            hotkey,
+            cut: None,
+        }
     }
 
-    /// The text in `style`, its letter in `hotkey` over it.
-    fn spans(&self, style: Style, hotkey: Option<Style>) -> Vec<Span<'static>> {
-        let Some(((at, _), hotkey)) = self.hotkey.zip(hotkey) else {
-            return vec![Span::styled(self.text.clone(), style)];
-        };
-        let mut chars = self.text.chars();
-        let head: String = chars.by_ref().take(at).collect();
-        let letter: String = chars.by_ref().take(1).collect();
-        let tail: String = chars.collect();
-        vec![
-            Span::styled(head, style),
-            Span::styled(letter, style.patch(hotkey)),
-            Span::styled(tail, style),
-        ]
+    /// The text in `style`, its letter in `hotkey` over it, and the mark of a name cut short
+    /// in `mark` over it.
+    fn spans(&self, style: Style, hotkey: Option<Style>, mark: Style) -> Vec<Span<'static>> {
+        let letter = self
+            .hotkey
+            .zip(hotkey)
+            .map(|((at, _), hotkey)| (at, hotkey));
+        let mut over: Vec<(usize, Style)> = letter.into_iter().collect();
+        over.extend(self.cut.map(|at| (at, mark)));
+        over.sort_by_key(|(at, _)| *at);
+        let chars: Vec<char> = self.text.chars().collect();
+        let text = |range: std::ops::Range<usize>| chars[range].iter().collect::<String>();
+        let mut spans = Vec::new();
+        let mut from = 0;
+        for (at, over) in over {
+            if at < from || at >= chars.len() {
+                continue;
+            }
+            spans.push(Span::styled(text(from..at), style));
+            spans.push(Span::styled(text(at..at + 1), style.patch(over)));
+            from = at + 1;
+        }
+        spans.push(Span::styled(text(from..chars.len()), style));
+        spans
     }
 }
 
@@ -236,12 +252,20 @@ fn workspace_menu(title: Label, workspaces: &[String], marks: Marks) -> Menu {
     for (index, name) in workspaces.iter().enumerate() {
         let name = cells::sanitize(name.as_bytes());
         let width = cells::width(&name).min(WORKSPACE_NAME_WIDTH);
-        let name = cells::fit(&name, width, Align::Left, marks).replace('&', "&&");
+        let fitted = cells::fit_cut(&name, width, Align::Left, Cut::Middle);
+        let name = fitted.text(marks).replace('&', "&&");
         let text = match index {
             0..=9 => format!("&{} {name}", (index + 1) % 10),
             _ => format!("  {name}"),
         };
-        entries.push(item(text, Command::Workspace(index), Mark::Radio));
+        let mut label = Label::parse(&text);
+        // After the digit and a blank, or two blanks.
+        label.cut = fitted.cut.map(|_| 2 + fitted.head.chars().count());
+        entries.push(Entry::Item(Item {
+            label,
+            command: Command::Workspace(index),
+            mark: Mark::Radio,
+        }));
     }
     Menu { title, entries }
 }
@@ -846,19 +870,26 @@ fn item_line(
         (Mark::Check, true) => check,
         _ => ' ',
     };
+    let truncated = if selected {
+        theme.truncated_cursor
+    } else {
+        theme.truncated_menu
+    };
     let hotkey = status.enabled.then_some(theme.menu_hotkey);
     let mut spans = vec![Span::styled(format!(" {mark} "), style)];
-    spans.extend(item.label.spans(style, hotkey));
+    spans.extend(item.label.spans(style, hotkey, truncated));
     let key = status.key.as_deref().unwrap_or_default();
     let used = 3 + cells::width(&item.label.text);
     let rest = room.saturating_sub(used + 1);
-    spans.push(Span::styled(
-        format!(
-            "{} ",
-            cells::fit(key, rest, Align::Right, theme.glyphs.marks)
-        ),
-        style,
+    let styles = (style, truncated);
+    spans.extend(cells::fit(
+        key,
+        rest,
+        Align::Right,
+        styles,
+        theme.glyphs.marks,
     ));
+    spans.push(Span::styled(" ", style));
     Line::from(spans)
 }
 
@@ -900,20 +931,27 @@ fn render_bar(
         let width = u16::try_from(cells::width(&title.text) + 2).unwrap_or(u16::MAX);
         let room = area.right().saturating_sub(x);
         spots.push(Rect::new(x, area.y, width.min(room), 1));
-        let shown = if selected == Some(index) {
-            theme.menu_bar_selected
+        let (shown, truncated) = if selected == Some(index) {
+            (theme.menu_bar_selected, theme.truncated_cursor)
         } else {
-            style
+            (style, theme.truncated_bar)
         };
         if room >= width {
             let mut spans = vec![Span::styled(" ", shown)];
-            spans.extend(title.spans(shown, hotkey));
+            spans.extend(title.spans(shown, hotkey, truncated));
             spans.push(Span::styled(" ", shown));
             frame.render_widget(Line::from(spans), Rect::new(x, area.y, width, 1));
         } else if room > 0 {
             let text = format!(" {} ", title.text);
-            let fitted = cells::fit(&text, usize::from(room), Align::Left, theme.glyphs.marks);
-            frame.render_widget(Line::styled(fitted, shown), Rect::new(x, area.y, room, 1));
+            let styles = (shown, truncated);
+            let fitted = cells::fit(
+                &text,
+                usize::from(room),
+                Align::Left,
+                styles,
+                theme.glyphs.marks,
+            );
+            frame.render_widget(Line::from(fitted), Rect::new(x, area.y, room, 1));
         }
         x = x.saturating_add(width).saturating_add(3);
     }
@@ -968,7 +1006,8 @@ mod tests {
             Label::parse("Sort by si&ze"),
             Label {
                 text: "Sort by size".to_owned(),
-                hotkey: Some((10, 'z'))
+                hotkey: Some((10, 'z')),
+                cut: None,
             }
         );
         assert_eq!(Label::parse("&View").hotkey, Some((0, 'v')));
@@ -976,7 +1015,8 @@ mod tests {
             Label::parse("R&&D &Notes"),
             Label {
                 text: "R&D Notes".to_owned(),
-                hotkey: Some((4, 'n'))
+                hotkey: Some((4, 'n')),
+                cut: None,
             }
         );
         assert_eq!(Label::parse("Plain").hotkey, None);
@@ -1418,5 +1458,35 @@ mod tests {
         };
         assert_eq!(item.label.text, "1 R&D");
         assert_eq!(item.label.hotkey, Some((0, '1')));
+    }
+
+    #[test]
+    fn a_long_name_marks_where_it_is_cut_in_its_own_style() {
+        let names = [format!("R&D {}", "x".repeat(60))];
+        let menu = PullDown::new(
+            Side::Left,
+            false,
+            None,
+            &names,
+            Glyphs::PLAIN.marks,
+            &status,
+        );
+        let menu = &menu.menus[4];
+        let Some(Entry::Item(item)) = menu.entries.last() else {
+            panic!("{menu:?}");
+        };
+        let (style, hotkey, mark) = (Style::new(), Style::new().bold(), Style::new().italic());
+        let spans = item.label.spans(style, Some(hotkey), mark);
+        let styled: Vec<(&str, Style)> = spans
+            .iter()
+            .filter(|span| !span.content.is_empty())
+            .map(|span| (span.content.as_ref(), span.style))
+            .collect();
+        assert_eq!(styled[0], ("1", hotkey));
+        let head = format!(" R&D {}", "x".repeat(16));
+        assert_eq!(styled[1], (head.as_str(), style));
+        assert_eq!(styled[2], ("»", mark));
+        assert_eq!(styled[3].1, style);
+        assert_eq!(cells::width(&item.label.text), 2 + WORKSPACE_NAME_WIDTH);
     }
 }

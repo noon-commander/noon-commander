@@ -57,8 +57,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   shows: the viewer's on top, the help's in its bottom frame.
 - Text cut short ends or breaks with `»` instead of `~`, in a bold accent of the theme, so that it
   no longer looks like part of a name nor like mc's marker of a symlink to a directory; with
-  icons, a Nerd Font double chevron. Paths that do not fit lose their start rather than their
-  middle, as in `«/deploy/site`.
+  icons, a Nerd Font double chevron. The accent shows everywhere text is cut: the panels, the
+  key hints of Ctrl+k, the help, the menus of F9 and the menu bar, the F-key bar, the line of tabs,
+  the command line, dialogs, and the viewer's title, in a style of its own for each background.
+  Paths that do not fit lose their start rather than their middle, as in `«/deploy/site`.
 - Shift+Down and Shift+Up mark a row and move down or up, as in mc and Far; `J` and `K` no longer
   mark, and `K` shows the whole name under the cursor.
 - `l` in the viewer stops once the last character of the longest line on screen reaches the left

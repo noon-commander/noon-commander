@@ -565,7 +565,7 @@ impl CommandLine {
         &mut self,
         frame: &mut Frame<'_>,
         area: Rect,
-        (prompt, style): (&str, Style),
+        (prompt, style): (&[Span<'static>], Style),
         bar_glyphs: BarGlyphs,
         focused: bool,
     ) {
@@ -573,13 +573,14 @@ impl CommandLine {
         if area.is_empty() {
             return;
         }
+        let prompt_text = cells::text_of(prompt);
         let height = usize::from(area.height);
         let mut width = area.width;
-        let (mut rows, mut at) = self.layout(prompt, usize::from(width));
+        let (mut rows, mut at) = self.layout(&prompt_text, usize::from(width));
         let overflows = rows.len() > height && width > 1;
         if overflows {
             width -= 1;
-            (rows, at) = self.layout(prompt, usize::from(width));
+            (rows, at) = self.layout(&prompt_text, usize::from(width));
         }
         let (row, column) = at;
         let followed = (self.editor.cursor(), self.editor.text().len());
@@ -604,9 +605,15 @@ impl CommandLine {
         } else {
             style
         };
-        for (index, shown) in rows.into_iter().skip(self.scroll).take(height).enumerate() {
-            let y = area.y + u16::try_from(index).unwrap_or(u16::MAX);
-            let mut spans = vec![Span::styled(shown.lead, lead)];
+        for (index, shown) in rows.into_iter().enumerate().skip(self.scroll).take(height) {
+            let y = area.y + u16::try_from(index - self.scroll).unwrap_or(u16::MAX);
+            // The prompt keeps the styles of its parts, such as the mark of a directory cut.
+            let mut spans = if index == 0 {
+                let part = |span: &Span<'static>| span.clone().style(lead.patch(span.style));
+                prompt.iter().map(part).collect()
+            } else {
+                vec![Span::styled(shown.lead, lead)]
+            };
             match shown.selected {
                 Some(selected) => {
                     let chars: Vec<char> = shown.text.chars().collect();
@@ -693,7 +700,8 @@ mod tests {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         terminal
             .draw(|frame| {
-                let text = (prompt, Style::default());
+                let prompt = [Span::raw(prompt.to_owned())];
+                let text = (prompt.as_slice(), Style::default());
                 line.render(frame, frame.area(), text, Glyphs::PLAIN.scroll_bar, true);
             })
             .unwrap();

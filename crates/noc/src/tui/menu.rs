@@ -523,34 +523,28 @@ impl Look<'_> {
             }
             Item::More(_, count) => (String::new(), fl!("menu-more", count = count), None),
         };
-        let name = cells::fit(
-            &format!("{prefix}{name}"),
-            name_width,
-            Align::Left,
-            self.theme.glyphs.marks,
-        );
-        let info = cells::fit(
-            &info(item, self.hosts),
-            info_width,
-            Align::Right,
-            self.theme.glyphs.marks,
-        );
-        if selected {
-            return Line::styled(format!("{name} {info}"), self.focused);
+        let styles = if selected {
+            (self.focused, self.theme.truncated_cursor)
+        } else {
+            (self.theme.dialog, self.theme.truncated_dialog)
+        };
+        let marks = self.theme.glyphs.marks;
+        let name = format!("{prefix}{name}");
+        let mut spans = cells::fit(&name, name_width, Align::Left, styles, marks);
+        // The status marker of a host has a color of its own.
+        if let (Some(style), false) = (marker, selected)
+            && let Some(first) = spans.first_mut()
+        {
+            let split = first.content.chars().next().map_or(0, char::len_utf8);
+            let (marker, rest) = first.content.split_at(split);
+            let (marker, rest) = (marker.to_owned(), rest.to_owned());
+            *first = Span::styled(rest, styles.0);
+            spans.insert(0, Span::styled(marker, styles.0.patch(style)));
         }
-        let mut spans = Vec::new();
-        match marker {
-            // The status marker of a host has a color of its own.
-            Some(style) => {
-                let split = name.chars().next().map_or(0, char::len_utf8);
-                let (marker, rest) = name.split_at(split);
-                spans.push(Span::styled(marker.to_owned(), style));
-                spans.push(Span::raw(rest.to_owned()));
-            }
-            None => spans.push(Span::raw(name)),
-        }
-        spans.push(Span::raw(format!(" {info}")));
-        Line::from(spans).style(self.theme.dialog)
+        spans.push(Span::styled(" ", styles.0));
+        let info = info(item, self.hosts);
+        spans.extend(cells::fit(&info, info_width, Align::Right, styles, marks));
+        Line::from(spans).style(styles.0)
     }
 }
 

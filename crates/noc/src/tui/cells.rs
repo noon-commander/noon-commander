@@ -5,7 +5,9 @@ use std::time::SystemTime;
 
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
-pub(crate) use noc_text::{Align, Cut, Marks, chop, fit_cut, rule, sanitize, split, width, wrap};
+pub(crate) use noc_text::{
+    Align, Cut, Fitted, Marks, chop, fit_cut, rule, sanitize, split, width, wrap,
+};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
@@ -65,9 +67,30 @@ pub(crate) fn mtime(time: Option<SystemTime>, now: SystemTime, tz: &TimeZone) ->
 }
 
 /// Fits `text` into exactly `width` cells: shorter text is padded; longer text loses its
-/// middle, to the mark of `marks`.
-pub(crate) fn fit(text: &str, width: usize, align: Align, marks: Marks) -> String {
-    fit_cut(text, width, align, Cut::Middle).text(marks)
+/// middle, to the mark of `marks`. Spans in `style`, the mark in `mark` over it.
+pub(crate) fn fit(
+    text: &str,
+    width: usize,
+    align: Align,
+    styles: (Style, Style),
+    marks: Marks,
+) -> Vec<Span<'static>> {
+    spans(fit_cut(text, width, align, Cut::Middle), styles, marks)
+}
+
+/// `fitted` in `style`, with its mark of `marks`, where it was cut, in `mark` over `style`:
+/// the mark stands out wherever text is cut short.
+pub(crate) fn spans(
+    fitted: Fitted,
+    (style, mark): (Style, Style),
+    marks: Marks,
+) -> Vec<Span<'static>> {
+    let mut spans = vec![Span::styled(fitted.head.clone(), style)];
+    if fitted.cut.is_some() {
+        spans.push(Span::styled(fitted.mark(marks), style.patch(mark)));
+    }
+    spans.push(Span::styled(fitted.tail, style));
+    spans
 }
 
 /// `text` fitted into `width` cells as [`fit_cut`] fits it, in `style`, with the mark of
@@ -76,16 +99,52 @@ pub(crate) fn fitted(
     text: &str,
     width: usize,
     (align, cut): (Align, Cut),
-    (style, mark): (Style, Style),
+    styles: (Style, Style),
     marks: Marks,
 ) -> Line<'static> {
-    let fitted = fit_cut(text, width, align, cut);
-    let mut spans = vec![Span::styled(fitted.head.clone(), style)];
-    if fitted.cut.is_some() {
-        spans.push(Span::styled(fitted.mark(marks), style.patch(mark)));
+    Line::from(spans(fit_cut(text, width, align, cut), styles, marks))
+}
+
+/// `spans` in exactly `width` cells: padded in `pad` where they are shorter; where longer, cut
+/// at their end, the mark of `marks` in `mark` over the style of the span it cuts.
+pub(crate) fn fit_spans(
+    spans: Vec<Span<'static>>,
+    width: usize,
+    (pad, mark): (Style, Style),
+    marks: Marks,
+) -> Vec<Span<'static>> {
+    let total: usize = spans.iter().map(Span::width).sum();
+    if total <= width {
+        let mut spans = spans;
+        if total < width {
+            spans.push(Span::styled(" ".repeat(width - total), pad));
+        }
+        return spans;
     }
-    spans.push(Span::styled(fitted.tail, style));
-    Line::from(spans)
+    let room = width.saturating_sub(1);
+    let mut used = 0;
+    let mut fitted = Vec::with_capacity(spans.len() + 1);
+    for span in spans {
+        let cells = span.width();
+        if used + cells <= room {
+            used += cells;
+            fitted.push(span);
+            continue;
+        }
+        let style = span.style;
+        let (head, _) = split(&span.content, room - used);
+        fitted.push(Span::styled(head, style));
+        if width > 0 {
+            fitted.push(Span::styled(marks.after, style.patch(mark)));
+        }
+        break;
+    }
+    fitted
+}
+
+/// The text of `spans`, without their styles: for widths, and where nothing can be styled.
+pub(crate) fn text_of(spans: &[Span<'_>]) -> String {
+    spans.iter().map(|span| span.content.as_ref()).collect()
 }
 
 /// `text` in exactly `rows` lines of `width` cells, broken after `after` where it can be, as
@@ -149,6 +208,52 @@ mod tests {
             ["abcd", "efg»"],
             "the last line ends with the mark where the text goes on"
         );
+    }
+
+    #[test]
+    fn the_mark_of_text_cut_short_takes_its_own_style() {
+        let style = Style::new().bold();
+        let mark = Style::new().underlined();
+        let marks = Glyphs::PLAIN.marks;
+        let styled = |spans: Vec<Span<'static>>| -> Vec<(String, Style)> {
+            spans
+                .into_iter()
+                .filter(|span| !span.content.is_empty())
+                .map(|span| (span.content.into_owned(), span.style))
+                .collect()
+        };
+        let owned = |text: &str, style| (text.to_owned(), style);
+        assert_eq!(
+            styled(fit("abcdef", 4, Align::Left, (style, mark), marks)),
+            [
+                owned("ab", style),
+                owned("»", style.patch(mark)),
+                owned("f", style)
+            ]
+        );
+        assert_eq!(
+            styled(fit("ab", 4, Align::Left, (style, mark), marks)),
+            [owned("ab  ", style)]
+        );
+        let spans = vec![Span::styled("abc", style), Span::raw("def")];
+        assert_eq!(
+            styled(fit_spans(spans.clone(), 5, (style, mark), marks)),
+            [
+                owned("abc", style),
+                owned("d", Style::new()),
+                owned("»", Style::new().patch(mark))
+            ],
+            "cut at the end, the mark over the span it cuts"
+        );
+        assert_eq!(
+            styled(fit_spans(spans.clone(), 8, (style, mark), marks)),
+            [
+                owned("abc", style),
+                owned("def", Style::new()),
+                owned("  ", style)
+            ]
+        );
+        assert_eq!(text_of(&fit_spans(spans, 0, (style, mark), marks)), "");
     }
 
     #[test]

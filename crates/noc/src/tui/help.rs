@@ -166,24 +166,34 @@ impl Help {
             .iter()
             .flat_map(|entry| match entry {
                 Entry::Heading(title) => {
-                    vec![Line::styled(
-                        cells::fit(title, width, Align::Left, theme.glyphs.marks),
-                        theme.dialog_title,
-                    )]
+                    let styles = (theme.dialog_title, theme.truncated_dialog);
+                    vec![Line::from(cells::fit(
+                        title,
+                        width,
+                        Align::Left,
+                        styles,
+                        theme.glyphs.marks,
+                    ))]
                 }
                 Entry::Keys { keys, text } => {
-                    let text = cells::fit(text, text_width, Align::Left, theme.glyphs.marks);
+                    let styles = (theme.dialog, theme.truncated_dialog);
+                    let text =
+                        cells::fit(text, text_width, Align::Left, styles, theme.glyphs.marks);
                     key_lines(keys, keys_width)
                         .into_iter()
-                        .zip(std::iter::once(text).chain(std::iter::repeat(String::new())))
+                        .zip(std::iter::once(text).chain(std::iter::repeat(Vec::new())))
                         .map(|(keys, text)| {
-                            let keys =
-                                cells::fit(&keys, keys_width, Align::Left, theme.glyphs.marks);
-                            Line::from(vec![
-                                Span::styled(keys, theme.dialog_title),
-                                Span::raw(" "),
-                                Span::raw(text),
-                            ])
+                            let styles = (theme.dialog_title, theme.truncated_dialog);
+                            let mut spans = cells::fit(
+                                &keys,
+                                keys_width,
+                                Align::Left,
+                                styles,
+                                theme.glyphs.marks,
+                            );
+                            spans.push(Span::raw(" "));
+                            spans.extend(text);
+                            Line::from(spans)
                         })
                         .collect()
                 }
@@ -194,8 +204,12 @@ impl Help {
                 Entry::Blank => vec![Line::default()],
             })
             .collect();
-        let end = cells::rule(&fl!("help-end"), width, glyphs::LINE, theme.glyphs.marks);
-        lines.push(Line::styled(end, theme.dialog.add_modifier(Modifier::DIM)));
+        let end = cells::rule(&fl!("help-end"), width, glyphs::LINE);
+        let styles = (
+            theme.dialog.add_modifier(Modifier::DIM),
+            theme.truncated_dialog.remove_modifier(Modifier::DIM),
+        );
+        lines.push(Line::from(cells::spans(end, styles, theme.glyphs.marks)));
         self.rows = lines.len();
         self.page = usize::from(inner.height).max(1);
         self.offset = self.offset.min(self.rows.saturating_sub(1));

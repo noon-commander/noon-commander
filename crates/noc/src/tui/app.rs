@@ -4153,7 +4153,7 @@ impl App {
                 self.handover = Some(Handover::Run(Run {
                     place,
                     command,
-                    prompt: self.shell_prompt(u16::MAX),
+                    prompt: cells::text_of(&self.shell_prompt(u16::MAX)),
                     pause: self.config.shell.pause,
                 }));
                 effects.extend(self.note(&dir));
@@ -4291,12 +4291,12 @@ impl App {
     /// the panel's directory, with `~` for the home directory, or `host:path` with the host's
     /// label if it has one, its middle cut if it would take more than a third of `width`, and
     /// `$`.
-    fn command_prompt(&self, width: u16) -> String {
+    fn command_prompt(&self, width: u16) -> Vec<Span<'static>> {
         let Some(line) = &self.command_line else {
-            return String::new();
+            return Vec::new();
         };
         if line.kind() == command::Kind::Noc {
-            return ":".to_owned();
+            return vec![Span::raw(":")];
         }
         self.shell_prompt(width)
     }
@@ -4304,15 +4304,17 @@ impl App {
     /// The prompt of a shell command in the active panel: its directory, with `~` for the home
     /// directory, or `host:path` with the host's label if it has one, its middle cut if it
     /// would take more than a third of `width`, and `$`.
-    fn shell_prompt(&self, width: u16) -> String {
+    fn shell_prompt(&self, width: u16) -> Vec<Span<'static>> {
         let dir = self.active_place();
         let room = usize::from(width / 3).max(1);
-        let dir = if cells::width(&dir) > room {
-            cells::fit(&dir, room, Align::Left, self.theme.glyphs.marks)
+        let mut spans = if cells::width(&dir) > room {
+            let styles = (Style::new(), self.theme.truncated);
+            cells::fit(&dir, room, Align::Left, styles, self.theme.glyphs.marks)
         } else {
-            dir
+            vec![Span::raw(dir)]
         };
-        format!("{dir} $ ")
+        spans.push(Span::raw(" $ "));
+        spans
     }
 
     /// The title of the terminal's window or tab while `ui.terminal_title` is on: where the
@@ -5968,12 +5970,12 @@ impl App {
         let bar_height = u16::from(always);
         let screen = frame.area();
         let prompt = self.command_prompt(screen.width);
+        let prompt_text = cells::text_of(&prompt);
         // As vim's command line, the line of the mode and of the command typed when no command
         // is.
-        let line_height = self
-            .command_line
-            .as_ref()
-            .map_or(1, |line| line.height(&prompt, screen.width, screen.height));
+        let line_height = self.command_line.as_ref().map_or(1, |line| {
+            line.height(&prompt_text, screen.width, screen.height)
+        });
         let [menu_bar, panels, full, command_line, key_bar] = Layout::vertical([
             Constraint::Length(bar_height),
             Constraint::Fill(1),
@@ -6010,6 +6012,7 @@ impl App {
         if let Some(viewing) = &mut self.viewing {
             let styles = ViewerStyles {
                 header: self.theme.cursor,
+                header_mark: self.theme.truncated_cursor,
                 text: self.theme.panel,
                 bar: self.theme.glyphs.scroll_bar,
                 line: glyphs::LINE,
@@ -6058,7 +6061,7 @@ impl App {
             }
         }
         self.render_windows(frame, panels);
-        self.render_command_choices(frame, command_line, &prompt);
+        self.render_command_choices(frame, command_line, &prompt_text);
         if let Some(hints) = &self.hints {
             which_key::render(frame, panels, hints, &self.theme);
         }
@@ -6224,21 +6227,18 @@ impl App {
         );
         // Inside the corner of the right panel's frame.
         let room = usize::from(area.width.saturating_sub(2));
-        let text = cells::fit(
-            &text,
-            cells::width(&text).min(room),
-            cells::Align::Left,
-            self.theme.glyphs.marks,
-        );
-        let width = u16::try_from(cells::width(&text)).unwrap_or(0);
+        let width = cells::width(&text).min(room);
+        let styles = (self.theme.panel_title_active, self.theme.truncated_cursor);
+        let text = cells::fit(&text, width, Align::Left, styles, self.theme.glyphs.marks);
+        let width = u16::try_from(width).unwrap_or(0);
         let x = area.right().saturating_sub(width + 1);
         let row = Rect::new(x, area.y, width, 1.min(area.height));
-        frame.render_widget(Line::styled(text, self.theme.panel_title_active), row);
+        frame.render_widget(Line::from(text), row);
     }
 
     /// The command line in `area`, after `prompt`, if it is open; else the mode and what the
     /// pending command has typed, on the line it takes.
-    fn render_command_line(&mut self, frame: &mut Frame<'_>, area: Rect, prompt: &str) {
+    fn render_command_line(&mut self, frame: &mut Frame<'_>, area: Rect, prompt: &[Span<'static>]) {
         let focused = matches!(
             self.context(),
             Context::CommandLine | Context::CommandCompletion
@@ -6298,13 +6298,15 @@ impl App {
         let shown = cells::width(&typed).min(width);
         let room = width.saturating_sub(shown + 1);
         // A message takes the place of the mode, as on vim's command line.
+        let marks = self.theme.glyphs.marks;
         if let Some(message) = &self.message {
-            let message = cells::fit(message, room, Align::Left, self.theme.glyphs.marks);
-            frame.render_widget(Line::styled(message, self.theme.message), area);
-        } else if let Some(mode) =
-            mode.map(|mode| cells::fit(&mode, room, Align::Left, self.theme.glyphs.marks))
-        {
-            frame.render_widget(Line::styled(mode, Style::new().bold()), area);
+            let styles = (self.theme.message, self.theme.truncated);
+            let message = cells::fit(message, room, Align::Left, styles, marks);
+            frame.render_widget(Line::from(message), area);
+        } else if let Some(mode) = mode {
+            let styles = (Style::new().bold(), self.theme.truncated);
+            let mode = cells::fit(&mode, room, Align::Left, styles, marks);
+            frame.render_widget(Line::from(mode), area);
         }
         let x = area
             .right()
@@ -6337,13 +6339,10 @@ impl App {
             let number = number.to_string();
             // The label's color fills its slot, as in mc.
             let room = usize::from(slot.width).saturating_sub(number.len());
-            let line = Line::from(vec![
-                Span::styled(number, self.theme.fkey_number),
-                Span::styled(
-                    cells::fit(&label, room, Align::Left, self.theme.glyphs.marks),
-                    self.theme.fkey_label,
-                ),
-            ]);
+            let styles = (self.theme.fkey_label, self.theme.truncated_bar);
+            let mut line = Line::from(Span::styled(number, self.theme.fkey_number));
+            let label = cells::fit(&label, room, Align::Left, styles, self.theme.glyphs.marks);
+            line.spans.extend(label);
             frame.render_widget(line, *slot);
         }
         slots.to_vec()
@@ -11802,10 +11801,20 @@ mod tests {
             &config(),
         );
         app.handle(action(Action::Shell));
-        assert_eq!(app.command_prompt(80), "~/src/noc $ ");
-        assert_eq!(app.command_prompt(18), "~/s»oc $ ", "a third of the width");
+        let prompt = |app: &App, width| cells::text_of(&app.command_prompt(width));
+        assert_eq!(prompt(&app, 80), "~/src/noc $ ");
+        assert_eq!(prompt(&app, 18), "~/s»oc $ ", "a third of the width");
+        let mark = app
+            .command_prompt(18)
+            .into_iter()
+            .find(|span| span.content == "»");
+        assert_eq!(
+            mark.map(|span| span.style),
+            Some(app.theme.truncated),
+            "the mark stands out"
+        );
         app.command_line = Some(CommandLine::new(command::Kind::Noc));
-        assert_eq!(app.command_prompt(80), ":");
+        assert_eq!(prompt(&app, 80), ":");
     }
 
     #[test]

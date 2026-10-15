@@ -11,10 +11,10 @@ use noc_scroll::Motion;
 use noc_scroll::scrollbar::{self, Bar};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
-use ratatui::style::Modifier;
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
-use super::cells::{self, Align};
+use super::cells::{self, Align, Marks};
 use super::dialog::{Colors, Field, draw_box, draw_separator, right_frame};
 use super::edit::Registers;
 use super::glyphs::{self, categories};
@@ -846,28 +846,27 @@ impl Configuration {
             Rect::new(x, body.bottom(), 1, 1),
         );
 
-        let (hint, style) = match (&self.error, self.settings().get(self.row)) {
-            (Some(error), _) => (error.clone(), theme.error_dialog),
+        let hint_style = (
+            theme.dialog.patch(theme.menu_disabled),
+            theme.truncated_dialog,
+        );
+        let (hint, styles) = match (&self.error, self.settings().get(self.row)) {
+            (Some(error), _) => (error.clone(), (theme.error_dialog, theme.truncated_error)),
             (None, Some(setting)) if self.focus == Focus::Settings && setting.restart => (
                 format!("{} {}", setting.hint, fl!("config-restart")),
-                theme.dialog.patch(theme.menu_disabled),
+                hint_style,
             ),
-            (None, Some(setting)) if self.focus == Focus::Settings => (
-                setting.hint.clone(),
-                theme.dialog.patch(theme.menu_disabled),
-            ),
-            _ => (String::new(), theme.dialog),
+            (None, Some(setting)) if self.focus == Focus::Settings => {
+                (setting.hint.clone(), hint_style)
+            }
+            _ => (String::new(), (theme.dialog, theme.truncated_dialog)),
         };
-        let lines = cells::wrap(&hint, usize::from(inner.width));
+        let width = usize::from(inner.width);
+        let lines = cells::wrap(&hint, width);
         for (row, line) in (0..HINT_ROWS).zip(lines) {
-            let line = cells::fit(
-                &line,
-                usize::from(inner.width),
-                Align::Left,
-                theme.glyphs.marks,
-            );
+            let line = cells::fit(&line, width, Align::Left, styles, theme.glyphs.marks);
             let area = Rect::new(inner.x, body.bottom() + 1 + row, inner.width, 1);
-            frame.render_widget(Line::styled(line, style), area);
+            frame.render_widget(Line::from(line).style(styles.0), area);
         }
     }
 
@@ -902,14 +901,20 @@ impl Configuration {
             if y >= area.height {
                 break;
             }
-            let style = match (index == self.category, self.focus == Focus::Sidebar) {
-                (true, true) => colors.focused_style(),
-                (true, false) => theme.dialog_title.bold(),
-                (false, _) => theme.dialog,
+            let styles = match (index == self.category, self.focus == Focus::Sidebar) {
+                (true, true) => (colors.focused_style(), theme.truncated_cursor),
+                (true, false) => (theme.dialog_title.bold(), theme.truncated_dialog),
+                (false, _) => (theme.dialog, theme.truncated_dialog),
             };
-            let text = cells::fit(name, usize::from(width), Align::Left, theme.glyphs.marks);
+            let text = cells::fit(
+                name,
+                usize::from(width),
+                Align::Left,
+                styles,
+                theme.glyphs.marks,
+            );
             let row = Rect::new(area.x, area.y + y, width, 1);
-            frame.render_widget(Line::styled(text, style), row);
+            frame.render_widget(Line::from(text).style(styles.0), row);
             self.drawn.categories.push(row);
         }
         area
@@ -957,17 +962,19 @@ impl Configuration {
         {
             let y = area.y + u16::try_from(index - self.offset).unwrap_or(0);
             let focused = self.focus == Focus::Settings && index == self.row;
+            let styles = if focused && !matches!(setting.value, Value::Text { .. }) {
+                (colors.focused_style(), theme.truncated_cursor)
+            } else {
+                (theme.dialog, theme.truncated_dialog)
+            };
+            let label_style = styles.0;
             let label = cells::fit(
                 &setting.label,
                 label_width + LABEL_GAP,
                 Align::Left,
+                styles,
                 theme.glyphs.marks,
             );
-            let label_style = if focused && !matches!(setting.value, Value::Text { .. }) {
-                colors.focused_style()
-            } else {
-                theme.dialog
-            };
             let value = match &setting.value {
                 Value::Toggle(on) => {
                     let mark = if *on { 'x' } else { ' ' };
@@ -975,16 +982,7 @@ impl Configuration {
                 }
                 Value::Choice { options, chosen } => {
                     let text = options.get(*chosen).map_or("", |(_, text)| text.as_str());
-                    let text = cells::fit(
-                        text,
-                        value_width.saturating_sub(4),
-                        Align::Left,
-                        theme.glyphs.marks,
-                    );
-                    vec![Span::styled(
-                        format!("< {} >", text.trim_end()),
-                        label_style,
-                    )]
+                    choice_spans(text, value_width, styles, theme.glyphs.marks)
                 }
                 Value::Text { field, .. } => {
                     let ([before, selected, after], column) = field.visible_parts(value_width);
@@ -999,21 +997,23 @@ impl Configuration {
                         &after,
                         value_width.saturating_sub(used),
                         Align::Left,
+                        (theme.dialog_input, theme.truncated_cursor),
                         theme.glyphs.marks,
                     );
                     let reversed = theme.dialog_input.add_modifier(Modifier::REVERSED);
-                    vec![
+                    let mut spans = vec![
                         Span::styled(before, theme.dialog_input),
                         Span::styled(selected, reversed),
-                        Span::styled(after, theme.dialog_input),
-                    ]
+                    ];
+                    spans.extend(after);
+                    spans
                 }
             };
             let x = area.x + u16::try_from(label_width + LABEL_GAP).unwrap_or(0);
             let value_cells = value.iter().map(Span::width).sum::<usize>();
             let value_cells = u16::try_from(value_cells).unwrap_or(0);
             let row = Rect::new(area.x, y, area.width.saturating_sub(2), 1);
-            let mut spans = vec![Span::styled(label, label_style)];
+            let mut spans = label;
             spans.extend(value);
             let line = Line::from(spans).style(theme.dialog);
             frame.render_widget(line, row);
@@ -1025,6 +1025,26 @@ impl Configuration {
         }
         self.drawn.settings = drawn;
     }
+}
+
+/// The choice `text` between `<` and `>` in at most `width` cells, in `style`, cut in its
+/// middle where it is longer, with the mark in `mark` over `style`.
+fn choice_spans(
+    text: &str,
+    width: usize,
+    (style, mark): (Style, Style),
+    marks: Marks,
+) -> Vec<Span<'static>> {
+    let text = text.trim_end();
+    let room = width.saturating_sub(4);
+    let mut spans = vec![Span::styled("< ", style)];
+    if cells::width(text) > room {
+        spans.extend(cells::fit(text, room, Align::Left, (style, mark), marks));
+    } else {
+        spans.push(Span::styled(text.to_owned(), style));
+    }
+    spans.push(Span::styled(" >", style));
+    spans
 }
 
 /// Choices whose text is their value, as the names of themes are.

@@ -1595,8 +1595,7 @@ impl Panel {
         let columns = DirColumns::for_width(width);
         self.names = (view.decor, columns.name);
         let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
-        let header = Line::styled(columns.header(self.sort, theme.glyphs.marks), theme.header);
-        frame.render_widget(header, line(inner.y));
+        frame.render_widget(columns.header(self.sort, theme), line(inner.y));
         let visual = self.visual_rows();
         for (screen_row, index) in (self.window.top()..self.rows())
             .take(list_height)
@@ -1635,14 +1634,14 @@ impl Panel {
     fn render_status(&self, frame: &mut Frame<'_>, area: Rect, active: bool, view: &View<'_>) {
         let theme = view.theme;
         let width = usize::from(area.width);
-        let mut status_style = Style::new();
+        let mut status_style = (Style::new(), theme.truncated);
         // A host the panel waits for turns a spinner in front, in the color of its status.
         let mut waiting = None;
         let status = if let Some(renaming) = &self.renaming {
             fl!("panel-rename", name = cells::sanitize(&renaming.name))
         } else if let Some(search) = &self.search {
             let field = &search.field;
-            status_style = theme.quick_search;
+            status_style = (theme.quick_search, theme.truncated_cursor);
             let prompt = |text: String| {
                 if search.back {
                     fl!("panel-search-back", text = text)
@@ -1697,26 +1696,17 @@ impl Panel {
                 None => String::new(),
             }
         };
-        let status = match waiting {
-            Some(waiting) => {
-                let spinner = format!("{} ", decor::spinner(view.tick));
-                let status = cells::fit(
-                    &status,
-                    width.saturating_sub(2),
-                    Align::Left,
-                    theme.glyphs.marks,
-                );
-                Line::from(vec![
-                    Span::styled(spinner, theme.host_status(waiting)),
-                    Span::raw(status),
-                ])
-            }
-            None => Line::styled(
-                cells::fit(&status, width, Align::Left, theme.glyphs.marks),
-                status_style,
-            ),
-        };
-        frame.render_widget(status, area);
+        let mut line = Line::default().style(status_style.0);
+        let mut room = width;
+        if let Some(waiting) = waiting {
+            let spinner = format!("{} ", decor::spinner(view.tick));
+            line = Line::from(Span::styled(spinner, theme.host_status(waiting)));
+            room = room.saturating_sub(2);
+        }
+        let marks = theme.glyphs.marks;
+        line.spans
+            .extend(cells::fit(&status, room, Align::Left, status_style, marks));
+        frame.render_widget(line, area);
     }
 
     /// The field of the entry being renamed, over its row from the name on, in the colors of a
@@ -1781,15 +1771,15 @@ impl Panel {
             return;
         }
         let total = fl!("panel-marked", size = cells::grouped(bytes), count = count);
-        let mut total = format!(" {total} ");
-        if cells::width(&total) > usize::from(inside) {
-            total = cells::fit(&total, usize::from(inside), Align::Left, theme.glyphs.marks);
-        }
-        let total_width = u16::try_from(cells::width(&total)).unwrap_or(u16::MAX);
+        let total = format!(" {total} ");
+        let width = cells::width(&total).min(usize::from(inside));
+        // An underline would run along the frame.
+        let styles = (theme.marked.not_underlined(), theme.truncated);
+        let total = cells::fit(&total, width, Align::Left, styles, theme.glyphs.marks);
+        let total_width = u16::try_from(width).unwrap_or(u16::MAX);
         let x = area.x + area.width.saturating_sub(total_width) / 2;
         frame.render_widget(
-            // An underline would run along the frame.
-            Line::styled(total, theme.marked.not_underlined()),
+            Line::from(total),
             Rect::new(x, y, total_width.min(inside), 1),
         );
     }
@@ -1955,7 +1945,7 @@ impl DirColumns {
     }
 
     /// The column titles; an arrow marks the one the directory is sorted by, and its direction.
-    fn header(self, sort: Sort, marks: Marks) -> String {
+    fn header(self, sort: Sort, theme: &Theme) -> Line<'static> {
         let mut titles = [fl!("panel-name"), fl!("panel-size"), fl!("panel-time")];
         let (column, title) = match sort.key {
             SortKey::Name => (0, fl!("panel-name")),
@@ -1965,8 +1955,11 @@ impl DirColumns {
         };
         titles[column] = format!("{}{title}", sort.arrow());
         let [name, size, time] = titles;
-        let (name, rest) = self.join(&name, &size, &time, [Align::Center; 3], marks);
-        name + &rest
+        let styles = (theme.header, theme.truncated);
+        let titles = [name.as_str(), size.as_str(), time.as_str()];
+        let (mut name, rest, _) = self.join(titles, [Align::Center; 3], styles, theme.glyphs.marks);
+        name.extend(rest);
+        Line::from(name).style(theme.header)
     }
 
     /// A row, with the name in the color of its kind, as mc highlights files, scrolled `shift`
@@ -1990,9 +1983,13 @@ impl DirColumns {
                 (size, time, theme.entry(entry))
             }
         };
-        let (_, rest) = self.join("", &size, &time, ALIGN, view.theme.glyphs.marks);
-        let (mut spans, marks) = name_spans(&prefix, &name, (self.name, shift), style, view);
-        spans.push(Span::raw(rest));
+        // Without styles: `row_style` gives the row its colors, and the marks their accent.
+        let styles = (Style::new(), Style::new());
+        let cells = ["", &size, &time];
+        let (_, rest, cut) = self.join(cells, ALIGN, styles, view.theme.glyphs.marks);
+        let (mut spans, mut marks) = name_spans(&prefix, &name, (self.name, shift), style, view);
+        marks.extend(cut.into_iter().map(|index| spans.len() + index));
+        spans.extend(rest);
         (Line::from(spans), marks)
     }
 }
@@ -2082,25 +2079,36 @@ impl DirColumns {
         }
     }
 
-    /// The name cell, and the other cells with the blanks the lines between them go on.
+    /// The name cell, and the other cells with the blanks the lines between them go on, in
+    /// `style`, with the marks of text cut short of `marks` in `mark` over it; and the indexes
+    /// of those marks among the other cells.
     fn join(
         self,
-        name: &str,
-        size: &str,
-        time: &str,
+        [name, size, time]: [&str; 3],
         align: [Align; 3],
+        (style, mark): (Style, Style),
         marks: Marks,
-    ) -> (String, String) {
-        let mut rest = String::new();
-        if self.size {
-            rest.push(' ');
-            rest.push_str(&cells::fit(size, SIZE_WIDTH, align[1], marks));
+    ) -> (Vec<Span<'static>>, Vec<Span<'static>>, Vec<usize>) {
+        let mut rest = Vec::new();
+        let mut cut = Vec::new();
+        let cells = [
+            (self.size, size, SIZE_WIDTH),
+            (self.time, time, MTIME_WIDTH),
+        ];
+        for ((shown, text, width), align) in cells.into_iter().zip([align[1], align[2]]) {
+            if !shown {
+                continue;
+            }
+            rest.push(Span::styled(" ", style));
+            let fitted = cells::fit_cut(text, width, align, Cut::Middle);
+            if fitted.cut.is_some() {
+                // After the text before the mark.
+                cut.push(rest.len() + 1);
+            }
+            rest.extend(cells::spans(fitted, (style, mark), marks));
         }
-        if self.time {
-            rest.push(' ');
-            rest.push_str(&cells::fit(time, MTIME_WIDTH, align[2], marks));
-        }
-        (cells::fit(name, self.name, align[0], marks), rest)
+        let name = cells::fit(name, self.name, align[0], (style, mark), marks);
+        (name, rest, cut)
     }
 }
 

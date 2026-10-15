@@ -336,12 +336,19 @@ pub(crate) struct Colors {
     title: Style,
     button: Style,
     focused: Style,
+    /// The marks of text cut short, over `body`.
+    mark: Style,
 }
 
 impl Colors {
     /// The style of the button with the focus.
     pub(crate) fn focused_style(self) -> Style {
         self.focused
+    }
+
+    /// The body's style, and that of the marks of text cut short over it.
+    pub(crate) fn body_styles(self) -> (Style, Style) {
+        (self.body, self.mark)
     }
 
     /// A dialog's colors, or an error's: mc draws errors and warnings red.
@@ -352,6 +359,7 @@ impl Colors {
                 title: theme.error_title,
                 button: theme.error_dialog,
                 focused: theme.error_button_focused,
+                mark: theme.truncated_error,
             }
         } else {
             Self {
@@ -359,6 +367,7 @@ impl Colors {
                 title: theme.dialog_title,
                 button: theme.dialog_button,
                 focused: theme.dialog_button_focused,
+                mark: theme.truncated_dialog,
             }
         }
     }
@@ -985,8 +994,9 @@ impl Dialog {
                 if index >= inner.height {
                     return;
                 }
-                let label = cells::fit(label, room, cells::Align::Left, theme.glyphs.marks);
-                frame.render_widget(Line::raw(label), row(index));
+                let styles = colors.body_styles();
+                let label = cells::fit(label, room, cells::Align::Left, styles, theme.glyphs.marks);
+                frame.render_widget(Line::from(label), row(index));
                 index += 1;
             }
             if index >= inner.height {
@@ -998,16 +1008,17 @@ impl Dialog {
                 &after,
                 room.saturating_sub(used),
                 cells::Align::Left,
+                (Style::new(), theme.truncated_cursor),
                 theme.glyphs.marks,
             );
-            let line = Line::from(vec![
+            let mut line = Line::from(vec![
                 Span::raw(before),
                 Span::styled(
                     selected,
                     theme.dialog_input.add_modifier(Modifier::REVERSED),
                 ),
-                Span::raw(after),
             ]);
+            line.spans.extend(after);
             frame.render_widget(line.style(theme.dialog_input), row(index));
             spots.push((Focus::Field(number), row(index)));
             if number == 0 {

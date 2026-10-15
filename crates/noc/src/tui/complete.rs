@@ -469,15 +469,21 @@ impl Choices {
             .take(page)
             .enumerate()
         {
-            let text = cells::fit(&row_text(item).0, width, Align::Left, theme.glyphs.marks);
-            let style = if Some(row) == self.chosen {
-                focused
+            let styles = if Some(row) == self.chosen {
+                (focused, theme.truncated_cursor)
             } else {
-                theme.dialog
+                (theme.dialog, theme.truncated_dialog)
             };
+            let text = cells::fit(
+                &row_text(item).0,
+                width,
+                Align::Left,
+                styles,
+                theme.glyphs.marks,
+            );
             let y = inner.y + u16::try_from(index).unwrap_or(0);
             let line = Rect::new(inner.x, y, inner.width, 1);
-            frame.render_widget(Line::styled(text, style), line);
+            frame.render_widget(Line::from(text).style(styles.0), line);
             self.drawn.rows.push((row, line));
         }
     }

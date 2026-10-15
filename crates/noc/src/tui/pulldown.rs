@@ -882,7 +882,13 @@ fn item_line(
     let key = status.key.as_deref().unwrap_or_default();
     let used = 3 + cells::width(&item.label.text);
     let rest = room.saturating_sub(used + 1);
-    let styles = (style, truncated);
+    // In the colors of keys, but on the cursor and where the command cannot run now.
+    let key_style = if selected || !status.enabled {
+        style
+    } else {
+        theme.menu.patch(theme.menu_keys)
+    };
+    let styles = (key_style, truncated);
     spans.extend(cells::fit(
         key,
         rest,
@@ -1459,6 +1465,35 @@ mod tests {
         };
         assert_eq!(item.label.text, "1 R&D");
         assert_eq!(item.label.hotkey, Some((0, '1')));
+    }
+
+    #[test]
+    fn keys_take_the_color_of_keys_but_on_the_cursor_and_where_disabled() {
+        let menu = PullDown::new(Side::Left, false, None, &[], Glyphs::PLAIN.marks, &status);
+        let Some(Entry::Item(item)) = menu.menus[0].entries.first() else {
+            panic!("{menu:?}");
+        };
+        let theme = Theme::mc_classic();
+        let marks = ('*', 'x');
+        let key_style = |selected: bool, enabled: bool| {
+            let status = Status {
+                enabled,
+                checked: false,
+                key: Some("o n".to_owned()),
+            };
+            let line = item_line(item, &status, selected, 40, &theme, marks);
+            line.spans
+                .iter()
+                .find(|span| span.content.contains("o n"))
+                .map(|span| span.style)
+                .unwrap()
+        };
+        assert_eq!(key_style(false, true), theme.menu.patch(theme.menu_keys));
+        assert_eq!(key_style(true, true), theme.menu_selected);
+        assert_eq!(
+            key_style(false, false),
+            theme.menu.patch(theme.menu_disabled)
+        );
     }
 
     #[test]

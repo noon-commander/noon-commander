@@ -165,7 +165,7 @@ impl KeyHintsWindow {
                 let (keys_style, text_style, mark) = if shown_row.selected {
                     (focused, focused, theme.truncated_cursor)
                 } else if row.runs() {
-                    (theme.dialog_title, theme.dialog, theme.truncated_dialog)
+                    (theme.keys, theme.dialog, theme.truncated_dialog)
                 } else {
                     let dim = theme.dialog.add_modifier(Modifier::DIM);
                     (
@@ -279,6 +279,32 @@ mod tests {
         let row = window.picker.shown(&window.rows)[window.picker.cursor()].clone();
         assert!(row.action.takes_char(), "{row:?}");
         assert_eq!(press(&mut window, Action::Confirm), KeyHintsEvent::Pending);
+    }
+
+    #[test]
+    fn keys_take_the_color_of_keys_but_under_the_cursor() {
+        let mut window = window((Mode::Normal, Context::Panel), Extra::default());
+        filter(&mut window, "'ctrl+w");
+        let theme = Theme::mc_classic();
+        let mut terminal = Terminal::new(TestBackend::new(80, 16)).unwrap();
+        terminal
+            .draw(|frame| window.render(frame, frame.area(), &theme))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let colors: Vec<_> = (0..buffer.area.height)
+            .filter_map(|y| {
+                let row: String = (0..buffer.area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect();
+                let x = row.find("Ctrl+w")?;
+                let x = u16::try_from(row[..x].chars().count()).unwrap();
+                Some(buffer[(x, y)].fg)
+            })
+            .collect();
+        let keys = theme.keys.fg.unwrap();
+        assert!(colors.len() > 1, "{}", terminal.backend());
+        assert_ne!(colors[0], keys, "the row under the cursor");
+        assert!(colors[1..].iter().all(|fg| *fg == keys), "{colors:?}");
     }
 
     #[test]

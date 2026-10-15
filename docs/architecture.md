@@ -1219,7 +1219,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   Keys, which folds, with a group for each part of the app (panels, text fields, search and
   renaming, the command line, lists and menus, menus and dialogs, the viewer) and tips. It opens at
   the top of About first, and then where it was when it closed last (`help::Spot`, which the app
-  keeps): the section, Keys open or folded, what had the keys, and how far down the text was.
+  keeps): the section, Keys open or folded, what had the keys, and how far down the text was. The
+  titles of the parts of a section are bold on a line across (`── Panels ──`), and the keys and the
+  names of the facts take the theme's `keys`, a color apart from the titles, as the keys of the
+  key hints and of their list (Ctrl+k) do, and those of the menus of F9 in `menu_keys`.
   Tab moves between the sections and the text; in the sections `j` and `k` choose, `l` or Enter
   opens Keys or goes to the text, and `h` goes up to Keys and folds it; in the text `h` goes back.
   A click chooses a section, and one on Keys opens or folds it. The text scrolls as the viewer

@@ -13,7 +13,7 @@ use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
 use super::dialog::{Colors, draw_box, right_frame};
-use super::glyphs::categories;
+use super::glyphs::{self, categories};
 use super::keymap::{Action, Context, Keymap, Mode, Resolved};
 use super::mouse::{Pointer, Press, Scroll};
 use super::panel::home_text;
@@ -666,20 +666,12 @@ impl Help {
             usize::MAX,
         );
         let marks = theme.glyphs.marks;
-        let title = (theme.dialog_title, theme.truncated_dialog);
+        let title = (theme.keys, theme.truncated_dialog);
         let body = (theme.dialog, theme.truncated_dialog);
         entries
             .iter()
             .flat_map(|entry| match entry {
-                Entry::Heading(heading) => {
-                    vec![Line::from(cells::fit(
-                        heading,
-                        width,
-                        Align::Left,
-                        title,
-                        marks,
-                    ))]
-                }
+                Entry::Heading(heading) => vec![heading_line(heading, width, theme)],
                 Entry::Keys { keys, text } => {
                     let room = width.saturating_sub(keys_width + 1);
                     let text = cells::fit(text, room, Align::Left, body, marks);
@@ -730,6 +722,35 @@ impl Help {
         let line = Line::styled(position, theme.dialog);
         frame.render_widget(line, Rect::new(x, inner.bottom(), width, 1));
     }
+}
+
+/// `title` on a line across `width` cells, as `── Panels ──────`: the line as the frame is, the
+/// title in bold.
+fn heading_line(title: &str, width: usize, theme: &Theme) -> Line<'static> {
+    let styles = (theme.dialog_title.bold(), theme.truncated_dialog);
+    let marks = theme.glyphs.marks;
+    let lead = format!("{0}{0} ", glyphs::LINE);
+    // The lead, and a cell after the title.
+    let room = width.saturating_sub(cells::width(&lead) + 1);
+    if room == 0 {
+        return Line::from(cells::fit(title, width, Align::Left, styles, marks));
+    }
+    let title = cells::fit(
+        title,
+        cells::width(title).min(room),
+        Align::Left,
+        styles,
+        marks,
+    );
+    let used = cells::width(&lead) + title.iter().map(Span::width).sum::<usize>();
+    let rest = width.saturating_sub(used + 1);
+    let mut spans = vec![Span::styled(lead, theme.dialog)];
+    spans.extend(title);
+    spans.push(Span::styled(
+        format!(" {}", glyphs::LINE.repeat(rest)),
+        theme.dialog,
+    ));
+    Line::from(spans)
 }
 
 /// `percent` of `cells`, rounded down.
@@ -1584,6 +1605,43 @@ mod tests {
             screen.contains("Open the directory under the cursor"),
             "{screen}"
         );
+    }
+
+    #[test]
+    fn titles_are_lines_across_and_keys_have_a_color_of_their_own() {
+        let theme = Theme::terminal();
+        let text = |line: Line<'_>| {
+            line.spans
+                .iter()
+                .map(|span| span.content.as_ref())
+                .collect::<String>()
+        };
+        let line = heading_line("Panels", 20, &theme);
+        assert_eq!(text(line.clone()), "── Panels ──────────");
+        assert!(
+            line.spans[1]
+                .style
+                .add_modifier
+                .contains(ratatui::style::Modifier::BOLD)
+        );
+        assert_eq!(
+            text(heading_line("Panels in Visual mode", 12, &theme)),
+            "── Pane»ode "
+        );
+        assert_eq!(text(heading_line("Panels", 4, &theme)), "Pa»s");
+
+        let theme = Theme::mc_classic();
+        let mut terminal = Terminal::new(TestBackend::new(120, 26)).unwrap();
+        let mut help = on(1);
+        terminal
+            .draw(|frame| help.render(frame, frame.area(), &theme))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let at = super::super::mouse::find(buffer, "Ctrl+p");
+        assert_eq!(buffer[(at.x, at.y)].fg, theme.keys.fg.unwrap());
+        let at = super::super::mouse::find(buffer, "Panels ─");
+        assert_eq!(buffer[(at.x, at.y)].fg, theme.dialog_title.fg.unwrap());
+        assert_ne!(theme.keys.fg, theme.dialog_title.fg);
     }
 
     #[test]

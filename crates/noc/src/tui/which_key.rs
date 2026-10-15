@@ -154,7 +154,7 @@ fn render_cells(frame: &mut Frame<'_>, inner: Rect, grid: Grid, rows: &[Row], th
             } else {
                 theme.dialog
             };
-            let mut spans = styled(fit_keys(&row.keys, keys_width), theme.dialog_title, theme);
+            let mut spans = styled(fit_keys(&row.keys, keys_width), theme.keys, theme);
             spans.push(Span::styled(" ", theme.dialog));
             spans.extend(styled(cut(&row.text, text_width), style, theme));
             frame.render_widget(Line::from(spans), cell_area(inner, grid, column, line));
@@ -297,6 +297,20 @@ mod tests {
             assert_eq!(cell.fg, theme.truncated_dialog.fg.unwrap());
             assert_eq!(cell.bg, theme.dialog.bg.unwrap());
         }
+    }
+
+    #[test]
+    fn keys_take_the_color_of_keys() {
+        let keymap = Keymap::default();
+        let hints = root(&keymap, Context::Panel);
+        let theme = Theme::mc_classic();
+        let mut terminal = Terminal::new(TestBackend::new(80, 14)).unwrap();
+        terminal
+            .draw(|frame| render(frame, frame.area(), &hints, &theme))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let at = crate::tui::mouse::find(buffer, "Ctrl+w");
+        assert_eq!(buffer[(at.x, at.y)].fg, theme.keys.fg.unwrap());
     }
 
     #[test]

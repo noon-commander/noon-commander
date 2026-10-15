@@ -88,9 +88,15 @@ pub(crate) struct Theme {
     /// run now.
     pub(crate) menu_hotkey: Style,
     pub(crate) menu_disabled: Style,
+    /// The keys of the commands of the pull-down menu: `keys` on the menu's own background.
+    pub(crate) menu_keys: Style,
     /// Dialog body, frame, and text.
     pub(crate) dialog: Style,
     pub(crate) dialog_title: Style,
+    /// Keys, wherever they are listed with what they do: in the help, where the names of the
+    /// facts on its About page take it too, the key hints, and their list of Ctrl+k; a color of
+    /// their own, apart from titles. The pull-down menu has [`menu_keys`](Self::menu_keys).
+    pub(crate) keys: Style,
     /// Dialog button without the focus.
     pub(crate) dialog_button: Style,
     pub(crate) dialog_button_focused: Style,
@@ -231,8 +237,11 @@ impl Theme {
             menu_selected: on(Color::White, Color::Black),
             menu_hotkey: fg(Color::LightYellow),
             menu_disabled: fg(Color::DarkGray),
+            // Magenta does not read on the cyan of menus; the labels there are white.
+            menu_keys: fg(Color::Black),
             dialog: on(Color::Black, Color::Gray),
             dialog_title: on(Color::Blue, Color::Gray),
+            keys: on(Color::Magenta, Color::Gray),
             dialog_button: on(Color::Black, Color::Gray),
             dialog_button_focused: on(Color::Black, Color::Cyan),
             dialog_input: on(Color::Black, Color::Cyan),
@@ -299,8 +308,10 @@ impl Theme {
             menu_selected: reversed,
             menu_hotkey: Style::new().underlined(),
             menu_disabled: Style::new().dim(),
+            menu_keys: plain.bold(),
             dialog: plain,
             dialog_title: plain,
+            keys: plain.bold(),
             dialog_button: plain,
             dialog_button_focused: reversed,
             dialog_input: reversed,
@@ -365,8 +376,10 @@ impl Theme {
             // Without a color of its own: an accent would not show on the selected command.
             menu_hotkey: Style::new().bold().underlined(),
             menu_disabled: fg(p.subtext0),
+            menu_keys: fg(p.blue),
             dialog: on(p.text, p.surface0),
             dialog_title: on(p.mauve, p.surface0),
+            keys: on(p.blue, p.surface0),
             dialog_button: on(p.text, p.surface0),
             dialog_button_focused: cursor,
             dialog_input: on(p.text, p.surface1),
@@ -434,8 +447,10 @@ impl Theme {
             // Without a color of its own: an accent would not show on the selected command.
             menu_hotkey: Style::new().bold().underlined(),
             menu_disabled: fg(p.muted),
+            menu_keys: fg(p.teal),
             dialog: on(p.text, p.surface),
             dialog_title: on(p.accent, p.surface).bold(),
+            keys: on(p.teal, p.surface),
             dialog_button: on(p.text, p.surface),
             dialog_button_focused: cursor,
             dialog_input: on(p.text, p.field),

@@ -667,15 +667,23 @@ impl Panel {
         }
     }
 
-    /// Scrolls the names `to` cells left, but no further than vim's `zl` goes: until the last
-    /// character of the name under the cursor is at the left edge.
+    /// Scrolls the names `to` cells left, but no further than [`Self::shift_limit`].
     fn shift_names(&mut self, to: usize) {
-        let name = self.cursor_name().unwrap_or_default();
-        let last = name
-            .chars()
-            .next_back()
-            .map_or(0, |c| cells::width(&c.to_string()));
-        self.shift = to.min(cells::width(&name) - last);
+        self.shift = to.min(self.shift_limit());
+    }
+
+    /// How far the names can scroll left: until the end of the longest name on screen is at the
+    /// right edge, as `ze` puts it, so that scrolling never leaves the column empty. The cursor's
+    /// row counts even before a render brings it on screen.
+    fn shift_limit(&self) -> usize {
+        let on_screen = (self.window.top()..self.rows()).take(self.page);
+        let longest = on_screen
+            .chain([self.cursor])
+            .filter_map(|index| self.row(index))
+            .map(|row| cells::width(&shown_name(row, self.names.0).concat()))
+            .max()
+            .unwrap_or(0);
+        longest.saturating_sub(self.names.1)
     }
 
     /// The name under the cursor as its row shows it, after its icon or marker, as the last
@@ -1594,6 +1602,8 @@ impl Panel {
 
         let columns = DirColumns::for_width(width);
         self.names = (view.decor, columns.name);
+        // Other rows on screen, or a wider column, may need less of the scroll.
+        self.shift = self.shift.min(self.shift_limit());
         let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
         frame.render_widget(columns.header(self.sort, theme), line(inner.y));
         let visual = self.visual_rows();
@@ -3392,26 +3402,67 @@ mod tests {
         assert_eq!(panel.shift, 0);
         // `ze`: the end of the name under the cursor at the right edge.
         assert_eq!(press(&mut panel, &[Action::ScrollEnd])[2], "«jklmnopqrst");
-        // `zl` stops where the last character of the name under the cursor is at the left
-        // edge, as vim's stops at the end of the cursor line.
-        press(&mut panel, &[Action::ScrollRight; 40]);
-        assert_eq!(panel.shift, 20, "' abcdefghijklmnopqrst' is 21 cells");
+        // `zl` stops where `ze` does for the longest name on screen, its end at the right edge,
+        // so that the column never scrolls empty.
+        assert_eq!(
+            press(&mut panel, &[Action::ScrollRight; 40])[2],
+            "«jklmnopqrst"
+        );
+        assert_eq!(
+            panel.shift, 9,
+            "' abcdefghijklmnopqrst' is 21 cells, the column 12"
+        );
         // `zs`: from the start again.
         press(&mut panel, &[Action::ScrollStart]);
         assert_eq!(panel.shift, 0);
-        // On a shorter name, `zl` brings the names back to its end, as vim's does.
-        press(&mut panel, &[Action::ScrollEnd, Action::ScrollRight]);
-        assert_eq!(panel.shift, 10);
-        panel.handle(Action::Down);
-        panel.handle(Action::ScrollRight);
-        assert_eq!(panel.shift, 5, "' short' is 6 cells");
-        // Moving the cursor keeps the names where they are.
-        panel.handle(Action::Up);
-        assert_eq!(panel.shift, 5);
+        // On a shorter name, the longest on screen still sets how far `zl` goes.
+        press(&mut panel, &[Action::Down]);
+        assert_eq!(under_cursor(&panel), "short");
+        press(&mut panel, &[Action::ScrollRight; 40]);
+        assert_eq!(panel.shift, 9);
+        // Moving the cursor keeps the names where they are, and `zl` goes no further.
+        press(&mut panel, &[Action::Up, Action::ScrollRight]);
+        assert_eq!(panel.shift, 9);
+        press(&mut panel, &[Action::Up, Action::Up, Action::ScrollRight]);
+        assert_eq!(panel.shift, 9);
         // Another directory shows its names from their start.
         panel.cursor = 1;
         let request = panel.handle(Action::Enter).unwrap();
         answer(&mut panel, &request, Listing::Dir(vec![]));
+        assert_eq!(panel.shift, 0);
+    }
+
+    #[test]
+    fn the_names_scroll_back_as_far_as_the_names_on_screen_need() {
+        let mut entries = vec![entry("abcdefghijklmnopqrst", FileKind::File, 1)];
+        entries.extend((0..9).map(|n| entry(&format!("medium-name{n}"), FileKind::File, 1)));
+        let mut panel = loaded("/srv", entries);
+        name_rows(&mut panel);
+        for _ in 0..40 {
+            panel.handle(Action::ScrollRight);
+        }
+        assert_eq!(
+            panel.shift, 9,
+            "' abcdefghijklmnopqrst' is 21 cells, the column 12"
+        );
+        panel.handle(Action::End);
+        let rows = name_rows(&mut panel);
+        assert!(panel.window.top() > 1, "the long name is off screen");
+        assert_eq!(panel.shift, 1, "' medium-name8' is 13 cells");
+        assert_eq!(rows[3], "«edium-name8");
+        panel.handle(Action::ScrollRight);
+        assert_eq!(panel.shift, 1);
+        // Back by the long name, it scrolls as far again.
+        panel.handle(Action::Home);
+        name_rows(&mut panel);
+        for _ in 0..40 {
+            panel.handle(Action::ScrollRight);
+        }
+        assert_eq!(panel.shift, 9);
+        // Where all the names on screen fit, they do not scroll.
+        let mut panel = loaded("/srv", vec![entry("short", FileKind::File, 1)]);
+        name_rows(&mut panel);
+        panel.handle(Action::ScrollRight);
         assert_eq!(panel.shift, 0);
     }
 

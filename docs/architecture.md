@@ -864,9 +864,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   in the colors of dialogs, following the cursor until `K` or Esc (`App.whole`, not saved). The
   z keys scroll the names of all rows as vim scrolls lines that do not wrap (`Panel.shift`, back
   to 0 in another directory): `z h`/`z l` a column, `z H`/`z L` half the column, `z s` the
-  start, `z e` the end of the name under the cursor into view; `z l` stops with the last
-  character of that name at the left edge, as vim's with the cursor line's. A scrolled name
-  shows `«` over its first cell and `»` where it is cut.
+  start, `z e` the end of the name under the cursor into view; `z l` and `z L` stop with the end
+  of the longest name on screen at the right edge (`Panel::shift_limit`), and each render brings
+  the scroll back as far as the names on screen need. A scrolled name shows `«` over its first
+  cell and `»` where it is cut.
 - **Scrolling.** The rows of a panel and of the lists scroll as vim 9.1 scrolls a window
   (`tui/scroll.rs`, a port of vim's `move.c` for lines one row high, checked against vim on random
   keys): five rows stay above and below the cursor, as vim's `defaults.vim` sets 'scrolloff'
@@ -954,7 +955,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   ends lines, and control characters are shown safely. Long lines wrap, each row after the first
   starting with `»`, as vim's 'showbreak' (F2 cuts them, `«` and `»` mark where they go on past
   the screen, as vim's 'listchars', and Left and Right, `h`, `l`, and the z keys as vim's scroll
-  then, no further than the last character of the longest line on screen at the left edge); the
+  then, no further than the end of the longest line on screen at the right edge, and back as far
+  as the lines on screen need after paging or widening); the
   position is a line and a row within it, so that only the lines in view are wrapped, whatever
   the size of the file. Keys follow vim and less: `j`/`k`, Ctrl+e/Ctrl+y, and the
   arrows a line, Ctrl+f/Ctrl+b and PgDn/PgUp a page but for the two rows that vim keeps, Space/`f`

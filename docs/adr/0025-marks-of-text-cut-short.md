@@ -42,13 +42,17 @@ rows looked like lines of their own.
 - **The z keys scroll sideways as vim's do on lines that do not wrap**: `z h` and `z l` a column,
   with a count that many; `z H` and `z L` half the width; `z s` to the start; `z e` the end into
   view. In a panel they scroll the names, all rows together, with `«` over the first cell of
-  a name that goes on to the left and `»` at the end of one cut short. As vim's `zl` stops with
-  the last character of the cursor line at the left edge, a panel stops with that of the name
-  under the cursor; the viewer, which has no cursor, with that of the longest line on screen,
-  and so does `l`. `z s` and `z e` go by the start and the end of the name under the cursor, the
-  viewer's by the longest line on screen. Moving the cursor keeps the names where they are;
-  another directory shows them from their start. In the viewer they do nothing while lines
-  wrap, as in vim.
+  a name that goes on to the left and `»` at the end of one cut short. Vim's `zl` stops with the
+  last character of the cursor line at the left edge, under the `«` that would cover it, which
+  scrolls the text out of sight; and since all names scroll together, a limit set by the name
+  under the cursor went further on a longer one and jumped back on a shorter one. So `z l`,
+  `z L`, and the viewer's `l` stop where `z e` puts the end of the longest name or line on
+  screen: at the right edge. The scroll comes back by itself as far as what is on screen needs,
+  after paging to shorter names or widening the terminal, as vim's view follows its cursor.
+  `z s` goes to the start; `z e` goes by the end of the name under the cursor, the viewer's by
+  the longest line on screen. Moving the cursor keeps the names where they are, as far as the
+  names on screen let it; another directory shows them from their start. In the viewer they do
+  nothing while lines wrap, as in vim.
 - **The viewer marks lines that go on past the screen** as vim's 'listchars' does: `«` over the
   first cell when text is hidden on the left, `»` over the last when it goes on to the right.
   Wrapped rows after the first start with `»`, as vim's 'showbreak', which takes a cell of them.

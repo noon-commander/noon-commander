@@ -44,8 +44,8 @@ pub enum Command {
     Top(usize),
     /// One column left, when lines are cut.
     Left,
-    /// One column right, when lines are cut; no further than the last character of the longest
-    /// line on screen at the left edge.
+    /// One column right, when lines are cut; no further than the end of the longest line on
+    /// screen at the right edge.
     Right,
     /// Count columns left, when lines are cut, as vim's `zh`.
     ScrollLeft(usize),
@@ -181,9 +181,7 @@ impl Viewer {
             }
             Command::HalfRight(count) => self.go_right(count.saturating_mul(self.width / 2)),
             Command::ScrollStart => self.column = 0,
-            Command::ScrollEnd => {
-                self.column = self.longest_on_screen().saturating_sub(self.width);
-            }
+            Command::ScrollEnd => self.column = self.last_column(),
         }
     }
 
@@ -200,11 +198,15 @@ impl Viewer {
         lines.map(|line| width(line)).max().unwrap_or(0)
     }
 
-    /// `count` columns right, as vim's `zl`: no further than the last character of the longest
-    /// line on screen at the left edge, and never back left.
+    /// How far the lines can scroll left: until the end of the longest line on screen is at the
+    /// right edge, as `ze` puts it, so that scrolling never leaves the screen empty.
+    fn last_column(&self) -> usize {
+        self.longest_on_screen().saturating_sub(self.width)
+    }
+
+    /// `count` columns right, as vim's `zl`, but no further than [`Self::last_column`].
     fn go_right(&mut self, count: usize) {
-        let last = self.longest_on_screen().saturating_sub(1);
-        self.column = self.column.max(self.column.saturating_add(count).min(last));
+        self.column = self.column.saturating_add(count).min(self.last_column());
     }
 
     /// The rows line `index` takes on screen.
@@ -339,6 +341,8 @@ impl Viewer {
         }
         // The width may have changed since the position was taken.
         self.top.1 = self.top.1.min(self.rows_of(self.top.0).saturating_sub(1));
+        // Other lines on screen, or a wider screen, may need less of the scroll.
+        self.column = self.column.min(self.last_column());
         let row = |index: u16| Rect::new(area.x, area.y + index, area.width, 1);
         // Rows of text leave the scroll bar's column alone, which the end line's style would dim.
         let text_width = u16::try_from(self.width).unwrap_or(area.width);
@@ -898,25 +902,39 @@ mod tests {
         assert_eq!(press(Command::ScrollStart), 0);
         assert_eq!(
             press(Command::ScrollRight(100)),
-            39,
-            "the last character at the left edge"
+            21,
+            "no further than the end of the longest line at the right edge"
         );
-        assert_eq!(press(Command::Right), 39, "Right stops there too");
-        assert_eq!(press(Command::HalfRight(1)), 39);
-        assert_eq!(press(Command::Left), 38);
+        assert_eq!(press(Command::Right), 21, "Right stops there too");
+        assert_eq!(press(Command::HalfRight(1)), 21);
+        assert_eq!(press(Command::Left), 20);
 
         viewer.handle(Command::Scroll(Motion::Down));
         draw(&mut viewer, 20, 4);
         assert_eq!(
-            viewer.column, 38,
-            "the long line is off screen; nothing scrolls back"
+            viewer.column, 0,
+            "the long line is off screen and the lines on screen fit"
         );
-        viewer.handle(Command::ScrollRight(1));
-        assert_eq!(viewer.column, 38, "nor further than the lines on screen");
-        viewer.handle(Command::ScrollEnd);
-        assert_eq!(viewer.column, 0, "the lines on screen fit");
         viewer.handle(Command::ScrollRight(5));
-        assert_eq!(viewer.column, 0, "one character, at the left edge already");
+        assert_eq!(viewer.column, 0, "nor do they scroll");
+    }
+
+    #[test]
+    fn the_lines_scroll_back_as_far_as_the_lines_on_screen_need() {
+        let mut viewer = Viewer::new("f".to_owned());
+        let text = format!("{}\n{}\nz\n", "x".repeat(40), "y".repeat(25));
+        viewer.show(text.as_bytes(), false);
+        viewer.handle(Command::ToggleWrap);
+        // Two rows of text, nineteen cells wide beside the scroll bar.
+        draw(&mut viewer, 20, 3);
+        assert_eq!(viewer.width, 19);
+        viewer.handle(Command::ScrollRight(100));
+        assert_eq!(viewer.column, 21);
+        viewer.handle(Command::Scroll(Motion::Down));
+        let screen = draw(&mut viewer, 20, 3);
+        assert_eq!(viewer.column, 6, "the end of the line of 25 at the edge");
+        let rows: Vec<&str> = screen.lines().collect();
+        assert!(rows[1].starts_with("\"«yyyyyyyyyyyyyyyyyy"), "{screen}");
     }
 
     #[test]

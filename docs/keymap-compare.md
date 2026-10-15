@@ -196,7 +196,7 @@ section says: the commands of files act on the rows it selects, which become the
 | Mark or unmark, then the next row | `mark` | ⏳ | Space<br>Shift+Down | Insert<br>Ctrl+t<br>Shift+Down | Insert<br>Shift+Down | Space | Space |
 | Mark or unmark, then the row above | `mark_up` | ⏳ | Shift+Up | Shift+Up | Shift+Up | — | — |
 | The names a column left, as vim's zh; with a count, that many | `scroll_left` | ⏳ | z h<br>z Left | — | Alt+Left | — | — |
-| The names a column right, as vim's zl, until the last character of the name under the cursor is at the left edge; with a count, that many | `scroll_right` | ⏳ | z l<br>z Right | — | Alt+Right | — | — |
+| The names a column right, as vim's zl, until the end of the longest name on screen is at the right edge; with a count, that many | `scroll_right` | ⏳ | z l<br>z Right | — | Alt+Right | — | — |
 | The names half their column left, as vim's zH | `scroll_half_left` | ⏳ | z H | — | — | — | — |
 | The names half their column right, as vim's zL | `scroll_half_right` | ⏳ | z L | — | — | — | — |
 | The names from their start, as vim's zs | `scroll_start` | ⏳ | z s | — | Alt+Home | — | — |
@@ -841,7 +841,7 @@ z keys scroll them as vim's do; wrapped lines start each row after the first wit
 | The start of the file | `home` | ✅ | g g<br>Home | Home<br>A1<br>g<br>Ctrl+Home<br>Ctrl+PgUp<br>Alt+< | Home<br>Ctrl+Home | — | Home<br>g |
 | The end of the file | `end` | ✅ | G<br>End | End<br>C1<br>G<br>Ctrl+End<br>Ctrl+PgDn<br>Alt+> | End<br>Ctrl+End | — | End<br>G |
 | One column left, when lines are cut (ranger: four) | `left` | ✅ | h<br>Left | Left<br>h | Left | — | Left<br>h |
-| One column right, when lines are cut, until the last character of the longest line on screen is at the left edge (ranger: four) | `right` | ⏳ | l<br>Right | Right<br>l | Right | — | Right<br>l |
+| One column right, when lines are cut, until the end of the longest line on screen is at the right edge (ranger: four) | `right` | ⏳ | l<br>Right | Right<br>l | Right | — | Right<br>l |
 | A column left, when lines are cut, as vim's zh; with a count, that many | `scroll_left` | ⏳ | z h<br>z Left | — | — | — | — |
 | A column right, when lines are cut, as vim's zl and as far as l; with a count, that many | `scroll_right` | ⏳ | z l<br>z Right | — | — | — | — |
 | Half the screen left, when lines are cut, as vim's zH | `scroll_half_left` | ⏳ | z H | — | — | — | — |

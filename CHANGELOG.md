@@ -63,8 +63,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Paths that do not fit lose their start rather than their middle, as in `«/deploy/site`.
 - Shift+Down and Shift+Up mark a row and move down or up, as in mc and Far; `J` and `K` no longer
   mark, and `K` shows the whole name under the cursor.
-- `l` in the viewer stops once the last character of the longest line on screen reaches the left
-  edge, as `z l` does.
+- `l`, `z l` and `z L` in the viewer stop once the end of the longest line on screen reaches the
+  right edge, where `z e` puts it, so that the text never scrolls out of sight; before, they went
+  on until its last character reached the left edge.
+- `z l` and `z L` in the panels stop once the end of the longest name on screen reaches the right
+  edge, as in the viewer; before, they went by the name under the cursor, until its last
+  character reached the left edge, so they went further on a longer name, jumped back on a
+  shorter one, and could leave the column empty.
+- The names in the panels and the lines in the viewer scroll back by themselves as far as the
+  ones on screen need, as after paging to shorter ones or widening the terminal.
 - The zoxide window (`g z`) opens in Insert mode, so keywords can be typed at once, as in `zi`,
   without `/` first. Esc goes to the rows, and Esc there closes the window.
 

@@ -88,7 +88,7 @@ where
 }
 
 /// The last line with text, trimmed: usually why a program gave up.
-fn last_line(bytes: &[u8]) -> String {
+pub(crate) fn last_line(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes)
         .lines()
         .map(str::trim)

@@ -139,6 +139,8 @@ pub(crate) enum Done {
     },
     /// What zoxide said it is, after an [`Effect::DetectZoxide`].
     Zoxide(Detected),
+    /// What ripgrep said it is, after an [`Effect::DetectRipgrep`].
+    Ripgrep(Detected),
     /// zoxide's answer to the [`Effect::ZoxideQuery`] `generation`, or why there is none.
     Jumps {
         generation: u64,
@@ -369,6 +371,7 @@ impl Tasks {
                     with_dirs,
                 } => self.list_commands(generation, dirs, prefix, with_dirs),
                 Effect::DetectZoxide => self.detect_zoxide(),
+                Effect::DetectRipgrep => self.detect_ripgrep(),
                 Effect::ZoxideQuery {
                     generation,
                     keywords,
@@ -516,8 +519,7 @@ impl Tasks {
         });
     }
 
-    /// Asks zoxide for the directories that match `keywords`, without `exclude`; a query that
-    /// is still running is dropped, which stops zoxide.
+    /// Asks zoxide what it is.
     fn detect_zoxide(&self) {
         let zoxide = self.context.zoxide();
         let done = self.done.clone();
@@ -526,6 +528,17 @@ impl Tasks {
         });
     }
 
+    /// Asks ripgrep what it is.
+    fn detect_ripgrep(&self) {
+        let ripgrep = self.context.ripgrep();
+        let done = self.done.clone();
+        tokio::spawn(async move {
+            let _ = done.send(Done::Ripgrep(about::detect_ripgrep(&ripgrep).await));
+        });
+    }
+
+    /// Asks zoxide for the directories that match `keywords`, without `exclude`; a query that
+    /// is still running is dropped, which stops zoxide.
     fn query_zoxide(&mut self, generation: u64, keywords: Vec<String>, exclude: Option<PathBuf>) {
         if let Some(previous) = self.zoxide_query.take() {
             previous.abort();

@@ -168,7 +168,16 @@ fn debug_version_has_one_line_per_key() {
         env!("CARGO_MANIFEST_DIR"),
         "/../noc-tools/tests/support/fake-zoxide"
     );
-    sandbox.write_config(&format!("[zoxide]\nprogram = {}\n", quote(fake_zoxide)));
+    let fake_rg = sandbox.path("rg");
+    write_executable(
+        &fake_rg,
+        "#!/bin/sh\necho 'ripgrep 15.2.0-fake'\necho\necho 'features:+pcre2'\n",
+    );
+    sandbox.write_config(&format!(
+        "[zoxide]\nprogram = {}\n[search]\nprogram = {}\n",
+        quote(fake_zoxide),
+        quote(fake_rg.to_str().unwrap())
+    ));
     let output = sandbox
         .command()
         .args(["debug", "version"])
@@ -206,6 +215,7 @@ fn debug_version_has_one_line_per_key() {
             "keyboard",
             "editor",
             "zoxide",
+            "ripgrep",
         ],
         "{text}"
     );
@@ -227,15 +237,21 @@ fn debug_version_has_one_line_per_key() {
     assert_eq!(value("keyboard"), "unchecked");
     assert_eq!(value("editor"), "nano -w");
     assert_eq!(value("zoxide"), "zoxide 0.9.8-fake");
+    assert_eq!(value("ripgrep"), "ripgrep 15.2.0-fake", "its first line");
 
-    sandbox.write_config("[zoxide]\nprogram = '/nonexistent/zoxide'\n");
+    sandbox.write_config(
+        "[zoxide]\nprogram = '/nonexistent/zoxide'\n[search]\nprogram = '/nonexistent/rg'\n",
+    );
     let output = sandbox
         .command()
         .args(["debug", "version"])
         .output()
         .unwrap();
     let text = stdout(&output);
-    assert!(text.ends_with("zoxide       not found\n"), "{text}");
+    assert!(
+        text.ends_with("zoxide       not found\nripgrep      not found\n"),
+        "{text}"
+    );
 }
 
 #[test]

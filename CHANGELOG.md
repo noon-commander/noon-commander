@@ -11,7 +11,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The help (F1) takes 70% of the screen and has sections down its left, as the Configuration
   dialog: About, with the license and every fact of `noc debug version` (the build, the system,
-  the terminal, and the external tools: the editor and zoxide), and where the settings,
+  the terminal, and the external tools: the editor, zoxide, and ripgrep), and where the settings,
   workspaces, history, and log are; and Keys, which folds, with the keys grouped by part of the
   app (panels, text fields, search and renaming, the command line, lists and menus, menus and
   dialogs, the viewer) and tips, each under its title in points. The parts of a section have
@@ -30,10 +30,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   over whatever is in front. `/` filters it by keys and by what they do, Enter runs the command
   under the cursor with the count typed before Ctrl+k, and Esc closes it.
 - `noc debug version` prints one `key value` line per fact, for scripts and bug reports: the
-  version, the compile-time features, the commit and its time in UTC, the target, the
-  operating system, the terminal with its colors and keyboard protocol, the editor of F4, and
-  zoxide, as `zoxide --version` says, or `not found`. The terminal is asked for its name, so
-  kitty, which sets no `TERM_PROGRAM`, is named too.
+  version, the compile-time features, the commit and its time in UTC, the target, the operating
+  system, the terminal with its colors and keyboard protocol, the editor of F4, zoxide, as
+  `zoxide --version` says, and ripgrep, as `rg --version` says, or `not found`. The terminal is
+  asked for its name, so kitty, which sets no `TERM_PROGRAM`, is named too.
 - Scroll bars on the right of the frames wherever the rows do not fit, as in Far: the panels,
   the help, the Configuration dialog, the location and tab menus, the Workspaces, history, and
   zoxide windows, the menus of F9, the list of completions, the jobs, and the checksums; the

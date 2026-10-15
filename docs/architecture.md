@@ -1219,8 +1219,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   on the left (`tui/sidebar.rs`, which both draw): About, with the license and the report of
   `crate::about` that `noc debug version` prints too (the build; the system, read once at start;
   the terminal, from its variables and the keyboard protocol the TUI found, without asking for its
-  name; and the external tools, the editor and zoxide, which is asked in the background at start
-  and again when `[zoxide] program` changes), and the files the app keeps; and
+  name; and the external tools, the editor, zoxide, and ripgrep, which are asked in the background
+  at start and again when `[zoxide] program` or `[search] program` changes), and the files the app
+  keeps; and
   Keys, which folds, with a group for each part of the app (panels, text fields, search and
   renaming, the command line, lists and menus, menus and dialogs, the viewer) and tips, each under
   its title in points after a bullet (`•`, `-` without icons). It opens at

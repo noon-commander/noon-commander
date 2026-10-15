@@ -6,7 +6,9 @@
 use std::ffi::OsString;
 use std::os::unix::ffi::OsStrExt as _;
 
+use noc_tools::ToolError;
 use noc_tools::editor::Editor;
+use noc_tools::ripgrep::Ripgrep;
 use noc_tools::zoxide::Zoxide;
 
 use crate::tui::ColorDepth;
@@ -86,10 +88,11 @@ pub(crate) enum Fact {
     Keyboard,
     Editor,
     Zoxide,
+    Ripgrep,
 }
 
 impl Fact {
-    pub(crate) const ALL: [Self; 18] = [
+    pub(crate) const ALL: [Self; 19] = [
         Self::Name,
         Self::Version,
         Self::Features,
@@ -108,6 +111,7 @@ impl Fact {
         Self::Keyboard,
         Self::Editor,
         Self::Zoxide,
+        Self::Ripgrep,
     ];
 
     /// Its key in `noc debug version`.
@@ -131,6 +135,7 @@ impl Fact {
             Self::Keyboard => "keyboard",
             Self::Editor => "editor",
             Self::Zoxide => "zoxide",
+            Self::Ripgrep => "ripgrep",
         }
     }
 
@@ -147,7 +152,7 @@ impl Fact {
             Self::Terminal | Self::Term | Self::Multiplexer | Self::Colors | Self::Keyboard => {
                 Topic::Terminal
             }
-            Self::Editor | Self::Zoxide => Topic::Tools,
+            Self::Editor | Self::Zoxide | Self::Ripgrep => Topic::Tools,
         }
     }
 }
@@ -185,6 +190,8 @@ pub(crate) struct Report {
     /// The command of F4.
     pub(crate) editor: Option<String>,
     pub(crate) zoxide: Detected,
+    /// The ripgrep of `g /`, for local directories.
+    pub(crate) ripgrep: Detected,
 }
 
 impl Report {
@@ -196,6 +203,7 @@ impl Report {
             terminal: Terminal::default(),
             editor: None,
             zoxide: Detected::Unchecked,
+            ripgrep: Detected::Unchecked,
         }
     }
 
@@ -234,11 +242,8 @@ impl Report {
                 keyboard => text(keyboard.name()),
             },
             Fact::Editor => known(&self.editor),
-            Fact::Zoxide => match &self.zoxide {
-                Detected::Found(version) => text(version),
-                Detected::Missing => Value::Missing,
-                Detected::Unchecked => Value::Unknown,
-            },
+            Fact::Zoxide => self.zoxide.value(),
+            Fact::Ripgrep => self.ripgrep.value(),
         }
     }
 }
@@ -348,16 +353,37 @@ pub(crate) enum Detected {
     Unchecked,
 }
 
-/// Asks `zoxide` what it is.
-pub(crate) async fn detect_zoxide(zoxide: &Zoxide) -> Detected {
-    match zoxide.version().await {
-        Ok(version) => known(version.as_bytes()).map_or(Detected::Unchecked, Detected::Found),
-        Err(error) if error.is_not_found() => Detected::Missing,
-        Err(error) => {
-            tracing::info!("zoxide does not say what it is: {error}");
-            Detected::Unchecked
+impl Detected {
+    /// As the report has it.
+    fn value(&self) -> Value {
+        match self {
+            Self::Found(version) => Value::Text(version.clone()),
+            Self::Missing => Value::Missing,
+            Self::Unchecked => Value::Unknown,
         }
     }
+
+    /// What `answer`, the version `program` gave or why it gave none, says of it.
+    fn of(program: &str, answer: Result<String, ToolError>) -> Self {
+        match answer {
+            Ok(version) => known(version.as_bytes()).map_or(Self::Unchecked, Self::Found),
+            Err(error) if error.is_not_found() => Self::Missing,
+            Err(error) => {
+                tracing::info!("{program} does not say what it is: {error}");
+                Self::Unchecked
+            }
+        }
+    }
+}
+
+/// Asks `zoxide` what it is.
+pub(crate) async fn detect_zoxide(zoxide: &Zoxide) -> Detected {
+    Detected::of("zoxide", zoxide.version().await)
+}
+
+/// Asks `rg` what it is.
+pub(crate) async fn detect_ripgrep(ripgrep: &Ripgrep) -> Detected {
+    Detected::of("rg", ripgrep.version().await)
 }
 
 /// The system the binary runs on.
@@ -487,11 +513,16 @@ mod tests {
             Fact::Keyboard => 15,
             Fact::Editor => 16,
             Fact::Zoxide => 17,
+            Fact::Ripgrep => 18,
         };
         for (index, fact) in Fact::ALL.into_iter().enumerate() {
             assert_eq!(place(fact), index, "{fact:?}");
         }
-        assert_eq!(place(Fact::Zoxide) + 1, Fact::ALL.len(), "the last is last");
+        assert_eq!(
+            place(Fact::Ripgrep) + 1,
+            Fact::ALL.len(),
+            "the last is last"
+        );
     }
 
     #[test]

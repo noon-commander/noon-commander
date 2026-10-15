@@ -348,6 +348,7 @@ fn fact_name(fact: Fact) -> Option<String> {
         Fact::Keyboard => fl!("help-about-keyboard"),
         Fact::Editor => fl!("help-about-editor"),
         Fact::Zoxide => fl!("help-about-zoxide"),
+        Fact::Ripgrep => fl!("help-about-ripgrep"),
     })
 }
 
@@ -1837,6 +1838,7 @@ mod tests {
             },
             editor: Some("nvim -p".to_owned()),
             zoxide: Detected::Missing,
+            ripgrep: Detected::Found("ripgrep 15.2.0".to_owned()),
         };
         let about = About {
             report,

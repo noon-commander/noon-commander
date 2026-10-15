@@ -179,6 +179,9 @@ pub(crate) enum Effect {
     /// Ask zoxide what it is, for the About page of the help, and pass it to
     /// [`App::set_zoxide`].
     DetectZoxide,
+    /// Ask ripgrep what it is, for the About page of the help, and pass it to
+    /// [`App::set_ripgrep`].
+    DetectRipgrep,
     /// Ask zoxide for the directories that match `keywords`, without `exclude`, and pass them
     /// to [`App::jumps`].
     ZoxideQuery {
@@ -1035,6 +1038,17 @@ impl App {
     /// Tells what zoxide is on the About page of the help, open or not.
     pub(crate) fn set_zoxide(&mut self, zoxide: Detected) {
         self.about.report.zoxide = zoxide;
+        self.refresh_help();
+    }
+
+    /// Tells what ripgrep is on the About page of the help, open or not.
+    pub(crate) fn set_ripgrep(&mut self, ripgrep: Detected) {
+        self.about.report.ripgrep = ripgrep;
+        self.refresh_help();
+    }
+
+    /// Draws the help again with what it shows now, where it was.
+    fn refresh_help(&mut self) {
         if let Some(help) = &self.help {
             let spot = help.spot();
             self.help = Some(self.help_screen().at(spot));
@@ -3729,6 +3743,7 @@ impl App {
         self.parallel_jobs = config.transfer.parallel_jobs.get();
         self.config = config.clone();
         let zoxide = old.zoxide.program != new.zoxide.program;
+        let ripgrep = old.search.program != new.search.program;
         let mut effects = vec![Effect::SaveConfig {
             old: Box::new(old),
             new: Box::new(new),
@@ -3736,6 +3751,9 @@ impl App {
         }];
         if zoxide {
             effects.push(Effect::DetectZoxide);
+        }
+        if ripgrep {
+            effects.push(Effect::DetectRipgrep);
         }
         effects.extend(self.start_queued());
         effects
@@ -10363,7 +10381,7 @@ mod tests {
     }
 
     #[test]
-    fn about_shows_zoxide_once_it_answers_and_asks_again_for_another_program() {
+    fn about_shows_zoxide_and_ripgrep_once_they_answer_and_asks_again_for_another_program() {
         let mut app = loaded();
         app.handle(action(Action::Help));
         screen_of(&mut app, 40);
@@ -10371,10 +10389,11 @@ mod tests {
         let text = screen_of(&mut app, 40);
         assert!(text.contains("External tools"), "{text}");
         app.set_zoxide(Detected::Found("zoxide 0.9.8".to_owned()));
+        app.set_ripgrep(Detected::Found("ripgrep 15.2.0".to_owned()));
         let text = screen_of(&mut app, 40);
         assert!(
-            text.contains("zoxide 0.9.8"),
-            "the open help shows it: {text}"
+            text.contains("zoxide 0.9.8") && text.contains("ripgrep 15.2.0"),
+            "the open help shows them: {text}"
         );
         assert_eq!(app.context(), Context::Help);
 
@@ -10388,12 +10407,21 @@ mod tests {
             "{effects:?}"
         );
         let mut new = config();
+        new.search.program = PathBuf::from("/opt/rg");
+        let effects = app.apply_config(config(), new);
+        assert!(
+            effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::DetectRipgrep)),
+            "{effects:?}"
+        );
+        let mut new = config();
         new.ui.show_hidden = !new.ui.show_hidden;
         let effects = app.apply_config(config(), new);
         assert!(
             !effects
                 .iter()
-                .any(|effect| matches!(effect, Effect::DetectZoxide))
+                .any(|effect| matches!(effect, Effect::DetectZoxide | Effect::DetectRipgrep))
         );
     }
 

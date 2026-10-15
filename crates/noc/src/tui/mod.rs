@@ -96,6 +96,7 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
         Done::Job { id, event } => tasks.run(app.job_event(id, event)),
         Done::Read { id, result } => app.read(id, result),
         Done::Zoxide(zoxide) => app.set_zoxide(zoxide),
+        Done::Ripgrep(ripgrep) => app.set_ripgrep(ripgrep),
         Done::Connected {
             host,
             connection,
@@ -264,6 +265,7 @@ fn start_app(
     // No menu asks for this generation.
     effects.push(app::Effect::ListPlaces { generation: 0 });
     effects.push(app::Effect::DetectZoxide);
+    effects.push(app::Effect::DetectRipgrep);
     app.set_color_depth(theme::ColorDepth::detect());
     app.set_keyboard(keyboard);
     app.set_time_zone(tz.clone());

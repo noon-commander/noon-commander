@@ -7,6 +7,7 @@ use color_eyre::eyre::{Result, WrapErr as _, bail};
 use noc_config::{Config, ConfigError, Hosts, Paths};
 use noc_ssh::discovery::{Discovery, DiscoveryOptions, DiscoveryWarning, discover};
 use noc_ssh::{ConfigStamp, ResolveCache, SshSettings};
+use noc_tools::ripgrep::Ripgrep;
 use noc_tools::zoxide::Zoxide;
 
 /// The loaded configuration.
@@ -103,6 +104,11 @@ impl Context {
     /// How zoxide is run now.
     pub(crate) fn zoxide(&self) -> Zoxide {
         Zoxide::new(self.config().zoxide.program.clone())
+    }
+
+    /// How ripgrep is run now, for local directories.
+    pub(crate) fn ripgrep(&self) -> Ripgrep {
+        Ripgrep::new(self.config().search.program.clone())
     }
 
     /// The host settings as they are now.

@@ -3,6 +3,7 @@
 
 #![allow(clippy::unwrap_used)]
 
+use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -298,6 +299,82 @@ async fn runs_a_command_in_a_directory_over_the_master() {
         session_after_close(&fake).await.command_in(b"", "true"),
         Err(SshError::Disconnected { .. })
     ));
+}
+
+fn os_args(args: &[&str]) -> Vec<OsString> {
+    args.iter().map(OsString::from).collect()
+}
+
+#[tokio::test]
+async fn spawns_a_program_without_a_terminal_and_reads_its_output() {
+    let fake = Fake::new(&[]);
+    let dir = fake.root.path().join("it's here");
+    std::fs::create_dir(&dir).unwrap();
+    // A word the shell expanded would print this name instead of `*`.
+    std::fs::write(dir.join("file"), b"").unwrap();
+    let session = fake.connect(&fake.settings).await.unwrap();
+    let args = os_args(&["%s|", "a b", "$HOME", "*", "-x", "it's"]);
+    let child = session.spawn_in(b"it's here", "printf", &args).unwrap();
+    let output = child.wait_with_output().await.unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(output.stdout, b"a b|$HOME|*|-x|it's|");
+
+    let invocations = fake.invocations();
+    let control_path = value_after(&invocations[0], "-S").unwrap();
+    let ran = &invocations[1];
+    assert_eq!(value_after(ran, "-S"), Some(control_path));
+    for option in [
+        "RequestTTY=no",
+        "RemoteCommand=none",
+        "ControlMaster=no",
+        "BatchMode=yes",
+    ] {
+        assert!(contains_pair(ran, "-o", option), "{option}");
+    }
+    let tail = [
+        "--",
+        "web",
+        "cd -- 'it'\\''s here' || exit",
+        "exec 'printf' '%s|' 'a b' '$HOME' '*' '-x' 'it'\\''s'",
+    ];
+    assert!(ran.ends_with(&tail.map(String::from)), "{ran:?}");
+
+    // A failed cd runs nothing.
+    let child = session
+        .spawn_in(b"gone", "printf", &os_args(&["ran"]))
+        .unwrap();
+    let output = child.wait_with_output().await.unwrap();
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty(), "{output:?}");
+    session.close().await;
+    assert!(matches!(
+        session_after_close(&fake).await.spawn_in(b"", "true", &[]),
+        Err(SshError::Disconnected { .. })
+    ));
+}
+
+#[tokio::test]
+async fn spawns_a_program_with_a_connection_of_its_own_without_multiplexing() {
+    let fake = Fake::new(&[]);
+    let settings = SshSettings {
+        multiplex: false,
+        ..fake.settings.clone()
+    };
+    let session = fake.connect(&settings).await.unwrap();
+    let child = session.spawn_in(b"", "pwd", &[]).unwrap();
+    let output = child.wait_with_output().await.unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let real = fake.root.path().canonicalize().unwrap();
+    let printed = PathBuf::from(String::from_utf8(output.stdout).unwrap().trim_end())
+        .canonicalize()
+        .unwrap();
+    assert_eq!(printed, real);
+    let ran = &fake.invocations()[0];
+    assert!(!ran.iter().any(|arg| arg == "-S"));
+    assert!(contains_pair(ran, "-o", "RequestTTY=no"));
+    assert!(!contains_pair(ran, "-o", "BatchMode=yes"));
+    assert!(ran.ends_with(&["--", "web", "exec 'pwd'"].map(String::from)));
+    session.close().await;
 }
 
 /// A session whose master has gone away.

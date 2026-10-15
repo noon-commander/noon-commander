@@ -1,6 +1,7 @@
 //! Connections to a host: the `ControlMaster` process and SFTP channels (ADR 0002).
 
 use std::collections::VecDeque;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -14,7 +15,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::askpass::AskpassEnv;
 use crate::command::{
-    Role, SshSettings, Target, command_command, control_command, remote_command, session_command,
+    Role, SshSettings, Target, command_command, control_command, exec_command, remote_command,
+    session_command,
 };
 use crate::error::SshError;
 use crate::runtime::{self, CONTROL_PREFIX, MAX_CONTROL_PATH_LEN};
@@ -219,15 +221,7 @@ impl Session {
     /// if empty), over the master if there is one. The caller starts it with the terminal
     /// handed over, since the command gets a terminal of its own there (ADR 0019).
     pub fn command_in(&self, dir: &[u8], command: &str) -> Result<Command, SshError> {
-        let control_path = match &self.master {
-            Some(master) if master.exited.is_cancelled() => {
-                return Err(SshError::Disconnected {
-                    stderr: master.stderr.text(),
-                });
-            }
-            Some(master) => Some(master.control_path.as_path()),
-            None => None,
-        };
+        let control_path = self.control_path()?;
         let remote = remote_command(dir, command);
         Ok(command_command(
             &self.settings,
@@ -235,6 +229,43 @@ impl Session {
             control_path,
             &remote,
         ))
+    }
+
+    /// Starts `program` with `args` on the host in `dir` (the home directory if empty), without a
+    /// terminal and in a session of its own, over the master if there is one: stdin null, stdout
+    /// and stderr piped, killed when the child is dropped. The host's shell gets
+    /// `cd -- '<dir>' || exit`, then `exec` and the program and its arguments, each quoted for a
+    /// POSIX shell, so that nothing in them is read as shell syntax (ADR 0028). Must be called
+    /// within a tokio runtime.
+    pub fn spawn_in(
+        &self,
+        dir: &[u8],
+        program: &str,
+        args: &[OsString],
+    ) -> Result<Child, SshError> {
+        let control_path = self.control_path()?;
+        let remote = exec_command(dir, program, args);
+        let role = Role::Exec {
+            control_path,
+            command: &remote,
+        };
+        session_command(&self.settings, &self.target, role, self.askpass.as_ref())
+            .spawn()
+            .map_err(|source| SshError::Spawn {
+                program: self.settings.program.clone(),
+                source,
+            })
+    }
+
+    /// The control socket to multiplex over, if there is a master; an error if it is gone.
+    fn control_path(&self) -> Result<Option<&Path>, SshError> {
+        match &self.master {
+            Some(master) if master.exited.is_cancelled() => Err(SshError::Disconnected {
+                stderr: master.stderr.text(),
+            }),
+            Some(master) => Ok(Some(master.control_path.as_path())),
+            None => Ok(None),
+        }
     }
 
     /// Shuts the master connection down gracefully (`ssh -O exit`), killing it if needed.

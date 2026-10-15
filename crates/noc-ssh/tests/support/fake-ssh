@@ -14,6 +14,10 @@
 #
 # Like a real master, `ssh -M` creates its control socket only after authentication; here it
 # is a regular file holding the master's pid.
+#
+# Every invocation must come without a controlling terminal (ADR 0003), except a remote command
+# without `-o RequestTTY=no`: a command of the command line, which gets the terminal (ADR 0019).
+# A program run for its output (ADR 0028) passes `RequestTTY=no` and gets none.
 set -eu
 
 if [ -n "${FAKE_SSH_LOG:-}" ]; then
@@ -32,7 +36,7 @@ if [ -n "${FAKE_SSH_PIDS:-}" ]; then
     echo $$ >>"$FAKE_SSH_PIDS"
 fi
 
-mode=session sock='' control='' subsystem=no
+mode=session sock='' control='' subsystem=no tty=''
 while [ $# -gt 0 ]; do
     case $1 in
         -V)
@@ -44,7 +48,14 @@ while [ $# -gt 0 ]; do
         -s) subsystem=yes ;;
         -S) shift; sock=$1 ;;
         -O) shift; control=$1 ;;
-        -[BbcDEeFIiJLlmoPpQRWw]) shift ;;
+        -o)
+            shift
+            case $1 in
+                # Like ssh, the first value counts.
+                RequestTTY=*) [ -n "$tty" ] || tty=${1#RequestTTY=} ;;
+            esac
+            ;;
+        -[BbcDEeFIiJLlmPpQRWw]) shift ;;
         --) shift; break ;;
         -*) ;;
         *) break ;;
@@ -53,9 +64,8 @@ while [ $# -gt 0 ]; do
 done
 dest=${1:-}
 
-# Noon Commander must start ssh without a controlling terminal (ADR 0003), except for a
-# command of the command line, which gets the terminal (ADR 0019).
-if [ $# -lt 2 ] || [ "$subsystem" = yes ] || [ "$mode" != session ] || [ -n "$control" ]; then
+if [ $# -lt 2 ] || [ "$subsystem" = yes ] || [ "$mode" != session ] || [ -n "$control" ] ||
+    [ "$tty" = no ]; then
     if (: </dev/tty) 2>/dev/null; then
         echo "fake-ssh: started with a controlling terminal" >&2
         exit 3

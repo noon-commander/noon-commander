@@ -74,7 +74,7 @@ client; the system `ssh` is the single source of truth for connections and auth.
 | `crates/noc-ssh` | Host discovery, `ssh -G`, argument validation, forwarding policy, ControlMaster, SFTP channels, askpass bridge |
 | `crates/noc-vfs` | `Vfs` trait and backends (local, SFTP), mounted volumes |
 | `crates/noc-ops` | Job engine: copy, move, delete, mkdir, checksums; progress, cancellation, conflicts |
-| `crates/noc-tools` | External programs other than ssh: zoxide, the editor, the opener, the shell of `!` |
+| `crates/noc-tools` | External programs other than ssh: zoxide, ripgrep, the editor, the opener, the shell of `!` |
 | `crates/noc-text` | Terminal-safe text: sanitizing, widths in cells, fitting, wrapping |
 | `crates/noc-scroll` | Paging the help and the viewer: how far the page keys go, the scroll bar |
 | `crates/noc-viewer` | The F3 viewer: reading through the `Vfs`, scrolling, wrapping; its own Fluent text |
@@ -184,6 +184,8 @@ Paths come from `crates/noc-config/src/paths.rs`.
   (8.7), which are forced off.
 - Every ssh child runs in its own session (`setsid`) without a controlling terminal; prompts go
   through the askpass bridge. Exception: the command line's ssh keeps the terminal (ADR 0019).
+- A program noc runs on a host (only `rg`, for `g /`) goes through `Session::spawn_in`: no
+  terminal, every word quoted for a POSIX shell (ADR 0028).
 - `ssh -O` commands use `-F /dev/null`.
 
 ## Testing

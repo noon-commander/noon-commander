@@ -20,15 +20,16 @@ pub const SFTP_CHANNEL_OPTIONS: &[(&str, &str)] = &[
     ("RequestTTY", "no"),
 ];
 
-/// Options forced on the master and on every SFTP channel: ssh must keep its stdin and stay
-/// in the foreground, whatever the user's config says (both keywords exist since OpenSSH 8.7).
+/// Options forced on every ssh process that connects to a host: ssh must keep its stdin and
+/// stay in the foreground, whatever the user's config says (both keywords exist since OpenSSH
+/// 8.7).
 /// `SessionType` needs no override: `-N` and `-s` on the command line take precedence.
 pub const PROCESS_OPTIONS: &[(&str, &str)] =
     &[("StdinNull", "no"), ("ForkAfterAuthentication", "no")];
 
-/// Options forced on SFTP channels multiplexed over a master, in addition to
-/// [`SFTP_CHANNEL_OPTIONS`]. If the master is gone, ssh silently falls back to a direct
-/// connection; that fallback must never prompt.
+/// Options forced on SFTP channels and programs without a terminal multiplexed over a master,
+/// in addition to [`SFTP_CHANNEL_OPTIONS`] or [`EXEC_OPTIONS`]. If the master is gone, ssh
+/// silently falls back to a direct connection; that fallback must never prompt.
 pub const MUX_CHANNEL_OPTIONS: &[(&str, &str)] = &[("BatchMode", "yes")];
 
 /// Options forced on the master connection in every build, in addition to
@@ -51,6 +52,18 @@ pub const COMMAND_OPTIONS: &[(&str, &str)] = &[
     ("ControlMaster", "no"),
 ];
 
+/// Options forced on a program that Noon Commander runs on the host and reads the output of,
+/// such as the search of file contents (ADR 0028): the program given, not a `RemoteCommand`
+/// from the config; no terminal, which would mix its stderr into its stdout and translate line
+/// ends; no `LocalCommand`; and never a master of its own. [`PROCESS_OPTIONS`] and
+/// [`session_options`] apply too, and [`MUX_CHANNEL_OPTIONS`] over a master.
+pub const EXEC_OPTIONS: &[(&str, &str)] = &[
+    ("PermitLocalCommand", "no"),
+    ("RemoteCommand", "none"),
+    ("RequestTTY", "no"),
+    ("ControlMaster", "no"),
+];
+
 /// Options forced on the master connection and the console when forwarding is compiled out.
 pub const NO_FORWARDING_OPTIONS: &[(&str, &str)] = &[
     ("ClearAllForwardings", "yes"),
@@ -60,8 +73,8 @@ pub const NO_FORWARDING_OPTIONS: &[(&str, &str)] = &[
     ("GSSAPIDelegateCredentials", "no"),
 ];
 
-/// Forwarding-related options this build forces on the master connection, the console, and
-/// commands of the command line.
+/// Forwarding-related options this build forces on the master connection, the console,
+/// commands of the command line, and programs run without a terminal.
 pub const fn session_options() -> &'static [(&'static str, &'static str)] {
     if FORWARDING_ENABLED {
         &[]
@@ -86,6 +99,15 @@ mod tests {
         );
         assert_eq!(value(SFTP_CHANNEL_OPTIONS, "ForwardAgent"), Some("no"));
         assert_eq!(value(SFTP_CHANNEL_OPTIONS, "ForwardX11"), Some("no"));
+    }
+
+    #[test]
+    fn programs_without_a_terminal_get_none_and_no_master() {
+        assert_eq!(value(EXEC_OPTIONS, "RequestTTY"), Some("no"));
+        assert_eq!(value(EXEC_OPTIONS, "RemoteCommand"), Some("none"));
+        assert_eq!(value(EXEC_OPTIONS, "ControlMaster"), Some("no"));
+        assert_eq!(value(EXEC_OPTIONS, "PermitLocalCommand"), Some("no"));
+        assert_eq!(value(MUX_CHANNEL_OPTIONS, "BatchMode"), Some("yes"));
     }
 
     #[test]

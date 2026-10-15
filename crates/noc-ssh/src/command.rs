@@ -1,7 +1,7 @@
 //! Assembly of ssh command lines.
 //!
 //! The order is fixed (AGENTS.md): program → forced options → `-F` and `ssh.args` → role
-//! options → `--` → destination. ssh keeps the first value it sees for an option, so `-o`
+//! options → `--` → destination → remote command. ssh keeps the first value it sees for an option, so `-o`
 //! values in user arguments cannot override forced options.
 
 use std::ffi::{OsStr, OsString};
@@ -83,6 +83,12 @@ pub(crate) enum Role<'a> {
         control_path: Option<&'a Path>,
         command: &'a OsStr,
     },
+    /// A program without a terminal whose output Noon Commander reads, over the master if
+    /// there is one (ADR 0028).
+    Exec {
+        control_path: Option<&'a Path>,
+        command: &'a OsStr,
+    },
 }
 
 pub(crate) fn arguments(settings: &SshSettings, target: &Target, role: Role<'_>) -> Vec<OsString> {
@@ -109,7 +115,7 @@ pub(crate) fn arguments(settings: &SshSettings, target: &Target, role: Role<'_>)
             argv.extend(["-T", "-s"].map(OsString::from));
         }
         Role::DirectSftp => argv.extend(["-T", "-s"].map(OsString::from)),
-        Role::Command { control_path, .. } => {
+        Role::Command { control_path, .. } | Role::Exec { control_path, .. } => {
             if let Some(control_path) = control_path {
                 argv.push("-S".into());
                 argv.push(control_path.into());
@@ -120,7 +126,7 @@ pub(crate) fn arguments(settings: &SshSettings, target: &Target, role: Role<'_>)
     argv.push((&target.destination).into());
     match role {
         Role::MuxSftp { .. } | Role::DirectSftp => argv.push("sftp".into()),
-        Role::Command { command, .. } => argv.push(command.into()),
+        Role::Command { command, .. } | Role::Exec { command, .. } => argv.push(command.into()),
         Role::Resolve | Role::Master { .. } => {}
     }
     argv
@@ -149,6 +155,22 @@ fn forced_options(role: Role<'_>) -> Vec<(&'static str, &'static str)> {
             policy::PROCESS_OPTIONS,
             policy::session_options(),
         ],
+        Role::Exec {
+            control_path: Some(_),
+            ..
+        } => &[
+            policy::EXEC_OPTIONS,
+            policy::PROCESS_OPTIONS,
+            policy::MUX_CHANNEL_OPTIONS,
+            policy::session_options(),
+        ],
+        Role::Exec {
+            control_path: None, ..
+        } => &[
+            policy::EXEC_OPTIONS,
+            policy::PROCESS_OPTIONS,
+            policy::session_options(),
+        ],
     };
     let mut options: Vec<(&'static str, &'static str)> = Vec::new();
     for &(key, value) in groups.iter().copied().flatten() {
@@ -163,7 +185,7 @@ fn forced_options(role: Role<'_>) -> Vec<(&'static str, &'static str)> {
     options
 }
 
-/// Command for a master, an SFTP channel, or `ssh -G`.
+/// Command for a master, an SFTP channel, a program without a terminal, or `ssh -G`.
 pub(crate) fn session_command(
     settings: &SshSettings,
     target: &Target,
@@ -173,7 +195,7 @@ pub(crate) fn session_command(
     let mut command = base_command(settings);
     command.args(arguments(settings, target, role));
     match role {
-        Role::Resolve => {
+        Role::Resolve | Role::Exec { .. } => {
             command.stdout(Stdio::piped());
         }
         Role::Master { .. } | Role::Command { .. } => {}
@@ -214,20 +236,46 @@ pub(crate) fn command_command(
 /// POSIX shell, unless it is empty, the home directory where ssh starts; then the command as
 /// typed, on lines of its own, so that a failed `cd` runs none of it.
 pub(crate) fn remote_command(dir: &[u8], command: &str) -> OsString {
-    let mut text = Vec::new();
-    if !dir.is_empty() {
-        text.extend_from_slice(b"cd -- '");
-        for &byte in dir {
-            if byte == b'\'' {
-                text.extend_from_slice(b"'\\''");
-            } else {
-                text.push(byte);
-            }
-        }
-        text.extend_from_slice(b"' || exit\n");
-    }
+    let mut text = change_dir(dir);
     text.extend_from_slice(command.as_bytes());
     OsStr::from_bytes(&text).to_owned()
+}
+
+/// What the host's shell runs for `program` with `args` in `dir`: the `cd` of
+/// [`remote_command`], then `exec` and every word quoted, so that the shell reads nothing in
+/// them as syntax (ADR 0028).
+pub(crate) fn exec_command(dir: &[u8], program: &str, args: &[OsString]) -> OsString {
+    let mut text = change_dir(dir);
+    text.extend_from_slice(b"exec ");
+    push_quoted(&mut text, program.as_bytes());
+    for arg in args {
+        text.push(b' ');
+        push_quoted(&mut text, arg.as_bytes());
+    }
+    OsStr::from_bytes(&text).to_owned()
+}
+
+fn change_dir(dir: &[u8]) -> Vec<u8> {
+    let mut text = Vec::new();
+    if !dir.is_empty() {
+        text.extend_from_slice(b"cd -- ");
+        push_quoted(&mut text, dir);
+        text.extend_from_slice(b" || exit\n");
+    }
+    text
+}
+
+/// Appends `word` in single quotes for a POSIX shell, inside which only `'` is special.
+fn push_quoted(text: &mut Vec<u8>, word: &[u8]) {
+    text.push(b'\'');
+    for &byte in word {
+        if byte == b'\'' {
+            text.extend_from_slice(b"'\\''");
+        } else {
+            text.push(byte);
+        }
+    }
+    text.push(b'\'');
 }
 
 /// `ssh -V`.
@@ -433,6 +481,64 @@ mod tests {
             remote_command(b"caf\xe9", "ls").as_bytes(),
             b"cd -- 'caf\xe9' || exit\nls"
         );
+    }
+
+    #[test]
+    fn a_program_without_a_terminal_over_the_master_never_prompts() {
+        let path = Path::new("/run/1/abcd");
+        let remote = OsStr::new("exec 'rg'");
+        let argv = strings(&arguments(
+            &settings(),
+            &target(),
+            Role::Exec {
+                control_path: Some(path),
+                command: remote,
+            },
+        ));
+        let mut expected = options(policy::EXEC_OPTIONS);
+        expected.extend(options(policy::PROCESS_OPTIONS));
+        expected.extend(options(policy::MUX_CHANNEL_OPTIONS));
+        expected.extend(options(policy::session_options()));
+        expected.extend(tail(&["-S", "/run/1/abcd", "--", "web", "exec 'rg'"]));
+        assert_eq!(argv, expected);
+    }
+
+    #[test]
+    fn a_program_without_a_terminal_and_a_master_connects_on_its_own() {
+        let remote = OsStr::new("exec 'rg'");
+        let argv = strings(&arguments(
+            &settings(),
+            &target(),
+            Role::Exec {
+                control_path: None,
+                command: remote,
+            },
+        ));
+        let mut expected = options(policy::EXEC_OPTIONS);
+        expected.extend(options(policy::PROCESS_OPTIONS));
+        expected.extend(options(policy::session_options()));
+        expected.extend(tail(&["--", "web", "exec 'rg'"]));
+        assert_eq!(argv, expected);
+    }
+
+    #[test]
+    fn the_program_and_its_arguments_are_quoted_word_by_word() {
+        let args = [
+            OsString::from("a b"),
+            OsString::from("$HOME"),
+            OsString::from("*"),
+            OsString::from("x\ny"),
+            OsString::from("-x"),
+            OsString::new(),
+            OsString::from("it's"),
+            OsStr::from_bytes(b"caf\xe9").to_owned(),
+        ];
+        assert_eq!(
+            exec_command(b"/srv/it's here", "rg", &args).as_bytes(),
+            b"cd -- '/srv/it'\\''s here' || exit\n\
+              exec 'rg' 'a b' '$HOME' '*' 'x\ny' '-x' '' 'it'\\''s' 'caf\xe9'"
+        );
+        assert_eq!(exec_command(b"", "rg", &[]), OsStr::new("exec 'rg'"));
     }
 
     #[test]

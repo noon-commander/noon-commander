@@ -597,6 +597,8 @@ struct Viewing {
     id: u64,
     viewer: Viewer,
     location: Location,
+    /// The line it shows at the top once the file is read, if not the first.
+    line: Option<u64>,
     cancel: CancellationToken,
 }
 
@@ -4028,6 +4030,12 @@ impl App {
             }
             return Vec::new();
         };
+        let dir = self.panel(side).location().clone();
+        self.view_file(location, &dir, None)
+    }
+
+    /// Views the file at `location`, in `dir`, from `line` if there is one.
+    fn view_file(&mut self, location: Location, dir: &Location, line: Option<u64>) -> Vec<Effect> {
         let host = match &location {
             Location::Remote { host, .. } => match self.hosts.get(host) {
                 Some(Host::Connected { handle, .. }) => Some(handle.clone()),
@@ -4042,16 +4050,16 @@ impl App {
             id,
             viewer: Viewer::new(location_text(&location)),
             location: location.clone(),
+            line,
             cancel: cancel.clone(),
         });
-        let dir = self.panel(side).location().clone();
         let mut effects = vec![Effect::Read {
             id,
             location,
             host,
             cancel,
         }];
-        effects.extend(self.note(&dir));
+        effects.extend(self.note(dir));
         effects
     }
 
@@ -4539,7 +4547,13 @@ impl App {
             return;
         };
         match result {
-            Ok((bytes, truncated)) => viewing.viewer.show(&bytes, truncated),
+            Ok((bytes, truncated)) => {
+                viewing.viewer.show(&bytes, truncated);
+                if let Some(line) = viewing.line {
+                    let line = usize::try_from(line.saturating_sub(1)).unwrap_or(usize::MAX);
+                    viewing.viewer.handle(ViewerCommand::Top(line));
+                }
+            }
             Err(reason) => {
                 let path = location_text(&viewing.location);
                 self.close_viewer();
@@ -9091,6 +9105,25 @@ mod tests {
             panic!("expected a listing");
         };
         assert_eq!(request.location, local("/srv/sub"));
+    }
+
+    #[test]
+    fn a_file_viewed_from_a_line_shows_it_at_the_top() {
+        let mut app = with_files(&["a1"]);
+        let effects = app.view_file(local("/srv/a1"), &local("/srv"), Some(3));
+        let Some(Effect::Read { id, .. }) = effects.first() else {
+            panic!("expected a read, got {effects:?}");
+        };
+        let text = (1..=40)
+            .map(|n| format!("line {n}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        app.read(*id, Ok((text.into_bytes(), false)));
+        let screen = screen_of(&mut app, 12);
+        assert!(
+            screen.contains("line 3") && !screen.contains("line 2 "),
+            "{screen}"
+        );
     }
 
     #[test]

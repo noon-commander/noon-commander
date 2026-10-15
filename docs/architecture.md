@@ -398,7 +398,7 @@ below the active panel's directory with ripgrep, in a window over both panels
 
 ```text
 ╔════════════════════════ Find in ~/src/noc ═════════════════════════╗
-║ Text:  handle                                                      ║
+║ Text:  handle                                                .* Aa ║
 ║ Files: *.rs !target                           ⠹ 3 lines in 2 files ║
 ║ ────────────────────────────────────────────────────────────────── ║
 ║   crates/noc/src/tui/app.rs                                     2  ║
@@ -412,8 +412,9 @@ below the active panel's directory with ripgrep, in a window over both panels
 ```
 
 - Two fields: the text, and the globs of the files, split at blanks, `!` before one leaving
-  those out; Tab and Shift+Tab go between them. With no text the window lists the files. The
-  text is a regular expression, whose case counts only once it has a capital letter.
+  those out; Tab and Shift+Tab go between them. With no text the window lists the files. Alt+r
+  takes the text as it is rather than as a regular expression, and Alt+c matches case rather than
+  only when the text has a capital letter; `.*` and `Aa` show the two, bright while on.
 - Each change starts a search 150 ms after the last key (`FIND_DELAY`), the first at once. A task
   (`Effect::Find`) runs ripgrep through `noc_tools::ripgrep`: locally in the directory, as
   `[search] program`; on a host, `rg` through the host's task and `Session::spawn_in`, over the

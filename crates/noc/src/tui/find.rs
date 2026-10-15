@@ -101,6 +101,8 @@ pub(crate) struct FindWindow {
     focus: Focus,
     /// The field that `i` and `/` go back to from the rows.
     field: Focus,
+    regex: bool,
+    match_case: bool,
     /// Hidden files too, as the panels show them, and how much it finds: in all, and in a
     /// file.
     hidden: bool,
@@ -153,6 +155,8 @@ impl FindWindow {
             files: Field::plain(""),
             focus: Focus::Text,
             field: Focus::Text,
+            regex: true,
+            match_case: false,
             hidden,
             max_results,
             max_per_file,
@@ -189,8 +193,8 @@ impl FindWindow {
                 .split_whitespace()
                 .map(str::to_owned)
                 .collect(),
-            regex: true,
-            match_case: false,
+            regex: self.regex,
+            match_case: self.match_case,
             hidden: self.hidden,
             max_per_file: self.max_per_file,
         }
@@ -419,6 +423,14 @@ impl FindWindow {
             }
             Action::NormalMode => self.focus = Focus::Rows,
             Action::InsertMode | Action::QuickSearch => self.focus = self.field,
+            Action::ToggleRegex => {
+                self.regex = !self.regex;
+                return FindEvent::Search;
+            }
+            Action::MatchCase => {
+                self.match_case = !self.match_case;
+                return FindEvent::Search;
+            }
             Action::Confirm => {
                 return self.chosen().map_or(FindEvent::Pending, |row| {
                     let (location, name) = self.place(&row.path);
@@ -656,13 +668,25 @@ impl FindWindow {
             .max()
             .unwrap_or(0)
             + 1;
+        let on = |on: bool| {
+            if on {
+                theme.quick_search
+            } else {
+                theme.dialog.add_modifier(Modifier::DIM)
+            }
+        };
+        let switches = vec![
+            Span::styled(fl!("find-regex-mark"), on(self.regex)),
+            Span::styled(" ", theme.dialog),
+            Span::styled(fl!("find-case-mark"), on(self.match_case)),
+        ];
         let count = self.count();
         let count = if self.searching() {
             format!("{} {count}", decor::spinner(tick))
         } else {
             count
         };
-        let notes = [Vec::new(), vec![Span::styled(count, theme.dialog)]];
+        let notes = [switches, vec![Span::styled(count, theme.dialog)]];
         let fields = [(&self.text, Focus::Text), (&self.files, Focus::Files)];
         for (index, ((field, focus), (label, note))) in
             fields.into_iter().zip(labels.iter().zip(notes)).enumerate()
@@ -887,10 +911,12 @@ mod tests {
         press(&mut window, Action::NextField);
         typed(&mut window, "*.rs  !target");
         assert_eq!(press(&mut window, Action::Backspace), FindEvent::Search);
+        assert_eq!(press(&mut window, Action::ToggleRegex), FindEvent::Search);
+        assert_eq!(press(&mut window, Action::MatchCase), FindEvent::Search);
         let query = window.query();
         assert_eq!(query.pattern, "fn x");
         assert_eq!(query.globs, ["*.rs", "!targe"]);
-        assert!(query.regex && !query.match_case && query.hidden);
+        assert!(!query.regex && query.match_case && query.hidden);
         assert_eq!(query.max_per_file, 2);
         press(&mut window, Action::PrevField);
         typed(&mut window, "y");

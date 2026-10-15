@@ -160,6 +160,10 @@ find-title = Find in { $dir }
 # The labels of the fields: the text to find, and the globs of the files to search.
 find-text = Text:
 find-files = Files:
+# Right of the text: the marks of regular expressions (Alt+r) and of matching case (Alt+c), as
+# VS Code shows them; bright while on.
+find-regex-mark = .*
+find-case-mark = Aa
 # Right of the files: how many lines matched, in how many files.
 find-count = { $lines ->
         [one] 1 line
@@ -616,6 +620,8 @@ help-find-go = Go to the file, its directory in the active panel
 help-find-field = The other field: the text, or the files
 help-find-rows = To the rows; i and / go back to the field
 help-find-back = Back to the field
+help-find-regex = The text as a regular expression, or as it is
+help-find-case = Match case, or ignore it unless the text has a capital
 help-new-tab = A new tab in this panel, on the same directory
 help-close-tab = Close this tab; the last one stays
 help-next-tab = The next tab in this panel

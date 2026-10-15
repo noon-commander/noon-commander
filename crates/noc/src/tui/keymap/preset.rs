@@ -632,7 +632,8 @@ pub(super) const PRESET: Preset = &[
     ),
     // The window of the search of a whole tree, on top of the list's: Tab and Shift+Tab go between
     // its fields, the text and the files, and Esc to the rows, where i and / go back to the field.
-    // Enter goes to the file in the panel.
+    // Enter goes to the file in the panel. Alt+r and Alt+c switch regular expressions and case, as
+    // in VS Code.
     (
         Mode::Normal,
         Context::Find,
@@ -640,6 +641,8 @@ pub(super) const PRESET: Preset = &[
             (Action::InsertMode, &["i"]),
             (Action::NextField, &["tab", "ctrl-i"]),
             (Action::PrevField, &["backtab"]),
+            (Action::ToggleRegex, &["alt-r"]),
+            (Action::MatchCase, &["alt-c"]),
         ],
     ),
     (
@@ -648,6 +651,8 @@ pub(super) const PRESET: Preset = &[
         &[
             (Action::NextField, &["tab", "ctrl-i"]),
             (Action::PrevField, &["backtab"]),
+            (Action::ToggleRegex, &["alt-r"]),
+            (Action::MatchCase, &["alt-c"]),
         ],
     ),
     // The terminal's own screen, with the output of commands. Enter and q go back, as from the

@@ -3,7 +3,7 @@ source: crates/noc/src/tui/find.rs
 expression: "draw(&mut window, 70)"
 ---
 "╔════════════════════════ Find in ~/src/noc ═════════════════════════╗"
-"║ Text:  handle                                                      ║"
+"║ Text:  handle                                                .* Aa ║"
 "║ Files:                                          3 lines in 2 files ║"
 "║ ────────────────────────────────────────────────────────────────── ║"
 "║   Cargo.toml                                                    1  ║"

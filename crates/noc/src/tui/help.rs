@@ -1077,6 +1077,8 @@ fn describe_find(context: Context, action: Action) -> Option<String> {
         Action::NextField | Action::PrevField => fl!("help-find-field"),
         Action::InsertMode | Action::QuickSearch => fl!("help-find-back"),
         Action::NormalMode => fl!("help-find-rows"),
+        Action::ToggleRegex => fl!("help-find-regex"),
+        Action::MatchCase => fl!("help-find-case"),
         _ => return None,
     };
     Some(text)

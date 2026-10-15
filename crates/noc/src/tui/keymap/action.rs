@@ -321,6 +321,11 @@ pub(crate) enum Action {
     PrevMatch,
     /// Searches the files under the panel's directory for text, in a window.
     FindFile,
+    /// In the search of a tree, takes the text as a regular expression, or as it is.
+    ToggleRegex,
+    /// In the search of a tree, matches case, or ignores it unless the text has a capital
+    /// letter.
+    MatchCase,
     /// Goes back to where the panel was before its last jump, as vim's Ctrl+o.
     JumpBack,
     /// Goes forward again to where a jump back came from, as vim's Ctrl+i.
@@ -593,6 +598,8 @@ impl Action {
         Self::NextMatch,
         Self::PrevMatch,
         Self::FindFile,
+        Self::ToggleRegex,
+        Self::MatchCase,
         Self::JumpBack,
         Self::JumpForward,
         Self::Shell,

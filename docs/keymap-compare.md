@@ -5,6 +5,7 @@ Sources:
 - noc: the keymap in [keymap/preset.rs](../crates/noc/src/tui/keymap/preset.rs): vim's, in its
   modes, with mc's F-keys ([ADR 0022](adr/0022-vim-modes.md)). It is the only one: no
   `ui.keymap` chooses another, and no `noc keymap diff` compares two.
+  [keymap-non-vim.md](keymap-non-vim.md) lists its keys that are not vim's, and why each is there.
 - mc: [mc.default.keymap](https://github.com/MidnightCommander/mc/blob/master/misc/mc.default.keymap),
   the keys mc binds, and [mc.1.in](https://github.com/MidnightCommander/mc/blob/master/doc/man/mc.1.in),
   which explains them; where the two disagree, or neither says what a key does, the

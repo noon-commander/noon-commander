@@ -142,6 +142,9 @@ Paths come from `crates/noc-config/src/paths.rs`.
 - Changing any binding: update the `noc` column of
   [docs/keymap-compare.md](docs/keymap-compare.md) in the same change. A new action gets a row
   in its mode and context's section, in preset order, with the keys of mc, Far, yazi, ranger.
+  A key that is not vim's also gets a row in [docs/keymap-non-vim.md](docs/keymap-non-vim.md):
+  the reason for it, the vim-style keys that do the same, and what it does without the kitty
+  keyboard protocol.
 - Keys in text (help, menus, Fluent, docs, comments) follow `keymap::describe`: `Ctrl+l`, `G`,
   `Alt+W`, `Shift+F6`, `Ctrl+w h`, `PgUp`. Full rules: docs/keymap-compare.md. The preset uses
   crokey syntax (`ctrl-w h`, `shift-z`).
@@ -212,6 +215,7 @@ Paths come from `crates/noc-config/src/paths.rs`.
   Conventional Commits, one logical change each.
 - ADRs: significant decisions go in `docs/adr/NNNN-title.md` (Status, Context, Decision,
   Consequences).
-- Keep `docs/architecture.md`, `docs/roadmap.md`, `docs/keymap-compare.md` in sync with code.
+- Keep `docs/architecture.md`, `docs/roadmap.md`, `docs/keymap-compare.md`,
+  `docs/keymap-non-vim.md` in sync with code.
 - User-visible changes go in `CHANGELOG.md` under `Unreleased`.
 - Markdown follows `.markdownlint.yaml` (100-character lines); `just md` checks it.

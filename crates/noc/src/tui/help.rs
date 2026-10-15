@@ -1074,6 +1074,8 @@ fn describe_find(context: Context, action: Action) -> Option<String> {
     }
     let text = match action {
         Action::Confirm => fl!("help-find-go"),
+        Action::View => fl!("help-find-view"),
+        Action::Edit => fl!("help-find-edit"),
         Action::NextField | Action::PrevField => fl!("help-find-field"),
         Action::InsertMode | Action::QuickSearch => fl!("help-find-back"),
         Action::NormalMode => fl!("help-find-rows"),

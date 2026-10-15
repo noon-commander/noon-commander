@@ -3719,9 +3719,9 @@ impl App {
         })]
     }
 
-    /// Gives a key to the window of the search of a tree: what is typed searches again, and
-    /// Enter goes to the file in the active panel, which puts where it was in the jump list.
-    /// Closing it stops the search.
+    /// Gives a key to the window of the search of a tree: what is typed searches again, Enter
+    /// goes to the file in the active panel, which puts where it was in the jump list, and F3
+    /// and F4 view and edit it at the line, the window kept. Closing it stops the search.
     fn handle_find(&mut self, input: Resolved) -> Vec<Effect> {
         let Some(window) = &mut self.find else {
             return Vec::new();
@@ -3743,6 +3743,16 @@ impl App {
                 }
                 self.go(id, Destination::onto_entry(location, &name))
             }
+            FindEvent::View {
+                location,
+                name,
+                line,
+            } => self.view_file(child(&location, &name), &location, line),
+            FindEvent::Edit {
+                location,
+                name,
+                line,
+            } => self.edit_file(location, &name, line),
         }
     }
 
@@ -7972,6 +7982,37 @@ mod tests {
         assert_eq!(cursor_name(&app, Side::Left), "main.rs");
         keys(&mut app, &["ctrl-o"]);
         assert_eq!(app.panel(Side::Left).heading().0, local("/srv"));
+    }
+
+    #[test]
+    fn f3_views_a_file_found_at_its_line_and_f4_edits_it_there() {
+        let mut app = with_files(&["a1", "b2"]);
+        found_main(&mut app);
+        let effects = keys(&mut app, &["f3"]);
+        let Some(Effect::Read { id, location, .. }) = effects.first() else {
+            panic!("expected a read, got {effects:?}");
+        };
+        assert_eq!(*location, local("/srv/src/run/main.rs"));
+        assert_eq!(app.context(), Context::Viewer);
+        let text = (1..=40)
+            .map(|n| format!("line {n}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        app.read(*id, Ok((text.into_bytes(), false)));
+        let screen = screen_of(&mut app, 12);
+        assert!(
+            screen.contains("line 3") && !screen.contains("line 2\n"),
+            "{screen}"
+        );
+        // The viewer goes, and the window is there again.
+        keys(&mut app, &["q"]);
+        assert_eq!(app.context(), Context::Find);
+        keys(&mut app, &["f4"]);
+        assert!(matches!(
+            app.take_handover(),
+            Some(Handover::Edit { file, line: Some(3) })
+                if file == Path::new("/srv/src/run/main.rs")
+        ));
     }
 
     #[test]

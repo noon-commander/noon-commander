@@ -2,7 +2,8 @@
 //! the files under the panel's directory, local or on a host, for the text of the first field,
 //! among the files that the globs of the second let through, again as either changes. The window
 //! shows each file it found, in the order of their paths, with the lines that match under it,
-//! the matches highlighted; with no text it lists the files. Enter goes to the file in the panel.
+//! the matches highlighted; with no text it lists the files. Enter goes to the file in the panel,
+//! F3 and F4 view and edit it at the line, as in the results of mc's Find File.
 
 use noc_scroll::scrollbar::{self, Bar};
 use noc_tools::ripgrep::{Hit, Query};
@@ -40,6 +41,19 @@ pub(crate) enum FindEvent {
     Go {
         location: Location,
         name: Vec<u8>,
+    },
+    /// View the file `name` in the directory at `location`, from `line` (1-based), the line
+    /// under the cursor or the first that matched.
+    View {
+        location: Location,
+        name: Vec<u8>,
+        line: Option<u64>,
+    },
+    /// Edit the file `name` in the directory at `location`, at `line`, likewise.
+    Edit {
+        location: Location,
+        name: Vec<u8>,
+        line: Option<u64>,
     },
 }
 
@@ -363,11 +377,16 @@ impl FindWindow {
             .map(|&(file, line)| (self.rows[file].path.clone(), line));
     }
 
-    /// The file of the row under the cursor.
-    fn chosen(&self) -> Option<&FileRow> {
+    /// The file and line of the row under the cursor.
+    fn chosen(&self) -> Option<(&FileRow, Option<u64>)> {
         let items = self.items();
-        let &(file, _) = items.get(self.cursor_in(&items))?;
-        Some(&self.rows[file])
+        let &(file, line) = items.get(self.cursor_in(&items))?;
+        let row = &self.rows[file];
+        let line = match line {
+            Some(line) => Some(row.lines[line].number),
+            None => row.lines.first().map(|line| line.number),
+        };
+        Some((row, line))
     }
 
     /// The directory of the file at `path`, and its name.
@@ -432,9 +451,27 @@ impl FindWindow {
                 return FindEvent::Search;
             }
             Action::Confirm => {
-                return self.chosen().map_or(FindEvent::Pending, |row| {
+                return self.chosen().map_or(FindEvent::Pending, |(row, _)| {
                     let (location, name) = self.place(&row.path);
                     FindEvent::Go { location, name }
+                });
+            }
+            Action::View | Action::Edit => {
+                return self.chosen().map_or(FindEvent::Pending, |(row, line)| {
+                    let (location, name) = self.place(&row.path);
+                    if action == Action::View {
+                        FindEvent::View {
+                            location,
+                            name,
+                            line,
+                        }
+                    } else {
+                        FindEvent::Edit {
+                            location,
+                            name,
+                            line,
+                        }
+                    }
                 });
             }
             Action::Cancel => return FindEvent::Closed,
@@ -938,10 +975,26 @@ mod tests {
         window.found(2, vec![file("stale.rs")]);
         assert_eq!(window.rows.len(), 2, "an earlier search's are dropped");
         assert_eq!(window.rows[0].path, b"Cargo.toml");
-        // The first row is Cargo.toml.
+        // The first row is Cargo.toml; F3 views it at its first line.
+        assert_eq!(
+            press(&mut window, Action::View),
+            FindEvent::View {
+                location: Location::Local("/src/noc".into()),
+                name: b"Cargo.toml".to_vec(),
+                line: Some(4)
+            }
+        );
         for _ in 0..3 {
             press(&mut window, Action::Down);
         }
+        assert_eq!(
+            press(&mut window, Action::Edit),
+            FindEvent::Edit {
+                location: Location::Local("/src/noc/crates/noc/src/tui".into()),
+                name: b"app.rs".to_vec(),
+                line: Some(2599)
+            }
+        );
         // A file that comes in before the cursor leaves it on its row.
         window.found(3, vec![file("README.md")]);
         assert_eq!(

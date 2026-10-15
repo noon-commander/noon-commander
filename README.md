@@ -40,7 +40,8 @@ The same panels in the theme `mc-classic`, with the blue of Midnight Commander:
 - **Fuzzy search, as in fzf.** Quick search, the location menu, and the zoxide window find
   `config.rs` from `cfg`, best match first.
 - **Search with ripgrep.** `g /` finds text in the files below, as you type, on a server too,
-  where [ripgrep](https://github.com/BurntSushi/ripgrep) runs.
+  where [ripgrep](https://github.com/BurntSushi/ripgrep) runs; F3 and F4 open a file at the
+  line.
 
 ## Philosophy
 

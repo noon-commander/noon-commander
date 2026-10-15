@@ -436,7 +436,9 @@ below the active panel's directory with ripgrep, in a window over both panels
   regular expression, a missing ripgrep, or a host that is not connected says why in place of the
   rows.
 - Enter goes to the file in the active panel: its directory, with the cursor on it; where the
-  panel was goes to the jump list.
+  panel was goes to the jump list. F3 views it with the line at the top, and F4 edits it at the
+  line (`Editor::edit_at`), a remote one through a local copy; the window is there again after
+  both. On a file's row they take its first line that matched.
 
 ### Lists
 

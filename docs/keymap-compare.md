@@ -1154,16 +1154,18 @@ g / in a panel, or F9 → Command → Find file…: ripgrep searches the files u
 directory, local or on a host, for the text of the first field, among those the globs of the second
 let through, again as either changes; with no text it lists the files. Each file found shows with
 the lines that match under it. Esc in a field goes to the rows, in Normal mode, where i and / go
-back, and it falls back to `list`, whose Enter goes to the file in the panel, as in the results of
-mc's Find File, which, as Far's Find file, asks for a mask and a text in a dialog first. The
-switches of regular expressions and case are VS Code's keys. yazi's s and S find with fd and rg, and
-show the result as a directory of its own.
+back, and it falls back to `list`; Enter, F3, and F4 act on the row under the cursor, as in the
+results of mc's Find File, which, as Far's Find file, asks for a mask and a text in a dialog first.
+The switches of regular expressions and case are VS Code's keys. yazi's s and S find with fd and rg,
+and show the result as a directory of its own.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
 | Back to the field | `insert_mode` | ⏳ | i | — | — | — | — |
 | To a field: the text, or the files | `next_field` | ⏳ | Tab<br>Ctrl+i | — | — | — | — |
 | To a field, back | `prev_field` | ⏳ | Shift+Tab | — | — | — | — |
+| View the file, from the line | `view` | ⏳ | F3 | F3 | F3 | — | — |
+| Edit the file, at the line | `edit` | ⏳ | F4 | F4 | F4 | — | — |
 | The text as a regular expression, or as it is | `toggle_regex` | ⏳ | Alt+r | — | — | — | — |
 | Match case, or ignore it unless the text has a capital | `match_case` | ⏳ | Alt+c | — | — | — | — |
 | The files found in a panel | — | ⏳ | — | Panelize | Panel (F2) | — | — |
@@ -1177,6 +1179,8 @@ to `global`.
 | --- | --- | :-: | --- | --- | --- | --- | --- |
 | The other field: the text, or the files | `next_field` | ⏳ | Tab<br>Ctrl+i | — | — | — | — |
 | The other field, back | `prev_field` | ⏳ | Shift+Tab | — | — | — | — |
+| View the file, from the line | `view` | ⏳ | F3 | F3 | F3 | — | — |
+| Edit the file, at the line | `edit` | ⏳ | F4 | F4 | F4 | — | — |
 | The text as a regular expression, or as it is | `toggle_regex` | ⏳ | Alt+r | — | — | — | — |
 | Match case, or ignore it unless the text has a capital | `match_case` | ⏳ | Alt+c | — | — | — | — |
 

@@ -586,9 +586,10 @@ first match after the row the cursor was on, round, or before it, up, after ?, a
 before / or ? the match of that number (2/); each edit searches again from there, and while nothing
 matches, the cursor stays there and the text stays as typed. Enter and Ctrl+j end the search, on the
 match, or say that nothing matches, and Esc and Ctrl+c give it up, putting back the cursor and the
-rows on screen, as in vim, and so do Backspace and Delete with nothing typed; Delete at the end of
-the text deletes the character before it, and Shift and Ctrl with Left and Right go by what spaces
-part, as on vim's command line; Ctrl+g and Ctrl+t go to the next match down and the next up, as many
+rows on screen, as in vim, but Backspace and Delete with nothing typed do not, as on the command
+line, so that one too many does not go to the parent directory; Delete at the end of the text
+deletes the character before it, and Shift and Ctrl with Left and Right go by what spaces part, as
+on vim's command line; Ctrl+g and Ctrl+t go to the next match down and the next up, as many
 as the count before / or ?, and the search goes on from there, and Ctrl+b and Ctrl+e go to the start
 and the end of the text, as on vim's command line. Up, Down, PgUp, PgDn, and the F-keys, Alt+F1 and
 Alt+F2 among them, end the search and do what they do in the panel, as in mc, but Shift+F7, which

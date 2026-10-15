@@ -1037,7 +1037,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   Insert mode (`input`): Left, Right, Shift+Left, Shift+Right, Home, End (and Ctrl+b, Ctrl+e, as on
   vim's command line), Backspace, Delete, Ctrl+u, Ctrl+w, and Ctrl+r and a register; as on vim's
   command line, Delete at the end of the text deletes the character before, Shift and Ctrl with Left
-  and Right go by what spaces part, and Backspace and Delete with nothing typed give the search up.
+  and Right go by what spaces part. Unlike vim's, Backspace and Delete with nothing typed keep the
+  search open, as on the command line, so that one too many does not go to the parent directory.
   As in vim, Enter (and Ctrl+j) ends the search: it searches once more from where it searches from,
   with the count, and goes to the match, or says "Pattern not found", keeping the text for `n`
   either way; Esc or Ctrl+c (`abort`) gives it up and puts back the cursor and the rows on screen as

@@ -2303,13 +2303,8 @@ impl App {
                 None
             }
             Resolved::Action(action) if searching => match action {
-                // As vim's search, Backspace and Delete with nothing typed give it up.
-                Action::Backspace | Action::DeleteChar
-                    if self.panel(side).search_text() == Some("") =>
-                {
-                    self.panel_mut(side).abort_search();
-                    None
-                }
+                // Unlike vim's search, Backspace and Delete with nothing typed keep it open, as
+                // on the command line: a Backspace too many would go to the parent directory.
                 Action::Left
                 | Action::Right
                 | Action::TextStart
@@ -7013,17 +7008,24 @@ mod tests {
     }
 
     #[test]
-    fn backspace_and_delete_with_nothing_typed_give_quick_search_up_as_vims() {
+    fn backspace_and_delete_with_nothing_typed_keep_quick_search_open() {
         let mut app = with_files(&["a1", "b2"]);
         app.config.ui.fuzzy_search = false;
+        let location = app.panel(Side::Left).location().clone();
         for key in ["backspace", "delete"] {
             keys(&mut app, &["g", "g", "j", "/", "b"]);
             assert_eq!(cursor_name(&app, Side::Left), "b2");
-            keys(&mut app, &["backspace"]);
-            assert!(app.panel(Side::Left).searching(), "the text goes first");
-            keys(&mut app, &[key]);
-            assert!(!app.panel(Side::Left).searching(), "{key}");
+            keys(&mut app, &["backspace", key, key, key]);
+            assert!(app.panel(Side::Left).searching(), "{key}");
+            assert_eq!(app.panel(Side::Left).search_text(), Some(""));
             assert_eq!(cursor_name(&app, Side::Left), "a1", "back where it started");
+            assert_eq!(
+                app.panel(Side::Left).location(),
+                &location,
+                "not the parent"
+            );
+            keys(&mut app, &["esc"]);
+            assert!(!app.panel(Side::Left).searching());
         }
     }
 

@@ -19,7 +19,7 @@ crates/
 │                  ControlMaster, SFTP channels, askpass bridge
 ├── noc-vfs/       Vfs trait: local and SFTP backends, mounted volumes
 ├── noc-ops/       job engine: copy, move, rename, delete, mkdir, checksums; progress, cancellation, conflicts
-├── noc-tools/     external programs other than ssh: zoxide, ripgrep, the editor, the opener, the shell
+├── noc-tools/     external programs other than ssh: zoxide, ripgrep, fd, the editor, the opener, the shell
 ├── noc-text/      terminal-safe text: sanitizing, widths in cells, fitting, wrapping
 ├── noc-scroll/    paging text that ends: how far the page keys go, the scroll bar
 └── noc-viewer/    the F3 viewer: reading through the Vfs, scrolling, wrapping; its own text

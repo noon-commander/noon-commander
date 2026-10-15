@@ -1,7 +1,8 @@
 //! External programs that Noon Commander works with, other than ssh.
 //!
 //! This crate owns every command line of a helper program: zoxide, which ranks the directories
-//! the user works in, ripgrep, which searches the contents of files, the editor of F4, the
+//! the user works in, ripgrep, which searches the contents of files, fd, which finds files and
+//! directories by name, the editor of F4, the
 //! desktop's opener of `g x`, and the shell of the command line. ssh has rules of its own and
 //! lives in `noc-ssh`. Programs run without a shell, with their arguments after `--` where they
 //! take paths, and background ones end when their future is dropped; the shell of the command
@@ -10,6 +11,7 @@
 
 pub mod editor;
 mod error;
+pub mod fd;
 pub mod opener;
 mod process;
 pub mod ripgrep;

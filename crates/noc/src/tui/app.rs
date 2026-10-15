@@ -38,6 +38,7 @@ use super::help::Help;
 use super::history::{HistoryEvent, HistoryWindow};
 use super::jobs::{JobsEvent, JobsList, Row};
 use super::jump::{JumpEvent, JumpMenu};
+use super::key_hints::{KeyHintsEvent, KeyHintsWindow};
 use super::keymap::{
     Action, Context, Extra, Hints, KeyState, Keyboard, Keymap, Mode, Resolved, Typed,
 };
@@ -738,6 +739,9 @@ pub(crate) struct App {
     hints: Option<Hints>,
     /// The key hints were asked for, with every key of this mode and context.
     hints_asked: Option<(Mode, Context)>,
+    /// The key hints with the keys, after Ctrl+k while they show: over everything, the dialogs
+    /// too.
+    key_hints: Option<KeyHintsWindow>,
     /// What the pending command has typed so far, as the event loop's key state has it, for
     /// vim's `showcmd`.
     showcmd: String,
@@ -783,6 +787,7 @@ enum Scrolled {
     Jump,
     Workspaces,
     History,
+    KeyHints,
     PullDown,
     /// The list of completions.
     Choices,
@@ -797,6 +802,7 @@ enum Scrolled {
 /// What is in front, and takes the mouse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Front {
+    KeyHints,
     /// The dialog in front, by its id.
     Dialog(u64),
     Menu,
@@ -900,6 +906,7 @@ impl App {
             keymap: Keymap::default(),
             hints: None,
             hints_asked: None,
+            key_hints: None,
             showcmd: String::new(),
             extra: Extra::default(),
             registers: Registers::default(),
@@ -978,7 +985,8 @@ impl App {
                 | Context::TabMenu
                 | Context::Jump
                 | Context::Workspaces
-                | Context::CommandHistory,
+                | Context::CommandHistory
+                | Context::KeyHints,
             ) => {
                 let mut effects = Vec::new();
                 if mode == Mode::Normal {
@@ -1095,7 +1103,9 @@ impl App {
 
     /// What is in front, in the order [`handle_over`](Self::handle_over) gives keys.
     fn front(&self) -> Front {
-        if let Some(open) = self.dialogs.front() {
+        if self.key_hints.is_some() {
+            Front::KeyHints
+        } else if let Some(open) = self.dialogs.front() {
             Front::Dialog(open.dialog.id())
         } else if self.menu.is_some() {
             Front::Menu
@@ -1235,6 +1245,10 @@ impl App {
             };
         }
         let action = match front {
+            Front::KeyHints => self
+                .key_hints
+                .as_mut()
+                .and_then(|window| window.pointer(pointer)),
             Front::Menu => self.menu.as_mut().and_then(|menu| menu.pointer(pointer)),
             Front::TabMenu => self
                 .tab_menu
@@ -1315,6 +1329,10 @@ impl App {
         };
         let one = |target: Scrolled, bar: Option<scrollbar::Bar>| bar.map(|bar| (target, bar));
         let bars = match self.front() {
+            Front::KeyHints => {
+                let bar = self.key_hints.as_ref().and_then(KeyHintsWindow::bar);
+                vec![one(Scrolled::KeyHints, bar)]
+            }
             Front::Dialog(_) => {
                 let dialog = self.dialogs.front().and_then(|open| open.dialog.bar());
                 vec![choices(Completes::Field), one(Scrolled::Dialog, dialog)]
@@ -1396,6 +1414,7 @@ impl App {
                 | Scrolled::Jump
                 | Scrolled::Workspaces
                 | Scrolled::History
+                | Scrolled::KeyHints
                 | Scrolled::Choices
         );
         if let (true, Scroll::By(motion)) = (keys, scroll) {
@@ -1465,6 +1484,7 @@ impl App {
             | Scrolled::Jump
             | Scrolled::Workspaces
             | Scrolled::History
+            | Scrolled::KeyHints
             | Scrolled::Choices => {}
         }
         Vec::new()
@@ -1496,6 +1516,11 @@ impl App {
             }
             Scrolled::History => {
                 if let Some(window) = &mut self.history_window {
+                    window.scroll_to(top);
+                }
+            }
+            Scrolled::KeyHints => {
+                if let Some(window) = &mut self.key_hints {
                     window.scroll_to(top);
                 }
             }
@@ -1660,7 +1685,9 @@ impl App {
 
     /// Where keys go now.
     pub(crate) fn context(&self) -> Context {
-        if let Some(open) = self.dialogs.front() {
+        if self.key_hints.is_some() {
+            Context::KeyHints
+        } else if let Some(open) = self.dialogs.front() {
             if self.lists(Completes::Field) && open.dialog.completes() {
                 Context::Completion
             } else {
@@ -1712,7 +1739,9 @@ impl App {
     /// The mode keys are typed in now, as vim's: that of the text field that has them, Visual
     /// mode while a panel selects rows, and else Normal mode.
     pub(crate) fn mode(&self) -> Mode {
-        if let Some(open) = self.dialogs.front() {
+        if let Some(window) = &self.key_hints {
+            window.mode()
+        } else if let Some(open) = self.dialogs.front() {
             if self.context() == Context::Completion {
                 Mode::Insert
             } else {
@@ -1781,6 +1810,9 @@ impl App {
     }
 
     fn pending_operator(&self) -> Option<String> {
+        if self.key_hints.is_some() {
+            return None;
+        }
         if let Some(open) = self.dialogs.front() {
             return open.dialog.pending();
         }
@@ -1855,20 +1887,28 @@ impl App {
                     | Context::Jump
                     | Context::Workspaces
                     | Context::CommandHistory
+                    | Context::KeyHints
             )
         )
     }
 
     /// Whether keys go to a secret field, such as the password of a prompt from ssh.
     fn typing_secret(&self) -> bool {
-        self.dialogs
-            .front()
-            .is_some_and(|open| open.dialog.secret_focused())
+        self.key_hints.is_none()
+            && self
+                .dialogs
+                .front()
+                .is_some_and(|open| open.dialog.secret_focused())
     }
 
     /// Gives up the part of a command that a text field has waiting, such as an operator, when
     /// the keymap gives up the command: after Esc, or a key that cannot go on with it.
     fn give_up_command(&mut self) {
+        // The key hints with the keys have no command of their own to give up; what waits under
+        // them, such as an operator, waits for the command run from them.
+        if self.key_hints.is_some() {
+            return;
+        }
         if let Some(open) = self.dialogs.front_mut() {
             open.dialog.give_up();
         }
@@ -1965,6 +2005,7 @@ impl App {
                 | Context::TabMenu
                 | Context::Workspaces
                 | Context::CommandHistory
+                | Context::KeyHints
                 | Context::Jump
         );
         if pages && matches!(action, Action::PageUp | Action::PageDown) {
@@ -2000,6 +2041,7 @@ impl App {
                 .as_mut()
                 .map(WorkspacesWindow::picker_mut),
             Context::CommandHistory => self.history_window.as_mut().map(HistoryWindow::picker_mut),
+            Context::KeyHints => self.key_hints.as_mut().map(KeyHintsWindow::picker_mut),
             Context::Jump => {
                 if let Some(jump) = &mut self.jump {
                     jump.count_pages(pages);
@@ -2016,6 +2058,9 @@ impl App {
     /// Whether a dialog or the configuration has the keys, which count their moves themselves,
     /// past their text fields too, where a count would go to the field.
     fn counts_moves(&self) -> bool {
+        if self.key_hints.is_some() {
+            return false;
+        }
         if !self.dialogs.is_empty() {
             return true;
         }
@@ -2349,6 +2394,9 @@ impl App {
 
     /// Gives a key to what is over the panels, front first, if anything is.
     fn handle_over(&mut self, input: Resolved) -> Option<Vec<Effect>> {
+        if self.key_hints.is_some() {
+            return Some(self.handle_key_hints(input));
+        }
         if !self.dialogs.is_empty() {
             return Some(self.handle_dialog(input));
         }
@@ -2551,8 +2599,19 @@ impl App {
             return None;
         };
         match action {
-            // The hints show their keys over what is in front, which stays open.
-            Action::KeyHints => self.hints_asked = Some(self.place()),
+            // The hints show their keys over what is in front, which stays open; again while
+            // they show, they take the keys, as a list.
+            Action::KeyHints => {
+                let place = self.place();
+                match self.hints.take() {
+                    Some(hints) if (hints.mode, hints.context) == place => {
+                        let fuzzy = self.config.ui.fuzzy_search;
+                        let window = KeyHintsWindow::new(&self.keymap, &hints, self.extra, fuzzy);
+                        self.key_hints = Some(window);
+                    }
+                    _ => self.hints_asked = Some(place),
+                }
+            }
             // The lists take it themselves, each for itself.
             Action::ShowFull if self.context() == Context::Panel => {
                 self.whole = self.whole.toggled();
@@ -4216,6 +4275,28 @@ impl App {
                     .retain(|entry| !entry.is(host.as_deref(), &command));
                 window.set_history(&self.history);
                 vec![Effect::History(HistoryChange::Remove { host, command })]
+            }
+        }
+    }
+
+    /// Gives a key to the key hints with the keys: a command run from them runs where the keys
+    /// went before they opened, with the count and the register typed before them.
+    fn handle_key_hints(&mut self, input: Resolved) -> Vec<Effect> {
+        let Some(window) = &mut self.key_hints else {
+            return Vec::new();
+        };
+        match window.handle(input) {
+            KeyHintsEvent::Pending => Vec::new(),
+            KeyHintsEvent::Closed => {
+                self.key_hints = None;
+                Vec::new()
+            }
+            KeyHintsEvent::Run(typed) => {
+                self.key_hints = None;
+                let extra = self.extra;
+                let effects = self.typed(typed);
+                self.extra = extra;
+                effects
             }
         }
     }
@@ -6062,6 +6143,9 @@ impl App {
         }
         self.render_windows(frame, panels);
         self.render_command_choices(frame, command_line, &prompt_text);
+        if let Some(window) = &mut self.key_hints {
+            window.render(frame, panels, &self.theme);
+        }
         if let Some(hints) = &self.hints {
             which_key::render(frame, panels, hints, &self.theme);
         }
@@ -11877,6 +11961,79 @@ mod tests {
             Some((Mode::Normal, Context::PullDown))
         );
         assert_eq!(app.context(), Context::PullDown);
+    }
+
+    /// Feeds `keys` to the app as the event loop does, with the key hints, which `state` keeps.
+    fn keys_with_hints(app: &mut App, state: &mut KeyState, keys: &[&str]) -> Vec<Effect> {
+        let mut effects = Vec::new();
+        for key in keys {
+            let combination = crokey::parse(key).unwrap().normalized();
+            let event = KeyEvent::new(*combination.codes.first(), combination.modifiers);
+            effects.extend(app.key(state, event, Instant::now()));
+            if let Some(place) = app.take_hints_asked() {
+                app.keymap().show_hints(state, place);
+            }
+            app.set_hints(state);
+        }
+        effects
+    }
+
+    #[test]
+    fn ctrl_k_twice_lists_the_keys_to_filter_and_run_where_they_went() {
+        let mut app = loaded();
+        let mut state = KeyState::default();
+        keys_with_hints(&mut app, &mut state, &["2", "ctrl-k"]);
+        assert!(app.hints.is_some());
+        assert_eq!(app.place(), (Mode::Normal, Context::Panel));
+        keys_with_hints(&mut app, &mut state, &["ctrl-k"]);
+        assert_eq!(app.place(), (Mode::Normal, Context::KeyHints));
+        assert!(app.hints.is_none(), "the list takes the place of the hints");
+        let text = screen_of(&mut app, 30);
+        assert!(
+            text.contains("Ctrl+w h") && text.contains("Filter:"),
+            "{text}"
+        );
+        // `/` filters, and Enter runs the command in the panel, with the count.
+        keys_with_hints(&mut app, &mut state, &["/"]);
+        assert_eq!(app.place(), (Mode::Insert, Context::KeyHints));
+        let typed: Vec<String> = "'row down".chars().map(String::from).collect();
+        let typed: Vec<&str> = typed
+            .iter()
+            .map(|c| if c == " " { "space" } else { c.as_str() })
+            .collect();
+        keys_with_hints(&mut app, &mut state, &typed);
+        keys_with_hints(&mut app, &mut state, &["enter"]);
+        assert_eq!(app.place(), (Mode::Normal, Context::Panel));
+        assert_eq!(cursor_name(&app, Side::Left), "right", "two rows down");
+
+        // After the first key of a sequence, the list has the sequences after it.
+        keys_with_hints(&mut app, &mut state, &["ctrl-w", "ctrl-k"]);
+        assert_eq!(
+            app.hints.as_ref().and_then(|hints| hints.typed.as_deref()),
+            Some("Ctrl+w")
+        );
+        keys_with_hints(&mut app, &mut state, &["ctrl-k"]);
+        assert_eq!(app.context(), Context::KeyHints);
+        let text = screen_of(&mut app, 30);
+        assert!(text.contains("Ctrl+w h") && !text.contains("g g"), "{text}");
+        // Esc closes it, and the hints do not come back.
+        keys_with_hints(&mut app, &mut state, &["esc"]);
+        assert_eq!(app.place(), (Mode::Normal, Context::Panel));
+        assert!(app.hints.is_none());
+    }
+
+    #[test]
+    fn ctrl_k_twice_lists_the_keys_of_a_dialog_over_it() {
+        let mut app = loaded();
+        let mut state = KeyState::default();
+        app.handle(action(Action::Mkdir));
+        let dialog = app.place();
+        assert_eq!(dialog, (Mode::Insert, Context::PathInput));
+        keys_with_hints(&mut app, &mut state, &["ctrl-k", "ctrl-k"]);
+        assert_eq!(app.place(), (Mode::Normal, Context::KeyHints));
+        assert!(screen_of(&mut app, 30).contains("Complete the path"));
+        keys_with_hints(&mut app, &mut state, &["esc"]);
+        assert_eq!(app.place(), dialog, "the dialog has the keys again");
     }
 
     #[test]

@@ -1106,6 +1106,83 @@ fn esc_closes_the_hints_and_backspace_takes_back_a_key() {
 }
 
 #[test]
+fn ctrl_k_while_the_hints_show_gives_them_the_keys_with_the_count() {
+    let keymap = Keymap::default();
+    let mut state = KeyState::default();
+    // Every key: the app, which has the hints, takes the second Ctrl+k for itself.
+    keymap.show_hints(&mut state, PANEL);
+    assert_eq!(
+        feed(&keymap, &mut state, PANEL, &["ctrl-k"]),
+        actions(&[Action::KeyHints])
+    );
+    assert_eq!(keymap.hints_of(&state, PANEL), None);
+    // After a count, which goes with it, for the command run from the list.
+    assert_eq!(
+        feed(&keymap, &mut state, PANEL, &["3", "ctrl-k"]),
+        actions(&[Action::KeyHints])
+    );
+    keymap.show_hints(&mut state, PANEL);
+    assert_eq!(
+        feed(&keymap, &mut state, PANEL, &["ctrl-k"]),
+        with(
+            Action::KeyHints,
+            Extra {
+                count: Some(3),
+                ..Extra::default()
+            }
+        )
+    );
+    assert_eq!(state.showcmd(), "");
+    // After the first key of a sequence, which the hints keep.
+    assert_eq!(feed(&keymap, &mut state, PANEL, &["ctrl-w", "ctrl-k"]), []);
+    let hints = keymap.hints_of(&state, PANEL).unwrap();
+    assert_eq!(hints.prefix, parse_sequence("ctrl-w").unwrap());
+    assert_eq!(
+        feed(&keymap, &mut state, PANEL, &["ctrl-k"]),
+        actions(&[Action::KeyHints])
+    );
+    assert_eq!(state.showcmd(), "");
+    assert_eq!(keymap.hints_of(&state, PANEL), None);
+}
+
+#[test]
+fn sequences_list_every_command_whole_after_the_keys_typed() {
+    let keymap = Keymap::default();
+    let ctrl_w = parse_sequence("ctrl-w").unwrap();
+    assert_eq!(
+        hint_keys(&keymap.sequences(PANEL, &ctrl_w)),
+        [
+            "Ctrl+w w, Ctrl+w Ctrl+w, Ctrl+w p",
+            "Ctrl+w h",
+            "Ctrl+w l",
+            "Ctrl+w x, Ctrl+w r",
+            "Ctrl+w f",
+            "Ctrl+w v",
+            "Ctrl+w 1",
+            "Ctrl+w 2"
+        ]
+    );
+    let every = keymap.sequences(PANEL, &[]);
+    let row = |action| every.iter().find(|row| row.action == Some(action));
+    assert_eq!(
+        row(Action::Home).map(|row| row.keys.as_str()),
+        Some("g g, Home")
+    );
+    assert!(
+        every
+            .iter()
+            .all(|row| row.more == 0 && row.action.is_some())
+    );
+    assert!(row(Action::KeyHints).is_some(), "the global keys too");
+    assert!(
+        every.iter().all(|row| !row.keys.starts_with("Esc")),
+        "Esc closes the list"
+    );
+    let search = keymap.sequences((Mode::Insert, Context::QuickSearch), &[]);
+    assert!(hint_keys(&search).iter().all(|keys| keys.len() > 1));
+}
+
+#[test]
 fn the_help_lists_the_keys_a_context_binds_in_a_mode() {
     let keymap = Keymap::default();
     let typing = keymap.help(Mode::Insert, Context::Input);

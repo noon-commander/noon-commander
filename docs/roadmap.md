@@ -133,6 +133,8 @@
       `ui.terminal_title`
 - [x] Key hints, as which-key: the keys that can follow `g`, Ctrl+w, …, and every key of
       whatever is in front (Ctrl+k); `ui.which_key`, `ui.which_key_delay_ms`
+- [x] Ctrl+k while the key hints show gives them the keys, as nvim's `K K`: a list of every
+      sequence whole, which `/` filters and Enter runs from
 - [x] One keymap, vim's, in its modes, with mc's F-keys, in place of two presets chosen by
       `ui.keymap`, one modelled on mc ([ADR 0022](adr/0022-vim-modes.md)): Normal, Insert, and
       Visual mode in the panels, the lists, the dialogs, and the text fields; vim's motions,

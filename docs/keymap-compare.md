@@ -92,19 +92,22 @@ g < and " work only where keys are commands; Ctrl+k and Ctrl+l work in every mod
 terminal. " names a register for the next command, as in vim, wherever keys are commands, so that
 the name never runs as a command; only text fields keep text in registers. Ctrl+k after a count or a
 register shows the keys they can go with, and keeps them for the key after it; Backspace with
-nothing typed closes the hints. Ctrl+k is free in all of noc's modes and is no prefix of tmux or
-screen; vim's digraphs of Ctrl+k in Insert mode noc does not have. yazi and ranger show the keys
-that can follow on their own, once the first key of a sequence is pressed; yazi binds its help in
-every window, and F1 in mc and Far opens the help of the window in front. g <, vim's key for the
-output of the last command, shows the output of commands over whatever is in front, which is there
-again afterwards; mc and Far hide or show the panels with Ctrl+o in the panels and on their command
-line, and mc in its viewer and editor too. noc's Ctrl+o is vim's, which goes back through the jump
-list. Ctrl+l redraws the screen under whatever is in front, which stays as it was, quick search too,
-as mc's Ctrl+l does in its panels, dialogs, viewer, and editor.
+nothing typed closes the hints. Ctrl+k while the hints show gives them the keys, as `K K` gives
+nvim's hover window the keys: a list of every key sequence whole, `/` filters it, Enter runs the
+command under the cursor with the count and the register typed before, and Esc closes it. Ctrl+k
+is free in all of noc's modes and is no prefix of tmux or screen; vim's digraphs of Ctrl+k in
+Insert mode noc does not have. yazi and ranger show the keys that can follow on their own, once the
+first key of a sequence is pressed; yazi binds its help in every window, and F1 in mc and Far opens
+the help of the window in front. g <, vim's key for the output of the last command, shows the
+output of commands over whatever is in front, which is there again afterwards; mc and Far hide or
+show the panels with Ctrl+o in the panels and on their command line, and mc in its viewer and editor
+too. noc's Ctrl+o is vim's, which goes back through the jump list. Ctrl+l redraws the screen under
+whatever is in front, which stays as it was, quick search too, as mc's Ctrl+l does in its panels,
+dialogs, viewer, and editor.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
-| The keys that can be typed now, over whatever is in front, and what they do, as which-key shows them | `key_hints` | ⏳ | Ctrl+k | — | — | — | — |
+| The keys that can be typed now, over whatever is in front, and what they do, as which-key shows them; again, a list of them to filter and run from | `key_hints` | ⏳ | Ctrl+k | — | — | — | — |
 | The register for the next command: a … z, which text fields share, and A … Z to append to it | `register` | ⏳ | " | — | — | — | — |
 | The output of commands, in place of the panels and what is in front of them (mc, Far: hide or show the panels) | `user_screen` | ⏳ | g < | Ctrl+o | Ctrl+o | — | — |
 | Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | — | — | Ctrl+l |
@@ -1142,6 +1145,16 @@ Tab and F8 still switch the hosts and remove the command.
 | --- | --- | :-: | --- | --- | --- | --- | --- |
 | The commands of the panel's host, or of all hosts | `next_field` | ⏳ | Tab<br>Ctrl+i | — | — | — | — |
 | Remove the command from the history | `delete` | ⏳ | F8 | — | — | — | — |
+
+## Key hints list (`key_hints`, Normal and Insert mode)
+
+Ctrl+k while the key hints show, as `K K` gives nvim's hover window the keys: every key sequence of
+what is under the hints, whole, after the keys typed, one row for each command, over everything,
+the dialogs too. It binds no keys of its own: it falls back to `list`, whose Enter closes it and
+runs the command under the cursor where the keys went before, with the count and the register typed
+before Ctrl+k, and whose Esc closes it; commands that take a character after them, as `f` does,
+show but do not run. `/` types in its filter, in Insert mode, which falls back to `list`, then to
+`input`, then to `global`. mc, Far, yazi, and ranger have no such list.
 
 ## Output of commands (`user_screen`, Normal mode)
 

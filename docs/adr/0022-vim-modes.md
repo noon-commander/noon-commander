@@ -99,7 +99,9 @@ no registers.
 - **Ctrl+k shows the key hints** of whatever is in front, in every mode and every terminal, in
   place of Alt+/, which an Esc and a quick `/` arrived as: Esc then `/` started key hints rather
   than quick search. Ctrl+k comes as a byte of its own, without the kitty keyboard protocol, is
-  free in every mode, and is no prefix of tmux or screen.
+  free in every mode, and is no prefix of tmux or screen. Ctrl+k again while the hints show gives
+  them the keys, as `K K` gives nvim's hover window the keys: a list of every sequence whole, to
+  filter with `/` and run from with Enter; Esc closes it.
 - **The mode shows** as vim's `showmode` and `showcmd` show it, on a line above the F-key bar
   that the command line takes when open: `-- INSERT --` or `-- VISUAL --` on the left, the
   count, register, operator, or keys of the pending command on the right. The cursor is a bar

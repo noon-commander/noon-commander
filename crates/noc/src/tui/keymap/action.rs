@@ -70,6 +70,9 @@ pub(crate) enum Context {
     CommandCompletion,
     /// The window of the command history; falls back as the location menu does.
     CommandHistory,
+    /// The key hints with the keys, after a second Ctrl+k: every key of what is under them, to
+    /// filter and run; falls back as the location menu does.
+    KeyHints,
     /// The terminal's own screen, with the output of commands, in place of the panels; only
     /// the keys that go back to the panels do anything.
     UserScreen,
@@ -136,6 +139,8 @@ impl Context {
                 &[Self::CommandHistory, Self::List, Self::Input, Self::Global]
             }
             Self::CommandHistory => &[Self::CommandHistory, Self::List, Self::Global],
+            Self::KeyHints if filtering => &[Self::KeyHints, Self::List, Self::Input, Self::Global],
+            Self::KeyHints => &[Self::KeyHints, Self::List, Self::Global],
             Self::PullDown => &[Self::PullDown, Self::Global],
         }
     }
@@ -455,7 +460,8 @@ pub(crate) enum Action {
     /// Shows the key bindings.
     Help,
     /// Shows the keys that can be typed now and what they do, as which-key does: the next key
-    /// typed runs as it would have, or shows the keys that can follow it.
+    /// typed runs as it would have, or shows the keys that can follow it. Again while they
+    /// show, it gives them the keys, as a list to filter and run from.
     KeyHints,
     /// Quits Noon Commander.
     Quit,
@@ -674,6 +680,7 @@ impl Context {
         Self::CommandLine,
         Self::CommandCompletion,
         Self::CommandHistory,
+        Self::KeyHints,
         Self::UserScreen,
     ];
 }

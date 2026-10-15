@@ -29,7 +29,7 @@ struct Row {
 }
 
 /// What `action` does in `context`, or in the first context of its chain in `mode` that says.
-fn describe((mode, context): (Mode, Context), action: Action) -> Option<String> {
+pub(crate) fn describe((mode, context): (Mode, Context), action: Action) -> Option<String> {
     context
         .chain(mode)
         .iter()
@@ -176,7 +176,7 @@ fn styled(fitted: Fitted, style: Style, theme: &Theme) -> Vec<Span<'static>> {
 
 /// `keys`, a list such as `Space, Shift+Down`, in `width` cells: as many of them as fit whole,
 /// and the first cut where not even that one does.
-fn fit_keys(keys: &str, width: usize) -> Fitted {
+pub(crate) fn fit_keys(keys: &str, width: usize) -> Fitted {
     let mut fitted = String::new();
     for key in keys.split(", ") {
         let next = if fitted.is_empty() {
@@ -325,6 +325,7 @@ mod tests {
             mode: Mode::Normal,
             context: Context::Panel,
             typed: Some("Ctrl+w".to_owned()),
+            prefix: vec![ctrl_w],
             rows: keymap.hints(place, &[ctrl_w]),
         };
         insta::assert_snapshot!(draw(&hints, 100, 13));

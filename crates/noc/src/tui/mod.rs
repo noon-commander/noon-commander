@@ -16,6 +16,7 @@ mod help;
 mod history;
 mod jobs;
 mod jump;
+mod key_hints;
 mod keymap;
 mod menu;
 mod mouse;

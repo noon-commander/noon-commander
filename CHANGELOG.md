@@ -9,6 +9,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Ctrl+k while the key hints show gives them the keys, as `K K` does to nvim's hover window: a
+  list of every key sequence whole, `Ctrl+w h` rather than a `Ctrl+w` group, with what each does,
+  over whatever is in front. `/` filters it by keys and by what they do, Enter runs the command
+  under the cursor with the count typed before Ctrl+k, and Esc closes it.
 - `noc debug version` prints one `key value` line per fact, for scripts and bug reports: the
   version, the compile-time features, the commit and its time in UTC, the target, the
   operating system, the terminal with its colors and keyboard protocol, and the editor of F4.

@@ -1288,7 +1288,13 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   as it would have, or shows the keys that can follow it; `Esc` closes them and `Backspace` takes
   back the last key, or with none closes them, and so do `Ctrl+[` and `Ctrl+h`, which the kitty
   keyboard protocol tells apart from them. Ctrl+k after a count or a register shows every key, and
-  keeps them for the key after it. `Esc` never starts a sequence, and never shows hints. The
+  keeps them for the key after it. Ctrl+k while hints show gives them the keys, as `K K` gives
+  nvim's hover window the keys: the keymap resolves it with the count and the register, and the app
+  opens `tui/key_hints.rs` in place of the hints it has, over everything, the dialogs too
+  (`Context::KeyHints`, which falls back to `list`). It lists every sequence of the hints, whole,
+  after the keys they had typed (`Keymap::sequences`), one row for each command; `/` filters it,
+  Enter closes it and runs the command where the keys went before, with that count and register,
+  and Esc closes it. `Esc` never starts a sequence, and never shows hints. The
   `KeyState` also keeps what the pending command has typed, which the line above the F-key bar shows
   (`KeyState::showcmd`).
 - **Mouse.** On by default (`ui.mouse`; [ADR 0018](adr/0018-mouse-support.md)). The event loop

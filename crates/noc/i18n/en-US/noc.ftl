@@ -622,8 +622,10 @@ help-note-fuzzy = Quick search, the location menu, the tab menu, the zoxide wind
 help-note-workspaces = A workspace holds the tabs of both panels: where each is, its sort order, and the row under its cursor. t w and F9 → Workspace list them; restoring one replaces every tab.
 help-note-command = ! opens the command line, and : too, for commands of Noon Commander, of which :!command is the only one so far. A command runs with the terminal, in the panel's directory, then a key brings the panels back; cd and export last only as long as the command.
 help-note-pulldown = In the pull-down menu, Alt and the highlighted letter of a menu open it, and Alt and that of a command run it.
-help-note-key-hints = After a key that starts longer sequences, such as g or Ctrl+w, the keys that can follow show after a moment, and wait for one; Esc closes them, and Backspace takes back the last key, or closes them when none is typed.
-help-key-hints = The keys that can be typed now, and what they do
+help-note-key-hints = After a key that starts longer sequences, such as g or Ctrl+w, the keys that can follow show after a moment, and wait for one; Esc closes them, and Backspace takes back the last key, or closes them when none is typed. Ctrl+k while they show gives them the keys, as a list of whole sequences: / filters it, and Enter runs the command under the cursor.
+help-key-hints = The keys that can be typed now and what they do; again, a list to filter
+help-key-hints-run = Close the list and run the command, with the count typed before Ctrl+k
+help-key-hints-close = Close the list
 help-register = The register for the next command: a … z, which text fields share, and A … Z to append to it
 
 ## Key hints, as which-key shows them (src/tui/which_key): the keys that can follow those
@@ -639,7 +641,7 @@ which-key-more = { $count ->
 # In the last cell, for the keys that do not fit.
 which-key-hidden = … { $count } more
 # On the bottom of the frame.
-which-key-close = Esc closes, Backspace goes back
+which-key-close = Ctrl+k lists, Esc closes, Backspace goes back
 
 ## Host settings, F4 on a host (src/tui/app), saved to hosts.toml. Prefix: host-.
 

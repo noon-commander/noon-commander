@@ -14,7 +14,8 @@
 //! As which-key does, the keymap lists the keys that can follow a pending sequence, or every
 //! key of a context, with what they do ([`Keymap::hints`]). While the hints show, the sequence
 //! waits for its next key without a deadline; `Esc` closes them, and `Backspace` takes back the
-//! last key of the sequence, or with none closes them.
+//! last key of the sequence, or with none closes them. The key of the hints typed again while
+//! they show gives them the keys, as a list of whole sequences ([`Keymap::sequences`]).
 
 mod action;
 mod preset;
@@ -279,6 +280,8 @@ pub(crate) struct Hints {
     pub(crate) context: Context,
     /// The keys typed so far as the help writes them; `None` while none is typed.
     pub(crate) typed: Option<String>,
+    /// The keys typed so far.
+    pub(crate) prefix: Vec<KeyCombination>,
     pub(crate) rows: Vec<Hint>,
 }
 
@@ -451,6 +454,9 @@ impl Keymap {
                         || state.register.is_some()) =>
             {
                 state.keys.clear();
+                if state.hinting {
+                    return Self::focus_hints(state);
+                }
                 vec![Typed::from(Resolved::Action(Action::KeyHints))]
             }
             Lookup::Exact(action) => Self::resolve(state, action).into_iter().collect(),
@@ -473,8 +479,12 @@ impl Keymap {
             }
             Lookup::Unknown => {
                 state.keys.pop();
-                // The key of the hints shows what can follow the keys typed so far.
+                // The key of the hints shows what can follow the keys typed so far; again, it
+                // gives the hints the keys.
                 if self.lookup(mode, context, &[key]) == Lookup::Exact(Action::KeyHints) {
+                    if state.hinting {
+                        return Self::focus_hints(state);
+                    }
                     self.show_hints(state, (mode, context));
                     return Vec::new();
                 }
@@ -497,6 +507,18 @@ impl Keymap {
                 typed
             }
         }
+    }
+
+    /// The key of the hints typed while they show: the app gives them the keys, with the count
+    /// and the register typed, for the command run from them. The keys typed so far stay in the
+    /// hints the app has.
+    fn focus_hints(state: &mut KeyState) -> Vec<Typed> {
+        let extra = state.take_extra();
+        state.reset();
+        vec![Typed {
+            resolved: Resolved::Action(Action::KeyHints),
+            extra,
+        }]
     }
 
     /// What `action` does now that its keys are typed: it waits for a character if it takes
@@ -724,8 +746,57 @@ impl Keymap {
             mode,
             context,
             typed,
+            prefix: state.keys.clone(),
             rows,
         })
+    }
+
+    /// Every sequence longer than `prefix` that starts with it and does something in
+    /// `context`'s chain in `mode`, whole, for the key hints with the keys: one row for each
+    /// action, in the order of the preset, the context's own first, with its sequences apart by
+    /// commas. The hints leave out the same keys as [`hints`](Self::hints).
+    pub(crate) fn sequences(
+        &self,
+        (mode, context): (Mode, Context),
+        prefix: &[KeyCombination],
+    ) -> Vec<Hint> {
+        let mut seen: Vec<&Sequence> = Vec::new();
+        let mut rows: Vec<Hint> = Vec::new();
+        for (sequence, action) in self.chain_bindings(mode, context) {
+            if sequence.len() <= prefix.len()
+                || !sequence.starts_with(prefix)
+                || seen.contains(&sequence)
+            {
+                continue;
+            }
+            seen.push(sequence);
+            let closes = sequence
+                .first()
+                .is_some_and(|first| [ESC, CTRL_BRACKET].contains(first));
+            let text = matches!(sequence.as_slice(), [key] if mode == Mode::Insert
+                && is_character(*key)
+                && !self.binds_itself(mode, context, sequence));
+            let does = match self.lookup(mode, context, sequence) {
+                Lookup::Exact(bound) | Lookup::Prefix(Some(bound)) => bound == *action,
+                Lookup::Prefix(None) | Lookup::Unknown => false,
+            };
+            if closes || text || !does {
+                continue;
+            }
+            let keys = describe(sequence);
+            match rows.iter_mut().find(|row| row.action == Some(*action)) {
+                Some(row) => {
+                    row.keys.push_str(", ");
+                    row.keys.push_str(&keys);
+                }
+                None => rows.push(Hint {
+                    keys,
+                    action: Some(*action),
+                    more: 0,
+                }),
+            }
+        }
+        rows
     }
 
     /// The keys that can follow `prefix` in `context`'s chain in `mode`, in the order of the

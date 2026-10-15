@@ -343,6 +343,8 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Dialog | Context::DialogInput, Action::Cancel) => fl!("help-dialog-cancel"),
         (Context::Jump, Action::Confirm) => fl!("help-jump-go"),
         (Context::Jump, Action::Cancel) => fl!("help-menu-close"),
+        (Context::KeyHints, Action::Confirm) => fl!("help-key-hints-run"),
+        (Context::KeyHints, Action::Cancel) => fl!("help-key-hints-close"),
         (Context::Rename, Action::Confirm) => fl!("help-rename-confirm"),
         (Context::Rename, Action::Cancel) => fl!("help-rename-cancel"),
         (Context::Viewer, Action::Home) => fl!("help-viewer-top"),

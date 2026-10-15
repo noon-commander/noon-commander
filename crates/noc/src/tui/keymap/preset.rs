@@ -630,17 +630,26 @@ pub(super) const PRESET: Preset = &[
             (Action::Delete, &["f8"]),
         ],
     ),
-    // The window of the search of a whole tree, on top of the list's: Tab and Shift+Tab go between
-    // its fields, the text and the files, and Esc to the rows, where i and / go back to the field.
-    // Enter goes to the file in the panel, and F3 and F4 view and edit it at the line, as in the
-    // results of mc's Find File. Alt+r and Alt+c switch regular expressions and case, as in VS Code.
+    // The dialog of the search of a whole tree, on top of the dialogs': F3 and F4 view and edit
+    // the file of the row at the line, as in the results of mc's Find File, and Alt+r and Alt+c
+    // switch regular expressions and case, as in VS Code, wherever the focus is. On the rows,
+    // Ctrl+u and Ctrl+d move half a page, as in the lists.
     (
         Mode::Normal,
         Context::Find,
         &[
-            (Action::InsertMode, &["i"]),
-            (Action::NextField, &["tab", "ctrl-i"]),
-            (Action::PrevField, &["backtab"]),
+            (Action::View, &["f3"]),
+            (Action::Edit, &["f4"]),
+            (Action::ToggleRegex, &["alt-r"]),
+            (Action::MatchCase, &["alt-c"]),
+            (Action::HalfPageUp, &["ctrl-u"]),
+            (Action::HalfPageDown, &["ctrl-d"]),
+        ],
+    ),
+    (
+        Mode::Normal,
+        Context::FindInput,
+        &[
             (Action::View, &["f3"]),
             (Action::Edit, &["f4"]),
             (Action::ToggleRegex, &["alt-r"]),
@@ -649,10 +658,8 @@ pub(super) const PRESET: Preset = &[
     ),
     (
         Mode::Insert,
-        Context::Find,
+        Context::FindInput,
         &[
-            (Action::NextField, &["tab", "ctrl-i"]),
-            (Action::PrevField, &["backtab"]),
             (Action::View, &["f3"]),
             (Action::Edit, &["f4"]),
             (Action::ToggleRegex, &["alt-r"]),

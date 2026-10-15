@@ -160,11 +160,11 @@ find-title = Find in { $dir }
 # The labels of the fields: the text to find, and the globs of the files to search.
 find-text = Text:
 find-files = Files:
-# Right of the text: the marks of regular expressions (Alt+r) and of matching case (Alt+c), as
-# VS Code shows them; bright while on.
-find-regex-mark = .*
-find-case-mark = Aa
-# Right of the files: how many lines matched, in how many files.
+# The check boxes: the text as a regular expression rather than as it is (Alt+r), and matching
+# case rather than only when the text has a capital letter (Alt+c).
+find-regex = Regular expression
+find-match-case = Match case
+# Under the rows: how many lines matched, in how many files.
 find-count = { $lines ->
         [one] 1 line
        *[other] { $lines } lines
@@ -422,6 +422,11 @@ dialog-older = Older
 dialog-error = Error
 # Fills a field of a form with what a panel shows, such as the directory open on a host.
 dialog-use-current = Use current
+# Buttons of a list of files found, as in mc's results of Find File: go to the file in the
+# panel, view it, edit it.
+dialog-go-to = Go to
+dialog-view = View
+dialog-edit = Edit
 
 ## Help screen (src/tui/help). Prefix: help-. One line per key: say what it does, briefly.
 
@@ -595,7 +600,7 @@ help-sort-time = Sort by modification time, newest first; again: reverse
 help-sort-size = Sort by size, largest first; again: reverse
 help-quick-search-start = Quick search, typed as vim's search
 help-quick-search-back = Quick search up the rows, as vim's ?; n then goes up too, and N down
-help-find-open = Search the files below for text, in a window
+help-find-open = Search the files below for text, in a dialog
 help-match-next = The next name that matches the last quick search, the way it went
 help-match-prev = The previous name that matches the last quick search, the other way
 help-shell = Open the command line for a shell command, run in this directory
@@ -616,12 +621,8 @@ help-menu-right = Change the right panel's location: a volume or a host
 help-quick-cd = Quick cd: type a path as for cd, with ~, .., -, or host:path
 help-jump-open = Jump to a directory that zoxide ranks, in this panel
 help-jump-go = Open the directory in the active panel
-help-find-go = Go to the file, its directory in the active panel
 help-find-view = View the file, from the line
 help-find-edit = Edit the file, at the line
-help-find-field = The other field: the text, or the files
-help-find-rows = To the rows; i and / go back to the field
-help-find-back = Back to the field
 help-find-regex = The text as a regular expression, or as it is
 help-find-case = Match case, or ignore it unless the text has a capital
 help-new-tab = A new tab in this panel, on the same directory

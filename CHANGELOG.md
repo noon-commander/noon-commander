@@ -11,11 +11,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `g /` searches the files below the panel's directory for text with
   [ripgrep](https://github.com/BurntSushi/ripgrep), locally or on a host, where rg runs over
-  the connection, in a window over both panels; so does F9 → Command → Find file…. One field
-  takes the text, another the globs of the files (`*.rs !target`); it searches again as either
-  changes, and with no text lists the files. Alt+r switches regular expressions, Alt+c case.
-  Each file found shows with its lines that match, the matches highlighted. Enter goes to the
-  file in the panel (Ctrl+o back), F3 views it from the line, and F4 edits it at the line.
+  the connection, in a dialog over both panels; so does F9 → Command → Find file…. One field
+  takes the text, another the globs of the files (`*.rs !target`), and check boxes switch
+  regular expressions (Alt+r) and case (Alt+c); it searches again as any of them changes, and
+  with no text lists the files. Each file found shows with its lines that match, the matches
+  highlighted. Go to, the default button, goes to the file in the panel (Ctrl+o back), View (F3)
+  views it from the line, and Edit (F4) edits it at the line.
   It finds at most `[search] max_results` (10000) lines, and `max_per_file` (100) in one file,
   whose count then shows as `100+`; they and `program` (`rg`) are in the new Search category of
   the Configuration dialog. Hidden files are searched while the panels show them, and

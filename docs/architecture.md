@@ -393,28 +393,37 @@ fzf's algorithm:
 ### Search of a whole tree
 
 `g /` in a panel, next to quick search's `/`, or F9 → Command → Find file…, searches the files
-below the active panel's directory with ripgrep, in a window over both panels
+below the active panel's directory with ripgrep, in a dialog over both panels
 ([ADR 0027](adr/0027-search-of-a-whole-tree.md)):
 
 ```text
 ╔════════════════════════ Find in ~/src/noc ═════════════════════════╗
-║ Text:  handle                                                .* Aa ║
-║ Files: *.rs !target                           ⠹ 3 lines in 2 files ║
-║ ────────────────────────────────────────────────────────────────── ║
+║ Text:                                                              ║
+║ handle                                                             ║
+║ Files:                                                             ║
+║ *.rs !target                                                       ║
+║ [x] Regular expression                                             ║
+║ [ ] Match case                                                     ║
+╟────────────────────────────────────────────────────────────────────╢
 ║   crates/noc/src/tui/app.rs                                     2  ║
 ║    2599  fn handle(&mut self, input: Resolved) {                   ║
 ║    3700  fn handle_find(&mut self) {                               ║
 ║   crates/noc/src/tui/find.rs                                    1  ║
 ║     172  pub(crate) fn handle(&mut self, input: Resolved) {        ║
-║ ────────────────────────────────────────────────────────────────── ║
+╟────────────────────────────────────────────────────────────────────╢
+║ ⠹ 3 lines in 2 files                                               ║
 ║ 2 errors: rg: ./secret: Permission denied (os error 13)            ║
+╟────────────────────────────────────────────────────────────────────╢
+║              [< Go to >] [ View ] [ Edit ] [ Cancel ]              ║
 ╚════════════════════════════════════════════════════════════════════╝
 ```
 
-- Two fields: the text, and the globs of the files, split at blanks, `!` before one leaving
-  those out; Tab and Shift+Tab go between them. With no text the window lists the files. Alt+r
-  takes the text as it is rather than as a regular expression, and Alt+c matches case rather than
-  only when the text has a capital letter; `.*` and `Aa` show the two, bright while on.
+- A `Dialog` (`tui/dialog.rs`) with a list (`Dialog::with_list`): two fields, the text and the
+  globs of the files, split at blanks, `!` before one leaving those out; two check boxes, the text
+  as a regular expression, and matching case rather than only when the text has a capital letter;
+  the rows; and four buttons. With no text it lists the files. The dialog keeps the cursor of the
+  rows and scrolls them; `FindWindow` (`tui/find.rs`) keeps what was found and draws each row
+  (`ListView`).
 - Each change starts a search 150 ms after the last key (`FIND_DELAY`), the first at once. A task
   (`Effect::Find`) runs ripgrep through `noc_tools::ripgrep`: locally in the directory, as
   `[search] program`; on a host, `rg` through the host's task and `Session::spawn_in`, over the
@@ -423,22 +432,26 @@ below the active panel's directory with ripgrep, in a window over both panels
   most every 50 ms (`Done::Found`), stops ripgrep after `[search] max_results` lines (or files),
   takes `[search] max_per_file` lines of a file at most (`--max-count`, `100+` by the file),
   then reports how it ended (`Done::FindEnded`): the limit, and the errors ripgrep told of. Each
-  search has a generation, so the reports of an earlier one are dropped; the window holds the
-  `CancellationToken` of the last, so a new search or closing the window stops it.
-- The window (`tui/find.rs`, context `find`) opens in Insert mode, typing in the text. Its rows
-  are the files, in the order of their paths, each with how many lines matched, and their lines
-  with their numbers, the matches in the style of quick search; a line too long starts a little
-  before its first match. The rows of a search stay until the next one finds something or ends.
-  Up, Down, and the page keys move in either mode; Esc goes to the rows, in Normal mode, where `i`
-  and `/` go back to the field, and Esc again closes the window.
-- Right of the files, how many lines it found in how many files, after the spinner while it
-  searches; under the rows, that it stopped at the limit, and the errors. A pattern that is not a
-  regular expression, a missing ripgrep, or a host that is not connected says why in place of the
-  rows.
-- Enter goes to the file in the active panel: its directory, with the cursor on it; where the
-  panel was goes to the jump list. F3 views it with the line at the top, and F4 edits it at the
-  line (`Editor::edit_at`), a remote one through a local copy; the window is there again after
-  both. On a file's row they take its first line that matched.
+  search has a generation, so the reports of an earlier one are dropped; the dialog holds the
+  `CancellationToken` of the last, so a new search or closing the dialog stops it.
+- Its keys are those of dialogs (contexts `find_input` in a field, `find` elsewhere): it opens in
+  Insert mode, typing in the text; Tab, Up, and Down go through the fields, the check boxes, the
+  rows, and the buttons; Esc leaves Insert mode in a field, and again closes the dialog. While the
+  rows have the focus, the motions and the page keys move their cursor. F3, F4, Alt+r, and Alt+c
+  work wherever the focus is. The wheel scrolls the rows.
+- The rows are the files, in the order of their paths, each with how many lines matched, and
+  their lines with their numbers, the matches in the style of quick search; a line too long starts
+  a little before its first match. The rows of a search stay until the next one finds something
+  or ends, the cursor on the row it was on. Under them, how many lines it found in how many files,
+  after the spinner while it searches; that it stopped at the limit; and the errors. A pattern
+  that is not a regular expression, a missing ripgrep, or a host that is not connected says why
+  in place of the rows.
+- Go to, the default button, goes to the file in the active panel: its directory, with the cursor
+  on it; where the panel was goes to the jump list. View (F3) views it with the line at the top,
+  and Edit (F4) edits it at the line (`Editor::edit_at`), a remote one through a local copy; the
+  dialog is there again after both. On a file's row they take its first line that matched.
+- It is not in the queue of dialogs, which shows only the one in front, over everything: it
+  stays under the viewer, the jobs, the help, and the dialogs, as the window it was.
 
 ### Lists
 

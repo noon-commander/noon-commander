@@ -24,18 +24,26 @@ the lists. It found names only, and had to read a whole remote tree over SFTP.
 
 ## Decision
 
-- **`g /` in a panel** opens a window that searches the files below the panel's directory, typing
+- **`g /` in a panel** opens a dialog that searches the files below the panel's directory, typing
   in its text; F9 → Command → Find file… does the same. `g /` stands next to quick search's `/`,
   as vim's `g` keys stand next to the plain ones.
+- **It is a dialog** as the others are: two fields, two check boxes, the rows found, and the
+  buttons Go to, View, Edit, and Cancel. Its keys are the dialogs': Tab, Up, and Down go through
+  them, Esc leaves Insert mode in a field and again closes it, Enter presses Go to. While the rows
+  have the focus, the motions and the page keys move their cursor, and Tab leaves them. A dialog
+  that lists rows is new; `Dialog` grew a list for it rather than the search keeping keys of its
+  own. It is not in the queue of dialogs, which shows the one in front over everything: it stays
+  under the viewer and the editor that it opens, and under the prompts of ssh.
 - **Two fields**: the text, and the files, whose globs, split at blanks, each go to ripgrep as a
-  `--glob`, `!` before one leaving those files out. Tab and Shift+Tab go between them. With no text
-  the window lists the files that the globs let through (`rg --files`).
-- **The text** is a regular expression, or with Alt+r the text as it is (`--fixed-strings`). Its
-  case counts only with a capital letter in it (`--smart-case`), or with Alt+c always
-  (`--case-sensitive`). `.*` and `Aa` right of the field show the two, bright while on, as VS Code
-  shows them.
-- **It searches as either field changes**, 150 ms after the last key, so that a word typed starts
-  one search; a new one stops the one before. The window opens listing the files at once.
+  `--glob`, `!` before one leaving those files out. With no text the dialog lists the files that
+  the globs let through (`rg --files`).
+- **The text** is a regular expression, or with the first check box off the text as it is
+  (`--fixed-strings`). Its case counts only with a capital letter in it (`--smart-case`), or with
+  the second check box on always (`--case-sensitive`). Alt+r and Alt+c switch the two from
+  anywhere in the dialog, as in VS Code.
+- **It searches as either field or check box changes**, 150 ms after the last key, so that a word
+  typed starts one search; a new one stops the one before. The dialog opens listing the files at
+  once.
 - **ripgrep runs from `noc-tools`** (`ripgrep.rs`), with `--json` for lines, which keeps paths and
   lines that are not UTF-8, and `--files --null` for files; with `--no-config`, so that the
   user's `RIPGREP_CONFIG_PATH` cannot change what it prints; with `--hidden` while the panels show
@@ -50,25 +58,24 @@ the lists. It found names only, and had to read a whole remote tree over SFTP.
   `noc debug version` show what `rg --version` says.
 - **On a host, ripgrep runs there** over the host's master connection, without a terminal
   ([ADR 0028](0028-programs-on-hosts-without-a-terminal.md)): `rg` as the host's `PATH` finds it.
-  Without it, the window says that ripgrep is not installed; the panels do not fall back to
+  Without it, the dialog says that ripgrep is not installed; the panels do not fall back to
   reading the tree through SFTP.
 - **It runs in a task of its own**, cancel-safe, which reads ripgrep's stdout and its stderr at
   once, so that neither pipe fills, and reports what it found at most every 50 ms. Closing the
-  window or a new search stops it through a `CancellationToken`, and the child is killed on drop;
+  dialog or a new search stops it through a `CancellationToken`, and the child is killed on drop;
   each search has a generation, so the reports of an earlier one are dropped. Its rows stay on
   screen until the next one finds something or ends.
-- **The window** shows each file found, in the order of their paths, with how many of its lines
+- **The rows** are each file found, in the order of their paths, with how many of its lines
   matched, and the lines under it with their numbers, without the blanks they start with, the
-  matches highlighted; a line too long for the window starts a little before its first match.
-  Esc goes to the rows, in Normal mode, where `i` and `/` go back to the field. Right of the files,
-  how many lines it found in how many files, and the spinner while it searches; under the rows,
-  that it stopped at the limit, and how many errors ripgrep told of, with the last. A pattern that
-  is not a regular expression shows ripgrep's error in place of the rows.
-- **Keys act on the row under the cursor**, as in the results of mc's Find File: Enter goes to the
-  file in the active panel, its directory with the cursor on it, and where the panel was goes to
-  the jump list; F3 views it from the line, at the top of the viewer, and F4 edits it at the line,
-  a remote file as a local copy as F4 always does. On a file's row, they take its first line that
-  matched. The window stays after F3 and F4.
+  matches highlighted; a line too long for the dialog starts a little before its first match.
+  Under the rows, how many lines it found in how many files, and the spinner while it searches;
+  that it stopped at the limit; and how many errors ripgrep told of, with the last. A pattern
+  that is not a regular expression shows ripgrep's error in place of the rows.
+- **The buttons act on the row under the cursor**, as in the results of mc's Find File: Go to
+  goes to the file in the active panel, its directory with the cursor on it, and where the panel
+  was goes to the jump list; View (F3) views it from the line, at the top of the viewer, and Edit
+  (F4) edits it at the line, a remote file as a local copy as F4 always does. On a file's row,
+  they take its first line that matched. The dialog stays after View and Edit.
 - **The editor gets the line** as it takes it: `+N file` for vi, vim, Neovim, nano, Emacs, micro,
   and kak; `-g file:N` for VS Code and its kin; `file:N` for Helix, Sublime Text, and Zed.
 

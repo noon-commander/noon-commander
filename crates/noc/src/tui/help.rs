@@ -137,7 +137,7 @@ impl Part {
             ],
             Self::SearchAndRenaming => vec![
                 (Mode::Insert, Context::QuickSearch, fl!("help-quick-search")),
-                (Mode::Insert, Context::Find, fl!("help-find-fields")),
+                (Mode::Insert, Context::FindInput, fl!("help-find-fields")),
                 (Mode::Normal, Context::Find, fl!("help-find")),
                 (Mode::Insert, Context::Rename, fl!("help-renaming-insert")),
                 (Mode::Normal, Context::Rename, fl!("help-renaming")),
@@ -1067,18 +1067,14 @@ fn describe_tabs(context: Context, action: Action) -> Option<String> {
     Some(text)
 }
 
-/// What keys do in the window of the search of a whole tree.
+/// What keys do in the dialog of the search of a whole tree, besides those of dialogs.
 fn describe_find(context: Context, action: Action) -> Option<String> {
-    if context != Context::Find {
+    if !matches!(context, Context::Find | Context::FindInput) {
         return None;
     }
     let text = match action {
-        Action::Confirm => fl!("help-find-go"),
         Action::View => fl!("help-find-view"),
         Action::Edit => fl!("help-find-edit"),
-        Action::NextField | Action::PrevField => fl!("help-find-field"),
-        Action::InsertMode | Action::QuickSearch => fl!("help-find-back"),
-        Action::NormalMode => fl!("help-find-rows"),
         Action::ToggleRegex => fl!("help-find-regex"),
         Action::MatchCase => fl!("help-find-case"),
         _ => return None,
@@ -1197,7 +1193,7 @@ fn describe_text(context: Context, action: Action) -> Option<String> {
 fn describe_rows(context: Context, action: Action) -> Option<String> {
     let rows = matches!(
         context,
-        Context::Panel | Context::Viewer | Context::Help | Context::List
+        Context::Panel | Context::Viewer | Context::Help | Context::List | Context::Find
     );
     let text = match action {
         Action::Up if rows => fl!("help-row-up"),
@@ -1434,6 +1430,7 @@ mod tests {
                 "Half a page up",
                 "Half a page up",
                 "Delete to the start of the line",
+                "Half a page up",
                 "Half a page up"
             ]
         );

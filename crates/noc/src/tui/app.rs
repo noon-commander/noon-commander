@@ -719,7 +719,7 @@ pub(crate) struct App {
     history: Vec<HistoryEntry>,
     /// The window of the command history, over the panels and under the dialogs.
     history_window: Option<HistoryWindow>,
-    /// The window of the search of a whole tree, over the panels and under the dialogs.
+    /// The dialog of the search of a whole tree, over the panels and under the other dialogs.
     find: Option<FindWindow>,
     /// The generation of the last search of a tree.
     finds: u64,
@@ -1030,13 +1030,12 @@ impl App {
                     .flat_map(|c| self.handle(Resolved::Insert(c)))
                     .collect();
             }
-            (_, Context::Find) => {
-                // One search for all of it, in the field typed in last.
-                if let Some(window) = &mut self.find {
-                    window.handle(Resolved::Action(Action::InsertMode));
-                    if window.paste(text) == FindEvent::Search {
-                        return self.search_tree(FIND_DELAY);
-                    }
+            (_, Context::FindInput) => {
+                // One search for all of it.
+                if let Some(window) = &mut self.find
+                    && window.paste(text, &mut self.registers) == FindEvent::Search
+                {
+                    return self.search_tree(FIND_DELAY);
                 }
             }
             (
@@ -1327,6 +1326,13 @@ impl App {
         if let Some(keys) = self.wheel_keys(pointer.press) {
             return match (front, &mut self.help) {
                 (Front::Job, _) => Vec::new(),
+                // The wheel scrolls the rows of the search, wherever the focus is.
+                (Front::Find, _) => {
+                    if let Some(window) = &mut self.find {
+                        window.wheel(keys.0, usize::from(keys.1));
+                    }
+                    Vec::new()
+                }
                 // The wheel scrolls the help's text, wherever its keys go.
                 (Front::Help, Some(help)) => {
                     let (action, count) = keys;
@@ -1357,10 +1363,13 @@ impl App {
                 .history_window
                 .as_mut()
                 .and_then(|window| window.pointer(pointer)),
-            Front::Find => self
-                .find
-                .as_mut()
-                .and_then(|window| window.pointer(pointer)),
+            Front::Find => {
+                let Some(window) = &mut self.find else {
+                    return Vec::new();
+                };
+                let event = window.pointer(pointer);
+                return self.find_event(event);
+            }
             Front::Results(_) => self
                 .results
                 .front_mut()
@@ -1827,8 +1836,8 @@ impl App {
             Context::PullDown
         } else if self.viewing.is_some() {
             Context::Viewer
-        } else if self.find.is_some() {
-            Context::Find
+        } else if let Some(window) = &self.find {
+            window.context()
         } else if self.command_line.is_some() {
             if self.lists(Completes::CommandLine) {
                 Context::CommandCompletion
@@ -1918,6 +1927,7 @@ impl App {
                 }
             }
             Context::Rename => self.panel(self.active).rename_field_ref(),
+            Context::FindInput => self.find.as_ref().and_then(FindWindow::focused_field),
             Context::CommandLine | Context::CommandCompletion => {
                 return self.command_line.as_ref().map(CommandLine::editor);
             }
@@ -1935,6 +1945,9 @@ impl App {
         }
         if let Some(configuration) = &self.configuration {
             return configuration.pending();
+        }
+        if self.front() == Front::Find {
+            return self.find.as_ref().and_then(FindWindow::pending);
         }
         if let Some(line) = &self.command_line {
             return line.pending();
@@ -2004,7 +2017,6 @@ impl App {
                     | Context::Jump
                     | Context::Workspaces
                     | Context::CommandHistory
-                    | Context::Find
                     | Context::KeyHints
             )
         )
@@ -2032,6 +2044,9 @@ impl App {
         }
         if let Some(configuration) = &mut self.configuration {
             configuration.give_up();
+        }
+        if let Some(window) = &mut self.find {
+            window.give_up();
         }
         if let Some(line) = &mut self.command_line {
             line.give_up();
@@ -2123,7 +2138,6 @@ impl App {
                 | Context::TabMenu
                 | Context::Workspaces
                 | Context::CommandHistory
-                | Context::Find
                 | Context::KeyHints
                 | Context::Jump
         );
@@ -2160,12 +2174,6 @@ impl App {
                 .as_mut()
                 .map(WorkspacesWindow::picker_mut),
             Context::CommandHistory => self.history_window.as_mut().map(HistoryWindow::picker_mut),
-            Context::Find => {
-                if let Some(window) = &mut self.find {
-                    window.count_pages(pages);
-                }
-                None
-            }
             Context::KeyHints => self.key_hints.as_mut().map(KeyHintsWindow::picker_mut),
             Context::Jump => {
                 if let Some(jump) = &mut self.jump {
@@ -2180,13 +2188,13 @@ impl App {
         }
     }
 
-    /// Whether a dialog or the configuration has the keys, which count their moves themselves,
-    /// past their text fields too, where a count would go to the field.
+    /// Whether a dialog, the search of a tree, or the configuration has the keys, which count
+    /// their moves themselves, past their text fields too, where a count would go to the field.
     fn counts_moves(&self) -> bool {
         if self.key_hints.is_some() {
             return false;
         }
-        if !self.dialogs.is_empty() {
+        if !self.dialogs.is_empty() || self.front() == Front::Find {
             return true;
         }
         let over = self.menu.is_some()
@@ -2194,7 +2202,6 @@ impl App {
             || self.jump.is_some()
             || self.workspaces_window.is_some()
             || self.history_window.is_some()
-            || self.find.is_some()
             || !self.results.is_empty()
             || self.in_front().is_some()
             || self.jobs_list.is_some()
@@ -3673,7 +3680,7 @@ impl App {
         }
     }
 
-    /// Opens the window of the search of the files under the active panel's directory (`g /`,
+    /// Opens the dialog of the search of the files under the active panel's directory (`g /`,
     /// F9 → Command → Find file…), as far as `[search]` lets it go, with the hidden files if
     /// the panels show them, and lists the files at once.
     fn open_find(&mut self) -> Vec<Effect> {
@@ -3692,7 +3699,7 @@ impl App {
         self.search_tree(Duration::ZERO)
     }
 
-    /// Starts the search of the window of the search of a tree again, after `delay`; the one
+    /// Starts the search of the dialog of the search of a tree again, after `delay`; the one
     /// before stops.
     fn search_tree(&mut self, delay: Duration) -> Vec<Effect> {
         let Some(window) = &self.find else {
@@ -3719,14 +3726,25 @@ impl App {
         })]
     }
 
-    /// Gives a key to the window of the search of a tree: what is typed searches again, Enter
-    /// goes to the file in the active panel, which puts where it was in the jump list, and F3
-    /// and F4 view and edit it at the line, the window kept. Closing it stops the search.
+    /// Gives a key to the dialog of the search of a tree.
     fn handle_find(&mut self, input: Resolved) -> Vec<Effect> {
         let Some(window) = &mut self.find else {
             return Vec::new();
         };
-        match window.handle(input) {
+        let typed = Typed {
+            resolved: input,
+            extra: self.extra,
+        };
+        let event = window.handle(typed, &mut self.registers);
+        self.find_event(event)
+    }
+
+    /// Does what `event` of the dialog of the search of a tree says: a change searches again,
+    /// Go to goes to the file in the active panel, which puts where it was in the jump list,
+    /// and View and Edit view and edit it at the line, the dialog kept. Closing it stops the
+    /// search.
+    fn find_event(&mut self, event: FindEvent) -> Vec<Effect> {
+        match event {
             FindEvent::Pending => Vec::new(),
             FindEvent::Search => self.search_tree(FIND_DELAY),
             FindEvent::Closed => {
@@ -7882,10 +7900,10 @@ mod tests {
         let (first, cancel) = (request.generation, request.cancel.clone());
         assert_eq!(
             app.place(),
-            (Mode::Insert, Context::Find),
+            (Mode::Insert, Context::FindInput),
             "typing in its text"
         );
-        assert!(screen_of(&mut app, 12).contains("Searching…"));
+        assert!(screen_of(&mut app, 24).contains("Searching…"));
         let effects = keys(&mut app, &["r"]);
         let request = find_request(&effects);
         assert_eq!(request.query.pattern, "r");
@@ -7905,9 +7923,11 @@ mod tests {
             ],
         );
         app.find_ended(generation, Ok(FindSummary::default()));
-        let text = screen_of(&mut app, 12);
+        let text = screen_of(&mut app, 24);
         assert!(
-            text.contains("Find in /srv") && text.contains("Text:  r") && text.contains("1 line"),
+            text.contains("Find in /srv")
+                && text.contains("[x] Regular")
+                && text.contains("1 line"),
             "{text}"
         );
         assert!(
@@ -7918,10 +7938,11 @@ mod tests {
         let effects = keys(&mut app, &["tab", "*", "."]);
         assert_eq!(effects.len(), 2);
         assert_eq!(find_request(&effects[1..]).query.globs, ["*."]);
-        // Esc goes to the rows, and again closes the window, which stops the search.
+        // Esc leaves Insert mode in the field, and again closes the dialog, which stops the
+        // search.
         let cancel = find_request(&effects[1..]).cancel.clone();
         keys(&mut app, &["esc"]);
-        assert_eq!(app.place(), (Mode::Normal, Context::Find));
+        assert_eq!(app.place(), (Mode::Normal, Context::FindInput));
         keys(&mut app, &["esc"]);
         assert_eq!(app.context(), Context::Panel);
         assert!(cancel.is_cancelled());
@@ -7944,7 +7965,7 @@ mod tests {
     }
 
     /// The app with the search of a tree open on `/srv`, which found `src/run/main.rs` with a
-    /// line 3 that matches, under the cursor.
+    /// line 3 that matches, under the cursor, which has the focus.
     #[allow(clippy::single_range_in_vec_init)]
     fn found_main(app: &mut App) {
         let effects = app.handle(action(Action::FindFile));
@@ -7961,7 +7982,9 @@ mod tests {
             ],
         );
         app.find_ended(generation, Ok(FindSummary::default()));
-        keys(app, &["down"]);
+        // Past the two fields and the two check boxes.
+        keys(app, &["tab", "tab", "tab", "tab", "down"]);
+        assert_eq!(app.context(), Context::Find);
     }
 
     #[test]
@@ -8004,7 +8027,7 @@ mod tests {
             screen.contains("line 3") && !screen.contains("line 2\n"),
             "{screen}"
         );
-        // The viewer goes, and the window is there again.
+        // The viewer goes, and the dialog is there again.
         keys(&mut app, &["q"]);
         assert_eq!(app.context(), Context::Find);
         keys(&mut app, &["f4"]);
@@ -8013,6 +8036,23 @@ mod tests {
             Some(Handover::Edit { file, line: Some(3) })
                 if file == Path::new("/srv/src/run/main.rs")
         ));
+    }
+
+    #[test]
+    fn the_wheel_scrolls_the_rows_of_the_search_wherever_the_focus_is() {
+        let mut app = with_files(&["a1"]);
+        let effects = app.handle(action(Action::FindFile));
+        let generation = find_request(&effects).generation;
+        let hits = (0..60)
+            .map(|n| Hit::File(format!("f{n:02}").into_bytes()))
+            .collect();
+        app.found(generation, hits);
+        app.find_ended(generation, Ok(FindSummary::default()));
+        assert!(screen_of(&mut app, 24).contains("f00"));
+        press(&mut app, Press::WheelDown, 40, 12);
+        let text = screen_of(&mut app, 24);
+        assert!(!text.contains("f00") && text.contains("f10"), "{text}");
+        assert_eq!(app.context(), Context::FindInput, "the focus stays");
     }
 
     #[test]

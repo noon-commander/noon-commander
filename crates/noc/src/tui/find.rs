@@ -1,36 +1,41 @@
 //! The search of a whole tree: `g /` in a panel, or F9 → Command → Find file…. ripgrep searches
 //! the files under the panel's directory, local or on a host, for the text of the first field,
-//! among the files that the globs of the second let through, again as either changes. The window
-//! shows each file it found, in the order of their paths, with the lines that match under it,
-//! the matches highlighted; with no text it lists the files. Enter goes to the file in the panel,
-//! F3 and F4 view and edit it at the line, as in the results of mc's Find File.
+//! among the files that the globs of the second let through, again as either changes or a check
+//! box switches. The dialog lists each file it found, in the order of their paths, with the lines
+//! that match under it, the matches highlighted; with no text it lists the files. Its buttons go
+//! to the file in the panel, and view and edit it at the line, as in the results of mc's Find
+//! File.
 
-use noc_scroll::scrollbar::{self, Bar};
+use noc_scroll::scrollbar::Bar;
 use noc_tools::ripgrep::{Hit, Query};
 use noc_vfs::{DirEntry, FileKind, Location, Metadata};
 use ratatui::Frame;
-use ratatui::layout::{Position, Rect};
+use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use tokio_util::sync::CancellationToken;
 
-use super::cells::{self, Align, Cut};
+use super::cells::{self, Align};
 use super::decor::{self, Decor};
-use super::dialog::{Colors, Field, draw_box, frame_around, right_frame};
-use super::glyphs;
-use super::keymap::{Action, Mode, Resolved};
-use super::mouse::{Drawn, Pointer, Press};
+use super::dialog::{Button, Dialog, DialogEvent, Field, ListView};
+use super::edit::Registers;
+use super::keymap::{Action, Context, Mode, Resolved, Typed};
+use super::mouse::Pointer;
 use super::panel::child;
-use super::scroll::Window;
 use super::theme::Theme;
 use crate::i18n::fl;
 
-/// Widest the window gets, in cells, borders included.
+/// Widest the dialog gets, in cells, borders included.
 const WIDTH: u16 = 120;
 /// Cells of text kept before the first match of a line that is too long to show whole.
 const BEFORE_MATCH: usize = 8;
+/// The fields of the dialog, and its check boxes.
+const TEXT: usize = 0;
+const FILES: usize = 1;
+const REGEX: usize = 0;
+const MATCH_CASE: usize = 1;
 
-/// What a key did in the window.
+/// What a key did in the dialog.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum FindEvent {
     Pending,
@@ -84,16 +89,8 @@ struct FileRow {
     lines: Vec<LineRow>,
 }
 
-/// A row of the window: a file, or one of its lines, by their indexes.
+/// A row of the list: a file, or one of its lines, by their indexes.
 type Item = (usize, Option<usize>);
-
-/// Where keys go.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Focus {
-    Text,
-    Files,
-    Rows,
-}
 
 /// How the search goes.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -104,19 +101,17 @@ enum State {
     Failed(String),
 }
 
-/// The window, with what the last search found.
+/// What the search depends on in the dialog: the fields and the check boxes.
+type Settings = (String, String, bool, bool);
+
+/// The dialog, with what the last search found.
 #[derive(Debug)]
 pub(crate) struct FindWindow {
-    /// Where it searches, and that as the panel's title shows it.
+    /// Where it searches.
     root: Location,
-    title: String,
-    text: Field,
-    files: Field,
-    focus: Focus,
-    /// The field that `i` and `/` go back to from the rows.
-    field: Focus,
-    regex: bool,
-    match_case: bool,
+    /// The text and the globs of the files in its fields, regular expressions and case in its
+    /// check boxes, the rows in its list, and its buttons.
+    dialog: Dialog,
     /// Hidden files too, as the panels show them, and how much it finds: in all, and in a
     /// file.
     hidden: bool,
@@ -134,16 +129,8 @@ pub(crate) struct FindWindow {
     /// The row under the cursor, by its path and line, which stays on it as files come in
     /// before it; `None` is the first row.
     cursor: Option<(Vec<u8>, Option<usize>)>,
-    window: Window,
-    page: usize,
-    /// The count before the next Ctrl+f or Ctrl+b.
-    pages: usize,
-    drawn: Drawn,
-    /// Where the fields were drawn, and their room, for the mouse.
-    fields: [(Rect, usize); 2],
-    bar: Option<Bar>,
     decor: Decor,
-    /// Stops the search, which the window does when it goes or a new one starts.
+    /// Stops the search, which the dialog does when it goes or a new one starts.
     cancel: CancellationToken,
 }
 
@@ -154,7 +141,7 @@ impl Drop for FindWindow {
 }
 
 impl FindWindow {
-    /// The window of the search in `root`, shown as `title`, typing in its text, which takes
+    /// The dialog of the search in `root`, shown as `title`, typing in its text, which takes
     /// as many results as `[search]` says, in all and in a file; hidden files too if `hidden`.
     pub(crate) fn new(
         (root, title): (Location, String),
@@ -162,15 +149,17 @@ impl FindWindow {
         hidden: bool,
         decor: Decor,
     ) -> Self {
+        let fields = [
+            (fl!("find-text"), String::new()),
+            (fl!("find-files"), String::new()),
+        ];
+        let checks = [(fl!("find-regex"), true), (fl!("find-match-case"), false)];
+        let buttons = vec![Button::GoTo, Button::View, Button::Edit, Button::Cancel];
+        let title = fl!("find-title", dir = title);
+        let dialog = Dialog::fields(&title, &fields, &checks, buttons, WIDTH).with_list();
         Self {
             root,
-            title,
-            text: Field::plain(""),
-            files: Field::plain(""),
-            focus: Focus::Text,
-            field: Focus::Text,
-            regex: true,
-            match_case: false,
+            dialog,
             hidden,
             max_results,
             max_per_file,
@@ -180,12 +169,6 @@ impl FindWindow {
             current: None,
             state: State::Searching,
             cursor: None,
-            window: Window::default(),
-            page: 1,
-            pages: 1,
-            drawn: Drawn::default(),
-            fields: [(Rect::default(), 0); 2],
-            bar: None,
             decor,
             cancel: CancellationToken::new(),
         }
@@ -200,15 +183,15 @@ impl FindWindow {
     /// at blanks.
     pub(crate) fn query(&self) -> Query {
         Query {
-            pattern: self.text.text().to_owned(),
+            pattern: self.dialog.text_of(TEXT).to_owned(),
             globs: self
-                .files
-                .text()
+                .dialog
+                .text_of(FILES)
                 .split_whitespace()
                 .map(str::to_owned)
                 .collect(),
-            regex: self.regex,
-            match_case: self.match_case,
+            regex: self.dialog.checked(REGEX),
+            match_case: self.dialog.checked(MATCH_CASE),
             hidden: self.hidden,
             max_per_file: self.max_per_file,
         }
@@ -242,7 +225,7 @@ impl FindWindow {
             self.shown = generation;
             self.rows.clear();
             self.current = None;
-            self.window.unsettle();
+            self.dialog.unsettle_list();
         }
         true
     }
@@ -270,6 +253,7 @@ impl FindWindow {
                 }
             }
         }
+        self.put_cursor();
     }
 
     /// Puts the file at `path` among the rows, in the order of the paths.
@@ -313,36 +297,62 @@ impl FindWindow {
             Ok(summary) => State::Over(summary),
             Err(reason) => State::Failed(reason),
         };
+        self.put_cursor();
     }
 
-    /// The mode keys are typed in: Insert in the fields, Normal on the rows.
-    pub(crate) fn mode(&self) -> Mode {
-        if self.focus == Focus::Rows {
-            Mode::Normal
+    /// The keymap context for the next key: `FindInput` while a field has the focus.
+    pub(crate) fn context(&self) -> Context {
+        if self.dialog.focused_field().is_some() {
+            Context::FindInput
         } else {
-            Mode::Insert
+            Context::Find
         }
     }
 
-    /// The field that takes what is typed, if one does.
-    fn field_mut(&mut self) -> Option<&mut Field> {
-        match self.focus {
-            Focus::Text => Some(&mut self.text),
-            Focus::Files => Some(&mut self.files),
-            Focus::Rows => None,
-        }
+    /// The mode keys are typed in: the focused field's, or Normal mode elsewhere.
+    pub(crate) fn mode(&self) -> Mode {
+        self.dialog.mode()
     }
 
-    /// Puts pasted `text` in the field that takes what is typed, without its control
-    /// characters.
-    pub(crate) fn paste(&mut self, text: &str) -> FindEvent {
-        let Some(field) = self.field_mut() else {
-            return FindEvent::Pending;
-        };
-        text.chars()
-            .filter(|c| !c.is_control())
-            .for_each(|c| field.insert(c));
-        FindEvent::Search
+    /// The field with the focus, if a field has it.
+    pub(crate) fn focused_field(&self) -> Option<&Field> {
+        self.dialog.focused_field()
+    }
+
+    /// The operator that the focused field has waiting for its motion.
+    pub(crate) fn pending(&self) -> Option<String> {
+        self.dialog.pending()
+    }
+
+    /// Gives up the command of Normal mode that the focused field has waiting.
+    pub(crate) fn give_up(&mut self) {
+        self.dialog.give_up();
+    }
+
+    /// What the search depends on now.
+    fn settings(&self) -> Settings {
+        (
+            self.dialog.text_of(TEXT).to_owned(),
+            self.dialog.text_of(FILES).to_owned(),
+            self.dialog.checked(REGEX),
+            self.dialog.checked(MATCH_CASE),
+        )
+    }
+
+    /// Puts pasted `text` in the focused field, as one change.
+    pub(crate) fn paste(&mut self, text: &str, registers: &mut Registers) -> FindEvent {
+        let before = self.settings();
+        self.dialog.paste(text, registers);
+        self.changed(&before)
+    }
+
+    /// `Search` if the fields or the check boxes changed since `before`.
+    fn changed(&self, before: &Settings) -> FindEvent {
+        if self.settings() == *before {
+            FindEvent::Pending
+        } else {
+            FindEvent::Search
+        }
     }
 
     /// Every row, in the order they show.
@@ -370,8 +380,21 @@ impl FindWindow {
             .unwrap_or(0)
     }
 
-    /// Puts the cursor on the row at `index` of `items`.
-    fn set_cursor(&mut self, items: &[Item], index: usize) {
+    /// Gives the list of the dialog its rows, with the cursor on the row it was on.
+    fn put_cursor(&mut self) {
+        let items = self.items();
+        let cursor = self.cursor_in(&items);
+        self.dialog.set_list_len(items.len());
+        self.dialog.set_list_cursor(cursor);
+    }
+
+    /// Keeps the row that the cursor of the list is on, if it moved from `before`.
+    fn take_cursor(&mut self, before: usize) {
+        let index = self.dialog.list_cursor();
+        if index == before {
+            return;
+        }
+        let items = self.items();
         self.cursor = items
             .get(index)
             .map(|&(file, line)| (self.rows[file].path.clone(), line));
@@ -380,7 +403,7 @@ impl FindWindow {
     /// The file and line of the row under the cursor.
     fn chosen(&self) -> Option<(&FileRow, Option<u64>)> {
         let items = self.items();
-        let &(file, line) = items.get(self.cursor_in(&items))?;
+        let &(file, line) = items.get(self.dialog.list_cursor())?;
         let row = &self.rows[file];
         let line = match line {
             Some(line) => Some(row.lines[line].number),
@@ -402,180 +425,112 @@ impl FindWindow {
         (location, name.to_vec())
     }
 
-    /// Takes the count before Ctrl+f or Ctrl+b, which scroll that many pages at once.
-    pub(crate) fn count_pages(&mut self, pages: usize) {
-        self.pages = pages.max(1);
-    }
-
-    /// Takes a key: in a field, characters and the keys of text fields edit it, and Tab and
-    /// Shift+Tab go to the other one; Esc goes to the rows, where `i` and `/` go back. Up, Down,
-    /// and the page keys move the cursor in both; Enter, F3, and F4 act on its row.
-    pub(crate) fn handle(&mut self, input: Resolved) -> FindEvent {
-        let action = match input {
-            Resolved::Insert(c) => {
-                return match self.field_mut() {
-                    Some(field) => {
-                        field.insert(c);
-                        FindEvent::Search
-                    }
-                    None => FindEvent::Pending,
-                };
-            }
-            Resolved::Action(action) => action,
+    /// What `button` does to the row under the cursor: go to its file, view it, or edit it.
+    fn press(&self, button: Button) -> FindEvent {
+        let Some((row, line)) = self.chosen() else {
+            return FindEvent::Pending;
         };
-        match action {
-            Action::Up
-            | Action::Down
-            | Action::PageUp
-            | Action::PageDown
-            | Action::HalfPageUp
-            | Action::HalfPageDown
-            | Action::Home
-            | Action::End => self.go(action),
-            Action::NextField | Action::PrevField => {
-                self.focus = match self.focus {
-                    Focus::Text => Focus::Files,
-                    Focus::Files => Focus::Text,
-                    Focus::Rows => self.field,
-                };
-                self.field = self.focus;
-            }
-            Action::NormalMode => self.focus = Focus::Rows,
-            Action::InsertMode | Action::QuickSearch => self.focus = self.field,
-            Action::ToggleRegex => {
-                self.regex = !self.regex;
-                return FindEvent::Search;
-            }
-            Action::MatchCase => {
-                self.match_case = !self.match_case;
-                return FindEvent::Search;
-            }
-            Action::Confirm => {
-                return self.chosen().map_or(FindEvent::Pending, |(row, _)| {
-                    let (location, name) = self.place(&row.path);
-                    FindEvent::Go { location, name }
-                });
-            }
-            Action::View | Action::Edit => {
-                return self.chosen().map_or(FindEvent::Pending, |(row, line)| {
-                    let (location, name) = self.place(&row.path);
-                    if action == Action::View {
-                        FindEvent::View {
-                            location,
-                            name,
-                            line,
-                        }
-                    } else {
-                        FindEvent::Edit {
-                            location,
-                            name,
-                            line,
-                        }
-                    }
-                });
-            }
-            Action::Cancel => return FindEvent::Closed,
-            action => {
-                if let Some(field) = self.field_mut() {
-                    let before = field.text().to_owned();
-                    if field.edit(action) && field.text() != before {
-                        return FindEvent::Search;
-                    }
-                }
-            }
+        let (location, name) = self.place(&row.path);
+        match button {
+            Button::GoTo => FindEvent::Go { location, name },
+            Button::View => FindEvent::View {
+                location,
+                name,
+                line,
+            },
+            Button::Edit => FindEvent::Edit {
+                location,
+                name,
+                line,
+            },
+            _ => FindEvent::Closed,
         }
-        FindEvent::Pending
     }
 
-    /// Moves the cursor as `action` says, scrolling as vim's window does for the page keys.
-    fn go(&mut self, action: Action) {
-        let items = self.items();
-        if items.is_empty() {
-            return;
-        }
-        let last = items.len() - 1;
-        let mut cursor = self.cursor_in(&items);
-        let page = self.page.max(1);
-        match action {
-            Action::Up => cursor = cursor.saturating_sub(1),
-            Action::Down => cursor = (cursor + 1).min(last),
-            Action::Home => cursor = 0,
-            Action::End => cursor = last,
-            Action::PageUp | Action::PageDown => {
-                let pages = std::mem::replace(&mut self.pages, 1);
-                let down = action == Action::PageDown;
-                self.window
-                    .page(down, pages, &mut cursor, items.len(), page);
+    /// Takes a key as a dialog does: the fields edit, Tab and the motions move the focus, and
+    /// over the list they move its cursor; Enter presses Go to, the default. F3 and F4 view and
+    /// edit the file of the row, and Alt+r and Alt+c switch the check boxes, from anywhere.
+    pub(crate) fn handle(&mut self, typed: Typed, registers: &mut Registers) -> FindEvent {
+        let before = self.settings();
+        let cursor = self.dialog.list_cursor();
+        let event = match typed.resolved {
+            Resolved::Action(Action::View) => return self.press(Button::View),
+            Resolved::Action(Action::Edit) => return self.press(Button::Edit),
+            Resolved::Action(Action::ToggleRegex) => {
+                self.dialog.toggle_check(REGEX);
+                DialogEvent::Pending
             }
-            _ => {
-                let down = action == Action::HalfPageDown;
-                self.window.half_page(down, &mut cursor, items.len(), page);
+            Resolved::Action(Action::MatchCase) => {
+                self.dialog.toggle_check(MATCH_CASE);
+                DialogEvent::Pending
             }
-        }
-        self.set_cursor(&items, cursor);
+            _ => self.dialog.handle_typed(typed, registers),
+        };
+        self.take_cursor(cursor);
+        self.event(event, &before)
     }
 
-    /// The scroll bar of the last render, for the mouse.
+    /// What `event` of the dialog does, its settings `before` it.
+    fn event(&self, event: DialogEvent, before: &Settings) -> FindEvent {
+        match event {
+            DialogEvent::Pending => self.changed(before),
+            DialogEvent::Cancelled | DialogEvent::Pressed(Button::Cancel) => FindEvent::Closed,
+            DialogEvent::Pressed(button) => self.press(button),
+        }
+    }
+
+    /// The scroll bar of the list at the last render, for the mouse.
     pub(crate) fn bar(&self) -> Option<Bar> {
-        self.bar
+        self.dialog.list_bar()
     }
 
     /// Shows the rows from `top`, where the thumb of the scroll bar was dragged.
     pub(crate) fn scroll_to(&mut self, top: usize) {
-        let items = self.items();
-        let mut cursor = self.cursor_in(&items);
-        self.window
-            .scroll_to(top, &mut cursor, items.len(), self.page.max(1));
-        self.set_cursor(&items, cursor);
+        let cursor = self.dialog.list_cursor();
+        self.dialog.scroll_list_to(top);
+        self.take_cursor(cursor);
     }
 
-    /// Takes a press of the mouse, where the window was drawn last: a click in a field types
-    /// there, a click puts the cursor on a row, and returns the key that a double click on one,
-    /// or a click outside the window, stands for: Enter or Esc.
-    pub(crate) fn pointer(&mut self, pointer: Pointer) -> Option<Action> {
-        if pointer.press == Press::Click {
-            for (index, (area, room)) in self.fields.iter().enumerate() {
-                if area.contains(pointer.at) {
-                    let column = usize::from(pointer.at.x - area.x);
-                    self.focus = if index == 0 {
-                        Focus::Text
-                    } else {
-                        Focus::Files
-                    };
-                    self.field = self.focus;
-                    let room = *room;
-                    if let Some(field) = self.field_mut() {
-                        field.click(column, room);
-                    }
-                    return None;
-                }
-            }
-        }
-        let items = self.items();
-        let mut cursor = self.cursor_in(&items);
-        let action = self.drawn.menu_press(pointer, &mut cursor);
-        self.set_cursor(&items, cursor);
-        action
+    /// A step of the wheel, as `action` `count` times: it scrolls the rows.
+    pub(crate) fn wheel(&mut self, action: Action, count: usize) {
+        let cursor = self.dialog.list_cursor();
+        self.dialog.wheel_list(action, count);
+        self.take_cursor(cursor);
     }
 
-    /// The lines under the rows: that it stopped at the limit, and what went wrong.
-    fn footer(&self) -> Vec<String> {
+    /// Takes a press of the mouse, as a dialog does: a double click on a row goes to its file.
+    pub(crate) fn pointer(&mut self, pointer: Pointer) -> FindEvent {
+        let before = self.settings();
+        let cursor = self.dialog.list_cursor();
+        let event = self.dialog.pointer(pointer);
+        self.take_cursor(cursor);
+        self.event(event, &before)
+    }
+
+    /// The lines under the rows: how many it found, with the spinner of `tick` while it
+    /// searches; that it stopped at the limit; and what went wrong.
+    fn status(&self, tick: u64) -> Vec<String> {
+        let count = self.count();
+        let mut status = vec![if self.searching() {
+            format!("{} {count}", decor::spinner(tick))
+        } else {
+            count
+        }];
         let State::Over(summary) = &self.state else {
-            return Vec::new();
+            return status;
         };
-        let mut footer = Vec::new();
         if summary.limit {
-            footer.push(fl!("find-limit", count = self.max_results));
+            status.push(fl!("find-limit", count = self.max_results));
         }
         if summary.errors > 0 && !self.rows.is_empty() {
             let last = summary.last_error.clone().unwrap_or_default();
-            footer.push(fl!(
+            status.push(fl!(
                 "find-errors",
                 count = summary.errors,
                 last = cells::sanitize(last.as_bytes())
             ));
         }
-        footer
+        status
     }
 
     /// What shows in place of the rows: while it searches, that nothing was found, or why.
@@ -605,154 +560,28 @@ impl FindWindow {
         }
     }
 
-    /// Draws the window centered over `area`, the panels: the fields, with whether the text is
-    /// a regular expression and matches case, how many it found, and the spinner of `tick`
-    /// while it searches; the rows, scrolled to the cursor; and what kept it from finding all.
-    pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, tick: u64) {
-        let footer = self.footer();
-        let below = if footer.is_empty() {
-            0
-        } else {
-            u16::try_from(footer.len() + 1).unwrap_or(u16::MAX)
-        };
-        let colors = Colors::of(theme, false);
-        let inner = draw_box(
-            frame,
-            area,
-            (WIDTH, u16::MAX),
-            &fl!("find-title", dir = self.title.clone()),
-            colors,
-            theme,
-        );
-        self.drawn = Drawn {
-            frame: frame_around(inner),
-            ..Drawn::default()
-        };
-        self.bar = None;
-        if inner.height < 4 || inner.width < 8 {
-            return;
-        }
-        let width = usize::from(inner.width);
-        let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
-        self.draw_fields(frame, inner, theme, tick);
-        frame.render_widget(
-            Line::styled(glyphs::LINE.repeat(width), theme.dialog),
-            line(2),
-        );
-        let rows_top = 3;
-        self.page = usize::from(inner.height.saturating_sub(rows_top + below)).max(1);
-        if below > 0 {
-            let top = inner.height - below;
-            frame.render_widget(
-                Line::styled(glyphs::LINE.repeat(width), theme.dialog),
-                line(top),
-            );
-            for (index, text) in (top + 1..inner.height).zip(footer) {
-                frame.render_widget(
-                    cells::fitted(
-                        &text,
-                        width,
-                        (Align::Left, Cut::End),
-                        (theme.dialog, theme.truncated_dialog),
-                        theme.glyphs.marks,
-                    ),
-                    line(index),
-                );
-            }
-        }
-        if let Some(message) = self.message() {
-            let room = rows_top..inner.height.saturating_sub(below);
-            for (index, text) in room.zip(cells::wrap(&message, width)) {
-                frame.render_widget(Line::styled(text, theme.dialog), line(index));
-            }
-            return;
-        }
+    /// Draws the dialog centered over `area`, the panels, as tall as they are: the rows in its
+    /// list, scrolled to the cursor, and under them how many it found, with the spinner of
+    /// `tick` while it searches, and what kept it from finding all.
+    pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, tick: u64) {
         let items = self.items();
-        let mut cursor = self.cursor_in(&items);
-        self.window.follow(&mut cursor, items.len(), self.page);
-        let top = self.window.top();
-        let height = u16::try_from(self.page).unwrap_or(u16::MAX);
-        let bar = right_frame(inner, inner.y + rows_top, height);
-        let position = (items.len(), self.page, top);
-        self.bar = scrollbar::render(frame, bar, position, theme.dialog, theme.glyphs.scroll_bar);
-        let focused = colors.focused_style();
-        for (offset, &(file, number)) in items.iter().enumerate().skip(top).take(self.page) {
-            let y = rows_top + u16::try_from(offset - top).unwrap_or(u16::MAX);
-            self.drawn.rows.push((offset, line(y)));
-            let style = if offset == cursor {
-                focused
-            } else {
-                theme.dialog
+        let row = |index: usize, width: usize, style: Style| {
+            let Some(&(file, number)) = items.get(index) else {
+                return Line::default();
             };
             let row = &self.rows[file];
             let spans = match number {
                 None => file_spans(row, (width, self.max_per_file), style, theme),
                 Some(number) => line_spans(row, number, width, style, theme),
             };
-            frame.render_widget(Line::from(spans).style(style), line(y));
-        }
-    }
-
-    /// The two fields, with their labels lined up, on the first two lines of `inner`: the text,
-    /// with the marks of regular expressions and case at its right, and the files, with how
-    /// many it found and the spinner of `tick` at theirs.
-    fn draw_fields(&mut self, frame: &mut Frame<'_>, inner: Rect, theme: &Theme, tick: u64) {
-        let width = usize::from(inner.width);
-        let labels = [fl!("find-text"), fl!("find-files")];
-        let label_width = labels
-            .iter()
-            .map(|label| cells::width(label))
-            .max()
-            .unwrap_or(0)
-            + 1;
-        let on = |on: bool| {
-            if on {
-                theme.quick_search
-            } else {
-                theme.dialog.add_modifier(Modifier::DIM)
-            }
+            Line::from(spans).style(style)
         };
-        let switches = vec![
-            Span::styled(fl!("find-regex-mark"), on(self.regex)),
-            Span::styled(" ", theme.dialog),
-            Span::styled(fl!("find-case-mark"), on(self.match_case)),
-        ];
-        let count = self.count();
-        let count = if self.searching() {
-            format!("{} {count}", decor::spinner(tick))
-        } else {
-            count
+        let view = ListView {
+            row: &row,
+            note: self.message(),
+            status: self.status(tick),
         };
-        let notes = [switches, vec![Span::styled(count, theme.dialog)]];
-        let fields = [(&self.text, Focus::Text), (&self.files, Focus::Files)];
-        for (index, ((field, focus), (label, note))) in
-            fields.into_iter().zip(labels.iter().zip(notes)).enumerate()
-        {
-            let y = inner.y + u16::try_from(index).unwrap_or(0);
-            let note_width: usize = note.iter().map(Span::width).sum();
-            let room = width.saturating_sub(label_width + note_width + 1);
-            let (shown, column) = field.visible(room);
-            let mut spans = vec![Span::styled(format!("{label:<label_width$}"), theme.dialog)];
-            let shown_width = cells::width(&shown);
-            spans.push(Span::styled(shown, theme.dialog));
-            let gap = room.saturating_sub(shown_width) + 1;
-            spans.push(Span::styled(" ".repeat(gap), theme.dialog));
-            spans.extend(note);
-            frame.render_widget(
-                Line::from(spans).style(theme.dialog),
-                Rect::new(inner.x, y, inner.width, 1),
-            );
-            let x = inner.x + u16::try_from(label_width).unwrap_or(0);
-            let area = Rect::new(x, y, u16::try_from(room).unwrap_or(0), 1);
-            self.fields[index] = (area, room);
-            if self.focus == focus {
-                let column = u16::try_from(column).unwrap_or(u16::MAX);
-                frame.set_cursor_position(Position::new(
-                    x.saturating_add(column).min(inner.right() - 1),
-                    y,
-                ));
-            }
-        }
+        self.dialog.render_list(frame, area, theme, &view);
     }
 }
 
@@ -923,17 +752,28 @@ mod tests {
     }
 
     fn press(window: &mut FindWindow, action: Action) -> FindEvent {
-        window.handle(Resolved::Action(action))
+        let typed = Typed::from(Resolved::Action(action));
+        window.handle(typed, &mut Registers::default())
     }
 
     fn typed(window: &mut FindWindow, text: &str) {
         for c in text.chars() {
-            assert_eq!(window.handle(Resolved::Insert(c)), FindEvent::Search);
+            let typed = Typed::from(Resolved::Insert(c));
+            let event = window.handle(typed, &mut Registers::default());
+            assert_eq!(event, FindEvent::Search);
         }
     }
 
+    /// Tab from the text to the rows: past the files and the two check boxes.
+    fn to_rows(window: &mut FindWindow) {
+        for _ in 0..4 {
+            press(window, Action::NextField);
+        }
+        assert_eq!(window.context(), Context::Find);
+    }
+
     fn draw(window: &mut FindWindow, width: u16) -> String {
-        let mut terminal = Terminal::new(TestBackend::new(width, 14)).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(width, 24)).unwrap();
         terminal
             .draw(|frame| window.render(frame, frame.area(), &Theme::terminal(), 1))
             .unwrap();
@@ -941,29 +781,46 @@ mod tests {
     }
 
     #[test]
-    fn the_fields_make_the_query_and_tab_goes_between_them() {
+    fn the_fields_and_the_check_boxes_make_the_query_as_in_a_dialog() {
         let mut window = window();
-        assert_eq!(window.mode(), Mode::Insert);
+        assert_eq!(
+            (window.mode(), window.context()),
+            (Mode::Insert, Context::FindInput)
+        );
         typed(&mut window, "fn x");
-        press(&mut window, Action::NextField);
+        // Down goes to the next field, as in every dialog.
+        press(&mut window, Action::Down);
         typed(&mut window, "*.rs  !target");
         assert_eq!(press(&mut window, Action::Backspace), FindEvent::Search);
         assert_eq!(press(&mut window, Action::ToggleRegex), FindEvent::Search);
-        assert_eq!(press(&mut window, Action::MatchCase), FindEvent::Search);
         let query = window.query();
         assert_eq!(query.pattern, "fn x");
         assert_eq!(query.globs, ["*.rs", "!targe"]);
-        assert!(!query.regex && query.match_case && query.hidden);
+        assert!(!query.regex && !query.match_case && query.hidden);
         assert_eq!(query.max_per_file, 2);
-        press(&mut window, Action::PrevField);
+        // Tab goes on to the check boxes, where Space switches one.
+        press(&mut window, Action::NextField);
+        press(&mut window, Action::NextField);
+        assert_eq!(window.context(), Context::Find);
+        assert_eq!(press(&mut window, Action::Toggle), FindEvent::Search);
+        assert!(window.query().match_case);
+        press(&mut window, Action::Up);
+        press(&mut window, Action::Up);
+        press(&mut window, Action::Up);
+        assert_eq!(
+            window.mode(),
+            Mode::Normal,
+            "a motion brings it in Normal mode"
+        );
+        press(&mut window, Action::Append);
         typed(&mut window, "y");
         assert_eq!(window.query().pattern, "fn xy");
-        // Esc goes to the rows, where characters type nothing, and i goes back.
+        // Esc leaves Insert mode in the field, and again closes the dialog.
         press(&mut window, Action::NormalMode);
-        assert_eq!(window.mode(), Mode::Normal);
-        assert_eq!(window.handle(Resolved::Insert('z')), FindEvent::Pending);
-        press(&mut window, Action::InsertMode);
-        assert_eq!(window.mode(), Mode::Insert);
+        assert_eq!(
+            (window.mode(), window.context()),
+            (Mode::Normal, Context::FindInput)
+        );
         assert_eq!(press(&mut window, Action::Cancel), FindEvent::Closed);
     }
 
@@ -975,7 +832,7 @@ mod tests {
         window.found(2, vec![file("stale.rs")]);
         assert_eq!(window.rows.len(), 2, "an earlier search's are dropped");
         assert_eq!(window.rows[0].path, b"Cargo.toml");
-        // The first row is Cargo.toml; F3 views it at its first line.
+        // The first row is Cargo.toml; F3 views it at its first line, from the field too.
         assert_eq!(
             press(&mut window, Action::View),
             FindEvent::View {
@@ -984,6 +841,8 @@ mod tests {
                 line: Some(4)
             }
         );
+        // Down in the rows moves their cursor, and Enter there presses Go to.
+        to_rows(&mut window);
         for _ in 0..3 {
             press(&mut window, Action::Down);
         }
@@ -1009,6 +868,13 @@ mod tests {
         assert_eq!(window.rows.len(), 3);
         window.finished(4, Ok(FindSummary::default()));
         assert!(window.rows.is_empty() && !window.searching());
+        assert_eq!(press(&mut window, Action::Confirm), FindEvent::Pending);
+        // Tab leaves the rows for the buttons, where Cancel closes.
+        press(&mut window, Action::NextField);
+        for _ in 0..3 {
+            press(&mut window, Action::Right);
+        }
+        assert_eq!(press(&mut window, Action::Confirm), FindEvent::Closed);
     }
 
     #[test]

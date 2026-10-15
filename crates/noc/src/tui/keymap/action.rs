@@ -27,8 +27,7 @@ pub(crate) enum Context {
     /// A panel that lists a directory.
     Panel,
     /// Keys that the windows listing items to choose from share: the menus, the zoxide window,
-    /// the workspaces, the command history, and the search of a tree fall back to it. Keys
-    /// never go to it alone.
+    /// the workspaces, and the command history fall back to it. Keys never go to it alone.
     List,
     /// The location menu of Alt+F1 and Alt+F2; falls back to `List`, and, while its filter
     /// takes text, to `Input`.
@@ -50,7 +49,7 @@ pub(crate) enum Context {
     /// The name field of the entry being renamed in its panel row; falls back to `Input`. Other
     /// keys, but the global ones, do nothing.
     Rename,
-    /// A dialog whose focus is on a button or a list.
+    /// A dialog whose focus is on a button, a check box, or a list.
     Dialog,
     /// The help of F1; falls back to `Dialog`, whose keys scroll it and close it.
     Help,
@@ -71,8 +70,12 @@ pub(crate) enum Context {
     CommandCompletion,
     /// The window of the command history; falls back as the location menu does.
     CommandHistory,
-    /// The window of the search of a whole tree; falls back as the location menu does.
+    /// The dialog of the search of a whole tree, its focus on a check box, the rows, or a
+    /// button; falls back to `Dialog`.
     Find,
+    /// A field of the dialog of the search of a whole tree; falls back as the text fields of
+    /// dialogs do.
+    FindInput,
     /// The key hints with the keys, after a second Ctrl+k: every key of what is under them, to
     /// filter and run; falls back as the location menu does.
     KeyHints,
@@ -142,8 +145,14 @@ impl Context {
                 &[Self::CommandHistory, Self::List, Self::Input, Self::Global]
             }
             Self::CommandHistory => &[Self::CommandHistory, Self::List, Self::Global],
-            Self::Find if filtering => &[Self::Find, Self::List, Self::Input, Self::Global],
-            Self::Find => &[Self::Find, Self::List, Self::Global],
+            Self::Find => &[Self::Find, Self::Dialog, Self::Global],
+            Self::FindInput => &[
+                Self::FindInput,
+                Self::DialogInput,
+                Self::Input,
+                Self::Dialog,
+                Self::Global,
+            ],
             Self::KeyHints if filtering => &[Self::KeyHints, Self::List, Self::Input, Self::Global],
             Self::KeyHints => &[Self::KeyHints, Self::List, Self::Global],
             Self::PullDown => &[Self::PullDown, Self::Global],
@@ -700,6 +709,7 @@ impl Context {
         Self::CommandCompletion,
         Self::CommandHistory,
         Self::Find,
+        Self::FindInput,
         Self::KeyHints,
         Self::UserScreen,
     ];

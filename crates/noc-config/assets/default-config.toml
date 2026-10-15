@@ -116,7 +116,12 @@ pause = "always"
 # directories: a name looked up in PATH, or a path; a leading ~/ stands for the home directory.
 # On a host, rg runs there, as the host's PATH finds it.
 program = "rg"
-# It stops after finding this many lines, or files when it lists them; at least 1.
+# The same window finds files and directories by name with fd (https://github.com/sharkdp/fd).
+# The program for local directories, as above; on a host, fd runs there, or fdfind as Debian
+# and Ubuntu name it.
+fd = "fd"
+# It stops after finding this many lines, or files and directories when it lists them; at
+# least 1.
 max_results = 10000
 # The most lines it finds in one file, so that one large file leaves room for others; at least 1.
 max_per_file = 100

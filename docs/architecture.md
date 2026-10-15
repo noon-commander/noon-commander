@@ -854,7 +854,8 @@ pause = "always"                 # output waits for a key: "always", "on-error",
 
 [search]
 program = "rg"                   # ripgrep for g /, name in PATH or a path; rg on hosts
-max_results = 10000              # it stops after finding so many lines
+fd = "fd"                        # fd for g /'s files and dirs, likewise; fd or fdfind on hosts
+max_results = 10000              # it stops after finding so many lines, or files and dirs
 max_per_file = 100               # and takes no more lines of one file
 ```
 

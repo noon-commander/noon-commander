@@ -37,15 +37,19 @@ pub struct Config {
     pub search: SearchConfig,
 }
 
-/// The `[search]` section: the search of a whole tree with ripgrep, which `g /` starts in a
-/// panel.
+/// The `[search]` section: the search of a whole tree with ripgrep, or of the names in it with
+/// fd, which `g /` starts in a panel.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct SearchConfig {
     /// The ripgrep program for local directories: a name looked up in `PATH`, or a path. On a
     /// host, `rg` in the host's `PATH` runs. Default: `rg`.
     pub program: PathBuf,
-    /// It stops after finding this many lines, or files when it lists them. Default: `10000`.
+    /// The fd program for local directories, likewise. On a host, `fd` in the host's `PATH`
+    /// runs, or `fdfind`. Default: `fd`.
+    pub fd: PathBuf,
+    /// It stops after finding this many lines, or files and directories when it lists them.
+    /// Default: `10000`.
     pub max_results: NonZeroUsize,
     /// The most lines it finds in one file. Default: `100`.
     pub max_per_file: NonZeroUsize,
@@ -55,6 +59,7 @@ impl Default for SearchConfig {
     fn default() -> Self {
         Self {
             program: PathBuf::from("rg"),
+            fd: PathBuf::from("fd"),
             max_results: NonZeroUsize::new(10_000).unwrap_or(NonZeroUsize::MIN),
             max_per_file: NonZeroUsize::new(100).unwrap_or(NonZeroUsize::MIN),
         }
@@ -418,8 +423,8 @@ impl Config {
     }
 
     /// Expands a leading `~` or `~/` to `home` in [`SshConfig::program`],
-    /// [`SshConfig::config_file`], [`ZoxideConfig::program`], and [`SearchConfig::program`].
-    /// `~user` is left alone.
+    /// [`SshConfig::config_file`], [`ZoxideConfig::program`], [`SearchConfig::program`], and
+    /// [`SearchConfig::fd`]. `~user` is left alone.
     pub fn expand_tilde(&mut self, home: &Path) {
         expand_tilde_in(&mut self.ssh.program, home);
         if let Some(config_file) = &mut self.ssh.config_file {
@@ -427,6 +432,7 @@ impl Config {
         }
         expand_tilde_in(&mut self.zoxide.program, home);
         expand_tilde_in(&mut self.search.program, home);
+        expand_tilde_in(&mut self.search.fd, home);
     }
 }
 
@@ -523,6 +529,7 @@ mod tests {
 
         [search]
         program = "/opt/homebrew/bin/rg"
+        fd = "/opt/homebrew/bin/fd"
         max_results = 1000
         max_per_file = 20
     "#;
@@ -570,6 +577,7 @@ mod tests {
             },
             search: SearchConfig {
                 program: PathBuf::from("/opt/homebrew/bin/rg"),
+                fd: PathBuf::from("/opt/homebrew/bin/fd"),
                 max_results: NonZeroUsize::new(1000).unwrap(),
                 max_per_file: NonZeroUsize::new(20).unwrap(),
             },
@@ -607,6 +615,7 @@ mod tests {
         assert_eq!(config.shell.history_size, 500);
         assert_eq!(config.shell.pause, Pause::Always);
         assert_eq!(config.search.program, Path::new("rg"));
+        assert_eq!(config.search.fd, Path::new("fd"));
         assert_eq!(config.search.max_results.get(), 10_000);
         assert_eq!(config.search.max_per_file.get(), 100);
     }
@@ -725,6 +734,7 @@ mod tests {
         config.ssh.config_file = Some(PathBuf::from("~/.ssh/work_config"));
         config.zoxide.program = PathBuf::from("~/.cargo/bin/zoxide");
         config.search.program = PathBuf::from("~/.cargo/bin/rg");
+        config.search.fd = PathBuf::from("~/.cargo/bin/fd");
         config.expand_tilde(Path::new("/home/u"));
         assert_eq!(config.ssh.program.as_os_str(), "/home/u/bin/ssh");
         assert_eq!(config.search.program.as_os_str(), "/home/u/.cargo/bin/rg");
@@ -751,6 +761,7 @@ mod tests {
                 },
                 search: SearchConfig {
                     program: PathBuf::from("/home/u/.cargo/bin/rg"),
+                    fd: PathBuf::from("/home/u/.cargo/bin/fd"),
                     ..full().search
                 },
                 ..full()
@@ -821,6 +832,7 @@ mod tests {
         assert!(table["search"].get("max_per_file").is_some());
         assert!(table["search"].get("max_results").is_some());
         assert!(table["search"].get("program").is_some());
+        assert!(table["search"].get("fd").is_some());
     }
 
     #[test]

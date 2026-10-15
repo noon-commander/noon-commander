@@ -61,6 +61,7 @@ enum Key {
     HistorySize,
     Pause,
     SearchProgram,
+    FdProgram,
     MaxResults,
     MaxPerFile,
 }
@@ -190,12 +191,8 @@ impl Setting {
                 };
             }
             Key::AtomicUpload => transfer.atomic_upload = self.on(),
-            Key::SshProgram => {
-                let program = text.trim();
-                if program.is_empty() {
-                    return Err(fl!("config-ssh-program-empty"));
-                }
-                ssh.program = PathBuf::from(program);
+            Key::SshProgram | Key::ZoxideProgram | Key::SearchProgram | Key::FdProgram => {
+                self.apply_program(config)?;
             }
             Key::SshConfigFile => {
                 let file = text.trim();
@@ -213,20 +210,6 @@ impl Setting {
             Key::HideHosts => config.discovery.hide = split_words(text),
             Key::HideVolumes => config.volumes.hide = split_words(text),
             Key::ZoxideRecord => config.zoxide.record = self.on(),
-            Key::ZoxideProgram => {
-                let program = text.trim();
-                if program.is_empty() {
-                    return Err(fl!("config-zoxide-program-empty"));
-                }
-                config.zoxide.program = PathBuf::from(program);
-            }
-            Key::SearchProgram => {
-                let program = text.trim();
-                if program.is_empty() {
-                    return Err(fl!("config-search-program-empty"));
-                }
-                config.search.program = PathBuf::from(program);
-            }
             Key::Pause => {
                 config.shell.pause = match text {
                     "on-error" => Pause::OnError,
@@ -235,6 +218,28 @@ impl Setting {
                 };
             }
         }
+        Ok(())
+    }
+
+    /// Writes a program into `config`, or says that it cannot be empty.
+    fn apply_program(&self, config: &mut Config) -> Result<(), String> {
+        let (program, empty) = match self.key {
+            Key::SshProgram => (&mut config.ssh.program, fl!("config-ssh-program-empty")),
+            Key::ZoxideProgram => (
+                &mut config.zoxide.program,
+                fl!("config-zoxide-program-empty"),
+            ),
+            Key::SearchProgram => (
+                &mut config.search.program,
+                fl!("config-search-program-empty"),
+            ),
+            _ => (&mut config.search.fd, fl!("config-fd-program-empty")),
+        };
+        let text = self.text().trim();
+        if text.is_empty() {
+            return Err(empty);
+        }
+        *program = PathBuf::from(text);
         Ok(())
     }
 
@@ -1317,7 +1322,7 @@ fn shell(config: &Config) -> Category {
     }
 }
 
-/// Search, `[search]`: ripgrep, and how much the search of a whole tree finds.
+/// Search, `[search]`: ripgrep and fd, and how much the search of a whole tree finds.
 fn search(config: &Config, home: &Path) -> Category {
     let search = &config.search;
     Category {
@@ -1331,6 +1336,11 @@ fn search(config: &Config, home: &Path) -> Category {
                     fl!("config-search-program-hint"),
                 ),
                 path_text(&search.program, home),
+            ),
+            Setting::new(
+                Key::FdProgram,
+                (fl!("config-fd-program"), fl!("config-fd-program-hint")),
+                path_text(&search.fd, home),
             ),
             Setting::new(
                 Key::MaxResults,
@@ -1580,6 +1590,10 @@ mod tests {
         dialog.handle(action(Action::Toggle));
         dialog.handle(action(Action::Down));
         typed(&mut dialog, "~/.cargo/bin/zoxide");
+        category(&mut dialog, 6);
+        typed(&mut dialog, "/opt/rg");
+        dialog.handle(action(Action::Down));
+        typed(&mut dialog, "fdfind");
         assert!(dialog.handle(action(Action::Cancel)).closed);
         let mut expected = Config::default();
         expected.ui.language = "de".to_owned();
@@ -1599,12 +1613,14 @@ mod tests {
         expected.volumes.hide = vec!["/mnt/*".to_owned()];
         expected.zoxide.record = false;
         expected.zoxide.program = PathBuf::from("~/.cargo/bin/zoxide");
+        expected.search.program = PathBuf::from("/opt/rg");
+        expected.search.fd = PathBuf::from("fdfind");
         assert_eq!(dialog.applied, expected);
     }
 
     #[test]
     fn an_invalid_text_keeps_the_cursor_and_says_why() {
-        let cases: [(usize, usize, &str, &str); 8] = [
+        let cases: [(usize, usize, &str, &str); 11] = [
             (0, 0, "?", "is not auto or a language tag"),
             (0, 7, "0", "is not a step of the wheel"),
             (0, 7, "pages", "is not a step of the wheel"),
@@ -1613,6 +1629,9 @@ mod tests {
             (2, 0, "", "The ssh program cannot be empty"),
             (4, 1, " ", "The zoxide program cannot be empty"),
             (5, 1, "-1", "is not a number of commands"),
+            (6, 0, "", "The ripgrep program cannot be empty"),
+            (6, 1, " ", "The fd program cannot be empty"),
+            (6, 2, "0", "is not a number of results"),
         ];
         for (index, row, text, message) in cases {
             let mut dialog = dialog();

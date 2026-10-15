@@ -35,6 +35,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The wheel moves the cursor of a panel where the rows cannot scroll, as when they all fit or the
+  last row shows, as in mc and Far; before, it did nothing there.
 - Tab in the panels goes to the other panel, as in mc, where the terminal speaks the kitty
   keyboard protocol and so tells Tab from Ctrl+i, which still goes forward through the jump list.
   Elsewhere Tab is Ctrl+i, as before.

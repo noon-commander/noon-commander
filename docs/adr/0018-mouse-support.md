@@ -39,8 +39,10 @@ presses, releases, drags, moves, and the wheel, but no double clicks.
   then does what Enter does, so it opens directories and hosts and does nothing on a file, as
   Enter does. A right click marks or unmarks the row, as in mc and Far, with the cursor on it; unlike
   Insert, the cursor does not move on. The wheel scrolls the panel under it, which need not be
-  the active one, and keeps its cursor on screen. A click on a tab shows it. Clicks end quick
-  search, as a key of the panel's own would, and do nothing while a name is edited in its row.
+  the active one, and keeps its cursor on screen; where it cannot scroll that way, as when the
+  rows all fit, it moves the cursor as far, as in mc and Far. A click on a tab shows it. Clicks
+  end quick search, as a key of the panel's own would, and do nothing while a name is edited in
+  its row.
 - In the viewer the wheel scrolls as Up and Down, or PageUp and PageDown.
 - In the pull-down menu, a click on a title opens its menu, or closes it if it is the one
   open; a click on a command runs it if it runs now; the wheel moves the cursor; and a click

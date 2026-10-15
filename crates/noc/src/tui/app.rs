@@ -7608,11 +7608,34 @@ mod tests {
             press(&mut app, Press::WheelDown, 90, 5);
             names(&mut app);
         }
-        assert_eq!(names(&mut app)[1], "f16", "never past the last row");
+        assert_eq!(
+            names(&mut app)[1],
+            "f19",
+            "never past the last row; then the cursor moves to it"
+        );
 
         app.config.ui.wheel = Wheel::Page;
         press(&mut app, Press::WheelUp, 90, 5);
         assert_eq!(names(&mut app)[1], "f10", "a page up");
+    }
+
+    #[test]
+    fn the_wheel_moves_the_cursor_where_the_rows_all_fit() {
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
+        let files = (0..5).map(|n| file(&format!("f{n:02}"), 1)).collect();
+        answer(&mut app, effects, &Listing::Dir(files));
+        let name = |app: &mut App| {
+            screen_of(app, 13);
+            cursor_name(app, Side::Right)
+        };
+        name(&mut app);
+        press(&mut app, Press::WheelDown, 90, 5);
+        assert_eq!(name(&mut app), "f02", "three rows down from ..");
+        press(&mut app, Press::WheelDown, 90, 5);
+        assert_eq!(name(&mut app), "f04", "no further than the last row");
+        press(&mut app, Press::WheelUp, 90, 5);
+        assert_eq!(name(&mut app), "f01");
+        assert_eq!(app.active, Side::Left, "the wheel does not take the keys");
     }
 
     #[test]

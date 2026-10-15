@@ -873,7 +873,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   as far, Ctrl+f and Ctrl+b scroll a window less two rows, with a count that many windows at once,
   and put the cursor at its top or bottom. Unlike vim's, Ctrl+f stops with the last row at the
   bottom, and once it shows, puts the cursor on it, as mc's PgDn does. The wheel scrolls as vim's
-  Ctrl+e and Ctrl+y, but never past the last row either. The view is worked out before each frame,
+  Ctrl+e and Ctrl+y, but never past the last row either; where it cannot scroll, as when the rows
+  all fit, it moves the cursor as far, as in mc and Far. The view is worked out before each frame,
   as vim does it before it redraws. When the rows do not fit, a scroll bar runs down the right of
   the frame along them, as in Far ([ADR 0024](adr/0024-scroll-bars-on-the-frames.md)).
 - **The cursor of the inactive panel.** Unlike mc, the inactive panel shows where its cursor
@@ -1295,7 +1296,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   buttons were drawn (`mouse::Drawn`), and `App::pointer` looks there, front first, as keys
   go. A click on an F-key slot presses its key; in a panel a click moves the cursor and gives
   the panel the keys, a double click does what Enter does, a right click marks the row as in
-  mc and Far, and the wheel scrolls the panel under it, by `ui.wheel` lines or a page; a click
+  mc and Far, and the wheel scrolls the panel under it, by `ui.wheel` lines or a page, or moves
+  its cursor as far where it cannot scroll; a click
   on a tab shows it, and in the viewer the wheel scrolls. In the pull-down menu a click opens
   a menu or runs a command; in a dialog a click chooses, puts the cursor in a field, switches
   a check box, or presses a button. Other windows and menus take the wheel as Up and Down, a

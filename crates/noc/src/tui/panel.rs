@@ -1887,7 +1887,8 @@ impl Panel {
     }
 
     /// Scrolls by `step` of the mouse wheel, down or up, as vim's Ctrl+e and Ctrl+y: the cursor
-    /// moves only to stay on screen, with its margin.
+    /// moves only to stay on screen, with its margin. Where the rows cannot scroll that way, as
+    /// when they all fit, the cursor moves as far instead, as in mc and Far.
     pub(crate) fn wheel(&mut self, step: Wheel, down: bool) {
         let page = self.page.max(1);
         let rows = match step {
@@ -1895,8 +1896,18 @@ impl Panel {
             Wheel::Page => page,
         };
         let count = self.rows();
+        let top = self.window.top();
         self.window
             .scroll(down, rows, &mut self.cursor, count, page);
+        if self.window.top() == top {
+            self.cursor = if down {
+                self.cursor
+                    .saturating_add(rows)
+                    .min(count.saturating_sub(1))
+            } else {
+                self.cursor.saturating_sub(rows)
+            };
+        }
     }
 
     /// The scroll bar of the last render, for the mouse.

@@ -951,13 +951,14 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 - **Keys.** The keymap is vim's, in its modes, with mc's F-keys ([ADR 0022](adr/0022-vim-modes.md));
   see the keymap below. The panels take keys in Normal mode, as vim's buffers do; text fields, quick
   search, and the command line in Insert mode. The line above the F-key bar shows the mode, `--
-  INSERT --` or `-- VISUAL --` (but in quick search, typed as vim's search, which shows none), on
-  the left, and the count, register, operator, or keys of a command typed so far on the right, as
-  typed, or how much Visual mode selects, as vim's `showmode` and `showcmd` do; after Ctrl+o it
-  shows `-- (insert) --`. A message, such as that a search went round, takes the place of the mode
-  until the next key, as vim's messages do on its command line. The command line takes it while
-  open. The cursor is a bar in Insert mode and a block in the others (DECSCUSR), and the terminal's
-  own shape comes back whenever another program gets the terminal, and on quitting.
+  NORMAL --`, `-- INSERT --`, or `-- VISUAL --` (but in quick search, typed as vim's search, which
+  shows none), on the left, and the count, register, operator, or keys of a command typed so far
+  on the right, as typed, or how much Visual mode selects, as vim's `showmode` and `showcmd` do,
+  though vim's shows no Normal mode; after Ctrl+o it shows `-- (insert) --`. A message, such as
+  that a search went round, takes the place of the mode until the next key, as vim's messages do
+  on its command line. The command line takes it while open. The cursor is a bar in Insert mode
+  and a block in the others (DECSCUSR), and the terminal's own shape comes back whenever another
+  program gets the terminal, and on quitting.
 - **Panels.** Each panel lists a directory with `..` first (but in a `/`), then directories,
   then files, by name ignoring case; columns are name, size, and modification time (local time,
   `ls -l` style), and narrow panels drop the time, then the size. Each panel has its own sort order:

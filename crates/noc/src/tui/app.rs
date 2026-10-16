@@ -6666,8 +6666,8 @@ impl App {
     }
 
     /// The mode, as vim's `showmode` shows it on the left of `area`, and what the pending
-    /// command has typed, as its `showcmd` shows it on the right. Quick search, typed as vim's
-    /// search, shows no mode.
+    /// command has typed, as its `showcmd` shows it on the right. Normal mode shows too, which
+    /// vim's does not. Quick search, typed as vim's search, shows no mode.
     fn render_mode(&self, frame: &mut Frame<'_>, area: Rect) {
         if area.is_empty() {
             return;
@@ -6682,7 +6682,8 @@ impl App {
                 Some(fl!("mode-visual-line"))
             }
             (Mode::Visual, _) => Some(fl!("mode-visual")),
-            _ => None,
+            (Mode::Normal, _) => Some(fl!("mode-normal")),
+            (Mode::Insert, _) => None,
         };
         let mut typed = format!(
             "{}{}",
@@ -7430,6 +7431,7 @@ mod tests {
         assert_eq!(cursor_name(&app, Side::Left), "a", "the other end");
         keys(&mut app, &["space"]);
         assert_eq!(app.mode(), Mode::Normal, "Space marks the rows and ends it");
+        assert!(screen(&mut app).contains("-- NORMAL --"));
         assert_eq!(chosen_names(&app, Side::Left), ["a", "b", "c"]);
         // A command acts on the rows selected, and only on them.
         keys(&mut app, &["shift-g", "shift-v", "k", "d"]);

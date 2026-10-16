@@ -30,8 +30,9 @@ fkey-pulldown = PullDn
 fkey-close-tab = Close
 
 ## The mode keys are typed in, as vim shows it on the line above the F-key bar (src/tui/app),
-## in Insert and Visual mode. Prefix: mode-.
+## in every mode but quick search. Prefix: mode-.
 
+mode-normal = -- NORMAL --
 mode-insert = -- INSERT --
 mode-visual = -- VISUAL --
 mode-visual-line = -- VISUAL LINE --
@@ -777,7 +778,7 @@ help-tip-modes = Modes
 help-tip-modes-keys = Keys are vim's, in its modes; the F-keys of the panels are mc's, in Normal and Visual mode and in quick search.
 help-tip-modes-fields = Text fields open in Insert mode, where characters are text; Esc goes to Normal mode, and Esc there closes.
 help-tip-modes-close = Quick search and the command line close on Esc, as vim's search and command line do.
-help-tip-modes-line = The line above the F-key bar says -- INSERT -- and -- VISUAL --, and -- (insert) -- for the one command of Normal mode after Ctrl+o; the cursor is a bar in Insert mode.
+help-tip-modes-line = The line above the F-key bar says -- NORMAL --, -- INSERT --, and -- VISUAL --, and -- (insert) -- for the one command of Normal mode after Ctrl+o; the cursor is a bar in Insert mode.
 help-tip-modes-alt = Alt and a key stand for Esc and the key in Insert and Visual mode and in the panels, but on a password.
 help-tip-modes-cancel = Ctrl+c closes or cancels in every mode.
 help-tip-counts = Counts and registers

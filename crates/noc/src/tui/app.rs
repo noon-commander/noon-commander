@@ -6666,8 +6666,8 @@ impl App {
     }
 
     /// The mode, as vim's `showmode` shows it on the left of `area`, and what the pending
-    /// command has typed, as its `showcmd` shows it on the right. Normal mode shows too, which
-    /// vim's does not. Quick search, typed as vim's search, shows no mode.
+    /// command has typed, as its `showcmd` shows it on the right. Every mode shows, so that the
+    /// line always says where keys go: Normal mode and quick search too, which vim's does not.
     fn render_mode(&self, frame: &mut Frame<'_>, area: Rect) {
         if area.is_empty() {
             return;
@@ -6675,15 +6675,14 @@ impl App {
         let editor = self.focused_editor();
         let once = editor.is_some_and(Editor::once);
         let mode = match self.place() {
-            (Mode::Insert, context) if context != Context::QuickSearch => Some(fl!("mode-insert")),
-            (Mode::Normal, _) if once => Some(fl!("mode-insert-once")),
-            (Mode::Visual, _) if once => Some(fl!("mode-insert-visual")),
+            (Mode::Insert, _) => fl!("mode-insert"),
+            (Mode::Normal, _) if once => fl!("mode-insert-once"),
+            (Mode::Visual, _) if once => fl!("mode-insert-visual"),
             (Mode::Visual, Context::Panel) if self.panel(self.active).visual_line() => {
-                Some(fl!("mode-visual-line"))
+                fl!("mode-visual-line")
             }
-            (Mode::Visual, _) => Some(fl!("mode-visual")),
-            (Mode::Normal, _) => Some(fl!("mode-normal")),
-            (Mode::Insert, _) => None,
+            (Mode::Visual, _) => fl!("mode-visual"),
+            (Mode::Normal, _) => fl!("mode-normal"),
         };
         let mut typed = format!(
             "{}{}",
@@ -6717,7 +6716,7 @@ impl App {
             let styles = (self.theme.message, self.theme.truncated);
             let message = cells::fit(message, room, Align::Left, styles, marks);
             frame.render_widget(Line::from(message), area);
-        } else if let Some(mode) = mode {
+        } else {
             let styles = (Style::new().bold(), self.theme.truncated);
             let mode = cells::fit(&mode, room, Align::Left, styles, marks);
             frame.render_widget(Line::from(mode), area);
@@ -11010,7 +11009,12 @@ mod tests {
         assert_eq!(app.context(), Context::Panel, "typing does nothing");
         assert!(keys(&mut app, &["/", "r"]).is_empty());
         assert_eq!(app.context(), Context::QuickSearch);
-        assert!(screen(&mut app).contains(&prompt(&app, "Search", "r")));
+        let shown = screen(&mut app);
+        assert!(shown.contains(&prompt(&app, "Search", "r")));
+        assert!(
+            shown.contains("-- INSERT --"),
+            "the line of the mode says it"
+        );
         // Enter ends the search on what it found, as in vim; l opens it.
         assert!(keys(&mut app, &["enter"]).is_empty());
         assert_eq!(app.context(), Context::Panel);

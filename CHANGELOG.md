@@ -126,8 +126,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   to `search_mode`.
 - Quick search shows the text as typed, capitals too, rather than in lower case; in the plain
   mode it still ignores case.
-- The line of the mode says `-- NORMAL --` in Normal mode too, rather than nothing, so that it
-  always says which mode keys go to.
+- The line of the mode says `-- NORMAL --` in Normal mode and `-- INSERT --` in quick search too,
+  rather than nothing, so that it always says which mode keys go to.
 
 ### Fixed
 

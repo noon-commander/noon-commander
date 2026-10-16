@@ -30,7 +30,7 @@ fkey-pulldown = PullDn
 fkey-close-tab = Close
 
 ## The mode keys are typed in, as vim shows it on the line above the F-key bar (src/tui/app),
-## in every mode but quick search. Prefix: mode-.
+## in every mode. Prefix: mode-.
 
 mode-normal = -- NORMAL --
 mode-insert = -- INSERT --

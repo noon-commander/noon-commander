@@ -1030,6 +1030,11 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   most as long as a volume in the location menu, so a dead network mount leaves it out; over
   SFTP it needs the `statvfs@openssh.com` extension, which OpenSSH's server has. A file system
   that reports no size, or a panel too narrow for it, shows none.
+- **Total of the directory.** At the left of the same line, the size of the files shown and how
+  many files and directories are shown: `12M in 45 files, 3 dirs`, the size as the Size column
+  writes it. Hidden files count while the panel shows them, `..` does not, and a link to a
+  directory is a directory. A panel on a host that is not connected shows none. Where the panel
+  is too narrow for both, the free space is left out first.
 - **Marks.** Space or Shift+Down marks the entry under the cursor, or unmarks it, and moves down,
   as mc's Insert does (Shift+Up moves up), and a count marks that many, the row at the end of the listing
   once; `g *` inverts the marks on files, leaving directories as they are; `..`

@@ -1,0 +1,10 @@
+---
+source: crates/noc/src/tui/panel.rs
+expression: "draw(&mut panel, 40, 6, true)"
+---
+"╔ /srv ═══════════╤═══════╤════════════╗"
+"║      ↑Name      │ Size  │Modify time ║"
+"║/..              │UP--DIR│            █"
+"╟─────────────────┴───────┴────────────╢"
+"║..                                    ║"
+"╚═ 9778K in 3 files, 3 dirs ═══════════╝"

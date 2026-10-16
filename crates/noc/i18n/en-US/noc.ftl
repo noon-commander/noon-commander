@@ -113,7 +113,16 @@ panel-marked = { $size } B in { $count ->
         [one] { $count } file
        *[other] { $count } files
     }
-# On the bottom of a panel's frame, as in mc: the free space and size of the file system that
+# On the bottom of a panel's frame at the left: the size of the files shown, such as 12M, and
+# how many files and directories are shown.
+panel-total = { $size } in { $files ->
+        [one] { $files } file
+       *[other] { $files } files
+    }, { $dirs ->
+        [one] { $dirs } dir
+       *[other] { $dirs } dirs
+    }
+# On the bottom of a panel's frame at the right, as in mc: the free space and size of the file system that
 # holds the directory, such as 212G / 460G, and the share that is free.
 panel-space = { $free } / { $total } ({ $percent }%)
 # Status line when a directory cannot be read; the panel keeps showing the previous one.

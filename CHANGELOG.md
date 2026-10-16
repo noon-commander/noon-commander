@@ -9,6 +9,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- The bottom of a panel's frame shows at the left the size of the files shown and how many files
+  and directories are shown, as `12M in 45 files, 3 dirs`; hidden files count while they show,
+  and a link to a directory is a directory. Where it and the free space do not both fit, the
+  free space is left out.
 - Windows grow from their middle as they open and shrink back as they close, their empty frame
   in a few sizes over about 120 ms; the menus of F9 drop from their bar. Every window with a
   frame does it: dialogs, menus, the help, the Configuration dialog, the search of a tree, jobs,

@@ -767,6 +767,22 @@ impl Panel {
         (self.marked.len(), bytes)
     }
 
+    /// How many of the shown entries are files and how many directories, and the bytes in the
+    /// files.
+    fn shown_total(&self) -> (usize, usize, u64) {
+        let Listing::Dir(entries) = &self.listing;
+        let (mut files, mut dirs, mut bytes) = (0, 0, 0u64);
+        for entry in self.shown.iter().map(|&index| &entries[index]) {
+            if entry.is_dir_like() {
+                dirs += 1;
+            } else {
+                files += 1;
+                bytes = bytes.saturating_add(entry.metadata.size.unwrap_or(0));
+            }
+        }
+        (files, dirs, bytes)
+    }
+
     /// Whether quick search runs.
     pub(crate) fn searching(&self) -> bool {
         self.search.is_some()
@@ -1579,8 +1595,9 @@ impl Panel {
     }
 
     /// Draws the panel: the location in the frame, column headers, the rows, the size and number
-    /// of marked entries on the line below them, and a status line with the name under the
-    /// cursor, the loading state, or the last error.
+    /// of marked entries on the line below them, a status line with the name under the cursor,
+    /// the loading state, or the last error, and the totals of the directory and its file
+    /// system on the bottom of the frame.
     pub(crate) fn render(
         &mut self,
         frame: &mut Frame<'_>,
@@ -1617,7 +1634,7 @@ impl Panel {
         if inner.height < 3 || inner.width < 2 {
             return;
         }
-        self.render_space(frame, area, theme);
+        self.render_bottom(frame, area, theme);
         let width = usize::from(inner.width);
         let list_height = usize::from(inner.height - 3);
         self.page = list_height;
@@ -1875,13 +1892,60 @@ impl Panel {
         }
     }
 
-    /// The free space and size of the directory's file system, on the bottom of the frame at
-    /// the right, as in mc; left out when unknown or when it does not fit.
-    fn render_space(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        // Pseudo file systems such as devfs report nothing.
-        let Some(space) = self.space.filter(|space| space.total > 0) else {
+    /// The bottom of the frame: at the left the size of the shown files and how many files and
+    /// directories are shown, at the right the free space and size of the directory's file
+    /// system, as in mc. Each is left out when unknown or when it does not fit; the free space
+    /// goes first.
+    fn render_bottom(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
+        let y = area.bottom() - 1;
+        // A corner and a line on either side.
+        let mut room = area.width.saturating_sub(4);
+        if let Some(text) = self.total_text() {
+            let width = u16::try_from(cells::width(&text)).unwrap_or(u16::MAX);
+            if width > room {
+                return;
+            }
+            frame.render_widget(
+                Line::styled(text, theme.panel),
+                Rect::new(area.x + 2, y, width, 1),
+            );
+            // A line between the two.
+            room = room.saturating_sub(width.saturating_add(1));
+        }
+        let Some(text) = self.space_text() else {
             return;
         };
+        let width = u16::try_from(cells::width(&text)).unwrap_or(u16::MAX);
+        if width > room {
+            return;
+        }
+        frame.render_widget(
+            Line::styled(text, theme.panel),
+            Rect::new(area.right() - 2 - width, y, width, 1),
+        );
+    }
+
+    /// The size of the shown files and how many files and directories are shown, padded for
+    /// the frame; none while the panel is on a host that is not connected.
+    fn total_text(&self) -> Option<String> {
+        if self.disconnected {
+            return None;
+        }
+        let (files, dirs, bytes) = self.shown_total();
+        let text = fl!(
+            "panel-total",
+            size = cells::size(bytes, SPACE_WIDTH),
+            files = files,
+            dirs = dirs
+        );
+        Some(format!(" {text} "))
+    }
+
+    /// The free space and size of the directory's file system, padded for the frame; none when
+    /// unknown.
+    fn space_text(&self) -> Option<String> {
+        // Pseudo file systems such as devfs report nothing.
+        let space = self.space.filter(|space| space.total > 0)?;
         let percent = u128::from(space.available.min(space.total)) * 100 / u128::from(space.total);
         let text = fl!(
             "panel-space",
@@ -1889,17 +1953,7 @@ impl Panel {
             total = cells::size(space.total, SPACE_WIDTH),
             percent = u64::try_from(percent).unwrap_or(100)
         );
-        let text = format!(" {text} ");
-        let width = u16::try_from(cells::width(&text)).unwrap_or(u16::MAX);
-        // A corner and a line on either side.
-        if width.saturating_add(4) > area.width {
-            return;
-        }
-        let x = area.right() - 2 - width;
-        frame.render_widget(
-            Line::styled(text, theme.panel),
-            Rect::new(x, area.bottom() - 1, width, 1),
-        );
+        Some(format!(" {text} "))
     }
 
     /// The row at `at` on screen at the last render, if there is one there.
@@ -3569,16 +3623,18 @@ mod tests {
             space: Some(space),
         };
         panel.listed(request.generation, Ok(reply));
-        insta::assert_snapshot!(draw(&mut panel, 30, 6, true));
-        let bottom = |panel: &mut Panel, width| {
-            let backend = draw(panel, width, 6, true);
-            let buffer = backend.buffer();
-            (0..width)
-                .map(|x| buffer[(x, 5)].symbol().to_owned())
-                .collect::<String>()
-        };
+        insta::assert_snapshot!(draw(&mut panel, 50, 6, true));
+        // The total of the directory, ` 0 in 0 files, 0 dirs `, comes first.
+        assert!(bottom(&mut panel, 46).contains("123G / 500G (24%)"));
+        let narrow = bottom(&mut panel, 45);
+        assert!(!narrow.contains("123G"), "too narrow: {narrow}");
+        assert!(narrow.contains("0 in 0 files, 0 dirs"), "{narrow}");
+
+        // Without the total, as on a host that is not connected, the space has the frame.
+        panel.disconnected = true;
         assert!(bottom(&mut panel, 23).contains("123G / 500G (24%)"));
         assert!(!bottom(&mut panel, 22).contains("123G"), "too narrow");
+        panel.disconnected = false;
 
         // A failed reload keeps it; the next listing replaces it.
         let request = panel.reload_onto(Vec::new());
@@ -3587,14 +3643,51 @@ mod tests {
         let request = panel.reload_onto(Vec::new());
         answer(&mut panel, &request, Listing::Dir(Vec::new()));
         assert_eq!(panel.space, None);
-        assert!(!bottom(&mut panel, 30).contains('G'));
+        assert!(!bottom(&mut panel, 50).contains('G'));
 
         // A file system that reports nothing shows nothing.
         panel.space = Some(Space {
             total: 0,
             available: 0,
         });
-        assert!(!bottom(&mut panel, 30).contains('0'));
+        assert!(!bottom(&mut panel, 50).contains('%'));
+    }
+
+    /// The bottom line of `panel`'s frame drawn `width` cells wide and 6 high.
+    fn bottom(panel: &mut Panel, width: u16) -> String {
+        let backend = draw(panel, width, 6, true);
+        let buffer = backend.buffer();
+        (0..width)
+            .map(|x| buffer[(x, 5)].symbol().to_owned())
+            .collect()
+    }
+
+    #[test]
+    fn the_frame_shows_the_size_of_the_shown_files_and_how_many_files_and_dirs() {
+        let mut panel = loaded("/srv", listing());
+        // 12,345 + 1 + 10,000,000 bytes; a link to a directory is a directory.
+        assert_eq!(panel.shown_total(), (3, 3, 10_012_346));
+        insta::assert_snapshot!(draw(&mut panel, 40, 6, true));
+
+        panel.set_show_hidden(false);
+        assert_eq!(
+            panel.shown_total(),
+            (2, 3, 10_012_345),
+            "hidden files are left out"
+        );
+        assert!(bottom(&mut panel, 40).contains(" 9778K in 2 files, 3 dirs "));
+
+        let mut panel = loaded(
+            "/srv",
+            vec![
+                entry("one", FileKind::File, 7),
+                entry("d", FileKind::Dir, 0),
+            ],
+        );
+        assert!(bottom(&mut panel, 40).contains(" 7 in 1 file, 1 dir "));
+        // ` 7 in 1 file, 1 dir ` and a corner and a line on either side.
+        assert!(bottom(&mut panel, 24).contains("1 dir"));
+        assert!(!bottom(&mut panel, 23).contains("dir"), "too narrow");
     }
 
     /// The rows of `panel` drawn 14 cells wide, a name column of 12, four of them, inside the

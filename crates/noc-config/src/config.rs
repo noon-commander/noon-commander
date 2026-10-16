@@ -33,12 +33,12 @@ pub struct Config {
     pub zoxide: ZoxideConfig,
     /// `[shell]`: the command line of `!` and `:`.
     pub shell: ShellConfig,
-    /// `[search]`: the search of the files below the panel's directory, `g /`.
+    /// `[search]`: the search of the files below the panel's directory, `f /` and `f f`.
     pub search: SearchConfig,
 }
 
 /// The `[search]` section: the search of a whole tree with ripgrep, or of the names in it with
-/// fd, which `g /` starts in a panel.
+/// fd, which `f /` and `f f` start in a panel.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct SearchConfig {

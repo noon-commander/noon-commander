@@ -158,7 +158,8 @@ jump-nothing = zoxide knows no directory that matches. It learns the directories
 # The zoxide program is not there.
 jump-not-installed = zoxide is not installed: cannot run { $program }. Get it from https://github.com/ajeetdsouza/zoxide, or set its path in Options → Configuration.
 
-## The search of a whole tree (src/tui/find): g / in a panel, or F9 → Command → Find file….
+## The search of a whole tree (src/tui/find): f / in a panel, or F9 → Command → Find file…; f f
+## and Find files and dirs… open it in its Files and dirs mode.
 ## ripgrep finds the lines that match the text in the files under the panel's directory. Prefix:
 ## find-.
 
@@ -294,8 +295,10 @@ pulldown-checksum = Chec&ksums…
 pulldown-exit = E&xit
 # Command.
 pulldown-quick-search = &Quick search
-# Searches the whole tree under the panel's directory, as g / does.
+# Searches the whole tree under the panel's directory, as f / does.
 pulldown-find = &Find file…
+# The same search in its Files and dirs mode, by name, as f f opens it.
+pulldown-find-names = Find f&iles and dirs…
 pulldown-swap = S&wap panels
 pulldown-other-open = &Open in the other panel
 pulldown-other-sync = &This directory in the other panel
@@ -338,7 +341,7 @@ config-icons-hint = Nerd Font icons in front of names; without them, mc's marker
 config-show-hidden = Show hidden files
 config-show-hidden-hint = Names that begin with a dot; o h switches them.
 config-search-mode = Search mode
-config-search-mode-hint = How quick search and the filters of the lists match what is typed: the text anywhere, the letters in order as fzf does, or a regular expression. Alt+r switches it in one of them until it closes. g / starts in it too, fzf as a regular expression.
+config-search-mode-hint = How quick search and the filters of the lists match what is typed: the text anywhere, the letters in order as fzf does, or a regular expression. Alt+r switches it in one of them until it closes. f / and f f start in it too, fzf as a regular expression.
 config-search-mode-plain = Plain
 config-search-mode-fzf = fzf
 config-search-mode-regex = Regular expression
@@ -626,6 +629,7 @@ help-sort-size = Sort by size, largest first; again: reverse
 help-quick-search-start = Quick search, typed as vim's search
 help-quick-search-back = Quick search up the rows, as vim's ?; n then goes up too, and N down
 help-find-open = Search the files below for text, in a dialog
+help-find-names = Find the files and directories below by name, in the same dialog
 help-match-next = The next name that matches the last quick search, the way it went
 help-match-prev = The previous name that matches the last quick search, the other way
 help-shell = Open the command line for a shell command, run in this directory
@@ -783,7 +787,7 @@ help-tip-lists = Lists
 help-tip-lists-open = The lists open in Normal mode: / types in the filter, and Esc goes back to the rows.
 help-tip-lists-jump = The zoxide window opens in Insert mode, typing what filters its directories, or, in the plain search mode, keywords, as z takes them in a shell; Esc goes to the rows, and / types again.
 help-tip-search = Search modes
-help-tip-search-where = Quick search and the filters of the lists (the location menu, the tab menu, the zoxide window, the workspaces, the command history, and the key hints) start in the search mode of Configuration; Alt+r switches it there, and the glyph after the word of the prompt says which, as in the Text field of g /.
+help-tip-search-where = Quick search and the filters of the lists (the location menu, the tab menu, the zoxide window, the workspaces, the command history, and the key hints) start in the search mode of Configuration; Alt+r switches it there, and the glyph after the word of the prompt says which, as in the Text field of f /.
 help-tip-search-plain = Plain: the text anywhere, ignoring case.
 help-tip-search-fzf = fzf: the letters typed in order, not necessarily together, best match first. Words separated by spaces must all match; 'word matches as it is, ^word at the start, word$ at the end, and !word where it is not.
 help-tip-search-regex = Regular expression: case counts only once it has a capital letter, as in the search of a tree; a glyph crossed out says it is none.

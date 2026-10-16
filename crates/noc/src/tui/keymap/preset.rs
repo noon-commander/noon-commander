@@ -98,7 +98,10 @@ pub(super) const PRESET: Preset = &[
             (Action::QuickSearchBack, &["?"]),
             (Action::NextMatch, &["n", "shift-f7"]),
             (Action::PrevMatch, &["shift-n"]),
-            (Action::FindFile, &["g /"]),
+            // In the group of f, the files: f / for text, as / searches, and f f for names, as
+            // telescope's <leader>ff finds files.
+            (Action::FindFile, &["f /"]),
+            (Action::FindNames, &["f f"]),
             // Tools
             (Action::Shell, &["!"]),
             (Action::Command, &[":"]),

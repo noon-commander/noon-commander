@@ -40,9 +40,9 @@ The same panels in the theme `mc-classic`, with the blue of Midnight Commander:
 - **Fuzzy search, as in fzf.** Quick search and the filters of every list (the location menu,
   the tab menu, the zoxide window, the workspaces, the command history) find `config.rs` from
   `cfg`, best match first. Alt+r switches to the plain text or a regular expression.
-- **Search with ripgrep and fd.** `g /` finds text in the files below, as you type, on a server
+- **Search with ripgrep and fd.** `f /` finds text in the files below, as you type, on a server
   too, where [ripgrep](https://github.com/BurntSushi/ripgrep) runs; F3 and F4 open a file at the
-  line. Its Files and dirs mode finds names with [fd](https://github.com/sharkdp/fd).
+  line. `f f` finds names with [fd](https://github.com/sharkdp/fd).
 
 ## Philosophy
 
@@ -75,8 +75,8 @@ Non-goals: forwarding of any kind, a built-in SSH implementation, a password man
 - macOS (Linux support is planned).
 - OpenSSH 8.7 or newer: check with `ssh -V`.
 - Optional: [ripgrep](https://github.com/BurntSushi/ripgrep) and [fd](https://github.com/sharkdp/fd)
-  for `g /`, locally and on the hosts searched; [zoxide](https://github.com/ajeetdsouza/zoxide)
-  for `g z`.
+  for `f /` and `f f`, locally and on the hosts searched;
+  [zoxide](https://github.com/ajeetdsouza/zoxide) for `g z`.
 - Rust 1.88 or newer to build from source.
 
 ## Installing

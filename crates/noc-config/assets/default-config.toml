@@ -59,8 +59,8 @@ show_hidden = true
 # separated by spaces must all match, and fzf's ' ^ $ ! work. "plain": the text anywhere,
 # ignoring case; the zoxide window gives it to zoxide as keywords, as z does. "regex": a
 # regular expression, whose case counts only once it has a capital letter. Each search and each
-# window starts with it; Alt+r switches it there. The search of a tree (g /) starts with it too,
-# taking "fzf" as "regex", and Alt+r switches it between "plain" and "regex".
+# window starts with it; Alt+r switches it there. The search of a tree (f /, f f) starts with it
+# too, taking "fzf" as "regex", and Alt+r switches it between "plain" and "regex".
 search_mode = "fzf"
 # The menu bar of F9 (Left, File, Command, Options, Right): "on-demand" shows it only while a
 # menu is open, over the panels, as Far Manager does; "always" keeps it above the panels, as
@@ -114,12 +114,13 @@ history_size = 500
 pause = "always"
 
 [search]
-# g / searches the files below the panel's directory for text with ripgrep
+# f / searches the files below the panel's directory for text with ripgrep
 # (https://github.com/BurntSushi/ripgrep), in a window of its own. The program for local
 # directories: a name looked up in PATH, or a path; a leading ~/ stands for the home directory.
 # On a host, rg runs there, as the host's PATH finds it.
 program = "rg"
-# The same window finds files and directories by name with fd (https://github.com/sharkdp/fd).
+# f f opens the same window in its Files and dirs mode, which finds files and directories by
+# name with fd (https://github.com/sharkdp/fd).
 # The program for local directories, as above; on a host, fd runs there, or fdfind as Debian
 # and Ubuntu name it.
 fd = "fd"

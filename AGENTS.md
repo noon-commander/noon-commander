@@ -189,7 +189,7 @@ Paths come from `crates/noc-config/src/paths.rs`.
   (8.7), which are forced off.
 - Every ssh child runs in its own session (`setsid`) without a controlling terminal; prompts go
   through the askpass bridge. Exception: the command line's ssh keeps the terminal (ADR 0019).
-- A program noc runs on a host (`rg`, `fd`, `fdfind`, for `g /`) goes through
+- A program noc runs on a host (`rg`, `fd`, `fdfind`, for `f /` and `f f`) goes through
   `Session::spawn_in`: no terminal, every word quoted for a POSIX shell (ADR 0028).
 - `ssh -O` commands use `-F /dev/null`.
 

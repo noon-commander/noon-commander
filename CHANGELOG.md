@@ -9,7 +9,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- `g /` searches the files below the panel's directory for text with
+- `f /` searches the files below the panel's directory for text with
   [ripgrep](https://github.com/BurntSushi/ripgrep), locally or on a host, where rg runs over
   the connection, in a dialog over both panels; so does F9 → Command → Find file…. One field
   takes the text, another the globs of the files (`*.rs !target`); Alt+r takes the text as a
@@ -20,7 +20,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   highlighted. Go to, the default button, goes to the file in the panel (Ctrl+o back), View (F3)
   views it from the line, and Edit (F4) edits it at the line. Its other mode, Files and dirs,
   finds files and directories by name with [fd](https://github.com/sharkdp/fd), locally or on a
-  host, where fd or fdfind runs; Go to goes into a directory. `[search] fd` names the program.
+  host, where fd or fdfind runs; Go to goes into a directory. `f f` and F9 → Command → Find files
+  and dirs… open the dialog in it. `[search] fd` names the program.
   It finds at most `[search] max_results` (10000) lines, and `max_per_file` (100) in one file,
   whose count then shows as `100+`; they and `program` (`rg`) are in the new Search category of
   the Configuration dialog. Hidden files are searched while the panels show them, and

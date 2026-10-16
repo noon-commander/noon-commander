@@ -89,7 +89,8 @@ not:
   below.
 - `f`: the file operations. It stands for mc's Ctrl+x and keeps its letters for mc's commands:
   `c` chmod, `o` chown, `e` chattr, `l`, `s`, and `v` links, `j` the jobs. mc has no checksums, so
-  they take `#`, for a hash. vim's `f` goes to a character in the line.
+  they take `#`, for a hash; the search of the files below takes `/` and `f`, which mc's Ctrl+x
+  does not use either. vim's `f` goes to a character in the line.
 
 ## Everywhere (`global`, every mode)
 
@@ -120,7 +121,7 @@ not:
 | Shift+Down<br>Shift+Up | `mark`<br>`mark_up` | mc, Far | Space (yazi, ranger)<br>— | Same | Mark and go down or up, as in mc and Far, so that K keeps vim's meaning: the whole name under the cursor ([ADR 0025](adr/0025-marks-of-text-cut-short.md)). vim's Shift+Down and Shift+Up turn the page, as Ctrl+f and Ctrl+b do here. |
 | g +<br>g -<br>g \* | `select`<br>`unselect`<br>`invert_marks` | mc | g + (mc)<br>g - (mc)<br>g \* (mc) | Same | mc's +, -, and \*, under g: alone they are vim's line motions and search, which stay unbound rather than mark where a vim user moves. vim's g + and g - go through its undo tree and g \* searches for the word under the cursor, none of which a listing has ([ADR 0022](adr/0022-vim-modes.md)). |
 | Shift+F7 | `next_match` | mc, Far | n (vim) | Same | Their key to search again. |
-| g / | `find_file` | noc | g / (noc) | Same | Search the files below, next to quick search's `/`, as vim's g keys stand next to the plain ones ([ADR 0027](adr/0027-search-of-a-whole-tree.md)). vim binds no g /. |
+| f /<br>f f | `find_file`<br>`find_names` | noc | f / (noc)<br>f f (noc) | Same | Group `f`: search the files below for text, / as quick search's `/` ([ADR 0027](adr/0027-search-of-a-whole-tree.md)), or find them by name, in the Files and dirs mode of the same dialog, f f as telescope's `<leader>ff` finds files ([ADR 0029](adr/0029-files-and-directories-with-fd.md)). |
 | g z | `jump` | noc | g z (noc) | Same | z for zoxide, whose command is z. vim binds no g z. |
 | g d | `quick_cd` | noc | g d (noc) | Same | d for directory: go to one typed as for cd. vim's g d goes to a declaration, which a listing has not. |
 | i<br>F3 | `view` | ranger, mc | i (ranger) | Same | ranger views with i, and mc with F3; each closes the viewer too. vim's i starts Insert mode, which a listing has not. |

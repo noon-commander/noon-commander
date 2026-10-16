@@ -104,11 +104,11 @@
       ([ADR 0016](adr/0016-fuzzy-search.md))
 - [x] Search modes: plain, fzf, and regex in quick search and the filters of the lists,
       `ui.search_mode`, switched by Alt+r ([ADR 0030](adr/0030-search-modes.md))
-- [x] `g /` searches the files below for text with ripgrep, local or on the host, in a dialog
+- [x] `f /` searches the files below for text with ripgrep, local or on the host, in a dialog
       with a field for the text and one for the files; `[search]`
       ([ADR 0027](adr/0027-search-of-a-whole-tree.md),
       [ADR 0028](adr/0028-programs-on-hosts-without-a-terminal.md))
-- [x] `g /` finds files and directories by name with fd, in its Files and dirs mode
+- [x] `f f` finds files and directories by name with fd, in the Files and dirs mode of `f /`
       ([ADR 0029](adr/0029-files-and-directories-with-fd.md))
 - [ ] Panelize what the search of a tree found, as mc and Far do, to act on it in a panel
 - [x] Workspaces: the tabs of both panels saved under a name (t W), restored from

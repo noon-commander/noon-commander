@@ -1021,6 +1021,7 @@ fn describe_panel(context: Context, action: Action) -> Option<String> {
         Action::NextMatch => fl!("help-match-next"),
         Action::PrevMatch => fl!("help-match-prev"),
         Action::FindFile => fl!("help-find-open"),
+        Action::FindNames => fl!("help-find-names"),
         Action::Shell => fl!("help-shell"),
         Action::Command => fl!("help-command"),
         Action::CommandHistory => fl!("help-command-history"),

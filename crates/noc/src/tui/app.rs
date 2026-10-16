@@ -33,7 +33,7 @@ use super::configuration::{ConfigEvent, Configuration};
 use super::decor::Decor;
 use super::dialog::{Ask, Button, Dialog, DialogEvent, Field, Reply};
 use super::edit::{Editor, Registers};
-use super::find::{FindEvent, FindQuery, FindSummary, FindWindow, Finding};
+use super::find::{FindEvent, FindMode, FindQuery, FindSummary, FindWindow, Finding};
 use super::glyphs::{self, Glyphs};
 use super::help::{About, Help, Spot};
 use super::history::{HistoryEvent, HistoryWindow};
@@ -2654,7 +2654,8 @@ impl App {
             Action::LocationMenuLeft => return self.open_menu(self.drawn_on(true)),
             Action::LocationMenuRight => return self.open_menu(self.drawn_on(false)),
             Action::Jump => return self.open_jump(),
-            Action::FindFile => return self.open_find(),
+            Action::FindFile => return self.open_find(FindMode::Text),
+            Action::FindNames => return self.open_find(FindMode::Names),
             Action::QuickCd => self.ask_cd(),
             Action::SaveWorkspace => self.ask_save_workspace(true),
             Action::Workspaces => self.open_workspaces(),
@@ -3673,10 +3674,11 @@ impl App {
         }
     }
 
-    /// Opens the dialog of the search of the files under the active panel's directory (`g /`,
-    /// F9 → Command → Find file…), as far as `[search]` lets it go, with the hidden files if
-    /// the panels show them, and lists the files at once.
-    fn open_find(&mut self) -> Vec<Effect> {
+    /// Opens the dialog of the search of the files under the active panel's directory in `mode`
+    /// (`f /` and F9 → Command → Find file… for text, `f f` and Find files and dirs… for
+    /// names), as far as `[search]` lets it go, with the hidden files if the panels show them,
+    /// and lists the files at once.
+    fn open_find(&mut self, mode: FindMode) -> Vec<Effect> {
         let location = self.panel(self.active).location().clone();
         let title = match &location {
             Location::Local(path) => home_text(path, &self.home),
@@ -3685,6 +3687,7 @@ impl App {
         let search = &self.config.search;
         self.find = Some(FindWindow::new(
             (location, title),
+            mode,
             (search.max_results.get(), search.max_per_file.get()),
             self.config.ui.show_hidden,
             self.config.ui.search_mode,
@@ -3992,6 +3995,7 @@ impl App {
                     | Action::InvertMarks
                     | Action::QuickSearch
                     | Action::FindFile
+                    | Action::FindNames
                     | Action::Jump
                     | Action::QuickCd
                     | Action::SwapPanels
@@ -7904,9 +7908,9 @@ mod tests {
 
     #[test]
     #[allow(clippy::single_range_in_vec_init)]
-    fn g_slash_lists_the_files_then_searches_as_the_text_is_typed() {
+    fn f_slash_lists_the_files_then_searches_as_the_text_is_typed() {
         let mut app = with_files(&["a1", "b2"]);
-        let effects = keys(&mut app, &["g", "/"]);
+        let effects = keys(&mut app, &["f", "/"]);
         let request = find_request(&effects);
         assert_eq!(request.location, local("/srv"));
         assert!(request.host.is_none());
@@ -7967,7 +7971,7 @@ mod tests {
     }
 
     #[test]
-    fn g_slash_on_a_host_searches_through_its_connection() {
+    fn f_slash_on_a_host_searches_through_its_connection() {
         let mut app = at_slash();
         let effects = enter_host(&mut app, Side::Left, 1);
         let Effect::Connect { connection, .. } = one(effects) else {
@@ -7976,7 +7980,7 @@ mod tests {
         let (handle, _requests) = HostHandle::channel();
         let effects = app.connected("web", connection, handle);
         answer(&mut app, effects, &Listing::Dir(Vec::new()));
-        let effects = keys(&mut app, &["g", "/"]);
+        let effects = keys(&mut app, &["f", "/"]);
         let request = find_request(&effects);
         assert!(matches!(request.location, Location::Remote { .. }));
         assert!(request.host.is_some(), "its connection");
@@ -8059,7 +8063,7 @@ mod tests {
     #[test]
     fn files_and_dirs_find_names_with_fd_and_enter_opens_a_directory() {
         let mut app = with_files(&["a1", "b2"]);
-        keys(&mut app, &["g", "/"]);
+        keys(&mut app, &["f", "/"]);
         let effects = keys(&mut app, &["backtab", "space"]);
         let request = find_request(&effects);
         let FindQuery::Names(query) = &request.query else {
@@ -8082,6 +8086,24 @@ mod tests {
             panic!("expected a listing, got {effects:?}");
         };
         assert_eq!(request.location, local("/srv/src/run"));
+    }
+
+    #[test]
+    fn f_f_opens_the_search_by_name_typing_in_its_text() {
+        let mut app = with_files(&["a1", "b2"]);
+        let effects = keys(&mut app, &["f", "f"]);
+        let request = find_request(&effects);
+        let FindQuery::Names(query) = &request.query else {
+            panic!("expected a search by name, got {:?}", request.query);
+        };
+        assert_eq!(query.pattern, "");
+        assert_eq!(request.location, local("/srv"));
+        assert_eq!(app.place(), (Mode::Insert, Context::FindInput));
+        let effects = keys(&mut app, &["m"]);
+        let FindQuery::Names(query) = &find_request(&effects).query else {
+            panic!("expected a search by name");
+        };
+        assert_eq!(query.pattern, "m");
     }
 
     #[test]

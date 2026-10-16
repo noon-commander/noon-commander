@@ -1,11 +1,11 @@
-//! The search of a whole tree: `g /` in a panel, or F9 → Command → Find file…. ripgrep searches
+//! The search of a whole tree: `f /` in a panel, or F9 → Command → Find file…. ripgrep searches
 //! the files under the panel's directory, local or on a host, for the text of the first field,
 //! among the files that the globs of the second let through, again as either changes, the check
 //! box of case switches, or Alt+r takes the text as it is or as a regular expression. The dialog lists each file it found, in the order of their paths, with the lines
 //! that match under it, the matches highlighted; with no text it lists the files. Its buttons go
 //! to the file in the panel, and view and edit it at the line, as in the results of mc's Find
 //! File. Its other mode, Files and dirs, finds files and directories whose names match the text
-//! with fd, and goes to them.
+//! with fd, and goes to them; `f f` and F9 → Command → Find files and dirs… open the dialog in it.
 
 use std::ops::Range;
 
@@ -43,6 +43,23 @@ const MATCH_CASE: usize = 0;
 /// Its modes, as its choices: text in the files, or files and directories by name.
 const TEXT_MODE: usize = 0;
 const NAMES_MODE: usize = 1;
+
+/// The mode the dialog opens in: text in the files, or files and directories by name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FindMode {
+    Text,
+    Names,
+}
+
+impl FindMode {
+    /// Its choice among the radio buttons of the modes.
+    fn choice(self) -> usize {
+        match self {
+            Self::Text => TEXT_MODE,
+            Self::Names => NAMES_MODE,
+        }
+    }
+}
 
 /// What a search looks for: lines with ripgrep, or names with fd.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -198,11 +215,13 @@ impl Drop for FindWindow {
 }
 
 impl FindWindow {
-    /// The dialog of the search in `root`, shown as `title`, typing in its text, which takes
-    /// as many results as `[search]` says, in all and in a file; hidden files too if `hidden`.
-    /// The text is a regular expression unless `mode` (`ui.search_mode`) is the plain one.
+    /// The dialog of the search in `root`, shown as `title`, in `find` mode, typing in its text,
+    /// which takes as many results as `[search]` says, in all and in a file; hidden files too
+    /// if `hidden`. The text is a regular expression unless `mode` (`ui.search_mode`) is the
+    /// plain one.
     pub(crate) fn new(
         (root, title): (Location, String),
+        find: FindMode,
         (max_results, max_per_file): (usize, usize),
         hidden: bool,
         mode: SearchMode,
@@ -216,8 +235,9 @@ impl FindWindow {
         let checks = [(fl!("find-match-case"), false)];
         let title = fl!("find-title", dir = title);
         let modes = vec![fl!("find-mode-text"), fl!("find-mode-names")];
-        let dialog = Dialog::fields(&title, &fields, &checks, buttons(TEXT_MODE), WIDTH)
-            .with_choices(modes, TEXT_MODE)
+        let chosen = find.choice();
+        let dialog = Dialog::fields(&title, &fields, &checks, buttons(chosen), WIDTH)
+            .with_choices(modes, chosen)
             .in_a_row()
             .with_list();
         Self {
@@ -881,6 +901,7 @@ mod tests {
     fn window() -> FindWindow {
         FindWindow::new(
             (Location::Local("/src/noc".into()), "~/src/noc".to_owned()),
+            FindMode::Text,
             (50, 2),
             true,
             SearchMode::Fzf,
@@ -967,6 +988,7 @@ mod tests {
         assert!(window.query().lines().regex, "and back");
         let plain = FindWindow::new(
             (Location::Local("/src/noc".into()), "~/src/noc".to_owned()),
+            FindMode::Text,
             (50, 2),
             true,
             SearchMode::Plain,
@@ -1135,6 +1157,38 @@ mod tests {
         }
         press(&mut window, Action::Toggle);
         assert!(matches!(window.query(), FindQuery::Lines(_)));
+        assert!(draw(&mut window, 70).contains("View"));
+    }
+
+    #[test]
+    fn opens_in_files_and_dirs_typing_in_the_text_and_goes_back_to_text() {
+        let mut window = FindWindow::new(
+            (Location::Local("/src/noc".into()), "~/src/noc".to_owned()),
+            FindMode::Names,
+            (50, 2),
+            true,
+            SearchMode::Fzf,
+            Decor::new(false),
+        );
+        assert_eq!(
+            (window.mode(), window.context()),
+            (Mode::Insert, Context::FindInput)
+        );
+        typed(&mut window, "main");
+        let FindQuery::Names(query) = window.query() else {
+            panic!("expected a search by name");
+        };
+        assert_eq!(query.pattern, "main");
+        let screen = draw(&mut window, 70);
+        assert!(
+            screen.contains("Go to") && !screen.contains("View"),
+            "{screen}"
+        );
+        // Shift+Tab from the text to the modes, then to Text, which Space chooses.
+        press(&mut window, Action::PrevField);
+        press(&mut window, Action::Left);
+        assert_eq!(press(&mut window, Action::Toggle), FindEvent::Search);
+        assert_eq!(window.query().lines().pattern, "main");
         assert!(draw(&mut window, 70).contains("View"));
     }
 

@@ -194,9 +194,9 @@ pub(crate) struct Report {
     /// The command of F4.
     pub(crate) editor: Option<String>,
     pub(crate) zoxide: Detected,
-    /// The ripgrep of `g /`, for local directories.
+    /// The ripgrep of `f /`, for local directories.
     pub(crate) ripgrep: Detected,
-    /// The fd of `g /`, likewise.
+    /// The fd of `f f`, likewise.
     pub(crate) fd: Detected,
 }
 

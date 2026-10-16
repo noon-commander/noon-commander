@@ -330,6 +330,9 @@ pub(crate) enum Action {
     PrevMatch,
     /// Searches the files under the panel's directory for text, in a window.
     FindFile,
+    /// Finds the files and directories under the panel's directory by name, in the same window,
+    /// in its Files and dirs mode.
+    FindNames,
     /// In quick search and the filters of the lists, matches what is typed the next way: as
     /// it is, as fzf does, or as a regular expression, round; in the search of a tree, as it is
     /// or as a regular expression.
@@ -609,6 +612,7 @@ impl Action {
         Self::NextMatch,
         Self::PrevMatch,
         Self::FindFile,
+        Self::FindNames,
         Self::SearchMode,
         Self::MatchCase,
         Self::JumpBack,

@@ -416,9 +416,10 @@ The fzf mode follows [ADR 0016](adr/0016-fuzzy-search.md). `tui/fuzzy.rs` wraps
 
 ### Search of a whole tree
 
-`g /` in a panel, next to quick search's `/`, or F9 → Command → Find file…, searches the files
-below the active panel's directory with ripgrep, or their names with fd, in a dialog over both
-panels ([ADR 0027](adr/0027-search-of-a-whole-tree.md),
+`f /` in a panel, or F9 → Command → Find file…, opens a dialog over both panels that searches the
+files below the active panel's directory with ripgrep; `f f`, or F9 → Command → Find files and
+dirs…, opens it in its Files and dirs mode, which finds their names with fd
+([ADR 0027](adr/0027-search-of-a-whole-tree.md),
 [ADR 0029](adr/0029-files-and-directories-with-fd.md)):
 
 ```text
@@ -889,8 +890,8 @@ history_size = 500               # commands of ! and : in history.toml, of all h
 pause = "always"                 # output waits for a key: "always", "on-error", or "never"
 
 [search]
-program = "rg"                   # ripgrep for g /, name in PATH or a path; rg on hosts
-fd = "fd"                        # fd for g /'s files and dirs, likewise; fd or fdfind on hosts
+program = "rg"                   # ripgrep for f /, name in PATH or a path; rg on hosts
+fd = "fd"                        # fd for f f, files and dirs, likewise; fd or fdfind on hosts
 max_results = 10000              # it stops after finding so many lines, or files and dirs
 max_per_file = 100               # and takes no more lines of one file
 ```
@@ -1301,8 +1302,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   does what a later context binds it to. Bindings are key sequences matched by prefix with a
   1-second timeout (`g g`, `Z Z`, `Ctrl+w h`). The panels group keys under `g`, Ctrl+w (the other
   panel, as vim's windows), `t` (tabs and workspaces), `o` (sort order and hidden names), and `f`
-  (`f j` the jobs, `f #` the checksums, the rest of mc's Ctrl+x letters left for later). In Insert
-  mode a character is text unless the context itself binds it, and in Normal and Visual mode a
+  (`f j` the jobs, `f #` the checksums, `f /` and `f f` the search of the files below by text and
+  by name, the rest of mc's Ctrl+x letters left for later). In Insert mode a character is text
+  unless the context itself binds it, and in Normal and Visual mode a
   character nothing binds does nothing. The keymap reads what vim lets come with a command and hands
   it to the app with the action (`Typed`, `Extra`): a count before it (digits, `0` only after
   another), a register after `"`, and the character after the actions that take one (`f`, `t`, `F`,

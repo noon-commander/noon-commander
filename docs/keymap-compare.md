@@ -131,12 +131,14 @@ goes on to the left, and `»` one cut short.
 noc groups keys under a first key: vim's g, q, and Ctrl+w, and its own t for the tabs and the
 workspaces, o for the sort order, as ranger's sort keys, and the hidden names, and f for the file
 operations. f stands for mc's Ctrl+x, whose letters it keeps for mc's commands: c chmod, o chown, e
-chattr, l, s, and v links, j the jobs. mc has no checksums, so they take #. Ctrl+w switches the
-panels, as it switches vim's windows: Ctrl+w h and Ctrl+w l go to the left and the right one, and
-Ctrl+w 1 and Ctrl+w 2 open their location menus, as Alt+F1 and Alt+F2 do. / searches down and ? up,
-as in vim and yazi; n and N repeat the last quick search, the way it went and the other way, as in
-vim, yazi, and ranger; Shift+F7, mc's and Far's key to search again, repeats it forward too. Of mc's
-keys, only the F-keys stay; they work in Visual mode and in quick search too, as their sections say.
+chattr, l, s, and v links, j the jobs. mc has no checksums, so they take #; the search of the files
+below takes / for text, as quick search's /, and f for names, as telescope's `<leader>ff` finds
+files, neither of which mc's Ctrl+x has. Ctrl+w switches the panels, as it switches vim's windows:
+Ctrl+w h and Ctrl+w l go to the left and the right one, and Ctrl+w 1 and Ctrl+w 2 open their
+location menus, as Alt+F1 and Alt+F2 do. / searches down and ? up, as in vim and yazi; n and N
+repeat the last quick search, the way it went and the other way, as in vim, yazi, and ranger;
+Shift+F7, mc's and Far's key to search again, repeats it forward too. Of mc's keys, only the F-keys
+stay; they work in Visual mode and in quick search too, as their sections say.
 
 A count goes before a motion, a mark, n, or N, and repeats it: 3j goes three rows down. Before G or
 g g, it goes to the row of that number, 5G to the fifth; before g t, to the tab of that number, 2g t
@@ -213,7 +215,8 @@ section says: the commands of files act on the rows it selects, which become the
 | Start quick search up the rows, as vim's ?; n then goes up too, and N down | `quick_search_back` | ⏳ | ? | — | — | ? | — |
 | The next name that matches the last quick search | `next_match` | ✅ | n<br>Shift+F7 | — | — | n | n |
 | The previous name that matches the last quick search | `prev_match` | ✅ | N | — | — | N | N |
-| Search the files below for text, or list them, in a window | `find_file` | ⏳ | g / | Alt+? | Alt+F7 | s<br>S | — |
+| Search the files below for text, or list them, in a window | `find_file` | ⏳ | f / | Alt+? | Alt+F7 | S | — |
+| Find the files and directories below by name, in the same window | `find_names` | ⏳ | f f | Alt+? | Alt+F7 | s | — |
 | Open the command line for a shell command | `shell` | ✅ | ! | Typing | Typing | ; (in the background)<br>: | !<br>s |
 | Open the command line for a command of noc | `command` | ✅ | : | — | — | — | :<br>; |
 | The command history | `command_history` | ✅ | q : | Alt+h | Alt+F8 | — | — |
@@ -1158,18 +1161,19 @@ Tab and F8 still switch the hosts and remove the command.
 
 ## Search of a whole tree (`find`, Normal mode)
 
-g / in a panel, or F9 → Command → Find file…: ripgrep searches the files under the panel's
+f / in a panel, or F9 → Command → Find file…: ripgrep searches the files under the panel's
 directory, local or on a host, for the text of the first field, among those the globs of the second
 let through, again as either changes, the check box switches, or Alt+r; with no text it lists the
 files. It is a dialog: two fields, a check box, the rows, and the buttons Go to, View, Edit, and
 Cancel, as in the results of mc's Find File, which, as Far's Find file, asks for a mask and a text
 in a dialog first. Its other mode, Files and dirs, a radio button above the fields, finds files and
-directories by name with fd, and Go to goes into a directory. Its focus on a check box, the rows, or
-a button, it falls back to `dialog`, whose motions move the cursor of the rows while they have the
-focus, and Tab leaves them. F3, F4, and the switches of regular expressions and case, VS Code's
-keys, work wherever the focus is: Alt+r takes the text as it is or as a regular expression,
-starting from the search mode (`ui.search_mode`, where fzf is regex), and the glyph after Text says
-which. yazi's s and S find with fd and rg, and show the result as a directory of its own.
+directories by name with fd, and Go to goes into a directory; f f, or F9 → Command → Find files and
+dirs…, opens the dialog in it. Its focus on a check box, the rows, or a button, it falls back to
+`dialog`, whose motions move the cursor of the rows while they have the focus, and Tab leaves them.
+F3, F4, and the switches of regular expressions and case, VS Code's keys, work wherever the focus
+is: Alt+r takes the text as it is or as a regular expression, starting from the search mode
+(`ui.search_mode`, where fzf is regex), and the glyph after Text says which. yazi's s and S find
+with fd and rg, and show the result as a directory of its own.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |

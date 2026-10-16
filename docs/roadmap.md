@@ -238,6 +238,8 @@
       switches a check box, chooses a radio button, or presses a button, while typing too;
       Alt+1 … Alt+7 open the categories of the Configuration dialog, and Alt and a letter the
       sections of the help ([ADR 0033](adr/0033-letters-in-dialogs.md))
+- [x] Windows grow from their middle as they open and shrink back as they close, the menus of
+      F9 drop from their bar; `ui.animations` ([ADR 0034](adr/0034-animated-windows.md))
 
 ## Known issues
 

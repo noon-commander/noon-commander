@@ -63,6 +63,7 @@ use super::tasks::{HostHandle, JobEvent};
 use super::theme::{ColorDepth, Theme};
 use super::which_key;
 use super::workspaces::{self, WorkspacesEvent, WorkspacesWindow};
+use super::zoom::{self, Grows, Stage};
 use crate::about::{Build, Detected, Tool};
 use crate::i18n::fl;
 use crossterm::event::{KeyCode, KeyEvent};
@@ -808,6 +809,8 @@ pub(crate) struct App {
     /// The thumb of a scroll bar that the left button holds: what its bar scrolls, and by
     /// which of its rows.
     grab: Option<(Scrolled, u16)>,
+    /// The windows of the last frame, and those growing or shrinking.
+    stage: Stage,
     quit: bool,
     redraw: bool,
 }
@@ -885,14 +888,8 @@ impl App {
         };
         let (left, left_request) = panel();
         let (right, right_request) = panel();
-        let left_id = PanelId {
-            side: Side::Left,
-            tab: 1,
-        };
-        let right_id = PanelId {
-            side: Side::Right,
-            tab: 2,
-        };
+        let [left_id, right_id] =
+            [(Side::Left, 1), (Side::Right, 2)].map(|(side, tab)| PanelId { side, tab });
         let mut app = Self {
             left: Tabs::new(Tab::new(left_id, left)),
             right: Tabs::new(Tab::new(right_id, right)),
@@ -972,6 +969,7 @@ impl App {
             spots: Spots::default(),
             clicked: None,
             grab: None,
+            stage: Stage::default(),
             quit: false,
             redraw: false,
         };
@@ -1002,7 +1000,17 @@ impl App {
 
     /// What to hand the terminal to now, with the panels hidden; resets the request.
     pub(crate) fn take_handover(&mut self) -> Option<Handover> {
-        self.handover.take()
+        let handover = self.handover.take();
+        if handover.is_some() {
+            // The windows were there before the terminal went; they come back as they were.
+            self.stage.settle();
+        }
+        handover
+    }
+
+    /// When the next frame of a window growing or shrinking is due, if one is.
+    pub(crate) fn frame_due(&self) -> Option<Instant> {
+        self.stage.due()
     }
 
     /// Takes pasted text: the command line gets all of it, line breaks included, and runs
@@ -6500,12 +6508,21 @@ impl App {
     }
 
     /// Two panels side by side above the F-key bar; the menu bar of F9 above them with
-    /// `ui.menu_bar`, else over their top line while a menu is open.
-    pub(crate) fn render(&mut self, frame: &mut Frame<'_>, now: SystemTime, tz: &TimeZone) {
+    /// `ui.menu_bar`, else over their top line while a menu is open. Dates are as of `now`;
+    /// windows that open or close grow or shrink as of `at`, with `ui.animations`.
+    pub(crate) fn render(
+        &mut self,
+        frame: &mut Frame<'_>,
+        (now, at): (SystemTime, Instant),
+        tz: &TimeZone,
+    ) {
         self.spots = Spots::default();
         let always = self.config.ui.menu_bar == MenuBar::Always;
         let bar_height = u16::from(always);
         let screen = frame.area();
+        let mut stage = std::mem::take(&mut self.stage);
+        let scene = (screen, self.viewing.is_some());
+        stage.begin(self.config.ui.animations, scene, &self.theme, at);
         let prompt = self.command_prompt(screen.width);
         let prompt_text = cells::text_of(&prompt);
         let line_height = self.line_height(&prompt_text, screen);
@@ -6573,45 +6590,83 @@ impl App {
         if always {
             self.spots.menu_bar = pulldown::render_idle(frame, menu_bar, &self.theme);
         }
-        self.render_pulldown(frame, menu_bar);
+        self.render_pulldown(frame, menu_bar, &mut stage);
         if self.viewing.is_none() {
             // On the menu bar, or on the top line of the panels without it.
             self.render_jobs(frame, menu_bar);
-            // The menus of a panel, over it.
-            let over = |side| match side {
-                Side::Left => left,
-                Side::Right => right,
-            };
-            if let Some(menu) = &mut self.menu {
-                let area = over(menu.side());
-                menu.render(frame, area, &self.theme, self.decor, &hosts, self.tick);
-            }
-            if let Some(menu) = &mut self.tab_menu {
-                menu.render(frame, over(menu.side()), &self.theme);
-            }
-            if let Some(jump) = &mut self.jump {
-                jump.render(frame, panels, &self.theme);
-            }
+            self.render_menus(frame, ([left, right], panels), &hosts, &mut stage);
         }
-        self.render_windows(frame, panels);
+        self.render_windows(frame, panels, &mut stage);
         self.render_command_choices(frame, command_line, &prompt_text);
         if let Some(window) = &mut self.key_hints {
-            window.render(frame, panels, &self.theme);
+            stage.show(
+                frame,
+                (zoom::Window::KeyHints, Grows::FromMiddle),
+                |frame| {
+                    window.render(frame, panels, &self.theme);
+                },
+            );
         }
+        stage.end(frame);
+        self.stage = stage;
         if let Some(hints) = &self.hints {
             which_key::render(frame, panels, hints, &self.theme);
         }
     }
 
-    /// The pull-down menu of F9, if it is open: its bar at `menu_bar`, its menu below.
-    fn render_pulldown(&self, frame: &mut Frame<'_>, menu_bar: Rect) {
+    /// The menus of a panel, over the panel on its side of `sides`, and the zoxide window over
+    /// `panels`; they grow and shrink on `stage`.
+    fn render_menus(
+        &mut self,
+        frame: &mut Frame<'_>,
+        ([left, right], panels): ([Rect; 2], Rect),
+        hosts: &dyn Fn(&str) -> HostState,
+        stage: &mut Stage,
+    ) {
+        let over = |side| match side {
+            Side::Left => left,
+            Side::Right => right,
+        };
+        let (theme, decor, tick) = (&self.theme, self.decor, self.tick);
+        if let Some(menu) = &mut self.menu {
+            let side = menu.side();
+            stage.show(
+                frame,
+                (zoom::Window::Menu(side), Grows::FromMiddle),
+                |frame| {
+                    menu.render(frame, over(side), theme, decor, hosts, tick);
+                },
+            );
+        }
+        if let Some(menu) = &mut self.tab_menu {
+            let side = menu.side();
+            stage.show(
+                frame,
+                (zoom::Window::TabMenu(side), Grows::FromMiddle),
+                |frame| {
+                    menu.render(frame, over(side), theme);
+                },
+            );
+        }
+        if let Some(jump) = &mut self.jump {
+            stage.show(frame, (zoom::Window::Jump, Grows::FromMiddle), |frame| {
+                jump.render(frame, panels, theme);
+            });
+        }
+    }
+
+    /// The pull-down menu of F9, if it is open: its bar at `menu_bar`, its menu below, which
+    /// drops from it on `stage`.
+    fn render_pulldown(&self, frame: &mut Frame<'_>, menu_bar: Rect, stage: &mut Stage) {
         if let Some(pulldown) = &self.pulldown {
             let screen = Rect {
                 height: frame.area().height.saturating_sub(1),
                 ..frame.area()
             };
-            pulldown.render(frame, (menu_bar, screen), &self.theme, &|command| {
-                self.command_status(command)
+            stage.show(frame, (zoom::Window::PullDown, Grows::Down), |frame| {
+                pulldown.render(frame, (menu_bar, screen), &self.theme, &|command| {
+                    self.command_status(command)
+                });
             });
         }
     }
@@ -6650,36 +6705,63 @@ impl App {
     }
 
     /// The windows over `panels`, those in front last: the workspaces, the Configuration
-    /// dialog, the help, the jobs, the checksums, and the dialogs.
-    fn render_windows(&mut self, frame: &mut Frame<'_>, panels: Rect) {
+    /// dialog, the help, the jobs, the checksums, and the dialogs; they grow and shrink on
+    /// `stage`.
+    fn render_windows(&mut self, frame: &mut Frame<'_>, panels: Rect, stage: &mut Stage) {
+        let middle = |window| (window, Grows::FromMiddle);
+        let theme = &self.theme;
         if let Some(window) = &mut self.workspaces_window {
-            window.render(frame, panels, &self.theme);
+            stage.show(frame, middle(zoom::Window::Workspaces), |frame| {
+                window.render(frame, panels, theme);
+            });
         }
         if let Some(window) = &mut self.history_window {
-            window.render(frame, panels, &self.theme);
+            stage.show(frame, middle(zoom::Window::History), |frame| {
+                window.render(frame, panels, theme);
+            });
         }
         if let Some(window) = &mut self.find
             && self.viewing.is_none()
         {
-            window.render(frame, panels, &self.theme, self.tick);
+            let tick = self.tick;
+            stage.show(frame, middle(zoom::Window::Find), |frame| {
+                window.render(frame, panels, theme, tick);
+            });
         }
         if let Some(configuration) = &mut self.configuration {
-            configuration.render(frame, panels, &self.theme);
+            stage.show(frame, middle(zoom::Window::Configuration), |frame| {
+                configuration.render(frame, panels, theme);
+            });
         }
         if let Some(help) = &mut self.help {
-            help.render(frame, panels, &self.theme);
+            stage.show(frame, middle(zoom::Window::Help), |frame| {
+                help.render(frame, panels, theme);
+            });
         }
         if let Some(list) = &self.jobs_list {
-            list.render(frame, panels, &self.theme, &self.job_rows());
+            let rows = self.job_rows();
+            stage.show(frame, middle(zoom::Window::JobsList), |frame| {
+                list.render(frame, panels, theme, &rows);
+            });
         }
         if let Some(job) = self.in_front() {
-            job.view.render(frame, panels, &self.theme, Instant::now());
+            stage.show(frame, middle(zoom::Window::Job(job.id)), |frame| {
+                job.view.render(frame, panels, theme, Instant::now());
+            });
         }
         if let Some(results) = self.results.front() {
-            results.window.render(frame, panels, &self.theme);
+            stage.show(frame, middle(zoom::Window::Results(results.id)), |frame| {
+                results.window.render(frame, panels, theme);
+            });
         }
         if let Some(open) = self.dialogs.front() {
-            open.dialog.render(frame, panels, &self.theme);
+            stage.show(
+                frame,
+                middle(zoom::Window::Dialog(open.dialog.id())),
+                |frame| {
+                    open.dialog.render(frame, panels, theme);
+                },
+            );
             if let Some(choices) = choices_for(&mut self.completion, Completes::Field)
                 && let Some(field) = open.dialog.field_area()
             {
@@ -7351,10 +7433,12 @@ mod tests {
             .collect()
     }
 
-    /// Settings with mc's markers, which read better in tests than icons.
+    /// Settings with mc's markers, which read better in tests than icons, and windows that show
+    /// whole at once, which tests of their own animate.
     fn ui() -> UiConfig {
         UiConfig {
             icons: false,
+            animations: false,
             ..UiConfig::default()
         }
     }
@@ -7465,12 +7549,62 @@ mod tests {
     }
 
     fn screen_of(app: &mut App, height: u16) -> String {
+        screen_at(app, height, Instant::now())
+    }
+
+    /// The screen `height` rows tall, with windows as they grow or shrink `at`.
+    fn screen_at(app: &mut App, height: u16, at: Instant) -> String {
         let mut terminal = Terminal::new(TestBackend::new(160, height)).unwrap();
         let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, now, &TimeZone::UTC))
+            .draw(|frame| app.render(frame, (now, at), &TimeZone::UTC))
             .unwrap();
         terminal.backend().to_string()
+    }
+
+    #[test]
+    fn windows_grow_as_they_open_and_shrink_as_they_close() {
+        let mut app = loaded();
+        app.config.ui.animations = true;
+        let start = Instant::now();
+        let at = |ms| start + Duration::from_millis(ms);
+        let panels = screen_at(&mut app, 12, at(0));
+        app.handle(action(Action::Help));
+        let growing = screen_at(&mut app, 12, at(1000));
+        let due = app.frame_due().unwrap();
+        assert!(due > at(1000) && due < at(2000), "{due:?}");
+        // Keys go to the window while it grows.
+        assert_eq!(app.context(), Context::Help);
+        let whole = screen_at(&mut app, 12, at(2000));
+        assert_ne!(growing, whole);
+        assert_eq!(app.frame_due(), None);
+        assert_eq!(screen_at(&mut app, 12, at(2500)), whole, "stays as it is");
+
+        app.handle(action(Action::Cancel));
+        let shrinking = screen_at(&mut app, 12, at(3000));
+        assert_ne!(shrinking, panels);
+        assert!(app.frame_due().is_some());
+        assert_eq!(screen_at(&mut app, 12, at(4000)), panels);
+        assert_eq!(app.frame_due(), None);
+
+        // A menu of F9 drops from its bar, which shows at once.
+        app.handle(action(Action::PullDown));
+        screen_at(&mut app, 12, at(5000));
+        app.handle(action(Action::Down));
+        let dropping = screen_at(&mut app, 12, at(6000));
+        assert!(dropping.contains("Command"), "{dropping}");
+        assert!(!dropping.contains("Sort by name"), "{dropping}");
+        let dropped = screen_at(&mut app, 12, at(7000));
+        assert!(dropped.contains("Sort by name"), "{dropped}");
+        app.handle(action(Action::Cancel));
+        app.handle(action(Action::Cancel));
+        screen_at(&mut app, 12, at(8000));
+
+        // Turned off, windows come and go at once.
+        app.config.ui.animations = false;
+        app.handle(action(Action::Help));
+        assert_eq!(screen_at(&mut app, 12, at(9000)), whole);
+        assert_eq!(app.frame_due(), None);
     }
 
     #[test]
@@ -8563,7 +8697,7 @@ mod tests {
         let mut terminal = Terminal::new(TestBackend::new(160, 12)).unwrap();
         let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, now, &TimeZone::UTC))
+            .draw(|frame| app.render(frame, (now, Instant::now()), &TimeZone::UTC))
             .unwrap();
         let at = super::super::mouse::find(terminal.backend().buffer(), text);
         (at.x, at.y)
@@ -10127,7 +10261,7 @@ mod tests {
         let mut terminal = Terminal::new(TestBackend::new(60, 8)).unwrap();
         let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, now, &TimeZone::UTC))
+            .draw(|frame| app.render(frame, (now, Instant::now()), &TimeZone::UTC))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
@@ -11394,7 +11528,7 @@ mod tests {
         let mut terminal = Terminal::new(TestBackend::new(80, 6)).unwrap();
         let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, now, &TimeZone::UTC))
+            .draw(|frame| app.render(frame, (now, Instant::now()), &TimeZone::UTC))
             .unwrap();
         let buffer = terminal.backend().buffer();
         // `10Quit` starts at column 72; its slot runs to the edge.
@@ -12235,7 +12369,7 @@ mod tests {
         let mut terminal = Terminal::new(TestBackend::new(60, 6)).unwrap();
         let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, now, &TimeZone::UTC))
+            .draw(|frame| app.render(frame, (now, Instant::now()), &TimeZone::UTC))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
@@ -12250,7 +12384,7 @@ mod tests {
         let mut terminal = Terminal::new(TestBackend::new(100, 7)).unwrap();
         let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, now, &TimeZone::UTC))
+            .draw(|frame| app.render(frame, (now, Instant::now()), &TimeZone::UTC))
             .unwrap();
         let text = terminal.backend().to_string();
         let top = text.lines().next().unwrap_or_default();
@@ -12290,7 +12424,7 @@ mod tests {
         let mut terminal = Terminal::new(TestBackend::new(80, 4)).unwrap();
         let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, now, &TimeZone::UTC))
+            .draw(|frame| app.render(frame, (now, Instant::now()), &TimeZone::UTC))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
@@ -12931,7 +13065,7 @@ mod tests {
         let mut terminal = Terminal::new(TestBackend::new(width, 9)).unwrap();
         let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, now, &TimeZone::UTC))
+            .draw(|frame| app.render(frame, (now, Instant::now()), &TimeZone::UTC))
             .unwrap();
         let buffer = terminal.backend().buffer();
         let y = buffer.area.height - 2;
@@ -13054,7 +13188,7 @@ mod tests {
         let mut terminal = Terminal::new(TestBackend::new(100, 9)).unwrap();
         let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, now, &TimeZone::UTC))
+            .draw(|frame| app.render(frame, (now, Instant::now()), &TimeZone::UTC))
             .unwrap();
         let buffer = terminal.backend().buffer();
         buffer

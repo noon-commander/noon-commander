@@ -1,6 +1,5 @@
 ---
 source: crates/noc/src/tui/configuration.rs
-assertion_line: 1874
 expression: "draw(&mut dialog, 72, 16)"
 ---
 "                                                                        "
@@ -8,12 +7,12 @@ expression: "draw(&mut dialog, 72, 16)"
 "  ║  󰍹 1 Interface    │ Language           auto                      ▲  "
 "  ║  󰓡 2 Transfers    │ Theme              < mc-classic >            █  "
 "  ║  󰣀 3 SSH          │ Borders            < Double ═ ║ ╔ >          █  "
-"  ║  󰋊 4 Volumes      │ Icons              [x]                       █  "
-"  ║  󰥨 5 zoxide       │ Show hidden files  [x]                       █  "
-"  ║  󰆍 6 Command line │ Search mode        < fzf >                   ░  "
-"  ║  󰍉 7 Search       │ Mouse              [x]                       ░  "
-"  ║                   │ Mouse wheel        3                         ░  "
-"  ║                   │ Terminal title     [x]                       ▼  "
+"  ║  󰋊 4 Volumes      │ Animations         [x]                       █  "
+"  ║  󰥨 5 zoxide       │ Icons              [x]                       █  "
+"  ║  󰆍 6 Command line │ Show hidden files  [x]                       ░  "
+"  ║  󰍉 7 Search       │ Search mode        < fzf >                   ░  "
+"  ║                   │ Mouse              [x]                       ░  "
+"  ║                   │ Mouse wheel        3                         ▼  "
 "  ╟───────────────────┴──────────────────────────────────────────────╢  "
 "  ║ Colors: mc-classic, as mc; terminal, the terminal's own; noon,   ║  "
 "  ║ from the logo, and catppuccin, each dark or light.               ║  "

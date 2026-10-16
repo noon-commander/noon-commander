@@ -40,6 +40,7 @@ enum Key {
     Language,
     Theme,
     Borders,
+    Animations,
     Icons,
     ShowHidden,
     SearchMode,
@@ -164,6 +165,7 @@ impl Setting {
                     _ => Borders::Double,
                 };
             }
+            Key::Animations => ui.animations = self.on(),
             Key::Icons => ui.icons = self.on(),
             Key::ShowHidden => ui.show_hidden = self.on(),
             Key::SearchMode => {
@@ -1167,6 +1169,11 @@ fn interface(config: &Config, themes: &[&str]) -> Category {
             ),
         ),
         Setting::new(
+            Key::Animations,
+            (fl!("config-animations"), fl!("config-animations-hint")),
+            Value::Toggle(ui.animations),
+        ),
+        Setting::new(
             Key::Icons,
             (fl!("config-icons"), fl!("config-icons-hint")),
             Value::Toggle(ui.icons),
@@ -1644,6 +1651,8 @@ mod tests {
         dialog.handle(action(Action::Toggle));
         dialog.handle(action(Action::Down));
         dialog.handle(action(Action::Toggle));
+        dialog.handle(action(Action::Down));
+        dialog.handle(action(Action::Toggle));
         for _ in 0..3 {
             dialog.handle(action(Action::Down));
         }
@@ -1682,6 +1691,7 @@ mod tests {
         expected.ui.language = "de".to_owned();
         expected.ui.theme = "terminal".to_owned();
         expected.ui.borders = Borders::Single;
+        expected.ui.animations = false;
         expected.ui.icons = false;
         expected.ui.tab_bar = TabBar::Frame;
         expected.ui.mouse = false;
@@ -1705,8 +1715,8 @@ mod tests {
     fn an_invalid_text_keeps_the_cursor_and_says_why() {
         let cases: [(usize, usize, &str, &str); 11] = [
             (0, 0, "?", "is not auto or a language tag"),
-            (0, 7, "0", "is not a step of the wheel"),
-            (0, 7, "pages", "is not a step of the wheel"),
+            (0, 8, "0", "is not a step of the wheel"),
+            (0, 8, "pages", "is not a step of the wheel"),
             (1, 1, "x", "is not a number of jobs"),
             (2, 2, "-F other_config", "Invalid extra ssh arguments"),
             (2, 0, "", "The ssh program cannot be empty"),
@@ -1920,12 +1930,12 @@ mod tests {
                 .collect();
             (underlined, terminal.backend().to_string())
         };
-        assert_eq!(underlined(76).0, "1L2T3B4I5h6S7MweKdna");
+        assert_eq!(underlined(76).0, "1L2T3B4o5I6h7SMweKdna");
         // Names cut short keep the letter before the cut, as Command line its 6 and Show hidden
         // files its h, and lose one after it, as Key hints delay its d.
         let (letters, screen) = underlined(40);
         assert!(screen.contains(" 6 Co"), "{screen}");
-        assert_eq!(letters, "1L2T3B4I5h6S7MweKna", "{screen}");
+        assert_eq!(letters, "1L2T3B4o5I6h7SMweKna", "{screen}");
     }
 
     #[test]
@@ -1958,7 +1968,7 @@ mod tests {
         let (old, new) = dialog.handle(Resolved::Hotkey('i')).change.unwrap();
         assert_eq!((old.ui.language.as_str(), old.ui.icons), ("auto", true));
         assert_eq!((new.ui.language.as_str(), new.ui.icons), ("de", false));
-        assert_eq!((dialog.focus, dialog.row), (Focus::Settings, 3));
+        assert_eq!((dialog.focus, dialog.row), (Focus::Settings, 4));
         // A choice goes round, in either case of its letter.
         let (_, new) = dialog.handle(Resolved::Hotkey('T')).change.unwrap();
         assert_eq!((new.ui.theme.as_str(), dialog.row), ("terminal", 1));
@@ -1967,7 +1977,7 @@ mod tests {
         // A text field gets the focus in Insert mode, from the categories too.
         dialog.handle(action(Action::PrevField));
         assert_eq!(dialog.handle(Resolved::Hotkey('w')), ConfigEvent::default());
-        assert_eq!((dialog.focus, dialog.row), (Focus::Settings, 7));
+        assert_eq!((dialog.focus, dialog.row), (Focus::Settings, 8));
         assert_eq!(
             (dialog.context(), dialog.mode()),
             (Context::DialogInput, Mode::Insert)
@@ -1976,18 +1986,18 @@ mod tests {
         dialog.handle(Resolved::Hotkey('w'));
         assert_eq!(
             (dialog.row, dialog.mode()),
-            (7, Mode::Insert),
+            (8, Mode::Insert),
             "its own letter"
         );
         // From a field in Normal mode, the next one is in Insert mode all the same.
         dialog.handle(action(Action::NormalMode));
         dialog.handle(Resolved::Hotkey('d'));
-        assert_eq!((dialog.row, dialog.mode()), (10, Mode::Insert));
+        assert_eq!((dialog.row, dialog.mode()), (11, Mode::Insert));
         // Leaving a field that holds something invalid keeps the cursor and says why.
         dialog.handle(Resolved::Hotkey('w'));
         typed(&mut dialog, "0");
         assert_eq!(dialog.handle(Resolved::Hotkey('b')), ConfigEvent::default());
-        assert_eq!((dialog.row, dialog.mode()), (7, Mode::Insert));
+        assert_eq!((dialog.row, dialog.mode()), (8, Mode::Insert));
         assert!(dialog.error.is_some());
         assert_eq!(dialog.handle(Resolved::Hotkey('2')), ConfigEvent::default());
         assert_eq!((dialog.category, dialog.focus), (0, Focus::Settings));

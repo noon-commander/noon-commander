@@ -884,6 +884,7 @@ tab_bar = "line"                 # tabs on a line above the panels; "frame": in 
 terminal_title = true            # the window's title shows the active panel's directory
 which_key = true                 # after g, Ctrl+w, …: the keys that can follow, as which-key
 which_key_delay_ms = 500         # how long after such a key the hints show
+animations = true                # frames of windows grow as they open and shrink as they close
 
 [transfer]
 atomic_upload = true             # copies go to a hidden temporary name, then are renamed
@@ -1582,6 +1583,19 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   icons, mc's markers: `/` directory, `~` link to a directory, `@` link, `!` broken link, `*`
   executable, `|` FIFO, `=` socket, `-` character device, `+` block device and volume; the
   home directory is `~`.
+- **Animated windows.** With `ui.animations` (the default;
+  [ADR 0034](adr/0034-animated-windows.md)), a window's frame grows from its middle as it
+  opens and shrinks back as it closes: six sizes, 20 ms each, empty and in the window's colors,
+  with its shadow; a menu of F9 drops from its bar. `tui/zoom.rs` does it on top of rendering:
+  `App::render` draws each window through `Stage::show` under a `zoom::Window` that tells it
+  apart (a dialog by its id, a job by its own), which compares the screen before and after it
+  to find the frame (its first new top left corner, and the blank cells drawn around it); a
+  window new since the last frame grows, its cells under it put back from before, and one of
+  the last frame that is gone shrinks over everything at the end, unless another opened in its
+  place. Keys reach the window at once; only the screen waits. The event loop wakes for the
+  next size at `App::frame_due`. The first frame, a new size of the screen, the viewer coming
+  or going, and the terminal coming back from another program show their windows at once.
+  Completion lists and the key hints of which-key appear at once, as they come while typing.
 - **Glyphs.** Every special character the UI draws is in `tui/glyphs.rs`: `Glyphs::NERD` and
   `Glyphs::PLAIN`, which `ui.icons` picks and the theme carries (`Theme.glyphs`), with the icons
   and markers of kinds, hosts, and volumes, the glyph of root, the scroll bars, the marks of text

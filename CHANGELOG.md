@@ -9,6 +9,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Windows grow from their middle as they open and shrink back as they close, their empty frame
+  in a few sizes over about 120 ms; the menus of F9 drop from their bar. Every window with a
+  frame does it: dialogs, menus, the help, the Configuration dialog, the search of a tree, jobs,
+  and the lists. Keys work on a window at once. `ui.animations` (on) turns it off, a check box
+  under Interface in the Configuration dialog.
 - Who is where: the prompt of the command line is a shell's, `alice@mac:~/src $` locally and
   `deploy@web:/var/www $` on a host, with the user from `ssh -G`, and the line of the mode shows
   `alice@mac` of the active panel left of the keys typed. Where the user is root, `user@host` is

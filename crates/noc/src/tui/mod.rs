@@ -40,6 +40,7 @@ mod tasks;
 mod theme;
 mod which_key;
 mod workspaces;
+mod zoom;
 
 use std::io::{self, IsTerminal as _};
 use std::path::{Path, PathBuf};
@@ -211,7 +212,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
         if let Err(error) = take_terminal_requests(&mut terminal, &mut app, &mut asked) {
             break Err(error.into());
         }
-        let now = SystemTime::now();
+        let now = (SystemTime::now(), Instant::now());
         take_hints(&mut app, &mut keys);
         if !std::mem::take(&mut idle)
             && let Err(error) = terminal.draw(|frame| app.render(frame, now, &tz))
@@ -219,6 +220,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
             break Err(error.into());
         }
         let timer = key_timer(&app, &keys);
+        let frame_due = app.frame_due();
         tokio::select! {
             event = events.next() => match event {
                 Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => {
@@ -242,6 +244,8 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
                 }
             }
             _ = spinner.tick(), if app.animates() => app.tick(),
+            // A window growing or shrinking needs its next frame.
+            () = sleep_until(frame_due) => {}
             _ = terminate.recv() => break Ok(()),
             _ = hangup.recv() => break Ok(()),
             _ = interrupt.recv() => break Ok(()),

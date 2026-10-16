@@ -183,6 +183,9 @@ pub struct UiConfig {
     /// How long after such a key the keys that can follow it show, in milliseconds.
     /// Default: `500`.
     pub which_key_delay_ms: u16,
+    /// Whether a window's frame grows from its middle as it opens and shrinks back as it
+    /// closes. Default: `true`.
+    pub animations: bool,
 }
 
 impl Default for UiConfig {
@@ -201,6 +204,7 @@ impl Default for UiConfig {
             terminal_title: true,
             which_key: true,
             which_key_delay_ms: 500,
+            animations: true,
         }
     }
 }
@@ -529,6 +533,7 @@ mod tests {
         terminal_title = false
         which_key = false
         which_key_delay_ms = 200
+        animations = false
 
         [transfer]
         atomic_upload = false
@@ -577,6 +582,7 @@ mod tests {
                 terminal_title: false,
                 which_key: false,
                 which_key_delay_ms: 200,
+                animations: false,
             },
             transfer: TransferConfig {
                 atomic_upload: false,
@@ -623,6 +629,7 @@ mod tests {
         assert!(config.ui.terminal_title);
         assert!(config.ui.which_key);
         assert_eq!(config.ui.which_key_delay_ms, 500);
+        assert!(config.ui.animations);
         assert!(config.transfer.atomic_upload);
         assert_eq!(config.transfer.parallel_jobs.get(), 2);
         assert_eq!(config.zoxide.program, Path::new("zoxide"));
@@ -840,6 +847,7 @@ mod tests {
         assert!(table["ui"].get("terminal_title").is_some());
         assert!(table["ui"].get("which_key").is_some());
         assert!(table["ui"].get("which_key_delay_ms").is_some());
+        assert!(table["ui"].get("animations").is_some());
         assert!(table["zoxide"].get("program").is_some());
         assert!(table["zoxide"].get("record").is_some());
         assert!(table["shell"].get("history_size").is_some());

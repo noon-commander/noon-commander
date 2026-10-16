@@ -950,17 +950,25 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 
 - **Keys.** The keymap is vim's, in its modes, with mc's F-keys ([ADR 0022](adr/0022-vim-modes.md));
   see the keymap below. The panels take keys in Normal mode, as vim's buffers do; text fields, quick
-  search, and the command line in Insert mode. The line above the F-key bar shows the mode, `--
-  NORMAL --`, `-- INSERT --`, or `-- VISUAL --`, on the left, and the count, register, operator,
-  or keys of a command typed so far on the right, as typed, or how much Visual mode selects, as
-  vim's `showmode` and `showcmd` do, though vim's shows no mode in Normal mode nor while it
-  searches; after Ctrl+o it shows `-- (insert) --`. A message, such as
-  that a search went round, takes the place of the mode until the next key, as vim's messages do
-  on its command line. Left of the cells of what is typed it shows who is where in the active
-  panel, `alice@mac` or `deploy@web`, as long as it fits after the mode or the message
-  ([ADR 0031](adr/0031-who-and-where-on-screen.md)). The command line takes the line while
-  open. The cursor is a bar in Insert mode and a block in the others (DECSCUSR), and the terminal's
-  own shape comes back whenever another program gets the terminal, and on quitting.
+  search, and the command line in Insert mode. The line above the F-key bar shows on the left the
+  mode, in bold capitals as lualine shows it, `NORMAL`, `INSERT`, `VISUAL`, or `VISUAL LINE`, and
+  after Ctrl+o `(insert)`; then, after `·`, the kind of window that has the keys, named by its
+  keymap context so that it says which keys work ([ADR 0032](adr/0032-line-of-the-mode.md)):
+  `Quick search`, `Rename`, `List` for the location menu, the tab menu, the zoxide window, the
+  workspaces, the command history, and the list of the key hints, `Menu` for F9, `Dialog` for
+  every dialog, the Configuration dialog, the search of a tree, the jobs, and the checksums,
+  `Help`, and `Viewer`; `window_kind` maps every context. The panels show the mode alone. Where
+  the line is short the kind goes first, then the mode is cut. On the right it shows the count,
+  register, operator, or keys of a command typed so far, as typed, or how much Visual mode
+  selects, as vim's `showcmd` does. Unlike vim's `showmode`, it shows every mode everywhere,
+  Normal mode and quick search too. A message, such as that a search went round, takes the place
+  of the mode until the next key, as vim's messages do on its command line. Left of the cells of
+  what is typed it shows who is where in the active panel, `alice@mac` or `deploy@web`, as long
+  as it fits after the mode or the message ([ADR 0031](adr/0031-who-and-where-on-screen.md)). The
+  command line takes the line while it has the keys; a window over it, such as the command
+  history of `q :`, takes the line back. The cursor is a bar in Insert mode and a block in the
+  others (DECSCUSR), and the terminal's own shape comes back whenever another program gets the
+  terminal, and on quitting.
 - **Panels.** Each panel lists a directory with `..` first (but in a `/`), then directories,
   then files, by name ignoring case; columns are name, size, and modification time (local time,
   `ls -l` style), and narrow panels drop the time, then the size. Each panel has its own sort order:
@@ -1031,7 +1039,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   command of Visual mode, as many as it took times the count, as vim's `resel_VIsual`; `o` goes to
   the other end, `g v` selects the rows selected last again, and Esc ends it, as does the key of `v`
   and `V` that started it, while the other switches its kind, as vim's; after `V` the line of the
-  mode says `-- VISUAL LINE --`. Space marks the rows selected; `y`, `x`, `d`, `D`, `X`, F5, F6, F8,
+  mode says `VISUAL LINE`. Space marks the rows selected; `y`, `x`, `d`, `D`, `X`, F5, F6, F8,
   `f #`, and `g x` make them the marked entries and act on them, as on any marks, and put the
   cursor on the first row, as vim's operators do. The line of the mode shows how many entries it
   selects, without `..`. The other F-keys, Ctrl+w to the other panel, and the commands of the
@@ -1548,13 +1556,13 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   and markers of kinds, hosts, and volumes, the glyph of root, the scroll bars, the marks of text
   cut short, and the marks of the pull-down menu; `Lines::DOUBLE` and `Lines::SINGLE` by
   `ui.borders`, with the tees that join lines to frames; and the characters that are the same either
-  way: the single line, the line between columns, the spinner, the arrows of the sort order, the
-  checks of checksums, the progress bar, the marks of dialogs' radio buttons, check boxes, and
-  secrets, and the icons of the Configuration dialog's categories. `decor.rs` picks among them by
-  kind, and asks devicons for files. `noc-scroll`, `noc-text`, and `noc-viewer` hold none: they take
-  what they draw with as parameters (`BarGlyphs`, `Marks`, the viewer's `Styles`). `just glyphs`,
-  part of `just lint`, fails on a special character written in Rust code that draws, outside
-  `glyphs.rs` and the tests.
+  way: the single line, the line between columns, the `·` after the mode on its line, the spinner,
+  the arrows of the sort order, the checks of checksums, the progress bar, the marks of dialogs'
+  radio buttons, check boxes, and secrets, and the icons of the Configuration dialog's categories.
+  `decor.rs` picks among them by kind, and asks devicons for files. `noc-scroll`, `noc-text`, and
+  `noc-viewer` hold none: they take what they draw with as parameters (`BarGlyphs`, `Marks`, the
+  viewer's `Styles`). `just glyphs`, part of `just lint`, fails on a special character written in
+  Rust code that draws, outside `glyphs.rs` and the tests.
 
 ## Releases
 

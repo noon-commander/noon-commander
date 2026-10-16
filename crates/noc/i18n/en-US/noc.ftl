@@ -29,16 +29,34 @@ fkey-pulldown = PullDn
 # Closes the tab under the cursor in the tab menu.
 fkey-close-tab = Close
 
-## The mode keys are typed in, as vim shows it on the line above the F-key bar (src/tui/app),
-## in every mode. Prefix: mode-.
+## The mode keys are typed in, on the line above the F-key bar (src/tui/app), as lualine shows
+## it: in capitals, then what kind of window has the keys. Prefix: mode-.
 
-mode-normal = -- NORMAL --
-mode-insert = -- INSERT --
-mode-visual = -- VISUAL --
-mode-visual-line = -- VISUAL LINE --
+mode-normal = NORMAL
+mode-insert = INSERT
+mode-visual = VISUAL
+mode-visual-line = VISUAL LINE
 # After Ctrl+o in Insert mode, for the one command of Normal mode, as vim says it.
-mode-insert-once = -- (insert) --
-mode-insert-visual = -- (insert) VISUAL --
+mode-insert-once = (insert)
+mode-insert-visual = (insert) VISUAL
+
+## What kind of window has the keys, after the mode on its line (src/tui/app), by the keys
+## that work there: INSERT · Quick search, NORMAL · List. The panels go by the mode alone.
+## Prefix: window-.
+
+window-quick-search = Quick search
+# The name of an entry, edited in its row, r or Shift+F6.
+window-rename = Rename
+# The windows that list rows to choose from: the location menu, the tab menu, the zoxide window,
+# the workspaces, the command history, and the list of the key hints.
+window-list = List
+# The pull-down menu of F9.
+window-menu = Menu
+# Every dialog: questions, forms, errors, prompts of ssh, the Configuration dialog, the search
+# of a whole tree, the jobs, and the checksums.
+window-dialog = Dialog
+window-help = Help
+window-viewer = Viewer
 
 ## Messages on the line of the mode, in its place until the next key, as vim's on its command
 ## line (src/tui/app): n or N with no search before, a search that goes on round the end of the
@@ -780,7 +798,7 @@ help-tip-modes = Modes
 help-tip-modes-keys = Keys are vim's, in its modes; the F-keys of the panels are mc's, in Normal and Visual mode and in quick search.
 help-tip-modes-fields = Text fields open in Insert mode, where characters are text; Esc goes to Normal mode, and Esc there closes.
 help-tip-modes-close = Quick search and the command line close on Esc, as vim's search and command line do.
-help-tip-modes-line = The line above the F-key bar says -- NORMAL --, -- INSERT --, and -- VISUAL --, and -- (insert) -- for the one command of Normal mode after Ctrl+o; the cursor is a bar in Insert mode.
+help-tip-modes-line = The line above the F-key bar says the mode, NORMAL, INSERT, or VISUAL, and the window that has the keys, as INSERT · Quick search; (insert) is the one command of Normal mode after Ctrl+o. The cursor is a bar in Insert mode.
 help-tip-modes-alt = Alt and a key stand for Esc and the key in Insert and Visual mode and in the panels, but on a password.
 help-tip-modes-cancel = Ctrl+c closes or cancels in every mode.
 help-tip-counts = Counts and registers

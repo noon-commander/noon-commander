@@ -196,7 +196,7 @@
       a line break
 - [ ] The command line shows its mode and the command typed, as vim's window of the command
       line does: Normal and Visual mode after Ctrl+f, an operator or a register that waits
-      (`2d`, `"a`), and `-- (insert) --` after Ctrl+o
+      (`2d`, `"a`), and `(insert)` after Ctrl+o
 - [ ] Ctrl+v and a code types the character of that code, as vim's: `065`, `x41`, `o101`,
       `u20ac`, `U0001F600`
 - [ ] `:` and `!` in Visual mode in the panels open the command line for the rows selected, as

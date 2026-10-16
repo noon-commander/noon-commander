@@ -102,12 +102,11 @@ no registers.
   free in every mode, and is no prefix of tmux or screen. Ctrl+k again while the hints show gives
   them the keys, as `K K` gives nvim's hover window the keys: a list of every sequence whole, to
   filter with `/` and run from with Enter; Esc closes it.
-- **The mode shows** as vim's `showmode` and `showcmd` show it, on a line above the F-key bar
-  that the command line takes when open: `-- NORMAL --`, `-- INSERT --`, or `-- VISUAL --` on
-  the left, the count, register, operator, or keys of the pending command on the right. Unlike
-  vim's, it shows Normal mode and quick search too, so that the line always says which mode keys
-  go to. The cursor is a bar in Insert mode and a block in the others, and the terminal's own
-  shape comes back on leaving.
+- **The mode shows** on a line above the F-key bar that the command line takes while it has the
+  keys: on the left the mode and the kind of window that has the keys, `INSERT · Quick search`
+  ([ADR 0032](0032-line-of-the-mode.md)); the count, register, operator, or keys of the pending
+  command on the right, as vim's `showcmd`. The cursor is a bar in Insert mode and a block in the
+  others, and the terminal's own shape comes back on leaving.
 
 ## Consequences
 

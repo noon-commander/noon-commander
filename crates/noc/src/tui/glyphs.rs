@@ -210,6 +210,10 @@ pub(crate) const GAUGE_LEFT: &str = "░";
 /// Where a command's output ended without a newline, as zsh marks it.
 pub(crate) const NO_NEWLINE: &str = "⏎";
 
+/// On the line of the mode, between the mode and the window that has the keys, as lualine
+/// parts its sections.
+pub(crate) const MODE_SEPARATOR: char = '·';
+
 /// In a radio button, a check box, and a secret field, as mc draws them.
 pub(crate) const CHOSEN: char = '*';
 pub(crate) const CHECKED: char = 'x';

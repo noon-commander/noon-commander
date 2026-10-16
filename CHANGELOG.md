@@ -135,8 +135,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   to `search_mode`.
 - Quick search shows the text as typed, capitals too, rather than in lower case; in the plain
   mode it still ignores case.
-- The line of the mode says `-- NORMAL --` in Normal mode and `-- INSERT --` in quick search too,
-  rather than nothing, so that it always says which mode keys go to.
+- The line of the mode says the mode everywhere, as lualine does, rather than vim's `-- INSERT --`
+  in some places and nothing in others: `NORMAL`, `INSERT`, `VISUAL`, then the kind of window that
+  has the keys, which says which keys work there: `Quick search`, `Rename`, `List` for the menus of
+  places and tabs and the other lists, `Menu` for F9, `Dialog` for every dialog, `Help`, and
+  `Viewer`, as `INSERT · Quick search` or `NORMAL · List`; the panels show the mode alone. The
+  command line takes the line only while it has the keys: the command history of `q :` over it
+  shows `NORMAL · List`.
 
 ### Fixed
 

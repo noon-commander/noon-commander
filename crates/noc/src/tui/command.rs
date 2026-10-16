@@ -559,15 +559,15 @@ impl CommandLine {
         };
     }
 
-    /// Draws the line in `area`, after `prompt`, and puts the cursor there if it has the keys.
-    /// Rows that do not fit leave the last column to a scroll bar drawn with `bar`.
+    /// Draws the line in `area`, after `prompt`, and puts the cursor there: it shows only while
+    /// it has the keys. Rows that do not fit leave the last column to a scroll bar drawn with
+    /// `bar`.
     pub(crate) fn render(
         &mut self,
         frame: &mut Frame<'_>,
         area: Rect,
         (prompt, style): (&[Span<'static>], Style),
         bar_glyphs: BarGlyphs,
-        focused: bool,
     ) {
         self.bar = None;
         if area.is_empty() {
@@ -632,7 +632,7 @@ impl CommandLine {
         }
         // A cursor scrolled off the screen by the scroll bar does not show.
         let shown = row.checked_sub(self.scroll).filter(|&shown| shown < height);
-        if let (true, Some(shown)) = (focused, shown) {
+        if let Some(shown) = shown {
             let x = u16::try_from(column).unwrap_or(u16::MAX);
             let y = u16::try_from(shown).unwrap_or(u16::MAX);
             frame.set_cursor_position(Position::new(
@@ -702,7 +702,7 @@ mod tests {
             .draw(|frame| {
                 let prompt = [Span::raw(prompt.to_owned())];
                 let text = (prompt.as_slice(), Style::default());
-                line.render(frame, frame.area(), text, Glyphs::PLAIN.scroll_bar, true);
+                line.render(frame, frame.area(), text, Glyphs::PLAIN.scroll_bar);
             })
             .unwrap();
         terminal.backend().to_string()

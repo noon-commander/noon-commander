@@ -6504,11 +6504,7 @@ impl App {
         let screen = frame.area();
         let prompt = self.command_prompt(screen.width);
         let prompt_text = cells::text_of(&prompt);
-        // As vim's command line, the line of the mode and of the command typed when no command
-        // is.
-        let line_height = self.command_line.as_ref().map_or(1, |line| {
-            line.height(&prompt_text, screen.width, screen.height)
-        });
+        let line_height = self.line_height(&prompt_text, screen);
         let [menu_bar, panels, full, command_line, key_bar] = Layout::vertical([
             Constraint::Length(bar_height),
             Constraint::Fill(1),
@@ -6691,6 +6687,9 @@ impl App {
     /// The list of completions over the command line in `line`, after `prompt`, if it shows:
     /// its rows start where the names completed start on the line.
     fn render_command_choices(&mut self, frame: &mut Frame<'_>, line: Rect, prompt: &str) {
+        if !self.typing_command() {
+            return;
+        }
         let Some(command_line) = &self.command_line else {
             return;
         };
@@ -6777,31 +6776,44 @@ impl App {
         frame.render_widget(Line::from(text), row);
     }
 
-    /// The command line in `area`, after `prompt`, if it is open; else the mode and what the
-    /// pending command has typed, on the line it takes.
-    fn render_command_line(&mut self, frame: &mut Frame<'_>, area: Rect, prompt: &[Span<'static>]) {
-        let focused = matches!(
-            self.context(),
-            Context::CommandLine | Context::CommandCompletion
-        );
-        match &mut self.command_line {
-            Some(line) => {
-                let bar = self.theme.glyphs.scroll_bar;
-                line.render(frame, area, (prompt, Style::default()), bar, focused);
-            }
-            None => self.render_mode(frame, area),
+    /// The rows above the F-key bar on `screen`, as vim's command line: the command line's,
+    /// after `prompt`, while it has the keys; else the line of the mode and of the command
+    /// typed.
+    fn line_height(&self, prompt: &str, screen: Rect) -> u16 {
+        match &self.command_line {
+            Some(line) if self.typing_command() => line.height(prompt, screen.width, screen.height),
+            _ => 1,
         }
     }
 
-    /// The mode, as vim's `showmode` shows it on the left of `area`, and what the pending
-    /// command has typed, as its `showcmd` shows it on the right. Every mode shows, so that the
-    /// line always says where keys go: Normal mode and quick search too, which vim's does not.
-    fn render_mode(&self, frame: &mut Frame<'_>, area: Rect) {
-        if area.is_empty() {
-            return;
+    /// Whether the command line is open and has the keys, and so takes the line of the mode.
+    fn typing_command(&self) -> bool {
+        self.command_line.is_some()
+            && matches!(
+                self.context(),
+                Context::CommandLine | Context::CommandCompletion
+            )
+    }
+
+    /// The command line in `area`, after `prompt`, while it has the keys; else the mode and
+    /// what the pending command has typed, on the line it takes.
+    fn render_command_line(&mut self, frame: &mut Frame<'_>, area: Rect, prompt: &[Span<'static>]) {
+        let typing = self.typing_command();
+        match &mut self.command_line {
+            Some(line) if typing => {
+                let bar = self.theme.glyphs.scroll_bar;
+                line.render(frame, area, (prompt, Style::default()), bar);
+            }
+            _ => self.render_mode(frame, area),
         }
-        let editor = self.focused_editor();
-        let once = editor.is_some_and(Editor::once);
+    }
+
+    /// The mode in capitals, as lualine shows it, then the window that has the keys, in `room`
+    /// cells: the window goes first where they are too few, then the mode is cut. Returns how
+    /// many cells they take whole. Every mode shows, so that the line always says where keys
+    /// go: Normal mode and quick search too, which vim's `showmode` does not.
+    fn mode_spans(&self, room: usize) -> (Vec<Span<'static>>, usize) {
+        let once = self.focused_editor().is_some_and(Editor::once);
         let mode = match self.place() {
             (Mode::Insert, _) => fl!("mode-insert"),
             (Mode::Normal, _) if once => fl!("mode-insert-once"),
@@ -6812,6 +6824,27 @@ impl App {
             (Mode::Visual, _) => fl!("mode-visual"),
             (Mode::Normal, _) => fl!("mode-normal"),
         };
+        let bold = Style::new().bold();
+        let mode_width = cells::width(&mode);
+        let window = window_kind(self.context())
+            .map(|kind| format!(" {} {kind}", glyphs::MODE_SEPARATOR))
+            .filter(|window| mode_width + cells::width(window) <= room);
+        if let Some(window) = window {
+            let width = mode_width + cells::width(&window);
+            return (vec![Span::styled(mode, bold), Span::raw(window)], width);
+        }
+        let styles = (bold, self.theme.truncated);
+        let spans = cells::fit(&mode, room, Align::Left, styles, self.theme.glyphs.marks);
+        (spans, mode_width)
+    }
+
+    /// The mode and the window that has the keys on the left of `area`, and what the pending
+    /// command has typed, as vim's `showcmd` shows it, on the right.
+    fn render_mode(&self, frame: &mut Frame<'_>, area: Rect) {
+        if area.is_empty() {
+            return;
+        }
+        let editor = self.focused_editor();
         let mut typed = format!(
             "{}{}",
             self.pending_operator().unwrap_or_default(),
@@ -6846,10 +6879,9 @@ impl App {
             frame.render_widget(Line::from(message_line), area);
             cells::width(message)
         } else {
-            let styles = (Style::new().bold(), self.theme.truncated);
-            let mode_line = cells::fit(&mode, room, Align::Left, styles, marks);
+            let (mode_line, left_width) = self.mode_spans(room);
             frame.render_widget(Line::from(mode_line), area);
-            cells::width(&mode)
+            left_width
         };
         // Left of the cells of what is typed, as long as it fits after the mode or message.
         let who = self.mode_who();
@@ -6899,6 +6931,40 @@ impl App {
         }
         slots.to_vec()
     }
+}
+
+/// What kind of window has the keys in `context`, as the line of the mode names it after the
+/// mode: the kind says which keys work there, so windows with the same keys share it (ADR
+/// 0032). None in the panels, which the mode alone stands for, on the command line, which
+/// shows itself, and in the contexts keys never go to alone.
+fn window_kind(context: Context) -> Option<String> {
+    let kind = match context {
+        Context::QuickSearch => fl!("window-quick-search"),
+        Context::Rename => fl!("window-rename"),
+        Context::LocationMenu
+        | Context::TabMenu
+        | Context::Jump
+        | Context::Workspaces
+        | Context::CommandHistory
+        | Context::KeyHints => fl!("window-list"),
+        Context::PullDown => fl!("window-menu"),
+        Context::Dialog
+        | Context::DialogInput
+        | Context::PathInput
+        | Context::Completion
+        | Context::Find
+        | Context::FindInput => fl!("window-dialog"),
+        Context::Help => fl!("window-help"),
+        Context::Viewer => fl!("window-viewer"),
+        Context::Panel
+        | Context::CommandLine
+        | Context::CommandCompletion
+        | Context::Global
+        | Context::List
+        | Context::Input
+        | Context::UserScreen => return None,
+    };
+    Some(kind)
 }
 
 /// The colors and glyphs of the viewer in `theme`.
@@ -7577,12 +7643,12 @@ mod tests {
         let mut app = with_files(&["a", "b", "c", "d"]);
         keys(&mut app, &["j", "v", "j", "j"]);
         assert_eq!(app.place(), (Mode::Visual, Context::Panel));
-        assert!(screen(&mut app).contains("-- VISUAL --"));
+        assert_eq!(mode_of(&mut app), "VISUAL");
         keys(&mut app, &["o"]);
         assert_eq!(cursor_name(&app, Side::Left), "a", "the other end");
         keys(&mut app, &["space"]);
         assert_eq!(app.mode(), Mode::Normal, "Space marks the rows and ends it");
-        assert!(screen(&mut app).contains("-- NORMAL --"));
+        assert_eq!(mode_of(&mut app), "NORMAL");
         assert_eq!(chosen_names(&app, Side::Left), ["a", "b", "c"]);
         // A command acts on the rows selected, and only on them.
         keys(&mut app, &["shift-g", "shift-v", "k", "d"]);
@@ -7724,7 +7790,7 @@ mod tests {
         let mut app = with_files(&["report.pdf"]);
         keys(&mut app, &["j", "r"]);
         assert_eq!(app.place(), (Mode::Insert, Context::Rename));
-        assert!(screen(&mut app).contains("-- INSERT --"));
+        assert_eq!(mode_of(&mut app), "INSERT · Rename");
         // In Insert mode j is text; Esc goes to Normal mode, where it is not.
         keys(&mut app, &["esc", "0", "c", "w", "n", "e", "w", "esc"]);
         assert_eq!(app.place(), (Mode::Normal, Context::Rename));
@@ -7879,10 +7945,10 @@ mod tests {
             "w only moved"
         );
         keys(&mut app, &["shift-a", "ctrl-o"]);
-        assert!(screen(&mut app).contains("-- (insert) --"));
+        assert_eq!(mode_of(&mut app), "(insert) · Rename");
         keys(&mut app, &["ctrl-l"]);
         assert_eq!(app.place(), (Mode::Insert, Context::Rename));
-        assert!(screen(&mut app).contains("-- INSERT --"));
+        assert_eq!(mode_of(&mut app), "INSERT · Rename");
     }
 
     #[test]
@@ -7945,12 +8011,9 @@ mod tests {
     fn v_and_shift_v_switch_the_kind_of_visual_mode_and_end_it_as_vims() {
         let mut app = with_files(&["a", "b", "c"]);
         keys(&mut app, &["j", "shift-v", "j"]);
-        assert!(screen(&mut app).contains("-- VISUAL LINE --"));
+        assert_eq!(mode_of(&mut app), "VISUAL LINE");
         keys(&mut app, &["v"]);
-        assert!(
-            screen(&mut app).contains("-- VISUAL --"),
-            "the other key switches"
-        );
+        assert_eq!(mode_of(&mut app), "VISUAL", "the other key switches");
         assert_eq!(
             app.panel(Side::Left).visual_size(),
             Some(2),
@@ -7959,10 +8022,7 @@ mod tests {
         keys(&mut app, &["v"]);
         assert_eq!(app.mode(), Mode::Normal, "its own key ends it");
         keys(&mut app, &["g", "v"]);
-        assert!(
-            screen(&mut app).contains("-- VISUAL --"),
-            "g v takes the kind back"
-        );
+        assert_eq!(mode_of(&mut app), "VISUAL", "g v takes the kind back");
         // After a command of files, the cursor is on the first row selected, as in vim.
         keys(&mut app, &["f", "#"]);
         assert_eq!(cursor_name(&app, Side::Left), "a");
@@ -7972,7 +8032,11 @@ mod tests {
     fn counts_select_rows_and_remove_them_from_lists_as_vims_lines() {
         let mut app = with_files(&["a", "b", "c", "d"]);
         keys(&mut app, &["j", "3", "shift-v"]);
-        assert!(line_with(&screen(&mut app), "-- VISUAL LINE --").ends_with(" 3\""));
+        let line = mode_line(&mut app, 160);
+        assert!(
+            line.starts_with("VISUAL LINE") && line.ends_with(" 3"),
+            "{line}"
+        );
         keys(&mut app, &["esc", "t", "n", "t", "n", "t", "n"]);
         assert_eq!(app.tabs(Side::Left).len(), 4);
         keys(&mut app, &["t", "h", "g", "g", "3", "d", "d"]);
@@ -8335,9 +8399,10 @@ mod tests {
     fn visual_mode_counts_the_entries_and_d_and_x_delete_them() {
         let mut app = with_files(&["a", "b"]);
         keys(&mut app, &["v", "j"]);
+        let line = mode_line(&mut app, 160);
         assert!(
-            line_with(&screen(&mut app), "-- VISUAL --").ends_with(" 1\""),
-            "not .."
+            line.starts_with("VISUAL") && line.ends_with(" 1"),
+            "not ..: {line}"
         );
         keys(&mut app, &["shift-d"]);
         assert_eq!(app.dialogs.len(), 1, "the question of the delete");
@@ -8347,13 +8412,17 @@ mod tests {
     fn visual_mode_shows_how_much_it_selects() {
         let mut app = with_files(&["abc", "bcd", "cde"]);
         keys(&mut app, &["j", "v", "j"]);
-        let shown = screen(&mut app);
+        let line = mode_line(&mut app, 160);
         assert!(
-            line_with(&shown, "-- VISUAL --").ends_with(" 2\""),
-            "{shown}"
+            line.starts_with("VISUAL ") && line.ends_with(" 2"),
+            "{line}"
         );
         keys(&mut app, &["esc", "r", "esc", "0", "v", "l"]);
-        assert!(line_with(&screen(&mut app), "-- VISUAL --").ends_with(" 2\""));
+        let line = mode_line(&mut app, 160);
+        assert!(
+            line.starts_with("VISUAL · Rename") && line.ends_with(" 2"),
+            "{line}"
+        );
     }
 
     #[test]
@@ -11163,10 +11232,7 @@ mod tests {
         assert_eq!(app.context(), Context::QuickSearch);
         let shown = screen(&mut app);
         assert!(shown.contains(&prompt(&app, "Search", "r")));
-        assert!(
-            shown.contains("-- INSERT --"),
-            "the line of the mode says it"
-        );
+        assert_eq!(mode_of(&mut app), "INSERT · Quick search");
         // Enter ends the search on what it found, as in vim; l opens it.
         assert!(keys(&mut app, &["enter"]).is_empty());
         assert_eq!(app.context(), Context::Panel);
@@ -12842,6 +12908,56 @@ mod tests {
         line.trim_end().to_owned()
     }
 
+    /// The left of the line of the mode, before what is on its right: the mode and the window
+    /// that has the keys, or a message.
+    fn mode_of(app: &mut App) -> String {
+        let line = mode_line(app, 160);
+        line.split("  ").next().unwrap_or_default().to_owned()
+    }
+
+    #[test]
+    fn the_line_of_the_mode_names_the_kind_of_window_by_its_keys() {
+        let cases: &[(&[&str], &str)] = &[
+            (&[], "NORMAL"),
+            (&["/"], "INSERT · Quick search"),
+            (&["?"], "INSERT · Quick search"),
+            (&["j", "r", "esc"], "NORMAL · Rename"),
+            (&["ctrl-w", "1"], "NORMAL · List"),
+            (&["t", "h"], "NORMAL · List"),
+            (&["g", "z"], "INSERT · List"),
+            (&["t", "w"], "NORMAL · List"),
+            (&["q", ":"], "NORMAL · List"),
+            (&["f1"], "NORMAL · Help"),
+            (&["f9"], "NORMAL · Menu"),
+            (&["f7"], "INSERT · Dialog"),
+            (&["j", "f8"], "NORMAL · Dialog"),
+            (&["f", "/"], "INSERT · Dialog"),
+            (&["f", "j"], "NORMAL · Dialog"),
+            (&["j", "i"], "NORMAL · Viewer"),
+        ];
+        for (typed, shown) in cases {
+            let mut app = with_files(&["a", "b"]);
+            keys(&mut app, typed);
+            assert_eq!(mode_of(&mut app), *shown, "after {typed:?}");
+        }
+        let mut app = loaded();
+        open_configuration(&mut app);
+        assert_eq!(mode_of(&mut app), "INSERT · Dialog");
+    }
+
+    #[test]
+    fn the_command_line_takes_the_line_of_the_mode_while_it_has_the_keys() {
+        let mut app = with_files(&["a"]);
+        keys(&mut app, &["!", "l", "s"]);
+        assert!(mode_line(&mut app, 160).ends_with("$ ls"));
+        keys(&mut app, &["ctrl-f", "q", ":"]);
+        assert_eq!(app.place().1, Context::CommandHistory);
+        assert_eq!(mode_of(&mut app), "NORMAL · List");
+        keys(&mut app, &["q"]);
+        assert_eq!(app.place().1, Context::CommandLine);
+        assert!(mode_line(&mut app, 160).ends_with("$ ls"));
+    }
+
     #[test]
     fn the_prompt_says_who_is_where_as_a_shell_does() {
         let (mut app, _) = App::new(
@@ -12886,18 +13002,18 @@ mod tests {
         let mut app = loaded();
         assert_eq!(
             mode_line(&mut app, 60),
-            "-- NORMAL --",
+            "NORMAL",
             "a machine without a name"
         );
         app.set_machine(alice_on_mac());
         let line = mode_line(&mut app, 60);
-        assert!(line.starts_with("-- NORMAL --"), "{line}");
+        assert!(line.starts_with("NORMAL "), "{line}");
         assert!(
             line.ends_with(" alice@mac"),
             "left of what is typed: {line}"
         );
         assert_eq!(line.chars().count(), 60 - SHOWCMD_WIDTH - 1);
-        assert_eq!(mode_line(&mut app, 32), "-- NORMAL --", "no room");
+        assert_eq!(mode_line(&mut app, 26), "NORMAL", "no room");
         app.set_machine(root_on_mac());
         assert!(mode_line(&mut app, 60).ends_with(" # root@mac"));
     }

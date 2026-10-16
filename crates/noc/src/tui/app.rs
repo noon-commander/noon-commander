@@ -43,6 +43,7 @@ use super::key_hints::{KeyHintsEvent, KeyHintsWindow};
 use super::keymap::{
     Action, Context, Extra, Hints, KeyState, Keyboard, Keymap, Mode, Resolved, Typed,
 };
+use super::label::{self, Label};
 use super::machine::{self, Machine};
 use super::menu::{LocationMenu, MenuEvent};
 use super::mouse::{Pointer, Press, Scroll};
@@ -2851,6 +2852,7 @@ impl App {
                 }
                 None
             }
+            Resolved::Hotkey(_) => None,
             Resolved::Action(action) if searching => match action {
                 // Unlike vim's search, Backspace and Delete with nothing typed keep it open, as
                 // on the command line: a Backspace too many would go to the parent directory.
@@ -3007,7 +3009,7 @@ impl App {
         };
         let event = match input {
             Resolved::Action(action) => choices.handle(action),
-            Resolved::Insert(_) => ChoicesEvent::Passed,
+            Resolved::Insert(_) | Resolved::Hotkey(_) => ChoicesEvent::Passed,
         };
         self.take_choices(event)
     }
@@ -3316,7 +3318,7 @@ impl App {
                 return self.restore_workspace(&name);
             }
             WorkspacesEvent::Rename(from) => {
-                let shown = cells::sanitize(from.as_bytes());
+                let shown = label::escape(&cells::sanitize(from.as_bytes()));
                 let title = fl!("workspaces-rename-title");
                 let prompt = fl!("workspaces-rename-prompt", name = shown);
                 let dialog = Dialog::form(&title, &prompt, &from, &[], WORKSPACE_DIALOG_WIDTH);
@@ -5020,10 +5022,12 @@ impl App {
     fn ask_transfer(&mut self, kind: JobKind) {
         let panel = self.panel(self.active);
         let chosen = panel.chosen();
+        // The & of the prompt marks the letter of the field; a name's is a character.
+        let name = |name: &[u8]| label::escape(&cells::sanitize(name));
         let message = match (chosen.as_slice(), kind) {
             ([], _) => return,
-            ([entry], JobKind::Move) => fl!("move-one", name = cells::sanitize(&entry.name)),
-            ([entry], _) => fl!("copy-one", name = cells::sanitize(&entry.name)),
+            ([entry], JobKind::Move) => fl!("move-one", name = name(&entry.name)),
+            ([entry], _) => fl!("copy-one", name = name(&entry.name)),
             (many, JobKind::Move) => fl!("move-many", count = many.len()),
             (many, _) => fl!("copy-many", count = many.len()),
         };
@@ -5369,11 +5373,11 @@ impl App {
         let checks: Vec<(String, bool)> = other
             .iter()
             .map(|(location, same)| {
-                let path = location_text(location);
+                let path = label::escape(&location_text(location));
                 (fl!("checksum-compare", path = path), *same)
             })
             .collect();
-        let choices = Algorithm::ALL.iter().map(|&a| algorithm_name(a)).collect();
+        let choices: Vec<String> = Algorithm::ALL.iter().map(|&a| algorithm_name(a)).collect();
         let chosen = Algorithm::ALL
             .iter()
             .position(|&a| a == self.algorithm)
@@ -5382,7 +5386,7 @@ impl App {
         let title = fl!("checksum-title");
         let dialog = Dialog::fields(&title, &fields, &checks, buttons, CHECKSUM_DIALOG_WIDTH)
             .with_message(&message)
-            .with_choices(choices, chosen);
+            .with_choices(&choices, chosen);
         self.dialogs.push_back(Open {
             dialog,
             purpose: Purpose::Checksum {
@@ -5554,7 +5558,7 @@ impl App {
                 (name, hex)
             })
             .collect();
-        let title = algorithm_name(hashing.algorithm);
+        let title = Label::parse(&algorithm_name(hashing.algorithm)).text;
         self.results.push_back(Results {
             id,
             window: SumsWindow::new(title, rows, verdict, buttons),
@@ -5829,7 +5833,7 @@ impl App {
             (Resolved::Action(action), Some(field)) => {
                 (!field.handle(action, extra, &mut registers)).then_some(action)
             }
-            (_, None) => None,
+            (Resolved::Hotkey(_), _) | (_, None) => None,
         };
         self.registers = registers;
         match action {
@@ -8993,6 +8997,33 @@ mod tests {
     }
 
     #[test]
+    fn alt_and_a_letter_act_on_a_dialog_while_its_field_takes_the_text() {
+        let mut app = loaded();
+        app.handle(action(Action::Mkdir));
+        retype(&mut app, "new");
+        // A letter nothing has does nothing: no Esc, no x deleting a character.
+        keys(&mut app, &["alt-x"]);
+        assert_eq!(app.place(), (Mode::Insert, Context::PathInput));
+        assert_eq!(
+            app.dialogs.front().map(|open| open.dialog.text()),
+            Some("new")
+        );
+        let (_, location, _) = create_dir(keys(&mut app, &["alt-o"]));
+        assert_eq!(location, local("/srv/new"), "OK, pressed from the field");
+
+        // The letter of the prompt brings the focus back to the field, in Insert mode.
+        app.handle(action(Action::Mkdir));
+        keys(&mut app, &["down"]);
+        assert_eq!(app.place(), (Mode::Normal, Context::Dialog));
+        keys(&mut app, &["alt-e"]);
+        assert_eq!(app.place(), (Mode::Insert, Context::PathInput));
+        let text = screen(&mut app);
+        assert!(text.contains("Enter directory name:"), "no & shows: {text}");
+        keys(&mut app, &["esc", "esc"]);
+        assert!(app.dialogs.is_empty(), "Cancel has no letter, Esc closes");
+    }
+
+    #[test]
     fn a_directory_that_cannot_be_made_is_an_error_dialog() {
         let mut app = loaded();
         let effects = app.created(
@@ -10676,7 +10707,7 @@ mod tests {
         app.handle(action(Action::Right));
         let text = screen_of(&mut app, 20);
         assert!(!line_with(&text, "Sort by size").contains("o s"), "{text}");
-        assert!(app.handle(Resolved::Insert('z')).is_empty());
+        assert!(app.handle(Resolved::Hotkey('z')).is_empty());
         assert!(app.pulldown.is_none(), "a command closes the menu");
         assert_eq!(app.panel(Side::Left).sort_action(), Action::SortBySize);
         assert_eq!(app.panel(Side::Right).sort_action(), Action::SortByName);
@@ -10687,7 +10718,7 @@ mod tests {
         app.handle(action(Action::PullDown));
         let text = screen_of(&mut app, 20);
         assert!(!text.contains("Sort by size"), "the bar alone: {text}");
-        app.handle(Resolved::Insert('f'));
+        app.handle(Resolved::Hotkey('f'));
         app.handle(action(Action::Cancel));
         app.handle(action(Action::Cancel));
         assert!(app.pulldown.is_none());
@@ -10703,16 +10734,16 @@ mod tests {
 
         // Options: the hidden files, in both panels.
         app.handle(action(Action::PullDown));
-        assert!(app.handle(Resolved::Insert('o')).is_empty());
+        assert!(app.handle(Resolved::Hotkey('o')).is_empty());
         assert!(screen_of(&mut app, 20).contains("x Show hidden files"));
-        app.handle(Resolved::Insert('h'));
+        app.handle(Resolved::Hotkey('h'));
         assert!(!app.config.ui.show_hidden);
 
         // Commands that cannot run do nothing; Esc goes back to the bar, then closes it.
         app.handle(action(Action::PullDown));
-        app.handle(Resolved::Insert('f'));
+        app.handle(Resolved::Hotkey('f'));
         assert!(
-            app.handle(Resolved::Insert('k')).is_empty(),
+            app.handle(Resolved::Hotkey('k')).is_empty(),
             "nothing chosen"
         );
         assert!(app.pulldown.is_some());
@@ -10723,8 +10754,8 @@ mod tests {
 
         // A command that opens something: the location menu of the panel on its side.
         app.handle(action(Action::PullDown));
-        app.handle(Resolved::Insert('l'));
-        let effects = app.handle(Resolved::Insert('l'));
+        app.handle(Resolved::Hotkey('l'));
+        let effects = app.handle(Resolved::Hotkey('l'));
         assert!(matches!(&effects[..], [Effect::ListPlaces { .. }]));
         assert_eq!(app.menu.as_ref().map(LocationMenu::side), Some(Side::Left));
     }
@@ -10732,8 +10763,8 @@ mod tests {
     /// Opens Options → Configuration… through F9.
     fn open_configuration(app: &mut App) {
         app.handle(action(Action::PullDown));
-        app.handle(Resolved::Insert('o'));
-        assert!(app.handle(Resolved::Insert('c')).is_empty());
+        app.handle(Resolved::Hotkey('o'));
+        assert!(app.handle(Resolved::Hotkey('c')).is_empty());
         assert!(app.configuration.is_some());
     }
 
@@ -12073,7 +12104,7 @@ mod tests {
         other.name = "photos".to_owned();
         holds(&mut app, &[other, noon()]);
         app.handle(action(Action::PullDown));
-        app.handle(Resolved::Insert('w'));
+        app.handle(Resolved::Hotkey('w'));
         let text = screen_of(&mut app, 16);
         assert!(
             text.contains("Save workspace…")
@@ -12081,7 +12112,7 @@ mod tests {
                 && text.contains("2 noon"),
             "{text}"
         );
-        let effects = app.handle(Resolved::Insert('2'));
+        let effects = app.handle(Resolved::Hotkey('2'));
         assert!(!effects.is_empty());
         assert_eq!(app.workspace.as_deref(), Some("noon"));
         app.handle(action(Action::PullDownLast));
@@ -13212,7 +13243,7 @@ mod tests {
     }
 
     #[test]
-    fn alt_r_switches_how_one_quick_search_matches_and_n_matches_as_it_did() {
+    fn ctrl_s_switches_how_one_quick_search_matches_and_n_matches_as_it_did() {
         let mut app = loaded();
         app.config.ui.search_mode = SearchMode::Plain;
         let start = app
@@ -13228,13 +13259,13 @@ mod tests {
             start,
             "as it is: no name holds it"
         );
-        keys(&mut app, &["alt-r"]);
+        keys(&mut app, &["ctrl-s"]);
         assert_eq!(
             app.panel(app.active).name_under_cursor(),
             Some(&b"right"[..]),
             "fzf"
         );
-        keys(&mut app, &["alt-r"]);
+        keys(&mut app, &["ctrl-s"]);
         let glyphs = app.theme.glyphs.search_modes;
         assert!(screen(&mut app).contains(&format!("Search {}: ^r", glyphs.regex)));
         keys(&mut app, &["enter"]);

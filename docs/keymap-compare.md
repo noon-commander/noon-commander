@@ -41,11 +41,13 @@ nothing. Insert mode takes characters as text: quick search, the command line of
 field of a rename, and a dialog whose first focus is a text field start in it. Visual mode
 selects rows of a panel, or text of a field, for the commands that act on them. Alt and a key
 stand for Esc and the key in Insert and Visual mode, and in the panels in Normal mode, unless
-something binds that Alt key, as a quick Esc and the key arrive from a terminal; on a password
-field they do nothing. Ctrl+c closes or cancels in every mode. Counts, registers, and the
-character typed after f, t, r, ", Ctrl+r, or Ctrl+v come with the action rather than as
-bindings; the sections say where they apply. mc, Far, and ranger have no modes; yazi has vi's in
-its input boxes, and a visual mode in its panels.
+something binds that Alt key, as a quick Esc and the key arrive from a terminal. Dialogs and the
+pull-down menu are the exception, in every mode: there Alt and a letter or a digit act on what it
+marks in a label, as in Far and mc, and other Alt keys do nothing, on a password field too
+([ADR 0033](adr/0033-letters-in-dialogs.md)). Ctrl+c closes or cancels in every mode. Counts,
+registers, and the character typed after f, t, r, ", Ctrl+r, or Ctrl+v come with the action rather
+than as bindings; the sections say where they apply. mc, Far, and ranger have no modes; yazi has
+vi's in its input boxes, and a visual mode in its panels.
 
 yazi and ranger show one directory between its parent and a preview, with tabs and no second
 panel, so the keys of the other panel are "—" for them. Both copy and move in two steps: they
@@ -456,8 +458,9 @@ What the text fields share while they take text: quick search, the field of a re
 fields of dialogs, the command line, and the filters of the lists fall back to it, and their
 sections list only the keys they add. Keys never go to it alone; the help lists its keys with
 each of those fields. It falls back to `global`. Characters are text, and Alt and a key stand
-for Esc and the key, as a quick Esc and the key arrive from a terminal, except on a password
-field, where they do nothing. Ctrl+r takes the register typed after it, a … z or " for the
+for Esc and the key, as a quick Esc and the key arrive from a terminal, except in the text fields
+of dialogs, a password's among them, where Alt and a letter are the dialog's, as `dialog` says, and
+other Alt keys do nothing. Ctrl+r takes the register typed after it, a … z or " for the
 unnamed one, and types its text, in quick search and the filters too; Ctrl+v takes the key to
 type as it is. The registers live in memory, every text field and the command line share them,
 and none reads or writes the system clipboard. Ctrl+o, one command of Normal mode, is bound by
@@ -616,11 +619,13 @@ as the count before / or ?, and the search goes on from there, and Ctrl+b and Ct
 and the end of the text, as on vim's command line. Up, Down, PgUp, PgDn, and the F-keys, Alt+F1 and
 Alt+F2 among them, end the search and do what they do in the panel, as in mc, but Shift+F7, which
 goes to the next match; Left, Right, Home, and End move in the text, and other keys that none of
-them binds do nothing. Alt+r switches how this search matches, round: as it is, as fzf does, or as
-a regular expression; the next one starts in `ui.search_mode` again. The last search stays for n,
-N, and Shift+F7 in the panel, which match as it did. yazi searches as
-the name is typed in an input box, and ranger as it is typed on its console; both go to the next and
-previous match with keys of the panel, once the search is over.
+them binds do nothing. Ctrl+s switches how this search matches, round: as it is, as fzf does, or as
+a regular expression; the next one starts in `ui.search_mode` again. vim binds no Ctrl+s; mc's
+starts quick search and goes to the next match, but of mc's keys noc keeps only the F-keys, and its
+next match is Ctrl+g, as on vim's command line. The last search stays for n, N, and Shift+F7 in the
+panel, which match as it did. yazi searches as the name is typed in an input box, and ranger as it
+is typed on its console; both go to the next and previous match with keys of the panel, once the
+search is over.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -628,7 +633,7 @@ previous match with keys of the panel, once the search is over.
 | Give the search up: the cursor goes back to where it started, and the search is not kept | `abort` | ✅ | Esc<br>Ctrl+[<br>Ctrl+c | — | — | — | — |
 | Next match; with nothing typed, the last search again, as mc's Ctrl+s Ctrl+s | `quick_search` | ✅ | Ctrl+g | Ctrl+s<br>Alt+s | Ctrl+Enter | n | n |
 | Previous match | `prev_match` | ✅ | Ctrl+t | — | Ctrl+Shift+Enter | N | N |
-| Match the next way: as it is, as fzf does, or as a regular expression | `search_mode` | ⏳ | Alt+r | — | — | — | — |
+| Match the next way: as it is, as fzf does, or as a regular expression | `search_mode` | ⏳ | Ctrl+s | — | — | — | — |
 | Start of the line | `text_start` | ⏳ | Ctrl+b | — | — | — | — |
 | End of the line | `text_end` | ⏳ | Ctrl+e | — | — | — | — |
 | End the search, and one row up | `up` | ⏳ | Up | — | — | — | — |
@@ -694,7 +699,14 @@ so its keys scroll and close the help too, and so do the text fields of dialogs 
 after the keys of `input`: j and k move from a field, as Up and Down do, and a count moves as many
 stops, past the fields too, g g and G to the first and the last field or button, as vim's to the
 first and the last line, and q and Esc close the dialog. Dialogs are modal: the panel's keys do
-nothing there. The yazi column has the keys of its confirmations (confirm), its list of tasks
+nothing there. Every element but Cancel has a letter, highlighted in its label, and Alt and it act
+on the element from anywhere in the dialog, in every mode, as in Far and mc: a text field gets the
+focus, in Insert mode, a check box switches, a radio button is chosen, and a button is pressed. In
+the Configuration dialog, Alt+1 … Alt+7 open its categories, and the letter of a setting does what
+Space or Enter does on it, or puts the focus in its text field. Alt and a letter that nothing has
+do nothing, and here and in the text fields of dialogs Alt and a key never stand for Esc and the
+key ([ADR 0033](adr/0033-letters-in-dialogs.md)). Each dialog has letters of its own, so the
+preset lists none. The yazi column has the keys of its confirmations (confirm), its list of tasks
 (tasks), and its help; the ranger column, those of its list of tasks, since ranger asks its
 questions on the console.
 
@@ -713,6 +725,7 @@ questions on the console.
 | Press the focused button; from a text field or a check box, the default one; in the help, open the section, or close the help from its text | `confirm` | ✅ | Enter<br>Ctrl+m | Enter | Ctrl+Enter (default button) | Enter (confirm, help)<br>y (confirm) | — |
 | Switch the check box, choose the radio button, or press the focused button | `toggle` | ✅ | Space | Space | — | — | — |
 | Cancel; abort the job in front; close the help or the window | `cancel` | ⏳ | Esc<br>Ctrl+[<br>Ctrl+c<br>q<br>F10 | Esc<br>Esc Esc<br>F10<br>Ctrl+g<br>Ctrl+c (abort copy/delete) | Esc | Esc<br>Ctrl+[<br>Ctrl+c<br>n (confirm)<br>w (tasks) | Esc<br>q<br>Q<br>w<br>Ctrl+c |
+| Put the focus in a field, switch a check box, choose a radio button, or press a button by its letter (noc: Alt and the letter) | — | ⏳ | — | Alt+letter<br>Letter (not in a text field) | Alt+letter | — | — |
 | Copy/move in background (in dialog) | — | ⏳ | — | Alt+b | — | — | — |
 | Focus first dialog item | — | ⏳ | — | — | Home | — | — |
 | Focus default dialog item | — | ⏳ | — | — | PgDn<br>End | — | — |
@@ -757,9 +770,12 @@ starts; it falls back to `input`, whose keys edit the text, then to `dialog`, th
 Up, Down, Tab, and Shift+Tab still move between the fields and the buttons, and Enter presses the
 default button. Esc goes to Normal mode, through `input`, where the field binds nothing of its
 own: the keys of `input` edit the text, then those of `dialog` move, accept, and close, Esc among
-them; Ctrl+o runs one command of Normal mode, then Insert mode comes back. A secret field, such
-as a password, has no Normal mode: Esc closes its dialog, and Ctrl+o and Alt and a key do
-nothing. The mc column has the keys of mc's input lines; the far column, those of Far's dialogs.
+them; Ctrl+o runs one command of Normal mode, then Insert mode comes back. Alt and a letter act on
+the element of the dialog it marks, as in `dialog`, while typing too, and other Alt keys do
+nothing: they no longer stand for Esc and the key, and without the kitty keyboard protocol an Esc
+and a quick letter act on its element rather than leave Insert mode. A secret field, such as a
+password, has no Normal mode: Esc closes its dialog, and Ctrl+o does nothing. The mc column has
+the keys of mc's input lines; the far column, those of Far's dialogs.
 mc and Far move between the fields and press the buttons with the keys of their dialogs, under
 `dialog`.
 
@@ -813,7 +829,8 @@ Down go through the matches, and Left and Right complete in the directory above 
 chosen. Case never counts, as with vim's 'fileignorecase' on macOS. Ctrl+y keeps the match and
 Ctrl+e puts back what was typed. Keys it does not bind close it and go to the field with the match
 in it: Enter confirms, Esc goes to Normal mode, or closes the command line, and Ctrl+c closes the
-dialog or the command line, as in vim. Over the command line the list falls back to `command_line`.
+dialog or the command line, as in vim; Alt and a letter are the dialog's, as in the field. Over the
+command line the list falls back to `command_line`.
 ranger has no list: Tab and Shift+Tab put the next and the previous choice in the console's line.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
@@ -906,8 +923,8 @@ z keys scroll them as vim's do; wrapped lines start each row after the first wit
 The keys that the windows listing items to choose from share, in Normal mode, where all but the
 zoxide window start: the location menu, the tab menu, the zoxide window, the workspaces, the
 command history, and the list of the key hints fall back to it, then to `global`, and their
-sections list only the keys they add. Alt+r switches how the filter matches, in the window it is
-pressed in, until it closes.
+sections list only the keys they add. Ctrl+s switches how the filter matches, in the window it is
+pressed in, until it closes, as in quick search.
 Keys that nothing binds do nothing: no digit or letter picks an item. The rows scroll as the
 panels' do, as vim's window, headings among them. `/` types in the filter, or the keywords of the
 zoxide window, in Insert mode, and Esc there comes back with the filter kept. Keys never go to it
@@ -927,7 +944,7 @@ with. None of them has modes: their keys are here, not under Insert mode.
 | First item | `home` | ⏳ | g g<br>Home | Home<br>A1<br>Alt+< | — | — | — |
 | Last item | `end` | ⏳ | G<br>End | End<br>C1<br>Alt+> | — | — | — |
 | Type in the filter, in Insert mode | `quick_search` | ⏳ | / | — | Ctrl+Alt+f<br>RightAlt | — | — |
-| Match the filter the next way: as it is, as fzf does, or as a regular expression | `search_mode` | ⏳ | Alt+r | — | — | — | — |
+| Match the filter the next way: as it is, as fzf does, or as a regular expression | `search_mode` | ⏳ | Ctrl+s | — | — | — | — |
 | Show the whole row under the cursor under the rows, until asked again | `show_full` | ⏳ | K | — | — | — | — |
 | Take the item, as the window's section says | `confirm` | ⏳ | Enter<br>Ctrl+m | Enter | Enter | Enter | — |
 | Close the window | `cancel` | ⏳ | Esc<br>Ctrl+[<br>Ctrl+c<br>q<br>F10 | Esc<br>F10<br>Ctrl+g | Esc | Esc<br>Ctrl+[<br>Ctrl+c | — |
@@ -949,7 +966,7 @@ are under Normal mode.
 | One page up | `page_up` | ⏳ | PgUp | — | — | — | — |
 | One page down | `page_down` | ⏳ | PgDn | — | — | — | — |
 | Take the item, as the window's section says | `confirm` | ⏳ | Enter<br>Ctrl+m<br>Ctrl+y | — | — | — | — |
-| Match the filter the next way: as it is, as fzf does, or as a regular expression | `search_mode` | ⏳ | Alt+r | — | — | — | — |
+| Match the filter the next way: as it is, as fzf does, or as a regular expression | `search_mode` | ⏳ | Ctrl+s | — | — | — | — |
 | Back to the rows, with the filter kept | `normal_mode` | ⏳ | Esc<br>Ctrl+[ | — | — | — | — |
 | Close the window | `cancel` | ⏳ | Ctrl+c<br>F10 | — | — | — | — |
 
@@ -1039,7 +1056,8 @@ F6 and F8 still rename and delete the workspace under the cursor.
 F9 or g m; Shift+F9 or g M, on the command that ran from it last. It falls back to `global`. h, j,
 k, and l move, as the arrows do, g g and G go to the first and the last command and stay there, as
 vim's do, and Alt and the highlighted letter of a menu open it, and of a command run it; mc's menus
-take the letter alone.
+take the letter alone. Alt and a letter that nothing has do nothing, as in dialogs, which take
+their letters the same way.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -1163,24 +1181,24 @@ Tab and F8 still switch the hosts and remove the command.
 
 f / in a panel, or F9 → Command → Find file…: ripgrep searches the files under the panel's
 directory, local or on a host, for the text of the first field, among those the globs of the second
-let through, again as either changes, the check box switches, or Alt+r; with no text it lists the
+let through, again as either changes, the check box switches, or Ctrl+s; with no text it lists the
 files. It is a dialog: two fields, a check box, the rows, and the buttons Go to, View, Edit, and
 Cancel, as in the results of mc's Find File, which, as Far's Find file, asks for a mask and a text
 in a dialog first. Its other mode, Files and dirs, a radio button above the fields, finds files and
 directories by name with fd, and Go to goes into a directory; f f, or F9 → Command → Find files and
 dirs…, opens the dialog in it. Its focus on a check box, the rows, or a button, it falls back to
 `dialog`, whose motions move the cursor of the rows while they have the focus, and Tab leaves them.
-F3, F4, and the switches of regular expressions and case, VS Code's keys, work wherever the focus
-is: Alt+r takes the text as it is or as a regular expression, starting from the search mode
-(`ui.search_mode`, where fzf is regex), and the glyph after Text says which. yazi's s and S find
-with fd and rg, and show the result as a directory of its own.
+F3, F4, and Ctrl+s work wherever the focus is: Ctrl+s takes the text as it is or as a regular
+expression, as it switches the mode of quick search, starting from the search mode
+(`ui.search_mode`, where fzf is regex), and the glyph after Text says which. Alt and the letters
+of the dialog act on its elements, as in every dialog: Alt+c, the letter of Match case, switches
+case. yazi's s and S find with fd and rg, and show the result as a directory of its own.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
 | View the file, from the line | `view` | ⏳ | F3 | F3 | F3 | — | — |
 | Edit the file, at the line | `edit` | ⏳ | F4 | F4 | F4 | — | — |
-| The text as a regular expression, or as it is | `search_mode` | ⏳ | Alt+r | — | — | — | — |
-| Match case, or ignore it unless the text has a capital | `match_case` | ⏳ | Alt+c | — | — | — | — |
+| The text as a regular expression, or as it is | `search_mode` | ⏳ | Ctrl+s | — | — | — | — |
 | Half a page up | `half_page_up` | ⏳ | Ctrl+u | — | — | — | — |
 | Half a page down | `half_page_down` | ⏳ | Ctrl+d | — | — | — | — |
 | The files found in a panel | — | ⏳ | — | Panelize | Panel (F2) | — | — |
@@ -1194,8 +1212,7 @@ do: to `dialog_input`, then to `input`, then to `dialog`, then to `global`.
 | --- | --- | :-: | --- | --- | --- | --- | --- |
 | View the file, from the line | `view` | ⏳ | F3 | F3 | F3 | — | — |
 | Edit the file, at the line | `edit` | ⏳ | F4 | F4 | F4 | — | — |
-| The text as a regular expression, or as it is | `search_mode` | ⏳ | Alt+r | — | — | — | — |
-| Match case, or ignore it unless the text has a capital | `match_case` | ⏳ | Alt+c | — | — | — | — |
+| The text as a regular expression, or as it is | `search_mode` | ⏳ | Ctrl+s | — | — | — | — |
 
 ## Key hints list (`key_hints`, Normal and Insert mode)
 

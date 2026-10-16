@@ -11,6 +11,7 @@ use super::cells::{self, Align};
 use super::dialog::{Colors, button_line, button_spots, draw_box, draw_separator, frame_around};
 use super::glyphs;
 use super::keymap::{Action, Resolved};
+use super::label::Label;
 use super::mouse::{Drawn, Pointer};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -94,6 +95,16 @@ pub(crate) enum JobButton {
     /// The job goes on behind the panels.
     Background,
     Abort,
+}
+
+impl JobButton {
+    /// Its name, with the letter that Alt and it press.
+    fn label(self) -> Label {
+        Label::parse(&match self {
+            Self::Background => fl!("job-background"),
+            Self::Abort => fl!("dialog-abort"),
+        })
+    }
 }
 
 /// How far a job is, for the list of jobs.
@@ -253,11 +264,19 @@ impl JobView {
         }
     }
 
-    /// Takes a key: Enter or Space presses the focused button, Esc aborts, as in mc, and
-    /// arrows and Tab move the focus.
+    /// Takes a key: Enter or Space presses the focused button, Esc aborts, as in mc, arrows
+    /// and Tab move the focus, and Alt and a button's letter press it.
     pub(crate) fn handle(&mut self, input: Resolved) -> Option<JobButton> {
-        let Resolved::Action(action) = input else {
-            return None;
+        let action = match input {
+            Resolved::Action(action) => action,
+            Resolved::Hotkey(c) => {
+                return self
+                    .buttons
+                    .iter()
+                    .copied()
+                    .find(|button| button.label().has(c));
+            }
+            Resolved::Insert(_) => return None,
         };
         let count = self.buttons.len();
         match action {
@@ -345,21 +364,14 @@ impl JobView {
         put(2, gauge(ratio, width, theme));
         put(3, text(&count));
         put(4, text(&self.time_line(now)));
-        let labels: Vec<String> = self
-            .buttons
-            .iter()
-            .map(|button| match button {
-                JobButton::Background => fl!("job-background"),
-                JobButton::Abort => fl!("dialog-abort"),
-            })
-            .collect();
+        let labels: Vec<Label> = self.buttons.iter().map(|button| button.label()).collect();
         let buttons = button_line(&labels, 0, Some(self.focus), colors);
         let row = Rect::new(inner.x, inner.y + 6, inner.width, 1);
         *self.drawn.borrow_mut() = Drawn {
             frame: frame_around(inner),
             rows: Vec::new(),
             buttons: if inner.height > 6 {
-                button_spots(&buttons, row)
+                button_spots(&labels, 0, row)
             } else {
                 Vec::new()
             },
@@ -651,8 +663,15 @@ mod tests {
             Some(JobButton::Background)
         );
         assert_eq!(view.handle(Resolved::Insert('a')), None);
+        assert_eq!(view.handle(Resolved::Hotkey('a')), Some(JobButton::Abort));
+        assert_eq!(
+            view.handle(Resolved::Hotkey('B')),
+            Some(JobButton::Background)
+        );
+        assert_eq!(view.handle(Resolved::Hotkey('x')), None);
 
         view.keep_in_front();
+        assert_eq!(view.handle(Resolved::Hotkey('b')), None, "no Background");
         assert!(!draw(&view).contains("Background"));
         for action in [Action::Cancel, Action::Confirm, Action::Toggle] {
             assert_eq!(press(&mut view, action), Some(JobButton::Abort));

@@ -110,6 +110,9 @@ pub(crate) struct Theme {
     /// Dialog button without the focus.
     pub(crate) dialog_button: Style,
     pub(crate) dialog_button_focused: Style,
+    /// Drawn over the others: the letter of a button, a field, a check box, or a choice, which
+    /// Alt and it act on, as mc's `dhotnormal`.
+    pub(crate) dialog_hotkey: Style,
     /// Text field in a dialog.
     pub(crate) dialog_input: Style,
     /// The progress bar of a job.
@@ -118,6 +121,8 @@ pub(crate) struct Theme {
     pub(crate) error_dialog: Style,
     pub(crate) error_title: Style,
     pub(crate) error_button_focused: Style,
+    /// The same letters in error dialogs, as mc's `errdhotnormal`.
+    pub(crate) error_hotkey: Style,
     /// Tabs: the line of tabs, the tabs that do not show, and what parts them; tabs drawn
     /// in a panel's frame take it too.
     pub(crate) tab: Style,
@@ -269,11 +274,15 @@ impl Theme {
             keys: on(Color::Magenta, Color::Gray),
             dialog_button: on(Color::Black, Color::Gray),
             dialog_button_focused: on(Color::Black, Color::Cyan),
+            // mc's `dhotnormal` and `dhotfocus`.
+            dialog_hotkey: fg(Color::Blue),
             dialog_input: on(Color::Black, Color::Cyan),
             gauge: on(Color::White, Color::Black),
             error_dialog: on(Color::White, Color::Red),
             error_title: on(Color::LightYellow, Color::Red),
             error_button_focused: on(Color::Black, Color::Gray),
+            // mc's `errdhotnormal` and `errdhotfocus`.
+            error_hotkey: fg(Color::LightYellow),
             // Dark, as the F-key bar below the panels.
             tab: on(Color::Gray, Color::Black),
             tab_active: on(Color::White, Color::Blue).bold(),
@@ -344,11 +353,13 @@ impl Theme {
             keys: plain.bold(),
             dialog_button: plain,
             dialog_button_focused: reversed,
+            dialog_hotkey: Style::new().underlined(),
             dialog_input: reversed,
             gauge: plain,
             error_dialog: plain,
             error_title: plain.bold(),
             error_button_focused: reversed,
+            error_hotkey: Style::new().underlined(),
             tab: plain.dim(),
             tab_active: plain.bold().underlined(),
             tab_active_idle: plain.bold(),
@@ -416,11 +427,14 @@ impl Theme {
             keys: on(p.blue, p.surface0),
             dialog_button: on(p.text, p.surface0),
             dialog_button_focused: cursor,
+            // As the letters of the menus, which an accent would not show on the cursor.
+            dialog_hotkey: Style::new().bold().underlined(),
             dialog_input: on(p.text, p.surface1),
             gauge: on(p.blue, p.surface0),
             error_dialog: on(p.base, p.red),
             error_title: on(p.base, p.red),
             error_button_focused: on(p.text, p.surface0),
+            error_hotkey: Style::new().bold().underlined(),
             tab: on(p.overlay1, p.crust),
             tab_active: on(p.text, p.base).bold(),
             tab_active_idle: on(p.subtext0, p.base),
@@ -492,11 +506,14 @@ impl Theme {
             keys: on(p.teal, p.surface),
             dialog_button: on(p.text, p.surface),
             dialog_button_focused: cursor,
+            // As the letters of the menus, which an accent would not show on the cursor.
+            dialog_hotkey: Style::new().bold().underlined(),
             dialog_input: on(p.text, p.field),
             gauge: on(p.accent, p.surface),
             error_dialog: on(p.ink, p.danger),
             error_title: on(p.ink, p.danger).bold(),
             error_button_focused: on(p.text, p.surface),
+            error_hotkey: Style::new().bold().underlined(),
             tab: on(p.muted, p.deep),
             tab_active: on(p.text, p.panel).bold(),
             tab_active_idle: on(p.muted, p.panel),
@@ -913,6 +930,33 @@ mod tests {
                 ];
                 for (surface, style, mark) in surfaces {
                     let marked = style.patch(mark);
+                    assert_ne!(marked, style, "{name} {depth:?}: {surface}");
+                    if let (Some(fg), Some(bg)) = (marked.fg, marked.bg) {
+                        assert_ne!(fg, bg, "{name} {depth:?}: {surface}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn letters_of_dialogs_stand_out_on_the_dialogs_and_their_buttons() {
+        for name in Theme::NAMES {
+            for depth in [ColorDepth::TrueColor, ColorDepth::Indexed] {
+                let theme = Theme::by_name(name, depth).unwrap();
+                let surfaces = [
+                    ("dialog", theme.dialog, theme.dialog_hotkey),
+                    ("button", theme.dialog_button, theme.dialog_hotkey),
+                    ("focused", theme.dialog_button_focused, theme.dialog_hotkey),
+                    ("error", theme.error_dialog, theme.error_hotkey),
+                    (
+                        "error focused",
+                        theme.error_button_focused,
+                        theme.error_hotkey,
+                    ),
+                ];
+                for (surface, style, letter) in surfaces {
+                    let marked = style.patch(letter);
                     assert_ne!(marked, style, "{name} {depth:?}: {surface}");
                     if let (Some(fg), Some(bg)) = (marked.fg, marked.bg) {
                         assert_ne!(fg, bg, "{name} {depth:?}: {surface}");

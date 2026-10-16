@@ -1,6 +1,6 @@
 //! How quick search and the filters of the lists match what is typed (ADR 0030): as it is, as
 //! fzf does, or as a regular expression. Each search and each window starts with
-//! `ui.search_mode`, and Alt+r switches its own, round; a glyph in its prompt, after the word,
+//! `ui.search_mode`, and Ctrl+s switches its own, round; a glyph in its prompt, after the word,
 //! says which.
 
 use noc_config::SearchMode;
@@ -13,7 +13,7 @@ use super::fuzzy::Fuzzy;
 use super::glyphs::SearchModes;
 use super::theme::Theme;
 
-/// The mode after `mode`, as Alt+r goes round: plain, fzf, regex.
+/// The mode after `mode`, as Ctrl+s goes round: plain, fzf, regex.
 pub(crate) fn next(mode: SearchMode) -> SearchMode {
     match mode {
         SearchMode::Plain => SearchMode::Fzf,

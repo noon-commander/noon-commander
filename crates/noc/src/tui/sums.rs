@@ -16,6 +16,7 @@ use super::dialog::{
 };
 use super::glyphs;
 use super::keymap::{Action, Resolved};
+use super::label::Label;
 use super::mouse::{Drawn, Pointer, Press, Scroll};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -66,13 +67,14 @@ pub(crate) enum SumsButton {
 }
 
 impl SumsButton {
-    fn label(self) -> String {
-        match self {
+    /// Its name, with the letter that Alt and it press.
+    fn label(self) -> Label {
+        Label::parse(&match self {
             Self::Copy => fl!("checksum-copy"),
             Self::CopyAll => fl!("checksum-copy-all"),
             Self::Save => fl!("checksum-save"),
             Self::Close => fl!("dialog-ok"),
-        }
+        })
     }
 }
 
@@ -137,10 +139,17 @@ impl SumsWindow {
     }
 
     /// Takes a key: Up and Down choose a file, Left, Right, and Tab a button, Enter or Space
-    /// press it, and Esc closes the window.
+    /// press it, Alt and its letter too, and Esc closes the window.
     pub(crate) fn handle(&mut self, input: Resolved) -> SumsEvent {
-        let Resolved::Action(action) = input else {
-            return SumsEvent::Pending;
+        let action = match input {
+            Resolved::Action(action) => action,
+            Resolved::Hotkey(c) => {
+                return match self.buttons.iter().find(|button| button.label().has(c)) {
+                    Some(&button) => self.press(button),
+                    None => SumsEvent::Pending,
+                };
+            }
+            Resolved::Insert(_) => return SumsEvent::Pending,
         };
         let last = self.rows.len().saturating_sub(1);
         let count = self.buttons.len().max(1);
@@ -154,17 +163,23 @@ impl SumsWindow {
             Action::Right | Action::NextField => self.focus = (self.focus + 1) % count,
             Action::Left | Action::PrevField => self.focus = (self.focus + count - 1) % count,
             Action::Confirm | Action::Toggle => {
-                return match self.buttons.get(self.focus) {
-                    Some(SumsButton::Copy) => SumsEvent::Copy(self.selected),
-                    Some(SumsButton::CopyAll) => SumsEvent::CopyAll,
-                    Some(SumsButton::Save) => SumsEvent::Save,
-                    Some(SumsButton::Close) | None => SumsEvent::Closed,
-                };
+                let button = self.buttons.get(self.focus).copied();
+                return self.press(button.unwrap_or(SumsButton::Close));
             }
             Action::Cancel => return SumsEvent::Closed,
             _ => {}
         }
         SumsEvent::Pending
+    }
+
+    /// What `button` does.
+    fn press(&self, button: SumsButton) -> SumsEvent {
+        match button {
+            SumsButton::Copy => SumsEvent::Copy(self.selected),
+            SumsButton::CopyAll => SumsEvent::CopyAll,
+            SumsButton::Save => SumsEvent::Save,
+            SumsButton::Close => SumsEvent::Closed,
+        }
     }
 
     /// The scroll bar of the list at the last render, for the mouse.
@@ -293,12 +308,12 @@ impl SumsWindow {
         };
         self.bar.set(bar);
         if inner.height >= 2 {
-            let labels: Vec<String> = self.buttons.iter().map(|button| button.label()).collect();
+            let labels: Vec<Label> = self.buttons.iter().map(|button| button.label()).collect();
             let buttons = button_line(&labels, 0, Some(self.focus), colors);
             let y = inner.bottom() - 1;
             draw_separator(frame, inner, y - 1, colors, theme);
             let row = Rect::new(inner.x, y, inner.width, 1);
-            drawn.buttons = button_spots(&buttons, row);
+            drawn.buttons = button_spots(&labels, 0, row);
             frame.render_widget(buttons, row);
         }
         *self.drawn.borrow_mut() = drawn;
@@ -471,5 +486,25 @@ mod tests {
             SumsEvent::Pending,
             "typing does nothing"
         );
+    }
+
+    #[test]
+    fn alt_and_a_letter_press_its_button() {
+        let mut window = many();
+        press(&mut window, Action::Down);
+        let mut hotkey = |c| window.handle(Resolved::Hotkey(c));
+        assert_eq!(hotkey('c'), SumsEvent::Copy(1));
+        assert_eq!(hotkey('a'), SumsEvent::CopyAll);
+        assert_eq!(hotkey('s'), SumsEvent::Save);
+        assert_eq!(hotkey('o'), SumsEvent::Closed);
+        assert_eq!(hotkey('x'), SumsEvent::Pending);
+        let all = [
+            SumsButton::Copy,
+            SumsButton::CopyAll,
+            SumsButton::Save,
+            SumsButton::Close,
+        ];
+        let letters: Vec<_> = all.iter().filter_map(|b| b.label().letter()).collect();
+        assert_eq!(letters, ['c', 'a', 's', 'o']);
     }
 }

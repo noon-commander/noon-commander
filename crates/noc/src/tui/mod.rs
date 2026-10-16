@@ -19,6 +19,7 @@ mod jobs;
 mod jump;
 mod key_hints;
 mod keymap;
+mod label;
 mod machine;
 mod menu;
 mod mouse;

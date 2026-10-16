@@ -35,12 +35,14 @@ command is in a list of files:
   they go with those keys here.
 - Text fields, quick search, and the command line take the keys of vim's Insert, Normal, and
   Visual mode, of its command line and the window of it, and of its pop-up menu. Alt and a key
-  stand for Esc and the key, as in nvim.
+  stand for Esc and the key, as in nvim, but in dialogs, where Alt and a letter are the dialog's
+  letters ([ADR 0033](adr/0033-letters-in-dialogs.md)).
 
 Every other key is here: keys that vim does not bind, and keys that it binds to something that a
 listing, a dialog, or a pager has not. These contexts have only vim's keys, and no section:
 `input` and `rename` in every mode, `path_input`, `completion`, `jump`, `key_hints`, and
-`user_screen`. The mouse is not in the keymap ([ADR 0018](adr/0018-mouse-support.md));
+`user_screen`; the letters of dialogs, which `path_input` and `completion` take too, are under
+`dialog`. The mouse is not in the keymap ([ADR 0018](adr/0018-mouse-support.md));
 keymap-compare.md lists what it does.
 
 ## Vim-style keys
@@ -74,9 +76,10 @@ others. A row whose keys differ has a line for each key.
 - Ctrl+[ and Ctrl+m are bound wherever Esc and Enter are, so they lose nothing. Ctrl+i is bound
   wherever Tab is but in the panels; there the keymap drops the bindings of Tab and gives it those
   of Ctrl+i, so Tab differs only there.
-- An Alt key that nothing binds stands for Esc and the key either way. Where an Alt key is bound
-  itself, an Esc and a quick key do what the Alt key does, rather than what Esc and then the key
-  would.
+- An Alt key that nothing binds stands for Esc and the key either way, but in dialogs and the
+  pull-down menu, where Alt and a letter are their letters, and an Esc and a quick letter act on
+  what the letter marks. Where an Alt key is bound itself, an Esc and a quick key do what the Alt
+  key does, rather than what Esc and then the key would.
 
 ## noc's own groups
 
@@ -152,7 +155,7 @@ not:
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
 | --- | --- | --- | --- | --- | --- |
-| Alt+r | `search_mode` | VS Code | — | Esc and a quick r arrive as Alt+r too, and switch the mode rather than give the search up and do what r does | Switch how the search matches, round: as it is, as fzf does, or as a regular expression. It is the key of the search of a tree for regular expressions, which is VS Code's ([ADR 0030](adr/0030-search-modes.md)). |
+| Ctrl+s | `search_mode` | noc | Ctrl+s (noc) | Same | Switch how the search matches, round: as it is, as fzf does, or as a regular expression ([ADR 0030](adr/0030-search-modes.md)); the search of a tree and the filters of the lists take it too. vim binds no Ctrl+s in Normal mode, in Insert mode, or on its command line; terminals stop their output with it (XOFF), which raw mode turns off, so it arrives, as a byte of its own without the kitty keyboard protocol too. Ctrl+x is vim's to subtract in Normal mode and to start completion in Insert mode, as Ctrl+x Ctrl+f completes file names; Ctrl+Shift+s arrives as Ctrl+s without the protocol, and kitty takes it to paste from the selection. mc's Ctrl+s searches again, which Ctrl+g does here, as on vim's command line. It replaced Alt+r, which an Esc and a quick r arrived as, so that Esc then r switched the mode rather than give the search up and rename ([ADR 0033](adr/0033-letters-in-dialogs.md)). |
 | Up<br>Down<br>PgUp<br>PgDn | `up`<br>`down`<br>`page_up`<br>`page_down` | mc | — | Same | End the search and move in the panel, as in mc. On vim's command line they go through the history. |
 | F1<br>F3<br>F4<br>F5<br>F6<br>Shift+F6<br>F7<br>F8<br>F9<br>Shift+F9<br>F10 | `help`<br>`view`<br>`edit`<br>`copy`<br>`move`<br>`rename`<br>`mkdir`<br>`delete`<br>`pull_down`<br>`pull_down_last`<br>`quit` | mc | — | Same | End the search and do what they do in the panel, as in mc ([ADR 0022](adr/0022-vim-modes.md)). |
 | Shift+F7 | `next_match` | mc, Far | Ctrl+g (vim) | Same | The next match, with their key to search again. |
@@ -167,6 +170,7 @@ not:
 | Space | `toggle` | mc | Space (mc) | Same | Switch the check box, choose the radio button, or press the button, as in mc's dialogs. vim's Space goes right. |
 | q | `cancel` | less, ranger | Esc, Ctrl+c (vim); q (less, ranger) | Same | Close, as q quits less and closes ranger's windows. vim's q records a macro. |
 | F10 | `cancel` | mc | Esc, Ctrl+c (vim); q (less, ranger) | Same | Cancel, as in mc's dialogs ([ADR 0022](adr/0022-vim-modes.md)). |
+| Alt and a letter | — | Far, mc | — | Esc and a quick letter arrive as Alt and the letter too, and act on its element rather than leave Insert mode or close the dialog | Put the focus in a text field, in Insert mode, switch a check box, choose a radio button, or press a button, by the letter highlighted in its label, from anywhere in the dialog, as in Far's and mc's dialogs; with Alt, so that the plain letters stay vim's keys and text ([ADR 0033](adr/0033-letters-in-dialogs.md)). In every mode, in the text fields too (`dialog_input`, `path_input`, `completion`, `find`, `find_input`), where Alt and a key no longer stand for Esc and the key; the Configuration dialog takes Alt+1 … Alt+7 for its categories. Not in the preset: `Context::alt_letters_are_hotkeys` asks for it. |
 
 ## Help (`help`, Normal mode)
 
@@ -201,14 +205,14 @@ not:
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
 | --- | --- | --- | --- | --- | --- |
-| Alt+r | `search_mode` | VS Code | — | Esc and a quick r arrive as Alt+r too, and switch the mode rather than close the window | As in quick search, for the filter, until the window closes. |
+| Ctrl+s | `search_mode` | noc | Ctrl+s (noc) | Same | As in quick search, for the filter, until the window closes. |
 | q<br>F10 | `cancel` | less, ranger, mc | Esc, Ctrl+c (vim); q (less, ranger) | Same | As in `dialog`; F10 closes mc's lists too. |
 
 ## Lists (`list`, Insert mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
 | --- | --- | --- | --- | --- | --- |
-| Alt+r | `search_mode` | VS Code | — | Esc and a quick r arrive as Alt+r too, and switch the mode rather than go to Normal mode | As in Normal mode. |
+| Ctrl+s | `search_mode` | noc | Ctrl+s (noc) | Same | As in Normal mode. |
 | F10 | `cancel` | mc | Ctrl+c (vim) | Same | As in Normal mode. |
 
 ## Location menu (`location_menu`, Normal mode)
@@ -279,4 +283,4 @@ not:
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
 | --- | --- | --- | --- | --- | --- |
 | F3<br>F4 | `view`<br>`edit` | mc, Far | — | Same | View the file of the row from its line, or edit it at the line, as in the results of mc's and Far's Find file. |
-| Alt+r<br>Alt+c | `search_mode`<br>`match_case` | VS Code | — | Esc and a quick r or c arrive as Alt+r or Alt+c too, and switch rather than leave Insert mode or close the dialog | Switch regular expressions and case wherever the focus is, as in VS Code ([ADR 0027](adr/0027-search-of-a-whole-tree.md), [ADR 0030](adr/0030-search-modes.md)). |
+| Ctrl+s | `search_mode` | noc | Ctrl+s (noc) | Same | Take the text as a regular expression or as it is, wherever the focus is, as Ctrl+s switches the mode of quick search ([ADR 0030](adr/0030-search-modes.md), [ADR 0033](adr/0033-letters-in-dialogs.md)). Case, VS Code's Alt+c, is the check box Match case, whose letter is c, as under `dialog`. |

@@ -108,7 +108,7 @@ struct Search {
     back: bool,
     /// The rows on screen that Esc puts back, as vim's `old_viewstate`.
     view: Window,
-    /// How it matches what is typed: `ui.search_mode` until Alt+r switches it.
+    /// How it matches what is typed: `ui.search_mode` until Ctrl+s switches it.
     mode: SearchMode,
 }
 
@@ -789,7 +789,7 @@ impl Panel {
         self.search = Some(Search::new(self.cursor, count, true, self.window, mode));
     }
 
-    /// Switches how quick search matches to the next mode, as Alt+r does, and searches again.
+    /// Switches how quick search matches to the next mode, as Ctrl+s does, and searches again.
     pub(crate) fn switch_search_mode(&mut self) {
         let Some(search) = &mut self.search else {
             return;

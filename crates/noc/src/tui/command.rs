@@ -306,6 +306,7 @@ impl CommandLine {
                 self.editor.insert(c);
                 return CommandEvent::None;
             }
+            Resolved::Hotkey(_) => return CommandEvent::None,
             Resolved::Action(action) => action,
         };
         // As vim's, `-`, `+`, and `_` that find no line leave the column of `j` and `k` alone.

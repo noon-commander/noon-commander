@@ -56,6 +56,7 @@ const VISUAL_PANEL: (Mode, Context) = (Mode::Visual, Context::Panel);
 const FIELD: (Mode, Context) = (Mode::Normal, Context::DialogInput);
 const TYPING: (Mode, Context) = (Mode::Insert, Context::DialogInput);
 const SELECTING: (Mode, Context) = (Mode::Visual, Context::DialogInput);
+const RENAMING: (Mode, Context) = (Mode::Insert, Context::Rename);
 
 #[test]
 fn single_keys_resolve_at_once() {
@@ -429,17 +430,30 @@ fn alt_and_a_key_stand_for_esc_and_the_key_in_insert_mode_and_the_panels() {
     let state = KeyState::default();
     let alt_j = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::ALT);
     let plain = Some(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
-    assert_eq!(keymap.alt_as_esc(&state, TYPING, alt_j), plain);
+    assert_eq!(keymap.alt_as_esc(&state, RENAMING, alt_j), plain);
     assert_eq!(keymap.alt_as_esc(&state, PANEL, alt_j), plain);
     assert_eq!(
         keymap.alt_as_esc(&state, (Mode::Insert, Context::CommandLine), alt_j),
         plain
     );
     assert_eq!(
-        keymap.alt_as_esc(&state, (Mode::Normal, Context::Dialog), alt_j),
-        None,
-        "Esc would close the dialog"
+        keymap.alt_as_esc(&state, (Mode::Insert, Context::QuickSearch), alt_j),
+        plain
     );
+    // In dialogs Alt and a letter are its hotkey, in every mode.
+    for place in [
+        (Mode::Normal, Context::Dialog),
+        TYPING,
+        SELECTING,
+        (Mode::Insert, Context::PathInput),
+        (Mode::Insert, Context::Completion),
+        (Mode::Normal, Context::Find),
+        (Mode::Insert, Context::FindInput),
+    ] {
+        assert_eq!(keymap.alt_as_esc(&state, place, alt_j), None, "{place:?}");
+        let left = KeyEvent::new(KeyCode::Left, KeyModifiers::ALT);
+        assert_eq!(keymap.alt_as_esc(&state, place, left), None, "{place:?}");
+    }
     let alt_f1 = KeyEvent::new(KeyCode::F(1), KeyModifiers::ALT);
     assert_eq!(keymap.alt_as_esc(&state, PANEL, alt_f1), None, "bound");
     // Any key: an Esc and a quick Enter, Backspace, or arrow arrive with Alt too.
@@ -451,16 +465,16 @@ fn alt_and_a_key_stand_for_esc_and_the_key_in_insert_mode_and_the_panels() {
     ] {
         let alt = KeyEvent::new(code, KeyModifiers::ALT);
         let plain = Some(KeyEvent::new(code, KeyModifiers::NONE));
-        assert_eq!(keymap.alt_as_esc(&state, TYPING, alt), plain, "{code:?}");
+        assert_eq!(keymap.alt_as_esc(&state, RENAMING, alt), plain, "{code:?}");
     }
     let alt_esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::ALT);
-    assert_eq!(keymap.alt_as_esc(&state, TYPING, alt_esc), None);
+    assert_eq!(keymap.alt_as_esc(&state, RENAMING, alt_esc), None);
     let ctrl_alt_w = KeyEvent::new(
         KeyCode::Char('w'),
         KeyModifiers::ALT | KeyModifiers::CONTROL,
     );
     assert_eq!(
-        keymap.alt_as_esc(&state, TYPING, ctrl_alt_w),
+        keymap.alt_as_esc(&state, RENAMING, ctrl_alt_w),
         Some(KeyEvent::new(KeyCode::Char('w'), KeyModifiers::CONTROL))
     );
     assert_eq!(
@@ -482,6 +496,12 @@ fn alt_and_a_key_stand_for_esc_and_the_key_in_insert_mode_and_the_panels() {
     assert_eq!(keymap.alt_as_esc(&pending, PANEL, alt_j), None);
 }
 
+fn hotkeys(text: &str) -> Vec<Typed> {
+    text.chars()
+        .map(|c| Typed::from(Resolved::Hotkey(c)))
+        .collect()
+}
+
 #[test]
 fn the_pull_down_menu_runs_letters_with_alt_and_moves_with_hjkl() {
     let menu = (Mode::Normal, Context::PullDown);
@@ -489,16 +509,62 @@ fn the_pull_down_menu_runs_letters_with_alt_and_moves_with_hjkl() {
         typed(menu, &["h", "j", "k", "l"]),
         actions(&[Action::Left, Action::Down, Action::Up, Action::Right])
     );
-    assert_eq!(typed(menu, &["alt-c", "alt-2"]), inserts("c2"));
+    assert_eq!(typed(menu, &["alt-c", "alt-2"]), hotkeys("c2"));
     assert_eq!(typed(menu, &["q"]), actions(&[Action::Cancel]));
     // A count goes with the letter, not with the key after it.
     assert_eq!(
         typed(menu, &["3", "alt-z", "j"]),
         [
-            Typed::from(Resolved::Insert('z')),
+            Typed::from(Resolved::Hotkey('z')),
             Typed::from(Resolved::Action(Action::Down))
         ]
     );
+}
+
+#[test]
+fn dialogs_take_alt_and_a_letter_as_their_hotkeys_in_every_mode() {
+    for place in [
+        (Mode::Normal, Context::Dialog),
+        FIELD,
+        TYPING,
+        SELECTING,
+        (Mode::Insert, Context::PathInput),
+        (Mode::Insert, Context::Completion),
+        (Mode::Normal, Context::Find),
+        (Mode::Insert, Context::FindInput),
+    ] {
+        assert_eq!(
+            typed(place, &["alt-c", "alt-shift-o", "alt-1"]),
+            hotkeys("cO1"),
+            "{place:?}"
+        );
+    }
+    // In a field, the letter alone is text.
+    assert_eq!(typed(TYPING, &["c"]), inserts("c"));
+    // Ctrl+s switches regular expressions in the search of a tree, from anywhere.
+    for place in [
+        (Mode::Normal, Context::Find),
+        (Mode::Insert, Context::FindInput),
+    ] {
+        assert_eq!(typed(place, &["ctrl-s"]), actions(&[Action::SearchMode]));
+    }
+}
+
+#[test]
+fn ctrl_s_switches_how_quick_search_and_the_filters_match() {
+    for place in [
+        (Mode::Insert, Context::QuickSearch),
+        (Mode::Normal, Context::LocationMenu),
+        (Mode::Insert, Context::LocationMenu),
+        (Mode::Normal, Context::Jump),
+        (Mode::Insert, Context::KeyHints),
+    ] {
+        assert_eq!(
+            typed(place, &["ctrl-s"]),
+            actions(&[Action::SearchMode]),
+            "{place:?}"
+        );
+    }
 }
 
 #[test]

@@ -286,8 +286,8 @@ pub(super) const PRESET: Preset = &[
     // match, and Esc and Ctrl+c go back to where it started. Ctrl+g and Ctrl+t go to the next and the
     // previous match, and Ctrl+b and Ctrl+e to the start and the end, as on vim's command line.
     // The arrows and the page keys, and the F-keys, end it and do what they do in the panel,
-    // as in mc; Shift+F7 goes to the next match. Alt+r switches how it matches, as the search of
-    // a tree switches regular expressions.
+    // as in mc; Shift+F7 goes to the next match. Ctrl+s switches how it matches, as in the lists
+    // and the search of a tree; vim binds no Ctrl+s.
     (
         Mode::Insert,
         Context::QuickSearch,
@@ -296,7 +296,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Abort, &["esc", "ctrl-[", "ctrl-c"]),
             (Action::QuickSearch, &["ctrl-g"]),
             (Action::PrevMatch, &["ctrl-t"]),
-            (Action::SearchMode, &["alt-r"]),
+            (Action::SearchMode, &["ctrl-s"]),
             (Action::TextStart, &["ctrl-b"]),
             (Action::TextEnd, &["ctrl-e"]),
             (Action::Up, &["up"]),
@@ -471,7 +471,7 @@ pub(super) const PRESET: Preset = &[
     // What the windows that list items to choose from share: the location menu, the tab menu,
     // the zoxide window, the workspaces, the command history, and the list of the key hints
     // fall back to it. `/` types in the filter, in Insert mode, where Esc goes back to the list.
-    // Alt+r switches how the filter matches, in either mode.
+    // Ctrl+s switches how the filter matches, in either mode.
     (
         Mode::Normal,
         Context::List,
@@ -485,7 +485,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Home, &["g g", "home"]),
             (Action::End, &["shift-g", "end"]),
             (Action::QuickSearch, &["/"]),
-            (Action::SearchMode, &["alt-r"]),
+            (Action::SearchMode, &["ctrl-s"]),
             (Action::ShowFull, &["shift-k"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c", "q", "f10"]),
@@ -500,7 +500,7 @@ pub(super) const PRESET: Preset = &[
             (Action::PageUp, &["pageup"]),
             (Action::PageDown, &["pagedown"]),
             (Action::Confirm, &["enter", "ctrl-m", "ctrl-y"]),
-            (Action::SearchMode, &["alt-r"]),
+            (Action::SearchMode, &["ctrl-s"]),
             (Action::NormalMode, &["esc", "ctrl-["]),
             (Action::Cancel, &["ctrl-c", "f10"]),
         ],
@@ -639,17 +639,16 @@ pub(super) const PRESET: Preset = &[
         ],
     ),
     // The dialog of the search of a whole tree, on top of the dialogs': F3 and F4 view and edit
-    // the file of the row at the line, as in the results of mc's Find File, and Alt+r and Alt+c
-    // switch regular expressions and case, as in VS Code, wherever the focus is. On the rows,
-    // Ctrl+u and Ctrl+d move half a page, as in the lists.
+    // the file of the row at the line, as in the results of mc's Find File, and Ctrl+s switches
+    // regular expressions, as in quick search, wherever the focus is; Alt+c is the letter of the
+    // check box of case. On the rows, Ctrl+u and Ctrl+d move half a page, as in the lists.
     (
         Mode::Normal,
         Context::Find,
         &[
             (Action::View, &["f3"]),
             (Action::Edit, &["f4"]),
-            (Action::SearchMode, &["alt-r"]),
-            (Action::MatchCase, &["alt-c"]),
+            (Action::SearchMode, &["ctrl-s"]),
             (Action::HalfPageUp, &["ctrl-u"]),
             (Action::HalfPageDown, &["ctrl-d"]),
         ],
@@ -660,8 +659,7 @@ pub(super) const PRESET: Preset = &[
         &[
             (Action::View, &["f3"]),
             (Action::Edit, &["f4"]),
-            (Action::SearchMode, &["alt-r"]),
-            (Action::MatchCase, &["alt-c"]),
+            (Action::SearchMode, &["ctrl-s"]),
         ],
     ),
     (
@@ -670,8 +668,7 @@ pub(super) const PRESET: Preset = &[
         &[
             (Action::View, &["f3"]),
             (Action::Edit, &["f4"]),
-            (Action::SearchMode, &["alt-r"]),
-            (Action::MatchCase, &["alt-c"]),
+            (Action::SearchMode, &["ctrl-s"]),
         ],
     ),
     // The terminal's own screen, with the output of commands. Enter and q go back, as from the

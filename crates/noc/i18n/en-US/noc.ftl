@@ -90,7 +90,7 @@ panel-name-by-extension = Name, by extension
 # The size column of the `..` row and of directories.
 panel-up-dir = UP--DIR
 panel-dir = DIR
-# Status line during quick search: the glyph of how it matches (plain, fzf, or regex; Alt+r
+# Status line during quick search: the glyph of how it matches (plain, fzf, or regex; Ctrl+s
 # switches it), and what was typed so far.
 panel-search = Search { $mode }: { $text }
 # Status line during quick search up the rows, as vim's ?: the same.
@@ -142,12 +142,12 @@ error-not-openssh = { $program } is not OpenSSH
 ## the tab menu, the workspaces, the command history, and the list of the key hints. Prefix:
 ## picker-.
 
-# The first line: the glyph of how the filter matches (plain, fzf, or regex; Alt+r switches
+# The first line: the glyph of how the filter matches (plain, fzf, or regex; Ctrl+s switches
 # it), and what was typed to filter the window.
 picker-filter = Filter { $mode }: { $text }
 # When the filter leaves no row.
 picker-nothing = Nothing matches.
-# In the regex mode of the filter (Alt+r), when what is typed is no regular expression: what is
+# In the regex mode of the filter (Ctrl+s), when what is typed is no regular expression: what is
 # wrong with it, as the regex engine says.
 picker-not-regex = Not a regular expression: { $reason }
 
@@ -171,7 +171,7 @@ menu-more = { $count } more…
 ## keywords typed, as `z` picks them in a shell. Prefix: jump-.
 
 jump-title = zoxide
-# The first line: the glyph of how they match (plain, fzf, or regex; Alt+r switches it), and the
+# The first line: the glyph of how they match (plain, fzf, or regex; Ctrl+s switches it), and the
 # keywords typed, separated by spaces.
 jump-keywords = Jump to { $mode }: { $text }
 # When zoxide lists no directory.
@@ -182,20 +182,21 @@ jump-not-installed = zoxide is not installed: cannot run { $program }. Get it fr
 ## The search of a whole tree (src/tui/find): f / in a panel, or F9 → Command → Find file…; f f
 ## and Find files and dirs… open it in its Files and dirs mode.
 ## ripgrep finds the lines that match the text in the files under the panel's directory. Prefix:
-## find-.
+## find-. As in every dialog, an & marks the letter that Alt and it act on, and && stands for &;
+## letters must differ within a dialog, and Cancel has none.
 
 # The title: where it searches, as the panel's title shows it.
 find-title = Find in { $dir }
 # Its modes, as radio buttons: text in the files, with ripgrep, or files and directories by name,
 # with fd.
-find-mode-text = Text
-find-mode-names = Files and dirs
+find-mode-text = Te&xt
+find-mode-names = Files and &dirs
 # The labels of the fields: the text to find, with the glyph of how it matches, as it is or as a
-# regular expression (Alt+r), and the globs of the files to search.
-find-text = Text { $mode }:
-find-files = Files:
-# The check box: matching case rather than only when the text has a capital letter (Alt+c).
-find-match-case = Match case
+# regular expression (Ctrl+s), and the globs of the files to search.
+find-text = &Text { $mode }:
+find-files = &Files:
+# The check box: matching case rather than only when the text has a capital letter.
+find-match-case = Match &case
 # Under the rows: how many lines matched, in how many files.
 find-count = { $lines ->
         [one] 1 line
@@ -254,15 +255,15 @@ workspaces-tabs = { $count ->
         [one] 1 tab
        *[other] { $count } tabs
     }
-# The dialog of t W, and of a in the window.
+# The dialog of t W, and of a in the window. The & of a prompt marks the letter of its field.
 workspaces-save-title = Save workspace
-workspaces-save-prompt = Save the tabs of both panels as:
+workspaces-save-prompt = &Save the tabs of both panels as:
 # The name of an existing workspace was typed.
 workspaces-replace-title = Replace workspace
 workspaces-replace = Workspace "{ $name }" exists. Replace it with the tabs of both panels?
 # F6 in the window.
 workspaces-rename-title = Rename workspace
-workspaces-rename-prompt = New name for "{ $name }":
+workspaces-rename-prompt = &New name for "{ $name }":
 # The new name is that of another workspace.
 workspaces-rename-replace = Workspace "{ $name }" exists. Replace it?
 # F8 in the window.
@@ -343,102 +344,104 @@ pulldown-workspace-list = Workspace &list…
 
 ## The Configuration dialog, Options → Configuration… (src/tui/configuration): the settings of
 ## config.toml by category. Prefix: config-. Each setting has a name and a hint, a line shown
-## below the settings while it has the cursor.
+## below the settings while it has the cursor. As in every dialog, an & in a setting's name marks
+## the letter that Alt and it act on, and && stands for &; letters must differ within a category.
+## The categories get the digits 1, 2, … in front of their names, for Alt and them.
 
 config-title = Configuration
 # Categories.
 config-interface = Interface
 # Settings of the interface, [ui].
-config-language = Language
+config-language = &Language
 config-language-hint = A language tag, such as en-US, or auto for the system locale.
-config-theme = Theme
+config-theme = &Theme
 config-theme-hint = Colors: mc-classic, as mc; terminal, the terminal's own; noon, from the logo, and catppuccin, each dark or light.
-config-borders = Borders
+config-borders = &Borders
 config-borders-hint = The frames of panels and dialogs.
 config-borders-double = Double ═ ║ ╔
 config-borders-single = Single ─ │ ┌
-config-icons = Icons
+config-icons = &Icons
 config-icons-hint = Nerd Font icons in front of names; without them, mc's markers.
-config-show-hidden = Show hidden files
+config-show-hidden = Show &hidden files
 config-show-hidden-hint = Names that begin with a dot; o h switches them.
-config-search-mode = Search mode
-config-search-mode-hint = How quick search and the filters of the lists match what is typed: the text anywhere, the letters in order as fzf does, or a regular expression. Alt+r switches it in one of them until it closes. f / and f f start in it too, fzf as a regular expression.
+config-search-mode = &Search mode
+config-search-mode-hint = How quick search and the filters of the lists match what is typed: the text anywhere, the letters in order as fzf does, or a regular expression. Ctrl+s switches it in one of them until it closes. f / and f f start in it too, fzf as a regular expression.
 config-search-mode-plain = Plain
 config-search-mode-fzf = fzf
 config-search-mode-regex = Regular expression
-config-mouse = Mouse
+config-mouse = &Mouse
 config-mouse-hint = Clicks move the cursor, open, and mark, and the wheel scrolls. The terminal then selects text with Shift held, or Option in iTerm2.
-config-wheel = Mouse wheel
+config-wheel = Mouse &wheel
 config-wheel-hint = How far a step of the wheel scrolls: a number of lines, or page.
 config-wheel-invalid = "{ $text }" is not a step of the wheel: it takes a number of lines from 1 to { $most }, or page.
-config-terminal-title = Terminal title
+config-terminal-title = T&erminal title
 config-terminal-title-hint = The title of the terminal's window or tab shows the active panel's directory.
-config-which-key = Key hints
+config-which-key = &Key hints
 config-which-key-hint = After a key that starts longer sequences, such as g or Ctrl+w, show the keys that can follow it, as which-key does.
-config-which-key-delay = Key hints delay
+config-which-key-delay = Key hints &delay
 config-which-key-delay-hint = How long after such a key the hints show, in milliseconds.
 config-which-key-delay-invalid = "{ $text }" is not a delay: it takes a whole number of milliseconds, from 0 to 65535.
-config-menu-bar = Menu bar
+config-menu-bar = Me&nu bar
 config-menu-bar-hint = When the menu bar of F9 shows.
 config-menu-bar-on-demand = While a menu is open
 config-menu-bar-always = Always
-config-tab-bar = Tab bar
+config-tab-bar = T&ab bar
 config-tab-bar-hint = Where a panel with more than one tab shows them.
 config-tab-bar-line = A line above the panel
 config-tab-bar-frame = In the panel's frame
 # Settings of copying and moving, [transfer].
 config-transfers = Transfers
-config-atomic-upload = Atomic copies
+config-atomic-upload = &Atomic copies
 config-atomic-upload-hint = Write each copy under a hidden name and rename it when complete, so the target never holds part of a file.
-config-parallel-jobs = Parallel jobs
+config-parallel-jobs = &Parallel jobs
 config-parallel-jobs-hint = How many jobs run at once; later ones wait. Editing with F4 never waits.
 config-parallel-jobs-invalid = "{ $text }" is not a number of jobs: it takes a whole number, at least 1.
 # Settings of ssh, [ssh], and of the hosts of the location menu, [discovery]. Lists are words separated by
 # spaces, with "…" around a word that has spaces.
 config-ssh = SSH
-config-ssh-program = Program
+config-ssh-program = &Program
 config-ssh-program-hint = The OpenSSH client, 8.7 or later: a name in PATH, or a path. Applies to new connections.
 config-ssh-program-empty = The ssh program cannot be empty.
-config-ssh-config-file = Config file
+config-ssh-config-file = &Config file
 config-ssh-config-file-hint = Read this file instead of ~/.ssh/config, like ssh -F; empty: the default. Applies to new connections.
-config-ssh-args = Extra arguments
+config-ssh-args = &Extra arguments
 config-ssh-args-hint = For every ssh run, such as -o ServerAliveInterval=15. Forwarding is refused. Applies to new connections.
 config-ssh-args-invalid = Invalid extra ssh arguments: { $reason }
-config-multiplex = Share connections
+config-multiplex = &Share connections
 config-multiplex-hint = One authenticated connection per host for panels and transfers; off for servers with MaxSessions 1.
-config-hide-hosts = Hidden hosts
+config-hide-hosts = &Hidden hosts
 config-hide-hosts-hint = Hosts from ssh_config to leave out, as patterns with * and ?, separated by spaces.
 # Settings of the volumes of the location menu, [volumes].
 config-volumes = Volumes
-config-hide-volumes = Hidden volumes
+config-hide-volumes = &Hidden volumes
 config-hide-volumes-hint = Mount points to leave out of the location menu, as patterns with * and ?, separated by spaces. The system volume always shows.
 # Settings of zoxide, [zoxide].
 config-zoxide = zoxide
-config-zoxide-record = Record directories
+config-zoxide-record = &Record directories
 config-zoxide-record-hint = Add a local directory to zoxide once you copy, delete, view, or edit something there; passing through does not count.
-config-zoxide-program = Program
+config-zoxide-program = &Program
 config-zoxide-program-hint = The zoxide program: a name in PATH, or a path. g z jumps to the directories it ranks.
 config-zoxide-program-empty = The zoxide program cannot be empty.
 config-shell = Command line
-config-pause = Wait after a command
+config-pause = &Wait after a command
 config-pause-hint = When the output of a command stays on screen until a key; g < shows it again either way.
 config-pause-always = Always
 config-pause-on-error = When it fails
 config-pause-never = Never
-config-history-size = History size
+config-history-size = &History size
 config-history-size-hint = How many commands of ! and : the history keeps, of all hosts together; 0 keeps none.
 config-history-size-invalid = "{ $text }" is not a number of commands: it takes a whole number, 0 or more.
 config-search = Search
-config-search-program = ripgrep program
+config-search-program = &ripgrep program
 config-search-program-hint = The ripgrep program for local directories, which searches the text of files: a name in PATH, or a path. On a host, rg runs as the host's PATH finds it.
 config-search-program-empty = The ripgrep program cannot be empty.
-config-fd-program = fd program
+config-fd-program = &fd program
 config-fd-program-hint = The fd program for local directories, which finds files and directories by name: a name in PATH, or a path. On a host, fd runs as the host's PATH finds it, or fdfind.
 config-fd-program-empty = The fd program cannot be empty.
-config-max-results = Most results
+config-max-results = &Most results
 config-max-results-hint = The search stops after finding so many lines, or files and directories when it lists them; 1 or more.
 config-max-results-invalid = "{ $text }" is not a number of results: it takes a whole number, 1 or more.
-config-max-per-file = Most lines in a file
+config-max-per-file = Most &lines in a file
 config-max-per-file-hint = The search finds no more lines in one file than so many, so that a large file leaves room for others; 1 or more.
 config-max-per-file-invalid = "{ $text }" is not a number of lines: it takes a whole number, 1 or more.
 # After the hint of a setting that the running Noon Commander cannot change.
@@ -449,31 +452,35 @@ config-save-error = Cannot save the configuration: { $reason }
 config-language-invalid = "{ $text }" is not auto or a language tag such as en-US.
 
 ## Dialogs (src/tui/dialog). Prefix: dialog-. Their text comes from ssh; these are the buttons.
+## In every dialog, as in mc and Far, an & marks the letter that Alt and it act on: it presses a
+## button, switches a check box, picks a choice, or puts the focus in a field; the & of the prompt
+## over a lone field marks the field's. && stands for &. Letters must differ within a dialog;
+## Cancel has none, as Esc and F10 cancel.
 
-dialog-ok = OK
+dialog-ok = &OK
 dialog-cancel = Cancel
-dialog-yes = Yes
-dialog-no = No
+dialog-yes = &Yes
+dialog-no = &No
 # Buttons of a failed file operation, as in mc: leave this entry, leave every failing one
 # without asking again, try again, stop.
-dialog-skip = Ignore
-dialog-skip-all = Ignore all
-dialog-retry = Retry
-dialog-abort = Abort
+dialog-skip = &Ignore
+dialog-skip-all = Ignore a&ll
+dialog-retry = &Retry
+dialog-abort = &Abort
 # Buttons of a taken name, as in mc: overwrite this and every later one, keep them all,
-# overwrite those that are older.
-dialog-all = All
-dialog-none = None
-dialog-older = Older
+# overwrite those that are older. They show with Yes, No, and Abort.
+dialog-all = A&ll
+dialog-none = Non&e
+dialog-older = &Older
 # Title of error dialogs.
 dialog-error = Error
 # Fills a field of a form with what a panel shows, such as the directory open on a host.
-dialog-use-current = Use current
+dialog-use-current = &Use current
 # Buttons of a list of files found, as in mc's results of Find File: go to the file in the
 # panel, view it, edit it.
-dialog-go-to = Go to
-dialog-view = View
-dialog-edit = Edit
+dialog-go-to = &Go to
+dialog-view = &View
+dialog-edit = &Edit
 
 ## Help screen (src/tui/help). Prefix: help-. One line per key: say what it does, briefly.
 
@@ -674,7 +681,6 @@ help-jump-go = Open the directory in the active panel
 help-find-view = View the file, from the line
 help-find-edit = Edit the file, at the line
 help-find-regex = The text as a regular expression, or as it is; the glyph after Text says which
-help-find-case = Match case, or ignore it unless the text has a capital
 help-new-tab = A new tab in this panel, on the same directory
 help-close-tab = Close this tab; the last one stays
 help-next-tab = The next tab in this panel
@@ -799,7 +805,7 @@ help-tip-modes-keys = Keys are vim's, in its modes; the F-keys of the panels are
 help-tip-modes-fields = Text fields open in Insert mode, where characters are text; Esc goes to Normal mode, and Esc there closes.
 help-tip-modes-close = Quick search and the command line close on Esc, as vim's search and command line do.
 help-tip-modes-line = The line above the F-key bar says the mode, NORMAL, INSERT, or VISUAL, and the window that has the keys, as INSERT · Quick search; (insert) is the one command of Normal mode after Ctrl+o. The cursor is a bar in Insert mode.
-help-tip-modes-alt = Alt and a key stand for Esc and the key in Insert and Visual mode and in the panels, but on a password.
+help-tip-modes-alt = Alt and a key stand for Esc and the key in Insert and Visual mode and in the panels, but on a password, and in the dialogs and the pull-down menu, where Alt and a highlighted letter act on what has it.
 help-tip-modes-cancel = Ctrl+c closes or cancels in every mode.
 help-tip-counts = Counts and registers
 help-tip-counts-count = In Normal mode, a count goes before a command: 5j goes five rows down, 3G to the third row, 2g t to the second tab, and d3w deletes three words.
@@ -808,7 +814,7 @@ help-tip-lists = Lists
 help-tip-lists-open = The lists open in Normal mode: / types in the filter, and Esc goes back to the rows.
 help-tip-lists-jump = The zoxide window opens in Insert mode, typing what filters its directories, or, in the plain search mode, keywords, as z takes them in a shell; Esc goes to the rows, and / types again.
 help-tip-search = Search modes
-help-tip-search-where = Quick search and the filters of the lists (the location menu, the tab menu, the zoxide window, the workspaces, the command history, and the key hints) start in the search mode of Configuration; Alt+r switches it there, and the glyph after the word of the prompt says which, as in the Text field of f /.
+help-tip-search-where = Quick search and the filters of the lists (the location menu, the tab menu, the zoxide window, the workspaces, the command history, and the key hints) start in the search mode of Configuration; Ctrl+s switches it there, and the glyph after the word of the prompt says which, as in the Text field of f /.
 help-tip-search-plain = Plain: the text anywhere, ignoring case.
 help-tip-search-fzf = fzf: the letters typed in order, not necessarily together, best match first. Words separated by spaces must all match; 'word matches as it is, ^word at the start, word$ at the end, and !word where it is not.
 help-tip-search-regex = Regular expression: case counts only once it has a capital letter, as in the search of a tree; a glyph crossed out says it is none.
@@ -820,6 +826,8 @@ help-tip-command-open = ! opens the command line, and : too, for commands of Noo
 help-tip-command-run = A command runs with the terminal, in the panel's directory, then a key brings the panels back; cd and export last only as long as the command.
 help-tip-pulldown = Pull-down menu
 help-tip-pulldown-letters = Alt and the highlighted letter of a menu open it, and Alt and that of a command run it.
+help-tip-dialogs = Dialogs
+help-tip-dialogs-letters = Alt and a highlighted letter press its button, switch its check box, pick its choice, or put the focus in its field, from anywhere in the dialog; in Configuration, Alt and a digit open a category.
 help-tip-key-hints = Key hints
 help-tip-key-hints-show = After a key that starts longer sequences, such as g or Ctrl+w, the keys that can follow show after a moment, and wait for one.
 help-tip-key-hints-keys = Esc closes them, and Backspace takes back the last key, or closes them when none is typed.
@@ -849,10 +857,10 @@ which-key-close = Ctrl+k lists, Esc closes, Backspace goes back
 # Title: the host alias.
 host-edit-title = Host { $host }
 # Field labels.
-host-label = Label (shown instead of the alias):
-host-start-dir = Remote directory (opened on connect; empty: home):
-host-other-dir = Other panel directory (local, / or ~/…; empty: unchanged):
-host-remember-dir = Remember the last directory in this session
+host-label = &Label (shown instead of the alias):
+host-start-dir = &Remote directory (opened on connect; empty: home):
+host-other-dir = Other panel &directory (local, / or ~/…; empty: unchanged):
+host-remember-dir = Re&member the last directory in this session
 # The reason names the file.
 host-save-error = Cannot save the host settings: { $reason }
 # The other panel directory must be a local path.
@@ -864,20 +872,20 @@ host-other-dir-invalid = the other panel directory must start with / or ~/
 pattern-select = Select
 pattern-unselect = Unselect
 # Check boxes: leave directories alone; tell upper and lower case apart.
-pattern-files-only = Files only
-pattern-case-sensitive = Case sensitive
+pattern-files-only = &Files only
+pattern-case-sensitive = &Case sensitive
 
 ## Quick cd, g d (src/tui/app, src/tui/cd). Prefix: cd-. As in mc.
 
 cd-title = Quick cd
 # Above the field: a path as cd takes it in a shell.
-cd-prompt = cd
+cd-prompt = &cd
 
 ## Making directories, F7 (src/tui/app). Prefix: mkdir-. As in mc.
 
 mkdir-title = Create a new directory
 # Above the name field; the name under the cursor is filled in.
-mkdir-prompt = Enter directory name:
+mkdir-prompt = &Enter directory name:
 mkdir-error = Cannot create directory { $path }: { $reason }
 
 ## The window of a running job (src/tui/progress). Prefix: job-.
@@ -905,7 +913,7 @@ job-waiting = Waiting for other jobs to finish…
 jobs-title = Jobs
 jobs-none = No jobs are running.
 # The button that brings the selected job to the front, in its window.
-jobs-show = Show
+jobs-show = &Show
 # How far a job is, in the list, in a column of 9.
 jobs-state-waiting = waiting
 jobs-state-counting = counting
@@ -914,7 +922,7 @@ jobs-state-percent = { $percent }%
 # The time left of a job that moves data, in a column of 12, once it is known.
 jobs-left = ETA { $left }
 # The button that sends the job behind the panels, where it goes on.
-job-background = Background
+job-background = &Background
 # At the top right while jobs run in the background: how many, and how far they are together.
 jobs-running = { $count ->
         [one] { $count } job
@@ -940,10 +948,10 @@ delete-error = Cannot delete { $path }: { $reason }
 ## Copying, F5 (src/tui/app). Prefix: copy-. As in mc.
 
 copy-title = Copy
-# Above the target field, which opens with the other panel's directory.
-copy-one = Copy "{ $name }" to:
-copy-many = Copy { $count } files and directories to:
-copy-preserve = Preserve attributes
+# Above the target field, which opens with the other panel's directory; the & marks its letter.
+copy-one = &Copy "{ $name }" to:
+copy-many = &Copy { $count } files and directories to:
+copy-preserve = &Preserve attributes
 # Above the entry the job works on.
 copy-copying = Copying
 copy-error = Cannot copy to { $path }: { $reason }
@@ -958,8 +966,8 @@ copy-exists =
 ## Moving, F6 (src/tui/app). Prefix: move-. As in mc; a new name in the field renames.
 
 move-title = Move
-move-one = Move "{ $name }" to:
-move-many = Move { $count } files and directories to:
+move-one = &Move "{ $name }" to:
+move-many = &Move { $count } files and directories to:
 move-moving = Moving
 move-error = Cannot move to { $path }: { $reason }
 
@@ -989,15 +997,16 @@ checksum-one = Checksum of "{ $name }" with:
 checksum-directory = Checksums of the files in "{ $name }" with:
 checksum-many = Checksums of { $count } files and directories with:
 # Above a field for a checksum to compare with, as a download page gives it.
-checksum-expected = Expected checksum (optional; paste it):
+checksum-expected = &Expected checksum (optional; paste it):
 # A check box: also hash the file under the cursor of the other panel, and compare the two.
-checksum-compare = Compare with { $path }
-# The names of the algorithms.
-checksum-sha256 = SHA-256
-checksum-sha512 = SHA-512
-checksum-sha1 = SHA-1
-checksum-md5 = MD5
-checksum-blake3 = BLAKE3
+checksum-compare = &Compare with { $path }
+# The names of the algorithms, the choices of the dialog with their letters; the title of the
+# window of the checksums without them.
+checksum-sha256 = SHA-&256
+checksum-sha512 = SHA-&512
+checksum-sha1 = SHA-&1
+checksum-md5 = &MD5
+checksum-blake3 = &BLAKE3
 checksum-expected-invalid = "{ $text }" is not a checksum: it takes the hex digits of an MD5, SHA-1, SHA-256, BLAKE3, or SHA-512 checksum.
 # Above the file the job reads.
 checksum-hashing = Hashing
@@ -1011,13 +1020,13 @@ checksum-same = The files are the same.
 checksum-different = The files differ.
 # Buttons: the checksum of the selected file; every line, as sha256sum prints them; a file of
 # them.
-checksum-copy = Copy
-checksum-copy-all = Copy all
-checksum-save = Save…
+checksum-copy = &Copy
+checksum-copy-all = Copy &all
+checksum-save = &Save…
 # Nothing tells whether the terminal took it: some ignore the request (OSC 52).
 checksum-copied = Sent to the terminal's clipboard.
 checksum-save-title = Save checksums
-checksum-save-prompt = File name:
+checksum-save-prompt = &File name:
 checksum-saved = Saved to { $path }.
 checksum-exists = { $path } is there already. Overwrite it?
 checksum-save-error = Cannot save { $path }: { $reason }

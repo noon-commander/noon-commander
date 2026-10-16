@@ -16,7 +16,6 @@ use noc_scroll::Motion;
 use noc_scroll::scrollbar::{self, Bar};
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear};
 
@@ -24,6 +23,7 @@ use super::app::Side;
 use super::cells::{self, Align, Cut, Marks};
 use super::glyphs;
 use super::keymap::{Action, Resolved};
+use super::label::{self, Label};
 use super::mouse::{Pointer, Press, Scroll};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -79,73 +79,6 @@ enum Mark {
     Radio,
     /// A setting that is on or off.
     Check,
-}
-
-/// Text with the letter that an `&` marks, as the Fluent messages write it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Label {
-    text: String,
-    /// The index among the characters of `text`, and the letter in lower case.
-    hotkey: Option<(usize, char)>,
-    /// The index among the characters of `text` of the mark of a name cut short in it.
-    cut: Option<usize>,
-}
-
-impl Label {
-    /// `&&` stands for `&`; the first other `&` marks the letter after it.
-    fn parse(source: &str) -> Self {
-        let mut text = String::new();
-        let mut hotkey = None;
-        let mut chars = source.chars().peekable();
-        let mut index = 0;
-        while let Some(c) = chars.next() {
-            let c = match (c, chars.peek()) {
-                ('&', Some('&')) => {
-                    chars.next();
-                    '&'
-                }
-                ('&', Some(&next)) if hotkey.is_none() => {
-                    chars.next();
-                    hotkey = next.to_lowercase().next().map(|lower| (index, lower));
-                    next
-                }
-                _ => c,
-            };
-            text.push(c);
-            index += 1;
-        }
-        Self {
-            text,
-            hotkey,
-            cut: None,
-        }
-    }
-
-    /// The text in `style`, its letter in `hotkey` over it, and the mark of a name cut short
-    /// in `mark` over it.
-    fn spans(&self, style: Style, hotkey: Option<Style>, mark: Style) -> Vec<Span<'static>> {
-        let letter = self
-            .hotkey
-            .zip(hotkey)
-            .map(|((at, _), hotkey)| (at, hotkey));
-        let mut over: Vec<(usize, Style)> = letter.into_iter().collect();
-        over.extend(self.cut.map(|at| (at, mark)));
-        over.sort_by_key(|(at, _)| *at);
-        let chars: Vec<char> = self.text.chars().collect();
-        let text = |range: std::ops::Range<usize>| chars[range].iter().collect::<String>();
-        let mut spans = Vec::new();
-        let mut from = 0;
-        for (at, over) in over {
-            if at < from || at >= chars.len() {
-                continue;
-            }
-            spans.push(Span::styled(text(from..at), style));
-            spans.push(Span::styled(text(at..at + 1), style.patch(over)));
-            from = at + 1;
-        }
-        spans.push(Span::styled(text(from..chars.len()), style));
-        spans
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -253,7 +186,7 @@ fn workspace_menu(title: Label, workspaces: &[String], marks: Marks) -> Menu {
         let name = cells::sanitize(name.as_bytes());
         let width = cells::width(&name).min(WORKSPACE_NAME_WIDTH);
         let fitted = cells::fit_cut(&name, width, Align::Left, Cut::Middle);
-        let name = fitted.text(marks).replace('&', "&&");
+        let name = label::escape(&fitted.text(marks));
         let text = match index {
             0..=9 => format!("&{} {name}", (index + 1) % 10),
             _ => format!("  {name}"),
@@ -647,9 +580,8 @@ impl PullDown {
         let entries = self.menu().entries.len();
         let selected = self.selected;
         match input {
-            Resolved::Insert(c) => {
-                let lower = c.to_lowercase().next().unwrap_or(c);
-                let has = |label: &Label| label.hotkey.is_some_and(|(_, key)| key == lower);
+            Resolved::Hotkey(c) => {
+                let has = |label: &Label| label.has(c);
                 if !self.open {
                     if let Some(index) = self.menus.iter().position(|menu| has(&menu.title)) {
                         self.open_at(index, 0, status);
@@ -672,6 +604,7 @@ impl PullDown {
                     return PullDownEvent::Run(command);
                 }
             }
+            Resolved::Insert(_) => {}
             Resolved::Action(action) => match action {
                 Action::Left => self.select((selected + count - 1) % count, status),
                 Action::Right => self.select((selected + 1) % count, status),
@@ -973,6 +906,7 @@ mod tests {
 
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
+    use ratatui::style::Style;
 
     use super::*;
     use crate::tui::glyphs::Glyphs;
@@ -1007,28 +941,6 @@ mod tests {
 
     fn chosen(menu: &PullDown) -> Option<Command> {
         menu.menu().item(menu.cursor).map(|item| item.command)
-    }
-
-    #[test]
-    fn labels_mark_their_letter() {
-        assert_eq!(
-            Label::parse("Sort by si&ze"),
-            Label {
-                text: "Sort by size".to_owned(),
-                hotkey: Some((10, 'z')),
-                cut: None,
-            }
-        );
-        assert_eq!(Label::parse("&View").hotkey, Some((0, 'v')));
-        assert_eq!(
-            Label::parse("R&&D &Notes"),
-            Label {
-                text: "R&D Notes".to_owned(),
-                hotkey: Some((4, 'n')),
-                cut: None,
-            }
-        );
-        assert_eq!(Label::parse("Plain").hotkey, None);
     }
 
     #[test]
@@ -1164,12 +1076,12 @@ mod tests {
         menu.handle(action(Action::Left), &status);
         assert_eq!((menu.selected, menu.open), (5, false));
         assert_eq!(
-            menu.handle(Resolved::Insert('x'), &status),
+            menu.handle(Resolved::Hotkey('x'), &status),
             PullDownEvent::Pending,
             "Exit is in a menu that is not open"
         );
         assert_eq!(
-            menu.handle(Resolved::Insert('O'), &status),
+            menu.handle(Resolved::Hotkey('O'), &status),
             PullDownEvent::Pending
         );
         assert_eq!(menu.menu().title.text, "Options");
@@ -1242,22 +1154,22 @@ mod tests {
     fn letters_run_their_commands_in_the_open_menu() {
         let mut menu = open(Side::Left);
         assert_eq!(
-            menu.handle(Resolved::Insert('Z'), &status),
+            menu.handle(Resolved::Hotkey('Z'), &status),
             PullDownEvent::Run(Command::On(Side::Left, Action::SortBySize))
         );
         menu.handle(action(Action::Right), &status);
         assert_eq!(
-            menu.handle(Resolved::Insert('d'), &status),
+            menu.handle(Resolved::Hotkey('d'), &status),
             PullDownEvent::Pending,
             "Delete cannot run"
         );
         assert_eq!(
-            menu.handle(Resolved::Insert('q'), &status),
+            menu.handle(Resolved::Hotkey('q'), &status),
             PullDownEvent::Pending,
             "Quick search is in another menu"
         );
         assert_eq!(
-            menu.handle(Resolved::Insert('x'), &status),
+            menu.handle(Resolved::Hotkey('x'), &status),
             PullDownEvent::Run(Command::Do(Action::Quit))
         );
     }
@@ -1372,7 +1284,7 @@ mod tests {
             Glyphs::PLAIN.marks,
             &status,
         );
-        menu.handle(Resolved::Insert('w'), &status);
+        menu.handle(Resolved::Hotkey('w'), &status);
         assert_eq!(menu.menu().title.text, "Workspace");
         menu
     }
@@ -1382,16 +1294,16 @@ mod tests {
         let mut menu = workspace_menu(12);
         assert_eq!(chosen(&menu), Some(Command::Do(Action::SaveWorkspace)));
         assert_eq!(
-            menu.handle(Resolved::Insert('2'), &status),
+            menu.handle(Resolved::Hotkey('2'), &status),
             PullDownEvent::Run(Command::Workspace(1))
         );
         assert_eq!(
-            menu.handle(Resolved::Insert('0'), &status),
+            menu.handle(Resolved::Hotkey('0'), &status),
             PullDownEvent::Run(Command::Workspace(9)),
             "0 for the tenth"
         );
         assert_eq!(
-            menu.handle(Resolved::Insert('l'), &status),
+            menu.handle(Resolved::Hotkey('l'), &status),
             PullDownEvent::Run(Command::Do(Action::Workspaces))
         );
         let labels: Vec<&str> = menu

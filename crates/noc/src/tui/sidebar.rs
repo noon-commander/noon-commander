@@ -5,16 +5,17 @@ use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::text::Line;
 
-use super::cells::{self, Align};
+use super::cells;
 use super::dialog::Colors;
 use super::glyphs;
+use super::label::Label;
 use super::theme::Theme;
 
 /// The rows of a sidebar and which one is chosen.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Sidebar<'a> {
-    /// The rows shown, each as it is drawn.
-    pub(crate) rows: &'a [String],
+    /// The rows shown, each as it is drawn, with its letter, if it has one.
+    pub(crate) rows: &'a [Label],
     /// Cells it takes, if no more than a third of the dialog: wide enough for its longest row,
     /// also those not shown now, so that it keeps its width.
     pub(crate) width: usize,
@@ -35,8 +36,11 @@ pub(crate) struct Drawn {
 }
 
 /// Cells `rows` need: their longest.
-pub(crate) fn width(rows: &[String]) -> usize {
-    rows.iter().map(|row| cells::width(row)).max().unwrap_or(0)
+pub(crate) fn width(rows: &[Label]) -> usize {
+    rows.iter()
+        .map(|row| cells::width(&row.text))
+        .max()
+        .unwrap_or(0)
 }
 
 /// Draws `sidebar` down the left of `body`, scrolled to its chosen row, and the line beside it.
@@ -60,13 +64,8 @@ pub(crate) fn render(
             (true, false) => (theme.dialog_title.bold(), theme.truncated_dialog),
             (false, _) => (theme.dialog, theme.truncated_dialog),
         };
-        let text = cells::fit(
-            name,
-            usize::from(width),
-            Align::Left,
-            styles,
-            theme.glyphs.marks,
-        );
+        let hotkey = colors.hotkey_style();
+        let text = name.fit(usize::from(width), styles, hotkey, theme.glyphs.marks);
         let row = Rect::new(body.x, y, width, 1);
         frame.render_widget(Line::from(text).style(styles.0), row);
         drawn.rows.push((index, row));

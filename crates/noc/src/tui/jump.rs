@@ -55,7 +55,7 @@ pub(crate) struct JumpMenu {
     keywords: Field,
     /// The keywords take what is typed, in Insert mode.
     typing: bool,
-    /// How it matches the keywords: `ui.search_mode` until Alt+r switches it. In the plain
+    /// How it matches the keywords: `ui.search_mode` until Ctrl+s switches it. In the plain
     /// mode it asks zoxide for each change of the keywords; in the others, once for every
     /// directory, which it filters itself.
     mode: SearchMode,
@@ -217,7 +217,7 @@ impl JumpMenu {
                 self.keywords.insert(c);
                 return self.changed();
             }
-            Resolved::Insert(_) => {}
+            Resolved::Insert(_) | Resolved::Hotkey(_) => {}
             Resolved::Action(action) => match action {
                 Action::Up => self.cursor = self.cursor.saturating_sub(1),
                 Action::Down => self.cursor = (self.cursor + 1).min(last),

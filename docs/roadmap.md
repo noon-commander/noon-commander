@@ -103,7 +103,7 @@
 - [x] Fuzzy search as fzf does it in quick search, the location menu, and the zoxide window
       ([ADR 0016](adr/0016-fuzzy-search.md))
 - [x] Search modes: plain, fzf, and regex in quick search and the filters of the lists,
-      `ui.search_mode`, switched by Alt+r ([ADR 0030](adr/0030-search-modes.md))
+      `ui.search_mode`, switched by Ctrl+s ([ADR 0030](adr/0030-search-modes.md))
 - [x] `f /` searches the files below for text with ripgrep, local or on the host, in a dialog
       with a field for the text and one for the files; `[search]`
       ([ADR 0027](adr/0027-search-of-a-whole-tree.md),
@@ -234,6 +234,10 @@
       a cursor on red for root; a glyph and `[root]` in the terminal title while Noon Commander
       runs as root
       ([ADR 0031](adr/0031-who-and-where-on-screen.md))
+- [x] Letters in every dialog, as in Far and mc: Alt and the letter puts the focus in a field,
+      switches a check box, chooses a radio button, or presses a button, while typing too;
+      Alt+1 … Alt+7 open the categories of the Configuration dialog
+      ([ADR 0033](adr/0033-letters-in-dialogs.md))
 
 ## Known issues
 

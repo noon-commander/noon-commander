@@ -39,7 +39,7 @@ The same panels in the theme `mc-classic`, with the blue of Midnight Commander:
   ranks, and the directories you work in from Noon Commander count there too.
 - **Fuzzy search, as in fzf.** Quick search and the filters of every list (the location menu,
   the tab menu, the zoxide window, the workspaces, the command history) find `config.rs` from
-  `cfg`, best match first. Alt+r switches to the plain text or a regular expression.
+  `cfg`, best match first. Ctrl+s switches to the plain text or a regular expression.
 - **Search with ripgrep and fd.** `f /` finds text in the files below, as you type, on a server
   too, where [ripgrep](https://github.com/BurntSushi/ripgrep) runs; F3 and F4 open a file at the
   line. `f f` finds names with [fd](https://github.com/sharkdp/fd).
@@ -264,10 +264,11 @@ directory Noon Commander uses.
 
 ### The Option key on macOS
 
-A few keys use Alt: Alt+F1 and Alt+F2, and Alt and a letter for the commands of the pull-down
-menu. In Insert and Visual mode, and in the panels, Alt and a key also
-stand for Esc and the key, as in vim, but on a password. On macOS the Option key types characters
-such as `ø` instead, unless the terminal sends it as Alt:
+A few keys use Alt: Alt+F1 and Alt+F2, and Alt and the highlighted letter of a command of the
+pull-down menu, or of a button, a field, a check box, or a choice of a dialog. In Insert and Visual
+mode, and in the panels, Alt and a key also stand for Esc and the key, as in vim, but on a password
+and in the dialogs and the menu. On macOS the Option key types characters such as `ø` instead,
+unless the terminal sends it as Alt:
 
 - Terminal.app: Settings → Profiles → Keyboard → Use Option as Meta key.
 - iTerm2: Settings → Profiles → Keys → Left Option key: Esc+.
@@ -276,7 +277,7 @@ such as `ø` instead, unless the terminal sends it as Alt:
 - Alacritty: `option_as_alt = "Both"` under `[window]`.
 
 Without it, Ctrl+w 1 and Ctrl+w 2 open the location menus, and the arrows and Enter run the
-commands of the pull-down menu.
+commands of the pull-down menu and press the buttons of dialogs.
 
 ## Contributing
 

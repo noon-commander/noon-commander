@@ -161,15 +161,26 @@ impl Context {
 
     /// Whether, in Normal mode, Alt and a character that nothing binds stand for Esc and the
     /// character, which is how an Esc typed quickly before a key arrives. In Insert and Visual
-    /// mode they do in every context, as in vim in a terminal, but on a password.
+    /// mode they do in every context, as in vim in a terminal, but on a password and where Alt
+    /// and a letter are hotkeys.
     pub(crate) fn alt_stands_for_esc(self) -> bool {
         matches!(self, Self::Panel)
     }
 
-    /// Whether Alt and a letter run the command of the menu that has that letter: in the
-    /// pull-down menu, whose plain letters move as `h`, `j`, `k`, and `l` do.
+    /// Whether Alt and a letter act on what has that letter, as in mc and Far: in the pull-down
+    /// menu, whose plain letters move as `h`, `j`, `k`, and `l` do, and in the dialogs, whose
+    /// fields take them as text. There Alt and a key never stand for Esc and the key.
     pub(crate) fn alt_letters_are_hotkeys(self) -> bool {
-        matches!(self, Self::PullDown)
+        matches!(
+            self,
+            Self::PullDown
+                | Self::Dialog
+                | Self::DialogInput
+                | Self::PathInput
+                | Self::Completion
+                | Self::Find
+                | Self::FindInput
+        )
     }
 }
 
@@ -337,9 +348,6 @@ pub(crate) enum Action {
     /// it is, as fzf does, or as a regular expression, round; in the search of a tree, as it is
     /// or as a regular expression.
     SearchMode,
-    /// In the search of a tree, matches case, or ignores it unless the text has a capital
-    /// letter.
-    MatchCase,
     /// Goes back to where the panel was before its last jump, as vim's Ctrl+o.
     JumpBack,
     /// Goes forward again to where a jump back came from, as vim's Ctrl+i.
@@ -614,7 +622,6 @@ impl Action {
         Self::FindFile,
         Self::FindNames,
         Self::SearchMode,
-        Self::MatchCase,
         Self::JumpBack,
         Self::JumpForward,
         Self::Shell,

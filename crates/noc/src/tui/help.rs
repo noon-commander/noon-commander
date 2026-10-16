@@ -15,6 +15,7 @@ use super::cells::{self, Align};
 use super::dialog::{Colors, draw_box, right_frame};
 use super::glyphs::{self, categories};
 use super::keymap::{Action, Context, Keymap, Mode, Resolved};
+use super::label::Label;
 use super::mouse::{Pointer, Press, Scroll};
 use super::panel::home_text;
 use super::sidebar::{self, Sidebar};
@@ -247,6 +248,10 @@ fn tips() -> Vec<Entry> {
         (
             fl!("help-tip-pulldown"),
             vec![fl!("help-tip-pulldown-letters")],
+        ),
+        (
+            fl!("help-tip-dialogs"),
+            vec![fl!("help-tip-dialogs-letters")],
         ),
         (
             fl!("help-tip-key-hints"),
@@ -646,7 +651,7 @@ impl Help {
 
     /// The rows of the sidebar as it draws them, and the cells the widest of them takes, of all
     /// the rows it can show, so that it keeps its width as Keys opens and folds.
-    fn sidebar_texts(&self, theme: &Theme) -> (Vec<String>, usize) {
+    fn sidebar_texts(&self, theme: &Theme) -> (Vec<Label>, usize) {
         let icons = theme.glyphs.icons;
         let top = |icon: &str, title: String| {
             if icons {
@@ -659,14 +664,15 @@ impl Help {
         let fold = if self.keys_open { open } else { closed };
         let about = top(categories::ABOUT, fl!("help-section-about"));
         let keys = format!("{}{fold} ", top(categories::KEYS, fl!("help-section-keys")));
-        let groups: Vec<String> = self
+        let groups: Vec<Label> = self
             .groups
             .iter()
-            .map(|group| format!("{GROUP_INDENT}{} ", group.title))
+            .map(|group| Label::plain(&format!("{GROUP_INDENT}{} ", group.title)))
             .collect();
+        let (about, keys) = (Label::plain(&about), Label::plain(&keys));
         let width = sidebar::width(&groups)
-            .max(cells::width(&about))
-            .max(cells::width(&keys));
+            .max(cells::width(&about.text))
+            .max(cells::width(&keys.text));
         let mut texts = vec![about, keys];
         if self.keys_open {
             texts.extend(groups);
@@ -1075,7 +1081,6 @@ fn describe_find(context: Context, action: Action) -> Option<String> {
         Action::View => fl!("help-find-view"),
         Action::Edit => fl!("help-find-edit"),
         Action::SearchMode => fl!("help-find-regex"),
-        Action::MatchCase => fl!("help-find-case"),
         _ => return None,
     };
     Some(text)
@@ -1459,6 +1464,7 @@ mod tests {
                 "Workspaces",
                 "Command line",
                 "Pull-down menu",
+                "Dialogs",
                 "Key hints"
             ]
         );
@@ -1551,6 +1557,7 @@ mod tests {
                         "Workspaces",
                         "Command line",
                         "Pull-down menu",
+                        "Dialogs",
                         "Key hints"
                     ]
                 ),

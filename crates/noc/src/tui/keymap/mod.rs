@@ -39,9 +39,12 @@ pub(crate) const MAX_COUNT: usize = 99_999;
 pub(crate) enum Resolved {
     /// A bound action.
     Action(Action),
-    /// A printable character typed in Insert mode that no binding claimed, or after Ctrl+v, or
-    /// a letter of the pull-down menu.
+    /// A printable character typed in Insert mode that no binding claimed, or after Ctrl+v.
     Insert(char),
+    /// Alt and a letter or a digit that nothing binds, where those mark what they act on: the
+    /// commands of the pull-down menu, and the buttons, fields, check boxes, and choices of the
+    /// dialogs.
+    Hotkey(char),
 }
 
 /// What vim lets come with a command: a count and a register before it, and a character after
@@ -441,7 +444,7 @@ impl Keymap {
         {
             // The letter is the command: a count typed before it goes with nothing.
             state.reset();
-            return vec![Typed::from(Resolved::Insert(c))];
+            return vec![Typed::from(Resolved::Hotkey(c))];
         }
         state.keys.push(key);
         match self.lookup(mode, context, &state.keys) {

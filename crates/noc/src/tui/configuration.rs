@@ -1,6 +1,7 @@
 //! The Configuration dialog (Options → Configuration…): the settings of `config.toml`, by
-//! category. Categories are listed on the left, each with an icon; the settings of the chosen
-//! one are on the right and scroll, with a scroll bar, when they do not fit. There is no OK:
+//! category. Categories are listed on the left, each with an icon and a digit, 1 for the first,
+//! that Alt and it show; the settings of the chosen one are on the right, each with a letter
+//! that Alt and it act on, and scroll, with a scroll bar, when they do not fit. There is no OK:
 //! every change takes effect as it is made, a text field's when the cursor leaves it.
 
 use std::path::{Path, PathBuf};
@@ -19,6 +20,7 @@ use super::dialog::{Colors, Field, draw_box, draw_separator, right_frame};
 use super::edit::Registers;
 use super::glyphs::{self, categories};
 use super::keymap::{Action, Context, Mode, Resolved, Typed};
+use super::label::{self, Label};
 use super::mouse::{Pointer, Press, Scroll};
 use super::sidebar::{self, Sidebar};
 use super::theme::Theme;
@@ -85,7 +87,8 @@ enum Value {
 #[derive(Debug)]
 struct Setting {
     key: Key,
-    label: String,
+    /// Its name, with the letter that Alt and it act on.
+    label: Label,
     /// What it does, below the settings while it has the cursor.
     hint: String,
     value: Value,
@@ -97,7 +100,7 @@ impl Setting {
     fn new(key: Key, (label, hint): (String, String), value: Value) -> Self {
         Self {
             key,
-            label,
+            label: Label::parse(&label),
             hint,
             value,
             restart: false,
@@ -422,6 +425,18 @@ fn join_words(words: &[String]) -> String {
         .join(" ")
 }
 
+/// A change and the one made after it as one: from what the settings were before the first to
+/// what the second left.
+fn chain(
+    first: Option<(Config, Config)>,
+    then: Option<(Config, Config)>,
+) -> Option<(Config, Config)> {
+    match (first, then) {
+        (Some((old, _)), Some((_, new))) => Some((old, new)),
+        (first, then) => then.or(first),
+    }
+}
+
 impl Configuration {
     /// The dialog with the settings `config` has, which shows paths under `home` from `~`;
     /// `themes` are the themes to choose from, and `icons` puts the categories' icons in front
@@ -593,11 +608,12 @@ impl Configuration {
 
     /// Takes a key, with its count and register. Tab moves between the categories and the
     /// settings; Up and Down move within them; Space or Enter switches a check box or picks the
-    /// next choice, and Left and Right pick choices, each applied at once. A text field edits
-    /// its text in vim's modes; it is applied when the cursor leaves it or on Enter, and keeps
-    /// the cursor while it holds something invalid. A text field the cursor comes to is in
-    /// Normal mode, but after Tab, or from a field in Insert mode. Esc in Normal mode closes
-    /// the dialog, applying the text field under the cursor, or putting it back if invalid.
+    /// next choice, and Left and Right pick choices, each applied at once. Alt and a letter or a
+    /// digit go to what has it (see [`Self::hotkey`]). A text field edits its text in vim's
+    /// modes; it is applied when the cursor leaves it or on Enter, and keeps the cursor while it
+    /// holds something invalid. A text field the cursor comes to is in Normal mode, but after
+    /// Tab or its letter, or from a field in Insert mode. Esc in Normal mode closes the dialog,
+    /// applying the text field under the cursor, or putting it back if invalid.
     pub(crate) fn handle_typed(&mut self, typed: Typed, registers: &mut Registers) -> ConfigEvent {
         let before = (self.focus, self.category, self.row);
         // A field after Ctrl+o is in Insert mode but for one command.
@@ -606,11 +622,14 @@ impl Configuration {
         } else {
             self.mode()
         };
-        let event = self.take(typed, registers);
+        let event = match typed.resolved {
+            Resolved::Hotkey(c) => self.hotkey(c),
+            _ => self.take(typed, registers),
+        };
         if (self.focus, self.category, self.row) != before {
             let tab = matches!(
                 typed.resolved,
-                Resolved::Action(Action::NextField | Action::PrevField)
+                Resolved::Action(Action::NextField | Action::PrevField) | Resolved::Hotkey(_)
             );
             let mode = if tab || left == Mode::Insert {
                 Mode::Insert
@@ -632,7 +651,7 @@ impl Configuration {
                 field.insert(c);
                 return event;
             }
-            (Resolved::Insert(_), None) => return event,
+            (Resolved::Insert(_), None) | (Resolved::Hotkey(_), _) => return event,
             (Resolved::Action(action), Some(field)) => {
                 if field.handle(action, extra, registers) {
                     return event;
@@ -745,6 +764,53 @@ impl Configuration {
         cycled
     }
 
+    /// Alt and `c`, as mc and Far take them, from the categories or the settings. A category's
+    /// digit shows it, with the focus on the categories, as moving their cursor there does. A
+    /// setting's letter, among those of the category shown, puts the cursor on it and does
+    /// what Space does there: switches a check box or picks the next choice, applied at once;
+    /// a text field gets the focus in Insert mode. Leaving a text field applies it, as a key
+    /// that leaves it does, and one that holds something invalid keeps the cursor. Nothing
+    /// else has it.
+    fn hotkey(&mut self, c: char) -> ConfigEvent {
+        let mut event = ConfigEvent::default();
+        let category = self.category_labels().iter().position(|label| label.has(c));
+        let row = self
+            .settings()
+            .iter()
+            .position(|setting| setting.label.has(c));
+        if category.is_none() && row.is_none() {
+            return event;
+        }
+        self.give_up();
+        let stays = self.focus == Focus::Settings && row == Some(self.row);
+        if self.field().is_some() && !stays {
+            match self.apply() {
+                Ok(change) => event.change = change,
+                Err(()) => return event,
+            }
+        }
+        if let Some(index) = category {
+            self.focus = Focus::Sidebar;
+            self.choose_category(index);
+            return event;
+        }
+        let Some(row) = row else {
+            return event;
+        };
+        self.focus = Focus::Settings;
+        self.row = row;
+        let Some(setting) = self.setting_mut() else {
+            return event;
+        };
+        if let Value::Text { field, .. } = &mut setting.value {
+            field.set_mode(Mode::Insert);
+            return event;
+        }
+        setting.toggle();
+        event.change = chain(event.change, self.apply().unwrap_or_default());
+        event
+    }
+
     /// Takes a press of the mouse, where the dialog was drawn last. A click on a category shows
     /// its settings; one on a setting puts the cursor there, and on its value switches a check
     /// box, picks the next choice (the one before at `<`), or puts the cursor in the text where
@@ -809,11 +875,7 @@ impl Configuration {
         } else {
             setting.cycle(column > 0);
         }
-        let change = self.apply().unwrap_or_default();
-        event.change = match (event.change, change) {
-            (Some((old, _)), Some((_, new))) => Some((old, new)),
-            (before, change) => change.or(before),
-        };
+        event.change = chain(event.change, self.apply().unwrap_or_default());
         event
     }
 
@@ -873,7 +935,7 @@ impl Configuration {
             height: inner.height - HINT_ROWS - 1,
             ..inner
         };
-        let names = self.category_names();
+        let names = self.category_labels();
         let sidebar = Sidebar {
             rows: &names,
             width: sidebar::width(&names),
@@ -915,15 +977,18 @@ impl Configuration {
         }
     }
 
-    /// The names of the categories, as the sidebar shows them.
-    fn category_names(&self) -> Vec<String> {
+    /// The names of the categories, as the sidebar shows them, each after its digit as its
+    /// letter: 1 for the first, and 0 for the tenth.
+    fn category_labels(&self) -> Vec<Label> {
         self.categories
             .iter()
-            .map(|category| {
+            .enumerate()
+            .map(|(index, category)| {
+                let name = format!("&{} {}", (index + 1) % 10, label::escape(&category.title));
                 if self.icons {
-                    format!(" {} {} ", category.icon, category.title)
+                    Label::parse(&format!(" {} {name} ", category.icon))
                 } else {
-                    format!(" {} ", category.title)
+                    Label::parse(&format!(" {name} "))
                 }
             })
             .collect()
@@ -955,7 +1020,7 @@ impl Configuration {
         let label_width = self
             .settings()
             .iter()
-            .map(|setting| cells::width(&setting.label))
+            .map(|setting| cells::width(&setting.label.text))
             .max()
             .unwrap_or(0)
             .min(room / 2);
@@ -977,11 +1042,10 @@ impl Configuration {
                 (theme.dialog, theme.truncated_dialog)
             };
             let label_style = styles.0;
-            let label = cells::fit(
-                &setting.label,
+            let label = setting.label.fit(
                 label_width + LABEL_GAP,
-                Align::Left,
                 styles,
+                colors.hotkey_style(),
                 theme.glyphs.marks,
             );
             let value = match &setting.value {
@@ -1807,5 +1871,152 @@ mod tests {
         let mut dialog = Configuration::new(&Config::default(), Path::new(HOME), PRESETS, true);
         dialog.handle(action(Action::Down));
         insta::assert_snapshot!(draw(&mut dialog, 72, 16));
+    }
+
+    #[test]
+    fn every_setting_has_a_letter_of_its_own_in_its_category() {
+        let dialog = dialog();
+        for category in &dialog.categories {
+            let letters: Vec<char> = category
+                .settings
+                .iter()
+                .filter_map(|setting| setting.label.letter())
+                .collect();
+            assert_eq!(letters.len(), category.settings.len(), "{}", category.title);
+            let mut unique = letters.clone();
+            unique.sort_unstable();
+            unique.dedup();
+            assert_eq!(
+                unique.len(),
+                letters.len(),
+                "{}: {letters:?}",
+                category.title
+            );
+        }
+        let digits: Vec<Option<char>> =
+            dialog.category_labels().iter().map(Label::letter).collect();
+        assert_eq!(
+            digits,
+            "1234567".chars().map(Some).collect::<Vec<_>>(),
+            "the categories have their digits"
+        );
+    }
+
+    #[test]
+    fn draws_the_letters_apart() {
+        let mut dialog = dialog();
+        let mut underlined = |width| {
+            let mut terminal = Terminal::new(TestBackend::new(width, 24)).unwrap();
+            terminal
+                .draw(|frame| dialog.render(frame, frame.area(), &Theme::terminal()))
+                .unwrap();
+            let buffer = terminal.backend().buffer().clone();
+            let underlined: String = buffer
+                .content()
+                .iter()
+                .filter(|cell| cell.modifier.contains(Modifier::UNDERLINED))
+                .map(ratatui::buffer::Cell::symbol)
+                .collect();
+            (underlined, terminal.backend().to_string())
+        };
+        assert_eq!(underlined(76).0, "1L2T3B4I5h6S7MweKdna");
+        // Names cut short keep the letter before the cut, as Command line its 6 and Show hidden
+        // files its h, and lose one after it, as Key hints delay its d.
+        let (letters, screen) = underlined(40);
+        assert!(screen.contains(" 6 Co"), "{screen}");
+        assert_eq!(letters, "1L2T3B4I5h6S7MweKna", "{screen}");
+    }
+
+    #[test]
+    fn alt_and_a_digit_shows_its_category() {
+        let mut dialog = dialog();
+        typed(&mut dialog, "de");
+        let event = dialog.handle(Resolved::Hotkey('3'));
+        let (old, new) = event.change.unwrap();
+        assert_eq!(
+            (old.ui.language.as_str(), new.ui.language.as_str()),
+            ("auto", "de")
+        );
+        assert_eq!((dialog.category, dialog.focus), (2, Focus::Sidebar));
+        assert_eq!(dialog.context(), Context::Dialog);
+        assert_eq!(dialog.handle(Resolved::Hotkey('1')), ConfigEvent::default());
+        assert_eq!(
+            (dialog.category, dialog.focus, dialog.row),
+            (0, Focus::Sidebar, 0)
+        );
+        assert_eq!(dialog.handle(Resolved::Hotkey('8')), ConfigEvent::default());
+        assert_eq!(dialog.handle(Resolved::Hotkey('0')), ConfigEvent::default());
+        assert_eq!((dialog.category, dialog.focus), (0, Focus::Sidebar));
+    }
+
+    #[test]
+    fn alt_and_a_letter_acts_on_its_setting() {
+        let mut dialog = dialog();
+        // From the language, typed in and so applied: the icons switch.
+        typed(&mut dialog, "de");
+        let (old, new) = dialog.handle(Resolved::Hotkey('i')).change.unwrap();
+        assert_eq!((old.ui.language.as_str(), old.ui.icons), ("auto", true));
+        assert_eq!((new.ui.language.as_str(), new.ui.icons), ("de", false));
+        assert_eq!((dialog.focus, dialog.row), (Focus::Settings, 3));
+        // A choice goes round, in either case of its letter.
+        let (_, new) = dialog.handle(Resolved::Hotkey('T')).change.unwrap();
+        assert_eq!((new.ui.theme.as_str(), dialog.row), ("terminal", 1));
+        let (_, new) = dialog.handle(Resolved::Hotkey('t')).change.unwrap();
+        assert_eq!(new.ui.theme, "mc-classic", "round to the first");
+        // A text field gets the focus in Insert mode, from the categories too.
+        dialog.handle(action(Action::PrevField));
+        assert_eq!(dialog.handle(Resolved::Hotkey('w')), ConfigEvent::default());
+        assert_eq!((dialog.focus, dialog.row), (Focus::Settings, 7));
+        assert_eq!(
+            (dialog.context(), dialog.mode()),
+            (Context::DialogInput, Mode::Insert)
+        );
+        dialog.handle(action(Action::NormalMode));
+        dialog.handle(Resolved::Hotkey('w'));
+        assert_eq!(
+            (dialog.row, dialog.mode()),
+            (7, Mode::Insert),
+            "its own letter"
+        );
+        // From a field in Normal mode, the next one is in Insert mode all the same.
+        dialog.handle(action(Action::NormalMode));
+        dialog.handle(Resolved::Hotkey('d'));
+        assert_eq!((dialog.row, dialog.mode()), (10, Mode::Insert));
+        // Leaving a field that holds something invalid keeps the cursor and says why.
+        dialog.handle(Resolved::Hotkey('w'));
+        typed(&mut dialog, "0");
+        assert_eq!(dialog.handle(Resolved::Hotkey('b')), ConfigEvent::default());
+        assert_eq!((dialog.row, dialog.mode()), (7, Mode::Insert));
+        assert!(dialog.error.is_some());
+        assert_eq!(dialog.handle(Resolved::Hotkey('2')), ConfigEvent::default());
+        assert_eq!((dialog.category, dialog.focus), (0, Focus::Settings));
+        typed(&mut dialog, "page");
+        let (_, new) = dialog.handle(Resolved::Hotkey('b')).change.unwrap();
+        assert_eq!(
+            (new.ui.wheel, new.ui.borders),
+            (Wheel::Page, Borders::Single)
+        );
+        assert_eq!((dialog.row, dialog.error.as_deref()), (2, None));
+    }
+
+    #[test]
+    fn a_letter_that_nothing_shown_has_does_nothing() {
+        let mut dialog = dialog();
+        typed(&mut dialog, "de");
+        // `z` is no setting's; `p` is Parallel jobs', which Transfers shows.
+        for c in ['z', 'p', '!'] {
+            assert_eq!(dialog.handle(Resolved::Hotkey(c)), ConfigEvent::default());
+            assert_eq!(
+                (dialog.focus, dialog.category, dialog.row),
+                (Focus::Settings, 0, 0)
+            );
+            assert_eq!(dialog.mode(), Mode::Insert);
+        }
+        assert_eq!(
+            dialog.settings()[0].text(),
+            "de",
+            "still typed, not applied"
+        );
+        assert_eq!(dialog.applied.ui.language, "auto");
     }
 }

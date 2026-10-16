@@ -14,6 +14,7 @@ use super::dialog::{
     Colors, button_line, button_spots, draw_box, draw_separator, frame_around, right_frame,
 };
 use super::keymap::{Action, Resolved};
+use super::label::Label;
 use super::mouse::{Drawn, Pointer, Press, Scroll};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -58,6 +59,17 @@ enum Button {
 
 const BUTTONS: [Button; 3] = [Button::Show, Button::Abort, Button::Close];
 
+impl Button {
+    /// Its name, with the letter that Alt and it press.
+    fn label(self) -> Label {
+        Label::parse(&match self {
+            Self::Show => fl!("jobs-show"),
+            Self::Abort => fl!("dialog-abort"),
+            Self::Close => fl!("dialog-ok"),
+        })
+    }
+}
+
 /// The state of the list. Its rows come from the app with every key and every draw, as jobs
 /// come and go.
 #[derive(Debug, Default)]
@@ -91,10 +103,17 @@ impl JobsList {
     }
 
     /// Takes a key: arrows choose a job, Left, Right, and Tab a button, Enter or Space press
-    /// it, and Esc closes the list.
+    /// it, Alt and its letter too, and Esc closes the list.
     pub(crate) fn handle(&mut self, input: Resolved, rows: &[Row]) -> JobsEvent {
-        let Resolved::Action(action) = input else {
-            return JobsEvent::Pending;
+        let action = match input {
+            Resolved::Action(action) => action,
+            Resolved::Hotkey(c) => {
+                return match BUTTONS.iter().find(|button| button.label().has(c)) {
+                    Some(&button) => self.press(button, rows),
+                    None => JobsEvent::Pending,
+                };
+            }
+            Resolved::Insert(_) => return JobsEvent::Pending,
         };
         let index = self.index(rows);
         let last = rows.len().saturating_sub(1);
@@ -106,19 +125,22 @@ impl JobsList {
             Action::End | Action::PageDown => self.select(rows, last),
             Action::Right | Action::NextField => self.focus = (self.focus + 1) % count,
             Action::Left | Action::PrevField => self.focus = (self.focus + count - 1) % count,
-            Action::Confirm | Action::Toggle => {
-                let id = rows.get(index).map(|row| row.id);
-                return match (BUTTONS[self.focus], id) {
-                    (Button::Close, _) => JobsEvent::Closed,
-                    (Button::Show, Some(id)) => JobsEvent::Show(id),
-                    (Button::Abort, Some(id)) => JobsEvent::Abort(id),
-                    (Button::Show | Button::Abort, None) => JobsEvent::Pending,
-                };
-            }
+            Action::Confirm | Action::Toggle => return self.press(BUTTONS[self.focus], rows),
             Action::Cancel => return JobsEvent::Closed,
             _ => {}
         }
         JobsEvent::Pending
+    }
+
+    /// What `button` does to the selected job.
+    fn press(&self, button: Button, rows: &[Row]) -> JobsEvent {
+        let id = rows.get(self.index(rows)).map(|row| row.id);
+        match (button, id) {
+            (Button::Close, _) => JobsEvent::Closed,
+            (Button::Show, Some(id)) => JobsEvent::Show(id),
+            (Button::Abort, Some(id)) => JobsEvent::Abort(id),
+            (Button::Show | Button::Abort, None) => JobsEvent::Pending,
+        }
     }
 
     /// The scroll bar of the last render, for the mouse.
@@ -222,12 +244,12 @@ impl JobsList {
             drawn.rows.push((number, line(shown)));
         }
         if inner.height >= 2 {
-            let labels = [fl!("jobs-show"), fl!("dialog-abort"), fl!("dialog-ok")];
+            let labels = BUTTONS.map(Button::label);
             let buttons = button_line(&labels, 0, Some(self.focus), colors);
             let y = inner.bottom() - 1;
             draw_separator(frame, inner, y - 1, colors, theme);
             let row = Rect::new(inner.x, y, inner.width, 1);
-            drawn.buttons = button_spots(&buttons, row);
+            drawn.buttons = button_spots(&labels, 0, row);
             frame.render_widget(buttons, row);
         }
         *self.drawn.borrow_mut() = drawn;
@@ -299,6 +321,21 @@ mod tests {
         );
         assert_eq!(press(&mut list, Action::Cancel, &rows), JobsEvent::Closed);
         assert_eq!(press(&mut list, Action::Confirm, &[]), JobsEvent::Pending);
+    }
+
+    #[test]
+    fn alt_and_a_letter_press_its_button() {
+        let rows = rows(&[1, 2]);
+        let mut list = JobsList::default();
+        let hotkey = |list: &mut JobsList, c, rows: &[Row]| list.handle(Resolved::Hotkey(c), rows);
+        press(&mut list, Action::Down, &rows);
+        assert_eq!(hotkey(&mut list, 's', &rows), JobsEvent::Show(2));
+        assert_eq!(hotkey(&mut list, 'a', &rows), JobsEvent::Abort(2));
+        assert_eq!(hotkey(&mut list, 'O', &rows), JobsEvent::Closed);
+        assert_eq!(hotkey(&mut list, 'x', &rows), JobsEvent::Pending);
+        assert_eq!(hotkey(&mut list, 's', &[]), JobsEvent::Pending);
+        let letters: Vec<_> = BUTTONS.iter().filter_map(|b| b.label().letter()).collect();
+        assert_eq!(letters, ['s', 'a', 'o']);
     }
 
     #[test]

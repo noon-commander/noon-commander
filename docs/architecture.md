@@ -276,7 +276,8 @@ menu:
   only for the active panel, as keys act there. Commands that cannot run now are dimmed, and
   the cursor skips them.
 - On the bar, `h` and `l` (Left and Right, Shift+Tab and Tab) select the next menu, round the bar;
-  Enter, `j` (Down), or Alt and the menu's highlighted letter (`&` in the Fluent messages) opens it,
+  Enter, `j` (Down), or Alt and the menu's highlighted letter (`&` in the Fluent messages, which
+  `Label` in `tui/label.rs` reads, for the menus and the [dialogs](#ui) alike) opens it,
   `G` (End) opens it on its last command, and `k` (Up) and `g g` (Home) do nothing. In an open menu,
   `h` and `l` open the next one, round the bar too; `k` and `j` move round it, from the last command
   to the first and back, and the mouse wheel stops at its ends; `g g` and `G` go to its first and
@@ -292,7 +293,8 @@ menu:
   of the panels only while a menu is open, as Far does; `always` keeps it above the panels, as
   mc does, which takes a row from them. The jobs indicator sits at the right end of that row.
 - The menu is modal (keymap context `pull_down`), in Normal mode; Alt and a letter or a digit reach
-  its hotkeys, so the plain letters stay vim's motions.
+  its hotkeys, so the plain letters stay vim's motions. The keymap hands them to the menu as
+  `Resolved::Hotkey`, as it does to the dialogs, and Alt and a letter that nothing has do nothing.
 
 ### Quick cd
 
@@ -361,7 +363,7 @@ directories, which Enter opens in the active panel:
   order, as `zi` does with fzf, or as a regular expression, in zoxide's order. In the plain
   mode what is typed is zoxide keywords, as `z foo bar` in a shell; each change asks
   `zoxide query --list --score --exclude <dir> -- <keywords>` again, and a query still running
-  is dropped. Alt+r going to or from the plain mode asks zoxide again. Unlike the other
+  is dropped. Ctrl+s going to or from the plain mode asks zoxide again. Unlike the other
   [lists](#lists), the window opens in Insert mode, typing keywords, as `zi` does: Esc goes to
   the rows, in Normal mode, where `/` types again and Esc closes the window. Directories under
   the home directory show from `~`, and the window matches them as shown.
@@ -379,14 +381,14 @@ directories, which Enter opens in the active panel:
 Quick search and the filters of the lists (the location menu, the tab menu, the zoxide window,
 the Workspaces window, the command history, and the list of the key hints) match what is typed
 in one of three modes ([ADR 0030](adr/0030-search-modes.md)). Each search and each window starts
-in `ui.search_mode`, `fzf` by default, and Alt+r switches its own, round: plain, fzf, regex. The
+in `ui.search_mode`, `fzf` by default, and Ctrl+s switches its own, round: plain, fzf, regex. The
 mode is not kept: the next search or window starts in `ui.search_mode` again, but `n` and `N`
 match as the last search did. A glyph after the word of the prompt says which mode
 (`Search ~:`, `Filter ~:`, `Jump to ~:`; in `glyphs.rs`: nf-cod-whole_word,
 nf-md-approximately_equal, nf-cod-regex; `=`, `~`, `.*` without icons); crossed out, in the color
 of a broken link, while the text is no regular expression, when the lists say what is wrong with
 it in place of the rows. The [search of a whole tree](#search-of-a-whole-tree) starts in the
-search mode too, but has no fzf mode: there `fzf` is the regex mode, Alt+r switches between it
+search mode too, but has no fzf mode: there `fzf` is the regex mode, Ctrl+s switches between it
 and the plain one, and its Text field shows which (`Text .*:`). `tui/search_mode.rs` holds the
 `Matcher` of each mode:
 
@@ -445,17 +447,17 @@ dirs…, opens it in its Files and dirs mode, which finds their names with fd
 ```
 
 - A `Dialog` (`tui/dialog.rs`) with a list (`Dialog::with_list`): two fields, the text and the
-  globs of the files, split at blanks, `!` before one leaving those out; a check box, matching
-  case rather than only when the text has a capital letter; the rows; and four buttons. The text
-  is a regular expression in the regex and fzf [search modes](#search-modes) and as it is in the
-  plain one; Alt+r switches it for this dialog, and the glyph after `Text` says which
+  globs of the files, split at blanks, `!` before one leaving those out; a check box, Match case,
+  matching case rather than only when the text has a capital letter; the rows; and four buttons.
+  The text is a regular expression in the regex and fzf [search modes](#search-modes) and as it is
+  in the plain one; Ctrl+s switches it for this dialog, and the glyph after `Text` says which
   (`Dialog::set_label`). With no text it lists the files. The dialog keeps the cursor of the
   rows and scrolls them; `FindWindow` (`tui/find.rs`) keeps what was found and draws each row
   (`ListView`).
 - Two modes, radio buttons on a line above the fields (`Dialog::in_a_row`): Text, with ripgrep
   (`FindQuery::Lines`), and Files and dirs, with fd (`FindQuery::Names`), whose buttons are Go to
   and Cancel (`Dialog::set_buttons`). By name, fd matches the text against the names, as a
-  regular expression or as it is, with smart case or case, as Alt+r and the check box say; `!`
+  regular expression or as it is, with smart case or case, as Ctrl+s and the check box say; `!`
   globs go to it as `--exclude`, and `noc_tools::fd::Names` keeps what the other globs let through and
   finds where the name matches, with fd's regex engine, for `find_match`. On a host `fd` runs,
   or `fdfind` where the shell says 127. Its rows (`Finding::Entry`) are the files and
@@ -474,8 +476,10 @@ dirs…, opens it in its Files and dirs mode, which finds their names with fd
 - Its keys are those of dialogs (contexts `find_input` in a field, `find` elsewhere): it opens in
   Insert mode, typing in the text; Tab, Up, and Down go through the fields, the check box, the
   rows, and the buttons; Esc leaves Insert mode in a field, and again closes the dialog. While the
-  rows have the focus, the motions and the page keys move their cursor. F3, F4, Alt+r, and Alt+c
-  work wherever the focus is. The wheel scrolls the rows.
+  rows have the focus, the motions and the page keys move their cursor. F3, F4, and Ctrl+s work
+  wherever the focus is, and so do the letters of the dialog, as in every dialog: Alt+c, the letter
+  of `Match &case`, switches case ([ADR 0033](adr/0033-letters-in-dialogs.md)). The wheel scrolls
+  the rows.
 - The rows are the files, in the order of their paths, each with how many lines matched, and their
   lines with their numbers, the matches in a color of their own (`find_match`), apart from the
   cursor's; a line too long starts a little before its first match. The rows of a search stay until
@@ -642,6 +646,10 @@ settings window: there is no OK or Cancel, and every change takes effect as it i
   them, and `g g` and `G` go to the first and last of them; `h` (Left) on anything but a text
   field goes back to the categories; Esc, `q`, or F10 closes the dialog, in Normal mode (a
   text field in Insert mode takes a first Esc to Normal mode).
+- Alt+1 … Alt+7 open the categories, from anywhere in the dialog, the digit shown in front of
+  each, and each setting has a letter, unique within its page: Alt and it do what Space or Enter
+  does on the row, or put the focus in its text field, in Insert mode, as the letters of every
+  dialog do ([ADR 0033](adr/0033-letters-in-dialogs.md)).
 - Space or Enter switches a check box or picks the next choice, and `h` and `l` pick choices: each
   takes effect at once. The dialog opens on the language, a text field, in Insert mode; a text field
   the cursor comes to with `j` or `k` is in Normal mode, where `i`, `a`, or `A` goes to Insert mode,
@@ -870,7 +878,7 @@ theme = "mc-classic"             # "terminal", "noon-dark", "noon-light", "catpp
 borders = "double"               # frames of panels and dialogs: ═ ║ ╔; "single": ─ │ ┌
 icons = true                     # Nerd Font icons; false: mc's markers (/ * @ ~ …)
 show_hidden = true               # names that start with a dot; o h switches while running
-search_mode = "fzf"              # quick search and filters; "plain": the text; "regex"; Alt+r
+search_mode = "fzf"              # quick search and filters; "plain": the text; "regex"; Ctrl+s
 menu_bar = "on-demand"           # the F9 menu bar while a menu is open; "always": above the panels
 tab_bar = "line"                 # tabs on a line above the panels; "frame": in the panel's frame
 terminal_title = true            # the window's title shows the active panel's directory
@@ -1198,7 +1206,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   open the [command line](#command-line-of--and-). As vim's search, it looks from the row after the
   one where it started, round, or after `?` up from the row before it, round to the bottom, and a
   count before `/` or `?` goes to the match of that number (`2/`). It matches in the
-  [search mode](#search-modes), which Alt+r switches while it runs. As fzf, the default, the cursor
+  [search mode](#search-modes), which Ctrl+s switches while it runs. As fzf, the default, the cursor
   jumps to the best match as fzf ranks it, the first after where it started of those as good, and
   Ctrl+g to the next best, round to the best; in the plain and regex modes, to the first name after
   where it started that holds the text anywhere, ignoring case, or that matches it as a regular
@@ -1340,9 +1348,14 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   `Keymap::alt_as_esc`), even while a command is pending, unless the key goes on with it. vim gets
   them so without the kitty keyboard protocol; with it, which Noon Commander asks for, vim would
   type the key with the eighth bit set, and Noon Commander does as nvim does in Insert and Visual
-  mode ([ADR 0022](adr/0022-vim-modes.md)). On a password they do nothing, as the `Esc` would close
-  its dialog and send the key to the panels. The pull-down menu takes Alt and a letter as its hotkey
-  instead. Keys are written with `crokey` names. User overrides of the keymap are planned. The F-key
+  mode ([ADR 0022](adr/0022-vim-modes.md)). The pull-down menu and the dialogs (contexts
+  `pull_down`, `dialog`, `dialog_input`, `path_input`, `completion`, `find`, and `find_input`,
+  which `Context::alt_letters_are_hotkeys` names) take Alt and a key otherwise, in every mode: Alt
+  and a letter or a digit that nothing binds go to the app as `Resolved::Hotkey`, the letter of a
+  menu, a command, or an element of the dialog, and do nothing where nothing has the letter, and
+  Alt never stands for Esc there ([ADR 0033](adr/0033-letters-in-dialogs.md)), as it never did on
+  a password, where the `Esc` would close its dialog and send the key to the panels. Keys are
+  written with `crokey` names. User overrides of the keymap are planned. The F-key
   bar is generated from the keymap in the mode and context of the next key, and so is the help
   screen (F1): the keys of each mode and context, with what they do, for what the app can do
   already; a prompt from ssh shows over it. It takes 70% of the width and of the height of the
@@ -1506,6 +1519,19 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   the middle, as vim's 'sidescroll' 0 does; what Visual mode selects shows in reverse. A message
   taller than the screen scrolls between the top and the rest of the dialog, which keeps its
   buttons, with a scroll bar on the frame that the mouse and the wheel move.
+- **Letters of dialogs** ([ADR 0033](adr/0033-letters-in-dialogs.md)). As in Far and mc, every
+  element of a dialog but Cancel has a letter, which an `&` marks in its Fluent text (`Label`, in
+  `tui/label.rs`, as for the menus of F9) and which shows in the theme's `dialog_hotkey`, or
+  `error_hotkey` in red dialogs, as mc's `dhotnormal` and `errdhotnormal`. Alt and it act on the
+  element from anywhere in the dialog, in every mode, while typing in a field too: a text field
+  gets the focus, in Insert mode, as with Tab; a check box switches and a radio button is chosen,
+  each getting the focus; a button is pressed. The one field of a form without a label (Copy,
+  Move, Create a new directory, Quick cd, Save workspace, Rename workspace, Save checksums) takes
+  its letter from the prompt over it, as `&Copy "x" to:`. What ssh asks is ssh's text, with no
+  letter, but the buttons of its dialogs have theirs. Names that the user gave, of files, paths,
+  workspaces, and hosts, have their `&` doubled before they go into a label, so they never make a
+  letter. The window of a job, the jobs, the checksums, and the Configuration dialog have letters
+  too. Letters are unique within a dialog, which a test checks.
 - **Text.** Fluent files under `crates/noc/i18n/`, embedded in the binary and read with
   `fl!` from `i18n-embed-fl`, which checks message IDs against `en-US` at compile time; only
   `en-US` for now. `ui.language = "auto"` follows the system locale (through `sys-locale`).

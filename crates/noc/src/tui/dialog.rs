@@ -1,5 +1,7 @@
 //! Modal dialogs: prompts from ssh (passwords and passphrases, host keys, confirmations, and
 //! notices), the app's own questions, and the search of a whole tree, whose dialog has a list.
+//! As in mc and Far, Alt and the letter that an `&` marks in a label act on what it labels:
+//! press a button, switch a check box, pick a choice, or put the focus in a field.
 
 use std::cell::{Cell, RefCell};
 use std::fmt;
@@ -21,6 +23,7 @@ use super::cells;
 use super::edit::{Editor, Registers};
 use super::glyphs;
 use super::keymap::{Action, Context, Extra, Mode, Resolved, Typed};
+use super::label::{self, Label};
 use super::mouse::{Pointer, Press, Scroll};
 use super::scroll::Window;
 use super::theme::Theme;
@@ -95,7 +98,12 @@ pub(crate) enum Button {
 }
 
 impl Button {
-    pub(crate) fn label(self) -> String {
+    /// Its name, with the letter that Alt and it press; Cancel has none, as Esc and F10 cancel.
+    pub(crate) fn label(self) -> Label {
+        Label::parse(&self.text())
+    }
+
+    fn text(self) -> String {
         match self {
             Self::Ok => fl!("dialog-ok"),
             Self::Cancel => fl!("dialog-cancel"),
@@ -327,14 +335,14 @@ impl fmt::Debug for Field {
 /// A text field, with its label drawn on a line of its own above it unless empty.
 #[derive(Debug)]
 struct LabelledField {
-    label: String,
+    label: Label,
     field: Field,
 }
 
 impl LabelledField {
     fn unlabelled(field: Field) -> Self {
         Self {
-            label: String::new(),
+            label: Label::default(),
             field,
         }
     }
@@ -349,12 +357,19 @@ pub(crate) struct Colors {
     focused: Style,
     /// The marks of text cut short, over `body`.
     mark: Style,
+    /// The letters of labels, over the rest.
+    hotkey: Style,
 }
 
 impl Colors {
     /// The style of the button with the focus.
     pub(crate) fn focused_style(self) -> Style {
         self.focused
+    }
+
+    /// The style of the letters of labels, over the others.
+    pub(crate) fn hotkey_style(self) -> Style {
+        self.hotkey
     }
 
     /// The body's style, and that of the marks of text cut short over it.
@@ -371,6 +386,7 @@ impl Colors {
                 button: theme.error_dialog,
                 focused: theme.error_button_focused,
                 mark: theme.truncated_error,
+                hotkey: theme.error_hotkey,
             }
         } else {
             Self {
@@ -379,6 +395,7 @@ impl Colors {
                 button: theme.dialog_button,
                 focused: theme.dialog_button_focused,
                 mark: theme.truncated_dialog,
+                hotkey: theme.dialog_hotkey,
             }
         }
     }
@@ -387,7 +404,7 @@ impl Colors {
 /// A check box.
 #[derive(Debug)]
 struct Check {
-    label: String,
+    label: Label,
     on: bool,
 }
 
@@ -434,9 +451,10 @@ pub(crate) struct Dialog {
     /// Tells this dialog from one that takes its place.
     id: u64,
     title: String,
-    message: String,
+    /// The text above the rest; a form's marks the letter of its field.
+    message: Label,
     /// Radio buttons, as mc draws them: `(*)` on the chosen one.
-    choices: Vec<String>,
+    choices: Vec<Label>,
     chosen: usize,
     /// The choices on one line, rather than one under another.
     in_a_row: bool,
@@ -515,7 +533,8 @@ impl Dialog {
     }
 
     /// `message`, a text field that opens with `text`, check boxes with their labels and
-    /// states, and OK and Cancel, `width` cells wide.
+    /// states, and OK and Cancel, `width` cells wide. An `&` in `message` marks the letter of
+    /// the field.
     pub(crate) fn form(
         title: &str,
         message: &str,
@@ -524,11 +543,12 @@ impl Dialog {
         width: u16,
     ) -> Self {
         Self {
+            message: Label::parse(message.trim_end()),
             fields: vec![LabelledField::unlabelled(Field::plain(text))],
             checks: Self::checks(checks),
             focus: Focus::Field(0),
             width,
-            ..Self::new(title, message, vec![Button::Ok, Button::Cancel])
+            ..Self::new(title, "", vec![Button::Ok, Button::Cancel])
         }
     }
 
@@ -544,7 +564,7 @@ impl Dialog {
         let fields: Vec<LabelledField> = fields
             .iter()
             .map(|(label, text)| LabelledField {
-                label: cells::sanitize(label.as_bytes()),
+                label: Label::parse(&cells::sanitize(label.as_bytes())),
                 field: Field::plain(text),
             })
             .collect();
@@ -566,7 +586,7 @@ impl Dialog {
         checks
             .iter()
             .map(|(label, on)| Check {
-                label: label.clone(),
+                label: Label::parse(label),
                 on: *on,
             })
             .collect()
@@ -576,7 +596,7 @@ impl Dialog {
         Self {
             id: LAST_ID.fetch_add(1, Ordering::Relaxed) + 1,
             title: cells::sanitize(title.as_bytes()),
-            message: message.trim_end().to_owned(),
+            message: Label::plain(message.trim_end()),
             choices: Vec::new(),
             chosen: 0,
             in_a_row: false,
@@ -761,27 +781,20 @@ impl Dialog {
         moves && self.list.is_some()
     }
 
-    /// Switches check box `index`.
-    pub(crate) fn toggle_check(&mut self, index: usize) {
-        if let Some(check) = self.checks.get_mut(index) {
-            check.on = !check.on;
-        }
-    }
-
     /// The same dialog with `message` above the rest.
     pub(crate) fn with_message(mut self, message: &str) -> Self {
-        message.trim_end().clone_into(&mut self.message);
+        self.message = Label::plain(message.trim_end());
         self
     }
 
     /// The same dialog with `choices` above its fields, `chosen` of them chosen. Without
     /// fields, the chosen one starts with the focus.
-    pub(crate) fn with_choices(mut self, choices: Vec<String>, chosen: usize) -> Self {
+    pub(crate) fn with_choices(mut self, choices: &[String], chosen: usize) -> Self {
         self.chosen = chosen.min(choices.len().saturating_sub(1));
         if self.fields.is_empty() && !choices.is_empty() {
             self.focus = Focus::Choice(self.chosen);
         }
-        self.choices = choices;
+        self.choices = choices.iter().map(|choice| Label::parse(choice)).collect();
         self
     }
 
@@ -794,7 +807,7 @@ impl Dialog {
     /// Puts `label` over text field `index`.
     pub(crate) fn set_label(&mut self, index: usize, label: &str) {
         if let Some(field) = self.fields.get_mut(index) {
-            field.label = cells::sanitize(label.as_bytes());
+            field.label = Label::parse(&cells::sanitize(label.as_bytes()));
         }
     }
 
@@ -931,12 +944,17 @@ impl Dialog {
     /// bring it there in Normal mode, but from a field in Insert mode.
     pub(crate) fn handle_typed(&mut self, typed: Typed, registers: &mut Registers) -> DialogEvent {
         let Typed { resolved, extra } = typed;
+        if let Resolved::Hotkey(c) = resolved {
+            return self.hotkey(c);
+        }
         let action = match (resolved, self.focused_field_mut()) {
             (Resolved::Insert(c), Some(field)) => {
                 field.insert(c);
                 return DialogEvent::Pending;
             }
-            (Resolved::Insert(_), None) => return DialogEvent::Pending,
+            (Resolved::Hotkey(_), _) | (Resolved::Insert(_), None) => {
+                return DialogEvent::Pending;
+            }
             (Resolved::Action(action), Some(field)) => {
                 if field.handle(action, extra, registers) {
                     return DialogEvent::Pending;
@@ -1000,6 +1018,56 @@ impl Dialog {
             }
             _ => DialogEvent::Pending,
         }
+    }
+
+    /// Alt and `c`, as mc and Far take them: a button with the letter is pressed, a check box
+    /// switched, and a choice chosen, each with the focus; a field with it, or under a prompt
+    /// with it, gets the focus in Insert mode. Nothing else has it.
+    fn hotkey(&mut self, c: char) -> DialogEvent {
+        let found = if self.message.has(c) && !self.fields.is_empty() {
+            Some(Focus::Field(0))
+        } else {
+            self.stops().into_iter().find(|&stop| match stop {
+                Focus::Choice(index) => self.choices[index].has(c),
+                Focus::Field(index) => self.fields[index].label.has(c),
+                Focus::Check(index) => self.checks[index].label.has(c),
+                Focus::List => false,
+                Focus::Button(index) => self.buttons[index].label().has(c),
+            })
+        };
+        let Some(stop) = found else {
+            return DialogEvent::Pending;
+        };
+        if let Focus::Button(index) = stop {
+            return DialogEvent::Pressed(self.buttons[index]);
+        }
+        self.give_up();
+        self.focus_on(stop, Mode::Insert);
+        match stop {
+            Focus::Choice(index) => self.chosen = index,
+            Focus::Check(index) => self.checks[index].on = !self.checks[index].on,
+            Focus::Field(_) | Focus::List | Focus::Button(_) => {}
+        }
+        DialogEvent::Pending
+    }
+
+    /// The letters of everything Alt and a letter act on, the prompt of a lone field first, in
+    /// the order of the stops; one for each that has a letter.
+    #[cfg(test)]
+    pub(crate) fn letters(&self) -> Vec<char> {
+        let prompt = (!self.fields.is_empty()).then(|| self.message.letter());
+        let choices = self.choices.iter().map(Label::letter);
+        let fields = self.fields.iter().map(|field| field.label.letter());
+        let checks = self.checks.iter().map(|check| check.label.letter());
+        let buttons = self.buttons.iter().map(|button| button.label().letter());
+        prompt
+            .into_iter()
+            .chain(choices)
+            .chain(fields)
+            .chain(checks)
+            .chain(buttons)
+            .flatten()
+            .collect()
     }
 
     /// Takes a press of the mouse, where the dialog was drawn last: a click chooses a choice,
@@ -1121,11 +1189,12 @@ impl Dialog {
         &self,
         frame: &mut Frame<'_>,
         inner: Rect,
-        lines: &[String],
+        (lines, letter): (&[String], Option<(usize, usize)>),
         rest: u16,
-        style: Style,
+        colors: Colors,
         theme: &Theme,
     ) -> u16 {
+        let style = colors.body;
         let room = usize::from(inner.height.saturating_sub(rest)).max(1);
         let page = lines.len().min(room);
         let offset = self.offset.get().min(lines.len() - page);
@@ -1137,9 +1206,14 @@ impl Dialog {
         let arrows = theme.glyphs.scroll_bar;
         self.bar
             .set(scrollbar::render(frame, bar, position, style, arrows));
-        for (index, line) in (0..rows).zip(lines.iter().skip(offset)) {
+        for (index, line) in (0..rows).zip(lines.iter().enumerate().skip(offset)) {
             let row = Rect::new(inner.x, inner.y + index, inner.width, 1);
-            frame.render_widget(Line::raw(line.as_str()), row);
+            let (number, text) = line;
+            let over = letter
+                .filter(|&(at, _)| at == number)
+                .map(|(_, column)| (column, colors.hotkey));
+            let spans = label::spans_over(text, style, over.into_iter().collect());
+            frame.render_widget(Line::from(spans), row);
         }
         rows
     }
@@ -1170,11 +1244,19 @@ impl Dialog {
     ) {
         let width = self.width.min(area.width.saturating_sub(4)).max(20);
         let text_width = usize::from(width.saturating_sub(4));
-        let lines = cells::wrap(&self.message, text_width);
+        let (lines, letter) = if self.fields.is_empty() {
+            (cells::wrap(&self.message.text, text_width), None)
+        } else {
+            self.message.wrap(text_width)
+        };
         let rows = |count: usize| u16::try_from(count).unwrap_or(u16::MAX);
         // Borders, the message, the choices, the fields under their labels, the check boxes, a
         // line, the buttons.
-        let labels = self.fields.iter().filter(|f| !f.label.is_empty()).count();
+        let labels = self
+            .fields
+            .iter()
+            .filter(|f| !f.label.text.is_empty())
+            .count();
         let choice_rows = if self.in_a_row {
             self.choices.len().min(1)
         } else {
@@ -1204,20 +1286,22 @@ impl Dialog {
             .saturating_sub(rows(lines.len()))
             .saturating_add(2)
             .saturating_add(below);
-        let mut index = self.render_message(frame, inner, &lines, rest, colors.body, theme);
+        let message = (lines.as_slice(), letter);
+        let mut index = self.render_message(frame, inner, message, rest, colors, theme);
         let room = usize::from(inner.width).max(1);
         let Some(after) = self.draw_choices(frame, (inner, index), colors, &mut spots) else {
             return;
         };
         index = after;
         for (number, LabelledField { label, field }) in self.fields.iter().enumerate() {
-            if !label.is_empty() {
+            if !label.text.is_empty() {
                 if index >= inner.height {
                     return;
                 }
-                let styles = colors.body_styles();
-                let label = cells::fit(label, room, cells::Align::Left, styles, theme.glyphs.marks);
-                frame.render_widget(Line::from(label), row(index));
+                frame.render_widget(
+                    Line::from(label_spans(label, room, colors, theme)),
+                    row(index),
+                );
                 index += 1;
             }
             if index >= inner.height {
@@ -1235,20 +1319,10 @@ impl Dialog {
             }
             index += 1;
         }
-        for (number, check) in self.checks.iter().enumerate() {
-            if index >= inner.height {
-                return;
-            }
-            let text = format!("[{}] {}", mark(check.on, glyphs::CHECKED), check.label);
-            let style = if self.focus == Focus::Check(number) {
-                colors.focused
-            } else {
-                colors.body
-            };
-            frame.render_widget(Line::from(Span::styled(text, style)), row(index));
-            spots.push((Focus::Check(number), row(index)));
-            index += 1;
-        }
+        let Some(after) = self.draw_checks(frame, (inner, index), colors, &mut spots) else {
+            return;
+        };
+        index = after;
         if let Some(view) = list {
             let Some(end) = self.draw_list_part(frame, (inner, index), view, colors, theme) else {
                 return;
@@ -1257,13 +1331,13 @@ impl Dialog {
         }
         if index + 1 < inner.height {
             draw_separator(frame, inner, inner.y + index, colors, theme);
-            let labels: Vec<String> = self.buttons.iter().map(|button| button.label()).collect();
+            let labels: Vec<Label> = self.buttons.iter().map(|button| button.label()).collect();
             let focus = match self.focus {
                 Focus::Button(index) => Some(index),
                 Focus::Choice(_) | Focus::Field(_) | Focus::Check(_) | Focus::List => None,
             };
             let line = button_line(&labels, self.default, focus, colors);
-            let buttons = button_spots(&line, row(index + 1));
+            let buttons = button_spots(&labels, self.default, row(index + 1));
             spots.extend((0..).map(Focus::Button).zip(buttons));
             frame.render_widget(line, row(index + 1));
         }
@@ -1271,6 +1345,35 @@ impl Dialog {
 }
 
 impl Dialog {
+    /// Draws the check boxes from row `index` of `inner`, the room inside the frame, and keeps
+    /// where for the mouse in `spots`. Returns the row after them, or `None` without room.
+    fn draw_checks(
+        &self,
+        frame: &mut Frame<'_>,
+        (inner, mut index): (Rect, u16),
+        colors: Colors,
+        spots: &mut Vec<(Focus, Rect)>,
+    ) -> Option<u16> {
+        for (number, check) in self.checks.iter().enumerate() {
+            if index >= inner.height {
+                return None;
+            }
+            let row = Rect::new(inner.x, inner.y + index, inner.width, 1);
+            let text = format!("[{}] ", mark(check.on, glyphs::CHECKED));
+            let style = if self.focus == Focus::Check(number) {
+                colors.focused
+            } else {
+                colors.body
+            };
+            let mut spans = vec![Span::styled(text, style)];
+            spans.extend(check.label.spans(style, Some(colors.hotkey), colors.mark));
+            frame.render_widget(Line::from(spans), row);
+            spots.push((Focus::Check(number), row));
+            index += 1;
+        }
+        Some(index)
+    }
+
     /// Draws the choices from row `index` of `inner`, the room inside the frame, one under
     /// another or on one line, and keeps where for the mouse in `spots`. Returns the row after
     /// them, or `None` without room.
@@ -1286,19 +1389,22 @@ impl Dialog {
             if index >= inner.height {
                 return None;
             }
-            let text = format!("({}) {choice}", mark(number == self.chosen, glyphs::CHOSEN));
+            let text = format!("({}) ", mark(number == self.chosen, glyphs::CHOSEN));
             let style = if self.focus == Focus::Choice(number) {
                 colors.focused
             } else {
                 colors.body
             };
-            let width = u16::try_from(cells::width(&text)).unwrap_or(u16::MAX);
+            let cells = cells::width(&text) + cells::width(&choice.text);
+            let width = u16::try_from(cells).unwrap_or(u16::MAX);
             let area = if self.in_a_row {
                 Rect::new(x, inner.y + index, width, 1).intersection(inner)
             } else {
                 Rect::new(inner.x, inner.y + index, inner.width, 1)
             };
-            frame.render_widget(Line::from(Span::styled(text, style)), area);
+            let mut spans = vec![Span::styled(text, style)];
+            spans.extend(choice.spans(style, Some(colors.hotkey), colors.mark));
+            frame.render_widget(Line::from(spans), area);
             spots.push((Focus::Choice(number), area));
             if self.in_a_row {
                 // Three blanks apart, as mc sets its radio buttons on a line.
@@ -1414,10 +1520,35 @@ impl Dialog {
     }
 }
 
+/// A label in `room` cells of a dialog's body, its letter set apart; one too long loses its
+/// middle, and its letter with it.
+fn label_spans(label: &Label, room: usize, colors: Colors, theme: &Theme) -> Vec<Span<'static>> {
+    if cells::width(&label.text) <= room {
+        return label.spans(colors.body, Some(colors.hotkey), colors.mark);
+    }
+    let styles = colors.body_styles();
+    cells::fit(
+        &label.text,
+        room,
+        cells::Align::Left,
+        styles,
+        theme.glyphs.marks,
+    )
+}
+
+/// The brackets around a button: `[< >]` for the default one, `[ ]` for the others.
+fn brackets(default: bool) -> (&'static str, &'static str) {
+    if default {
+        ("[< ", " >]")
+    } else {
+        ("[ ", " ]")
+    }
+}
+
 /// Buttons, centered, as mc draws them: the default one in `[< >]`, the one with the focus in
-/// its color.
+/// its color, each with its letter set apart.
 pub(crate) fn button_line(
-    labels: &[String],
+    labels: &[Label],
     default: usize,
     focus: Option<usize>,
     colors: Colors,
@@ -1427,41 +1558,45 @@ pub(crate) fn button_line(
         if index > 0 {
             spans.push(Span::raw(" "));
         }
-        let text = if index == default {
-            format!("[< {label} >]")
-        } else {
-            format!("[ {label} ]")
-        };
         let style = if focus == Some(index) {
             colors.focused
         } else {
             colors.button
         };
-        spans.push(Span::styled(text, style));
+        let (open, close) = brackets(index == default);
+        spans.push(Span::styled(open, style));
+        spans.extend(label.spans(style, Some(colors.hotkey), colors.mark));
+        spans.push(Span::styled(close, style));
     }
     Line::from(spans).centered()
 }
 
-/// Where the buttons of `line`, from [`button_line`], are when it is drawn on `area`, which
-/// centers it.
-pub(crate) fn button_spots(line: &Line<'_>, area: Rect) -> Vec<Rect> {
-    let width = |span: &Span<'_>| i32::try_from(span.width()).unwrap_or(i32::MAX);
-    let total = line.spans.iter().map(width).sum::<i32>();
+/// Where the buttons of `labels`, as [`button_line`] draws them with the one at `default` the
+/// default, are when it is drawn on `area`, which centers it.
+pub(crate) fn button_spots(labels: &[Label], default: usize, area: Rect) -> Vec<Rect> {
+    let widths: Vec<i32> = labels
+        .iter()
+        .enumerate()
+        .map(|(index, label)| {
+            let (open, close) = brackets(index == default);
+            let cells = cells::width(open) + cells::width(&label.text) + cells::width(close);
+            i32::try_from(cells).unwrap_or(i32::MAX)
+        })
+        .collect();
+    let gaps = i32::try_from(labels.len().saturating_sub(1)).unwrap_or(i32::MAX);
+    let total = widths.iter().sum::<i32>().saturating_add(gaps);
     // Ratatui centers a line that does not fit by cutting as much off either side.
     let mut x = i32::from(area.x) + (i32::from(area.width) - total).div_euclid(2);
     if total > i32::from(area.width) {
         x = i32::from(area.x) - (total - i32::from(area.width)) / 2;
     }
     let mut spots = Vec::new();
-    // Buttons and the spaces between them take turns.
-    for (index, span) in line.spans.iter().enumerate() {
+    for width in widths {
         let start = x;
-        x += width(span);
-        if index % 2 == 1 {
-            continue;
-        }
+        // A blank between buttons.
+        x += width + 1;
         let left = start.max(i32::from(area.x));
-        let right = x.min(i32::from(area.right()));
+        let right = (start + width).min(i32::from(area.right()));
         let (Ok(left), Ok(right)) = (u16::try_from(left), u16::try_from(right)) else {
             continue;
         };
@@ -1944,6 +2079,228 @@ mod tests {
         assert_eq!(dialog.text(), "*");
     }
 
+    fn lettered() -> Dialog {
+        let checks = [
+            ("&Files only".to_owned(), false),
+            ("&Case sensitive".to_owned(), false),
+        ];
+        Dialog::form("Select", "&Pattern:", "*", &checks, 50)
+            .with_choices(&["O&ne".to_owned(), "T&wo".to_owned()], 0)
+    }
+
+    #[test]
+    fn alt_and_a_letter_switch_choose_focus_and_press_from_anywhere() {
+        let mut dialog = lettered();
+        assert_eq!(
+            dialog.focus,
+            Focus::Field(0),
+            "the field first, as forms open"
+        );
+        let hotkey = |dialog: &mut Dialog, c| dialog.handle(Resolved::Hotkey(c));
+        assert_eq!(hotkey(&mut dialog, 'f'), DialogEvent::Pending);
+        assert!(dialog.checked(0));
+        assert_eq!(dialog.focus, Focus::Check(0));
+        hotkey(&mut dialog, 'W');
+        assert_eq!(
+            (dialog.chosen(), dialog.focus),
+            (1, Focus::Choice(1)),
+            "either case"
+        );
+        hotkey(&mut dialog, 'p');
+        assert_eq!(
+            dialog.focus,
+            Focus::Field(0),
+            "the prompt's letter is the field's"
+        );
+        assert_eq!(dialog.mode(), Mode::Insert);
+        typed(&mut dialog, "x");
+        assert_eq!(dialog.text(), "*x");
+        hotkey(&mut dialog, 'c');
+        assert!(dialog.checked(1), "from the field too");
+        hotkey(&mut dialog, 'c');
+        assert!(!dialog.checked(1), "again, back");
+        hotkey(&mut dialog, 'z');
+        assert_eq!(
+            dialog.focus,
+            Focus::Check(1),
+            "a letter nothing has does nothing"
+        );
+        assert_eq!(dialog.text(), "*x");
+        assert_eq!(hotkey(&mut dialog, 'o'), DialogEvent::Pressed(Button::Ok));
+        assert_eq!(Button::Cancel.label().letter(), None, "Esc and F10 cancel");
+    }
+
+    #[test]
+    fn a_letter_in_normal_mode_gives_up_the_command_that_waits() {
+        let mut dialog = lettered();
+        dialog.handle(action(Action::NormalMode));
+        dialog.handle(action(Action::DeleteOperator));
+        assert!(dialog.pending().is_some());
+        dialog.handle(Resolved::Hotkey('f'));
+        assert_eq!(dialog.pending(), None);
+        dialog.handle(Resolved::Hotkey('p'));
+        assert_eq!(
+            dialog.mode(),
+            Mode::Insert,
+            "a letter brings Insert mode, as Tab"
+        );
+    }
+
+    #[test]
+    fn letters_stand_out_where_they_are_drawn() {
+        use ratatui::style::Color;
+
+        let mut dialog = lettered();
+        dialog.handle(Resolved::Hotkey('f'));
+        let terminal = draw_themed(&dialog, 50, 14, &Theme::mc_classic());
+        let buffer = terminal.backend().buffer();
+        let find = |text: &str| super::super::mouse::find(buffer, text);
+        let fg = |at: Position, offset: u16| buffer[(at.x + offset, at.y)].fg;
+        let colors = Colors::of(&Theme::mc_classic(), false);
+        assert_eq!(colors.hotkey_style().fg, Some(Color::Blue));
+        let prompt = find("Pattern:");
+        assert_eq!((fg(prompt, 0), fg(prompt, 1)), (Color::Blue, Color::Black));
+        let choice = find("One");
+        assert_eq!(fg(choice, 1), Color::Blue);
+        let check = find("Files only");
+        assert_eq!(fg(check, 0), Color::Blue, "on the focus too");
+        assert_eq!(buffer[(check.x, check.y)].bg, Color::Cyan);
+        let ok = find("OK");
+        assert_eq!((fg(ok, 0), fg(ok, 1)), (Color::Blue, Color::Black));
+        let cancel = find("Cancel");
+        assert_eq!(fg(cancel, 0), Color::Black);
+        let text: String = (0..buffer.area.height)
+            .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
+            .map(|at| buffer[at].symbol())
+            .collect();
+        assert!(!text.contains('&'), "{text}");
+    }
+
+    /// Asserts that what `dialog` acts on by a letter has one of its own: its choices, its
+    /// labelled fields, its check boxes, and its buttons but Cancel.
+    fn assert_letters(name: &str, dialog: &Dialog) {
+        let labels = dialog
+            .choices
+            .iter()
+            .chain(dialog.fields.iter().map(|field| &field.label))
+            .chain(dialog.checks.iter().map(|check| &check.label));
+        let missing: Vec<&str> = labels
+            .filter(|label| !label.text.is_empty() && label.letter().is_none())
+            .map(|label| label.text.as_str())
+            .collect();
+        assert!(missing.is_empty(), "{name}: {missing:?} have no letter");
+        for &button in &dialog.buttons {
+            let none = button.label().letter().is_none();
+            assert_eq!(none, button == Button::Cancel, "{name}: {button:?}");
+        }
+        let letters = dialog.letters();
+        let unique: std::collections::HashSet<char> = letters.iter().copied().collect();
+        assert_eq!(unique.len(), letters.len(), "{name}: {letters:?}");
+    }
+
+    #[test]
+    fn every_element_of_the_apps_dialogs_has_a_letter_of_its_own() {
+        use crate::i18n::fl;
+
+        let ok_cancel = || vec![Button::Ok, Button::Cancel];
+        let form = |message: String, checks: &[(String, bool)]| {
+            Dialog::form("Title", &message, "", checks, 60)
+        };
+        let preserve = [(fl!("copy-preserve"), true)];
+        let forms = [
+            ("copy", form(fl!("copy-one", name = "R&&D"), &preserve)),
+            ("copy many", form(fl!("copy-many", count = 2), &preserve)),
+            ("move", form(fl!("move-one", name = "x"), &[])),
+            ("move many", form(fl!("move-many", count = 2), &[])),
+            ("mkdir", form(fl!("mkdir-prompt"), &[])),
+            ("quick cd", form(fl!("cd-prompt"), &[])),
+            ("save checksums", form(fl!("checksum-save-prompt"), &[])),
+            ("save workspace", form(fl!("workspaces-save-prompt"), &[])),
+            (
+                "rename workspace",
+                form(fl!("workspaces-rename-prompt", name = "x"), &[]),
+            ),
+        ];
+        for (name, dialog) in &forms {
+            assert!(dialog.message.letter().is_some(), "{name}: the prompt");
+            assert_letters(name, dialog);
+        }
+        let select = [
+            (fl!("pattern-files-only"), false),
+            (fl!("pattern-case-sensitive"), false),
+        ];
+        let host_fields = [
+            (fl!("host-label"), String::new()),
+            (fl!("host-start-dir"), String::new()),
+            (fl!("host-other-dir"), String::new()),
+        ];
+        let host_buttons = vec![Button::Ok, Button::UseCurrent, Button::Cancel];
+        let algorithms = [
+            fl!("checksum-sha256"),
+            fl!("checksum-sha512"),
+            fl!("checksum-sha1"),
+            fl!("checksum-md5"),
+            fl!("checksum-blake3"),
+        ];
+        let question = |buttons: Vec<Button>| Dialog::question("Title", "?", buttons, 0, false);
+        let dialogs = [
+            ("select", Dialog::form("Select", "", "*", &select, 50)),
+            (
+                "host",
+                Dialog::fields(
+                    "Host",
+                    &host_fields,
+                    &[(fl!("host-remember-dir"), false)],
+                    host_buttons,
+                    70,
+                ),
+            ),
+            (
+                "checksum",
+                Dialog::fields(
+                    "Checksum",
+                    &[(fl!("checksum-expected"), String::new())],
+                    &[(fl!("checksum-compare", path = "/x"), false)],
+                    ok_cancel(),
+                    70,
+                )
+                .with_message(&fl!("checksum-one", name = "x"))
+                .with_choices(&algorithms, 0),
+            ),
+            ("password", secret()),
+            (
+                "host key",
+                Dialog::prompt("web", "yes?", PromptKind::HostKey),
+            ),
+            ("yes or no", question(vec![Button::Yes, Button::No])),
+            (
+                "file exists",
+                question(vec![
+                    Button::Yes,
+                    Button::No,
+                    Button::All,
+                    Button::KeepAll,
+                    Button::Older,
+                    Button::Abort,
+                ]),
+            ),
+            (
+                "failure",
+                question(vec![
+                    Button::Skip,
+                    Button::SkipAll,
+                    Button::Retry,
+                    Button::Abort,
+                ]),
+            ),
+            ("reconnect", question(vec![Button::Retry, Button::Cancel])),
+            ("error", Dialog::error("Error", "No.")),
+        ];
+        for (name, dialog) in &dialogs {
+            assert_letters(name, dialog);
+        }
+    }
+
     #[test]
     fn a_long_field_keeps_its_text_still_while_the_cursor_shows_as_vim() {
         // Off the edge, the cursor goes to the middle, as with vim's 'sidescroll' 0.
@@ -2062,9 +2419,9 @@ mod tests {
 
     #[test]
     fn a_double_click_on_a_choice_chooses_it_and_confirms() {
-        let choices = vec!["one".to_owned(), "two".to_owned()];
+        let choices = ["one".to_owned(), "two".to_owned()];
         let mut dialog = Dialog::fields("Pick", &[], &[], vec![Button::Ok, Button::Cancel], 40)
-            .with_choices(choices, 0);
+            .with_choices(&choices, 0);
         press_on(&mut dialog, Press::Click, "two");
         assert_eq!((dialog.chosen(), dialog.focus), (1, Focus::Choice(1)));
         press_on(&mut dialog, Press::Click, "one");

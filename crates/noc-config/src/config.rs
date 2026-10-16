@@ -162,7 +162,7 @@ pub struct UiConfig {
     /// Whether panels start out showing files whose names begin with a dot. Default: `true`.
     pub show_hidden: bool,
     /// How quick search, the filters of the lists, and the search of a tree match what is
-    /// typed, until Alt+r switches it in one of them. Default: `fzf`.
+    /// typed, until Ctrl+s switches it in one of them. Default: `fzf`.
     pub search_mode: SearchMode,
     /// When the menu bar of F9 shows. Default: `on-demand`.
     pub menu_bar: MenuBar,

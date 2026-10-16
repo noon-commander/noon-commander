@@ -18,10 +18,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `f /` searches the files below the panel's directory for text with
   [ripgrep](https://github.com/BurntSushi/ripgrep), locally or on a host, where rg runs over
   the connection, in a dialog over both panels; so does F9 → Command → Find file…. One field
-  takes the text, another the globs of the files (`*.rs !target`); Alt+r takes the text as a
+  takes the text, another the globs of the files (`*.rs !target`); Ctrl+s takes the text as a
   regular expression or as it is, starting from `ui.search_mode` (fzf there is a regular
-  expression), the glyph after Text saying which, and a check box switches case (Alt+c); it
-  searches again as any of them changes, and
+  expression), the glyph after Text saying which, and a check box, Match case, switches case
+  (Alt+c, its letter); it searches again as any of them changes, and
   with no text lists the files. Each file found shows with its lines that match, the matches
   highlighted. Go to, the default button, goes to the file in the panel (Ctrl+o back), View (F3)
   views it from the line, and Edit (F4) edits it at the line. Its other mode, Files and dirs,
@@ -37,9 +37,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Search modes: quick search and the filters of the lists (the location menu, the tab menu, the
   zoxide window, the workspaces, the command history, the list of the key hints) match what is
   typed as fzf does, as plain text anywhere, or as a regular expression with smart case. Each
-  starts in `ui.search_mode` (`fzf`), a choice in the Configuration dialog, and Alt+r switches
+  starts in `ui.search_mode` (`fzf`), a choice in the Configuration dialog, and Ctrl+s switches
   its own until it closes; a glyph after the word of the prompt says which (`Filter ~:`), crossed
   out while the text is no regular expression. `n` and `N` match as the last search did.
+- Letters in every dialog, as in Far and mc: each element but Cancel has a letter, highlighted in
+  its label, and Alt and the letter put the focus in a text field, switch a check box, choose a
+  radio button, or press a button, from anywhere in the dialog, while typing in a field too. A
+  dialog of one field takes its letter from the prompt over it, as Alt+c for `Copy "x" to:`. The
+  window of a job, the jobs, the checksums, and the Configuration dialog have letters too; there
+  Alt+1 … Alt+7 open the categories, and the letter of a setting switches it, picks its next
+  choice, or puts the focus in its field.
 - The help (F1) takes 70% of the screen and has sections down its left, as the Configuration dialog:
   About, with the license and every fact of `noc debug version` (the build, the system, the
   terminal, and the external tools: the editor, zoxide, ripgrep, and fd), and where the settings,
@@ -142,6 +149,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Viewer`, as `INSERT · Quick search` or `NORMAL · List`; the panels show the mode alone. The
   command line takes the line only while it has the keys: the command history of `q :` over it
   shows `NORMAL · List`.
+- In dialogs, Alt and a key no longer stand for Esc and the key: Alt and a letter are the
+  dialog's letters, and other Alt keys do nothing. Without the kitty keyboard protocol, an Esc and
+  a quick letter typed in a field arrive as Alt and the letter, and so act on its element rather
+  than leave Insert mode.
 
 ### Fixed
 

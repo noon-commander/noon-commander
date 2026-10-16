@@ -116,7 +116,7 @@ pub(crate) struct Picker {
     shows: Vec<Shows>,
     /// The filter, a text field.
     filter: Field,
-    /// How the filter matches: `ui.search_mode` until Alt+r switches it.
+    /// How the filter matches: `ui.search_mode` until Ctrl+s switches it.
     mode: SearchMode,
     /// Why the filter is not a regular expression, in the regex mode.
     error: Option<String>,
@@ -278,7 +278,7 @@ impl Picker {
                 self.refilter();
                 self.focus_best();
             }
-            Resolved::Insert(_) => {}
+            Resolved::Insert(_) | Resolved::Hotkey(_) => {}
             Resolved::Action(action) => match action {
                 Action::Up => self.cursor = self.cursor.saturating_sub(1),
                 Action::Down => self.cursor = (self.cursor + 1).min(last),

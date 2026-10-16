@@ -5,7 +5,7 @@ use std::time::SystemTime;
 
 use bytes::BytesMut;
 use futures_util::stream::FuturesUnordered;
-use futures_util::{StreamExt, TryStreamExt, stream};
+use futures_util::{StreamExt, TryStreamExt, future, stream};
 use openssh_sftp_client::error::SftpErrorKind;
 use openssh_sftp_client::file::{File, OpenOptions};
 use openssh_sftp_client::metadata::{MetaData, MetaDataBuilder, Permissions, RawFileType};
@@ -17,8 +17,8 @@ use crate::{
     DirEntry, FileKind, FileReader, FileWriter, Metadata, RemotePath, Space, Vfs, VfsError,
 };
 
-/// Symlink targets a listing resolves at a time, the number of requests `sftp(1)` keeps in
-/// flight.
+/// Symlinks a listing resolves at a time, as many as the requests `sftp(1)` keeps in flight;
+/// each sends two at once, a stat of its target and a read of the link.
 const MAX_PENDING_STATS: usize = 64;
 
 /// Bytes each read or write request of a file carries: what every server takes, and what
@@ -154,6 +154,16 @@ impl SftpFs {
         }
     }
 
+    /// The target of the symlink at `link` as stored; `None` if the server does not tell it.
+    async fn link_target(&self, link: &RemotePath) -> Result<Option<Vec<u8>>, VfsError> {
+        let mut fs = self.sftp.fs();
+        match fs.read_link(link.as_path()).await {
+            Ok(target) => Ok(Some(target.into_os_string().into_vec())),
+            Err(openssh_sftp_client::Error::SftpError(..)) => Ok(None),
+            Err(err) => Err(VfsError::Sftp(err)),
+        }
+    }
+
     /// The error for a failure to give `path` a name: SFTP v3 has no code for a name that is
     /// taken, so a plain failure where something has that name means that.
     async fn naming_error(&self, err: Error, path: &RemotePath) -> VfsError {
@@ -204,19 +214,22 @@ impl Vfs for SftpFs {
                 name: name.to_vec(),
                 metadata,
                 target_kind: None,
+                link_target: None,
             });
         }
 
         let targets: Vec<_> = stream::iter(links)
             .map(|(index, link)| async move {
-                let kind = self.target_kind(&link).await?;
-                Ok::<_, VfsError>((index, kind))
+                let (kind, target) =
+                    future::try_join(self.target_kind(&link), self.link_target(&link)).await?;
+                Ok::<_, VfsError>((index, kind, target))
             })
             .buffer_unordered(MAX_PENDING_STATS)
             .try_collect()
             .await?;
-        for (index, kind) in targets {
+        for (index, kind, target) in targets {
             entries[index].target_kind = kind;
+            entries[index].link_target = target;
         }
         Ok(entries)
     }

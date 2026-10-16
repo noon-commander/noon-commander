@@ -9,6 +9,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- With a symlink under the cursor, the status line of the panel shows its target as stored in
+  the link, as `config -> /etc/app/config.toml`, locally and on a host, with a Nerd Font arrow
+  in place of `->` under `ui.icons`. The arrow is toned down, and the target has the color of
+  its kind, a broken one red; an
+  icon of its kind goes in front of it, or without icons mc's marker after it, as `/opt/`. A
+  long target loses its start.
 - The bottom of a panel's frame shows at the left the size of the files shown and how many files
   and directories are shown, as `12M in 45 files, 3 dirs`; hidden files count while they show,
   and a link to a directory is a directory. Where it and the free space do not both fit, the

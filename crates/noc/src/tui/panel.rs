@@ -11,7 +11,7 @@ use jiff::tz::TimeZone;
 use noc_config::{SearchMode, Wheel};
 use noc_scroll::Motion;
 use noc_scroll::scrollbar::{self, Bar};
-use noc_vfs::{DirEntry, Location, RemotePath, Space};
+use noc_vfs::{DirEntry, FileKind, Location, RemotePath, Space};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -40,6 +40,9 @@ const MIN_NAME_WIDTH: usize = 8;
 
 /// Cells of the free space and size of a file system, such as `212G`.
 const SPACE_WIDTH: usize = 5;
+/// Cells the target of a symlink needs on the status line, its mark of text cut short among
+/// them; with less room the name shows alone.
+const MIN_LINK_TARGET: usize = 4;
 
 /// A request to list `location` for a panel; the reply must carry `generation`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -87,6 +90,61 @@ pub(crate) enum HostStatus {
     Failed,
     /// As `Failed`, while a dialog asks whether to try again; panels still wait for it.
     Stalled,
+}
+
+/// The status line of a symlink under the cursor: its name and its target, which ends the text.
+/// The name starts the text, plain, as the row above shows its kind; the arrow comes between,
+/// toned down; and the target, which tells its kind by its color and by an icon in front of it
+/// or a marker after it, ends it.
+#[derive(Debug)]
+struct Linked {
+    /// Where the name ends in the text, and where the target starts.
+    name_end: usize,
+    target_start: usize,
+    /// The target's style, by its kind.
+    target: Style,
+    /// The icon in front of the target, or the marker after it.
+    icon: String,
+    marker: String,
+}
+
+impl Linked {
+    /// `text` in exactly `width` cells over `style`: the target cut at its start where it does
+    /// not fit, as a path whose end matters most, its icon and marker kept; the name alone where
+    /// it leaves the target too little room. The mark of text cut short in `mark`.
+    fn fit(
+        &self,
+        text: &str,
+        width: usize,
+        (style, mark): (Style, Style),
+        marks: Marks,
+    ) -> Vec<Span<'static>> {
+        let name = &text[..self.name_end];
+        let arrow = &text[self.name_end..self.target_start];
+        let target = &text[self.target_start..];
+        let fixed = cells::width(name)
+            + cells::width(arrow)
+            + cells::width(&self.icon)
+            + cells::width(&self.marker);
+        if fixed + MIN_LINK_TARGET.min(cells::width(target)) > width {
+            return cells::fit(name, width, Align::Left, (style, mark), marks);
+        }
+        let target_style = style.patch(self.target);
+        let mut spans = vec![
+            Span::styled(name.to_owned(), style),
+            Span::styled(arrow.to_owned(), Theme::icon(style)),
+            Span::styled(self.icon.clone(), Theme::icon(target_style)),
+        ];
+        let room = width - fixed;
+        if cells::width(target) <= room {
+            spans.push(Span::styled(target.to_owned(), target_style));
+        } else {
+            let fitted = cells::fit_cut(target, room, Align::Left, Cut::Start);
+            spans.extend(cells::spans(fitted, (target_style, mark), marks));
+        }
+        spans.push(Span::styled(self.marker.clone(), target_style));
+        cells::fit_spans(spans, width, (style, mark), marks)
+    }
 }
 
 /// Quick search while it runs, as vim keeps its incremental search. Positions between rows
@@ -1690,7 +1748,7 @@ impl Panel {
 
     /// The status line, at `area`: the name being renamed, quick search with its cursor in the
     /// active panel, the last error, the listing or host it waits for, the host it
-    /// is not connected to, or the name under the cursor.
+    /// is not connected to, or the name under the cursor, with the target of a symlink.
     fn render_status(&self, frame: &mut Frame<'_>, area: Rect, active: bool, view: &View<'_>) {
         let theme = view.theme;
         let width = usize::from(area.width);
@@ -1699,6 +1757,8 @@ impl Panel {
         let mut waiting = None;
         // Quick search, whose glyph of its mode has a style of its own.
         let mut searching = None;
+        // A symlink under the cursor, with its target.
+        let mut linked = None;
         let status = if let Some(renaming) = &self.renaming {
             fl!("panel-rename", name = cells::sanitize(&renaming.name))
         } else if let Some(search) = &self.search {
@@ -1756,11 +1816,9 @@ impl Panel {
                 None => fl!("panel-disconnected", host = host),
             }
         } else {
-            match self.row(self.cursor) {
-                Some(Row::Parent) => "..".to_owned(),
-                Some(Row::Entry(entry)) => cells::sanitize(&entry.name),
-                None => String::new(),
-            }
+            let (status, link) = self.cursor_status(view);
+            linked = link;
+            status
         };
         let mut line = Line::default().style(status_style.0);
         let mut room = width;
@@ -1770,12 +1828,53 @@ impl Panel {
             room = room.saturating_sub(2);
         }
         let marks = theme.glyphs.marks;
-        let fitted = match searching {
-            Some(spans) => cells::fit_spans(spans, room, status_style, marks),
-            None => cells::fit(&status, room, Align::Left, status_style, marks),
+        let fitted = match (searching, linked) {
+            (Some(spans), _) => cells::fit_spans(spans, room, status_style, marks),
+            (None, Some(linked)) => linked.fit(&status, room, status_style, marks),
+            (None, None) => cells::fit(&status, room, Align::Left, status_style, marks),
         };
         line.spans.extend(fitted);
         frame.render_widget(line, area);
+    }
+
+    /// The status line of the row under the cursor: its name, and the target of a symlink.
+    fn cursor_status(&self, view: &View<'_>) -> (String, Option<Linked>) {
+        let entry = match self.row(self.cursor) {
+            Some(Row::Parent) => return ("..".to_owned(), None),
+            Some(Row::Entry(entry)) => entry,
+            None => return (String::new(), None),
+        };
+        let name = cells::sanitize(&entry.name);
+        let Some(stored) = entry
+            .link_target
+            .as_ref()
+            .filter(|_| entry.metadata.kind == FileKind::Symlink)
+        else {
+            return (name, None);
+        };
+        let theme = view.theme;
+        let target = cells::sanitize(stored);
+        let status = fl!(
+            "panel-link",
+            name = name.clone(),
+            arrow = theme.glyphs.link_arrow,
+            target = target.clone()
+        );
+        // The parts are styled where the name starts the text and the target ends it.
+        let Some(target_start) = status.len().checked_sub(target.len()).filter(|&start| {
+            status.starts_with(&name) && status.ends_with(&target) && name.len() <= start
+        }) else {
+            return (status, None);
+        };
+        let (icon, marker) = view.decor.target(entry.target_kind, stored);
+        let linked = Linked {
+            name_end: name.len(),
+            target_start,
+            target: theme.target(entry.target_kind),
+            icon,
+            marker,
+        };
+        (status, Some(linked))
     }
 
     /// The field of the entry being renamed, over its row from the name on, in the colors of a
@@ -2531,12 +2630,14 @@ mod tests {
                 gid: Some(20),
             },
             target_kind: None,
+            link_target: None,
         }
     }
 
     fn link_to_dir(name: &str) -> DirEntry {
         DirEntry {
             target_kind: Some(FileKind::Dir),
+            link_target: Some(b"/opt".to_vec()),
             ..entry(name, FileKind::Symlink, 4)
         }
     }
@@ -3651,6 +3752,99 @@ mod tests {
             available: 0,
         });
         assert!(!bottom(&mut panel, 50).contains('%'));
+    }
+
+    #[test]
+    fn the_status_line_shows_the_target_of_a_symlink_cut_at_its_start() {
+        let link = |name: &str, target: Option<&str>, kind: Option<FileKind>| DirEntry {
+            target_kind: kind,
+            link_target: target.map(|target| target.as_bytes().to_vec()),
+            ..entry(name, FileKind::Symlink, 1)
+        };
+        let config = "/etc/app/config.toml";
+        let mut panel = loaded(
+            "/srv",
+            vec![
+                link("conf", Some(config), Some(FileKind::File)),
+                link("gone", Some("../missing"), None),
+                link("opt", Some("/opt"), Some(FileKind::Dir)),
+                link("unread", None, Some(FileKind::File)),
+            ],
+        );
+        let hosts = |_: &str| HostState::default();
+        let plain = Theme::mc_classic();
+        let nerd = Theme::mc_classic().with_glyphs(&glyphs::Glyphs::NERD);
+        // The cells of the status line of a panel 6 high, inside the frame, and their text.
+        let status = |panel: &mut Panel, width: u16, icons: bool| {
+            let theme = if icons { &nerd } else { &plain };
+            let size = (width, 6);
+            let terminal = render_themed(panel, size, true, &hosts, Decor::new(icons), theme);
+            let buffer = terminal.backend().buffer();
+            let cells: Vec<_> = (1..width - 1).map(|x| buffer[(x, 4)].clone()).collect();
+            let text: String = cells.iter().map(|cell| cell.symbol().to_owned()).collect();
+            (text.trim_end().to_owned(), cells)
+        };
+        let fg = |style: Style| style.fg.unwrap();
+        // The color of the status line's text, which the name keeps.
+        let text_fg = fg(plain.panel);
+
+        // Directories first: `opt`, then `conf`.
+        panel.handle(Action::Down);
+        let (text, cells) = status(&mut panel, 40, false);
+        assert_eq!(text, "opt -> /opt/", "a directory's marker after it");
+        assert_eq!(cells[0].fg, text_fg, "the name plain");
+        assert_eq!(cells[7].fg, fg(plain.directory), "the target by its kind");
+
+        panel.handle(Action::Down);
+        let (text, cells) = status(&mut panel, 40, false);
+        assert_eq!(text, format!("conf -> {config}"), "no marker after a file");
+        assert_eq!(cells[0].fg, text_fg);
+        assert_eq!(cells[5].fg, text_fg);
+        assert!(
+            cells[5].modifier.contains(Modifier::DIM),
+            "the arrow toned down"
+        );
+        assert!(!cells[0].modifier.contains(Modifier::DIM));
+        assert_eq!(cells[8].fg, fg(plain.file));
+        assert!(!cells[8].modifier.contains(Modifier::DIM));
+        let (text, _) = status(&mut panel, 22, false);
+        assert_eq!(text, "conf -> «config.toml", "the end of the path stays");
+        let (text, cells) = status(&mut panel, 13, false);
+        assert_eq!(text, "conf", "no room for the target");
+        assert_eq!(cells[0].fg, text_fg);
+
+        let (text, cells) = status(&mut panel, 40, true);
+        let arrow = glyphs::Glyphs::NERD.link_arrow;
+        let (icon, _) = Decor::new(true).target(Some(FileKind::File), config.as_bytes());
+        assert_eq!(text, format!("conf {arrow} {icon}{config}"), "with icons");
+        assert_eq!(
+            cells[7].fg,
+            fg(plain.file),
+            "the icon in the target's color"
+        );
+        assert!(cells[7].modifier.contains(Modifier::DIM), "toned down");
+        let (text, _) = status(&mut panel, 22, true);
+        assert_eq!(
+            text,
+            format!(
+                "conf {arrow} {icon}{}{}",
+                glyphs::Glyphs::NERD.marks.before,
+                &config[config.len() - 10..]
+            ),
+            "the icon stays, and the target loses a cell more"
+        );
+
+        panel.handle(Action::Down);
+        let (text, cells) = status(&mut panel, 40, false);
+        assert_eq!(text, "gone -> ../missing!");
+        assert_eq!(cells[0].fg, text_fg);
+        assert_eq!(cells[8].fg, fg(plain.stale_link), "a broken link's target");
+        let (text, _) = status(&mut panel, 20, false);
+        assert_eq!(text, "gone -> «/missing!", "the marker stays");
+
+        panel.handle(Action::Down);
+        let (text, _) = status(&mut panel, 40, false);
+        assert_eq!(text, "unread", "a target that could not be read");
     }
 
     /// The bottom line of `panel`'s frame drawn `width` cells wide and 6 high.

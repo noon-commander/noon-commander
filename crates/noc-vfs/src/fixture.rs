@@ -44,11 +44,13 @@ pub(crate) fn check_tree(entries: &[DirEntry], root: &Path) {
         Some(seconds(local.modified().unwrap()))
     );
     assert_eq!(file.target_kind, None);
+    assert_eq!(file.link_target, None);
     assert!(!file.is_dir_like());
 
     let dir = entry(entries, "dir");
     assert_eq!(dir.metadata.kind, FileKind::Dir);
     assert_eq!(dir.target_kind, None);
+    assert_eq!(dir.link_target, None);
     assert!(dir.is_dir_like());
 
     let links = [
@@ -61,6 +63,11 @@ pub(crate) fn check_tree(entries: &[DirEntry], root: &Path) {
         assert_eq!(link.metadata.kind, FileKind::Symlink, "{name}");
         assert_eq!(link.metadata.size, Some(target.len() as u64), "{name}");
         assert_eq!(link.target_kind, target_kind, "{name}");
+        assert_eq!(
+            link.link_target.as_deref(),
+            Some(target.as_bytes()),
+            "{name}"
+        );
         assert_eq!(
             link.is_dir_like(),
             target_kind == Some(FileKind::Dir),
@@ -91,6 +98,7 @@ pub(crate) fn check_special_files(entries: &[DirEntry]) {
     let null = entry(entries, "null");
     assert_eq!(null.metadata.kind, FileKind::Symlink);
     assert_eq!(null.target_kind, Some(FileKind::CharDevice));
+    assert_eq!(null.link_target.as_deref(), Some(&b"/dev/null"[..]));
     assert!(!null.is_dir_like());
 }
 

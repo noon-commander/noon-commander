@@ -606,6 +606,19 @@ impl Theme {
         }
     }
 
+    /// The style of a symlink's target by its kind, `None` when nothing is there: as an entry of
+    /// that kind, without its permissions, which a listing does not read.
+    pub(crate) fn target(&self, kind: Option<FileKind>) -> Style {
+        match kind {
+            None => self.stale_link,
+            Some(FileKind::Dir) => self.directory,
+            Some(FileKind::File) => self.file,
+            Some(FileKind::Symlink) => self.symlink,
+            Some(FileKind::BlockDevice | FileKind::CharDevice) => self.device,
+            Some(FileKind::Fifo | FileKind::Socket | FileKind::Unknown) => self.special,
+        }
+    }
+
     /// The style of the icon in front of a name in `name`: the name's color, toned down so the
     /// name stands out. Not bold, which many terminals cannot draw together with dim.
     pub(crate) fn icon(name: Style) -> Style {
@@ -897,6 +910,7 @@ mod tests {
                 gid: None,
             },
             target_kind,
+            link_target: None,
         }
     }
 
@@ -1181,6 +1195,27 @@ mod tests {
         assert_eq!(
             theme.host_status(HostStatus::Connected).fg,
             Some(Color::LightGreen)
+        );
+    }
+
+    #[test]
+    fn the_target_of_a_link_takes_the_style_of_its_kind() {
+        let theme = Theme::mc_classic();
+        let of = |kind, permissions| theme.entry(&entry(kind, permissions, None));
+        assert_eq!(theme.target(None), theme.stale_link);
+        assert_eq!(theme.target(Some(FileKind::Dir)), of(FileKind::Dir, 0o755));
+        assert_eq!(
+            theme.target(Some(FileKind::File)),
+            of(FileKind::File, 0o644),
+            "never as executable: the permissions of the target are not read"
+        );
+        assert_eq!(
+            theme.target(Some(FileKind::CharDevice)),
+            of(FileKind::CharDevice, 0o644)
+        );
+        assert_eq!(
+            theme.target(Some(FileKind::Fifo)),
+            of(FileKind::Fifo, 0o644)
         );
     }
 }

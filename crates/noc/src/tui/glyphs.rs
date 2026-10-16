@@ -67,6 +67,8 @@ pub(crate) struct Glyphs {
     /// In front of each point of a tip in the help.
     pub(crate) bullet: char,
     pub(crate) search_modes: SearchModes,
+    /// Between a symlink's name and its target on the status line.
+    pub(crate) link_arrow: &'static str,
 }
 
 impl Glyphs {
@@ -116,6 +118,8 @@ impl Glyphs {
             fzf: "󰾞",
             regex: "",
         },
+        // nf-md-arrow_right.
+        link_arrow: "󰁔",
     };
 
     /// Without a Nerd Font: what every font has, mc's markers and Far's arrows.
@@ -164,6 +168,8 @@ impl Glyphs {
             fzf: "~",
             regex: ".*",
         },
+        // As mc and `ls -l` write it.
+        link_arrow: "->",
     };
 
     /// The glyphs of `ui.icons`.
@@ -282,6 +288,15 @@ mod tests {
         );
         let plain = Glyphs::of(false).marks;
         assert_eq!((plain.before, plain.after), ("«", "»"));
+    }
+
+    #[test]
+    fn the_arrow_of_a_link_is_nerd_fonts_or_ascii() {
+        let code = |text: &str| text.chars().map(u32::from).collect::<Vec<_>>();
+        // nf-md-arrow_right, in one cell.
+        assert_eq!(code(Glyphs::NERD.link_arrow), [0xf0054]);
+        assert_eq!(noc_text::width(Glyphs::NERD.link_arrow), 1);
+        assert_eq!(Glyphs::PLAIN.link_arrow, "->");
     }
 
     #[test]

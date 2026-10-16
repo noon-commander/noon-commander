@@ -379,6 +379,7 @@ impl FindWindow {
                         gid: None,
                     },
                     target_kind: None,
+                    link_target: None,
                 };
                 let prefix = self.decor.entry(&entry_of);
                 let shown = format!("{prefix}{}", cells::sanitize(&path));

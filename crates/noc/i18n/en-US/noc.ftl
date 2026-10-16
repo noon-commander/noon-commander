@@ -97,6 +97,10 @@ panel-search = Search { $mode }: { $text }
 panel-search-back = Search up { $mode }: { $text }
 # Status line while the entry under the cursor is renamed in its row: its name until now.
 panel-rename = Rename: { $name }
+# Status line with a symlink under the cursor: its name, an arrow (a Nerd Font glyph, or -> without
+# icons), and its target as stored in the link, which must end the text: it is cut at its start
+# where the line is too short.
+panel-link = { $name } { $arrow } { $target }
 # Status line while a directory is read.
 panel-loading = Loading…
 # Status line, after a spinner, while the panel waits for a connection to a host; Esc stops it.

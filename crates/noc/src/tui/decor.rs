@@ -72,6 +72,37 @@ impl Decor {
         format!("{marker} ")
     }
 
+    /// What tells the kind of a symlink's `target`, of `kind` (`None` when nothing is there):
+    /// with icons, its icon and a space in front of it, devicons' for a file whose name it
+    /// knows; without them, mc's marker after it where `ls -F` puts one, and `!` after nothing.
+    pub(crate) fn target(self, kind: Option<FileKind>, target: &[u8]) -> (String, String) {
+        let kinds = self.glyphs().kinds;
+        if self.icons {
+            let icon = match kind {
+                None => kinds.broken_link,
+                Some(FileKind::Dir) => kinds.dir,
+                Some(FileKind::Symlink) => kinds.link,
+                Some(FileKind::Fifo) => kinds.fifo,
+                Some(FileKind::Socket) => kinds.socket,
+                Some(FileKind::CharDevice) => kinds.char_device,
+                Some(FileKind::BlockDevice) => kinds.block_device,
+                Some(FileKind::File | FileKind::Unknown) => {
+                    let name = target.rsplit(|&byte| byte == b'/').next().unwrap_or(target);
+                    file_icon(name).unwrap_or(kinds.file)
+                }
+            };
+            return (format!("{icon} "), String::new());
+        }
+        let marker = match kind {
+            None => Some(kinds.broken_link),
+            Some(FileKind::Dir) => Some(kinds.dir),
+            Some(FileKind::Fifo) => Some(kinds.fifo),
+            Some(FileKind::Socket) => Some(kinds.socket),
+            Some(_) => None,
+        };
+        (String::new(), marker.map(String::from).unwrap_or_default())
+    }
+
     /// The icon or the marker of an entry's kind; with icons, devicons' for a file it knows.
     fn kind(self, entry: &DirEntry) -> char {
         let kinds = self.glyphs().kinds;
@@ -145,6 +176,7 @@ mod tests {
                 gid: None,
             },
             target_kind,
+            link_target: None,
         }
     }
 
@@ -195,6 +227,44 @@ mod tests {
         latin1.name = b"caf\xe9.rs".to_vec();
         assert_eq!(decor.entry(&latin1), " ", "not UTF-8");
         assert_eq!(decor.parent(), " ");
+    }
+
+    #[test]
+    fn the_target_of_a_link_has_the_icon_of_its_kind_or_a_marker_after_it() {
+        let icons = Decor::new(true);
+        let before = |kind, target: &str| {
+            let (prefix, suffix) = icons.target(kind, target.as_bytes());
+            assert_eq!(suffix, "", "{target}");
+            prefix
+        };
+        let dir = entry("d", FileKind::Dir, 0o755, None);
+        assert_eq!(before(Some(FileKind::Dir), "/opt"), icons.entry(&dir));
+        assert_eq!(
+            before(Some(FileKind::File), "../etc/Cargo.toml"),
+            icons.entry(&file("Cargo.toml")),
+            "by the last name of the path"
+        );
+        assert_eq!(
+            before(Some(FileKind::File), "/usr/bin/zz"),
+            icons.entry(&file("zz"))
+        );
+        let broken = entry("l", FileKind::Symlink, 0o777, None);
+        assert_eq!(before(None, "missing"), icons.entry(&broken));
+        let fifo = entry("p", FileKind::Fifo, 0o644, None);
+        assert_eq!(before(Some(FileKind::Fifo), "/run/p"), icons.entry(&fifo));
+
+        let plain = Decor::new(false);
+        let after = |kind, target: &str| {
+            let (prefix, suffix) = plain.target(kind, target.as_bytes());
+            assert_eq!(prefix, "", "{target}");
+            suffix
+        };
+        assert_eq!(after(Some(FileKind::Dir), "/opt"), "/");
+        assert_eq!(after(None, "missing"), "!");
+        assert_eq!(after(Some(FileKind::Fifo), "p"), "|");
+        assert_eq!(after(Some(FileKind::Socket), "s"), "=");
+        assert_eq!(after(Some(FileKind::File), "a.txt"), "", "as ls -F");
+        assert_eq!(after(Some(FileKind::CharDevice), "/dev/null"), "");
     }
 
     #[test]

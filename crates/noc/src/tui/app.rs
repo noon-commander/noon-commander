@@ -7359,6 +7359,7 @@ mod tests {
                 gid: None,
             },
             target_kind: None,
+            link_target: None,
         }
     }
 

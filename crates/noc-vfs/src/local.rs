@@ -240,17 +240,23 @@ fn read_dir(path: &Path) -> Result<Vec<DirEntry>, VfsError> {
             Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
             Err(_) => Metadata::of_kind(entry.file_type().map_or(FileKind::Unknown, kind_of)),
         };
-        let target_kind = if metadata.kind == FileKind::Symlink {
-            fs::metadata(entry.path())
+        let (target_kind, link_target) = if metadata.kind == FileKind::Symlink {
+            let path = entry.path();
+            let kind = fs::metadata(&path)
                 .ok()
-                .map(|target| kind_of(target.file_type()))
+                .map(|target| kind_of(target.file_type()));
+            let target = fs::read_link(&path)
+                .ok()
+                .map(|target| target.into_os_string().into_vec());
+            (kind, target)
         } else {
-            None
+            (None, None)
         };
         entries.push(DirEntry {
             name: entry.file_name().into_vec(),
             metadata,
             target_kind,
+            link_target,
         });
     }
     Ok(entries)

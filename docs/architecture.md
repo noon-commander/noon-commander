@@ -94,8 +94,10 @@ stored as given, never resolved), sets permissions and modification times, and r
 files as chunks (`FileReader`, `FileWriter`, whose `finish` reports errors that only show when a
 file is closed). Over SFTP, reads and writes of a file keep 64 requests of 32 KiB in flight, as
 `sftp(1)` does, so a long round trip does not idle the link; a read that comes back short is asked
-again for the rest. Symlinks go to the server in OpenSSH's argument order (target first), which the
-client uses and which differs from the protocol draft; a server that follows the draft would store
+again for the rest. A listing tells of each symlink the kind of its target and the target as
+stored; over SFTP each link asks both at once, 64 links at a time. Symlinks go to the server in
+OpenSSH's argument order (target first), which the client uses and which differs from the
+protocol draft; a server that follows the draft would store
 them the other way round. Its futures are cancel-safe: a dropped one leaks nothing, though a change
 already sent may still happen. Errors are typed, and the UI words them: not found, permission
 denied, already exists, or the error of the OS or the server. SFTP v3 has no code for a name that is
@@ -1035,6 +1037,17 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   writes it. Hidden files count while the panel shows them, `..` does not, and a link to a
   directory is a directory. A panel on a host that is not connected shows none. Where the panel
   is too narrow for both, the free space is left out first.
+- **Targets of symlinks.** With a symlink under the cursor, the status line shows its target as
+  stored in the link, as mc does: `config -> /etc/app/config.toml`, read with the listing; with
+  `ui.icons` a Nerd Font arrow (nf-md-arrow_right) takes the place of `->`. The name stays plain,
+  as its row above already shows its kind; the arrow is toned down as an icon; the target has the
+  color of its kind (`directory`, `file`, `device`, `special`, `stale_link` where nothing is
+  there; never `executable`, as the target's permissions are not read). The target tells its
+  kind too: with icons by the icon of a directory, a file (devicons' by its last name), or a
+  broken link in front of it, in its color toned down; without them by
+  mc's marker after it where `ls -F` puts one, `/opt/`, and `!` after a broken one. A target too
+  long loses its start, as a path in the title does, its icon and marker kept; with too little
+  room for it the name shows alone.
 - **Marks.** Space or Shift+Down marks the entry under the cursor, or unmarks it, and moves down,
   as mc's Insert does (Shift+Up moves up), and a count marks that many, the row at the end of the listing
   once; `g *` inverts the marks on files, leaving directories as they are; `..`

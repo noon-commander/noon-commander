@@ -62,6 +62,9 @@ pub struct DirEntry {
     pub metadata: Metadata,
     /// For symlinks, the kind of the target; `None` if the link is dangling or not a symlink.
     pub target_kind: Option<FileKind>,
+    /// For symlinks, the target as stored in the link; `None` if it cannot be read or not a
+    /// symlink.
+    pub link_target: Option<Vec<u8>>,
 }
 
 impl DirEntry {
@@ -89,6 +92,7 @@ mod tests {
             name: b"x".to_vec(),
             metadata: Metadata::of_kind(kind),
             target_kind,
+            link_target: None,
         }
     }
 

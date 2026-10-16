@@ -176,6 +176,7 @@ not:
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
 | --- | --- | --- | --- | --- | --- |
+| Alt and a letter | — | Far, mc | — | Esc and a quick letter arrive as Alt and the letter too, and show its section rather than close the help | Show the section whose letter it is, as the letters of dialogs, `dialog` above, act on their elements, opening Keys for one of its groups; the text gets the keys, to scroll it ([ADR 0033](adr/0033-letters-in-dialogs.md)). With Alt, so that the plain letters stay the help's keys. Not in the preset: `Context::alt_letters_are_hotkeys` asks for it. |
 | b<br>Space<br>f<br>u<br>d | `window_up`<br>`window_down`<br>`window_down`<br>`half_page_up`<br>`half_page_down` | less | b (less)<br>Space, f (less)<br>Space, f (less)<br>Ctrl+u (vim); u (less)<br>Ctrl+d (vim); d (less) | Same | A whole page up or down, and half of one, as in less and ranger's pager. vim's b, Space, f, u, and d go back a word, go right, find a character, undo, and delete, none of which the help has; Space presses no button here. |
 
 ## Text fields (`dialog_input`, Insert mode)

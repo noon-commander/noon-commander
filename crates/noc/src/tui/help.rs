@@ -391,10 +391,10 @@ impl Default for Spot {
     }
 }
 
-/// A group of keys under Keys: its title in the sidebar, and its text.
+/// A group of keys under Keys: its title in the sidebar, with its letter, and its text.
 #[derive(Debug)]
 struct Group {
-    title: String,
+    title: Label,
     entries: Vec<Entry>,
 }
 
@@ -446,7 +446,7 @@ impl Help {
         let groups = Part::ALL
             .into_iter()
             .map(|part| Group {
-                title: part.title(),
+                title: Label::parse(&part.title()),
                 entries: match part {
                     Part::Tips => tips(),
                     part => part.entries(keymap),
@@ -599,10 +599,16 @@ impl Help {
     /// text. In the sidebar, Up and Down choose a section, Right and Enter open Keys or give
     /// the keys to the text, and Left goes up to Keys and folds it; the other motions scroll
     /// the text. In the text, the motions scroll it, never past its end at the bottom, Left
-    /// goes back to the sidebar, and Enter closes.
+    /// goes back to the sidebar, and Enter closes. Alt and the letter of a section show it,
+    /// from either.
     pub(crate) fn handle(&mut self, input: Resolved) -> bool {
-        let Resolved::Action(action) = input else {
-            return false;
+        let action = match input {
+            Resolved::Action(action) => action,
+            Resolved::Hotkey(c) => {
+                self.hotkey(c);
+                return false;
+            }
+            Resolved::Insert(_) => return false,
         };
         match (self.focus, action) {
             (_, Action::Cancel) | (Focus::Text, Action::Confirm) => return true,
@@ -623,6 +629,26 @@ impl Help {
             }
         }
         false
+    }
+
+    /// Alt and `c`, as in the dialogs: the section with that letter shows, Keys opening for one
+    /// of its groups, and its text has the keys, to scroll it. Nothing else has it.
+    fn hotkey(&mut self, c: char) {
+        let (about, keys) = (fl!("help-section-about"), fl!("help-section-keys"));
+        let row = if Label::parse(&about).has(c) {
+            Row::About
+        } else if Label::parse(&keys).has(c) {
+            Row::Keys
+        } else if let Some(group) = self.groups.iter().position(|group| group.title.has(c)) {
+            Row::Group(group)
+        } else {
+            return;
+        };
+        if row != Row::About {
+            self.keys_open = true;
+        }
+        self.choose(row);
+        self.focus = Focus::Text;
     }
 
     /// Takes a press of the mouse, where the help was drawn last: a click on a section shows
@@ -667,9 +693,15 @@ impl Help {
         let groups: Vec<Label> = self
             .groups
             .iter()
-            .map(|group| Label::plain(&format!("{GROUP_INDENT}{} ", group.title)))
+            .map(|group| {
+                let mut title = group.title.clone();
+                let indent = GROUP_INDENT.chars().count();
+                title.text = format!("{GROUP_INDENT}{} ", title.text);
+                title.hotkey = title.hotkey.map(|(at, letter)| (at + indent, letter));
+                title
+            })
             .collect();
-        let (about, keys) = (Label::plain(&about), Label::plain(&keys));
+        let (about, keys) = (Label::parse(&about), Label::parse(&keys));
         let width = sidebar::width(&groups)
             .max(cells::width(&about.text))
             .max(cells::width(&keys.text));
@@ -1496,7 +1528,7 @@ mod tests {
         let groups: Vec<(&str, Vec<&str>)> = help
             .groups
             .iter()
-            .map(|group| (group.title.as_str(), headings(&group.entries)))
+            .map(|group| (group.title.text.as_str(), headings(&group.entries)))
             .collect();
         assert_eq!(
             groups,
@@ -1564,6 +1596,68 @@ mod tests {
             ]
         );
         assert!(help.groups.iter().all(|group| !group.entries.is_empty()));
+    }
+
+    #[test]
+    fn every_section_has_a_letter_of_its_own() {
+        let (texts, _) = help().sidebar_texts(&Theme::terminal());
+        let letters: Vec<char> = texts.iter().filter_map(Label::letter).collect();
+        assert_eq!(
+            letters,
+            ['a', 'k', 'e', 'p', 't', 's', 'c', 'l', 'm', 'v', 'i'],
+            "one for each section, each its own"
+        );
+        let mut help = help();
+        let mut terminal = Terminal::new(TestBackend::new(120, 30)).unwrap();
+        terminal
+            .draw(|frame| help.render(frame, frame.area(), &Theme::terminal()))
+            .unwrap();
+        let underlined: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .filter(|cell| cell.modifier.contains(ratatui::style::Modifier::UNDERLINED))
+            .map(ratatui::buffer::Cell::symbol)
+            .collect();
+        assert_eq!(underlined, "AKEPTSCLMVi", "drawn apart");
+    }
+
+    #[test]
+    fn alt_and_a_letter_show_its_section_with_the_keys_in_its_text() {
+        let mut help = help();
+        help.handle(action(Action::NextField));
+        assert_eq!(help.focus, Focus::Sidebar);
+        assert!(!help.handle(Resolved::Hotkey('v')));
+        assert_eq!(
+            (help.row, help.shown(), help.focus),
+            (Row::Group(7), Some(7), Focus::Text)
+        );
+        help.handle(action(Action::Left));
+        help.handle(action(Action::Left));
+        help.handle(action(Action::Left));
+        assert!(!help.keys_open, "folded");
+        help.handle(Resolved::Hotkey('I'));
+        assert_eq!(
+            (help.row, help.keys_open),
+            (Row::Group(8), true),
+            "Keys opens"
+        );
+        help.handle(Resolved::Hotkey('a'));
+        assert_eq!((help.row, help.shown()), (Row::About, None));
+        help.handle(Resolved::Hotkey('k'));
+        assert_eq!(
+            (help.row, help.shown()),
+            (Row::Keys, Some(8)),
+            "the group of before"
+        );
+        help.handle(Resolved::Hotkey('z'));
+        assert_eq!(
+            (help.row, help.focus),
+            (Row::Keys, Focus::Text),
+            "nothing has z"
+        );
+        assert!(!draw(&mut help, 120, 30).contains('&'));
     }
 
     #[test]

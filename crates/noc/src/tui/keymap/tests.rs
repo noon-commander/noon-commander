@@ -541,6 +541,10 @@ fn dialogs_take_alt_and_a_letter_as_their_hotkeys_in_every_mode() {
     }
     // In a field, the letter alone is text.
     assert_eq!(typed(TYPING, &["c"]), inserts("c"));
+    // The help's sections have letters too; its plain letters stay its keys.
+    let help = (Mode::Normal, Context::Help);
+    assert_eq!(typed(help, &["alt-v"]), hotkeys("v"));
+    assert_eq!(typed(help, &["j"]), actions(&[Action::Down]));
     // Ctrl+s switches regular expressions in the search of a tree, from anywhere.
     for place in [
         (Mode::Normal, Context::Find),

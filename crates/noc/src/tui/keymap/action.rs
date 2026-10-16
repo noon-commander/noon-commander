@@ -168,12 +168,14 @@ impl Context {
     }
 
     /// Whether Alt and a letter act on what has that letter, as in mc and Far: in the pull-down
-    /// menu, whose plain letters move as `h`, `j`, `k`, and `l` do, and in the dialogs, whose
-    /// fields take them as text. There Alt and a key never stand for Esc and the key.
+    /// menu, whose plain letters move as `h`, `j`, `k`, and `l` do, in the help, whose sections
+    /// have letters, and in the dialogs, whose fields take them as text. There Alt and a key
+    /// never stand for Esc and the key.
     pub(crate) fn alt_letters_are_hotkeys(self) -> bool {
         matches!(
             self,
             Self::PullDown
+                | Self::Help
                 | Self::Dialog
                 | Self::DialogInput
                 | Self::PathInput

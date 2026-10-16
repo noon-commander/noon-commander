@@ -46,7 +46,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dialog of one field takes its letter from the prompt over it, as Alt+c for `Copy "x" to:`. The
   window of a job, the jobs, the checksums, and the Configuration dialog have letters too; there
   Alt+1 … Alt+7 open the categories, and the letter of a setting switches it, picks its next
-  choice, or puts the focus in its field.
+  choice, or puts the focus in its field. The sections of the help (F1) have letters, and Alt and
+  one shows its section.
 - The help (F1) takes 70% of the screen and has sections down its left, as the Configuration dialog:
   About, with the license and every fact of `noc debug version` (the build, the system, the
   terminal, and the external tools: the editor, zoxide, ripgrep, and fd), and where the settings,

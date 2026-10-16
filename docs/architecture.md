@@ -1374,8 +1374,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   the theme's `keys`, a color apart from the titles, as the keys of the key hints and of their list
   (Ctrl+k) do, and those of the menus of F9 in `menu_keys`. Tab moves between the sections and the
   text; in the sections `j` and `k` choose, `l` or Enter opens Keys or goes to the text, and `h`
-  goes up to Keys and folds it; in the text `h` goes back. A click chooses a section, and one on
-  Keys opens or folds it. The text scrolls as the viewer does, with the keys it does not take in the
+  goes up to Keys and folds it; in the text `h` goes back. Each section has a letter, highlighted
+  in its name: Alt and it show the section from anywhere, opening Keys for a group, and give the
+  text the keys, as the letters of dialogs do. A click chooses a section, and one on Keys opens or
+  folds it. The text scrolls as the viewer does, with the keys it does not take in the
   sections and with the wheel too, stopping with its last line at the bottom, with no line after it,
   a scroll bar, and how far down it is in its bottom frame.
 - **Text fields.** A text field (`dialog::Field`, and the command line) holds a `tui/edit.rs`

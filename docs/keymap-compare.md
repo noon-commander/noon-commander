@@ -752,10 +752,14 @@ falls back to `dialog`, whose j, k, Ctrl+b, Ctrl+f, g g, G, Esc, and q choose a 
 the help and close it, Tab moves between the sections and the text, h and l fold and open Keys,
 then to `global`; the keys of the other programs' help that do the same are there too. It adds the
 keys of the viewer: Ctrl+y, Ctrl+e, Ctrl+u, and Ctrl+d, as in vim, and Space, f, b, d, and u, as
-in less and ranger's pager, which scroll as in the viewer; Space presses no button here.
+in less and ranger's pager, which scroll as in the viewer; Space presses no button here. Each
+section has a letter, highlighted in its name, and Alt and it show the section, opening Keys for a
+group, with the text to scroll, as the letters of dialogs do
+([ADR 0033](adr/0033-letters-in-dialogs.md)).
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
+| Show a section by its letter, with its text to scroll (noc: Alt and the letter) | — | ⏳ | — | — | — | — | — |
 | One line up | `up` | ✅ | Ctrl+y | — | — | — | — |
 | One line down | `down` | ✅ | Ctrl+e | — | — | — | — |
 | A whole page up, as less's b | `window_up` | ✅ | b | b<br>Backspace | — | — | — |

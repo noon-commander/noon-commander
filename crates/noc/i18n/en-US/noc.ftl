@@ -491,17 +491,19 @@ help-position = { $percent }%
 help-position-end = End
 # The sections down the left of the help, as the categories of the Configuration dialog. Keys
 # folds, and has a group for each part of the app; keep their names short, for a narrow column.
-help-section-about = About
-help-section-keys = Keys
-help-group-everywhere = Everywhere
-help-group-panels = Panels
-help-group-text = Text fields
-help-group-search = Search and renaming
-help-group-command-line = Command line
-help-group-lists = Lists and menus
-help-group-dialogs = Menus and dialogs
-help-group-viewer = Viewer
-help-group-tips = Tips
+# An & marks the letter that Alt and it show the section by, as in the dialogs; letters must
+# differ among all of them, and && stands for &.
+help-section-about = &About
+help-section-keys = &Keys
+help-group-everywhere = &Everywhere
+help-group-panels = &Panels
+help-group-text = &Text fields
+help-group-search = &Search and renaming
+help-group-command-line = &Command line
+help-group-lists = &Lists and menus
+help-group-dialogs = &Menus and dialogs
+help-group-viewer = &Viewer
+help-group-tips = T&ips
 # The About page: what the app is, what it was built from, what it runs on, and its files. Each
 # fact has a short name on the left.
 help-about-name = Noon Commander { $version }
@@ -827,7 +829,7 @@ help-tip-command-run = A command runs with the terminal, in the panel's director
 help-tip-pulldown = Pull-down menu
 help-tip-pulldown-letters = Alt and the highlighted letter of a menu open it, and Alt and that of a command run it.
 help-tip-dialogs = Dialogs
-help-tip-dialogs-letters = Alt and a highlighted letter press its button, switch its check box, pick its choice, or put the focus in its field, from anywhere in the dialog; in Configuration, Alt and a digit open a category.
+help-tip-dialogs-letters = Alt and a highlighted letter press its button, switch its check box, pick its choice, or put the focus in its field, from anywhere in the dialog; in Configuration, Alt and a digit open a category, and in this help, Alt and a letter show a section.
 help-tip-key-hints = Key hints
 help-tip-key-hints-show = After a key that starts longer sequences, such as g or Ctrl+w, the keys that can follow show after a moment, and wait for one.
 help-tip-key-hints-keys = Esc closes them, and Backspace takes back the last key, or closes them when none is typed.

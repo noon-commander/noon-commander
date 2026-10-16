@@ -53,9 +53,12 @@ In dialogs, as everywhere in Insert and Visual mode, Alt and a key stood for Esc
   Search, the digit shown in front of each; each setting has a letter, and Alt and it do what
   Space or Enter does on its row, switching a check box or picking the next choice, or put the
   focus in its text field, in Insert mode. Letters are unique within a page.
-- **Letters are unique within a dialog**; a test checks it.
+- **The sections of the help have letters too**, as the dialogs' elements: About, Keys, and each
+  group under Keys. Alt and a section's letter show it, opening Keys for a group, and give its
+  text the keys, to scroll it; the help's plain letters stay its keys.
+- **Letters are unique within a dialog**, and among the sections of the help; tests check it.
 - **Alt and a letter are the dialog's**, in every mode, in the contexts `dialog`, `dialog_input`,
-  `path_input`, `completion`, `find`, and `find_input`, as they are the pull-down menu's in
+  `path_input`, `completion`, `find`, `find_input`, and `help`, as they are the pull-down menu's in
   `pull_down`. There Alt and a key no longer stand for Esc and the key; Alt and a letter that no
   element has do nothing, as in the pull-down menu. The keymap hands the letter to the app as
   `Resolved::Hotkey`, which the preset does not list: `Context::alt_letters_are_hotkeys` asks for

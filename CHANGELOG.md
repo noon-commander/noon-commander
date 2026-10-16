@@ -88,6 +88,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The Noon themes put error dialogs on a deep red (`#A63A32`) in `noon-dark` and a pale one
+  (`#F2A39A`) in `noon-light`, with the cream or navy text of the cursor, rather than on the
+  bright red of text, which glared.
 - The wheel moves the cursor of a panel where the rows cannot scroll, as when they all fit or the
   last row shows, as in mc and Far; before, it did nothing there.
 - Tab in the panels goes to the other panel, as in mc, where the terminal speaks the kitty

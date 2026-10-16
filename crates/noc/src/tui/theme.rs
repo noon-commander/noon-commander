@@ -449,8 +449,8 @@ impl Theme {
             cursor_inactive: Style::new().bg(p.cursor_inactive),
             marked: on(p.mark, p.panel).underlined(),
             marked_cursor: on(p.panel, p.mark).underlined(),
-            root_cursor: on(p.panel, p.red),
-            root_marked_cursor: on(p.panel, p.red).underlined(),
+            root_cursor: on(p.ink, p.danger),
+            root_marked_cursor: on(p.ink, p.danger).underlined(),
             quick_search: cursor,
             // The golds are the cursor's and the menu bar's.
             find_match: on(p.panel, p.teal),
@@ -474,7 +474,7 @@ impl Theme {
             truncated_menu: fg(p.pink).bold(),
             // A cell of its own, which reads on the amber menu bar and the deep F-key bar.
             truncated_bar: on(p.sun, p.ink).bold(),
-            truncated_error: on(p.red, p.panel).bold(),
+            truncated_error: on(p.danger, p.ink).bold(),
             dialog_host: [fg(p.muted), fg(p.accent), fg(p.green), fg(p.red)],
             fkey_number: on(p.accent, p.deep).bold(),
             fkey_label: on(p.text, p.deep),
@@ -494,8 +494,8 @@ impl Theme {
             dialog_button_focused: cursor,
             dialog_input: on(p.text, p.field),
             gauge: on(p.accent, p.surface),
-            error_dialog: on(p.panel, p.red),
-            error_title: on(p.panel, p.red).bold(),
+            error_dialog: on(p.ink, p.danger),
+            error_title: on(p.ink, p.danger).bold(),
             error_button_focused: on(p.text, p.surface),
             tab: on(p.muted, p.deep),
             tab_active: on(p.text, p.panel).bold(),
@@ -722,6 +722,10 @@ struct Noon {
     green: Color,
     teal: Color,
     red: Color,
+    /// Behind error dialogs and the cursor where the user is root, under `ink`: a deep red in
+    /// the dark variant, a pale one in the light one, as `sun` is to gold, rather than `red`,
+    /// which is bright enough for text and glares as a background.
+    danger: Color,
     pink: Color,
 }
 
@@ -746,6 +750,7 @@ impl Noon {
         green: Color::from_u32(0x009b_d67e),
         teal: Color::from_u32(0x006c_cfd6),
         red: Color::from_u32(0x00f2_6b5e),
+        danger: Color::from_u32(0x00a6_3a32),
         pink: Color::from_u32(0x00e5_9ae0),
     };
 
@@ -768,6 +773,7 @@ impl Noon {
         green: Color::from_u32(0x003a_8a2c),
         teal: Color::from_u32(0x000f_7c88),
         red: Color::from_u32(0x00c4_2b3a),
+        danger: Color::from_u32(0x00f2_a39a),
         pink: Color::from_u32(0x00a8_439a),
     };
 
@@ -792,6 +798,7 @@ impl Noon {
             green: indexed(self.green),
             teal: indexed(self.teal),
             red: indexed(self.red),
+            danger: indexed(self.danger),
             pink: indexed(self.pink),
         }
     }

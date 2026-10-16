@@ -956,9 +956,11 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   vim's `showmode` and `showcmd` do, though vim's shows no mode in Normal mode nor while it
   searches; after Ctrl+o it shows `-- (insert) --`. A message, such as
   that a search went round, takes the place of the mode until the next key, as vim's messages do
-  on its command line. The command line takes it while open. The cursor is a bar in Insert mode
-  and a block in the others (DECSCUSR), and the terminal's own shape comes back whenever another
-  program gets the terminal, and on quitting.
+  on its command line. Left of the cells of what is typed it shows who is where in the active
+  panel, `alice@mac` or `deploy@web`, as long as it fits after the mode or the message
+  ([ADR 0031](adr/0031-who-and-where-on-screen.md)). The command line takes the line while
+  open. The cursor is a bar in Insert mode and a block in the others (DECSCUSR), and the terminal's
+  own shape comes back whenever another program gets the terminal, and on quitting.
 - **Panels.** Each panel lists a directory with `..` first (but in a `/`), then directories,
   then files, by name ignoring case; columns are name, size, and modification time (local time,
   `ls -l` style), and narrow panels drop the time, then the size. Each panel has its own sort order:
@@ -1000,6 +1002,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   dialogs' `surface0` in the Catppuccin themes, and in the Noon themes the text fields' blue
   (`#2D4672`) in `noon-dark`, as the dialogs' one is a single step of gray above the panels in
   256 colors, and the dialogs' blue-gray (`#E8ECF4`) in `noon-light`.
+- **The cursor where the user is root.** In a local panel while Noon Commander runs as root, and
+  in a panel on a host whose ssh user is root, the cursor is on red: `root_cursor` and
+  `root_marked_cursor` take the place of `cursor` and `marked_cursor` in the theme that panel is
+  drawn with ([ADR 0031](adr/0031-who-and-where-on-screen.md)).
 - **Free space.** As in mc, the bottom of a panel's frame shows the free space and size of the
   file system that holds the directory, and the share that is free: `123G / 500G (24%)`. It is
   read with every listing, so it changes when a job reads the panel again or on `R`; a panel
@@ -1164,11 +1170,12 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   terminal's clipboard. Noon Commander never reads the clipboard
   ([ADR 0008](adr/0008-clipboard-through-osc-52.md)).
 - **Terminal title.** With `ui.terminal_title` (the default) the event loop titles the
-  terminal's window or tab with OSC 0 between frames: the active panel's directory as the
-  prompt of the command line shows it (`~/src — noc`, `host:path` with the host's label),
-  sanitized like every name. Before the first title it saves the terminal's own on xterm's
-  stack of titles (`CSI 22 t`) and takes it back from there (`CSI 23 t`) on quitting and before
-  handing the terminal to another program, which gets the shell's title and may set its own.
+  terminal's window or tab with OSC 0 between frames: the active panel's directory
+  (`~/src — noc`, `host:path` with the host's label), after `[root]` while Noon Commander runs as
+  root or the active panel is on a host as root, sanitized like every name. Before the first
+  title it saves the terminal's own on xterm's stack of titles (`CSI 22 t`) and takes it back from
+  there (`CSI 23 t`) on quitting and before handing the terminal to another program, which gets the
+  shell's title and may set its own.
 - **The other panel.** As vim's windows: Ctrl+w w, Ctrl+w Ctrl+w, or Ctrl+w p makes the other
   panel active; Ctrl+w x or Ctrl+w r swaps the panels, as mc's Ctrl+u, and the active one stays
   active on the other side; Ctrl+w f opens the directory under the cursor in the other panel, as
@@ -1227,9 +1234,11 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   [`Location`](#locations), always a directory.
 - <a id="command-line-of--and-"></a>**Command line of `!` and `:`** ([ADR
   0019](adr/0019-shell-command-line.md)). In a local panel, `!` opens a line above the F-key bar for
-  a shell command, after a prompt with the panel's directory (`~` for home, its middle cut past a
-  third of the width); `:` opens it for commands of Noon Commander, of which `!command` is the only
-  one so far. In a panel on a connected host the prompt starts with the host's label or alias. The
+  a shell command, after a prompt as a shell's: `alice@mac:~/src $`, with `~` for home, and `#`
+  where the user is root. It takes a third of the width at most: the middle of the directory goes
+  first, then the user, then the directory. `:` opens it for commands of Noon Commander, of which
+  `!command` is the only one so far. In a panel on a connected host the prompt has the user that
+  `ssh -G` gave and the host's label or alias, `deploy@web:/var/www $`. The
   line opens in Insert mode, as vim's command line, where every character is text. Ctrl+j, or Enter
   after an odd number of `\` at the end of a line, starts a new line, marked `>`; long lines wrap,
   and the line grows up to a third of the screen and ten rows, then scrolls to the cursor. Up and
@@ -1534,16 +1543,16 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   home directory is `~`.
 - **Glyphs.** Every special character the UI draws is in `tui/glyphs.rs`: `Glyphs::NERD` and
   `Glyphs::PLAIN`, which `ui.icons` picks and the theme carries (`Theme.glyphs`), with the icons
-  and markers of kinds, hosts, and volumes, the scroll bars, the marks of text cut short, and the
-  marks of the pull-down menu; `Lines::DOUBLE` and `Lines::SINGLE` by `ui.borders`, with the
-  tees that join lines to frames; and the characters that are the same either way: the single
-  line, the line between columns, the spinner, the arrows of the sort order, the checks of
-  checksums, the progress bar, the marks of dialogs' radio buttons, check boxes, and secrets,
-  and the icons of the Configuration dialog's categories. `decor.rs` picks among them by kind,
-  and asks devicons for files. `noc-scroll`, `noc-text`, and `noc-viewer` hold none: they take
-  what they draw with as parameters (`BarGlyphs`, `Marks`, the viewer's `Styles`). `just
-  glyphs`, part of `just lint`, fails on a special character written in Rust code that draws,
-  outside `glyphs.rs` and the tests.
+  and markers of kinds, hosts, and volumes, the glyph of root, the scroll bars, the marks of text
+  cut short, and the marks of the pull-down menu; `Lines::DOUBLE` and `Lines::SINGLE` by
+  `ui.borders`, with the tees that join lines to frames; and the characters that are the same either
+  way: the single line, the line between columns, the spinner, the arrows of the sort order, the
+  checks of checksums, the progress bar, the marks of dialogs' radio buttons, check boxes, and
+  secrets, and the icons of the Configuration dialog's categories. `decor.rs` picks among them by
+  kind, and asks devicons for files. `noc-scroll`, `noc-text`, and `noc-viewer` hold none: they take
+  what they draw with as parameters (`BarGlyphs`, `Marks`, the viewer's `Styles`). `just glyphs`,
+  part of `just lint`, fails on a special character written in Rust code that draws, outside
+  `glyphs.rs` and the tests.
 
 ## Releases
 

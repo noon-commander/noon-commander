@@ -54,6 +54,8 @@ pub(crate) struct Glyphs {
     pub(crate) volume: &'static str,
     pub(crate) network_volume: &'static str,
     pub(crate) hosts: Hosts,
+    /// On the line of the mode while Noon Commander runs as root.
+    pub(crate) root: char,
     pub(crate) scroll_bar: BarGlyphs,
     /// The marks of text cut short or going on past the screen.
     pub(crate) marks: Marks,
@@ -92,6 +94,8 @@ impl Glyphs {
             connected: '󰒋',
             failed: '󰒑',
         },
+        // nf-md-shield_account.
+        root: '󰢏',
         scroll_bar: BarGlyphs {
             up: "",
             down: "",
@@ -140,6 +144,8 @@ impl Glyphs {
             connected: '●',
             failed: '✗',
         },
+        // The prompt of root's shell.
+        root: '#',
         scroll_bar: BarGlyphs {
             up: "▲",
             down: "▼",
@@ -282,6 +288,7 @@ mod tests {
                 assert_eq!(noc_text::width(text), 1, "{text:?}");
             }
             assert_eq!(noc_text::width(glyphs.marks.after), 1);
+            assert_eq!(noc_text::width(&glyphs.root.to_string()), 1);
             let (closed, open) = glyphs.folds;
             assert_eq!(
                 noc_text::width(&format!("{closed}{open}{}", glyphs.bullet)),

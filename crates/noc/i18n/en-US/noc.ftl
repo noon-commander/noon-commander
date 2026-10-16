@@ -58,6 +58,8 @@ message-open-remote = Only local files open externally
 # Where the active panel is: a directory with ~ for home, or host:path. noc is the program's
 # name, not to be translated.
 terminal-title = { $place } — noc
+# The same while Noon Commander runs as root, or the active panel is on a host as root.
+terminal-title-root = [root] { $place } — noc
 
 ## Panels (src/tui/panel). Prefixes: panel-, error-.
 

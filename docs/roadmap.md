@@ -230,6 +230,10 @@
       a row for the rest; F4 and F8 on hosts there; a Retry dialog for failed connections, and
       panels that stay on a lost host; no `..` in `/`
       ([ADR 0021](adr/0021-location-menu-replaces-the-virtual-root.md))
+- [x] Who is where: `user@host` on the line of the mode and in a shell's prompt; `#`, red, and
+      a cursor on red for root; a glyph and `[root]` in the terminal title while Noon Commander
+      runs as root
+      ([ADR 0031](adr/0031-who-and-where-on-screen.md))
 
 ## Known issues
 

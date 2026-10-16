@@ -19,6 +19,7 @@ mod jobs;
 mod jump;
 mod key_hints;
 mod keymap;
+mod machine;
 mod menu;
 mod mouse;
 mod output;
@@ -103,7 +104,11 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
             connection,
             handle,
         } => tasks.run(app.connected(&host, connection, handle)),
-        Done::Resolved { host, address } => app.resolved(host, address),
+        Done::Resolved {
+            host,
+            address,
+            user,
+        } => app.resolved(host, address, &user),
         Done::Ask(ask) => app.ask(ask),
         Done::Notice {
             id,
@@ -271,6 +276,7 @@ fn start_app(
     app.set_color_depth(theme::ColorDepth::detect());
     app.set_keyboard(keyboard);
     app.set_time_zone(tz.clone());
+    app.set_machine(machine::Machine::current());
     app.set_runtime_dir(context.paths.runtime_dir.clone());
     app.set_hosts(context.hosts());
     let paths = &context.paths;

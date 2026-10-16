@@ -99,8 +99,12 @@ pub(crate) enum Done {
     },
     /// ssh no longer waits for the prompt or notice `id`.
     PromptClosed { id: u64 },
-    /// `ssh -G` gave the address of a host that [`Effect::Connect`] connects to.
-    Resolved { host: String, address: String },
+    /// `ssh -G` gave the address and the user of a host that [`Effect::Connect`] connects to.
+    Resolved {
+        host: String,
+        address: String,
+        user: String,
+    },
     /// The attempt or connection of [`Effect::Connect`] ended; `reason` is `None` if it was
     /// asked to stop.
     Closed {
@@ -1150,10 +1154,10 @@ async fn resolve_address(
             return;
         }
     };
-    let address = cached.address();
     let _ = done.send(Done::Resolved {
         host: host.clone(),
-        address,
+        address: cached.address(),
+        user: cached.user.clone(),
     });
     let _guard = cache.lock().await;
     let saved =

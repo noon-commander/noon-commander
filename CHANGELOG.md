@@ -9,6 +9,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Who is where: the prompt of the command line is a shell's, `alice@mac:~/src $` locally and
+  `deploy@web:/var/www $` on a host, with the user from `ssh -G`, and the line of the mode shows
+  `alice@mac` of the active panel left of the keys typed. Where the user is root, `user@host` is
+  red, the prompt ends in `#`, and the panel's cursor is on red; while Noon Commander itself runs
+  as root, a shield glyph (`#` without icons) stays on the line of the mode whichever panel is
+  active, and the terminal title starts with `[root]`.
 - `f /` searches the files below the panel's directory for text with
   [ripgrep](https://github.com/BurntSushi/ripgrep), locally or on a host, where rg runs over
   the connection, in a dialog over both panels; so does F9 → Command → Find file…. One field

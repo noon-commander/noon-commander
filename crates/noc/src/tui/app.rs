@@ -43,6 +43,7 @@ use super::key_hints::{KeyHintsEvent, KeyHintsWindow};
 use super::keymap::{
     Action, Context, Extra, Hints, KeyState, Keyboard, Keymap, Mode, Resolved, Typed,
 };
+use super::machine::{self, Machine};
 use super::menu::{LocationMenu, MenuEvent};
 use super::mouse::{Pointer, Press, Scroll};
 use super::panel::{
@@ -335,6 +336,9 @@ const FIND_DELAY: Duration = Duration::from_millis(150);
 /// Cells of what a pending command has typed that the line above the F-key bar shows, as
 /// vim's `showcmd` shows at most.
 const SHOWCMD_WIDTH: usize = 10;
+/// The fewest cells the prompt keeps for the directory before it leaves out the user, and
+/// then the directory.
+const PROMPT_DIR_WIDTH: usize = 8;
 /// Width of the dialogs of `g +` and `g -`, as of mc's `+` and `-`.
 const PATTERN_DIALOG_WIDTH: u16 = 50;
 /// Width of the dialogs of F7 and F5.
@@ -682,6 +686,10 @@ pub(crate) struct App {
     failed: HashSet<String>,
     /// Addresses from `ssh -G` in this session.
     addresses: HashMap<String, String>,
+    /// The users `ssh -G` gave for hosts in this session, terminal-safe.
+    users: HashMap<String, String>,
+    /// The machine Noon Commander runs on and who runs it; nothing until told.
+    machine: Machine,
     /// The settings from `hosts.toml`.
     host_settings: Arc<Hosts>,
     /// The last directory shown on each host in this session, for `remember_dir`.
@@ -902,6 +910,8 @@ impl App {
             tick: 0,
             failed: HashSet::new(),
             addresses: HashMap::new(),
+            users: HashMap::new(),
+            machine: Machine::default(),
             host_settings: Arc::default(),
             last_dirs: HashMap::new(),
             dialogs: VecDeque::new(),
@@ -1104,6 +1114,12 @@ impl App {
     pub(crate) fn set_color_depth(&mut self, depth: ColorDepth) {
         self.color_depth = depth;
         self.theme = theme_of(&self.config.ui, depth);
+    }
+
+    /// Shows who runs Noon Commander where, `machine`, on the line of the mode and in the
+    /// prompt.
+    pub(crate) fn set_machine(&mut self, machine: Machine) {
+        self.machine = machine;
     }
 
     /// Shows times in `tz`.
@@ -4686,9 +4702,7 @@ impl App {
     }
 
     /// What starts the command line: `:` for commands of Noon Commander; for a shell command,
-    /// the panel's directory, with `~` for the home directory, or `host:path` with the host's
-    /// label if it has one, its middle cut if it would take more than a third of `width`, and
-    /// `$`.
+    /// the [`shell_prompt`](Self::shell_prompt).
     fn command_prompt(&self, width: u16) -> Vec<Span<'static>> {
         let Some(line) = &self.command_line else {
             return Vec::new();
@@ -4699,29 +4713,140 @@ impl App {
         self.shell_prompt(width)
     }
 
-    /// The prompt of a shell command in the active panel: its directory, with `~` for the home
-    /// directory, or `host:path` with the host's label if it has one, its middle cut if it
-    /// would take more than a third of `width`, and `$`.
+    /// The prompt of a shell command in the active panel, as a shell's: `user@host:dir`, with
+    /// `~` for the home directory and the host's label if it has one, and `$`, or `#` where the
+    /// user is root. In a third of `width` at most: the middle of the directory cut first, then
+    /// the user left out, then the directory.
     fn shell_prompt(&self, width: u16) -> Vec<Span<'static>> {
-        let dir = self.active_place();
         let room = usize::from(width / 3).max(1);
-        let mut spans = if cells::width(&dir) > room {
-            let styles = (Style::new(), self.theme.truncated);
-            cells::fit(&dir, room, Align::Left, styles, self.theme.glyphs.marks)
-        } else {
-            vec![Span::raw(dir)]
+        let dir = match self.panel(self.active).location() {
+            Location::Local(path) => Some(home_text(path, &self.home)),
+            Location::Remote { path, .. } => {
+                (!path.as_bytes().is_empty()).then(|| cells::sanitize(path.as_bytes()))
+            }
         };
-        spans.push(Span::raw(" $ "));
+        let sign = if self.active_root() { " # " } else { " $ " };
+        let mut spans = match (self.active_who(), dir) {
+            (Some(who), dir) => self.who_prompt(who, dir.as_deref(), room),
+            (None, Some(dir)) => self.prompt_dir(&dir, room),
+            (None, None) => Vec::new(),
+        };
+        spans.push(Span::raw(sign));
+        spans
+    }
+
+    /// `user@host:dir` in `room` cells, as [`shell_prompt`](Self::shell_prompt) cuts it.
+    fn who_prompt(
+        &self,
+        (user, host): (Option<String>, String),
+        dir: Option<&str>,
+        room: usize,
+    ) -> Vec<Span<'static>> {
+        let style = self.who_style();
+        let whole = user.map(|user| format!("{user}@{host}"));
+        for who in whole.iter().chain([&host]) {
+            let width = cells::width(who);
+            match dir {
+                None if width <= room => return vec![Span::styled(who.clone(), style)],
+                Some(dir) => {
+                    let left = room.saturating_sub(width + 1);
+                    if left > 0 && left >= cells::width(dir).min(PROMPT_DIR_WIDTH) {
+                        let mut spans = vec![Span::styled(who.clone(), style), Span::raw(":")];
+                        spans.extend(self.prompt_dir(dir, left));
+                        return spans;
+                    }
+                }
+                None => {}
+            }
+        }
+        let styles = (style, self.theme.truncated);
+        let room = room.min(cells::width(&host));
+        cells::fit(&host, room, Align::Left, styles, self.theme.glyphs.marks)
+    }
+
+    /// `dir` in `room` cells, its middle cut if it is wider.
+    fn prompt_dir(&self, dir: &str, room: usize) -> Vec<Span<'static>> {
+        if cells::width(dir) > room {
+            let styles = (Style::new(), self.theme.truncated);
+            cells::fit(dir, room, Align::Left, styles, self.theme.glyphs.marks)
+        } else {
+            vec![Span::raw(dir.to_owned())]
+        }
+    }
+
+    /// Who is where in the active panel: the user, if known, and the machine's name or the
+    /// host's label or alias, terminal-safe; `None` in a local panel while the machine has no
+    /// name.
+    fn active_who(&self) -> Option<(Option<String>, String)> {
+        match self.panel(self.active).location() {
+            Location::Local(_) => {
+                let host = self.machine.host.clone()?;
+                Some((self.machine.user.clone(), host))
+            }
+            Location::Remote { host, .. } => Some((
+                self.users.get(host).cloned(),
+                cells::sanitize(self.host_label(host).as_bytes()),
+            )),
+        }
+    }
+
+    /// The user is root in the active panel, as [`root_at`](Self::root_at) tells.
+    fn active_root(&self) -> bool {
+        self.root_at(self.panel(self.active).location())
+    }
+
+    /// The user is root at `location`: a local one while Noon Commander runs as root, on a
+    /// host as the user that `ssh -G` gave.
+    fn root_at(&self, location: &Location) -> bool {
+        match location {
+            Location::Local(_) => self.machine.root,
+            Location::Remote { host, .. } => self
+                .users
+                .get(host)
+                .is_some_and(|user| user == machine::ROOT),
+        }
+    }
+
+    /// The style of `user@host` in the prompt and on the line of the mode.
+    fn who_style(&self) -> Style {
+        if self.active_root() {
+            self.theme.root
+        } else {
+            Style::new()
+        }
+    }
+
+    /// On the line of the mode, left of what is typed: the glyph of root while Noon Commander
+    /// runs as root, whichever panel is active, and `user@host` of the active panel.
+    fn mode_who(&self) -> Vec<Span<'static>> {
+        let mut spans = Vec::new();
+        if self.machine.root {
+            let glyph = self.theme.glyphs.root.to_string();
+            spans.push(Span::styled(glyph, self.theme.root));
+        }
+        if let Some((user, host)) = self.active_who() {
+            if !spans.is_empty() {
+                spans.push(Span::raw(" "));
+            }
+            let who = user.map_or_else(|| host.clone(), |user| format!("{user}@{host}"));
+            spans.push(Span::styled(who, self.who_style()));
+        }
         spans
     }
 
     /// The title of the terminal's window or tab while `ui.terminal_title` is on: where the
-    /// active panel is, as the prompt of a shell command shows it.
+    /// active panel is, as the prompt of a shell command shows it, after `[root]` while Noon
+    /// Commander runs as root or the active panel is on a host as root.
     pub(crate) fn terminal_title(&self) -> Option<String> {
         if !self.config.ui.terminal_title {
             return None;
         }
-        Some(fl!("terminal-title", place = self.active_place()))
+        let place = self.active_place();
+        Some(if self.machine.root || self.active_root() {
+            fl!("terminal-title-root", place = place)
+        } else {
+            fl!("terminal-title", place = place)
+        })
     }
 
     /// The directory of the active panel, with `~` for the home directory, or `host:path` with
@@ -4729,18 +4854,19 @@ impl App {
     fn active_place(&self) -> String {
         match self.panel(self.active).location() {
             Location::Local(path) => home_text(path, &self.home),
-            Location::Remote { host, path } => {
-                let label = self
-                    .host_settings
-                    .get(host)
-                    .and_then(HostConfig::label)
-                    .unwrap_or(host);
-                location_text(&Location::Remote {
-                    host: label.to_owned(),
-                    path: path.clone(),
-                })
-            }
+            Location::Remote { host, path } => location_text(&Location::Remote {
+                host: self.host_label(host).to_owned(),
+                path: path.clone(),
+            }),
         }
+    }
+
+    /// The label of `host` from `hosts.toml`, or else its alias.
+    fn host_label<'a>(&'a self, host: &'a str) -> &'a str {
+        self.host_settings
+            .get(host)
+            .and_then(HostConfig::label)
+            .unwrap_or(host)
     }
 
     /// Says that the edited copy of `path` could not go back, and where it stays.
@@ -6095,8 +6221,10 @@ impl App {
         self.sync_connected();
     }
 
-    /// Takes the address `ssh -G` gave for a host.
-    pub(crate) fn resolved(&mut self, host: String, address: String) {
+    /// Takes the address and the user `ssh -G` gave for a host.
+    pub(crate) fn resolved(&mut self, host: String, address: String, user: &str) {
+        self.users
+            .insert(host.clone(), cells::sanitize(user.as_bytes()));
         self.addresses.insert(host, address);
     }
 
@@ -6414,25 +6542,25 @@ impl App {
             now,
             tz,
         };
+        let root_theme = self.theme.for_root();
+        let root_view = View {
+            theme: &root_theme,
+            ..view
+        };
+        let roots = [Side::Left, Side::Right].map(|side| self.root_at(self.panel(side).location()));
         if let Some(viewing) = &mut self.viewing {
-            let styles = ViewerStyles {
-                header: self.theme.cursor,
-                header_mark: self.theme.truncated_cursor,
-                text: self.theme.panel,
-                bar: self.theme.glyphs.scroll_bar,
-                line: glyphs::LINE,
-                mark: self.theme.truncated,
-                marks: self.theme.glyphs.marks,
-            };
-            viewing.viewer.render(frame, panels, &styles);
+            viewing
+                .viewer
+                .render(frame, panels, &viewer_styles(&self.theme));
         } else {
             let sides = [
                 (Side::Left, &mut self.left, left_bar, left),
                 (Side::Right, &mut self.right, right_bar, right),
             ];
-            for (side, tabs, line, area) in sides {
+            for ((side, tabs, line, area), root) in sides.into_iter().zip(roots) {
                 let focused = active == side;
-                let spots = render_side(frame, tabs, (line, area), focused, &view, &self.home);
+                let view = if root { &root_view } else { &view };
+                let spots = render_side(frame, tabs, (line, area), focused, view, &self.home);
                 let whole = line.map_or(area, |line| line.union(area));
                 self.spots.sides.push((side, whole));
                 let tabs = spots.into_iter().map(|(index, spot)| (side, index, spot));
@@ -6712,14 +6840,25 @@ impl App {
         let room = width.saturating_sub(shown + 1);
         // A message takes the place of the mode, as on vim's command line.
         let marks = self.theme.glyphs.marks;
-        if let Some(message) = &self.message {
+        let left_width = if let Some(message) = &self.message {
             let styles = (self.theme.message, self.theme.truncated);
-            let message = cells::fit(message, room, Align::Left, styles, marks);
-            frame.render_widget(Line::from(message), area);
+            let message_line = cells::fit(message, room, Align::Left, styles, marks);
+            frame.render_widget(Line::from(message_line), area);
+            cells::width(message)
         } else {
             let styles = (Style::new().bold(), self.theme.truncated);
-            let mode = cells::fit(&mode, room, Align::Left, styles, marks);
-            frame.render_widget(Line::from(mode), area);
+            let mode_line = cells::fit(&mode, room, Align::Left, styles, marks);
+            frame.render_widget(Line::from(mode_line), area);
+            cells::width(&mode)
+        };
+        // Left of the cells of what is typed, as long as it fits after the mode or message.
+        let who = self.mode_who();
+        let who_width = cells::width(&cells::text_of(&who));
+        let reserved = SHOWCMD_WIDTH + 1;
+        if who_width > 0 && left_width + 1 + who_width + reserved <= width {
+            let end = area.right() - u16::try_from(reserved).unwrap_or(0);
+            let x = end - u16::try_from(who_width).unwrap_or(0);
+            frame.render_widget(Line::from(who), Rect::new(x, area.y, end - x, 1));
         }
         let x = area
             .right()
@@ -6759,6 +6898,19 @@ impl App {
             frame.render_widget(line, *slot);
         }
         slots.to_vec()
+    }
+}
+
+/// The colors and glyphs of the viewer in `theme`.
+fn viewer_styles(theme: &Theme) -> ViewerStyles {
+    ViewerStyles {
+        header: theme.cursor,
+        header_mark: theme.truncated_cursor,
+        text: theme.panel,
+        bar: theme.glyphs.scroll_bar,
+        line: glyphs::LINE,
+        mark: theme.truncated,
+        marks: theme.glyphs.marks,
     }
 }
 
@@ -10748,7 +10900,7 @@ mod tests {
         let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
             panic!("expected a connection");
         };
-        app.resolved("web".to_owned(), "deploy@10.0.0.9".to_owned());
+        app.resolved("web".to_owned(), "deploy@10.0.0.9".to_owned(), "deploy");
         app.closed("web", connection, Some("Connection refused"));
         app.handle(action(Action::Cancel));
         assert_eq!(
@@ -12659,6 +12811,159 @@ mod tests {
         let (mut app, effects) = App::new(Path::new("/"), Path::new("/home/me"), &config());
         answer(&mut app, effects, &Listing::Dir(Vec::new()));
         assert_eq!(app.terminal_title().as_deref(), Some("/ — noc"));
+    }
+
+    fn alice_on_mac() -> Machine {
+        Machine {
+            host: Some("mac".to_owned()),
+            user: Some("alice".to_owned()),
+            root: false,
+        }
+    }
+
+    fn root_on_mac() -> Machine {
+        Machine {
+            user: Some("root".to_owned()),
+            root: true,
+            ..alice_on_mac()
+        }
+    }
+
+    /// The line of the mode on a screen `width` cells wide, its end trimmed.
+    fn mode_line(app: &mut App, width: u16) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(width, 9)).unwrap();
+        let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        terminal
+            .draw(|frame| app.render(frame, now, &TimeZone::UTC))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let y = buffer.area.height - 2;
+        let line: String = (0..width).map(|x| buffer[(x, y)].symbol()).collect();
+        line.trim_end().to_owned()
+    }
+
+    #[test]
+    fn the_prompt_says_who_is_where_as_a_shell_does() {
+        let (mut app, _) = App::new(
+            Path::new("/home/me/src/noc"),
+            Path::new("/home/me"),
+            &config(),
+        );
+        app.set_machine(alice_on_mac());
+        app.handle(action(Action::Shell));
+        let prompt = |app: &App, width| cells::text_of(&app.command_prompt(width));
+        assert_eq!(prompt(&app, 120), "alice@mac:~/src/noc $ ");
+        assert_eq!(
+            prompt(&app, 54),
+            "alice@mac:~/sr»noc $ ",
+            "the directory cut first"
+        );
+        assert_eq!(
+            prompt(&app, 48),
+            "mac:~/src/noc $ ",
+            "then the user left out"
+        );
+        assert_eq!(prompt(&app, 30), "mac $ ", "then the directory");
+        assert_eq!(prompt(&app, 6), "m» $ ");
+        let who = app.command_prompt(120).remove(0);
+        assert_eq!(who.style, Style::new(), "only root stands out");
+
+        app.set_machine(root_on_mac());
+        assert_eq!(prompt(&app, 120), "root@mac:~/src/noc # ");
+        let who = app.command_prompt(120).remove(0);
+        assert_eq!(
+            (who.content.as_ref(), who.style),
+            ("root@mac", app.theme.root)
+        );
+        assert_eq!(
+            app.terminal_title().as_deref(),
+            Some("[root] ~/src/noc — noc")
+        );
+    }
+
+    #[test]
+    fn the_line_of_the_mode_says_who_is_where_while_it_fits() {
+        let mut app = loaded();
+        assert_eq!(
+            mode_line(&mut app, 60),
+            "-- NORMAL --",
+            "a machine without a name"
+        );
+        app.set_machine(alice_on_mac());
+        let line = mode_line(&mut app, 60);
+        assert!(line.starts_with("-- NORMAL --"), "{line}");
+        assert!(
+            line.ends_with(" alice@mac"),
+            "left of what is typed: {line}"
+        );
+        assert_eq!(line.chars().count(), 60 - SHOWCMD_WIDTH - 1);
+        assert_eq!(mode_line(&mut app, 32), "-- NORMAL --", "no room");
+        app.set_machine(root_on_mac());
+        assert!(mode_line(&mut app, 60).ends_with(" # root@mac"));
+    }
+
+    /// Whether a cell of the screen has the background of `style`.
+    fn shows_background(app: &mut App, style: Style) -> bool {
+        let mut terminal = Terminal::new(TestBackend::new(100, 9)).unwrap();
+        let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        terminal
+            .draw(|frame| app.render(frame, now, &TimeZone::UTC))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        buffer
+            .content
+            .iter()
+            .any(|cell| cell.bg == style.bg.unwrap())
+    }
+
+    #[test]
+    fn the_cursor_is_on_red_in_the_panels_where_the_user_is_root() {
+        let mut app = loaded();
+        let (cursor, root) = (app.theme.cursor, app.theme.root_cursor);
+        assert_ne!(cursor.bg, root.bg);
+        assert!(shows_background(&mut app, cursor));
+        assert!(!shows_background(&mut app, root));
+        app.set_machine(root_on_mac());
+        assert!(shows_background(&mut app, root));
+
+        let (mut app, _) = on_a_host();
+        app.resolved("web".to_owned(), "deploy@10.0.0.5".to_owned(), "deploy");
+        assert!(!shows_background(&mut app, root), "not root there");
+        app.resolved("web".to_owned(), "root@10.0.0.5".to_owned(), "root");
+        assert!(shows_background(&mut app, root), "root on the host");
+        assert_eq!(app.theme.root_cursor, root, "the theme stays");
+    }
+
+    #[test]
+    fn on_a_host_the_user_comes_from_ssh_and_a_local_root_still_shows() {
+        let (mut app, _) = on_a_host();
+        let prompt = |app: &App| cells::text_of(&app.shell_prompt(120));
+        assert_eq!(prompt(&app), "web:/home/deploy $ ", "before ssh -G");
+        let line = mode_line(&mut app, 100);
+        assert!(line.ends_with(" web"), "{line:?}");
+
+        app.resolved("web".to_owned(), "deploy@10.0.0.5".to_owned(), "deploy");
+        assert_eq!(prompt(&app), "deploy@web:/home/deploy $ ");
+        app.set_machine(root_on_mac());
+        assert_eq!(prompt(&app), "deploy@web:/home/deploy $ ");
+        assert!(
+            mode_line(&mut app, 100).ends_with(" # deploy@web"),
+            "root here"
+        );
+        assert_eq!(
+            app.terminal_title().as_deref(),
+            Some("[root] web:/home/deploy — noc")
+        );
+
+        app.set_machine(alice_on_mac());
+        app.resolved("web".to_owned(), "root@10.0.0.5".to_owned(), "root");
+        assert_eq!(prompt(&app), "root@web:/home/deploy # ");
+        assert!(mode_line(&mut app, 100).ends_with(" root@web"));
+        assert!(!mode_line(&mut app, 100).contains('#'));
+        assert_eq!(
+            app.terminal_title().as_deref(),
+            Some("[root] web:/home/deploy — noc")
+        );
     }
 
     #[test]

@@ -29,6 +29,9 @@ pub(crate) struct Theme {
     pub(crate) marked: Style,
     /// A marked row under the cursor.
     pub(crate) marked_cursor: Style,
+    /// `cursor` and `marked_cursor` in a panel where the user is root: on red.
+    pub(crate) root_cursor: Style,
+    pub(crate) root_marked_cursor: Style,
     /// What quick search has matched so far.
     pub(crate) quick_search: Style,
     /// What a search found: in the lines of the search of a tree, and in the names that quick
@@ -58,6 +61,9 @@ pub(crate) struct Theme {
     pub(crate) address: Style,
     /// A message on the line of the mode, as vim's error and warning messages.
     pub(crate) message: Style,
+    /// Rights of uid 0: `root@host` on the line of the mode and in the prompt, and the glyph
+    /// of a Noon Commander run by root.
+    pub(crate) root: Style,
     /// The marks of text cut short or going on past the screen, over the style of their row:
     /// an accent that stands out from names of every kind, in the panels, the viewer, and the
     /// line of the mode.
@@ -167,6 +173,15 @@ impl Theme {
         "catppuccin-latte",
     ];
 
+    /// This theme for a panel where the user is root: its cursor on red.
+    pub(crate) fn for_root(&self) -> Self {
+        Self {
+            cursor: self.root_cursor,
+            marked_cursor: self.root_marked_cursor,
+            ..self.clone()
+        }
+    }
+
     /// A built-in theme by name, in the colors that `depth` allows.
     pub(crate) fn by_name(name: &str, depth: ColorDepth) -> Option<Self> {
         let palette = |palette: Palette| match depth {
@@ -202,6 +217,9 @@ impl Theme {
             cursor_inactive: Style::new().bg(Color::DarkGray),
             marked: on(Color::LightYellow, Color::Blue).underlined(),
             marked_cursor: on(Color::LightYellow, Color::Cyan).underlined(),
+            // As the titles of error dialogs.
+            root_cursor: on(Color::White, Color::Red),
+            root_marked_cursor: on(Color::LightYellow, Color::Red).underlined(),
             quick_search: on(Color::Black, Color::Cyan),
             // As mc's editor shows a bookmark found (`bookmarkfound`).
             find_match: on(Color::Black, Color::Green),
@@ -218,6 +236,7 @@ impl Theme {
             host_failed: fg(Color::LightRed),
             address: fg(Color::Gray),
             message: fg(Color::LightRed),
+            root: fg(Color::LightRed).bold(),
             truncated: fg(Color::LightYellow).bold(),
             truncated_cursor: on(Color::LightYellow, Color::Black).bold(),
             // Yellow does not read on the gray of dialogs, nor on the cyan of menus.
@@ -280,6 +299,8 @@ impl Theme {
             // Not bold as in mc: that is what directories are.
             marked: Style::new().underlined(),
             marked_cursor: reversed.underlined(),
+            root_cursor: reversed.bold(),
+            root_marked_cursor: reversed.underlined().bold(),
             quick_search: reversed,
             // Reversed is the cursor; this shows on it.
             find_match: plain.bold().underlined(),
@@ -298,6 +319,7 @@ impl Theme {
             host_failed: plain,
             address: plain,
             message: plain.bold(),
+            root: plain.bold(),
             // Reversed on plain rows, and plain in the reversed cursor.
             truncated: reversed.bold(),
             truncated_cursor: plain.not_reversed().bold(),
@@ -352,6 +374,8 @@ impl Theme {
             cursor_inactive: Style::new().bg(p.surface0),
             marked: on(p.mauve, p.base).underlined(),
             marked_cursor: on(p.base, p.mauve).underlined(),
+            root_cursor: on(p.base, p.red),
+            root_marked_cursor: on(p.base, p.red).underlined(),
             quick_search: cursor,
             find_match: on(p.base, p.yellow),
             file: fg(p.text),
@@ -367,6 +391,7 @@ impl Theme {
             host_failed: fg(p.red),
             address: fg(p.subtext0),
             message: fg(p.red),
+            root: fg(p.red).bold(),
             truncated: fg(p.yellow).bold(),
             truncated_cursor: on(p.yellow, p.crust).bold(),
             truncated_dialog: fg(p.yellow).bold(),
@@ -424,6 +449,8 @@ impl Theme {
             cursor_inactive: Style::new().bg(p.cursor_inactive),
             marked: on(p.mark, p.panel).underlined(),
             marked_cursor: on(p.panel, p.mark).underlined(),
+            root_cursor: on(p.panel, p.red),
+            root_marked_cursor: on(p.panel, p.red).underlined(),
             quick_search: cursor,
             // The golds are the cursor's and the menu bar's.
             find_match: on(p.panel, p.teal),
@@ -440,6 +467,7 @@ impl Theme {
             host_failed: fg(p.red),
             address: fg(p.muted),
             message: fg(p.red),
+            root: fg(p.red).bold(),
             truncated: fg(p.pink).bold(),
             truncated_cursor: on(p.sun, p.ink).bold(),
             truncated_dialog: fg(p.pink).bold(),

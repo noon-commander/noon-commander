@@ -28,9 +28,14 @@ In dialogs, as everywhere in Insert and Visual mode, Alt and a key stood for Esc
 ## Decision
 
 - **Every element of a dialog but Cancel has a letter**, marked with `&` in its Fluent text and
-  drawn highlighted, in the theme's `dialog_hotkey`, or `error_hotkey` in the red dialogs, as mc's
-  `dhotnormal` and `errdhotnormal`. Alt and the letter act on the element from anywhere in the
-  dialog, while typing in a field too:
+  drawn apart, in the theme's `dialog_hotkey`, or `error_hotkey` in the red dialogs, as mc's
+  `dhotnormal` and `errdhotnormal`, and on what has the focus in `dialog_hotkey_focused` and
+  `error_hotkey_focused`, as mc's `dhotfocus` and `errdhotfocus`. Without being bold, which drew
+  the eye from the labels: in the color of titles (the Noon themes' gold, Catppuccin's mauve), and
+  underlined on the cursor, where that color would not show, and in the red dialogs, where it
+  would read poorly; a letter in the color of its text, as on a title, is underlined. The menus
+  of F9 take the same, with `menu_hotkey_selected` on the cursor and the menu bar. Alt and the
+  letter act on the element from anywhere in the dialog, while typing in a field too:
 
   | Element | Alt and its letter |
   | --- | --- |

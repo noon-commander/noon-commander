@@ -1524,7 +1524,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 - **Letters of dialogs** ([ADR 0033](adr/0033-letters-in-dialogs.md)). As in Far and mc, every
   element of a dialog but Cancel has a letter, which an `&` marks in its Fluent text (`Label`, in
   `tui/label.rs`, as for the menus of F9) and which shows in the theme's `dialog_hotkey`, or
-  `error_hotkey` in red dialogs, as mc's `dhotnormal` and `errdhotnormal`. Alt and it act on the
+  `error_hotkey` in red dialogs, as mc's `dhotnormal` and `errdhotnormal`, and on what has the
+  focus in `dialog_hotkey_focused` or `error_hotkey_focused`, as mc's `dhotfocus` and
+  `errdhotfocus`: the color of titles, not bold, and underlined where that color would not show
+  (the cursor, red dialogs, a title's own color). Alt and it act on the
   element from anywhere in the dialog, in every mode, while typing in a field too: a text field
   gets the focus, in Insert mode, as with Tab; a check box switches and a radio button is chosen,
   each getting the focus; a button is pressed. The one field of a form without a label (Copy,

@@ -69,17 +69,25 @@ impl Label {
     }
 
     /// The text in `style`, its letter in `hotkey` over it, and the mark of a name cut short
-    /// in `mark` over it.
+    /// in `mark` over it. A letter that `hotkey` would not set apart, its color that of the
+    /// text, as on a title, is underlined.
     pub(crate) fn spans(
         &self,
         style: Style,
         hotkey: Option<Style>,
         mark: Style,
     ) -> Vec<Span<'static>> {
+        let apart = |hotkey: Style| {
+            if style.patch(hotkey) == style {
+                hotkey.underlined()
+            } else {
+                hotkey
+            }
+        };
         let letter = self
             .hotkey
             .zip(hotkey)
-            .map(|((at, _), hotkey)| (at, hotkey));
+            .map(|((at, _), hotkey)| (at, apart(hotkey)));
         let over: Vec<(usize, Style)> = letter
             .into_iter()
             .chain(self.cut.map(|at| (at, mark)))
@@ -233,6 +241,18 @@ mod tests {
             )
         );
         assert_eq!(Label::parse("No letter").wrap(5).1, None);
+    }
+
+    #[test]
+    fn a_letter_in_the_color_of_its_text_is_underlined() {
+        use ratatui::style::Color;
+
+        let label = Label::parse("&Keys");
+        let gold = Style::new().fg(Color::Yellow);
+        let spans = label.spans(gold.bold(), Some(gold), Style::new());
+        assert_eq!(spans[1].style, gold.bold().underlined());
+        let spans = label.spans(Style::new(), Some(gold), Style::new());
+        assert_eq!(spans[1].style, gold, "a color of its own");
     }
 
     #[test]

@@ -98,6 +98,9 @@ pub(crate) struct Theme {
     /// run now.
     pub(crate) menu_hotkey: Style,
     pub(crate) menu_disabled: Style,
+    /// The letter on the command under the cursor and on the menu bar, where a color of the
+    /// menu's may not show, as mc's `menuhotsel`.
+    pub(crate) menu_hotkey_selected: Style,
     /// The keys of the commands of the pull-down menu: `keys` on the menu's own background.
     pub(crate) menu_keys: Style,
     /// Dialog body, frame, and text.
@@ -111,8 +114,10 @@ pub(crate) struct Theme {
     pub(crate) dialog_button: Style,
     pub(crate) dialog_button_focused: Style,
     /// Drawn over the others: the letter of a button, a field, a check box, or a choice, which
-    /// Alt and it act on, as mc's `dhotnormal`.
+    /// Alt and it act on, as mc's `dhotnormal`; and on what has the focus, whose colors may
+    /// hide a color, as mc's `dhotfocus`.
     pub(crate) dialog_hotkey: Style,
+    pub(crate) dialog_hotkey_focused: Style,
     /// Text field in a dialog.
     pub(crate) dialog_input: Style,
     /// The progress bar of a job.
@@ -121,8 +126,9 @@ pub(crate) struct Theme {
     pub(crate) error_dialog: Style,
     pub(crate) error_title: Style,
     pub(crate) error_button_focused: Style,
-    /// The same letters in error dialogs, as mc's `errdhotnormal`.
+    /// The same letters in error dialogs, as mc's `errdhotnormal` and `errdhotfocus`.
     pub(crate) error_hotkey: Style,
+    pub(crate) error_hotkey_focused: Style,
     /// Tabs: the line of tabs, the tabs that do not show, and what parts them; tabs drawn
     /// in a panel's frame take it too.
     pub(crate) tab: Style,
@@ -267,6 +273,8 @@ impl Theme {
             menu_selected: on(Color::White, Color::Black),
             menu_hotkey: fg(Color::LightYellow),
             menu_disabled: fg(Color::DarkGray),
+            // mc's `menuhotsel`.
+            menu_hotkey_selected: fg(Color::LightYellow),
             // Magenta does not read on the cyan of menus; the labels there are white.
             menu_keys: fg(Color::Black),
             dialog: on(Color::Black, Color::Gray),
@@ -276,6 +284,7 @@ impl Theme {
             dialog_button_focused: on(Color::Black, Color::Cyan),
             // mc's `dhotnormal` and `dhotfocus`.
             dialog_hotkey: fg(Color::Blue),
+            dialog_hotkey_focused: fg(Color::Blue),
             dialog_input: on(Color::Black, Color::Cyan),
             gauge: on(Color::White, Color::Black),
             error_dialog: on(Color::White, Color::Red),
@@ -283,6 +292,7 @@ impl Theme {
             error_button_focused: on(Color::Black, Color::Gray),
             // mc's `errdhotnormal` and `errdhotfocus`.
             error_hotkey: fg(Color::LightYellow),
+            error_hotkey_focused: fg(Color::LightYellow),
             // Dark, as the F-key bar below the panels.
             tab: on(Color::Gray, Color::Black),
             tab_active: on(Color::White, Color::Blue).bold(),
@@ -347,6 +357,7 @@ impl Theme {
             menu_selected: reversed,
             menu_hotkey: Style::new().underlined(),
             menu_disabled: Style::new().dim(),
+            menu_hotkey_selected: Style::new().underlined(),
             menu_keys: plain.bold(),
             dialog: plain,
             dialog_title: plain,
@@ -354,12 +365,14 @@ impl Theme {
             dialog_button: plain,
             dialog_button_focused: reversed,
             dialog_hotkey: Style::new().underlined(),
+            dialog_hotkey_focused: Style::new().underlined(),
             dialog_input: reversed,
             gauge: plain,
             error_dialog: plain,
             error_title: plain.bold(),
             error_button_focused: reversed,
             error_hotkey: Style::new().underlined(),
+            error_hotkey_focused: Style::new().underlined(),
             tab: plain.dim(),
             tab_active: plain.bold().underlined(),
             tab_active_idle: plain.bold(),
@@ -418,23 +431,29 @@ impl Theme {
             menu_bar_inactive: on(p.subtext0, p.mantle),
             menu: on(p.text, p.surface0),
             menu_selected: cursor,
-            // Without a color of its own: an accent would not show on the selected command.
-            menu_hotkey: Style::new().bold().underlined(),
+            // In the color of titles, as the letters of dialogs; underlined where that would not
+            // show, on the cursor.
+            menu_hotkey: fg(p.mauve),
             menu_disabled: fg(p.subtext0),
+            menu_hotkey_selected: Style::new().underlined(),
             menu_keys: fg(p.blue),
             dialog: on(p.text, p.surface0),
             dialog_title: on(p.mauve, p.surface0),
             keys: on(p.blue, p.surface0),
             dialog_button: on(p.text, p.surface0),
             dialog_button_focused: cursor,
-            // As the letters of the menus, which an accent would not show on the cursor.
-            dialog_hotkey: Style::new().bold().underlined(),
+            // In the color of titles, quieter than bold; underlined on the cursor, where it
+            // would not show.
+            dialog_hotkey: fg(p.mauve),
+            dialog_hotkey_focused: Style::new().underlined(),
             dialog_input: on(p.text, p.surface1),
             gauge: on(p.blue, p.surface0),
             error_dialog: on(p.base, p.red),
             error_title: on(p.base, p.red),
             error_button_focused: on(p.text, p.surface0),
-            error_hotkey: Style::new().bold().underlined(),
+            // No accent reads on red.
+            error_hotkey: Style::new().underlined(),
+            error_hotkey_focused: Style::new().underlined(),
             tab: on(p.overlay1, p.crust),
             tab_active: on(p.text, p.base).bold(),
             tab_active_idle: on(p.subtext0, p.base),
@@ -497,23 +516,29 @@ impl Theme {
             menu_bar_inactive: bar,
             menu: on(p.text, p.surface),
             menu_selected: cursor,
-            // Without a color of its own: an accent would not show on the selected command.
-            menu_hotkey: Style::new().bold().underlined(),
+            // In the gold of titles, as the letters of dialogs; underlined on the cursor and the
+            // amber menu bar, where gold would not show.
+            menu_hotkey: fg(p.accent),
             menu_disabled: fg(p.muted),
+            menu_hotkey_selected: Style::new().underlined(),
             menu_keys: fg(p.teal),
             dialog: on(p.text, p.surface),
             dialog_title: on(p.accent, p.surface).bold(),
             keys: on(p.teal, p.surface),
             dialog_button: on(p.text, p.surface),
             dialog_button_focused: cursor,
-            // As the letters of the menus, which an accent would not show on the cursor.
-            dialog_hotkey: Style::new().bold().underlined(),
+            // In the gold of titles, quieter than bold; underlined on the gold cursor, where it
+            // would not show.
+            dialog_hotkey: fg(p.accent),
+            dialog_hotkey_focused: Style::new().underlined(),
             dialog_input: on(p.text, p.field),
             gauge: on(p.accent, p.surface),
             error_dialog: on(p.ink, p.danger),
             error_title: on(p.ink, p.danger).bold(),
             error_button_focused: on(p.text, p.surface),
-            error_hotkey: Style::new().bold().underlined(),
+            // Gold reads poorly on the pale red of noon-light.
+            error_hotkey: Style::new().underlined(),
+            error_hotkey_focused: Style::new().underlined(),
             tab: on(p.muted, p.deep),
             tab_active: on(p.text, p.panel).bold(),
             tab_active_idle: on(p.muted, p.panel),
@@ -940,20 +965,27 @@ mod tests {
     }
 
     #[test]
-    fn letters_of_dialogs_stand_out_on_the_dialogs_and_their_buttons() {
+    fn letters_stand_out_on_the_dialogs_the_menus_and_their_cursors() {
         for name in Theme::NAMES {
             for depth in [ColorDepth::TrueColor, ColorDepth::Indexed] {
                 let theme = Theme::by_name(name, depth).unwrap();
                 let surfaces = [
                     ("dialog", theme.dialog, theme.dialog_hotkey),
                     ("button", theme.dialog_button, theme.dialog_hotkey),
-                    ("focused", theme.dialog_button_focused, theme.dialog_hotkey),
+                    (
+                        "focused",
+                        theme.dialog_button_focused,
+                        theme.dialog_hotkey_focused,
+                    ),
                     ("error", theme.error_dialog, theme.error_hotkey),
                     (
                         "error focused",
                         theme.error_button_focused,
-                        theme.error_hotkey,
+                        theme.error_hotkey_focused,
                     ),
+                    ("menu", theme.menu, theme.menu_hotkey),
+                    ("selected", theme.menu_selected, theme.menu_hotkey_selected),
+                    ("menu bar", theme.menu_bar, theme.menu_hotkey_selected),
                 ];
                 for (surface, style, letter) in surfaces {
                     let marked = style.patch(letter);

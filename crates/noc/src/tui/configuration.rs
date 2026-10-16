@@ -1036,7 +1036,8 @@ impl Configuration {
         {
             let y = area.y + u16::try_from(index - self.offset).unwrap_or(0);
             let focused = self.focus == Focus::Settings && index == self.row;
-            let styles = if focused && !matches!(setting.value, Value::Text { .. }) {
+            let on_cursor = focused && !matches!(setting.value, Value::Text { .. });
+            let styles = if on_cursor {
                 (colors.focused_style(), theme.truncated_cursor)
             } else {
                 (theme.dialog, theme.truncated_dialog)
@@ -1045,7 +1046,7 @@ impl Configuration {
             let label = setting.label.fit(
                 label_width + LABEL_GAP,
                 styles,
-                colors.hotkey_style(),
+                colors.hotkey_style(on_cursor),
                 theme.glyphs.marks,
             );
             let value = match &setting.value {

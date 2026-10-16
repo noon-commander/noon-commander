@@ -811,7 +811,12 @@ fn item_line(
     } else {
         theme.truncated_menu
     };
-    let hotkey = status.enabled.then_some(theme.menu_hotkey);
+    let hotkey = if selected {
+        theme.menu_hotkey_selected
+    } else {
+        theme.menu_hotkey
+    };
+    let hotkey = status.enabled.then_some(hotkey);
     let mut spans = vec![Span::styled(format!(" {mark} "), style)];
     spans.extend(item.label.spans(style, hotkey, truncated));
     let key = status.key.as_deref().unwrap_or_default();
@@ -860,7 +865,7 @@ fn render_bar(
     } else {
         theme.menu_bar_inactive
     };
-    let hotkey = selected.map(|_| theme.menu_hotkey);
+    let hotkey = selected.map(|_| theme.menu_hotkey_selected);
     let row = Rect::new(area.x, area.y, area.width, 1);
     frame.render_widget(
         Line::styled(" ".repeat(usize::from(area.width)), style),

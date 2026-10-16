@@ -59,12 +59,13 @@ pub(crate) fn render(
     let mut drawn = Drawn::default();
     for (index, name) in sidebar.rows.iter().enumerate().skip(offset).take(height) {
         let y = body.y + u16::try_from(index - offset).unwrap_or(0);
+        let on_cursor = index == sidebar.chosen && sidebar.focused;
         let styles = match (index == sidebar.chosen, sidebar.focused) {
             (true, true) => (colors.focused_style(), theme.truncated_cursor),
             (true, false) => (theme.dialog_title.bold(), theme.truncated_dialog),
             (false, _) => (theme.dialog, theme.truncated_dialog),
         };
-        let hotkey = colors.hotkey_style();
+        let hotkey = colors.hotkey_style(on_cursor);
         let text = name.fit(usize::from(width), styles, hotkey, theme.glyphs.marks);
         let row = Rect::new(body.x, y, width, 1);
         frame.render_widget(Line::from(text).style(styles.0), row);

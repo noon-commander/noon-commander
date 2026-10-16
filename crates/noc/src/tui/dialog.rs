@@ -357,8 +357,9 @@ pub(crate) struct Colors {
     focused: Style,
     /// The marks of text cut short, over `body`.
     mark: Style,
-    /// The letters of labels, over the rest.
+    /// The letters of labels, over the rest, and over what has the focus.
     hotkey: Style,
+    hotkey_focused: Style,
 }
 
 impl Colors {
@@ -367,9 +368,14 @@ impl Colors {
         self.focused
     }
 
-    /// The style of the letters of labels, over the others.
-    pub(crate) fn hotkey_style(self) -> Style {
-        self.hotkey
+    /// The style of the letters of labels, over the others: over what has the focus if
+    /// `focused`, where the focus's colors may hide those of the others.
+    pub(crate) fn hotkey_style(self, focused: bool) -> Style {
+        if focused {
+            self.hotkey_focused
+        } else {
+            self.hotkey
+        }
     }
 
     /// The body's style, and that of the marks of text cut short over it.
@@ -387,6 +393,7 @@ impl Colors {
                 focused: theme.error_button_focused,
                 mark: theme.truncated_error,
                 hotkey: theme.error_hotkey,
+                hotkey_focused: theme.error_hotkey_focused,
             }
         } else {
             Self {
@@ -396,6 +403,7 @@ impl Colors {
                 focused: theme.dialog_button_focused,
                 mark: theme.truncated_dialog,
                 hotkey: theme.dialog_hotkey,
+                hotkey_focused: theme.dialog_hotkey_focused,
             }
         }
     }
@@ -1211,7 +1219,7 @@ impl Dialog {
             let (number, text) = line;
             let over = letter
                 .filter(|&(at, _)| at == number)
-                .map(|(_, column)| (column, colors.hotkey));
+                .map(|(_, column)| (column, colors.hotkey_style(false)));
             let spans = label::spans_over(text, style, over.into_iter().collect());
             frame.render_widget(Line::from(spans), row);
         }
@@ -1360,13 +1368,11 @@ impl Dialog {
             }
             let row = Rect::new(inner.x, inner.y + index, inner.width, 1);
             let text = format!("[{}] ", mark(check.on, glyphs::CHECKED));
-            let style = if self.focus == Focus::Check(number) {
-                colors.focused
-            } else {
-                colors.body
-            };
+            let focused = self.focus == Focus::Check(number);
+            let style = if focused { colors.focused } else { colors.body };
             let mut spans = vec![Span::styled(text, style)];
-            spans.extend(check.label.spans(style, Some(colors.hotkey), colors.mark));
+            let hotkey = colors.hotkey_style(focused);
+            spans.extend(check.label.spans(style, Some(hotkey), colors.mark));
             frame.render_widget(Line::from(spans), row);
             spots.push((Focus::Check(number), row));
             index += 1;
@@ -1390,11 +1396,8 @@ impl Dialog {
                 return None;
             }
             let text = format!("({}) ", mark(number == self.chosen, glyphs::CHOSEN));
-            let style = if self.focus == Focus::Choice(number) {
-                colors.focused
-            } else {
-                colors.body
-            };
+            let focused = self.focus == Focus::Choice(number);
+            let style = if focused { colors.focused } else { colors.body };
             let cells = cells::width(&text) + cells::width(&choice.text);
             let width = u16::try_from(cells).unwrap_or(u16::MAX);
             let area = if self.in_a_row {
@@ -1403,7 +1406,8 @@ impl Dialog {
                 Rect::new(inner.x, inner.y + index, inner.width, 1)
             };
             let mut spans = vec![Span::styled(text, style)];
-            spans.extend(choice.spans(style, Some(colors.hotkey), colors.mark));
+            let hotkey = colors.hotkey_style(focused);
+            spans.extend(choice.spans(style, Some(hotkey), colors.mark));
             frame.render_widget(Line::from(spans), area);
             spots.push((Focus::Choice(number), area));
             if self.in_a_row {
@@ -1524,7 +1528,8 @@ impl Dialog {
 /// middle, and its letter with it.
 fn label_spans(label: &Label, room: usize, colors: Colors, theme: &Theme) -> Vec<Span<'static>> {
     if cells::width(&label.text) <= room {
-        return label.spans(colors.body, Some(colors.hotkey), colors.mark);
+        let hotkey = colors.hotkey_style(false);
+        return label.spans(colors.body, Some(hotkey), colors.mark);
     }
     let styles = colors.body_styles();
     cells::fit(
@@ -1558,14 +1563,16 @@ pub(crate) fn button_line(
         if index > 0 {
             spans.push(Span::raw(" "));
         }
-        let style = if focus == Some(index) {
+        let focused = focus == Some(index);
+        let style = if focused {
             colors.focused
         } else {
             colors.button
         };
         let (open, close) = brackets(index == default);
         spans.push(Span::styled(open, style));
-        spans.extend(label.spans(style, Some(colors.hotkey), colors.mark));
+        let hotkey = colors.hotkey_style(focused);
+        spans.extend(label.spans(style, Some(hotkey), colors.mark));
         spans.push(Span::styled(close, style));
     }
     Line::from(spans).centered()
@@ -2157,7 +2164,7 @@ mod tests {
         let find = |text: &str| super::super::mouse::find(buffer, text);
         let fg = |at: Position, offset: u16| buffer[(at.x + offset, at.y)].fg;
         let colors = Colors::of(&Theme::mc_classic(), false);
-        assert_eq!(colors.hotkey_style().fg, Some(Color::Blue));
+        assert_eq!(colors.hotkey_style(false).fg, Some(Color::Blue));
         let prompt = find("Pattern:");
         assert_eq!((fg(prompt, 0), fg(prompt, 1)), (Color::Blue, Color::Black));
         let choice = find("One");

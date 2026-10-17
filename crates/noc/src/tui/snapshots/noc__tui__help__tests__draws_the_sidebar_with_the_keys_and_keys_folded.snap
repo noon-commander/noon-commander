@@ -1,6 +1,5 @@
 ---
 source: crates/noc/src/tui/help.rs
-assertion_line: 1614
 expression: "draw(&mut help, 120, 26)"
 ---
 "                                                                                                                        "
@@ -24,7 +23,7 @@ expression: "draw(&mut help, 120, 26)"
 "                  ║                       │ h, Left          One column left, when lines are cut     ░                  "
 "                  ║                       │ l, Right         One column right, when lines are cut    ░                  "
 "                  ║                       │ z h, z Left      A column left, when» a count, that many ▼                  "
-"                  ╚════════════════════════════════════════════════════════════════════════════ 61% ═╝                  "
+"                  ╚════════════════════════════════════════════════════════════════════════════ 64% ═╝                  "
 "                                                                                                                        "
 "                                                                                                                        "
 "                                                                                                                        "

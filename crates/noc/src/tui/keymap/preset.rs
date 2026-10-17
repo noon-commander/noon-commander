@@ -102,13 +102,14 @@ pub(super) const PRESET: Preset = &[
             // telescope's <leader>ff finds files.
             (Action::FindFile, &["f /"]),
             (Action::FindNames, &["f f"]),
-            // Tools
-            (Action::Shell, &["!"]),
+            // Tools. i starts Insert mode where there is text to type: on the command line, as
+            // typing in mc's panels goes into its command line.
+            (Action::Shell, &["i", "!"]),
             (Action::Command, &[":"]),
             (Action::CommandHistory, &["q :"]),
             (Action::Jump, &["g z"]),
             (Action::QuickCd, &["g d"]),
-            (Action::View, &["i", "f3"]),
+            (Action::View, &["g f", "f3"]),
             (Action::Edit, &["e", "f4"]),
             (Action::SystemOpen, &["g x"]),
             (Action::Copy, &["shift-y", "y y", "f5"]),
@@ -462,10 +463,7 @@ pub(super) const PRESET: Preset = &[
             (Action::ScrollEnd, &["z e"]),
             (Action::ToggleWrap, &["f2"]),
             (Action::Help, &["g ?", "f1"]),
-            (
-                Action::Quit,
-                &["q", "i", "esc", "ctrl-[", "ctrl-c", "f3", "f10"],
-            ),
+            (Action::Quit, &["q", "esc", "ctrl-[", "ctrl-c", "f3", "f10"]),
         ],
     ),
     // What the windows that list items to choose from share: the location menu, the tab menu,
@@ -570,11 +568,11 @@ pub(super) const PRESET: Preset = &[
             ),
         ],
     ),
-    // The command line of `!` and `:`, as vim's command line: Esc closes it, but leaves Insert
-    // mode after Ctrl+f, as in vim's window of the command line; Ctrl+c closes it. Ctrl+j arrives
-    // as LF where Enter arrives as CR, so it starts a new line in every terminal; Shift+Enter
-    // does where the terminal speaks the kitty keyboard protocol. Ctrl+b and Ctrl+e go to the
-    // start and the end of the line, Ctrl+p and Ctrl+n through the history, and Ctrl+f to
+    // The command line of `i`, `!`, and `:`, as vim's command line: Esc closes it, but leaves
+    // Insert mode after Ctrl+f, as in vim's window of the command line; Ctrl+c closes it. Ctrl+j
+    // arrives as LF where Enter arrives as CR, so it starts a new line in every terminal;
+    // Shift+Enter does where the terminal speaks the kitty keyboard protocol. Ctrl+b and Ctrl+e go
+    // to the start and the end of the line, Ctrl+p and Ctrl+n through the history, and Ctrl+f to
     // Normal mode, in place of vim's window of the command line. Tab completes as vim's `:!`
     // does.
     (

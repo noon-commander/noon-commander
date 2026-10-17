@@ -37,8 +37,8 @@ contexts it falls back to in that mode, as its section says. In each table:
 
 Keys are typed in one of vim's modes. Normal mode takes them as commands: the panels, the lists,
 the pull-down menu, the viewer, and the help start in it, and keys that nothing binds there do
-nothing. Insert mode takes characters as text: quick search, the command line of `:` and `!`, the
-field of a rename, and a dialog whose first focus is a text field start in it. Visual mode
+nothing. Insert mode takes characters as text: quick search, the command line of `i`, `!`, and
+`:`, the field of a rename, and a dialog whose first focus is a text field start in it. Visual mode
 selects rows of a panel, or text of a field, for the commands that act on them. Alt and a key
 stand for Esc and the key in Insert and Visual mode, and in the panels in Normal mode, unless
 something binds that Alt key, as a quick Esc and the key arrive from a terminal. Dialogs and the
@@ -121,14 +121,14 @@ dialogs, viewer, and editor.
 A panel that lists a directory, in Normal mode, where it starts. It falls back to `global`; keys
 that neither binds do nothing. Alt and a key, any key but Esc, stand for Esc and the key here,
 unless something binds that Alt key, as a quick Esc and the key arrive from a terminal. mc and Far
-have a command line under the panels that takes what is typed; noc opens one with `!` and `:`, yazi
-asks for a shell command in an input box, and ranger opens its console with `:`. mc's +, -, \\, and
-\*, on the numpad too, mark and unmark only while its command line is empty; with Alt, they always
-do. noc keeps them under g, as g +, g -, and g \*, and binds neither +, -, and \*, which are
-vim's motions and search. mc's Shift+Up and Shift+Down mark, as in Far, the one exception to vim's
-keys, so that `K` can show what is under the cursor, as vim's does: the whole name, below the
-panels. As vim scrolls lines that do not wrap, the z keys scroll the names: `«` marks a name that
-goes on to the left, and `»` one cut short.
+have a command line under the panels that takes what is typed; noc opens one with `i`, `!`, and
+`:`, yazi asks for a shell command in an input box, and ranger opens its console with `:`. mc's +,
+-, \\, and \*, on the numpad too, mark and unmark only while its command line is empty; with Alt,
+they always do. noc keeps them under g, as g +, g -, and g \*, and binds neither +, -, and \*,
+which are vim's motions and search. mc's Shift+Up and Shift+Down mark, as in Far, the one exception
+to vim's keys, so that `K` can show what is under the cursor, as vim's does: the whole name, below
+the panels. As vim scrolls lines that do not wrap, the z keys scroll the names: `«` marks a name
+that goes on to the left, and `»` one cut short.
 
 noc groups keys under a first key: vim's g, q, and Ctrl+w, and its own t for the tabs and the
 workspaces, o for the sort order, as ranger's sort keys, and the hidden names, and f for the file
@@ -219,12 +219,12 @@ section says: the commands of files act on the rows it selects, which become the
 | The previous name that matches the last quick search | `prev_match` | ✅ | N | — | — | N | N |
 | Search the files below for text, or list them, in a window | `find_file` | ⏳ | f / | Alt+? | Alt+F7 | S | — |
 | Find the files and directories below by name, in the same window | `find_names` | ⏳ | f f | Alt+? | Alt+F7 | s | — |
-| Open the command line for a shell command | `shell` | ✅ | ! | Typing | Typing | ; (in the background)<br>: | !<br>s |
+| Open the command line for a shell command | `shell` | ✅ | i<br>! | Typing | Typing | ; (in the background)<br>: | !<br>s |
 | Open the command line for a command of noc | `command` | ✅ | : | — | — | — | :<br>; |
 | The command history | `command_history` | ✅ | q : | Alt+h | Alt+F8 | — | — |
 | Jump to a directory that zoxide ranks | `jump` | ✅ | g z | — | — | Z | — |
 | Quick cd: type a path as for cd | `quick_cd` | ✅ | g d | Alt+c | — | g Space | c d |
-| View the file under the cursor | `view` | ✅ | i<br>F3 | F3 | F3<br>Numpad5<br>Ctrl+Shift+F3 (always internal) | — | i<br>F3 |
+| View the file under the cursor | `view` | ✅ | g f<br>F3 | F3 | F3<br>Numpad5<br>Ctrl+Shift+F3 (always internal) | — | i<br>F3 |
 | Edit the file under the cursor in $VISUAL or $EDITOR | `edit` | ✅ | e<br>F4 | F4 | F4<br>Ctrl+Shift+F4 (always internal) | — | F4<br>E |
 | Open the marked entries, or the one under the cursor, with the programs of the desktop (`open`, `xdg-open`), as vim's gx; local ones only (Far: in a window of its own; yazi, ranger: through their openers) | `system_open` | ✅ | g x | — | Shift+Enter | o<br>Enter | l<br>Right<br>Enter |
 | Copy the marked entries, or the one under the cursor | `copy` | ✅ | Y<br>y y<br>F5 | F5 | F5 | y, then p | y y, then p p<br>F5, then p p |
@@ -851,15 +851,14 @@ ranger has no list: Tab and Shift+Tab put the next and the previous choice in th
 
 ## Viewer (`viewer`, Normal mode)
 
-i or F3, in Normal mode; it falls back to `global`. yazi has no viewer: it previews the file under
-the cursor beside the list. The ranger column has the keys of its pager, which shows files, the
-output of commands, and the log. The key that opens the viewer closes it too: F3, and i, as in
-ranger. Ctrl+f and Ctrl+b turn the page but for two rows, as in vim; Space, f, and b turn the whole
-page, and u and d half of it, as in less. Unlike vim's, every key down stops with the end of the
-text at the bottom, where a dimmed line marks it; the help scrolls the same way. Lines cut show
-`«` and `»` where they go on past the screen, as vim's 'listchars' `precedes` and `extends`, and the
-z keys scroll them as vim's do; wrapped lines start each row after the first with `»`, as vim's
-'showbreak'.
+g f or F3, in Normal mode; it falls back to `global`. yazi has no viewer: it previews the file
+under the cursor beside the list. The ranger column has the keys of its pager, which shows files,
+the output of commands, and the log. Ctrl+f and Ctrl+b turn the page but for two rows, as in vim;
+Space, f, and b turn the whole page, and u and d half of it, as in less. Unlike vim's, every key
+down stops with the end of the text at the bottom, where a dimmed line marks it; the help scrolls
+the same way. Lines cut show `«` and `»` where they go on past the screen, as vim's 'listchars'
+`precedes` and `extends`, and the z keys scroll them as vim's do; wrapped lines start each row
+after the first with `»`, as vim's 'showbreak'.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -883,7 +882,7 @@ z keys scroll them as vim's do; wrapped lines start each row after the first wit
 | The end of the longest line on screen at the right edge, when lines are cut, as vim's ze | `scroll_end` | ⏳ | z e | — | — | — | — |
 | Wrap long lines, or cut them | `toggle_wrap` | ✅ | F2 | F2 | F2 | — | — |
 | Help | `help` | ✅ | g ?<br>F1 | F1 | F1 | — | — |
-| Close the viewer | `quit` | ✅ | q<br>i<br>Esc<br>Ctrl+[<br>Ctrl+c<br>F3<br>F10 | F3<br>F10<br>q<br>Esc | F10<br>F3<br>Numpad5<br>Esc | — | Esc<br>q<br>Q<br>i<br>F3 |
+| Close the viewer | `quit` | ✅ | q<br>Esc<br>Ctrl+[<br>Ctrl+c<br>F3<br>F10 | F3<br>F10<br>q<br>Esc | F10<br>F3<br>Numpad5<br>Esc | — | Esc<br>q<br>Q<br>i<br>F3 |
 | F1…F10 on terminals without function keys | — | 🚫 | — | Esc, then 1…9, 0 | — | — | — |
 | Wrap type (by chars/words) | — | ⏳ | — | — | Shift+F2 | — | — |
 | Hex/code mode | — | ⏳ | — | F4 | F4 | — | — |
@@ -1077,10 +1076,10 @@ their letters the same way.
 
 ## Command line (`command_line`, Insert mode)
 
-`!` and `:` open it, in Insert mode, as vim's command line: Esc closes it, and Ctrl+f goes to Normal
-mode, in place of vim's window of the command line, after which Esc leaves Insert mode, as in that
-window; Ctrl+c and F10 close it in any mode. Ctrl+o runs one command of Normal mode, then Insert
-mode comes back. Tab completes the word before the cursor as vim's :! does, with the completion
+`i`, `!`, and `:` open it, in Insert mode, as vim's command line: Esc closes it, and Ctrl+f goes to
+Normal mode, in place of vim's window of the command line, after which Esc leaves Insert mode, as
+in that window; Ctrl+c and F10 close it in any mode. Ctrl+o runs one command of Normal mode, then
+Insert mode comes back. Tab completes the word before the cursor as vim's :! does, with the completion
 list. It falls back to `input`, whose Home and End go to the start and the end of the line here and
 whose Ctrl+u deletes to the start, then to `global`; other keys, but characters, do nothing. Ctrl+j
 arrives as LF where Enter arrives as CR, so it starts a new line in every terminal; Shift+Enter does

@@ -13111,7 +13111,7 @@ mod tests {
             (&["j", "f8"], "NORMAL · Dialog"),
             (&["f", "/"], "INSERT · Dialog"),
             (&["f", "j"], "NORMAL · Dialog"),
-            (&["j", "i"], "NORMAL · Viewer"),
+            (&["j", "g", "f"], "NORMAL · Viewer"),
         ];
         for (typed, shown) in cases {
             let mut app = with_files(&["a", "b"]);

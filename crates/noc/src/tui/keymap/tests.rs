@@ -222,6 +222,11 @@ fn normal_mode_takes_characters_as_commands() {
     );
     assert_eq!(typed(FIELD, &["i"]), actions(&[Action::InsertMode]));
     assert_eq!(
+        typed(PANEL, &["i"]),
+        actions(&[Action::Shell]),
+        "Insert mode on the command line"
+    );
+    assert_eq!(
         typed(FIELD, &["j"]),
         actions(&[Action::Down]),
         "the dialog's"
@@ -1018,6 +1023,10 @@ fn key_names_the_first_sequence_that_does_the_action() {
     let keymap = Keymap::default();
     assert_eq!(
         keymap.key(Context::Panel, Action::View).as_deref(),
+        Some("g f")
+    );
+    assert_eq!(
+        keymap.key(Context::Panel, Action::Shell).as_deref(),
         Some("i")
     );
     assert_eq!(

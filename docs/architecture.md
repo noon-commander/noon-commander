@@ -1132,7 +1132,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   'scroll'; unlike vim's, every key down stops with the end at the bottom, where a dimmed line
   across the text, `──── EOF ────`, follows the last line (`noc-scroll` has
   the steps of both and the scroll bar, [ADR 0023](adr/0023-paging-stops-at-the-end.md)); `g g`/`G`
-  and Home/End the ends, and F3, F10, `q`, `i`, or Esc to close; F1 or `g ?` shows the help over
+  and Home/End the ends, and F3, F10, `q`, or Esc to close; F1 or `g ?` shows the help over
   it.
 - **F4 edits** the file under the cursor in `$VISUAL`, else `$EDITOR`, else `vi`, split at
   spaces (`code -w`), without a shell. A local file is edited where it is. A remote one is
@@ -1235,10 +1235,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   panel; mc keeps the sort order on its side. Ctrl+w h and Ctrl+w l make the panel drawn on that
   side active, whichever it is after Ctrl+w x.
 - **Quick search.** `/` starts quick search, typed as vim's search, in Insert mode, and `?` starts
-  it up the rows; typing in a panel in Normal mode does nothing but its commands, and `!` and `:`
-  open the [command line](#command-line-of--and-). As vim's search, it looks from the row after the
-  one where it started, round, or after `?` up from the row before it, round to the bottom, and a
-  count before `/` or `?` goes to the match of that number (`2/`). It matches in the
+  it up the rows; typing in a panel in Normal mode does nothing but its commands, and `i`, `!`, and
+  `:` open the [command line](#command-line-of--and-). As vim's search, it looks from the row after
+  the one where it started, round, or after `?` up from the row before it, round to the bottom, and
+  a count before `/` or `?` goes to the match of that number (`2/`). It matches in the
   [search mode](#search-modes), which Ctrl+s switches while it runs. As fzf, the default, the cursor
   jumps to the best match as fzf ranks it, the first after where it started of those as good, and
   Ctrl+g to the next best, round to the best; in the plain and regex modes, to the first name after
@@ -1282,9 +1282,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   listing. Going up puts the cursor on the directory just left. A panel shows a
   [`Location`](#locations), always a directory.
 - <a id="command-line-of--and-"></a>**Command line of `!` and `:`** ([ADR
-  0019](adr/0019-shell-command-line.md)). In a local panel, `!` opens a line above the F-key bar for
-  a shell command, after a prompt as a shell's: `alice@mac:~/src $`, with `~` for home, and `#`
-  where the user is root. It takes a third of the width at most: the middle of the directory goes
+  0019](adr/0019-shell-command-line.md)). In a local panel, `i` or `!` opens a line above the F-key
+  bar for a shell command, after a prompt as a shell's: `alice@mac:~/src $`, with `~` for home, and
+  `#` where the user is root. It takes a third of the width at most: the middle of the directory goes
   first, then the user, then the directory. `:` opens it for commands of Noon Commander, of which
   `!command` is the only one so far. In a panel on a connected host the prompt has the user that
   `ssh -G` gave and the host's label or alias, `deploy@web:/var/www $`. The

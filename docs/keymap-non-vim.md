@@ -23,8 +23,8 @@ command is in a list of files:
   list too; `v` and `V` select rows.
 - Commands of lines act on rows: `y y` and `Y` copy, as vim's yank lines; `d d` removes a row of
   a list, as vim's deletes a line; `K` shows the whole name under the cursor, as vim's looks up
-  what is under it; `g x` opens it; `!` opens the command line for a shell command, as vim's
-  starts `:.!`; `Z Z` quits.
+  what is under it; `g x` opens it; `g f` views it, as vim's goes to the file whose name is under
+  the cursor; `!` opens the command line for a shell command, as vim's starts `:.!`; `Z Z` quits.
 - Ctrl+w acts on the panels as vim's on windows: Ctrl+w f opens the directory under the cursor in
   the other panel, as vim's opens the file under it in a new window, and Ctrl+w v shows this
   directory there, as vim's splits the window on the same file.
@@ -125,9 +125,10 @@ not:
 | g +<br>g -<br>g \* | `select`<br>`unselect`<br>`invert_marks` | mc | g + (mc)<br>g - (mc)<br>g \* (mc) | Same | mc's +, -, and \*, under g: alone they are vim's line motions and search, which stay unbound rather than mark where a vim user moves. vim's g + and g - go through its undo tree and g \* searches for the word under the cursor, none of which a listing has ([ADR 0022](adr/0022-vim-modes.md)). |
 | Shift+F7 | `next_match` | mc, Far | n (vim) | Same | Their key to search again. |
 | f /<br>f f | `find_file`<br>`find_names` | noc | f / (noc)<br>f f (noc) | Same | Group `f`: search the files below for text, / as quick search's `/` ([ADR 0027](adr/0027-search-of-a-whole-tree.md)), or find them by name, in the Files and dirs mode of the same dialog, f f as telescope's `<leader>ff` finds files ([ADR 0029](adr/0029-files-and-directories-with-fd.md)). |
+| i | `shell` | noc | i (noc); ! (vim) | Same | Open the command line for a shell command, in Insert mode, as typing in mc's panels goes into its command line. vim's i starts Insert mode, which a listing has not; this i starts it where there is text to type. |
 | g z | `jump` | noc | g z (noc) | Same | z for zoxide, whose command is z. vim binds no g z. |
 | g d | `quick_cd` | noc | g d (noc) | Same | d for directory: go to one typed as for cd. vim's g d goes to a declaration, which a listing has not. |
-| i<br>F3 | `view` | ranger, mc | i (ranger) | Same | ranger views with i, and mc with F3; each closes the viewer too. vim's i starts Insert mode, which a listing has not. |
+| F3 | `view` | mc | g f (vim) | Same | mc's key to view. |
 | e<br>F4 | `edit` | noc, mc | e (noc) | Same | e for edit, as ranger's E; F4 is mc's. vim's e goes to the end of a word. |
 | F5 | `copy` | mc | Y, y y (vim) | Same | mc's key to copy. |
 | x<br>F6 | `move` | yazi, mc | x (yazi) | Same | yazi cuts with x to move; F6 is mc's. vim's x deletes the character under the cursor into a register. |
@@ -200,7 +201,7 @@ not:
 | b<br>Space<br>f<br>u<br>d | `window_up`<br>`window_down`<br>`window_down`<br>`half_page_up`<br>`half_page_down` | less | b (less)<br>Space, f (less)<br>Space, f (less)<br>Ctrl+u (vim); u (less)<br>Ctrl+d (vim); d (less) | Same | As in the help. |
 | F2 | `toggle_wrap` | mc, Far | — | Same | Their key to wrap long lines, or cut them. |
 | g ?<br>F1 | `help` | noc, mc | g ? (noc) | Same | As in the panels. |
-| q<br>i<br>F3<br>F10 | `quit` | less, ranger, mc | Esc, Ctrl+c (vim); q (less); i (ranger) | Same | q quits less, mc's viewer, and ranger's pager; vim's q records a macro. i and F3 close the viewer they open, as i opens and closes ranger's pager. F10 is mc's. |
+| q<br>F3<br>F10 | `quit` | less, mc | Esc, Ctrl+c (vim); q (less) | Same | q quits less, mc's viewer, and ranger's pager; vim's q records a macro. F3 and F10 close mc's viewer. |
 
 ## Lists (`list`, Normal mode)
 

@@ -469,8 +469,8 @@ pub(super) const PRESET: Preset = &[
     // What the windows that list items to choose from share: the location menu, the tab menu,
     // the zoxide window, the workspaces, the command history, and the list of the key hints
     // fall back to it. They open with the filter taking the keys, in Insert mode, where Esc goes
-    // back to the list and `/` types in the filter again. Ctrl+s switches how the filter matches,
-    // in either mode.
+    // back to the list and `/` or `i` types in the filter again, as `i` starts Insert mode in a
+    // text field. Ctrl+s switches how the filter matches, in either mode.
     (
         Mode::Normal,
         Context::List,
@@ -483,7 +483,7 @@ pub(super) const PRESET: Preset = &[
             (Action::HalfPageDown, &["ctrl-d"]),
             (Action::Home, &["g g", "home"]),
             (Action::End, &["shift-g", "end"]),
-            (Action::QuickSearch, &["/"]),
+            (Action::QuickSearch, &["/", "i"]),
             (Action::SearchMode, &["ctrl-s"]),
             (Action::ShowFull, &["shift-k"]),
             (Action::Confirm, &["enter", "ctrl-m"]),

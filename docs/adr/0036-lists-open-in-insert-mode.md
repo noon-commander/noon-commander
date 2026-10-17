@@ -24,10 +24,11 @@ pickers of nvim open with the prompt taking the keys.
   keys, Enter, Ctrl+s, Ctrl+c, and F10 keep working, as do the F-keys a window binds in Insert
   mode.
 - **Esc goes back to the rows**, in Normal mode, with the filter kept; Esc there closes the
-  window. `/` types in the filter again. The keys of Normal mode (`j`, `k`, `g g`, `G`, counts,
+  window. `/` types in the filter again, and so does `i`, as it starts Insert mode in a text
+  field. The keys of Normal mode (`j`, `k`, `g g`, `G`, counts,
   `K`, `q`, `d d`, and the letters of a window, such as `a` and `r` in the Workspaces window or
   `R` in the location menu) wait for Esc.
-- `Picker::new` starts filtering; the keymap does not change.
+- `Picker::new` starts filtering; the keymap adds `i` to `/` in the lists' Normal mode.
 
 ## Consequences
 

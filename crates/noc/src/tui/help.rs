@@ -1456,7 +1456,7 @@ mod tests {
         assert!(has("Shift+Tab, Ctrl+p, Up", &fl!("help-complete-prev")));
         assert!(has("Ctrl+y", "Keep the match, and close the list"));
         assert!(has("Ctrl+e", &fl!("help-complete-close")));
-        assert!(has("/", &fl!("help-list-filter")));
+        assert!(has("/, i", &fl!("help-list-filter")));
         // One key, three meanings, by mode and context.
         let ctrl_u: Vec<&str> = all_entries(&help)
             .filter_map(|entry| match entry {

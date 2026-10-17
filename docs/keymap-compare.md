@@ -930,13 +930,14 @@ menu, the tab menu, the zoxide window, the workspaces, the command history, and 
 key hints fall back to it, then to `global`, and their sections list only the keys they add.
 Ctrl+s switches how the filter matches, in the window it is pressed in, until it closes, as in
 quick search.
-Keys that nothing binds do nothing: no digit or letter picks an item. The rows scroll as the
-panels' do, as vim's window, headings among them. `/` types in the filter, or the keywords of the
-zoxide window, in Insert mode again, and Esc there comes back with the filter kept. Keys never go
-to it alone; the help lists its keys with each of those windows, with what Enter takes there. The mc
-column has the keys of mc's lists, such as its histories and its hotlist; the far column, those of
-Far's menus; the yazi column, those of its pick window, which asks for the program to open files
-with. None of them has modes: their keys are here, not under Insert mode.
+Keys that nothing binds do nothing: no digit or letter picks an item. The rows scroll as the panels'
+do, as vim's window, headings among them. `/` or `i` types in the filter, or the keywords of the
+zoxide window, in Insert mode again, as `i` starts Insert mode in a text field, and Esc there comes
+back with the filter kept. Keys never go to it alone; the help lists its keys with each of those
+windows, with what Enter takes there. The mc column has the keys of mc's lists, such as its
+histories and its hotlist; the far column, those of Far's menus; the yazi column, those of its pick
+window, which asks for the program to open files with. None of them has modes: their keys are here,
+not under Insert mode.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -948,7 +949,7 @@ with. None of them has modes: their keys are here, not under Insert mode.
 | Half a page down | `half_page_down` | ⏳ | Ctrl+d | — | — | — | — |
 | First item | `home` | ⏳ | g g<br>Home | Home<br>A1<br>Alt+< | — | — | — |
 | Last item | `end` | ⏳ | G<br>End | End<br>C1<br>Alt+> | — | — | — |
-| Type in the filter again, in Insert mode | `quick_search` | ⏳ | / | — | Ctrl+Alt+f<br>RightAlt | — | — |
+| Type in the filter again, in Insert mode | `quick_search` | ⏳ | /<br>i | — | Ctrl+Alt+f<br>RightAlt | — | — |
 | Match the filter the next way: as it is, as fzf does, or as a regular expression | `search_mode` | ⏳ | Ctrl+s | — | — | — | — |
 | Show the whole row under the cursor under the rows, until asked again | `show_full` | ⏳ | K | — | — | — | — |
 | Take the item, as the window's section says | `confirm` | ⏳ | Enter<br>Ctrl+m | Enter | Enter | Enter | — |
@@ -957,8 +958,8 @@ with. None of them has modes: their keys are here, not under Insert mode.
 
 ## Lists (`list`, Insert mode)
 
-The filter takes text, in Insert mode, as every list opens and after `/`: characters are text,
-and the windows fall back to `list`, then to `input`, whose keys edit the filter, then to
+The filter takes text, in Insert mode, as every list opens and after `/` or `i`: characters are
+text, and the windows fall back to `list`, then to `input`, whose keys edit the filter, then to
 `global`. Home and End go to the start and the end of the filter here, and to the first and the
 last item in Normal mode. Ctrl+r types the text of a register, as in a text field. Esc goes back
 to the rows with the filter kept, and Ctrl+c closes the window. mc, Far, and yazi have no modes in
@@ -998,8 +999,8 @@ Far's menus, its drive menu among them.
 
 ## Location menu (`location_menu`, Insert mode)
 
-As it opens, and after `/`, its filter takes text. It falls back to `list`, then to `input`, then
-to `global`; F4 and F8 still edit and disconnect the host under the cursor.
+As it opens, and after `/` or `i`, its filter takes text. It falls back to `list`, then to `input`,
+then to `global`; F4 and F8 still edit and disconnect the host under the cursor.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -1020,8 +1021,8 @@ Far, yazi, and ranger have no menu of tabs.
 
 ## Tab menu (`tab_menu`, Insert mode)
 
-As it opens, and after `/`, its filter takes text. It falls back to `list`, then to `input`, then
-to `global`.
+As it opens, and after `/` or `i`, its filter takes text. It falls back to `list`, then to `input`,
+then to `global`.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -1030,8 +1031,8 @@ to `global`.
 ## zoxide window (`jump`, Normal mode)
 
 g z: the directories that zoxide ranks. It opens in Insert mode, as every list does, its keywords
-taking text, as z takes them in a shell; Esc goes to the rows, in Normal mode, where `/` types
-again and Esc closes it. It binds no keys of its own, in either mode: it falls back to `list`,
+taking text, as z takes them in a shell; Esc goes to the rows, in Normal mode, where `/` or `i`
+types again and Esc closes it. It binds no keys of its own, in either mode: it falls back to `list`,
 whose Enter opens the directory in the active panel, and, while the keywords take text, to `input`
 too.
 
@@ -1050,8 +1051,8 @@ rename and delete files.
 
 ## Workspaces window (`workspaces`, Insert mode)
 
-As it opens, and after `/`, its filter takes text. It falls back to `list`, then to `input`, then
-to `global`; F6 and F8 still rename and delete the workspace under the cursor.
+As it opens, and after `/` or `i`, its filter takes text. It falls back to `list`, then to `input`,
+then to `global`; F6 and F8 still rename and delete the workspace under the cursor.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -1176,8 +1177,8 @@ are those of its history menus.
 
 ## Command history (`command_history`, Insert mode)
 
-As it opens, and after `/`, its filter takes text. It falls back to `list`, then to `input`, then
-to `global`; Tab and F8 still switch the hosts and remove the command.
+As it opens, and after `/` or `i`, its filter takes text. It falls back to `list`, then to `input`,
+then to `global`; Tab and F8 still switch the hosts and remove the command.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |

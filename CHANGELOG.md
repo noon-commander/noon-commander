@@ -137,6 +137,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ([ADR 0036](docs/adr/0036-lists-open-in-insert-mode.md)). The filter, and the keywords of the
   zoxide window, look like the text fields of dialogs: the colors of a field from the prompt to
   the right edge.
+- Fewer lines in the lists: the line under the filter and the one over what `K` shows join the
+  frame (`╟───╢`), as the line over the buttons of a dialog does, and the headings of the location
+  menu are their names alone, in the color of titles, without a line.
 - Messages with a count have plural forms for each: deleting, copying, moving, and checksums of
   several entries, the limit of the search of a tree, and the sizes in the question about a taken
   name; a translation gets the number itself, never `1` written out. The units of sizes, the marks

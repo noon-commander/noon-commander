@@ -10,9 +10,8 @@ use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::text::{Line, Span};
 
-use super::cells;
-use super::dialog::{Colors, Field, draw_box, frame_around, right_frame};
-use super::glyphs;
+use super::cells::{self, Align, Cut};
+use super::dialog::{Colors, Field, draw_box, draw_separator, frame_around, right_frame};
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::{Drawn, Pointer};
 use super::scroll::Window;
@@ -493,10 +492,7 @@ impl Picker {
         }
         if below > 0 {
             let top = inner.height.saturating_sub(below);
-            frame.render_widget(
-                Line::styled(glyphs::LINE.repeat(width), theme.dialog),
-                line(top),
-            );
+            draw_separator(frame, inner, inner.y + top, colors, theme);
             let footer: Vec<Line<'static>> = match full {
                 Some(full) => {
                     let styles = (theme.dialog, theme.truncated_dialog);
@@ -535,6 +531,7 @@ impl Picker {
 
     /// The filter, a text field in the colors of those of dialogs, with its cursor while it
     /// takes text, and `note` at the right, on the first line of `inner`; a line under them.
+    /// The line joins the frame, as the one over the buttons of a dialog does.
     fn draw_filter(&self, frame: &mut Frame<'_>, inner: Rect, theme: &Theme, note: Option<&str>) {
         let width = usize::from(inner.width);
         let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
@@ -559,18 +556,22 @@ impl Picker {
                 inner.y,
             ));
         }
-        frame.render_widget(
-            Line::styled(glyphs::LINE.repeat(width), theme.dialog),
-            line(1),
-        );
+        draw_separator(frame, inner, inner.y + 1, Colors::of(theme, false), theme);
     }
 }
 
-/// A heading over the rows after it, `width` cells across, on a line.
+/// A heading over the rows after it, `width` cells across: its text alone, in the color of
+/// titles, so that no line but those that join the frame crosses the window.
 fn heading_line(heading: &str, width: usize, theme: &Theme) -> Line<'static> {
-    let heading = format!("{} {heading} ", glyphs::LINE);
-    let rest = glyphs::LINE.repeat(width.saturating_sub(cells::width(&heading)));
-    Line::styled(format!("{heading}{rest}"), theme.dialog)
+    let styles = (theme.dialog_title, theme.truncated_dialog);
+    cells::fitted(
+        heading,
+        width,
+        (Align::Left, Cut::End),
+        styles,
+        theme.glyphs.marks,
+    )
+    .style(theme.dialog)
 }
 
 #[cfg(test)]
@@ -681,6 +682,22 @@ mod tests {
         press(&mut picker, Action::NormalMode);
         press(&mut picker, Action::HalfPageDown);
         assert_eq!(press(&mut picker, Action::Confirm), Pick::Chosen(1));
+    }
+
+    #[test]
+    fn a_heading_is_its_text_in_the_color_of_titles_without_a_line() {
+        let theme = Theme::terminal();
+        let line = heading_line("Mounts", 12, &theme);
+        let text: String = line
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect();
+        assert_eq!(text.trim_end(), "Mounts");
+        assert!(!text.contains('─'), "{text}");
+        assert_eq!(line.spans[0].style, theme.dialog_title);
+        let cut = heading_line("Mounts", 4, &theme);
+        assert_eq!(cut.width(), 4, "cut to the width");
     }
 
     #[test]

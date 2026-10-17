@@ -188,13 +188,13 @@ grouped under headings:
 ```text
  ╔════════════════════ Left ════════════════════╗
  ║ Filter:                                      ║
- ║ ──────────────────────────────────────────── ║
- ║ ─ Favorites ──────────────────────────────── ║
+ ╟──────────────────────────────────────────────╢
+ ║ Favorites                                    ║
  ║ ~ Home                                  212G ║
- ║ ─ Mounts ─────────────────────────────────── ║
+ ║ Mounts                                       ║
  ║ + Macintosh HD                          212G ║
  ║ + USB                                    12G ║
- ║ ─ SFTP ───────────────────────────────────── ║
+ ║ SFTP                                         ║
  ║ ● Prod                       deploy@10.0.0.5 ║
  ║ ○ db                                         ║
  ║ ○ staging                    ubuntu@stg:2222 ║
@@ -518,8 +518,10 @@ goes to the filter, in Insert mode. There are no digit hotkeys.
 - All but the zoxide window share `tui/picker.rs`: the filter, a text field with a cursor
   (`dialog::Field`), drawn in the colors of the fields of dialogs after its prompt, as the
   keywords of the zoxide window are (`search_mode::Mark::render_field`), which matches in the
-  [search mode](#search-modes); the cursor, scrolling,
-  the mouse, and the box, which the menus draw over their panel and the windows over both. Each
+  [search mode](#search-modes); the cursor, scrolling, the mouse, and the box, which the menus
+  draw over their panel and the windows over both. The only lines across a list are under the
+  filter and over what `K` shows, and they join the frame (`╟───╢`) as the line over the buttons
+  of a dialog does; a heading is its text alone, in the color of titles. Each
   holds its own rows, says what the filter finds them by, and draws them. A row may show only
   while the filter is empty, as the rows of more in the location menu do, or only while it has
   text, as the places behind them do.

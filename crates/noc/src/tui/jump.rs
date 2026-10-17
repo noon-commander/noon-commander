@@ -16,8 +16,7 @@ use ratatui::layout::{Position, Rect};
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Cut};
-use super::dialog::{Colors, Field, draw_box, frame_around, right_frame};
-use super::glyphs;
+use super::dialog::{Colors, Field, draw_box, draw_separator, frame_around, right_frame};
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::{Drawn, Pointer};
 use super::picker::{FULL_ROWS, Whole};
@@ -370,10 +369,7 @@ impl JumpMenu {
         let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
 
         self.draw_keywords(frame, line(0), theme);
-        frame.render_widget(
-            Line::styled(glyphs::LINE.repeat(width), theme.dialog),
-            line(1),
-        );
+        draw_separator(frame, inner, inner.y + 1, colors, theme);
 
         let page = usize::from(inner.height.saturating_sub(2 + below)).max(1);
         let message = if !self.loaded {
@@ -447,15 +443,12 @@ impl JumpMenu {
     }
 }
 
-/// `path`, whole, in the last lines of `inner`, below a line across it.
+/// `path`, whole, in the last lines of `inner`, below a line across it that joins the frame.
 fn draw_whole(frame: &mut Frame<'_>, inner: Rect, path: &str, theme: &Theme) {
     let width = usize::from(inner.width);
     let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
     let top = inner.height.saturating_sub(FULL_ROWS + 1);
-    frame.render_widget(
-        Line::styled(glyphs::LINE.repeat(width), theme.dialog),
-        line(top),
-    );
+    draw_separator(frame, inner, inner.y + top, Colors::of(theme, false), theme);
     let styles = (theme.dialog, theme.truncated_dialog);
     let size = (width, usize::from(FULL_ROWS));
     let rows = cells::whole(path, size, Some('/'), styles, theme.glyphs.marks);

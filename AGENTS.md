@@ -71,6 +71,7 @@ client; the system `ssh` is the single source of truth for connections and auth.
 | --- | --- |
 | `crates/noc` | Binary and UI: CLI, bootstrap, askpass entry point, ratatui app, keymap, themes, icons, i18n |
 | `crates/noc-config` | XDG paths, TOML schemas, defaults, writing config files |
+| `crates/noc-locale` | Formats of the region: numbers, dates, times, the order of names (ADR 0035) |
 | `crates/noc-ssh` | Host discovery, `ssh -G`, argument validation, forwarding policy, ControlMaster, SFTP channels, askpass bridge |
 | `crates/noc-vfs` | `Vfs` trait and backends (local, SFTP), mounted volumes |
 | `crates/noc-ops` | Job engine: copy, move, delete, mkdir, checksums; progress, cancellation, conflicts |
@@ -80,10 +81,10 @@ client; the system `ssh` is the single source of truth for connections and auth.
 | `crates/noc-scroll` | Paging the help and the viewer: how far the page keys go, the scroll bar |
 | `crates/noc-viewer` | The F3 viewer: reading through the `Vfs`, scrolling, wrapping; its own Fluent text |
 
-- `noc-config`, `noc-ssh`, `noc-vfs`, `noc-text`, `noc-scroll`, `noc-pattern` depend on no
-  other `noc-*` crate.
+- `noc-config`, `noc-ssh`, `noc-vfs`, `noc-text`, `noc-scroll`, `noc-pattern`, `noc-locale`
+  depend on no other `noc-*` crate.
 - `noc-tools` → `noc-pattern`. `noc-ops` → `noc-vfs`. `noc-viewer` → `noc-vfs`, `noc-text`,
-  `noc-scroll`. The binary → all.
+  `noc-scroll`, `noc-locale`. The binary → all.
 - Library crates: no UI code, no user-facing text. Exceptions: `noc-viewer`, which knows nothing
   of the keymap, theme, or app (ADR 0015); `noc-scroll`, which draws the scroll bar but has no
   text (ADR 0023).
@@ -156,6 +157,12 @@ Paths come from `crates/noc-config/src/paths.rs`.
 - Fluent files: `crates/noc/i18n/`, viewer's own in `crates/noc-viewer/i18n/`. `en-US` only.
 - A crate with its own text has its own loader; `noc::i18n::select` selects its language too.
 - Library errors are typed; the UI turns them into messages.
+- Numbers, dates, and times on screen go through `noc_locale::Formats` (ADR 0035), never
+  `format!`; pass numbers to `fl!` as numbers, so plural forms and the formatter see them. Every
+  number is grouped, file sizes too. A time always shows its date, with the year, and its time of
+  day, in digits (`Formats::date_time`).
+- No code for one language or region: no tables of a layout, no special cases, no tags but in
+  settings. Formats come from the system or CLDR; tests use `iso` and patterns of their own.
 - clap `--help` and logs stay English, outside Fluent.
 
 ### Look

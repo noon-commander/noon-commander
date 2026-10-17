@@ -15,13 +15,15 @@ crates/
 ├── noc/           bin + UI: CLI, bootstrap, askpass entry point, ratatui app,
 │                  keymap, themes, icons, i18n
 ├── noc-config/    XDG paths, TOML schema, defaults
+├── noc-locale/    formats of the region: numbers, dates, times, the order of names
 ├── noc-ssh/       host discovery, ssh -G, argument validation, forwarding policy,
 │                  ControlMaster, SFTP channels, askpass bridge
 ├── noc-vfs/       Vfs trait: local and SFTP backends, mounted volumes
 ├── noc-ops/       job engine: copy, move, rename, delete, mkdir, checksums; progress, cancellation, conflicts
 ├── noc-tools/     external programs other than ssh: zoxide, ripgrep, fd, the editor, the opener, the shell
 ├── noc-text/      terminal-safe text: sanitizing, widths in cells, fitting, wrapping
-├── noc-pattern/   patterns typed to match names: regular expressions or text, smart case
+├── noc-pattern/   patterns typed to match names: regular expressions or text, smart case,
+│                  one Unicode form, case folding
 ├── noc-scroll/    paging text that ends: how far the page keys go, the scroll bar
 └── noc-viewer/    the F3 viewer: reading through the Vfs, scrolling, wrapping; its own text
 ```
@@ -29,10 +31,11 @@ crates/
 Dependencies point one way, toward the binary:
 
 ```text
-noc-config  noc-ssh  noc-text  noc-vfs  noc-scroll  noc-pattern  no other noc-* crate
+noc-config  noc-ssh  noc-text  noc-vfs  noc-scroll  noc-pattern  noc-locale
+            no other noc-* crate
 noc-tools   → noc-pattern
 noc-ops     → noc-vfs
-noc-viewer  → noc-vfs, noc-text, noc-scroll
+noc-viewer  → noc-vfs, noc-text, noc-scroll, noc-locale
 noc         → all of them
 ```
 
@@ -659,11 +662,13 @@ settings window: there is no OK or Cancel, and every change takes effect as it i
   (see [Text fields](#ui)); what Visual mode selects shows in reverse. A text field takes effect
   when the cursor leaves it (Up, Down, Tab, `g g`, `G`) or on Enter, and as the dialog closes. A
   count before `j` or `k` moves as many rows, past the text fields too. Its value is checked first:
-  the language tag, a whole number of parallel jobs, a program for ssh, and the extra ssh arguments,
+  the language tag, the formats (`auto`, `iso`, or a tag), a whole number of parallel jobs, a
+  program for ssh, and the extra ssh arguments,
   through the same validator as at start ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)).
   An invalid one keeps the cursor in the field; Esc puts back what it had and closes the dialog.
 - A change is used at once, but the language, which the next start reads: the interface
-  redraws, copies and the job queue follow `[transfer]`, and the settings in `Context`, which
+  redraws, new formats are made in a task and the panels sort again, copies and the job queue
+  follow `[transfer]`, and the settings in `Context`, which
   sit behind a lock, change for new connections, `ssh -G`, and listings, so the location menu
   lists the volumes and hosts with them the next time it opens. Connections that are open stay
   as they are.
@@ -876,6 +881,8 @@ hide = ["/Volumes/Backup*"]      # mount points to leave out of the location men
 
 [ui]
 language = "auto"                # or a language tag such as "en-US"; others fall back to it
+formats = "auto"                 # dates, numbers, order of names: the system's; "iso"; a tag
+natural_sort = true              # names as the language orders them, file2 before file10
 theme = "mc-classic"             # "terminal", "noon-dark", "noon-light", "catppuccin-mocha", …
 borders = "double"               # frames of panels and dialogs: ═ ║ ╔; "single": ─ │ ┌
 icons = true                     # Nerd Font icons; false: mc's markers (/ * @ ~ …)
@@ -981,8 +988,12 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   others (DECSCUSR), and the terminal's own shape comes back whenever another program gets the
   terminal, and on quitting.
 - **Panels.** Each panel lists a directory with `..` first (but in a `/`), then directories,
-  then files, by name ignoring case; columns are name, size, and modification time (local time,
-  `ls -l` style), and narrow panels drop the time, then the size. Each panel has its own sort order:
+  then files, by name as the language of the formats orders names, with the numbers in them by
+  value (`ui.natural_sort`; off, by their characters ignoring case); columns are name, size, and
+  modification time (local time: the date, with its year, and the time, in the formats of the
+  region, as `12.10.26 05:05`), and narrow panels drop the time, then the size. The size column
+  is ten cells, as in Far: the bytes grouped as the region groups numbers, then K, M, G, …; the
+  time column is as wide as the longest time of the formats. Each panel has its own sort order:
   name, extension, modification time, or size (`o n`, `o e`, `o m`, `o s`);
   time and size start newest and largest first, the same key again reverses, ties go by name,
   and an arrow in the header marks the order. Directories stay first. Names that start with a
@@ -1559,7 +1570,20 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 - **Text.** Fluent files under `crates/noc/i18n/`, embedded in the binary and read with
   `fl!` from `i18n-embed-fl`, which checks message IDs against `en-US` at compile time; only
   `en-US` for now. `ui.language = "auto"` follows the system locale (through `sys-locale`).
-  Arguments are inserted without Unicode isolation marks, which terminals would show.
+  Arguments are inserted without Unicode isolation marks, which terminals would show. Numbers
+  are passed to messages as numbers, so that plural forms see them, and written by
+  `noc_locale::fluent`, the formatter of every bundle, in the formats of the region. A prompt
+  with what is typed in it (`Search: …`) is split where its message puts the typed text
+  (`search_mode::Prompt`), so a translation may put it anywhere.
+- **Formats of the region** ([ADR 0035](adr/0035-formats-of-the-region.md)). `noc-locale` writes
+  numbers, dates, and times, and compares names, as `ui.formats` says: `auto` takes each part
+  from `LC_ALL`, its own `LC_TIME`, `LC_NUMERIC`, or `LC_COLLATE`, then, on macOS, System
+  Settings through Foundation's formatters, which apply the user's own date format, separators,
+  and 24-hour time, then `LANG`; `iso` is neutral (`2025-10-17 14:05`, `1234.5`); a language tag
+  names a region's formats in CLDR, through ICU4X. A time shows its date, with the year, and its
+  time of day, in digits; every number is grouped. The formats in use are
+  global (`noc_locale::current`); a change of the setting makes new ones in a task
+  (`Effect::Formats`) and sorts the panels again. Help → About shows where they come from.
 - **Themes.** Built in: `mc-classic`, the colors of mc's default skin (blue panels, a cyan
   cursor that replaces the row's colors, a dark gray one under them in the inactive panel,
   yellow headers; directories white, executables green, broken links red, devices magenta; gray

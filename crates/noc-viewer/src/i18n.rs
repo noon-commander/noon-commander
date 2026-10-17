@@ -21,10 +21,12 @@ pub(crate) static LOADER: LazyLock<FluentLanguageLoader> = LazyLock::new(|| {
     loader
 });
 
-/// Fluent wraps arguments in Unicode bidi isolation marks, which a terminal shows as garbage.
-/// The setting applies to loaded bundles only, so it is renewed after every load.
+/// Fluent wraps arguments in Unicode bidi isolation marks, which a terminal shows as garbage,
+/// and writes numbers as Rust does; they take the formats of the region instead. Both settings
+/// apply to loaded bundles only, so they are renewed after every load.
 fn plain_arguments(loader: &FluentLanguageLoader) {
     loader.set_use_isolating(false);
+    loader.with_bundles_mut(|bundle| bundle.set_formatter(Some(noc_locale::fluent)));
 }
 
 /// Selects the language of the viewer's text from `requested`, the most wanted first, as the
@@ -60,7 +62,7 @@ mod tests {
     #[test]
     fn arguments_have_no_isolation_marks() {
         assert_eq!(
-            fl!("viewer-position", line = "1", lines = "20", percent = "25"),
+            fl!("viewer-position", line = 1, lines = 20, percent = 25),
             "1/20 25%"
         );
     }

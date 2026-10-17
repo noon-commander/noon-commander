@@ -22,7 +22,7 @@ use super::keymap::{Action, Mode, Resolved};
 use super::mouse::{Drawn, Pointer};
 use super::picker::{FULL_ROWS, Whole};
 use super::scroll::Window;
-use super::search_mode::{self, Matcher};
+use super::search_mode::{self, Matcher, Prompt};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -316,14 +316,11 @@ impl JumpMenu {
     fn draw_keywords(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let mark = search_mode::marked(self.mode, self.invalid.is_some(), theme.dialog, theme);
         let room = usize::from(area.width);
-        let prefix = fl!("jump-keywords", mode = mark.glyph, text = String::new());
-        let (shown, column) = self
-            .keywords
-            .visible(room.saturating_sub(cells::width(&prefix)));
-        let column = u16::try_from(cells::width(&prefix) + column).unwrap_or(u16::MAX);
-        let text = fl!("jump-keywords", mode = mark.glyph, text = shown);
+        let prompt = Prompt::new(|text| fl!("jump-keywords", mode = mark.glyph, text = text));
+        let (shown, column) = self.keywords.visible(room.saturating_sub(prompt.width()));
+        let column = u16::try_from(cells::width(&prompt.before) + column).unwrap_or(u16::MAX);
         let prompt = cells::fit_spans(
-            mark.spans(&text, &prefix, theme.dialog),
+            mark.spans(&prompt, &shown, theme.dialog),
             room,
             (theme.dialog, theme.truncated_dialog),
             theme.glyphs.marks,
@@ -415,11 +412,16 @@ impl JumpMenu {
         let position = (self.rows.len(), page, offset);
         let bar = scrollbar::render(frame, bar, position, theme.dialog, theme.glyphs.scroll_bar);
         let found: Vec<&Scored> = self.rows.iter().map(|&index| &self.found[index]).collect();
+        let formats = noc_locale::current();
         let scores: Vec<String> = found
             .iter()
-            .map(|scored| format!("{:.1}", scored.score))
+            .map(|scored| formats.decimal(scored.score, 1, true))
             .collect();
-        let score_width = scores.iter().map(String::len).max().unwrap_or(0);
+        let score_width = scores
+            .iter()
+            .map(|score| cells::width(score))
+            .max()
+            .unwrap_or(0);
         // The directory, a space, the score.
         let path_width = width.saturating_sub(score_width + 1);
         for (index, (row, scored)) in found.iter().enumerate().skip(offset).take(page).enumerate() {

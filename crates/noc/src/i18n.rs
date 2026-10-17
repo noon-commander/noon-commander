@@ -21,10 +21,12 @@ pub(crate) static LOADER: LazyLock<FluentLanguageLoader> = LazyLock::new(|| {
     loader
 });
 
-/// Fluent wraps arguments in Unicode bidi isolation marks, which a terminal shows as garbage.
-/// The setting applies to loaded bundles only, so it is renewed after every load.
+/// Fluent wraps arguments in Unicode bidi isolation marks, which a terminal shows as garbage,
+/// and writes numbers as Rust does; they take the formats of the region instead. Both settings
+/// apply to loaded bundles only, so they are renewed after every load.
 fn plain_arguments(loader: &FluentLanguageLoader) {
     loader.set_use_isolating(false);
+    loader.with_bundles_mut(|bundle| bundle.set_formatter(Some(noc_locale::fluent)));
 }
 
 /// Whether `language` is valid for `ui.language`: `auto`, or a language tag such as `en-US`.
@@ -39,6 +41,11 @@ pub(crate) fn select(language: &str) {
     let requested = requested(language);
     select_into(&LOADER, &requested);
     noc_viewer::select_language(&requested);
+}
+
+/// The language of the messages in use, such as `en-US`.
+pub(crate) fn selected() -> String {
+    LOADER.current_language().to_string()
 }
 
 /// The languages `ui.language` asks for, the most wanted first.

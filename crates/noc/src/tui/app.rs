@@ -183,6 +183,8 @@ pub(crate) enum Effect {
     /// Ask a tool what it is, for the About page of the help, and pass it to
     /// [`App::detected`].
     Detect(Tool),
+    /// Make the formats that `ui.formats` names, use them, and tell [`App::formats_changed`].
+    Formats(String),
     /// Ask zoxide for the directories that match `keywords`, without `exclude`, and pass them
     /// to [`App::jumps`].
     ZoxideQuery {
@@ -884,7 +886,9 @@ impl App {
         let show_hidden = ui.show_hidden;
         let panel = || {
             let start = Location::Local(start.to_path_buf());
-            Panel::new(start, home.to_path_buf(), show_hidden)
+            let (mut panel, request) = Panel::new(start, home.to_path_buf(), show_hidden);
+            panel.set_natural_sort(ui.natural_sort);
+            (panel, request)
         };
         let (left, left_request) = panel();
         let (right, right_request) = panel();
@@ -3271,7 +3275,9 @@ impl App {
             let mut tabs = Vec::with_capacity(saved.len());
             let mut first = None;
             for (index, saved) in saved.iter().enumerate() {
-                let (panel, request) = workspaces::restored_panel(saved, &self.home, show_hidden);
+                let (mut panel, request) =
+                    workspaces::restored_panel(saved, &self.home, show_hidden);
+                panel.set_natural_sort(self.config.ui.natural_sort);
                 self.last_tab += 1;
                 let id = PanelId {
                     side,
@@ -3961,6 +3967,13 @@ impl App {
                 panel.set_show_hidden(show);
             }
         }
+        if ui.natural_sort != self.config.ui.natural_sort {
+            let natural = ui.natural_sort;
+            for panel in self.panels_mut() {
+                panel.set_natural_sort(natural);
+            }
+        }
+        let formats = (old.ui.formats != new.ui.formats).then(|| new.ui.formats.clone());
         self.copy_choices.atomic = config.transfer.atomic_upload;
         self.parallel_jobs = config.transfer.parallel_jobs.get();
         self.config = config.clone();
@@ -3981,8 +3994,19 @@ impl App {
                 .filter(|&(_, changed)| changed)
                 .map(|(tool, _)| Effect::Detect(tool)),
         );
+        effects.extend(formats.map(Effect::Formats));
         effects.extend(self.start_queued());
         effects
+    }
+
+    /// Writes dates and numbers, and sorts names, in the formats in use from now on, which
+    /// [`Effect::Formats`] made.
+    pub(crate) fn formats_changed(&mut self) {
+        for panel in self.panels_mut() {
+            panel.sort_again();
+        }
+        self.about.report.formats = Some(crate::about::formats_text(&noc_locale::current()));
+        self.refresh_help();
     }
 
     /// Takes the result of an [`Effect::SaveConfig`].
@@ -5161,19 +5185,14 @@ impl App {
         (new, old): (&Metadata, &Metadata),
         reply: oneshot::Sender<Conflict>,
     ) {
-        let now = SystemTime::now();
-        let size = |metadata: &Metadata| metadata.size.map_or_else(String::new, cells::grouped);
-        let time = |metadata: &Metadata| {
-            cells::mtime(metadata.modified, now, &self.tz)
-                .trim()
-                .to_owned()
-        };
+        let formats = noc_locale::current();
+        let time = |metadata: &Metadata| cells::mtime(metadata.modified, &self.tz, &formats);
         let message = fl!(
             "copy-exists",
             path = location_text(target),
-            new_size = size(new),
+            new_size = new.size,
             new_time = time(new),
-            old_size = size(old),
+            old_size = old.size,
             old_time = time(old)
         );
         let buttons = vec![
@@ -5992,11 +6011,12 @@ impl App {
             files_only: dialog.checked(0),
             case_sensitive: dialog.checked(1),
         };
+        // Names match in either Unicode form, and ignoring case by folding it.
         let fold = |text: &str| {
             if options.case_sensitive {
-                text.to_owned()
+                noc_pattern::nfc(text).into_owned()
             } else {
-                text.to_lowercase()
+                noc_pattern::fold(text).into_owned()
             }
         };
         let pattern = Pattern::new(&fold(&options.pattern));
@@ -6510,12 +6530,7 @@ impl App {
     /// Two panels side by side above the F-key bar; the menu bar of F9 above them with
     /// `ui.menu_bar`, else over their top line while a menu is open. Dates are as of `now`;
     /// windows that open or close grow or shrink as of `at`, with `ui.animations`.
-    pub(crate) fn render(
-        &mut self,
-        frame: &mut Frame<'_>,
-        (now, at): (SystemTime, Instant),
-        tz: &TimeZone,
-    ) {
+    pub(crate) fn render(&mut self, frame: &mut Frame<'_>, at: Instant, tz: &TimeZone) {
         self.spots = Spots::default();
         let always = self.config.ui.menu_bar == MenuBar::Always;
         let bar_height = u16::from(always);
@@ -6550,14 +6565,15 @@ impl App {
             .collect();
         let hosts = |host: &str| states.get(host).cloned().unwrap_or_default();
         let reload_key = self.keymap.key(Context::Panel, Action::Reload);
+        let formats = noc_locale::current();
         let view = View {
             hosts: &hosts,
             decor: self.decor,
             theme: &self.theme,
             reload_key: reload_key.as_deref(),
             tick: self.tick,
-            now,
             tz,
+            formats: &formats,
         };
         let root_theme = self.theme.for_root();
         let root_view = View {
@@ -6845,11 +6861,7 @@ impl App {
         let percent = (ratio / behind.len() as f64 * 100.0).round() as u64;
         let text = format!(
             " {} ",
-            fl!(
-                "jobs-running",
-                count = behind.len(),
-                percent = percent.to_string()
-            )
+            fl!("jobs-running", count = behind.len(), percent = percent)
         );
         // Inside the corner of the right panel's frame.
         let room = usize::from(area.width.saturating_sub(2));
@@ -6942,7 +6954,10 @@ impl App {
                 Some(editor) => editor.selection_size(),
                 None => self.panel(self.active).visual_size(),
             };
-            typed = size.map(|size| size.to_string()).unwrap_or_default();
+            typed = size
+                .and_then(|size| u64::try_from(size).ok())
+                .map(|size| noc_locale::current().integer(size))
+                .unwrap_or_default();
         }
         // As vim's, the last ten cells of what is typed.
         let typed: String = typed
@@ -7556,9 +7571,8 @@ mod tests {
     /// The screen `height` rows tall, with windows as they grow or shrink `at`.
     fn screen_at(app: &mut App, height: u16, at: Instant) -> String {
         let mut terminal = Terminal::new(TestBackend::new(160, height)).unwrap();
-        let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, (now, at), &TimeZone::UTC))
+            .draw(|frame| app.render(frame, at, &TimeZone::UTC))
             .unwrap();
         terminal.backend().to_string()
     }
@@ -8696,9 +8710,8 @@ mod tests {
     /// Draws `app` 160 by 12 and finds where `text` starts on the screen.
     fn find(app: &mut App, text: &str) -> (u16, u16) {
         let mut terminal = Terminal::new(TestBackend::new(160, 12)).unwrap();
-        let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, (now, Instant::now()), &TimeZone::UTC))
+            .draw(|frame| app.render(frame, Instant::now(), &TimeZone::UTC))
             .unwrap();
         let at = super::super::mouse::find(terminal.backend().buffer(), text);
         (at.x, at.y)
@@ -9604,7 +9617,7 @@ mod tests {
         let (_, _, _, cancel) = delete_job(app.handle(action(Action::Confirm)));
         app.handle(action(Action::Confirm));
         app.handle(action(Action::Quit));
-        assert!(screen_of(&mut app, 12).contains("A job is still running. Quit and stop it?"));
+        assert!(screen_of(&mut app, 12).contains("1 job is still running. Quit and stop it?"));
         app.handle(action(Action::Left));
         app.handle(action(Action::Confirm));
         assert!(app.quits());
@@ -9713,7 +9726,10 @@ mod tests {
             text.contains("/srv/right/left/a is there already."),
             "{text}"
         );
-        assert!(text.contains("New:      12,345 bytes"), "{text}");
+        assert!(
+            text.contains("New:      12345 bytes, 2023-11-14 19:26"),
+            "{text}"
+        );
         assert!(text.contains("[< No >]"), "{text}");
         app.handle(action(Action::Confirm));
         assert_eq!(answer.try_recv(), Ok(Conflict::Skip));
@@ -10260,9 +10276,8 @@ mod tests {
             reply(Listing::Dir(vec![dir("deeper")])),
         );
         let mut terminal = Terminal::new(TestBackend::new(60, 8)).unwrap();
-        let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, (now, Instant::now()), &TimeZone::UTC))
+            .draw(|frame| app.render(frame, Instant::now(), &TimeZone::UTC))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
@@ -10913,10 +10928,12 @@ mod tests {
             text.contains("Configuration") && !text.contains("OK"),
             "{text}"
         );
-        assert!(
-            app.handle(action(Action::Down)).is_empty(),
-            "nothing changed"
-        );
+        for _ in 0..2 {
+            assert!(
+                app.handle(action(Action::Down)).is_empty(),
+                "nothing changed"
+            );
+        }
         let effects = app.handle(action(Action::Right));
         assert!(app.configuration.is_some(), "it stays open");
         assert_eq!(app.theme, Theme::terminal());
@@ -11527,9 +11544,8 @@ mod tests {
 
         let mut app = loaded();
         let mut terminal = Terminal::new(TestBackend::new(80, 6)).unwrap();
-        let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, (now, Instant::now()), &TimeZone::UTC))
+            .draw(|frame| app.render(frame, Instant::now(), &TimeZone::UTC))
             .unwrap();
         let buffer = terminal.backend().buffer();
         // `10Quit` starts at column 72; its slot runs to the edge.
@@ -12368,9 +12384,8 @@ mod tests {
         answer(&mut app, effects, &Listing::Dir(Vec::new()));
         app.handle(action(Action::NewTab));
         let mut terminal = Terminal::new(TestBackend::new(60, 6)).unwrap();
-        let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, (now, Instant::now()), &TimeZone::UTC))
+            .draw(|frame| app.render(frame, Instant::now(), &TimeZone::UTC))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
@@ -12383,9 +12398,8 @@ mod tests {
         answer(&mut app, effects, &Listing::Dir(vec![dir("docs")]));
         app.handle(action(Action::NewTab));
         let mut terminal = Terminal::new(TestBackend::new(100, 7)).unwrap();
-        let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, (now, Instant::now()), &TimeZone::UTC))
+            .draw(|frame| app.render(frame, Instant::now(), &TimeZone::UTC))
             .unwrap();
         let text = terminal.backend().to_string();
         let top = text.lines().next().unwrap_or_default();
@@ -12423,9 +12437,8 @@ mod tests {
             app.handle(action(Action::PrevTab));
         }
         let mut terminal = Terminal::new(TestBackend::new(80, 4)).unwrap();
-        let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, (now, Instant::now()), &TimeZone::UTC))
+            .draw(|frame| app.render(frame, Instant::now(), &TimeZone::UTC))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
@@ -13064,9 +13077,8 @@ mod tests {
     /// The line of the mode on a screen `width` cells wide, its end trimmed.
     fn mode_line(app: &mut App, width: u16) -> String {
         let mut terminal = Terminal::new(TestBackend::new(width, 9)).unwrap();
-        let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, (now, Instant::now()), &TimeZone::UTC))
+            .draw(|frame| app.render(frame, Instant::now(), &TimeZone::UTC))
             .unwrap();
         let buffer = terminal.backend().buffer();
         let y = buffer.area.height - 2;
@@ -13187,9 +13199,8 @@ mod tests {
     /// Whether a cell of the screen has the background of `style`.
     fn shows_background(app: &mut App, style: Style) -> bool {
         let mut terminal = Terminal::new(TestBackend::new(100, 9)).unwrap();
-        let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         terminal
-            .draw(|frame| app.render(frame, (now, Instant::now()), &TimeZone::UTC))
+            .draw(|frame| app.render(frame, Instant::now(), &TimeZone::UTC))
             .unwrap();
         let buffer = terminal.backend().buffer();
         buffer

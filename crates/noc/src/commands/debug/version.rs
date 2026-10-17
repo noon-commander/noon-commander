@@ -8,16 +8,20 @@ use std::io::{self, IsTerminal as _, Read as _, Write as _};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
+use noc_locale::Formats;
 use noc_tools::editor::Editor;
 use rustix::termios::{OptionalActions, Termios, tcgetattr, tcgetpgrp, tcsetattr};
 
 use crate::about::{
-    Build, Detected, Fact, Keyboard, Report, System, Terminal, editor_command, known,
+    Build, Detected, Fact, Keyboard, Report, System, Terminal, editor_command, formats_text, known,
 };
 
 /// Prints the report, with what zoxide, ripgrep, and fd said they are. Blocks while the
 /// terminal is asked.
-pub(super) fn print((zoxide, ripgrep, fd): (Detected, Detected, Detected)) -> ExitCode {
+pub(super) fn print(
+    (zoxide, ripgrep, fd): (Detected, Detected, Detected),
+    formats: &Formats,
+) -> ExitCode {
     // The terminal is in raw mode while it is asked, so the report is ready before printing.
     let answers = Answers::query();
     let report = Report {
@@ -31,6 +35,8 @@ pub(super) fn print((zoxide, ripgrep, fd): (Detected, Detected, Detected)) -> Ex
         zoxide,
         ripgrep,
         fd,
+        language: Some(crate::i18n::selected()),
+        formats: Some(formats_text(formats)),
         ..Report::new(Build::current())
     };
     let text = text(&report);
@@ -251,6 +257,8 @@ mod tests {
             zoxide: Detected::Found("zoxide 0.9.8".to_owned()),
             ripgrep: Detected::Found("ripgrep 15.2.0".to_owned()),
             fd: Detected::Found("fd 10.5.0".to_owned()),
+            language: Some("en-US".to_owned()),
+            formats: Some("iso".to_owned()),
         };
         insta::assert_snapshot!(text(&report));
         let missing = Report {
@@ -260,7 +268,7 @@ mod tests {
             ..report
         };
         assert!(
-            text(&missing).ends_with(
+            text(&missing).contains(
                 "zoxide       not found\nripgrep      not found\nfd           not found\n"
             ),
             "{}",

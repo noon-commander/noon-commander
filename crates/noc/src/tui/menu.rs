@@ -30,8 +30,6 @@ use crate::i18n::fl;
 
 /// Widest the menu gets, in cells, borders included.
 const WIDTH: u16 = 48;
-/// Cells of the free space of a volume, such as `212G`.
-const FREE_WIDTH: usize = 5;
 /// Places of a group that show while the filter is empty, besides those always shown.
 const SHOWN: usize = 10;
 
@@ -591,8 +589,8 @@ fn key(item: Item<'_>) -> Key {
 fn info(item: Item<'_>, hosts: &dyn Fn(&str) -> HostState) -> String {
     let free = |space: Option<Space>| {
         space.map_or_else(
-            || "?".to_owned(),
-            |space| cells::size(space.available, FREE_WIDTH),
+            || fl!("menu-free-unknown"),
+            |space| super::panel::short_size(space.available),
         )
     };
     match item {

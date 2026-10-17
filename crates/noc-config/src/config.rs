@@ -151,6 +151,13 @@ pub struct UiConfig {
     /// Interface language as a language tag such as `en-US`, or `auto` for the system locale.
     /// Default: `auto`.
     pub language: String,
+    /// How dates and numbers are written, and the order of names: `auto` for the system's,
+    /// `iso` for neutral ones, or a language tag that names a region's. Default: `auto`.
+    pub formats: String,
+    /// Whether panels sort names as the language of the formats orders them, with the numbers
+    /// in them by value (`file2` before `file10`); otherwise by their characters, ignoring
+    /// case. Default: `true`.
+    pub natural_sort: bool,
     /// A built-in color theme: `mc-classic`, `terminal`, `noon-dark`, `noon-light`,
     /// `catppuccin-mocha`, or `catppuccin-latte`. Default: `mc-classic`.
     pub theme: String,
@@ -192,6 +199,8 @@ impl Default for UiConfig {
     fn default() -> Self {
         Self {
             language: "auto".to_owned(),
+            formats: "auto".to_owned(),
+            natural_sort: true,
             theme: "mc-classic".to_owned(),
             borders: Borders::default(),
             icons: true,
@@ -521,6 +530,8 @@ mod tests {
 
         [ui]
         language = "de-DE"
+        formats = "iso"
+        natural_sort = false
         theme = "terminal"
         borders = "single"
         icons = false
@@ -570,6 +581,8 @@ mod tests {
             },
             ui: UiConfig {
                 language: "de-DE".to_owned(),
+                formats: "iso".to_owned(),
+                natural_sort: false,
                 theme: "terminal".to_owned(),
                 borders: Borders::Single,
                 icons: false,
@@ -617,6 +630,8 @@ mod tests {
             ["github.com", "gitlab.com", "bitbucket.org"]
         );
         assert_eq!(config.ui.language, "auto");
+        assert_eq!(config.ui.formats, "auto");
+        assert!(config.ui.natural_sort);
         assert_eq!(config.ui.theme, "mc-classic");
         assert_eq!(config.ui.borders, Borders::Double);
         assert!(config.ui.icons);
@@ -835,6 +850,8 @@ mod tests {
         assert!(table["discovery"].get("hide").is_some());
         assert!(table["volumes"].get("hide").is_some());
         assert!(table["ui"].get("language").is_some());
+        assert!(table["ui"].get("formats").is_some());
+        assert!(table["ui"].get("natural_sort").is_some());
         assert!(table["ui"].get("theme").is_some());
         assert!(table["ui"].get("borders").is_some());
         assert!(table["ui"].get("icons").is_some());

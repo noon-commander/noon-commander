@@ -243,7 +243,7 @@ impl HistoryWindow {
             let first = cells::sanitize(lines.next().unwrap_or_default().as_bytes());
             let more = lines.count();
             let more = if more > 0 {
-                format!(" +{more}")
+                format!(" {}", fl!("history-more-lines", count = more))
             } else {
                 String::new()
             };

@@ -41,6 +41,14 @@ hide = []
 # Interface language, such as "en-US", or "auto" for the system locale. Only English exists so
 # far; other languages fall back to it.
 language = "auto"
+# How dates, times, and numbers are written, and the order of names: "auto" as the system writes
+# them (on macOS, as System Settings → Language & Region sets them; elsewhere, by LC_TIME,
+# LC_NUMERIC, LC_COLLATE, LC_ALL, and LANG), "iso" for neutral ones (2025-10-17 14:05, 1234.5),
+# or a language tag that names a region's.
+formats = "auto"
+# Sort names as the language of the formats orders them, with the numbers in them by value
+# (file2 before file10); false sorts them by their characters, ignoring case.
+natural_sort = true
 # Colors: "mc-classic" (blue panels, as Midnight Commander), "terminal" (the terminal's own),
 # "noon-dark" and "noon-light" (the logo's navy, gold, and amber), "catppuccin-mocha" (dark), or
 # "catppuccin-latte" (light). All but the first two use 24-bit color where COLORTERM says the

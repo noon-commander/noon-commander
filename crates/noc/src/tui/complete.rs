@@ -243,14 +243,15 @@ pub(crate) fn complete(prefix: &str, candidates: Vec<Candidate>) -> Outcome {
         .into_iter()
         .filter(|candidate| !candidate.name.starts_with('.') || prefix.starts_with('.'))
         .collect();
-    // Case never counts, as vim's 'fileignorecase' has it on macOS.
-    let lower = prefix.to_lowercase();
+    // Case never counts, as vim's 'fileignorecase' has it on macOS, nor the Unicode form, which
+    // macOS keeps names in.
+    let folded = noc_pattern::fold(prefix);
     let mut matches: Vec<Candidate> = shown
         .into_iter()
-        .filter(|candidate| candidate.name.to_lowercase().starts_with(&lower))
+        .filter(|candidate| noc_pattern::fold(&candidate.name).starts_with(&*folded))
         .collect();
     matches.sort_by(|a, b| {
-        let key = |candidate: &Candidate| candidate.name.to_lowercase();
+        let key = |candidate: &Candidate| noc_pattern::fold(&candidate.name).into_owned();
         key(a)
             .cmp(&key(b))
             .then_with(|| a.name.cmp(&b.name))

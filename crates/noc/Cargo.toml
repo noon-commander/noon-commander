@@ -32,6 +32,7 @@ rust-embed.workspace = true
 rustix = { workspace = true, features = ["system", "termios"] }
 secrecy.workspace = true
 noc-config.workspace = true
+noc-locale.workspace = true
 noc-ssh.workspace = true
 noc-ops.workspace = true
 noc-pattern.workspace = true

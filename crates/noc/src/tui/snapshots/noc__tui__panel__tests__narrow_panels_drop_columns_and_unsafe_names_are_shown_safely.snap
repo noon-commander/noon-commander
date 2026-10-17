@@ -3,9 +3,9 @@ source: crates/noc/src/tui/panel.rs
 expression: "draw(&mut panel, 24, 7, true)"
 ---
 "╔ «h/that/does/not/fit ╗"
-"║    ↑Name     │ Size  ║"
-"║/..           │UP--DIR║"
-"║ bad?[2Jname  │      3║"
-"╟──────────────┴───────╢"
+"║   ↑Name   │   Size   ║"
+"║/..        │   UP--DIR║"
+"║ bad?»Jname│         3║"
+"╟───────────┴──────────╢"
 "║bad?[2Jname           ║"
 "╚══════════════════════╝"

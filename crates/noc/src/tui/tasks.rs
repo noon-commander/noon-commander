@@ -16,6 +16,7 @@ use noc_config::{
     Config, ConfigError, History, HistoryEntry, HostConfig, Hosts, Recent, Workspaces, add_command,
     remove_command, remove_workspace, rename_workspace, save_config, save_host, save_workspace,
 };
+use noc_locale::Formats;
 use noc_ops::{
     Algorithm, Checksum, Conflict, CopyOptions, Decision, Endpoint, Event, Files, Outcome,
     RenameError, Reporter, Sum,
@@ -150,6 +151,8 @@ pub(crate) enum Done {
     },
     /// What a tool said it is, after an [`Effect::Detect`].
     Detected(Tool, Detected),
+    /// The formats of [`Effect::Formats`], made.
+    Formats(Box<Formats>),
     /// zoxide's answer to the [`Effect::ZoxideQuery`] `generation`, or why there is none.
     Jumps {
         generation: u64,
@@ -399,6 +402,7 @@ impl Tasks {
                     with_dirs,
                 } => self.list_commands(generation, dirs, prefix, with_dirs),
                 Effect::Detect(tool) => self.detect(tool),
+                Effect::Formats(setting) => self.formats(setting),
                 Effect::ZoxideQuery {
                     generation,
                     keywords,
@@ -566,6 +570,18 @@ impl Tasks {
         };
         tokio::spawn(async move {
             let _ = done.send(Done::Detected(tool, detection.await));
+        });
+    }
+
+    /// Makes the formats `setting` names, which reads the environment and asks the system.
+    fn formats(&self, setting: String) {
+        let done = self.done.clone();
+        tokio::spawn(async move {
+            if let Ok(formats) =
+                tokio::task::spawn_blocking(move || Formats::detect(&setting)).await
+            {
+                let _ = done.send(Done::Formats(Box::new(formats)));
+            }
         });
     }
 

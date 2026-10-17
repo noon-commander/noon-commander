@@ -15,7 +15,7 @@ use super::glyphs;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::{Drawn, Pointer};
 use super::scroll::Window;
-use super::search_mode::{self, Matcher};
+use super::search_mode::{self, Matcher, Prompt};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -541,14 +541,11 @@ impl Picker {
             None => width,
         };
         let mark = search_mode::marked(self.mode, self.error.is_some(), theme.dialog, theme);
-        let prefix = fl!("picker-filter", mode = mark.glyph, text = String::new());
-        let (shown, column) = self
-            .filter
-            .visible(room.saturating_sub(cells::width(&prefix)));
-        let column = u16::try_from(cells::width(&prefix) + column).unwrap_or(u16::MAX);
-        let prompt = fl!("picker-filter", mode = mark.glyph, text = shown);
+        let prompt = Prompt::new(|text| fl!("picker-filter", mode = mark.glyph, text = text));
+        let (shown, column) = self.filter.visible(room.saturating_sub(prompt.width()));
+        let column = u16::try_from(cells::width(&prompt.before) + column).unwrap_or(u16::MAX);
         let mut top = cells::fit_spans(
-            mark.spans(&prompt, &prefix, theme.dialog),
+            mark.spans(&prompt, &shown, theme.dialog),
             room,
             (theme.dialog, theme.truncated_dialog),
             theme.glyphs.marks,

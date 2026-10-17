@@ -11,6 +11,7 @@ repository = "https://github.com/noon-commander/noon-commander"
 
 [workspace.dependencies]
 noc-config = { path = "crates/noc-config" }
+noc-locale = { path = "crates/noc-locale" }
 noc-ops = { path = "crates/noc-ops" }
 noc-pattern = { path = "crates/noc-pattern" }
 noc-scroll = { path = "crates/noc-scroll" }
@@ -27,16 +28,39 @@ color-eyre = { version = "0.6", default-features = false }
 crokey = "1.5"
 crossterm = { version = "0.29", features = ["event-stream", "osc52"] }
 devicons = "0.6"
+fluent-bundle = "0.16"
 futures-util = "0.3"
 getrandom = "0.4"
 glob = "0.3"
 globset = "0.4"
 i18n-embed = { version = "0.16", features = ["fluent-system", "desktop-requester"] }
 i18n-embed-fl = "0.10"
+icu_calendar = { version = "2.3", default-features = false }
+icu_casemap = "2.3"
+icu_collator = "2.3"
+icu_datetime = { version = "2.3", default-features = false, features = ["compiled_data"] }
+icu_decimal = { version = "2.3", features = ["ryu"] }
+icu_locale_core = { version = "2.3", features = ["alloc"] }
+icu_normalizer = { version = "2.3", default-features = false, features = ["compiled_data"] }
+icu_provider = { version = "2.3", default-features = false, features = ["sync"] }
 insta = "1.48"
+intl-memoizer = "0.5"
 jiff = "0.2"
 md-5 = "0.11"
 nucleo-matcher = "0.3"
+objc2 = { version = "0.6", default-features = false, features = ["std"] }
+objc2-foundation = { version = "0.3", default-features = false, features = [
+    "NSDate",
+    "NSDateFormatter",
+    "NSFormatter",
+    "NSLocale",
+    "NSNumberFormatter",
+    "NSObject",
+    "NSString",
+    "NSTimeZone",
+    "NSValue",
+    "std",
+] }
 openssh-sftp-client = "0.15"
 ratatui = "0.30"
 regex = "1"

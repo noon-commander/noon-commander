@@ -111,8 +111,8 @@ panel-host-waiting = { $host }: Retry or Cancel?
 # reading the directory again connects. The second one names the key that does it.
 panel-disconnected = Not connected to { $host }
 panel-disconnected-key = Not connected to { $host }; { $key } connects
-# Below the listing: the size of the marked files in bytes, with a comma between each group of
-# three digits, and how many entries are marked.
+# Below the listing: the size of the marked files in bytes, written as the region writes
+# numbers, and how many entries are marked.
 panel-marked = { $size } B in { $count ->
         [one] { $count } file
        *[other] { $count } files
@@ -131,6 +131,15 @@ panel-total = { $size } in { $files ->
 panel-space = { $free } / { $total } ({ $percent }%)
 # Status line when a directory cannot be read; the panel keeps showing the previous one.
 panel-error = Cannot open { $path }: { $reason }
+# The units after sizes in powers of 1024, from bytes up, as mc writes them: 512B in a job's
+# window, 12M, 3G in panels. Each takes one cell, as columns of sizes are narrow.
+size-bytes = B
+size-kilo = K
+size-mega = M
+size-giga = G
+size-tera = T
+size-peta = P
+size-exa = E
 error-not-found = no such file or directory
 error-permission-denied = permission denied
 error-already-exists = already exists
@@ -179,6 +188,8 @@ menu-home = Home
 # The last row of a group that shows only its first places: how many more it holds, which
 # Enter shows and the filter finds.
 menu-more = { $count } more…
+# Right of a place whose free space is not known.
+menu-free-unknown = ?
 
 ## The zoxide window of g z (src/tui/jump): the directories zoxide ranks highest for the
 ## keywords typed, as `z` picks them in a shell. Prefix: jump-.
@@ -212,10 +223,10 @@ find-files = &Files:
 find-match-case = Match &case
 # Under the rows: how many lines matched, in how many files.
 find-count = { $lines ->
-        [one] 1 line
+        [one] { $lines } line
        *[other] { $lines } lines
     } in { $files ->
-        [one] 1 file
+        [one] { $files } file
        *[other] { $files } files
     }
 # Right of a file: how many of its lines matched, once they are [search] max_per_file, after
@@ -223,14 +234,14 @@ find-count = { $lines ->
 find-file-count-more = { $count }+
 # The same with no text, which lists the files.
 find-count-files = { $files ->
-        [one] 1 file
+        [one] { $files } file
        *[other] { $files } files
     }
 # While nothing is found yet.
 find-searching = Searching…
 # Under the rows, by name: how many files and directories it found.
 find-count-entries = { $count ->
-        [one] 1 file or directory
+        [one] { $count } file or directory
        *[other] { $count } files and directories
     }
 # Nothing matches.
@@ -242,10 +253,13 @@ find-not-installed = ripgrep is not installed: cannot run { $program }. Get it f
 # fd is not installed where it searches; on a host, neither fd nor fdfind.
 find-fd-not-installed = fd is not installed: cannot run { $program }. Get it from https://github.com/sharkdp/fd, or set its path in Options → Configuration.
 # Under the rows: it stopped at [search] max_results.
-find-limit = Stopped after { $count } results: Configuration → Search.
+find-limit = { $count ->
+        [one] Stopped after { $count } result: Configuration → Search.
+       *[other] Stopped after { $count } results: Configuration → Search.
+    }
 # Under the rows: what ripgrep could not do, such as read a file, and the last of it.
 find-errors = { $count ->
-        [one] 1 error
+        [one] { $count } error
        *[other] { $count } errors
     }: { $last }
 
@@ -265,7 +279,7 @@ workspaces-title = Workspaces
 workspaces-none = No workspace is saved yet. a here, or t W in a panel, saves the tabs of both panels under a name.
 # Right of a workspace: how many tabs it has, in both panels together.
 workspaces-tabs = { $count ->
-        [one] 1 tab
+        [one] { $count } tab
        *[other] { $count } tabs
     }
 # The dialog of t W, and of a in the window. The & of a prompt marks the letter of its field.
@@ -367,6 +381,8 @@ config-interface = Interface
 # Settings of the interface, [ui].
 config-language = &Language
 config-language-hint = A language tag, such as en-US, or auto for the system locale.
+config-formats = &Formats
+config-formats-hint = Dates, numbers, and the order of names: auto as the system has them, iso for neutral ones, or a language tag for a region's.
 config-theme = &Theme
 config-theme-hint = Colors: mc-classic, as mc; terminal, the terminal's own; noon, from the logo, and catppuccin, each dark or light.
 config-borders = &Borders
@@ -379,6 +395,8 @@ config-icons = &Icons
 config-icons-hint = Nerd Font icons in front of names; without them, mc's markers.
 config-show-hidden = Show &hidden files
 config-show-hidden-hint = Names that begin with a dot; o h switches them.
+config-natural-sort = Natural so&rt
+config-natural-sort-hint = Names in the order of their language, numbers by value: file2 before file10. Off: by their characters, ignoring case.
 config-search-mode = &Search mode
 config-search-mode-hint = How quick search and the filters of the lists match what is typed: the text anywhere, the letters in order as fzf does, or a regular expression. Ctrl+s switches it in one of them until it closes. f / and f f start in it too, fzf as a regular expression.
 config-search-mode-plain = Plain
@@ -465,6 +483,8 @@ config-restart = Takes effect after a restart.
 config-save-error = Cannot save the configuration: { $reason }
 # The language field holds something else.
 config-language-invalid = "{ $text }" is not auto or a language tag such as en-US.
+# The formats field holds something else.
+config-formats-invalid = "{ $text }" is not auto, iso, or a language tag.
 
 ## Dialogs (src/tui/dialog). Prefix: dialog-. Their text comes from ssh; these are the buttons.
 ## In every dialog, as in mc and Far, an & marks the letter that Alt and it act on: it presses a
@@ -551,6 +571,11 @@ help-about-editor = Editor
 help-about-zoxide = zoxide
 help-about-ripgrep = ripgrep
 help-about-fd = fd
+# The language of the interface, and where the formats of dates, numbers, and the order of
+# names come from: ui.formats, a variable such as LC_TIME, or the settings of the system.
+help-about-region = Language and formats
+help-about-language = Language
+help-about-formats = Formats
 help-about-files = Files
 help-about-config = Settings
 help-about-hosts = Host settings
@@ -912,16 +937,21 @@ job-scanning = Counting…
 job-found = { $items } found
 # Entries done or skipped, of all.
 job-count = { $done } of { $total }
-# The same, for jobs that move data: the sizes are shown like those in panels.
-job-count-bytes = { $done } of { $total }, { $bytes_done } of { $bytes_total } bytes
+# The same, for jobs that move data, with the sizes done and in all, each with its unit, such as
+# 1.5M of 4.2G.
+job-count-bytes = { $done } of { $total }, { $bytes_done } of { $bytes_total }
 job-aborting = Aborting…
 # The time a job has worked, without the time it waited for answers: M:SS or H:MM:SS.
 job-elapsed = Time { $elapsed }
 # The same, for jobs that move data, with the time left and the average speed; each is shown
-# as -:-- or - until it is known.
+# as job-unknown-time or job-unknown-speed until it is known.
 job-timing = Time { $elapsed }   ETA { $left }   { $speed }
-# An average speed: the size is shown like those in panels, such as 1.5M.
+job-unknown-time = -:--
+job-unknown-speed = -
+# An average speed: the size with its unit, such as 1.5M.
 job-speed = { $size }/s
+# After the gauge: how far the job is.
+job-percent = { $percent }%
 # While a job waits for others to finish, as transfer.parallel_jobs allows.
 job-waiting = Waiting for other jobs to finish…
 
@@ -948,7 +978,7 @@ jobs-running = { $count ->
 # F10 while jobs run.
 quit-title = Quit
 quit-jobs = { $count ->
-        [one] A job is still running. Quit and stop it?
+        [one] { $count } job is still running. Quit and stop it?
        *[other] { $count } jobs are still running. Quit and stop them?
     }
 
@@ -957,7 +987,10 @@ quit-jobs = { $count ->
 delete-title = Delete
 delete-file = Delete file "{ $name }"?
 delete-directory = Delete directory "{ $name }" and everything in it?
-delete-many = Delete { $count } files and directories?
+delete-many = { $count ->
+        [one] Delete { $count } file or directory?
+       *[other] Delete { $count } files and directories?
+    }
 # Above the entry the job works on.
 delete-deleting = Deleting
 delete-error = Cannot delete { $path }: { $reason }
@@ -967,24 +1000,37 @@ delete-error = Cannot delete { $path }: { $reason }
 copy-title = Copy
 # Above the target field, which opens with the other panel's directory; the & marks its letter.
 copy-one = &Copy "{ $name }" to:
-copy-many = &Copy { $count } files and directories to:
+copy-many = { $count ->
+        [one] &Copy { $count } file or directory to:
+       *[other] &Copy { $count } files and directories to:
+    }
 copy-preserve = &Preserve attributes
 # Above the entry the job works on.
 copy-copying = Copying
 copy-error = Cannot copy to { $path }: { $reason }
-# A taken name: what is to be copied, what is there, and the question.
+# A taken name: what is to be copied, what is there, and the question. The sizes are in bytes,
+# written as the region writes numbers, and the times are dates and times of the region.
 copy-exists-title = File exists
 copy-exists =
     { $path } is there already.
-    New:      { $new_size } bytes, { $new_time }
-    Existing: { $old_size } bytes, { $old_time }
+    New:      { $new_size ->
+        [one] { $new_size } byte
+       *[other] { $new_size } bytes
+    }, { $new_time }
+    Existing: { $old_size ->
+        [one] { $old_size } byte
+       *[other] { $old_size } bytes
+    }, { $old_time }
     Overwrite it?
 
 ## Moving, F6 (src/tui/app). Prefix: move-. As in mc; a new name in the field renames.
 
 move-title = Move
 move-one = &Move "{ $name }" to:
-move-many = &Move { $count } files and directories to:
+move-many = { $count ->
+        [one] &Move { $count } file or directory to:
+       *[other] &Move { $count } files and directories to:
+    }
 move-moving = Moving
 move-error = Cannot move to { $path }: { $reason }
 
@@ -1012,7 +1058,10 @@ checksum-title = Checksum
 # Above the algorithms. Directories count with the files in them.
 checksum-one = Checksum of "{ $name }" with:
 checksum-directory = Checksums of the files in "{ $name }" with:
-checksum-many = Checksums of { $count } files and directories with:
+checksum-many = { $count ->
+        [one] Checksums of { $count } file or directory with:
+       *[other] Checksums of { $count } files and directories with:
+    }
 # Above a field for a checksum to compare with, as a download page gives it.
 checksum-expected = &Expected checksum (optional; paste it):
 # A check box: also hash the file under the cursor of the other panel, and compare the two.
@@ -1087,6 +1136,8 @@ history-this-host = { $host } ⇄ all
 history-all-hosts = all hosts ⇄ this one
 # The host of commands that ran on this machine.
 history-local = local
+# After the first line of a command of several: how many more it has.
+history-more-lines = +{ $count }
 history-none = No commands yet. Commands run with ! and : come here.
 # When the filter leaves no command.
 history-nothing = No command matches.

@@ -45,7 +45,7 @@ mod zoom;
 use std::io::{self, IsTerminal as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 use color_eyre::eyre::{Result, bail};
 use crossterm::cursor::SetCursorStyle;
@@ -54,6 +54,7 @@ use crossterm::event::{
 };
 use futures_util::StreamExt as _;
 use jiff::tz::TimeZone;
+use noc_locale::Formats;
 use noc_tools::ToolError;
 use noc_tools::editor::Editor;
 use ratatui::DefaultTerminal;
@@ -101,6 +102,10 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
         Done::Job { id, event } => tasks.run(app.job_event(id, event)),
         Done::Read { id, result } => app.read(id, result),
         Done::Detected(tool, detected) => app.detected(tool, detected),
+        Done::Formats(formats) => {
+            noc_locale::set_current(*formats);
+            app.formats_changed();
+        }
         Done::Connected {
             host,
             connection,
@@ -147,6 +152,17 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
     }
 }
 
+/// The time zone, from /etc/localtime, and the formats of the region, put to use, from the
+/// environment and on macOS the settings of the system.
+async fn region(context: &Context) -> Result<TimeZone> {
+    let setting = context.config().ui.formats.clone();
+    let (tz, formats) =
+        tokio::task::spawn_blocking(move || (TimeZone::system(), Formats::detect(&setting)))
+            .await?;
+    noc_locale::set_current(formats);
+    Ok(tz)
+}
+
 /// How long a spinner shows each of its frames.
 const SPINNER_FRAME: Duration = Duration::from_millis(150);
 
@@ -161,8 +177,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     let mut terminate = signal(SignalKind::terminate())?;
     let mut hangup = signal(SignalKind::hangup())?;
     let mut interrupt = signal(SignalKind::interrupt())?;
-    // Reads /etc/localtime.
-    let tz = tokio::task::spawn_blocking(TimeZone::system).await?;
+    let tz = region(&context).await?;
     // Reads the macOS version or the Linux distribution, for the About page of the help.
     let system = tokio::task::spawn_blocking(System::current).await?;
     let restore = Restore::default();
@@ -212,7 +227,7 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
         if let Err(error) = take_terminal_requests(&mut terminal, &mut app, &mut asked) {
             break Err(error.into());
         }
-        let now = (SystemTime::now(), Instant::now());
+        let now = Instant::now();
         take_hints(&mut app, &mut keys);
         if !std::mem::take(&mut idle)
             && let Err(error) = terminal.draw(|frame| app.render(frame, now, &tz))
@@ -299,6 +314,8 @@ fn start_app(
                 keyboard_protocol,
             ),
             editor: about::editor_command(&Editor::from_env()),
+            language: Some(crate::i18n::selected()),
+            formats: Some(about::formats_text(&noc_locale::current())),
             ..Report::new(Build::current())
         },
         files: Some(Files {

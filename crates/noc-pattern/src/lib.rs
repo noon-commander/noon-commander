@@ -1,6 +1,11 @@
 //! Patterns typed to match names: a regular expression, or text as it is, with smart case, as
 //! fd and ripgrep match them. The search of a tree and quick search build them here, so that a
-//! pattern matches the same names in both, with the regex engine fd and ripgrep use.
+//! pattern matches the same names in both, with the regex engine fd and ripgrep use. Text is
+//! compared in one Unicode form, and case folded where case does not count ([`fold`]).
+
+mod fold;
+
+pub use fold::{Normalized, fold, nfc};
 
 /// Why a pattern is not a regular expression: the last line of what the regex engine says,
 /// after the lines that show where.

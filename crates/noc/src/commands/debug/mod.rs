@@ -35,8 +35,14 @@ pub(super) async fn run(
                 crate::about::detect_ripgrep(&ripgrep),
                 crate::about::detect_fd(&fd)
             );
-            // It waits for the terminal's answers.
-            Ok(tokio::task::spawn_blocking(move || version::print(tools)).await?)
+            crate::i18n::select(&config.ui.language);
+            let formats = config.ui.formats;
+            // It waits for the terminal's answers, and reads the formats of the system.
+            Ok(tokio::task::spawn_blocking(move || {
+                let formats = noc_locale::Formats::detect(&formats);
+                version::print(tools, &formats)
+            })
+            .await?)
         }
         DebugCommand::Hosts { resolve } => {
             let context = Context::load(paths, config_path)?;

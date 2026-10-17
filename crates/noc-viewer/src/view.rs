@@ -13,10 +13,13 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use crate::i18n::fl;
+use crate::read::LIMIT;
 use crate::text::{cut, lines_of, row_count, row_of, row_starts, wider_than, width};
 
 /// Long lines whose rows are kept, as wrapped: more than a few screens take.
 const WRAPPED_LINES: usize = 1024;
+/// [`LIMIT`] in mebibytes, as the header and the end say it.
+const LIMIT_MIB: usize = LIMIT / (1024 * 1024);
 
 /// Where the rows of lines start, by line.
 type Wrapped = HashMap<usize, Rc<[usize]>>;
@@ -424,7 +427,7 @@ impl Viewer {
         match self.state {
             State::Text {
                 truncated: true, ..
-            } => fl!("viewer-end-truncated"),
+            } => fl!("viewer-end-truncated", mebibytes = LIMIT_MIB),
             _ => fl!("viewer-end"),
         }
     }
@@ -460,25 +463,25 @@ impl Viewer {
         let lines = self.lines().len();
         let mut position = String::new();
         if let State::Text { truncated, .. } = &self.state {
-            let line = (self.top.0 + 1).min(lines).to_string();
+            let line = (self.top.0 + 1).min(lines);
             let bottom = self.bottom();
             position = if bottom == self.end() {
-                fl!(
-                    "viewer-position-end",
-                    line = line,
-                    lines = lines.to_string()
-                )
+                fl!("viewer-position-end", line = line, lines = lines)
             } else {
                 let percent = ((bottom.0 + 1) * 100).checked_div(lines).unwrap_or(100);
                 fl!(
                     "viewer-position",
                     line = line,
-                    lines = lines.to_string(),
-                    percent = percent.to_string()
+                    lines = lines,
+                    percent = percent
                 )
             };
             if *truncated {
-                position = fl!("viewer-truncated", position = position);
+                position = fl!(
+                    "viewer-truncated",
+                    position = position,
+                    mebibytes = LIMIT_MIB
+                );
             }
         }
         let position = format!(" {position} ");

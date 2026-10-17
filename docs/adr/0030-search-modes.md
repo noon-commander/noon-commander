@@ -49,6 +49,14 @@ Neither way takes a regular expression, which the search of a tree takes with Al
   names in both.
 - **Quick search keeps the text as typed**: it no longer lowers it, so that a capital counts
   once the mode becomes fzf or regex. The plain mode ignores case as it matches.
+- **Amended 2026-10-17: one Unicode form, and case folded.** Names and what is typed are
+  compared in NFC, so a name that macOS keeps in NFD (`e` and a combining accent) matches the
+  `é` typed; the plain mode ignores case by Unicode's full case folding (`ß` as `ss`, every sigma
+  as one) rather than by lower case. `noc_pattern::fold` and `nfc` do it, and
+  `noc_pattern::Normalized` maps what they match back to the characters of the name, grapheme by
+  grapheme, so the highlight lands on the name as drawn. The regex mode matches the name in NFC,
+  with its own case folding; `g +`, `g -`, and the completion of paths fold as the plain mode
+  does. The fzf mode keeps nucleo's own matching.
 
 ## Consequences
 

@@ -21,7 +21,8 @@ use crate::i18n::fl;
 
 /// Width of the window, borders included, where the screen has room.
 const WIDTH: u16 = 76;
-/// Columns for what a job does, how far it is, and the time it has left.
+/// Columns for what a job does, how far it is, and the time it has left, unless the words in
+/// them need more.
 const TITLE: usize = 8;
 const STATE: usize = 9;
 const LEFT: usize = 12;
@@ -223,6 +224,13 @@ impl JobsList {
         let position = (rows.len(), visible, top);
         let bar = scrollbar::render(frame, bar, position, theme.dialog, theme.glyphs.scroll_bar);
         self.bar.set(bar);
+        let (title, state, left) = rows.iter().fold((TITLE, STATE, LEFT), |widths, row| {
+            (
+                widths.0.max(cells::width(&row.title)),
+                widths.1.max(cells::width(&row.state)),
+                widths.2.max(cells::width(&row.left)),
+            )
+        });
         for (shown, (number, row)) in rows.iter().enumerate().skip(top).take(visible).enumerate() {
             let styles = if number == index {
                 (colors.focused_style(), theme.truncated_cursor)
@@ -231,13 +239,13 @@ impl JobsList {
             };
             let marks = theme.glyphs.marks;
             let gap = |cells: usize| Span::styled(" ".repeat(cells), styles.0);
-            let mut spans = cells::fit(&row.title, TITLE, Align::Left, styles, marks);
+            let mut spans = cells::fit(&row.title, title, Align::Left, styles, marks);
             spans.push(gap(1));
-            spans.extend(cells::fit(&row.state, STATE, Align::Right, styles, marks));
+            spans.extend(cells::fit(&row.state, state, Align::Right, styles, marks));
             spans.push(gap(1));
-            spans.extend(cells::fit(&row.left, LEFT, Align::Right, styles, marks));
+            spans.extend(cells::fit(&row.left, left, Align::Right, styles, marks));
             spans.push(gap(2));
-            let room = width.saturating_sub(TITLE + STATE + LEFT + 4);
+            let room = width.saturating_sub(title + state + left + 4);
             spans.extend(cells::fit(&row.current, room, Align::Left, styles, marks));
             let text = cells::fit_spans(spans, width, styles, marks);
             frame.render_widget(Line::from(text), line(shown));

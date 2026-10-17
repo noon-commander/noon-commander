@@ -6,6 +6,7 @@
 use std::ffi::OsString;
 use std::os::unix::ffi::OsStrExt as _;
 
+use noc_locale::{Formats, Origin};
 use noc_tools::ToolError;
 use noc_tools::editor::Editor;
 use noc_tools::fd::Fd;
@@ -64,6 +65,8 @@ pub(crate) enum Topic {
     Terminal,
     /// The programs other than ssh that Noon Commander runs.
     Tools,
+    /// The language of the interface, and the formats of dates and numbers.
+    Region,
 }
 
 /// A fact of the report. `noc debug version` prints them in the order of [`Fact::ALL`], one
@@ -91,10 +94,12 @@ pub(crate) enum Fact {
     Zoxide,
     Ripgrep,
     Fd,
+    Language,
+    Formats,
 }
 
 impl Fact {
-    pub(crate) const ALL: [Self; 20] = [
+    pub(crate) const ALL: [Self; 22] = [
         Self::Name,
         Self::Version,
         Self::Features,
@@ -115,6 +120,8 @@ impl Fact {
         Self::Zoxide,
         Self::Ripgrep,
         Self::Fd,
+        Self::Language,
+        Self::Formats,
     ];
 
     /// Its key in `noc debug version`.
@@ -140,6 +147,8 @@ impl Fact {
             Self::Zoxide => "zoxide",
             Self::Ripgrep => "ripgrep",
             Self::Fd => "fd",
+            Self::Language => "language",
+            Self::Formats => "formats",
         }
     }
 
@@ -157,6 +166,7 @@ impl Fact {
                 Topic::Terminal
             }
             Self::Editor | Self::Zoxide | Self::Ripgrep | Self::Fd => Topic::Tools,
+            Self::Language | Self::Formats => Topic::Region,
         }
     }
 }
@@ -198,6 +208,10 @@ pub(crate) struct Report {
     pub(crate) ripgrep: Detected,
     /// The fd of `f f`, likewise.
     pub(crate) fd: Detected,
+    /// The language of the messages, as [`crate::i18n::selected`] tells it.
+    pub(crate) language: Option<String>,
+    /// Where the formats of dates, numbers, and names come from, as [`formats_text`] tells it.
+    pub(crate) formats: Option<String>,
 }
 
 impl Report {
@@ -211,6 +225,8 @@ impl Report {
             zoxide: Detected::Unchecked,
             ripgrep: Detected::Unchecked,
             fd: Detected::Unchecked,
+            language: None,
+            formats: None,
         }
     }
 
@@ -261,6 +277,8 @@ impl Report {
             Fact::Zoxide => self.zoxide.value(),
             Fact::Ripgrep => self.ripgrep.value(),
             Fact::Fd => self.fd.value(),
+            Fact::Language => known(&self.language),
+            Fact::Formats => known(&self.formats),
         }
     }
 }
@@ -350,6 +368,33 @@ impl Keyboard {
             Self::Unknown => UNKNOWN,
             Self::Unchecked => "unchecked",
         }
+    }
+}
+
+/// Where `formats` come from: the origin of all, such as `de_CH.UTF-8 (LC_ALL)`, or of each
+/// part where they differ.
+pub(crate) fn formats_text(formats: &Formats) -> String {
+    let parts = [
+        ("dates", formats.dates_from()),
+        ("numbers", formats.numbers_from()),
+        ("names", formats.names_from()),
+    ];
+    if parts.iter().all(|(_, origin)| *origin == parts[0].1) {
+        return origin_text(parts[0].1);
+    }
+    parts
+        .iter()
+        .map(|(part, origin)| format!("{part} {}", origin_text(origin)))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn origin_text(origin: &Origin) -> String {
+    match origin {
+        Origin::Iso => "iso".to_owned(),
+        Origin::Setting(tag) => format!("{tag} (ui.formats)"),
+        Origin::Environment { variable, locale } => format!("{locale} ({variable})"),
+        Origin::System(locale) => format!("{locale} (system)"),
     }
 }
 
@@ -545,11 +590,17 @@ mod tests {
             Fact::Zoxide => 17,
             Fact::Ripgrep => 18,
             Fact::Fd => 19,
+            Fact::Language => 20,
+            Fact::Formats => 21,
         };
         for (index, fact) in Fact::ALL.into_iter().enumerate() {
             assert_eq!(place(fact), index, "{fact:?}");
         }
-        assert_eq!(place(Fact::Fd) + 1, Fact::ALL.len(), "the last is last");
+        assert_eq!(
+            place(Fact::Formats) + 1,
+            Fact::ALL.len(),
+            "the last is last"
+        );
     }
 
     #[test]

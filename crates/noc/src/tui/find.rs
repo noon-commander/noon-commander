@@ -805,7 +805,7 @@ fn file_spans(
     let count = match lines {
         0 => String::new(),
         _ if lines >= max_per_file => format!(" {}", fl!("find-file-count-more", count = lines)),
-        _ => format!(" {lines}"),
+        _ => format!(" {}", integer(lines)),
     };
     let count_width = cells::width(&count);
     let mut spans = vec![Span::styled(" ", style)];
@@ -821,6 +821,14 @@ fn file_spans(
     spans
 }
 
+/// `count` as the region writes numbers.
+fn integer(count: impl TryInto<u64>) -> String {
+    count.try_into().map_or_else(
+        |_| String::new(),
+        |count| noc_locale::current().integer(count),
+    )
+}
+
 /// The row of line `index` of `row` in `width` cells: its number, right-aligned under those of
 /// the file, then its text with the matches highlighted; a text too long to show whole starts
 /// a little before its first match, if that would not show, and is cut at its end.
@@ -832,13 +840,18 @@ fn line_spans(
     theme: &Theme,
 ) -> Vec<Span<'static>> {
     let line = &row.lines[index];
+    let number_of = |line: &LineRow| integer(line.number);
     let digits = row
         .lines
         .iter()
-        .map(|line| line.number.to_string().len())
+        .map(|line| cells::width(&number_of(line)))
         .max()
         .unwrap_or(1);
-    let number = format!("   {:>digits$}  ", line.number);
+    let number = number_of(line);
+    let number = format!(
+        "   {}{number}  ",
+        " ".repeat(digits - cells::width(&number))
+    );
     let room = width.saturating_sub(cells::width(&number) + 1);
     let marks = theme.glyphs.marks;
     let mut parts: Vec<(String, bool)> = line.parts.clone();

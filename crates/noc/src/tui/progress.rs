@@ -7,12 +7,13 @@ use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 
-use super::cells::{self, Align};
+use super::cells::{self, Align, Cut};
 use super::dialog::{Colors, button_line, button_spots, draw_box, draw_separator, frame_around};
 use super::glyphs;
 use super::keymap::{Action, Resolved};
 use super::label::Label;
 use super::mouse::{Drawn, Pointer};
+use super::panel::short_size;
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -20,9 +21,6 @@ use crate::i18n::fl;
 const WIDTH: u16 = 60;
 /// Work the speed needs behind it before it means anything.
 const SETTLED: Duration = Duration::from_secs(1);
-/// What stands for a time or a speed that is not known yet.
-const UNKNOWN_TIME: &str = "-:--";
-const UNKNOWN_SPEED: &str = "-";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Stage {
@@ -245,7 +243,7 @@ impl JobView {
                 // A ratio within 0 … 1.
                 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                 let percent = (self.ratio() * 100.0).round() as u64;
-                fl!("jobs-state-percent", percent = percent.to_string())
+                fl!("jobs-state-percent", percent = percent)
             }
         };
         let left = self
@@ -321,25 +319,25 @@ impl JobView {
         };
         let (doing, current, ratio, count) = match &self.stage {
             Stage::Waiting => (fl!("job-waiting"), String::new(), 0.0, String::new()),
-            Stage::Scanning { items } => (
+            &Stage::Scanning { items } => (
                 fl!("job-scanning"),
                 String::new(),
                 0.0,
-                fl!("job-found", items = items.to_string()),
+                fl!("job-found", items = items),
             ),
             Stage::Working { current, counts } => {
-                let done_total = (counts.done.to_string(), counts.total.to_string());
+                let (done, total) = (counts.done, counts.total);
                 // Data takes the time, so the gauge follows the bytes, if there are any.
                 let count = if counts.bytes_total > 0 {
                     fl!(
                         "job-count-bytes",
-                        done = done_total.0,
-                        total = done_total.1,
-                        bytes_done = cells::size(counts.bytes_done, 7),
-                        bytes_total = cells::size(counts.bytes_total, 7)
+                        done = done,
+                        total = total,
+                        bytes_done = short_size(counts.bytes_done),
+                        bytes_total = short_size(counts.bytes_total)
                     )
                 } else {
-                    fl!("job-count", done = done_total.0, total = done_total.1)
+                    fl!("job-count", done = done, total = total)
                 };
                 (self.doing.clone(), current.clone(), self.ratio(), count)
             }
@@ -395,9 +393,9 @@ impl JobView {
         }
         let left = timing
             .left
-            .map_or_else(|| UNKNOWN_TIME.to_owned(), duration);
+            .map_or_else(|| fl!("job-unknown-time"), duration);
         let speed = timing.speed.map_or_else(
-            || UNKNOWN_SPEED.to_owned(),
+            || fl!("job-unknown-speed"),
             |speed| fl!("job-speed", size = speed_size(speed)),
         );
         fl!("job-timing", elapsed = elapsed, left = left, speed = speed)
@@ -426,37 +424,35 @@ fn duration(duration: Duration) -> String {
     }
 }
 
-/// Bytes per second as a size: in powers of 1024, as sizes in panels, with a decimal below
-/// 100 so that slow links still show change: `512B`, `1.5M`, `480K`.
+/// Bytes per second as a size: `512B`, `1.5M`, `480K`.
 fn speed_size(bytes: f64) -> String {
-    let mut value = bytes.max(0.0);
-    let mut unit = "B";
-    for next in ["K", "M", "G", "T", "P"] {
-        if value < 1024.0 {
-            break;
-        }
-        value /= 1024.0;
-        unit = next;
-    }
-    if unit == "B" || value >= 99.95 {
-        format!("{value:.0}{unit}")
-    } else {
-        format!("{value:.1}{unit}")
-    }
+    cells::short_size(bytes, &noc_locale::current())
 }
 
 /// A bar of `width` cells, filled for `ratio`, and the percentage after it. Block characters
 /// show in any theme, where colors alone would not.
 fn gauge(ratio: f64, width: usize, theme: &Theme) -> Line<'static> {
-    let percent = format!(" {:>3.0}%", ratio * 100.0);
-    let bar = width.saturating_sub(percent.len());
     // `ratio` is within 0 … 1, and bars are a few dozen cells.
     #[allow(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
         clippy::cast_precision_loss
     )]
-    let filled = ((bar as f64 * ratio).round() as usize).min(bar);
+    let (percent, filled) = {
+        let percent = (ratio * 100.0).round() as u64;
+        // As wide as the widest, so that the bar keeps its length.
+        let widest = cells::width(&fl!("job-percent", percent = 100));
+        let percent = cells::fit_cut(
+            &fl!("job-percent", percent = percent),
+            widest,
+            Align::Right,
+            Cut::End,
+        );
+        let percent = format!(" {}", percent.head);
+        let bar = width.saturating_sub(cells::width(&percent));
+        (percent, ((bar as f64 * ratio).round() as usize).min(bar))
+    };
+    let bar = width.saturating_sub(cells::width(&percent));
     let done = glyphs::GAUGE_DONE.repeat(filled);
     let text = format!("{done}{}", glyphs::GAUGE_LEFT.repeat(bar - filled));
     Line::from(vec![Span::styled(text, theme.gauge), Span::raw(percent)])
@@ -525,7 +521,7 @@ mod tests {
         };
         view.working("big".to_owned(), counts, start);
         let text = draw(&view);
-        assert!(text.contains("1 of 2, 1536 of 2048 bytes"), "{text}");
+        assert!(text.contains("1 of 2, 1.5K of 2.0K"), "{text}");
         assert!(text.contains(" 75%"), "{text}");
 
         view.abort();
@@ -628,12 +624,7 @@ mod tests {
         assert_eq!(duration(Duration::from_millis(59_600)), "1:00");
         assert_eq!(duration(secs(754)), "12:34");
         assert_eq!(duration(secs(36_000)), "10:00:00");
-        assert_eq!(speed_size(512.0), "512B");
         assert_eq!(speed_size(1536.0), "1.5K");
-        assert_eq!(speed_size(480.0 * 1024.0), "480K");
-        assert_eq!(speed_size(12.34 * 1024.0 * 1024.0), "12.3M");
-        assert_eq!(speed_size(99.97 * 1024.0), "100K");
-        assert_eq!(speed_size(3.0 * 1024.0 * 1024.0 * 1024.0), "3.0G");
     }
 
     #[test]

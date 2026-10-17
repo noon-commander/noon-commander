@@ -176,7 +176,7 @@ fn debug_version_has_one_line_per_key() {
     let fake_fd = sandbox.path("fd");
     write_executable(&fake_fd, "#!/bin/sh\necho 'fd 10.5.0-fake'\n");
     sandbox.write_config(&format!(
-        "[zoxide]\nprogram = {}\n[search]\nprogram = {}\nfd = {}\n",
+        "[ui]\nformats = \"iso\"\n[zoxide]\nprogram = {}\n[search]\nprogram = {}\nfd = {}\n",
         quote(fake_zoxide),
         quote(fake_rg.to_str().unwrap()),
         quote(fake_fd.to_str().unwrap())
@@ -220,6 +220,8 @@ fn debug_version_has_one_line_per_key() {
             "zoxide",
             "ripgrep",
             "fd",
+            "language",
+            "formats",
         ],
         "{text}"
     );
@@ -243,6 +245,8 @@ fn debug_version_has_one_line_per_key() {
     assert_eq!(value("zoxide"), "zoxide 0.9.8-fake");
     assert_eq!(value("ripgrep"), "ripgrep 15.2.0-fake", "its first line");
     assert_eq!(value("fd"), "fd 10.5.0-fake");
+    assert_eq!(value("language"), "en-US", "the only one so far");
+    assert_eq!(value("formats"), "iso");
 
     sandbox.write_config(
         "[zoxide]\nprogram = '/nonexistent/zoxide'\n\
@@ -255,7 +259,7 @@ fn debug_version_has_one_line_per_key() {
         .unwrap();
     let text = stdout(&output);
     assert!(
-        text.ends_with("zoxide       not found\nripgrep      not found\nfd           not found\n"),
+        text.contains("zoxide       not found\nripgrep      not found\nfd           not found\n"),
         "{text}"
     );
 }

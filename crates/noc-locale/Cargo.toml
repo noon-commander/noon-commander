@@ -1,0 +1,33 @@
+[package]
+name = "noc-locale"
+description = "The formats of the user's region for Noon Commander: numbers, dates, times, and the order of names"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+fluent-bundle.workspace = true
+icu_calendar.workspace = true
+icu_collator.workspace = true
+icu_datetime.workspace = true
+icu_decimal.workspace = true
+icu_locale_core.workspace = true
+# Only for its `sync` feature, which makes the formatters `Send` and `Sync`.
+icu_provider.workspace = true
+intl-memoizer.workspace = true
+jiff.workspace = true
+tracing.workspace = true
+unicode-width.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2.workspace = true
+objc2-foundation.workspace = true
+
+[package.metadata.cargo-shear]
+ignored = ["icu_provider"]
+
+[lints]
+workspace = true

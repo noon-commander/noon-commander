@@ -1,67 +1,65 @@
-//! Text for table cells: sizes and times here, and from `noc-text` terminal-safe names,
-//! widths, truncation, and wrapping.
+//! Text for table cells: sizes and times here, in the formats of the region, and from
+//! `noc-text` terminal-safe names, widths, truncation, and wrapping.
 
+use std::sync::LazyLock;
 use std::time::SystemTime;
 
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
+use noc_locale::Formats;
 pub(crate) use noc_text::{Align, Cut, Fitted, Marks, chop, fit_cut, sanitize, split, width, wrap};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
-/// Width in cells of [`mtime`].
-pub(crate) const MTIME_WIDTH: usize = 12;
+use crate::i18n::fl;
 
-/// Half a year in seconds: newer times show the time of day, older ones the year.
-const SIX_MONTHS: i64 = 15_778_476;
+/// The units after sizes, from bytes up in powers of 1024: B, K, M, G, T, P, E.
+static UNITS: LazyLock<[String; 7]> = LazyLock::new(|| {
+    [
+        fl!("size-bytes"),
+        fl!("size-kilo"),
+        fl!("size-mega"),
+        fl!("size-giga"),
+        fl!("size-tera"),
+        fl!("size-peta"),
+        fl!("size-exa"),
+    ]
+});
 
-/// `bytes` with a comma between each group of three digits, as mc shows the size of marked
-/// files.
-pub(crate) fn grouped(bytes: u64) -> String {
-    let digits = bytes.to_string();
-    let mut text = String::with_capacity(digits.len() + digits.len() / 3);
-    for (index, digit) in digits.chars().enumerate() {
-        if index > 0 && (digits.len() - index).is_multiple_of(3) {
-            text.push(',');
-        }
-        text.push(digit);
-    }
-    text
-}
-
-/// A file size in at most `width` cells: the bytes when they fit, otherwise K, M, G, …
-/// (powers of 1024, rounded), as mc shows it.
-pub(crate) fn size(bytes: u64, width: usize) -> String {
-    let plain = bytes.to_string();
-    if plain.len() <= width {
-        return plain;
-    }
+/// A file size in at most `width` cells, grouped by thousands as the region writes numbers:
+/// the bytes when they fit, otherwise K, M, G, … (powers of 1024, rounded), as Far shows it.
+pub(crate) fn size(bytes: u64, width: usize, formats: &Formats) -> String {
+    let mut text = formats.integer(bytes);
     let mut value = bytes;
-    let mut text = plain;
-    for unit in ['K', 'M', 'G', 'T', 'P', 'E'] {
-        value = value / 1024 + u64::from(value % 1024 >= 512);
-        text = format!("{value}{unit}");
-        if text.len() <= width {
+    for unit in &UNITS[1..] {
+        if self::width(&text) <= width {
             break;
         }
+        value = value / 1024 + u64::from(value % 1024 >= 512);
+        text = format!("{}{unit}", formats.integer(value));
     }
     text
 }
 
-/// A modification time as `ls -l` and mc show it: `Sep 30 12:34` for the last six months,
-/// `Sep 30  2025` otherwise, spaces when unknown. [`MTIME_WIDTH`] cells.
-pub(crate) fn mtime(time: Option<SystemTime>, now: SystemTime, tz: &TimeZone) -> String {
-    let Some(stamp) = time.and_then(|time| Timestamp::try_from(time).ok()) else {
-        return " ".repeat(MTIME_WIDTH);
-    };
-    let age = Timestamp::try_from(now).map_or(0, |now| now.as_second() - stamp.as_second());
-    // Up to an hour in the future still counts as recent, for clocks that differ a little.
-    let format = if (-3600..SIX_MONTHS).contains(&age) {
-        "%b %e %H:%M"
-    } else {
-        "%b %e  %Y"
-    };
-    stamp.to_zoned(tz.clone()).strftime(format).to_string()
+/// A size with its unit, in powers of 1024 as sizes in panels, with a decimal below 100 so
+/// that a slow transfer still shows change: `512B`, `1.5M`, `480K`.
+pub(crate) fn short_size(bytes: f64, formats: &Formats) -> String {
+    let mut value = bytes.max(0.0);
+    let mut unit = 0;
+    while value >= 1024.0 && unit + 1 < UNITS.len() {
+        value /= 1024.0;
+        unit += 1;
+    }
+    let fraction = usize::from(unit > 0 && value < 99.95);
+    format!("{}{}", formats.decimal(value, fraction, false), UNITS[unit])
+}
+
+/// A modification time in `tz`, its date and its time of day, as every time shows in the
+/// formats of the region; nothing when unknown. At most [`Formats::time_width`] cells.
+pub(crate) fn mtime(time: Option<SystemTime>, tz: &TimeZone, formats: &Formats) -> String {
+    time.and_then(|time| Timestamp::try_from(time).ok())
+        .map(|stamp| formats.date_time(stamp.to_zoned(tz.clone()).datetime()))
+        .unwrap_or_default()
 }
 
 /// Fits `text` into exactly `width` cells: shorter text is padded; longer text loses its
@@ -311,48 +309,45 @@ mod tests {
     }
 
     #[test]
-    fn groups_digits_in_threes() {
-        assert_eq!(grouped(0), "0");
-        assert_eq!(grouped(999), "999");
-        assert_eq!(grouped(1_000), "1,000");
-        assert_eq!(grouped(10_012_345), "10,012,345");
-        assert_eq!(grouped(u64::MAX), "18,446,744,073,709,551,615");
-    }
-
-    #[test]
     fn sizes_fit_their_cells() {
-        assert_eq!(size(0, 7), "0");
-        assert_eq!(size(9_999_999, 7), "9999999");
-        assert_eq!(size(10_000_000, 7), "9766K");
-        assert_eq!(size(1_536, 3), "2K");
-        assert_eq!(size(5 * 1024 * 1024 * 1024, 4), "5G");
-        assert!(size(u64::MAX, 7).len() <= 7, "{}", size(u64::MAX, 7));
+        let iso = Formats::iso();
+        assert_eq!(size(0, 10, &iso), "0");
+        assert_eq!(size(9_999_999_999, 10, &iso), "9999999999");
+        assert_eq!(size(10_000_000_000, 10, &iso), "9765625K");
+        assert_eq!(size(1_536, 3, &iso), "2K");
+        assert_eq!(size(5 * 1024 * 1024 * 1024, 4, &iso), "5G");
+        assert!(
+            size(u64::MAX, 10, &iso).len() <= 10,
+            "{}",
+            size(u64::MAX, 10, &iso)
+        );
+        // Grouped as the formats group numbers: Unicode's root formats, which no region has.
+        let root = Formats::detect("und");
+        assert_eq!(size(99_999_999, 10, &root), "99,999,999");
+        assert_eq!(size(123_456_789, 10, &root), "120,563K");
     }
 
     #[test]
-    fn times_show_the_time_of_day_or_the_year() {
-        let at = |seconds| UNIX_EPOCH + Duration::from_secs(seconds);
+    fn short_sizes_have_a_unit_and_a_decimal_below_a_hundred() {
+        let iso = Formats::iso();
+        assert_eq!(short_size(512.0, &iso), "512B");
+        assert_eq!(short_size(1536.0, &iso), "1.5K");
+        assert_eq!(short_size(480.0 * 1024.0, &iso), "480K");
+        assert_eq!(short_size(12.34 * 1024.0 * 1024.0, &iso), "12.3M");
+        assert_eq!(short_size(99.97 * 1024.0, &iso), "100K");
+        assert_eq!(short_size(3.0 * 1024.0 * 1024.0 * 1024.0, &iso), "3.0G");
+    }
+
+    #[test]
+    fn times_show_their_date_and_time() {
+        let iso = Formats::iso();
+        let at = |seconds| Some(UNIX_EPOCH + Duration::from_secs(seconds));
         // 2023-11-14 22:13:20 UTC
-        let now = at(1_700_000_000);
-        assert_eq!(mtime(Some(now), now, &TimeZone::UTC), "Nov 14 22:13");
-        assert_eq!(
-            mtime(Some(at(1_700_000_000 - 86_400 * 40)), now, &TimeZone::UTC),
-            "Oct  5 22:13"
-        );
-        assert_eq!(
-            mtime(Some(at(1_600_000_000)), now, &TimeZone::UTC),
-            "Sep 13  2020"
-        );
-        assert_eq!(
-            mtime(Some(at(1_700_000_000 + 86_400)), now, &TimeZone::UTC),
-            "Nov 15  2023",
-            "far in the future"
-        );
-        assert_eq!(mtime(None, now, &TimeZone::UTC), " ".repeat(MTIME_WIDTH));
-        for time in [now, at(1_600_000_000)] {
-            assert_eq!(width(&mtime(Some(time), now, &TimeZone::UTC)), MTIME_WIDTH);
-        }
+        let utc = TimeZone::UTC;
+        assert_eq!(mtime(at(1_700_000_000), &utc, &iso), "2023-11-14 22:13");
+        assert_eq!(mtime(at(1_600_000_000), &utc, &iso), "2020-09-13 12:26");
+        assert_eq!(mtime(None, &utc, &iso), "");
         let tokyo = TimeZone::get("Asia/Tokyo").unwrap();
-        assert_eq!(mtime(Some(now), now, &tokyo), "Nov 15 07:13");
+        assert_eq!(mtime(at(1_700_000_000), &tokyo, &iso), "2023-11-15 07:13");
     }
 }

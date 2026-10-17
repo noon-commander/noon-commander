@@ -353,6 +353,8 @@ fn fact_name(fact: Fact) -> Option<String> {
         Fact::Zoxide => fl!("help-about-zoxide"),
         Fact::Ripgrep => fl!("help-about-ripgrep"),
         Fact::Fd => fl!("help-about-fd"),
+        Fact::Language => fl!("help-about-language"),
+        Fact::Formats => fl!("help-about-formats"),
     })
 }
 
@@ -364,6 +366,7 @@ fn topic_title(topic: Topic) -> Option<String> {
         Topic::System => fl!("help-about-system"),
         Topic::Terminal => fl!("help-about-terminal"),
         Topic::Tools => fl!("help-about-tools"),
+        Topic::Region => fl!("help-about-region"),
     })
 }
 
@@ -828,7 +831,7 @@ impl Help {
             fl!("help-position-end")
         } else {
             let percent = (bottom * 100).checked_div(self.rows).unwrap_or(100);
-            fl!("help-position", percent = percent.to_string())
+            fl!("help-position", percent = percent)
         };
         let position = format!(" {position} ");
         let width = u16::try_from(cells::width(&position)).unwrap_or(u16::MAX);
@@ -1959,6 +1962,8 @@ mod tests {
             zoxide: Detected::Missing,
             ripgrep: Detected::Found("ripgrep 15.2.0".to_owned()),
             fd: Detected::Found("fd 10.5.0".to_owned()),
+            language: Some("en-US".to_owned()),
+            formats: Some("iso".to_owned()),
         };
         let about = About {
             report,
@@ -1975,6 +1980,6 @@ mod tests {
         let mut help = Help::new(&Keymap::default(), &about);
         help.handle(action(Action::NextField));
         help.handle(action(Action::Home));
-        insta::assert_snapshot!(draw(&mut help, 120, 62));
+        insta::assert_snapshot!(draw(&mut help, 120, 68));
     }
 }

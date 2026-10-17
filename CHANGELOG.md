@@ -9,6 +9,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Dates, times, and numbers follow the formats of the region (`ui.formats`, a text field under
+  Interface in the Configuration dialog, applied at once). `auto` takes them from `LC_ALL`,
+  `LC_TIME`, `LC_NUMERIC`, and `LC_COLLATE`, then on macOS from System Settings → Language &
+  Region, with the user's own date format, separators of numbers, and 24-hour time, then from
+  `LANG`; `iso` writes `2025-10-17 14:05` and `1234.5`; a language tag names a region's formats
+  from CLDR, through ICU4X. Every time shows one way, its date with the year and its time of
+  day, in digits (`12.10.26 05:05`), in the panels' time column, as wide as the formats need,
+  and in dialogs. Every number is grouped as the region groups it: file sizes in a size column
+  of ten cells, as in Far (`12 345 678`, then `97 656K`), sizes with a decimal on the frame
+  (`1.5G / 460G`), counts, line numbers, speeds, and percentages. Help → About and
+  `noc debug version` tell the language of the messages and where the formats come from.
+- Panels sort names as the language of the formats orders them, with the numbers in them by
+  value, so `file2` comes before `file10` and letters with accents next to the same letters
+  without them. `ui.natural_sort` (on), a check box under Interface, sorts them by their
+  characters, ignoring case, as before.
 - With a symlink under the cursor, the status line of the panel shows its target as stored in
   the link, as `config -> /etc/app/config.toml`, locally and on a host, with a Nerd Font arrow
   in place of `->` under `ui.icons`. The arrow is toned down, and the target has the color of
@@ -111,6 +126,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Messages with a count have plural forms for each: deleting, copying, moving, and checksums of
+  several entries, the limit of the search of a tree, and the sizes in the question about a taken
+  name; a translation gets the number itself, never `1` written out. The units of sizes, the marks
+  of a time and a speed not known yet, and the percentage of a job's gauge are in the messages.
+- Quick search, the filters of the lists, `g +` and `g -`, and the completion of paths match
+  names in either Unicode form, so a name that macOS keeps in NFD matches the accented letter
+  typed, and ignore case by full case folding, so `strasse` finds `Straße`; the highlight covers
+  the whole letter with its accent. Regular expressions match the name in NFC.
+- A job that moves data counts its sizes with their units, as `1.5M of 4.2G`, rather than
+  `bytes` after sizes that had a unit already.
+- The viewer's header and end take the size of the start of a long file it reads from the code
+  rather than repeating it.
 - The Noon themes put error dialogs on a deep red (`#A63A32`) in `noon-dark` and a pale one
   (`#F2A39A`) in `noon-light`, with the cream or navy text of the cursor, rather than on the
   bright red of text, which glared.
@@ -172,6 +199,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A prompt whose translation put what is typed before the glyph of the search mode could
+  panic, and the cursor of every prompt went after the whole message, wherever the typed text
+  was in it.
 - The viewer no longer lags in files with very long lines, such as binary files, while it
   wraps them: each line wraps once for each width, rather than again for every row it scrolls.
 

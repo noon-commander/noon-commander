@@ -9,6 +9,7 @@ use std::time::SystemTime;
 
 use jiff::tz::TimeZone;
 use noc_config::{SearchMode, Wheel};
+use noc_locale::Formats;
 use noc_scroll::Motion;
 use noc_scroll::scrollbar::{self, Bar};
 use noc_vfs::{DirEntry, FileKind, Location, RemotePath, Space};
@@ -19,27 +20,26 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear};
 use unicode_width::UnicodeWidthChar as _;
 
-use super::cells::{self, Align, Cut, MTIME_WIDTH, Marks};
+use super::cells::{self, Align, Cut, Marks};
 use super::decor::{self, Decor};
 use super::dialog::Field;
 use super::glyphs;
 use super::keymap::Action;
 use super::mouse::Scroll;
 use super::scroll::Window;
-use super::search_mode::{self, Matcher};
+use super::search_mode::{self, Matcher, Prompt};
 use super::theme::Theme;
 use crate::i18n::fl;
 
-/// Width of the size column, as in mc.
-const SIZE_WIDTH: usize = 7;
+/// Width of the size column, as in Far: the bytes of a file under 100 MB, grouped by
+/// thousands, unless its words need more.
+const SIZE_WIDTH: usize = 10;
 /// Jumps the jump list of a panel keeps, as vim's keeps 100.
 const MAX_JUMPS: usize = 100;
 
 /// Narrow panels drop columns to keep at least this many cells for names.
 const MIN_NAME_WIDTH: usize = 8;
 
-/// Cells of the free space and size of a file system, such as `212G`.
-const SPACE_WIDTH: usize = 5;
 /// Cells the target of a symlink needs on the status line, its mark of text cut short among
 /// them; with less room the name shows alone.
 const MIN_LINK_TARGET: usize = 4;
@@ -211,8 +211,9 @@ pub(crate) struct View<'a> {
     pub(crate) reload_key: Option<&'a str>,
     /// Turns spinners.
     pub(crate) tick: u64,
-    pub(crate) now: SystemTime,
     pub(crate) tz: &'a TimeZone,
+    /// How dates and numbers are written.
+    pub(crate) formats: &'a Formats,
 }
 
 /// What a directory is sorted by. Directories always come first.
@@ -222,6 +223,15 @@ pub(crate) enum SortKey {
     Extension,
     Time,
     Size,
+}
+
+/// How a panel orders names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NameOrder {
+    /// As the language of the formats orders them, with the numbers in them by value.
+    Natural,
+    /// By their characters, ignoring case.
+    Characters,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -343,6 +353,7 @@ pub(crate) struct Panel {
     disconnected: bool,
     sort: Sort,
     show_hidden: bool,
+    names_by: NameOrder,
     /// Names of the marked entries; only shown ones, and never `..`.
     marked: HashSet<Vec<u8>>,
     /// The home directory, which `~` in dialogs stands for.
@@ -414,6 +425,7 @@ impl Panel {
                 descending: false,
             },
             show_hidden,
+            names_by: NameOrder::Natural,
             marked: HashSet::new(),
             home,
             cursor: 0,
@@ -451,6 +463,7 @@ impl Panel {
             disconnected: self.disconnected,
             sort: self.sort,
             show_hidden: self.show_hidden,
+            names_by: self.names_by,
             marked: HashSet::new(),
             home: self.home.clone(),
             cursor: self.cursor,
@@ -638,6 +651,25 @@ impl Panel {
         }
     }
 
+    /// Sorts names as the language of the formats orders them, with the numbers in them by
+    /// value, or by their characters.
+    pub(crate) fn set_natural_sort(&mut self, natural: bool) {
+        let names_by = if natural {
+            NameOrder::Natural
+        } else {
+            NameOrder::Characters
+        };
+        if self.names_by != names_by {
+            self.names_by = names_by;
+            self.rearrange();
+        }
+    }
+
+    /// Sorts the listing again, after the formats, and so the order of names, changed.
+    pub(crate) fn sort_again(&mut self) {
+        self.rearrange();
+    }
+
     /// Sorts and filters a listing again, keeping the cursor on its entry, or on its row if the
     /// entry is no longer shown.
     fn rearrange(&mut self) {
@@ -711,7 +743,9 @@ impl Panel {
     /// lose their marks.
     fn arrange(&mut self) {
         let Listing::Dir(entries) = &mut self.listing;
-        sort(entries, self.sort);
+        let formats = noc_locale::current();
+        let natural = (self.names_by == NameOrder::Natural).then_some(&*formats);
+        sort(entries, self.sort, natural);
         let show_hidden = self.show_hidden;
         self.shown = (0..entries.len())
             .filter(|&index| show_hidden || !entries[index].name.starts_with(b"."))
@@ -1703,7 +1737,7 @@ impl Panel {
         let (style, arrows) = (theme.panel_border, theme.glyphs.scroll_bar);
         self.bar = scrollbar::render(frame, bar, position, style, arrows);
 
-        let columns = DirColumns::for_width(width);
+        let columns = DirColumns::for_width(width, column_widths(view.formats));
         self.names = (view.decor, columns.name);
         // Other rows on screen, or a wider column, may need less of the scroll.
         self.shift = self.shift.min(self.shift_limit());
@@ -1766,23 +1800,22 @@ impl Panel {
             status_style = (theme.quick_search, theme.truncated_cursor);
             let invalid = self.finder().is_some_and(|finder| finder.error().is_some());
             let mark = search_mode::marked(search.mode, invalid, theme.quick_search, theme);
-            let prompt = |text: String| {
+            let prompt = Prompt::new(|text| {
                 if search.back {
                     fl!("panel-search-back", mode = mark.glyph, text = text)
                 } else {
                     fl!("panel-search", mode = mark.glyph, text = text)
                 }
-            };
-            let prefix = prompt(String::new());
-            let (shown, column) = field.visible(width.saturating_sub(cells::width(&prefix)));
+            });
+            let (shown, column) = field.visible(width.saturating_sub(prompt.width()));
             if active {
-                let column = u16::try_from(cells::width(&prefix) + column).unwrap_or(u16::MAX);
+                let column =
+                    u16::try_from(cells::width(&prompt.before) + column).unwrap_or(u16::MAX);
                 let x = area.x.saturating_add(column).min(area.right() - 1);
                 frame.set_cursor_position((x, area.y));
             }
-            let status = prompt(shown);
-            searching = Some(mark.spans(&status, &prefix, theme.quick_search));
-            status
+            searching = Some(mark.spans(&prompt, &shown, theme.quick_search));
+            prompt.with(&shown)
         } else if let Some(error) = &self.error {
             error.clone()
         } else if let Some(pending) = &self.pending {
@@ -1938,7 +1971,7 @@ impl Panel {
         if count == 0 {
             return;
         }
-        let total = fl!("panel-marked", size = cells::grouped(bytes), count = count);
+        let total = fl!("panel-marked", size = bytes, count = count);
         let total = format!(" {total} ");
         let width = cells::width(&total).min(usize::from(inside));
         // An underline would run along the frame.
@@ -2033,7 +2066,7 @@ impl Panel {
         let (files, dirs, bytes) = self.shown_total();
         let text = fl!(
             "panel-total",
-            size = cells::size(bytes, SPACE_WIDTH),
+            size = short_size(bytes),
             files = files,
             dirs = dirs
         );
@@ -2048,8 +2081,8 @@ impl Panel {
         let percent = u128::from(space.available.min(space.total)) * 100 / u128::from(space.total);
         let text = fl!(
             "panel-space",
-            free = cells::size(space.available, SPACE_WIDTH),
-            total = cells::size(space.total, SPACE_WIDTH),
+            free = short_size(space.available),
+            total = short_size(space.total),
             percent = u64::try_from(percent).unwrap_or(100)
         );
         Some(format!(" {text} "))
@@ -2144,7 +2177,7 @@ impl DirColumns {
             lines.push(self.name);
         }
         if self.time {
-            lines.push(self.name + 1 + SIZE_WIDTH);
+            lines.push(self.name + 1 + self.widths.0);
         }
         lines
     }
@@ -2179,12 +2212,11 @@ impl DirColumns {
                 let size = if entry.is_dir_like() {
                     fl!("panel-dir")
                 } else {
-                    entry
-                        .metadata
-                        .size
-                        .map_or_else(String::new, |size| cells::size(size, SIZE_WIDTH))
+                    entry.metadata.size.map_or_else(String::new, |size| {
+                        cells::size(size, self.widths.0, view.formats)
+                    })
                 };
-                let time = cells::mtime(entry.metadata.modified, view.now, view.tz);
+                let time = cells::mtime(entry.metadata.modified, view.tz, view.formats);
                 (size, time, theme.entry(entry))
             }
         };
@@ -2376,6 +2408,27 @@ fn name_spans(
     spans
 }
 
+/// `bytes` with its unit, as [`cells::short_size`] writes sizes on the frame.
+pub(crate) fn short_size(bytes: u64) -> String {
+    // Sizes stay far below 2^52, where `f64` would round them.
+    #[allow(clippy::cast_precision_loss)]
+    cells::short_size(bytes as f64, &noc_locale::current())
+}
+
+/// The cells of the size and the time columns: as many as the words that stand for a size, the
+/// longest times of `formats`, and the titles with the arrow of the order need, and the size at
+/// least as wide as in mc.
+fn column_widths(formats: &Formats) -> (usize, usize) {
+    let widest = |texts: &[String]| texts.iter().map(|text| cells::width(text)).max();
+    let titled = |title: String| cells::width(&title) + 1;
+    let size = widest(&[fl!("panel-up-dir"), fl!("panel-dir")])
+        .unwrap_or_default()
+        .max(titled(fl!("panel-size")))
+        .max(SIZE_WIDTH);
+    let time = formats.time_width().max(titled(fl!("panel-time")));
+    (size, time)
+}
+
 /// Column widths of a directory: the name takes what the size and time columns leave, and
 /// narrow panels drop the time, then the size.
 #[derive(Debug, Clone, Copy)]
@@ -2383,30 +2436,35 @@ struct DirColumns {
     name: usize,
     size: bool,
     time: bool,
+    /// The cells of the size and the time columns.
+    widths: (usize, usize),
 }
 
 impl DirColumns {
-    fn for_width(width: usize) -> Self {
-        let full = width.saturating_sub(SIZE_WIDTH + MTIME_WIDTH + 2);
+    fn for_width(width: usize, widths: (usize, usize)) -> Self {
+        let full = width.saturating_sub(widths.0 + widths.1 + 2);
         if full >= MIN_NAME_WIDTH {
             return Self {
                 name: full,
                 size: true,
                 time: true,
+                widths,
             };
         }
-        let sized = width.saturating_sub(SIZE_WIDTH + 1);
+        let sized = width.saturating_sub(widths.0 + 1);
         if sized >= MIN_NAME_WIDTH {
             return Self {
                 name: sized,
                 size: true,
                 time: false,
+                widths,
             };
         }
         Self {
             name: width,
             size: false,
             time: false,
+            widths,
         }
     }
 
@@ -2423,8 +2481,8 @@ impl DirColumns {
         let mut rest = Vec::new();
         let mut cut = Vec::new();
         let cells = [
-            (self.size, size, SIZE_WIDTH),
-            (self.time, time, MTIME_WIDTH),
+            (self.size, size, self.widths.0),
+            (self.time, time, self.widths.1),
         ];
         for ((shown, text, width), align) in cells.into_iter().zip([align[1], align[2]]) {
             if !shown {
@@ -2443,27 +2501,33 @@ impl DirColumns {
     }
 }
 
-/// Sorts a directory: directories first, then by `sort`; ties by name ignoring case, then by
-/// the bytes of the name.
-fn sort(entries: &mut Vec<DirEntry>, sort: Sort) {
+/// Sorts a directory: directories first, then by `sort`; ties by name, then by the bytes of
+/// the name. Names and extensions compare as the language of `natural` orders them, with the
+/// numbers in them by value; without it, by their characters, ignoring case.
+fn sort(entries: &mut Vec<DirEntry>, sort: Sort, natural: Option<&Formats>) {
     #[derive(PartialEq, Eq, PartialOrd, Ord)]
     enum Value {
         Name,
-        Extension(String),
+        Extension(Vec<u8>),
         Time(Option<SystemTime>),
         Size(u64),
     }
-    let mut keyed: Vec<(bool, Value, String, DirEntry)> = std::mem::take(entries)
+    // Keys that order as the text does: the collator's, or the text in lower case.
+    let key = |text: &str| match natural {
+        Some(formats) => formats.sort_key(text),
+        None => text.to_lowercase().into_bytes(),
+    };
+    let mut keyed: Vec<(bool, Value, Vec<u8>, DirEntry)> = std::mem::take(entries)
         .into_iter()
         .map(|entry| {
-            let name = String::from_utf8_lossy(&entry.name).to_lowercase();
+            let name = String::from_utf8_lossy(&entry.name);
             let value = match sort.key {
                 SortKey::Name => Value::Name,
-                SortKey::Extension => Value::Extension(extension(&name).to_owned()),
+                SortKey::Extension => Value::Extension(key(extension(&name))),
                 SortKey::Time => Value::Time(entry.metadata.modified),
                 SortKey::Size => Value::Size(entry.metadata.size.unwrap_or(0)),
             };
-            (!entry.is_dir_like(), value, name, entry)
+            (!entry.is_dir_like(), value, key(&name), entry)
         })
         .collect();
     keyed.sort_by(|a, b| {
@@ -2735,8 +2799,8 @@ mod tests {
             theme,
             reload_key: Some("Ctrl+r"),
             tick: 0,
-            now: UNIX_EPOCH + Duration::from_secs(NOW),
             tz: &TimeZone::UTC,
+            formats: &Formats::iso(),
         };
         terminal
             .draw(|frame| panel.render(frame, frame.area(), active, &view))
@@ -3089,8 +3153,8 @@ mod tests {
             theme: &theme,
             reload_key: None,
             tick: 0,
-            now: UNIX_EPOCH + Duration::from_secs(NOW),
             tz: &TimeZone::UTC,
+            formats: &Formats::iso(),
         };
         terminal
             .draw(|frame| panel.render(frame, frame.area(), true, &view))
@@ -3138,16 +3202,16 @@ mod tests {
         panel.search_down(1, SearchMode::Plain);
         typed(&mut panel, "ab");
         // The start and the end of the name show, not what it found in the middle.
-        assert_eq!(found(&mut panel, 40), ["abab"]);
+        assert_eq!(found(&mut panel, 47), ["abab"]);
         typed(&mut panel, ".");
-        assert_eq!(found(&mut panel, 40), ["ab."]);
+        assert_eq!(found(&mut panel, 47), ["ab."]);
         // Scrolled past the blank of the marker and the x, the mark over the a: the b after it
         // shows what it found.
         let mut panel = search_files(&[&format!("x{name}")]);
         panel.shift_names(2);
         panel.search_down(1, SearchMode::Plain);
         typed(&mut panel, "ab");
-        assert_eq!(found(&mut panel, 40), ["b"]);
+        assert_eq!(found(&mut panel, 47), ["b"]);
     }
 
     #[test]
@@ -3725,11 +3789,11 @@ mod tests {
         };
         panel.listed(request.generation, Ok(reply));
         insta::assert_snapshot!(draw(&mut panel, 50, 6, true));
-        // The total of the directory, ` 0 in 0 files, 0 dirs `, comes first.
-        assert!(bottom(&mut panel, 46).contains("123G / 500G (24%)"));
-        let narrow = bottom(&mut panel, 45);
+        // The total of the directory, ` 0B in 0 files, 0 dirs `, comes first.
+        assert!(bottom(&mut panel, 47).contains("123G / 500G (24%)"));
+        let narrow = bottom(&mut panel, 46);
         assert!(!narrow.contains("123G"), "too narrow: {narrow}");
-        assert!(narrow.contains("0 in 0 files, 0 dirs"), "{narrow}");
+        assert!(narrow.contains("0B in 0 files, 0 dirs"), "{narrow}");
 
         // Without the total, as on a host that is not connected, the space has the frame.
         panel.disconnected = true;
@@ -3869,7 +3933,7 @@ mod tests {
             (2, 3, 10_012_345),
             "hidden files are left out"
         );
-        assert!(bottom(&mut panel, 40).contains(" 9778K in 2 files, 3 dirs "));
+        assert!(bottom(&mut panel, 40).contains(" 9.5M in 2 files, 3 dirs "));
 
         let mut panel = loaded(
             "/srv",
@@ -3878,10 +3942,10 @@ mod tests {
                 entry("d", FileKind::Dir, 0),
             ],
         );
-        assert!(bottom(&mut panel, 40).contains(" 7 in 1 file, 1 dir "));
-        // ` 7 in 1 file, 1 dir ` and a corner and a line on either side.
-        assert!(bottom(&mut panel, 24).contains("1 dir"));
-        assert!(!bottom(&mut panel, 23).contains("dir"), "too narrow");
+        assert!(bottom(&mut panel, 40).contains(" 7B in 1 file, 1 dir "));
+        // ` 7B in 1 file, 1 dir ` and a corner and a line on either side.
+        assert!(bottom(&mut panel, 25).contains("1 dir"));
+        assert!(!bottom(&mut panel, 24).contains("dir"), "too narrow");
     }
 
     /// The rows of `panel` drawn 14 cells wide, a name column of 12, four of them, inside the
@@ -4101,9 +4165,9 @@ mod tests {
             "marked, under the cursor"
         );
         let separator: String = (0..40).map(|x| buffer[(x, 9)].symbol()).collect();
-        assert_eq!(separator, "╟────── 10,012,345 B in 2 files ───────╢");
-        assert_eq!(colors(7, 9), (Color::LightYellow, Color::Blue));
-        assert_eq!(colors(6, 9), (Color::Gray, Color::Blue));
+        assert_eq!(separator, "╟─────── 10012345 B in 2 files ────────╢");
+        assert_eq!(colors(8, 9), (Color::LightYellow, Color::Blue));
+        assert_eq!(colors(7, 9), (Color::Gray, Color::Blue));
     }
 
     #[test]
@@ -4165,7 +4229,7 @@ mod tests {
     #[test]
     fn column_lines_run_down_the_whole_listing_and_join_the_frame() {
         let mut panel = loaded("/srv", vec![entry("only.txt", FileKind::File, 1)]);
-        let text = draw(&mut panel, 40, 10, true).to_string();
+        let text = draw(&mut panel, 47, 10, true).to_string();
         let lines: Vec<&str> = text.lines().collect();
         let column = |line: &str| line.chars().nth(19);
         assert_eq!(column(lines[0]), Some('╤'), "{text}");
@@ -4191,7 +4255,7 @@ mod tests {
         for (active, cursor) in [(true, Color::Cyan), (false, Color::DarkGray)] {
             let terminal = render_themed(
                 &mut panel,
-                (40, 12),
+                (47, 12),
                 active,
                 &hosts,
                 Decor::new(false),

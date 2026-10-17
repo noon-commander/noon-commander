@@ -38,11 +38,13 @@ const HINT_ROWS: u16 = 2;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Key {
     Language,
+    Formats,
     Theme,
     Borders,
     Animations,
     Icons,
     ShowHidden,
+    NaturalSort,
     SearchMode,
     Mouse,
     Wheel,
@@ -158,6 +160,14 @@ impl Setting {
                 }
                 language.clone_into(&mut ui.language);
             }
+            Key::Formats => {
+                let formats = text.trim();
+                if !noc_locale::is_valid(formats) {
+                    let text = cells::sanitize(formats.as_bytes());
+                    return Err(fl!("config-formats-invalid", text = text));
+                }
+                formats.clone_into(&mut ui.formats);
+            }
             Key::Theme => text.clone_into(&mut ui.theme),
             Key::Borders => {
                 ui.borders = match text {
@@ -168,6 +178,7 @@ impl Setting {
             Key::Animations => ui.animations = self.on(),
             Key::Icons => ui.icons = self.on(),
             Key::ShowHidden => ui.show_hidden = self.on(),
+            Key::NaturalSort => ui.natural_sort = self.on(),
             Key::SearchMode => {
                 ui.search_mode = match text {
                     "plain" => SearchMode::Plain,
@@ -1143,15 +1154,8 @@ fn interface(config: &Config, themes: &[&str]) -> Category {
         SearchMode::Fzf => "fzf",
         SearchMode::Regex => "regex",
     };
-    let mut settings = vec![
-        Setting {
-            restart: true,
-            ..Setting::new(
-                Key::Language,
-                (fl!("config-language"), fl!("config-language-hint")),
-                text(&ui.language),
-            )
-        },
+    let mut settings = Vec::from(region(ui));
+    settings.extend([
         Setting::new(
             Key::Theme,
             (fl!("config-theme"), fl!("config-theme-hint")),
@@ -1182,6 +1186,11 @@ fn interface(config: &Config, themes: &[&str]) -> Category {
             Key::ShowHidden,
             (fl!("config-show-hidden"), fl!("config-show-hidden-hint")),
             Value::Toggle(ui.show_hidden),
+        ),
+        Setting::new(
+            Key::NaturalSort,
+            (fl!("config-natural-sort"), fl!("config-natural-sort-hint")),
+            Value::Toggle(ui.natural_sort),
         ),
         Setting::new(
             Key::SearchMode,
@@ -1226,13 +1235,32 @@ fn interface(config: &Config, themes: &[&str]) -> Category {
             ),
             text(&ui.which_key_delay_ms.to_string()),
         ),
-    ];
+    ]);
     settings.extend(bars(ui));
     Category {
         icon: categories::INTERFACE,
         title: fl!("config-interface"),
         settings,
     }
+}
+
+/// The settings of the language and the formats of the region.
+fn region(ui: &UiConfig) -> [Setting; 2] {
+    [
+        Setting {
+            restart: true,
+            ..Setting::new(
+                Key::Language,
+                (fl!("config-language"), fl!("config-language-hint")),
+                text(&ui.language),
+            )
+        },
+        Setting::new(
+            Key::Formats,
+            (fl!("config-formats"), fl!("config-formats-hint")),
+            text(&ui.formats),
+        ),
+    ]
 }
 
 /// The settings of the menu bar and the tab bar.
@@ -1524,6 +1552,8 @@ mod tests {
         assert_eq!(dialog.context(), Context::DialogInput, "on the language");
         let event = dialog.handle(action(Action::Down));
         assert_eq!(event, ConfigEvent::default(), "the language did not change");
+        let event = dialog.handle(action(Action::Down));
+        assert_eq!(event, ConfigEvent::default(), "nor the formats");
         let event = dialog.handle(action(Action::Right));
         let (old, new) = event.change.unwrap();
         assert_eq!(
@@ -1646,6 +1676,8 @@ mod tests {
         let mut dialog = dialog();
         typed(&mut dialog, "de");
         dialog.handle(action(Action::Down));
+        typed(&mut dialog, "iso");
+        dialog.handle(action(Action::Down));
         dialog.handle(action(Action::Right));
         dialog.handle(action(Action::Down));
         dialog.handle(action(Action::Toggle));
@@ -1653,7 +1685,11 @@ mod tests {
         dialog.handle(action(Action::Toggle));
         dialog.handle(action(Action::Down));
         dialog.handle(action(Action::Toggle));
-        for _ in 0..3 {
+        for _ in 0..2 {
+            dialog.handle(action(Action::Down));
+        }
+        dialog.handle(action(Action::Toggle));
+        for _ in 0..2 {
             dialog.handle(action(Action::Down));
         }
         dialog.handle(action(Action::Toggle));
@@ -1689,6 +1725,8 @@ mod tests {
         assert!(dialog.handle(action(Action::Cancel)).closed);
         let mut expected = Config::default();
         expected.ui.language = "de".to_owned();
+        expected.ui.formats = "iso".to_owned();
+        expected.ui.natural_sort = false;
         expected.ui.theme = "terminal".to_owned();
         expected.ui.borders = Borders::Single;
         expected.ui.animations = false;
@@ -1713,10 +1751,11 @@ mod tests {
 
     #[test]
     fn an_invalid_text_keeps_the_cursor_and_says_why() {
-        let cases: [(usize, usize, &str, &str); 11] = [
+        let cases: [(usize, usize, &str, &str); 12] = [
             (0, 0, "?", "is not auto or a language tag"),
-            (0, 8, "0", "is not a step of the wheel"),
-            (0, 8, "pages", "is not a step of the wheel"),
+            (0, 1, "not a tag", "is not auto, iso, or a language tag"),
+            (0, 10, "0", "is not a step of the wheel"),
+            (0, 10, "pages", "is not a step of the wheel"),
             (1, 1, "x", "is not a number of jobs"),
             (2, 2, "-F other_config", "Invalid extra ssh arguments"),
             (2, 0, "", "The ssh program cannot be empty"),
@@ -1801,9 +1840,12 @@ mod tests {
     #[test]
     fn scrolls_to_the_cursor_with_a_scroll_bar_when_the_settings_do_not_fit() {
         let mut dialog = dialog();
+        category(&mut dialog, 1);
         let tall = draw(&mut dialog, 72, 24);
         assert!(!tall.contains('█'), "{tall}");
+        category(&mut dialog, 0);
         // Home and End in the language field move its cursor.
+        dialog.handle(action(Action::Down));
         dialog.handle(action(Action::Down));
         dialog.handle(action(Action::End));
         let short = draw(&mut dialog, 72, 9);
@@ -1930,12 +1972,12 @@ mod tests {
                 .collect();
             (underlined, terminal.backend().to_string())
         };
-        assert_eq!(underlined(76).0, "1L2T3B4o5I6h7SMweKdna");
+        assert_eq!(underlined(76).0, "1L2F3T4B5o6I7hrSMweKdn");
         // Names cut short keep the letter before the cut, as Command line its 6 and Show hidden
         // files its h, and lose one after it, as Key hints delay its d.
         let (letters, screen) = underlined(40);
         assert!(screen.contains(" 6 Co"), "{screen}");
-        assert_eq!(letters, "1L2T3B4o5I6h7SMweKna", "{screen}");
+        assert_eq!(letters, "1L2F3T4B5o6I7hrSMweKn", "{screen}");
     }
 
     #[test]
@@ -1968,16 +2010,16 @@ mod tests {
         let (old, new) = dialog.handle(Resolved::Hotkey('i')).change.unwrap();
         assert_eq!((old.ui.language.as_str(), old.ui.icons), ("auto", true));
         assert_eq!((new.ui.language.as_str(), new.ui.icons), ("de", false));
-        assert_eq!((dialog.focus, dialog.row), (Focus::Settings, 4));
+        assert_eq!((dialog.focus, dialog.row), (Focus::Settings, 5));
         // A choice goes round, in either case of its letter.
         let (_, new) = dialog.handle(Resolved::Hotkey('T')).change.unwrap();
-        assert_eq!((new.ui.theme.as_str(), dialog.row), ("terminal", 1));
+        assert_eq!((new.ui.theme.as_str(), dialog.row), ("terminal", 2));
         let (_, new) = dialog.handle(Resolved::Hotkey('t')).change.unwrap();
         assert_eq!(new.ui.theme, "mc-classic", "round to the first");
         // A text field gets the focus in Insert mode, from the categories too.
         dialog.handle(action(Action::PrevField));
         assert_eq!(dialog.handle(Resolved::Hotkey('w')), ConfigEvent::default());
-        assert_eq!((dialog.focus, dialog.row), (Focus::Settings, 8));
+        assert_eq!((dialog.focus, dialog.row), (Focus::Settings, 10));
         assert_eq!(
             (dialog.context(), dialog.mode()),
             (Context::DialogInput, Mode::Insert)
@@ -1986,18 +2028,18 @@ mod tests {
         dialog.handle(Resolved::Hotkey('w'));
         assert_eq!(
             (dialog.row, dialog.mode()),
-            (8, Mode::Insert),
+            (10, Mode::Insert),
             "its own letter"
         );
         // From a field in Normal mode, the next one is in Insert mode all the same.
         dialog.handle(action(Action::NormalMode));
         dialog.handle(Resolved::Hotkey('d'));
-        assert_eq!((dialog.row, dialog.mode()), (11, Mode::Insert));
+        assert_eq!((dialog.row, dialog.mode()), (13, Mode::Insert));
         // Leaving a field that holds something invalid keeps the cursor and says why.
         dialog.handle(Resolved::Hotkey('w'));
         typed(&mut dialog, "0");
         assert_eq!(dialog.handle(Resolved::Hotkey('b')), ConfigEvent::default());
-        assert_eq!((dialog.row, dialog.mode()), (8, Mode::Insert));
+        assert_eq!((dialog.row, dialog.mode()), (10, Mode::Insert));
         assert!(dialog.error.is_some());
         assert_eq!(dialog.handle(Resolved::Hotkey('2')), ConfigEvent::default());
         assert_eq!((dialog.category, dialog.focus), (0, Focus::Settings));
@@ -2007,7 +2049,7 @@ mod tests {
             (new.ui.wheel, new.ui.borders),
             (Wheel::Page, Borders::Single)
         );
-        assert_eq!((dialog.row, dialog.error.as_deref()), (2, None));
+        assert_eq!((dialog.row, dialog.error.as_deref()), (3, None));
     }
 
     #[test]

@@ -240,6 +240,18 @@
       sections of the help ([ADR 0033](adr/0033-letters-in-dialogs.md))
 - [x] Windows grow from their middle as they open and shrink back as they close, the menus of
       F9 drop from their bar; `ui.animations` ([ADR 0034](adr/0034-animated-windows.md))
+- [x] Formats of the region for dates, times, and numbers: the system's (on macOS as System
+      Settings has them), `iso`, or a language tag, `ui.formats`; plural forms that see the
+      numbers in every message with a count ([ADR 0035](adr/0035-formats-of-the-region.md))
+- [x] Names sorted as the language of the formats orders them, numbers by value;
+      `ui.natural_sort`
+- [x] Search that matches names in either Unicode form, NFC or NFD (as macOS has them), and
+      ignores case by full case folding (`ß` as `ss`), in plain text, regular expressions,
+      `g +` and `g -`, and completion
+- [ ] Letters of other keyboard layouts as their keys in Normal and Visual mode, from the key the
+      kitty keyboard protocol reports for the place on a standard keyboard, once crossterm reads
+      it ([crossterm#1074](https://github.com/crossterm-rs/crossterm/pull/1074)); letters and
+      digits at least, and whether Shift with a sign, as `;` for `:`, goes by the standard layout
 
 ## Known issues
 

@@ -31,9 +31,6 @@ use super::search_mode::{self, Matcher, Prompt};
 use super::theme::Theme;
 use crate::i18n::fl;
 
-/// Width of the size column, as in Far: the bytes of a file under 100 MB, grouped by
-/// thousands, unless its words need more.
-const SIZE_WIDTH: usize = 10;
 /// Jumps the jump list of a panel keeps, as vim's keeps 100.
 const MAX_JUMPS: usize = 100;
 
@@ -1793,6 +1790,8 @@ impl Panel {
         let mut searching = None;
         // A symlink under the cursor, with its target.
         let mut linked = None;
+        // The size of the file under the cursor, every byte of it.
+        let mut size = None;
         let status = if let Some(renaming) = &self.renaming {
             fl!("panel-rename", name = cells::sanitize(&renaming.name))
         } else if let Some(search) = &self.search {
@@ -1851,6 +1850,7 @@ impl Panel {
         } else {
             let (status, link) = self.cursor_status(view);
             linked = link;
+            size = self.cursor_size(view.formats);
             status
         };
         let mut line = Line::default().style(status_style.0);
@@ -1860,6 +1860,11 @@ impl Panel {
             line = Line::from(Span::styled(spinner, theme.host_status(waiting)));
             room = room.saturating_sub(2);
         }
+        // At the right, as in Far, while the name keeps some room.
+        let size = size
+            .map(|size| format!(" {size}"))
+            .filter(|size| cells::width(size) + MIN_NAME_WIDTH <= room);
+        room -= size.as_deref().map_or(0, cells::width);
         let marks = theme.glyphs.marks;
         let fitted = match (searching, linked) {
             (Some(spans), _) => cells::fit_spans(spans, room, status_style, marks),
@@ -1867,7 +1872,22 @@ impl Panel {
             (None, None) => cells::fit(&status, room, Align::Left, status_style, marks),
         };
         line.spans.extend(fitted);
+        line.spans.extend(size.map(Span::raw));
         frame.render_widget(line, area);
+    }
+
+    /// The size of the file under the cursor, every byte of it, which the size column rounds.
+    /// Not of a symlink: its status line is about its target, and its own size is only the
+    /// length of the path it holds.
+    fn cursor_size(&self, formats: &Formats) -> Option<String> {
+        match self.row(self.cursor)? {
+            Row::Entry(entry)
+                if !matches!(entry.metadata.kind, FileKind::Dir | FileKind::Symlink) =>
+            {
+                entry.metadata.size.map(|size| formats.integer(size))
+            }
+            Row::Entry(_) | Row::Parent => None,
+        }
     }
 
     /// The status line of the row under the cursor: its name, and the target of a symlink.
@@ -2195,7 +2215,8 @@ impl DirColumns {
         let [name, size, time] = titles;
         let styles = (theme.header, theme.truncated);
         let titles = [name.as_str(), size.as_str(), time.as_str()];
-        let (mut name, rest, _) = self.join(titles, [Align::Center; 3], styles, theme.glyphs.marks);
+        let marks = (theme.glyphs.marks, None);
+        let (mut name, rest, _) = self.join(titles, [Align::Center; 3], styles, marks);
         name.extend(rest);
         Line::from(name).style(theme.header)
     }
@@ -2206,15 +2227,20 @@ impl DirColumns {
         const ALIGN: [Align; 3] = [Align::Left, Align::Right, Align::Left];
         let theme = view.theme;
         let [prefix, name] = shown_name(row, view.decor);
+        let mut unit = None;
         let (size, time, style) = match row {
             Row::Parent => (fl!("panel-up-dir"), String::new(), theme.directory),
             Row::Entry(entry) => {
-                let size = if entry.is_dir_like() {
-                    fl!("panel-dir")
-                } else {
-                    entry.metadata.size.map_or_else(String::new, |size| {
-                        cells::size(size, self.widths.0, view.formats)
-                    })
+                let size = match entry.metadata.size {
+                    _ if entry.is_dir_like() => fl!("panel-dir"),
+                    None => String::new(),
+                    Some(size) => {
+                        // Sizes stay far below 2^52, where `f64` would round them.
+                        #[allow(clippy::cast_precision_loss)]
+                        let (number, power) = cells::size_parts(size as f64, view.formats);
+                        unit = Some((cells::unit(power), theme.size_unit(power)));
+                        format!("{number}{}", cells::unit(power))
+                    }
                 };
                 let time = cells::mtime(entry.metadata.modified, view.tz, view.formats);
                 (size, time, theme.entry(entry))
@@ -2223,7 +2249,7 @@ impl DirColumns {
         // Without styles: `row_style` gives the row its colors, and the marks their accent.
         let styles = (Style::new(), Style::new());
         let cells = ["", &size, &time];
-        let (_, rest, cut) = self.join(cells, ALIGN, styles, view.theme.glyphs.marks);
+        let (_, rest, cut) = self.join(cells, ALIGN, styles, (theme.glyphs.marks, unit));
         let mut shown = name_spans(&prefix, &name, (self.name, shift), (style, found), view);
         let after = shown.spans.len();
         shown
@@ -2415,16 +2441,15 @@ pub(crate) fn short_size(bytes: u64) -> String {
     cells::short_size(bytes as f64, &noc_locale::current())
 }
 
-/// The cells of the size and the time columns: as many as the words that stand for a size, the
-/// longest times of `formats`, and the titles with the arrow of the order need, and the size at
-/// least as wide as in mc.
+/// The cells of the size and the time columns: as many as the longest sizes and times of
+/// `formats`, the words that stand for a size, and the titles with the arrow of the order need.
 fn column_widths(formats: &Formats) -> (usize, usize) {
     let widest = |texts: &[String]| texts.iter().map(|text| cells::width(text)).max();
     let titled = |title: String| cells::width(&title) + 1;
     let size = widest(&[fl!("panel-up-dir"), fl!("panel-dir")])
         .unwrap_or_default()
         .max(titled(fl!("panel-size")))
-        .max(SIZE_WIDTH);
+        .max(cells::short_size_width(formats));
     let time = formats.time_width().max(titled(fl!("panel-time")));
     (size, time)
 }
@@ -2469,22 +2494,23 @@ impl DirColumns {
     }
 
     /// The name cell, and the other cells with the blanks the lines between them go on, in
-    /// `style`, with the marks of text cut short of `marks` in `mark` over it; and the indexes
-    /// of those marks among the other cells.
+    /// `style`, with the marks of text cut short of `marks` in `mark` over it, and the `unit`
+    /// that ends the size in a style of its own; and the indexes of those marks among the other
+    /// cells.
     fn join(
         self,
         [name, size, time]: [&str; 3],
         align: [Align; 3],
         (style, mark): (Style, Style),
-        marks: Marks,
+        (marks, unit): (Marks, Option<(&str, Style)>),
     ) -> (Vec<Span<'static>>, Vec<Span<'static>>, Vec<usize>) {
         let mut rest = Vec::new();
         let mut cut = Vec::new();
         let cells = [
-            (self.size, size, self.widths.0),
-            (self.time, time, self.widths.1),
+            (self.size, size, self.widths.0, unit),
+            (self.time, time, self.widths.1, None),
         ];
-        for ((shown, text, width), align) in cells.into_iter().zip([align[1], align[2]]) {
+        for ((shown, text, width, unit), align) in cells.into_iter().zip([align[1], align[2]]) {
             if !shown {
                 continue;
             }
@@ -2494,7 +2520,15 @@ impl DirColumns {
                 // After the text before the mark.
                 cut.push(rest.len() + 1);
             }
-            rest.extend(cells::spans(fitted, (style, mark), marks));
+            let mut spans = cells::spans(fitted, (style, mark), marks);
+            if let ([head, tail], Some((unit, unit_style))) = (spans.as_mut_slice(), unit)
+                && tail.content.is_empty()
+                && let Some(number) = head.content.strip_suffix(unit)
+            {
+                *head = Span::styled(number.to_owned(), style);
+                *tail = Span::styled(unit.to_owned(), style.patch(unit_style));
+            }
+            rest.extend(spans);
         }
         let name = cells::fit(name, self.name, align[0], (style, mark), marks);
         (name, rest, cut)
@@ -2671,6 +2705,7 @@ mod tests {
     use noc_vfs::{FileKind, Metadata};
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
+    use ratatui::buffer::Buffer;
     use ratatui::layout::Position;
     use ratatui::style::Color;
 
@@ -4229,7 +4264,7 @@ mod tests {
     #[test]
     fn column_lines_run_down_the_whole_listing_and_join_the_frame() {
         let mut panel = loaded("/srv", vec![entry("only.txt", FileKind::File, 1)]);
-        let text = draw(&mut panel, 47, 10, true).to_string();
+        let text = draw(&mut panel, 44, 10, true).to_string();
         let lines: Vec<&str> = text.lines().collect();
         let column = |line: &str| line.chars().nth(19);
         assert_eq!(column(lines[0]), Some('╤'), "{text}");
@@ -4255,7 +4290,7 @@ mod tests {
         for (active, cursor) in [(true, Color::Cyan), (false, Color::DarkGray)] {
             let terminal = render_themed(
                 &mut panel,
-                (47, 12),
+                (44, 12),
                 active,
                 &hosts,
                 Decor::new(false),
@@ -4273,6 +4308,83 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn units_of_sizes_take_colors_by_how_big_and_the_cursor_s_on_its_row() {
+        let files = [
+            ("a", 512, "B", Color::Gray, false),
+            ("b", 5 << 10, "K", Color::Gray, false),
+            ("c", 5 << 20, "M", Color::Gray, true),
+            ("d", 3 << 30, "G", Color::LightCyan, true),
+            ("e", 2 << 40, "T", Color::LightRed, true),
+        ];
+        let entries = files
+            .iter()
+            .map(|&(name, size, ..)| entry(name, FileKind::File, size))
+            .collect();
+        let mut panel = loaded("/srv", entries);
+        let hosts = |_: &str| HostState::default();
+        let theme = Theme::mc_classic();
+        let draw = |panel: &mut Panel, active: bool| {
+            let size = (40, 11);
+            let terminal = render_themed(panel, size, active, &hosts, Decor::new(false), &theme);
+            terminal.backend().buffer().clone()
+        };
+        // The unit ends the size, before the line of the time column.
+        let unit = |buffer: &Buffer, y: u16| {
+            let x = (0..40).rfind(|&x| buffer[(x, y)].symbol() == "│").unwrap() - 1;
+            (buffer[(x - 1, y)].clone(), buffer[(x, y)].clone())
+        };
+        let buffer = draw(&mut panel, true);
+        for (y, (name, _, symbol, color, bold)) in (3..).zip(files) {
+            let (digit, unit) = unit(&buffer, y);
+            assert_eq!((unit.symbol(), unit.fg), (symbol, color), "{name}");
+            assert_eq!(unit.modifier.contains(Modifier::BOLD), bold, "{name}");
+            assert_eq!(digit.fg, Color::Gray, "{name}: the digits as the row");
+            assert!(!digit.modifier.contains(Modifier::BOLD), "{name}");
+        }
+
+        panel.handle(Action::End);
+        let (_, on_cursor) = unit(&draw(&mut panel, true), 7);
+        assert_eq!((on_cursor.fg, on_cursor.bg), (Color::Black, Color::Cyan));
+        assert!(!on_cursor.modifier.contains(Modifier::BOLD));
+        let (_, faint_cursor) = unit(&draw(&mut panel, false), 7);
+        assert_eq!(
+            (faint_cursor.fg, faint_cursor.bg),
+            (Color::LightRed, Color::DarkGray),
+            "under the inactive cursor, which keeps the colors"
+        );
+    }
+
+    #[test]
+    fn the_status_line_shows_every_byte_of_a_file_at_its_right() {
+        let mut panel = loaded(
+            "/srv",
+            vec![
+                entry("docs", FileKind::Dir, 4096),
+                entry("disk.img", FileKind::File, 3_221_225_472),
+            ],
+        );
+        let status = |panel: &mut Panel, width: u16| {
+            let screen = draw(panel, width, 6, true).to_string();
+            let line = screen.lines().nth(4).unwrap_or_default().to_owned();
+            line.trim_matches('"').chars().skip(1).collect::<String>()
+        };
+        panel.handle(Action::End);
+        assert!(
+            status(&mut panel, 40).ends_with(" 3221225472║"),
+            "{}",
+            status(&mut panel, 40)
+        );
+        let narrow = status(&mut panel, 19);
+        assert!(
+            narrow.starts_with("disk.img") && !narrow.contains('3'),
+            "{narrow}"
+        );
+        panel.handle(Action::Up);
+        let directory = status(&mut panel, 40);
+        assert!(!directory.contains("4096"), "{directory}");
     }
 
     #[test]

@@ -2,10 +2,10 @@
 source: crates/noc/src/tui/app.rs
 expression: terminal.backend()
 ---
-"╔ /srv/left ══════╤══════════╗╔ /srv ═══════════╤══════════╗"
-"║      ↑Name      │   Size   ║║      ↑Name      │   Size   ║"
-"║/..              │   UP--DIR█║/..              │   UP--DIR█"
-"╟─────────────────┴──────────╢╟─────────────────┴──────────╢"
+"╔ /srv/left ═════════╤═══════╗╔ /srv ══════════════╤═══════╗"
+"║       ↑Name        │ Size  ║║       ↑Name        │ Size  ║"
+"║/..                 │UP--DIR█║/..                 │UP--DIR█"
+"╟────────────────────┴───────╢╟────────────────────┴───────╢"
 "║..                          ║║..                          ║"
 "╚═ 0B in 0 files, 1 dir ═════╝╚═ 0B in 0 files, 2 dirs ════╝"
 "NORMAL                                                      "

@@ -54,19 +54,29 @@ came before `file2`, and letters with accents after `z`.
   six months and the date alone before, made a column of two shapes, which read badly.
 - **Dates are written in digits only.** Names of months would mix the language of the formats
   with that of the messages; digits read the same in both.
-- **Every number is grouped as the region groups it**, file sizes too: the size column is ten
-  cells wide, as in Far, with the bytes of a file under 100 MB whole (`12 345 678`), and K, M,
-  G, … above, grouped too (`97 656K`). The frame's totals and free space, and the free space in
-  the location menu, write sizes with their unit and a decimal below 100 (`1.5G / 460G`), as the
-  window of a job does. Numbers that name rather than count stay as they are: the digits of tabs
-  and F-keys, a count typed before a command, and the numbers typed in the Configuration dialog.
+- **Every number is grouped as the region groups it**, file sizes too. Sizes in the panels'
+  column, on their frame, in the location menu, and in the window of a job have a unit and a
+  decimal below 100 (`512B`, `78.5K`, `503G`), so the unit always takes the last cell of the
+  column and lines up. A column of grouped bytes, then K, M, G above them, as in Far, left the
+  digits of bytes one cell right of the others, and `515 123M` looked no bigger than `80 416`;
+  a cell kept for the unit lined the digits up but not the sizes, and a column of every byte
+  needs 15 cells for 999 GB. The status line shows every byte of the file under the cursor at
+  its right, grouped, as Far's does. Numbers that name rather than count stay as they are: the
+  digits of tabs and F-keys, a count typed before a command, and the numbers typed in the
+  Configuration dialog.
+- **The unit of a size in the column grows bolder and brighter with the size**, a role of the
+  theme (`size_units`): B and K as the text, M bold, G bold in the theme's accent, T and above
+  bold in red, so that big files show and the digits keep the row's colors; as
+  `eza --color-scale` and `lsd` color sizes, the unit alone. Without colors, in `terminal`, M
+  and above are bold. Under the cursor and on marked rows it takes the row's colors.
 - **Fluent formats its numbers.** Both loaders, the app's and the viewer's, get
   `noc_locale::fluent` as the formatter of their bundles, renewed after every load as the
   isolation marks are. Messages take numbers as numbers, so plural forms work; the language of the
   messages picks the plural forms, the formats of the region write the digits.
 - **Columns take what the formats need**: the time column is as wide as the longest time of the
-  formats, the size column as wide as its words; neither is narrower than its title. Marks of
-  the direction of text that some formats have are left out, as terminals show them as garbage.
+  formats, the size column as its longest size and its words; neither is narrower than its
+  title. Marks of the direction of text that some formats have are left out, as terminals show
+  them as garbage.
 - **`ui.natural_sort`, on by default**, sorts the names of panels with the collator; off, as
   before, by their characters in lower case.
 - **Help → About** shows the language of the messages and where the formats come from, and

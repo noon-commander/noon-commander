@@ -52,6 +52,10 @@ pub(crate) struct Theme {
     pub(crate) device: Style,
     /// FIFO, socket, or unknown kind.
     pub(crate) special: Style,
+    /// The unit after a size in the size column, from M on: M, G, then T and above; bytes and
+    /// K are as the text. Bolder and brighter as files grow, so that big ones show; the digits
+    /// keep the row's colors.
+    pub(crate) size_units: [Style; 3],
     pub(crate) host_idle: Style,
     pub(crate) host_connecting: Style,
     pub(crate) host_connected: Style,
@@ -241,6 +245,11 @@ impl Theme {
             stale_link: fg(Color::LightRed),
             device: fg(Color::LightMagenta),
             special: fg(Color::Black),
+            size_units: [
+                Style::new().bold(),
+                fg(Color::LightCyan).bold(),
+                fg(Color::LightRed).bold(),
+            ],
             host_idle: fg(Color::Gray),
             host_connecting: fg(Color::LightYellow),
             host_connected: fg(Color::LightGreen),
@@ -330,6 +339,8 @@ impl Theme {
             stale_link: plain,
             device: plain,
             special: plain,
+            // Without colors, weight alone.
+            size_units: [plain.bold(), plain.bold(), plain.bold()],
             // Without colors, connected hosts stand out by weight; a failure has a glyph or
             // marker of its own.
             host_idle: plain.dim(),
@@ -409,6 +420,8 @@ impl Theme {
             stale_link: fg(p.red),
             device: fg(p.pink),
             special: fg(p.overlay1),
+            // Catppuccin writes numbers in peach.
+            size_units: [Style::new().bold(), fg(p.peach).bold(), fg(p.red).bold()],
             host_idle: fg(p.overlay1),
             host_connecting: fg(p.yellow),
             host_connected: fg(p.green),
@@ -494,6 +507,7 @@ impl Theme {
             stale_link: fg(p.red),
             device: fg(p.pink),
             special: fg(p.faint),
+            size_units: [Style::new().bold(), fg(p.accent).bold(), fg(p.red).bold()],
             host_idle: fg(p.faint),
             host_connecting: fg(p.accent),
             host_connected: fg(p.green),
@@ -635,6 +649,14 @@ impl Theme {
         style.patch(color).crossed_out()
     }
 
+    /// The style of the unit of a size in `power`s of 1024, 0 for bytes.
+    pub(crate) fn size_unit(&self, power: usize) -> Style {
+        match power {
+            0 | 1 => Style::new(),
+            _ => self.size_units[(power - 2).min(2)],
+        }
+    }
+
     /// The style of a host's status marker.
     pub(crate) fn host_status(&self, status: HostStatus) -> Style {
         match status {
@@ -662,6 +684,7 @@ impl Theme {
 #[derive(Debug, Clone, Copy)]
 struct Palette {
     pink: Color,
+    peach: Color,
     mauve: Color,
     red: Color,
     yellow: Color,
@@ -683,6 +706,7 @@ struct Palette {
 impl Palette {
     const MOCHA: Self = Self {
         pink: Color::from_u32(0x00f5_c2e7),
+        peach: Color::from_u32(0x00fa_b387),
         mauve: Color::from_u32(0x00cb_a6f7),
         red: Color::from_u32(0x00f3_8ba8),
         yellow: Color::from_u32(0x00f9_e2af),
@@ -703,6 +727,7 @@ impl Palette {
 
     const LATTE: Self = Self {
         pink: Color::from_u32(0x00ea_76cb),
+        peach: Color::from_u32(0x00fe_640b),
         mauve: Color::from_u32(0x0088_39ef),
         red: Color::from_u32(0x00d2_0f39),
         yellow: Color::from_u32(0x00df_8e1d),
@@ -725,6 +750,7 @@ impl Palette {
     fn indexed(self) -> Self {
         Self {
             pink: indexed(self.pink),
+            peach: indexed(self.peach),
             mauve: indexed(self.mauve),
             red: indexed(self.red),
             yellow: indexed(self.yellow),
@@ -1054,6 +1080,29 @@ mod tests {
                     theme.cursor_inactive.fg, None,
                     "{name}: keeps the names' colors"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn units_of_sizes_stand_out_from_m_on_and_show_on_the_panel_and_the_inactive_cursor() {
+        for name in Theme::NAMES {
+            for depth in [ColorDepth::TrueColor, ColorDepth::Indexed] {
+                let theme = Theme::by_name(name, depth).unwrap();
+                let [mega, giga, tera] = theme.size_units;
+                let powers = [0, 1, 2, 3, 4, 6].map(|power| theme.size_unit(power));
+                let text = Style::new();
+                assert_eq!(powers, [text, text, mega, giga, tera, tera], "{name}");
+                for unit in theme.size_units {
+                    let bold = ratatui::style::Modifier::BOLD;
+                    assert!(unit.add_modifier.contains(bold), "{name}");
+                    for bg in [theme.panel.bg, theme.cursor_inactive.bg] {
+                        assert!(unit.fg.is_none() || unit.fg != bg, "{name} {depth:?}");
+                    }
+                }
+                if *name != "terminal" {
+                    assert!(mega != giga && giga != tera && mega != tera, "{name}");
+                }
             }
         }
     }

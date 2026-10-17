@@ -16,10 +16,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `LANG`; `iso` writes `2025-10-17 14:05` and `1234.5`; a language tag names a region's formats
   from CLDR, through ICU4X. Every time shows one way, its date with the year and its time of
   day, in digits (`12.10.26 05:05`), in the panels' time column, as wide as the formats need,
-  and in dialogs. Every number is grouped as the region groups it: file sizes in a size column
-  of ten cells, as in Far (`12 345 678`, then `97 656K`), sizes with a decimal on the frame
-  (`1.5G / 460G`), counts, line numbers, speeds, and percentages. Help → About and
-  `noc debug version` tell the language of the messages and where the formats come from.
+  and in dialogs. Every number is grouped as the region groups it: sizes, counts, line numbers,
+  speeds, and percentages. Help → About and `noc debug version` tell the language of the
+  messages and where the formats come from.
+- Sizes in the panels have a unit and a decimal below 100, as on the frame (`512B`, `78.5K`,
+  `503G`), so their units line up in the last cell of the column; the unit grows bolder and
+  brighter with the size: B and K as the text, M bold, G bold in the theme's accent, T and above
+  bold in red. The status line shows every byte of the file under the cursor at its right,
+  grouped, as `disk.img  3 221 225 472`.
 - Panels sort names as the language of the formats orders them, with the numbers in them by
   value, so `file2` comes before `file10` and letters with accents next to the same letters
   without them. `ui.natural_sort` (on), a check box under Interface, sorts them by their

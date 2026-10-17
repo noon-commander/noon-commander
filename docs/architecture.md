@@ -991,9 +991,12 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   then files, by name as the language of the formats orders names, with the numbers in them by
   value (`ui.natural_sort`; off, by their characters ignoring case); columns are name, size, and
   modification time (local time: the date, with its year, and the time, in the formats of the
-  region, as `12.10.26 05:05`), and narrow panels drop the time, then the size. The size column
-  is ten cells, as in Far: the bytes grouped as the region groups numbers, then K, M, G, …; the
-  time column is as wide as the longest time of the formats. Each panel has its own sort order:
+  region, as `12.10.26 05:05`), and narrow panels drop the time, then the size. Sizes have a
+  unit and a decimal below 100 (`512B`, `78.5K`, `503G`), the unit from M on bold, from G on in
+  a color too, as the theme's `size_units` say; the status line shows every byte of the file
+  under the cursor at its right, while the name keeps 8 cells. The size column is as wide as the
+  longest size and the words `UP--DIR` and `DIR` (7 cells in English); the time column as the
+  longest time of the formats. Each panel has its own sort order:
   name, extension, modification time, or size (`o n`, `o e`, `o m`, `o s`);
   time and size start newest and largest first, the same key again reverses, ties go by name,
   and an arrow in the header marks the order. Directories stay first. Names that start with a
@@ -1599,7 +1602,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   idle menu bar on `mantle`, the F-key numbers and the shadow on `crust`; a `blue` cursor, the
   active panel's title, and focused buttons; `lavender` headers, `mauve` marks and dialog
   titles; directories `blue`, executables `green`, symlinks `teal`, broken links `red`,
-  devices `pink`; hosts `overlay1`, `yellow`, `green`, `red` by state. The Noon themes are
+  devices `pink`; hosts `overlay1`, `yellow`, `green`, `red` by state; the units of sizes G in
+  `peach`, the color Catppuccin gives numbers, and T `red`. The Noon themes are
   built the same way from a palette of roles taken from the logo: the cursor, the active
   panel's title, and focused buttons are on the logo's gold (`#A46D00`), and the menu bar on
   its amber frame (`#996400`), with cream text; error dialogs and the cursor where the user is

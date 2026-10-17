@@ -131,8 +131,8 @@ panel-total = { $size } in { $files ->
 panel-space = { $free } / { $total } ({ $percent }%)
 # Status line when a directory cannot be read; the panel keeps showing the previous one.
 panel-error = Cannot open { $path }: { $reason }
-# The units after sizes in powers of 1024, from bytes up, as mc writes them: 512B in a job's
-# window, 12M, 3G in panels. Each takes one cell, as columns of sizes are narrow.
+# The units after sizes in powers of 1024, from bytes up, as mc writes them: 512B, 78.5K, 12M,
+# 3.0G, in panels and a job's window. Each takes one cell, as the size column is narrow.
 size-bytes = B
 size-kilo = K
 size-mega = M

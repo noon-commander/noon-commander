@@ -26,32 +26,42 @@ static UNITS: LazyLock<[String; 7]> = LazyLock::new(|| {
     ]
 });
 
-/// A file size in at most `width` cells, grouped by thousands as the region writes numbers:
-/// the bytes when they fit, otherwise K, M, G, … (powers of 1024, rounded), as Far shows it.
-pub(crate) fn size(bytes: u64, width: usize, formats: &Formats) -> String {
-    let mut text = formats.integer(bytes);
-    let mut value = bytes;
-    for unit in &UNITS[1..] {
-        if self::width(&text) <= width {
-            break;
-        }
-        value = value / 1024 + u64::from(value % 1024 >= 512);
-        text = format!("{}{unit}", formats.integer(value));
-    }
-    text
+/// A size with its unit, in powers of 1024, with a decimal below 100 so that a slow transfer
+/// still shows change: `512B`, `1.5M`, `480K`. At most [`short_size_width`] cells.
+pub(crate) fn short_size(bytes: f64, formats: &Formats) -> String {
+    let (number, power) = size_parts(bytes, formats);
+    format!("{number}{}", unit(power))
 }
 
-/// A size with its unit, in powers of 1024 as sizes in panels, with a decimal below 100 so
-/// that a slow transfer still shows change: `512B`, `1.5M`, `480K`.
-pub(crate) fn short_size(bytes: f64, formats: &Formats) -> String {
+/// [`short_size`] apart: the number, and the power of 1024 of its unit, 0 for bytes.
+pub(crate) fn size_parts(bytes: f64, formats: &Formats) -> (String, usize) {
     let mut value = bytes.max(0.0);
-    let mut unit = 0;
-    while value >= 1024.0 && unit + 1 < UNITS.len() {
+    let mut power = 0;
+    while value >= 1024.0 && power + 1 < UNITS.len() {
         value /= 1024.0;
-        unit += 1;
+        power += 1;
     }
-    let fraction = usize::from(unit > 0 && value < 99.95);
-    format!("{}{}", formats.decimal(value, fraction, false), UNITS[unit])
+    let fraction = usize::from(power > 0 && value < 99.95);
+    (formats.decimal(value, fraction, true), power)
+}
+
+/// The unit of sizes in `power`s of 1024: `B`, `K`, `M`, …; the largest beyond them.
+pub(crate) fn unit(power: usize) -> &'static str {
+    &UNITS[power.min(UNITS.len() - 1)]
+}
+
+/// The most cells that [`short_size`] takes: four digits, grouped, or two with a decimal, and
+/// a unit.
+pub(crate) fn short_size_width(formats: &Formats) -> usize {
+    let number = [
+        formats.decimal(1023.0, 0, true),
+        formats.decimal(99.9, 1, true),
+    ]
+    .iter()
+    .map(|number| width(number))
+    .max()
+    .unwrap_or(0);
+    number + UNITS.iter().map(|unit| width(unit)).max().unwrap_or(0)
 }
 
 /// A modification time in `tz`, its date and its time of day, as every time shows in the
@@ -309,22 +319,32 @@ mod tests {
     }
 
     #[test]
-    fn sizes_fit_their_cells() {
+    fn short_sizes_fit_their_cells_and_come_apart() {
         let iso = Formats::iso();
-        assert_eq!(size(0, 10, &iso), "0");
-        assert_eq!(size(9_999_999_999, 10, &iso), "9999999999");
-        assert_eq!(size(10_000_000_000, 10, &iso), "9765625K");
-        assert_eq!(size(1_536, 3, &iso), "2K");
-        assert_eq!(size(5 * 1024 * 1024 * 1024, 4, &iso), "5G");
-        assert!(
-            size(u64::MAX, 10, &iso).len() <= 10,
-            "{}",
-            size(u64::MAX, 10, &iso)
+        assert_eq!(short_size_width(&iso), 5);
+        for bytes in [
+            0.0,
+            1023.0,
+            1_048_552.0,
+            102_349.0,
+            1_099_511_627_776.0,
+            1.8e19,
+        ] {
+            let text = short_size(bytes, &iso);
+            assert!(width(&text) <= 5, "{text}");
+        }
+        assert_eq!(size_parts(512.0, &iso), ("512".to_owned(), 0));
+        assert_eq!(size_parts(80_416.0, &iso), ("78.5".to_owned(), 1));
+        assert_eq!(
+            size_parts(5.0 * 1024f64.powi(3), &iso),
+            ("5.0".to_owned(), 3)
         );
+        assert_eq!(unit(3), "G");
+        assert_eq!(unit(99), "E", "the largest");
         // Grouped as the formats group numbers: Unicode's root formats, which no region has.
         let root = Formats::detect("und");
-        assert_eq!(size(99_999_999, 10, &root), "99,999,999");
-        assert_eq!(size(123_456_789, 10, &root), "120,563K");
+        assert_eq!(short_size(1_047_552.0, &root), "1,023K");
+        assert_eq!(short_size_width(&root), 6);
     }
 
     #[test]

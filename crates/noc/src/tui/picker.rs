@@ -1,7 +1,8 @@
 //! What the windows that list rows to choose one from share: the location menu and the tab
 //! menu, drawn over their panel, the window of the saved workspaces, and the window of the
-//! command history. They open in Normal mode, where keys move and act; `/` types in the filter,
-//! in Insert mode, and Esc goes back to the rows with the filter kept.
+//! command history. They open in Insert mode, typing in the filter; Esc goes to
+//! the rows with the filter kept, in Normal mode, where keys move and act and `/` types in the
+//! filter again (ADR 0036).
 
 use noc_config::SearchMode;
 use noc_scroll::scrollbar::{self, Bar};
@@ -143,7 +144,8 @@ pub(crate) struct Picker {
 }
 
 impl Picker {
-    /// A picker without rows, whose filter matches in `mode` (`ui.search_mode`).
+    /// A picker without rows, whose filter matches in `mode` (`ui.search_mode`). It opens with
+    /// the filter taking what is typed, in Insert mode, as the zoxide window does (ADR 0036).
     pub(crate) fn new(mode: SearchMode) -> Self {
         Self {
             texts: Vec::new(),
@@ -151,7 +153,7 @@ impl Picker {
             filter: Field::plain(""),
             mode,
             error: None,
-            filtering: false,
+            filtering: true,
             matches: Vec::new(),
             cursor: 0,
             window: Window::default(),
@@ -267,8 +269,9 @@ impl Picker {
     }
 
     /// Takes a key: Up, Down, the page keys, Home, and End move, Enter chooses, and Esc closes
-    /// the window. `/` types in the filter: characters then filter, and the keys of text fields
-    /// edit it, until Esc goes back to the rows. Other keys are the window's.
+    /// the window. The filter takes what is typed, as it does when the window opens: characters
+    /// filter, and the keys of text fields edit it, until Esc goes back to the rows; `/` types
+    /// in it again. Other keys are the window's.
     pub(crate) fn handle(&mut self, input: Resolved) -> Pick {
         let rows = self.len();
         let last = rows.saturating_sub(1);
@@ -652,26 +655,34 @@ mod tests {
     }
 
     #[test]
-    fn the_rows_take_the_keys_until_slash_types_in_the_filter() {
+    fn the_filter_takes_the_keys_as_it_opens_until_esc_goes_back_to_the_rows() {
         let mut picker = picker(&["one", "two", "three"], SearchMode::Plain);
-        assert_eq!(picker.mode(), Mode::Normal);
-        assert_eq!(picker.handle(Resolved::Insert('t')), Pick::Pending);
-        assert_eq!(picker.shown(0..3), [0, 1, 2], "no filter yet");
-        typed(&mut picker, "t");
         assert_eq!(picker.mode(), Mode::Insert);
+        assert_eq!(picker.handle(Resolved::Insert('t')), Pick::Pending);
         assert_eq!(picker.shown(0..3), [1, 2]);
-        typed(&mut picker, "2");
+        assert_eq!(picker.handle(Resolved::Insert('2')), Pick::Pending);
         assert!(picker.shown(0..3).is_empty(), "a digit is text");
         press(&mut picker, Action::Backspace);
         press(&mut picker, Action::NormalMode);
         assert_eq!(picker.mode(), Mode::Normal);
         assert_eq!(picker.shown(0..3), [1, 2], "the filter stays");
+        assert_eq!(picker.handle(Resolved::Insert('o')), Pick::Pending);
+        assert_eq!(
+            picker.shown(0..3),
+            [1, 2],
+            "characters are no text in Normal mode"
+        );
         press(&mut picker, Action::Backspace);
         assert_eq!(
             picker.shown(0..3),
             [1, 2],
             "Backspace is no edit in Normal mode"
         );
+        typed(&mut picker, "w");
+        assert_eq!(picker.mode(), Mode::Insert, "/ types in the filter again");
+        assert_eq!(picker.shown(0..3), [1]);
+        press(&mut picker, Action::Backspace);
+        press(&mut picker, Action::NormalMode);
         press(&mut picker, Action::HalfPageDown);
         assert_eq!(press(&mut picker, Action::Confirm), Pick::Chosen(1));
     }

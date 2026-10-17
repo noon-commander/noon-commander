@@ -383,6 +383,7 @@ mod tests {
         let mut window = window();
         let restore = |name: &str| WorkspacesEvent::Restore(name.to_owned());
         assert_eq!(press(&mut window, Action::Confirm), restore("noon"));
+        press(&mut window, Action::NormalMode);
         assert_eq!(
             window.handle(Resolved::Insert('3')),
             WorkspacesEvent::Pending,

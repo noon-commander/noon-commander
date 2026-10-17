@@ -771,6 +771,7 @@ mod tests {
             press(&mut menu, Action::Confirm),
             MenuEvent::Open(Location::Local(PathBuf::from("/Volumes/USB")))
         );
+        press(&mut menu, Action::NormalMode);
         assert_eq!(
             menu.handle(Resolved::Insert('6')),
             MenuEvent::Pending,

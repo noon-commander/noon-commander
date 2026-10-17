@@ -7841,7 +7841,7 @@ mod tests {
     #[test]
     fn k_goes_for_what_is_in_front_alone() {
         let mut app = with_files(&["a"]);
-        keys(&mut app, &["t", "h", "shift-k"]);
+        keys(&mut app, &["t", "h", "esc", "shift-k"]);
         let full = |app: &mut App| app.tab_menu.as_mut().map(|menu| menu.picker_mut().full());
         assert_eq!(full(&mut app), Some(Whole::Shown));
         assert_eq!(app.whole, Whole::Cut, "the panels keep theirs");
@@ -8132,8 +8132,8 @@ mod tests {
     fn q_colon_from_a_panel_closes_with_the_window_of_the_history() {
         let mut app = loaded();
         keys(&mut app, &["q", ":"]);
-        assert_eq!(app.place(), (Mode::Normal, Context::CommandHistory));
-        keys(&mut app, &["q"]);
+        assert_eq!(app.place(), (Mode::Insert, Context::CommandHistory));
+        keys(&mut app, &["esc", "q"]);
         assert!(
             app.command_line.is_none(),
             "back to the panel, as from vim's :q"
@@ -8141,7 +8141,7 @@ mod tests {
         assert_eq!(app.place().1, Context::Panel);
         // From the command line, it goes back there.
         keys(&mut app, &["!", "ctrl-f", "q", ":"]);
-        keys(&mut app, &["q"]);
+        keys(&mut app, &["esc", "q"]);
         assert_eq!(app.place().1, Context::CommandLine);
     }
 
@@ -8192,7 +8192,7 @@ mod tests {
         );
         keys(&mut app, &["esc", "t", "n", "t", "n", "t", "n"]);
         assert_eq!(app.tabs(Side::Left).len(), 4);
-        keys(&mut app, &["t", "h", "g", "g", "3", "d", "d"]);
+        keys(&mut app, &["t", "h", "esc", "g", "g", "3", "d", "d"]);
         assert_eq!(app.tabs(Side::Left).len(), 1);
     }
 
@@ -8599,19 +8599,25 @@ mod tests {
     }
 
     #[test]
-    fn lists_open_in_normal_mode_and_slash_types_in_the_filter() {
+    fn lists_open_in_insert_mode_with_the_filter_taking_the_keys() {
         let mut app = loaded();
         keys(&mut app, &["t", "n", "t", "h"]);
-        assert_eq!(app.place(), (Mode::Normal, Context::TabMenu));
-        keys(&mut app, &["/", "x"]);
         assert_eq!(app.place(), (Mode::Insert, Context::TabMenu));
+        keys(&mut app, &["x"]);
         assert!(screen_of(&mut app, 16).contains(&prompt(&app, "Filter", "x")));
         keys(&mut app, &["backspace", "esc"]);
         assert_eq!(app.place(), (Mode::Normal, Context::TabMenu));
-        keys(&mut app, &["g", "g", "d", "d"]);
+        keys(&mut app, &["/"]);
+        assert_eq!(app.place(), (Mode::Insert, Context::TabMenu));
+        keys(&mut app, &["esc", "g", "g", "d", "d"]);
         assert_eq!(app.tabs(Side::Left).len(), 1, "d d closes the tab");
         keys(&mut app, &["q"]);
         assert_eq!(app.context(), Context::Panel);
+        for opens in [&["ctrl-w", "1"][..], &["t", "w"], &["q", ":"], &["g", "z"]] {
+            let mut app = loaded();
+            keys(&mut app, opens);
+            assert_eq!(app.mode(), Mode::Insert, "after {opens:?}");
+        }
     }
 
     #[test]
@@ -13100,11 +13106,12 @@ mod tests {
             (&["/"], "INSERT · Quick search"),
             (&["?"], "INSERT · Quick search"),
             (&["j", "r", "esc"], "NORMAL · Rename"),
-            (&["ctrl-w", "1"], "NORMAL · List"),
-            (&["t", "h"], "NORMAL · List"),
+            (&["ctrl-w", "1"], "INSERT · List"),
+            (&["t", "h"], "INSERT · List"),
+            (&["t", "h", "esc"], "NORMAL · List"),
             (&["g", "z"], "INSERT · List"),
-            (&["t", "w"], "NORMAL · List"),
-            (&["q", ":"], "NORMAL · List"),
+            (&["t", "w"], "INSERT · List"),
+            (&["q", ":"], "INSERT · List"),
             (&["f1"], "NORMAL · Help"),
             (&["f9"], "NORMAL · Menu"),
             (&["f7"], "INSERT · Dialog"),
@@ -13130,8 +13137,8 @@ mod tests {
         assert!(mode_line(&mut app, 160).ends_with("$ ls"));
         keys(&mut app, &["ctrl-f", "q", ":"]);
         assert_eq!(app.place().1, Context::CommandHistory);
-        assert_eq!(mode_of(&mut app), "NORMAL · List");
-        keys(&mut app, &["q"]);
+        assert_eq!(mode_of(&mut app), "INSERT · List");
+        keys(&mut app, &["esc", "q"]);
         assert_eq!(app.place().1, Context::CommandLine);
         assert!(mode_line(&mut app, 160).ends_with("$ ls"));
     }
@@ -13328,16 +13335,14 @@ mod tests {
         assert!(app.hints.is_some());
         assert_eq!(app.place(), (Mode::Normal, Context::Panel));
         keys_with_hints(&mut app, &mut state, &["ctrl-k"]);
-        assert_eq!(app.place(), (Mode::Normal, Context::KeyHints));
+        assert_eq!(app.place(), (Mode::Insert, Context::KeyHints));
         assert!(app.hints.is_none(), "the list takes the place of the hints");
         let text = screen_of(&mut app, 30);
         assert!(
             text.contains("Ctrl+w h") && text.contains(&prompt(&app, "Filter", "")),
             "{text}"
         );
-        // `/` filters, and Enter runs the command in the panel, with the count.
-        keys_with_hints(&mut app, &mut state, &["/"]);
-        assert_eq!(app.place(), (Mode::Insert, Context::KeyHints));
+        // What is typed filters, and Enter runs the command in the panel, with the count.
         let typed: Vec<String> = "'row down".chars().map(String::from).collect();
         let typed: Vec<&str> = typed
             .iter()
@@ -13358,7 +13363,9 @@ mod tests {
         assert_eq!(app.context(), Context::KeyHints);
         let text = screen_of(&mut app, 30);
         assert!(text.contains("Ctrl+w h") && !text.contains("g g"), "{text}");
-        // Esc closes it, and the hints do not come back.
+        // Esc goes back to the rows, Esc again closes it, and the hints do not come back.
+        keys_with_hints(&mut app, &mut state, &["esc"]);
+        assert_eq!(app.place(), (Mode::Normal, Context::KeyHints));
         keys_with_hints(&mut app, &mut state, &["esc"]);
         assert_eq!(app.place(), (Mode::Normal, Context::Panel));
         assert!(app.hints.is_none());
@@ -13372,9 +13379,9 @@ mod tests {
         let dialog = app.place();
         assert_eq!(dialog, (Mode::Insert, Context::PathInput));
         keys_with_hints(&mut app, &mut state, &["ctrl-k", "ctrl-k"]);
-        assert_eq!(app.place(), (Mode::Normal, Context::KeyHints));
+        assert_eq!(app.place(), (Mode::Insert, Context::KeyHints));
         assert!(screen_of(&mut app, 30).contains("Complete the path"));
-        keys_with_hints(&mut app, &mut state, &["esc"]);
+        keys_with_hints(&mut app, &mut state, &["esc", "esc"]);
         assert_eq!(app.place(), dialog, "the dialog has the keys again");
     }
 

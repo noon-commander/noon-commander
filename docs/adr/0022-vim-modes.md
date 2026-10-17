@@ -35,7 +35,9 @@ no registers.
   viewer, and the help start in Normal mode. Quick search, the command line of `:` and `!`, the
   field of a rename, the keywords of the zoxide window, and a dialog whose first focus is a text
   field start in Insert mode; a dialog whose first focus is a button, in Normal mode. The zoxide
-  window is there to type keywords, as `zi` is, where the other lists are mostly browsed.
+  window is there to type keywords, as `zi` is, where the other lists are mostly browsed. Since
+  [ADR 0036](0036-lists-open-in-insert-mode.md) every list starts in Insert mode, with its filter
+  taking the keys.
 - **Esc goes to Normal mode**, then closes in Normal mode, in the field of a rename and the fields
   of dialogs. Quick search, `:`, and `!` are typed as vim's command line: Esc closes them, and
   Ctrl+f puts `:` and `!` in Normal mode in place of vim's window of the command line, after which
@@ -94,8 +96,8 @@ no registers.
 - **The lists** (the location menu, the tab menu, the zoxide window, the workspaces, the command
   history) take `j`, `k`, and `q` in Normal mode, and `d d` where a row can go; `/` types in
   their filter in Insert mode, and Esc goes back to the rows. The zoxide window opens with its
-  keywords in Insert mode, so its first Esc goes to the rows and the second closes it. Their
-  digit hotkeys are gone.
+  keywords in Insert mode, so its first Esc goes to the rows and the second closes it; since
+  [ADR 0036](0036-lists-open-in-insert-mode.md) every list does. Their digit hotkeys are gone.
 - **Ctrl+k shows the key hints** of whatever is in front, in every mode and every terminal, in
   place of Alt+/, which an Esc and a quick `/` arrived as: Esc then `/` started key hints rather
   than quick search. Ctrl+k comes as a byte of its own, without the kitty keyboard protocol, is

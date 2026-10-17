@@ -468,8 +468,9 @@ pub(super) const PRESET: Preset = &[
     ),
     // What the windows that list items to choose from share: the location menu, the tab menu,
     // the zoxide window, the workspaces, the command history, and the list of the key hints
-    // fall back to it. `/` types in the filter, in Insert mode, where Esc goes back to the list.
-    // Ctrl+s switches how the filter matches, in either mode.
+    // fall back to it. They open with the filter taking the keys, in Insert mode, where Esc goes
+    // back to the list and `/` types in the filter again. Ctrl+s switches how the filter matches,
+    // in either mode.
     (
         Mode::Normal,
         Context::List,
@@ -530,8 +531,7 @@ pub(super) const PRESET: Preset = &[
         Context::TabMenu,
         &[(Action::CloseTab, &["f8"])],
     ),
-    // The zoxide window, on top of the list's; its filter takes keywords, in Insert mode as it
-    // opens.
+    // The zoxide window, on top of the list's; its filter takes keywords.
     (Mode::Normal, Context::Jump, &[]),
     // The window of the saved workspaces, on top of the list's: a adds one; r and F6 rename,
     // and d d and F8 delete, as they rename and delete files.

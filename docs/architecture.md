@@ -219,19 +219,20 @@ grouped under headings:
   on and the hosts that are connected, connecting, or waiting for Retry. A last row,
   `24 more…`, stands for the rest: the cursor and the mouse select it, and Enter on it shows the
   whole group until the menu closes.
-- The menu opens in Normal mode, as the other [lists](#lists) do, with the cursor on the home
-  directory or the volume that holds the panel's directory, whichever is nearer, or on its host:
-  `j` and `k` move, `g g` and `G` go to the first and the last row, and Enter opens the row in
-  that panel, which becomes active.
-- `/` types in the filter, in Insert mode, which finds the places by name, path or mount point,
+- The menu opens in Insert mode, as the other [lists](#lists) do, with the filter taking the keys
+  and the cursor on the home directory or the volume that holds the panel's directory, whichever
+  is nearer, or on its host. Up and Down move, and Enter opens the row in that panel, which
+  becomes active; after Esc, `j` and `k` move too, and `g g` and `G` go to the first and the last
+  row.
+- The filter, which `/` types in again, finds the places by name, path or mount point,
   alias, label, and address, and finds every one, hidden ones too; the rows of more go away while
   the filter has text. It matches them in the [search mode](#search-modes): as fzf does, the
   default, with the cursor on the best row; or a row's text must hold the filter, ignoring case,
   or match it as a regular expression, with the cursor on the first. The rows keep their order
   either way. The filter is a text field, edited with the keys of `input`; Esc goes back to the
-  rows with the filter kept. F4 edits the settings of the host under the cursor, F8 or `d d`
-  disconnects it or stops connecting to it, `R` reads the volumes and hosts again, and Esc, `q`,
-  or F10 closes the menu.
+  rows with the filter kept. F4 edits the settings of the host under the cursor, F8, or `d d`
+  on the rows, disconnects it or stops connecting to it, `R` on the rows reads the volumes and
+  hosts again, and Esc or `q` on the rows, Ctrl+c, or F10 closes the menu.
 - `recent.toml` in the state directory keeps the places used last: the aliases of hosts and
   the mount points of volumes, most recent first, up to 50 of each. A host counts as used when
   a connection to it succeeds; a volume when a panel arrives in a directory on it in any way:
@@ -368,7 +369,7 @@ directories, which Enter opens in the active panel:
   order, as `zi` does with fzf, or as a regular expression, in zoxide's order. In the plain
   mode what is typed is zoxide keywords, as `z foo bar` in a shell; each change asks
   `zoxide query --list --score --exclude <dir> -- <keywords>` again, and a query still running
-  is dropped. Ctrl+s going to or from the plain mode asks zoxide again. Unlike the other
+  is dropped. Ctrl+s going to or from the plain mode asks zoxide again. As the other
   [lists](#lists), the window opens in Insert mode, typing keywords, as `zi` does: Esc goes to
   the rows, in Normal mode, where `/` types again and Esc closes the window. Directories under
   the home directory show from `~`, and the window matches them as shown.
@@ -502,16 +503,17 @@ dirs…, opens it in its Files and dirs mode, which finds their names with fd
 ### Lists
 
 The location menu, the tab menu, the zoxide window, the Workspaces window, and the command history
-list rows to choose from. Their rows take keys in Normal mode (keymap context `list`, which each
-one's context falls back to), where all but the zoxide window open: `j`, `k`, Ctrl+j, Ctrl+d,
+list rows to choose from. Each opens in Insert mode, with its filter taking the keys ([ADR
+0036](adr/0036-lists-open-in-insert-mode.md)): characters are text, the keys of `input` edit it
+(Ctrl+r types a register, which the app reads, and Ctrl+o, which has no Normal mode to go to, does
+nothing), Up, Down, Ctrl+p, Ctrl+n, and the page keys move, Enter takes the row under the cursor,
+and Ctrl+c or F10 closes the window. Esc goes to the rows, with the filter kept, in Normal mode
+(keymap context `list`, which each one's context falls back to): `j`, `k`, Ctrl+j, Ctrl+d,
 Ctrl+u, Ctrl+f, Ctrl+b, `g g`, and `G` move, and the rows scroll as the panels' do, headings among
-them, a count repeats a motion, Enter takes the row under the cursor, `d d` and F8 delete it where
-the window can, as many rows as a count says (`3d d`, as vim's deletes three lines), and Esc, `q`,
-Ctrl+c, or F10 closes the window. `/` types in the filter, in Insert mode, where characters are
-text, the keys of `input` edit it (Ctrl+r types a register, which the app reads, and Ctrl+o, which
-has no Normal mode to go to, does nothing), Up, Down, Ctrl+p, and Ctrl+n still move, and Esc goes
-back to the rows with the filter kept. Text pasted while the
-rows have the keys goes to the filter, in Insert mode. There are no digit hotkeys.
+them, a count repeats a motion, Enter takes the row, `d d` and F8 delete it where the window can,
+as many rows as a count says (`3d d`, as vim's deletes three lines), `/` types in the filter
+again, and Esc, `q`, Ctrl+c, or F10 closes the window. Text pasted while the rows have the keys
+goes to the filter, in Insert mode. There are no digit hotkeys.
 
 - All but the zoxide window share `tui/picker.rs`: the filter, a text field with a cursor
   (`dialog::Field`), which matches in the [search mode](#search-modes); the cursor, scrolling,
@@ -520,7 +522,7 @@ rows have the keys goes to the filter, in Insert mode. There are no digit hotkey
   while the filter is empty, as the rows of more in the location menu do, or only while it has
   text, as the places behind them do.
 - The zoxide window does not use it: zoxide, not a filter, picks its rows from the keywords
-  typed. It has the same modes, but opens in Insert mode, with the keywords taking the keys.
+  typed. It has the same modes, with the keywords taking the keys as it opens.
 - `K` shows the whole row under the cursor in two lines under the rows, until `K` again, in each
   list on its own (`picker::Whole`), and not in the panels, which have theirs: the directory of the
   zoxide window, the place of the location menu, the title of a tab, where the tabs of a workspace
@@ -968,10 +970,11 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 
 - **Keys.** The keymap is vim's, in its modes, with mc's F-keys ([ADR 0022](adr/0022-vim-modes.md));
   see the keymap below. The panels take keys in Normal mode, as vim's buffers do; text fields, quick
-  search, and the command line in Insert mode. The line above the F-key bar shows on the left the
-  mode, in bold capitals as lualine shows it, `NORMAL`, `INSERT`, `VISUAL`, or `VISUAL LINE`, and
-  after Ctrl+o `(insert)`; then, after `·`, the kind of window that has the keys, named by its
-  keymap context so that it says which keys work ([ADR 0032](adr/0032-line-of-the-mode.md)):
+  search, the command line, and the filters of the lists in Insert mode. The line above the F-key
+  bar shows on the left the mode, in bold capitals as lualine shows it, `NORMAL`, `INSERT`,
+  `VISUAL`, or `VISUAL LINE`, and after Ctrl+o `(insert)`; then, after `·`, the kind of window
+  that has the keys, named by its keymap context so that it says which keys work
+  ([ADR 0032](adr/0032-line-of-the-mode.md)):
   `Quick search`, `Rename`, `List` for the location menu, the tab menu, the zoxide window, the
   workspaces, the command history, and the list of the key hints, `Menu` for F9, `Dialog` for
   every dialog, the Configuration dialog, the search of a tree, the jobs, and the checksums,
@@ -1340,7 +1343,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   commands of the panel's host, or of all of them after Tab, newest first, filtered as quick search
   matches, each with its host's label or alias, its directory, and its first line, and the whole
   command under the cursor below; Enter puts it on the line, with the prompt reversed until the next
-  key if it ran on another host, and `d d` or F8 removes it.
+  key if it ran on another host, and F8, or `d d` on the rows, removes it.
 - **Keymap.** The keymap is vim's, in its modes, with mc's F-keys ([ADR
   0022](adr/0022-vim-modes.md)): one preset, `tui/keymap/preset.rs`, maps keys to `Action`s per mode
   (`Mode::Normal`, `Insert`, `Visual`) and context (`global`, `panel`, `input`, `quick_search`,
@@ -1504,11 +1507,11 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   nvim's hover window the keys: the keymap resolves it with the count and the register, and the app
   opens `tui/key_hints.rs` in place of the hints it has, over everything, the dialogs too
   (`Context::KeyHints`, which falls back to `list`). It lists every sequence of the hints, whole,
-  after the keys they had typed (`Keymap::sequences`), one row for each command; `/` filters it,
-  Enter closes it and runs the command where the keys went before, with that count and register,
-  and Esc closes it. `Esc` never starts a sequence, and never shows hints. The
-  `KeyState` also keeps what the pending command has typed, which the line above the F-key bar shows
-  (`KeyState::showcmd`).
+  after the keys they had typed (`Keymap::sequences`), one row for each command; it opens with its
+  filter taking the keys, Enter closes it and runs the command where the keys went before, with
+  that count and register, and Esc goes to the rows, where Esc again closes it. `Esc` never starts
+  a sequence, and never shows hints. The `KeyState` also keeps what the pending command has typed,
+  which the line above the F-key bar shows (`KeyState::showcmd`).
 - **Mouse.** On by default (`ui.mouse`; [ADR 0018](adr/0018-mouse-support.md)). The event loop
   captures the mouse while it is on and turns crossterm's events into `Pointer`s
   (`tui/mouse.rs`): a click, a double click (the same cell within 400 ms), a right click, or a

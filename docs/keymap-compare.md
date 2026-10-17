@@ -1230,9 +1230,9 @@ show but do not run. `/` types in its filter, in Insert mode, which falls back t
 ## Output of commands (`user_screen`, Normal mode)
 
 The terminal's own screen, with the output of commands, in place of the panels. It falls back to
-nothing, `global` neither: only the keys that bring the panels back do anything, g < again, Enter
-and q, as the prompt under the output that vim's g < shows takes them, and Esc and Ctrl+c. mc
-and Far show it and hide it with Ctrl+o.
+nothing, `global` neither: only the keys that bring the panels back do anything: Enter and q, as
+the prompt under the output that vim's g < shows takes them, g <, Esc, and Ctrl+c. mc and Far show
+it and hide it with Ctrl+o.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |

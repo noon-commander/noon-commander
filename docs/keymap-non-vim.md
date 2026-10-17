@@ -257,7 +257,7 @@ not:
 | --- | --- | --- | --- | --- | --- |
 | Shift+Tab<br>Tab<br>Ctrl+i | `left`<br>`right`<br>`right` | noc | h (vim)<br>l (vim)<br>l (vim) | Same | The menu to the left and the right, as Tab goes through the fields of a dialog. vim's Tab is Ctrl+i, which goes forward through the jump list. |
 | q | `cancel` | less, ranger | Esc, Ctrl+c (vim); q (less, ranger) | Same | As in `dialog`. |
-| F9<br>F10 | `cancel` | mc | Esc, Ctrl+c (vim); q (less, ranger) | Same | F9 closes the menu it opens, as F3 closes the viewer; F10 closes mc's menus. |
+| F9<br>F10 | `cancel` | noc, mc | Esc, Ctrl+c (vim); q (less, ranger) | Same | F9 closes the menu, then the menu bar, as Esc does; F10 closes mc's menus. |
 | Alt and a letter | — | mc | — | Esc and a quick letter arrive as Alt and the letter too, and run its command rather than close the menu | Open the menu, or run the command, whose letter it is, as mc's menus take the letter alone; with Alt, so that h, j, k, and l stay the motions ([ADR 0022](adr/0022-vim-modes.md)). Not in the preset: `Context::alt_letters_are_hotkeys` asks for it. |
 
 ## Command line (`command_line`, Insert mode)

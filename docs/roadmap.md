@@ -220,9 +220,9 @@
 - [ ] `H`, `M`, `L`, `z z`, `z t`, `z b`, Ctrl+e, and Ctrl+y in the panels and the lists
 - [ ] Enter and `l` on a file open it
 - [ ] Smaller keys of vim's: in the viewer `0`, `$`, `z h`, `z l`, and search (`/`, `?`, `n`, `N`);
-      F1 and `g ?` close the help; Space goes back from the output of commands, as from vim's
-      hit-enter prompt; Ctrl+u and Ctrl+d in the lists of dialogs; Ctrl+e closes the pull-down menu
-      and the filters of lists, where Ctrl+y confirms; Replace mode (`R`, Insert in Insert mode),
+      Space goes back from the output of commands, as from vim's hit-enter prompt; Ctrl+u and
+      Ctrl+d in the lists of dialogs; Ctrl+e closes the pull-down menu and the filters of lists,
+      where Ctrl+y confirms; Replace mode (`R`, Insert in Insert mode),
       `Z Q`, `' '`, and marks (`m a`); a click gives up a command that waits, such as `d` or `"a`,
       and a paste uses up a count or a register that waits, as vim's does
 - [x] The location menu replaces the virtual root and the list of hosts: groups Favorites,

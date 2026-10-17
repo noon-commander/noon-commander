@@ -311,21 +311,13 @@ impl JumpMenu {
         (self.page, self.cursor, self.window, self.bar) = (page, cursor, window, bar);
     }
 
-    /// The keywords, with the glyph of the mode before them, at `area`, with the cursor while
-    /// they take text.
+    /// The keywords, a text field in the colors of those of dialogs, with the glyph of the mode
+    /// before them, at `area`, with the cursor while they take text.
     fn draw_keywords(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let mark = search_mode::marked(self.mode, self.invalid.is_some(), theme.dialog, theme);
-        let room = usize::from(area.width);
         let prompt = Prompt::new(|text| fl!("jump-keywords", mode = mark.glyph, text = text));
-        let (shown, column) = self.keywords.visible(room.saturating_sub(prompt.width()));
-        let column = u16::try_from(cells::width(&prompt.before) + column).unwrap_or(u16::MAX);
-        let prompt = cells::fit_spans(
-            mark.spans(&prompt, &shown, theme.dialog),
-            room,
-            (theme.dialog, theme.truncated_dialog),
-            theme.glyphs.marks,
-        );
-        frame.render_widget(Line::from(prompt).style(theme.dialog), area);
+        let field = (&prompt, &self.keywords);
+        let column = mark.render_field(frame, area, field, theme.dialog, theme);
         if self.typing {
             frame.set_cursor_position(Position::new(
                 area.x.saturating_add(column).min(area.right() - 1),

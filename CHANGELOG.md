@@ -134,7 +134,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   list of the key hints) open in Insert mode with their filter taking what is typed, as the
   zoxide window does: Esc goes to the rows, in Normal mode, where `j`, `k`, `d d`, and `q` work,
   `/` types in the filter again, and Esc closes the window
-  ([ADR 0036](docs/adr/0036-lists-open-in-insert-mode.md)).
+  ([ADR 0036](docs/adr/0036-lists-open-in-insert-mode.md)). The filter, and the keywords of the
+  zoxide window, look like the text fields of dialogs: the colors of a field from the prompt to
+  the right edge.
 - Messages with a count have plural forms for each: deleting, copying, moving, and checksums of
   several entries, the limit of the search of a tree, and the sizes in the question about a taken
   name; a translation gets the number itself, never `1` written out. The units of sizes, the marks

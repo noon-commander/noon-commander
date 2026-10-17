@@ -1,6 +1,6 @@
 //! What the windows that list rows to choose one from share: the location menu and the tab
 //! menu, drawn over their panel, the window of the saved workspaces, and the window of the
-//! command history. They open in Insert mode, typing in the filter; Esc goes to
+//! command history. They open in Insert mode, typing in the filter, a text field; Esc goes to
 //! the rows with the filter kept, in Normal mode, where keys move and act and `/` types in the
 //! filter again (ADR 0036).
 
@@ -533,8 +533,8 @@ impl Picker {
         })
     }
 
-    /// The filter, with its cursor while it takes text, and `note` at the right, on the first
-    /// line of `inner`; a line under them.
+    /// The filter, a text field in the colors of those of dialogs, with its cursor while it
+    /// takes text, and `note` at the right, on the first line of `inner`; a line under them.
     fn draw_filter(&self, frame: &mut Frame<'_>, inner: Rect, theme: &Theme, note: Option<&str>) {
         let width = usize::from(inner.width);
         let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
@@ -545,18 +545,14 @@ impl Picker {
         };
         let mark = search_mode::marked(self.mode, self.error.is_some(), theme.dialog, theme);
         let prompt = Prompt::new(|text| fl!("picker-filter", mode = mark.glyph, text = text));
-        let (shown, column) = self.filter.visible(room.saturating_sub(prompt.width()));
-        let column = u16::try_from(cells::width(&prompt.before) + column).unwrap_or(u16::MAX);
-        let mut top = cells::fit_spans(
-            mark.spans(&prompt, &shown, theme.dialog),
-            room,
-            (theme.dialog, theme.truncated_dialog),
-            theme.glyphs.marks,
+        let note = note.map(|note| Span::styled(format!(" {note}"), theme.dialog));
+        frame.render_widget(
+            Line::from_iter(note).style(theme.dialog).right_aligned(),
+            line(0),
         );
-        if let Some(note) = note {
-            top.push(Span::styled(format!(" {note}"), theme.dialog));
-        }
-        frame.render_widget(Line::from(top).style(theme.dialog), line(0));
+        let area = Rect::new(inner.x, inner.y, u16::try_from(room).unwrap_or(u16::MAX), 1);
+        let field = (&prompt, &self.filter);
+        let column = mark.render_field(frame, area, field, theme.dialog, theme);
         if self.filtering {
             frame.set_cursor_position(Position::new(
                 inner.x.saturating_add(column).min(inner.right() - 1),

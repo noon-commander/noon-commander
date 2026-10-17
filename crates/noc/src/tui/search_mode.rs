@@ -5,11 +5,14 @@
 
 use noc_config::SearchMode;
 use noc_pattern::{Normalized, Options, PatternError};
+use ratatui::Frame;
+use ratatui::layout::Rect;
 use ratatui::style::Style;
-use ratatui::text::Span;
+use ratatui::text::{Line, Span};
 use regex::Regex;
 
 use super::cells;
+use super::dialog::{self, Field};
 use super::fuzzy::Fuzzy;
 use super::glyphs::SearchModes;
 use super::theme::Theme;
@@ -114,6 +117,60 @@ impl Mark {
         }
         spans.retain(|span| !span.content.is_empty());
         spans
+    }
+
+    /// Draws `prompt` on the line `area` in `style`, the glyph marked, with `field` in its
+    /// place in the colors of the text fields of dialogs, as wide as the prompt leaves room
+    /// for. Returns the cursor's column in `area`. Where no room is left, the prompt and the
+    /// text are cut as one.
+    pub(crate) fn render_field(
+        self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        (prompt, field): (&Prompt, &Field),
+        style: Style,
+        theme: &Theme,
+    ) -> u16 {
+        let width = usize::from(area.width);
+        let (before, after) = (cells::width(&prompt.before), cells::width(&prompt.after));
+        let room = width.saturating_sub(before + after);
+        let to_u16 = |n: usize| u16::try_from(n).unwrap_or(u16::MAX);
+        if room == 0 {
+            let (shown, column) = field.visible(0);
+            let spans = cells::fit_spans(
+                self.spans(prompt, &shown, style),
+                width,
+                (style, theme.truncated_dialog),
+                theme.glyphs.marks,
+            );
+            frame.render_widget(Line::from(spans).style(style), area);
+            return to_u16(before + column).min(area.width.saturating_sub(1));
+        }
+        let part = |text: &str, mark: bool| {
+            let alone = Prompt {
+                before: text.to_owned(),
+                after: String::new(),
+            };
+            if mark {
+                self.spans(&alone, "", style)
+            } else {
+                vec![Span::styled(text.to_owned(), style)]
+            }
+        };
+        let in_before = prompt.before.contains(self.glyph);
+        let (field_line, column) = dialog::field_line(field, room, theme);
+        let field_area = Rect::new(area.x + to_u16(before), area.y, to_u16(room), 1);
+        let after_area = Rect::new(field_area.right(), area.y, to_u16(after), 1);
+        frame.render_widget(
+            Line::from(part(&prompt.before, true)).style(style),
+            Rect::new(area.x, area.y, to_u16(before), 1),
+        );
+        frame.render_widget(field_line, field_area);
+        frame.render_widget(
+            Line::from(part(&prompt.after, !in_before)).style(style),
+            after_area,
+        );
+        to_u16(before + column)
     }
 }
 
@@ -284,6 +341,40 @@ mod tests {
             text(&mark.spans(&before, "*", Style::new())),
             [owned("*", true), owned(" ", false), owned("*", false)]
         );
+    }
+
+    #[test]
+    fn the_field_of_a_prompt_has_the_colors_of_the_fields_of_dialogs() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+
+        let theme = Theme::terminal();
+        let mark = marked(SearchMode::Fzf, false, theme.dialog, &theme);
+        let prompt = Prompt::new(|text| format!("Filter {}: {text} !", mark.glyph));
+        let before = cells::width(&prompt.before);
+        let field = Field::plain("ab");
+        let mut terminal = Terminal::new(TestBackend::new(30, 1)).unwrap();
+        let mut column = 0;
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                column = mark.render_field(frame, area, (&prompt, &field), theme.dialog, &theme);
+            })
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let bg = |x: usize| buffer[(u16::try_from(x).unwrap(), 0)].bg;
+        assert_eq!(usize::from(column), before + 2, "after what is typed");
+        assert_eq!(bg(0), theme.dialog.bg.unwrap_or_default());
+        for x in before..28 {
+            assert_eq!(bg(x), theme.dialog_input.bg.unwrap_or_default(), "cell {x}");
+        }
+        assert_eq!(
+            bg(29),
+            theme.dialog.bg.unwrap_or_default(),
+            "the prompt after it"
+        );
+        assert_eq!(buffer[(28, 0)].symbol(), " ");
+        assert_eq!(buffer[(29, 0)].symbol(), "!");
     }
 
     #[test]

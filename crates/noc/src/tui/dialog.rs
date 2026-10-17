@@ -1697,7 +1697,7 @@ pub(crate) fn draw_box(
 
 /// What of `field` fits in `room` cells, in the color of fields, what Visual mode selects
 /// reversed; and the cursor's column.
-fn field_line(field: &Field, room: usize, theme: &Theme) -> (Line<'static>, usize) {
+pub(crate) fn field_line(field: &Field, room: usize, theme: &Theme) -> (Line<'static>, usize) {
     let ([before, selected, after], column) = field.visible_parts(room);
     let used = cells::width(&before) + cells::width(&selected);
     let after = cells::fit(

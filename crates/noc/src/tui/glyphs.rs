@@ -70,6 +70,9 @@ pub(crate) struct Glyphs {
     pub(crate) scroll_bar: BarGlyphs,
     /// The marks of text cut short or going on past the screen.
     pub(crate) marks: Marks,
+    /// In the viewer, in place of what cannot be shown: invalid UTF-8, and characters the
+    /// terminal would act on. Quiet, as mc's `.`, and one cell in every font.
+    pub(crate) hidden: &'static str,
     /// The marks of the pull-down menu's commands: the choice taken among others, and a setting
     /// that is on.
     pub(crate) menu_marks: (char, char),
@@ -124,6 +127,7 @@ impl Glyphs {
             before: "󰄽",
             after: "󰄾",
         },
+        hidden: "·",
         menu_marks: ('•', '✓'),
         // nf-md-chevron_right and nf-md-chevron_down.
         folds: ('󰅂', '󰅀'),
@@ -182,6 +186,7 @@ impl Glyphs {
             before: "«",
             after: "»",
         },
+        hidden: "·",
         menu_marks: ('*', 'x'),
         folds: ('▸', '▾'),
         bullet: '-',

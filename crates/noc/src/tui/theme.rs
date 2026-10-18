@@ -83,6 +83,9 @@ pub(crate) struct Theme {
     pub(crate) truncated_bar: Style,
     /// The same marks in error dialogs, over `error_dialog`.
     pub(crate) truncated_error: Style,
+    /// In the viewer, over `panel`, the glyph in place of what cannot be shown: quiet, so that
+    /// the text of a binary file stands out from it.
+    pub(crate) hidden: Style,
     /// The status of a host in the location menu, drawn over `dialog`, which the panel colors
     /// may not show on: idle, connecting, connected, failed.
     pub(crate) dialog_host: [Style; 4],
@@ -268,6 +271,7 @@ impl Theme {
             // A cell of its own, which reads on the cyan bars and the black line of tabs.
             truncated_bar: on(Color::LightYellow, Color::Black).bold(),
             truncated_error: fg(Color::LightYellow).bold(),
+            hidden: fg(Color::DarkGray),
             // Dark colors, as mc draws on its gray dialogs; idle takes the dialog's black.
             dialog_host: [
                 Style::new(),
@@ -364,6 +368,7 @@ impl Theme {
             // Plain on the reversed bars, and neither dim nor reversed on the line of tabs.
             truncated_bar: plain.not_reversed().not_dim().bold(),
             truncated_error: reversed.bold(),
+            hidden: plain.dim(),
             dialog_host: [plain.dim(), plain, plain.bold(), plain],
             fkey_number: plain,
             fkey_label: reversed,
@@ -444,6 +449,7 @@ impl Theme {
             truncated_bar: fg(p.yellow).bold(),
             // Yellow does not read on red: the colors of the dialog, the other way round.
             truncated_error: on(p.red, p.base).bold(),
+            hidden: fg(p.overlay0),
             dialog_host: [fg(p.subtext0), fg(p.yellow), fg(p.green), fg(p.red)],
             fkey_number: on(p.text, p.crust),
             fkey_label: on(p.text, p.surface0),
@@ -532,6 +538,7 @@ impl Theme {
             // A cell of its own, which reads on the amber menu bar and the deep F-key bar.
             truncated_bar: on(p.sun, p.ink).bold(),
             truncated_error: on(p.danger, p.ink).bold(),
+            hidden: fg(p.faint),
             dialog_host: [fg(p.muted), fg(p.accent), fg(p.green), fg(p.red)],
             fkey_number: on(p.accent, p.deep).bold(),
             fkey_label: on(p.text, p.deep),

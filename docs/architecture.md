@@ -1139,8 +1139,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   the position is `line/? percent%` by bytes, the scroll bar goes by bytes, and `more below` ends
   the text. A read longer than 150 ms shows the `Reading` dialog (`tui/reading.rs`): where the
   part starts, a gauge, Stop (Esc), which keeps what was read, and Close. A file whose size or
-  time changes between parts is read again from the start. Text is UTF-8 with invalid bytes
-  replaced, tabs go to stops of 8, `\r\n` ends lines, and control characters are shown safely.
+  time changes between parts is read again from the start. Text is UTF-8; invalid bytes and
+  what the terminal would act on show as `·` in the theme's faint `hidden`, as mc's `.`
+  (`Theme.glyphs.hidden`); tabs go to stops of 8, and
+  `\r\n` ends lines.
   Long lines wrap, each row after the first starting with `»`, as vim's 'showbreak' (F2 cuts
   them, `«` and `»` mark where they go on past the screen, as vim's 'listchars', and Left and
   Right, `h`, `l`, and the z keys as vim's scroll then, no further than the end of the longest
@@ -1296,11 +1298,11 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   no search before, on the line of the mode until the next key; so does Enter in quick search, when
   its last search went round (a count can take it round too; after Ctrl+g or Ctrl+t it does not),
   but in the fzf mode, which ranks the rows rather than go down them. Long names lose their middle,
-  marked with `»` in an accent. Names are shown terminal-safe: control and bidi characters become
-  `?`. Listings run in background tasks; a reply carries the generation of its request, so a stale
-  one is dropped. If a directory cannot be read, the panel stays where it was and says why below the
-  listing. Going up puts the cursor on the directory just left. A panel shows a
-  [`Location`](#locations), always a directory.
+  marked with `»` in an accent. Names are shown terminal-safe: control and bidi characters, and
+  marks that join the next character, become `?`. Listings run in background tasks; a reply
+  carries the generation of its request, so a stale one is dropped. If a directory cannot be read,
+  the panel stays where it was and says why below the listing. Going up puts the cursor on the
+  directory just left. A panel shows a [`Location`](#locations), always a directory.
 - <a id="command-line-of--and-"></a>**Command line of `!` and `:`** ([ADR
   0019](adr/0019-shell-command-line.md)). In a local panel, `i` or `!` opens a line above the F-key
   bar for a shell command, after a prompt as a shell's: `alice@mac:~/src $`, with `~` for home, and

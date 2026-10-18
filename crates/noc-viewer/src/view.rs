@@ -87,6 +87,11 @@ pub struct Styles {
     pub line: &'static str,
     /// The style of the marks of text that goes on past the screen.
     pub mark: Style,
+    /// In place of what cannot be shown as it is: invalid UTF-8, and characters a terminal
+    /// would act on; one cell.
+    pub hidden: &'static str,
+    /// The style of [`Styles::hidden`], over `text`.
+    pub hidden_style: Style,
     /// The marks: [`Marks::before`] over the first cell of a cut line with text hidden on the
     /// left, as vim's 'listchars' `precedes`; [`Marks::after`] over the last cell of one that
     /// goes on to the right, as `extends`, and in front of each row of a wrapped line after its
@@ -678,12 +683,12 @@ impl Viewer {
                     None if position.1 == 0 => line.clone(),
                     None => String::new(),
                 };
+                let mut spans = Vec::new();
                 if position.1 > 0 && breaks(self.width) {
-                    let mark = Span::styled(styles.marks.after, styles.mark);
-                    Line::from(vec![mark, Span::raw(text)])
-                } else {
-                    Line::raw(text)
+                    spans.push(Span::styled(styles.marks.after, styles.mark));
                 }
+                push_text(&mut spans, text, styles);
+                Line::from(spans)
             } else {
                 self.cut_line(line, styles)
             };
@@ -714,7 +719,7 @@ impl Viewer {
             let gap = room.saturating_sub(width(&text));
             text.extend(std::iter::repeat_n(' ', gap));
         }
-        spans.push(Span::raw(text));
+        push_text(&mut spans, text, styles);
         if extends {
             spans.push(Span::styled(marks.after, mark));
         }
@@ -822,6 +827,22 @@ fn fitted_line(fitted: Fitted, (style, mark): (Style, Style), marks: Marks) -> L
     Line::from(spans)
 }
 
+/// Pushes `text` to `spans`, each U+FFFD in it as [`Styles::hidden`].
+fn push_text(spans: &mut Vec<Span<'static>>, text: String, styles: &Styles) {
+    if !text.contains(char::REPLACEMENT_CHARACTER) {
+        spans.push(Span::raw(text));
+        return;
+    }
+    for (index, piece) in text.split(char::REPLACEMENT_CHARACTER).enumerate() {
+        if index > 0 {
+            spans.push(Span::styled(styles.hidden, styles.hidden_style));
+        }
+        if !piece.is_empty() {
+            spans.push(Span::raw(piece.to_owned()));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use ratatui::Terminal;
@@ -845,6 +866,8 @@ mod tests {
             before: "«",
             after: "»",
         },
+        hidden: "·",
+        hidden_style: Style::new(),
     };
 
     const SIZES: Sizes = Sizes {
@@ -1130,6 +1153,7 @@ mod tests {
         let styles = Styles {
             header_mark: mark,
             mark,
+            hidden_style: mark,
             ..STYLES
         };
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
@@ -1188,6 +1212,23 @@ mod tests {
         viewer.handle(Command::ScrollEnd);
         let (screen, _) = draw_marks(&mut viewer, 10, 8);
         assert!(screen.contains("\"«rstuvwxyz\""), "{screen}");
+    }
+
+    #[test]
+    fn what_cannot_be_shown_is_a_mark_of_one_cell() {
+        let mut viewer = Viewer::new("f".to_owned(), SIZES);
+        viewer.show(b"\x1b[2J\xff ok\x07\n\xfe\xfe\xfe\xfe\xfe\xfe\xfe\xfe\xfe\xfe\xfe\xfe\n");
+        let (screen, marks) = draw_marks(&mut viewer, 10, 5);
+        let rows: Vec<&str> = screen.lines().collect();
+        assert_eq!(rows[1], "\"·[2J· ok· \"", "{screen}");
+        assert_eq!(marks[1], "···");
+        assert_eq!(rows[3], "\"»··       \"", "a wrapped row: {screen}");
+        assert_eq!(marks[3], "»··");
+
+        viewer.handle(Command::ToggleWrap);
+        let (screen, _) = draw_marks(&mut viewer, 10, 5);
+        let rows: Vec<&str> = screen.lines().collect();
+        assert_eq!(rows[2], "\"·········»\"", "a cut line: {screen}");
     }
 
     #[test]

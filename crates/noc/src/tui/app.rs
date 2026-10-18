@@ -7335,6 +7335,8 @@ fn viewer_styles(theme: &Theme) -> ViewerStyles {
         line: glyphs::LINE,
         mark: theme.truncated,
         marks: theme.glyphs.marks,
+        hidden: theme.glyphs.hidden,
+        hidden_style: theme.hidden,
     }
 }
 

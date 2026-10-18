@@ -18,15 +18,15 @@ pub enum Align {
 /// controls, and marks that join the next character, which could move the cursor, reorder the
 /// screen, or shift the rest of a row, are shown as `?`.
 pub fn sanitize(bytes: &[u8]) -> String {
-    String::from_utf8_lossy(bytes).chars().map(safe).collect()
+    String::from_utf8_lossy(bytes)
+        .chars()
+        .map(|c| if is_unsafe(c) { '?' } else { c })
+        .collect()
 }
 
-/// `c` as [`sanitize`] shows it: itself, or `?` if the terminal could act on it.
-pub fn safe(c: char) -> char {
-    if is_unsafe(c) { '?' } else { c }
-}
-
-fn is_unsafe(c: char) -> bool {
+/// Whether the terminal could act on `c`, or draw it in other cells than ratatui counts, so
+/// that it must not be shown as it is.
+pub fn is_unsafe(c: char) -> bool {
     c.is_control()
         || matches!(
             c,

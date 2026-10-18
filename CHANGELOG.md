@@ -256,7 +256,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the terminal shows whole. Terminals without it still may show the cursor on its way.
 - A row of the viewer or a name in a panel no longer comes out a cell short, shifting the scroll
   bar or the frame, when it holds a mark that joins the next character, such as U+0602 in a
-  binary file: such marks show as `?`.
+  binary file: such marks show as `?` in names and as `·` in the viewer.
+- The viewer shows invalid UTF-8 and characters the terminal would act on as a faint `·`, as mc
+  shows `.`, rather than as `?` and `�`, which stood out in a binary file and passed for text.
 
 ## [0.2.0] - 2026-10-14
 

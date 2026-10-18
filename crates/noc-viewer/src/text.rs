@@ -5,8 +5,9 @@ use unicode_width::UnicodeWidthChar as _;
 /// Columns between tab stops.
 const TAB: usize = 8;
 
-/// The lines of `bytes`, as UTF-8 with invalid bytes replaced: `\r\n` ends a line too, tabs
-/// go to the next stop, and what a terminal would act on is shown safely.
+/// The lines of `bytes`, as UTF-8: `\r\n` ends a line too, tabs go to the next stop, and
+/// invalid bytes and what a terminal would act on become U+FFFD, which the screen shows as
+/// [`Styles::hidden`](crate::Styles::hidden).
 pub(crate) fn lines_of(bytes: &[u8]) -> Vec<String> {
     let bytes = bytes.strip_suffix(b"\n").unwrap_or(bytes);
     let pieces = pieces(bytes, threads_for(bytes.len()));
@@ -104,7 +105,12 @@ fn push(line: &mut String, column: &mut usize, c: char) {
         line.extend(std::iter::repeat_n(' ', spaces));
         *column += spaces;
     } else {
-        line.push(noc_text::safe(c));
+        let c = if noc_text::is_unsafe(c) {
+            char::REPLACEMENT_CHARACTER
+        } else {
+            c
+        };
+        line.push(c);
         *column += c.width().unwrap_or(0);
     }
 }
@@ -221,7 +227,7 @@ mod tests {
         let lines = lines_of(b"a\tb\r\nwide\xe6\x96\x87\tx\n\x1b[2Jbad \xff\n\n");
         assert_eq!(
             lines,
-            ["a       b", "wide文  x", "?[2Jbad \u{fffd}", ""],
+            ["a       b", "wide文  x", "\u{fffd}[2Jbad \u{fffd}", ""],
             "one line per newline, the last ending none"
         );
         assert_eq!(lines_of(b""), [""]);

@@ -101,12 +101,6 @@ panel-rename = Rename: { $name }
 # icons), and its target as stored in the link, which must end the text: it is cut at its start
 # where the line is too short.
 panel-link = { $name } { $arrow } { $target }
-# Status line, in the colors of errors, while a dialog asks whether to connect to the host again.
-panel-host-waiting = { $host }: Retry or Cancel?
-# Status line of a panel on a host that is not connected, which shows none of its entries;
-# reading the directory again connects. The second one names the key that does it.
-panel-disconnected = Not connected to { $host }
-panel-disconnected-key = Not connected to { $host }; { $key } connects
 # Below the listing: the size of the marked files in bytes, written as the region writes
 # numbers, and how many entries are marked.
 panel-marked = { $size } B in { $count ->
@@ -125,8 +119,6 @@ panel-total = { $size } in { $files ->
 # On the bottom of a panel's frame at the right, as in mc: the free space and size of the file system that
 # holds the directory, such as 212G / 460G, and the share that is free.
 panel-space = { $free } / { $total } ({ $percent }%)
-# Status line when a directory cannot be read; the panel keeps showing the previous one.
-panel-error = Cannot open { $path }: { $reason }
 # The units after sizes in powers of 1024, from bytes up, as mc writes them: 512B, 78.5K, 12M,
 # 3.0G, in panels and a job's window. Each takes one cell, as the size column is narrow.
 size-bytes = B
@@ -146,6 +138,16 @@ error-already-exists = already exists
 reconnect-title = Connection
 reconnect-failed = Cannot connect to { $host }: { $reason }
 reconnect-lost = Lost the connection to { $host }: { $reason }
+# A key in a panel on a host that is not connected, which shows none of its entries. Its
+# buttons: Connect reads the directory again, Local goes to the panel's last local directory.
+reconnect-not-connected = Not connected to { $host }
+
+## The dialog after a directory could not be read (src/tui/app): OK stays, Retry reads it again,
+## Up goes to the nearest parent that is there, Go to opens Quick cd with its path. Prefix: list-.
+
+# A subdirectory of the panel's directory is named by its name alone, as the title shows the
+# directory.
+list-failed = Cannot open { $path }: { $reason }
 
 ## Connection errors (src/tui/describe). Prefix: error-. Most of the time ssh's own words are
 ## shown instead.
@@ -523,6 +525,11 @@ dialog-use-current = &Use current
 dialog-go-to = &Go to
 dialog-view = &View
 dialog-edit = &Edit
+# Buttons of a directory that could not be read: go to its nearest parent that is there.
+dialog-up = &Up
+# Buttons of a panel on a host that is not connected: connect again, go to a local directory.
+dialog-connect = &Connect
+dialog-local = &Local
 
 ## Help screen (src/tui/help). Prefix: help-. One line per key: say what it does, briefly.
 

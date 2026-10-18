@@ -149,19 +149,31 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
   title, before the path it opens, `⠹ web:/var/www`, and Esc stops it.
 - A failed connection, the first attempt or a lost one, opens a dialog, Connection, that says
   `Cannot connect to web: reason` or `Lost the connection to web: reason`, with Retry (the
-  default) and Cancel. While it is open, the panels that wait for the host keep waiting, and
-  their status line says `web: Retry or Cancel?` after a spinner in the color of a failed host.
+  default) and Cancel. While it is open, the panels that wait for the host keep waiting, with
+  the dots in their titles in the color of a failed host.
   On a lost connection, the panels on the host, in every tab, drop their entries at once and
   wait to read the same directory, with the cursor where it was. Retry connects again, and the
   waiting panels read their directories once it is connected. Cancel after a failed first
-  attempt leaves the panel where it was, with `Cannot open web: reason` in its status line;
-  after a lost connection, it leaves the panels on the host without entries, and their status
-  line says `Not connected to web; R connects`, with the Reload key of the keymap. `R`, or
-  Enter on `..`, connects again. Jobs on a lost host end with it.
+  attempt leaves the panel where it was; after a lost connection, it leaves the panels on the
+  host without entries and with an empty status line. No second dialog says why again. Jobs on
+  a lost host end with it.
+- A key in a panel on a host that is not connected opens the dialog Connection,
+  `Not connected to web`, with Connect (the default), which reads the directory again, Local,
+  which goes to the last local directory of the panel's jump list or else the home directory,
+  and Cancel. Keys that do not touch the panel's entries work without it: other panels and tabs,
+  menus, help, jobs, Quit, Quick cd, the jump list, workspaces, hidden files
+  (`works_unconnected` in `app.rs`). `R` connects at once
+  ([ADR 0039](adr/0039-errors-of-panels-in-dialogs.md)).
 - F8 or `d d` in the location menu, or Disconnect in the menus of F9, closes the connection to a
-  host, or stops connecting to it. Panels on a connected host stay there without entries, with the
-  same
-  status line, and no dialog asks; a panel that only waited for the host stays where it was.
+  host, or stops connecting to it. Panels on a connected host stay there without entries, as
+  after a lost connection, and no dialog asks; a panel that only waited for the host stays where
+  it was.
+- A directory that cannot be read opens a dialog, Error, `Cannot open dir: reason`, and the
+  panel keeps what it showed. OK stays; Retry reads it again; Up, where it leads elsewhere, goes
+  to the nearest parent, on the directory it came from, past parents that are not there either;
+  Go to opens Quick cd with the path. The default is Up for a directory gone under the panel,
+  OK for one not there or not allowed, Retry for other errors. A panel has one such dialog at a
+  time, the last failure's.
 - F4 in the location menu edits the settings of a host in a dialog (label, remote directory,
   other panel directory, remember the last directory); Use Current fills in the directory a
   panel shows on the host. They are saved to `hosts.toml` in the background, and the menu reads

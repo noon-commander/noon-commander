@@ -1,6 +1,6 @@
 # 0037. Spinners
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0039](0039-errors-of-panels-in-dialogs.md)
 - Date: 2026-10-18
 - Amends: [ADR 0034](0034-animated-windows.md)
 
@@ -42,7 +42,8 @@ too, which some users want and others do not, apart from windows.
   cursor. The dots take the color of the host's status while it connects or does not answer, so
   connecting and reading look apart without a word that would take the room of the path. A host that
   does not answer still asks `web: Retry or Cancel?` on the status line, in the colors of errors: it
-  is a question, not a wait. A reading that fails puts the old path back. Work that the panel
+  is a question, not a wait ([ADR 0039](0039-errors-of-panels-in-dialogs.md) leaves the question to
+  the Connection dialog alone). A reading that fails puts the old path back. Work that the panel
   started in its directory, a directory of F7 or a rename, turns the same dots until it is done and
   the directory is read again, as one wait, so the dots do not start over in between; work on a host
   whose connection goes stops being waited for, as its result never comes.

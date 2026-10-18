@@ -12,7 +12,7 @@ use noc_config::{SearchMode, Wheel};
 use noc_locale::Formats;
 use noc_scroll::Motion;
 use noc_scroll::scrollbar::{self, Bar};
-use noc_vfs::{DirEntry, FileKind, Location, RemotePath, Space};
+use noc_vfs::{DirEntry, FileKind, Location, RemotePath, Space, VfsError};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -22,6 +22,7 @@ use unicode_width::UnicodeWidthChar as _;
 
 use super::cells::{self, Align, Cut, Marks};
 use super::decor::Decor;
+use super::describe;
 use super::dialog::Field;
 use super::glyphs;
 use super::keymap::Action;
@@ -67,6 +68,63 @@ pub(crate) struct Listed {
 pub(crate) enum Listing {
     /// The entries of a directory, in any order.
     Dir(Vec<DirEntry>),
+}
+
+/// Why a location could not be listed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ListError {
+    pub(crate) kind: ListErrorKind,
+    /// The reason in words.
+    pub(crate) reason: String,
+}
+
+impl ListError {
+    pub(crate) fn vfs(error: &VfsError) -> Self {
+        let kind = match error {
+            VfsError::NotFound(_) => ListErrorKind::NotFound,
+            VfsError::PermissionDenied(_) => ListErrorKind::Denied,
+            _ => ListErrorKind::Other,
+        };
+        Self {
+            kind,
+            reason: describe::vfs_error(error),
+        }
+    }
+
+    pub(crate) fn other(reason: String) -> Self {
+        Self {
+            kind: ListErrorKind::Other,
+            reason,
+        }
+    }
+}
+
+/// What kind of failure a [`ListError`] is, which decides the way out its dialog offers first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ListErrorKind {
+    /// The directory is not there.
+    NotFound,
+    /// The directory may not be read.
+    Denied,
+    /// Anything else, such as a connection that broke: trying again may help.
+    Other,
+}
+
+/// A listing that failed, for the app to report with the ways out of it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Failure {
+    /// Where the panel tried to go; Retry goes there again.
+    pub(crate) destination: Destination,
+    /// The location as the message names it: a subdirectory by its name alone.
+    pub(crate) shown: String,
+    pub(crate) error: ListError,
+    /// The parent of the location, with the cursor on its name.
+    pub(crate) parent: Option<Destination>,
+    /// The panel stands on the location, as when its directory was removed or the panel never
+    /// got to show it: staying there shows nothing.
+    pub(crate) stranded: bool,
+    /// The panel went up to the location on its way to the nearest directory that is there.
+    pub(crate) climbing: bool,
 }
 
 /// What the app knows about a host beyond the ssh config.
@@ -205,8 +263,6 @@ pub(crate) struct View<'a> {
     pub(crate) hosts: &'a dyn Fn(&str) -> HostState,
     pub(crate) decor: Decor,
     pub(crate) theme: &'a Theme,
-    /// The key that reads a directory again, for a panel on a host that is not connected.
-    pub(crate) reload_key: Option<&'a str>,
     /// What spinners look like in this frame.
     pub(crate) spin: Spin,
     pub(crate) tz: &'a TimeZone,
@@ -288,6 +344,8 @@ struct Pending {
     /// Where the panel was, put in the jump list on the way: a listing that fails takes it
     /// out again, as vim keeps no jump that did not happen.
     jumped: Option<Destination>,
+    /// The panel goes up to the nearest directory that is there.
+    climbing: bool,
 }
 
 /// Where a panel can go: a location, and the row to put the cursor on there.
@@ -317,6 +375,28 @@ impl Destination {
             location,
             focus: Focus::Name(name.to_vec()),
         }
+    }
+
+    pub(crate) fn location(&self) -> &Location {
+        &self.location
+    }
+
+    /// The parent directory of `location`, with the cursor on its name; `None` for a `/` and
+    /// for the home directory of a host, which has no path.
+    fn parent_of(location: &Location) -> Option<Self> {
+        let parent = location.parent()?;
+        let focus = match location {
+            Location::Local(path) => path
+                .file_name()
+                .map_or(Focus::First, |name| Focus::Name(name.as_bytes().to_vec())),
+            Location::Remote { path, .. } => path
+                .file_name()
+                .map_or(Focus::First, |name| Focus::Name(name.to_vec())),
+        };
+        Some(Self {
+            location: parent,
+            focus,
+        })
     }
 }
 
@@ -391,7 +471,6 @@ pub(crate) struct Panel {
     /// the place in it after Ctrl+o: its length while no jump went back.
     jumps: Vec<Destination>,
     jump: usize,
-    error: Option<String>,
     /// Where the lines between columns ran at the last render, so that they can be joined to
     /// a top of the frame drawn again over the panel's.
     column_lines: Vec<u16>,
@@ -449,7 +528,6 @@ impl Panel {
             reselect: None,
             jumps: Vec::new(),
             jump: 0,
-            error: None,
             column_lines: Vec::new(),
             shift: 0,
             names: (Decor::new(false), 0),
@@ -489,7 +567,6 @@ impl Panel {
             reselect: None,
             jumps: Vec::new(),
             jump: 0,
-            error: None,
             column_lines: Vec::new(),
             shift: 0,
             names: (Decor::new(false), 0),
@@ -503,7 +580,6 @@ impl Panel {
 
     fn open(&mut self, location: Location, focus: Focus) -> ListRequest {
         self.generation += 1;
-        self.error = None;
         self.search = None;
         if location != self.location {
             self.renaming = None;
@@ -518,6 +594,7 @@ impl Panel {
             location: location.clone(),
             focus,
             jumped: None,
+            climbing: false,
         });
         ListRequest {
             generation: self.generation,
@@ -527,14 +604,15 @@ impl Panel {
     }
 
     /// Takes the reply to a [`ListRequest`]; replies to older requests are dropped. On error the
-    /// panel keeps showing what it showed and reports `reason` below the listing.
-    pub(crate) fn listed(&mut self, generation: u64, result: Result<Listed, String>) {
-        let Some(pending) = self
+    /// panel keeps showing what it showed and returns the failure, for the app to report.
+    pub(crate) fn listed(
+        &mut self,
+        generation: u64,
+        result: Result<Listed, ListError>,
+    ) -> Option<Failure> {
+        let pending = self
             .pending
-            .take_if(|pending| pending.generation == generation)
-        else {
-            return;
-        };
+            .take_if(|pending| pending.generation == generation)?;
         match result {
             Ok(Listed {
                 location,
@@ -559,8 +637,9 @@ impl Panel {
                 self.cursor = self.row_of(&pending.focus);
                 self.restore_visual(visual);
                 self.keep_renaming();
+                None
             }
-            Err(reason) => {
+            Err(error) => {
                 if pending.jumped.is_some()
                     && self.jump == self.jumps.len()
                     && self.jumps.last() == pending.jumped.as_ref()
@@ -579,8 +658,18 @@ impl Panel {
                 };
                 let shown = shown.unwrap_or_else(|| location_text(&pending.location));
                 // The reason may quote ssh, which may quote the server.
-                let reason = cells::sanitize(reason.as_bytes());
-                self.error = Some(fl!("panel-error", path = shown, reason = reason));
+                let reason = cells::sanitize(error.reason.as_bytes());
+                Some(Failure {
+                    parent: Destination::parent_of(&pending.location),
+                    stranded: pending.location == self.location,
+                    climbing: pending.climbing,
+                    destination: Destination {
+                        location: pending.location,
+                        focus: pending.focus,
+                    },
+                    shown,
+                    error: ListError { reason, ..error },
+                })
             }
         }
     }
@@ -684,6 +773,26 @@ impl Panel {
         if self.on_host(host) {
             self.empty();
         }
+    }
+
+    /// The host the panel is on, if it shows none of its entries as it is not connected, and
+    /// does not wait for them either.
+    pub(crate) fn not_connected(&self) -> Option<&str> {
+        match &self.location {
+            Location::Remote { host, .. } if self.disconnected && self.pending.is_none() => {
+                Some(host)
+            }
+            _ => None,
+        }
+    }
+
+    /// The last local directory in the jump list, with the cursor where it was.
+    pub(crate) fn last_local(&self) -> Option<Destination> {
+        self.jumps
+            .iter()
+            .rev()
+            .find(|jump| matches!(jump.location, Location::Local(_)))
+            .cloned()
     }
 
     /// Shows or hides names that start with a dot; the cursor stays on its entry if it can.
@@ -1418,6 +1527,16 @@ impl Panel {
         request
     }
 
+    /// Goes to `destination` as [`go`](Self::go) does, on the way up to the nearest directory
+    /// that is there: the failure it may return says so.
+    pub(crate) fn climb(&mut self, destination: Destination) -> ListRequest {
+        let request = self.go(destination);
+        if let Some(pending) = &mut self.pending {
+            pending.climbing = true;
+        }
+        request
+    }
+
     /// Puts the cursor on row `number`, counted from 1, as vim's `G` with a count does; where
     /// it was goes to the jump list.
     pub(crate) fn go_to_row(&mut self, number: usize) {
@@ -1691,19 +1810,7 @@ impl Panel {
 
     /// The parent, with the cursor on the directory this is; `None` in a `/`.
     fn parent_destination(&self) -> Option<Destination> {
-        let parent = self.location.parent()?;
-        let focus = match &self.location {
-            Location::Local(path) => path
-                .file_name()
-                .map_or(Focus::First, |name| Focus::Name(name.as_bytes().to_vec())),
-            Location::Remote { path, .. } => path
-                .file_name()
-                .map_or(Focus::First, |name| Focus::Name(name.to_vec())),
-        };
-        Some(Destination {
-            location: parent,
-            focus,
-        })
+        Destination::parent_of(&self.location)
     }
 
     /// Whether the first row is `..`: everywhere but in a `/`.
@@ -1731,8 +1838,8 @@ impl Panel {
 
     /// Draws the panel: the location in the frame, column headers, the rows, the size and number
     /// of marked entries on the line below them, a status line with the name under the cursor,
-    /// the loading state, or the last error, and the totals of the directory and its file
-    /// system on the bottom of the frame.
+    /// the rename, or quick search, and the totals of the directory and its file system on the
+    /// bottom of the frame.
     pub(crate) fn render(
         &mut self,
         frame: &mut Frame<'_>,
@@ -1866,19 +1973,9 @@ impl Panel {
         title
     }
 
-    /// The host being listed, if it does not answer.
-    fn stalled<'a>(&'a self, view: &View<'_>) -> Option<&'a str> {
-        match &self.pending.as_ref()?.location {
-            Location::Remote { host, .. } if (view.hosts)(host).status == HostStatus::Stalled => {
-                Some(host)
-            }
-            _ => None,
-        }
-    }
-
     /// The status line, at `area`: the name being renamed, quick search with its cursor in the
-    /// active panel, the last error, a host that does not answer, the host it is not connected
-    /// to, or the name under the cursor, with the target of a symlink.
+    /// active panel, or the name under the cursor, with the target of a symlink; nothing on a
+    /// host that is not connected.
     fn render_status(&self, frame: &mut Frame<'_>, area: Rect, active: bool, view: &View<'_>) {
         let theme = view.theme;
         let width = usize::from(area.width);
@@ -1912,23 +2009,8 @@ impl Panel {
             }
             searching = Some(mark.spans(&prompt, &shown, theme.quick_search));
             prompt.with(&shown)
-        } else if let Some(error) = &self.error {
-            error.clone()
-        } else if let Some(host) = self.stalled(view) {
-            status_style.0 = theme.host_status(HostStatus::Stalled);
-            fl!(
-                "panel-host-waiting",
-                host = cells::sanitize(host.as_bytes())
-            )
         } else if self.disconnected {
-            let host = match &self.location {
-                Location::Remote { host, .. } => cells::sanitize(host.as_bytes()),
-                Location::Local(_) => String::new(),
-            };
-            match view.reload_key {
-                Some(key) => fl!("panel-disconnected-key", host = host, key = key),
-                None => fl!("panel-disconnected", host = host),
-            }
+            String::new()
         } else {
             let (status, link) = self.cursor_status(view);
             linked = link;
@@ -2913,7 +2995,6 @@ mod tests {
                 hosts,
                 decor,
                 theme,
-                reload_key: Some("Ctrl+r"),
                 spin: Spin::new(at, start, false, theme.glyphs.spinners),
                 tz: &TimeZone::UTC,
                 formats: &Formats::iso(),
@@ -3268,7 +3349,6 @@ mod tests {
             hosts: &hosts,
             decor: Decor::new(false),
             theme: &theme,
-            reload_key: None,
             spin: Spin::new(Instant::now(), Instant::now(), false, theme.glyphs.spinners),
             tz: &TimeZone::UTC,
             formats: &Formats::iso(),
@@ -3491,11 +3571,15 @@ mod tests {
         let mut panel = loaded("/srv", Vec::new());
         let request = panel.go(Destination::to(remote("staging", "")));
         let refused = "deploy@stg: Permission denied (publickey).".to_owned();
-        panel.listed(request.generation, Err(refused));
+        let failure = panel
+            .listed(request.generation, Err(ListError::other(refused.clone())))
+            .unwrap();
         assert_eq!(panel.location, local("/srv"), "the panel stays");
+        assert_eq!(failure.shown, "staging");
+        assert_eq!(failure.error.reason, refused);
         assert_eq!(
-            panel.error.as_deref(),
-            Some("Cannot open staging: deploy@stg: Permission denied (publickey).")
+            failure.parent, None,
+            "the home directory has none to go up to"
         );
 
         // The reply names the start directory, which `..` then leads up from.
@@ -3762,34 +3846,52 @@ mod tests {
         let mut panel = loaded("/srv", listing());
         panel.handle(Action::Down);
         let request = panel.handle(Action::Enter).unwrap();
-        panel.listed(request.generation, Err("permission denied".to_owned()));
+        let denied = ListError {
+            kind: ListErrorKind::Denied,
+            reason: "permission denied".to_owned(),
+        };
+        let failure = panel.listed(request.generation, Err(denied)).unwrap();
         assert_eq!(panel.location, local("/srv"));
         assert_eq!(under_cursor(&panel), "alpha-link");
+        assert_eq!(failure.shown, "alpha-link");
+        assert_eq!(failure.error.kind, ListErrorKind::Denied);
+        assert_eq!(failure.destination.location(), &request.location);
         assert_eq!(
-            panel.error.as_deref(),
-            Some("Cannot open alpha-link: permission denied")
+            failure.parent,
+            Some(Destination::onto(local("/srv"), "alpha-link")),
+            "up is the panel's directory, with the cursor on the name"
         );
+        assert!(!failure.stranded && !failure.climbing);
         // The parent is not inside the directory shown, so it gets its full path.
         let request = panel.handle(Action::Parent).unwrap();
-        panel.listed(
-            request.generation,
-            Err("no such file or directory".to_owned()),
-        );
-        assert_eq!(
-            panel.error.as_deref(),
-            Some("Cannot open /: no such file or directory")
-        );
-        // The next request clears it.
-        panel.handle(Action::Reload);
-        assert_eq!(panel.error, None);
+        let missing = ListError {
+            kind: ListErrorKind::NotFound,
+            reason: "no such file or directory".to_owned(),
+        };
+        let failure = panel.listed(request.generation, Err(missing)).unwrap();
+        assert_eq!(failure.shown, "/");
+        assert_eq!(failure.parent, None, "nothing is above /");
 
         let request = panel.handle(Action::Reload).unwrap();
-        panel.listed(request.generation, Err("bad\x1b[2Jthing".to_owned()));
+        let bad = ListError::other("bad\x1b[2Jthing".to_owned());
+        let failure = panel.listed(request.generation, Err(bad)).unwrap();
+        assert_eq!(failure.shown, "/srv");
         assert_eq!(
-            panel.error.as_deref(),
-            Some("Cannot open /srv: bad?[2Jthing"),
-            "reasons are shown terminal-safe"
+            failure.error.reason, "bad?[2Jthing",
+            "reasons are terminal-safe"
         );
+        assert!(failure.stranded, "the panel stands on the directory");
+
+        let request = panel.climb(Destination::to(local("/")));
+        let failure = panel
+            .listed(request.generation, Err(ListError::other(String::new())))
+            .unwrap();
+        assert!(failure.climbing);
+        let request = panel.go(Destination::to(local("/")));
+        let failure = panel
+            .listed(request.generation, Err(ListError::other(String::new())))
+            .unwrap();
+        assert!(!failure.climbing, "a new request does not climb");
     }
 
     #[test]
@@ -3841,10 +3943,10 @@ mod tests {
         };
         assert_eq!(shown(dots), shown(title_style.patch(theme.host_connecting)));
         assert_eq!(shown(path), shown(title_style));
-        // A host that does not answer asks on the status line too.
+        // A host that does not answer turns the dots red; its dialog asks what to do.
         let ([title, status], [dots, _]) = waiting_lines(&mut panel, HostStatus::Stalled);
         assert!(title.starts_with("╔ … web "), "{title}");
-        assert_eq!(status, "║web: Retry or Cancel?                 ║");
+        assert_eq!(status, "║..                                    ║");
         assert_eq!(shown(dots), shown(title_style.patch(theme.host_failed)));
         // Listing a host that is connected, the dots are busy as any other.
         let ([title, _], [dots, _]) = waiting_lines(&mut panel, HostStatus::Connected);
@@ -3901,7 +4003,6 @@ mod tests {
             hosts: &hosts,
             decor: Decor::new(false),
             theme: &theme,
-            reload_key: None,
             spin: Spin::new(now, now, true, theme.glyphs.spinners),
             tz: &TimeZone::UTC,
             formats: &Formats::iso(),
@@ -3960,8 +4061,7 @@ mod tests {
         assert!(panel.marked.is_empty());
         let request = panel.pending_request().unwrap();
         assert_eq!(request.location, remote("db", "/srv"));
-        let ([_, line], _) = waiting_lines(&mut panel, HostStatus::Stalled);
-        assert_eq!(line, "║db: Retry or Cancel?                  ║");
+        assert_eq!(panel.not_connected(), None, "it waits");
         answer(&mut panel, &request, Listing::Dir(listing()));
         assert_eq!(under_cursor(&panel), "zeta.txt", "back on its entry");
         assert!(!panel.disconnected);
@@ -3969,8 +4069,13 @@ mod tests {
         // Cancel: the panel stays, without its entries, until it reads the directory again.
         panel.lose_host("db");
         panel.cancel();
+        assert_eq!(panel.not_connected(), Some("db"));
         let ([_, line], _) = waiting_lines(&mut panel, HostStatus::Failed);
-        assert_eq!(line, "║Not connected to db; Ctrl+r connects  ║");
+        assert_eq!(
+            line,
+            format!("║{}║", " ".repeat(38)),
+            "the status line is empty"
+        );
         let request = panel.handle(Action::Reload).unwrap();
         assert_eq!(request.location, remote("db", "/srv"));
     }
@@ -3983,13 +4088,10 @@ mod tests {
         panel.drop_host("db");
         assert_eq!(names(&panel), [".."]);
         assert_eq!(panel.pending_request(), None);
-        assert!(
-            draw(&mut panel, 40, 6, true)
-                .to_string()
-                .contains("Not connected to db")
-        );
+        assert_eq!(panel.not_connected(), Some("db"));
         let request = panel.handle(Action::Enter).unwrap();
         assert_eq!(request.location, remote("db", "/"), "`..` connects too");
+        assert_eq!(panel.not_connected(), None, "it waits");
 
         // A panel that was about to open the host stays where it is.
         let mut panel = loaded("/srv", listing());
@@ -3998,6 +4100,21 @@ mod tests {
         assert_eq!(panel.pending_request(), None);
         assert_eq!(panel.location, local("/srv"));
         assert!(!panel.disconnected);
+        assert_eq!(panel.not_connected(), None);
+    }
+
+    #[test]
+    fn the_last_local_directory_is_the_last_local_jump() {
+        let mut panel = loaded("/srv", listing());
+        assert_eq!(panel.last_local(), None, "no jump yet");
+        let request = panel.go(Destination::to(local("/tmp")));
+        answer(&mut panel, &request, Listing::Dir(listing()));
+        let request = panel.go(Destination::to(remote("db", "/srv")));
+        answer(&mut panel, &request, Listing::Dir(listing()));
+        assert_eq!(
+            panel.last_local().as_ref().map(Destination::location),
+            Some(&local("/tmp"))
+        );
     }
 
     #[test]
@@ -4035,7 +4152,7 @@ mod tests {
 
         // A failed reload keeps it; the next listing replaces it.
         let request = panel.reload_onto(Vec::new());
-        panel.listed(request.generation, Err("gone".to_owned()));
+        panel.listed(request.generation, Err(ListError::other("gone".to_owned())));
         assert_eq!(panel.space, Some(space));
         let request = panel.reload_onto(Vec::new());
         answer(&mut panel, &request, Listing::Dir(Vec::new()));

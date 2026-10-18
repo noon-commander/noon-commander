@@ -45,7 +45,7 @@ use super::app::{Effect, FindRequest, HistoryChange, ReadRequest, RecentChange, 
 use super::describe;
 use super::dialog::{Ask, Reply};
 use super::find::{FindQuery, FindSummary, Finding};
-use super::panel::{ListRequest, Listed, Listing};
+use super::panel::{ListError, ListRequest, Listed, Listing};
 use super::places::{self, Places};
 use super::tabs::PanelId;
 use crate::about::{self, Detected, Tool};
@@ -65,7 +65,7 @@ pub(crate) enum Done {
     Listed {
         panel: PanelId,
         generation: u64,
-        result: Result<Listed, String>,
+        result: Result<Listed, ListError>,
     },
     /// The volumes and hosts of [`Effect::ListPlaces`], for the location menu.
     Places {
@@ -1892,15 +1892,15 @@ impl CopyJob<'_> {
 }
 
 /// Lists a local directory.
-async fn list(location: Location) -> Result<Listed, String> {
+async fn list(location: Location) -> Result<Listed, ListError> {
     let Location::Local(path) = &location else {
         // The app sends remote ones to the host's task.
-        return Err(fl!("error-connection-closed"));
+        return Err(ListError::other(fl!("error-connection-closed")));
     };
     // The listing does not wait for a file system that is slow to tell its space.
     let space = tokio::time::timeout(places::VOLUME_TIMEOUT, space(&LocalFs, path));
     let (entries, space) = tokio::join!(LocalFs.list_dir(path), space);
-    let entries = entries.map_err(|error| describe::vfs_error(&error))?;
+    let entries = entries.map_err(|error| ListError::vfs(&error))?;
     Ok(Listed {
         location,
         listing: Listing::Dir(entries),
@@ -2108,7 +2108,7 @@ impl HostTask {
     async fn list(&self, fs: &SftpFs, panel: PanelId, request: ListRequest) -> Done {
         let result = async {
             let Location::Remote { path, .. } = &request.location else {
-                return Err(fl!("error-connection-closed"));
+                return Err(ListError::other(fl!("error-connection-closed")));
             };
             if path.as_bytes().is_empty()
                 && let Some(dir) = &request.resume
@@ -2122,13 +2122,13 @@ impl HostTask {
                     Some(dir) => fs.canonicalize(&RemotePath::from(dir)).await,
                     None => fs.home().await,
                 }
-                .map_err(|error: VfsError| describe::vfs_error(&error))?
+                .map_err(|error: VfsError| ListError::vfs(&error))?
             } else {
                 path.clone()
             };
             self.list_dir(fs, path)
                 .await
-                .map_err(|error| describe::vfs_error(&error))
+                .map_err(|error| ListError::vfs(&error))
         }
         .await;
         Done::Listed {
@@ -2228,10 +2228,14 @@ mod tests {
         let Done::Listed { result, .. } = task.list(fs, panel, request).await else {
             panic!("expected a listing");
         };
-        result.map(|listed| match listed.location {
-            Location::Remote { path, .. } => String::from_utf8_lossy(path.as_bytes()).into_owned(),
-            other @ Location::Local(_) => panic!("expected a remote location, got {other:?}"),
-        })
+        result
+            .map(|listed| match listed.location {
+                Location::Remote { path, .. } => {
+                    String::from_utf8_lossy(path.as_bytes()).into_owned()
+                }
+                other @ Location::Local(_) => panic!("expected a remote location, got {other:?}"),
+            })
+            .map_err(|error| error.reason)
     }
 
     #[tokio::test]

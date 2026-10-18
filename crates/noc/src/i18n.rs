@@ -66,7 +66,7 @@ fn select_into(loader: &FluentLanguageLoader, requested: &[LanguageIdentifier]) 
 }
 
 /// A localized message, checked against the English messages at compile time:
-/// `fl!("fkey-quit")`, or with arguments `fl!("panel-error", path = path, reason = reason)`.
+/// `fl!("fkey-quit")`, or with arguments `fl!("list-failed", path = path, reason = reason)`.
 macro_rules! fl {
     ($id:literal) => {
         i18n_embed_fl::fl!($crate::i18n::LOADER, $id)
@@ -89,7 +89,7 @@ mod tests {
     #[test]
     fn arguments_have_no_isolation_marks() {
         assert_eq!(
-            fl!("panel-error", path = "docs", reason = "denied"),
+            fl!("list-failed", path = "docs", reason = "denied"),
             "Cannot open docs: denied"
         );
     }

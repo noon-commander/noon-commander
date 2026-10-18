@@ -51,8 +51,8 @@ use super::machine::{self, Machine};
 use super::menu::{LocationMenu, MenuEvent};
 use super::mouse::{Pointer, Press, Scroll};
 use super::panel::{
-    Destination, HostState, HostStatus, ListRequest, Listed, Panel, SearchEnd, View, child,
-    home_text, location_text,
+    Destination, Failure, HostState, HostStatus, ListError, ListErrorKind, ListRequest, Listed,
+    Panel, SearchEnd, View, child, home_text, location_text,
 };
 use super::pattern::Pattern;
 use super::picker::{FULL_ROWS, Whole};
@@ -448,6 +448,12 @@ enum Purpose {
     /// Connecting to `host` failed for `reason`, or its connection was lost: Retry tries
     /// again for the panels that wait for it.
     Reconnect { host: String, reason: String },
+    /// `panel` could not read a directory: Retry reads it again, Up goes to the nearest parent
+    /// that is there, Go to opens Quick cd with its path; OK stays.
+    ListFailed { panel: PanelId, failure: Failure },
+    /// A key in `panel`, which is on a host that is not connected: Connect reads its directory
+    /// again, Local goes to the last local directory of the panel.
+    NotConnected { panel: PanelId },
     /// F10 while jobs run: Yes quits and stops them.
     Quit,
     /// Something to read, such as an error.
@@ -2699,6 +2705,9 @@ impl App {
         let Some(action) = self.search_key(input) else {
             return Vec::new();
         };
+        if self.ask_connect(self.active, action) {
+            return Vec::new();
+        }
         if let Some(effects) = self.handle_vim(action) {
             return effects;
         }
@@ -2714,9 +2723,7 @@ impl App {
             }
             Action::Quit => self.ask_quit(),
             Action::Jobs => self.jobs_list = Some(JobsList::default()),
-            Action::Help => {
-                self.help = Some(self.help_screen());
-            }
+            Action::Help => self.help = Some(self.help_screen()),
             Action::SwitchPanel => self.active = self.active.other(),
             Action::FocusLeft | Action::FocusRight => {
                 self.active = self.drawn_on(action == Action::FocusLeft);
@@ -3984,6 +3991,7 @@ impl App {
                 side,
                 action @ (Action::NewTab | Action::CloseTab | Action::NextTab | Action::PrevTab),
             ) => self.tab_action(side, action),
+            Command::On(side, action) if self.ask_connect(side, action) => Vec::new(),
             Command::On(side, action) => match self.panel_mut(side).handle(action) {
                 Some(request) => self.open(self.shown(side), request),
                 None => Vec::new(),
@@ -4341,6 +4349,10 @@ impl App {
                 }
                 self.give_up(&host, &reason);
             }
+            Purpose::ListFailed { panel, failure } => {
+                return self.list_failed_closed(panel, failure, event);
+            }
+            Purpose::NotConnected { panel } => return self.not_connected_closed(panel, event),
             Purpose::Quit => self.quit = event == DialogEvent::Pressed(Button::Yes),
             Purpose::EditHost { .. }
             | Purpose::QuickCd { .. }
@@ -5879,17 +5891,22 @@ impl App {
 
     /// Opens the dialog of Quick cd, `g d`, for the active panel, as in mc.
     fn ask_cd(&mut self) {
+        self.ask_cd_in(self.shown(self.active), "");
+    }
+
+    /// Opens the dialog of Quick cd for `panel`, with `text` typed.
+    fn ask_cd_in(&mut self, panel: PanelId, text: &str) {
         let (title, prompt) = (fl!("cd-title"), fl!("cd-prompt"));
-        let dialog = Dialog::form(&title, &prompt, "", &[], MKDIR_DIALOG_WIDTH).with_completion();
-        let panel = self.shown(self.active);
-        self.dialogs.push_back(Open {
+        let dialog = Dialog::form(&title, &prompt, text, &[], MKDIR_DIALOG_WIDTH).with_completion();
+        // First, as it may follow a dialog that just closed, ahead of others waiting.
+        self.dialogs.push_front(Open {
             dialog,
             purpose: Purpose::QuickCd { panel },
         });
     }
 
     /// Sends `panel` where `cd <text>` leads from its directory. A path that is not there
-    /// leaves the panel where it is and says why, as any listing does.
+    /// leaves the panel where it is and asks what to do, as any listing does.
     fn cd(&mut self, panel: PanelId, text: &str) -> Vec<Effect> {
         let Some(tab) = self.tabs(panel.side).get(panel.tab) else {
             return Vec::new();
@@ -6474,19 +6491,20 @@ impl App {
         }
     }
 
-    /// Takes the result of an [`Effect::List`].
+    /// Takes the result of an [`Effect::List`]. A failure asks what to do, unless the panel
+    /// went up past a directory that is not there either, on its way to one that is.
     pub(crate) fn listed(
         &mut self,
         panel: PanelId,
         generation: u64,
-        result: Result<Listed, String>,
-    ) {
+        result: Result<Listed, ListError>,
+    ) -> Vec<Effect> {
         self.sync_connected();
         let Some(tab) = self.tab_mut(panel) else {
-            return;
+            return Vec::new();
         };
         let before = tab.panel.location().clone();
-        tab.panel.listed(generation, result);
+        let failure = tab.panel.listed(generation, result);
         let location = tab.panel.location().clone();
         if location != before {
             tab.previous = Some(before);
@@ -6505,6 +6523,129 @@ impl App {
         {
             self.last_dirs.insert(host, path);
         }
+        match failure {
+            Some(failure) => self.list_failed(panel, failure),
+            None => Vec::new(),
+        }
+    }
+
+    /// Reports that `panel` could not read a directory, in a dialog with the ways out: OK,
+    /// Retry, Up where it leads elsewhere, Go to. A directory that is not there on the way up
+    /// is passed by. Each panel has one such dialog, the last failure's.
+    fn list_failed(&mut self, panel: PanelId, failure: Failure) -> Vec<Effect> {
+        if failure.climbing
+            && failure.error.kind == ListErrorKind::NotFound
+            && let Some(parent) = failure.parent
+        {
+            return self.climb(panel, parent);
+        }
+        let Some(shown) = self.panel_of(panel) else {
+            return Vec::new();
+        };
+        let up = failure
+            .parent
+            .as_ref()
+            .is_some_and(|parent| parent.location() != shown.location());
+        let mut buttons = vec![Button::Ok, Button::Retry];
+        if up {
+            buttons.push(Button::Up);
+        }
+        buttons.push(Button::GoTo);
+        let first = match failure.error.kind {
+            ListErrorKind::NotFound if up && failure.stranded => Button::Up,
+            ListErrorKind::NotFound | ListErrorKind::Denied => Button::Ok,
+            ListErrorKind::Other => Button::Retry,
+        };
+        let default = buttons
+            .iter()
+            .position(|&button| button == first)
+            .unwrap_or_default();
+        let message = fl!(
+            "list-failed",
+            path = failure.shown.as_str(),
+            reason = failure.error.reason.as_str()
+        );
+        let dialog = Dialog::question(&fl!("dialog-error"), &message, buttons, default, true);
+        let open = Open {
+            dialog,
+            purpose: Purpose::ListFailed { panel, failure },
+        };
+        let earlier = self.dialogs.iter_mut().find(|open| {
+            matches!(open.purpose, Purpose::ListFailed { panel: failed, .. } if failed == panel)
+        });
+        match earlier {
+            Some(earlier) => *earlier = open,
+            None => self.dialogs.push_back(open),
+        }
+        Vec::new()
+    }
+
+    /// Takes the button that closed the dialog of [`App::list_failed`].
+    fn list_failed_closed(
+        &mut self,
+        panel: PanelId,
+        failure: Failure,
+        event: DialogEvent,
+    ) -> Vec<Effect> {
+        match event {
+            DialogEvent::Pressed(Button::Retry) => self.go(panel, failure.destination),
+            DialogEvent::Pressed(Button::Up) => match failure.parent {
+                Some(parent) => self.climb(panel, parent),
+                None => Vec::new(),
+            },
+            DialogEvent::Pressed(Button::GoTo) => {
+                self.ask_cd_in(panel, &cd_text(failure.destination.location()));
+                Vec::new()
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// Sends `panel` up to `destination`, and on up past directories that are not there.
+    fn climb(&mut self, panel: PanelId, destination: Destination) -> Vec<Effect> {
+        let Some(shown) = self.panel_of_mut(panel) else {
+            return Vec::new();
+        };
+        let request = shown.climb(destination);
+        self.open(panel, request)
+    }
+
+    /// Asks what to do instead of `action` in the panel on `side`, if it needs the panel's
+    /// entries and the panel is on a host that is not connected.
+    fn ask_connect(&mut self, side: Side, action: Action) -> bool {
+        if works_unconnected(action) {
+            return false;
+        }
+        let Some(host) = self.panel(side).not_connected() else {
+            return false;
+        };
+        let message = fl!(
+            "reconnect-not-connected",
+            host = cells::sanitize(host.as_bytes())
+        );
+        let buttons = vec![Button::Connect, Button::Local, Button::Cancel];
+        let dialog = Dialog::question(&fl!("reconnect-title"), &message, buttons, 0, true);
+        let panel = self.shown(side);
+        self.dialogs.push_back(Open {
+            dialog,
+            purpose: Purpose::NotConnected { panel },
+        });
+        true
+    }
+
+    /// Takes the button that closed the dialog of [`App::ask_connect`].
+    fn not_connected_closed(&mut self, panel: PanelId, event: DialogEvent) -> Vec<Effect> {
+        let Some(shown) = self.panel_of(panel) else {
+            return Vec::new();
+        };
+        let destination = match event {
+            DialogEvent::Pressed(Button::Connect) => shown.here(),
+            DialogEvent::Pressed(Button::Local) => shown
+                .last_local()
+                .unwrap_or_else(|| Destination::to(Location::Local(self.home.clone()))),
+            _ => return Vec::new(),
+        };
+        self.go(panel, destination)
     }
 
     /// Takes the handle of a host that [`Effect::Connect`] connected, and sends the requests
@@ -6641,8 +6782,8 @@ impl App {
     }
 
     /// Stops waiting for `host`, which could not be reached for `reason`, after Cancel: the
-    /// panels that were to open it stay where they were and say why; those on it stay there
-    /// without their entries.
+    /// panels that were to open it stay where they were; those on it stay there without their
+    /// entries, until a key in one asks to connect. The dialog said why already.
     fn give_up(&mut self, host: &str, reason: &str) {
         if !matches!(self.hosts.get(host), Some(Host::Stalled { .. })) {
             return;
@@ -6656,9 +6797,9 @@ impl App {
                 continue;
             }
             if is_on(panel.location(), host) {
-                panel.cancel();
+                panel.drop_host(host);
             } else {
-                panel.listed(request.generation, Err(reason.to_owned()));
+                panel.listed(request.generation, Err(ListError::other(reason.to_owned())));
             }
         }
         self.sync_connected();
@@ -6805,14 +6946,12 @@ impl App {
             .map(|host| (host.clone(), self.host_state(host)))
             .collect();
         let hosts = |host: &str| states.get(host).cloned().unwrap_or_default();
-        let reload_key = self.keymap.key(Context::Panel, Action::Reload);
         let formats = noc_locale::current();
         let spin = self.spin(at);
         let view = View {
             hosts: &hosts,
             decor: self.decor,
             theme: &self.theme,
-            reload_key: reload_key.as_deref(),
             spin,
             tz,
             formats: &formats,
@@ -7579,6 +7718,57 @@ fn waits_for(panel: &Panel, host: &str) -> bool {
     )
 }
 
+/// Whether `action` does its work in a panel on a host that is not connected, without asking
+/// to connect: it leaves the panel, goes elsewhere, or does not touch its entries. Reload
+/// connects by itself.
+fn works_unconnected(action: Action) -> bool {
+    matches!(
+        action,
+        Action::Quit
+            | Action::Help
+            | Action::KeyHints
+            | Action::Redraw
+            | Action::UserScreen
+            | Action::Jobs
+            | Action::Cancel
+            | Action::NormalMode
+            | Action::SwitchPanel
+            | Action::FocusLeft
+            | Action::FocusRight
+            | Action::SwapPanels
+            | Action::NewTab
+            | Action::CloseTab
+            | Action::NextTab
+            | Action::PrevTab
+            | Action::TabListLeft
+            | Action::TabListRight
+            | Action::LocationMenuLeft
+            | Action::LocationMenuRight
+            | Action::PullDown
+            | Action::PullDownLast
+            | Action::Reload
+            | Action::Disconnect
+            | Action::EditHost
+            | Action::Jump
+            | Action::QuickCd
+            | Action::JumpBack
+            | Action::JumpForward
+            | Action::SaveWorkspace
+            | Action::Workspaces
+            | Action::ToggleHidden
+    )
+}
+
+/// `location` as Quick cd reads it: a host's home directory as `host:`.
+fn cd_text(location: &Location) -> String {
+    match location {
+        Location::Remote { host, path } if path.as_bytes().is_empty() => {
+            format!("{}:", cells::sanitize(host.as_bytes()))
+        }
+        _ => location_text(location),
+    }
+}
+
 /// The label of an action in the F-key bar.
 fn fkey_label(action: Action) -> Option<String> {
     match action {
@@ -7782,6 +7972,27 @@ mod tests {
                 }),
             );
         }
+    }
+
+    /// Fails every listing in `effects` for `kind`, and returns what that leads to.
+    fn fail(app: &mut App, effects: Vec<Effect>, kind: ListErrorKind) -> Vec<Effect> {
+        let reason = match kind {
+            ListErrorKind::NotFound => "no such file or directory",
+            ListErrorKind::Denied => "permission denied",
+            ListErrorKind::Other => "connection reset",
+        };
+        let mut next = Vec::new();
+        for effect in effects {
+            let Effect::List { panel, request, .. } = effect else {
+                panic!("expected a listing, got {effect:?}");
+            };
+            let error = ListError {
+                kind,
+                reason: reason.to_owned(),
+            };
+            next.extend(app.listed(panel, request.generation, Err(error)));
+        }
+        next
     }
 
     /// An app on `/srv` whose first listings arrived.
@@ -8377,11 +8588,8 @@ mod tests {
         // A listing that fails leaves the panel where it was, and no jump.
         keys(&mut app, &["shift-g"]);
         let effects = keys(&mut app, &["g", "g", "l"]);
-        let [Effect::List { panel, request, .. }] = &effects[..] else {
-            panic!("expected a listing, got {effects:?}");
-        };
-        app.listed(*panel, request.generation, Err("denied".to_owned()));
-        keys(&mut app, &["ctrl-o"]);
+        fail(&mut app, effects, ListErrorKind::Denied);
+        keys(&mut app, &["esc", "ctrl-o"]);
         assert_eq!(
             cursor_name(&app, Side::Left),
             "b5",
@@ -11090,7 +11298,7 @@ mod tests {
             text.contains("Cannot connect to db: deploy@db: Permission denied (publickey)."),
             "{text}"
         );
-        assert!(text.contains("db: Retry or Cancel?"), "{text}");
+        assert!(!text.contains("Retry or Cancel"), "the dialog asks: {text}");
 
         // Retry, the default, connects again for the panel that still waits.
         let Effect::Connect {
@@ -11107,17 +11315,16 @@ mod tests {
             Some(remote("db", ""))
         );
 
-        // Cancel: the panel stays where it was and says why.
+        // Cancel: the panel stays where it was; the dialog said why, so no other one does.
         assert!(app.closed("db", again, Some(refused)).is_empty());
         assert!(app.handle(action(Action::Cancel)).is_empty());
         assert_eq!(app.host_state("db").status, HostStatus::Failed);
         assert_eq!(app.panel(Side::Left).location(), &local("/"));
         assert_eq!(app.panel(Side::Left).pending_request(), None);
+        assert!(app.dialogs.is_empty());
+        assert_eq!(app.panel(Side::Left).not_connected(), None);
         let text = screen(&mut app);
-        assert!(
-            text.contains("Cannot open db: deploy@db: Permission denied (publickey)."),
-            "{text}"
-        );
+        assert!(!text.contains("Cannot open"), "{text}");
         let Effect::Connect { .. } = one(enter_host(&mut app, Side::Left, 2)) else {
             panic!("expected a new connection");
         };
@@ -11174,7 +11381,7 @@ mod tests {
             text.contains("Lost the connection to web: Broken pipe"),
             "{text}"
         );
-        assert!(text.contains("web: Retry or Cancel?"), "{text}");
+        assert_eq!(app.dialogs.len(), 1);
         assert_eq!(app.panel(Side::Left).location(), &remote("web", ""));
 
         // Retry reads the directory again once the host is back.
@@ -11193,8 +11400,10 @@ mod tests {
         // Cancel leaves the panel on the host, without its entries, until it reads it again.
         app.closed("web", connection, Some("Broken pipe"));
         app.handle(action(Action::Cancel));
+        assert!(app.dialogs.is_empty(), "the dialog said why already");
+        assert_eq!(app.panel(Side::Left).not_connected(), Some("web"));
         let text = screen(&mut app);
-        assert!(text.contains("Not connected to web; R connects"), "{text}");
+        assert!(!text.contains("Cannot open"), "{text}");
         let Effect::Connect { .. } = one(app.handle(action(Action::Reload))) else {
             panic!("expected a new connection");
         };
@@ -11229,8 +11438,8 @@ mod tests {
         app.handle(action(Action::Cancel));
         let text = screen(&mut app);
         assert!(!text.contains("www"), "{text}");
-        assert!(text.contains("Not connected to web"), "{text}");
-        assert!(!text.contains("Lost"), "asked for, so no reason: {text}");
+        assert_eq!(app.panel(Side::Left).not_connected(), Some("web"));
+        assert!(app.dialogs.is_empty(), "asked for, so no dialog");
         assert_eq!(app.panel(Side::Left).location(), &remote("web", ""));
         // Nothing to close, or not a host.
         menu_on(&mut app, Side::Right);
@@ -13343,6 +13552,11 @@ mod tests {
         connect_web(&mut app, Side::Left, connection, "/var/www");
         app.disconnect("web");
         app.handle(action(Action::Shell));
+        assert!(
+            screen_of(&mut app, 12).contains("Not connected to web"),
+            "it asks to connect first"
+        );
+        app.handle(action(Action::Cancel));
         assert_eq!(app.context(), Context::Panel);
     }
 
@@ -14042,17 +14256,145 @@ mod tests {
 
         let mut app = loaded();
         let effects = quick_cd(&mut app, "/nowhere");
-        let [Effect::List { panel, request, .. }] = &effects[..] else {
-            panic!("expected a listing, got {effects:?}");
-        };
-        app.listed(
-            *panel,
-            request.generation,
-            Err("no such file or directory".to_owned()),
-        );
+        fail(&mut app, effects, ListErrorKind::NotFound);
         assert_eq!(app.panel(Side::Left).location(), &local("/srv"), "it stays");
         let text = screen(&mut app);
         assert!(text.contains("Cannot open /nowhere"), "{text}");
+    }
+
+    #[test]
+    fn a_directory_that_cannot_be_read_asks_what_to_do() {
+        let mut app = loaded();
+        // OK, the default when it is not allowed, stays; Up would lead where the panel is.
+        let effects = quick_cd(&mut app, "left");
+        assert!(fail(&mut app, effects, ListErrorKind::Denied).is_empty());
+        let text = screen_of(&mut app, 12);
+        assert!(
+            text.contains("Cannot open left: permission denied"),
+            "{text}"
+        );
+        assert!(text.contains("Retry") && text.contains("Go to"), "{text}");
+        assert!(!text.contains(" Up "), "{text}");
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        assert!(app.dialogs.is_empty());
+        assert_eq!(app.panel(Side::Left).location(), &local("/srv"));
+
+        // Retry, the default for other errors, reads it again.
+        let effects = quick_cd(&mut app, "left");
+        assert!(fail(&mut app, effects, ListErrorKind::Other).is_empty());
+        let Effect::List { request, .. } = one(app.handle(action(Action::Confirm))) else {
+            panic!("expected the directory again");
+        };
+        assert_eq!(request.location, local("/srv/left"));
+
+        // A panel has one such dialog at a time: the last failure replaces the one before.
+        let panel = app.shown(Side::Left);
+        let error = |reason: &str| ListError::other(reason.to_owned());
+        app.listed(panel, request.generation, Err(error("first")));
+        let Some(request) = app.panel_mut(Side::Left).handle(Action::Reload) else {
+            panic!("expected the directory again");
+        };
+        app.listed(panel, request.generation, Err(error("second")));
+        assert_eq!(app.dialogs.len(), 1);
+        let text = screen_of(&mut app, 12);
+        assert!(text.contains("Cannot open /srv: second"), "{text}");
+
+        // Go to opens Quick cd with the path, to mend it.
+        app.handle(action(Action::Cancel));
+        let effects = quick_cd(&mut app, "/nowhere/deep");
+        fail(&mut app, effects, ListErrorKind::NotFound);
+        assert!(app.handle(Resolved::Hotkey('g')).is_empty());
+        assert_eq!(app.context(), Context::PathInput);
+        let field = app.dialogs.front().map(|open| open.dialog.text());
+        assert_eq!(field, Some("/nowhere/deep"));
+        assert_eq!(cd_text(&remote("web", "")), "web:");
+        assert_eq!(cd_text(&remote("web", "/var")), "web:/var");
+    }
+
+    #[test]
+    fn up_climbs_to_the_nearest_directory_that_is_there() {
+        let mut app = loaded();
+        let effects = quick_cd(&mut app, "/srv/x/y/z");
+        answer(&mut app, effects, &Listing::Dir(Vec::new()));
+
+        // The directory of the panel is gone: Up is the default.
+        let effects = app.handle(action(Action::Reload));
+        assert!(fail(&mut app, effects, ListErrorKind::NotFound).is_empty());
+        let text = screen_of(&mut app, 12);
+        assert!(
+            text.contains("Cannot open /srv/x/y/z: no such file or directory"),
+            "{text}"
+        );
+        let effects = app.handle(action(Action::Confirm));
+        let [Effect::List { request, .. }] = &effects[..] else {
+            panic!("expected the parent, got {effects:?}");
+        };
+        assert_eq!(request.location, local("/srv/x/y"));
+        // Past every directory that is gone too, without asking, up to one that it cannot read.
+        let effects = fail(&mut app, effects, ListErrorKind::NotFound);
+        let [Effect::List { request, .. }] = &effects[..] else {
+            panic!("expected the next parent, got {effects:?}");
+        };
+        assert_eq!(request.location, local("/srv/x"));
+        assert!(fail(&mut app, effects, ListErrorKind::Denied).is_empty());
+        let text = screen_of(&mut app, 12);
+        assert!(
+            text.contains("Cannot open /srv/x: permission denied"),
+            "{text}"
+        );
+
+        // Up again, by its letter, to /srv, on the directory it came from.
+        let effects = app.handle(Resolved::Hotkey('u'));
+        answer(&mut app, effects, &Listing::Dir(vec![dir("w"), dir("x")]));
+        assert_eq!(app.panel(Side::Left).location(), &local("/srv"));
+        assert_eq!(cursor_name(&app, Side::Left), "x");
+        assert!(app.dialogs.is_empty());
+    }
+
+    #[test]
+    fn a_key_in_a_panel_not_connected_asks_to_connect() {
+        let mut app = at_slash();
+        let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
+            panic!("expected a connection");
+        };
+        connect_web(&mut app, Side::Left, connection, "/var/www");
+        app.disconnect("web");
+        // Keys that do not need the host work as ever.
+        app.handle(action(Action::SwitchPanel));
+        app.handle(action(Action::SwitchPanel));
+        assert_eq!(app.active, Side::Left);
+        assert!(app.dialogs.is_empty());
+
+        // Any other asks; Connect, the default, reads the directory again.
+        assert!(app.handle(action(Action::Down)).is_empty());
+        let text = screen_of(&mut app, 12);
+        assert!(text.contains("Not connected to web"), "{text}");
+        let Effect::Connect { .. } = one(app.handle(action(Action::Confirm))) else {
+            panic!("expected a connection");
+        };
+        assert_eq!(
+            app.panel(Side::Left).pending_request().map(|r| r.location),
+            Some(remote("web", "/var/www"))
+        );
+        app.handle(action(Action::Cancel));
+        assert_eq!(app.panel(Side::Left).not_connected(), Some("web"));
+
+        // Local goes to the last local directory of the panel; Cancel stays.
+        app.handle(action(Action::Enter));
+        assert!(app.handle(action(Action::Cancel)).is_empty());
+        assert_eq!(app.panel(Side::Left).not_connected(), Some("web"));
+        app.handle(action(Action::Enter));
+        let Effect::List { request, .. } = one(app.handle(Resolved::Hotkey('l'))) else {
+            panic!("expected a local directory");
+        };
+        assert_eq!(request.location, local("/"));
+
+        // R connects at once.
+        app.panel_mut(Side::Left).cancel();
+        let Effect::Connect { .. } = one(app.handle(action(Action::Reload))) else {
+            panic!("expected a connection");
+        };
+        assert!(app.dialogs.is_empty());
     }
 
     /// The listing that a Tab asks for: its generation, directory, host, and whether it wants

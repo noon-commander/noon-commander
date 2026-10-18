@@ -97,7 +97,7 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
             panel,
             generation,
             result,
-        } => app.listed(panel, generation, result),
+        } => tasks.run(app.listed(panel, generation, result)),
         Done::Places { generation, result } => app.places(generation, result),
         Done::Created {
             panel,

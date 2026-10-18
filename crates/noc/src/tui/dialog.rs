@@ -90,12 +90,18 @@ pub(crate) enum Button {
     Older,
     /// Take what the panel shows.
     UseCurrent,
-    /// Go to the row of the list, as in mc's results of Find File.
+    /// Go to the row of the list, as in mc's results of Find File; or to a path typed.
     GoTo,
     /// View the file of the row.
     View,
     /// Edit the file of the row.
     Edit,
+    /// Go to the nearest parent directory that is there.
+    Up,
+    /// Connect to the host again.
+    Connect,
+    /// Go to a local directory.
+    Local,
 }
 
 impl Button {
@@ -121,6 +127,9 @@ impl Button {
             Self::GoTo => fl!("dialog-go-to"),
             Self::View => fl!("dialog-view"),
             Self::Edit => fl!("dialog-edit"),
+            Self::Up => fl!("dialog-up"),
+            Self::Connect => fl!("dialog-connect"),
+            Self::Local => fl!("dialog-local"),
         }
     }
 }

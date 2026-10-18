@@ -1,4 +1,4 @@
-//! Errors in words, for the status line.
+//! Errors in words, for messages and dialogs.
 
 use std::error::Error;
 

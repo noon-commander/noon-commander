@@ -1679,7 +1679,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   reason it failed right of the filter. In debug builds, `--slow-spinners SECONDS` holds back every
   result of background work by that long, in order, and `--slow-connections SECONDS` holds back only
   connections made or ended, in a queue of their own, so the dots of a host connecting can be
-  watched in the location menu.
+  watched in the location menu. Each frame goes out as synchronized output (`draw_whole` in
+  `tui/mod.rs`), so the cursor of a field does not show on its way through the cells a shine
+  changes.
 - **Glyphs.** Every special character the UI draws is in `tui/glyphs.rs`: `Glyphs::NERD` and
   `Glyphs::PLAIN`, which `ui.icons` picks and the theme carries (`Theme.glyphs`), with the icons
   and markers of kinds, hosts, and volumes, the glyph of root, the scroll bars, the marks of text

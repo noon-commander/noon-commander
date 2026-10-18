@@ -241,6 +241,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   was in it.
 - The viewer no longer lags in files with very long lines, such as binary files, while it
   wraps them: each line wraps once for each width, rather than again for every row it scrolls.
+- The cursor of a field no longer flickers over cells that change while it waits, such as the
+  skeleton that a shine crosses under `f f`: every frame is drawn as synchronized output, which
+  the terminal shows whole. Terminals without it still may show the cursor on its way.
 
 ## [0.2.0] - 2026-10-14
 

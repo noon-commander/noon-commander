@@ -55,14 +55,15 @@ use crossterm::cursor::SetCursorStyle;
 use crossterm::event::{
     DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyEventKind, MouseEvent,
 };
+use crossterm::terminal::{BeginSynchronizedUpdate, EndSynchronizedUpdate};
 use futures_util::StreamExt as _;
 use jiff::tz::TimeZone;
 use noc_locale::Formats;
 use noc_tools::ToolError;
 use noc_tools::editor::Editor;
-use ratatui::DefaultTerminal;
 use ratatui::backend::{Backend as _, ClearType};
 use ratatui::widgets::Clear;
+use ratatui::{DefaultTerminal, Frame};
 use tokio::signal::unix::{Signal, SignalKind, signal};
 use tokio::sync::mpsc;
 
@@ -295,7 +296,7 @@ pub(crate) async fn run(
         let now = Instant::now();
         take_hints(&mut app, &mut keys);
         if !std::mem::take(&mut idle) {
-            if let Err(error) = terminal.draw(|frame| app.render(frame, now, &tz)) {
+            if let Err(error) = draw_whole(&mut terminal, |frame| app.render(frame, now, &tz)) {
                 break Err(error.into());
             }
             drawn = now;
@@ -709,6 +710,20 @@ fn capture_mouse(on: bool) -> io::Result<()> {
     } else {
         crossterm::execute!(io::stdout(), DisableMouseCapture)
     }
+}
+
+/// Draws a frame between the marks of synchronized output, so that the terminal shows it whole.
+/// Without them the cursor of a field shows on its way through the cells that change, such as
+/// those a shine crosses every 40 ms, before it is put back. Terminals that do not know the
+/// marks ignore them.
+fn draw_whole(
+    terminal: &mut DefaultTerminal,
+    render: impl FnOnce(&mut Frame<'_>),
+) -> io::Result<()> {
+    crossterm::execute!(terminal.backend_mut(), BeginSynchronizedUpdate)?;
+    let drawn = terminal.draw(render).map(drop);
+    crossterm::execute!(terminal.backend_mut(), EndSynchronizedUpdate)?;
+    drawn
 }
 
 /// Makes the next draw write every cell. Unlike `Terminal::clear`, this does not ask the

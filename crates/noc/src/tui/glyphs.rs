@@ -31,13 +31,10 @@ pub(crate) struct Hosts {
     pub(crate) failed: char,
 }
 
-/// What turns while something waits, one cell each: the cells of the scanner that sweeps to
-/// and fro, lit and not; the frames of the spinner where there is room for one cell only; and
-/// what stands still in their place without animations.
+/// What turns while something waits, in one cell: the frames of the dots, and what stands still
+/// in their place without animations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Spinners {
-    pub(crate) lit: char,
-    pub(crate) unlit: char,
     pub(crate) dots: &'static [char],
     pub(crate) still: char,
 }
@@ -111,8 +108,6 @@ impl Glyphs {
             failed: '󰒑',
         },
         spinners: Spinners {
-            lit: '■',
-            unlit: '⬝',
             dots: &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],
             still: '⋯',
         },
@@ -171,8 +166,6 @@ impl Glyphs {
         },
         // Fonts without the smaller squares and braille have these.
         spinners: Spinners {
-            lit: '■',
-            unlit: '·',
             dots: &['|', '/', '-', '\\'],
             still: '…',
         },
@@ -344,12 +337,7 @@ mod tests {
                 3
             );
             let spinners = glyphs.spinners;
-            let still = [
-                spinners.lit,
-                spinners.unlit,
-                spinners.still,
-                glyphs.skeleton,
-            ];
+            let still = [spinners.still, glyphs.skeleton];
             for glyph in spinners.dots.iter().chain(&still) {
                 assert_eq!(noc_text::width(&glyph.to_string()), 1, "{glyph:?}");
             }

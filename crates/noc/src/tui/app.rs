@@ -6533,7 +6533,7 @@ impl App {
             if shows > drawn {
                 at(shows);
             } else if turns {
-                at(drawn + spinner::SCANNER_FRAME);
+                at(drawn + spinner::SHINE_STEP);
             }
         }
         let connecting = self

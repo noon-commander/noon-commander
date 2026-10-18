@@ -26,12 +26,11 @@ too, which some users want and others do not, apart from windows.
   Each stands next to what tells what it waits for: a title, a path, or the place of the rows to
   come. No text says that something waits: a first version wrote `Reading the file…` after a
   scanner, which said less than the title over it.
-- **A scanner.** Eight cells, a lit block that runs from one end to the other and
-  back, with a trail that fades behind it, and a pause at each end, 40 ms a step. The trail is
-  one color, `busy` of the theme (`busy_dialog` in dialogs), blended into the background:
-  brighter at the head, fading to 30% in the pause. Where the colors are not known (the low 16,
-  the terminal's own), the head is bold, the next two cells plain, and the rest dim. The blocks
-  are `■` and `⬝` with icons, `■` and `·` without.
+- **Dots and skeletons, no scanner.** A first version drew a scanner, eight cells with a lit block
+  running to and fro, in front of every text that waited. As each place moved its wait into its
+  title or its rows, the scanner was left in the status line of the search of a tree alone, a second
+  look of waiting beside the skeleton over it; that line takes a skeleton too. Waiting has two
+  looks: dots in one cell, and faint bars where something is still to come.
 - **Braille dots where one cell is all there is.** They turn through `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, 80 ms each;
   `|/-\` without icons. The icon of a host connecting in the location menu turns them, and so do the
   titles of panels, of windows, and of the viewer.
@@ -52,16 +51,16 @@ too, which some users want and others do not, apart from windows.
   gauge of a read in parts is left for later.
 - **Shown after 150 ms.** A `Wait`, kept by what waits, remembers the first frame that drew it; the
   spinner and its text show only from 150 ms later, so quick work shows nothing.
-- **Frames come from time, not ticks.** A frame of the scanner is the time since the app's first
-  frame, divided by its step, so every spinner on screen moves together, and tests draw a given
-  instant. `App::spin_due` tells the event loop when the next frame is due: when a `Wait` starts
-  to show, the next step of a spinner, or the next second of a job's clock. Nothing waiting, the
-  loop sleeps until an event.
-- **Settings of their own.** A new section, `[animations]`, holds `windows` (the frames of
-  windows, which was `ui.animations`) and `spinners`, both on by default, each a check box under
-  Animations in the Configuration dialog. `ui.animations` is gone with no fallback, before the
-  first release; a config that still has it is an error that names the key. With `spinners` off,
-  a still mark stands where the spinner was, `⋯` (`…` without icons), and the text stays.
+- **Frames come from time, not ticks.** A frame of the dots or a step of the shine is the time since
+  the wait showed, divided by its step, so every spinner on screen moves together, and tests draw a
+  given instant. `App::spin_due` tells the event loop when the next frame is due: when a `Wait`
+  starts to show, the next step of a spinner, or the next second of a job's clock. Nothing waiting,
+  the loop sleeps until an event.
+- **Settings of their own.** A new section, `[animations]`, holds `windows` (the frames of windows,
+  which was `ui.animations`) and `spinners`, both on by default, each a check box under Animations
+  in the Configuration dialog. `ui.animations` is gone with no fallback, before the first release; a
+  config that still has it is an error that names the key. With `spinners` off, a still mark stands
+  where the dots were, `⋯` (`…` without icons), and the shine rests.
 - **`--slow-spinners SECONDS`, in debug builds only.** It holds back every result of background
   work by so many seconds, in the order they came, so spinners stay long enough to watch. A task
   between the tasks and the event loop stamps each result as it arrives and releases it at its
@@ -77,10 +76,11 @@ too, which some users want and others do not, apart from windows.
   from when the dots show, with the same delay, one cell every 40 ms over every bar, so a short bar
   is crossed sooner, and resting 400 ms after the longest; an empty box looked broken, and three
   still rows read as rows that had come. With `animations.spinners` off the shine rests. Every list
-  whose rows do not come at once does the same. The status line of the search shows the scanner
-  alone while it searches: a count that runs said less than the one at the end. R in the location
-  menu keeps the last rows while it lists the volumes and the hosts again, the dots in the title, or
-  shows the reason it failed right of the filter, in the colors of errors.
+  whose rows do not come at once does the same. The status line of the search shows a skeleton of
+  one bar while it searches, as long as the right bar of a row, which the shine crosses with them: a
+  count that runs said less than the one at the end. R in the location menu keeps the last rows
+  while it lists the volumes and the hosts again, the dots in the title, or shows the reason it
+  failed right of the filter, in the colors of errors.
 - **A job waits in its gauge.** While a job waits its turn or counts, its window says which on its
   first line, a stage of the job rather than a wait, and its gauge, which has no percentage yet, is
   a faint bar of `▒` over which the shine of the skeleton of rows runs to and fro, turning at its

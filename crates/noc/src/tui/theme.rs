@@ -126,9 +126,7 @@ pub(crate) struct Theme {
     pub(crate) dialog_input: Style,
     /// The progress bar of a job.
     pub(crate) gauge: Style,
-    /// The color of the spinner of what waits, over `panel` and over `dialog`: the head of its
-    /// scanner, whose trail and other cells fade into the background where its colors are
-    /// known.
+    /// The color of the dots of what waits, over `panel` and over `dialog`.
     pub(crate) busy: Style,
     pub(crate) busy_dialog: Style,
     /// Error dialogs: body, frame, text, and buttons without the focus.

@@ -492,10 +492,10 @@ dirs…, opens it in its Files and dirs mode, which finds their names with fd
   cursor's; a line too long starts a little before its first match. The rows of a search stay until
   the next one finds something or ends, the cursor on the row it was on. While it searches, the dots
   turn in front of the title, a skeleton stands in place of the rows until the first come, and the
-  status line under them shows the scanner alone. Once it ends, the status says how many lines it
-  found in how many files; that it stopped at the limit; and the errors. A pattern that is not a
-  regular expression, a missing ripgrep, or a host that is not connected says why in place of the
-  rows.
+  status line under them a skeleton bar, which the shine crosses with the row. Once it ends, the
+  status says how many lines it found in how many files; that it stopped at the limit; and the
+  errors. A pattern that is not a regular expression, a missing ripgrep, or a host that is not
+  connected says why in place of the rows.
 - Go to, the default button, goes to the file in the active panel: its directory, with the cursor
   on it; where the panel was goes to the jump list. View (F3) views it with the line at the top,
   and Edit (F4) edits it at the line (`Editor::edit_at`), a remote one through a local copy; the
@@ -1656,30 +1656,28 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   or going, and the terminal coming back from another program show their windows at once.
   Completion lists and the key hints of which-key appear at once, as they come while typing.
 - **Spinners.** Whatever waits for work in the background shows one spinner, next to what tells what
-  it waits for ([ADR 0037](adr/0037-spinners.md)). In the status line of the search of a tree,
-  `tui/spinner.rs` draws it as a scanner: eight cells, a lit block running to and fro, 40 ms a step,
-  with a trail in the theme's `busy` color blended into the background (bold, plain, and dim where
-  colors are not known), and a pause at each end. Braille dots turn where one cell is all there is:
-  in place of the icon in front of the path in a panel's title (a folder, or a host in the color of
-  its status), which shows the directory it reads at once, so the path never moves and the status
-  line under the rows stays as it is; the dots take the color of the host's status while it
-  connects; in place of the file's icon in front of the path in the viewer's title, while
-  `dialog::text_skeleton` gives a line of faint bars for the text; on the icon of a host connecting
-  in the location menu; and in front of the titles of the location menu, the zoxide window, and the
-  search of a whole tree, drawn over the line of the frame by `dialog::draw_title_dots`, so the
-  title stays in place; until their first rows come, `dialog::draw_skeleton` draws a row of faint
-  bars, both of which a shine crosses at once from when the dots show, one cell every 40 ms, in
-  their place. Until a job knows how far it is, its gauge is a faint bar of `▒` with no percentage,
-  over which the same shine runs to and fro as fast, turning at its ends (`dialog::shine_bar`, which
-  the skeleton of rows draws too; `Shine::bounce`). Each waiting thing keeps a `Wait`, which
-  remembers the first frame that drew it; nothing shows until 150 ms later, so quick work does not
-  flicker. Frames come from the time since the app's first frame, so spinners move together and
-  tests draw given instants; `App::spin_due` tells the event loop when the next frame is due. With
-  `animations.spinners` off, a still mark stands in place of the spinner. R in the location menu
-  keeps its rows while the dots turn, and shows the reason it failed right of the filter. In debug
-  builds, `--slow-spinners SECONDS` holds back every result of background work by that long, in
-  order, and `--slow-connections SECONDS` holds back only connections made or ended, in a queue of
-  their own, so the dots of a host connecting can be watched in the location menu.
+  it waits for ([ADR 0037](adr/0037-spinners.md)). `tui/spinner.rs` keeps its clock. Braille dots
+  turn, in the theme's `busy` color, where one cell is all there is: in place of the icon in front
+  of the path in a panel's title (a folder, or a host in the color of its status), which shows the
+  directory it reads at once, so the path never moves and the status line under the rows stays as it
+  is; the dots take the color of the host's status while it connects; in place of the file's icon in
+  front of the path in the viewer's title, while `dialog::text_skeleton` gives a line of faint bars
+  for the text; on the icon of a host connecting in the location menu; and in front of the titles of
+  the location menu, the zoxide window, and the search of a whole tree, drawn over the line of the
+  frame by `dialog::draw_title_dots`, so the title stays in place; until their first rows come,
+  `dialog::draw_skeleton` draws a row of faint bars, both of which a shine crosses at once from when
+  the dots show, one cell every 40 ms, in their place; the status line of the search has a bar of
+  its own, crossed with them. Until a job knows how far it is, its gauge is a faint bar of `▒` with
+  no percentage, over which the same shine runs to and fro as fast, turning at its ends
+  (`dialog::shine_bar`, which the skeleton of rows draws too; `Shine::bounce`). Each waiting thing
+  keeps a `Wait`, which remembers the first frame that drew it; nothing shows until 150 ms later, so
+  quick work does not flicker. Frames come from the time since the app's first frame, so spinners
+  move together and tests draw given instants; `App::spin_due` tells the event loop when the next
+  frame is due. With `animations.spinners` off, a still mark stands in place of the spinner. R in
+  the location menu keeps its rows while the dots turn, and shows the reason it failed right of the
+  filter. In debug builds, `--slow-spinners SECONDS` holds back every result of background work by
+  that long, in order, and `--slow-connections SECONDS` holds back only connections made or ended,
+  in a queue of their own, so the dots of a host connecting can be watched in the location menu.
 - **Glyphs.** Every special character the UI draws is in `tui/glyphs.rs`: `Glyphs::NERD` and
   `Glyphs::PLAIN`, which `ui.icons` picks and the theme carries (`Theme.glyphs`), with the icons
   and markers of kinds, hosts, and volumes, the glyph of root, the scroll bars, the marks of text

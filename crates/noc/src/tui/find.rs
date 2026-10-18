@@ -208,7 +208,7 @@ pub(crate) struct FindWindow {
     regex: bool,
     /// Stops the search, which the dialog does when it goes or a new one starts.
     cancel: CancellationToken,
-    /// For the end of the search, whose spinner shows under the rows.
+    /// For the end of the search, while a skeleton stands for how many it found.
     wait: Wait,
 }
 
@@ -313,7 +313,7 @@ impl FindWindow {
         self.wait = Wait::default();
     }
 
-    /// The wait for the end of the search, while it searches, which turns the spinner.
+    /// The wait for the end of the search, while it searches, which turns the dots.
     pub(crate) fn wait(&self) -> Option<&Wait> {
         (self.state == State::Searching).then_some(&self.wait)
     }
@@ -639,10 +639,10 @@ impl FindWindow {
     }
 
     /// The lines under the rows: how many it found; that it stopped at the limit; and what
-    /// went wrong. While it searches, a line for the spinner alone.
+    /// went wrong. While it searches, a line for the skeleton that stands for them.
     fn status(&self) -> Vec<String> {
         let summary = match &self.state {
-            // The spinner alone, in front of an empty line.
+            // The skeleton stands in its place.
             State::Searching => return vec![String::new()],
             State::Over(summary) => summary,
             State::Failed(_) => return vec![self.count()],
@@ -693,8 +693,8 @@ impl FindWindow {
     }
 
     /// Draws the dialog centered over `area`, the panels, as tall as they are: the rows in its
-    /// list, scrolled to the cursor, and under them how many it found, with the spinner of
-    /// `spin` while it searches, and what kept it from finding all.
+    /// list, scrolled to the cursor, and under them how many it found, a skeleton crossed by
+    /// the shine of `spin` while it searches, and what kept it from finding all.
     pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, spin: &Spin) {
         let items = self.items();
         let row = |index: usize, width: usize, style: Style| {
@@ -714,7 +714,7 @@ impl FindWindow {
             row: &row,
             note: self.message(),
             status: self.status(),
-            spinner: wait.and_then(|wait| spin.wait(wait, (theme.busy_dialog, theme.dialog))),
+            counting: wait.is_some(),
             dots: wait
                 .and_then(|wait| spin.wait_dots(wait))
                 .map(|dots| (dots, theme.busy_dialog)),
@@ -1367,10 +1367,17 @@ mod tests {
             screen.contains("═ … Find in"),
             "dots in front of the title: {screen}"
         );
-        let bars = screen.lines().filter(|line| line.contains("---")).count();
-        assert_eq!(bars, 1, "a skeleton of the rows to come: {screen}");
-        let status = screen.lines().filter(|line| line.contains("║ … ")).count();
-        assert_eq!(status, 1, "the spinner alone in the status: {screen}");
+        let bars: Vec<&str> = screen.lines().filter(|line| line.contains("---")).collect();
+        assert_eq!(
+            bars.len(),
+            2,
+            "skeletons of the rows and the status: {screen}"
+        );
+        assert!(bars[0].contains("-  "), "a row of two bars: {screen}");
+        assert!(
+            bars[1].trim_end_matches(['║', ' ', '"']).ends_with('-'),
+            "{screen}"
+        );
         assert!(!screen.contains("0 lines"), "{screen}");
         window.finished(
             1,

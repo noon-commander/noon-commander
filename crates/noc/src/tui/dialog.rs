@@ -439,8 +439,9 @@ pub(crate) struct ListView<'a> {
     pub(crate) note: Option<String>,
     /// Lines under the rows, apart from them, cut at their end where too long.
     pub(crate) status: Vec<String>,
-    /// In front of the first of them, while the list waits for more: the spinner.
-    pub(crate) spinner: Option<Vec<Span<'static>>>,
+    /// Whether the first of them is still to come: a skeleton stands in its place, crossed by
+    /// the shine.
+    pub(crate) counting: bool,
     /// Turning in front of the title while the list waits for more, in their color.
     pub(crate) dots: Option<(char, Style)>,
     /// Whether the first rows are still to come: a skeleton stands in their place.
@@ -1467,13 +1468,11 @@ impl Dialog {
             for (number, text) in view.status.iter().enumerate() {
                 index += 1;
                 let marks = theme.glyphs.marks;
-                let spinner = view.spinner.as_ref().filter(|_| number == 0);
-                let used = spinner.map_or(0, |spans| spans.iter().map(Span::width).sum());
-                let room = width.saturating_sub(used);
-                let mut line = cells::fitted(text, room, cut, colors.body_styles(), marks);
-                if let Some(spinner) = spinner {
-                    line.spans.splice(0..0, spinner.iter().cloned());
-                }
+                let line = if number == 0 && view.counting {
+                    status_skeleton(inner.width, colors.body, theme, view.shine)
+                } else {
+                    cells::fitted(text, width, cut, colors.body_styles(), marks)
+                };
                 frame.render_widget(line.style(colors.body), row(index));
             }
             index += 1;
@@ -1760,6 +1759,8 @@ pub(crate) fn rows_area(inner: Rect, below: u16) -> Rect {
 
 /// Rows a window shows while its first ones are still to come.
 pub(crate) const SKELETON_ROWS: u16 = 1;
+/// Twelfths of the width: of the bar on the left of a skeleton row, of the one on the right.
+const SKELETON_BARS: (u16, u16) = (6, 3);
 
 /// Draws a skeleton on the first line of `area`, where rows are still to come: a faint bar on
 /// the left for a name and one on the right for what is known of it. A `shine`, if any, crosses
@@ -1770,13 +1771,12 @@ pub(crate) fn draw_skeleton(
     theme: &Theme,
     shine: Option<Shine>,
 ) {
-    // Twelfths of the width: of the bar on the left, of the one on the right.
-    const BARS: (u16, u16) = (6, 3);
     if area.width < 8 || area.height == 0 {
         return;
     }
     let glyph = theme.glyphs.skeleton.to_string();
-    let (left, right) = (area.width * BARS.0 / 12, area.width * BARS.1 / 12);
+    let bars = SKELETON_BARS;
+    let (left, right) = (area.width * bars.0 / 12, area.width * bars.1 / 12);
     let middle = shine_middle(shine, left.max(right));
     let line: Line<'_> = shine_bar(left, middle, &glyph, theme.dialog)
         .into_iter()
@@ -1787,6 +1787,20 @@ pub(crate) fn draw_skeleton(
         .chain(shine_bar(right, middle, &glyph, theme.dialog))
         .collect();
     frame.render_widget(line, Rect::new(area.x, area.y, area.width, 1));
+}
+
+/// A skeleton of a line of status over `width` cells, such as how many a search found, in the
+/// colors of `style`: a faint bar from the left edge, as long as the right bar of a skeleton row.
+/// A `shine`, if any, crosses it with the bars of a skeleton row over as many cells.
+fn status_skeleton(width: u16, style: Style, theme: &Theme, shine: Option<Shine>) -> Line<'static> {
+    let length = if width < 8 {
+        0
+    } else {
+        width * SKELETON_BARS.1 / 12
+    };
+    let middle = shine_middle(shine, width * SKELETON_BARS.0 / 12);
+    let glyph = theme.glyphs.skeleton.to_string();
+    Line::from(shine_bar(length, middle, &glyph, style))
 }
 
 /// A skeleton of a line of text, in place of a text still to come over `width` cells: a faint
@@ -2782,7 +2796,7 @@ mod tests {
             row: &row,
             note: note.map(str::to_owned),
             status: vec!["30 rows".to_owned()],
-            spinner: None,
+            counting: false,
             dots: None,
             waiting: false,
             shine: None,

@@ -272,6 +272,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   binary file: such marks show as `?` in names and as `·` in the viewer.
 - The viewer shows invalid UTF-8 and characters the terminal would act on as a faint `·`, as mc
   shows `.`, rather than as `?` and `�`, which stood out in a binary file and passed for text.
+- A host whose start directory cannot be opened says which directory it is, rather than only
+  the host's name; Up takes the panel to the nearest directory above it that is there, and Go to
+  starts from its path, rather than from `host:`.
 
 ## [0.2.0] - 2026-10-14
 

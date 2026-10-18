@@ -8032,6 +8032,7 @@ mod tests {
             let error = ListError {
                 kind,
                 reason: reason.to_owned(),
+                location: None,
             };
             next.extend(app.listed(panel, request.generation, Err(error)));
         }
@@ -14396,6 +14397,46 @@ mod tests {
         assert_eq!(app.panel(Side::Left).location(), &local("/srv"));
         assert_eq!(cursor_name(&app, Side::Left), "x");
         assert!(app.dialogs.is_empty());
+    }
+
+    #[test]
+    fn a_host_that_cannot_open_its_start_dir_names_it_for_up_and_go_to() {
+        let mut app = at_slash();
+        let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
+            panic!("expected a connection");
+        };
+        let (handle, _requests) = HostHandle::channel();
+        let effects = app.connected("web", connection, handle);
+        let fail_at_start_dir = |app: &mut App, effects: Vec<Effect>| {
+            let Effect::List { panel, request, .. } = one(effects) else {
+                panic!("expected a listing");
+            };
+            assert_eq!(request.location, remote("web", ""));
+            let error = ListError {
+                kind: ListErrorKind::NotFound,
+                reason: "no such file or directory".to_owned(),
+                location: Some(remote("web", "/var/www/gone")),
+            };
+            assert!(app.listed(panel, request.generation, Err(error)).is_empty());
+        };
+        fail_at_start_dir(&mut app, effects);
+        let text = screen_of(&mut app, 12);
+        assert!(
+            text.contains("Cannot open web:/var/www/gone: no such file or directory"),
+            "{text}"
+        );
+        assert!(text.contains(" Up "), "{text}");
+        let Effect::List { request, .. } = one(app.handle(Resolved::Hotkey('u'))) else {
+            panic!("expected the parent");
+        };
+        assert_eq!(request.location, remote("web", "/var/www"));
+
+        app.panel_mut(Side::Left).cancel();
+        let effects = enter_host(&mut app, Side::Left, 1);
+        fail_at_start_dir(&mut app, effects);
+        assert!(app.handle(Resolved::Hotkey('g')).is_empty());
+        let field = app.dialogs.front().map(|open| open.dialog.text());
+        assert_eq!(field, Some("web:/var/www/gone"));
     }
 
     #[test]

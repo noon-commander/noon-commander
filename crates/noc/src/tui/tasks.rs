@@ -2104,31 +2104,27 @@ impl HostTask {
 
     /// Lists a remote directory. The empty path is where the host opens: the directory to
     /// resume, if it is still there, else its `start_dir`, else the remote home directory; the
-    /// reply names it as an absolute path.
+    /// reply, or the failure, names it as an absolute path.
     async fn list(&self, fs: &SftpFs, panel: PanelId, request: ListRequest) -> Done {
         let result = async {
             let Location::Remote { path, .. } = &request.location else {
                 return Err(ListError::other(fl!("error-connection-closed")));
             };
-            if path.as_bytes().is_empty()
-                && let Some(dir) = &request.resume
+            if !path.as_bytes().is_empty() {
+                return self
+                    .list_dir(fs, path.clone())
+                    .await
+                    .map_err(|error| ListError::vfs(&error));
+            }
+            if let Some(dir) = &request.resume
                 && let Ok(listed) = self.list_dir(fs, dir.clone()).await
             {
                 return Ok(listed);
             }
-            let path = if path.as_bytes().is_empty() {
-                let hosts = self.context.hosts();
-                match hosts.get(&self.host).and_then(|host| host.start_dir()) {
-                    Some(dir) => fs.canonicalize(&RemotePath::from(dir)).await,
-                    None => fs.home().await,
-                }
-                .map_err(|error: VfsError| ListError::vfs(&error))?
-            } else {
-                path.clone()
-            };
-            self.list_dir(fs, path)
+            let path = self.start_dir(fs).await?;
+            self.list_dir(fs, path.clone())
                 .await
-                .map_err(|error| ListError::vfs(&error))
+                .map_err(|error| ListError::vfs(&error).at(self.remote(path)))
         }
         .await;
         Done::Listed {
@@ -2138,19 +2134,47 @@ impl HostTask {
         }
     }
 
+    /// The directory the host opens in, with no directory to resume: its `start_dir`, else the
+    /// remote home directory. A `start_dir` that cannot be resolved fails at its path, which
+    /// goes from the home directory if it is relative.
+    async fn start_dir(&self, fs: &SftpFs) -> Result<RemotePath, ListError> {
+        let hosts = self.context.hosts();
+        let Some(dir) = hosts.get(&self.host).and_then(|host| host.start_dir()) else {
+            return fs.home().await.map_err(|error| ListError::vfs(&error));
+        };
+        let dir = RemotePath::from(dir);
+        let error = match fs.canonicalize(&dir).await {
+            Ok(path) => return Ok(path),
+            Err(error) => ListError::vfs(&error),
+        };
+        let path = if dir.is_absolute() {
+            Some(dir)
+        } else {
+            fs.home().await.ok().map(|home| home.join(dir.as_bytes()))
+        };
+        Err(match path {
+            Some(path) => error.at(self.remote(path)),
+            None => error,
+        })
+    }
+
     async fn list_dir(&self, fs: &SftpFs, path: RemotePath) -> Result<Listed, VfsError> {
         // No timeout, unlike locally: the server serves requests in order, so a statvfs that
         // hangs there would hold up the listing anyway.
         let (space, entries) = tokio::join!(space(fs, &path), fs.list_dir(&path));
-        let location = Location::Remote {
-            host: self.host.clone(),
-            path,
-        };
         Ok(Listed {
-            location,
+            location: self.remote(path),
             listing: Listing::Dir(entries?),
             space,
         })
+    }
+
+    /// `path` on this host.
+    fn remote(&self, path: RemotePath) -> Location {
+        Location::Remote {
+            host: self.host.clone(),
+            path,
+        }
     }
 }
 
@@ -2211,8 +2235,12 @@ mod tests {
         }
     }
 
-    /// Where opening `web` lands, resuming `resume`.
-    async fn opened(task: &HostTask, fs: &SftpFs, resume: Option<&Path>) -> Result<String, String> {
+    /// Where opening `web` lands, resuming `resume`; else where it failed, if the failure says.
+    async fn opened(
+        task: &HostTask,
+        fs: &SftpFs,
+        resume: Option<&Path>,
+    ) -> Result<String, Option<String>> {
         let request = ListRequest {
             generation: 1,
             location: Location::Remote {
@@ -2228,14 +2256,13 @@ mod tests {
         let Done::Listed { result, .. } = task.list(fs, panel, request).await else {
             panic!("expected a listing");
         };
+        let path = |location: Location| match location {
+            Location::Remote { path, .. } => String::from_utf8_lossy(path.as_bytes()).into_owned(),
+            other @ Location::Local(_) => panic!("expected a remote location, got {other:?}"),
+        };
         result
-            .map(|listed| match listed.location {
-                Location::Remote { path, .. } => {
-                    String::from_utf8_lossy(path.as_bytes()).into_owned()
-                }
-                other @ Location::Local(_) => panic!("expected a remote location, got {other:?}"),
-            })
-            .map_err(|error| error.reason)
+            .map(|listed| path(listed.location))
+            .map_err(|error| error.location.map(path))
     }
 
     #[tokio::test]
@@ -2258,8 +2285,20 @@ mod tests {
         );
         let plain = task(&root, None);
         assert_eq!(opened(&plain, &fs, Some(&gone)).await, Ok(text(&root)));
-        let missing = task(&root, Some("missing"));
-        assert!(opened(&missing, &fs, None).await.is_err());
+        // A start_dir that is not there fails at its path, for Up and Go to.
+        let absolute = text(&root.join("gone/deeper"));
+        for (start_dir, path) in [
+            ("missing", root.join("missing")),
+            ("missing/deeper", root.join("missing/deeper")),
+            (absolute.as_str(), root.join("gone/deeper")),
+        ] {
+            let missing = task(&root, Some(start_dir));
+            assert_eq!(
+                opened(&missing, &fs, None).await,
+                Err(Some(text(&path))),
+                "{start_dir}"
+            );
+        }
     }
 
     #[tokio::test]

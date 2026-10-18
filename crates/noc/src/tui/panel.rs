@@ -76,6 +76,9 @@ pub(crate) struct ListError {
     pub(crate) kind: ListErrorKind,
     /// The reason in words.
     pub(crate) reason: String,
+    /// Where the listing failed, if more exact than the request: the directory a host opens
+    /// in, as a path.
+    pub(crate) location: Option<Location>,
 }
 
 impl ListError {
@@ -88,6 +91,7 @@ impl ListError {
         Self {
             kind,
             reason: describe::vfs_error(error),
+            location: None,
         }
     }
 
@@ -95,6 +99,16 @@ impl ListError {
         Self {
             kind: ListErrorKind::Other,
             reason,
+            location: None,
+        }
+    }
+
+    /// The same failure, at `location`.
+    #[must_use]
+    pub(crate) fn at(self, location: Location) -> Self {
+        Self {
+            location: Some(location),
+            ..self
         }
     }
 }
@@ -113,7 +127,8 @@ pub(crate) enum ListErrorKind {
 /// A listing that failed, for the app to report with the ways out of it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Failure {
-    /// Where the panel tried to go; Retry goes there again.
+    /// Where the panel tried to go, a host by the directory it opens in where known; Retry goes
+    /// there again.
     pub(crate) destination: Destination,
     /// The location as the message names it: a subdirectory by its name alone.
     pub(crate) shown: String,
@@ -639,7 +654,7 @@ impl Panel {
                 self.keep_renaming();
                 None
             }
-            Err(error) => {
+            Err(mut error) => {
                 if pending.jumped.is_some()
                     && self.jump == self.jumps.len()
                     && self.jumps.last() == pending.jumped.as_ref()
@@ -647,7 +662,10 @@ impl Panel {
                     self.jumps.pop();
                     self.jump = self.jumps.len();
                 }
-                let shown = match (&pending.location, &self.location) {
+                let stranded = pending.location == self.location;
+                // A host by its name alone: Up, Go to and the message need the directory.
+                let location = error.location.take().unwrap_or(pending.location);
+                let shown = match (&location, &self.location) {
                     // The title shows the directory, so a subdirectory needs only its name.
                     (Location::Local(path), Location::Local(current)) => path
                         .strip_prefix(current)
@@ -656,15 +674,15 @@ impl Panel {
                         .map(|relative| cells::sanitize(relative.as_os_str().as_bytes())),
                     _ => None,
                 };
-                let shown = shown.unwrap_or_else(|| location_text(&pending.location));
+                let shown = shown.unwrap_or_else(|| location_text(&location));
                 // The reason may quote ssh, which may quote the server.
                 let reason = cells::sanitize(error.reason.as_bytes());
                 Some(Failure {
-                    parent: Destination::parent_of(&pending.location),
-                    stranded: pending.location == self.location,
+                    parent: Destination::parent_of(&location),
+                    stranded,
                     climbing: pending.climbing,
                     destination: Destination {
-                        location: pending.location,
+                        location,
                         focus: pending.focus,
                     },
                     shown,
@@ -3859,6 +3877,7 @@ mod tests {
         let denied = ListError {
             kind: ListErrorKind::Denied,
             reason: "permission denied".to_owned(),
+            location: None,
         };
         let failure = panel.listed(request.generation, Err(denied)).unwrap();
         assert_eq!(panel.location, local("/srv"));
@@ -3877,6 +3896,7 @@ mod tests {
         let missing = ListError {
             kind: ListErrorKind::NotFound,
             reason: "no such file or directory".to_owned(),
+            location: None,
         };
         let failure = panel.listed(request.generation, Err(missing)).unwrap();
         assert_eq!(failure.shown, "/");

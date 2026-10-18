@@ -5796,6 +5796,7 @@ impl App {
             }
             None => Vec::new(),
         };
+        self.begin_work(panel, &location);
         let host = match &location {
             Location::Remote { host, .. } => match self.hosts.get(host) {
                 Some(Host::Connected { handle, .. }) => Some(handle.clone()),
@@ -5821,13 +5822,32 @@ impl App {
         location: &Location,
         result: Result<(), String>,
     ) -> Vec<Effect> {
-        if let Err(reason) = result {
-            let path = location_text(location);
-            let reason = cells::sanitize(reason.as_bytes());
-            self.show_error(&fl!("mkdir-error", path = path, reason = reason));
-            return Vec::new();
+        let effects = match result {
+            Ok(()) => self.show_new(panel, location),
+            Err(reason) => {
+                let path = location_text(location);
+                let reason = cells::sanitize(reason.as_bytes());
+                self.show_error(&fl!("mkdir-error", path = path, reason = reason));
+                Vec::new()
+            }
+        };
+        self.end_work(panel, location);
+        effects
+    }
+
+    /// `panel` waits for work that makes `location`, with dots on its title, as for a listing.
+    fn begin_work(&mut self, panel: PanelId, location: &Location) {
+        if let Some(tab) = self.tab_mut(panel) {
+            tab.panel.begin_work(location.clone());
         }
-        self.show_new(panel, location)
+    }
+
+    /// `panel` no longer waits for the work that made `location`; called after the listing its
+    /// result asks for, so that the dots go on until that comes.
+    fn end_work(&mut self, panel: PanelId, location: &Location) {
+        if let Some(tab) = self.tab_mut(panel) {
+            tab.panel.end_work(location);
+        }
     }
 
     /// Panels on the directory that holds the new `location` read it again, `panel` with the
@@ -5953,6 +5973,7 @@ impl App {
             return Vec::new();
         };
         let noted = from.parent().map_or_else(Vec::new, |dir| self.note(&dir));
+        self.begin_work(panel, &to);
         let mut effects = vec![Effect::Rename {
             panel,
             from,
@@ -5968,6 +5989,18 @@ impl App {
     /// one that renamed with the cursor on the new name. A file with that name asks whether to
     /// rename over it; an error shows in a dialog.
     pub(crate) fn entry_renamed(
+        &mut self,
+        panel: PanelId,
+        from: &Location,
+        to: &Location,
+        result: Result<(), Option<String>>,
+    ) -> Vec<Effect> {
+        let effects = self.take_renamed(panel, from, to, result);
+        self.end_work(panel, to);
+        effects
+    }
+
+    fn take_renamed(
         &mut self,
         panel: PanelId,
         from: &Location,
@@ -9211,12 +9244,17 @@ mod tests {
             (panel.side, &location, host.is_none()),
             (Side::Left, &local("/srv/new"), true)
         );
+        // The panel that asked waits, its dots turning, until the directory is made and read.
+        let waits = |app: &App| Side::BOTH.map(|side| app.panel(side).wait().is_some());
+        assert_eq!(waits(&app), [true, false]);
 
         // Both panels show /srv and read it again; the one that asked lands on the directory.
         let effects = app.created(panel, &location, Ok(()));
         assert_eq!(effects.len(), 2);
+        assert_eq!(waits(&app), [true, true]);
         let listing = Listing::Dir(vec![dir("left"), dir("new"), dir("right")]);
         answer(&mut app, effects, &listing);
+        assert_eq!(waits(&app), [false, false]);
         assert_eq!(app.panel(Side::Left).name_under_cursor(), Some(&b"new"[..]));
         assert_eq!(
             app.panel(Side::Right).name_under_cursor(),
@@ -9234,6 +9272,16 @@ mod tests {
         type_text(&mut app, "2");
         let (_, location, _) = create_dir(app.handle(action(Action::Confirm)));
         assert_eq!(location, local("/srv/new2"));
+        // A directory that is not made ends the wait as well, in an error.
+        app.created(panel, &local("/srv/x"), Ok(()));
+        assert!(
+            app.created(panel, &location, Err("taken".into()))
+                .is_empty()
+        );
+        for side in Side::BOTH {
+            app.panel_mut(side).cancel();
+        }
+        assert_eq!(waits(&app), [false, false]);
 
         // Esc and an empty name make nothing.
         app.handle(action(Action::Mkdir));
@@ -12675,9 +12723,14 @@ mod tests {
             (&local("/srv/report.pdf"), &local("/srv/taken.pdf"))
         );
         assert_eq!(app.context(), Context::Panel, "the field is gone");
+        assert!(app.panel(Side::Left).wait().is_some(), "its dots turn");
 
         // A file has the name: No is the default; Left goes to Yes.
         assert!(app.entry_renamed(panel, &from, &to, Err(None)).is_empty());
+        assert!(
+            app.panel(Side::Left).wait().is_none(),
+            "while the question waits"
+        );
         assert!(screen(&mut app).contains("\"taken.pdf\" is there already."));
         app.handle(action(Action::Left));
         let again = one(app.handle(action(Action::Confirm)));

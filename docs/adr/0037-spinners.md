@@ -42,7 +42,10 @@ too, which some users want and others do not, apart from windows.
   cursor. The dots take the color of the host's status while it connects or does not answer, so
   connecting and reading look apart without a word that would take the room of the path. A host that
   does not answer still asks `web: Retry or Cancel?` on the status line, in the colors of errors: it
-  is a question, not a wait. A reading that fails puts the old path back.
+  is a question, not a wait. A reading that fails puts the old path back. Work that the panel
+  started in its directory, a directory of F7 or a rename, turns the same dots until it is done and
+  the directory is read again, as one wait, so the dots do not start over in between; work on a host
+  whose connection goes stops being waited for, as its result never comes.
 - **The viewer waits in its title.** Its title has one cell in front of the path too, the icon of
   the file (devicons' for its name; mc's marker of files, a space, without icons), where the dots
   turn while the file is read, so the path never moves. A skeleton of one line, of 80 cells at most,

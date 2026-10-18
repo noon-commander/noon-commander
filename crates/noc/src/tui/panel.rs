@@ -288,7 +288,6 @@ struct Pending {
     /// Where the panel was, put in the jump list on the way: a listing that fails takes it
     /// out again, as vim keeps no jump that did not happen.
     jumped: Option<Destination>,
-    wait: Wait,
 }
 
 /// Where a panel can go: a location, and the row to put the cursor on there.
@@ -369,6 +368,12 @@ pub(crate) struct Panel {
     bar: Option<Bar>,
     generation: u64,
     pending: Option<Pending>,
+    /// What the user does in the panel, such as F7, by what it makes, until it is done: its
+    /// result reads the directory again.
+    working: Vec<Location>,
+    /// Since when the panel waits, for a listing or for its work: one wait from the first to
+    /// the last, so that the dots go on from one to the next.
+    wait: Wait,
     /// Quick search, while it runs.
     search: Option<Search>,
     /// The entry under the cursor, while its name is edited in its row.
@@ -434,6 +439,8 @@ impl Panel {
             bar: None,
             generation: 0,
             pending: None,
+            working: Vec::new(),
+            wait: Wait::default(),
             search: None,
             renaming: None,
             visual: None,
@@ -472,6 +479,8 @@ impl Panel {
             bar: None,
             generation: 0,
             pending: None,
+            working: Vec::new(),
+            wait: Wait::default(),
             search: None,
             renaming: None,
             visual: None,
@@ -501,12 +510,14 @@ impl Panel {
             self.visual = None;
             self.last_visual = None;
         }
+        if !self.waits() {
+            self.wait = Wait::default();
+        }
         self.pending = Some(Pending {
             generation: self.generation,
             location: location.clone(),
             focus,
             jumped: None,
-            wait: Wait::default(),
         });
         ListRequest {
             generation: self.generation,
@@ -594,9 +605,34 @@ impl Panel {
         })
     }
 
-    /// The wait for a listing, whose dots the title shows.
+    /// The wait for a listing or for work, whose dots the title shows.
     pub(crate) fn wait(&self) -> Option<&Wait> {
-        self.pending.as_ref().map(|pending| &pending.wait)
+        self.waits().then_some(&self.wait)
+    }
+
+    fn waits(&self) -> bool {
+        self.pending.is_some() || !self.working.is_empty()
+    }
+
+    /// Starts work that makes `location`, such as a directory of F7, which the title waits for.
+    pub(crate) fn begin_work(&mut self, location: Location) {
+        if !self.waits() {
+            self.wait = Wait::default();
+        }
+        self.working.push(location);
+    }
+
+    /// Ends the work that made `location`, once its result has asked for the directory again.
+    pub(crate) fn end_work(&mut self, location: &Location) {
+        if let Some(index) = self.working.iter().position(|work| work == location) {
+            self.working.swap_remove(index);
+        }
+    }
+
+    /// Stops waiting for work on `host`, whose connection took its result away.
+    fn forget_work(&mut self, host: &str) {
+        self.working
+            .retain(|work| !matches!(work, Location::Remote { host: on, .. } if on == host));
     }
 
     /// Stops waiting for a listing; its reply will be dropped.
@@ -626,6 +662,7 @@ impl Panel {
     /// and waits to read its directory again, with the cursor where it was, once the host is
     /// back. A panel that only waits for the host waits on.
     pub(crate) fn lose_host(&mut self, host: &str) {
+        self.forget_work(host);
         if self.on_host(host) {
             let here = self.here();
             self.empty();
@@ -636,6 +673,7 @@ impl Panel {
     /// Takes the end of the connection to `host`: on it, the panel shows none of its entries
     /// until it reads its directory again; a panel that waits for the host stops waiting.
     pub(crate) fn drop_host(&mut self, host: &str) {
+        self.forget_work(host);
         let waits = matches!(
             &self.pending,
             Some(Pending { location: Location::Remote { host: wanted, .. }, .. }) if wanted == host
@@ -1785,10 +1823,7 @@ impl Panel {
             .pending
             .as_ref()
             .map_or(&self.location, |pending| &pending.location);
-        let dots = self
-            .pending
-            .as_ref()
-            .and_then(|pending| view.spin.wait_dots(&pending.wait));
+        let dots = self.wait().and_then(|wait| view.spin.wait_dots(wait));
         let (icon, color) = match location {
             Location::Local(_) => match dots {
                 Some(dots) => (dots, Some(theme.busy)),
@@ -3881,6 +3916,35 @@ mod tests {
             panel.wait().and_then(Wait::shows),
             Some(now + spinner::DELAY)
         );
+    }
+
+    #[test]
+    fn work_waits_in_one_wait_with_the_listing_after_it_until_its_host_goes() {
+        let mut panel = loaded_at(remote("db", "/srv"), Listing::Dir(listing()));
+        let start = Instant::now();
+        panel.begin_work(remote("db", "/srv/new"));
+        panel.begin_work(local("/tmp/new"));
+        let shows = panel.wait().map(|wait| wait.since(start));
+        assert_eq!(shows, Some(start));
+
+        // The listing that the result asks for keeps the wait, so the dots do not start over.
+        let request = panel.handle(Action::Reload).unwrap();
+        panel.end_work(&local("/tmp/new"));
+        let later = start + spinner::DELAY;
+        assert_eq!(panel.wait().map(|wait| wait.since(later)), Some(start));
+        answer(&mut panel, &request, Listing::Dir(listing()));
+        assert!(panel.wait().is_some(), "the work on db");
+
+        // Work on another host goes on; the result of work on a host that goes never comes.
+        panel.drop_host("web");
+        assert!(panel.wait().is_some());
+        panel.drop_host("db");
+        assert!(panel.wait().is_none());
+        panel.begin_work(remote("db", "/srv/new"));
+        assert_eq!(panel.wait().map(|wait| wait.since(later)), Some(later));
+        panel.lose_host("db");
+        panel.cancel();
+        assert!(panel.wait().is_none());
     }
 
     #[test]

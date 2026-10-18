@@ -1666,18 +1666,19 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   gives a line of faint bars for the text; on the icon of a host connecting in the location menu;
   and in front of the titles of the location menu, the zoxide window, and the search of a whole
   tree, drawn over the line of the frame by `dialog::draw_title_dots`, so the title stays in place;
-  until their first rows come, `dialog::draw_skeleton` draws a row of faint bars, both of which a
-  shine crosses at once from when the dots show, one cell every 40 ms, in their place; the status
-  line of the search has a bar of its own, crossed with them. Until a job knows how far it is, its
-  gauge is a faint bar of `▒` with no percentage, over which the same shine runs to and fro as fast,
-  turning at its ends (`dialog::shine_bar`, which the skeleton of rows draws too; `Shine::bounce`).
-  Each waiting thing keeps a `Wait`, which remembers the first frame that drew it; nothing shows
-  until 150 ms later, so quick work does not flicker. Frames come from the time since the app's
-  first frame, so spinners move together and tests draw given instants; `App::spin_due` tells the
-  event loop when the next frame is due. With `animations.spinners` off, a still mark stands in
-  place of the spinner. R in the location menu keeps its rows while the dots turn, and shows the
-  reason it failed right of the filter. In debug builds, `--slow-spinners SECONDS` holds back every
-  result of background work by that long, in order, and `--slow-connections SECONDS` holds back only
+  until their first rows come, `dialog::draw_skeleton` draws rows of faint bars, as many as the
+  window had the last time it opened (`App` keeps them in memory, one the first time), which a shine
+  crosses at once from when the dots show, one cell every 40 ms, in their place; the status line of
+  the search has a bar of its own, crossed with them. Until a job knows how far it is, its gauge is
+  a faint bar of `▒` with no percentage, over which the same shine runs to and fro as fast, turning
+  at its ends (`dialog::shine_bar`, which the skeleton of rows draws too; `Shine::bounce`). Each
+  waiting thing keeps a `Wait`, which remembers the first frame that drew it; nothing shows until
+  150 ms later, so quick work does not flicker. Frames come from the time since the app's first
+  frame, so spinners move together and tests draw given instants; `App::spin_due` tells the event
+  loop when the next frame is due. With `animations.spinners` off, a still mark stands in place of
+  the spinner. R in the location menu keeps its rows while the dots turn, and shows the reason it
+  failed right of the filter. In debug builds, `--slow-spinners SECONDS` holds back every result of
+  background work by that long, in order, and `--slow-connections SECONDS` holds back only
   connections made or ended, in a queue of their own, so the dots of a host connecting can be
   watched in the location menu. Each frame goes out as synchronized output (`draw_whole` in
   `tui/mod.rs`), so the cursor of a field does not show on its way through the cells a shine

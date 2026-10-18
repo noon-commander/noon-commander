@@ -1505,7 +1505,7 @@ impl Dialog {
             Rect::new(area.x, y, area.width, 1)
         };
         if view.waiting {
-            draw_skeleton(frame, area, theme, view.shine);
+            draw_skeleton(frame, line(0), theme, view.shine);
             return;
         }
         if let Some(note) = &view.note {
@@ -1757,36 +1757,48 @@ pub(crate) fn rows_area(inner: Rect, below: u16) -> Rect {
     Rect::new(inner.x, inner.y + 2, inner.width, height)
 }
 
-/// Rows a window shows while its first ones are still to come.
+/// Rows a window shows while its first ones are still to come, the first time it opens; then as
+/// many as came the last time.
 pub(crate) const SKELETON_ROWS: u16 = 1;
-/// Twelfths of the width: of the bar on the left of a skeleton row, of the one on the right.
-const SKELETON_BARS: (u16, u16) = (6, 3);
+/// Twelfths of the width: of the bar on the left of each skeleton row, of the one on the right,
+/// over and over, so that rows under each other do not look alike.
+const SKELETON_BARS: [(u16, u16); 4] = [(6, 3), (4, 3), (7, 2), (5, 3)];
 
-/// Draws a skeleton on the first line of `area`, where rows are still to come: a faint bar on
-/// the left for a name and one on the right for what is known of it. A `shine`, if any, crosses
-/// both bars at once, lighting them where it passes.
+/// Draws a skeleton on every line of `area`, where rows are still to come: a faint bar on the
+/// left for a name and one on the right for what is known of it. A `shine`, if any, crosses
+/// every bar at once, lighting them where it passes.
 pub(crate) fn draw_skeleton(
     frame: &mut Frame<'_>,
     area: Rect,
     theme: &Theme,
     shine: Option<Shine>,
 ) {
-    if area.width < 8 || area.height == 0 {
+    if area.width < 8 {
         return;
     }
     let glyph = theme.glyphs.skeleton.to_string();
-    let bars = SKELETON_BARS;
-    let (left, right) = (area.width * bars.0 / 12, area.width * bars.1 / 12);
-    let middle = shine_middle(shine, left.max(right));
-    let line: Line<'_> = shine_bar(left, middle, &glyph, theme.dialog)
-        .into_iter()
-        .chain([Span::styled(
-            " ".repeat(usize::from(area.width - left - right)),
-            theme.dialog,
-        )])
-        .chain(shine_bar(right, middle, &glyph, theme.dialog))
-        .collect();
-    frame.render_widget(line, Rect::new(area.x, area.y, area.width, 1));
+    let bars = SKELETON_BARS
+        .iter()
+        .cycle()
+        .take(usize::from(area.height))
+        .map(|(left, right)| (area.width * left / 12, area.width * right / 12));
+    let longest = bars
+        .clone()
+        .map(|(left, right)| left.max(right))
+        .max()
+        .unwrap_or(0);
+    let middle = shine_middle(shine, longest);
+    for (y, (left, right)) in (area.y..area.bottom()).zip(bars) {
+        let line: Line<'_> = shine_bar(left, middle, &glyph, theme.dialog)
+            .into_iter()
+            .chain([Span::styled(
+                " ".repeat(usize::from(area.width - left - right)),
+                theme.dialog,
+            )])
+            .chain(shine_bar(right, middle, &glyph, theme.dialog))
+            .collect();
+        frame.render_widget(line, Rect::new(area.x, y, area.width, 1));
+    }
 }
 
 /// A skeleton of a line of status over `width` cells, such as how many a search found, in the
@@ -1796,9 +1808,9 @@ fn status_skeleton(width: u16, style: Style, theme: &Theme, shine: Option<Shine>
     let length = if width < 8 {
         0
     } else {
-        width * SKELETON_BARS.1 / 12
+        width * SKELETON_BARS[0].1 / 12
     };
-    let middle = shine_middle(shine, width * SKELETON_BARS.0 / 12);
+    let middle = shine_middle(shine, width * SKELETON_BARS[0].0 / 12);
     let glyph = theme.glyphs.skeleton.to_string();
     Line::from(shine_bar(length, middle, &glyph, style))
 }
@@ -1987,6 +1999,29 @@ mod tests {
         assert_eq!(shining[..3], still[..3]);
         assert_eq!(shining[23 + 6], next);
         assert_eq!(shining[23 + 2], faint);
+    }
+
+    #[test]
+    fn a_skeleton_fills_its_area_with_rows_of_bars_of_their_own_lengths() {
+        let theme = Theme::terminal();
+        let mut terminal = Terminal::new(TestBackend::new(24, 5)).unwrap();
+        terminal
+            .draw(|frame| draw_skeleton(frame, frame.area(), &theme, None))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let lines: Vec<String> = (0..5)
+            .map(|y| (0..24).map(|x| buffer[(x, y)].symbol()).collect())
+            .collect();
+        assert_eq!(
+            lines,
+            [
+                "------------      ------",
+                "--------          ------",
+                "--------------      ----",
+                "----------        ------",
+                "------------      ------",
+            ]
+        );
     }
 
     fn draw_themed(

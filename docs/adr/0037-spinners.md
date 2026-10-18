@@ -74,16 +74,21 @@ too, which some users want and others do not, apart from windows.
 - **A window waits in its title.** The location menu, the zoxide window, and the search of a whole
   tree turn the dots in front of their title, over the line of the frame, so the title stays where
   it is: the title says what the window lists, and the rows, or the place where they come, stay
-  clear. Until the first rows come, a skeleton stands in their place: one row of faint bars, a name
-  on the left and what is known of it on the right, whose two bars a brighter shine crosses at once,
-  from when the dots show, with the same delay, one cell every 40 ms over every bar, so a short bar
-  is crossed sooner, and resting 400 ms after the longest; an empty box looked broken, and three
-  still rows read as rows that had come. With `animations.spinners` off the shine rests. Every list
-  whose rows do not come at once does the same. The status line of the search shows a skeleton of
-  one bar while it searches, as long as the right bar of a row, which the shine crosses with them: a
-  count that runs said less than the one at the end. R in the location menu keeps the last rows
-  while it lists the volumes and the hosts again, the dots in the title, or shows the reason it
-  failed right of the filter, in the colors of errors.
+  clear. Until the first rows come, a skeleton stands in their place: rows of faint bars, a name on
+  the left and what is known of it on the right, whose bars a brighter shine crosses at once, from
+  when the dots show, with the same delay, one cell every 40 ms over every bar, so a short bar is
+  crossed sooner, and resting 400 ms after the longest; an empty box looked broken, and three still
+  rows read as rows that had come. The first time a window opens in a run, the skeleton has one row;
+  then as many as the rows the window had the last time, with no filter (the location menu's
+  headings count too), so the box does not grow when the rows come. The skeleton's rows have bars of
+  lengths of their own, over and over, so that they do not read as one block. The count is kept in
+  memory, not in a file: a size from another day would be as much a guess as one row. With
+  `animations.spinners` off the shine rests. Every list whose rows do not come at once does the
+  same. The status line of the search shows a skeleton of one bar while it searches, as long as the
+  right bar of a row, which the shine crosses with them: a count that runs said less than the one at
+  the end. R in the location menu keeps the last rows while it lists the volumes and the hosts
+  again, the dots in the title, or shows the reason it failed right of the filter, in the colors of
+  errors.
 - **A job waits in its gauge.** While a job waits its turn or counts, its window says which on its
   first line, a stage of the job rather than a wait, and its gauge, which has no percentage yet, is
   a faint bar of `▒` over which the shine of the skeleton of rows runs to and fro, turning at its

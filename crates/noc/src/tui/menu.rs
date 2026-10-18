@@ -19,7 +19,7 @@ use ratatui::text::{Line, Span};
 use super::app::Side;
 use super::cells::{self, Align};
 use super::decor::Decor;
-use super::dialog::Colors;
+use super::dialog::{Colors, SKELETON_ROWS};
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
 use super::panel::HostState;
@@ -104,6 +104,11 @@ pub(crate) struct LocationMenu {
     wait: Wait,
     /// For a listing asked for again, while the rows of the last one show.
     reloading: Option<Wait>,
+    /// Rows of the skeleton until the first listing comes: as many lines as the last menu
+    /// had, so that the box does not grow when they come.
+    skeleton: u16,
+    /// Lines of the last listing, with the filter empty and every group as it opens.
+    lines_listed: Option<u16>,
     error: Option<String>,
     picker: Picker,
 }
@@ -143,6 +148,8 @@ impl LocationMenu {
             loaded: false,
             wait: Wait::default(),
             reloading: None,
+            skeleton: SKELETON_ROWS,
+            lines_listed: None,
             error: None,
             picker: Picker::new(SearchMode::Plain),
         };
@@ -167,6 +174,20 @@ impl LocationMenu {
     pub(crate) fn drawn(mut self, drawn: Side) -> Self {
         self.drawn = drawn;
         self
+    }
+
+    /// The same menu, whose skeleton has as many `lines` as the last menu had, if any.
+    pub(crate) fn lines_like(mut self, lines: Option<u16>) -> Self {
+        if let Some(lines) = lines {
+            self.skeleton = lines;
+        }
+        self
+    }
+
+    /// Lines of the last listing, for the skeleton of the next menu: with the filter empty and
+    /// every group as it opens.
+    pub(crate) fn lines_listed(&self) -> Option<u16> {
+        self.lines_listed
     }
 
     /// The panel the menu is for.
@@ -215,6 +236,14 @@ impl LocationMenu {
             Ok(places) => {
                 self.contents.places = places;
                 self.error = None;
+                let expanded = std::mem::take(&mut self.contents.expanded);
+                let items: Vec<Item<'_>> = (self.contents.rows().into_iter())
+                    .filter(|(_, shows)| *shows != Shows::Filtered)
+                    .map(|(item, _)| item)
+                    .collect();
+                self.lines_listed =
+                    Some(u16::try_from(Self::lines(&items).len()).unwrap_or(u16::MAX));
+                self.contents.expanded = expanded;
                 if self.loaded {
                     self.refresh();
                 } else {
@@ -373,14 +402,14 @@ impl LocationMenu {
             Side::Right => fl!("menu-right"),
         };
         let message = self.error.clone().filter(|_| !self.loaded);
-        let waiting = !self.loaded && message.is_none();
+        let waiting = (!self.loaded && message.is_none()).then_some(self.skeleton);
         let dots = self
             .wait()
             .and_then(|wait| spin.wait_dots(wait))
             .map(|dots| (dots, theme.busy_dialog));
         let shine = self
             .wait()
-            .filter(|_| waiting)
+            .filter(|_| waiting.is_some())
             .and_then(|wait| spin.shine(wait));
         let note = self.note(theme);
         let widest = items
@@ -1123,6 +1152,28 @@ mod tests {
             .unwrap_or_default();
         let column = |line: &str| line.find(" Right ").map(|at| line[..at].chars().count());
         assert_eq!(column(title), column(still), "the title stays in place");
+    }
+
+    #[test]
+    fn a_menu_waits_in_a_box_as_tall_as_the_last_one_had() {
+        let rows = |text: &str| text.lines().filter(|line| line.contains('║')).count();
+        let mut first = LocationMenu::new(Side::Left, home(), PathBuf::from("/Users/me"), 1);
+        assert_eq!(first.lines_listed(), None);
+        assert_eq!(rows(&draw(&mut first, 30)), 2, "the filter, one row");
+        first.listed(1, Ok(places()));
+        let listed = rows(&draw(&mut first, 30));
+        assert!(listed > 2);
+        let lines = first.lines_listed();
+        assert_eq!(lines.map(usize::from), Some(listed - 1));
+
+        let mut next =
+            LocationMenu::new(Side::Left, home(), PathBuf::from("/Users/me"), 2).lines_like(lines);
+        let text = draw(&mut next, 30);
+        assert_eq!(rows(&text), listed, "{text}");
+        assert!(
+            text.lines().filter(|line| line.contains("--")).count() > 1,
+            "{text}"
+        );
     }
 
     #[test]

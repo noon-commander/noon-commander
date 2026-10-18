@@ -72,6 +72,11 @@ pub(crate) struct JumpMenu {
     loaded: bool,
     /// For the first answer.
     wait: Wait,
+    /// Rows of the skeleton until the first answer comes: as many as the last window had, so
+    /// that the box does not grow when they come.
+    skeleton: u16,
+    /// Rows of the last answer without keywords, which lists every directory.
+    rows_listed: Option<u16>,
     error: Option<String>,
     /// The row under the cursor.
     cursor: usize,
@@ -104,6 +109,8 @@ impl JumpMenu {
             rows: Vec::new(),
             loaded: false,
             wait: Wait::default(),
+            skeleton: SKELETON_ROWS,
+            rows_listed: None,
             error: None,
             cursor: 0,
             window: Window::default(),
@@ -119,6 +126,19 @@ impl JumpMenu {
     pub(crate) fn search_mode(mut self, mode: SearchMode) -> Self {
         self.mode = mode;
         self
+    }
+
+    /// The same window, whose skeleton has as many `rows` as the last window had, if any.
+    pub(crate) fn rows_like(mut self, rows: Option<u16>) -> Self {
+        if let Some(rows) = rows {
+            self.skeleton = rows;
+        }
+        self
+    }
+
+    /// Rows of the last answer without keywords, for the skeleton of the next window.
+    pub(crate) fn rows_listed(&self) -> Option<u16> {
+        self.rows_listed
     }
 
     /// Whether the window filters zoxide's directories itself, rather than zoxide.
@@ -171,6 +191,9 @@ impl JumpMenu {
             }
         }
         self.refilter();
+        if self.error.is_none() && self.keywords.text().is_empty() {
+            self.rows_listed = Some(u16::try_from(self.rows.len()).unwrap_or(u16::MAX));
+        }
     }
 
     /// Picks the rows again, with the cursor on the best: every directory zoxide found; if the
@@ -353,11 +376,11 @@ impl JumpMenu {
     /// Lines the box has for the rows: those of the skeleton while they are still to come.
     fn rows_shown(&self) -> u16 {
         let rows = if self.loaded {
-            u16::try_from(self.rows.len().max(1)).unwrap_or(u16::MAX)
+            u16::try_from(self.rows.len()).unwrap_or(u16::MAX)
         } else {
-            SKELETON_ROWS
+            self.skeleton
         };
-        rows.min(MAX_ROWS)
+        rows.clamp(1, MAX_ROWS)
     }
 
     fn draw(
@@ -712,6 +735,26 @@ mod tests {
         assert!(draw(&mut menu, 10).contains("zoxide knows no directory"));
         menu.found(1, Err("zoxide is not installed".to_owned()));
         assert!(draw(&mut menu, 10).contains("zoxide is not installed"));
+    }
+
+    #[test]
+    fn a_window_waits_with_as_many_rows_as_the_last_one_had_without_keywords() {
+        let mut first = menu();
+        assert_eq!(first.rows_listed(), Some(4));
+        first.handle(Resolved::Insert('s'));
+        first.wait(2);
+        first.found(2, Ok(found()[1..2].to_vec()));
+        assert_eq!(first.rows_listed(), Some(4), "keywords pick only some");
+
+        let mut next =
+            JumpMenu::new(PathBuf::from("/home/me"), None, 1).rows_like(first.rows_listed());
+        let text = draw(&mut next, 20);
+        let bars = text.lines().filter(|line| line.contains("---")).count();
+        assert_eq!(bars, 4, "{text}");
+        next.found(1, Ok(found()));
+        let rows = draw(&mut next, 20);
+        let lines = |text: &str| text.lines().filter(|line| !line.trim().is_empty()).count();
+        assert_eq!(lines(&rows), lines(&text), "the box stays as tall: {rows}");
     }
 
     #[test]

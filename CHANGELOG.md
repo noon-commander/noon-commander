@@ -52,12 +52,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dots turn while it reads the file, and a skeleton line of faint bars, crossed by the same shine,
   stands for the text. A host connecting in the location menu turns braille dots too, and so do the
   location menu, the zoxide window, and the search of a whole tree in front of their title while
-  they wait, which stays in place; until their first rows come, a skeleton row of faint bars stands
-  in their place, a shine crossing both bars at once, one cell every 40 ms, while the dots turn; the
-  status line of the search shows a skeleton bar until it ends, then how much it found. Until a job
-  knows how far it is, while it waits its turn or counts, its gauge is a faint bar of `▒` with no
-  percentage, the same shine running to and fro over it as fast; a stop leaves the bar still.
-  `animations.spinners` (on), a check box under Animations, leaves a still mark in their place.
+  they wait, which stays in place; until their first rows come, a skeleton of faint bars stands in
+  their place, as many rows as the window had the last time it opened (one, the first time), so the
+  box does not grow when they come, a shine crossing every bar at once, one cell every 40 ms, while
+  the dots turn; the status line of the search shows a skeleton bar until it ends, then how much it
+  found. Until a job knows how far it is, while it waits its turn or counts, its gauge is a faint
+  bar of `▒` with no percentage, the same shine running to and fro over it as fast; a stop leaves
+  the bar still. `animations.spinners` (on), a check box under Animations, leaves a still mark in
+  their place.
 - R in the location menu keeps the rows while it lists the volumes and the hosts again, with the
   dots in the title; if that fails, the reason shows right of the filter in the colors of errors.
 - Debug builds take `--slow-spinners SECONDS`, which holds back every result of background work

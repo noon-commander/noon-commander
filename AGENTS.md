@@ -179,7 +179,8 @@ Paths come from `crates/noc-config/src/paths.rs`.
 - Fuzzy matching: `nucleo-matcher` only, only in `crates/noc/src/tui/fuzzy.rs` (ADR 0016).
 - A list whose rows do not come at once turns the dots in front of its title
   (`dialog::draw_title_dots`) and shows the skeleton with its shine (`dialog::draw_skeleton`) in
-  place of its first rows; never an empty box or a text that says it waits (ADR 0037).
+  place of its first rows, as many as it had the last time it opened; never an empty box, a box that
+  grows when the rows come, or a text that says it waits (ADR 0037).
 
 ### Line of the mode
 

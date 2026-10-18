@@ -623,6 +623,15 @@ impl Job {
     }
 }
 
+/// How many lines of rows the windows whose rows come later had the last time, if they came.
+#[derive(Debug, Clone, Copy, Default)]
+struct Sizes {
+    /// Of the location menu, headings of groups too.
+    menu: Option<u16>,
+    /// Of the zoxide window.
+    jump: Option<u16>,
+}
+
 /// The viewer on screen, the read it waits for, and what stops it loading.
 #[derive(Debug)]
 struct Viewing {
@@ -795,6 +804,9 @@ pub(crate) struct App {
     jump: Option<JumpMenu>,
     /// The generation of the last query for the zoxide window.
     jump_queries: u64,
+    /// How many rows the windows whose rows come later had the last time, for the skeleton of
+    /// the next, so that their boxes do not grow when the rows come. Not kept past a run.
+    sizes: Sizes,
     /// The pull-down menu of F9, over the panels and under the windows and dialogs.
     pulldown: Option<PullDown>,
     /// The command of the pull-down menu that ran last, for Shift+F9 to open the menu on it.
@@ -982,6 +994,7 @@ impl App {
             command_dirs: Vec::new(),
             jump: None,
             jump_queries: 0,
+            sizes: Sizes::default(),
             pulldown: None,
             pulldown_last: None,
             configuration: None,
@@ -3165,7 +3178,8 @@ impl App {
         let mut menu = LocationMenu::new(side, current, self.home.clone(), generation)
             .drawn(drawn)
             .search_mode(self.config.ui.search_mode)
-            .recent(&self.recent);
+            .recent(&self.recent)
+            .lines_like(self.sizes.menu);
         menu.set_connected(self.hosts.keys().cloned().collect());
         self.menu = Some(menu);
         vec![Effect::ListPlaces { generation }]
@@ -3678,8 +3692,9 @@ impl App {
             Location::Local(path) => Some(path.clone()),
             Location::Remote { .. } => None,
         };
-        let jump =
-            JumpMenu::new(self.home.clone(), exclude, 0).search_mode(self.config.ui.search_mode);
+        let jump = JumpMenu::new(self.home.clone(), exclude, 0)
+            .search_mode(self.config.ui.search_mode)
+            .rows_like(self.sizes.jump);
         self.jump = Some(jump);
         self.query_jump()
     }
@@ -3732,6 +3747,7 @@ impl App {
     pub(crate) fn jumps(&mut self, generation: u64, result: Result<Vec<Scored>, String>) {
         if let Some(jump) = &mut self.jump {
             jump.found(generation, result);
+            self.sizes.jump = jump.rows_listed().or(self.sizes.jump);
         }
     }
 
@@ -4157,6 +4173,7 @@ impl App {
         }
         if let Some(menu) = &mut self.menu {
             menu.listed(generation, result);
+            self.sizes.menu = menu.lines_listed().or(self.sizes.menu);
         }
     }
 
@@ -7663,6 +7680,36 @@ mod tests {
             panic!("expected the places");
         };
         app.places(generation, Ok(places()));
+    }
+
+    #[test]
+    fn the_location_menu_and_the_zoxide_window_remember_how_many_rows_they_had() {
+        let mut app = at_slash();
+        assert!(app.sizes.menu.is_none());
+        menu_on(&mut app, Side::Left);
+        let lines = app.menu.as_ref().and_then(LocationMenu::lines_listed);
+        assert!(lines.is_some());
+        assert_eq!(app.sizes.menu, lines);
+        app.handle(action(Action::Cancel));
+        assert!(app.menu.is_none());
+        let effects = app.handle(action(Action::LocationMenuLeft));
+        let Effect::ListPlaces { generation } = one(effects) else {
+            panic!("expected the places");
+        };
+        app.places(generation, Err("no ssh config".to_owned()));
+        assert_eq!(app.sizes.menu, lines, "a failed listing keeps them");
+
+        app.handle(action(Action::Cancel));
+        app.handle(action(Action::Jump));
+        assert!(app.sizes.jump.is_none());
+        app.jumps(
+            app.jump_queries,
+            Ok(vec![Scored {
+                score: 1.0,
+                path: PathBuf::from("/srv"),
+            }]),
+        );
+        assert_eq!(app.sizes.jump, Some(1));
     }
 
     /// Opens the host of [`places`] number `host`, from 1, in the panel on `side`, through its

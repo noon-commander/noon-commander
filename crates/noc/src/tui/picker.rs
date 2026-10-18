@@ -13,8 +13,8 @@ use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Cut};
 use super::dialog::{
-    Colors, Field, SKELETON_ROWS, draw_box, draw_separator, draw_skeleton, draw_title_dots,
-    frame_around, right_frame, rows_area,
+    Colors, Field, draw_box, draw_separator, draw_skeleton, draw_title_dots, frame_around,
+    right_frame, rows_area,
 };
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::{Drawn, Pointer};
@@ -94,8 +94,8 @@ pub(crate) struct Body<'a> {
     /// Shown in place of the lines, such as why the rows did not load; without, a note that
     /// nothing matches once the filter hides every row.
     pub(crate) message: Option<String>,
-    /// Whether the rows are still to come: a skeleton stands in their place.
-    pub(crate) waiting: bool,
+    /// Rows still to come, if they are: a skeleton of so many stands in their place.
+    pub(crate) waiting: Option<u16>,
     /// The shine that crosses the skeleton.
     pub(crate) shine: Option<Shine>,
     /// Turning in front of the title while the window waits, in their color.
@@ -110,12 +110,10 @@ pub(crate) struct Body<'a> {
 impl Body<'_> {
     /// Lines the box has for the rows: those of the skeleton while they are still to come.
     fn shown(&self) -> u16 {
-        let lines = if self.waiting {
-            SKELETON_ROWS
-        } else {
-            u16::try_from(self.lines.len().max(1)).unwrap_or(u16::MAX)
-        };
-        lines.min(self.max_lines.unwrap_or(u16::MAX))
+        let lines = self
+            .waiting
+            .unwrap_or_else(|| u16::try_from(self.lines.len()).unwrap_or(u16::MAX));
+        lines.max(1).min(self.max_lines.unwrap_or(u16::MAX))
     }
 }
 
@@ -472,7 +470,7 @@ impl Picker {
 
         self.page = usize::from(inner.height.saturating_sub(2 + below)).max(1);
         let rows = self.len();
-        if body.waiting {
+        if body.waiting.is_some() {
             draw_skeleton(frame, rows_area(inner, below), theme, body.shine);
             return;
         }

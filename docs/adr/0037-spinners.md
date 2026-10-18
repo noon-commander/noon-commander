@@ -63,15 +63,17 @@ too, which some users want and others do not, apart from windows.
   or ended, in a queue of its own, so other results come as they are and a host's dots can be
   watched in the location menu. With both, a connection waits for their sum. Release builds have
   neither the flags nor the code.
-- **A window waits in its title.** The location menu and the zoxide window turn the dots in front of
-  their title, over the line of the frame, so the title stays where it is: the title says what the
-  window lists, and the rows, or the place where they come, stay clear. Until the first rows come, a
-  skeleton stands in their place: one row of faint bars, a name on the left and what is known of it
-  on the right, whose two bars a brighter shine crosses at once, from when the dots show, with the
-  same delay; an empty box looked broken, and three still rows read as rows that had come. With
-  `animations.spinners` off the shine rests. R in the location menu keeps the last rows while it
-  lists the volumes and the hosts again, the dots in the title, or shows the reason it failed right
-  of the filter, in the colors of errors.
+- **A window waits in its title.** The location menu, the zoxide window, and the search of a whole
+  tree turn the dots in front of their title, over the line of the frame, so the title stays where
+  it is: the title says what the window lists, and the rows, or the place where they come, stay
+  clear. Until the first rows come, a skeleton stands in their place: one row of faint bars, a name
+  on the left and what is known of it on the right, whose two bars a brighter shine crosses at once,
+  from when the dots show, with the same delay; an empty box looked broken, and three still rows
+  read as rows that had come. With `animations.spinners` off the shine rests. Every list whose rows
+  do not come at once does the same. The status line of the search shows the scanner alone while it
+  searches: a count that runs said less than the one at the end. R in the location menu keeps the
+  last rows while it lists the volumes and the hosts again, the dots in the title, or shows the
+  reason it failed right of the filter, in the colors of errors.
 
 ## Consequences
 

@@ -490,10 +490,12 @@ dirs…, opens it in its Files and dirs mode, which finds their names with fd
 - The rows are the files, in the order of their paths, each with how many lines matched, and their
   lines with their numbers, the matches in a color of their own (`find_match`), apart from the
   cursor's; a line too long starts a little before its first match. The rows of a search stay until
-  the next one finds something or ends, the cursor on the row it was on. Under them, how many lines
-  it found in how many files, after the spinner while it searches; that it stopped at the limit; and
-  the errors. A pattern that is not a regular expression, a missing ripgrep, or a host that is not
-  connected says why in place of the rows.
+  the next one finds something or ends, the cursor on the row it was on. While it searches, the dots
+  turn in front of the title, a skeleton stands in place of the rows until the first come, and the
+  status line under them shows the scanner alone. Once it ends, the status says how many lines it
+  found in how many files; that it stopped at the limit; and the errors. A pattern that is not a
+  regular expression, a missing ripgrep, or a host that is not connected says why in place of the
+  rows.
 - Go to, the default button, goes to the file in the active panel: its directory, with the cursor
   on it; where the panel was goes to the jump list. View (F3) views it with the line at the top,
   and Edit (F4) edits it at the line (`Editor::edit_at`), a remote one through a local copy; the
@@ -1662,8 +1664,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   the color of its status), which shows the directory it reads at once, so the path never moves and
   the status line under the rows stays as it is; the dots take the color of the host's status while
   it connects; on the icon of a host connecting in the location menu; and in front of the titles of
-  the location menu and the zoxide window, drawn over the line of the frame by
-  `dialog::draw_title_dots`, so the title stays in place; until their first rows come,
+  the location menu, the zoxide window, and the search of a whole tree, drawn over the line of the
+  frame by `dialog::draw_title_dots`, so the title stays in place; until their first rows come,
   `dialog::draw_skeleton` draws a row of faint bars, both of which a shine crosses at once from when
   the dots show, in their place. Each waiting thing keeps a `Wait`, which remembers the first frame
   that drew it; nothing shows until 150 ms later, so quick work does not flicker. Frames come from

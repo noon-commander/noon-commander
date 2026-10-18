@@ -50,10 +50,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   marker without icons); while the panel reads a directory or connects, braille dots turn in its
   place and the title shows the path it reads (`⠹ web:/var/www`), so the path never moves; its
   status line stays as it is. A host connecting in the location menu turns braille dots too, and so
-  do the location menu and the zoxide window in front of their title while they wait, which stays in
-  place; until their first rows come, a skeleton row of faint bars stands in their place, a shine
-  crossing both bars at once while the dots turn. `animations.spinners` (on), a check box under
-  Animations, leaves a still mark in their place.
+  do the location menu, the zoxide window, and the search of a whole tree in front of their title
+  while they wait, which stays in place; until their first rows come, a skeleton row of faint bars
+  stands in their place, a shine crossing both bars at once while the dots turn; the status line of
+  the search shows the scanner alone until it ends, then how much it found. `animations.spinners`
+  (on), a check box under Animations, leaves a still mark in their place.
 - R in the location menu keeps the rows while it lists the volumes and the hosts again, with the
   dots in the title; if that fails, the reason shows right of the filter in the colors of errors.
 - Debug builds take `--slow-spinners SECONDS`, which holds back every result of background work

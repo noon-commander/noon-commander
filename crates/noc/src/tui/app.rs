@@ -8373,7 +8373,7 @@ mod tests {
             (Mode::Insert, Context::FindInput),
             "typing in its text"
         );
-        assert!(screen_of(&mut app, 24).contains("Searching…"));
+        assert!(screen_of(&mut app, 24).contains("═ … Find in"));
         let effects = keys(&mut app, &["r"]);
         let request = find_request(&effects);
         assert_eq!(request.query.lines().pattern, "r");

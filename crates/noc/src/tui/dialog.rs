@@ -440,6 +440,12 @@ pub(crate) struct ListView<'a> {
     pub(crate) status: Vec<String>,
     /// In front of the first of them, while the list waits for more: the spinner.
     pub(crate) spinner: Option<Vec<Span<'static>>>,
+    /// Turning in front of the title while the list waits for more, in their color.
+    pub(crate) dots: Option<(char, Style)>,
+    /// Whether the first rows are still to come: a skeleton stands in their place.
+    pub(crate) waiting: bool,
+    /// How far the shine has crossed the skeleton, per mille; none while it rests.
+    pub(crate) shine: Option<u16>,
 }
 
 /// What a key did to a dialog.
@@ -1288,6 +1294,9 @@ impl Dialog {
             (width, height + 4)
         };
         let inner = draw_box(frame, area, size, &self.title, colors, theme);
+        if let Some(dots) = list.and_then(|list| list.dots) {
+            draw_title_dots(frame, inner, &self.title, dots, colors);
+        }
         let row = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
         let mut spots = self.spots.borrow_mut();
         spots.clear();
@@ -1472,8 +1481,8 @@ impl Dialog {
     }
 
     /// Draws the rows of the list in `area`, scrolled to the cursor, with a scroll bar on the
-    /// right of the frame; or the note of `view` in place of them. The cursor's row is in the
-    /// color of the focus, dimmed while the focus is elsewhere.
+    /// right of the frame; or the skeleton or the note of `view` in place of them. The cursor's
+    /// row is in the color of the focus, dimmed while the focus is elsewhere.
     fn draw_list(
         &self,
         frame: &mut Frame<'_>,
@@ -1495,6 +1504,10 @@ impl Dialog {
             let y = area.y + u16::try_from(offset).unwrap_or(u16::MAX);
             Rect::new(area.x, y, area.width, 1)
         };
+        if view.waiting {
+            draw_skeleton(frame, area, theme, view.shine);
+            return;
+        }
         if let Some(note) = &view.note {
             for (offset, text) in cells::wrap(note, width).into_iter().take(page).enumerate() {
                 frame.render_widget(Line::styled(text, colors.body), line(offset));
@@ -2710,6 +2723,9 @@ mod tests {
             note: note.map(str::to_owned),
             status: vec!["30 rows".to_owned()],
             spinner: None,
+            dots: None,
+            waiting: false,
+            shine: None,
         };
         let mut terminal = Terminal::new(TestBackend::new(40, 16)).unwrap();
         terminal

@@ -639,12 +639,15 @@ impl FindWindow {
     }
 
     /// The lines under the rows: how many it found; that it stopped at the limit; and what
-    /// went wrong.
+    /// went wrong. While it searches, a line for the spinner alone.
     fn status(&self) -> Vec<String> {
-        let mut status = vec![self.count()];
-        let State::Over(summary) = &self.state else {
-            return status;
+        let summary = match &self.state {
+            // The spinner alone, in front of an empty line.
+            State::Searching => return vec![String::new()],
+            State::Over(summary) => summary,
+            State::Failed(_) => return vec![self.count()],
         };
+        let mut status = vec![self.count()];
         if summary.limit {
             status.push(fl!("find-limit", count = self.max_results));
         }
@@ -659,15 +662,16 @@ impl FindWindow {
         status
     }
 
-    /// What shows in place of the rows: while it searches, that nothing was found, or why.
+    /// What shows in place of the rows: that nothing was found, or why.
     fn message(&self) -> Option<String> {
         match &self.state {
             State::Failed(reason) => Some(fl!(
                 "find-failed",
                 reason = cells::sanitize(reason.as_bytes())
             )),
+            // The skeleton stands in their place.
+            State::Searching => None,
             _ if !self.rows.is_empty() => None,
-            State::Searching => Some(fl!("find-searching")),
             State::Over(FindSummary {
                 last_error: Some(error),
                 ..
@@ -705,13 +709,17 @@ impl FindWindow {
             };
             Line::from(spans).style(style)
         };
+        let wait = self.wait();
         let view = ListView {
             row: &row,
             note: self.message(),
             status: self.status(),
-            spinner: self
-                .wait()
-                .and_then(|wait| spin.wait(wait, (theme.busy_dialog, theme.dialog))),
+            spinner: wait.and_then(|wait| spin.wait(wait, (theme.busy_dialog, theme.dialog))),
+            dots: wait
+                .and_then(|wait| spin.wait_dots(wait))
+                .map(|dots| (dots, theme.busy_dialog)),
+            waiting: wait.is_some() && self.rows.is_empty(),
+            shine: wait.and_then(|wait| spin.shine(wait)),
         };
         self.dialog.render_list(frame, area, theme, &view);
     }
@@ -1354,7 +1362,16 @@ mod tests {
     fn says_why_it_found_nothing() {
         let mut window = window();
         window.restart(1, CancellationToken::new());
-        assert!(draw(&mut window, 60).contains("Searching…"));
+        let screen = draw(&mut window, 60);
+        assert!(
+            screen.contains("═ … Find in"),
+            "dots in front of the title: {screen}"
+        );
+        let bars = screen.lines().filter(|line| line.contains("---")).count();
+        assert_eq!(bars, 1, "a skeleton of the rows to come: {screen}");
+        let status = screen.lines().filter(|line| line.contains("║ … ")).count();
+        assert_eq!(status, 1, "the spinner alone in the status: {screen}");
+        assert!(!screen.contains("0 lines"), "{screen}");
         window.finished(
             1,
             Ok(FindSummary {

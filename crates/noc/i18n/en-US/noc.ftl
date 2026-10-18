@@ -235,8 +235,6 @@ find-count-files = { $files ->
         [one] { $files } file
        *[other] { $files } files
     }
-# While nothing is found yet.
-find-searching = Searching…
 # Under the rows, by name: how many files and directories it found.
 find-count-entries = { $count ->
         [one] { $count } file or directory

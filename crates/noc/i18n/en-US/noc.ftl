@@ -101,8 +101,10 @@ panel-rename = Rename: { $name }
 # icons), and its target as stored in the link, which must end the text: it is cut at its start
 # where the line is too short.
 panel-link = { $name } { $arrow } { $target }
-# Status line while a directory is read.
-panel-loading = Loading…
+# Status line, after a spinner, while a local directory is read.
+panel-reading = Reading the directory…
+# The same on a host that is connected.
+panel-reading-on = Reading the directory on { $host }…
 # Status line, after a spinner, while the panel waits for a connection to a host; Esc stops it.
 panel-connecting = Connecting to { $host }…
 # Status line, after a spinner, while a dialog asks whether to connect to the host again.
@@ -190,6 +192,12 @@ menu-home = Home
 menu-more = { $count } more…
 # Right of a place whose free space is not known.
 menu-free-unknown = ?
+# In place of the rows, after a spinner, until the volumes and the hosts are listed.
+menu-loading = Looking for volumes and hosts…
+# Right of the filter, after a spinner, while R lists the volumes and the hosts again.
+menu-reloading = Looking again…
+# Right of the filter, in the colors of errors, when R could not list them again.
+menu-reload-failed = Not listed again: { $reason }
 
 ## The zoxide window of g z (src/tui/jump): the directories zoxide ranks highest for the
 ## keywords typed, as `z` picks them in a shell. Prefix: jump-.
@@ -198,6 +206,8 @@ jump-title = zoxide
 # The first line: the glyph of how they match (plain, fzf, or regex; Ctrl+s switches it), and the
 # keywords typed, separated by spaces.
 jump-keywords = Jump to { $mode }: { $text }
+# In place of the rows, after a spinner, until zoxide answers.
+jump-loading = Asking zoxide…
 # When zoxide lists no directory.
 jump-nothing = zoxide knows no directory that matches. It learns the directories you work in.
 # The zoxide program is not there.
@@ -389,8 +399,6 @@ config-borders = &Borders
 config-borders-hint = The frames of panels and dialogs.
 config-borders-double = Double ═ ║ ╔
 config-borders-single = Single ─ │ ┌
-config-animations = Animati&ons
-config-animations-hint = A window's frame grows from its middle as it opens and shrinks back as it closes.
 config-icons = &Icons
 config-icons-hint = Nerd Font icons in front of names; without them, mc's markers.
 config-show-hidden = Show &hidden files
@@ -422,6 +430,12 @@ config-tab-bar = T&ab bar
 config-tab-bar-hint = Where a panel with more than one tab shows them.
 config-tab-bar-line = A line above the panel
 config-tab-bar-frame = In the panel's frame
+# Settings of what moves on screen, [animations].
+config-animations = Animations
+config-animations-windows = &Windows
+config-animations-windows-hint = A window's frame grows from its middle as it opens and shrinks back as it closes.
+config-animations-spinners = &Spinners
+config-animations-spinners-hint = The spinner in front of what waits, such as a directory being read, turns; off, a still mark stands there.
 # Settings of copying and moving, [transfer].
 config-transfers = Transfers
 config-atomic-upload = &Atomic copies

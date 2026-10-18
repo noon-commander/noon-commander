@@ -5,7 +5,7 @@ use std::path::Path;
 
 use noc_vfs::{DirEntry, FileKind, VolumeKind};
 
-use super::glyphs::{Glyphs, SPINNER};
+use super::glyphs::Glyphs;
 use super::panel::HostStatus;
 
 /// Icons on (`ui.icons`) or off.
@@ -58,13 +58,13 @@ impl Decor {
     }
 
     /// The prefix of a host, which tells its status in one cell, as every prefix takes one:
-    /// with icons a server, a server with a cross after a failure, or the spinner while
-    /// connecting, which `tick` turns; without them a circle, a dot, a cross, or the spinner.
-    /// The theme colors it by the status.
-    pub(crate) fn host(self, status: HostStatus, tick: u64) -> String {
+    /// with icons a server, a server with a cross after a failure, or `dots`, the frame of the
+    /// spinner, while connecting; without them a circle, a dot, a cross, or the spinner. The
+    /// theme colors it by the status.
+    pub(crate) fn host(self, status: HostStatus, dots: char) -> String {
         let hosts = self.glyphs().hosts;
         let marker = match status {
-            HostStatus::Connecting => spinner(tick),
+            HostStatus::Connecting => dots,
             HostStatus::Idle => hosts.idle,
             HostStatus::Connected => hosts.connected,
             HostStatus::Failed | HostStatus::Stalled => hosts.failed,
@@ -128,11 +128,6 @@ impl Decor {
             FileKind::File | FileKind::Unknown => kinds.file,
         }
     }
-}
-
-/// Frame `tick` of the spinner shown while connecting.
-pub(crate) fn spinner(tick: u64) -> char {
-    SPINNER[usize::try_from(tick % 4).unwrap_or(0)]
 }
 
 /// The devicons glyph for a file name, if it knows the name or its extension.
@@ -280,22 +275,19 @@ mod tests {
     #[test]
     fn hosts_show_their_status() {
         let plain = Decor::new(false);
-        assert_eq!(plain.host(HostStatus::Connected, 0), "● ");
-        assert_eq!(plain.host(HostStatus::Idle, 0), "○ ");
-        assert_eq!(plain.host(HostStatus::Failed, 0), "✗ ");
-        assert_eq!(plain.host(HostStatus::Stalled, 0), "✗ ");
-        let spun: Vec<String> = (0..5)
-            .map(|tick| plain.host(HostStatus::Connecting, tick))
-            .collect();
-        assert_eq!(spun, ["| ", "/ ", "- ", "\\ ", "| "]);
+        assert_eq!(plain.host(HostStatus::Connected, '/'), "● ");
+        assert_eq!(plain.host(HostStatus::Idle, '/'), "○ ");
+        assert_eq!(plain.host(HostStatus::Failed, '/'), "✗ ");
+        assert_eq!(plain.host(HostStatus::Stalled, '/'), "✗ ");
+        assert_eq!(plain.host(HostStatus::Connecting, '/'), "/ ");
         assert_eq!(plain.volume(VolumeKind::System), "+ ");
         assert_eq!(plain.home(), "~ ");
         // With icons, the icon itself tells the status, so every prefix is one cell wide.
         let icons = Decor::new(true);
-        assert_eq!(icons.host(HostStatus::Idle, 0), "󰒋 ");
-        assert_eq!(icons.host(HostStatus::Connected, 0), "󰒋 ");
-        assert_eq!(icons.host(HostStatus::Failed, 0), "󰒑 ");
-        assert_eq!(icons.host(HostStatus::Connecting, 1), "/ ");
+        assert_eq!(icons.host(HostStatus::Idle, '⠙'), "󰒋 ");
+        assert_eq!(icons.host(HostStatus::Connected, '⠙'), "󰒋 ");
+        assert_eq!(icons.host(HostStatus::Failed, '⠙'), "󰒑 ");
+        assert_eq!(icons.host(HostStatus::Connecting, '⠙'), "⠙ ");
         assert_eq!(icons.volume(VolumeKind::Local), "󰋊 ");
         assert_eq!(icons.volume(VolumeKind::Network), "󰣳 ");
         assert_eq!(icons.home(), "󰋜 ");

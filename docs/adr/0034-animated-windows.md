@@ -1,6 +1,6 @@
 # 0034. Animated windows
 
-- Status: Accepted
+- Status: Accepted; its setting is `animations.windows` since [ADR 0037](0037-spinners.md)
 - Date: 2026-10-16
 
 ## Context

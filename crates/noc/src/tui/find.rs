@@ -22,7 +22,7 @@ use ratatui::text::{Line, Span};
 use tokio_util::sync::CancellationToken;
 
 use super::cells::{self, Align};
-use super::decor::{self, Decor};
+use super::decor::Decor;
 use super::dialog::{Button, Dialog, DialogEvent, Field, ListView};
 use super::edit::Registers;
 use super::glyphs::Glyphs;
@@ -30,6 +30,7 @@ use super::keymap::{Action, Context, Mode, Resolved, Typed};
 use super::mouse::Pointer;
 use super::panel::child;
 use super::search_mode;
+use super::spinner::{Spin, Wait};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -207,6 +208,8 @@ pub(crate) struct FindWindow {
     regex: bool,
     /// Stops the search, which the dialog does when it goes or a new one starts.
     cancel: CancellationToken,
+    /// For the end of the search, whose spinner shows under the rows.
+    wait: Wait,
 }
 
 impl Drop for FindWindow {
@@ -256,6 +259,7 @@ impl FindWindow {
             decor,
             regex,
             cancel: CancellationToken::new(),
+            wait: Wait::default(),
         }
     }
 
@@ -306,11 +310,12 @@ impl FindWindow {
         self.cancel = cancel;
         self.generation = generation;
         self.state = State::Searching;
+        self.wait = Wait::default();
     }
 
-    /// Whether it still searches, which turns the spinner.
-    pub(crate) fn searching(&self) -> bool {
-        self.state == State::Searching
+    /// The wait for the end of the search, while it searches, which turns the spinner.
+    pub(crate) fn wait(&self) -> Option<&Wait> {
+        (self.state == State::Searching).then_some(&self.wait)
     }
 
     /// Shows the results of the search `generation` from now on, if they are not yet.
@@ -633,15 +638,10 @@ impl FindWindow {
         self.event(event, &before)
     }
 
-    /// The lines under the rows: how many it found, with the spinner of `tick` while it
-    /// searches; that it stopped at the limit; and what went wrong.
-    fn status(&self, tick: u64) -> Vec<String> {
-        let count = self.count();
-        let mut status = vec![if self.searching() {
-            format!("{} {count}", decor::spinner(tick))
-        } else {
-            count
-        }];
+    /// The lines under the rows: how many it found; that it stopped at the limit; and what
+    /// went wrong.
+    fn status(&self) -> Vec<String> {
+        let mut status = vec![self.count()];
         let State::Over(summary) = &self.state else {
             return status;
         };
@@ -690,8 +690,8 @@ impl FindWindow {
 
     /// Draws the dialog centered over `area`, the panels, as tall as they are: the rows in its
     /// list, scrolled to the cursor, and under them how many it found, with the spinner of
-    /// `tick` while it searches, and what kept it from finding all.
-    pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, tick: u64) {
+    /// `spin` while it searches, and what kept it from finding all.
+    pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, spin: &Spin) {
         let items = self.items();
         let row = |index: usize, width: usize, style: Style| {
             let Some(&(file, number)) = items.get(index) else {
@@ -708,7 +708,10 @@ impl FindWindow {
         let view = ListView {
             row: &row,
             note: self.message(),
-            status: self.status(tick),
+            status: self.status(),
+            spinner: self
+                .wait()
+                .and_then(|wait| spin.wait(wait, (theme.busy_dialog, theme.dialog))),
         };
         self.dialog.render_list(frame, area, theme, &view);
     }
@@ -904,10 +907,13 @@ fn line_spans(
 #[cfg(test)]
 #[allow(clippy::single_range_in_vec_init)]
 mod tests {
+    use std::time::Instant;
+
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
     use super::*;
+    use crate::tui::spinner;
 
     fn window() -> FindWindow {
         FindWindow::new(
@@ -977,9 +983,14 @@ mod tests {
 
     fn draw(window: &mut FindWindow, width: u16) -> String {
         let mut terminal = Terminal::new(TestBackend::new(width, 24)).unwrap();
-        terminal
-            .draw(|frame| window.render(frame, frame.area(), &Theme::terminal(), 1))
-            .unwrap();
+        // Drawn again once what it waits for shows, with a still spinner.
+        let start = Instant::now();
+        for at in [start, start + spinner::DELAY] {
+            let spin = Spin::new(at, start, false, Glyphs::PLAIN.spinners);
+            terminal
+                .draw(|frame| window.render(frame, frame.area(), &Theme::terminal(), &spin))
+                .unwrap();
+        }
         terminal.backend().to_string()
     }
 
@@ -1145,7 +1156,7 @@ mod tests {
         window.restart(4, CancellationToken::new());
         assert_eq!(window.rows.len(), 3);
         window.finished(4, Ok(FindSummary::default()));
-        assert!(window.rows.is_empty() && !window.searching());
+        assert!(window.rows.is_empty() && window.wait().is_none());
         assert_eq!(press(&mut window, Action::Confirm), FindEvent::Pending);
         // Tab leaves the rows for the buttons, where Cancel closes.
         press(&mut window, Action::NextField);

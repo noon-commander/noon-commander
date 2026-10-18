@@ -328,8 +328,21 @@ impl Viewer {
         };
     }
 
-    /// Draws the viewer over `area`: a title line, then the text.
-    pub fn render(&mut self, frame: &mut Frame<'_>, area: Rect, styles: &Styles) {
+    /// Whether it waits for the file.
+    pub fn loading(&self) -> bool {
+        matches!(self.state, State::Loading)
+    }
+
+    /// Draws the viewer over `area`: a title line, then the text. While it waits for the file,
+    /// `spinner` and the viewer's text that says so; nothing without it, until the app shows
+    /// its spinner.
+    pub fn render(
+        &mut self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        styles: &Styles,
+        spinner: Option<&[Span<'_>]>,
+    ) {
         self.bar = None;
         if area.height < 2 || area.width == 0 {
             return;
@@ -353,8 +366,12 @@ impl Viewer {
         frame.render_widget(self.header(usize::from(area.width), styles), row(0));
         let text_area = Rect::new(area.x, area.y + 1, area.width, area.height - 1);
         frame.buffer_mut().set_style(text_area, styles.text);
-        if matches!(self.state, State::Loading) {
-            frame.render_widget(Line::raw(fl!("viewer-loading")), row(1));
+        if self.loading() {
+            if let Some(spinner) = spinner {
+                let mut spans = spinner.to_vec();
+                spans.push(Span::raw(fl!("viewer-loading")));
+                frame.render_widget(Line::from(spans), row(1));
+            }
             return;
         }
         if bar {
@@ -533,7 +550,7 @@ mod tests {
     fn draw(viewer: &mut Viewer, width: u16, height: u16) -> String {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         terminal
-            .draw(|frame| viewer.render(frame, frame.area(), &STYLES))
+            .draw(|frame| viewer.render(frame, frame.area(), &STYLES, None))
             .unwrap();
         terminal.backend().to_string()
     }
@@ -550,8 +567,17 @@ mod tests {
     #[test]
     fn scrolls_within_the_text_and_stops_at_its_end() {
         let mut viewer = Viewer::new("/srv/log".to_owned());
-        assert!(draw(&mut viewer, 30, 6).contains("Loading"));
+        assert!(viewer.loading());
+        assert!(!draw(&mut viewer, 30, 6).contains("Reading"));
+        let mut terminal = Terminal::new(TestBackend::new(30, 6)).unwrap();
+        let spinner = [Span::raw("* ")];
+        terminal
+            .draw(|frame| viewer.render(frame, frame.area(), &STYLES, Some(&spinner)))
+            .unwrap();
+        let text = terminal.backend().to_string();
+        assert!(text.contains("* Reading the file…"), "{text}");
         viewer.show(&numbered(20), false);
+        assert!(!viewer.loading());
         let mut press = |motion| {
             viewer.handle(Command::Scroll(motion));
             draw(&mut viewer, 30, 6)
@@ -716,7 +742,7 @@ mod tests {
         let mut terminal = Terminal::new(TestBackend::new(20, 6)).unwrap();
         let mut render = |viewer: &mut Viewer| {
             terminal
-                .draw(|frame| viewer.render(frame, frame.area(), &STYLES))
+                .draw(|frame| viewer.render(frame, frame.area(), &STYLES, None))
                 .unwrap()
                 .buffer
                 .clone()
@@ -776,7 +802,7 @@ mod tests {
         };
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         let buffer = terminal
-            .draw(|frame| viewer.render(frame, frame.area(), &styles))
+            .draw(|frame| viewer.render(frame, frame.area(), &styles, None))
             .unwrap()
             .buffer
             .clone();

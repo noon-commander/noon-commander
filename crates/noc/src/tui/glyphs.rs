@@ -23,12 +23,23 @@ pub(crate) struct Kinds {
     pub(crate) file: char,
 }
 
-/// The status of a host in one cell; while it connects, a frame of [`SPINNER`].
+/// The status of a host in one cell; while it connects, a frame of [`Spinners::dots`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Hosts {
     pub(crate) idle: char,
     pub(crate) connected: char,
     pub(crate) failed: char,
+}
+
+/// What turns while something waits, one cell each: the cells of the scanner that sweeps to
+/// and fro, lit and not; the frames of the spinner where there is room for one cell only; and
+/// what stands still in their place without animations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Spinners {
+    pub(crate) lit: char,
+    pub(crate) unlit: char,
+    pub(crate) dots: &'static [char],
+    pub(crate) still: char,
 }
 
 /// In front of the prompt of quick search and of the filters of the lists: how they match what
@@ -54,6 +65,7 @@ pub(crate) struct Glyphs {
     pub(crate) volume: &'static str,
     pub(crate) network_volume: &'static str,
     pub(crate) hosts: Hosts,
+    pub(crate) spinners: Spinners,
     /// On the line of the mode while Noon Commander runs as root.
     pub(crate) root: char,
     pub(crate) scroll_bar: BarGlyphs,
@@ -95,6 +107,12 @@ impl Glyphs {
             idle: '󰒋',
             connected: '󰒋',
             failed: '󰒑',
+        },
+        spinners: Spinners {
+            lit: '■',
+            unlit: '⬝',
+            dots: &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],
+            still: '⋯',
         },
         // nf-md-shield_account.
         root: '󰢏',
@@ -148,6 +166,13 @@ impl Glyphs {
             connected: '●',
             failed: '✗',
         },
+        // Fonts without the smaller squares and braille have these.
+        spinners: Spinners {
+            lit: '■',
+            unlit: '·',
+            dots: &['|', '/', '-', '\\'],
+            still: '…',
+        },
         // The prompt of root's shell.
         root: '#',
         scroll_bar: BarGlyphs {
@@ -182,6 +207,8 @@ impl Glyphs {
 /// shown with `ui.icons` only.
 pub(crate) mod categories {
     pub(crate) const INTERFACE: &str = "󰍹";
+    // nf-md-animation_play.
+    pub(crate) const ANIMATIONS: &str = "󰤺";
     pub(crate) const TRANSFERS: &str = "󰓡";
     pub(crate) const SSH: &str = "󰣀";
     pub(crate) const VOLUMES: &str = "󰋊";
@@ -196,9 +223,6 @@ pub(crate) mod categories {
 const TRACK: &str = "░";
 /// The thumb of a scroll bar.
 const THUMB: &str = "█";
-
-/// The frames of the spinner while something waits, one cell each.
-pub(crate) const SPINNER: [char; 4] = ['|', '/', '-', '\\'];
 
 /// In the header of a panel, the order of the column it is sorted by.
 pub(crate) const ASCENDING: char = '↑';
@@ -313,6 +337,11 @@ mod tests {
                 noc_text::width(&format!("{closed}{open}{}", glyphs.bullet)),
                 3
             );
+            let spinners = glyphs.spinners;
+            let still = [spinners.lit, spinners.unlit, spinners.still];
+            for glyph in spinners.dots.iter().chain(&still) {
+                assert_eq!(noc_text::width(&glyph.to_string()), 1, "{glyph:?}");
+            }
         }
     }
 }

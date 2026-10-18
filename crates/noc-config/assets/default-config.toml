@@ -92,9 +92,14 @@ terminal_title = true
 which_key = true
 # How long after such a key the keys that can follow it show, in milliseconds.
 which_key_delay_ms = 500
+
+[animations]
 # Let a window's frame grow from its middle as it opens and shrink back as it closes, which
 # takes a moment; keys work at once all the same.
-animations = true
+windows = true
+# Turn the spinner in front of what Noon Commander waits for, such as a directory being read or
+# a host it connects to. When off, a still mark stands there.
+spinners = true
 
 [transfer]
 # Write each copy under a hidden temporary name next to its target and rename it when it is

@@ -22,6 +22,7 @@ use super::mouse::{Drawn, Pointer};
 use super::picker::{FULL_ROWS, Whole};
 use super::scroll::Window;
 use super::search_mode::{self, Matcher, Prompt};
+use super::spinner::{Spin, Wait};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -66,6 +67,8 @@ pub(crate) struct JumpMenu {
     rows: Vec<usize>,
     /// `true` once the first answer arrived.
     loaded: bool,
+    /// For the first answer.
+    wait: Wait,
     error: Option<String>,
     /// The row under the cursor.
     cursor: usize,
@@ -97,6 +100,7 @@ impl JumpMenu {
             found: Vec::new(),
             rows: Vec::new(),
             loaded: false,
+            wait: Wait::default(),
             error: None,
             cursor: 0,
             window: Window::default(),
@@ -139,6 +143,11 @@ impl JumpMenu {
     /// Waits for the query `generation` instead.
     pub(crate) fn wait(&mut self, generation: u64) {
         self.generation = generation;
+    }
+
+    /// The wait for the first answer, whose spinner shows in place of the rows.
+    pub(crate) fn first_wait(&self) -> Option<&Wait> {
+        (!self.loaded).then_some(&self.wait)
     }
 
     /// Takes zoxide's answer to the query `generation`: directories best first, or why there
@@ -305,8 +314,8 @@ impl JumpMenu {
     /// Draws the window centered over `area`, the panels: the keywords, then the directories,
     /// scrolled to the cursor, and the whole directory under the cursor below them if `K` asks
     /// for it.
-    pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        let (page, cursor, window, bar) = self.draw(frame, area, theme);
+    pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, spin: &Spin) {
+        let (page, cursor, window, bar) = self.draw(frame, area, theme, spin);
         (self.page, self.cursor, self.window, self.bar) = (page, cursor, window, bar);
     }
 
@@ -343,6 +352,7 @@ impl JumpMenu {
         frame: &mut Frame<'_>,
         area: Rect,
         theme: &Theme,
+        spin: &Spin,
     ) -> (usize, usize, Window, Option<Bar>) {
         let rows = u16::try_from(self.rows.len().max(1))
             .unwrap_or(u16::MAX)
@@ -372,9 +382,16 @@ impl JumpMenu {
         draw_separator(frame, inner, inner.y + 1, colors, theme);
 
         let page = usize::from(inner.height.saturating_sub(2 + below)).max(1);
-        let message = if !self.loaded {
-            Some(fl!("panel-loading"))
-        } else if let Some(error) = &self.error {
+        if !self.loaded {
+            if let Some(mut spans) = spin.wait(&self.wait, (theme.busy_dialog, theme.dialog)) {
+                spans.push(Span::raw(fl!("jump-loading")));
+                let styles = (theme.dialog, theme.truncated_dialog);
+                let spans = cells::fit_spans(spans, width, styles, theme.glyphs.marks);
+                frame.render_widget(Line::from(spans).style(theme.dialog), line(2));
+            }
+            return (page, self.cursor, self.window, None);
+        }
+        let message = if let Some(error) = &self.error {
             Some(error.clone())
         } else if let Some(reason) = &self.invalid {
             Some(fl!(
@@ -459,10 +476,14 @@ fn draw_whole(frame: &mut Frame<'_>, inner: Rect, path: &str, theme: &Theme) {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Instant;
+
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
     use super::*;
+    use crate::tui::glyphs::Glyphs;
+    use crate::tui::spinner;
 
     fn scored(score: f64, path: &str) -> Scored {
         Scored {
@@ -492,9 +513,14 @@ mod tests {
 
     fn draw(menu: &mut JumpMenu, height: u16) -> String {
         let mut terminal = Terminal::new(TestBackend::new(70, height)).unwrap();
-        terminal
-            .draw(|frame| menu.render(frame, frame.area(), &Theme::terminal()))
-            .unwrap();
+        // Drawn again once what it waits for shows, with a still spinner.
+        let start = Instant::now();
+        for at in [start, start + spinner::DELAY] {
+            let spin = Spin::new(at, start, false, Glyphs::PLAIN.spinners);
+            terminal
+                .draw(|frame| menu.render(frame, frame.area(), &Theme::terminal(), &spin))
+                .unwrap();
+        }
         terminal.backend().to_string()
     }
 
@@ -667,7 +693,7 @@ mod tests {
     #[test]
     fn says_why_it_lists_nothing() {
         let mut menu = JumpMenu::new(PathBuf::from("/home/me"), None, 1);
-        assert!(draw(&mut menu, 10).contains("Loading…"));
+        assert!(draw(&mut menu, 10).contains("… Asking zoxide…"));
         menu.found(1, Ok(Vec::new()));
         assert!(draw(&mut menu, 10).contains("zoxide knows no directory"));
         menu.found(1, Err("zoxide is not installed".to_owned()));
@@ -694,8 +720,10 @@ mod tests {
             for c in text.chars() {
                 menu.handle(Resolved::Insert(c));
             }
+            let now = Instant::now();
+            let spin = Spin::new(now, now, false, Glyphs::PLAIN.spinners);
             terminal
-                .draw(|frame| menu.render(frame, frame.area(), &Theme::terminal()))
+                .draw(|frame| menu.render(frame, frame.area(), &Theme::terminal(), &spin))
                 .unwrap();
             terminal.get_cursor_position().unwrap()
         };

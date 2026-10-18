@@ -438,6 +438,8 @@ pub(crate) struct ListView<'a> {
     pub(crate) note: Option<String>,
     /// Lines under the rows, apart from them, cut at their end where too long.
     pub(crate) status: Vec<String>,
+    /// In front of the first of them, while the list waits for more: the spinner.
+    pub(crate) spinner: Option<Vec<Span<'static>>>,
 }
 
 /// What a key did to a dialog.
@@ -1452,10 +1454,16 @@ impl Dialog {
             draw_separator(frame, inner, inner.y + index, colors, theme);
             let cut = (cells::Align::Left, cells::Cut::End);
             let width = usize::from(inner.width);
-            for text in &view.status {
+            for (number, text) in view.status.iter().enumerate() {
                 index += 1;
                 let marks = theme.glyphs.marks;
-                let line = cells::fitted(text, width, cut, colors.body_styles(), marks);
+                let spinner = view.spinner.as_ref().filter(|_| number == 0);
+                let used = spinner.map_or(0, |spans| spans.iter().map(Span::width).sum());
+                let room = width.saturating_sub(used);
+                let mut line = cells::fitted(text, room, cut, colors.body_styles(), marks);
+                if let Some(spinner) = spinner {
+                    line.spans.splice(0..0, spinner.iter().cloned());
+                }
                 frame.render_widget(line.style(colors.body), row(index));
             }
             index += 1;
@@ -2565,6 +2573,7 @@ mod tests {
             row: &row,
             note: note.map(str::to_owned),
             status: vec!["30 rows".to_owned()],
+            spinner: None,
         };
         let mut terminal = Terminal::new(TestBackend::new(40, 16)).unwrap();
         terminal

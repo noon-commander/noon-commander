@@ -74,7 +74,7 @@ mod tests {
             select_into(&loader, &[language.parse().unwrap()]);
             assert_eq!(
                 i18n_embed_fl::fl!(loader, "viewer-loading"),
-                "Loading…",
+                "Reading the file…",
                 "{language}"
             );
         }

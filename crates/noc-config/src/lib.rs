@@ -22,9 +22,9 @@ mod workspaces;
 mod write;
 
 pub use config::{
-    Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, Pause, SearchConfig, SearchMode,
-    ShellConfig, SshConfig, TabBar, TransferConfig, UiConfig, VolumesConfig, Wheel, ZoxideConfig,
-    write_default_config,
+    AnimationsConfig, Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, Pause,
+    SearchConfig, SearchMode, ShellConfig, SshConfig, TabBar, TransferConfig, UiConfig,
+    VolumesConfig, Wheel, ZoxideConfig, write_default_config,
 };
 pub use edit::save_config;
 pub use error::ConfigError;

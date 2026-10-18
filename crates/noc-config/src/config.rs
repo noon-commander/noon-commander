@@ -27,6 +27,8 @@ pub struct Config {
     pub volumes: VolumesConfig,
     /// `[ui]`: how the TUI looks.
     pub ui: UiConfig,
+    /// `[animations]`: what moves on screen.
+    pub animations: AnimationsConfig,
     /// `[transfer]`: how files are copied.
     pub transfer: TransferConfig,
     /// `[zoxide]`: the directories zoxide ranks, for jumping to them.
@@ -190,9 +192,6 @@ pub struct UiConfig {
     /// How long after such a key the keys that can follow it show, in milliseconds.
     /// Default: `500`.
     pub which_key_delay_ms: u16,
-    /// Whether a window's frame grows from its middle as it opens and shrinks back as it
-    /// closes. Default: `true`.
-    pub animations: bool,
 }
 
 impl Default for UiConfig {
@@ -213,7 +212,27 @@ impl Default for UiConfig {
             terminal_title: true,
             which_key: true,
             which_key_delay_ms: 500,
-            animations: true,
+        }
+    }
+}
+
+/// The `[animations]` section: what moves on screen.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct AnimationsConfig {
+    /// Whether a window's frame grows from its middle as it opens and shrinks back as it
+    /// closes. Default: `true`.
+    pub windows: bool,
+    /// Whether the spinner in front of what waits, such as a directory being read, turns;
+    /// otherwise a still mark stands there. Default: `true`.
+    pub spinners: bool,
+}
+
+impl Default for AnimationsConfig {
+    fn default() -> Self {
+        Self {
+            windows: true,
+            spinners: true,
         }
     }
 }
@@ -492,9 +511,9 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, Pause, SearchConfig, SearchMode,
-        ShellConfig, SshConfig, TabBar, TransferConfig, UiConfig, VolumesConfig, Wheel,
-        ZoxideConfig,
+        AnimationsConfig, Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, Pause,
+        SearchConfig, SearchMode, ShellConfig, SshConfig, TabBar, TransferConfig, UiConfig,
+        VolumesConfig, Wheel, ZoxideConfig,
     };
     use crate::{ConfigError, write_default_config};
 
@@ -544,7 +563,10 @@ mod tests {
         terminal_title = false
         which_key = false
         which_key_delay_ms = 200
-        animations = false
+
+        [animations]
+        windows = false
+        spinners = false
 
         [transfer]
         atomic_upload = false
@@ -595,7 +617,10 @@ mod tests {
                 terminal_title: false,
                 which_key: false,
                 which_key_delay_ms: 200,
-                animations: false,
+            },
+            animations: AnimationsConfig {
+                windows: false,
+                spinners: false,
             },
             transfer: TransferConfig {
                 atomic_upload: false,
@@ -644,7 +669,8 @@ mod tests {
         assert!(config.ui.terminal_title);
         assert!(config.ui.which_key);
         assert_eq!(config.ui.which_key_delay_ms, 500);
-        assert!(config.ui.animations);
+        assert!(config.animations.windows);
+        assert!(config.animations.spinners);
         assert!(config.transfer.atomic_upload);
         assert_eq!(config.transfer.parallel_jobs.get(), 2);
         assert_eq!(config.zoxide.program, Path::new("zoxide"));
@@ -729,6 +755,8 @@ mod tests {
             "[discovery]\nshow = []",
             // There is one keymap, vim's (ADR 0022).
             "[ui]\nkeymap = \"vim\"",
+            // Moved to `[animations]`, as `windows` (ADR 0037).
+            "[ui]\nanimations = true",
         ] {
             assert_parse_error(text);
         }
@@ -864,7 +892,8 @@ mod tests {
         assert!(table["ui"].get("terminal_title").is_some());
         assert!(table["ui"].get("which_key").is_some());
         assert!(table["ui"].get("which_key_delay_ms").is_some());
-        assert!(table["ui"].get("animations").is_some());
+        assert!(table["animations"].get("windows").is_some());
+        assert!(table["animations"].get("spinners").is_some());
         assert!(table["zoxide"].get("program").is_some());
         assert!(table["zoxide"].get("record").is_some());
         assert!(table["shell"].get("history_size").is_some());

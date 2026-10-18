@@ -25,6 +25,7 @@ use super::mouse::Pointer;
 use super::panel::HostState;
 use super::picker::{Body, MenuLine, Pick, Picker, ShownRow, Shows};
 use super::places::{KnownHost, Places, volume_name, volume_of};
+use super::spinner::{Spin, Wait};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -99,6 +100,10 @@ pub(crate) struct LocationMenu {
     contents: Contents,
     /// `true` once the first listing arrived.
     loaded: bool,
+    /// For the first listing.
+    wait: Wait,
+    /// For a listing asked for again, while the rows of the last one show.
+    reloading: Option<Wait>,
     error: Option<String>,
     picker: Picker,
 }
@@ -136,6 +141,8 @@ impl LocationMenu {
                 expanded: HashSet::new(),
             },
             loaded: false,
+            wait: Wait::default(),
+            reloading: None,
             error: None,
             picker: Picker::new(SearchMode::Plain),
         };
@@ -167,9 +174,25 @@ impl LocationMenu {
         self.side
     }
 
-    /// Waits for the listing `generation` instead, for a reload.
+    /// Waits for the listing `generation` instead, for a reload. The rows stay until it comes.
     pub(crate) fn reload(&mut self, generation: u64) {
         self.generation = generation;
+        self.error = None;
+        if self.loaded {
+            self.reloading = Some(Wait::default());
+        } else {
+            self.wait = Wait::default();
+        }
+    }
+
+    /// The wait for a listing: the first, whose spinner shows in place of the rows, or one
+    /// asked for again, whose spinner shows right of the filter.
+    pub(crate) fn wait(&self) -> Option<&Wait> {
+        if self.loaded {
+            self.reloading.as_ref()
+        } else {
+            self.error.is_none().then_some(&self.wait)
+        }
     }
 
     /// Takes the hosts that are connected, connecting, or stalled, which always show. The
@@ -187,6 +210,7 @@ impl LocationMenu {
         if generation != self.generation {
             return;
         }
+        self.reloading = None;
         match result {
             Ok(places) => {
                 self.contents.places = places;
@@ -339,7 +363,7 @@ impl LocationMenu {
         theme: &Theme,
         decor: Decor,
         hosts: &dyn Fn(&str) -> HostState,
-        tick: u64,
+        spin: &Spin,
     ) {
         let rows = self.contents.rows();
         let items = self.picker.shown(rows.into_iter().map(|(item, _)| item));
@@ -348,8 +372,16 @@ impl LocationMenu {
             Side::Left => fl!("menu-left"),
             Side::Right => fl!("menu-right"),
         };
-        let message =
-            (!self.loaded).then(|| self.error.clone().unwrap_or_else(|| fl!("panel-loading")));
+        let message = self.error.clone().filter(|_| !self.loaded);
+        let busy = (!self.loaded && message.is_none()).then(|| {
+            spin.wait(&self.wait, (theme.busy_dialog, theme.dialog))
+                .map(|mut spans| {
+                    spans.push(Span::raw(fl!("menu-loading")));
+                    Line::from(spans)
+                })
+                .unwrap_or_default()
+        });
+        let note = self.note(theme, spin);
         let widest = items
             .iter()
             .map(|item| cells::width(&info(*item, hosts)))
@@ -359,7 +391,7 @@ impl LocationMenu {
             theme,
             decor,
             hosts,
-            tick,
+            dots: spin.dots(),
             focused: Colors::of(theme, false).focused_style(),
         };
         let full = items.get(self.picker.cursor()).map(|item| {
@@ -370,7 +402,9 @@ impl LocationMenu {
             title: &title,
             width: WIDTH,
             lines: &lines,
+            note,
             message,
+            busy,
             full,
             ..Body::default()
         };
@@ -380,6 +414,22 @@ impl LocationMenu {
             let name_width = row.width.saturating_sub(info_width + 1);
             look.line(items[row.index], row, (name_width, info_width))
         });
+    }
+
+    /// Right of the filter once the rows show: the spinner and what it waits for while they are
+    /// listed again, or why that failed.
+    fn note(&self, theme: &Theme, spin: &Spin) -> Option<Line<'static>> {
+        if !self.loaded {
+            return None;
+        }
+        if let Some(wait) = &self.reloading {
+            let mut spans = spin.wait(wait, (theme.busy_dialog, theme.dialog))?;
+            spans.push(Span::raw(fl!("menu-reloading")));
+            return Some(Line::from(spans));
+        }
+        let reason = self.error.as_deref()?;
+        let text = fl!("menu-reload-failed", reason = reason);
+        Some(Line::styled(text, theme.invalid(theme.dialog)))
     }
 }
 
@@ -490,7 +540,8 @@ struct Look<'a> {
     theme: &'a Theme,
     decor: Decor,
     hosts: &'a dyn Fn(&str) -> HostState,
-    tick: u64,
+    /// The frame of the spinner of hosts that connect.
+    dots: char,
     /// The row under the cursor.
     focused: Style,
 }
@@ -514,7 +565,7 @@ impl Look<'_> {
                 let status = (self.hosts)(&host.alias).status;
                 let name = host.label.as_deref().unwrap_or(&host.alias);
                 (
-                    self.decor.host(status, self.tick),
+                    self.decor.host(status, self.dots),
                     cells::sanitize(name.as_bytes()),
                     Some(self.theme.dialog_host_status(status)),
                 )
@@ -606,12 +657,16 @@ fn info(item: Item<'_>, hosts: &dyn Fn(&str) -> HostState) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Instant;
+
     use noc_vfs::VolumeKind;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
     use super::*;
+    use crate::tui::glyphs::Glyphs;
     use crate::tui::panel::HostStatus;
+    use crate::tui::spinner;
 
     fn volume(path: &str, label: Option<&str>, kind: VolumeKind) -> Volume {
         Volume {
@@ -711,6 +766,12 @@ mod tests {
             .collect()
     }
 
+    /// Spinners that stand still.
+    fn still() -> Spin {
+        let now = Instant::now();
+        Spin::new(now, now, false, Glyphs::PLAIN.spinners)
+    }
+
     fn draw(menu: &mut LocationMenu, height: u16) -> String {
         let mut terminal = Terminal::new(TestBackend::new(50, height)).unwrap();
         let hosts = |alias: &str| HostState {
@@ -721,18 +782,23 @@ mod tests {
             },
             address: None,
         };
-        terminal
-            .draw(|frame| {
-                menu.render(
-                    frame,
-                    frame.area(),
-                    &Theme::terminal(),
-                    Decor::new(false),
-                    &hosts,
-                    0,
-                );
-            })
-            .unwrap();
+        // Drawn again once what it waits for shows, with a still spinner.
+        let start = Instant::now();
+        for at in [start, start + spinner::DELAY] {
+            let spin = Spin::new(at, start, false, Glyphs::PLAIN.spinners);
+            terminal
+                .draw(|frame| {
+                    menu.render(
+                        frame,
+                        frame.area(),
+                        &Theme::terminal(),
+                        Decor::new(false),
+                        &hosts,
+                        &spin,
+                    );
+                })
+                .unwrap();
+        }
         terminal.backend().to_string()
     }
 
@@ -989,7 +1055,14 @@ mod tests {
         terminal
             .draw(|frame| {
                 let theme = Theme::mc_classic();
-                menu.render(frame, frame.area(), &theme, Decor::new(true), &hosts, 0);
+                menu.render(
+                    frame,
+                    frame.area(),
+                    &theme,
+                    Decor::new(true),
+                    &hosts,
+                    &still(),
+                );
             })
             .unwrap();
         let buffer = terminal.backend().buffer();
@@ -1015,7 +1088,14 @@ mod tests {
             terminal
                 .draw(|frame| {
                     let theme = Theme::terminal();
-                    menu.render(frame, frame.area(), &theme, Decor::new(false), &hosts, 0);
+                    menu.render(
+                        frame,
+                        frame.area(),
+                        &theme,
+                        Decor::new(false),
+                        &hosts,
+                        &still(),
+                    );
                 })
                 .unwrap();
             terminal.get_cursor_position().unwrap()
@@ -1037,8 +1117,48 @@ mod tests {
         let mut loading = LocationMenu::new(Side::Right, home(), PathBuf::from("/Users/me"), 1);
         let text = draw(&mut loading, 10);
         assert!(
-            text.contains("Right") && text.contains("Loading…"),
+            text.contains("Right") && text.contains("… Looking for volumes and hosts…"),
             "{text}"
         );
+    }
+
+    #[test]
+    fn listing_again_keeps_the_rows_and_tells_how_it_goes_right_of_the_filter() {
+        let mut menu = menu_at(home());
+        assert!(menu.wait().is_none());
+
+        menu.reload(2);
+        assert!(menu.wait().is_some());
+        let text = draw(&mut menu, 16);
+        assert!(text.contains("… Looking again…"), "{text}");
+        assert!(text.contains("Prod"), "the rows stay: {text}");
+
+        menu.listed(1, Ok(places()));
+        assert!(menu.wait().is_some(), "an older listing changes nothing");
+        menu.listed(2, Ok(places()));
+        assert!(menu.wait().is_none());
+        assert!(!draw(&mut menu, 16).contains("Looking again"));
+
+        menu.reload(3);
+        menu.listed(3, Err("no ssh config".to_owned()));
+        assert!(menu.wait().is_none());
+        let text = draw(&mut menu, 16);
+        assert!(text.contains("Not listed again: no"), "{text}");
+        assert!(text.contains("Prod"), "the rows stay: {text}");
+
+        menu.reload(4);
+        assert!(!draw(&mut menu, 16).contains("Not listed again"));
+    }
+
+    #[test]
+    fn listing_again_before_the_first_listing_waits_in_place_of_the_rows() {
+        let mut menu = LocationMenu::new(Side::Left, home(), PathBuf::from("/Users/me"), 1);
+        menu.listed(1, Err("no ssh config".to_owned()));
+        assert!(menu.wait().is_none());
+        menu.reload(2);
+        assert!(menu.wait().is_some());
+        let text = draw(&mut menu, 10);
+        assert!(text.contains("… Looking for volumes and hosts…"), "{text}");
+        assert!(!text.contains("no ssh config"), "{text}");
     }
 }

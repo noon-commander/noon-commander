@@ -230,10 +230,11 @@ impl HistoryWindow {
             width: WIDTH,
             lines: &lines,
             max_lines: Some(MAX_ROWS),
-            note: Some(scope),
+            note: Some(Line::raw(scope)),
             message,
             footer,
             full: None,
+            busy: None,
         };
         let focused = Colors::of(theme, false).focused_style();
         self.picker.render(frame, area, theme, body, &mut |row| {

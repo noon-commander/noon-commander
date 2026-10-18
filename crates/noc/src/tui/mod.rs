@@ -33,6 +33,7 @@ mod pulldown;
 mod scroll;
 mod search_mode;
 mod sidebar;
+mod spinner;
 mod sums;
 mod tab_menu;
 mod tabs;
@@ -45,7 +46,9 @@ mod zoom;
 use std::io::{self, IsTerminal as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+#[cfg(debug_assertions)]
+use std::time::Duration;
+use std::time::Instant;
 
 use color_eyre::eyre::{Result, bail};
 use crossterm::cursor::SetCursorStyle;
@@ -163,12 +166,73 @@ async fn region(context: &Context) -> Result<TimeZone> {
     Ok(tz)
 }
 
-/// How long a spinner shows each of its frames.
-const SPINNER_FRAME: Duration = Duration::from_millis(150);
+/// Debug builds only: how long results of background work are held back, so spinners stay
+/// long enough to watch.
+#[cfg(debug_assertions)]
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct Slow {
+    /// Every result (`--slow-spinners`).
+    pub(crate) spinners: Option<Duration>,
+    /// A connection made or ended, on top of that (`--slow-connections`).
+    pub(crate) connections: Option<Duration>,
+}
+
+/// Debug builds only: holds back each result of background work as `slow` says, from when it
+/// comes. Connections have a queue of their own, so the results behind them do not wait for
+/// them; each queue keeps its order.
+#[cfg(debug_assertions)]
+fn slow_down(done: mpsc::UnboundedSender<Done>, slow: Slow) -> mpsc::UnboundedSender<Done> {
+    if slow.spinners.is_none() && slow.connections.is_none() {
+        return done;
+    }
+    let (sender, mut results) = mpsc::unbounded_channel::<Done>();
+    let others = release(done.clone());
+    let connections = release(done);
+    tokio::spawn(async move {
+        while let Some(result) = results.recv().await {
+            let mut delay = slow.spinners.unwrap_or_default();
+            let queue = if matches!(result, Done::Connected { .. } | Done::Closed { .. }) {
+                delay += slow.connections.unwrap_or_default();
+                &connections
+            } else {
+                &others
+            };
+            if queue
+                .send((tokio::time::Instant::now() + delay, result))
+                .is_err()
+            {
+                break;
+            }
+        }
+    });
+    sender
+}
+
+/// Debug builds only: sends each result to `done` at its time, in the order they come.
+#[cfg(debug_assertions)]
+fn release(
+    done: mpsc::UnboundedSender<Done>,
+) -> mpsc::UnboundedSender<(tokio::time::Instant, Done)> {
+    let (sender, mut held) = mpsc::unbounded_channel::<(tokio::time::Instant, Done)>();
+    tokio::spawn(async move {
+        while let Some((due, result)) = held.recv().await {
+            tokio::time::sleep_until(due).await;
+            if done.send(result).is_err() {
+                break;
+            }
+        }
+    });
+    sender
+}
 
 /// Runs the TUI with both panels on the local directory `start` until the user quits or the
-/// process gets SIGTERM, SIGHUP, or SIGINT.
-pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
+/// process gets SIGTERM, SIGHUP, or SIGINT. In debug builds, `slow` holds back the results of
+/// background work.
+pub(crate) async fn run(
+    context: Context,
+    start: PathBuf,
+    #[cfg(debug_assertions)] slow: Slow,
+) -> Result<()> {
     if !io::stdout().is_terminal() {
         bail!("the TUI needs a terminal; in scripts, use the subcommands (`noc --help`)");
     }
@@ -188,14 +252,15 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
         ..Asked::default()
     };
     let mut events = EventStream::new();
-    let mut spinner = tokio::time::interval(SPINNER_FRAME);
-    spinner.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut keys = KeyState::default();
     let mut clicks = Clicks::default();
     // The last event changed nothing, so the screen stays as it is.
     let mut idle = false;
+    let mut drawn = Instant::now();
     let context = Arc::new(context);
     let (done_tx, mut done) = mpsc::unbounded_channel();
+    #[cfg(debug_assertions)]
+    let done_tx = slow_down(done_tx, slow);
     let mut tasks = Tasks::start(Arc::clone(&context), done_tx).await;
     let (mut app, effects) = start_app(&context, &start, (&tz, system), asked.modes.keys());
     tasks.run(effects);
@@ -229,13 +294,15 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
         }
         let now = Instant::now();
         take_hints(&mut app, &mut keys);
-        if !std::mem::take(&mut idle)
-            && let Err(error) = terminal.draw(|frame| app.render(frame, now, &tz))
-        {
-            break Err(error.into());
+        if !std::mem::take(&mut idle) {
+            if let Err(error) = terminal.draw(|frame| app.render(frame, now, &tz)) {
+                break Err(error.into());
+            }
+            drawn = now;
         }
         let timer = key_timer(&app, &keys);
         let frame_due = app.frame_due();
+        let spin_due = app.spin_due(drawn);
         tokio::select! {
             event = events.next() => match event {
                 Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => {
@@ -258,15 +325,25 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
                     take_done(&mut app, &mut tasks, job);
                 }
             }
-            _ = spinner.tick(), if app.animates() => app.tick(),
-            // A window growing or shrinking needs its next frame.
+            // A window growing or shrinking, a spinner, or a clock needs its next frame.
             () = sleep_until(frame_due) => {}
+            () = sleep_until(spin_due) => {}
             _ = terminate.recv() => break Ok(()),
             _ = hangup.recv() => break Ok(()),
             _ = interrupt.recv() => break Ok(()),
         }
     };
-    // The terminal comes back first, so a slow shutdown does not look like a hang.
+    shut_down((terminal, restore, &mut asked), &mut app, tasks).await;
+    result
+}
+
+/// Gives the terminal back first, so a slow shutdown does not look like a hang; then stops the
+/// jobs, which clean up before the connections go.
+async fn shut_down(
+    (terminal, restore, asked): (DefaultTerminal, Restore, &mut Asked),
+    app: &mut App,
+    mut tasks: Tasks,
+) {
     let _ = asked.title.show(None);
     drop(terminal);
     drop(restore);
@@ -274,7 +351,6 @@ pub(crate) async fn run(context: Context, start: PathBuf) -> Result<()> {
     tasks.finish_jobs().await;
     app.disconnect_all();
     tasks.shutdown().await;
-    result
 }
 
 /// The app with both panels on `start`, set up for this terminal and `system`, and the work it

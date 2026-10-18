@@ -21,13 +21,14 @@ use ratatui::widgets::{Block, Clear};
 use unicode_width::UnicodeWidthChar as _;
 
 use super::cells::{self, Align, Cut, Marks};
-use super::decor::{self, Decor};
+use super::decor::Decor;
 use super::dialog::Field;
 use super::glyphs;
 use super::keymap::Action;
 use super::mouse::Scroll;
 use super::scroll::Window;
 use super::search_mode::{self, Matcher, Prompt};
+use super::spinner::{Spin, Wait};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -206,8 +207,8 @@ pub(crate) struct View<'a> {
     pub(crate) theme: &'a Theme,
     /// The key that reads a directory again, for a panel on a host that is not connected.
     pub(crate) reload_key: Option<&'a str>,
-    /// Turns spinners.
-    pub(crate) tick: u64,
+    /// What spinners look like in this frame.
+    pub(crate) spin: Spin,
     pub(crate) tz: &'a TimeZone,
     /// How dates and numbers are written.
     pub(crate) formats: &'a Formats,
@@ -287,6 +288,7 @@ struct Pending {
     /// Where the panel was, put in the jump list on the way: a listing that fails takes it
     /// out again, as vim keeps no jump that did not happen.
     jumped: Option<Destination>,
+    wait: Wait,
 }
 
 /// Where a panel can go: a location, and the row to put the cursor on there.
@@ -504,6 +506,7 @@ impl Panel {
             location: location.clone(),
             focus,
             jumped: None,
+            wait: Wait::default(),
         });
         ListRequest {
             generation: self.generation,
@@ -589,6 +592,11 @@ impl Panel {
             location: pending.location.clone(),
             resume: None,
         })
+    }
+
+    /// The wait for a listing, whose spinner the status line shows.
+    pub(crate) fn wait(&self) -> Option<&Wait> {
+        self.pending.as_ref().map(|pending| &pending.wait)
     }
 
     /// Stops waiting for a listing; its reply will be dropped.
@@ -1784,8 +1792,9 @@ impl Panel {
         let theme = view.theme;
         let width = usize::from(area.width);
         let mut status_style = (Style::new(), theme.truncated);
-        // A host the panel waits for turns a spinner in front, in the color of its status.
-        let mut waiting = None;
+        // What the panel waits for has a spinner in front, in the color of the status of a
+        // host it waits for.
+        let mut spinner = None;
         // Quick search, whose glyph of its mode has a style of its own.
         let mut searching = None;
         // A symlink under the cursor, with its target.
@@ -1818,25 +1827,31 @@ impl Panel {
         } else if let Some(error) = &self.error {
             error.clone()
         } else if let Some(pending) = &self.pending {
-            match &pending.location {
+            let (color, text) = match &pending.location {
                 Location::Remote { host, .. } => {
                     let status = (view.hosts)(host).status;
                     let host = cells::sanitize(host.as_bytes());
                     match status {
-                        HostStatus::Connecting => {
-                            waiting = Some(status);
-                            fl!("panel-connecting", host = host)
-                        }
-                        HostStatus::Stalled => {
-                            waiting = Some(status);
-                            fl!("panel-host-waiting", host = host)
-                        }
+                        HostStatus::Connecting => (
+                            theme.host_status(status),
+                            fl!("panel-connecting", host = host),
+                        ),
+                        HostStatus::Stalled => (
+                            theme.host_status(status),
+                            fl!("panel-host-waiting", host = host),
+                        ),
                         HostStatus::Idle | HostStatus::Connected | HostStatus::Failed => {
-                            fl!("panel-loading")
+                            (theme.busy, fl!("panel-reading-on", host = host))
                         }
                     }
                 }
-                Location::Local(_) => fl!("panel-loading"),
+                Location::Local(_) => (theme.busy, fl!("panel-reading")),
+            };
+            spinner = view.spin.wait(&pending.wait, (color, theme.panel));
+            if spinner.is_some() {
+                text
+            } else {
+                String::new()
             }
         } else if self.disconnected {
             let host = match &self.location {
@@ -1855,10 +1870,9 @@ impl Panel {
         };
         let mut line = Line::default().style(status_style.0);
         let mut room = width;
-        if let Some(waiting) = waiting {
-            let spinner = format!("{} ", decor::spinner(view.tick));
-            line = Line::from(Span::styled(spinner, theme.host_status(waiting)));
-            room = room.saturating_sub(2);
+        if let Some(spinner) = spinner {
+            room = room.saturating_sub(spinner.iter().map(Span::width).sum());
+            line = Line::from(spinner);
         }
         // At the right, as in Far, while the name keeps some room.
         let size = size
@@ -2700,7 +2714,7 @@ fn row_style(
 
 #[cfg(test)]
 mod tests {
-    use std::time::{Duration, UNIX_EPOCH};
+    use std::time::{Duration, Instant, UNIX_EPOCH};
 
     use noc_vfs::{FileKind, Metadata};
     use ratatui::Terminal;
@@ -2711,6 +2725,7 @@ mod tests {
 
     use super::*;
     use crate::tui::keymap::Mode;
+    use crate::tui::spinner;
 
     /// 2023-11-14 22:13:20 UTC.
     const NOW: u64 = 1_700_000_000;
@@ -2828,18 +2843,22 @@ mod tests {
         theme: &Theme,
     ) -> Terminal<TestBackend> {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-        let view = View {
-            hosts,
-            decor,
-            theme,
-            reload_key: Some("Ctrl+r"),
-            tick: 0,
-            tz: &TimeZone::UTC,
-            formats: &Formats::iso(),
-        };
-        terminal
-            .draw(|frame| panel.render(frame, frame.area(), active, &view))
-            .unwrap();
+        // Drawn again once what it waits for shows, with a still spinner.
+        let start = Instant::now();
+        for at in [start, start + spinner::DELAY] {
+            let view = View {
+                hosts,
+                decor,
+                theme,
+                reload_key: Some("Ctrl+r"),
+                spin: Spin::new(at, start, false, theme.glyphs.spinners),
+                tz: &TimeZone::UTC,
+                formats: &Formats::iso(),
+            };
+            terminal
+                .draw(|frame| panel.render(frame, frame.area(), active, &view))
+                .unwrap();
+        }
         terminal
     }
 
@@ -3187,7 +3206,7 @@ mod tests {
             decor: Decor::new(false),
             theme: &theme,
             reload_key: None,
-            tick: 0,
+            spin: Spin::new(Instant::now(), Instant::now(), false, theme.glyphs.spinners),
             tz: &TimeZone::UTC,
             formats: &Formats::iso(),
         };
@@ -3716,7 +3735,10 @@ mod tests {
         let request = panel.go(Destination::to(remote("web", "")));
         assert_eq!(panel.pending_request(), Some(request.clone()));
         let status = draw(&mut panel, 40, 6, true).to_string();
-        assert!(status.contains("Loading…"), "{status}");
+        assert!(
+            status.contains("… Reading the directory on web…"),
+            "{status}"
+        );
 
         panel.cancel();
         assert_eq!(panel.pending_request(), None);
@@ -3738,16 +3760,50 @@ mod tests {
     }
 
     #[test]
-    fn a_panel_waiting_for_a_host_turns_a_spinner() {
+    fn a_panel_waiting_shows_a_spinner_and_what_it_waits_for() {
         let mut panel = loaded("/srv", listing());
         panel.go(Destination::to(remote("web", "")));
         let theme = Theme::terminal();
         let (line, style) = status_line(&mut panel, HostStatus::Connecting);
-        assert_eq!(line, "| Connecting to web…");
+        assert_eq!(line, "… Connecting to web…");
         assert_eq!(style.add_modifier, theme.host_connecting.add_modifier);
         let (line, style) = status_line(&mut panel, HostStatus::Stalled);
-        assert_eq!(line, "| web: Retry or Cancel?");
+        assert_eq!(line, "… web: Retry or Cancel?");
         assert_eq!(style.add_modifier, theme.host_failed.add_modifier);
+
+        let mut panel = loaded("/srv", listing());
+        panel.handle(Action::Reload);
+        let (line, _) = status_line(&mut panel, HostStatus::Idle);
+        assert_eq!(line, "… Reading the directory…");
+    }
+
+    #[test]
+    fn a_wait_shows_nothing_for_its_first_moment() {
+        let mut panel = loaded("/srv", listing());
+        panel.handle(Action::Reload);
+        let theme = Theme::terminal();
+        let hosts = |_: &str| HostState::default();
+        let mut terminal = Terminal::new(TestBackend::new(40, 6)).unwrap();
+        let now = Instant::now();
+        let view = View {
+            hosts: &hosts,
+            decor: Decor::new(false),
+            theme: &theme,
+            reload_key: None,
+            spin: Spin::new(now, now, true, theme.glyphs.spinners),
+            tz: &TimeZone::UTC,
+            formats: &Formats::iso(),
+        };
+        terminal
+            .draw(|frame| panel.render(frame, frame.area(), true, &view))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let line: String = (1..39).map(|x| buffer[(x, 4)].symbol()).collect();
+        assert_eq!(line.trim(), "");
+        assert_eq!(
+            panel.wait().and_then(Wait::shows),
+            Some(now + spinner::DELAY)
+        );
     }
 
     #[test]
@@ -3764,7 +3820,7 @@ mod tests {
         let request = panel.pending_request().unwrap();
         assert_eq!(request.location, remote("db", "/srv"));
         let (line, _) = status_line(&mut panel, HostStatus::Stalled);
-        assert_eq!(line, "| db: Retry or Cancel?");
+        assert_eq!(line, "… db: Retry or Cancel?");
         answer(&mut panel, &request, Listing::Dir(listing()));
         assert_eq!(under_cursor(&panel), "zeta.txt", "back on its entry");
         assert!(!panel.disconnected);

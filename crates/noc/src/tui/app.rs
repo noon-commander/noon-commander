@@ -56,6 +56,7 @@ use super::picker::{FULL_ROWS, Whole};
 use super::places::{Places, volume_of};
 use super::progress::{Counts, JobButton, JobView};
 use super::pulldown::{self, Command, PullDown, PullDownEvent, Status};
+use super::spinner::{self, Spin, Wait};
 use super::sums::{Mark, SumRow, SumsButton, SumsEvent, SumsWindow, Verdict};
 use super::tab_menu::{TabMenu, TabMenuEvent};
 use super::tabs::{self, Bar, PanelId, Tab, Tabs};
@@ -337,6 +338,8 @@ const MAX_REPEAT: usize = 10_000;
 /// How long the search of a tree waits after a key before it starts again, so that typing a
 /// word starts one search rather than one for each letter.
 const FIND_DELAY: Duration = Duration::from_millis(150);
+/// How often the time of a working job is drawn again.
+const CLOCK_FRAME: Duration = Duration::from_millis(150);
 /// Cells of what a pending command has typed that the line above the F-key bar shows, as
 /// vim's `showcmd` shows at most.
 const SHOWCMD_WIDTH: usize = 10;
@@ -625,10 +628,21 @@ impl Job {
 struct Viewing {
     id: u64,
     viewer: Viewer,
+    /// For the file, whose spinner shows until it is read.
+    wait: Wait,
     location: Location,
     /// The line it shows at the top once the file is read, if not the first.
     line: Option<u64>,
     cancel: CancellationToken,
+}
+
+impl Viewing {
+    /// Draws the viewer over `area`, with a spinner while the file is read.
+    fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, spin: &Spin) {
+        let spinner = spin.wait(&self.wait, (theme.busy, theme.panel));
+        let styles = viewer_styles(theme);
+        self.viewer.render(frame, area, &styles, spinner.as_deref());
+    }
 }
 
 /// How F5 copies: what its dialog asked for last, which it starts with, and the setting.
@@ -684,8 +698,8 @@ pub(crate) struct App {
     theme: Theme,
     /// What the terminal can show, for themes in RGB.
     color_depth: ColorDepth,
-    /// Counts the frames of spinners.
-    tick: u64,
+    /// When the first frame was drawn, which spinners of one cell turn from.
+    epoch: Wait,
     /// Hosts whose last attempt failed or whose connection was lost.
     failed: HashSet<String>,
     /// Addresses from `ssh -G` in this session.
@@ -909,7 +923,7 @@ impl App {
             // `ui.theme` was checked when the config was loaded.
             theme: theme_of(ui, ColorDepth::TrueColor),
             color_depth: ColorDepth::TrueColor,
-            tick: 0,
+            epoch: Wait::default(),
             failed: HashSet::new(),
             addresses: HashMap::new(),
             users: HashMap::new(),
@@ -4299,6 +4313,7 @@ impl App {
         self.viewing = Some(Viewing {
             id,
             viewer: Viewer::new(location_text(&location)),
+            wait: Wait::default(),
             location: location.clone(),
             line,
             cancel: cancel.clone(),
@@ -6492,24 +6507,58 @@ impl App {
             .retain(|open| !matches!(open.purpose, Purpose::Ssh { id: shown, .. } if shown == id));
     }
 
-    /// Whether something on screen moves while time passes: a host that is connecting or
-    /// stalled, or the time of a working job in its window or in the list of jobs.
-    pub(crate) fn animates(&self) -> bool {
+    /// When the screen needs drawing again, after the frame drawn at `drawn`, for what changes
+    /// as time passes: a spinner that is due to show, or that turns; a host that connects in the
+    /// location menu; the time of a working job in its window or in the list of jobs.
+    pub(crate) fn spin_due(&self, drawn: Instant) -> Option<Instant> {
+        let turns = self.config.animations.spinners;
+        let mut due: Option<Instant> = None;
+        let mut at = |time: Instant| due = Some(due.map_or(time, |due| due.min(time)));
+        for shows in self.waits().into_iter().filter_map(Wait::shows) {
+            if shows > drawn {
+                at(shows);
+            } else if turns {
+                at(drawn + spinner::SCANNER_FRAME);
+            }
+        }
+        if turns && self.in_front().is_some_and(|job| job.view.busy()) {
+            at(drawn + spinner::SCANNER_FRAME);
+        }
         let connecting = self
             .hosts
             .values()
-            .any(|host| matches!(host, Host::Connecting { .. } | Host::Stalled { .. }));
+            .any(|host| matches!(host, Host::Connecting { .. }));
+        if turns && connecting && self.menu.is_some() {
+            at(drawn + spinner::DOTS_FRAME);
+        }
         let timed = self
             .jobs
             .iter()
             .any(|job| job.view.ticking() && (!job.background || self.jobs_list.is_some()));
-        let searching = self.find.as_ref().is_some_and(FindWindow::searching);
-        connecting || timed || searching
+        if timed {
+            at(drawn + CLOCK_FRAME);
+        }
+        due
     }
 
-    /// Moves spinners on by a frame.
-    pub(crate) fn tick(&mut self) {
-        self.tick = self.tick.wrapping_add(1);
+    /// What waits on screen, each with a spinner.
+    fn waits(&self) -> Vec<&Wait> {
+        if let Some(viewing) = &self.viewing {
+            return viewing
+                .viewer
+                .loading()
+                .then_some(&viewing.wait)
+                .into_iter()
+                .collect();
+        }
+        let panels = [Side::Left, Side::Right].map(|side| self.panel(side).wait());
+        panels
+            .into_iter()
+            .flatten()
+            .chain(self.menu.as_ref().and_then(LocationMenu::wait))
+            .chain(self.jump.as_ref().and_then(JumpMenu::first_wait))
+            .chain(self.find.as_ref().and_then(FindWindow::wait))
+            .collect()
     }
 
     /// Stops every job, for quitting; they clean up before the connections go.
@@ -6529,7 +6578,8 @@ impl App {
 
     /// Two panels side by side above the F-key bar; the menu bar of F9 above them with
     /// `ui.menu_bar`, else over their top line while a menu is open. Dates are as of `now`;
-    /// windows that open or close grow or shrink as of `at`, with `ui.animations`.
+    /// windows that open or close grow or shrink as of `at`, with `animations.windows`, and
+    /// spinners turn.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, at: Instant, tz: &TimeZone) {
         self.spots = Spots::default();
         let always = self.config.ui.menu_bar == MenuBar::Always;
@@ -6537,7 +6587,7 @@ impl App {
         let screen = frame.area();
         let mut stage = std::mem::take(&mut self.stage);
         let scene = (screen, self.viewing.is_some());
-        stage.begin(self.config.ui.animations, scene, &self.theme, at);
+        stage.begin(self.config.animations.windows, scene, &self.theme, at);
         let prompt = self.command_prompt(screen.width);
         let prompt_text = cells::text_of(&prompt);
         let line_height = self.line_height(&prompt_text, screen);
@@ -6566,12 +6616,13 @@ impl App {
         let hosts = |host: &str| states.get(host).cloned().unwrap_or_default();
         let reload_key = self.keymap.key(Context::Panel, Action::Reload);
         let formats = noc_locale::current();
+        let spin = self.spin(at);
         let view = View {
             hosts: &hosts,
             decor: self.decor,
             theme: &self.theme,
             reload_key: reload_key.as_deref(),
-            tick: self.tick,
+            spin,
             tz,
             formats: &formats,
         };
@@ -6582,9 +6633,7 @@ impl App {
         };
         let roots = [Side::Left, Side::Right].map(|side| self.root_at(self.panel(side).location()));
         if let Some(viewing) = &mut self.viewing {
-            viewing
-                .viewer
-                .render(frame, panels, &viewer_styles(&self.theme));
+            viewing.render(frame, panels, &self.theme, &spin);
         } else {
             let sides = [
                 (Side::Left, &mut self.left, left_bar, left),
@@ -6610,9 +6659,10 @@ impl App {
         if self.viewing.is_none() {
             // On the menu bar, or on the top line of the panels without it.
             self.render_jobs(frame, menu_bar);
-            self.render_menus(frame, ([left, right], panels), &hosts, &mut stage);
+            let sides = ([left, right], panels);
+            self.render_menus(frame, sides, (&hosts, &spin), &mut stage);
         }
-        self.render_windows(frame, panels, &mut stage);
+        self.render_windows(frame, panels, &spin, &mut stage);
         self.render_command_choices(frame, command_line, &prompt_text);
         if let Some(window) = &mut self.key_hints {
             stage.show(
@@ -6630,27 +6680,37 @@ impl App {
         }
     }
 
+    /// The spinners as of `at`, counted from the first frame drawn.
+    fn spin(&self, at: Instant) -> Spin {
+        Spin::new(
+            at,
+            self.epoch.since(at),
+            self.config.animations.spinners,
+            self.theme.glyphs.spinners,
+        )
+    }
+
     /// The menus of a panel, over the panel on its side of `sides`, and the zoxide window over
     /// `panels`; they grow and shrink on `stage`.
     fn render_menus(
         &mut self,
         frame: &mut Frame<'_>,
         ([left, right], panels): ([Rect; 2], Rect),
-        hosts: &dyn Fn(&str) -> HostState,
+        (hosts, spin): (&dyn Fn(&str) -> HostState, &Spin),
         stage: &mut Stage,
     ) {
         let over = |side| match side {
             Side::Left => left,
             Side::Right => right,
         };
-        let (theme, decor, tick) = (&self.theme, self.decor, self.tick);
+        let (theme, decor) = (&self.theme, self.decor);
         if let Some(menu) = &mut self.menu {
             let side = menu.side();
             stage.show(
                 frame,
                 (zoom::Window::Menu(side), Grows::FromMiddle),
                 |frame| {
-                    menu.render(frame, over(side), theme, decor, hosts, tick);
+                    menu.render(frame, over(side), theme, decor, hosts, spin);
                 },
             );
         }
@@ -6666,7 +6726,7 @@ impl App {
         }
         if let Some(jump) = &mut self.jump {
             stage.show(frame, (zoom::Window::Jump, Grows::FromMiddle), |frame| {
-                jump.render(frame, panels, theme);
+                jump.render(frame, panels, theme, spin);
             });
         }
     }
@@ -6723,7 +6783,13 @@ impl App {
     /// The windows over `panels`, those in front last: the workspaces, the Configuration
     /// dialog, the help, the jobs, the checksums, and the dialogs; they grow and shrink on
     /// `stage`.
-    fn render_windows(&mut self, frame: &mut Frame<'_>, panels: Rect, stage: &mut Stage) {
+    fn render_windows(
+        &mut self,
+        frame: &mut Frame<'_>,
+        panels: Rect,
+        spin: &Spin,
+        stage: &mut Stage,
+    ) {
         let middle = |window| (window, Grows::FromMiddle);
         let theme = &self.theme;
         if let Some(window) = &mut self.workspaces_window {
@@ -6739,9 +6805,8 @@ impl App {
         if let Some(window) = &mut self.find
             && self.viewing.is_none()
         {
-            let tick = self.tick;
             stage.show(frame, middle(zoom::Window::Find), |frame| {
-                window.render(frame, panels, theme, tick);
+                window.render(frame, panels, theme, spin);
             });
         }
         if let Some(configuration) = &mut self.configuration {
@@ -6762,7 +6827,8 @@ impl App {
         }
         if let Some(job) = self.in_front() {
             stage.show(frame, middle(zoom::Window::Job(job.id)), |frame| {
-                job.view.render(frame, panels, theme, Instant::now());
+                job.view
+                    .render(frame, panels, theme, (Instant::now(), spin));
             });
         }
         if let Some(results) = self.results.front() {
@@ -7348,7 +7414,7 @@ mod tests {
 
     use std::sync::mpsc;
 
-    use noc_config::{TransferConfig, ZoxideConfig};
+    use noc_config::{AnimationsConfig, TransferConfig, ZoxideConfig};
     use noc_ssh::askpass::PromptKind;
     use noc_vfs::{DirEntry, FileKind, Metadata, RemotePath};
     use ratatui::Terminal;
@@ -7390,6 +7456,7 @@ mod tests {
     fn config() -> Config {
         Config {
             ui: ui(),
+            animations: still(),
             zoxide: ZoxideConfig {
                 record: false,
                 ..ZoxideConfig::default()
@@ -7449,12 +7516,19 @@ mod tests {
             .collect()
     }
 
-    /// Settings with mc's markers, which read better in tests than icons, and windows that show
-    /// whole at once, which tests of their own animate.
+    /// Windows that show whole at once and spinners that stand still, which tests of their own
+    /// animate.
+    fn still() -> AnimationsConfig {
+        AnimationsConfig {
+            windows: false,
+            spinners: false,
+        }
+    }
+
+    /// Settings with mc's markers, which read better in tests than icons.
     fn ui() -> UiConfig {
         UiConfig {
             icons: false,
-            animations: false,
             ..UiConfig::default()
         }
     }
@@ -7564,8 +7638,11 @@ mod tests {
         format!("{prompt} {glyph}: {text}")
     }
 
+    /// The screen once spinners that start now show, with what they wait for.
     fn screen_of(app: &mut App, height: u16) -> String {
-        screen_at(app, height, Instant::now())
+        let now = Instant::now();
+        screen_at(app, height, now);
+        screen_at(app, height, now + spinner::DELAY)
     }
 
     /// The screen `height` rows tall, with windows as they grow or shrink `at`.
@@ -7580,7 +7657,7 @@ mod tests {
     #[test]
     fn windows_grow_as_they_open_and_shrink_as_they_close() {
         let mut app = loaded();
-        app.config.ui.animations = true;
+        app.config.animations.windows = true;
         let start = Instant::now();
         let at = |ms| start + Duration::from_millis(ms);
         let panels = screen_at(&mut app, 12, at(0));
@@ -7616,7 +7693,7 @@ mod tests {
         screen_at(&mut app, 12, at(8000));
 
         // Turned off, windows come and go at once.
-        app.config.ui.animations = false;
+        app.config.animations.windows = false;
         app.handle(action(Action::Help));
         assert_eq!(screen_at(&mut app, 12, at(9000)), whole);
         assert_eq!(app.frame_due(), None);
@@ -9457,7 +9534,8 @@ mod tests {
             app.job_event(id, progress);
         }
         assert!(ticking(&app, first) && ticking(&app, second));
-        assert!(app.animates(), "the time in front moves");
+        let now = Instant::now();
+        assert!(app.spin_due(now).is_some(), "the time in front moves");
 
         // Both ask; the question of the second waits behind that of the first.
         let mut decisions = Vec::new();
@@ -9469,7 +9547,7 @@ mod tests {
             decisions.push(decision);
         }
         assert!(!ticking(&app, first) && !ticking(&app, second));
-        assert!(!app.animates(), "nothing moves while they wait");
+        assert!(app.spin_due(now).is_none(), "nothing moves while they wait");
 
         app.handle(action(Action::Confirm));
         assert_eq!(decisions[0].try_recv(), Ok(Decision::Skip));
@@ -9945,7 +10023,7 @@ mod tests {
         };
         assert_eq!((location, host.is_none()), (local("/srv/notes"), true));
         assert_eq!(app.context(), Context::Viewer);
-        assert!(screen(&mut app).contains("Loading"));
+        assert!(screen(&mut app).contains("Reading the file…"));
         app.read(id + 1, Ok((b"not this".to_vec(), false)));
         app.read(id, Ok((b"hello\nworld\n".to_vec(), false)));
         let text = screen(&mut app);
@@ -10582,9 +10660,12 @@ mod tests {
             "reported once"
         );
         assert_eq!(app.host_state("db").status, HostStatus::Stalled);
-        assert!(app.animates(), "the spinner turns");
         assert_eq!(app.dialogs.len(), 1);
         let text = screen_of(&mut app, 20);
+        assert!(
+            app.spin_due(Instant::now()).is_some(),
+            "the spinner of the panel is due"
+        );
         assert!(
             text.contains("Cannot connect to db: deploy@db: Permission denied (publickey)."),
             "{text}"
@@ -11008,12 +11089,12 @@ mod tests {
     fn transfer_and_ssh_settings_apply_at_once() {
         let mut app = loaded();
         open_configuration(&mut app);
-        config_category(&mut app, 1);
+        config_category(&mut app, 2);
         app.handle(action(Action::Toggle));
         assert!(!app.copy_choices.atomic);
         app.handle(action(Action::Down));
         edit_field(&mut app, "5");
-        config_category(&mut app, 2);
+        config_category(&mut app, 3);
         assert_eq!(app.parallel_jobs, 5, "as the cursor left the field");
         edit_field(&mut app, "~/bin/ssh");
         let effects = app.handle(action(Action::Confirm));

@@ -236,10 +236,14 @@
       ([ADR 0031](adr/0031-who-and-where-on-screen.md))
 - [x] Letters in every dialog, as in Far and mc: Alt and the letter puts the focus in a field,
       switches a check box, chooses a radio button, or presses a button, while typing too;
-      Alt+1 … Alt+7 open the categories of the Configuration dialog, and Alt and a letter the
+      Alt+1 … Alt+8 open the categories of the Configuration dialog, and Alt and a letter the
       sections of the help ([ADR 0033](adr/0033-letters-in-dialogs.md))
 - [x] Windows grow from their middle as they open and shrink back as they close, the menus of
-      F9 drop from their bar; `ui.animations` ([ADR 0034](adr/0034-animated-windows.md))
+      F9 drop from their bar; `animations.windows` ([ADR 0034](adr/0034-animated-windows.md))
+- [x] One spinner for everything that waits, a scanner, with what it waits for after it, shown
+      after 150 ms; `animations.spinners`; R in the location menu keeps the rows and spins right
+      of the filter; `--slow-spinners` and `--slow-connections` in debug builds
+      ([ADR 0037](adr/0037-spinners.md))
 - [x] Formats of the region for dates, times, and numbers: the system's (on macOS as System
       Settings has them), `iso`, or a language tag, `ui.formats`; plural forms that see the
       numbers in every message with a count ([ADR 0035](adr/0035-formats-of-the-region.md))

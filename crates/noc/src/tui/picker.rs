@@ -84,11 +84,14 @@ pub(crate) struct Body<'a> {
     pub(crate) lines: &'a [MenuLine],
     /// Lines the box shows at most; as many as fit without.
     pub(crate) max_lines: Option<u16>,
-    /// Right of the filter, such as which hosts the history shows.
-    pub(crate) note: Option<String>,
-    /// Shown in place of the lines, such as while the rows load; without, a note that nothing
-    /// matches once the filter hides every row.
+    /// Right of the filter, in half the line at most, such as which hosts the history shows.
+    pub(crate) note: Option<Line<'static>>,
+    /// Shown in place of the lines, such as why the rows did not load; without, a note that
+    /// nothing matches once the filter hides every row.
     pub(crate) message: Option<String>,
+    /// Shown in place of the lines while the rows load: the spinner and what it waits for, or
+    /// nothing before the spinner shows.
+    pub(crate) busy: Option<Line<'static>>,
     /// Lines under the rows, apart from them, such as the whole command under the cursor.
     pub(crate) footer: Vec<String>,
     /// The whole text of the row under the cursor, which shows under the rows while `K` asks
@@ -444,10 +447,16 @@ impl Picker {
         }
         let width = usize::from(inner.width);
         let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
-        self.draw_filter(frame, inner, theme, body.note.as_deref());
+        self.draw_filter(frame, inner, theme, body.note);
 
         self.page = usize::from(inner.height.saturating_sub(2 + below)).max(1);
         let rows = self.len();
+        if let Some(busy) = body.busy {
+            if inner.height > 2 + below {
+                draw_busy(frame, line(2), busy, theme);
+            }
+            return;
+        }
         let message = body.message.or_else(|| self.nothing());
         if let Some(message) = message {
             let room = 2..inner.height.saturating_sub(below);
@@ -532,21 +541,47 @@ impl Picker {
     /// The filter, a text field in the colors of those of dialogs, with its cursor while it
     /// takes text, and `note` at the right, on the first line of `inner`; a line under them.
     /// The line joins the frame, as the one over the buttons of a dialog does.
-    fn draw_filter(&self, frame: &mut Frame<'_>, inner: Rect, theme: &Theme, note: Option<&str>) {
+    fn draw_filter(
+        &self,
+        frame: &mut Frame<'_>,
+        inner: Rect,
+        theme: &Theme,
+        note: Option<Line<'static>>,
+    ) {
         let width = usize::from(inner.width);
         let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
-        let note = note.map(|note| cells::sanitize(note.as_bytes()));
+        let note = note.map(|note| {
+            let spans: Vec<Span<'static>> = note
+                .spans
+                .into_iter()
+                .map(|span| {
+                    Span::styled(
+                        cells::sanitize(span.content.as_bytes()),
+                        note.style.patch(span.style),
+                    )
+                })
+                .collect();
+            let most = width / 2;
+            if spans.iter().map(Span::width).sum::<usize>() > most {
+                let styles = (theme.dialog, theme.truncated_dialog);
+                cells::fit_spans(spans, most, styles, theme.glyphs.marks)
+            } else {
+                spans
+            }
+        });
         let room = match &note {
-            Some(note) => width.saturating_sub(cells::width(note) + 1),
+            Some(note) => width.saturating_sub(note.iter().map(Span::width).sum::<usize>() + 1),
             None => width,
         };
         let mark = search_mode::marked(self.mode, self.error.is_some(), theme.dialog, theme);
         let prompt = Prompt::new(|text| fl!("picker-filter", mode = mark.glyph, text = text));
-        let note = note.map(|note| Span::styled(format!(" {note}"), theme.dialog));
-        frame.render_widget(
-            Line::from_iter(note).style(theme.dialog).right_aligned(),
-            line(0),
-        );
+        if let Some(mut note) = note {
+            note.insert(0, Span::raw(" "));
+            frame.render_widget(
+                Line::from(note).style(theme.dialog).right_aligned(),
+                line(0),
+            );
+        }
         let area = Rect::new(inner.x, inner.y, u16::try_from(room).unwrap_or(u16::MAX), 1);
         let field = (&prompt, &self.filter);
         let column = mark.render_field(frame, area, field, theme.dialog, theme);
@@ -558,6 +593,18 @@ impl Picker {
         }
         draw_separator(frame, inner, inner.y + 1, Colors::of(theme, false), theme);
     }
+}
+
+/// What the window waits for, with its spinner, cut to fit `area`.
+fn draw_busy(frame: &mut Frame<'_>, area: Rect, busy: Line<'static>, theme: &Theme) {
+    let styles = (theme.dialog, theme.truncated_dialog);
+    let spans = cells::fit_spans(
+        busy.spans,
+        usize::from(area.width),
+        styles,
+        theme.glyphs.marks,
+    );
+    frame.render_widget(Line::from(spans).style(theme.dialog), area);
 }
 
 /// A heading over the rows after it, `width` cells across: its text alone, in the color of

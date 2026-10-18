@@ -627,12 +627,12 @@ settings window: there is no OK or Cancel, and every change takes effect as it i
 
 ```text
   ╔═════════════════════════ Configuration ══════════════════════════╗
-  ║  󰍹 Interface │ Language           auto                           ▲
-  ║  󰓡 Transfers │ Theme              < mc-classic >                 █
-  ║  󰣀 SSH       │ Borders            < Double ═ ║ ╔ >               █
-  ║  󰋊 Volumes   │ Icons              [x]                            ░
-  ║  󰥨 zoxide    │ Show hidden files  [x]                            ▼
-  ╟──────────────┴───────────────────────────────────────────────────╢
+  ║  󰍹 Interface  │ Language           auto                          ▲
+  ║  󰤺 Animations │ Theme              < mc-classic >                █
+  ║  󰓡 Transfers  │ Borders            < Double ═ ║ ╔ >              █
+  ║  󰣀 SSH        │ Icons              [x]                           ░
+  ║  󰋊 Volumes    │ Show hidden files  [x]                           ▼
+  ╟───────────────┴──────────────────────────────────────────────────╢
   ║ A language tag, such as en-US, or auto for the system locale.    ║
   ║ Takes effect after a restart.                                    ║
   ╚══════════════════════════════════════════════════════════════════╝
@@ -641,9 +641,9 @@ settings window: there is no OK or Cancel, and every change takes effect as it i
 - Categories are on the left, with a Nerd Font icon each (without `ui.icons`, names only);
   the settings of the chosen one are on the right: check boxes `[x]`, choices `< … >`, and
   text fields. Every option of `config.toml` is there, so that nobody has to edit the file:
-  Interface (`[ui]`), Transfers (`[transfer]`), SSH (`[ssh]` and the hidden hosts of
-  `[discovery]`), Volumes (`[volumes]`), zoxide (`[zoxide]`), Command line (`[shell]`), and
-  Search (`[search]`).
+  Interface (`[ui]`), Animations (`[animations]`), Transfers (`[transfer]`), SSH (`[ssh]` and
+  the hidden hosts of `[discovery]`), Volumes (`[volumes]`), zoxide (`[zoxide]`), Command line
+  (`[shell]`), and Search (`[search]`).
 - Paths under the home directory show from `~`, and are written as typed. Lists, such as
   `ssh.args` and the hidden hosts and volumes, are words separated by spaces, as a shell
   reads them: `"…"` around a word with spaces, `\` before a character to take it as it is.
@@ -657,7 +657,7 @@ settings window: there is no OK or Cancel, and every change takes effect as it i
   them, and `g g` and `G` go to the first and last of them; `h` (Left) on anything but a text
   field goes back to the categories; Esc, `q`, or F10 closes the dialog, in Normal mode (a
   text field in Insert mode takes a first Esc to Normal mode).
-- Alt+1 … Alt+7 open the categories, from anywhere in the dialog, the digit shown in front of
+- Alt+1 … Alt+8 open the categories, from anywhere in the dialog, the digit shown in front of
   each, and each setting has a letter, unique within its page: Alt and it do what Space or Enter
   does on the row, or put the focus in its text field, in Insert mode, as the letters of every
   dialog do ([ADR 0033](adr/0033-letters-in-dialogs.md)).
@@ -899,7 +899,10 @@ tab_bar = "line"                 # tabs on a line above the panels; "frame": in 
 terminal_title = true            # the window's title shows the active panel's directory
 which_key = true                 # after g, Ctrl+w, …: the keys that can follow, as which-key
 which_key_delay_ms = 500         # how long after such a key the hints show
-animations = true                # frames of windows grow as they open and shrink as they close
+
+[animations]
+windows = true                   # frames of windows grow as they open and shrink as they close
+spinners = true                  # the spinner in front of what waits turns; false: a still mark
 
 [transfer]
 atomic_upload = true             # copies go to a hidden temporary name, then are renamed
@@ -1636,7 +1639,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   icons, mc's markers: `/` directory, `~` link to a directory, `@` link, `!` broken link, `*`
   executable, `|` FIFO, `=` socket, `-` character device, `+` block device and volume; the
   home directory is `~`.
-- **Animated windows.** With `ui.animations` (the default;
+- **Animated windows.** With `animations.windows` (the default;
   [ADR 0034](adr/0034-animated-windows.md)), a window's frame grows from its middle as it
   opens and shrinks back as it closes: six sizes, 20 ms each, empty and in the window's colors,
   with its shadow; a menu of F9 drops from its bar. `tui/zoom.rs` does it on top of rendering:
@@ -1649,6 +1652,22 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   next size at `App::frame_due`. The first frame, a new size of the screen, the viewer coming
   or going, and the terminal coming back from another program show their windows at once.
   Completion lists and the key hints of which-key appear at once, as they come while typing.
+- **Spinners.** Whatever waits for work in the background shows one spinner, with what it waits
+  for after it ([ADR 0037](adr/0037-spinners.md)): a panel (`Reading the directory on web…`,
+  `Connecting to web…`), the location menu, the zoxide window, the search of a tree, a job
+  starting or stopping, and the viewer. `tui/spinner.rs` draws it as a scanner: eight
+  cells, a lit block running to and fro, 40 ms a step, with a trail in the theme's `busy` color
+  blended into the background (bold, plain, and dim where colors are not known), and a pause at
+  each end. A host connecting in the location menu turns braille dots in its one cell. Each
+  waiting thing keeps a `Wait`, which remembers the first frame that drew it; nothing shows until
+  150 ms later, so quick work does not flicker. Frames come from the time since the app's first
+  frame, so spinners move together and tests draw given instants; `App::spin_due` tells the
+  event loop when the next frame is due. With `animations.spinners` off, a still mark stands in
+  place of the spinner. R in the location menu keeps its rows and shows the spinner right of the
+  filter, with `Looking again…`, or the reason it failed. In debug builds, `--slow-spinners
+  SECONDS` holds back every result of background work by that long, in order, and
+  `--slow-connections SECONDS` holds back only connections made or ended, in a queue of their
+  own, so the dots of a host connecting can be watched in the location menu.
 - **Glyphs.** Every special character the UI draws is in `tui/glyphs.rs`: `Glyphs::NERD` and
   `Glyphs::PLAIN`, which `ui.icons` picks and the theme carries (`Theme.glyphs`), with the icons
   and markers of kinds, hosts, and volumes, the glyph of root, the scroll bars, the marks of text

@@ -41,7 +41,6 @@ enum Key {
     Formats,
     Theme,
     Borders,
-    Animations,
     Icons,
     ShowHidden,
     NaturalSort,
@@ -53,6 +52,8 @@ enum Key {
     HintsDelay,
     MenuBar,
     TabBar,
+    AnimateWindows,
+    Spinners,
     AtomicUpload,
     ParallelJobs,
     SshProgram,
@@ -175,7 +176,6 @@ impl Setting {
                     _ => Borders::Double,
                 };
             }
-            Key::Animations => ui.animations = self.on(),
             Key::Icons => ui.icons = self.on(),
             Key::ShowHidden => ui.show_hidden = self.on(),
             Key::NaturalSort => ui.natural_sort = self.on(),
@@ -212,6 +212,8 @@ impl Setting {
                     _ => TabBar::Line,
                 };
             }
+            Key::AnimateWindows => config.animations.windows = self.on(),
+            Key::Spinners => config.animations.spinners = self.on(),
             Key::AtomicUpload => transfer.atomic_upload = self.on(),
             Key::SshProgram | Key::ZoxideProgram | Key::SearchProgram | Key::FdProgram => {
                 self.apply_program(config)?;
@@ -458,6 +460,7 @@ impl Configuration {
         let mut dialog = Self {
             categories: vec![
                 interface(config, themes),
+                animations(config),
                 transfers(config),
                 ssh(config, home),
                 volumes(config),
@@ -1173,11 +1176,6 @@ fn interface(config: &Config, themes: &[&str]) -> Category {
             ),
         ),
         Setting::new(
-            Key::Animations,
-            (fl!("config-animations"), fl!("config-animations-hint")),
-            Value::Toggle(ui.animations),
-        ),
-        Setting::new(
             Key::Icons,
             (fl!("config-icons"), fl!("config-icons-hint")),
             Value::Toggle(ui.icons),
@@ -1297,6 +1295,33 @@ fn bars(ui: &UiConfig) -> [Setting; 2] {
             ),
         ),
     ]
+}
+
+/// Animations, `[animations]`.
+fn animations(config: &Config) -> Category {
+    let animations = &config.animations;
+    Category {
+        icon: categories::ANIMATIONS,
+        title: fl!("config-animations"),
+        settings: vec![
+            Setting::new(
+                Key::AnimateWindows,
+                (
+                    fl!("config-animations-windows"),
+                    fl!("config-animations-windows-hint"),
+                ),
+                Value::Toggle(animations.windows),
+            ),
+            Setting::new(
+                Key::Spinners,
+                (
+                    fl!("config-animations-spinners"),
+                    fl!("config-animations-spinners-hint"),
+                ),
+                Value::Toggle(animations.spinners),
+            ),
+        ],
+    }
 }
 
 /// Transfers, `[transfer]`.
@@ -1570,7 +1595,7 @@ mod tests {
         );
 
         // A text field takes effect when the cursor leaves it.
-        category(&mut dialog, 1);
+        category(&mut dialog, 2);
         dialog.handle(action(Action::Down));
         typed(&mut dialog, "4");
         let (_, new) = dialog.handle(action(Action::Up)).change.unwrap();
@@ -1592,7 +1617,7 @@ mod tests {
     #[test]
     fn g_g_and_g_apply_a_text_field_and_a_key_after_ctrl_o_leaves_insert_mode_on() {
         let mut dialog = dialog();
-        category(&mut dialog, 1);
+        category(&mut dialog, 2);
         dialog.handle(action(Action::Down));
         typed(&mut dialog, "4");
         dialog.handle(action(Action::NormalMode));
@@ -1600,7 +1625,7 @@ mod tests {
         assert_eq!(dialog.row, 0, "g g");
         assert_eq!(event.change.unwrap().1.transfer.parallel_jobs.get(), 4);
         // After Ctrl+o, j is the one command, and the next field is in Insert mode.
-        category(&mut dialog, 2);
+        category(&mut dialog, 3);
         dialog.handle(action(Action::AppendAtEnd));
         dialog.handle(action(Action::NormalOnce));
         assert_eq!(dialog.mode(), Mode::Normal);
@@ -1630,7 +1655,7 @@ mod tests {
             press_on(&mut dialog, "Transfers", 0),
             ConfigEvent::default()
         );
-        assert_eq!((dialog.category, dialog.focus), (1, Focus::Sidebar));
+        assert_eq!((dialog.category, dialog.focus), (2, Focus::Sidebar));
         assert_eq!(
             press_on(&mut dialog, "Parallel jobs", 0),
             ConfigEvent::default()
@@ -1683,8 +1708,6 @@ mod tests {
         dialog.handle(action(Action::Toggle));
         dialog.handle(action(Action::Down));
         dialog.handle(action(Action::Toggle));
-        dialog.handle(action(Action::Down));
-        dialog.handle(action(Action::Toggle));
         for _ in 0..2 {
             dialog.handle(action(Action::Down));
         }
@@ -1702,8 +1725,12 @@ mod tests {
         category(&mut dialog, 1);
         dialog.handle(action(Action::Toggle));
         dialog.handle(action(Action::Down));
-        typed(&mut dialog, "4");
+        dialog.handle(action(Action::Toggle));
         category(&mut dialog, 2);
+        dialog.handle(action(Action::Toggle));
+        dialog.handle(action(Action::Down));
+        typed(&mut dialog, "4");
+        category(&mut dialog, 3);
         dialog.handle(action(Action::Down));
         typed(&mut dialog, "~/.ssh/work");
         dialog.handle(action(Action::Down));
@@ -1712,13 +1739,13 @@ mod tests {
         dialog.handle(action(Action::Toggle));
         dialog.handle(action(Action::Down));
         typed(&mut dialog, "");
-        category(&mut dialog, 3);
-        typed(&mut dialog, "/mnt/*");
         category(&mut dialog, 4);
+        typed(&mut dialog, "/mnt/*");
+        category(&mut dialog, 5);
         dialog.handle(action(Action::Toggle));
         dialog.handle(action(Action::Down));
         typed(&mut dialog, "~/.cargo/bin/zoxide");
-        category(&mut dialog, 6);
+        category(&mut dialog, 7);
         typed(&mut dialog, "/opt/rg");
         dialog.handle(action(Action::Down));
         typed(&mut dialog, "fdfind");
@@ -1729,7 +1756,8 @@ mod tests {
         expected.ui.natural_sort = false;
         expected.ui.theme = "terminal".to_owned();
         expected.ui.borders = Borders::Single;
-        expected.ui.animations = false;
+        expected.animations.windows = false;
+        expected.animations.spinners = false;
         expected.ui.icons = false;
         expected.ui.tab_bar = TabBar::Frame;
         expected.ui.mouse = false;
@@ -1754,16 +1782,16 @@ mod tests {
         let cases: [(usize, usize, &str, &str); 12] = [
             (0, 0, "?", "is not auto or a language tag"),
             (0, 1, "not a tag", "is not auto, iso, or a language tag"),
-            (0, 10, "0", "is not a step of the wheel"),
-            (0, 10, "pages", "is not a step of the wheel"),
-            (1, 1, "x", "is not a number of jobs"),
-            (2, 2, "-F other_config", "Invalid extra ssh arguments"),
-            (2, 0, "", "The ssh program cannot be empty"),
-            (4, 1, " ", "The zoxide program cannot be empty"),
-            (5, 1, "-1", "is not a number of commands"),
-            (6, 0, "", "The ripgrep program cannot be empty"),
-            (6, 1, " ", "The fd program cannot be empty"),
-            (6, 2, "0", "is not a number of results"),
+            (0, 9, "0", "is not a step of the wheel"),
+            (0, 9, "pages", "is not a step of the wheel"),
+            (2, 1, "x", "is not a number of jobs"),
+            (3, 2, "-F other_config", "Invalid extra ssh arguments"),
+            (3, 0, "", "The ssh program cannot be empty"),
+            (5, 1, " ", "The zoxide program cannot be empty"),
+            (6, 1, "-1", "is not a number of commands"),
+            (7, 0, "", "The ripgrep program cannot be empty"),
+            (7, 1, " ", "The fd program cannot be empty"),
+            (7, 2, "0", "is not a number of results"),
         ];
         for (index, row, text, message) in cases {
             let mut dialog = dialog();
@@ -1950,7 +1978,7 @@ mod tests {
             dialog.category_labels().iter().map(Label::letter).collect();
         assert_eq!(
             digits,
-            "1234567".chars().map(Some).collect::<Vec<_>>(),
+            "12345678".chars().map(Some).collect::<Vec<_>>(),
             "the categories have their digits"
         );
     }
@@ -1972,12 +2000,12 @@ mod tests {
                 .collect();
             (underlined, terminal.backend().to_string())
         };
-        assert_eq!(underlined(76).0, "1L2F3T4B5o6I7hrSMweKdn");
-        // Names cut short keep the letter before the cut, as Command line its 6 and Show hidden
+        assert_eq!(underlined(76).0, "1L2F3T4B5I6h7r8SMweKdna");
+        // Names cut short keep the letter before the cut, as Command line its 7 and Show hidden
         // files its h, and lose one after it, as Key hints delay its d.
         let (letters, screen) = underlined(40);
-        assert!(screen.contains(" 6 Co"), "{screen}");
-        assert_eq!(letters, "1L2F3T4B5o6I7hrSMweKn", "{screen}");
+        assert!(screen.contains(" 7 Co"), "{screen}");
+        assert_eq!(letters, "1L2F3T4B5I6h7r8SMweKna", "{screen}");
     }
 
     #[test]
@@ -1997,7 +2025,7 @@ mod tests {
             (dialog.category, dialog.focus, dialog.row),
             (0, Focus::Sidebar, 0)
         );
-        assert_eq!(dialog.handle(Resolved::Hotkey('8')), ConfigEvent::default());
+        assert_eq!(dialog.handle(Resolved::Hotkey('9')), ConfigEvent::default());
         assert_eq!(dialog.handle(Resolved::Hotkey('0')), ConfigEvent::default());
         assert_eq!((dialog.category, dialog.focus), (0, Focus::Sidebar));
     }
@@ -2010,7 +2038,7 @@ mod tests {
         let (old, new) = dialog.handle(Resolved::Hotkey('i')).change.unwrap();
         assert_eq!((old.ui.language.as_str(), old.ui.icons), ("auto", true));
         assert_eq!((new.ui.language.as_str(), new.ui.icons), ("de", false));
-        assert_eq!((dialog.focus, dialog.row), (Focus::Settings, 5));
+        assert_eq!((dialog.focus, dialog.row), (Focus::Settings, 4));
         // A choice goes round, in either case of its letter.
         let (_, new) = dialog.handle(Resolved::Hotkey('T')).change.unwrap();
         assert_eq!((new.ui.theme.as_str(), dialog.row), ("terminal", 2));
@@ -2019,7 +2047,7 @@ mod tests {
         // A text field gets the focus in Insert mode, from the categories too.
         dialog.handle(action(Action::PrevField));
         assert_eq!(dialog.handle(Resolved::Hotkey('w')), ConfigEvent::default());
-        assert_eq!((dialog.focus, dialog.row), (Focus::Settings, 10));
+        assert_eq!((dialog.focus, dialog.row), (Focus::Settings, 9));
         assert_eq!(
             (dialog.context(), dialog.mode()),
             (Context::DialogInput, Mode::Insert)
@@ -2028,18 +2056,18 @@ mod tests {
         dialog.handle(Resolved::Hotkey('w'));
         assert_eq!(
             (dialog.row, dialog.mode()),
-            (10, Mode::Insert),
+            (9, Mode::Insert),
             "its own letter"
         );
         // From a field in Normal mode, the next one is in Insert mode all the same.
         dialog.handle(action(Action::NormalMode));
         dialog.handle(Resolved::Hotkey('d'));
-        assert_eq!((dialog.row, dialog.mode()), (13, Mode::Insert));
+        assert_eq!((dialog.row, dialog.mode()), (12, Mode::Insert));
         // Leaving a field that holds something invalid keeps the cursor and says why.
         dialog.handle(Resolved::Hotkey('w'));
         typed(&mut dialog, "0");
         assert_eq!(dialog.handle(Resolved::Hotkey('b')), ConfigEvent::default());
-        assert_eq!((dialog.row, dialog.mode()), (10, Mode::Insert));
+        assert_eq!((dialog.row, dialog.mode()), (9, Mode::Insert));
         assert!(dialog.error.is_some());
         assert_eq!(dialog.handle(Resolved::Hotkey('2')), ConfigEvent::default());
         assert_eq!((dialog.category, dialog.focus), (0, Focus::Settings));

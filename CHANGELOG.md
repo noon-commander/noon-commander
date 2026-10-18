@@ -41,8 +41,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Windows grow from their middle as they open and shrink back as they close, their empty frame
   in a few sizes over about 120 ms; the menus of F9 drop from their bar. Every window with a
   frame does it: dialogs, menus, the help, the Configuration dialog, the search of a tree, jobs,
-  and the lists. Keys work on a window at once. `ui.animations` (on) turns it off, a check box
-  under Interface in the Configuration dialog.
+  and the lists. Keys work on a window at once. `animations.windows` (on) turns it off, a check
+  box under Animations in the Configuration dialog.
+- Everything that waits for work in the background shows the same spinner, a scanner of eight
+  cells, with what it waits for after it: a panel reading a directory
+  (`Reading the directory on web…`) or connecting, the location menu, the zoxide window, the
+  search of a tree, a job starting or stopping, and the viewer reading a file. It shows only
+  after 150 ms, so quick work does not flicker. A host connecting in the location menu turns
+  braille dots. `animations.spinners` (on), a check box under Animations, leaves a still mark in
+  its place.
+- R in the location menu keeps the rows while it lists the volumes and the hosts again, with the
+  spinner and `Looking again…` right of the filter; if that fails, the reason shows there in the
+  colors of errors.
+- Debug builds take `--slow-spinners SECONDS`, which holds back every result of background work
+  by that long, and `--slow-connections SECONDS`, which holds back only a connection made or
+  ended, to watch the spinners.
 - Who is where: the prompt of the command line is a shell's, `alice@mac:~/src $` locally and
   `deploy@web:/var/www $` on a host, with the user from `ssh -G`, and the line of the mode shows
   `alice@mac` of the active panel left of the keys typed. Where the user is root, `user@host` is
@@ -79,7 +92,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   radio button, or press a button, from anywhere in the dialog, while typing in a field too. A
   dialog of one field takes its letter from the prompt over it, as Alt+c for `Copy "x" to:`. The
   window of a job, the jobs, the checksums, and the Configuration dialog have letters too; there
-  Alt+1 … Alt+7 open the categories, and the letter of a setting switches it, picks its next
+  Alt+1 … Alt+8 open the categories, and the letter of a setting switches it, picks its next
   choice, or puts the focus in its field. The sections of the help (F1) have letters, and Alt and
   one shows its section.
 - The help (F1) takes 70% of the screen and has sections down its left, as the Configuration dialog:

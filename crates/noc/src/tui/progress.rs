@@ -14,6 +14,7 @@ use super::keymap::{Action, Resolved};
 use super::label::Label;
 use super::mouse::{Drawn, Pointer};
 use super::panel::short_size;
+use super::spinner::{Spin, Wait};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -131,6 +132,9 @@ pub(crate) struct JobView {
     focus: usize,
     /// Where the last render drew it, for the mouse.
     drawn: RefCell<Drawn>,
+    /// For the end of the waiting, the counting, or the aborting, whose spinner shows in front
+    /// of them.
+    wait: Wait,
 }
 
 impl JobView {
@@ -145,6 +149,7 @@ impl JobView {
             buttons: vec![JobButton::Background, JobButton::Abort],
             focus: 0,
             drawn: RefCell::default(),
+            wait: Wait::default(),
         }
     }
 
@@ -190,6 +195,11 @@ impl JobView {
     /// Whether its time runs, so that what shows it needs drawing as time passes.
     pub(crate) fn ticking(&self) -> bool {
         self.clock.running()
+    }
+
+    /// Whether it waits its turn, counts, or stops, which a spinner shows.
+    pub(crate) fn busy(&self) -> bool {
+        self.aborting || !matches!(self.stage, Stage::Working { .. })
     }
 
     /// How far the job is, from 0 to 1: by bytes if it moves data, else by entries.
@@ -304,8 +314,15 @@ impl JobView {
         self.aborting = true;
     }
 
-    /// Draws the window as it is at `now`.
-    pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, now: Instant) {
+    /// Draws the window as it is at `now`, with the spinner of `spin` while it is
+    /// [`busy`](Self::busy).
+    pub(crate) fn render(
+        &self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        theme: &Theme,
+        (now, spin): (Instant, &Spin),
+    ) {
         let colors = Colors::of(theme, false);
         // Borders, what it does, where, the gauge, the count, the time, a line, the buttons.
         let inner = draw_box(frame, area, (WIDTH, 9), &self.title, colors, theme);
@@ -357,7 +374,17 @@ impl JobView {
                 theme.glyphs.marks,
             ))
         };
-        put(0, text(&doing));
+        if self.busy() {
+            let mut spans = spin.now(&self.wait, (theme.busy_dialog, theme.dialog));
+            spans.push(Span::raw(doing));
+            let styles = colors.body_styles();
+            put(
+                0,
+                Line::from(cells::fit_spans(spans, width, styles, theme.glyphs.marks)),
+            );
+        } else {
+            put(0, text(&doing));
+        }
         put(1, text(&current));
         put(2, gauge(ratio, width, theme));
         put(3, text(&count));
@@ -464,11 +491,15 @@ mod tests {
     use ratatui::backend::TestBackend;
 
     use super::*;
+    use crate::tui::glyphs::Glyphs;
 
     fn draw_at(view: &JobView, now: Instant) -> String {
         let mut terminal = Terminal::new(TestBackend::new(64, 11)).unwrap();
         terminal
-            .draw(|frame| view.render(frame, frame.area(), &Theme::terminal(), now))
+            .draw(|frame| {
+                let spin = Spin::new(now, now, false, Glyphs::PLAIN.spinners);
+                view.render(frame, frame.area(), &Theme::terminal(), (now, &spin));
+            })
             .unwrap();
         terminal.backend().to_string()
     }

@@ -1,6 +1,8 @@
 //! Command-line interface.
 
 use std::path::PathBuf;
+#[cfg(debug_assertions)]
+use std::time::Duration;
 
 use clap::{Parser, Subcommand};
 
@@ -11,8 +13,26 @@ pub(crate) struct Cli {
     #[arg(short, long, global = true, value_name = "FILE")]
     pub(crate) config: Option<PathBuf>,
 
+    /// Debug builds only: hold back every result of background work, such as a directory
+    /// read, by this many seconds, so spinners stay long enough to watch.
+    #[cfg(debug_assertions)]
+    #[arg(long, value_name = "SECONDS", value_parser = seconds)]
+    pub(crate) slow_spinners: Option<Duration>,
+
+    /// Debug builds only: hold back a connection made or ended by this many seconds more, so
+    /// its spinners stay long enough to watch, while other results come as they are.
+    #[cfg(debug_assertions)]
+    #[arg(long, value_name = "SECONDS", value_parser = seconds)]
+    pub(crate) slow_connections: Option<Duration>,
+
     #[command(subcommand)]
     pub(crate) command: Option<Command>,
+}
+
+#[cfg(debug_assertions)]
+fn seconds(text: &str) -> Result<Duration, String> {
+    let seconds: f64 = text.parse().map_err(|error| format!("{error}"))?;
+    Duration::try_from_secs_f64(seconds).map_err(|error| format!("{error}"))
 }
 
 #[derive(Debug, Subcommand)]
@@ -67,5 +87,23 @@ mod tests {
     #[test]
     fn cli_is_consistent() {
         Cli::command().debug_assert();
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn slow_modes_take_seconds() {
+        use clap::Parser as _;
+
+        let cli = Cli::try_parse_from(["noc", "--slow-spinners", "1.5"]).unwrap();
+        assert_eq!(
+            cli.slow_spinners,
+            Some(std::time::Duration::from_millis(1500))
+        );
+        assert!(Cli::try_parse_from(["noc", "--slow-spinners", "-1"]).is_err());
+        let cli = Cli::try_parse_from(["noc", "--slow-connections", "5"]).unwrap();
+        assert_eq!(
+            cli.slow_connections,
+            Some(std::time::Duration::from_secs(5))
+        );
     }
 }

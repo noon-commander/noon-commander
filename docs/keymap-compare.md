@@ -703,7 +703,7 @@ first and the last line, and q and Esc close the dialog. Dialogs are modal: the 
 nothing there. Every element but Cancel has a letter, highlighted in its label, and Alt and it act
 on the element from anywhere in the dialog, in every mode, as in Far and mc: a text field gets the
 focus, in Insert mode, a check box switches, a radio button is chosen, and a button is pressed. In
-the Configuration dialog, Alt+1 … Alt+7 open its categories, and the letter of a setting does what
+the Configuration dialog, Alt+1 … Alt+8 open its categories, and the letter of a setting does what
 Space or Enter does on it, or puts the focus in its text field. Alt and a letter that nothing has
 do nothing, and here and in the text fields of dialogs Alt and a key never stand for Esc and the
 key ([ADR 0033](adr/0033-letters-in-dialogs.md)). Each dialog has letters of its own, so the

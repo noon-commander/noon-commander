@@ -126,6 +126,11 @@ pub(crate) struct Theme {
     pub(crate) dialog_input: Style,
     /// The progress bar of a job.
     pub(crate) gauge: Style,
+    /// The color of the spinner of what waits, over `panel` and over `dialog`: the head of its
+    /// scanner, whose trail and other cells fade into the background where its colors are
+    /// known.
+    pub(crate) busy: Style,
+    pub(crate) busy_dialog: Style,
     /// Error dialogs: body, frame, text, and buttons without the focus.
     pub(crate) error_dialog: Style,
     pub(crate) error_title: Style,
@@ -296,6 +301,9 @@ impl Theme {
             dialog_hotkey_focused: fg(Color::Blue),
             dialog_input: on(Color::Black, Color::Cyan),
             gauge: on(Color::White, Color::Black),
+            // As connecting hosts, and the titles of dialogs.
+            busy: fg(Color::LightYellow),
+            busy_dialog: fg(Color::Blue),
             error_dialog: on(Color::White, Color::Red),
             error_title: on(Color::LightYellow, Color::Red),
             error_button_focused: on(Color::Black, Color::Gray),
@@ -379,6 +387,8 @@ impl Theme {
             dialog_hotkey_focused: Style::new().underlined(),
             dialog_input: reversed,
             gauge: plain,
+            busy: plain,
+            busy_dialog: plain,
             error_dialog: plain,
             error_title: plain.bold(),
             error_button_focused: reversed,
@@ -461,6 +471,8 @@ impl Theme {
             dialog_hotkey_focused: Style::new().underlined(),
             dialog_input: on(p.text, p.surface1),
             gauge: on(p.blue, p.surface0),
+            busy: fg(p.mauve),
+            busy_dialog: fg(p.mauve),
             error_dialog: on(p.base, p.red),
             error_title: on(p.base, p.red),
             error_button_focused: on(p.text, p.surface0),
@@ -547,6 +559,8 @@ impl Theme {
             dialog_hotkey_focused: Style::new().underlined(),
             dialog_input: on(p.text, p.field),
             gauge: on(p.accent, p.surface),
+            busy: fg(p.accent),
+            busy_dialog: fg(p.accent),
             error_dialog: on(p.ink, p.danger),
             error_title: on(p.ink, p.danger).bold(),
             error_button_focused: on(p.text, p.surface),
@@ -918,6 +932,48 @@ fn indexed(color: Color) -> Color {
     }
 }
 
+/// `color` brightened by `gain` per mille and laid at `alpha` per mille over `background`, as
+/// a translucent color shows; `None` for a color the terminal's palette decides, whose value is
+/// not known. In 256 colors when either of them is.
+pub(crate) fn blend(color: Color, background: Color, (gain, alpha): (u16, u16)) -> Option<Color> {
+    let (front, back) = (rgb(color)?, rgb(background)?);
+    let alpha = u32::from(alpha.min(1000));
+    let mix = |front: u8, back: u8| {
+        let front = (u32::from(front) * u32::from(gain) / 1000).min(255);
+        let mixed = (front * alpha + u32::from(back) * (1000 - alpha) + 500) / 1000;
+        u8::try_from(mixed).unwrap_or(u8::MAX)
+    };
+    let mixed = Color::Rgb(
+        mix(front.0, back.0),
+        mix(front.1, back.1),
+        mix(front.2, back.2),
+    );
+    let indexed_in = |color: Color| matches!(color, Color::Indexed(_));
+    Some(if indexed_in(color) || indexed_in(background) {
+        indexed(mixed)
+    } else {
+        mixed
+    })
+}
+
+/// The red, green, and blue of `color`: of an RGB color, or of one of the 6×6×6 cube or the
+/// gray ramp of the 256-color palette, whose values are fixed.
+fn rgb(color: Color) -> Option<(u8, u8, u8)> {
+    const LEVELS: [u8; 6] = [0, 95, 135, 175, 215, 255];
+    match color {
+        Color::Rgb(r, g, b) => Some((r, g, b)),
+        Color::Indexed(index @ 16..=231) => {
+            let cube = usize::from(index - 16);
+            Some((LEVELS[cube / 36], LEVELS[cube / 6 % 6], LEVELS[cube % 6]))
+        }
+        Color::Indexed(index @ 232..) => {
+            let gray = 8 + 10 * (index - 232);
+            Some((gray, gray, gray))
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use noc_vfs::Metadata;
@@ -1201,6 +1257,50 @@ mod tests {
                 assert!(!layers[index + 1..].contains(layer), "{name}: {layer:?}");
             }
             assert!(matches!(theme.directory.fg, Some(Color::Indexed(16..))));
+        }
+    }
+
+    #[test]
+    fn colors_blend_into_their_background_where_their_values_are_known() {
+        let (white, black) = (Color::Rgb(255, 255, 255), Color::Rgb(0, 0, 0));
+        assert_eq!(blend(white, black, (1000, 1000)), Some(white));
+        assert_eq!(blend(white, black, (1000, 0)), Some(black));
+        assert_eq!(
+            blend(white, black, (1000, 500)),
+            Some(Color::Rgb(128, 128, 128))
+        );
+        let gold = Color::Rgb(200, 100, 0);
+        assert_eq!(
+            blend(gold, black, (1150, 1000)),
+            Some(Color::Rgb(230, 115, 0))
+        );
+        // In 256 colors, the cube and the gray ramp have values; the low 16 do not.
+        assert_eq!(
+            blend(Color::Indexed(231), Color::Indexed(16), (1000, 1000)),
+            Some(Color::Indexed(231))
+        );
+        assert_eq!(
+            blend(Color::Indexed(255), Color::Indexed(232), (1000, 0)),
+            Some(Color::Indexed(232))
+        );
+        assert_eq!(blend(white, Color::Blue, (1000, 500)), None);
+        assert_eq!(blend(Color::LightYellow, black, (1000, 500)), None);
+    }
+
+    #[test]
+    fn spinners_show_on_the_panels_and_the_dialogs() {
+        for name in Theme::NAMES {
+            for depth in [ColorDepth::TrueColor, ColorDepth::Indexed] {
+                let theme = Theme::by_name(name, depth).unwrap();
+                for (surface, busy) in
+                    [(theme.panel, theme.busy), (theme.dialog, theme.busy_dialog)]
+                {
+                    let drawn = surface.patch(busy);
+                    if let (Some(fg), Some(bg)) = (drawn.fg, drawn.bg) {
+                        assert_ne!(fg, bg, "{name} {depth:?}");
+                    }
+                }
+            }
         }
     }
 

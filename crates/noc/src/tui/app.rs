@@ -6528,7 +6528,8 @@ impl App {
             .hosts
             .values()
             .any(|host| matches!(host, Host::Connecting { .. }));
-        if turns && connecting && self.menu.is_some() {
+        // The dots of a host that connects turn in the location menu and in the titles of panels.
+        if turns && connecting && self.viewing.is_none() {
             at(drawn + spinner::DOTS_FRAME);
         }
         let timed = self
@@ -10383,7 +10384,7 @@ mod tests {
             "already on its way"
         );
         let text = screen(&mut app);
-        assert_eq!(text.matches("Connecting to web…").count(), 2, "{text}");
+        assert_eq!(text.matches("╔ … web ═").count(), 2, "{text}");
 
         let (handle, _requests) = HostHandle::channel();
         let effects = app.connected("web", connection, handle);
@@ -11977,7 +11978,7 @@ mod tests {
         let text = screen(&mut app);
         assert!(text.contains(" 1 srv │ 2 srv "), "{text}");
         assert!(
-            text.contains("╠ /srv ═"),
+            text.contains("╠ / /srv ═"),
             "the title keeps the whole path, under tees that join the line: {text}"
         );
 

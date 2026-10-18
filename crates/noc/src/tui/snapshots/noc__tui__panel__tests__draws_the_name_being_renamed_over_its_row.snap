@@ -2,7 +2,7 @@
 source: crates/noc/src/tui/panel.rs
 expression: terminal.backend()
 ---
-"╔ /srv ═══════╤═══════╤════════════════╗"
+"╔ / /srv ═════╤═══════╤════════════════╗"
 "║    ↑Name    │ Size  │  Modify time   ║"
 "║/docs        │    DIR│2023-11-14 21:13▲"
 "║ .profile    │     1B│2023-11-14 21:13░"

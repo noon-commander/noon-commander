@@ -2,7 +2,7 @@
 source: crates/noc/src/tui/app.rs
 expression: terminal.backend()
 ---
-"╔ 1 docs ═ 2 /srv/docs ══════╗╔ /srv ══════════════════════╗"
+"╔ 1 docs ═ 2 /srv/docs ══════╗╔ / /srv ════════════════════╗"
 "║                            ║║                            ║"
 "║                            ║║                            ║"
 "╚════════════════════════════╝╚════════════════════════════╝"

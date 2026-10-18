@@ -62,14 +62,23 @@ impl Decor {
     /// spinner, while connecting; without them a circle, a dot, a cross, or the spinner. The
     /// theme colors it by the status.
     pub(crate) fn host(self, status: HostStatus, dots: char) -> String {
+        format!("{} ", self.host_marker(status, dots))
+    }
+
+    /// The cell of [`Decor::host`], without the space.
+    pub(crate) fn host_marker(self, status: HostStatus, dots: char) -> char {
         let hosts = self.glyphs().hosts;
-        let marker = match status {
+        match status {
             HostStatus::Connecting => dots,
             HostStatus::Idle => hosts.idle,
             HostStatus::Connected => hosts.connected,
             HostStatus::Failed | HostStatus::Stalled => hosts.failed,
-        };
-        format!("{marker} ")
+        }
+    }
+
+    /// The cell in front of a local directory's path: its icon, or mc's marker.
+    pub(crate) fn directory(self) -> char {
+        self.glyphs().kinds.dir
     }
 
     /// What tells the kind of a symlink's `target`, of `kind` (`None` when nothing is there):

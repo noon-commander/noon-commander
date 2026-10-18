@@ -594,7 +594,7 @@ impl Panel {
         })
     }
 
-    /// The wait for a listing, whose spinner the status line shows.
+    /// The wait for a listing, whose dots the title shows.
     pub(crate) fn wait(&self) -> Option<&Wait> {
         self.pending.as_ref().map(|pending| &pending.wait)
     }
@@ -1703,21 +1703,7 @@ impl Panel {
         view: &View<'_>,
     ) {
         let theme = view.theme;
-        let title = match &self.location {
-            Location::Local(path) => home_text(path, &self.home),
-            Location::Remote { .. } => location_text(&self.location),
-        };
-        let (title_style, mark) = if active {
-            (theme.panel_title_active, theme.truncated_cursor)
-        } else {
-            (theme.panel_border, theme.truncated)
-        };
-        // A path that does not fit keeps its last directories.
-        let room = usize::from(area.width.saturating_sub(4)).min(cells::width(&title));
-        let fit = (Align::Left, Cut::Start);
-        let mut title = cells::fitted(&title, room, fit, (title_style, mark), theme.glyphs.marks);
-        title.spans.insert(0, Span::styled(" ", title_style));
-        title.spans.push(Span::styled(" ", title_style));
+        let title = self.title(area.width, active, view);
         let block = Block::bordered()
             .border_type(theme.border_type())
             .title(title)
@@ -1785,16 +1771,83 @@ impl Panel {
         self.render_status(frame, line(inner.bottom() - 1), active, view);
     }
 
+    /// The title on the frame: the location, or the one being listed, after one cell that keeps
+    /// the path in place: the icon of a directory, or of a host in the color of its status; and
+    /// while it is listed, dots that turn, in the color of a host it connects to.
+    fn title(&self, width: u16, active: bool, view: &View<'_>) -> Line<'static> {
+        let theme = view.theme;
+        let (style, mark) = if active {
+            (theme.panel_title_active, theme.truncated_cursor)
+        } else {
+            (theme.panel_border, theme.truncated)
+        };
+        let location = self
+            .pending
+            .as_ref()
+            .map_or(&self.location, |pending| &pending.location);
+        let dots = self
+            .pending
+            .as_ref()
+            .and_then(|pending| view.spin.wait_dots(&pending.wait));
+        let (icon, color) = match location {
+            Location::Local(_) => match dots {
+                Some(dots) => (dots, Some(theme.busy)),
+                None => (view.decor.directory(), None),
+            },
+            Location::Remote { host, .. } => {
+                let status = (view.hosts)(host).status;
+                let color = match status {
+                    HostStatus::Idle | HostStatus::Connected | HostStatus::Failed
+                        if dots.is_some() =>
+                    {
+                        theme.busy
+                    }
+                    _ => theme.host_status(status),
+                };
+                let icon = dots.unwrap_or_else(|| view.decor.host_marker(status, view.spin.dots()));
+                (icon, Some(color))
+            }
+        };
+        let text = match location {
+            Location::Local(path) => home_text(path, &self.home),
+            Location::Remote { .. } => location_text(location),
+        };
+        let icon_style = color.map_or(style, |color| style.patch(color));
+        let lead = [
+            Span::styled(" ", style),
+            Span::styled(icon.to_string(), icon_style),
+            Span::styled(" ", style),
+        ];
+        // A path that does not fit keeps its last directories.
+        let lead_width: usize = lead.iter().map(Span::width).sum();
+        let room = usize::from(width)
+            .saturating_sub(lead_width + 3)
+            .min(cells::width(&text));
+        let fit = (Align::Left, Cut::Start);
+        let path = cells::fitted(&text, room, fit, (style, mark), theme.glyphs.marks);
+        let mut title = Line::from(lead.to_vec());
+        title.spans.extend(path.spans);
+        title.spans.push(Span::styled(" ", style));
+        title
+    }
+
+    /// The host being listed, if it does not answer.
+    fn stalled<'a>(&'a self, view: &View<'_>) -> Option<&'a str> {
+        match &self.pending.as_ref()?.location {
+            Location::Remote { host, .. } if (view.hosts)(host).status == HostStatus::Stalled => {
+                Some(host)
+            }
+            _ => None,
+        }
+    }
+
     /// The status line, at `area`: the name being renamed, quick search with its cursor in the
-    /// active panel, the last error, the listing or host it waits for, the host it
-    /// is not connected to, or the name under the cursor, with the target of a symlink.
+    /// active panel, the last error, a host that does not answer, the host it is not connected
+    /// to, or the name under the cursor, with the target of a symlink.
     fn render_status(&self, frame: &mut Frame<'_>, area: Rect, active: bool, view: &View<'_>) {
         let theme = view.theme;
         let width = usize::from(area.width);
         let mut status_style = (Style::new(), theme.truncated);
-        // What the panel waits for has a spinner in front, in the color of the status of a
-        // host it waits for.
-        let mut spinner = None;
         // Quick search, whose glyph of its mode has a style of its own.
         let mut searching = None;
         // A symlink under the cursor, with its target.
@@ -1826,33 +1879,12 @@ impl Panel {
             prompt.with(&shown)
         } else if let Some(error) = &self.error {
             error.clone()
-        } else if let Some(pending) = &self.pending {
-            let (color, text) = match &pending.location {
-                Location::Remote { host, .. } => {
-                    let status = (view.hosts)(host).status;
-                    let host = cells::sanitize(host.as_bytes());
-                    match status {
-                        HostStatus::Connecting => (
-                            theme.host_status(status),
-                            fl!("panel-connecting", host = host),
-                        ),
-                        HostStatus::Stalled => (
-                            theme.host_status(status),
-                            fl!("panel-host-waiting", host = host),
-                        ),
-                        HostStatus::Idle | HostStatus::Connected | HostStatus::Failed => {
-                            (theme.busy, fl!("panel-reading-on", host = host))
-                        }
-                    }
-                }
-                Location::Local(_) => (theme.busy, fl!("panel-reading")),
-            };
-            spinner = view.spin.wait(&pending.wait, (color, theme.panel));
-            if spinner.is_some() {
-                text
-            } else {
-                String::new()
-            }
+        } else if let Some(host) = self.stalled(view) {
+            status_style.0 = theme.host_status(HostStatus::Stalled);
+            fl!(
+                "panel-host-waiting",
+                host = cells::sanitize(host.as_bytes())
+            )
         } else if self.disconnected {
             let host = match &self.location {
                 Location::Remote { host, .. } => cells::sanitize(host.as_bytes()),
@@ -1870,10 +1902,6 @@ impl Panel {
         };
         let mut line = Line::default().style(status_style.0);
         let mut room = width;
-        if let Some(spinner) = spinner {
-            room = room.saturating_sub(spinner.iter().map(Span::width).sum());
-            line = Line::from(spinner);
-        }
         // At the right, as in Far, while the name keeps some room.
         let size = size
             .map(|size| format!(" {size}"))
@@ -3734,11 +3762,8 @@ mod tests {
         let mut panel = loaded("/srv", listing());
         let request = panel.go(Destination::to(remote("web", "")));
         assert_eq!(panel.pending_request(), Some(request.clone()));
-        let status = draw(&mut panel, 40, 6, true).to_string();
-        assert!(
-            status.contains("… Reading the directory on web…"),
-            "{status}"
-        );
+        let screen = draw(&mut panel, 40, 6, true).to_string();
+        assert!(screen.contains("╔ … web "), "{screen}");
 
         panel.cancel();
         assert_eq!(panel.pending_request(), None);
@@ -3746,35 +3771,87 @@ mod tests {
         assert_eq!(panel.location, local("/srv"), "the late reply is dropped");
     }
 
-    /// The status line of `panel` while its hosts are in `status`, and the style of its first
-    /// cell.
-    fn status_line(panel: &mut Panel, status: HostStatus) -> (String, Style) {
+    /// The title and the status line of `panel` while its hosts are in `status`, and the styles
+    /// of the icon or the dots and of the path in the title, at its third and fifth cells.
+    fn waiting_lines(panel: &mut Panel, status: HostStatus) -> ([String; 2], [Style; 2]) {
         let hosts = |_: &str| HostState {
             status,
             address: None,
         };
         let terminal = render_with(panel, (40, 6), true, &hosts, Decor::new(false));
         let buffer = terminal.backend().buffer();
-        let line: String = (1..39).map(|x| buffer[(x, 4)].symbol()).collect();
-        (line.trim_end().to_owned(), buffer[(1, 4)].style())
+        let line = |y: u16| {
+            let line: String = (0..40).map(|x| buffer[(x, y)].symbol()).collect();
+            line.trim_end().to_owned()
+        };
+        let styles = [buffer[(2, 0)].style(), buffer[(4, 0)].style()];
+        ([line(0), line(4)], styles)
     }
 
     #[test]
-    fn a_panel_waiting_shows_a_spinner_and_what_it_waits_for() {
-        let mut panel = loaded("/srv", listing());
-        panel.go(Destination::to(remote("web", "")));
+    fn a_panel_waiting_shows_dots_in_place_of_its_icon_and_what_it_lists() {
         let theme = Theme::terminal();
-        let (line, style) = status_line(&mut panel, HostStatus::Connecting);
-        assert_eq!(line, "… Connecting to web…");
-        assert_eq!(style.add_modifier, theme.host_connecting.add_modifier);
-        let (line, style) = status_line(&mut panel, HostStatus::Stalled);
-        assert_eq!(line, "… web: Retry or Cancel?");
-        assert_eq!(style.add_modifier, theme.host_failed.add_modifier);
+        let mut panel = loaded("/srv", listing());
+        let ([title, _], _) = waiting_lines(&mut panel, HostStatus::Idle);
+        assert!(title.starts_with("╔ / /srv "), "{title}");
+        panel.go(Destination::to(remote("web", "")));
+        let ([title, status], [dots, path]) = waiting_lines(&mut panel, HostStatus::Connecting);
+        assert_eq!(title, "╔ … web ══════╤═══════╤════════════════╗");
+        assert_eq!(status, "║..                                    ║");
+        let title_style = theme.panel_title_active;
+        // The colors a cell shows, which cells keep with every color reset that no style sets.
+        let shown = |style: Style| {
+            let style = Style::reset().patch(style);
+            (style.fg, style.add_modifier)
+        };
+        assert_eq!(shown(dots), shown(title_style.patch(theme.host_connecting)));
+        assert_eq!(shown(path), shown(title_style));
+        // A host that does not answer asks on the status line too.
+        let ([title, status], [dots, _]) = waiting_lines(&mut panel, HostStatus::Stalled);
+        assert!(title.starts_with("╔ … web "), "{title}");
+        assert_eq!(status, "║web: Retry or Cancel?                 ║");
+        assert_eq!(shown(dots), shown(title_style.patch(theme.host_failed)));
+        // Listing a host that is connected, the dots are busy as any other.
+        let ([title, _], [dots, _]) = waiting_lines(&mut panel, HostStatus::Connected);
+        assert!(title.starts_with("╔ … web "), "{title}");
+        assert_eq!(shown(dots), shown(title_style.patch(theme.busy)));
 
         let mut panel = loaded("/srv", listing());
-        panel.handle(Action::Reload);
-        let (line, _) = status_line(&mut panel, HostStatus::Idle);
-        assert_eq!(line, "… Reading the directory…");
+        panel.go(Destination::to(local("/srv/photos")));
+        let ([title, _], _) = waiting_lines(&mut panel, HostStatus::Idle);
+        assert!(title.starts_with("╔ … /srv/photos "), "{title}");
+        // What it lists keeps its last directories where it does not fit.
+        let terminal = render_with(
+            &mut panel,
+            (14, 6),
+            true,
+            &|_| HostState::default(),
+            Decor::new(false),
+        );
+        let title: String = (0..14)
+            .map(|x| terminal.backend().buffer()[(x, 0)].symbol())
+            .collect();
+        assert_eq!(title, "╔ … «/photos ╗");
+        // Given up, the title shows where it is again, its icon back.
+        panel.cancel();
+        let ([title, _], _) = waiting_lines(&mut panel, HostStatus::Idle);
+        assert!(title.starts_with("╔ / /srv "), "{title}");
+    }
+
+    #[test]
+    fn a_panel_on_a_host_shows_its_status_in_front_of_the_path() {
+        let theme = Theme::terminal();
+        let mut panel = loaded_at(remote("db", "/srv"), Listing::Dir(listing()));
+        let ([title, _], [icon, _]) = waiting_lines(&mut panel, HostStatus::Connected);
+        assert!(title.starts_with("╔ ● db:/srv "), "{title}");
+        assert_eq!(
+            Style::reset().patch(icon).add_modifier,
+            Style::reset()
+                .patch(theme.panel_title_active.patch(theme.host_connected))
+                .add_modifier
+        );
+        let ([title, _], _) = waiting_lines(&mut panel, HostStatus::Failed);
+        assert!(title.starts_with("╔ ✗ db:/srv "), "{title}");
     }
 
     #[test]
@@ -3798,8 +3875,8 @@ mod tests {
             .draw(|frame| panel.render(frame, frame.area(), true, &view))
             .unwrap();
         let buffer = terminal.backend().buffer();
-        let line: String = (1..39).map(|x| buffer[(x, 4)].symbol()).collect();
-        assert_eq!(line.trim(), "");
+        let title: String = (0..40).map(|x| buffer[(x, 0)].symbol()).collect();
+        assert!(title.starts_with("╔ / /srv "), "{title}");
         assert_eq!(
             panel.wait().and_then(Wait::shows),
             Some(now + spinner::DELAY)
@@ -3819,8 +3896,8 @@ mod tests {
         assert!(panel.marked.is_empty());
         let request = panel.pending_request().unwrap();
         assert_eq!(request.location, remote("db", "/srv"));
-        let (line, _) = status_line(&mut panel, HostStatus::Stalled);
-        assert_eq!(line, "… db: Retry or Cancel?");
+        let ([_, line], _) = waiting_lines(&mut panel, HostStatus::Stalled);
+        assert_eq!(line, "║db: Retry or Cancel?                  ║");
         answer(&mut panel, &request, Listing::Dir(listing()));
         assert_eq!(under_cursor(&panel), "zeta.txt", "back on its entry");
         assert!(!panel.disconnected);
@@ -3828,8 +3905,8 @@ mod tests {
         // Cancel: the panel stays, without its entries, until it reads the directory again.
         panel.lose_host("db");
         panel.cancel();
-        let (line, _) = status_line(&mut panel, HostStatus::Failed);
-        assert_eq!(line, "Not connected to db; Ctrl+r connects");
+        let ([_, line], _) = waiting_lines(&mut panel, HostStatus::Failed);
+        assert_eq!(line, "║Not connected to db; Ctrl+r connects  ║");
         let request = panel.handle(Action::Reload).unwrap();
         assert_eq!(request.location, remote("db", "/srv"));
     }
@@ -4445,10 +4522,10 @@ mod tests {
 
     #[test]
     fn column_lines_leave_the_title_whole() {
-        let mut panel = loaded("/srv/some-directory", listing());
+        let mut panel = loaded("/srv/some-dir", listing());
         let text = draw(&mut panel, 40, 12, true).to_string();
         let top = text.lines().next().unwrap_or_default();
-        assert!(top.contains(" /srv/some-directory "), "{text}");
+        assert!(top.contains(" /srv/some-dir "), "{text}");
         assert_eq!(top.matches('╤').count(), 1, "only past the title: {text}");
     }
 

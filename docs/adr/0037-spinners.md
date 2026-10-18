@@ -23,17 +23,26 @@ too, which some users want and others do not, apart from windows.
 ## Decision
 
 - **One spinner, always with its text.** `tui/spinner.rs` draws every spinner in the app, and
-  each says what it waits for after it: `Reading the directory on web…`, `Connecting to web…`,
-  `Looking for volumes and hosts…`, `Asking zoxide…`, `Reading the file…`. The texts are in the
-  Fluent files, as any other.
+  each says what it waits for after it: `Looking for volumes and hosts…`, `Asking zoxide…`,
+  `Reading the file…`. The texts are in the Fluent files, as any other.
 - **A scanner.** Eight cells, a lit block that runs from one end to the other and
   back, with a trail that fades behind it, and a pause at each end, 40 ms a step. The trail is
   one color, `busy` of the theme (`busy_dialog` in dialogs), blended into the background:
   brighter at the head, fading to 30% in the pause. Where the colors are not known (the low 16,
   the terminal's own), the head is bold, the next two cells plain, and the rest dim. The blocks
   are `■` and `⬝` with icons, `■` and `·` without.
-- **Braille dots where one cell is all there is.** The icon of a host connecting in the location
-  menu turns through `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, 80 ms each; `|/-\` without icons.
+- **Braille dots where one cell is all there is.** They turn through `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, 80 ms
+  each; `|/-\` without icons. The icon of a host connecting in the location menu turns them.
+- **A panel waits in its title.** The title has one cell in front of the path: the icon of a
+  folder, or of a host in the color of its status; without icons mc's `/` or the host's marker.
+  While a panel reads a directory, the dots turn in that cell, so the path never moves when they
+  come and go, and the title shows the path it reads, `⠹ web:/var/www`, at once: the path says
+  what it waits for, which the old one would not, and the status line under the rows keeps the
+  name under the cursor. The dots take the color of the host's status while it connects or does
+  not answer, so connecting and reading look apart without a word that would take the room of the
+  path. A host that does not
+  answer still asks `web: Retry or Cancel?` on the status line, in the colors of errors: it is a
+  question, not a wait. A reading that fails puts the old path back.
 - **Shown after 150 ms.** A `Wait`, kept by what waits, remembers the first frame that drew it;
   the spinner and its text show only from 150 ms later, so quick work shows nothing. A job's
   window, which shows whole, draws its spinner at once.

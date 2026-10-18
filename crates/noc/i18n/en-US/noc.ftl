@@ -101,13 +101,7 @@ panel-rename = Rename: { $name }
 # icons), and its target as stored in the link, which must end the text: it is cut at its start
 # where the line is too short.
 panel-link = { $name } { $arrow } { $target }
-# Status line, after a spinner, while a local directory is read.
-panel-reading = Reading the directory…
-# The same on a host that is connected.
-panel-reading-on = Reading the directory on { $host }…
-# Status line, after a spinner, while the panel waits for a connection to a host; Esc stops it.
-panel-connecting = Connecting to { $host }…
-# Status line, after a spinner, while a dialog asks whether to connect to the host again.
+# Status line, in the colors of errors, while a dialog asks whether to connect to the host again.
 panel-host-waiting = { $host }: Retry or Cancel?
 # Status line of a panel on a host that is not connected, which shows none of its entries;
 # reading the directory again connects. The second one names the key that does it.

@@ -1,7 +1,8 @@
 //! The spinner in front of what Noon Commander waits for: a scanner of eight cells whose head
-//! sweeps to and fro with a trail that fades behind it, resting at each end; where there is room for one cell only, dots that turn. A wait shows nothing for its
-//! first moment, so that one that ends at once, such as a small local directory, does not
-//! flicker. Frames go by the time, not by how often the screen is drawn.
+//! sweeps to and fro with a trail that fades behind it, resting at each end; where there is
+//! room for one cell only, dots that turn. A wait shows nothing for its first moment, so that
+//! one that ends at once, such as a small local directory, does not flicker. Frames go by the
+//! time, not by how often the screen is drawn.
 
 use std::cell::Cell;
 use std::time::{Duration, Instant};
@@ -111,13 +112,24 @@ impl Spin {
         spans
     }
 
+    /// The dots of `wait` in one cell, from when they show; `None` while the wait is too young
+    /// to show.
+    pub(crate) fn wait_dots(&self, wait: &Wait) -> Option<char> {
+        let since = wait.since(self.at);
+        let shown = self.at.checked_duration_since(since)?.checked_sub(DELAY)?;
+        Some(self.dots_after(shown))
+    }
+
     /// The dots in one cell, at their frame now, or the still mark.
     pub(crate) fn dots(&self) -> char {
+        self.dots_after(self.at.saturating_duration_since(self.epoch))
+    }
+
+    fn dots_after(&self, elapsed: Duration) -> char {
         if !self.turns {
             return self.glyphs.still;
         }
         let dots = self.glyphs.dots;
-        let elapsed = self.at.saturating_duration_since(self.epoch);
         dots.get(frame_of(elapsed, DOTS_FRAME, dots.len()))
             .copied()
             .unwrap_or(self.glyphs.still)
@@ -340,5 +352,18 @@ mod tests {
         let plain = Spin::new(start + DOTS_FRAME, start, true, Glyphs::PLAIN.spinners);
         assert_eq!(plain.dots(), '/');
         assert_eq!(spin(start, false).dots(), '⋯');
+    }
+
+    #[test]
+    fn the_dots_of_a_wait_turn_from_when_they_show() {
+        let start = Instant::now();
+        let wait = Wait::default();
+        assert_eq!(spin(start, true).wait_dots(&wait), None);
+        let almost = start + DELAY.saturating_sub(Duration::from_millis(1));
+        assert_eq!(spin(almost, true).wait_dots(&wait), None);
+        assert_eq!(spin(start + DELAY, true).wait_dots(&wait), Some('⠋'));
+        let next = start + DELAY + DOTS_FRAME;
+        assert_eq!(spin(next, true).wait_dots(&wait), Some('⠙'));
+        assert_eq!(spin(next, false).wait_dots(&wait), Some('⋯'));
     }
 }

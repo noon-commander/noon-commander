@@ -13,7 +13,8 @@ use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Cut};
 use super::dialog::{
-    Colors, Field, draw_box, draw_separator, draw_title_dots, frame_around, right_frame,
+    Colors, Field, SKELETON_ROWS, draw_box, draw_separator, draw_skeleton, draw_title_dots,
+    frame_around, right_frame, rows_area,
 };
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::{Drawn, Pointer};
@@ -92,8 +93,10 @@ pub(crate) struct Body<'a> {
     /// Shown in place of the lines, such as why the rows did not load; without, a note that
     /// nothing matches once the filter hides every row.
     pub(crate) message: Option<String>,
-    /// Whether the rows are still to come: nothing shows in their place.
+    /// Whether the rows are still to come: a skeleton stands in their place.
     pub(crate) waiting: bool,
+    /// How far the shine has crossed the skeleton, per mille; none while it rests.
+    pub(crate) shine: Option<u16>,
     /// Turning in front of the title while the window waits, in their color.
     pub(crate) dots: Option<(char, Style)>,
     /// Lines under the rows, apart from them, such as the whole command under the cursor.
@@ -101,6 +104,18 @@ pub(crate) struct Body<'a> {
     /// The whole text of the row under the cursor, which shows under the rows while `K` asks
     /// for it, in the place of a footer.
     pub(crate) full: Option<String>,
+}
+
+impl Body<'_> {
+    /// Lines the box has for the rows: those of the skeleton while they are still to come.
+    fn shown(&self) -> u16 {
+        let lines = if self.waiting {
+            SKELETON_ROWS
+        } else {
+            u16::try_from(self.lines.len().max(1)).unwrap_or(u16::MAX)
+        };
+        lines.min(self.max_lines.unwrap_or(u16::MAX))
+    }
 }
 
 /// A row to draw.
@@ -425,9 +440,7 @@ impl Picker {
         row: &mut dyn FnMut(ShownRow) -> Line<'static>,
     ) {
         let lines = body.lines;
-        let shown = u16::try_from(lines.len().max(1))
-            .unwrap_or(u16::MAX)
-            .min(body.max_lines.unwrap_or(u16::MAX));
+        let shown = body.shown();
         let full = body
             .full
             .filter(|_| self.full == Whole::Shown && body.footer.is_empty() && !lines.is_empty());
@@ -459,6 +472,7 @@ impl Picker {
         self.page = usize::from(inner.height.saturating_sub(2 + below)).max(1);
         let rows = self.len();
         if body.waiting {
+            draw_skeleton(frame, rows_area(inner, below), theme, body.shine);
             return;
         }
         let message = body.message.or_else(|| self.nothing());

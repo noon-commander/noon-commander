@@ -66,6 +66,8 @@ pub(crate) struct Glyphs {
     pub(crate) network_volume: &'static str,
     pub(crate) hosts: Hosts,
     pub(crate) spinners: Spinners,
+    /// The bars of a skeleton, which stand where rows are still to come.
+    pub(crate) skeleton: char,
     /// On the line of the mode while Noon Commander runs as root.
     pub(crate) root: char,
     pub(crate) scroll_bar: BarGlyphs,
@@ -114,6 +116,7 @@ impl Glyphs {
             dots: &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],
             still: '⋯',
         },
+        skeleton: '▬',
         // nf-md-shield_account.
         root: '󰢏',
         scroll_bar: BarGlyphs {
@@ -173,6 +176,7 @@ impl Glyphs {
             dots: &['|', '/', '-', '\\'],
             still: '…',
         },
+        skeleton: '-',
         // The prompt of root's shell.
         root: '#',
         scroll_bar: BarGlyphs {
@@ -338,7 +342,12 @@ mod tests {
                 3
             );
             let spinners = glyphs.spinners;
-            let still = [spinners.lit, spinners.unlit, spinners.still];
+            let still = [
+                spinners.lit,
+                spinners.unlit,
+                spinners.still,
+                glyphs.skeleton,
+            ];
             for glyph in spinners.dots.iter().chain(&still) {
                 assert_eq!(noc_text::width(&glyph.to_string()), 1, "{glyph:?}");
             }

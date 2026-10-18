@@ -26,7 +26,7 @@ use super::keymap::{Action, Context, Extra, Mode, Resolved, Typed};
 use super::label::{self, Label};
 use super::mouse::{Pointer, Press, Scroll};
 use super::scroll::Window;
-use super::theme::Theme;
+use super::theme::{self, Theme};
 use crate::i18n::fl;
 
 /// Bytes a secret may have. Reserved up front, so typing never moves it in memory and leaves
@@ -1737,6 +1737,63 @@ pub(crate) fn draw_title_dots(
     frame.render_widget(line, area);
 }
 
+/// Where the rows go in `inner`, the room inside a window's box: under its first line and the
+/// line under that, above the last `below` lines.
+pub(crate) fn rows_area(inner: Rect, below: u16) -> Rect {
+    let height = inner.height.saturating_sub(2 + below);
+    Rect::new(inner.x, inner.y + 2, inner.width, height)
+}
+
+/// Rows a window shows while its first ones are still to come.
+pub(crate) const SKELETON_ROWS: u16 = 1;
+
+/// Draws a skeleton on the first line of `area`, where rows are still to come: a faint bar on
+/// the left for a name and one on the right for what is known of it. A shine `shine` per mille
+/// of the way across, if any, crosses both bars at once, lighting them where it passes.
+pub(crate) fn draw_skeleton(frame: &mut Frame<'_>, area: Rect, theme: &Theme, shine: Option<u16>) {
+    // Twelfths of the width: of the bar on the left, of the one on the right.
+    const BARS: (u16, u16) = (6, 3);
+    // How much of the color of text shows: in the bars, in the middle of the shine; per mille.
+    const FAINT: u16 = 250;
+    const BRIGHT: u16 = 650;
+    // Cells from the middle of the shine to where it fades out.
+    const HALF: u16 = 5;
+    if area.width < 8 || area.height == 0 {
+        return;
+    }
+    let shade = |alpha: u16| match (theme.dialog.fg, theme.dialog.bg) {
+        (Some(fg), Some(bg)) => theme::blend(fg, bg, (1000, alpha)).map(|fg| theme.dialog.fg(fg)),
+        _ => None,
+    };
+    let faint = shade(FAINT).unwrap_or_else(|| theme.dialog.add_modifier(Modifier::DIM));
+    // A bar of `length` cells; the shine comes in and goes out past its ends.
+    let bar = |length: u16| {
+        let middle = shine.map(|shine| {
+            let path = u32::from(length) + 2 * u32::from(HALF);
+            i64::from(path * u32::from(shine.min(1000)) / 1000) - i64::from(HALF)
+        });
+        (0..length).map(move |x| {
+            let near = middle
+                .map(|middle| (i64::from(x) - middle).unsigned_abs())
+                .filter(|distance| *distance < u64::from(HALF));
+            let style = near.map_or(faint, |distance| {
+                let distance = u16::try_from(distance).unwrap_or(HALF);
+                shade(BRIGHT - (BRIGHT - FAINT) * distance / HALF).unwrap_or(theme.dialog)
+            });
+            Span::styled(theme.glyphs.skeleton.to_string(), style)
+        })
+    };
+    let (left, right) = (area.width * BARS.0 / 12, area.width * BARS.1 / 12);
+    let line: Line<'_> = bar(left)
+        .chain([Span::styled(
+            " ".repeat(usize::from(area.width - left - right)),
+            theme.dialog,
+        )])
+        .chain(bar(right))
+        .collect();
+    frame.render_widget(line, Rect::new(area.x, area.y, area.width, 1));
+}
+
 /// What of `field` fits in `room` cells, in the color of fields, what Visual mode selects
 /// reversed; and the cursor's column.
 pub(crate) fn field_line(field: &Field, room: usize, theme: &Theme) -> (Line<'static>, usize) {
@@ -1770,6 +1827,7 @@ mod tests {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
     use ratatui::buffer::Buffer;
+    use ratatui::style::Color;
     use secrecy::ExposeSecret as _;
 
     use super::*;
@@ -1798,6 +1856,50 @@ mod tests {
 
     fn draw(dialog: &Dialog, width: u16, height: u16) -> Terminal<TestBackend> {
         draw_themed(dialog, width, height, &Theme::terminal())
+    }
+
+    fn skeleton_colors(shine: Option<u16>) -> Vec<Option<Color>> {
+        let mut theme = Theme::terminal();
+        theme.dialog = Style::new()
+            .fg(Color::Rgb(255, 255, 255))
+            .bg(Color::Rgb(0, 0, 0));
+        let mut terminal = Terminal::new(TestBackend::new(30, 1)).unwrap();
+        terminal
+            .draw(|frame| draw_skeleton(frame, frame.area(), &theme, shine))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        (0..30).map(|x| buffer[(x, 0)].style().fg).collect()
+    }
+
+    #[test]
+    fn a_skeleton_lights_its_bars_where_the_shine_passes() {
+        let faint = Some(Color::Rgb(64, 64, 64));
+        let still = skeleton_colors(None);
+        // Bars of 15 and 7 cells, the gap between them in the color of the dialog.
+        assert!(
+            still[..15]
+                .iter()
+                .chain(&still[23..])
+                .all(|fg| *fg == faint)
+        );
+        assert!(
+            still[15..23]
+                .iter()
+                .all(|fg| *fg == Some(Color::Rgb(255, 255, 255)))
+        );
+        assert_eq!(
+            skeleton_colors(Some(0)),
+            still,
+            "the shine comes in from the left"
+        );
+        // Half the way across, its middle is on cell 7 of the left bar and cell 3 of the right
+        // one: both shine at once.
+        let shining = skeleton_colors(Some(500));
+        let brightest = Some(Color::Rgb(166, 166, 166));
+        assert_eq!(shining[7], brightest);
+        assert_eq!(shining[23 + 3], brightest);
+        assert_eq!(shining[8], Some(Color::Rgb(145, 145, 145)));
+        assert_eq!(shining[..3], still[..3]);
     }
 
     fn draw_themed(

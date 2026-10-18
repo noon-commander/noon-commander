@@ -19,6 +19,9 @@ pub(crate) const DELAY: Duration = Duration::from_millis(150);
 pub(crate) const SCANNER_FRAME: Duration = Duration::from_millis(40);
 /// How long each frame of the dots shows.
 pub(crate) const DOTS_FRAME: Duration = Duration::from_millis(80);
+/// How long the shine takes to cross a skeleton, and how long it rests before the next.
+const SWEEP: Duration = Duration::from_millis(1200);
+const SWEEP_REST: Duration = Duration::from_millis(400);
 
 /// Cells of the scanner.
 const WIDTH: usize = 8;
@@ -123,6 +126,19 @@ impl Spin {
     /// The dots in one cell, at their frame now, or the still mark.
     pub(crate) fn dots(&self) -> char {
         self.dots_after(self.at.saturating_duration_since(self.epoch))
+    }
+
+    /// How far the shine has crossed the skeleton of `wait`, per mille, from when its dots show
+    /// on; none before, while the shine rests between sweeps, or without `animations.spinners`.
+    pub(crate) fn shine(&self, wait: &Wait) -> Option<u16> {
+        let since = wait.since(self.at);
+        let elapsed = self.at.checked_duration_since(since)?.checked_sub(DELAY)?;
+        if !self.turns {
+            return None;
+        }
+        let into = elapsed.as_millis() % (SWEEP + SWEEP_REST).as_millis();
+        let sweep = SWEEP.as_millis();
+        (into < sweep).then(|| u16::try_from(into * 1000 / sweep).unwrap_or(1000))
     }
 
     fn dots_after(&self, elapsed: Duration) -> char {
@@ -365,5 +381,27 @@ mod tests {
         let next = start + DELAY + DOTS_FRAME;
         assert_eq!(spin(next, true).wait_dots(&wait), Some('⠙'));
         assert_eq!(spin(next, false).wait_dots(&wait), Some('⋯'));
+    }
+
+    #[test]
+    fn the_shine_crosses_from_when_the_dots_show_and_rests_between_sweeps() {
+        let start = Instant::now();
+        let wait = Wait::default();
+        assert_eq!(spin(start, true).shine(&wait), None);
+        let almost = start + DELAY.saturating_sub(Duration::from_millis(1));
+        assert_eq!(spin(almost, true).shine(&wait), None);
+        let shown = start + DELAY;
+        assert_eq!(spin(shown, true).shine(&wait), Some(0));
+        assert_eq!(
+            spin(shown, true).wait_dots(&wait),
+            Some('⠋'),
+            "with the dots"
+        );
+        let half = shown + SWEEP / 2;
+        assert_eq!(spin(half, true).shine(&wait), Some(500));
+        assert_eq!(spin(half, false).shine(&wait), None);
+        assert_eq!(spin(shown + SWEEP, true).shine(&wait), None);
+        let next = shown + SWEEP + SWEEP_REST;
+        assert_eq!(spin(next, true).shine(&wait), Some(0));
     }
 }

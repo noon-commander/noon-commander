@@ -17,7 +17,8 @@ use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Cut};
 use super::dialog::{
-    Colors, Field, draw_box, draw_separator, draw_title_dots, frame_around, right_frame,
+    Colors, Field, SKELETON_ROWS, draw_box, draw_separator, draw_skeleton, draw_title_dots,
+    frame_around, right_frame, rows_area,
 };
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::{Drawn, Pointer};
@@ -349,6 +350,16 @@ impl JumpMenu {
             .scroll_to(top, &mut self.cursor, rows, self.page.max(1));
     }
 
+    /// Lines the box has for the rows: those of the skeleton while they are still to come.
+    fn rows_shown(&self) -> u16 {
+        let rows = if self.loaded {
+            u16::try_from(self.rows.len().max(1)).unwrap_or(u16::MAX)
+        } else {
+            SKELETON_ROWS
+        };
+        rows.min(MAX_ROWS)
+    }
+
     fn draw(
         &self,
         frame: &mut Frame<'_>,
@@ -356,9 +367,7 @@ impl JumpMenu {
         theme: &Theme,
         spin: &Spin,
     ) -> (usize, usize, Window, Option<Bar>) {
-        let rows = u16::try_from(self.rows.len().max(1))
-            .unwrap_or(u16::MAX)
-            .min(MAX_ROWS);
+        let rows = self.rows_shown();
         let colors = Colors::of(theme, false);
         // A line between the rows and the whole directory under the cursor.
         let below = if self.full == Whole::Shown && !self.rows.is_empty() {
@@ -389,6 +398,8 @@ impl JumpMenu {
 
         let page = usize::from(inner.height.saturating_sub(2 + below)).max(1);
         if !self.loaded {
+            let shine = self.first_wait().and_then(|wait| spin.shine(wait));
+            draw_skeleton(frame, rows_area(inner, below), theme, shine);
             return (page, self.cursor, self.window, None);
         }
         let message = if let Some(error) = &self.error {
@@ -695,6 +706,8 @@ mod tests {
         let mut menu = JumpMenu::new(PathBuf::from("/home/me"), None, 1);
         let text = draw(&mut menu, 10);
         assert!(text.contains("═ … zoxide ═"), "{text}");
+        let bars = text.lines().filter(|line| line.contains("---")).count();
+        assert_eq!(bars, 1, "a skeleton of the rows to come: {text}");
         menu.found(1, Ok(Vec::new()));
         assert!(draw(&mut menu, 10).contains("zoxide knows no directory"));
         menu.found(1, Err("zoxide is not installed".to_owned()));

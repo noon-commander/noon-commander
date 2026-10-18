@@ -378,6 +378,10 @@ impl LocationMenu {
             .wait()
             .and_then(|wait| spin.wait_dots(wait))
             .map(|dots| (dots, theme.busy_dialog));
+        let shine = self
+            .wait()
+            .filter(|_| waiting)
+            .and_then(|wait| spin.shine(wait));
         let note = self.note(theme);
         let widest = items
             .iter()
@@ -402,6 +406,7 @@ impl LocationMenu {
             note,
             message,
             waiting,
+            shine,
             dots,
             full,
             ..Body::default()
@@ -1118,6 +1123,12 @@ mod tests {
             .unwrap_or_default();
         let column = |line: &str| line.find(" Right ").map(|at| line[..at].chars().count());
         assert_eq!(column(title), column(still), "the title stays in place");
+    }
+
+    #[test]
+    fn a_menu_waiting_for_its_rows_shows_a_skeleton_of_them() {
+        let mut menu = LocationMenu::new(Side::Right, home(), PathBuf::from("/Users/me"), 1);
+        insta::assert_snapshot!(draw(&mut menu, 10));
     }
 
     #[test]

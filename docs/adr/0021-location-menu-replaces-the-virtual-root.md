@@ -61,7 +61,7 @@ gave:
   status line; after a lost connection, the panels stay on the host without entries until
   Ctrl+r, or Enter on `..`, connects again. F8 on a connected host leaves its panels the same
   way, without a dialog. [ADR 0039](0039-errors-of-panels-in-dialogs.md) moves the reason and the
-  way to connect from the status line to dialogs.
+  way to connect from the status line to dialogs, and keeps the entries, toned down.
 - **Workspaces** no longer write `root` or `sftp`; read, both mean `~`. A location that
   `workspaces.toml` cannot hold is saved as the nearest directory above it that it can, or else
   as `~`.

@@ -164,11 +164,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   under the panel, with ways out: OK stays, Retry reads it again, Up goes to the nearest parent
   that is there, and Go to opens Quick cd with the path. A directory gone under the panel has Up
   as its default ([ADR 0039](docs/adr/0039-errors-of-panels-in-dialogs.md)).
-- A key in a panel on a host that is not connected asks, `Not connected to web`, with Connect,
-  Local (the panel's last local directory), and Cancel; `R` still connects at once. The status
-  line no longer says `web: Retry or Cancel?` while the Connection dialog asks, nor
-  `Not connected to web; R connects`, and Cancel in the Connection dialog no longer leaves
-  `Cannot open web: reason` behind.
+- A panel on a host that is no longer connected, after a lost connection or a disconnection,
+  keeps its entries, cursor, and marks, toned down, instead of emptying: the cursor moves, quick
+  search, sorting, and marks work on them. A key that needs the host asks, `Not connected to
+  web`, with Connect, Local (the panel's last local directory), and Cancel; `R` still connects
+  at once. The status line no longer says `web: Retry or Cancel?` while the Connection dialog
+  asks, nor `Not connected to web; R connects`, and Cancel in the Connection dialog no longer
+  leaves `Cannot open web: reason` behind.
+- The status line no longer says `Rename: name` during a rename in the row; it shows the name
+  and size of the entry as ever.
 - The lists (the location menu, the tab menu, the Workspaces window, the command history, and the
   list of the key hints) open in Insert mode with their filter taking what is typed, as the
   zoxide window does: Esc goes to the rows, in Normal mode, where `j`, `k`, `d d`, and `q` work,

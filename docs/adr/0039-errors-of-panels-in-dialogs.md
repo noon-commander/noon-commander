@@ -15,7 +15,10 @@ that went wrong:
   gone under the panel left it there, empty, with nothing to do but find a way up by hand.
 - `web: Retry or Cancel?`, while the Connection dialog asked the same.
 - `Not connected to web; R connects`, in a panel left on a host after Cancel or a disconnection.
-  Every other key did nothing there, without a word.
+  The panel had dropped its entries, and every other key did nothing there, without a word.
+
+Over the name under the cursor, a rename in its row also wrote `Rename: name`, the name the
+field over the row had started from.
 
 A line at the bottom is easy to miss, and once seen it does not say what to do. mc and Far
 report a directory they cannot enter in a dialog, and go up without asking when the directory of
@@ -41,16 +44,27 @@ a panel is gone.
 - **No status line for hosts.** While the Connection dialog asks, the status line of a waiting
   panel shows the name under the cursor, as any panel; the dots in its title show the wait.
   Cancel in it leaves no second dialog: the panels that were to open the host stay where they
-  were, and those on it stay there without entries.
-- **A key in a panel on a host that is not connected asks**: Connection, `Not connected to web`,
-  with Connect, the default, which reads the directory again, Local, which goes to the last
-  local directory of the panel's jump list or else the home directory, and Cancel. The keys that
-  do not touch the panel's entries work as ever: other panels and tabs, menus, help, the jobs,
-  Quit, Quick cd, the jump list, workspaces, hidden files. `R` connects without asking. The
-  status line of such a panel is empty. F8 and Disconnect still ask nothing.
+  were, and those on it stay there.
+- **A panel on a host that is not connected keeps its entries, toned down**: after a lost
+  connection, Cancel, F8, or Disconnect, its rows, status line, total of the marked entries, and
+  totals on the frame are dim, without bold, over the colors they had (`Theme::offline`); the
+  frame, title, and headers are not. The cursor and the marks stay. They may be gone by now; dim
+  says so without hiding where the panel was. A rename in its row ends. A panel that never read
+  its directory has nothing to keep.
+- **The keys that look through them work**: moving the cursor and scrolling, quick search,
+  sorting, marking and Visual mode (`works_offline` in `app.rs`). Reading the directory again
+  keeps the marks on names still there, as `R` does.
+- **A key that needs the host asks**: Connection, `Not connected to web`, with Connect, the
+  default, which reads the directory again, Local, which goes to the last local directory of
+  the panel's jump list or else the home directory, and Cancel. So do the keys of the previous
+  point in a panel with no entries. The keys that do not touch the panel's entries work as
+  ever: other panels and tabs, menus, help, the jobs, Quit, Quick cd, the jump list,
+  workspaces, hidden files. `R` connects without asking. F8 and Disconnect still ask nothing.
+- **A rename shows the status line as ever**, with the name and size of the entry; the field
+  over the row shows the new name.
 
-This amends ADR 0021, whose panels on a host said the reason and how to connect in their status
-line, and ADR 0037, whose status line asked `web: Retry or Cancel?`.
+This amends ADR 0021, whose panels on a host dropped their entries and said the reason and how
+to connect in their status line, and ADR 0037, whose status line asked `web: Retry or Cancel?`.
 
 ## Consequences
 
@@ -58,5 +72,7 @@ line, and ADR 0037, whose status line asked `web: Retry or Cancel?`.
   Enter from a directory that is there.
 - A failure costs a key to close, which the status line did not. Listings read again in the
   background can open a dialog; there is one per panel at most.
-- The status line only describes the entry under the cursor, the rename, or quick search.
+- The status line only describes the entry under the cursor, or quick search.
+- A panel cut off from its host still shows what was there, and only the keys that need the
+  host ask; dim is the one sign, which a terminal without it does not show, but the dialog does.
 - Typed errors reach the panel, so other kinds can choose their own buttons later.

@@ -95,8 +95,6 @@ panel-dir = DIR
 panel-search = Search { $mode }: { $text }
 # Status line during quick search up the rows, as vim's ?: the same.
 panel-search-back = Search up { $mode }: { $text }
-# Status line while the entry under the cursor is renamed in its row: its name until now.
-panel-rename = Rename: { $name }
 # Status line with a symlink under the cursor: its name, an arrow (a Nerd Font glyph, or -> without
 # icons), and its target as stored in the link, which must end the text: it is cut at its start
 # where the line is too short.

@@ -6453,7 +6453,7 @@ impl App {
     }
 
     /// Closes the connection to `host`, or stops connecting to it. Panels on that host stay
-    /// there, without their entries, until they read their directories again.
+    /// there, with their entries toned down, until they read their directories again.
     fn disconnect(&mut self, host: &str) {
         let Some(state) = self.hosts.remove(host) else {
             return;
@@ -6610,13 +6610,14 @@ impl App {
         self.open(panel, request)
     }
 
-    /// Asks what to do instead of `action` in the panel on `side`, if it needs the panel's
-    /// entries and the panel is on a host that is not connected.
+    /// Asks what to do instead of `action` in the panel on `side`, if it needs the host of the
+    /// panel and the host is not connected. The entries the panel kept can be looked through.
     fn ask_connect(&mut self, side: Side, action: Action) -> bool {
-        if works_unconnected(action) {
+        let panel = self.panel(side);
+        if works_unconnected(action) || (works_offline(action) && panel.has_entries()) {
             return false;
         }
-        let Some(host) = self.panel(side).not_connected() else {
+        let Some(host) = panel.not_connected() else {
             return false;
         };
         let message = fl!(
@@ -6782,8 +6783,8 @@ impl App {
     }
 
     /// Stops waiting for `host`, which could not be reached for `reason`, after Cancel: the
-    /// panels that were to open it stay where they were; those on it stay there without their
-    /// entries, until a key in one asks to connect. The dialog said why already.
+    /// panels that were to open it stay where they were; those on it stay there with their
+    /// entries toned down, until a key in one asks to connect. The dialog said why already.
     fn give_up(&mut self, host: &str, reason: &str) {
         if !matches!(self.hosts.get(host), Some(Host::Stalled { .. })) {
             return;
@@ -7756,6 +7757,48 @@ fn works_unconnected(action: Action) -> bool {
             | Action::SaveWorkspace
             | Action::Workspaces
             | Action::ToggleHidden
+    )
+}
+
+/// Whether `action` only looks through the entries a panel kept from a host that is not
+/// connected: it moves the cursor or scrolls, searches, sorts, marks, or selects.
+fn works_offline(action: Action) -> bool {
+    matches!(
+        action,
+        Action::Up
+            | Action::Down
+            | Action::PageUp
+            | Action::PageDown
+            | Action::HalfPageUp
+            | Action::HalfPageDown
+            | Action::Home
+            | Action::End
+            | Action::ScrollLeft
+            | Action::ScrollRight
+            | Action::ScrollHalfLeft
+            | Action::ScrollHalfRight
+            | Action::ScrollStart
+            | Action::ScrollEnd
+            | Action::ShowFull
+            | Action::QuickSearch
+            | Action::QuickSearchBack
+            | Action::NextMatch
+            | Action::PrevMatch
+            | Action::SearchMode
+            | Action::Abort
+            | Action::SortByName
+            | Action::SortByExtension
+            | Action::SortByTime
+            | Action::SortBySize
+            | Action::Mark
+            | Action::MarkUp
+            | Action::InvertMarks
+            | Action::Select
+            | Action::Unselect
+            | Action::VisualMode
+            | Action::VisualLineMode
+            | Action::OtherEnd
+            | Action::Reselect
     )
 }
 
@@ -11357,7 +11400,7 @@ mod tests {
     }
 
     #[test]
-    fn a_lost_connection_empties_its_panels_and_asks_to_retry() {
+    fn a_lost_connection_tones_down_its_panels_and_asks_to_retry() {
         let mut app = at_slash();
         let Effect::Connect {
             connection, stop, ..
@@ -11376,7 +11419,7 @@ mod tests {
         );
         assert!(!stop.is_cancelled(), "it ended on its own");
         let text = screen_of(&mut app, 20);
-        assert!(!text.contains("www"), "{text}");
+        assert!(text.contains("www"), "the entries stay: {text}");
         assert!(
             text.contains("Lost the connection to web: Broken pipe"),
             "{text}"
@@ -11397,12 +11440,14 @@ mod tests {
         answer(&mut app, effects, &Listing::Dir(vec![dir("www")]));
         assert!(screen(&mut app).contains("www"));
 
-        // Cancel leaves the panel on the host, without its entries, until it reads it again.
+        // Cancel leaves the panel on the host, with its entries toned down, until it reads it
+        // again.
         app.closed("web", connection, Some("Broken pipe"));
         app.handle(action(Action::Cancel));
         assert!(app.dialogs.is_empty(), "the dialog said why already");
         assert_eq!(app.panel(Side::Left).not_connected(), Some("web"));
         let text = screen(&mut app);
+        assert!(text.contains("www"), "{text}");
         assert!(!text.contains("Cannot open"), "{text}");
         let Effect::Connect { .. } = one(app.handle(action(Action::Reload))) else {
             panic!("expected a new connection");
@@ -11437,7 +11482,7 @@ mod tests {
         );
         app.handle(action(Action::Cancel));
         let text = screen(&mut app);
-        assert!(!text.contains("www"), "{text}");
+        assert!(text.contains("www"), "the entries stay: {text}");
         assert_eq!(app.panel(Side::Left).not_connected(), Some("web"));
         assert!(app.dialogs.is_empty(), "asked for, so no dialog");
         assert_eq!(app.panel(Side::Left).location(), &remote("web", ""));
@@ -12696,7 +12741,7 @@ mod tests {
     }
 
     #[test]
-    fn disconnecting_empties_hidden_tabs_on_the_host_too() {
+    fn disconnecting_tones_down_hidden_tabs_on_the_host_too() {
         let mut app = at_slash();
         let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
             panic!("expected a connection");
@@ -12708,8 +12753,9 @@ mod tests {
         assert_eq!(app.left.len(), 2);
         for tab in app.left.iter_mut() {
             assert_eq!(tab.panel.location(), &remote("web", "/var/www"), "it stays");
+            assert_eq!(tab.panel.not_connected(), Some("web"));
             tab.panel.handle(Action::End);
-            assert_eq!(tab.panel.entry_under_cursor(), None, "without its entries");
+            assert!(tab.panel.entry_under_cursor().is_some(), "with its entries");
         }
     }
 
@@ -13269,7 +13315,8 @@ mod tests {
         app.handle(action(Action::Down));
         app.handle(action(Action::Rename));
         assert_eq!(app.context(), Context::Rename);
-        assert!(screen(&mut app).contains("Rename: report.pdf"));
+        let text = screen(&mut app);
+        assert!(!text.contains("Rename:"), "the status line as ever: {text}");
         retype(&mut app, "taken");
         let rename = one(app.handle(action(Action::Confirm)));
         let Effect::Rename {
@@ -14364,9 +14411,18 @@ mod tests {
         app.handle(action(Action::SwitchPanel));
         assert_eq!(app.active, Side::Left);
         assert!(app.dialogs.is_empty());
+        // So do those that look through the entries the panel kept.
+        assert!(app.handle(action(Action::Down)).is_empty());
+        assert!(app.handle(action(Action::Mark)).is_empty());
+        assert!(app.handle(action(Action::SortBySize)).is_empty());
+        assert!(app.handle(action(Action::Home)).is_empty());
+        assert!(app.dialogs.is_empty());
+        let panel = app.panel(Side::Left);
+        let chosen: Vec<&[u8]> = panel.chosen().iter().map(|e| e.name.as_slice()).collect();
+        assert_eq!(chosen, [b"app".as_slice()], "marked");
 
         // Any other asks; Connect, the default, reads the directory again.
-        assert!(app.handle(action(Action::Down)).is_empty());
+        assert!(app.handle(action(Action::Enter)).is_empty());
         let text = screen_of(&mut app, 12);
         assert!(text.contains("Not connected to web"), "{text}");
         let Effect::Connect { .. } = one(app.handle(action(Action::Confirm))) else {

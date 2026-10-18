@@ -151,23 +151,29 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
   `Cannot connect to web: reason` or `Lost the connection to web: reason`, with Retry (the
   default) and Cancel. While it is open, the panels that wait for the host keep waiting, with
   the dots in their titles in the color of a failed host.
-  On a lost connection, the panels on the host, in every tab, drop their entries at once and
-  wait to read the same directory, with the cursor where it was. Retry connects again, and the
-  waiting panels read their directories once it is connected. Cancel after a failed first
-  attempt leaves the panel where it was; after a lost connection, it leaves the panels on the
-  host without entries and with an empty status line. No second dialog says why again. Jobs on
-  a lost host end with it.
-- A key in a panel on a host that is not connected opens the dialog Connection,
-  `Not connected to web`, with Connect (the default), which reads the directory again, Local,
-  which goes to the last local directory of the panel's jump list or else the home directory,
-  and Cancel. Keys that do not touch the panel's entries work without it: other panels and tabs,
+  On a lost connection, the panels on the host, in every tab, keep their entries, toned down,
+  and wait to read the same directory, with the cursor where it was. Retry connects again, and
+  the waiting panels read their directories once it is connected, keeping the marks on names
+  still there. Cancel after a failed first attempt leaves the panel where it was; after a lost
+  connection, it leaves the panels on the host with their entries toned down. No second dialog
+  says why again. Jobs on a lost host end with it.
+- A panel on a host that is not connected draws what it kept dim, without bold, over its colors
+  (`Theme::offline`): rows, status line, the total of the marked entries, and the totals on the
+  frame, not the frame, title, or headers; quick search, being typed, is not dim. The cursor and
+  marks stay; a rename in its row ends.
+- In it, the keys that look through the entries work: moving the cursor and scrolling, quick
+  search, sorting, marking, Visual mode (`works_offline` in `app.rs`). A key that needs the host
+  opens the dialog Connection, `Not connected to web`, with Connect (the default), which reads
+  the directory again, Local, which goes to the last local directory of the panel's jump list or
+  else the home directory, and Cancel; so do the keys that look through entries where the panel
+  has none. Keys that do not touch the panel's entries work without it: other panels and tabs,
   menus, help, jobs, Quit, Quick cd, the jump list, workspaces, hidden files
-  (`works_unconnected` in `app.rs`). `R` connects at once
+  (`works_unconnected`). `R` connects at once
   ([ADR 0039](adr/0039-errors-of-panels-in-dialogs.md)).
 - F8 or `d d` in the location menu, or Disconnect in the menus of F9, closes the connection to a
-  host, or stops connecting to it. Panels on a connected host stay there without entries, as
-  after a lost connection, and no dialog asks; a panel that only waited for the host stays where
-  it was.
+  host, or stops connecting to it. Panels on a connected host stay there with their entries
+  toned down, as after a lost connection, and no dialog asks; a panel that only waited for the
+  host stays where it was.
 - A directory that cannot be read opens a dialog, Error, `Cannot open dir: reason`, and the
   panel keeps what it showed. OK stays; Retry reads it again; Up, where it leads elsewhere, goes
   to the nearest parent, on the directory it came from, past parents that are not there either;
@@ -1199,7 +1205,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   dotfile, or a name that ends with a dot), so that Ctrl+u takes away the rest of the name.
   Enter renames in every mode; Esc goes to Normal mode, where vim's motions and operators edit
   the name, and Esc there keeps the name; Ctrl+c keeps it in every mode; other panel keys do
-  nothing (`Context::Rename`). The status line shows the old name. An empty or unchanged name
+  nothing (`Context::Rename`). The status line stays as it was, with the old name and its size.
+  An empty or unchanged name
   renames nothing; one with `/` or NUL, or `.` or `..`, is an error and the field stays. A name
   that is not UTF-8 cannot be edited, which an error says: F6 renames it. `noc_ops::rename`
   checks the new name first: a directory's is an error, a file's asks in a red question with No

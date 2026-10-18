@@ -658,6 +658,12 @@ impl Theme {
         name.not_bold().dim()
     }
 
+    /// `style` toned down, for what a panel showed before its host was disconnected and may be
+    /// gone by now: dim over the colors it has, without bold, as [`Theme::icon`].
+    pub(crate) fn offline(style: Style) -> Style {
+        style.not_bold().dim()
+    }
+
     /// `style` for what says that what was typed is wrong, such as the glyph of the regex mode
     /// before a text that is no regular expression: crossed out, in the color of a broken link.
     pub(crate) fn invalid(&self, style: Style) -> Style {

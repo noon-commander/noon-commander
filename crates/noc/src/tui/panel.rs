@@ -426,8 +426,8 @@ pub(crate) struct Panel {
     space: Option<Space>,
     /// The entries of the listing that are shown, in order: hidden files may be left out.
     shown: Vec<usize>,
-    /// The panel is on a host that is not connected, and shows none of its entries until it
-    /// reads the directory again.
+    /// The panel is on a host that is not connected, and shows the entries it kept toned down
+    /// until it reads the directory again.
     disconnected: bool,
     sort: Sort,
     show_hidden: bool,
@@ -734,33 +734,27 @@ impl Panel {
         matches!(&self.location, Location::Remote { host: shown, .. } if shown == host)
     }
 
-    /// Shows none of the entries of `host`, which is not connected, if the panel is on it.
-    fn empty(&mut self) {
-        self.listing = Listing::Dir(Vec::new());
-        self.shown.clear();
-        self.marked.clear();
+    /// Keeps the entries of its host, which is not connected, toned down, with the cursor and the
+    /// marks: they may be gone by now. A rename, which needs the host, ends.
+    fn go_offline(&mut self) {
         self.renaming = None;
-        self.search = None;
-        self.visual = None;
-        self.last_visual = None;
-        self.space = None;
         self.disconnected = true;
     }
 
-    /// Takes the loss of the connection to `host`: on it, the panel shows none of its entries
-    /// and waits to read its directory again, with the cursor where it was, once the host is
-    /// back. A panel that only waits for the host waits on.
+    /// Takes the loss of the connection to `host`: on it, the panel keeps its entries, toned
+    /// down, and waits to read its directory again, with the cursor where it was, once the host
+    /// is back. A panel that only waits for the host waits on.
     pub(crate) fn lose_host(&mut self, host: &str) {
         self.forget_work(host);
         if self.on_host(host) {
             let here = self.here();
-            self.empty();
+            self.go_offline();
             self.open(here.location, here.focus);
         }
     }
 
-    /// Takes the end of the connection to `host`: on it, the panel shows none of its entries
-    /// until it reads its directory again; a panel that waits for the host stops waiting.
+    /// Takes the end of the connection to `host`: on it, the panel keeps its entries, toned
+    /// down, until it reads its directory again; a panel that waits for the host stops waiting.
     pub(crate) fn drop_host(&mut self, host: &str) {
         self.forget_work(host);
         let waits = matches!(
@@ -771,12 +765,12 @@ impl Panel {
             self.pending = None;
         }
         if self.on_host(host) {
-            self.empty();
+            self.go_offline();
         }
     }
 
-    /// The host the panel is on, if it shows none of its entries as it is not connected, and
-    /// does not wait for them either.
+    /// The host the panel is on, if it is not connected, and the panel does not wait to read its
+    /// directory either.
     pub(crate) fn not_connected(&self) -> Option<&str> {
         match &self.location {
             Location::Remote { host, .. } if self.disconnected && self.pending.is_none() => {
@@ -784,6 +778,12 @@ impl Panel {
             }
             _ => None,
         }
+    }
+
+    /// Whether the panel holds entries, if only those it kept from a host not connected.
+    pub(crate) fn has_entries(&self) -> bool {
+        let Listing::Dir(entries) = &self.listing;
+        !entries.is_empty()
     }
 
     /// The last local directory in the jump list, with the cursor where it was.
@@ -1837,9 +1837,9 @@ impl Panel {
     }
 
     /// Draws the panel: the location in the frame, column headers, the rows, the size and number
-    /// of marked entries on the line below them, a status line with the name under the cursor,
-    /// the rename, or quick search, and the totals of the directory and its file system on the
-    /// bottom of the frame.
+    /// of marked entries on the line below them, a status line with the name under the cursor or
+    /// quick search, and the totals of the directory and its file system on the bottom of the
+    /// frame. What the panel kept from a host that is not connected is toned down.
     pub(crate) fn render(
         &mut self,
         frame: &mut Frame<'_>,
@@ -1900,7 +1900,7 @@ impl Panel {
                 theme,
             );
             let y = inner.y + 1 + u16::try_from(screen_row).unwrap_or(u16::MAX);
-            frame.render_widget(text, line(y));
+            frame.render_widget(self.toned(text), line(y));
         }
 
         self.render_separator(frame, area, inner.bottom() - 2, theme);
@@ -1973,9 +1973,9 @@ impl Panel {
         title
     }
 
-    /// The status line, at `area`: the name being renamed, quick search with its cursor in the
-    /// active panel, or the name under the cursor, with the target of a symlink; nothing on a
-    /// host that is not connected.
+    /// The status line, at `area`: quick search with its cursor in the active panel, or the name
+    /// under the cursor, with the target of a symlink, and the size of a file; while a name is
+    /// renamed in its row, the name it had.
     fn render_status(&self, frame: &mut Frame<'_>, area: Rect, active: bool, view: &View<'_>) {
         let theme = view.theme;
         let width = usize::from(area.width);
@@ -1986,9 +1986,7 @@ impl Panel {
         let mut linked = None;
         // The size of the file under the cursor, every byte of it.
         let mut size = None;
-        let status = if let Some(renaming) = &self.renaming {
-            fl!("panel-rename", name = cells::sanitize(&renaming.name))
-        } else if let Some(search) = &self.search {
+        let status = if let Some(search) = &self.search {
             let field = &search.field;
             status_style = (theme.quick_search, theme.truncated_cursor);
             let invalid = self.finder().is_some_and(|finder| finder.error().is_some());
@@ -2009,8 +2007,6 @@ impl Panel {
             }
             searching = Some(mark.spans(&prompt, &shown, theme.quick_search));
             prompt.with(&shown)
-        } else if self.disconnected {
-            String::new()
         } else {
             let (status, link) = self.cursor_status(view);
             linked = link;
@@ -2025,6 +2021,8 @@ impl Panel {
             .filter(|size| cells::width(size) + MIN_NAME_WIDTH <= room);
         room -= size.as_deref().map_or(0, cells::width);
         let marks = theme.glyphs.marks;
+        // What is typed is not of the host.
+        let typed = searching.is_some();
         let fitted = match (searching, linked) {
             (Some(spans), _) => cells::fit_spans(spans, room, status_style, marks),
             (None, Some(linked)) => linked.fit(&status, room, status_style, marks),
@@ -2032,7 +2030,19 @@ impl Panel {
         };
         line.spans.extend(fitted);
         line.spans.extend(size.map(Span::raw));
+        let line = if typed { line } else { self.toned(line) };
         frame.render_widget(line, area);
+    }
+
+    /// `line` toned down if it shows what the panel kept from a host that is not connected.
+    fn toned<'a>(&self, mut line: Line<'a>) -> Line<'a> {
+        if self.disconnected {
+            line.style = Theme::offline(line.style);
+            for span in &mut line.spans {
+                span.style = Theme::offline(span.style);
+            }
+        }
+        line
     }
 
     /// The size of the file under the cursor, every byte of it, which the size column rounds.
@@ -2159,7 +2169,7 @@ impl Panel {
         let total_width = u16::try_from(width).unwrap_or(u16::MAX);
         let x = area.x + area.width.saturating_sub(total_width) / 2;
         frame.render_widget(
-            Line::from(total),
+            self.toned(Line::from(total)),
             Rect::new(x, y, total_width.min(inside), 1),
         );
     }
@@ -2217,7 +2227,7 @@ impl Panel {
                 return;
             }
             frame.render_widget(
-                Line::styled(text, theme.panel),
+                self.toned(Line::styled(text, theme.panel)),
                 Rect::new(area.x + 2, y, width, 1),
             );
             // A line between the two.
@@ -2231,15 +2241,15 @@ impl Panel {
             return;
         }
         frame.render_widget(
-            Line::styled(text, theme.panel),
+            self.toned(Line::styled(text, theme.panel)),
             Rect::new(area.right() - 2 - width, y, width, 1),
         );
     }
 
     /// The size of the shown files and how many files and directories are shown, padded for
-    /// the frame; none while the panel is on a host that is not connected.
+    /// the frame; none while the panel holds no entries of a host that is not connected.
     fn total_text(&self) -> Option<String> {
-        if self.disconnected {
+        if self.disconnected && !self.has_entries() {
             return None;
         }
         let (files, dirs, bytes) = self.shown_total();
@@ -4049,44 +4059,49 @@ mod tests {
     }
 
     #[test]
-    fn a_lost_host_leaves_its_panels_empty_and_waiting_with_the_cursor_kept() {
+    fn a_lost_host_keeps_the_entries_of_its_panels_waiting_with_the_cursor_and_marks() {
         let mut panel = loaded_at(remote("db", "/srv"), Listing::Dir(listing()));
         panel.handle(Action::End);
         panel.handle(Action::Mark);
         panel.lose_host("web");
-        assert_eq!(panel.rows(), 1 + listing().len(), "another host");
+        assert!(!panel.disconnected, "another host");
 
         panel.lose_host("db");
-        assert_eq!(names(&panel), [".."], "the entries go");
-        assert!(panel.marked.is_empty());
+        assert_eq!(names(&panel).len(), 1 + listing().len(), "the entries stay");
+        assert!(panel.disconnected);
+        assert_eq!(panel.marked.len(), 1);
         let request = panel.pending_request().unwrap();
         assert_eq!(request.location, remote("db", "/srv"));
         assert_eq!(panel.not_connected(), None, "it waits");
         answer(&mut panel, &request, Listing::Dir(listing()));
         assert_eq!(under_cursor(&panel), "zeta.txt", "back on its entry");
+        assert_eq!(panel.marked.len(), 1, "the marks too");
         assert!(!panel.disconnected);
 
-        // Cancel: the panel stays, without its entries, until it reads the directory again.
+        // Cancel: the panel keeps its entries, toned down, until it reads the directory again.
         panel.lose_host("db");
         panel.cancel();
         assert_eq!(panel.not_connected(), Some("db"));
-        let ([_, line], _) = waiting_lines(&mut panel, HostStatus::Failed);
+        panel.handle(Action::Up);
         assert_eq!(
-            line,
-            format!("║{}║", " ".repeat(38)),
-            "the status line is empty"
+            under_cursor(&panel),
+            "Alpha.md",
+            "the cursor moves over them"
         );
+        let ([_, line], _) = waiting_lines(&mut panel, HostStatus::Failed);
+        assert!(line.starts_with("║Alpha.md"), "{line}");
         let request = panel.handle(Action::Reload).unwrap();
         assert_eq!(request.location, remote("db", "/srv"));
     }
 
     #[test]
-    fn a_disconnected_host_leaves_its_panels_empty() {
+    fn a_disconnected_host_keeps_the_entries_of_its_panels() {
         let mut panel = loaded_at(remote("db", "/srv"), Listing::Dir(listing()));
         panel.drop_host("web");
-        assert_eq!(panel.rows(), 1 + listing().len(), "another host");
+        assert!(!panel.disconnected, "another host");
         panel.drop_host("db");
-        assert_eq!(names(&panel), [".."]);
+        assert_eq!(names(&panel).len(), 1 + listing().len());
+        assert!(panel.has_entries());
         assert_eq!(panel.pending_request(), None);
         assert_eq!(panel.not_connected(), Some("db"));
         let request = panel.handle(Action::Enter).unwrap();
@@ -4101,6 +4116,43 @@ mod tests {
         assert_eq!(panel.location, local("/srv"));
         assert!(!panel.disconnected);
         assert_eq!(panel.not_connected(), None);
+    }
+
+    #[test]
+    fn a_panel_not_connected_tones_down_what_it_kept() {
+        let mut panel = loaded_at(remote("db", "/srv"), Listing::Dir(listing()));
+        panel.handle(Action::Down);
+        panel.handle(Action::Mark);
+        let dim = |backend: &TestBackend, (x, y): (u16, u16)| {
+            let cell = &backend.buffer()[(x, y)];
+            cell.modifier.contains(Modifier::DIM) && !cell.modifier.contains(Modifier::BOLD)
+        };
+        // Rows: frame, header, `..`, alpha-link (marked), Beta (cursor), …, separator, status,
+        // frame with the total.
+        let (parent, marked, cursor) = ((3, 2), (3, 3), (3, 4));
+        let (separator, status, total) = ((20, 9), (2, 10), (4, 11));
+        let backend = draw(&mut panel, 40, 12, true);
+        for at in [parent, marked, cursor, separator, status, total] {
+            assert!(!dim(&backend, at), "connected: {at:?}");
+        }
+
+        panel.drop_host("db");
+        let backend = draw(&mut panel, 40, 12, true);
+        for at in [parent, marked, cursor, separator, status, total] {
+            assert!(dim(&backend, at), "{at:?}");
+        }
+        for at in [(0, 2), (3, 0), (3, 1), (39, 11)] {
+            assert!(!dim(&backend, at), "the frame, title, and header: {at:?}");
+        }
+        let bottom: String = (0..40)
+            .map(|x| backend.buffer()[(x, 11)].symbol())
+            .collect();
+        assert!(bottom.contains(" in "), "the total stays: {bottom}");
+
+        // Quick search types what is not of the host.
+        panel.search_down(1, SearchMode::Plain);
+        let backend = draw(&mut panel, 40, 12, true);
+        assert!(!dim(&backend, status));
     }
 
     #[test]

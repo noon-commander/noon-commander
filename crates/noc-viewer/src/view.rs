@@ -333,15 +333,15 @@ impl Viewer {
         matches!(self.state, State::Loading)
     }
 
-    /// Draws the viewer over `area`: a title line, then the text. While it waits for the file,
-    /// `spinner` and the viewer's text that says so; nothing without it, until the app shows
-    /// its spinner.
+    /// Draws the viewer over `area`: a title line, `icon` in front of the path, then the text.
+    /// While it waits for the file, `skeleton` stands in place of the text; the app turns the
+    /// frames of its spinner as `icon`.
     pub fn render(
         &mut self,
         frame: &mut Frame<'_>,
         area: Rect,
         styles: &Styles,
-        spinner: Option<&[Span<'_>]>,
+        (icon, skeleton): (char, &[Line<'_>]),
     ) {
         self.bar = None;
         if area.height < 2 || area.width == 0 {
@@ -363,14 +363,12 @@ impl Viewer {
         // Rows of text leave the scroll bar's column alone, which the end line's style would dim.
         let text_width = u16::try_from(self.width).unwrap_or(area.width);
         let text_row = |index: u16| Rect::new(area.x, area.y + index, text_width, 1);
-        frame.render_widget(self.header(usize::from(area.width), styles), row(0));
+        frame.render_widget(self.header(usize::from(area.width), icon, styles), row(0));
         let text_area = Rect::new(area.x, area.y + 1, area.width, area.height - 1);
         frame.buffer_mut().set_style(text_area, styles.text);
         if self.loading() {
-            if let Some(spinner) = spinner {
-                let mut spans = spinner.to_vec();
-                spans.push(Span::raw(fl!("viewer-loading")));
-                frame.render_widget(Line::from(spans), row(1));
+            for (index, line) in (1..area.height).zip(skeleton) {
+                frame.render_widget(line, row(index));
             }
             return;
         }
@@ -473,10 +471,10 @@ impl Viewer {
         (last_top + page, page, top)
     }
 
-    /// The path on the left, and where the screen is on the right, `width` cells wide in all:
-    /// its first line, the lines, and how far the last one on screen is, in percent, or that the
-    /// end shows.
-    fn header(&self, width: usize, styles: &Styles) -> Line<'static> {
+    /// `icon` and the path on the left, and where the screen is on the right, `width` cells wide
+    /// in all: its first line, the lines, and how far the last one on screen is, in percent, or
+    /// that the end shows. The path never moves, whatever `icon` is.
+    fn header(&self, width: usize, icon: char, styles: &Styles) -> Line<'static> {
         let lines = self.lines().len();
         let mut position = String::new();
         if let State::Text { truncated, .. } = &self.state {
@@ -502,11 +500,12 @@ impl Viewer {
             }
         }
         let position = format!(" {position} ");
-        let room = width.saturating_sub(noc_text::width(&position));
-        let title = format!(" {}", self.title);
-        let title = noc_text::fit_cut(&title, room, Align::Left, Cut::Middle);
+        let lead = format!(" {icon} ");
+        let room = width.saturating_sub(noc_text::width(&position) + noc_text::width(&lead));
+        let title = noc_text::fit_cut(&self.title, room, Align::Left, Cut::Middle);
         let mark = styles.header.patch(styles.header_mark);
         let mut line = fitted_line(title, (styles.header, mark), styles.marks).style(styles.header);
+        line.spans.insert(0, Span::styled(lead, styles.header));
         line.push_span(Span::styled(position, styles.header));
         line
     }
@@ -550,7 +549,7 @@ mod tests {
     fn draw(viewer: &mut Viewer, width: u16, height: u16) -> String {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         terminal
-            .draw(|frame| viewer.render(frame, frame.area(), &STYLES, None))
+            .draw(|frame| viewer.render(frame, frame.area(), &STYLES, ('*', &[])))
             .unwrap();
         terminal.backend().to_string()
     }
@@ -568,14 +567,17 @@ mod tests {
     fn scrolls_within_the_text_and_stops_at_its_end() {
         let mut viewer = Viewer::new("/srv/log".to_owned());
         assert!(viewer.loading());
-        assert!(!draw(&mut viewer, 30, 6).contains("Reading"));
         let mut terminal = Terminal::new(TestBackend::new(30, 6)).unwrap();
-        let spinner = [Span::raw("* ")];
+        let skeleton = [Line::raw("----"), Line::raw("------")];
         terminal
-            .draw(|frame| viewer.render(frame, frame.area(), &STYLES, Some(&spinner)))
+            .draw(|frame| viewer.render(frame, frame.area(), &STYLES, ('|', &skeleton)))
             .unwrap();
         let text = terminal.backend().to_string();
-        assert!(text.contains("* Reading the file…"), "{text}");
+        let rows: Vec<&str> = text
+            .lines()
+            .map(|row| row.trim_matches('"').trim_end())
+            .collect();
+        assert_eq!(rows[..4], [" | /srv/log", "----", "------", ""], "{text}");
         viewer.show(&numbered(20), false);
         assert!(!viewer.loading());
         let mut press = |motion| {
@@ -742,7 +744,7 @@ mod tests {
         let mut terminal = Terminal::new(TestBackend::new(20, 6)).unwrap();
         let mut render = |viewer: &mut Viewer| {
             terminal
-                .draw(|frame| viewer.render(frame, frame.area(), &STYLES, None))
+                .draw(|frame| viewer.render(frame, frame.area(), &STYLES, ('*', &[])))
                 .unwrap()
                 .buffer
                 .clone()
@@ -802,7 +804,7 @@ mod tests {
         };
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         let buffer = terminal
-            .draw(|frame| viewer.render(frame, frame.area(), &styles, None))
+            .draw(|frame| viewer.render(frame, frame.area(), &styles, ('*', &[])))
             .unwrap()
             .buffer
             .clone();

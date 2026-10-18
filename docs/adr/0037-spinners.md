@@ -22,9 +22,10 @@ too, which some users want and others do not, apart from windows.
 
 ## Decision
 
-- **One spinner, always with its text.** `tui/spinner.rs` draws every spinner in the app, and each
-  says what it waits for after it, such as `Reading the file…`. The texts are in the Fluent files,
-  as any other.
+- **One base for every spinner.** `tui/spinner.rs` draws every spinner in the app, from one clock.
+  Each stands next to what tells what it waits for: a title, a path, or the place of the rows to
+  come. No text says that something waits: a first version wrote `Reading the file…` after a
+  scanner, which said less than the title over it.
 - **A scanner.** Eight cells, a lit block that runs from one end to the other and
   back, with a trail that fades behind it, and a pause at each end, 40 ms a step. The trail is
   one color, `busy` of the theme (`busy_dialog` in dialogs), blended into the background:
@@ -33,7 +34,7 @@ too, which some users want and others do not, apart from windows.
   are `■` and `⬝` with icons, `■` and `·` without.
 - **Braille dots where one cell is all there is.** They turn through `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, 80 ms each;
   `|/-\` without icons. The icon of a host connecting in the location menu turns them, and so do the
-  titles of panels and of windows.
+  titles of panels, of windows, and of the viewer.
 - **A panel waits in its title.** The title has one cell in front of the path: the icon of a folder,
   or of a host in the color of its status; without icons mc's `/` or the host's marker. While a
   panel reads a directory, the dots turn in that cell, so the path never moves when they come and
@@ -43,6 +44,12 @@ too, which some users want and others do not, apart from windows.
   connecting and reading look apart without a word that would take the room of the path. A host that
   does not answer still asks `web: Retry or Cancel?` on the status line, in the colors of errors: it
   is a question, not a wait. A reading that fails puts the old path back.
+- **The viewer waits in its title.** Its title has one cell in front of the path too, the icon of
+  the file (devicons' for its name; mc's marker of files, a space, without icons), where the dots
+  turn while the file is read, so the path never moves. A skeleton of one line, of 80 cells at most,
+  stands for the text, the shine crossing it as it crosses rows; more lines looked busier than what
+  they stand for. The file is read at once, up to its limit, so there is no percentage to show; a
+  gauge of a read in parts is left for later.
 - **Shown after 150 ms.** A `Wait`, kept by what waits, remembers the first frame that drew it; the
   spinner and its text show only from 150 ms later, so quick work shows nothing.
 - **Frames come from time, not ticks.** A frame of the scanner is the time since the app's first
@@ -87,7 +94,8 @@ too, which some users want and others do not, apart from windows.
 ## Consequences
 
 - A new place that waits keeps a `Wait`, gives it to `App::waits`, and draws `Spin::wait` with
-  its text, or `Spin::wait_dots` in its title. It needs no tick of its own.
+  `Spin::wait_dots` in its title, with a skeleton where rows or text are to come. It needs no tick
+  of its own.
 - The event loop wakes at most every 40 ms while a spinner shows, and not at all before 150 ms.
 - Spinners and windows are turned off apart. Configs with `ui.animations` must move it to
   `animations.windows`.

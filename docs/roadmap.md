@@ -240,13 +240,16 @@
       sections of the help ([ADR 0033](adr/0033-letters-in-dialogs.md))
 - [x] Windows grow from their middle as they open and shrink back as they close, the menus of
       F9 drop from their bar; `animations.windows` ([ADR 0034](adr/0034-animated-windows.md))
-- [x] One spinner for everything that waits, a scanner, with what it waits for after it, shown after
-  150 ms; `animations.spinners`; a panel turns braille dots in place of the icon before the path in
-  its title; the location menu, the zoxide window, and the search of a whole tree turn them in front
-  of their title, a skeleton row with a shine in place of the rows to come; a job's gauge is a faint
-  bar with the shine running to and fro until it knows how far it is; R in the location menu keeps
-  the rows; `--slow-spinners` and `--slow-connections` in debug builds ([ADR
-  0037](adr/0037-spinners.md))
+- [x] One spinner for everything that waits, shown after 150 ms; `animations.spinners`; a panel
+  turns braille dots in place of the icon before the path in its title, and the viewer in place of
+  the file's icon, a skeleton line for the text; the location menu, the zoxide window, and the
+  search of a whole tree turn them in front of their title, a skeleton row with a shine in place of
+  the rows to come; a job's gauge is a faint bar with the shine running to and fro until it knows
+  how far it is; R in the location menu keeps the rows; `--slow-spinners` and `--slow-connections`
+  in debug builds ([ADR 0037](adr/0037-spinners.md))
+- [ ] F3 reads a file in parts and shows how much it has read in a gauge, in percent of its size
+      or of the limit, so that a large file over SFTP shows how far it is; cancel-safe, as the
+      reading at once is now
 - [x] Formats of the region for dates, times, and numbers: the system's (on macOS as System
       Settings has them), `iso`, or a language tag, `ui.formats`; plural forms that see the
       numbers in every message with a count ([ADR 0035](adr/0035-formats-of-the-region.md))

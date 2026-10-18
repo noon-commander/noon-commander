@@ -73,8 +73,8 @@ mod tests {
             let loader: FluentLanguageLoader = fluent_language_loader!();
             select_into(&loader, &[language.parse().unwrap()]);
             assert_eq!(
-                i18n_embed_fl::fl!(loader, "viewer-loading"),
-                "Reading the file…",
+                i18n_embed_fl::fl!(loader, "viewer-end"),
+                "EOF",
                 "{language}"
             );
         }

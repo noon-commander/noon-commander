@@ -44,19 +44,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and the lists. Keys work on a window at once. `animations.windows` (on) turns it off, a check
   box under Animations in the Configuration dialog.
 - Everything that waits for work in the background shows the same spinner, a scanner of eight cells,
-  with what it waits for after it: the search of a tree and the viewer reading a file. It shows only
-  after 150 ms, so quick work does not flicker. A panel's title has an icon in front of the path, a
-  folder or a host in the color of its status (mc's `/` or the host's marker without icons); while
-  the panel reads a directory or connects, braille dots turn in its place and the title shows the
-  path it reads (`⠹ web:/var/www`), so the path never moves; its status line stays as it is. A host
-  connecting in the location menu turns braille dots too, and so do the location menu, the zoxide
-  window, and the search of a whole tree in front of their title while they wait, which stays in
-  place; until their first rows come, a skeleton row of faint bars stands in their place, a shine
-  crossing both bars at once, one cell every 40 ms, while the dots turn; the status line of the
-  search shows the scanner alone until it ends, then how much it found. Until a job knows how far it
-  is, while it waits its turn or counts, its gauge is a faint bar of `▒` with no percentage, the
-  same shine running to and fro over it as fast; a stop leaves the bar still. `animations.spinners`
-  (on), a check box under Animations, leaves a still mark in their place.
+  in the status line of the search of a tree. It shows only after 150 ms, so quick work does not
+  flicker. A panel's title has an icon in front of the path, a folder or a host in the color of its
+  status (mc's `/` or the host's marker without icons); while the panel reads a directory or
+  connects, braille dots turn in its place and the title shows the path it reads (`⠹ web:/var/www`),
+  so the path never moves; its status line stays as it is. The viewer's title has the file's icon in
+  front of the path, where the dots turn while it reads the file, and a skeleton line of faint bars,
+  crossed by the same shine, stands for the text. A host connecting in the location menu turns
+  braille dots too, and so do the location menu, the zoxide window, and the search of a whole tree
+  in front of their title while they wait, which stays in place; until their first rows come, a
+  skeleton row of faint bars stands in their place, a shine crossing both bars at once, one cell
+  every 40 ms, while the dots turn; the status line of the search shows the scanner alone until it
+  ends, then how much it found. Until a job knows how far it is, while it waits its turn or counts,
+  its gauge is a faint bar of `▒` with no percentage, the same shine running to and fro over it as
+  fast; a stop leaves the bar still. `animations.spinners` (on), a check box under Animations,
+  leaves a still mark in their place.
 - R in the location menu keeps the rows while it lists the volumes and the hosts again, with the
   dots in the title; if that fails, the reason shows right of the filter in the colors of errors.
 - Debug builds take `--slow-spinners SECONDS`, which holds back every result of background work

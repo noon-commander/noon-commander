@@ -31,7 +31,7 @@ use super::command::{self, CommandEvent, CommandLine, Place, Run};
 use super::complete::{self, Candidate, Choices, ChoicesEvent, Kind, Offer, Outcome, Quote};
 use super::configuration::{ConfigEvent, Configuration};
 use super::decor::Decor;
-use super::dialog::{Ask, Button, Dialog, DialogEvent, Field, Reply};
+use super::dialog::{Ask, Button, Dialog, DialogEvent, Field, Reply, text_skeleton};
 use super::edit::{Editor, Registers};
 use super::find::{FindEvent, FindMode, FindQuery, FindSummary, FindWindow, Finding};
 use super::glyphs::{self, Glyphs};
@@ -628,7 +628,7 @@ impl Job {
 struct Viewing {
     id: u64,
     viewer: Viewer,
-    /// For the file, whose spinner shows until it is read.
+    /// For the file, whose dots turn on its icon until it is read.
     wait: Wait,
     location: Location,
     /// The line it shows at the top once the file is read, if not the first.
@@ -637,11 +637,26 @@ struct Viewing {
 }
 
 impl Viewing {
-    /// Draws the viewer over `area`, with a spinner while the file is read.
-    fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, spin: &Spin) {
-        let spinner = spin.wait(&self.wait, (theme.busy, theme.panel));
-        let styles = viewer_styles(theme);
-        self.viewer.render(frame, area, &styles, spinner.as_deref());
+    /// Draws the viewer over `area`, the icon of the file in front of its path: while the file
+    /// is read, the dots turn in its place, and a skeleton of text stands for the text.
+    fn render(
+        &mut self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        (theme, decor): (&Theme, Decor),
+        spin: &Spin,
+    ) {
+        let loading = self.viewer.loading();
+        let icon = spin
+            .wait_dots(&self.wait)
+            .filter(|_| loading)
+            .unwrap_or_else(|| decor.file(&file_name(&self.location).unwrap_or_default()));
+        let skeleton = loading
+            .then(|| text_skeleton(area.width, theme.panel, theme, spin.shine(&self.wait)))
+            .flatten();
+        let skeleton = skeleton.as_slice();
+        self.viewer
+            .render(frame, area, &viewer_styles(theme), (icon, skeleton));
     }
 }
 
@@ -6632,7 +6647,7 @@ impl App {
         };
         let roots = [Side::Left, Side::Right].map(|side| self.root_at(self.panel(side).location()));
         if let Some(viewing) = &mut self.viewing {
-            viewing.render(frame, panels, &self.theme, &spin);
+            viewing.render(frame, panels, (&self.theme, self.decor), &spin);
         } else {
             let sides = [
                 (Side::Left, &mut self.left, left_bar, left),
@@ -10022,14 +10037,17 @@ mod tests {
         };
         assert_eq!((location, host.is_none()), (local("/srv/notes"), true));
         assert_eq!(app.context(), Context::Viewer);
-        assert!(screen(&mut app).contains("Reading the file…"));
+        // While it is read, the dots stand in place of its icon, and a skeleton for its text.
+        let text = screen(&mut app);
+        let rows: Vec<&str> = text.lines().map(|row| row.trim_matches('"')).collect();
+        assert!(rows[0].starts_with(" … /srv/notes "), "{text}");
+        assert!(rows[1].starts_with("-----"), "{text}");
+        assert!(!rows[2].contains('-'), "{text}");
         app.read(id + 1, Ok((b"not this".to_vec(), false)));
         app.read(id, Ok((b"hello\nworld\n".to_vec(), false)));
         let text = screen(&mut app);
-        assert!(
-            text.contains("/srv/notes") && text.contains("hello"),
-            "{text}"
-        );
+        assert!(text.starts_with("\"   /srv/notes "), "{text}");
+        assert!(text.contains("hello") && !text.contains("---"), "{text}");
         assert!(text.contains("2Wrap") && text.contains("10Quit"), "{text}");
 
         // F1 shows the help over it, and Esc goes back to it.

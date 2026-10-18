@@ -81,6 +81,17 @@ impl Decor {
         self.glyphs().kinds.dir
     }
 
+    /// The cell in front of the path of a file named `name` in the viewer: devicons' icon for
+    /// it, or that of files; mc's marker of files, a space, without icons.
+    pub(crate) fn file(self, name: &[u8]) -> char {
+        let file = self.glyphs().kinds.file;
+        if self.icons {
+            file_icon(name).unwrap_or(file)
+        } else {
+            file
+        }
+    }
+
     /// What tells the kind of a symlink's `target`, of `kind` (`None` when nothing is there):
     /// with icons, its icon and a space in front of it, devicons' for a file whose name it
     /// knows; without them, mc's marker after it where `ls -F` puts one, and `!` after nothing.
@@ -269,6 +280,18 @@ mod tests {
         assert_eq!(after(Some(FileKind::Socket), "s"), "=");
         assert_eq!(after(Some(FileKind::File), "a.txt"), "", "as ls -F");
         assert_eq!(after(Some(FileKind::CharDevice), "/dev/null"), "");
+    }
+
+    #[test]
+    fn a_viewed_file_has_the_icon_of_its_name() {
+        let icons = Decor::new(true);
+        for name in ["main.rs", "no-such-kind.zzz"] {
+            assert_eq!(
+                format!("{} ", icons.file(name.as_bytes())),
+                icons.entry(&file(name))
+            );
+        }
+        assert_eq!(Decor::new(false).file(b"main.rs"), ' ');
     }
 
     #[test]

@@ -2,7 +2,7 @@
 source: crates/noc-viewer/src/view.rs
 expression: wrapped
 ---
-" f          1/2 End "
+" * f        1/2 End "
 "abcdefghijklmnopqrst"
 "»uvwxyzabcdefghijklm"
 "»nopqrstuvwx        "

@@ -1,7 +1,5 @@
 ## The viewer, F3. Prefix: viewer-. As in mc.
 
-# While the file is read, after a spinner.
-viewer-loading = Reading the file…
 # Right of the title: the first line on screen, the lines, and how far the last one on screen
 # is.
 viewer-position = { $line }/{ $lines } { $percent }%

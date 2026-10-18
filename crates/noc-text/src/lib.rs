@@ -14,8 +14,9 @@ pub enum Align {
     Right,
 }
 
-/// A name made safe for the terminal: invalid UTF-8 is replaced, and control characters and
-/// bidi controls, which could move the cursor or reorder the screen, are shown as `?`.
+/// A name made safe for the terminal: invalid UTF-8 is replaced, and control characters, bidi
+/// controls, and marks that join the next character, which could move the cursor, reorder the
+/// screen, or shift the rest of a row, are shown as `?`.
 pub fn sanitize(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).chars().map(safe).collect()
 }
@@ -31,6 +32,31 @@ fn is_unsafe(c: char) -> bool {
             c,
             '\u{061c}' | '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'
         )
+        || is_prepended(c)
+}
+
+/// Whether `c` joins the character after it into one grapheme (Unicode's `Prepend`): ratatui
+/// draws the two in the cells of both, while a terminal that does not join them gives the first
+/// a width of its own, often none, and moves the rest of the row.
+fn is_prepended(c: char) -> bool {
+    matches!(
+        c,
+        '\u{0600}'..='\u{0605}'
+            | '\u{06dd}'
+            | '\u{070f}'
+            | '\u{0890}'..='\u{0891}'
+            | '\u{08e2}'
+            | '\u{0d4e}'
+            | '\u{110bd}'
+            | '\u{110cd}'
+            | '\u{111c2}'..='\u{111c3}'
+            | '\u{1193f}'
+            | '\u{11941}'
+            | '\u{11a3a}'
+            | '\u{11a84}'..='\u{11a89}'
+            | '\u{11d46}'
+            | '\u{11f02}'
+    )
 }
 
 /// Width of `text` in terminal cells.
@@ -275,6 +301,11 @@ mod tests {
         assert_eq!(sanitize(b"two\nlines\r\t"), "two?lines??");
         assert_eq!(sanitize("del\u{7f}c1\u{9b}".as_bytes()), "del?c1?");
         assert_eq!(sanitize("txt.\u{202e}exe".as_bytes()), "txt.?exe");
+        assert_eq!(
+            sanitize("\u{0602}R\u{06dd}1".as_bytes()),
+            "?R?1",
+            "a mark that joins the next character would move the rest of the row"
+        );
         assert_eq!(sanitize(b"latin1 \xe9t\xe9"), "latin1 \u{fffd}t\u{fffd}");
         assert_eq!(sanitize("Привет 文件".as_bytes()), "Привет 文件");
     }

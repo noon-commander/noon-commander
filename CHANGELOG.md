@@ -254,6 +254,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The cursor of a field no longer flickers over cells that change while it waits, such as the
   skeleton that a shine crosses under `f f`: every frame is drawn as synchronized output, which
   the terminal shows whole. Terminals without it still may show the cursor on its way.
+- A row of the viewer or a name in a panel no longer comes out a cell short, shifting the scroll
+  bar or the frame, when it holds a mark that joins the next character, such as U+0602 in a
+  binary file: such marks show as `?`.
 
 ## [0.2.0] - 2026-10-14
 

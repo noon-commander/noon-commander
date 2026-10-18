@@ -62,9 +62,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   their place.
 - R in the location menu keeps the rows while it lists the volumes and the hosts again, with the
   dots in the title; if that fails, the reason shows right of the filter in the colors of errors.
-- Debug builds take `--slow-spinners SECONDS`, which holds back every result of background work
-  by that long, and `--slow-connections SECONDS`, which holds back only a connection made or
-  ended, to watch the spinners.
+- Debug builds take `--slow-spinners SECONDS`, which holds back every result of background work by
+  that long, and `--slow-connections SECONDS`, which holds back only a connection made or ended, to
+  watch the spinners; `--slow-windows SECONDS` has a window take that long to grow as it opens and
+  to shrink as it closes.
 - Who is where: the prompt of the command line is a shell's, `alice@mac:~/src $` locally and
   `deploy@web:/var/www $` on a host, with the user from `ssh -G`, and the line of the mode shows
   `alice@mac` of the active panel left of the keys typed. Where the user is root, `user@host` is

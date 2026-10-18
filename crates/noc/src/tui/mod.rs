@@ -168,7 +168,7 @@ async fn region(context: &Context) -> Result<TimeZone> {
 }
 
 /// Debug builds only: how long results of background work are held back, so spinners stay
-/// long enough to watch.
+/// long enough to watch, and how long windows take to grow or shrink.
 #[cfg(debug_assertions)]
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct Slow {
@@ -176,6 +176,8 @@ pub(crate) struct Slow {
     pub(crate) spinners: Option<Duration>,
     /// A connection made or ended, on top of that (`--slow-connections`).
     pub(crate) connections: Option<Duration>,
+    /// A window growing or shrinking, from start to end (`--slow-windows`).
+    pub(crate) windows: Option<Duration>,
 }
 
 /// Debug builds only: holds back each result of background work as `slow` says, from when it
@@ -228,7 +230,7 @@ fn release(
 
 /// Runs the TUI with both panels on the local directory `start` until the user quits or the
 /// process gets SIGTERM, SIGHUP, or SIGINT. In debug builds, `slow` holds back the results of
-/// background work.
+/// background work and slows down windows.
 pub(crate) async fn run(
     context: Context,
     start: PathBuf,
@@ -264,6 +266,8 @@ pub(crate) async fn run(
     let done_tx = slow_down(done_tx, slow);
     let mut tasks = Tasks::start(Arc::clone(&context), done_tx).await;
     let (mut app, effects) = start_app(&context, &start, (&tz, system), asked.modes.keys());
+    #[cfg(debug_assertions)]
+    app.slow_windows(slow.windows);
     tasks.run(effects);
     let result = loop {
         if app.quits() {

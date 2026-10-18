@@ -74,12 +74,14 @@ struct Zoom {
     drawn: Drawn,
     start: Instant,
     opens: bool,
+    /// How long each size shows.
+    each: Duration,
 }
 
 impl Zoom {
     /// The size reached at `now`, from 0; `None` once the window shows whole or has gone.
     fn step(&self, now: Instant) -> Option<u32> {
-        let elapsed = now.saturating_duration_since(self.start).as_millis() / STEP.as_millis();
+        let elapsed = now.saturating_duration_since(self.start).as_nanos() / self.each.as_nanos();
         u32::try_from(elapsed).ok().filter(|&step| step < STEPS)
     }
 
@@ -90,7 +92,8 @@ impl Zoom {
 
     /// When the size after the one at `now` is due.
     fn due(&self, now: Instant) -> Option<Instant> {
-        self.step(now).map(|step| self.start + STEP * (step + 1))
+        self.step(now)
+            .map(|step| self.start + self.each * (step + 1))
     }
 }
 
@@ -103,7 +106,7 @@ struct Now {
 }
 
 /// The windows on screen, frame after frame, and those growing or shrinking.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct Stage {
     /// The windows of the last frame, where they drew.
     shown: Vec<(Window, Drawn)>,
@@ -118,9 +121,33 @@ pub(crate) struct Stage {
     opened: bool,
     /// The frame being drawn; none while windows do not animate.
     now: Option<Now>,
+    /// How long each size of a frame shows: [`STEP`], or longer in debug builds.
+    each: Duration,
+}
+
+impl Default for Stage {
+    fn default() -> Self {
+        Self {
+            shown: Vec::new(),
+            drawing: Vec::new(),
+            zooms: Vec::new(),
+            screen: None,
+            settle: false,
+            opened: false,
+            now: None,
+            each: STEP,
+        }
+    }
 }
 
 impl Stage {
+    /// Debug builds only: frames take `whole` to grow or shrink, so they can be watched;
+    /// never less than they take anyway.
+    #[cfg(debug_assertions)]
+    pub(crate) fn slow(&mut self, whole: Duration) {
+        self.each = (whole / STEPS).max(STEP);
+    }
+
     /// Starts a frame drawn `at` on `screen`, with the viewer on it or not, in `theme`;
     /// windows animate if `on`. A screen of a new size, or the viewer coming or going, shows
     /// its windows at once.
@@ -132,7 +159,10 @@ impl Stage {
         at: Instant,
     ) {
         if !on {
-            *self = Self::default();
+            *self = Self {
+                each: self.each,
+                ..Self::default()
+            };
             return;
         }
         if self.screen != Some((screen, viewing)) {
@@ -180,6 +210,7 @@ impl Stage {
                 drawn,
                 start: now.at,
                 opens: true,
+                each: self.each,
             });
             self.opened = true;
         }
@@ -214,6 +245,7 @@ impl Stage {
                         drawn: place,
                         start: now.at,
                         opens: false,
+                        each: self.each,
                     });
                 }
             }
@@ -447,6 +479,24 @@ mod tests {
         let gone = screen(&mut stage, None, closed + STEP * STEPS);
         assert!(!text(&gone).contains('═'), "{}", text(&gone));
         assert_eq!(stage.due(), None);
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn a_slow_stage_takes_its_whole_time_to_grow_a_window() {
+        let start = Instant::now();
+        let mut stage = shown(start);
+        stage.slow(Duration::from_secs(3));
+        screen(&mut stage, None, start);
+        let opened = start + Duration::from_secs(10);
+        screen(&mut stage, Some(2), opened);
+        assert_eq!(stage.due(), Some(opened + Duration::from_millis(500)));
+        screen(&mut stage, Some(2), opened + Duration::from_millis(2999));
+        assert_eq!(stage.due(), Some(opened + Duration::from_secs(3)));
+        screen(&mut stage, Some(2), opened + Duration::from_secs(3));
+        assert_eq!(stage.due(), None);
+        stage.slow(Duration::ZERO);
+        assert_eq!(stage.each, STEP);
     }
 
     #[test]

@@ -59,3 +59,6 @@ after an event, or on the spinner's tick while something spins.
   it is not found on that frame, and shows at once.
 - Tests of the app turn `ui.animations` off, so screens show windows whole; `tui/zoom.rs` and a
   test of the app animate at given instants, which `App::render` takes beside the time of dates.
+- Debug builds take `--slow-windows SECONDS`: a frame takes that long to grow or shrink, its six
+  sizes shown for equal parts of it, never faster than usual, so each size can be watched. Release
+  builds have neither the flag nor the code.

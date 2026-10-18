@@ -1642,19 +1642,21 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   icons, mc's markers: `/` directory, `~` link to a directory, `@` link, `!` broken link, `*`
   executable, `|` FIFO, `=` socket, `-` character device, `+` block device and volume; the
   home directory is `~`.
-- **Animated windows.** With `animations.windows` (the default;
-  [ADR 0034](adr/0034-animated-windows.md)), a window's frame grows from its middle as it
-  opens and shrinks back as it closes: six sizes, 20 ms each, empty and in the window's colors,
-  with its shadow; a menu of F9 drops from its bar. `tui/zoom.rs` does it on top of rendering:
-  `App::render` draws each window through `Stage::show` under a `zoom::Window` that tells it
-  apart (a dialog by its id, a job by its own), which compares the screen before and after it
-  to find the frame (its first new top left corner, and the blank cells drawn around it); a
-  window new since the last frame grows, its cells under it put back from before, and one of
-  the last frame that is gone shrinks over everything at the end, unless another opened in its
-  place. Keys reach the window at once; only the screen waits. The event loop wakes for the
-  next size at `App::frame_due`. The first frame, a new size of the screen, the viewer coming
-  or going, and the terminal coming back from another program show their windows at once.
-  Completion lists and the key hints of which-key appear at once, as they come while typing.
+- **Animated windows.** With `animations.windows` (the default; [ADR
+  0034](adr/0034-animated-windows.md)), a window's frame grows from its middle as it opens and
+  shrinks back as it closes: six sizes, 20 ms each, empty and in the window's colors, with its
+  shadow; a menu of F9 drops from its bar. `tui/zoom.rs` does it on top of rendering: `App::render`
+  draws each window through `Stage::show` under a `zoom::Window` that tells it apart (a dialog by
+  its id, a job by its own), which compares the screen before and after it to find the frame (its
+  first new top left corner, and the blank cells drawn around it); a window new since the last frame
+  grows, its cells under it put back from before, and one of the last frame that is gone shrinks
+  over everything at the end, unless another opened in its place. Keys reach the window at once;
+  only the screen waits. The event loop wakes for the next size at `App::frame_due`. The first
+  frame, a new size of the screen, the viewer coming or going, and the terminal coming back from
+  another program show their windows at once. Completion lists and the key hints of which-key appear
+  at once, as they come while typing. In debug builds, `--slow-windows SECONDS` has a frame take
+  that long to grow or shrink, its six sizes shown for equal parts of it (`Stage::slow`), so each
+  can be watched.
 - **Spinners.** Whatever waits for work in the background shows one spinner, next to what tells what
   it waits for ([ADR 0037](adr/0037-spinners.md)). `tui/spinner.rs` keeps its clock. Braille dots
   turn, in the theme's `busy` color, where one cell is all there is: in place of the icon in front

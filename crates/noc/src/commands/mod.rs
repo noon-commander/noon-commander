@@ -26,6 +26,7 @@ pub(crate) async fn run(cli: Cli) -> Result<ExitCode> {
                 crate::tui::Slow {
                     spinners: cli.slow_spinners,
                     connections: cli.slow_connections,
+                    windows: cli.slow_windows,
                 },
             )
             .await?;

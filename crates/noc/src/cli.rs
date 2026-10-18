@@ -25,6 +25,12 @@ pub(crate) struct Cli {
     #[arg(long, value_name = "SECONDS", value_parser = seconds)]
     pub(crate) slow_connections: Option<Duration>,
 
+    /// Debug builds only: have a window take this many seconds to grow as it opens and to
+    /// shrink as it closes, so each of its sizes can be watched.
+    #[cfg(debug_assertions)]
+    #[arg(long, value_name = "SECONDS", value_parser = seconds)]
+    pub(crate) slow_windows: Option<Duration>,
+
     #[command(subcommand)]
     pub(crate) command: Option<Command>,
 }
@@ -105,5 +111,7 @@ mod tests {
             cli.slow_connections,
             Some(std::time::Duration::from_secs(5))
         );
+        let cli = Cli::try_parse_from(["noc", "--slow-windows", "2"]).unwrap();
+        assert_eq!(cli.slow_windows, Some(std::time::Duration::from_secs(2)));
     }
 }

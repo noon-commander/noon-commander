@@ -1054,6 +1054,14 @@ impl App {
         handover
     }
 
+    /// Debug builds only: windows take `whole`, if given, to grow or shrink.
+    #[cfg(debug_assertions)]
+    pub(crate) fn slow_windows(&mut self, whole: Option<Duration>) {
+        if let Some(whole) = whole {
+            self.stage.slow(whole);
+        }
+    }
+
     /// When the next frame of a window growing or shrinking is due, if one is.
     pub(crate) fn frame_due(&self) -> Option<Instant> {
         self.stage.due()

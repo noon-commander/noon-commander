@@ -37,6 +37,30 @@ pub struct Config {
     pub shell: ShellConfig,
     /// `[search]`: the search of the files below the panel's directory, `f /` and `f f`.
     pub search: SearchConfig,
+    /// `[viewer]`: how the viewer, F3, reads a file.
+    pub viewer: ViewerConfig,
+}
+
+/// The `[viewer]` section: the viewer reads a file in parts and keeps a window of them, so
+/// that a file of any size opens at once and takes no more memory than the window.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ViewerConfig {
+    /// Mebibytes of a part: how much it reads at once, before showing anything and again each
+    /// time scrolling reaches the edge of what it holds. Default: `16`.
+    pub part_mib: NonZeroUsize,
+    /// Mebibytes of the parts it holds at once; the ones farthest away go, to be read again
+    /// when scrolling comes back. At least two parts; less counts as two. Default: `128`.
+    pub window_mib: NonZeroUsize,
+}
+
+impl Default for ViewerConfig {
+    fn default() -> Self {
+        Self {
+            part_mib: NonZeroUsize::new(16).unwrap_or(NonZeroUsize::MIN),
+            window_mib: NonZeroUsize::new(128).unwrap_or(NonZeroUsize::MIN),
+        }
+    }
 }
 
 /// The `[search]` section: the search of a whole tree with ripgrep, or of the names in it with
@@ -513,7 +537,7 @@ mod tests {
     use super::{
         AnimationsConfig, Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, Pause,
         SearchConfig, SearchMode, ShellConfig, SshConfig, TabBar, TransferConfig, UiConfig,
-        VolumesConfig, Wheel, ZoxideConfig,
+        ViewerConfig, VolumesConfig, Wheel, ZoxideConfig,
     };
     use crate::{ConfigError, write_default_config};
 
@@ -585,6 +609,10 @@ mod tests {
         fd = "/opt/homebrew/bin/fd"
         max_results = 1000
         max_per_file = 20
+
+        [viewer]
+        part_mib = 4
+        window_mib = 64
     "#;
 
     fn full() -> Config {
@@ -640,6 +668,10 @@ mod tests {
                 max_results: NonZeroUsize::new(1000).unwrap(),
                 max_per_file: NonZeroUsize::new(20).unwrap(),
             },
+            viewer: ViewerConfig {
+                part_mib: NonZeroUsize::new(4).unwrap(),
+                window_mib: NonZeroUsize::new(64).unwrap(),
+            },
         }
     }
 
@@ -681,6 +713,8 @@ mod tests {
         assert_eq!(config.search.fd, Path::new("fd"));
         assert_eq!(config.search.max_results.get(), 10_000);
         assert_eq!(config.search.max_per_file.get(), 100);
+        assert_eq!(config.viewer.part_mib.get(), 16);
+        assert_eq!(config.viewer.window_mib.get(), 128);
     }
 
     #[test]
@@ -691,7 +725,12 @@ mod tests {
 
     #[test]
     fn a_search_finds_a_result_at_least() {
-        for text in ["[search]\nmax_results = 0", "[search]\nmax_per_file = 0"] {
+        for text in [
+            "[search]\nmax_results = 0",
+            "[search]\nmax_per_file = 0",
+            "[viewer]\npart_mib = 0",
+            "[viewer]\nwindow_mib = 0",
+        ] {
             let error = toml::from_str::<Config>(text).unwrap_err();
             assert!(error.to_string().contains("nonzero"), "{error}");
         }
@@ -902,6 +941,8 @@ mod tests {
         assert!(table["search"].get("max_results").is_some());
         assert!(table["search"].get("program").is_some());
         assert!(table["search"].get("fd").is_some());
+        assert!(table["viewer"].get("part_mib").is_some());
+        assert!(table["viewer"].get("window_mib").is_some());
     }
 
     #[test]

@@ -146,4 +146,12 @@ max_results = 10000
 # The most lines it finds in one file, so that one large file leaves room for others; at least 1.
 max_per_file = 100
 
+[viewer]
+# The viewer (F3) reads a file in parts of this many mebibytes: the first before it shows the
+# file, the next each time scrolling reaches the end of what it read; at least 1.
+part_mib = 16
+# It holds this many mebibytes of parts at once; the ones farthest away go, and are read again
+# when scrolling comes back to them. At least two parts; less counts as two.
+window_mib = 128
+
 # Per-host settings (labels, start directories) live in hosts.toml next to this file.

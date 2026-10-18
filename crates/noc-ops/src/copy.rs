@@ -1505,8 +1505,12 @@ mod tests {
         async fn set_modified(&self, path: &PathBuf, time: SystemTime) -> Result<(), VfsError> {
             LocalFs.set_modified(path, time).await
         }
-        async fn open_file(&self, path: &PathBuf) -> Result<Self::Reader, VfsError> {
-            LocalFs.open_file(path).await
+        async fn open_file_at(
+            &self,
+            path: &PathBuf,
+            offset: u64,
+        ) -> Result<Self::Reader, VfsError> {
+            LocalFs.open_file_at(path, offset).await
         }
         async fn create_file(
             &self,

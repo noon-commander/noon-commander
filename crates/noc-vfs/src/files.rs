@@ -48,12 +48,12 @@ pub(crate) struct ReadPipeline {
 }
 
 impl ReadPipeline {
-    /// Reads of `chunk` bytes, `depth` at a time.
-    pub(crate) fn new(fetch: Fetch, chunk: u32, depth: usize) -> Self {
+    /// Reads of `chunk` bytes from `start` on, `depth` at a time.
+    pub(crate) fn new(fetch: Fetch, start: u64, chunk: u32, depth: usize) -> Self {
         Self {
             fetch,
             pending: FuturesOrdered::new(),
-            next: 0,
+            next: start,
             chunk: chunk.max(1),
             depth: depth.max(1),
             ended: false,
@@ -154,7 +154,7 @@ mod tests {
     async fn reads_in_order_and_asks_again_for_short_reads() {
         for size in [0, 1, 63, 64, 1000, 10_007] {
             let (data, fetch, flight) = fake(size, None);
-            let mut pipeline = ReadPipeline::new(fetch, 64, 4);
+            let mut pipeline = ReadPipeline::new(fetch, 0, 64, 4);
             assert_eq!(read_all(&mut pipeline).await.unwrap(), data, "{size}");
             assert!(pipeline.read().await.unwrap().is_none(), "ended");
             assert!(flight.lock().unwrap().1 <= 4, "at most four at once");
@@ -164,7 +164,7 @@ mod tests {
     #[tokio::test]
     async fn keeps_several_reads_in_flight() {
         let (_, fetch, flight) = fake(10_000, None);
-        let mut pipeline = ReadPipeline::new(fetch, 64, 8);
+        let mut pipeline = ReadPipeline::new(fetch, 0, 64, 8);
         read_all(&mut pipeline).await.unwrap();
         assert_eq!(flight.lock().unwrap().1, 8);
     }
@@ -172,7 +172,7 @@ mod tests {
     #[tokio::test]
     async fn stops_at_an_error() {
         let (_, fetch, _) = fake(1000, Some(320));
-        let mut pipeline = ReadPipeline::new(fetch, 64, 4);
+        let mut pipeline = ReadPipeline::new(fetch, 0, 64, 4);
         let err = read_all(&mut pipeline).await.unwrap_err();
         assert!(matches!(err, VfsError::PermissionDenied(_)), "{err:?}");
         assert!(pipeline.read().await.unwrap().is_none(), "nothing after it");

@@ -223,7 +223,12 @@ pub(crate) fn pattern(size: usize) -> Vec<u8> {
 
 /// Everything `reader` reads.
 async fn read_all<V: Vfs>(vfs: &V, path: &V::Path) -> Result<Vec<u8>, VfsError> {
-    let mut reader = vfs.open_file(path).await?;
+    read_from(vfs, path, 0).await
+}
+
+/// Everything `reader` reads from `offset` on.
+async fn read_from<V: Vfs>(vfs: &V, path: &V::Path, offset: u64) -> Result<Vec<u8>, VfsError> {
+    let mut reader = vfs.open_file_at(path, offset).await?;
     let mut all = Vec::new();
     while let Some(chunk) = reader.read().await? {
         all.extend(chunk);
@@ -249,6 +254,13 @@ pub(crate) async fn check_files<V: Vfs>(vfs: &V, root: &Path, path: impl Fn(&str
             read_all(vfs, &path(&name)).await.unwrap() == data,
             "read: {size}"
         );
+        for offset in [1, size / 2, size, size + 5] {
+            let rest = data.get(offset..).unwrap_or_default();
+            assert!(
+                read_from(vfs, &path(&name), offset as u64).await.unwrap() == rest,
+                "read from {offset}: {size}"
+            );
+        }
     }
 
     fs::write(on_disk("taken"), "old and long").unwrap();

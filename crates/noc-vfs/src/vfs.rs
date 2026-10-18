@@ -147,6 +147,16 @@ pub trait Vfs: Send + Sync {
     fn open_file(
         &self,
         path: &Self::Path,
+    ) -> impl Future<Output = Result<Self::Reader, VfsError>> + Send {
+        self.open_file_at(path, 0)
+    }
+
+    /// Opens the file at `path` for reading from byte `offset` on, following symlinks. An
+    /// offset at or past the end reads nothing.
+    fn open_file_at(
+        &self,
+        path: &Self::Path,
+        offset: u64,
     ) -> impl Future<Output = Result<Self::Reader, VfsError>> + Send;
 
     /// Creates the file at `path` for writing: a new one, or with `replace` an existing one

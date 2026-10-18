@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rustix::fs::{AtFlags, CWD, Timespec, Timestamps};
-use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+use tokio::io::{AsyncReadExt as _, AsyncSeekExt as _, AsyncWriteExt as _};
 
 use crate::volumes::space_of;
 use crate::{DirEntry, FileKind, FileReader, FileWriter, Metadata, Space, Vfs, VfsError};
@@ -159,10 +159,15 @@ impl Vfs for LocalFs {
             .map_err(|err| VfsError::local(err, path))
     }
 
-    async fn open_file(&self, path: &PathBuf) -> Result<LocalReader, VfsError> {
-        let file = tokio::fs::File::open(path)
+    async fn open_file_at(&self, path: &PathBuf, offset: u64) -> Result<LocalReader, VfsError> {
+        let mut file = tokio::fs::File::open(path)
             .await
             .map_err(|err| VfsError::local(err, path))?;
+        if offset > 0 {
+            file.seek(io::SeekFrom::Start(offset))
+                .await
+                .map_err(|err| VfsError::local(err, path))?;
+        }
         Ok(LocalReader {
             file,
             path: path.clone(),

@@ -342,7 +342,7 @@ impl Vfs for SftpFs {
             .map_err(|err| VfsError::remote(err, path))
     }
 
-    async fn open_file(&self, path: &RemotePath) -> Result<SftpReader, VfsError> {
+    async fn open_file_at(&self, path: &RemotePath, offset: u64) -> Result<SftpReader, VfsError> {
         let mut options = self.sftp.options();
         options.read(true);
         let file = open(options, path)
@@ -363,7 +363,7 @@ impl Vfs for SftpFs {
         });
         let depth = usize::try_from(IN_FLIGHT / CHUNK).unwrap_or(1);
         Ok(SftpReader {
-            pipeline: ReadPipeline::new(fetch, CHUNK, depth),
+            pipeline: ReadPipeline::new(fetch, offset, CHUNK, depth),
         })
     }
 

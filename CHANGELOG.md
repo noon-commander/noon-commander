@@ -9,6 +9,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- F3 reads a file in parts (`viewer.part_mib`, 16 MiB) and holds a window of it
+  (`viewer.window_mib`, 128 MiB), both under Viewer in the Configuration dialog, so any part of
+  a large file can be seen: the next part is read when the screen reaches the end of what is held,
+  and a dropped one again when it scrolls back. A read that takes long shows a dialog with a gauge
+  of the part; Stop (Esc) keeps what was read, Close closes the viewer. Until the end is known the
+  position shows `line/? percent%` and the text ends with `more below`. A file that changes
+  between parts is read again from the start; a later part that fails keeps the text.
 - Dates, times, and numbers follow the formats of the region (`ui.formats`, a text field under
   Interface in the Configuration dialog, applied at once). `auto` takes them from `LC_ALL`,
   `LC_TIME`, `LC_NUMERIC`, and `LC_COLLATE`, then on macOS from System Settings → Language &
@@ -49,9 +56,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reads a directory or connects, or makes a directory of F7 or renames, braille dots turn in its
   place and the title shows the path it reads (`⠹ web:/var/www`), so the path never moves; its
   status line stays as it is. The viewer's title has the file's icon in front of the path, where the
-  dots turn while it reads the file, and a skeleton line of faint bars, crossed by the same shine,
-  stands for the text. A host connecting in the location menu turns braille dots too, and so do the
-  location menu, the zoxide window, and the search of a whole tree in front of their title while
+  dots turn while it reads the file. A host connecting in the location menu turns braille dots
+  too, and so do the location menu, the zoxide window, and the search of a whole tree in front of
+  their title while
   they wait, which stays in place; until their first rows come, a skeleton of faint bars stands in
   their place, as many rows as the window had the last time it opened (one, the first time), so the
   box does not grow when they come, a shine crossing every bar at once, one cell every 40 ms, while

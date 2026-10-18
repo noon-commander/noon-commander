@@ -17,13 +17,13 @@ noc-text.workspace = true
 noc-vfs.workspace = true
 ratatui.workspace = true
 rust-embed.workspace = true
+tokio.workspace = true
 tracing.workspace = true
 unicode-width.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
 tempfile.workspace = true
-tokio.workspace = true
 
 [lints]
 workspace = true

@@ -3,6 +3,7 @@
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
+use std::ops::ControlFlow;
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -34,13 +35,13 @@ use noc_vfs::{
     FileKind, FileWriter as _, LocalFs, Location, Metadata, RemotePath, SftpFs, Space, Vfs,
     VfsError, VfsPath as _,
 };
-use noc_viewer::read_start;
+use noc_viewer::{Part, Progress, Want, read_part};
 use tokio::io::AsyncReadExt as _;
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::task::{AbortHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 
-use super::app::{Effect, FindRequest, HistoryChange, RecentChange, WorkspaceChange};
+use super::app::{Effect, FindRequest, HistoryChange, ReadRequest, RecentChange, WorkspaceChange};
 use super::describe;
 use super::dialog::{Ask, Reply};
 use super::find::{FindQuery, FindSummary, Finding};
@@ -73,11 +74,13 @@ pub(crate) enum Done {
     },
     /// A report from the job `id` of [`Effect::Delete`] or [`Effect::Copy`].
     Job { id: u64, event: JobEvent },
-    /// The start of the file of [`Effect::Read`], and whether there is more, or why not.
+    /// The part of the file of [`Effect::Read`], or why not.
     Read {
         id: u64,
-        result: Result<(Vec<u8>, bool), String>,
+        result: Result<Part, String>,
     },
+    /// How far [`Effect::Read`] is with its part.
+    ReadProgress { id: u64, progress: Progress },
     /// The directory of [`Effect::CreateDir`] was made, or why not.
     Created {
         panel: PanelId,
@@ -347,12 +350,7 @@ impl Tasks {
                     host,
                 } => self.rename(panel, from, to, replace, host),
                 Effect::Discard(path) => discard(path),
-                Effect::Read {
-                    id,
-                    location,
-                    host,
-                    cancel,
-                } => self.read(id, location, host, cancel),
+                Effect::Read(request) => self.read(request),
                 Effect::Delete {
                     id,
                     targets,
@@ -707,18 +705,34 @@ impl Tasks {
         });
     }
 
-    /// Reads the start of a file for the viewer `id`, until `cancel`.
-    fn read(
-        &self,
-        id: u64,
-        location: Location,
-        host: Option<HostHandle>,
-        cancel: CancellationToken,
-    ) {
+    /// Reads a part of a file for the viewer, reporting how far it is at most every
+    /// [`FIND_REPORTS`].
+    fn read(&self, request: ReadRequest) {
+        let ReadRequest {
+            id,
+            location,
+            host,
+            want,
+            stop,
+            cancel,
+        } = request;
         let done = self.done.clone();
         tokio::spawn(async move {
+            let mut sent: Option<Instant> = None;
+            let report = |progress: Progress| {
+                if stop.is_cancelled() {
+                    return ControlFlow::Break(());
+                }
+                // The last report always goes, so that the gauge ends full.
+                let last = progress.read >= progress.total;
+                if last || sent.is_none_or(|sent| sent.elapsed() >= FIND_REPORTS) {
+                    sent = Some(Instant::now());
+                    let _ = done.send(Done::ReadProgress { id, progress });
+                }
+                ControlFlow::Continue(())
+            };
             let result = tokio::select! {
-                result = read(location, host) => result,
+                result = read(location, host, want, report) => result,
                 () = cancel.cancelled() => return,
             };
             let _ = done.send(Done::Read { id, result });
@@ -1437,12 +1451,18 @@ pub(crate) async fn remote_command(
     answer.await.map_err(|_| closed())?
 }
 
-/// The start of the file at `location`, up to [`noc_viewer::LIMIT`], and whether there is
-/// more.
-async fn read(location: Location, host: Option<HostHandle>) -> Result<(Vec<u8>, bool), String> {
+/// The part `want` of the file at `location`; `report` hears how far it is.
+async fn read(
+    location: Location,
+    host: Option<HostHandle>,
+    want: Want,
+    report: impl FnMut(Progress) -> ControlFlow<()>,
+) -> Result<Part, String> {
     let result = match (location, share(host).await) {
-        (Location::Local(path), _) => read_start(&LocalFs, &path).await,
-        (Location::Remote { path, .. }, Some(Some(fs))) => read_start(&*fs, &path).await,
+        (Location::Local(path), _) => read_part(&LocalFs, &path, want, report).await,
+        (Location::Remote { path, .. }, Some(Some(fs))) => {
+            read_part(&*fs, &path, want, report).await
+        }
         _ => return Err(fl!("error-connection-closed")),
     };
     result.map_err(|error| describe::vfs_error(&error))

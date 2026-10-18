@@ -1815,27 +1815,6 @@ fn status_skeleton(width: u16, style: Style, theme: &Theme, shine: Option<Shine>
     Line::from(shine_bar(length, middle, &glyph, style))
 }
 
-/// A skeleton of a line of text, in place of a text still to come over `width` cells: a faint
-/// bar from the left edge, in the colors of `style`, which a `shine`, if any, crosses as it does
-/// the skeleton of rows. None where there is no room for it.
-pub(crate) fn text_skeleton(
-    width: u16,
-    style: Style,
-    theme: &Theme,
-    shine: Option<Shine>,
-) -> Option<Line<'static>> {
-    // Twelfths of the measure of the line; of 80 cells at most, as lines of text tend to be.
-    const LENGTH: u16 = 7;
-    const MEASURE: u16 = 80;
-    if width < 8 {
-        return None;
-    }
-    let length = width.min(MEASURE) * LENGTH / 12;
-    let glyph = theme.glyphs.skeleton.to_string();
-    let bar = shine_bar(length, shine_middle(shine, length), &glyph, style);
-    Some(Line::from(bar))
-}
-
 /// Cells from the middle of a shine to where it fades out.
 const SHINE_HALF: u16 = 5;
 
@@ -1953,20 +1932,6 @@ mod tests {
             .unwrap();
         let buffer = terminal.backend().buffer();
         (0..30).map(|x| buffer[(x, 0)].style().fg).collect()
-    }
-
-    #[test]
-    fn a_skeleton_of_text_is_a_line_of_eighty_cells_at_most_that_shines() {
-        let theme = Theme::terminal();
-        let white = Style::new()
-            .fg(Color::Rgb(255, 255, 255))
-            .bg(Color::Rgb(0, 0, 0));
-        let width = |width| text_skeleton(width, white, &theme, None).map(|line| line.width());
-        assert_eq!(width(24), Some(14));
-        assert_eq!(width(200), Some(46));
-        assert_eq!(width(7), None, "too narrow for a bar");
-        let line = text_skeleton(24, white, &theme, Some(Shine::after(12))).unwrap();
-        assert_eq!(line.spans[7].style.fg, Some(Color::Rgb(166, 166, 166)));
     }
 
     #[test]

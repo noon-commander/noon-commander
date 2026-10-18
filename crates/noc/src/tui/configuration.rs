@@ -70,6 +70,8 @@ enum Key {
     FdProgram,
     MaxResults,
     MaxPerFile,
+    ViewerPart,
+    ViewerWindow,
 }
 
 /// A value and how it is edited.
@@ -199,7 +201,9 @@ impl Setting {
             | Key::ParallelJobs
             | Key::HistorySize
             | Key::MaxResults
-            | Key::MaxPerFile => self.apply_number(config)?,
+            | Key::MaxPerFile
+            | Key::ViewerPart
+            | Key::ViewerWindow => self.apply_number(config)?,
             Key::MenuBar => {
                 ui.menu_bar = match text {
                     "always" => MenuBar::Always,
@@ -292,6 +296,15 @@ impl Setting {
             Key::MaxPerFile => {
                 config.search.max_per_file =
                     number(text, |text| fl!("config-max-per-file-invalid", text = text))?;
+            }
+            Key::ViewerPart => {
+                config.viewer.part_mib =
+                    number(text, |text| fl!("config-viewer-part-invalid", text = text))?;
+            }
+            Key::ViewerWindow => {
+                config.viewer.window_mib = number(text, |text| {
+                    fl!("config-viewer-window-invalid", text = text)
+                })?;
             }
             _ => {}
         }
@@ -467,6 +480,7 @@ impl Configuration {
                 zoxide(config, home),
                 shell(config),
                 search(config, home),
+                viewer(config),
             ],
             category: 0,
             focus: Focus::Settings,
@@ -1499,6 +1513,30 @@ fn search(config: &Config, home: &Path) -> Category {
     }
 }
 
+/// Viewer, `[viewer]`: how much of a file F3 reads at once, and how much it keeps.
+fn viewer(config: &Config) -> Category {
+    let viewer = &config.viewer;
+    Category {
+        icon: categories::VIEWER,
+        title: fl!("config-viewer"),
+        settings: vec![
+            Setting::new(
+                Key::ViewerPart,
+                (fl!("config-viewer-part"), fl!("config-viewer-part-hint")),
+                text(&viewer.part_mib.to_string()),
+            ),
+            Setting::new(
+                Key::ViewerWindow,
+                (
+                    fl!("config-viewer-window"),
+                    fl!("config-viewer-window-hint"),
+                ),
+                text(&viewer.window_mib.to_string()),
+            ),
+        ],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::num::NonZeroUsize;
@@ -1978,7 +2016,7 @@ mod tests {
             dialog.category_labels().iter().map(Label::letter).collect();
         assert_eq!(
             digits,
-            "12345678".chars().map(Some).collect::<Vec<_>>(),
+            "123456789".chars().map(Some).collect::<Vec<_>>(),
             "the categories have their digits"
         );
     }
@@ -2000,12 +2038,12 @@ mod tests {
                 .collect();
             (underlined, terminal.backend().to_string())
         };
-        assert_eq!(underlined(76).0, "1L2F3T4B5I6h7r8SMweKdna");
+        assert_eq!(underlined(76).0, "1L2F3T4B5I6h7r8S9MweKdna");
         // Names cut short keep the letter before the cut, as Command line its 7 and Show hidden
         // files its h, and lose one after it, as Key hints delay its d.
         let (letters, screen) = underlined(40);
         assert!(screen.contains(" 7 Co"), "{screen}");
-        assert_eq!(letters, "1L2F3T4B5I6h7r8SMweKna", "{screen}");
+        assert_eq!(letters, "1L2F3T4B5I6h7r8S9MweKna", "{screen}");
     }
 
     #[test]
@@ -2026,8 +2064,9 @@ mod tests {
             (0, Focus::Sidebar, 0)
         );
         assert_eq!(dialog.handle(Resolved::Hotkey('9')), ConfigEvent::default());
+        assert_eq!((dialog.category, dialog.focus), (8, Focus::Sidebar));
         assert_eq!(dialog.handle(Resolved::Hotkey('0')), ConfigEvent::default());
-        assert_eq!((dialog.category, dialog.focus), (0, Focus::Sidebar));
+        assert_eq!((dialog.category, dialog.focus), (8, Focus::Sidebar));
     }
 
     #[test]

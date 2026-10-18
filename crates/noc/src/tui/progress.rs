@@ -432,7 +432,7 @@ impl JobView {
 }
 
 /// `done` of `total`, from 0 to 1.
-fn ratio(done: u64, total: u64) -> f64 {
+pub(crate) fn ratio(done: u64, total: u64) -> f64 {
     if total == 0 {
         return 0.0;
     }
@@ -460,7 +460,7 @@ fn speed_size(bytes: f64) -> String {
 
 /// A bar of `width` cells, filled for `ratio`, and the percentage after it. Block characters
 /// show in any theme, where colors alone would not.
-fn gauge(ratio: f64, width: usize, theme: &Theme) -> Line<'static> {
+pub(crate) fn gauge(ratio: f64, width: usize, theme: &Theme) -> Line<'static> {
     // `ratio` is within 0 … 1, and bars are a few dozen cells.
     #[allow(
         clippy::cast_possible_truncation,
@@ -489,7 +489,7 @@ fn gauge(ratio: f64, width: usize, theme: &Theme) -> Line<'static> {
 
 /// The gauge of a job that does not know yet how far it is: a faint bar of `width` cells, with
 /// no percentage, over which a `shine`, if any, the one of the skeleton of rows, runs to and fro.
-fn unknown_gauge(width: u16, shine: Option<Shine>, theme: &Theme) -> Line<'static> {
+pub(crate) fn unknown_gauge(width: u16, shine: Option<Shine>, theme: &Theme) -> Line<'static> {
     let middle = shine.map(|shine| i32::from(shine.bounce(width)));
     Line::from(shine_bar(
         width,

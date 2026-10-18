@@ -17,10 +17,12 @@ pub enum Align {
 /// A name made safe for the terminal: invalid UTF-8 is replaced, and control characters and
 /// bidi controls, which could move the cursor or reorder the screen, are shown as `?`.
 pub fn sanitize(bytes: &[u8]) -> String {
-    String::from_utf8_lossy(bytes)
-        .chars()
-        .map(|c| if is_unsafe(c) { '?' } else { c })
-        .collect()
+    String::from_utf8_lossy(bytes).chars().map(safe).collect()
+}
+
+/// `c` as [`sanitize`] shows it: itself, or `?` if the terminal could act on it.
+pub fn safe(c: char) -> char {
+    if is_unsafe(c) { '?' } else { c }
 }
 
 fn is_unsafe(c: char) -> bool {

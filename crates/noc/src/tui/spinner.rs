@@ -91,6 +91,11 @@ impl Spin {
         }
     }
 
+    /// The moment of the frame.
+    pub(crate) fn at(&self) -> Instant {
+        self.at
+    }
+
     /// The dots of `wait` in one cell, from when they show; `None` while the wait is too young
     /// to show.
     pub(crate) fn wait_dots(&self, wait: &Wait) -> Option<char> {

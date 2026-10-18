@@ -859,7 +859,9 @@ Space, f, and b turn the whole page, and u and d half of it, as in less. Unlike 
 down stops with the end of the text at the bottom, where a dimmed line marks it; the help scrolls
 the same way. Lines cut show `«` and `»` where they go on past the screen, as vim's 'listchars'
 `precedes` and `extends`, and the z keys scroll them as vim's do; wrapped lines start each row
-after the first with `»`, as vim's 'showbreak'.
+after the first with `»`, as vim's 'showbreak'. The keys down read the next part of a large file
+when they reach the end of what is held, and the keys up read a part dropped before; a read that
+takes long shows a dialog, whose keys are those of `dialog` (Esc stops it).
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |

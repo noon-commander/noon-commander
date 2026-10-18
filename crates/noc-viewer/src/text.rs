@@ -8,26 +8,105 @@ const TAB: usize = 8;
 /// The lines of `bytes`, as UTF-8 with invalid bytes replaced: `\r\n` ends a line too, tabs
 /// go to the next stop, and what a terminal would act on is shown safely.
 pub(crate) fn lines_of(bytes: &[u8]) -> Vec<String> {
-    let text = String::from_utf8_lossy(bytes);
-    let text = text.strip_suffix('\n').unwrap_or(&text);
-    text.split('\n')
-        .map(|line| {
-            let line = line.strip_suffix('\r').unwrap_or(line);
-            let mut expanded = String::with_capacity(line.len());
-            let mut column = 0;
-            for c in line.chars() {
-                if c == '\t' {
-                    let spaces = TAB - column % TAB;
-                    expanded.extend(std::iter::repeat_n(' ', spaces));
-                    column += spaces;
-                } else {
-                    expanded.push(c);
-                    column += c.width().unwrap_or(0);
-                }
-            }
-            noc_text::sanitize(expanded.as_bytes())
-        })
+    let bytes = bytes.strip_suffix(b"\n").unwrap_or(bytes);
+    let pieces = pieces(bytes, threads_for(bytes.len()));
+    in_parallel(&pieces, |piece| lines_in(piece))
+        .into_iter()
+        .flatten()
         .collect()
+}
+
+/// The rows of all `lines`, as [`row_count`] counts them, on as many threads as they are worth.
+pub(crate) fn rows_of_lines(lines: &[String], first: usize, rest: usize) -> usize {
+    let bytes = lines.iter().map(String::len).sum();
+    let threads = threads_for(bytes);
+    let pieces: Vec<&[String]> = lines.chunks(lines.len().div_ceil(threads).max(1)).collect();
+    let count = |piece: &&[String]| -> usize {
+        piece.iter().map(|line| row_count(line, first, rest)).sum()
+    };
+    in_parallel(&pieces, count).into_iter().sum()
+}
+
+/// The fewest bytes worth a thread of their own.
+const PIECE: usize = 1 << 20;
+
+/// The threads to share the work on `bytes` bytes between: one for each [`PIECE`], at most one
+/// for each processor.
+fn threads_for(bytes: usize) -> usize {
+    let threads = std::thread::available_parallelism().map_or(1, usize::from);
+    threads.min(bytes / PIECE).max(1)
+}
+
+/// `work` done on each of `pieces`, each on a thread of its own if there are more than one.
+fn in_parallel<P: Sync, T: Send>(pieces: &[P], work: impl Fn(&P) -> T + Sync) -> Vec<T> {
+    if pieces.len() < 2 {
+        return pieces.iter().map(&work).collect();
+    }
+    std::thread::scope(|scope| {
+        let threads: Vec<_> = pieces
+            .iter()
+            .map(|piece| scope.spawn(|| work(piece)))
+            .collect();
+        threads
+            .into_iter()
+            .map(|thread| {
+                thread
+                    .join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+            })
+            .collect()
+    })
+}
+
+/// `bytes` in about `count` pieces of whole lines, without the line feeds between them.
+fn pieces(bytes: &[u8], count: usize) -> Vec<&[u8]> {
+    let mut pieces = Vec::with_capacity(count);
+    let mut rest = bytes;
+    for left in (1..count).rev() {
+        let at = rest.len() / (left + 1);
+        let Some(feed) = rest[at..].iter().position(|&byte| byte == b'\n') else {
+            break;
+        };
+        pieces.push(&rest[..at + feed]);
+        rest = &rest[at + feed + 1..];
+    }
+    pieces.push(rest);
+    pieces
+}
+
+fn lines_in(bytes: &[u8]) -> Vec<String> {
+    bytes.split(|&byte| byte == b'\n').map(line_of).collect()
+}
+
+/// One line of [`lines_of`], in one pass: a line feed is never part of a bad UTF-8 sequence, so
+/// the bytes split into lines before they are decoded.
+fn line_of(bytes: &[u8]) -> String {
+    let bytes = bytes.strip_suffix(b"\r").unwrap_or(bytes);
+    let mut line = String::with_capacity(bytes.len());
+    let mut column = 0;
+    for chunk in bytes.utf8_chunks() {
+        for c in chunk.valid().chars() {
+            push(&mut line, &mut column, c);
+        }
+        if !chunk.invalid().is_empty() {
+            push(&mut line, &mut column, char::REPLACEMENT_CHARACTER);
+        }
+    }
+    line
+}
+
+fn push(line: &mut String, column: &mut usize, c: char) {
+    if c.is_ascii_graphic() || c == ' ' {
+        line.push(c);
+        *column += 1;
+    } else if c == '\t' {
+        let spaces = TAB - *column % TAB;
+        line.extend(std::iter::repeat_n(' ', spaces));
+        *column += spaces;
+    } else {
+        line.push(noc_text::safe(c));
+        *column += c.width().unwrap_or(0);
+    }
 }
 
 /// Where the rows of `line` start, in bytes, wrapped in a first row of at most `first` cells and
@@ -58,7 +137,15 @@ pub(crate) fn row_of<'a>(line: &'a str, starts: &[usize], row: usize) -> &'a str
 
 /// How many rows [`row_starts`] breaks `line` into, without keeping where.
 pub(crate) fn row_count(line: &str, first: usize, rest: usize) -> usize {
-    let (mut count, mut used, mut room, mut empty) = (1, 0, first.max(1), true);
+    let (first, rest) = (first.max(1), rest.max(1));
+    // No cell takes less than a byte, and lines of [`lines_of`] in ASCII take one a byte.
+    if line.len() <= first {
+        return 1;
+    }
+    if line.is_ascii() {
+        return 1 + (line.len() - first).div_ceil(rest);
+    }
+    let (mut count, mut used, mut room, mut empty) = (1, 0, first, true);
     for c in line.chars() {
         let char_width = c.width().unwrap_or(0);
         if used + char_width > room && !empty {
@@ -202,5 +289,32 @@ mod tests {
         assert!(wider_than("文", 1));
         assert!(!wider_than("", 0));
         assert!(!wider_than("\u{301}", 0), "nothing shows");
+    }
+
+    #[test]
+    fn shares_long_text_between_threads_as_one_would_read_it() {
+        let mut bytes = Vec::new();
+        let mut n = 0_u32;
+        while bytes.len() < 3 * PIECE {
+            n += 1;
+            bytes.extend_from_slice(match n % 4 {
+                0 => b"\t\xe6\x96\x87x\xff\r\n",
+                1 => b"\n",
+                2 => b"a\x1bb\xe6\x96",
+                _ => b"\x87 line\n",
+            });
+        }
+        let one = lines_in(&bytes[..bytes.len() - 1]);
+        assert_eq!(lines_of(&bytes), one);
+        assert_eq!(
+            pieces(b"ab\ncd\nef", 3),
+            [b"ab", b"cd", b"ef"],
+            "split at the line feed after a third"
+        );
+        assert_eq!(pieces(b"abc", 3), [b"abc"], "no line feed to split at");
+        for (first, rest) in [(10, 8), (3, 1)] {
+            let rows: usize = one.iter().map(|line| row_count(line, first, rest)).sum();
+            assert_eq!(rows_of_lines(&one, first, rest), rows);
+        }
     }
 }

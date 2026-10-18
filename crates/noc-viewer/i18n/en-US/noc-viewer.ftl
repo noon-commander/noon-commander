@@ -5,9 +5,10 @@
 viewer-position = { $line }/{ $lines } { $percent }%
 # The same, once the end of the text shows.
 viewer-position-end = { $line }/{ $lines } End
-# The same, when only the start of a long file was read: how much was read, in mebibytes.
-viewer-truncated = { $position } of the first { $mebibytes } MiB
+# The same, before the whole file was read: its lines are not known yet, and how far is in
+# bytes.
+viewer-position-part = { $line }/? { $percent }%
 # In the middle of the dimmed line across the screen after the last line of the text.
 viewer-end = EOF
-# The same, when only the start of a long file was read.
-viewer-end-truncated = end of the first { $mebibytes } MiB
+# The same, where the file goes on past the parts read: scrolling on reads the next one.
+viewer-end-more = more below

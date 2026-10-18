@@ -477,6 +477,13 @@ config-max-results-invalid = "{ $text }" is not a number of results: it takes a 
 config-max-per-file = Most &lines in a file
 config-max-per-file-hint = The search finds no more lines in one file than so many, so that a large file leaves room for others; 1 or more.
 config-max-per-file-invalid = "{ $text }" is not a number of lines: it takes a whole number, 1 or more.
+config-viewer = Viewer
+config-viewer-part = &Part, MiB
+config-viewer-part-hint = F3 reads a file in parts of so many MiB, the next one when the text is scrolled past the end of what it holds; 1 or more. Takes effect at the next F3.
+config-viewer-part-invalid = "{ $text }" is not a number of MiB: it takes a whole number, 1 or more.
+config-viewer-window = &Window, MiB
+config-viewer-window-hint = F3 holds at most so many MiB of a file, and at least two parts; scrolled back past them, it reads them again. Takes effect at the next F3.
+config-viewer-window-invalid = "{ $text }" is not a number of MiB: it takes a whole number, 1 or more.
 # After the hint of a setting that the running Noon Commander cannot change.
 config-restart = Takes effect after a restart.
 # The reason names the file.
@@ -1100,6 +1107,20 @@ checksum-save-error = Cannot save { $path }: { $reason }
 ## The viewer, F3 (src/tui/app). Prefix: viewer-. Its own text is in crates/noc-viewer.
 
 viewer-error = Cannot view { $path }: { $reason }
+# A part after the first could not be read; the viewer keeps what it holds.
+viewer-read-error = Cannot read more of { $path }: { $reason }
+# The file changed between two parts the viewer read; it reads it again from the start.
+viewer-changed = { $path } changed; reading it again.
+# The window over the viewer while it reads a part of the file that takes a while.
+viewer-reading = Reading
+# Where the part starts in the file, and the size of the file; sizes are short, as 32M.
+viewer-read-at = At { $offset } of { $size }
+viewer-read-at-unknown = At { $offset }
+# How much of the part it has read.
+viewer-read-count = { $read } of { $total }
+# Ends the reading and shows what it read.
+viewer-read-stop = &Stop
+viewer-read-close = &Close
 
 ## Editing, F4 (src/tui). Prefix: edit-. The editor of $VISUAL or $EDITOR, or vi.
 

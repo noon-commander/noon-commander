@@ -43,12 +43,13 @@ Library crates contain no UI code and no user-facing text; they return typed err
 and the UI turns them into messages. `noc-viewer` is the exception
 ([ADR 0015](adr/0015-viewer-and-text-crates.md)): a piece of the UI, with Fluent text of its own,
 that knows nothing of the keymap, the theme, or the app. The app maps its keys to the viewer's
-commands, gives it the styles of its theme, reads the file with `noc_viewer::read_start` in a
-task of its own, and closes the viewer itself. `noc-scroll` draws too, the scroll bar, but has
-no text ([ADR 0023](adr/0023-paging-stops-at-the-end.md)). Code that two crates need goes into a
-crate of its own topic, such as `noc-text`, or `noc-pattern`, which builds the regular
-expressions of fd's search in `noc-tools` and of the regex mode in the app, rather than into a
-common `core` crate.
+commands, gives it the styles of its theme, reads the parts it asks for (`Viewer::want`) with
+`noc_viewer::read_part` in a task of its own, which also makes their lines away from the thread
+that draws, gives them back (`Viewer::take`), and closes the viewer itself. `noc-scroll` draws
+too, the scroll bar, but has no text ([ADR 0023](adr/0023-paging-stops-at-the-end.md)). Code
+that two crates need goes into a crate of its own topic, such as `noc-text`, or `noc-pattern`,
+which builds the regular expressions of fd's search in `noc-tools` and of the regex mode in the
+app, rather than into a common `core` crate.
 
 ssh runs only from `noc-ssh`, and every other program only from `noc-tools`
 ([ADR 0012](adr/0012-external-tools-and-zoxide.md)): without a shell, with `--` before paths,
@@ -1130,17 +1131,23 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 - **F3 views** the file under the cursor, as mc does (on a directory it opens it): the viewer
   (`noc-viewer`) takes the screen, with the path and the position (first line, lines, and how far
   the last line on screen is, or `End` once the end shows) on top, a scroll bar on the right when
-  the text does not fit, and its own F-key bar. It reads the first 16 MiB, locally or
-  through the host's shared session, in the background (closing the viewer stops that), and says so
-  when the file is longer. Text is UTF-8 with invalid bytes replaced, tabs go to stops of 8, `\r\n`
-  ends lines, and control characters are shown safely. Long lines wrap, each row after the first
-  starting with `»`, as vim's 'showbreak' (F2 cuts them, `«` and `»` mark where they go on past
-  the screen, as vim's 'listchars', and Left and Right, `h`, `l`, and the z keys as vim's scroll
-  then, no further than the end of the longest line on screen at the right edge, and back as far
-  as the lines on screen need after paging or widening); the
-  position is a line and a row within it, so that only the lines in view are wrapped, whatever
-  the size of the file. Keys follow vim and less: `j`/`k`, Ctrl+e/Ctrl+y, and the
-  arrows a line, Ctrl+f/Ctrl+b and PgDn/PgUp a page but for the two rows that vim keeps, Space/`f`
+  the text does not fit, and its own F-key bar. It reads the file in parts of `viewer.part_mib`,
+  locally or through the host's shared session, in the background (closing the viewer stops
+  that), each ending after its last line feed, the next when a move down shows the end of what it
+  holds, and keeps a window of `viewer.window_mib`, reading a part it dropped again when a move up
+  reaches it ([ADR 0038](adr/0038-viewer-reads-a-window-of-the-file.md)). Until the end is known
+  the position is `line/? percent%` by bytes, the scroll bar goes by bytes, and `more below` ends
+  the text. A read longer than 150 ms shows the `Reading` dialog (`tui/reading.rs`): where the
+  part starts, a gauge, Stop (Esc), which keeps what was read, and Close. A file whose size or
+  time changes between parts is read again from the start. Text is UTF-8 with invalid bytes
+  replaced, tabs go to stops of 8, `\r\n` ends lines, and control characters are shown safely.
+  Long lines wrap, each row after the first starting with `»`, as vim's 'showbreak' (F2 cuts
+  them, `«` and `»` mark where they go on past the screen, as vim's 'listchars', and Left and
+  Right, `h`, `l`, and the z keys as vim's scroll then, no further than the end of the longest
+  line on screen at the right edge, and back as far as the lines on screen need after paging or
+  widening); the position is a line and a row within it, so that only the lines in view are
+  wrapped, whatever the size of the file. Keys follow vim and less: `j`/`k`, Ctrl+e/Ctrl+y, and
+  the arrows a line, Ctrl+f/Ctrl+b and PgDn/PgUp a page but for the two rows that vim keeps, Space/`f`
   and `b` a whole page, as less, Ctrl+d/Ctrl+u and `d`/`u` half a page, rounded down as vim's
   'scroll'; unlike vim's, every key down stops with the end at the bottom, where a dimmed line
   across the text, `──── EOF ────`, follows the last line (`noc-scroll` has
@@ -1664,8 +1671,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   directory it reads at once (and while a directory of F7 or a rename it started is done, with the
   reading after it in one wait: `Panel::begin_work`), so the path never moves and the status line
   under the rows stays as it is; the dots take the color of the host's status while it connects; in
-  place of the file's icon in front of the path in the viewer's title, while `dialog::text_skeleton`
-  gives a line of faint bars for the text; on the icon of a host connecting in the location menu;
+  place of the file's icon in front of the path in the viewer's title, while its `Reading` window
+  shows a gauge; on the icon of a host connecting in the location menu;
   and in front of the titles of the location menu, the zoxide window, and the search of a whole
   tree, drawn over the line of the frame by `dialog::draw_title_dots`, so the title stays in place;
   until their first rows come, `dialog::draw_skeleton` draws rows of faint bars, as many as the

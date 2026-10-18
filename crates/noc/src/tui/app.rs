@@ -16,7 +16,10 @@ use noc_scroll::Motion;
 use noc_scroll::scrollbar::{self, Part};
 use noc_tools::zoxide::Scored;
 use noc_vfs::{FileKind, Location, Metadata, RemotePath, Volume};
-use noc_viewer::{Command as ViewerCommand, Styles as ViewerStyles, Viewer};
+use noc_viewer::{
+    Command as ViewerCommand, Part as ViewerPart, Progress as ReadProgress, Sizes as ViewerSizes,
+    Styles as ViewerStyles, Taken, Viewer, Want,
+};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::style::Style;
@@ -31,7 +34,7 @@ use super::command::{self, CommandEvent, CommandLine, Place, Run};
 use super::complete::{self, Candidate, Choices, ChoicesEvent, Kind, Offer, Outcome, Quote};
 use super::configuration::{ConfigEvent, Configuration};
 use super::decor::Decor;
-use super::dialog::{Ask, Button, Dialog, DialogEvent, Field, Reply, text_skeleton};
+use super::dialog::{Ask, Button, Dialog, DialogEvent, Field, Reply};
 use super::edit::{Editor, Registers};
 use super::find::{FindEvent, FindMode, FindQuery, FindSummary, FindWindow, Finding};
 use super::glyphs::{self, Glyphs};
@@ -56,6 +59,7 @@ use super::picker::{FULL_ROWS, Whole};
 use super::places::{Places, volume_of};
 use super::progress::{Counts, JobButton, JobView};
 use super::pulldown::{self, Command, PullDown, PullDownEvent, Status};
+use super::reading::{ReadButton, Reading};
 use super::spinner::{self, Spin, Wait};
 use super::sums::{Mark, SumRow, SumsButton, SumsEvent, SumsWindow, Verdict};
 use super::tab_menu::{TabMenu, TabMenuEvent};
@@ -102,14 +106,9 @@ pub(crate) enum Effect {
     },
     /// Read the volumes and the hosts for the location menu and pass them to [`App::places`].
     ListPlaces { generation: u64 },
-    /// Read the start of the file at `location` for the viewer `id`, through `host` if it is
-    /// remote, and report to [`App::read`]; `cancel` stops it.
-    Read {
-        id: u64,
-        location: Location,
-        host: Option<HostHandle>,
-        cancel: CancellationToken,
-    },
+    /// Read a part of a file for the viewer, and report to [`App::read_progress`] and
+    /// [`App::read`].
+    Read(ReadRequest),
     /// Remove a temporary file, if it is there.
     Discard(PathBuf),
     /// Make the directory at `location` and report to [`App::created`]. Remote ones go to the
@@ -245,6 +244,18 @@ pub(crate) struct FindRequest {
     pub(crate) query: FindQuery,
     pub(crate) max_results: usize,
     pub(crate) delay: Duration,
+    pub(crate) cancel: CancellationToken,
+}
+
+/// The read of the part `want` of the file at `location` for the viewer `id`, through `host`
+/// if it is remote; `stop` ends it with what it read, `cancel` drops it.
+#[derive(Debug)]
+pub(crate) struct ReadRequest {
+    pub(crate) id: u64,
+    pub(crate) location: Location,
+    pub(crate) host: Option<HostHandle>,
+    pub(crate) want: Want,
+    pub(crate) stop: CancellationToken,
     pub(crate) cancel: CancellationToken,
 }
 
@@ -632,7 +643,7 @@ struct Sizes {
     jump: Option<u16>,
 }
 
-/// The viewer on screen, the read it waits for, and what stops it loading.
+/// The viewer on screen, the part it reads, and what stops it loading.
 #[derive(Debug)]
 struct Viewing {
     id: u64,
@@ -640,14 +651,18 @@ struct Viewing {
     /// For the file, whose dots turn on its icon until it is read.
     wait: Wait,
     location: Location,
-    /// The line it shows at the top once the file is read, if not the first.
-    line: Option<u64>,
+    host: Option<HostHandle>,
+    /// The part being read, if any, with its window.
+    reading: Option<Reading>,
+    /// The window of the part read last, full for a moment.
+    finished: Option<Reading>,
     cancel: CancellationToken,
 }
 
 impl Viewing {
     /// Draws the viewer over `area`, the icon of the file in front of its path: while the file
-    /// is read, the dots turn in its place, and a skeleton of text stands for the text.
+    /// is read, the dots turn in its place. A part that takes a while shows its window over it,
+    /// with a gauge.
     fn render(
         &mut self,
         frame: &mut Frame<'_>,
@@ -660,12 +675,23 @@ impl Viewing {
             .wait_dots(&self.wait)
             .filter(|_| loading)
             .unwrap_or_else(|| decor.file(&file_name(&self.location).unwrap_or_default()));
-        let skeleton = loading
-            .then(|| text_skeleton(area.width, theme.panel, theme, spin.shine(&self.wait)))
-            .flatten();
-        let skeleton = skeleton.as_slice();
-        self.viewer
-            .render(frame, area, &viewer_styles(theme), (icon, skeleton));
+        self.viewer.render(frame, area, &viewer_styles(theme), icon);
+        if self
+            .finished
+            .as_ref()
+            .is_some_and(|finished| finished.gone(spin.at()))
+        {
+            self.finished = None;
+        }
+        // The window of the next part, once it shows, covers that of the last.
+        for reading in [&self.finished, &self.reading].into_iter().flatten() {
+            reading.render(frame, area, theme, spin);
+        }
+    }
+
+    /// Whether the window of the part being read is on screen.
+    fn window_shown(&self) -> bool {
+        self.reading.as_ref().is_some_and(Reading::shown)
     }
 }
 
@@ -915,6 +941,8 @@ enum Front {
     Help,
     Configuration,
     PullDown,
+    /// The window of the part the viewer reads.
+    Reading,
     Viewer,
     Panels,
 }
@@ -1283,6 +1311,8 @@ impl App {
             Front::Configuration
         } else if self.pulldown.is_some() {
             Front::PullDown
+        } else if self.viewing.as_ref().is_some_and(Viewing::window_shown) {
+            Front::Reading
         } else if self.viewing.is_some() {
             Front::Viewer
         } else if self.find.is_some() {
@@ -1312,10 +1342,7 @@ impl App {
         match self.front() {
             Front::Dialog(_) => return self.pointer_dialog(pointer),
             Front::PullDown => return self.pointer_pulldown(pointer),
-            Front::Viewer => {
-                self.wheel_viewer(press);
-                return Vec::new();
-            }
+            Front::Viewer => return self.wheel_viewer(press),
             Front::Panels => {}
             _ => return self.pointer_window(pointer),
         }
@@ -1388,14 +1415,14 @@ impl App {
     }
 
     /// Gives a press of the mouse to the window or menu in front. The wheel moves its cursor
-    /// as Up and Down do, or scrolls the help; but not in a job's window, where they move
-    /// between the buttons. A click does what the window says, often by the key it stands
+    /// as Up and Down do, or scrolls the help; but not in a job's window or the viewer's
+    /// reading, where they move between the buttons. A click does what the window says, often by the key it stands
     /// for.
     fn pointer_window(&mut self, pointer: Pointer) -> Vec<Effect> {
         let front = self.front();
         if let Some(keys) = self.wheel_keys(pointer.press) {
             return match (front, &mut self.help) {
-                (Front::Job, _) => Vec::new(),
+                (Front::Job | Front::Reading, _) => Vec::new(),
                 // The wheel scrolls the rows of the search, wherever the focus is.
                 (Front::Find, _) => {
                     if let Some(window) = &mut self.find {
@@ -1449,6 +1476,11 @@ impl App {
                 .iter_mut()
                 .find(|job| !job.background)
                 .and_then(|job| job.view.pointer(pointer)),
+            Front::Reading => self
+                .viewing
+                .as_mut()
+                .and_then(|viewing| viewing.reading.as_mut())
+                .and_then(|reading| reading.pointer(pointer)),
             Front::JobsList => {
                 let rows = self.job_rows();
                 let list = self.jobs_list.as_mut();
@@ -1472,20 +1504,24 @@ impl App {
         action.map_or_else(Vec::new, |action| self.handle(Resolved::Action(action)))
     }
 
-    /// Scrolls the viewer by a step of the wheel, if `press` is one.
-    fn wheel_viewer(&mut self, press: Press) {
+    /// Scrolls the viewer by a step of the wheel, if `press` is one, and reads the part it
+    /// scrolls to.
+    fn wheel_viewer(&mut self, press: Press) -> Vec<Effect> {
         let down = match press {
             Press::WheelUp => false,
             Press::WheelDown => true,
-            Press::Click | Press::DoubleClick | Press::RightClick | Press::Drag => return,
+            Press::Click | Press::DoubleClick | Press::RightClick | Press::Drag => {
+                return Vec::new();
+            }
         };
         let (motion, count) = self.wheel_motion(down);
         let Some(viewing) = &mut self.viewing else {
-            return;
+            return Vec::new();
         };
         for _ in 0..count {
             viewing.viewer.handle(ViewerCommand::Scroll(motion));
         }
+        self.read_more()
     }
 
     /// How far a step of the wheel up or down scrolls text, and how many times: by `ui.wheel`
@@ -1552,7 +1588,7 @@ impl App {
                     .and_then(|results| results.window.bar());
                 vec![one(Scrolled::Results, bar)]
             }
-            Front::Job => Vec::new(),
+            Front::Job | Front::Reading => Vec::new(),
             Front::JobsList => {
                 let bar = self.jobs_list.as_ref().and_then(JobsList::bar);
                 vec![one(Scrolled::JobsList, bar)]
@@ -1633,8 +1669,9 @@ impl App {
                 if let Some(viewing) = &mut self.viewing {
                     viewing.viewer.handle(match scroll {
                         Scroll::By(motion) => ViewerCommand::Scroll(motion),
-                        Scroll::To(line) => ViewerCommand::Top(line),
+                        Scroll::To(at) => ViewerCommand::Bar(at),
                     });
+                    return self.read_more();
                 }
             }
             Scrolled::Panel(side) => self.panel_mut(side).scroll_bar(scroll),
@@ -1904,6 +1941,8 @@ impl App {
             configuration.context()
         } else if self.pulldown.is_some() {
             Context::PullDown
+        } else if self.viewing.as_ref().is_some_and(Viewing::window_shown) {
+            Context::Dialog
         } else if self.viewing.is_some() {
             Context::Viewer
         } else if let Some(window) = &self.find {
@@ -2635,8 +2674,7 @@ impl App {
             return Some(self.handle_pulldown(input));
         }
         if self.viewing.is_some() {
-            self.handle_viewer(input);
-            return Some(Vec::new());
+            return Some(self.handle_viewer(input));
         }
         if self.find.is_some() {
             return Some(self.handle_find(input));
@@ -4348,24 +4386,57 @@ impl App {
             Location::Local(_) => None,
         };
         self.last_job += 1;
-        let id = self.last_job;
-        let cancel = CancellationToken::new();
+        let mebibytes = |count: std::num::NonZeroUsize| {
+            u64::try_from(count.get())
+                .unwrap_or(u64::MAX)
+                .saturating_mul(1 << 20)
+        };
+        let viewer = &self.config.viewer;
+        let sizes = ViewerSizes {
+            part: mebibytes(viewer.part_mib),
+            window: mebibytes(viewer.window_mib),
+        };
+        let mut viewer = Viewer::new(location_text(&location), sizes);
+        if let Some(line) = line {
+            let line = usize::try_from(line.saturating_sub(1)).unwrap_or(usize::MAX);
+            viewer.handle(ViewerCommand::Top(line));
+        }
         self.viewing = Some(Viewing {
-            id,
-            viewer: Viewer::new(location_text(&location)),
+            id: self.last_job,
+            viewer,
             wait: Wait::default(),
-            location: location.clone(),
-            line,
-            cancel: cancel.clone(),
-        });
-        let mut effects = vec![Effect::Read {
-            id,
             location,
             host,
-            cancel,
-        }];
+            reading: None,
+            finished: None,
+            cancel: CancellationToken::new(),
+        });
+        let mut effects = self.read_more();
         effects.extend(self.note(dir));
         effects
+    }
+
+    /// Reads the part the viewer wants next, unless it reads one already.
+    fn read_more(&mut self) -> Vec<Effect> {
+        let Some(viewing) = &mut self.viewing else {
+            return Vec::new();
+        };
+        if viewing.reading.is_some() {
+            return Vec::new();
+        }
+        let Some(want) = viewing.viewer.want() else {
+            return Vec::new();
+        };
+        let stop = CancellationToken::new();
+        viewing.reading = Some(Reading::new(want, stop.clone()));
+        vec![Effect::Read(ReadRequest {
+            id: viewing.id,
+            location: viewing.location.clone(),
+            host: viewing.host.clone(),
+            want,
+            stop,
+            cancel: viewing.cancel.clone(),
+        })]
     }
 
     /// Edits the file under the cursor of the active panel with F4: a local one where it is, a
@@ -4964,33 +5035,71 @@ impl App {
         self.show_error(&fl!("edit-kept", path = path, copy = copy));
     }
 
-    /// Takes what [`Effect::Read`] read for the viewer `id`; an error closes the viewer and
-    /// shows why.
-    pub(crate) fn read(&mut self, id: u64, result: Result<(Vec<u8>, bool), String>) {
+    /// Takes the part [`Effect::Read`] read for the viewer `id`, and reads the next one it
+    /// wants. A file that changed is read again from the start. An error closes the viewer
+    /// while it has nothing to show; after that, the viewer keeps what it holds.
+    pub(crate) fn read(&mut self, id: u64, result: Result<ViewerPart, String>) -> Vec<Effect> {
         let Some(viewing) = self.viewing.as_mut().filter(|viewing| viewing.id == id) else {
-            return;
+            return Vec::new();
         };
+        let reading = viewing.reading.take();
         match result {
-            Ok((bytes, truncated)) => {
-                viewing.viewer.show(&bytes, truncated);
-                if let Some(line) = viewing.line {
-                    let line = usize::try_from(line.saturating_sub(1)).unwrap_or(usize::MAX);
-                    viewing.viewer.handle(ViewerCommand::Top(line));
+            Ok(part) => {
+                if !part.stopped {
+                    viewing.finished = reading.and_then(Reading::finish);
+                }
+                if viewing.viewer.take(part) == Taken::Changed {
+                    let path = location_text(&viewing.location);
+                    self.message = Some(fl!("viewer-changed", path = path));
                 }
             }
             Err(reason) => {
                 let path = location_text(&viewing.location);
-                self.close_viewer();
                 let reason = cells::sanitize(reason.as_bytes());
-                self.show_error(&fl!("viewer-error", path = path, reason = reason));
+                if viewing.viewer.loading() {
+                    self.close_viewer();
+                    self.show_error(&fl!("viewer-error", path = path, reason = reason));
+                } else {
+                    viewing.viewer.stop();
+                    self.show_error(&fl!("viewer-read-error", path = path, reason = reason));
+                }
+                return Vec::new();
             }
+        }
+        self.read_more()
+    }
+
+    /// Shows how far [`Effect::Read`] is with the part of the viewer `id`.
+    pub(crate) fn read_progress(&mut self, id: u64, progress: ReadProgress) {
+        if let Some(reading) = self
+            .viewing
+            .as_mut()
+            .filter(|viewing| viewing.id == id)
+            .and_then(|viewing| viewing.reading.as_mut())
+        {
+            reading.progress(progress);
         }
     }
 
-    /// Takes a key for the viewer: F1 shows the help over it.
-    fn handle_viewer(&mut self, input: Resolved) {
+    /// Takes a key for the viewer, or for the window of the part it reads while it shows: F1
+    /// shows the help over it. A move may ask for another part.
+    fn handle_viewer(&mut self, input: Resolved) -> Vec<Effect> {
+        if let Some(viewing) = &mut self.viewing
+            && viewing.window_shown()
+            && let Some(reading) = &mut viewing.reading
+        {
+            match reading.handle(input) {
+                Some(ReadButton::Stop) => {
+                    reading.stop();
+                    viewing.viewer.stop();
+                }
+                Some(ReadButton::Close) => self.close_viewer(),
+                None => {}
+            }
+            return Vec::new();
+        }
         let Resolved::Action(action) = input else {
-            return;
+            return Vec::new();
         };
         match action {
             Action::Help => {
@@ -5002,9 +5111,11 @@ impl App {
                     && let Some(command) = viewer_command(action)
                 {
                     viewing.viewer.handle(command);
+                    return self.read_more();
                 }
             }
         }
+        Vec::new()
     }
 
     fn close_viewer(&mut self) {
@@ -6609,6 +6720,13 @@ impl App {
         if timed {
             at(drawn + CLOCK_FRAME);
         }
+        let finished = self
+            .viewing
+            .as_ref()
+            .and_then(|viewing| viewing.finished.as_ref());
+        if let Some(goes) = finished.and_then(Reading::goes) {
+            at(goes);
+        }
         due
     }
 
@@ -6620,6 +6738,7 @@ impl App {
                 .loading()
                 .then_some(&viewing.wait)
                 .into_iter()
+                .chain(viewing.reading.as_ref().and_then(Reading::wait))
                 .collect();
         }
         let panels = [Side::Left, Side::Right].map(|side| self.panel(side).wait());
@@ -7489,6 +7608,7 @@ mod tests {
     use noc_config::{AnimationsConfig, TransferConfig, ZoxideConfig};
     use noc_ssh::askpass::PromptKind;
     use noc_vfs::{DirEntry, FileKind, Metadata, RemotePath};
+    use noc_viewer::Stamp;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
     use secrecy::ExposeSecret as _;
@@ -7624,6 +7744,22 @@ mod tests {
     fn one(effects: Vec<Effect>) -> Effect {
         let [effect] = <[Effect; 1]>::try_from(effects).unwrap();
         effect
+    }
+
+    /// A whole file of `bytes`, read as the viewer's first part.
+    fn whole(bytes: impl Into<Vec<u8>>) -> ViewerPart {
+        let bytes = bytes.into();
+        let length = bytes.len() as u64;
+        let want = Want {
+            offset: 0,
+            length,
+            new: true,
+        };
+        let stamp = Stamp {
+            size: Some(length),
+            modified: None,
+        };
+        ViewerPart::new(want, &bytes, (true, false), stamp)
     }
 
     /// Answers every listing in `effects` with `listing`, from where it was asked for.
@@ -8583,7 +8719,7 @@ mod tests {
         let mut app = with_files(&["a1", "b2"]);
         found_main(&mut app);
         let effects = keys(&mut app, &["f3"]);
-        let Some(Effect::Read { id, location, .. }) = effects.first() else {
+        let Some(Effect::Read(ReadRequest { id, location, .. })) = effects.first() else {
             panic!("expected a read, got {effects:?}");
         };
         assert_eq!(*location, local("/srv/src/run/main.rs"));
@@ -8592,7 +8728,7 @@ mod tests {
             .map(|n| format!("line {n}"))
             .collect::<Vec<_>>()
             .join("\n");
-        app.read(*id, Ok((text.into_bytes(), false)));
+        app.read(*id, Ok(whole(text)));
         let screen = screen_of(&mut app, 12);
         assert!(
             screen.contains("line 3") && !screen.contains("line 2\n"),
@@ -9017,11 +9153,11 @@ mod tests {
         let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
         answer(&mut app, effects, &Listing::Dir(vec![file("log", 1)]));
         app.handle(action(Action::Down));
-        let Effect::Read { id, .. } = one(app.handle(action(Action::View))) else {
+        let Effect::Read(ReadRequest { id, .. }) = one(app.handle(action(Action::View))) else {
             panic!("expected a read");
         };
         let lines: Vec<String> = (1..=100).map(|n| format!("line {n}")).collect();
-        app.read(id, Ok((lines.join("\n").into_bytes(), false)));
+        app.read(id, Ok(whole(lines.join("\n"))));
         screen_of(&mut app, 12);
         let (x, up, down) = bar_ends(&app);
         press(&mut app, Press::Click, x, down);
@@ -10129,25 +10265,25 @@ mod tests {
             &Listing::Dir(vec![dir("sub"), file("notes", 12)]),
         );
         app.handle(action(Action::End));
-        let Effect::Read {
+        let Effect::Read(ReadRequest {
             id,
             location,
             host,
             cancel,
-        } = one(app.handle(action(Action::View)))
+            ..
+        }) = one(app.handle(action(Action::View)))
         else {
             panic!("expected a read");
         };
         assert_eq!((location, host.is_none()), (local("/srv/notes"), true));
         assert_eq!(app.context(), Context::Viewer);
-        // While it is read, the dots stand in place of its icon, and a skeleton for its text.
+        // While it is read, the dots stand in place of its icon, and its window shows how far.
         let text = screen(&mut app);
         let rows: Vec<&str> = text.lines().map(|row| row.trim_matches('"')).collect();
         assert!(rows[0].starts_with(" … /srv/notes "), "{text}");
-        assert!(rows[1].starts_with("-----"), "{text}");
-        assert!(!rows[2].contains('-'), "{text}");
-        app.read(id + 1, Ok((b"not this".to_vec(), false)));
-        app.read(id, Ok((b"hello\nworld\n".to_vec(), false)));
+        assert!(text.contains("Reading") && !text.contains("---"), "{text}");
+        app.read(id + 1, Ok(whole(*b"not this")));
+        app.read(id, Ok(whole(*b"hello\nworld\n")));
         let text = screen(&mut app);
         assert!(text.starts_with("\"   /srv/notes "), "{text}");
         assert!(text.contains("hello") && !text.contains("---"), "{text}");
@@ -10176,14 +10312,14 @@ mod tests {
     fn a_file_viewed_from_a_line_shows_it_at_the_top() {
         let mut app = with_files(&["a1"]);
         let effects = app.view_file(local("/srv/a1"), &local("/srv"), Some(3));
-        let Some(Effect::Read { id, .. }) = effects.first() else {
+        let Some(Effect::Read(ReadRequest { id, .. })) = effects.first() else {
             panic!("expected a read, got {effects:?}");
         };
         let text = (1..=40)
             .map(|n| format!("line {n}"))
             .collect::<Vec<_>>()
             .join("\n");
-        app.read(*id, Ok((text.into_bytes(), false)));
+        app.read(*id, Ok(whole(text)));
         let screen = screen_of(&mut app, 12);
         assert!(
             screen.contains("line 3") && !screen.contains("line 2 "),
@@ -10422,7 +10558,7 @@ mod tests {
         let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
         answer(&mut app, effects, &Listing::Dir(vec![file("secret", 1)]));
         app.handle(action(Action::Down));
-        let Effect::Read { id, .. } = one(app.handle(action(Action::View))) else {
+        let Effect::Read(ReadRequest { id, .. }) = one(app.handle(action(Action::View))) else {
             panic!("expected a read");
         };
         app.read(id, Err("permission denied".to_owned()));
@@ -10432,6 +10568,168 @@ mod tests {
             text.contains("Cannot view /srv/secret: permission denied"),
             "{text}"
         );
+    }
+
+    /// The viewer of `/srv/big` with the read it starts.
+    fn view_big() -> (App, Effect) {
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
+        answer(&mut app, effects, &Listing::Dir(vec![file("big", 1000)]));
+        app.handle(action(Action::Down));
+        let read = one(app.handle(action(Action::View)));
+        (app, read)
+    }
+
+    /// The part of `/srv/big`, 1,000 bytes long, that `want` asks for, holding `bytes`.
+    fn part_of_big(want: Want, bytes: &[u8]) -> ViewerPart {
+        let stamp = Stamp {
+            size: Some(1000),
+            modified: None,
+        };
+        ViewerPart::new(want, bytes, (false, false), stamp)
+    }
+
+    #[test]
+    fn a_read_that_takes_long_shows_a_window_that_stops_it() {
+        let (mut app, read) = view_big();
+        let Effect::Read(ReadRequest {
+            id,
+            want,
+            stop,
+            cancel,
+            ..
+        }) = read
+        else {
+            panic!("expected a read");
+        };
+        assert_eq!(want.offset, 0);
+        let text = screen_of(&mut app, 16);
+        assert!(text.contains("Reading") && text.contains("Stop"), "{text}");
+        assert_eq!(app.context(), Context::Dialog);
+        assert_eq!(app.place().0, Mode::Normal);
+        app.read_progress(
+            id,
+            ReadProgress {
+                read: 250,
+                total: 1000,
+                size: Some(1000),
+            },
+        );
+        let text = screen_of(&mut app, 16);
+        assert!(text.contains("25%"), "{text}");
+
+        // Esc stops the read and keeps what it has read.
+        app.handle(action(Action::Cancel));
+        assert!(stop.is_cancelled() && !cancel.is_cancelled());
+        assert_eq!(app.context(), Context::Viewer);
+        let mut part = part_of_big(want, b"one\ntwo\n");
+        part.stopped = true;
+        assert!(
+            app.read(id, Ok(part)).is_empty(),
+            "a stopped read starts no other"
+        );
+        let text = screen_of(&mut app, 16);
+        assert!(
+            text.contains("two") && text.contains("more below"),
+            "{text}"
+        );
+        assert!(!text.contains("Reading"), "{text}");
+    }
+
+    #[test]
+    fn the_window_of_a_read_ends_full_and_then_goes() {
+        let (mut app, read) = view_big();
+        let Effect::Read(ReadRequest { id, want, .. }) = read else {
+            panic!("expected a read");
+        };
+        let start = Instant::now();
+        let at = |ms| start + Duration::from_millis(ms);
+        screen_at(&mut app, 16, at(0));
+        let progress = ReadProgress {
+            read: 980,
+            total: 1000,
+            size: Some(1000),
+        };
+        app.read_progress(id, progress);
+        let text = screen_at(&mut app, 16, at(200));
+        assert!(text.contains("98%"), "{text}");
+
+        // The part comes before a report of its end: the window shows it full, over the text,
+        // and leaves the keys to the viewer.
+        app.read(id, Ok(part_of_big(want, b"one\ntwo\n")));
+        let text = screen_at(&mut app, 16, at(300));
+        assert!(text.contains("100%") && text.contains("two"), "{text}");
+        assert_eq!(app.context(), Context::Viewer);
+        let goes = app.spin_due(at(300)).unwrap();
+        assert_eq!(goes, at(300) + spinner::DELAY);
+        let text = screen_at(&mut app, 16, goes);
+        assert!(!text.contains("Reading"), "{text}");
+        assert_eq!(app.spin_due(goes), None);
+    }
+
+    #[test]
+    fn close_in_the_window_of_a_read_closes_the_viewer() {
+        let (mut app, read) = view_big();
+        let Effect::Read(ReadRequest { cancel, .. }) = read else {
+            panic!("expected a read");
+        };
+        screen_of(&mut app, 16);
+        app.handle(action(Action::NextField));
+        app.handle(action(Action::Confirm));
+        assert_eq!(app.context(), Context::Panel);
+        assert!(cancel.is_cancelled());
+    }
+
+    #[test]
+    fn the_viewer_reads_the_next_part_at_the_end_and_keeps_its_text_if_it_fails() {
+        let (mut app, read) = view_big();
+        let Effect::Read(ReadRequest { id, want, .. }) = read else {
+            panic!("expected a read");
+        };
+        assert!(
+            app.read(id, Ok(part_of_big(want, b"one\ntwo\n")))
+                .is_empty()
+        );
+        screen_of(&mut app, 16);
+        let Effect::Read(ReadRequest { id, want, .. }) = one(app.handle(action(Action::End)))
+        else {
+            panic!("expected the next part");
+        };
+        assert_eq!((want.offset, want.new), (8, true));
+        assert!(app.read(id, Err("broken pipe".to_owned())).is_empty());
+        let text = screen_of(&mut app, 16);
+        assert!(
+            text.contains("Cannot read more of /srv/big: broken pipe"),
+            "{text}"
+        );
+        app.handle(action(Action::Cancel));
+        assert_eq!(app.context(), Context::Viewer);
+        let text = screen_of(&mut app, 16);
+        assert!(text.contains("two"), "{text}");
+    }
+
+    #[test]
+    fn a_file_that_changed_between_parts_is_read_again() {
+        let (mut app, read) = view_big();
+        let Effect::Read(ReadRequest { id, want, .. }) = read else {
+            panic!("expected a read");
+        };
+        assert!(
+            app.read(id, Ok(part_of_big(want, b"one\ntwo\n")))
+                .is_empty()
+        );
+        screen_of(&mut app, 16);
+        let Effect::Read(ReadRequest { id, want, .. }) = one(app.handle(action(Action::End)))
+        else {
+            panic!("expected the next part");
+        };
+        let mut part = part_of_big(want, b"three\n");
+        part.stamp.size = Some(2000);
+        let Effect::Read(ReadRequest { want, .. }) = one(app.read(id, Ok(part))) else {
+            panic!("expected the file again");
+        };
+        assert_eq!(want.offset, 0);
+        let text = screen_of(&mut app, 16);
+        assert!(text.contains("/srv/big changed"), "{text}");
     }
 
     #[test]

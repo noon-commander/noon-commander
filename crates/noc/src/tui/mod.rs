@@ -30,6 +30,7 @@ mod picker;
 mod places;
 mod progress;
 mod pulldown;
+mod reading;
 mod scroll;
 mod search_mode;
 mod sidebar;
@@ -104,7 +105,8 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
             result,
         } => tasks.run(app.created(panel, &location, result)),
         Done::Job { id, event } => tasks.run(app.job_event(id, event)),
-        Done::Read { id, result } => app.read(id, result),
+        Done::Read { id, result } => tasks.run(app.read(id, result)),
+        Done::ReadProgress { id, progress } => app.read_progress(id, progress),
         Done::Detected(tool, detected) => app.detected(tool, detected),
         Done::Formats(formats) => {
             noc_locale::set_current(*formats);

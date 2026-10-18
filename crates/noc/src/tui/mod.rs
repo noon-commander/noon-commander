@@ -692,11 +692,13 @@ fn take_mouse(
 }
 
 /// Releases the mouse and the modes on a panic: the hook of `ratatui::try_init`, which this
-/// one calls, restores the terminal but leaves them on. Both are harmless to turn off when they
-/// are not on.
+/// one calls, restores the terminal but leaves them on. A panic in the middle of a frame would
+/// also leave the terminal holding back what it shows, until it gives up waiting. All are
+/// harmless to turn off when they are not on.
 fn release_mouse_on_panic() {
     let hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
+        let _ = crossterm::execute!(io::stdout(), EndSynchronizedUpdate);
         let _ = capture_mouse(false);
         let _ = Modes { keyboard: true }.leave();
         hook(info);
@@ -715,12 +717,12 @@ fn capture_mouse(on: bool) -> io::Result<()> {
 /// Draws a frame between the marks of synchronized output, so that the terminal shows it whole.
 /// Without them the cursor of a field shows on its way through the cells that change, such as
 /// those a shine crosses every 40 ms, before it is put back. Terminals that do not know the
-/// marks ignore them.
+/// marks ignore them. The first mark is only queued: it leaves with the frame, in one write.
 fn draw_whole(
     terminal: &mut DefaultTerminal,
     render: impl FnOnce(&mut Frame<'_>),
 ) -> io::Result<()> {
-    crossterm::execute!(terminal.backend_mut(), BeginSynchronizedUpdate)?;
+    crossterm::queue!(terminal.backend_mut(), BeginSynchronizedUpdate)?;
     let drawn = terminal.draw(render).map(drop);
     crossterm::execute!(terminal.backend_mut(), EndSynchronizedUpdate)?;
     drawn

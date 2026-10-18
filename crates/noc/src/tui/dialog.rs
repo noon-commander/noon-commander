@@ -26,6 +26,7 @@ use super::keymap::{Action, Context, Extra, Mode, Resolved, Typed};
 use super::label::{self, Label};
 use super::mouse::{Pointer, Press, Scroll};
 use super::scroll::Window;
+use super::spinner::Shine;
 use super::theme::{self, Theme};
 use crate::i18n::fl;
 
@@ -444,8 +445,8 @@ pub(crate) struct ListView<'a> {
     pub(crate) dots: Option<(char, Style)>,
     /// Whether the first rows are still to come: a skeleton stands in their place.
     pub(crate) waiting: bool,
-    /// How far the shine has crossed the skeleton, per mille; none while it rests.
-    pub(crate) shine: Option<u16>,
+    /// The shine that crosses the skeleton.
+    pub(crate) shine: Option<Shine>,
 }
 
 /// What a key did to a dialog.
@@ -1761,50 +1762,73 @@ pub(crate) fn rows_area(inner: Rect, below: u16) -> Rect {
 pub(crate) const SKELETON_ROWS: u16 = 1;
 
 /// Draws a skeleton on the first line of `area`, where rows are still to come: a faint bar on
-/// the left for a name and one on the right for what is known of it. A shine `shine` per mille
-/// of the way across, if any, crosses both bars at once, lighting them where it passes.
-pub(crate) fn draw_skeleton(frame: &mut Frame<'_>, area: Rect, theme: &Theme, shine: Option<u16>) {
+/// the left for a name and one on the right for what is known of it. A `shine`, if any, crosses
+/// both bars at once, lighting them where it passes.
+pub(crate) fn draw_skeleton(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    theme: &Theme,
+    shine: Option<Shine>,
+) {
     // Twelfths of the width: of the bar on the left, of the one on the right.
     const BARS: (u16, u16) = (6, 3);
-    // How much of the color of text shows: in the bars, in the middle of the shine; per mille.
-    const FAINT: u16 = 250;
-    const BRIGHT: u16 = 650;
-    // Cells from the middle of the shine to where it fades out.
-    const HALF: u16 = 5;
     if area.width < 8 || area.height == 0 {
         return;
     }
-    let shade = |alpha: u16| match (theme.dialog.fg, theme.dialog.bg) {
-        (Some(fg), Some(bg)) => theme::blend(fg, bg, (1000, alpha)).map(|fg| theme.dialog.fg(fg)),
-        _ => None,
-    };
-    let faint = shade(FAINT).unwrap_or_else(|| theme.dialog.add_modifier(Modifier::DIM));
-    // A bar of `length` cells; the shine comes in and goes out past its ends.
-    let bar = |length: u16| {
-        let middle = shine.map(|shine| {
-            let path = u32::from(length) + 2 * u32::from(HALF);
-            i64::from(path * u32::from(shine.min(1000)) / 1000) - i64::from(HALF)
-        });
-        (0..length).map(move |x| {
-            let near = middle
-                .map(|middle| (i64::from(x) - middle).unsigned_abs())
-                .filter(|distance| *distance < u64::from(HALF));
-            let style = near.map_or(faint, |distance| {
-                let distance = u16::try_from(distance).unwrap_or(HALF);
-                shade(BRIGHT - (BRIGHT - FAINT) * distance / HALF).unwrap_or(theme.dialog)
-            });
-            Span::styled(theme.glyphs.skeleton.to_string(), style)
-        })
-    };
+    let glyph = theme.glyphs.skeleton.to_string();
     let (left, right) = (area.width * BARS.0 / 12, area.width * BARS.1 / 12);
-    let line: Line<'_> = bar(left)
+    let middle = shine_middle(shine, left.max(right));
+    let line: Line<'_> = shine_bar(left, middle, &glyph, theme.dialog)
+        .into_iter()
         .chain([Span::styled(
             " ".repeat(usize::from(area.width - left - right)),
             theme.dialog,
         )])
-        .chain(bar(right))
+        .chain(shine_bar(right, middle, &glyph, theme.dialog))
         .collect();
     frame.render_widget(line, Rect::new(area.x, area.y, area.width, 1));
+}
+
+/// Cells from the middle of a shine to where it fades out.
+const SHINE_HALF: u16 = 5;
+
+/// Where the middle of `shine` is, in cells from the start of bars of `longest` cells at most:
+/// it comes in at one end and goes out at the other, as fast over every bar. None while it
+/// rests.
+pub(crate) fn shine_middle(shine: Option<Shine>, longest: u16) -> Option<i32> {
+    let cells = shine?.over(longest.saturating_add(2 * SHINE_HALF))?;
+    Some(i32::from(cells) - i32::from(SHINE_HALF))
+}
+
+/// A faint bar of `length` cells of `glyph` in the color of `style` blended into its
+/// background, which a shine whose middle is at `middle` (from [`shine_middle`]), if any,
+/// lights where it passes. Where the colors are not known, the bar is dim and the shine plain.
+pub(crate) fn shine_bar(
+    length: u16,
+    middle: Option<i32>,
+    glyph: &str,
+    style: Style,
+) -> Vec<Span<'static>> {
+    // How much of the color shows: in the bar, in the middle of the shine; per mille.
+    const FAINT: u16 = 250;
+    const BRIGHT: u16 = 650;
+    let shade = |alpha: u16| match (style.fg, style.bg) {
+        (Some(fg), Some(bg)) => theme::blend(fg, bg, (1000, alpha)).map(|fg| style.fg(fg)),
+        _ => None,
+    };
+    let faint = shade(FAINT).unwrap_or_else(|| style.add_modifier(Modifier::DIM));
+    (0..length)
+        .map(|x| {
+            let near = middle
+                .map(|middle| (i32::from(x) - middle).unsigned_abs())
+                .filter(|distance| *distance < u32::from(SHINE_HALF));
+            let style = near.map_or(faint, |distance| {
+                let distance = u16::try_from(distance).unwrap_or(SHINE_HALF);
+                shade(BRIGHT - (BRIGHT - FAINT) * distance / SHINE_HALF).unwrap_or(style)
+            });
+            Span::styled(glyph.to_owned(), style)
+        })
+        .collect()
 }
 
 /// What of `field` fits in `room` cells, in the color of fields, what Visual mode selects
@@ -1871,7 +1895,7 @@ mod tests {
         draw_themed(dialog, width, height, &Theme::terminal())
     }
 
-    fn skeleton_colors(shine: Option<u16>) -> Vec<Option<Color>> {
+    fn skeleton_colors(shine: Option<Shine>) -> Vec<Option<Color>> {
         let mut theme = Theme::terminal();
         theme.dialog = Style::new()
             .fg(Color::Rgb(255, 255, 255))
@@ -1901,18 +1925,19 @@ mod tests {
                 .all(|fg| *fg == Some(Color::Rgb(255, 255, 255)))
         );
         assert_eq!(
-            skeleton_colors(Some(0)),
+            skeleton_colors(Some(Shine::after(0))),
             still,
             "the shine comes in from the left"
         );
-        // Half the way across, its middle is on cell 7 of the left bar and cell 3 of the right
-        // one: both shine at once.
-        let shining = skeleton_colors(Some(500));
-        let brightest = Some(Color::Rgb(166, 166, 166));
-        assert_eq!(shining[7], brightest);
-        assert_eq!(shining[23 + 3], brightest);
-        assert_eq!(shining[8], Some(Color::Rgb(145, 145, 145)));
+        // Twelve cells on, coming in five cells before the bars, its middle is on cell 7 of both:
+        // they shine at once and as fast, the shorter bar on the right at its end already.
+        let shining = skeleton_colors(Some(Shine::after(12)));
+        let next = Some(Color::Rgb(145, 145, 145));
+        assert_eq!(shining[7], Some(Color::Rgb(166, 166, 166)));
+        assert_eq!(shining[8], next);
         assert_eq!(shining[..3], still[..3]);
+        assert_eq!(shining[23 + 6], next);
+        assert_eq!(shining[23 + 2], faint);
     }
 
     fn draw_themed(

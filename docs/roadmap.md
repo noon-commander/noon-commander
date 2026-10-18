@@ -243,8 +243,9 @@
 - [x] One spinner for everything that waits, a scanner, with what it waits for after it, shown after
   150 ms; `animations.spinners`; a panel turns braille dots in place of the icon before the path in
   its title; the location menu, the zoxide window, and the search of a whole tree turn them in front
-  of their title, a skeleton row with a shine in place of the rows to come; R in the location menu
-  keeps the rows; `--slow-spinners` and `--slow-connections` in debug builds ([ADR
+  of their title, a skeleton row with a shine in place of the rows to come; a job's gauge is a faint
+  bar with the shine running to and fro until it knows how far it is; R in the location menu keeps
+  the rows; `--slow-spinners` and `--slow-connections` in debug builds ([ADR
   0037](adr/0037-spinners.md))
 - [x] Formats of the region for dates, times, and numbers: the system's (on macOS as System
       Settings has them), `iso`, or a language tag, `ui.formats`; plural forms that see the

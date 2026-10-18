@@ -19,9 +19,10 @@ pub(crate) const DELAY: Duration = Duration::from_millis(150);
 pub(crate) const SCANNER_FRAME: Duration = Duration::from_millis(40);
 /// How long each frame of the dots shows.
 pub(crate) const DOTS_FRAME: Duration = Duration::from_millis(80);
-/// How long the shine takes to cross a skeleton, and how long it rests before the next.
-const SWEEP: Duration = Duration::from_millis(1200);
-const SWEEP_REST: Duration = Duration::from_millis(400);
+/// How long the shine takes to move one cell, so that it goes as fast over every bar, and how
+/// long it rests between sweeps.
+const SHINE_STEP: Duration = Duration::from_millis(40);
+const SHINE_REST: Duration = Duration::from_millis(400);
 
 /// Cells of the scanner.
 const WIDTH: usize = 8;
@@ -60,6 +61,38 @@ impl Wait {
     }
 }
 
+/// A shine that sweeps over bars, one cell every [`SHINE_STEP`], resting [`SHINE_REST`]
+/// between sweeps: how long it has gone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Shine(Duration);
+
+impl Shine {
+    /// How many cells it has come in its sweep over `cells`; none while it rests.
+    pub(crate) fn over(self, cells: u16) -> Option<u16> {
+        let step = SHINE_STEP.as_millis();
+        let sweep = u128::from(cells) * step;
+        let into = self.0.as_millis() % (sweep + SHINE_REST.as_millis());
+        (into < sweep).then(|| u16::try_from(into / step).unwrap_or(cells))
+    }
+
+    /// Where it is as it runs to and fro over `cells`, turning at either end without a rest:
+    /// the cell from the start.
+    pub(crate) fn bounce(self, cells: u16) -> u16 {
+        let last = u128::from(cells.saturating_sub(1));
+        if last == 0 {
+            return 0;
+        }
+        let step = self.0.as_millis() / SHINE_STEP.as_millis() % (2 * last);
+        u16::try_from(if step <= last { step } else { 2 * last - step }).unwrap_or(0)
+    }
+
+    /// The shine once it has come `cells` cells.
+    #[cfg(test)]
+    pub(crate) fn after(cells: u32) -> Self {
+        Self(SHINE_STEP * cells)
+    }
+}
+
 /// What spinners look like in a frame drawn at a moment.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Spin {
@@ -87,12 +120,6 @@ impl Spin {
         let since = wait.since(self.at);
         let shown = self.at.checked_duration_since(since)?.checked_sub(DELAY)?;
         Some(self.scanner(shown, colors))
-    }
-
-    /// The scanner of `wait` from its first frame, at once, for what shows only while it waits.
-    pub(crate) fn now(&self, wait: &Wait, colors: (Style, Style)) -> Vec<Span<'static>> {
-        let since = wait.since(self.at);
-        self.scanner(self.at.saturating_duration_since(since), colors)
     }
 
     /// The scanner `elapsed` after it began, and a space.
@@ -128,17 +155,12 @@ impl Spin {
         self.dots_after(self.at.saturating_duration_since(self.epoch))
     }
 
-    /// How far the shine has crossed the skeleton of `wait`, per mille, from when its dots show
-    /// on; none before, while the shine rests between sweeps, or without `animations.spinners`.
-    pub(crate) fn shine(&self, wait: &Wait) -> Option<u16> {
+    /// The shine of `wait`, which sweeps from when its dots show on; none before, or without
+    /// `animations.spinners`.
+    pub(crate) fn shine(&self, wait: &Wait) -> Option<Shine> {
         let since = wait.since(self.at);
         let elapsed = self.at.checked_duration_since(since)?.checked_sub(DELAY)?;
-        if !self.turns {
-            return None;
-        }
-        let into = elapsed.as_millis() % (SWEEP + SWEEP_REST).as_millis();
-        let sweep = SWEEP.as_millis();
-        (into < sweep).then(|| u16::try_from(into * 1000 / sweep).unwrap_or(1000))
+        self.turns.then_some(Shine(elapsed))
     }
 
     fn dots_after(&self, elapsed: Duration) -> char {
@@ -339,9 +361,10 @@ mod tests {
             Style::new().fg(Color::LightYellow),
             Style::new().bg(Color::Blue),
         );
-        let spans = spin(start, true).now(&wait, colors);
-        let at = start + SCANNER_FRAME * 4;
-        let spans_later = spin(at, true).now(&wait, colors);
+        wait.since(start);
+        let spans = spin(start + DELAY, true).wait(&wait, colors).unwrap();
+        let at = start + DELAY + SCANNER_FRAME * 4;
+        let spans_later = spin(at, true).wait(&wait, colors).unwrap();
         assert_eq!(text(&spans), "■⬝⬝⬝⬝⬝⬝⬝ ");
         assert!(spans[0].style.add_modifier.contains(Modifier::BOLD));
         assert!(spans[1].style.add_modifier.contains(Modifier::DIM));
@@ -391,17 +414,31 @@ mod tests {
         let almost = start + DELAY.saturating_sub(Duration::from_millis(1));
         assert_eq!(spin(almost, true).shine(&wait), None);
         let shown = start + DELAY;
-        assert_eq!(spin(shown, true).shine(&wait), Some(0));
+        let over = |at, cells| spin(at, true).shine(&wait).and_then(|s| s.over(cells));
+        assert_eq!(over(shown, 20), Some(0));
         assert_eq!(
             spin(shown, true).wait_dots(&wait),
             Some('⠋'),
             "with the dots"
         );
-        let half = shown + SWEEP / 2;
-        assert_eq!(spin(half, true).shine(&wait), Some(500));
-        assert_eq!(spin(half, false).shine(&wait), None);
-        assert_eq!(spin(shown + SWEEP, true).shine(&wait), None);
-        let next = shown + SWEEP + SWEEP_REST;
-        assert_eq!(spin(next, true).shine(&wait), Some(0));
+        let later = shown + SHINE_STEP * 5;
+        assert_eq!(over(later, 20), Some(5));
+        assert_eq!(over(later, 50), Some(5), "as fast over a longer bar");
+        assert_eq!(spin(later, false).shine(&wait), None);
+        assert_eq!(over(shown + SHINE_STEP * 20, 20), None, "resting");
+        let next = shown + SHINE_STEP * 20 + SHINE_REST;
+        assert_eq!(over(next, 20), Some(0));
+        assert_eq!(over(next, 50), Some(30), "a longer sweep rests later");
+    }
+
+    #[test]
+    fn a_bouncing_shine_runs_to_and_fro_as_fast() {
+        let at = |cells| Shine::after(cells).bounce(10);
+        assert_eq!(
+            [at(0), at(4), at(9), at(10), at(17), at(18)],
+            [0, 4, 9, 8, 1, 0]
+        );
+        assert_eq!(Shine::after(5).bounce(1), 0);
+        assert_eq!(Shine::after(5).bounce(0), 0);
     }
 }

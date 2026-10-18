@@ -6521,9 +6521,6 @@ impl App {
                 at(drawn + spinner::SCANNER_FRAME);
             }
         }
-        if turns && self.in_front().is_some_and(|job| job.view.busy()) {
-            at(drawn + spinner::SCANNER_FRAME);
-        }
         let connecting = self
             .hosts
             .values()
@@ -6559,6 +6556,7 @@ impl App {
             .chain(self.menu.as_ref().and_then(LocationMenu::wait))
             .chain(self.jump.as_ref().and_then(JumpMenu::first_wait))
             .chain(self.find.as_ref().and_then(FindWindow::wait))
+            .chain(self.in_front().and_then(|job| job.view.shining()))
             .collect()
     }
 

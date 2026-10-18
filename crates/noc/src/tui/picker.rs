@@ -20,6 +20,7 @@ use super::keymap::{Action, Mode, Resolved};
 use super::mouse::{Drawn, Pointer};
 use super::scroll::Window;
 use super::search_mode::{self, Matcher, Prompt};
+use super::spinner::Shine;
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -95,8 +96,8 @@ pub(crate) struct Body<'a> {
     pub(crate) message: Option<String>,
     /// Whether the rows are still to come: a skeleton stands in their place.
     pub(crate) waiting: bool,
-    /// How far the shine has crossed the skeleton, per mille; none while it rests.
-    pub(crate) shine: Option<u16>,
+    /// The shine that crosses the skeleton.
+    pub(crate) shine: Option<Shine>,
     /// Turning in front of the title while the window waits, in their color.
     pub(crate) dots: Option<(char, Style)>,
     /// Lines under the rows, apart from them, such as the whole command under the cursor.

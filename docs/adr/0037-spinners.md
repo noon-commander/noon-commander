@@ -43,9 +43,8 @@ too, which some users want and others do not, apart from windows.
   connecting and reading look apart without a word that would take the room of the path. A host that
   does not answer still asks `web: Retry or Cancel?` on the status line, in the colors of errors: it
   is a question, not a wait. A reading that fails puts the old path back.
-- **Shown after 150 ms.** A `Wait`, kept by what waits, remembers the first frame that drew it;
-  the spinner and its text show only from 150 ms later, so quick work shows nothing. A job's
-  window, which shows whole, draws its spinner at once.
+- **Shown after 150 ms.** A `Wait`, kept by what waits, remembers the first frame that drew it; the
+  spinner and its text show only from 150 ms later, so quick work shows nothing.
 - **Frames come from time, not ticks.** A frame of the scanner is the time since the app's first
   frame, divided by its step, so every spinner on screen moves together, and tests draw a given
   instant. `App::spin_due` tells the event loop when the next frame is due: when a `Wait` starts
@@ -68,12 +67,22 @@ too, which some users want and others do not, apart from windows.
   it is: the title says what the window lists, and the rows, or the place where they come, stay
   clear. Until the first rows come, a skeleton stands in their place: one row of faint bars, a name
   on the left and what is known of it on the right, whose two bars a brighter shine crosses at once,
-  from when the dots show, with the same delay; an empty box looked broken, and three still rows
-  read as rows that had come. With `animations.spinners` off the shine rests. Every list whose rows
-  do not come at once does the same. The status line of the search shows the scanner alone while it
-  searches: a count that runs said less than the one at the end. R in the location menu keeps the
-  last rows while it lists the volumes and the hosts again, the dots in the title, or shows the
-  reason it failed right of the filter, in the colors of errors.
+  from when the dots show, with the same delay, one cell every 40 ms over every bar, so a short bar
+  is crossed sooner, and resting 400 ms after the longest; an empty box looked broken, and three
+  still rows read as rows that had come. With `animations.spinners` off the shine rests. Every list
+  whose rows do not come at once does the same. The status line of the search shows the scanner
+  alone while it searches: a count that runs said less than the one at the end. R in the location
+  menu keeps the last rows while it lists the volumes and the hosts again, the dots in the title, or
+  shows the reason it failed right of the filter, in the colors of errors.
+- **A job waits in its gauge.** While a job waits its turn or counts, its window says which on its
+  first line, a stage of the job rather than a wait, and its gauge, which has no percentage yet, is
+  a faint bar of `▒` over which the shine of the skeleton of rows runs to and fro, turning at its
+  ends with no rest, with the same width, colors, and speed in cells, from the same delay
+  (`dialog::shine_bar` draws both): an empty gauge at 0% read as a job that stood. It runs to and
+  fro rather than sweeping, so that a stage of a job does not read as rows to come. No dots turn in
+  its title: the gauge already shows that it works. A stop leaves the bar still: no more is to come.
+  The list of jobs says `waiting`, `counting`, or `aborting` in place of the percentage, in a column
+  too narrow for a bar.
 
 ## Consequences
 

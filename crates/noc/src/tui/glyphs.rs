@@ -240,6 +240,8 @@ pub(crate) const SKIPPED: char = '-';
 /// The done and the rest of a progress bar.
 pub(crate) const GAUGE_DONE: &str = "█";
 pub(crate) const GAUGE_LEFT: &str = "░";
+/// The gauge of a job that does not know yet how far it is.
+pub(crate) const GAUGE_UNKNOWN: &str = "▒";
 
 /// Where a command's output ended without a newline, as zsh marks it.
 pub(crate) const NO_NEWLINE: &str = "⏎";
@@ -351,6 +353,9 @@ mod tests {
             for glyph in spinners.dots.iter().chain(&still) {
                 assert_eq!(noc_text::width(&glyph.to_string()), 1, "{glyph:?}");
             }
+        }
+        for text in [GAUGE_DONE, GAUGE_LEFT, GAUGE_UNKNOWN] {
+            assert_eq!(noc_text::width(text), 1, "{text:?}");
         }
     }
 }

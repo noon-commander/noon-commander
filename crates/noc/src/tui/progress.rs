@@ -8,13 +8,15 @@ use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Cut};
-use super::dialog::{Colors, button_line, button_spots, draw_box, draw_separator, frame_around};
+use super::dialog::{
+    Colors, button_line, button_spots, draw_box, draw_separator, frame_around, shine_bar,
+};
 use super::glyphs;
 use super::keymap::{Action, Resolved};
 use super::label::Label;
 use super::mouse::{Drawn, Pointer};
 use super::panel::short_size;
-use super::spinner::{Spin, Wait};
+use super::spinner::{Shine, Spin, Wait};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -132,8 +134,7 @@ pub(crate) struct JobView {
     focus: usize,
     /// Where the last render drew it, for the mouse.
     drawn: RefCell<Drawn>,
-    /// For the end of the waiting, the counting, or the aborting, whose spinner shows in front
-    /// of them.
+    /// For the waiting and the counting, whose gauge the shine crosses.
     wait: Wait,
 }
 
@@ -197,9 +198,14 @@ impl JobView {
         self.clock.running()
     }
 
-    /// Whether it waits its turn, counts, or stops, which a spinner shows.
-    pub(crate) fn busy(&self) -> bool {
-        self.aborting || !matches!(self.stage, Stage::Working { .. })
+    /// Its wait while it waits its turn or counts, whose shine crosses the gauge.
+    pub(crate) fn shining(&self) -> Option<&Wait> {
+        (!self.aborting && !self.measured()).then_some(&self.wait)
+    }
+
+    /// Whether how far it is is known: not while it waits its turn or counts.
+    fn measured(&self) -> bool {
+        matches!(self.stage, Stage::Working { .. })
     }
 
     /// How far the job is, from 0 to 1: by bytes if it moves data, else by entries.
@@ -314,8 +320,8 @@ impl JobView {
         self.aborting = true;
     }
 
-    /// Draws the window as it is at `now`, with the spinner of `spin` while it is
-    /// [`busy`](Self::busy).
+    /// Draws the window as it is at `now`; until how far the job is is known, its gauge is a
+    /// skeleton, which the shine of `spin` crosses while it is [`shining`](Self::shining).
     pub(crate) fn render(
         &self,
         frame: &mut Frame<'_>,
@@ -374,19 +380,15 @@ impl JobView {
                 theme.glyphs.marks,
             ))
         };
-        if self.busy() {
-            let mut spans = spin.now(&self.wait, (theme.busy_dialog, theme.dialog));
-            spans.push(Span::raw(doing));
-            let styles = colors.body_styles();
-            put(
-                0,
-                Line::from(cells::fit_spans(spans, width, styles, theme.glyphs.marks)),
-            );
-        } else {
-            put(0, text(&doing));
-        }
+        put(0, text(&doing));
         put(1, text(&current));
-        put(2, gauge(ratio, width, theme));
+        if self.measured() {
+            put(2, gauge(ratio, width, theme));
+        } else {
+            // A stop leaves it still: nothing more is to come.
+            let shine = self.shining().and_then(|wait| spin.shine(wait));
+            put(2, unknown_gauge(inner.width, shine, theme));
+        }
         put(3, text(&count));
         put(4, text(&self.time_line(now)));
         let labels: Vec<Label> = self.buttons.iter().map(|button| button.label()).collect();
@@ -485,13 +487,27 @@ fn gauge(ratio: f64, width: usize, theme: &Theme) -> Line<'static> {
     Line::from(vec![Span::styled(text, theme.gauge), Span::raw(percent)])
 }
 
+/// The gauge of a job that does not know yet how far it is: a faint bar of `width` cells, with
+/// no percentage, over which a `shine`, if any, the one of the skeleton of rows, runs to and fro.
+fn unknown_gauge(width: u16, shine: Option<Shine>, theme: &Theme) -> Line<'static> {
+    let middle = shine.map(|shine| i32::from(shine.bounce(width)));
+    Line::from(shine_bar(
+        width,
+        middle,
+        glyphs::GAUGE_UNKNOWN,
+        theme.dialog,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
+    use ratatui::style::Modifier;
 
     use super::*;
     use crate::tui::glyphs::Glyphs;
+    use crate::tui::spinner;
 
     fn draw_at(view: &JobView, now: Instant) -> String {
         let mut terminal = Terminal::new(TestBackend::new(64, 11)).unwrap();
@@ -502,6 +518,59 @@ mod tests {
             })
             .unwrap();
         terminal.backend().to_string()
+    }
+
+    /// The title line of the window drawn at `now` with turning spinners, the gauge line, and
+    /// which cells of the gauge are dim.
+    fn busy_lines(view: &JobView, now: Instant) -> (String, String, Vec<bool>) {
+        let mut terminal = Terminal::new(TestBackend::new(64, 11)).unwrap();
+        terminal
+            .draw(|frame| {
+                let spin = Spin::new(now, now, true, Glyphs::PLAIN.spinners);
+                view.render(frame, frame.area(), &Theme::terminal(), (now, &spin));
+            })
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let line = |y: u16| -> String {
+            (0..buffer.area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+                .trim()
+                .to_owned()
+        };
+        // The gauge, inside the frame and its margin.
+        let dim = (4..60)
+            .map(|x| buffer[(x, 4)].modifier.contains(Modifier::DIM))
+            .collect();
+        (line(1), line(4), dim)
+    }
+
+    #[test]
+    fn until_how_far_it_is_is_known_the_gauge_is_a_skeleton_that_a_shine_crosses() {
+        let start = Instant::now();
+        let mut view = JobView::new("Delete".to_owned(), "Deleting".to_owned());
+        view.scanning(42);
+        let (title, gauge, dim) = busy_lines(&view, start);
+        assert!(title.contains("═ Delete ═"), "{title}");
+        assert!(gauge.contains("▒▒▒▒▒▒") && !gauge.contains('%'), "{gauge}");
+        assert!(dim.iter().all(|dim| *dim), "{dim:?}");
+        // The shine starts with the delay of every spinner, and no dots turn in the title.
+        let (title, _, dim) = busy_lines(&view, start + spinner::DELAY + secs(1) / 2);
+        assert!(title.contains("═ Delete ═"), "{title}");
+        assert_eq!(dim.iter().filter(|dim| !**dim).count(), 9, "{dim:?}");
+        // It turns at the end of the bar of 56 cells and runs back: eight cells after the last.
+        let back = start + spinner::DELAY + Duration::from_millis(40) * 63;
+        let (_, _, dim) = busy_lines(&view, back);
+        let lit: Vec<usize> = (0..dim.len()).filter(|x| !dim[*x]).collect();
+        assert_eq!(lit, (43..=51).collect::<Vec<_>>());
+        // A stop leaves it still.
+        view.abort();
+        let (_, _, dim) = busy_lines(&view, start + spinner::DELAY + secs(1) / 2);
+        assert!(dim.iter().all(|dim| *dim), "{dim:?}");
+        // Once it is known, the gauge fills, with its percentage.
+        view.working("/srv/a".to_owned(), Counts::default(), start);
+        let (_, gauge, _) = busy_lines(&view, start + secs(1));
+        assert!(gauge.contains('%'), "{gauge}");
     }
 
     fn draw(view: &JobView) -> String {

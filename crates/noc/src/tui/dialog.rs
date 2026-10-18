@@ -1703,6 +1703,40 @@ pub(crate) fn draw_box(
     inner
 }
 
+/// Draws `dots` in `color` in front of `title` on the frame around `inner`, the room inside a box that
+/// [`draw_box`] drew with that title: over the line of the frame, so that the title stays where
+/// it is when they come and go. Nothing where the line has no room for them.
+pub(crate) fn draw_title_dots(
+    frame: &mut Frame<'_>,
+    inner: Rect,
+    title: &str,
+    (dots, color): (char, Style),
+    colors: Colors,
+) {
+    // Where the frame puts its title: between its corners.
+    let left = inner.x.saturating_sub(1);
+    let room = inner.width.saturating_add(2);
+    // The title with a blank cell on either side.
+    let width = u16::try_from(cells::width(title))
+        .unwrap_or(u16::MAX)
+        .saturating_add(2);
+    let Some(free) = room.checked_sub(width) else {
+        return;
+    };
+    // A blank cell and the dots.
+    if free / 2 < 2 || inner.y == 0 {
+        return;
+    }
+    let x = left + free / 2 - 2;
+    let title = colors.title.bold();
+    let line = Line::from(vec![
+        Span::styled(" ", title),
+        Span::styled(dots.to_string(), title.patch(color)),
+    ]);
+    let area = Rect::new(x, inner.y - 1, 2, 1).intersection(frame.area());
+    frame.render_widget(line, area);
+}
+
 /// What of `field` fits in `room` cells, in the color of fields, what Visual mode selects
 /// reversed; and the cursor's column.
 pub(crate) fn field_line(field: &Field, room: usize, theme: &Theme) -> (Line<'static>, usize) {

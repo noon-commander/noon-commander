@@ -8,10 +8,13 @@ use noc_config::SearchMode;
 use noc_scroll::scrollbar::{self, Bar};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Cut};
-use super::dialog::{Colors, Field, draw_box, draw_separator, frame_around, right_frame};
+use super::dialog::{
+    Colors, Field, draw_box, draw_separator, draw_title_dots, frame_around, right_frame,
+};
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::{Drawn, Pointer};
 use super::scroll::Window;
@@ -89,9 +92,10 @@ pub(crate) struct Body<'a> {
     /// Shown in place of the lines, such as why the rows did not load; without, a note that
     /// nothing matches once the filter hides every row.
     pub(crate) message: Option<String>,
-    /// Shown in place of the lines while the rows load: the spinner and what it waits for, or
-    /// nothing before the spinner shows.
-    pub(crate) busy: Option<Line<'static>>,
+    /// Whether the rows are still to come: nothing shows in their place.
+    pub(crate) waiting: bool,
+    /// Turning in front of the title while the window waits, in their color.
+    pub(crate) dots: Option<(char, Style)>,
     /// Lines under the rows, apart from them, such as the whole command under the cursor.
     pub(crate) footer: Vec<String>,
     /// The whole text of the row under the cursor, which shows under the rows while `K` asks
@@ -437,6 +441,9 @@ impl Picker {
         // Borders, the filter, the line under it, the rows, the footer.
         let size = (body.width, shown.saturating_add(4).saturating_add(below));
         let inner = draw_box(frame, area, size, body.title, colors, theme);
+        if let Some(dots) = body.dots {
+            draw_title_dots(frame, inner, body.title, dots, colors);
+        }
         self.drawn = Drawn {
             frame: frame_around(inner),
             ..Drawn::default()
@@ -451,10 +458,7 @@ impl Picker {
 
         self.page = usize::from(inner.height.saturating_sub(2 + below)).max(1);
         let rows = self.len();
-        if let Some(busy) = body.busy {
-            if inner.height > 2 + below {
-                draw_busy(frame, line(2), busy, theme);
-            }
+        if body.waiting {
             return;
         }
         let message = body.message.or_else(|| self.nothing());
@@ -593,18 +597,6 @@ impl Picker {
         }
         draw_separator(frame, inner, inner.y + 1, Colors::of(theme, false), theme);
     }
-}
-
-/// What the window waits for, with its spinner, cut to fit `area`.
-fn draw_busy(frame: &mut Frame<'_>, area: Rect, busy: Line<'static>, theme: &Theme) {
-    let styles = (theme.dialog, theme.truncated_dialog);
-    let spans = cells::fit_spans(
-        busy.spans,
-        usize::from(area.width),
-        styles,
-        theme.glyphs.marks,
-    );
-    frame.render_widget(Line::from(spans).style(theme.dialog), area);
 }
 
 /// A heading over the rows after it, `width` cells across: its text alone, in the color of

@@ -186,10 +186,6 @@ menu-home = Home
 menu-more = { $count } more…
 # Right of a place whose free space is not known.
 menu-free-unknown = ?
-# In place of the rows, after a spinner, until the volumes and the hosts are listed.
-menu-loading = Looking for volumes and hosts…
-# Right of the filter, after a spinner, while R lists the volumes and the hosts again.
-menu-reloading = Looking again…
 # Right of the filter, in the colors of errors, when R could not list them again.
 menu-reload-failed = Not listed again: { $reason }
 
@@ -200,8 +196,6 @@ jump-title = zoxide
 # The first line: the glyph of how they match (plain, fzf, or regex; Ctrl+s switches it), and the
 # keywords typed, separated by spaces.
 jump-keywords = Jump to { $mode }: { $text }
-# In place of the rows, after a spinner, until zoxide answers.
-jump-loading = Asking zoxide…
 # When zoxide lists no directory.
 jump-nothing = zoxide knows no directory that matches. It learns the directories you work in.
 # The zoxide program is not there.

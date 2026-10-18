@@ -44,17 +44,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and the lists. Keys work on a window at once. `animations.windows` (on) turns it off, a check
   box under Animations in the Configuration dialog.
 - Everything that waits for work in the background shows the same spinner, a scanner of eight cells,
-  with what it waits for after it: the location menu, the zoxide window, the search of a tree, a job
-  starting or stopping, and the viewer reading a file. It shows only after 150 ms, so quick work
-  does not flicker. A panel's title has an icon in front of the path, a folder or a host in the
-  color of its status (mc's `/` or the host's marker without icons); while the panel reads a
-  directory or connects, braille dots turn in its place and the title shows the path it reads (`⠹
-  web:/var/www`), so the path never moves; its status line stays as it is. A host connecting in the
-  location menu turns braille dots too. `animations.spinners` (on), a check box under Animations,
-  leaves a still mark in their place.
+  with what it waits for after it: the search of a tree, a job starting or stopping, and the viewer
+  reading a file. It shows only after 150 ms, so quick work does not flicker. A panel's title has an
+  icon in front of the path, a folder or a host in the color of its status (mc's `/` or the host's
+  marker without icons); while the panel reads a directory or connects, braille dots turn in its
+  place and the title shows the path it reads (`⠹ web:/var/www`), so the path never moves; its
+  status line stays as it is. A host connecting in the location menu turns braille dots too, and so
+  do the location menu and the zoxide window in front of their title while they wait, which stays in
+  place. `animations.spinners` (on), a check box under Animations, leaves a still mark in their
+  place.
 - R in the location menu keeps the rows while it lists the volumes and the hosts again, with the
-  spinner and `Looking again…` right of the filter; if that fails, the reason shows there in the
-  colors of errors.
+  dots in the title; if that fails, the reason shows right of the filter in the colors of errors.
 - Debug builds take `--slow-spinners SECONDS`, which holds back every result of background work
   by that long, and `--slow-connections SECONDS`, which holds back only a connection made or
   ended, to watch the spinners.

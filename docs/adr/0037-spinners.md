@@ -22,27 +22,27 @@ too, which some users want and others do not, apart from windows.
 
 ## Decision
 
-- **One spinner, always with its text.** `tui/spinner.rs` draws every spinner in the app, and
-  each says what it waits for after it: `Looking for volumes and hosts…`, `Asking zoxide…`,
-  `Reading the file…`. The texts are in the Fluent files, as any other.
+- **One spinner, always with its text.** `tui/spinner.rs` draws every spinner in the app, and each
+  says what it waits for after it, such as `Reading the file…`. The texts are in the Fluent files,
+  as any other.
 - **A scanner.** Eight cells, a lit block that runs from one end to the other and
   back, with a trail that fades behind it, and a pause at each end, 40 ms a step. The trail is
   one color, `busy` of the theme (`busy_dialog` in dialogs), blended into the background:
   brighter at the head, fading to 30% in the pause. Where the colors are not known (the low 16,
   the terminal's own), the head is bold, the next two cells plain, and the rest dim. The blocks
   are `■` and `⬝` with icons, `■` and `·` without.
-- **Braille dots where one cell is all there is.** They turn through `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, 80 ms
-  each; `|/-\` without icons. The icon of a host connecting in the location menu turns them.
-- **A panel waits in its title.** The title has one cell in front of the path: the icon of a
-  folder, or of a host in the color of its status; without icons mc's `/` or the host's marker.
-  While a panel reads a directory, the dots turn in that cell, so the path never moves when they
-  come and go, and the title shows the path it reads, `⠹ web:/var/www`, at once: the path says
-  what it waits for, which the old one would not, and the status line under the rows keeps the
-  name under the cursor. The dots take the color of the host's status while it connects or does
-  not answer, so connecting and reading look apart without a word that would take the room of the
-  path. A host that does not
-  answer still asks `web: Retry or Cancel?` on the status line, in the colors of errors: it is a
-  question, not a wait. A reading that fails puts the old path back.
+- **Braille dots where one cell is all there is.** They turn through `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, 80 ms each;
+  `|/-\` without icons. The icon of a host connecting in the location menu turns them, and so do the
+  titles of panels and of windows.
+- **A panel waits in its title.** The title has one cell in front of the path: the icon of a folder,
+  or of a host in the color of its status; without icons mc's `/` or the host's marker. While a
+  panel reads a directory, the dots turn in that cell, so the path never moves when they come and
+  go, and the title shows the path it reads, `⠹ web:/var/www`, at once: the path says what it waits
+  for, which the old one would not, and the status line under the rows keeps the name under the
+  cursor. The dots take the color of the host's status while it connects or does not answer, so
+  connecting and reading look apart without a word that would take the room of the path. A host that
+  does not answer still asks `web: Retry or Cancel?` on the status line, in the colors of errors: it
+  is a question, not a wait. A reading that fails puts the old path back.
 - **Shown after 150 ms.** A `Wait`, kept by what waits, remembers the first frame that drew it;
   the spinner and its text show only from 150 ms later, so quick work shows nothing. A job's
   window, which shows whole, draws its spinner at once.
@@ -63,14 +63,16 @@ too, which some users want and others do not, apart from windows.
   or ended, in a queue of its own, so other results come as they are and a host's dots can be
   watched in the location menu. With both, a connection waits for their sum. Release builds have
   neither the flags nor the code.
-- **R keeps the rows.** Listing the volumes and the hosts again in the location menu leaves the
-  last rows in place; the spinner and `Looking again…` show right of the filter, or the reason
-  it failed in the colors of errors.
+- **A window waits in its title.** The location menu and the zoxide window turn the dots in
+  front of their title, over the line of the frame, so the title stays where it is: the title
+  says what the window lists, and the rows, or the place where they come, stay clear. R in the
+  location menu keeps the last rows while it lists the volumes and the hosts again, the dots in
+  the title, or shows the reason it failed right of the filter, in the colors of errors.
 
 ## Consequences
 
 - A new place that waits keeps a `Wait`, gives it to `App::waits`, and draws `Spin::wait` with
-  its text. It needs no tick of its own.
+  its text, or `Spin::wait_dots` in its title. It needs no tick of its own.
 - The event loop wakes at most every 40 ms while a spinner shows, and not at all before 150 ms.
 - Spinners and windows are turned off apart. Configs with `ui.animations` must move it to
   `animations.windows`.

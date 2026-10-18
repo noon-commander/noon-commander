@@ -16,7 +16,9 @@ use ratatui::layout::{Position, Rect};
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Cut};
-use super::dialog::{Colors, Field, draw_box, draw_separator, frame_around, right_frame};
+use super::dialog::{
+    Colors, Field, draw_box, draw_separator, draw_title_dots, frame_around, right_frame,
+};
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::{Drawn, Pointer};
 use super::picker::{FULL_ROWS, Whole};
@@ -145,7 +147,7 @@ impl JumpMenu {
         self.generation = generation;
     }
 
-    /// The wait for the first answer, whose spinner shows in place of the rows.
+    /// The wait for the first answer, whose dots turn in front of the title.
     pub(crate) fn first_wait(&self) -> Option<&Wait> {
         (!self.loaded).then_some(&self.wait)
     }
@@ -366,7 +368,11 @@ impl JumpMenu {
         };
         // Borders, the keywords, the line under them, the rows.
         let size = (WIDTH, rows.saturating_add(4).saturating_add(below));
-        let inner = draw_box(frame, area, size, &fl!("jump-title"), colors, theme);
+        let title = fl!("jump-title");
+        let inner = draw_box(frame, area, size, &title, colors, theme);
+        if let Some(dots) = self.first_wait().and_then(|wait| spin.wait_dots(wait)) {
+            draw_title_dots(frame, inner, &title, (dots, theme.busy_dialog), colors);
+        }
         let mut drawn = self.drawn.borrow_mut();
         *drawn = Drawn {
             frame: frame_around(inner),
@@ -383,12 +389,6 @@ impl JumpMenu {
 
         let page = usize::from(inner.height.saturating_sub(2 + below)).max(1);
         if !self.loaded {
-            if let Some(mut spans) = spin.wait(&self.wait, (theme.busy_dialog, theme.dialog)) {
-                spans.push(Span::raw(fl!("jump-loading")));
-                let styles = (theme.dialog, theme.truncated_dialog);
-                let spans = cells::fit_spans(spans, width, styles, theme.glyphs.marks);
-                frame.render_widget(Line::from(spans).style(theme.dialog), line(2));
-            }
             return (page, self.cursor, self.window, None);
         }
         let message = if let Some(error) = &self.error {
@@ -693,7 +693,8 @@ mod tests {
     #[test]
     fn says_why_it_lists_nothing() {
         let mut menu = JumpMenu::new(PathBuf::from("/home/me"), None, 1);
-        assert!(draw(&mut menu, 10).contains("… Asking zoxide…"));
+        let text = draw(&mut menu, 10);
+        assert!(text.contains("═ … zoxide ═"), "{text}");
         menu.found(1, Ok(Vec::new()));
         assert!(draw(&mut menu, 10).contains("zoxide knows no directory"));
         menu.found(1, Err("zoxide is not installed".to_owned()));

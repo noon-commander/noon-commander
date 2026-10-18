@@ -185,8 +185,8 @@ impl LocationMenu {
         }
     }
 
-    /// The wait for a listing: the first, whose spinner shows in place of the rows, or one
-    /// asked for again, whose spinner shows right of the filter.
+    /// The wait for a listing, the first or one asked for again, whose dots turn in front of
+    /// the title.
     pub(crate) fn wait(&self) -> Option<&Wait> {
         if self.loaded {
             self.reloading.as_ref()
@@ -373,15 +373,12 @@ impl LocationMenu {
             Side::Right => fl!("menu-right"),
         };
         let message = self.error.clone().filter(|_| !self.loaded);
-        let busy = (!self.loaded && message.is_none()).then(|| {
-            spin.wait(&self.wait, (theme.busy_dialog, theme.dialog))
-                .map(|mut spans| {
-                    spans.push(Span::raw(fl!("menu-loading")));
-                    Line::from(spans)
-                })
-                .unwrap_or_default()
-        });
-        let note = self.note(theme, spin);
+        let waiting = !self.loaded && message.is_none();
+        let dots = self
+            .wait()
+            .and_then(|wait| spin.wait_dots(wait))
+            .map(|dots| (dots, theme.busy_dialog));
+        let note = self.note(theme);
         let widest = items
             .iter()
             .map(|item| cells::width(&info(*item, hosts)))
@@ -404,7 +401,8 @@ impl LocationMenu {
             lines: &lines,
             note,
             message,
-            busy,
+            waiting,
+            dots,
             full,
             ..Body::default()
         };
@@ -416,18 +414,9 @@ impl LocationMenu {
         });
     }
 
-    /// Right of the filter once the rows show: the spinner and what it waits for while they are
-    /// listed again, or why that failed.
-    fn note(&self, theme: &Theme, spin: &Spin) -> Option<Line<'static>> {
-        if !self.loaded {
-            return None;
-        }
-        if let Some(wait) = &self.reloading {
-            let mut spans = spin.wait(wait, (theme.busy_dialog, theme.dialog))?;
-            spans.push(Span::raw(fl!("menu-reloading")));
-            return Some(Line::from(spans));
-        }
-        let reason = self.error.as_deref()?;
+    /// Right of the filter once the rows show: why listing them again failed.
+    fn note(&self, theme: &Theme) -> Option<Line<'static>> {
+        let reason = self.error.as_deref().filter(|_| self.loaded)?;
         let text = fl!("menu-reload-failed", reason = reason);
         Some(Line::styled(text, theme.invalid(theme.dialog)))
     }
@@ -1116,28 +1105,37 @@ mod tests {
         insta::assert_snapshot!(draw(&mut menu, 16));
         let mut loading = LocationMenu::new(Side::Right, home(), PathBuf::from("/Users/me"), 1);
         let text = draw(&mut loading, 10);
-        assert!(
-            text.contains("Right") && text.contains("… Looking for volumes and hosts…"),
-            "{text}"
-        );
+        let title = text
+            .lines()
+            .find(|line| line.contains("Right"))
+            .unwrap_or_default();
+        assert!(title.contains("═ … Right ═"), "{text}");
+        loading.listed(1, Ok(places()));
+        let listed = draw(&mut loading, 10);
+        let still = listed
+            .lines()
+            .find(|line| line.contains("Right"))
+            .unwrap_or_default();
+        let column = |line: &str| line.find(" Right ").map(|at| line[..at].chars().count());
+        assert_eq!(column(title), column(still), "the title stays in place");
     }
 
     #[test]
-    fn listing_again_keeps_the_rows_and_tells_how_it_goes_right_of_the_filter() {
+    fn listing_again_keeps_the_rows_and_turns_the_dots_of_the_title() {
         let mut menu = menu_at(home());
         assert!(menu.wait().is_none());
 
         menu.reload(2);
         assert!(menu.wait().is_some());
         let text = draw(&mut menu, 16);
-        assert!(text.contains("… Looking again…"), "{text}");
+        assert!(text.contains("═ … Left ═"), "{text}");
         assert!(text.contains("Prod"), "the rows stay: {text}");
 
         menu.listed(1, Ok(places()));
         assert!(menu.wait().is_some(), "an older listing changes nothing");
         menu.listed(2, Ok(places()));
         assert!(menu.wait().is_none());
-        assert!(!draw(&mut menu, 16).contains("Looking again"));
+        assert!(!draw(&mut menu, 16).contains("… Left"));
 
         menu.reload(3);
         menu.listed(3, Err("no ssh config".to_owned()));
@@ -1158,7 +1156,7 @@ mod tests {
         menu.reload(2);
         assert!(menu.wait().is_some());
         let text = draw(&mut menu, 10);
-        assert!(text.contains("… Looking for volumes and hosts…"), "{text}");
+        assert!(text.contains("═ … Left ═"), "{text}");
         assert!(!text.contains("no ssh config"), "{text}");
     }
 }

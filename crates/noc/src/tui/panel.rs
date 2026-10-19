@@ -1194,14 +1194,24 @@ impl Panel {
 
     /// Types `c` at the cursor of quick search and searches again, as vim's incremental search
     /// does: from where the search goes from to the first name that matches the text, or, as
-    /// fzf, to the best match, the first from there of several as good. While nothing matches,
-    /// the cursor stays where the search goes from, and the text stays as typed.
+    /// fzf, to the best match, the first from there of several as good. As mc's, a character
+    /// after which no name matches is not typed; one that leaves a regular expression unfinished
+    /// is, so that the rest of it can be typed.
     pub(crate) fn search_type(&mut self, c: char) {
+        let Some(search) = &self.search else {
+            return;
+        };
+        let text = typed_at_cursor(&search.field, c);
+        let mut matcher = Matcher::names(search.mode, &text);
+        let found = self.find_typed(search, &mut matcher, &text);
+        if found.is_none() && !text.trim().is_empty() && matcher.error().is_none() {
+            return;
+        }
         let Some(search) = &mut self.search else {
             return;
         };
         search.field.insert(c);
-        self.search_again_typed();
+        self.show_found(found);
     }
 
     /// Edits the text of quick search with a key of the text fields; an edit searches again,
@@ -1224,17 +1234,27 @@ impl Panel {
             return;
         };
         let text = search.field.text().to_owned();
-        let found = if text.trim().is_empty() {
+        let mut matcher = Matcher::names(search.mode, &text);
+        let found = self.find_typed(search, &mut matcher, &text);
+        self.show_found(found);
+    }
+
+    /// The row that `search` goes to for `text`, which `matcher` matches: from where it goes
+    /// from to the first name that matches, or, as fzf, to the best match; none for a blank text.
+    fn find_typed(&self, search: &Search, matcher: &mut Matcher, text: &str) -> Option<usize> {
+        if text.trim().is_empty() {
             None
+        } else if matcher.ranks() {
+            self.best_ranked(matcher, search)
         } else {
-            let mut matcher = Matcher::names(search.mode, &text);
-            if matcher.ranks() {
-                self.best_ranked(&mut matcher, search)
-            } else {
-                self.find_from(&mut matcher, search.from, search.back, search.count)
-                    .map(|(row, _)| row)
-            }
-        };
+            self.find_from(matcher, search.from, search.back, search.count)
+                .map(|(row, _)| row)
+        }
+    }
+
+    /// Puts the cursor on `found`, what quick search found, or, if nothing, where it goes from,
+    /// with the rows on screen as they were before it.
+    fn show_found(&mut self, found: Option<usize>) {
         let Some(search) = &mut self.search else {
             return;
         };
@@ -2835,6 +2855,15 @@ fn stem_chars(name: &str, dir: bool) -> usize {
     }
 }
 
+/// The text of `field` as it would be with `c` typed at its cursor.
+fn typed_at_cursor(field: &Field, c: char) -> String {
+    let at = field.editor().cursor();
+    let mut text: String = field.text().chars().take(at).collect();
+    text.push(c);
+    text.extend(field.text().chars().skip(at));
+    text
+}
+
 /// `shown` as a row under the cursor, `Some(true)` in the active panel, `marked`, and `selected`
 /// by Visual mode. The cursor and marks replace the colors of the row, as in mc, and a selection
 /// reverses them; the cursor of the inactive panel only puts a background under them. The marks
@@ -3184,10 +3213,12 @@ mod tests {
         typed(&mut panel, "i");
         assert_eq!(under_cursor(&panel), "bin");
         typed(&mut panel, "x");
-        assert_eq!(panel.search_text(), Some("Bix"), "a miss stays as typed");
-        assert_eq!(panel.cursor, 0, "and the cursor goes back where it started");
-        panel.search_edit(Action::Backspace);
-        assert_eq!(under_cursor(&panel), "bin");
+        assert_eq!(
+            panel.search_text(),
+            Some("Bi"),
+            "a miss is not typed, as in mc"
+        );
+        assert_eq!(under_cursor(&panel), "bin", "and the cursor stays");
         panel.search_edit(Action::Backspace);
         assert_eq!(
             under_cursor(&panel),
@@ -3216,9 +3247,15 @@ mod tests {
             })
         );
         assert!(!panel.searching());
-        // Enter on a text that nothing matches stays where the search started.
+        // Enter on a text that nothing matches, as the last search's may be, stays where the
+        // search started.
         panel.search_up(1, SearchMode::Plain);
-        typed(&mut panel, "z");
+        panel.search_resume("z", SearchMode::Plain);
+        assert_eq!(
+            panel.search_text(),
+            Some("z"),
+            "what the last search found stays"
+        );
         assert_eq!(under_cursor(&panel), "boot");
         assert_eq!(panel.end_search().map(|end| end.found), Some(None));
         assert_eq!(under_cursor(&panel), "boot");
@@ -3227,6 +3264,38 @@ mod tests {
         typed(&mut panel, "b");
         panel.handle(Action::Reload);
         assert!(!panel.searching());
+    }
+
+    #[test]
+    fn quick_search_types_no_character_that_nothing_matches_but_finishes_a_regex() {
+        let mut panel = search_files(&["bar", "boot"]);
+        panel.search_down(1, SearchMode::Regex);
+        typed(&mut panel, "(oz");
+        assert_eq!(
+            panel.search_text(),
+            Some("(oz"),
+            "not a regular expression yet"
+        );
+        assert_eq!(panel.cursor, 0);
+        typed(&mut panel, ")");
+        assert_eq!(panel.search_text(), Some("(oz"), "one that nothing matches");
+        panel.search_edit(Action::Backspace);
+        typed(&mut panel, "|a)");
+        assert_eq!(panel.search_text(), Some("(o|a)"));
+        assert_eq!(under_cursor(&panel), "bar");
+        panel.abort_search();
+
+        // A blank text searches for nothing, so it is typed.
+        panel.search_down(1, SearchMode::Plain);
+        typed(&mut panel, " x");
+        assert_eq!(panel.search_text(), Some(" "));
+        assert_eq!(panel.cursor, 0);
+
+        // Nothing matches in a directory without names.
+        let mut panel = search_files(&[]);
+        panel.search_down(1, SearchMode::Fzf);
+        typed(&mut panel, "a");
+        assert_eq!(panel.search_text(), Some(""));
     }
 
     #[test]
@@ -3242,8 +3311,8 @@ mod tests {
         panel.search_step(true);
         assert_eq!(under_cursor(&panel), "cfg-if", "round to the best");
         typed(&mut panel, "q");
-        assert_eq!(panel.search_text(), Some("cfgq"), "a miss stays typed");
-        assert_eq!(panel.cursor, 0);
+        assert_eq!(panel.search_text(), Some("cfg"), "a miss is not typed");
+        assert_eq!(under_cursor(&panel), "cfg-if", "and the cursor stays");
         panel.search_edit(Action::DeleteToStart);
         assert_eq!(panel.search_text(), Some(""));
         typed(&mut panel, "C");
@@ -3443,24 +3512,24 @@ mod tests {
     fn quick_search_edits_its_text_as_a_text_field_does() {
         let mut panel = search_files(&["bar", "bat", "boot", "cab"]);
         panel.search_down(1, SearchMode::Plain);
-        typed(&mut panel, "bt");
-        assert_eq!(panel.cursor, 0, "no name starts with bt");
-        panel.search_edit(Action::Backspace);
-        assert_eq!(under_cursor(&panel), "bar");
-        typed(&mut panel, "o");
+        typed(&mut panel, "bo");
         assert_eq!(under_cursor(&panel), "boot");
-        // Typed in the middle, a character searches again.
+        // Typed in the middle, a character searches again, and one that nothing matches is not
+        // typed there either.
         panel.search_edit(Action::TextStart);
         panel.search_edit(Action::Right);
         assert_eq!(under_cursor(&panel), "boot", "a move of the text cursor");
         typed(&mut panel, "a");
-        assert_eq!(panel.search_text(), Some("bao"));
-        assert_eq!(panel.cursor, 0);
+        assert_eq!(panel.search_text(), Some("bo"), "no name holds bao");
+        typed(&mut panel, "o");
+        assert_eq!(panel.search_text(), Some("boo"));
+        panel.search_edit(Action::Backspace);
+        assert_eq!(panel.search_text(), Some("bo"));
         panel.search_edit(Action::DeleteChar);
-        assert_eq!(panel.search_text(), Some("ba"));
-        assert_eq!(under_cursor(&panel), "bar");
+        assert_eq!(panel.search_text(), Some("b"));
+        assert_eq!(under_cursor(&panel), "bar", "an edit searches again");
         panel.search_edit(Action::TextEnd);
-        typed(&mut panel, "t");
+        typed(&mut panel, "at");
         assert_eq!(under_cursor(&panel), "bat");
         panel.search_edit(Action::TextStart);
         panel.search_edit(Action::DeleteToEnd);

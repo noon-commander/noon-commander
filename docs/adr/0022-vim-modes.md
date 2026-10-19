@@ -1,6 +1,6 @@
 # 0022. One keymap, in vim's modes
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0042](0042-quick-search-types-only-what-matches.md)
 - Date: 2026-10-13
 - Supersedes: [ADR 0020](0020-esc-acts-at-once.md)
 
@@ -85,14 +85,15 @@ no registers.
   one preset, but the same key does different things in different terminals; the help, the key
   hints, and the F-key bar show what it does in this one, and the pull-down menu keeps Ctrl+w w.
 - **Quick search is vim's incremental search**, not mc's: a character that matches nothing stays
-  typed while the cursor goes back to where the search started, an edit searches again from there,
-  Enter says "Pattern not found" and keeps the text for `n`, and Esc puts back the rows on screen
-  too, as vim's `search_start` and `old_viewstate` have it; this replaces ADR 0016's dropped
-  characters. Tab completes as vim's command line with 'wildmenu' does, rather than as bash: the
-  first match goes in whole, and the next Tab the next, round through what was typed; the list stays
-  a column, as vim's pop-up menu, with its keys: Up and Down choose, Left and Right go up and down
-  the directories; case never counts, as vim's 'fileignorecase' on macOS. The command line completes
-  too, as vim's `:!`.
+  typed while the cursor goes back to where the search started (no longer:
+  [ADR 0042](0042-quick-search-types-only-what-matches.md) drops it, as mc does), an edit searches
+  again from there, Enter says "Pattern not found" and keeps the text for `n`, and Esc puts back
+  the rows on screen too, as vim's `search_start` and `old_viewstate` have it; this replaces ADR
+  0016's dropped characters. Tab completes as vim's command line with 'wildmenu' does, rather than
+  as bash: the first match goes in whole, and the next Tab the next, round through what was typed;
+  the list stays a column, as vim's pop-up menu, with its keys: Up and Down choose, Left and Right
+  go up and down the directories; case never counts, as vim's 'fileignorecase' on macOS. The
+  command line completes too, as vim's `:!`.
 - **The lists** (the location menu, the tab menu, the zoxide window, the workspaces, the command
   history) take `j`, `k`, and `q` in Normal mode, and `d d` where a row can go; `/` types in
   their filter in Insert mode, and Esc goes back to the rows. The zoxide window opens with its

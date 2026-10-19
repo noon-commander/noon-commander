@@ -609,8 +609,10 @@ In the active panel, in Insert mode, as vim's search is typed: characters are pa
 searched for, and the keys of `input` edit it, Ctrl+r among them, which types the text of a
 register; it falls back to `input`, then to `global`. As vim's incremental search, it finds the
 first match after the row the cursor was on, round, or before it, up, after ?, and with a count
-before / or ? the match of that number (2/); each edit searches again from there, and while nothing
-matches, the cursor stays there and the text stays as typed. Enter and Ctrl+j end the search, on the
+before / or ? the match of that number (2/); each edit searches again from there. As in mc, not
+vim, a character after which nothing matches is not typed, but one that leaves a regular expression
+unfinished is; while nothing matches, as after Ctrl+s, the cursor stays where the search goes from.
+Enter and Ctrl+j end the search, on the
 match, or say that nothing matches, and Esc and Ctrl+c give it up, putting back the cursor and the
 rows on screen, as in vim, but Backspace and Delete with nothing typed do not, as on the command
 line, so that one too many does not go to the parent directory; Delete at the end of the text

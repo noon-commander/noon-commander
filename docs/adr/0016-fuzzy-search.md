@@ -33,8 +33,9 @@ it does not rank items for a program that draws them itself.
 - The code lives in `crates/noc/src/tui/fuzzy.rs`; no other crate needs it.
 - Quick search keeps the order of the listing and puts the cursor on the best match; of
   matches as good, the first from where the cursor is, as mc goes from there. Ctrl+s goes to
-  the next best, round to the best. A character that nothing matches is still dropped (no
-  longer: [ADR 0022](0022-vim-modes.md) keeps it, as vim's search does).
+  the next best, round to the best. A character that nothing matches is still dropped (for a
+  while: [ADR 0022](0022-vim-modes.md) kept it, as vim's search does, and
+  [ADR 0042](0042-quick-search-types-only-what-matches.md) drops it again).
 - The location menu keeps its order too, the home directory, the volumes, then the hosts,
   and puts the cursor on the best row. A row's texts (name and mount point; alias, label,
   and address) are matched as one line, as fzf matches the columns of one. Since

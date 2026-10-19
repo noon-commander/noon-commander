@@ -1307,8 +1307,11 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   expression, as the filters of the lists match, and Ctrl+g to the next one, round to the top, as
   many as the count. It runs as vim's incremental search (`panel::Search`, with vim's `search_start`,
   `match_start`, and `old_viewstate`): every edit of the text searches again from where it searches
-  from, with the rows on screen as they were before it; while nothing matches, the cursor stays
-  there and the text as typed. Ctrl+g and Ctrl+t move where it searches from as vim's do, so that an
+  from, with the rows on screen as they were before it. As in mc, a character after which no name
+  matches is not typed, and nothing moves; one that leaves a regular expression unfinished is
+  ([ADR 0042](adr/0042-quick-search-types-only-what-matches.md)). While nothing matches, after
+  Ctrl+s or with the last search brought back, the cursor stays where it searches from and the text
+  as it is. Ctrl+g and Ctrl+t move where it searches from as vim's do, so that an
   edit after them searches on from the match before, and Enter stays on the match. The listing keeps
   its order. While it runs, every name on screen shows where it matches in the colors of what is
   found (`find_match`, as in the [search of a whole tree](#search-of-a-whole-tree)), the cursor's

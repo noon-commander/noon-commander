@@ -14182,15 +14182,8 @@ mod tests {
             .name_under_cursor()
             .map(<[u8]>::to_vec);
         app.handle(action(Action::QuickSearch));
-        type_text(&mut app, "^r");
-        assert_eq!(
-            app.panel(app.active)
-                .name_under_cursor()
-                .map(<[u8]>::to_vec),
-            start,
-            "as it is: no name holds it"
-        );
         keys(&mut app, &["ctrl-s"]);
+        type_text(&mut app, "^r");
         assert_eq!(
             app.panel(app.active).name_under_cursor(),
             Some(&b"right"[..]),
@@ -14199,7 +14192,24 @@ mod tests {
         keys(&mut app, &["ctrl-s"]);
         let glyphs = app.theme.glyphs.search_modes;
         assert!(screen(&mut app).contains(&format!("Search {}: ^r", glyphs.regex)));
-        keys(&mut app, &["enter"]);
+        assert_eq!(
+            app.panel(app.active).name_under_cursor(),
+            Some(&b"right"[..]),
+            "a regular expression"
+        );
+        keys(&mut app, &["ctrl-s"]);
+        assert_eq!(
+            app.panel(app.active)
+                .name_under_cursor()
+                .map(<[u8]>::to_vec),
+            start,
+            "as it is: no name holds it"
+        );
+        assert!(
+            screen(&mut app).contains(&format!("Search {}: ^r", glyphs.plain)),
+            "the text stays"
+        );
+        keys(&mut app, &["ctrl-s", "ctrl-s", "enter"]);
         app.handle(action(Action::QuickSearch));
         assert!(
             screen(&mut app).contains(&format!("Search {}: ", glyphs.plain)),
@@ -14231,11 +14241,15 @@ mod tests {
         app.handle(action(Action::QuickSearch));
         app.handle(Resolved::Insert('r'));
         app.handle(Resolved::Insert('t'));
-        assert!(screen(&mut app).contains(&prompt(&app, "Search", "rt")));
+        assert_eq!(
+            app.panel(app.active).search_text(),
+            Some("r"),
+            "no name holds rt: t is not typed"
+        );
         assert_eq!(
             app.panel(app.active).name_under_cursor(),
             Some(&b"right"[..]),
-            "no name holds the text: the cursor stays"
+            "the cursor stays"
         );
     }
 

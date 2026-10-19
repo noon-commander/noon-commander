@@ -227,6 +227,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `noc hosts` and `noc ls` moved to `noc debug hosts` and `noc debug ls`.
 - Backspace and Delete with nothing typed no longer close quick search, as on the command line,
   so that pressing Backspace once too often no longer goes to the parent directory.
+- Quick search no longer types a character after which no name matches, as in mc: the text and
+  the cursor stay as they were. A character that leaves a regular expression unfinished, such as
+  `(`, is still typed, so that the rest can follow
+  ([ADR 0042](docs/adr/0042-quick-search-types-only-what-matches.md)).
 - Ctrl+f in the panels and the lists stops with the last row at the bottom, then goes to it,
   rather than scroll on until only the last row shows at the top, as vim's does.
 - The help and the viewer stop scrolling with the end at the bottom, for `j`, Ctrl+e, and

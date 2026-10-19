@@ -1,6 +1,6 @@
 # 0016. Fuzzy search as fzf does it
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0040](0040-one-picker-for-every-list.md)
 - Date: 2026-10-04
 
 ## Context
@@ -37,7 +37,8 @@ it does not rank items for a program that draws them itself.
   longer: [ADR 0022](0022-vim-modes.md) keeps it, as vim's search does).
 - The location menu keeps its order too, the home directory, the volumes, then the hosts,
   and puts the cursor on the best row. A row's texts (name and mount point; alias, label,
-  and address) are matched as one line, as fzf matches the columns of one.
+  and address) are matched as one line, as fzf matches the columns of one. Since
+  [ADR 0040](0040-one-picker-for-every-list.md) every list ranks its rows, best first.
 - The zoxide window asks zoxide once for every directory, `zoxide query --list --score
   --exclude <dir> --`, and filters them as the keys come, best first and those as good in
   zoxide's order, matching the paths as it shows them, from `~`. This is `zi` with fzf's

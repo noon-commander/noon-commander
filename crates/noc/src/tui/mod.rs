@@ -20,6 +20,7 @@ mod jump;
 mod key_hints;
 mod keymap;
 mod label;
+mod loading;
 mod machine;
 mod menu;
 mod mouse;

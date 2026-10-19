@@ -1,30 +1,26 @@
 //! The zoxide window of `g z`: the directories zoxide ranks highest for the keywords typed,
 //! best first, as `z foo bar` picks them in a shell, in the plain mode of `ui.search_mode`; or
 //! all of them, filtered by what is typed, as fzf ranks them or as a regular expression in
-//! zoxide's order. It opens in Insert mode, as `zi` does, and Esc goes to the rows, where `/`
-//! types the keywords again; Enter opens one in the active panel.
+//! zoxide's order. A list as the others, on [`Picker`]: it opens in Insert mode, as `zi` does,
+//! and Esc goes to the rows, where `/` types the keywords again; Enter opens one in the active
+//! panel.
 
-use std::cell::RefCell;
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 
 use noc_config::SearchMode;
-use noc_scroll::scrollbar::{self, Bar};
+use noc_scroll::scrollbar::Bar;
 use noc_tools::zoxide::Scored;
 use ratatui::Frame;
-use ratatui::layout::{Position, Rect};
-use ratatui::text::{Line, Span};
+use ratatui::layout::Rect;
+use ratatui::text::Span;
 
 use super::cells::{self, Align, Cut};
-use super::dialog::{
-    Colors, Field, SKELETON_ROWS, draw_box, draw_separator, draw_skeleton, draw_title_dots,
-    frame_around, right_frame, rows_area,
-};
+use super::dialog::Colors;
 use super::keymap::{Action, Mode, Resolved};
-use super::mouse::{Drawn, Pointer};
-use super::picker::{FULL_ROWS, Whole};
-use super::scroll::Window;
-use super::search_mode::{self, Matcher, Prompt};
+use super::loading::Loading;
+use super::mouse::Pointer;
+use super::picker::{Body, MenuLine, Pick, Picker, ShownRow};
 use super::spinner::{Spin, Wait};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -52,45 +48,13 @@ pub(crate) struct JumpMenu {
     home: PathBuf,
     /// The local directory the panel shows, which zoxide leaves out.
     exclude: Option<PathBuf>,
-    /// Of the query the window waits for; an answer to an older one is dropped.
-    generation: u64,
-    /// The keywords, a text field.
-    keywords: Field,
-    /// The keywords take what is typed, in Insert mode.
-    typing: bool,
-    /// How it matches the keywords: `ui.search_mode` until Ctrl+s switches it. In the plain
-    /// mode it asks zoxide for each change of the keywords; in the others, once for every
-    /// directory, which it filters itself.
-    mode: SearchMode,
-    /// Why the keywords are not a regular expression, in the regex mode.
-    invalid: Option<String>,
+    /// zoxide's answers; the rows listed are those without keywords, every directory.
+    loading: Loading,
     /// zoxide's answer, best first.
     found: Vec<Scored>,
-    /// The rows: indices into `found` of the directories that match, best first.
-    rows: Vec<usize>,
-    /// `true` once the first answer arrived.
-    loaded: bool,
-    /// For the first answer.
-    wait: Wait,
-    /// Rows of the skeleton until the first answer comes: as many as the last window had, so
-    /// that the box does not grow when they come.
-    skeleton: u16,
-    /// Rows of the last answer without keywords, which lists every directory.
-    rows_listed: Option<u16>,
-    error: Option<String>,
-    /// The row under the cursor.
-    cursor: usize,
-    /// The rows on screen, as vim's window scrolls them, and how many at the last render.
-    window: Window,
-    page: usize,
-    /// The count before the next Ctrl+f or Ctrl+b, which scroll that many pages at once.
-    pages: usize,
-    /// Where the last render drew it, for the mouse.
-    drawn: RefCell<Drawn>,
-    /// The scroll bar of the rows at the last render, on the right of the frame.
-    bar: Option<Bar>,
-    /// Whether `K` asks for the whole directory under the cursor under the rows.
-    full: Whole,
+    /// The keywords: in the plain mode zoxide picks the directories by them; in the others the
+    /// picker filters every directory, as it shows them, from `~`.
+    picker: Picker,
 }
 
 impl JumpMenu {
@@ -100,59 +64,36 @@ impl JumpMenu {
         Self {
             home,
             exclude,
-            generation,
-            keywords: Field::plain(""),
-            typing: true,
-            mode: SearchMode::Plain,
-            invalid: None,
+            loading: Loading::new(generation),
             found: Vec::new(),
-            rows: Vec::new(),
-            loaded: false,
-            wait: Wait::default(),
-            skeleton: SKELETON_ROWS,
-            rows_listed: None,
-            error: None,
-            cursor: 0,
-            window: Window::default(),
-            page: 1,
-            pages: 1,
-            drawn: RefCell::default(),
-            bar: None,
-            full: Whole::Cut,
+            picker: Picker::new(SearchMode::Plain).paths().plain_keywords(),
         }
     }
 
     /// The same window, which matches in `mode` (`ui.search_mode`).
     pub(crate) fn search_mode(mut self, mode: SearchMode) -> Self {
-        self.mode = mode;
+        self.picker.set_mode(mode);
         self
     }
 
     /// The same window, whose skeleton has as many `rows` as the last window had, if any.
     pub(crate) fn rows_like(mut self, rows: Option<u16>) -> Self {
-        if let Some(rows) = rows {
-            self.skeleton = rows;
-        }
+        self.loading = self.loading.lines_like(rows);
         self
     }
 
     /// Rows of the last answer without keywords, for the skeleton of the next window.
     pub(crate) fn rows_listed(&self) -> Option<u16> {
-        self.rows_listed
-    }
-
-    /// Whether the window filters zoxide's directories itself, rather than zoxide.
-    fn filters(&self) -> bool {
-        self.mode != SearchMode::Plain
+        self.loading.listed()
     }
 
     /// The keywords to ask zoxide for: those typed, separated by spaces; none, for every
     /// directory, if the window filters them itself.
     pub(crate) fn keywords(&self) -> Vec<String> {
-        if self.filters() {
+        if self.picker.filters() {
             return Vec::new();
         }
-        self.keywords
+        self.picker
             .text()
             .split_whitespace()
             .map(str::to_owned)
@@ -163,173 +104,85 @@ impl JumpMenu {
         self.exclude.as_deref()
     }
 
-    /// Waits for the query `generation` instead.
-    pub(crate) fn wait(&mut self, generation: u64) {
-        self.generation = generation;
+    /// Waits for the query `generation` instead. The rows stay until its answer comes.
+    pub(crate) fn ask(&mut self, generation: u64) {
+        self.loading.ask(generation);
     }
 
-    /// The wait for the first answer, whose dots turn in front of the title.
-    pub(crate) fn first_wait(&self) -> Option<&Wait> {
-        (!self.loaded).then_some(&self.wait)
+    /// The wait for an answer, whose dots turn in front of the title.
+    pub(crate) fn wait(&self) -> Option<&Wait> {
+        self.loading.wait()
     }
 
     /// Takes zoxide's answer to the query `generation`: directories best first, or why there
     /// are none. The cursor goes back to the best.
     pub(crate) fn found(&mut self, generation: u64, result: Result<Vec<Scored>, String>) {
-        if generation != self.generation {
+        if !self.loading.answers(generation) {
             return;
         }
-        self.loaded = true;
         match result {
             Ok(found) => {
+                let listed = self.picker.text().is_empty().then_some(found.len());
                 self.found = found;
-                self.error = None;
+                self.loading.came(listed);
             }
             Err(reason) => {
                 self.found.clear();
-                self.error = Some(cells::sanitize(reason.as_bytes()));
+                self.loading.failed(&reason);
             }
         }
-        self.refilter();
-        if self.error.is_none() && self.keywords.text().is_empty() {
-            self.rows_listed = Some(u16::try_from(self.rows.len()).unwrap_or(u16::MAX));
-        }
-    }
-
-    /// Picks the rows again, with the cursor on the best: every directory zoxide found; if the
-    /// window filters them itself, those whose paths match the keywords, as fzf ranks them,
-    /// and those as good in zoxide's order.
-    fn refilter(&mut self) {
-        self.cursor = 0;
-        self.window.reset();
-        self.invalid = None;
-        if !self.filters() {
-            self.rows = (0..self.found.len()).collect();
-            return;
-        }
-        let mut matcher = Matcher::paths(self.mode, self.keywords.text());
-        self.invalid = matcher.error().map(ToString::to_string);
-        let mut scored: Vec<(usize, u32)> = self
-            .found
-            .iter()
-            .enumerate()
-            .filter_map(|(index, found)| Some((index, matcher.score(&self.shown(&found.path))?)))
+        let texts = (self.found.iter())
+            .map(|scored| vec![self.path_shown(&scored.path)])
             .collect();
-        scored.sort_by_key(|&(_, score)| std::cmp::Reverse(score));
-        self.rows = scored.into_iter().map(|(index, _)| index).collect();
-    }
-
-    /// The directory on `row`.
-    fn row(&self, row: usize) -> Option<&Scored> {
-        self.found.get(*self.rows.get(row)?)
+        self.picker.set_rows(texts);
+        self.picker.focus_best();
     }
 
     /// The mode keys are typed in: Insert while the keywords take them.
     pub(crate) fn mode(&self) -> Mode {
-        if self.typing {
-            Mode::Insert
-        } else {
-            Mode::Normal
-        }
+        self.picker.mode()
     }
 
-    /// Takes the count before Ctrl+f or Ctrl+b, which scroll that many pages at once, as vim's.
-    pub(crate) fn count_pages(&mut self, pages: usize) {
-        self.pages = pages.max(1);
+    /// The rows, for the count before a page key.
+    pub(crate) fn picker_mut(&mut self) -> &mut Picker {
+        &mut self.picker
     }
 
-    /// Takes a key: Up, Down, the page keys, Home, and End move, Enter opens, and Esc closes
-    /// the window. While the keywords take what is typed, as they do when the window opens,
-    /// characters are keywords and the keys of text fields edit them, until Esc goes back to the
-    /// rows; `/` types them again.
+    /// Takes a key: the picker's, whose filter is the keywords. Enter opens the directory under
+    /// the cursor.
     pub(crate) fn handle(&mut self, input: Resolved) -> JumpEvent {
-        let rows = self.rows.len();
-        let last = rows.saturating_sub(1);
-        let page = self.page.max(1);
-        match input {
-            Resolved::Insert(c) if self.typing => {
-                self.keywords.insert(c);
-                return self.changed();
-            }
-            Resolved::Insert(_) | Resolved::Hotkey(_) => {}
-            Resolved::Action(action) => match action {
-                Action::Up => self.cursor = self.cursor.saturating_sub(1),
-                Action::Down => self.cursor = (self.cursor + 1).min(last),
-                // As vim's Ctrl+b, Ctrl+f, Ctrl+u, and Ctrl+d, which scroll the rows.
-                Action::PageUp | Action::PageDown => {
-                    let down = action == Action::PageDown;
-                    let pages = std::mem::replace(&mut self.pages, 1);
-                    self.window.page(down, pages, &mut self.cursor, rows, page);
-                }
-                Action::HalfPageUp | Action::HalfPageDown => {
-                    let down = action == Action::HalfPageDown;
-                    self.window.half_page(down, &mut self.cursor, rows, page);
-                }
-                Action::Home => self.cursor = 0,
-                Action::End => self.cursor = last,
-                Action::QuickSearch => self.typing = true,
-                Action::NormalMode => self.typing = false,
-                Action::ShowFull => self.full = self.full.toggled(),
-                Action::SearchMode => {
-                    let before = self.filters();
-                    self.mode = search_mode::next(self.mode);
-                    // zoxide gives every directory, or what matches the keywords, anew.
-                    if before != self.filters() {
-                        return JumpEvent::Query;
-                    }
-                    self.refilter();
-                }
-                Action::Left
-                | Action::Right
-                | Action::TextStart
-                | Action::TextEnd
-                | Action::WordForward
-                | Action::WordBackward
-                | Action::Backspace
-                | Action::DeleteChar
-                | Action::DeleteToStart
-                | Action::DeleteToEnd
-                | Action::DeleteWord
-                    if self.typing =>
-                {
-                    let before = self.keywords.text().to_owned();
-                    self.keywords.edit(action);
-                    if self.keywords.text() != before {
-                        return self.changed();
-                    }
-                }
-                Action::Confirm => {
-                    if let Some(scored) = self.row(self.cursor) {
-                        return JumpEvent::Open(scored.path.clone());
-                    }
-                }
-                Action::Cancel => return JumpEvent::Closed,
-                _ => {}
+        let filtered = self.picker.filters();
+        match self.picker.handle(input) {
+            Pick::Chosen(row) => match self.picker.shown(&self.found).get(row) {
+                Some(scored) => JumpEvent::Open(scored.path.clone()),
+                None => JumpEvent::Pending,
             },
+            Pick::Closed => JumpEvent::Closed,
+            // zoxide picks the directories by the keywords, or gives every one anew.
+            Pick::Filtered if !filtered || !self.picker.filters() => JumpEvent::Query,
+            Pick::Pending | Pick::Filtered | Pick::Other(_) => JumpEvent::Pending,
         }
-        JumpEvent::Pending
+    }
+
+    /// The scroll bar of the last render, for the mouse.
+    pub(crate) fn bar(&self) -> Option<Bar> {
+        self.picker.bar()
+    }
+
+    /// Shows the rows from `top`, where the thumb of the scroll bar was dragged.
+    pub(crate) fn scroll_to(&mut self, top: usize) {
+        self.picker.scroll_to(top);
     }
 
     /// Takes a press of the mouse, where the window was drawn last: a click puts the cursor on
     /// a row, and returns the key that a double click on one, or a click outside the window,
     /// stands for: Enter or Esc.
     pub(crate) fn pointer(&mut self, pointer: Pointer) -> Option<Action> {
-        let drawn = self.drawn.borrow().clone();
-        drawn.menu_press(pointer, &mut self.cursor)
-    }
-
-    /// The keywords changed: the window filters zoxide's directories again, or asks zoxide.
-    fn changed(&mut self) -> JumpEvent {
-        if self.filters() {
-            self.refilter();
-            JumpEvent::Pending
-        } else {
-            JumpEvent::Query
-        }
+        self.picker.pointer(pointer)
     }
 
     /// A directory as the window shows it: under the home directory, from `~`.
-    fn shown(&self, path: &Path) -> String {
+    fn path_shown(&self, path: &Path) -> String {
         match path.strip_prefix(&self.home) {
             Ok(rest) if rest.as_os_str().is_empty() => "~".to_owned(),
             Ok(rest) => format!("~/{}", cells::sanitize(rest.as_os_str().as_bytes())),
@@ -337,174 +190,58 @@ impl JumpMenu {
         }
     }
 
-    /// Draws the window centered over `area`, the panels: the keywords, then the directories,
-    /// scrolled to the cursor, and the whole directory under the cursor below them if `K` asks
-    /// for it.
+    /// Draws the window centered over `area`, the panels: the keywords, then the directories
+    /// with their scores, scrolled to the cursor, and the whole directory under the cursor below
+    /// them if `K` asks for it.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, spin: &Spin) {
-        let (page, cursor, window, bar) = self.draw(frame, area, theme, spin);
-        (self.page, self.cursor, self.window, self.bar) = (page, cursor, window, bar);
-    }
-
-    /// The keywords, a text field in the colors of those of dialogs, with the glyph of the mode
-    /// before them, at `area`, with the cursor while they take text.
-    fn draw_keywords(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        let mark = search_mode::marked(self.mode, self.invalid.is_some(), theme.dialog, theme);
-        let prompt = Prompt::new(|text| fl!("jump-keywords", mode = mark.glyph, text = text));
-        let field = (&prompt, &self.keywords);
-        let column = mark.render_field(frame, area, field, theme.dialog, theme);
-        if self.typing {
-            frame.set_cursor_position(Position::new(
-                area.x.saturating_add(column).min(area.right() - 1),
-                area.y,
-            ));
-        }
-    }
-
-    /// The scroll bar of the last render, for the mouse.
-    pub(crate) fn bar(&self) -> Option<Bar> {
-        self.bar
-    }
-
-    /// Shows the rows from `top`, where the thumb of the scroll bar was dragged; the cursor
-    /// moves only to stay on screen.
-    pub(crate) fn scroll_to(&mut self, top: usize) {
-        let rows = self.rows.len();
-        self.window
-            .scroll_to(top, &mut self.cursor, rows, self.page.max(1));
-    }
-
-    /// Lines the box has for the rows: those of the skeleton while they are still to come.
-    fn rows_shown(&self) -> u16 {
-        let rows = if self.loaded {
-            u16::try_from(self.rows.len()).unwrap_or(u16::MAX)
-        } else {
-            self.skeleton
-        };
-        rows.clamp(1, MAX_ROWS)
-    }
-
-    fn draw(
-        &self,
-        frame: &mut Frame<'_>,
-        area: Rect,
-        theme: &Theme,
-        spin: &Spin,
-    ) -> (usize, usize, Window, Option<Bar>) {
-        let rows = self.rows_shown();
-        let colors = Colors::of(theme, false);
-        // A line between the rows and the whole directory under the cursor.
-        let below = if self.full == Whole::Shown && !self.rows.is_empty() {
-            FULL_ROWS + 1
-        } else {
-            0
-        };
-        // Borders, the keywords, the line under them, the rows.
-        let size = (WIDTH, rows.saturating_add(4).saturating_add(below));
-        let title = fl!("jump-title");
-        let inner = draw_box(frame, area, size, &title, colors, theme);
-        if let Some(dots) = self.first_wait().and_then(|wait| spin.wait_dots(wait)) {
-            draw_title_dots(frame, inner, &title, (dots, theme.busy_dialog), colors);
-        }
-        let mut drawn = self.drawn.borrow_mut();
-        *drawn = Drawn {
-            frame: frame_around(inner),
-            ..Drawn::default()
-        };
-        if inner.height < 3 || inner.width < 4 {
-            return (self.page, self.cursor, self.window, None);
-        }
-        let width = usize::from(inner.width);
-        let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
-
-        self.draw_keywords(frame, line(0), theme);
-        draw_separator(frame, inner, inner.y + 1, colors, theme);
-
-        let page = usize::from(inner.height.saturating_sub(2 + below)).max(1);
-        if !self.loaded {
-            let shine = self.first_wait().and_then(|wait| spin.shine(wait));
-            draw_skeleton(frame, rows_area(inner, below), theme, shine);
-            return (page, self.cursor, self.window, None);
-        }
-        let message = if let Some(error) = &self.error {
-            Some(error.clone())
-        } else if let Some(reason) = &self.invalid {
-            Some(fl!(
-                "picker-not-regex",
-                reason = cells::sanitize(reason.as_bytes())
-            ))
-        } else if self.rows.is_empty() {
-            Some(fl!("jump-nothing"))
-        } else {
-            None
-        };
-        if let Some(message) = message {
-            for (index, text) in (2..inner.height).zip(cells::wrap(&message, width)) {
-                frame.render_widget(Line::styled(text, theme.dialog), line(index));
-            }
-            return (page, self.cursor, self.window, None);
-        }
-        let (mut window, mut cursor) = (self.window, self.cursor);
-        window.follow(&mut cursor, self.rows.len(), page);
-        let offset = window.top();
-        let height = u16::try_from(page).unwrap_or(u16::MAX);
-        let bar = right_frame(inner, inner.y + 2, height);
-        let position = (self.rows.len(), page, offset);
-        let bar = scrollbar::render(frame, bar, position, theme.dialog, theme.glyphs.scroll_bar);
-        let found: Vec<&Scored> = self.rows.iter().map(|&index| &self.found[index]).collect();
+        let found = self.picker.shown(&self.found);
+        let paths: Vec<String> = (found.iter())
+            .map(|scored| self.path_shown(&scored.path))
+            .collect();
         let formats = noc_locale::current();
-        let scores: Vec<String> = found
-            .iter()
+        let scores: Vec<String> = (found.iter())
             .map(|scored| formats.decimal(scored.score, 1, true))
             .collect();
-        let score_width = scores
-            .iter()
+        let score_width = (scores.iter())
             .map(|score| cells::width(score))
             .max()
             .unwrap_or(0);
-        // The directory, a space, the score.
-        let path_width = width.saturating_sub(score_width + 1);
-        for (index, (row, scored)) in found.iter().enumerate().skip(offset).take(page).enumerate() {
-            let styles = if row == cursor {
-                (colors.focused_style(), theme.truncated_cursor)
+        let lines: Vec<MenuLine> = (0..found.len()).map(MenuLine::Row).collect();
+        let title = fl!("jump-title");
+        let body = Body {
+            title: &title,
+            width: WIDTH,
+            lines: &lines,
+            max_lines: Some(MAX_ROWS),
+            prompt: Some(|mode, text| fl!("jump-keywords", mode = mode, text = text)),
+            message: self.loading.error().map(str::to_owned),
+            nothing: Some(fl!("jump-nothing")),
+            loading: Some((&self.loading, spin)),
+            full: paths.get(self.picker.cursor()).cloned(),
+            ..Body::default()
+        };
+        let focused = Colors::of(theme, false).focused_style();
+        let marks = theme.glyphs.marks;
+        self.picker.render(frame, area, theme, body, &mut |row| {
+            let ShownRow {
+                index,
+                selected,
+                width,
+            } = row;
+            let styles = if selected {
+                (focused, theme.truncated_cursor)
             } else {
                 (theme.dialog, theme.truncated_dialog)
             };
+            // The directory, a space, the score.
+            let path_width = width.saturating_sub(score_width + 1);
             let fit = (Align::Left, Cut::Start);
-            let mut text = cells::fitted(
-                &self.shown(&scored.path),
-                path_width,
-                fit,
-                styles,
-                theme.glyphs.marks,
-            );
-            text.spans.push(Span::styled(" ", styles.0));
-            let score = &scores[row];
-            let score = cells::fit(score, score_width, Align::Right, styles, theme.glyphs.marks);
-            text.spans.extend(score);
-            let y = u16::try_from(index + 2).unwrap_or(u16::MAX);
-            frame.render_widget(text, line(y));
-            drawn.rows.push((row, line(y)));
-        }
-        if below > 0
-            && let Some(scored) = found.get(cursor)
-        {
-            draw_whole(frame, inner, &self.shown(&scored.path), theme);
-        }
-        (page, cursor, window, bar)
-    }
-}
-
-/// `path`, whole, in the last lines of `inner`, below a line across it that joins the frame.
-fn draw_whole(frame: &mut Frame<'_>, inner: Rect, path: &str, theme: &Theme) {
-    let width = usize::from(inner.width);
-    let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
-    let top = inner.height.saturating_sub(FULL_ROWS + 1);
-    draw_separator(frame, inner, inner.y + top, Colors::of(theme, false), theme);
-    let styles = (theme.dialog, theme.truncated_dialog);
-    let size = (width, usize::from(FULL_ROWS));
-    let rows = cells::whole(path, size, Some('/'), styles, theme.glyphs.marks);
-    for (index, text) in (top + 1..inner.height).zip(rows) {
-        frame.render_widget(text, line(index));
+            let mut line = cells::fitted(&paths[index], path_width, fit, styles, marks);
+            line.spans.push(Span::styled(" ", styles.0));
+            let score = cells::fit(&scores[index], score_width, Align::Right, styles, marks);
+            line.spans.extend(score);
+            line
+        });
     }
 }
 
@@ -659,10 +396,10 @@ mod tests {
         );
         assert_eq!(press(&mut menu, Action::Backspace), JumpEvent::Pending);
         assert_eq!(press(&mut menu, Action::Backspace), JumpEvent::Pending);
-        assert_eq!(menu.rows.len(), 4, "every directory again");
+        assert_eq!(menu.picker.len(), 4, "every directory again");
         menu.handle(Resolved::Insert('~'));
         assert_eq!(
-            menu.rows.len(),
+            menu.picker.len(),
             3,
             "the paths as the window shows them, from ~"
         );
@@ -682,9 +419,9 @@ mod tests {
             assert_eq!(menu.handle(Resolved::Insert(c)), JumpEvent::Pending);
         }
         assert_eq!(menu.keywords(), [] as [String; 0], "zoxide gets none");
-        assert_eq!(menu.rows, [0, 3], "zoxide's order");
+        assert_eq!(menu.picker.shown(0..4), [0, 3], "zoxide's order");
         menu.handle(Resolved::Insert('('));
-        assert_eq!(menu.rows, [] as [usize; 0]);
+        assert_eq!(menu.picker.len(), 0);
         assert!(draw(&mut menu, 10).contains("Not a regular expression: error: unclosed group"));
         assert_eq!(
             press(&mut menu, Action::SearchMode),
@@ -698,23 +435,23 @@ mod tests {
             "every directory"
         );
         assert_eq!(menu.keywords(), [] as [String; 0]);
-        menu.wait(2);
+        menu.ask(2);
         menu.found(2, Ok(found()));
         press(&mut menu, Action::DeleteToStart);
-        assert_eq!(menu.rows.len(), 4);
+        assert_eq!(menu.picker.len(), 4);
         assert_eq!(
             press(&mut menu, Action::SearchMode),
             JumpEvent::Pending,
             "fzf to regex"
         );
-        assert_eq!(menu.mode, SearchMode::Regex);
+        assert_eq!(menu.keywords(), [] as [String; 0], "the window filters");
     }
 
     #[test]
     fn stale_answers_are_dropped_and_new_ones_start_at_the_best() {
         let mut menu = menu();
         press(&mut menu, Action::Down);
-        menu.wait(2);
+        menu.ask(2);
         menu.found(1, Ok(Vec::new()));
         assert_eq!(menu.found.len(), 4);
         menu.found(2, Ok(found()[1..].to_vec()));
@@ -742,7 +479,7 @@ mod tests {
         let mut first = menu();
         assert_eq!(first.rows_listed(), Some(4));
         first.handle(Resolved::Insert('s'));
-        first.wait(2);
+        first.ask(2);
         first.found(2, Ok(found()[1..2].to_vec()));
         assert_eq!(first.rows_listed(), Some(4), "keywords pick only some");
 

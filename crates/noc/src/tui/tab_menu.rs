@@ -88,7 +88,7 @@ impl TabMenu {
             Pick::Other(Action::CloseTab) => {
                 tab(self, self.picker.cursor()).map_or(TabMenuEvent::Pending, TabMenuEvent::Close)
             }
-            Pick::Pending | Pick::Other(_) => TabMenuEvent::Pending,
+            Pick::Pending | Pick::Filtered | Pick::Other(_) => TabMenuEvent::Pending,
         }
     }
 

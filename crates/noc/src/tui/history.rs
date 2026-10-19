@@ -149,7 +149,7 @@ impl HistoryWindow {
             Pick::Other(Action::Delete) => self
                 .chosen()
                 .map_or(HistoryEvent::Pending, |entry| event(entry, true)),
-            Pick::Pending | Pick::Other(_) => HistoryEvent::Pending,
+            Pick::Pending | Pick::Filtered | Pick::Other(_) => HistoryEvent::Pending,
         }
     }
 

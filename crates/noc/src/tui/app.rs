@@ -2290,12 +2290,7 @@ impl App {
                 .map(WorkspacesWindow::picker_mut),
             Context::CommandHistory => self.history_window.as_mut().map(HistoryWindow::picker_mut),
             Context::KeyHints => self.key_hints.as_mut().map(KeyHintsWindow::picker_mut),
-            Context::Jump => {
-                if let Some(jump) = &mut self.jump {
-                    jump.count_pages(pages);
-                }
-                None
-            }
+            Context::Jump => self.jump.as_mut().map(JumpMenu::picker_mut),
             _ => None,
         };
         if let Some(picker) = picker {
@@ -3759,7 +3754,7 @@ impl App {
         };
         self.jump_queries += 1;
         let generation = self.jump_queries;
-        jump.wait(generation);
+        jump.ask(generation);
         vec![Effect::ZoxideQuery {
             generation,
             keywords: jump.keywords(),
@@ -6888,7 +6883,7 @@ impl App {
             .into_iter()
             .flatten()
             .chain(self.menu.as_ref().and_then(LocationMenu::wait))
-            .chain(self.jump.as_ref().and_then(JumpMenu::first_wait))
+            .chain(self.jump.as_ref().and_then(JumpMenu::wait))
             .chain(self.find.as_ref().and_then(FindWindow::wait))
             .chain(self.in_front().and_then(|job| job.view.shining()))
             .collect()

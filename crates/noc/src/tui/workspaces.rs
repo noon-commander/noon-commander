@@ -161,7 +161,7 @@ impl WorkspacesWindow {
             Pick::Other(Action::SaveWorkspace) => WorkspacesEvent::Save,
             Pick::Other(Action::Move) => chosen(self, WorkspacesEvent::Rename),
             Pick::Other(Action::Delete) => chosen(self, WorkspacesEvent::Delete),
-            Pick::Pending | Pick::Other(_) => WorkspacesEvent::Pending,
+            Pick::Pending | Pick::Filtered | Pick::Other(_) => WorkspacesEvent::Pending,
         }
     }
 

@@ -160,6 +160,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- In the fzf search mode, every list shows the best match first, as fzf does: the location menu,
+  the tab menu, the Workspaces window, the command history, and the key hints, as the zoxide
+  window did; matches as good keep their order. The location menu drops the headings of its
+  groups while it ranks. The zoxide window turns its dots while it asks zoxide again
+  ([ADR 0040](docs/adr/0040-one-picker-for-every-list.md)).
 - A directory that cannot be read opens a dialog, `Cannot open dir: reason`, instead of a line
   under the panel, with ways out: OK stays, Retry reads it again, Up goes to the nearest parent
   that is there, and Go to opens Quick cd with the path. A directory gone under the panel has Up

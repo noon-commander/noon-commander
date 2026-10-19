@@ -19,8 +19,9 @@ use ratatui::text::{Line, Span};
 use super::app::Side;
 use super::cells::{self, Align};
 use super::decor::Decor;
-use super::dialog::{Colors, SKELETON_ROWS};
+use super::dialog::Colors;
 use super::keymap::{Action, Mode, Resolved};
+use super::loading::Loading;
 use super::mouse::Pointer;
 use super::panel::HostState;
 use super::picker::{Body, MenuLine, Pick, Picker, ShownRow, Shows};
@@ -95,21 +96,9 @@ pub(crate) struct LocationMenu {
     side: Side,
     /// Where the panel is drawn, which the title names: the other side after Ctrl+w x.
     drawn: Side,
-    /// Of the listing the menu waits for; a reply to an older one is dropped.
-    generation: u64,
     contents: Contents,
-    /// `true` once the first listing arrived.
-    loaded: bool,
-    /// For the first listing.
-    wait: Wait,
-    /// For a listing asked for again, while the rows of the last one show.
-    reloading: Option<Wait>,
-    /// Rows of the skeleton until the first listing comes: as many lines as the last menu
-    /// had, so that the box does not grow when they come.
-    skeleton: u16,
-    /// Lines of the last listing, with the filter empty and every group as it opens.
-    lines_listed: Option<u16>,
-    error: Option<String>,
+    /// The listing; its lines are those with every group as it opens.
+    loading: Loading,
     picker: Picker,
 }
 
@@ -136,7 +125,6 @@ impl LocationMenu {
         let mut menu = Self {
             side,
             drawn: side,
-            generation,
             contents: Contents {
                 current,
                 home,
@@ -145,12 +133,7 @@ impl LocationMenu {
                 connected: HashSet::new(),
                 expanded: HashSet::new(),
             },
-            loaded: false,
-            wait: Wait::default(),
-            reloading: None,
-            skeleton: SKELETON_ROWS,
-            lines_listed: None,
-            error: None,
+            loading: Loading::new(generation),
             picker: Picker::new(SearchMode::Plain),
         };
         // The home directory, before the listing.
@@ -178,16 +161,14 @@ impl LocationMenu {
 
     /// The same menu, whose skeleton has as many `lines` as the last menu had, if any.
     pub(crate) fn lines_like(mut self, lines: Option<u16>) -> Self {
-        if let Some(lines) = lines {
-            self.skeleton = lines;
-        }
+        self.loading = self.loading.lines_like(lines);
         self
     }
 
     /// Lines of the last listing, for the skeleton of the next menu: with the filter empty and
     /// every group as it opens.
     pub(crate) fn lines_listed(&self) -> Option<u16> {
-        self.lines_listed
+        self.loading.listed()
     }
 
     /// The panel the menu is for.
@@ -197,23 +178,13 @@ impl LocationMenu {
 
     /// Waits for the listing `generation` instead, for a reload. The rows stay until it comes.
     pub(crate) fn reload(&mut self, generation: u64) {
-        self.generation = generation;
-        self.error = None;
-        if self.loaded {
-            self.reloading = Some(Wait::default());
-        } else {
-            self.wait = Wait::default();
-        }
+        self.loading.reload(generation);
     }
 
     /// The wait for a listing, the first or one asked for again, whose dots turn in front of
     /// the title.
     pub(crate) fn wait(&self) -> Option<&Wait> {
-        if self.loaded {
-            self.reloading.as_ref()
-        } else {
-            self.error.is_none().then_some(&self.wait)
-        }
+        self.loading.wait()
     }
 
     /// Takes the hosts that are connected, connecting, or stalled, which always show. The
@@ -228,32 +199,30 @@ impl LocationMenu {
     /// Takes the places of the listing `generation`. The first one puts the cursor on where
     /// the panel is.
     pub(crate) fn listed(&mut self, generation: u64, result: Result<Places, String>) {
-        if generation != self.generation {
+        if !self.loading.answers(generation) {
             return;
         }
-        self.reloading = None;
         match result {
             Ok(places) => {
                 self.contents.places = places;
-                self.error = None;
                 let expanded = std::mem::take(&mut self.contents.expanded);
                 let items: Vec<Item<'_>> = (self.contents.rows().into_iter())
                     .filter(|(_, shows)| *shows != Shows::Filtered)
                     .map(|(item, _)| item)
                     .collect();
-                self.lines_listed =
-                    Some(u16::try_from(Self::lines(&items).len()).unwrap_or(u16::MAX));
+                let lines = Self::lines(&items, false).len();
                 self.contents.expanded = expanded;
-                if self.loaded {
-                    self.refresh();
-                } else {
+                let first = !self.loading.loaded();
+                self.loading.came(Some(lines));
+                if first {
                     self.picker.set_rows_showing(self.texts());
                     let row = self.contents.current_row(&self.items());
                     self.picker.set_cursor(row);
-                    self.loaded = true;
+                } else {
+                    self.refresh();
                 }
             }
-            Err(reason) => self.error = Some(cells::sanitize(reason.as_bytes())),
+            Err(reason) => self.loading.failed(&reason),
         }
     }
 
@@ -348,7 +317,7 @@ impl LocationMenu {
                 None => MenuEvent::Pending,
             },
             Pick::Other(Action::Reload) => MenuEvent::Reload,
-            Pick::Pending | Pick::Other(_) => MenuEvent::Pending,
+            Pick::Pending | Pick::Filtered | Pick::Other(_) => MenuEvent::Pending,
         }
     }
 
@@ -369,12 +338,13 @@ impl LocationMenu {
         self.picker.pointer(pointer)
     }
 
-    /// The lines: the rows the filter shows, with the heading of each group above its first.
-    fn lines(items: &[Item<'_>]) -> Vec<MenuLine> {
+    /// The lines: the rows the filter shows, with the heading of each group above its first;
+    /// without headings while they are `ranked`, best first, out of their groups.
+    fn lines(items: &[Item<'_>], ranked: bool) -> Vec<MenuLine> {
         let mut lines = Vec::with_capacity(items.len() + 3);
         let mut group = None;
         for (row, item) in items.iter().enumerate() {
-            if group != Some(item.group()) {
+            if !ranked && group != Some(item.group()) {
                 group = Some(item.group());
                 lines.push(MenuLine::Heading(item.group().heading()));
             }
@@ -396,21 +366,14 @@ impl LocationMenu {
     ) {
         let rows = self.contents.rows();
         let items = self.picker.shown(rows.into_iter().map(|(item, _)| item));
-        let lines = Self::lines(&items);
+        let lines = Self::lines(&items, self.picker.ranked());
         let title = match self.drawn {
             Side::Left => fl!("menu-left"),
             Side::Right => fl!("menu-right"),
         };
-        let message = self.error.clone().filter(|_| !self.loaded);
-        let waiting = (!self.loaded && message.is_none()).then_some(self.skeleton);
-        let dots = self
-            .wait()
-            .and_then(|wait| spin.wait_dots(wait))
-            .map(|dots| (dots, theme.busy_dialog));
-        let shine = self
-            .wait()
-            .filter(|_| waiting.is_some())
-            .and_then(|wait| spin.shine(wait));
+        let message = (self.loading.error())
+            .filter(|_| !self.loading.loaded())
+            .map(str::to_owned);
         let note = self.note(theme);
         let widest = items
             .iter()
@@ -434,9 +397,7 @@ impl LocationMenu {
             lines: &lines,
             note,
             message,
-            waiting,
-            shine,
-            dots,
+            loading: Some((&self.loading, spin)),
             full,
             ..Body::default()
         };
@@ -450,7 +411,7 @@ impl LocationMenu {
 
     /// Right of the filter once the rows show: why listing them again failed.
     fn note(&self, theme: &Theme) -> Option<Line<'static>> {
-        let reason = self.error.as_deref().filter(|_| self.loaded)?;
+        let reason = self.loading.error().filter(|_| self.loading.loaded())?;
         let text = fl!("menu-reload-failed", reason = reason);
         Some(Line::styled(text, theme.invalid(theme.dialog)))
     }
@@ -906,7 +867,7 @@ mod tests {
     }
 
     #[test]
-    fn a_fuzzy_filter_keeps_the_order_and_puts_the_cursor_on_the_best() {
+    fn a_fuzzy_filter_ranks_the_places_best_first_out_of_their_groups() {
         let mut menu = LocationMenu::new(Side::Left, home(), PathBuf::from("/Users/me"), 1)
             .search_mode(SearchMode::Fzf);
         menu.listed(1, Ok(places()));
@@ -919,20 +880,23 @@ mod tests {
         for _ in 0..3 {
             press(&mut menu, Action::Backspace);
         }
+        assert!(draw(&mut menu, 20).contains("Mounts"), "in their groups");
         typed(&mut menu, "sh");
         assert_eq!(
             keys(&menu),
             [
-                Key::Volume(PathBuf::from("/")),
-                Key::Volume(PathBuf::from("/Volumes/share"))
+                Key::Volume(PathBuf::from("/Volumes/share")),
+                Key::Volume(PathBuf::from("/"))
             ],
-            "Macintosh HD, and share"
+            "the start of a word, in share, beats the end of one, in Macintosh HD"
         );
         assert_eq!(
             menu.chosen().map(key),
             Some(Key::Volume(PathBuf::from("/Volumes/share"))),
-            "the start of a word beats the end of one"
+            "on the best"
         );
+        let text = draw(&mut menu, 20);
+        assert!(!text.contains("Mounts"), "no headings: {text}");
         typed(&mut menu, " !hd");
         assert_eq!(
             keys(&menu),

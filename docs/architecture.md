@@ -247,9 +247,9 @@ grouped under headings:
 - The filter, which `/` or `i` types in again, finds the places by name, path or mount point,
   alias, label, and address, and finds every one, hidden ones too; the rows of more go away while
   the filter has text. It matches them in the [search mode](#search-modes): as fzf does, the
-  default, with the cursor on the best row; or a row's text must hold the filter, ignoring case,
-  or match it as a regular expression, with the cursor on the first. The rows keep their order
-  either way. The filter is a text field, edited with the keys of `input`; Esc goes back to the
+  default, best first, without the headings of the groups; or a row's text must hold the filter,
+  ignoring case, or match it as a regular expression, in their order. The cursor goes to the
+  first row. The filter is a text field, edited with the keys of `input`; Esc goes back to the
   rows with the filter kept. F4 edits the settings of the host under the cursor, F8, or `d d`
   on the rows, disconnects it or stops connecting to it, `R` on the rows reads the volumes and
   hosts again, and Esc or `q` on the rows, Ctrl+c, or F10 closes the menu.
@@ -437,9 +437,10 @@ The fzf mode follows [ADR 0016](adr/0016-fuzzy-search.md). `tui/fuzzy.rs` wraps
   it is not; `\` takes a space or one of these as it is.
 - Case counts only once the text has a capital letter; letters with accents match those
   without.
-- Lists keep their order, and the cursor goes to the best match; the zoxide window, whose
-  order is zoxide's rank, sorts by the match instead, and keeps zoxide's order among matches
-  as good.
+- Lists sort their rows by the match, best first, and keep their order among matches as good;
+  the cursor goes to the first ([ADR 0040](adr/0040-one-picker-for-every-list.md)). The
+  location menu drops the headings of its groups meanwhile. Quick search keeps the order of the
+  listing and goes to the best match.
 - Tab completion in path fields still completes the start of a name.
 
 ### Search of a whole tree
@@ -537,9 +538,9 @@ as many rows as a count says (`3d d`, as vim's deletes three lines), `/` or `i` 
 filter again, and Esc, `q`, Ctrl+c, or F10 closes the window. Text pasted while the rows have the keys
 goes to the filter, in Insert mode. There are no digit hotkeys.
 
-- All but the zoxide window share `tui/picker.rs`: the filter, a text field with a cursor
-  (`dialog::Field`), drawn in the colors of the fields of dialogs after its prompt, as the
-  keywords of the zoxide window are (`search_mode::Mark::render_field`), which matches in the
+- All share `tui/picker.rs` ([ADR 0040](adr/0040-one-picker-for-every-list.md)): the filter, a
+  text field with a cursor (`dialog::Field`), drawn in the colors of the fields of dialogs after
+  its prompt (`search_mode::Mark::render_field`), which matches in the
   [search mode](#search-modes); the cursor, scrolling, the mouse, and the box, which the menus
   draw over their panel and the windows over both. The only lines across a list are under the
   filter and over what `K` shows, and they join the frame (`╟───╢`) as the line over the buttons
@@ -547,8 +548,13 @@ goes to the filter, in Insert mode. There are no digit hotkeys.
   holds its own rows, says what the filter finds them by, and draws them. A row may show only
   while the filter is empty, as the rows of more in the location menu do, or only while it has
   text, as the places behind them do.
-- The zoxide window does not use it: zoxide, not a filter, picks its rows from the keywords
-  typed. It has the same modes, with the keywords taking the keys as it opens.
+- The zoxide window gives its own prompt, matches paths as paths, after `/` best, and in the
+  plain mode lets zoxide pick its rows from the keywords typed: the picker says the filter changed
+  (`Pick::Filtered`), and the window asks zoxide again.
+- The location menu and the zoxide window wait for their rows from a task, through
+  `tui/loading.rs` (`Loading`): the answer they wait for, an older one dropped; the dots in front
+  of the title, at first and while they ask again; the skeleton, as tall as the last list without
+  a filter; and why no rows came, in their place.
 - `K` shows the whole row under the cursor in two lines under the rows, until `K` again, in each
   list on its own (`picker::Whole`), and not in the panels, which have theirs: the directory of the
   zoxide window, the place of the location menu, the title of a tab, where the tabs of a workspace

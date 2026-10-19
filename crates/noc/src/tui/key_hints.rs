@@ -117,7 +117,7 @@ impl KeyHintsWindow {
                 _ => KeyHintsEvent::Pending,
             },
             Pick::Closed => KeyHintsEvent::Closed,
-            Pick::Pending | Pick::Other(_) => KeyHintsEvent::Pending,
+            Pick::Pending | Pick::Filtered | Pick::Other(_) => KeyHintsEvent::Pending,
         }
     }
 

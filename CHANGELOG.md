@@ -291,6 +291,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A host whose start directory cannot be opened says which directory it is, rather than only
   the host's name; Up takes the panel to the nearest directory above it that is there, and Go to
   starts from its path, rather than from `host:`.
+- A copy no longer goes over its own source, which without `transfer.atomic_upload` emptied it:
+  through a hard link, or, where the file system ignores case or Unicode normalization, as
+  macOS's do by default, under its name in another case (`Notes.txt` for `notes.txt`). That is an
+  error now, locally and on a host. There a move to its own name in another case renames it, a
+  directory too, rather than ask about a taken name or go into itself; and renaming in place to
+  another entry's name in another case asks before replacing it, rather than replace it unasked.
 
 ## [0.2.0] - 2026-10-14
 

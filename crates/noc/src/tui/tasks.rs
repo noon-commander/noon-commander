@@ -1812,21 +1812,15 @@ impl CopyJob<'_> {
             }
         };
         let here = |path: &PathBuf| Location::Local(path.clone());
-        let moving = self.options.remove_sources;
         match (from, to, target) {
-            // Within one file system, a move renames.
-            (None, None, Location::Local(target)) if moving => {
-                self.move_within(&LocalFs, local, target, &here).await
-            }
-            (Some(from), Some(_), Location::Remote { host, path })
-                if moving && host == source_host =>
-            {
-                let there = on_host(host);
-                self.move_within(&*from, remote, path, &there).await
-            }
+            // Within one file system, a move renames, and neither goes over its source under a
+            // name spelled otherwise.
             (None, None, Location::Local(target)) => {
-                self.copy((&LocalFs, local, &here), (&LocalFs, target, &here))
-                    .await
+                self.within(&LocalFs, local, target, &here).await
+            }
+            (Some(from), Some(_), Location::Remote { host, path }) if host == source_host => {
+                let there = on_host(host);
+                self.within(&*from, remote, path, &there).await
             }
             (None, Some(to), Location::Remote { host, path }) => {
                 let there = on_host(host);
@@ -1847,7 +1841,8 @@ impl CopyJob<'_> {
         }
     }
 
-    async fn move_within<V: Vfs>(
+    /// Copies, or moves if the options remove sources, within one file system.
+    async fn within<V: Vfs>(
         &self,
         vfs: &V,
         sources: Vec<V::Path>,
@@ -1860,7 +1855,11 @@ impl CopyJob<'_> {
         let work = async move {
             let mut reporter = reporter;
             let side = Endpoint { vfs, report };
-            noc_ops::move_within(side, sources, target, options, &mut reporter).await
+            if options.remove_sources {
+                noc_ops::move_within(side, sources, target, options, &mut reporter).await
+            } else {
+                noc_ops::copy_within(side, sources, target, options, &mut reporter).await
+            }
         };
         let (outcome, ()) = tokio::join!(work, forward(incoming, self.id, self.done, |path| path));
         finished(self.id, Some(outcome))

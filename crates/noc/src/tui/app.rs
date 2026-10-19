@@ -7879,6 +7879,7 @@ mod tests {
                 modified: Some(UNIX_EPOCH + Duration::from_secs(1_699_990_000)),
                 uid: None,
                 gid: None,
+                inode: None,
             },
             target_kind: None,
             link_target: None,

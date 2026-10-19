@@ -1,6 +1,8 @@
 //! Renaming one entry in its directory.
 
-use noc_vfs::{FileKind, Vfs, VfsError, VfsPath as _};
+use noc_vfs::{FileKind, Vfs, VfsError};
+
+use crate::spelling::spelled_otherwise;
 
 /// Why [`rename`] left everything as it was.
 #[derive(Debug, thiserror::Error)]
@@ -15,7 +17,8 @@ pub enum RenameError {
 /// Renames `from` to `to`, a new name in the same directory. A name that another entry has is
 /// [`RenameError::Exists`] unless `replace`, and a directory is never replaced. A name that
 /// differs only in case or Unicode normalization, on a file system that does not tell them
-/// apart, is the entry itself, which takes the new spelling.
+/// apart, is the entry itself, which takes the new spelling; but where it leads to another
+/// entry, that one has the name.
 pub async fn rename<V: Vfs>(
     vfs: &V,
     from: &V::Path,
@@ -24,9 +27,9 @@ pub async fn rename<V: Vfs>(
 ) -> Result<(), RenameError> {
     let source = vfs.symlink_metadata(from).await?;
     let taken = match vfs.symlink_metadata(to).await {
-        Ok(existing) if is_listed(vfs, to).await? => Some(existing.kind),
-        // Not there, or another spelling of `from` itself.
-        Err(VfsError::NotFound(_)) | Ok(_) => None,
+        Err(VfsError::NotFound(_)) => None,
+        Ok(existing) if spelled_otherwise(vfs, (from, &source), (to, &existing)).await? => None,
+        Ok(existing) => Some(existing.kind),
         Err(error) => return Err(error.into()),
     };
     match taken {
@@ -44,16 +47,6 @@ pub async fn rename<V: Vfs>(
         result => result?,
     }
     Ok(())
-}
-
-/// Whether the directory of `path` lists its name byte for byte, not only a name that the file
-/// system takes for the same.
-async fn is_listed<V: Vfs>(vfs: &V, path: &V::Path) -> Result<bool, VfsError> {
-    let (Some(dir), Some(name)) = (path.parent(), path.name()) else {
-        return Ok(true);
-    };
-    let entries = vfs.list_dir(&dir).await?;
-    Ok(entries.iter().any(|entry| entry.name == name))
 }
 
 #[cfg(test)]
@@ -129,6 +122,12 @@ mod tests {
                 .await
                 .unwrap();
             assert_eq!(names(dir), ["Name"]);
+            // And `OTHER` is `other`, which keeps it.
+            fs::write(dir.join("other"), "y").unwrap();
+            let taken = rename(&LocalFs, &dir.join("Name"), &dir.join("OTHER"), false).await;
+            assert!(matches!(taken, Err(RenameError::Exists(FileKind::File))));
+            assert_eq!(names(dir), ["Name", "other"]);
+            assert_eq!(fs::read_to_string(dir.join("other")).unwrap(), "y");
         } else {
             // It tells them apart: `Name` is another file.
             fs::write(dir.join("Name"), "y").unwrap();
@@ -156,5 +155,17 @@ mod tests {
         rename(&sftp, &c, &b, true).await.unwrap();
         assert_eq!(names(root.path()), ["b"]);
         assert_eq!(fs::read_to_string(root.path().join("b")).unwrap(), "a");
+
+        if root.path().join("B").exists() {
+            // The file system ignores case, and SFTP tells no inodes: `B` is `b` all the same.
+            rename(&sftp, &b, &RemotePath::from("B"), false)
+                .await
+                .unwrap();
+            assert_eq!(names(root.path()), ["B"]);
+            fs::write(root.path().join("other"), "other").unwrap();
+            let other = RemotePath::from("OTHER");
+            let taken = rename(&sftp, &RemotePath::from("B"), &other, false).await;
+            assert!(matches!(taken, Err(RenameError::Exists(FileKind::File))));
+        }
     }
 }

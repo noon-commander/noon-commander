@@ -1001,6 +1001,7 @@ mod tests {
                 modified: None,
                 uid: None,
                 gid: None,
+                inode: None,
             },
             target_kind,
             link_target: None,

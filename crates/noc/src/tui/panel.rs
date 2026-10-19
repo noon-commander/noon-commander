@@ -2944,6 +2944,7 @@ mod tests {
                 modified: Some(UNIX_EPOCH + Duration::from_secs(NOW - 3600)),
                 uid: Some(501),
                 gid: Some(20),
+                inode: None,
             },
             target_kind: None,
             link_target: None,

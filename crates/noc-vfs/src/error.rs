@@ -17,6 +17,10 @@ pub enum VfsError {
     /// Something already has the name to create or rename to.
     #[error("already exists: {0}")]
     AlreadyExists(String),
+    /// A copy or a move would go over its own source: the path leads to the source, under
+    /// another name or the same.
+    #[error("same file: {0}")]
+    SameFile(String),
     /// Any other error of the local file system.
     #[error("I/O error")]
     Io(#[source] io::Error),
@@ -107,6 +111,7 @@ mod tests {
             VfsError::AlreadyExists("b".into()).to_string(),
             "already exists: b"
         );
+        assert_eq!(VfsError::SameFile("c".into()).to_string(), "same file: c");
         assert_eq!(
             VfsError::Io(io::ErrorKind::Other.into()).to_string(),
             "I/O error"

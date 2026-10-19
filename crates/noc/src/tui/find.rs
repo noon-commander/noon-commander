@@ -382,6 +382,7 @@ impl FindWindow {
                         modified: None,
                         uid: None,
                         gid: None,
+                        inode: None,
                     },
                     target_kind: None,
                     link_target: None,

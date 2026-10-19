@@ -8,11 +8,12 @@ mod copy;
 mod delete;
 mod job;
 mod rename;
+mod spelling;
 #[cfg(test)]
 mod testing;
 
 pub use checksum::{Algorithm, Checksum, Files, Hasher, Sum, checksum};
-pub use copy::{CopyOptions, Endpoint, copy, move_within};
+pub use copy::{CopyOptions, Endpoint, copy, copy_within, move_within};
 pub use delete::delete;
 pub use job::{Conflict, Decision, Event, Outcome, Progress, Reporter};
 pub use rename::{RenameError, rename};

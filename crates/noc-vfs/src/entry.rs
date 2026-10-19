@@ -37,6 +37,10 @@ pub struct Metadata {
     pub uid: Option<u32>,
     /// Group ID of the owner.
     pub gid: Option<u32>,
+    /// The device and inode numbers, the same for every path to one object: a name spelled
+    /// otherwise, where the file system ignores case, or a hard link. SFTP does not report
+    /// them.
+    pub inode: Option<(u64, u64)>,
 }
 
 impl Metadata {
@@ -49,7 +53,34 @@ impl Metadata {
             modified: None,
             uid: None,
             gid: None,
+            inode: None,
         }
+    }
+
+    /// Whether `self` and `other` are of one object, by their device and inode numbers;
+    /// `false` where the backend does not report them.
+    pub fn same_object(&self, other: &Self) -> bool {
+        matches!((self.inode, other.inode), (Some(this), Some(that)) if this == that)
+    }
+
+    /// Whether `self` and `other` tell the same of their objects, but for the device and inode
+    /// numbers.
+    pub fn same_attributes(&self, other: &Self) -> bool {
+        (
+            self.kind,
+            self.size,
+            self.permissions,
+            self.modified,
+            self.uid,
+            self.gid,
+        ) == (
+            other.kind,
+            other.size,
+            other.permissions,
+            other.modified,
+            other.uid,
+            other.gid,
+        )
     }
 }
 
@@ -105,6 +136,27 @@ mod tests {
         assert!(!entry(FileKind::File, None).is_dir_like());
         assert!(!entry(FileKind::File, Some(FileKind::Dir)).is_dir_like());
         assert!(!entry(FileKind::Unknown, None).is_dir_like());
+    }
+
+    #[test]
+    fn objects_by_their_inodes_and_attributes_without() {
+        let file = |inode| Metadata {
+            size: Some(1),
+            inode,
+            ..Metadata::of_kind(FileKind::File)
+        };
+        assert!(file(Some((1, 2))).same_object(&file(Some((1, 2)))));
+        assert!(!file(Some((1, 2))).same_object(&file(Some((3, 2)))));
+        assert!(
+            !file(None).same_object(&file(None)),
+            "unknown is not the same"
+        );
+        assert!(file(Some((1, 2))).same_attributes(&file(None)));
+        let bigger = Metadata {
+            size: Some(2),
+            ..file(None)
+        };
+        assert!(!bigger.same_attributes(&file(None)));
     }
 
     #[test]

@@ -91,22 +91,23 @@ volume could not be unmounted.
 leftovers of crashed instances.
 
 The `Vfs` trait of `noc-vfs`, implemented by `LocalFs` and `SftpFs`, lists directories, reads
-metadata with and without following symlinks, tells the size and free space of the file system that
-holds a path (`None` from an SFTP server without `statvfs@openssh.com`), canonicalizes paths,
-creates and removes directories, removes files, renames, reads and makes symlinks (their targets
-stored as given, never resolved), sets permissions and modification times, and reads and writes
-files as chunks (`FileReader`, `FileWriter`, whose `finish` reports errors that only show when a
-file is closed). Over SFTP, reads and writes of a file keep 64 requests of 32 KiB in flight, as
-`sftp(1)` does, so a long round trip does not idle the link; a read that comes back short is asked
-again for the rest. A listing tells of each symlink the kind of its target and the target as
+metadata with and without following symlinks (locally with the device and inode numbers, which tell
+that two paths lead to one object; SFTP v3 has none), tells the size and free space of the file
+system that holds a path (`None` from an SFTP server without `statvfs@openssh.com`), canonicalizes
+paths, creates and removes directories, removes files, renames, reads and makes symlinks (their
+targets stored as given, never resolved), sets permissions and modification times, and reads and
+writes files as chunks (`FileReader`, `FileWriter`, whose `finish` reports errors that only show
+when a file is closed). Over SFTP, reads and writes of a file keep 64 requests of 32 KiB in flight,
+as `sftp(1)` does, so a long round trip does not idle the link; a read that comes back short is
+asked again for the rest. A listing tells of each symlink the kind of its target and the target as
 stored; over SFTP each link asks both at once, 64 links at a time. Symlinks go to the server in
-OpenSSH's argument order (target first), which the client uses and which differs from the
-protocol draft; a server that follows the draft would store
-them the other way round. Its futures are cancel-safe: a dropped one leaks nothing, though a change
-already sent may still happen. Errors are typed, and the UI words them: not found, permission
-denied, already exists, or the error of the OS or the server. SFTP v3 has no code for a name that is
-taken, so `SftpFs` reports a plain failure to create or rename as `AlreadyExists` when something has
-that name. `rename` replaces an existing file where that takes one step: locally, and over SFTP with
+OpenSSH's argument order (target first), which the client uses and which differs from the protocol
+draft; a server that follows the draft would store them the other way round. Its futures are
+cancel-safe: a dropped one leaks nothing, though a change already sent may still happen. Errors are
+typed, and the UI words them: not found, permission denied, already exists, the source itself (from
+a job), or the error of the OS or the server. SFTP v3 has no code for a name that is taken, so
+`SftpFs` reports a plain failure to create or rename as `AlreadyExists` when something has that
+name. `rename` replaces an existing file where that takes one step: locally, and over SFTP with
 `posix-rename@openssh.com`. SFTP keeps times as whole seconds from 1970 to 2106 and sets the access
 time with the modification time, so the access time becomes the current time on both backends. Local
 times are set by path (`utimensat`), since opening a FIFO would block.
@@ -844,6 +845,16 @@ the UI runs like a new directory, through the host's shared session (`Arc<SftpFs
 remote one. It returns `RenameError::Exists` with the kind of a taken name, and replaces a
 file there only when asked.
 
+A file system that ignores case, or Unicode normalization, as macOS's do by default (and
+others: an SMB share, a host with such a disk), takes `Name` for `name`: a name spelled
+otherwise leads to an entry that its directory lists under another. A name is the entry's own
+spelled otherwise (`spelling.rs`) when its directory does not list it byte for byte and it is
+the same object: by device and inode locally; over SFTP, which tells neither, an entry of the
+same directory with the same metadata (kind, size, permissions, time, and owner). A file system
+that tells case apart lists every name byte for byte, so none of this happens there. Renaming to
+the entry's own name spelled otherwise gives it that spelling; one that leads to another entry
+finds the name taken.
+
 Deleting counts the entries first, so that progress has a total, then removes the deepest
 first. Listings report symlinks without following them, so a link goes and its target stays.
 A directory in which something stays (skipped, or unreadable) is left alone without asking
@@ -872,6 +883,16 @@ directory where a file would go is a failure, not a question. A symlink in the w
 so that a file written directly never goes through it; renaming replaces it anyway. Without
 `posix-rename`, the target is removed before the rename.
 
+A copy never goes over its source, which writing it directly would empty first: a target that is
+the source by device and inode, under a name spelled otherwise, through a directory spelled
+otherwise on the way, or a hard link, is a failure (`VfsError::SameFile`), not a question, and so
+is a directory that is its own source to go into. Within one file system (`copy_within`, which
+the UI runs for a copy on one host or on the local file system), one source to its own name spelled
+otherwise is that failure too, before anything is counted, over SFTP as well. Over SFTP the
+directories on the way are taken as typed: a copy into its own directory spelled otherwise there
+asks, as for any taken name, and its temporary file keeps the source whole, unless
+`atomic_upload` is off.
+
 Moving places sources as copying does. Between file systems (local and a host, or two
 hosts), it is a copy with `remove_sources`: each file or symlink goes from the source once
 it is copied, and each directory once everything in it has gone, so whatever is skipped or
@@ -879,8 +900,10 @@ fails stays, with the directories around it. Within one file system (`move_withi
 source is renamed, after the same question if its name is taken by something a rename
 replaces; a directory whose name is taken by a directory merges into it by copying and
 removing, and so does anything the rename refuses as crossing file systems (`EXDEV`
-locally, or a plain failure over SFTP v3, which has no code for it). Moves keep times and
-permissions.
+locally, or a plain failure over SFTP v3, which has no code for it). One source to its own name
+spelled otherwise is renamed to that spelling, without a question and without a copy, a
+directory too, where it would otherwise go into itself; a target that is the source by device and
+inode is a failure, since a rename onto itself does nothing. Moves keep times and permissions.
 
 Checksums (`Checksum`) hash files with SHA-256, SHA-512, SHA-1, MD5, or BLAKE3 (RustCrypto's
 `sha2`, `sha1`, and `md-5`, and `blake3`). A job may span several endpoints, such as a local
@@ -1159,7 +1182,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   where to, opening with the other panel's location (`host:/path` for a host), and whether to
   preserve attributes (times and permission bits; on, and remembered). A typed target is
   `host:path` for a host the app knows, or a path from the active panel's directory, as F7
-  takes it. A target that is the source directory, or in one of the sources, is an error.
+  takes it. A target that is the source directory, or in one of the sources, is an error; so
+  is, from the job, a source under its name spelled otherwise, where the file system ignores
+  case (see File operations).
   The job's window shows entries and bytes, with the gauge on the bytes. A taken name asks in
   red, as mc does, with the path, both sizes and times, and Yes, No (the default), All, None,
   Older, and Abort. Copies are written under a temporary name and renamed when complete,
@@ -1215,9 +1240,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   is dimmed in the File menu.
 - **F6 moves or renames** the marked entries, or the one under the cursor, with the dialog
   of F5 (`Move "x" to:`, without Preserve attributes: moves keep them); a new name in the
-  field renames in place, as in mc. Locally, and within one host, the job renames
-  (`move_within`); between the local file system and a host, or two hosts, it copies and
-  removes each source once all of it is copied. Its window says Moving; when it ends, the
+  field renames in place, as in mc, its own name in another case too, where the file system
+  ignores case. Locally, and within one host, the job renames (`move_within`); between the
+  local file system and a host, or two hosts, it copies and removes each source once all of it
+  is copied. Its window says Moving; when it ends, the
   panels on both sides read their directories again.
 - **Shift+F6 renames in place** the entry under the cursor, not the marked ones: its
   row becomes a text field from the name on, over the size and time columns, in Insert mode
@@ -1230,10 +1256,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   renames nothing; one with `/` or NUL, or `.` or `..`, is an error and the field stays. A name
   that is not UTF-8 cannot be edited, which an error says: F6 renames it. `noc_ops::rename`
   checks the new name first: a directory's is an error, a file's asks in a red question with No
-  as the default, and a name the file system takes for the entry itself, differing only in case
-  or normalization and not listed byte for byte, renames it. Without `posix-rename` the file
-  there goes first. A reload keeps the field on its entry; the field goes with the entry or when
-  the panel goes elsewhere.
+  as the default, and the entry's own name spelled otherwise, differing only in case or
+  normalization where the file system ignores them (see File operations), renames it; spelled
+  so, another entry's name is taken. Without `posix-rename` the file there goes first. A reload
+  keeps the field on its entry; the field goes with the entry or when the panel goes elsewhere.
 - **F8 deletes** the marked entries, or the one under the cursor, after a red question with Yes as
   the default, as in mc: `Delete file "x"?`, `Delete directory "x" and everything in it?`, or
   `Delete 3 files and directories?`. mc asks a second time before it goes into a directory that is

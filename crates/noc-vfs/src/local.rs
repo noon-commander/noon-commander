@@ -275,6 +275,7 @@ fn convert(metadata: &fs::Metadata) -> Metadata {
         modified: metadata.modified().ok(),
         uid: Some(metadata.uid()),
         gid: Some(metadata.gid()),
+        inode: Some((metadata.dev(), metadata.ino())),
     }
 }
 
@@ -404,6 +405,26 @@ mod tests {
         }
         let file = LocalFs.symlink_metadata(&path("file.txt")).await.unwrap();
         assert_eq!(file.kind, FileKind::File);
+    }
+
+    #[tokio::test]
+    async fn tells_paths_to_one_object() {
+        let dir = fixture::tree();
+        let path = |name: &str| dir.path().join(name);
+        fs::hard_link(path("file.txt"), path("hard")).unwrap();
+        let file = LocalFs.symlink_metadata(&path("file.txt")).await.unwrap();
+        let hard = LocalFs.symlink_metadata(&path("hard")).await.unwrap();
+        assert!(file.same_object(&hard), "a hard link is the file");
+        let link = LocalFs.symlink_metadata(&path("link-file")).await.unwrap();
+        assert!(
+            !file.same_object(&link),
+            "a symlink is an object of its own"
+        );
+        let target = LocalFs.metadata(&path("link-file")).await.unwrap();
+        assert!(file.same_object(&target), "followed, it is the file");
+        let listed = LocalFs.list_dir(&dir.path().to_path_buf()).await.unwrap();
+        let entry = fixture::entry(&listed, "file.txt");
+        assert!(entry.metadata.same_object(&file), "listings tell the same");
     }
 
     #[tokio::test]

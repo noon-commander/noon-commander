@@ -439,6 +439,8 @@ fn convert(metadata: MetaData) -> Metadata {
         modified: metadata.modified().map(UnixTimeStamp::as_system_time),
         uid: metadata.uid(),
         gid: metadata.gid(),
+        // SFTP v3 has none.
+        inode: None,
     }
 }
 
@@ -893,6 +895,7 @@ mod tests {
                 modified: Some(SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000)),
                 uid: Some(501),
                 gid: Some(20),
+                inode: None,
             }
         );
     }

@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use noc_vfs::{FileKind, FileReader as _, FileWriter as _, Metadata, Vfs, VfsError, VfsPath};
 
 use crate::job::{Conflict, Decision, Event, Outcome, Progress, Reporter};
+use crate::spelling::spelled_otherwise;
 
 /// How to copy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,6 +54,24 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
         target: V::Path,
         count: usize,
     ) -> Result<(), Aborted> {
+        // One source to its own name spelled otherwise: the rename gives it that spelling.
+        if let [source] = sources.as_slice() {
+            match self.respelled(source, &target).await? {
+                None => {
+                    self.outcome.skipped = 1;
+                    return Ok(());
+                }
+                Some(true) => {
+                    self.progress(source);
+                    match self.rename_one(source, &target, true).await? {
+                        Renamed::Done => self.outcome.done += 1,
+                        Renamed::Skipped | Renamed::Copy => self.outcome.skipped += 1,
+                    }
+                    return Ok(());
+                }
+                Some(false) => {}
+            }
+        }
         let Some(destination) = self.destination(target, count).await? else {
             self.outcome.skipped = count as u64;
             return Ok(());
@@ -64,7 +83,7 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
             }
             self.progress(&source);
             let target = destination.path(source.name().unwrap_or_default());
-            match self.rename_one(&source, &target).await? {
+            match self.rename_one(&source, &target, false).await? {
                 Renamed::Done => self.outcome.done += 1,
                 Renamed::Skipped => self.outcome.skipped += 1,
                 Renamed::Copy => left.push(source),
@@ -77,9 +96,73 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
         self.copy_items(&items, &destination).await
     }
 
-    async fn rename_one(&mut self, source: &V::Path, target: &V::Path) -> Result<Renamed, Aborted> {
+    /// Copies within one file system: one source to its own name spelled otherwise is a
+    /// failure, as a copy cannot go over its source.
+    async fn run_copy(&mut self, sources: Vec<V::Path>, target: V::Path) -> Result<(), Aborted> {
+        if let [source] = sources.as_slice() {
+            loop {
+                match self.respelled(source, &target).await? {
+                    None => {
+                        self.outcome.skipped = 1;
+                        return Ok(());
+                    }
+                    Some(false) => break,
+                    Some(true) => {
+                        let error = VfsError::SameFile(target.display());
+                        match self.reporter.ask((self.to.report)(&target), error).await {
+                            Decision::Retry => {}
+                            Decision::Skip | Decision::SkipAll => {
+                                self.outcome.skipped = 1;
+                                return Ok(());
+                            }
+                            Decision::Abort => return Err(Aborted),
+                        }
+                    }
+                }
+            }
+        }
+        let count = sources.len();
+        self.run(sources, target, count).await
+    }
+
+    /// Whether `target`, where the only source goes, is `source` under its name spelled
+    /// otherwise; `None` if the source is skipped.
+    async fn respelled(
+        &mut self,
+        source: &V::Path,
+        target: &V::Path,
+    ) -> Result<Option<bool>, Aborted> {
+        let vfs = self.to.vfs;
         loop {
-            match self.try_rename(source, target).await {
+            let error = match vfs.symlink_metadata(target).await {
+                Err(VfsError::NotFound(_)) => return Ok(Some(false)),
+                Err(error) => error,
+                Ok(there) => match vfs.symlink_metadata(source).await {
+                    Err(error) => error,
+                    Ok(here) => {
+                        match spelled_otherwise(vfs, (source, &here), (target, &there)).await {
+                            Ok(respelled) => return Ok(Some(respelled)),
+                            Err(error) => error,
+                        }
+                    }
+                },
+            };
+            match self.reporter.ask((self.from.report)(source), error).await {
+                Decision::Retry => {}
+                Decision::Skip | Decision::SkipAll => return Ok(None),
+                Decision::Abort => return Err(Aborted),
+            }
+        }
+    }
+
+    async fn rename_one(
+        &mut self,
+        source: &V::Path,
+        target: &V::Path,
+        respelled: bool,
+    ) -> Result<Renamed, Aborted> {
+        loop {
+            match self.try_rename(source, target, respelled).await {
                 Ok(renamed) => return Ok(renamed),
                 Err(Stop::Aborted) => return Err(Aborted),
                 Err(Stop::Failed(path, error)) => match self.reporter.ask(path, error).await {
@@ -92,13 +175,31 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
     }
 
     /// Renames `source` to `target`, asking first if the name is taken by something a rename
-    /// would replace.
-    async fn try_rename(&mut self, source: &V::Path, target: &V::Path) -> Result<Renamed, Stop<L>> {
+    /// would replace. If `respelled`, the target is the source under its name spelled
+    /// otherwise, which the rename gives it: nothing is replaced, or copied.
+    async fn try_rename(
+        &mut self,
+        source: &V::Path,
+        target: &V::Path,
+        respelled: bool,
+    ) -> Result<Renamed, Stop<L>> {
         let vfs = self.to.vfs;
         let at_source = |error| Stop::Failed((self.from.report)(source), error);
+        if respelled {
+            return vfs
+                .rename(source, target)
+                .await
+                .map(|()| Renamed::Done)
+                .map_err(at_source);
+        }
         let metadata = vfs.symlink_metadata(source).await.map_err(at_source)?;
         let replace = match vfs.symlink_metadata(target).await {
             Err(VfsError::NotFound(_)) => false,
+            // A hard link, or a directory on the way spelled otherwise: a rename would do nothing.
+            Ok(existing) if existing.same_object(&metadata) => {
+                let error = VfsError::SameFile(target.display());
+                return Err(self.at_target(target, error));
+            }
             Ok(existing) if existing.kind == FileKind::Dir && metadata.kind == FileKind::Dir => {
                 return Ok(Renamed::Copy);
             }
@@ -207,20 +308,31 @@ pub async fn copy<A: Vfs, B: Vfs, L>(
     options: CopyOptions,
     reporter: &mut Reporter<L>,
 ) -> Outcome {
-    let mut job = Job {
-        from,
-        to,
-        options,
-        reporter,
-        outcome: Outcome::default(),
-        items_total: 0,
-        bytes_done: 0,
-        bytes_total: 0,
-        bytes_copied: 0,
-        policy: options.overwrite.then_some(Policy::OverwriteAll),
-    };
+    let mut job = Job::new(from, to, options, reporter);
     let count = sources.len();
     if job.run(sources, target, count).await.is_err() {
+        job.outcome.aborted = true;
+    }
+    job.outcome
+}
+
+/// Copies `sources` to `target` within one file system, as [`copy`] does. A copy never goes
+/// over its source: one source to its own name spelled otherwise, which a file system that
+/// ignores case or Unicode normalization takes for its name, is a failure, as is a target
+/// that is a source by device and inode.
+pub async fn copy_within<V: Vfs, L>(
+    side: Endpoint<'_, V, L>,
+    sources: Vec<V::Path>,
+    target: V::Path,
+    options: CopyOptions,
+    reporter: &mut Reporter<L>,
+) -> Outcome {
+    let from = Endpoint {
+        vfs: side.vfs,
+        report: side.report,
+    };
+    let mut job = Job::new(from, side, options, reporter);
+    if job.run_copy(sources, target).await.is_err() {
         job.outcome.aborted = true;
     }
     job.outcome
@@ -230,7 +342,8 @@ pub async fn copy<A: Vfs, B: Vfs, L>(
 /// source where it can, asking first when its name is taken, and copies and removes it where
 /// it cannot: into a directory of the same name, which merges, or across file systems.
 /// Copies that remove their sources keep times and permissions, and the copy options
-/// otherwise apply.
+/// otherwise apply. One source to its own name spelled otherwise, which a file system that
+/// ignores case or Unicode normalization takes for its name, takes that spelling.
 pub async fn move_within<V: Vfs, L>(
     side: Endpoint<'_, V, L>,
     sources: Vec<V::Path>,
@@ -243,21 +356,12 @@ pub async fn move_within<V: Vfs, L>(
         remove_sources: true,
         ..options
     };
-    let mut job = Job {
-        from: Endpoint {
-            vfs: side.vfs,
-            report: side.report,
-        },
-        to: side,
-        options,
-        reporter,
-        outcome: Outcome::default(),
-        items_total: sources.len() as u64,
-        bytes_done: 0,
-        bytes_total: 0,
-        bytes_copied: 0,
-        policy: options.overwrite.then_some(Policy::OverwriteAll),
+    let from = Endpoint {
+        vfs: side.vfs,
+        report: side.report,
     };
+    let mut job = Job::new(from, side, options, reporter);
+    job.items_total = sources.len() as u64;
     let count = sources.len();
     if job.run_move(sources, target, count).await.is_err() {
         job.outcome.aborted = true;
@@ -288,7 +392,27 @@ struct Job<'a, 'r, A: Vfs, B: Vfs, L> {
     policy: Option<Policy>,
 }
 
-impl<A: Vfs, B: Vfs, L> Job<'_, '_, A, B, L> {
+impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
+    fn new(
+        from: Endpoint<'a, A, L>,
+        to: Endpoint<'a, B, L>,
+        options: CopyOptions,
+        reporter: &'r mut Reporter<L>,
+    ) -> Self {
+        Self {
+            from,
+            to,
+            options,
+            reporter,
+            outcome: Outcome::default(),
+            items_total: 0,
+            bytes_done: 0,
+            bytes_total: 0,
+            bytes_copied: 0,
+            policy: options.overwrite.then_some(Policy::OverwriteAll),
+        }
+    }
+
     async fn run(
         &mut self,
         sources: Vec<A::Path>,
@@ -337,7 +461,7 @@ impl<A: Vfs, B: Vfs, L> Job<'_, '_, A, B, L> {
             let before = self.bytes_done;
             let copied = loop {
                 let attempt = match item.metadata.kind {
-                    FileKind::Dir => self.copy_dir(&target).await.map(|made| {
+                    FileKind::Dir => self.copy_dir(item, &target).await.map(|made| {
                         if made {
                             made_dirs.push((target.clone(), item.metadata.clone()));
                         }
@@ -562,12 +686,16 @@ impl<A: Vfs, B: Vfs, L> Job<'_, '_, A, B, L> {
         Stop::Failed((self.to.report)(path), error)
     }
 
-    /// Makes the directory `target`, or goes into one that is there; `true` if it made it.
-    async fn copy_dir(&self, target: &B::Path) -> Result<bool, Stop<L>> {
+    /// Makes the directory `target` for `item`, or goes into one that is there, unless that is
+    /// the source itself; `true` if it made it.
+    async fn copy_dir(&self, item: &Item<A::Path>, target: &B::Path) -> Result<bool, Stop<L>> {
         let to = self.to.vfs;
         match to.create_dir(target).await {
             Ok(()) => Ok(true),
             Err(VfsError::AlreadyExists(name)) => match to.metadata(target).await {
+                Ok(metadata) if metadata.same_object(&item.metadata) => {
+                    Err(self.at_target(target, VfsError::SameFile(name)))
+                }
                 Ok(metadata) if metadata.kind == FileKind::Dir => Ok(false),
                 _ => Err(self.at_target(target, VfsError::AlreadyExists(name))),
             },
@@ -577,13 +705,18 @@ impl<A: Vfs, B: Vfs, L> Job<'_, '_, A, B, L> {
 
     /// What to do about the name `target` of a copy of `item`: free, or taken by something
     /// that the answer to a question, or an earlier answer for all, says to replace or keep.
-    /// A directory there is a failure: a file does not replace one.
+    /// A directory there is a failure: a file does not replace one; so is the source itself,
+    /// which a copy would empty.
     async fn plan(&mut self, item: &Item<A::Path>, target: &B::Path) -> Result<Plan, Stop<L>> {
         let existing = match self.to.vfs.symlink_metadata(target).await {
             Ok(existing) => existing,
             Err(VfsError::NotFound(_)) => return Ok(Plan::New),
             Err(error) => return Err(self.at_target(target, error)),
         };
+        if existing.same_object(&item.metadata) {
+            let error = VfsError::SameFile(target.display());
+            return Err(self.at_target(target, error));
+        }
         if existing.kind == FileKind::Dir {
             let error = VfsError::AlreadyExists(target.display());
             return Err(self.at_target(target, error));
@@ -898,6 +1031,29 @@ mod tests {
                 report: &report::<B::Path>,
             };
             let outcome = copy(from, sources, to, target, options, &mut reporter).await;
+            drop(reporter);
+            outcome
+        };
+        tokio::join!(job, listen(incoming, &cancel, script))
+    }
+
+    /// Copies within `vfs`, with the answers of `script`.
+    async fn run_within<V: Vfs>(
+        vfs: &V,
+        sources: Vec<V::Path>,
+        target: V::Path,
+        options: CopyOptions,
+        script: Script<'_>,
+    ) -> (Outcome, Seen) {
+        let (events, incoming) = mpsc::unbounded_channel();
+        let cancel = CancellationToken::new();
+        let mut reporter = Reporter::new(events, cancel.clone());
+        let job = async {
+            let side = Endpoint {
+                vfs,
+                report: &report::<V::Path>,
+            };
+            let outcome = copy_within(side, sources, target, options, &mut reporter).await;
             drop(reporter);
             outcome
         };
@@ -1551,6 +1707,140 @@ mod tests {
         assert_eq!(outcome.done, 2, "two renames");
         check_dir(&root.path().join("dst/dir"));
         assert_eq!(fs::read_dir(&src).unwrap().count(), 0);
+        sftp.close().await.unwrap();
+    }
+
+    /// Whether the file system of `dir` ignores case.
+    fn ignores_case(dir: &Path) -> bool {
+        fs::write(dir.join("probe"), "").unwrap();
+        let ignores = dir.join("PROBE").exists();
+        fs::remove_file(dir.join("probe")).unwrap();
+        ignores
+    }
+
+    fn names(dir: &Path) -> Vec<String> {
+        let mut names: Vec<String> = fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// Writing straight into the target, which empties it first: what would lose a source.
+    const PLAIN: CopyOptions = CopyOptions {
+        preserve: false,
+        atomic: false,
+        remove_sources: false,
+        overwrite: false,
+    };
+
+    /// Skips each failure; a copy over its source would ask about a taken name, and abort.
+    fn skipping(failures: &[Decision]) -> Script<'_> {
+        Script {
+            failures,
+            conflicts: &[Conflict::Abort],
+            cancel_midway: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn a_copy_does_not_go_over_a_hard_link_of_its_source() {
+        let root = tempfile::tempdir().unwrap();
+        let src = sources(root.path());
+        fs::hard_link(src.join("file"), src.join("hard")).unwrap();
+        let script = skipping(&[Decision::Skip]);
+        let one = vec![src.join("file")];
+        let (outcome, seen) = run_within(&LocalFs, one, src.join("hard"), PLAIN, script).await;
+        assert_eq!(
+            seen.failed,
+            [src.join("hard").to_string_lossy()],
+            "{seen:?}"
+        );
+        assert!(seen.exists.is_empty(), "{seen:?}");
+        assert_eq!((outcome.done, outcome.skipped), (0, 1));
+        assert_eq!(fs::read_to_string(src.join("file")).unwrap(), "f");
+    }
+
+    #[tokio::test]
+    async fn a_copy_does_not_go_over_its_source_spelled_otherwise() {
+        let root = tempfile::tempdir().unwrap();
+        if !ignores_case(root.path()) {
+            return;
+        }
+        let src = sources(root.path());
+        let upper = root.path().join("SRC");
+        // One source to its own name in another case: a file, and a directory, which would go
+        // into itself.
+        for (name, other) in [("file", "FILE"), ("dir", "Dir")] {
+            let script = skipping(&[Decision::Skip]);
+            let one = vec![src.join(name)];
+            let (outcome, seen) = run_within(&LocalFs, one, src.join(other), PLAIN, script).await;
+            assert_eq!(seen.failed.len(), 1, "{name}: {seen:?}");
+            assert_eq!((outcome.done, outcome.skipped), (0, 1), "{name}");
+        }
+        // Into their own directory spelled otherwise: each of them is its own target.
+        let script = skipping(&[Decision::Skip, Decision::Skip]);
+        let both = vec![src.join("dir"), src.join("file")];
+        let (outcome, seen) = run_within(&LocalFs, both, upper, PLAIN, script).await;
+        assert_eq!(seen.failed.len(), 2, "once each: {seen:?}");
+        assert!(seen.exists.is_empty(), "{seen:?}");
+        assert_eq!(outcome.done, 0);
+        assert_eq!(names(&src), ["dir", "file"]);
+        assert_eq!(fs::read_to_string(src.join("file")).unwrap(), "f");
+        check_dir(&src.join("dir"));
+        assert!(!src.join("dir/dir").exists());
+    }
+
+    #[tokio::test]
+    async fn a_move_to_its_own_name_spelled_otherwise_takes_that_spelling() {
+        let root = tempfile::tempdir().unwrap();
+        if !ignores_case(root.path()) {
+            return;
+        }
+        let src = sources(root.path());
+        for (name, other) in [("file", "File"), ("dir", "DIR")] {
+            let one = vec![src.join(name)];
+            let (outcome, seen) = run_move(&LocalFs, one, src.join(other), Script::default()).await;
+            assert!(seen.failed.is_empty() && seen.exists.is_empty(), "{seen:?}");
+            assert_eq!(outcome.done, 1, "{name}");
+        }
+        assert_eq!(names(&src), ["DIR", "File"]);
+        assert_eq!(fs::read_to_string(src.join("File")).unwrap(), "f");
+        check_dir(&src.join("DIR"));
+
+        // Into its own directory spelled otherwise, it stays where it is.
+        let script = skipping(&[Decision::Skip]);
+        let one = vec![src.join("File")];
+        let (outcome, seen) = run_move(&LocalFs, one, root.path().join("SRC"), script).await;
+        assert_eq!(seen.failed.len(), 1, "{seen:?}");
+        assert_eq!((outcome.done, outcome.skipped), (0, 1));
+        assert_eq!(fs::read_to_string(src.join("File")).unwrap(), "f");
+    }
+
+    #[tokio::test]
+    async fn on_a_host_a_copy_does_not_go_over_its_source_spelled_otherwise() {
+        let root = tempfile::tempdir().unwrap();
+        if !ignores_case(root.path()) {
+            return;
+        }
+        let src = sources(root.path());
+        let Some((_server, sftp)) = testing::sftp_server(root.path()).await else {
+            return;
+        };
+        let path = RemotePath::from;
+        let script = skipping(&[Decision::Skip]);
+        let one = vec![path("src/file")];
+        let (outcome, seen) = run_within(&sftp, one, path("src/FILE"), PLAIN, script).await;
+        assert_eq!(seen.failed, ["src/FILE"], "{seen:?}");
+        assert_eq!((outcome.done, outcome.skipped), (0, 1));
+        assert_eq!(fs::read_to_string(src.join("file")).unwrap(), "f");
+
+        let one = vec![path("src/file")];
+        let (outcome, seen) = run_move(&sftp, one, path("src/File"), Script::default()).await;
+        assert!(seen.failed.is_empty() && seen.exists.is_empty(), "{seen:?}");
+        assert_eq!(outcome.done, 1);
+        assert_eq!(names(&src), ["File", "dir"]);
         sftp.close().await.unwrap();
     }
 }

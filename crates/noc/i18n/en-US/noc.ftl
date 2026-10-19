@@ -129,6 +129,9 @@ size-exa = E
 error-not-found = no such file or directory
 error-permission-denied = permission denied
 error-already-exists = already exists
+# A copy or a move whose target leads to its source: the same name in another case, where the
+# file system ignores case, or a hard link.
+error-same-file = it is the source itself
 
 ## The dialog after a failed connection (src/tui/app): Retry tries again, Cancel leaves the
 ## panels where they were. Prefix: reconnect-.

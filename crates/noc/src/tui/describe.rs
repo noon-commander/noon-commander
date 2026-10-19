@@ -14,6 +14,7 @@ pub(crate) fn vfs_error(error: &VfsError) -> String {
         VfsError::NotFound(_) => fl!("error-not-found"),
         VfsError::PermissionDenied(_) => fl!("error-permission-denied"),
         VfsError::AlreadyExists(_) => fl!("error-already-exists"),
+        VfsError::SameFile(_) => fl!("error-same-file"),
         VfsError::Io(error) => error.to_string(),
         VfsError::Sftp(error) => chain(error),
     }
@@ -151,6 +152,10 @@ mod tests {
         assert_eq!(
             vfs_error(&VfsError::AlreadyExists("/x".to_owned())),
             "already exists"
+        );
+        assert_eq!(
+            vfs_error(&VfsError::SameFile("/x".to_owned())),
+            "it is the source itself"
         );
         let unsupported = VfsError::Io(io::ErrorKind::Unsupported.into());
         assert_eq!(vfs_error(&unsupported), "unsupported");

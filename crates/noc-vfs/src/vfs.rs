@@ -6,8 +6,9 @@ use std::time::SystemTime;
 
 use crate::{DirEntry, FileReader, FileWriter, Metadata, RemotePath, Space, VfsError};
 
-/// What code that works on any backend needs from its paths.
-pub trait VfsPath: Clone + fmt::Debug + Send + Sync + 'static {
+/// What code that works on any backend needs from its paths. Equal paths are equal byte for
+/// byte; a file system may still take two that are not for one entry.
+pub trait VfsPath: Clone + PartialEq + fmt::Debug + Send + Sync + 'static {
     /// The entry `name`, as a directory listing names it, of the directory at this path.
     #[must_use]
     fn join_name(&self, name: &[u8]) -> Self;

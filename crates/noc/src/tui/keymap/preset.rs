@@ -485,7 +485,6 @@ pub(super) const PRESET: Preset = &[
             (Action::End, &["shift-g", "end"]),
             (Action::QuickSearch, &["/", "i"]),
             (Action::SearchMode, &["ctrl-s"]),
-            (Action::ShowFull, &["shift-k"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c", "q", "f10"]),
         ],

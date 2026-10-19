@@ -1,6 +1,6 @@
 ---
 source: crates/noc/src/tui/menu.rs
-expression: "draw(&mut menu, 16)"
+expression: "draw(&mut menu, 19)"
 ---
 "                                                  "
 " ╔════════════════════ Left ════════════════════╗ "
@@ -16,5 +16,8 @@ expression: "draw(&mut menu, 16)"
 " ║ ● Prod                       deploy@10.0.0.5 ║ "
 " ║ ○ db                                         ║ "
 " ║ ○ proxy               root@proxy.example.org ║ "
+" ╟──────────────────────────────────────────────╢ "
+" ║ web  Prod  deploy@10.0.0.5                   ║ "
+" ║                                              ║ "
 " ╚══════════════════════════════════════════════╝ "
 "                                                  "

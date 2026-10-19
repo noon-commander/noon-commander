@@ -303,9 +303,12 @@ mod tests {
             })
             .collect();
         let keys = theme.keys.fg.unwrap();
-        assert!(colors.len() > 1, "{}", terminal.backend());
-        assert_ne!(colors[0], keys, "the row under the cursor");
-        assert!(colors[1..].iter().all(|fg| *fg == keys), "{colors:?}");
+        // The last is the whole row under the cursor, under the rows, in the dialog's color.
+        let (full, rows) = colors.split_last().unwrap();
+        assert!(rows.len() > 1, "{}", terminal.backend());
+        assert_ne!(rows[0], keys, "the row under the cursor");
+        assert!(rows[1..].iter().all(|fg| *fg == keys), "{colors:?}");
+        assert_eq!(Some(*full), theme.dialog.fg, "{}", terminal.backend());
     }
 
     #[test]

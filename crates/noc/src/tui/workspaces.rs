@@ -473,16 +473,9 @@ mod tests {
     }
 
     #[test]
-    fn draws_names_and_their_tabs() {
+    fn draws_names_and_their_tabs_and_where_those_under_the_cursor_are() {
         let mut window = window();
         insta::assert_snapshot!(draw(&mut window, 12));
-    }
-
-    #[test]
-    fn k_shows_where_the_tabs_under_the_cursor_are_under_the_rows() {
-        let mut window = window();
-        press(&mut window, Action::ShowFull);
-        insta::assert_snapshot!(draw(&mut window, 14));
     }
 
     #[test]

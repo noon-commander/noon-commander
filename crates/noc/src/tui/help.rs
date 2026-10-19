@@ -1258,7 +1258,6 @@ fn describe_list(context: Context, action: Action) -> Option<String> {
         Action::End => fl!("help-last-row"),
         Action::QuickSearch => fl!("help-list-filter"),
         Action::SearchMode => fl!("help-list-search-mode"),
-        Action::ShowFull => fl!("help-list-show-full"),
         Action::NormalMode => fl!("help-list-rows"),
         Action::Confirm => fl!("help-list-take"),
         Action::Cancel => fl!("help-list-close"),

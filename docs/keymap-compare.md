@@ -939,7 +939,9 @@ back with the filter kept. Keys never go to it alone; the help lists its keys wi
 windows, with what Enter takes there. The mc column has the keys of mc's lists, such as its
 histories and its hotlist; the far column, those of Far's menus; the yazi column, those of its pick
 window, which asks for the program to open files with. None of them has modes: their keys are here,
-not under Insert mode.
+not under Insert mode. No key shows the whole row under the cursor, as `K` does a name in a
+panel: every list shows it under its rows
+([ADR 0041](adr/0041-lists-always-show-the-whole-row.md)).
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -953,7 +955,6 @@ not under Insert mode.
 | Last item | `end` | ⏳ | G<br>End | End<br>C1<br>Alt+> | — | — | — |
 | Type in the filter again, in Insert mode | `quick_search` | ⏳ | /<br>i | — | Ctrl+Alt+f<br>RightAlt | — | — |
 | Match the filter the next way: as it is, as fzf does, or as a regular expression | `search_mode` | ⏳ | Ctrl+s | — | — | — | — |
-| Show the whole row under the cursor under the rows, until asked again | `show_full` | ⏳ | K | — | — | — | — |
 | Take the item, as the window's section says | `confirm` | ⏳ | Enter<br>Ctrl+m | Enter | Enter | Enter | — |
 | Close the window | `cancel` | ⏳ | Esc<br>Ctrl+[<br>Ctrl+c<br>q<br>F10 | Esc<br>F10<br>Ctrl+g | Esc | Esc<br>Ctrl+[<br>Ctrl+c | — |
 | F1…F10 on terminals without function keys, in the windows that bind them | — | 🚫 | — | Esc, then 1…9, 0 | — | — | — |

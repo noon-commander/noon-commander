@@ -650,6 +650,7 @@ mod tests {
     use super::*;
     use crate::tui::glyphs::Glyphs;
     use crate::tui::panel::HostStatus;
+    use crate::tui::picker::FULL_ROWS;
     use crate::tui::spinner;
 
     fn volume(path: &str, label: Option<&str>, kind: VolumeKind) -> Volume {
@@ -1030,7 +1031,7 @@ mod tests {
         use ratatui::style::Color;
 
         let mut menu = menu_at(home());
-        let mut terminal = Terminal::new(TestBackend::new(50, 16)).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(50, 19)).unwrap();
         let hosts = |alias: &str| HostState {
             status: match alias {
                 "web" => HostStatus::Connected,
@@ -1053,16 +1054,24 @@ mod tests {
             })
             .unwrap();
         let buffer = terminal.backend().buffer();
-        // Rows 11 … 13 hold the hosts, below their heading; their icons are in column 3.
+        // The hosts follow web, labeled Prod, below their heading; their icons are in column 3.
+        let web = (0..buffer.area.height)
+            .find(|&y| {
+                let row: String = (0..buffer.area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect();
+                row.contains("Prod")
+            })
+            .unwrap();
         let colors = |y: u16| (buffer[(3, y)].fg, buffer[(3, y)].bg);
-        assert_eq!(colors(11), (Color::Green, Color::Gray), "connected");
+        assert_eq!(colors(web), (Color::Green, Color::Gray), "connected");
         assert_eq!(
-            colors(12),
+            colors(web + 1),
             (Color::Black, Color::Gray),
             "idle: the dialog's own color"
         );
-        assert_eq!(colors(13), (Color::Red, Color::Gray), "failed");
-        assert_eq!(buffer[(3, 12)].symbol(), "󰒋");
+        assert_eq!(colors(web + 2), (Color::Red, Color::Gray), "failed");
+        assert_eq!(buffer[(3, web + 1)].symbol(), "󰒋");
     }
 
     #[test]
@@ -1100,7 +1109,7 @@ mod tests {
     #[test]
     fn draws_groups_under_their_headings() {
         let mut menu = menu_at(remote("web"));
-        insta::assert_snapshot!(draw(&mut menu, 16));
+        insta::assert_snapshot!(draw(&mut menu, 19));
         let mut loading = LocationMenu::new(Side::Right, home(), PathBuf::from("/Users/me"), 1);
         let text = draw(&mut loading, 10);
         let title = text
@@ -1120,15 +1129,23 @@ mod tests {
 
     #[test]
     fn a_menu_waits_in_a_box_as_tall_as_the_last_one_had() {
-        let rows = |text: &str| text.lines().filter(|line| line.contains('║')).count();
+        // The lines inside the frame, those that join it too.
+        let rows = |text: &str| {
+            (text.lines())
+                .filter(|line| line.contains('║') || line.contains('╟'))
+                .count()
+        };
         let mut first = LocationMenu::new(Side::Left, home(), PathBuf::from("/Users/me"), 1);
         assert_eq!(first.lines_listed(), None);
-        assert_eq!(rows(&draw(&mut first, 30)), 2, "the filter, one row");
+        let text = draw(&mut first, 30);
+        assert_eq!(rows(&text), 3, "the filter, a line, one row: {text}");
         first.listed(1, Ok(places()));
         let listed = rows(&draw(&mut first, 30));
-        assert!(listed > 2);
+        assert!(listed > 3);
         let lines = first.lines_listed();
-        assert_eq!(lines.map(usize::from), Some(listed - 1));
+        // The filter and the line under it; a line and the whole row under the cursor.
+        let around = 2 + usize::from(FULL_ROWS + 1);
+        assert_eq!(lines.map(usize::from), Some(listed - around));
 
         let mut next =
             LocationMenu::new(Side::Left, home(), PathBuf::from("/Users/me"), 2).lines_like(lines);

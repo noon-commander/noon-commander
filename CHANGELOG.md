@@ -148,10 +148,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A dialog's message taller than the screen scrolls, with the mouse and the wheel, and keeps the
   buttons on screen; so do the rows of a command line that do not fit.
 - `K` shows the whole name under the cursor in a frame below the panels, in the colors of dialogs,
-  following the cursor until `K` or Esc, and the whole row under the cursor under the rows of the
-  location menu, the tab menu, the zoxide window, and the Workspaces window, where the paths of a
-  workspace's tabs show. Each of them shows it on its own; Options → Show whole names does it for
-  the panels.
+  following the cursor until `K` or Esc; Options → Show whole names does it too. The lists always
+  show the whole row under the cursor under their rows, while they have rows: the location menu,
+  the tab menu, the zoxide window, the Workspaces window, where the paths of a workspace's tabs
+  show, and the key hints, with all the keys of a hint
+  ([ADR 0041](docs/adr/0041-lists-always-show-the-whole-row.md)).
 - The z keys scroll sideways as vim's do on lines that do not wrap: `z h` and `z l` a column,
   with a count that many, `z H` and `z L` half the width, `z s` to the start, and `z e` the end
   into view; the names in the panels, and the lines in the viewer while they are cut.
@@ -185,7 +186,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ([ADR 0036](docs/adr/0036-lists-open-in-insert-mode.md)). The filter, and the keywords of the
   zoxide window, look like the text fields of dialogs: the colors of a field from the prompt to
   the right edge.
-- Fewer lines in the lists: the line under the filter and the one over what `K` shows join the
+- Fewer lines in the lists: the line under the filter and the one over the whole row join the
   frame (`╟───╢`), as the line over the buttons of a dialog does, and the headings of the location
   menu are their names alone, in the color of titles, without a line.
 - Messages with a count have plural forms for each: deleting, copying, moving, and checksums of

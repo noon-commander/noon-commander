@@ -55,7 +55,7 @@ use super::panel::{
     Panel, SearchEnd, View, child, home_text, location_text,
 };
 use super::pattern::Pattern;
-use super::picker::{FULL_ROWS, Whole};
+use super::picker::FULL_ROWS;
 use super::places::{Places, volume_of};
 use super::progress::{Counts, JobButton, JobView};
 use super::pulldown::{self, Command, PullDown, PullDownEvent, Status};
@@ -92,6 +92,25 @@ impl Side {
 
 impl Side {
     const BOTH: [Self; 2] = [Self::Left, Self::Right];
+}
+
+/// Whether the name under the cursor of the active panel shows whole below the panels too, as
+/// `K` asks. The lists always show their row under the cursor whole.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum Whole {
+    /// Only cut, in its row.
+    #[default]
+    Cut,
+    Shown,
+}
+
+impl Whole {
+    fn toggled(self) -> Self {
+        match self {
+            Self::Cut => Self::Shown,
+            Self::Shown => Self::Cut,
+        }
+    }
 }
 
 /// Work the app asks the event loop to do.
@@ -740,7 +759,7 @@ pub(crate) struct App {
     /// The right panel is drawn on the left.
     swapped: bool,
     /// Whether `K` shows the whole name under the cursor below the panels, until it is asked
-    /// again; for this run only. Each list has its own.
+    /// again; for this run only.
     whole: Whole,
     /// What the last quick search found, in any panel, for `n` and `N`, as vim keeps the last
     /// pattern; whether it went up the rows, as `?` does, which `n` then does too; and how it
@@ -2862,7 +2881,7 @@ impl App {
                     _ => self.hints_asked = Some(place),
                 }
             }
-            // The lists take it themselves, each for itself.
+            // The panels alone: the lists always show their row under the cursor whole.
             Action::ShowFull if self.context() == Context::Panel => {
                 self.whole = self.whole.toggled();
             }
@@ -8406,19 +8425,13 @@ mod tests {
     }
 
     #[test]
-    fn k_goes_for_what_is_in_front_alone() {
+    fn k_is_for_the_panels_alone_as_the_lists_always_show_their_row_whole() {
         let mut app = with_files(&["a"]);
         keys(&mut app, &["t", "h", "esc", "shift-k"]);
-        let full = |app: &mut App| app.tab_menu.as_mut().map(|menu| menu.picker_mut().full());
-        assert_eq!(full(&mut app), Some(Whole::Shown));
-        assert_eq!(app.whole, Whole::Cut, "the panels keep theirs");
+        assert!(app.tab_menu.is_some(), "K closes no list");
+        assert_eq!(app.whole, Whole::Cut, "nor shows the name below the panels");
         keys(&mut app, &["esc", "shift-k", "t", "h"]);
-        assert_eq!(app.whole, Whole::Shown);
-        assert_eq!(
-            full(&mut app),
-            Some(Whole::Cut),
-            "a list opens with its own"
-        );
+        assert_eq!(app.whole, Whole::Shown, "the panels keep it under a list");
     }
 
     #[test]

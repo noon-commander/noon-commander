@@ -17,8 +17,8 @@ pub(crate) struct Loading {
     wait: Wait,
     /// For rows asked for again, while those that came last show.
     again: Option<Wait>,
-    /// Lines of the skeleton until the first rows come.
-    skeleton: u16,
+    /// Lines of the skeleton until the first rows come, as many as the last list had, if known.
+    skeleton: Option<u16>,
     /// Lines of the last rows that came while the filter was empty.
     listed: Option<u16>,
     /// Why the last answer brought no rows.
@@ -33,7 +33,7 @@ impl Loading {
             loaded: false,
             wait: Wait::default(),
             again: None,
-            skeleton: SKELETON_ROWS,
+            skeleton: None,
             listed: None,
             error: None,
         }
@@ -42,9 +42,7 @@ impl Loading {
     /// The same wait, whose skeleton has as many `lines` as the last list had, if any, so that
     /// the box does not grow when the rows come.
     pub(crate) fn lines_like(mut self, lines: Option<u16>) -> Self {
-        if let Some(lines) = lines {
-            self.skeleton = lines;
-        }
+        self.skeleton = lines.or(self.skeleton);
         self
     }
 
@@ -117,7 +115,13 @@ impl Loading {
     /// Lines of the skeleton that stands in place of the rows until the first come, unless the
     /// list says why they did not.
     pub(crate) fn skeleton(&self) -> Option<u16> {
-        (!self.loaded && self.error.is_none()).then_some(self.skeleton)
+        (!self.loaded && self.error.is_none()).then_some(self.skeleton.unwrap_or(SKELETON_ROWS))
+    }
+
+    /// Whether the skeleton stands for rows that the last list had, rather than for one row
+    /// of a list that opens the first time.
+    pub(crate) fn rows_known(&self) -> bool {
+        self.skeleton.is_some_and(|lines| lines > 0)
     }
 }
 
@@ -129,6 +133,7 @@ mod tests {
     fn waits_for_its_answer_and_drops_older_ones() {
         let mut loading = Loading::new(1).lines_like(Some(5));
         assert_eq!(loading.skeleton(), Some(5));
+        assert!(loading.rows_known());
         assert!(loading.wait().is_some());
         assert!(!loading.answers(0), "an older answer");
         assert!(loading.answers(1));
@@ -147,6 +152,11 @@ mod tests {
     fn says_why_no_rows_came_until_asked_to_wait_again() {
         let mut loading = Loading::new(1).lines_like(None);
         assert_eq!(loading.skeleton(), Some(SKELETON_ROWS));
+        assert!(!loading.rows_known(), "the first list");
+        assert!(
+            !Loading::new(1).lines_like(Some(0)).rows_known(),
+            "one with no rows"
+        );
         assert!(loading.answers(1));
         loading.failed("no \u{1b}zoxide");
         assert_eq!(loading.error(), Some("no ?zoxide"));

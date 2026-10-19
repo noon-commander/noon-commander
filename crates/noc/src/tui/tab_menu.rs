@@ -229,7 +229,7 @@ mod tests {
     #[test]
     fn draws_the_tabs_over_its_panel() {
         let mut menu = menu();
-        insta::assert_snapshot!(draw(&mut menu, 40, 10));
+        insta::assert_snapshot!(draw(&mut menu, 40, 13));
         typed(&mut menu, "www");
         let text = draw(&mut menu, 40, 10);
         assert!(

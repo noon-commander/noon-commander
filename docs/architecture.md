@@ -543,8 +543,8 @@ goes to the filter, in Insert mode. There are no digit hotkeys.
   its prompt (`search_mode::Mark::render_field`), which matches in the
   [search mode](#search-modes); the cursor, scrolling, the mouse, and the box, which the menus
   draw over their panel and the windows over both. The only lines across a list are under the
-  filter and over what `K` shows, and they join the frame (`╟───╢`) as the line over the buttons
-  of a dialog does; a heading is its text alone, in the color of titles. Each
+  filter and over the whole row under the cursor, and they join the frame (`╟───╢`) as the line
+  over the buttons of a dialog does; a heading is its text alone, in the color of titles. Each
   holds its own rows, says what the filter finds them by, and draws them. A row may show only
   while the filter is empty, as the rows of more in the location menu do, or only while it has
   text, as the places behind them do.
@@ -555,10 +555,12 @@ goes to the filter, in Insert mode. There are no digit hotkeys.
   `tui/loading.rs` (`Loading`): the answer they wait for, an older one dropped; the dots in front
   of the title, at first and while they ask again; the skeleton, as tall as the last list without
   a filter; and why no rows came, in their place.
-- `K` shows the whole row under the cursor in two lines under the rows, until `K` again, in each
-  list on its own (`picker::Whole`), and not in the panels, which have theirs: the directory of the
+- Every list shows the whole row under the cursor in two lines under the rows, while it has rows
+  (`Body.full`; [ADR 0041](adr/0041-lists-always-show-the-whole-row.md)): the directory of the
   zoxide window, the place of the location menu, the title of a tab, where the tabs of a workspace
-  go. The command history always shows the whole command there.
+  go, a key hint with all its keys. The command history shows the whole command there instead. A
+  skeleton that stands for the rows of the last list takes those lines too, so that the box does
+  not grow when the rows come. `K` is the panels' alone.
 
 ### Tabs
 

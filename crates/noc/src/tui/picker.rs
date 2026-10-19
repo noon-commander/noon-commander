@@ -32,25 +32,6 @@ use crate::i18n::fl;
 /// the cursor goes from one to the next.
 pub(crate) const FULL_ROWS: u16 = 2;
 
-/// Whether text that does not fit shows whole too, as `K` asks: below the panels, or under the
-/// rows of a list. The panels and each list have their own.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(crate) enum Whole {
-    /// Only cut, in its rows.
-    #[default]
-    Cut,
-    Shown,
-}
-
-impl Whole {
-    pub(crate) fn toggled(self) -> Self {
-        match self {
-            Self::Cut => Self::Shown,
-            Self::Shown => Self::Cut,
-        }
-    }
-}
-
 /// What a key did in a window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Pick {
@@ -112,8 +93,8 @@ pub(crate) struct Body<'a> {
     pub(crate) loading: Option<(&'a Loading, &'a Spin)>,
     /// Lines under the rows, apart from them, such as the whole command under the cursor.
     pub(crate) footer: Vec<String>,
-    /// The whole text of the row under the cursor, which shows under the rows while `K` asks
-    /// for it, in the place of a footer.
+    /// The whole text of the row under the cursor, which always shows under the rows while
+    /// there are rows, unless the window has a footer.
     pub(crate) full: Option<String>,
 }
 
@@ -129,6 +110,18 @@ impl Body<'_> {
     /// Lines of the skeleton, while rows are still to come.
     fn waiting(&self) -> Option<u16> {
         self.loading.and_then(|(loading, _)| loading.skeleton())
+    }
+
+    /// Lines the skeleton takes past the rows of the last list, where the whole row under the
+    /// cursor will show under them, so that the box does not grow when they come.
+    fn waiting_full(&self) -> u16 {
+        let known = (self.loading)
+            .is_some_and(|(loading, _)| loading.skeleton().is_some() && loading.rows_known());
+        if known && self.footer.is_empty() {
+            FULL_ROWS + 1
+        } else {
+            0
+        }
     }
 }
 
@@ -179,8 +172,6 @@ pub(crate) struct Picker {
     drawn: Drawn,
     /// The scroll bar of the lines at the last render, on the right of the frame.
     bar: Option<Bar>,
-    /// Whether `K` asks for the whole text of the row under the cursor under the rows.
-    full: Whole,
 }
 
 impl Picker {
@@ -204,7 +195,6 @@ impl Picker {
             pages: 1,
             drawn: Drawn::default(),
             bar: None,
-            full: Whole::Cut,
         }
     }
 
@@ -239,12 +229,6 @@ impl Picker {
     /// fzf mode, while the filter has text. Their groups then do not hold.
     pub(crate) fn ranked(&self) -> bool {
         self.filters() && self.mode == SearchMode::Fzf && !self.filter.text().is_empty()
-    }
-
-    /// Whether `K` shows the whole row under the cursor.
-    #[cfg(test)]
-    pub(crate) fn full(&self) -> Whole {
-        self.full
     }
 
     /// The mode keys are typed in: Insert while the filter takes them.
@@ -363,7 +347,6 @@ impl Picker {
                 Action::End => self.cursor = last,
                 Action::QuickSearch => self.filtering = true,
                 Action::NormalMode => self.filtering = false,
-                Action::ShowFull => self.full = self.full.toggled(),
                 Action::SearchMode => {
                     self.mode = search_mode::next(self.mode);
                     return self.filtered();
@@ -498,9 +481,8 @@ impl Picker {
         let lines = body.lines;
         let shown = body.shown();
         let waiting = body.waiting();
-        let full = body
-            .full
-            .filter(|_| self.full == Whole::Shown && body.footer.is_empty() && !lines.is_empty());
+        let full = (body.full.as_deref())
+            .filter(|_| waiting.is_none() && body.footer.is_empty() && !lines.is_empty());
         // A line between the rows and the footer.
         let below = match (body.footer.len(), &full) {
             (0, Some(_)) => FULL_ROWS + 1,
@@ -508,8 +490,10 @@ impl Picker {
             (footer, _) => u16::try_from(footer + 1).unwrap_or(u16::MAX),
         };
         let colors = Colors::of(theme, false);
-        // Borders, the filter, the line under it, the rows, the footer.
-        let size = (body.width, shown.saturating_add(4).saturating_add(below));
+        // Borders, the filter, the line under it, the rows, the footer; or the skeleton, in
+        // place of the rows and of the whole row under them.
+        let height = shown.saturating_add(4).saturating_add(below);
+        let size = (body.width, height.saturating_add(body.waiting_full()));
         let inner = draw_box(frame, area, size, body.title, colors, theme);
         let wait = body
             .loading
@@ -583,7 +567,7 @@ impl Picker {
                 Some(full) => {
                     let styles = (theme.dialog, theme.truncated_dialog);
                     cells::whole(
-                        &full,
+                        full,
                         (width, usize::from(FULL_ROWS)),
                         Some('/'),
                         styles,

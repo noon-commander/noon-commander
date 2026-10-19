@@ -777,6 +777,21 @@ fn marks_by_pattern_are_under_g_and_mcs_own_keys_are_gone() {
     assert_eq!(typed(PANEL, &["shift-down"]), actions(&[Action::Mark]));
     assert_eq!(typed(PANEL, &["shift-up"]), actions(&[Action::MarkUp]));
     assert_eq!(typed(PANEL, &["shift-k"]), actions(&[Action::ShowFull]));
+    // The lists always show their row under the cursor whole.
+    for context in [
+        Context::LocationMenu,
+        Context::TabMenu,
+        Context::Jump,
+        Context::Workspaces,
+        Context::CommandHistory,
+        Context::KeyHints,
+    ] {
+        assert_eq!(
+            typed((Mode::Normal, context), &["shift-k"]),
+            [],
+            "{context:?}"
+        );
+    }
 }
 
 #[test]

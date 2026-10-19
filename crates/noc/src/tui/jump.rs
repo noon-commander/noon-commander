@@ -192,7 +192,7 @@ impl JumpMenu {
 
     /// Draws the window centered over `area`, the panels: the keywords, then the directories
     /// with their scores, scrolled to the cursor, and the whole directory under the cursor below
-    /// them if `K` asks for it.
+    /// them.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, spin: &Spin) {
         let found = self.picker.shown(&self.found);
         let paths: Vec<String> = (found.iter())
@@ -254,6 +254,7 @@ mod tests {
 
     use super::*;
     use crate::tui::glyphs::Glyphs;
+    use crate::tui::picker::FULL_ROWS;
     use crate::tui::spinner;
 
     fn scored(score: f64, path: &str) -> Scored {
@@ -487,7 +488,12 @@ mod tests {
             JumpMenu::new(PathBuf::from("/home/me"), None, 1).rows_like(first.rows_listed());
         let text = draw(&mut next, 20);
         let bars = text.lines().filter(|line| line.contains("---")).count();
-        assert_eq!(bars, 4, "{text}");
+        let full = usize::from(FULL_ROWS + 1);
+        assert_eq!(
+            bars,
+            4 + full,
+            "the rows, and the whole row under them: {text}"
+        );
         next.found(1, Ok(found()));
         let rows = draw(&mut next, 20);
         let lines = |text: &str| text.lines().filter(|line| !line.trim().is_empty()).count();
@@ -540,11 +546,10 @@ mod tests {
     }
 
     #[test]
-    fn k_shows_the_whole_directory_under_the_cursor_under_the_rows() {
+    fn shows_the_whole_directory_under_the_cursor_under_the_rows() {
         let mut menu = JumpMenu::new(PathBuf::from("/home/me"), None, 1);
         let long = "/srv/www/clients/acme-corporation-international/deploy/releases/2026-10-15";
         menu.found(1, Ok(vec![scored(9.0, long), scored(1.0, "/srv")]));
-        menu.handle(Resolved::Action(Action::ShowFull));
         insta::assert_snapshot!(draw(&mut menu, 12));
     }
 }

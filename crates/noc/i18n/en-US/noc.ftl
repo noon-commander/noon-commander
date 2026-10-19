@@ -677,7 +677,6 @@ help-names-half-right = The names half their column right
 help-names-start = The names from their start
 help-names-end = The end of the name under the cursor at the right edge
 help-show-full = Show the whole name under the cursor below the panels, or stop
-help-list-show-full = Show the whole row under the cursor below the rows, or stop
 help-invert-marks = Invert the marks on files
 help-select = Mark the names that match a pattern
 help-unselect = Unmark the names that match a pattern

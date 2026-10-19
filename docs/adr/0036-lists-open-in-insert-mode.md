@@ -1,6 +1,6 @@
 # 0036. Lists open in Insert mode
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0041](0041-lists-always-show-the-whole-row.md)
 - Date: 2026-10-18
 - Amends: [ADR 0022](0022-vim-modes.md)
 

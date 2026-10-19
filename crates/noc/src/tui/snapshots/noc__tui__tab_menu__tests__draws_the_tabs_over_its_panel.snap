@@ -1,6 +1,6 @@
 ---
 source: crates/noc/src/tui/tab_menu.rs
-expression: "draw(&mut menu, 40, 10)"
+expression: "draw(&mut menu, 40, 13)"
 ---
 "                                        "
 "     ╔════════ Left tabs ═════════╗     "
@@ -10,5 +10,8 @@ expression: "draw(&mut menu, 40, 10)"
 "     ║ /var/log                   ║     "
 "     ║ web:/var/www               ║     "
 "     ║ ~/src/noc                  ║     "
+"     ╟────────────────────────────╢     "
+"     ║ /var/log                   ║     "
+"     ║                            ║     "
 "     ╚════════════════════════════╝     "
 "                                        "

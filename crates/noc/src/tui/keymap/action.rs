@@ -258,6 +258,9 @@ pub(crate) enum Action {
     SystemOpen,
     /// Asks where to, and copies the marked entries or the one under the cursor.
     Copy,
+    /// Asks where to, and copies the entry under the cursor, not the marked ones; the field
+    /// holds its name, so that the copy goes beside it, as mc's Shift+F5.
+    Duplicate,
     /// Asks where to, and moves or renames the marked entries or the one under the cursor.
     Move,
     /// Renames the entry under the cursor in its row.
@@ -582,6 +585,7 @@ impl Action {
         Self::Edit,
         Self::SystemOpen,
         Self::Copy,
+        Self::Duplicate,
         Self::Move,
         Self::Rename,
         Self::Mkdir,

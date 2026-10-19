@@ -674,6 +674,14 @@ impl Dialog {
         self
     }
 
+    /// The same dialog, with the cursor of its first field before character `cursor`.
+    pub(crate) fn with_cursor(mut self, cursor: usize) -> Self {
+        if let Some(first) = self.fields.first_mut() {
+            first.field.editor.set_cursor(cursor);
+        }
+        self
+    }
+
     /// Whether the first field has the focus and holds a path that Tab completes.
     pub(crate) fn completes(&self) -> bool {
         self.completes && self.focus == Focus::Field(0)

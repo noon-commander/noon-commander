@@ -332,6 +332,8 @@ pulldown-edit = &Edit
 # g x: with the program the desktop has for the file, as a double click (open, xdg-open).
 pulldown-system-open = &Open externally
 pulldown-copy = &Copy
+# Shift+F5: the entry under the cursor only, by default beside itself under a new name.
+pulldown-duplicate = Du&plicate
 pulldown-move = &Rename/Move
 # Shift+F6: the new name is typed in the entry's row.
 pulldown-rename = Re&name in place
@@ -724,6 +726,7 @@ help-edit = Edit the file under the cursor in $VISUAL or $EDITOR
 # open on macOS, xdg-open on Linux: the program a double click would start.
 help-system-open = Open the marked entries, or the one under the cursor, with the programs of the desktop
 help-copy = Copy the marked entries, or the one under the cursor
+help-duplicate = Copy the entry under the cursor, not the marked ones, beside it under a new name, or where typed
 help-move = Move or rename the marked entries, or the one under the cursor
 help-rename = Rename the entry under the cursor in its row
 help-mkdir = Make a directory
@@ -1013,7 +1016,8 @@ delete-error = Cannot delete { $path }: { $reason }
 ## Copying, F5 (src/tui/app). Prefix: copy-. As in mc.
 
 copy-title = Copy
-# Above the target field, which opens with the other panel's directory; the & marks its letter.
+# Above the target field, which opens with the other panel's directory, or with the name itself
+# after Shift+F5; the & marks its letter.
 copy-one = &Copy "{ $name }" to:
 copy-many = { $count ->
         [one] &Copy { $count } file or directory to:
@@ -1037,6 +1041,11 @@ copy-exists =
        *[other] { $old_size } bytes
     }, { $old_time }
     Overwrite it?
+
+## Copying the entry under the cursor beside it, Shift+F5 (src/tui/app), in the dialog of F5
+## with its name in the field, as in mc. Prefix: duplicate-.
+
+duplicate-not-utf8 = "{ $name }" cannot be edited: the name is not valid UTF-8; F5 can copy it
 
 ## Moving, F6 (src/tui/app). Prefix: move-. As in mc; a new name in the field renames.
 

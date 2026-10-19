@@ -162,6 +162,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   into view; the names in the panels, and the lines in the viewer while they are cut.
 - The viewer marks lines cut at the edges with `«` and `»`, and starts each wrapped row after the
   first with `»`, as vim's 'listchars' and 'showbreak'.
+- Shift+F5, or `y p`, as vim's `y y p` puts a copy of a line under it, copies the entry under the
+  cursor, not the marked ones, as mc's and Far's Shift+F5: the dialog of F5 opens with its name,
+  the cursor before the extension, so that the copy goes beside it under the name typed; a path
+  there copies elsewhere. File → Duplicate does it too.
 
 ### Changed
 

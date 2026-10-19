@@ -1070,6 +1070,7 @@ fn describe_panel(context: Context, action: Action) -> Option<String> {
         Action::Edit => fl!("help-edit"),
         Action::SystemOpen => fl!("help-system-open"),
         Action::Copy => fl!("help-copy"),
+        Action::Duplicate => fl!("help-duplicate"),
         Action::Move => fl!("help-move"),
         Action::Rename => fl!("help-rename"),
         Action::Mkdir => fl!("help-mkdir"),

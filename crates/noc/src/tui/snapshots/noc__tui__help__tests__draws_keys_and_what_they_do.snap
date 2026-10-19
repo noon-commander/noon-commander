@@ -1,6 +1,5 @@
 ---
 source: crates/noc/src/tui/help.rs
-assertion_line: 1607
 expression: "draw(&mut help, 120, 26)"
 ---
 "                                                                                                                        "
@@ -24,7 +23,7 @@ expression: "draw(&mut help, 120, 26)"
 "                  ║                       │ Backspace,                                               ░                  "
 "                  ║                       │ Ctrl+h                                                   ░                  "
 "                  ║                       │ Ctrl+o           Back to where the p» as vim's jump list ▼                  "
-"                  ╚════════════════════════════════════════════════════════════════════════════ 13% ═╝                  "
+"                  ╚════════════════════════════════════════════════════════════════════════════ 12% ═╝                  "
 "                                                                                                                        "
 "                                                                                                                        "
 "                                                                                                                        "

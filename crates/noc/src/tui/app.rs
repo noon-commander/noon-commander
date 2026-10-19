@@ -52,7 +52,7 @@ use super::menu::{LocationMenu, MenuEvent};
 use super::mouse::{Pointer, Press, Scroll};
 use super::panel::{
     Destination, Failure, HostState, HostStatus, ListError, ListErrorKind, ListRequest, Listed,
-    Panel, SearchEnd, View, child, home_text, location_text,
+    Panel, SearchEnd, View, child, home_text, location_text, stem_chars,
 };
 use super::pattern::Pattern;
 use super::picker::FULL_ROWS;
@@ -2362,6 +2362,7 @@ impl App {
             | Action::Mkdir
             | Action::Delete
             | Action::Copy
+            | Action::Duplicate
             | Action::Move
             | Action::Rename
             | Action::View
@@ -2773,10 +2774,10 @@ impl App {
             Action::Edit => return self.edit(),
             Action::SystemOpen => return self.system_open(),
             Action::Copy => self.ask_transfer(JobKind::Copy),
+            Action::Duplicate => self.ask_duplicate(),
             Action::Move => self.ask_transfer(JobKind::Move),
             Action::Rename => self.start_rename(),
-            Action::Select => self.ask_pattern(true),
-            Action::Unselect => self.ask_pattern(false),
+            Action::Select | Action::Unselect => self.ask_pattern(action == Action::Select),
             // Esc closes the whole name below the panels when it waits for no listing.
             Action::Cancel if self.panel(self.active).pending_request().is_none() => {
                 self.whole = Whole::Cut;
@@ -5246,31 +5247,67 @@ impl App {
     fn ask_transfer(&mut self, kind: JobKind) {
         let panel = self.panel(self.active);
         let chosen = panel.chosen();
-        // The & of the prompt marks the letter of the field; a name's is a character.
-        let name = |name: &[u8]| label::escape(&cells::sanitize(name));
         let message = match (chosen.as_slice(), kind) {
             ([], _) => return,
-            ([entry], JobKind::Move) => fl!("move-one", name = name(&entry.name)),
-            ([entry], _) => fl!("copy-one", name = name(&entry.name)),
+            ([entry], JobKind::Move) => fl!("move-one", name = prompt_name(&entry.name)),
+            ([entry], _) => fl!("copy-one", name = prompt_name(&entry.name)),
             (many, JobKind::Move) => fl!("move-many", count = many.len()),
             (many, _) => fl!("copy-many", count = many.len()),
         };
         let names = chosen.iter().map(|entry| entry.name.clone()).collect();
-        let dir = panel.location().clone();
         let other = self.panel(self.active.other()).location().clone();
-        let offered = Some((location_text(&other), other));
-        let text = offered
-            .as_ref()
-            .map(|(text, _)| text.clone())
-            .unwrap_or_default();
+        let text = location_text(&other);
+        let field = (text.clone(), text.chars().count());
+        self.open_transfer(kind, &message, names, field, Some((text, other)));
+    }
+
+    /// Asks where Shift+F5 copies the entry under the cursor of the active panel, not the
+    /// marked ones, as mc does: the field opens with its name, the cursor before its last
+    /// extension, as when it is renamed in its row, so that the copy goes beside it under the
+    /// name typed. A name that is not UTF-8 cannot be edited, which an error says: F5 copies it.
+    fn ask_duplicate(&mut self) {
+        let Some(entry) = self.panel(self.active).entry_under_cursor() else {
+            return;
+        };
+        let (name, dir_like) = (entry.name.clone(), entry.is_dir_like());
+        let Ok(text) = std::str::from_utf8(&name) else {
+            let name = cells::sanitize(&name);
+            self.show_error(&fl!("duplicate-not-utf8", name = name));
+            return;
+        };
+        let cursor = stem_chars(text, dir_like);
+        // Alone, `~` is the home directory.
+        let field = if text == "~" {
+            ("\\~".to_owned(), cursor + 1)
+        } else {
+            (text.to_owned(), cursor)
+        };
+        let message = fl!("copy-one", name = prompt_name(&name));
+        self.open_transfer(JobKind::Copy, &message, vec![name], field, None);
+    }
+
+    /// Opens the dialog of F5, F6, and Shift+F5 for `names` in the active panel's directory:
+    /// `message` over a field that opens with a text and the cursor before its character of
+    /// that number, and for a copy, whether to preserve attributes. `offered` is the location
+    /// that the text stands for while it stays as it was.
+    fn open_transfer(
+        &mut self,
+        kind: JobKind,
+        message: &str,
+        names: Vec<Vec<u8>>,
+        (text, cursor): (String, usize),
+        offered: Option<(String, Location)>,
+    ) {
+        let dir = self.panel(self.active).location().clone();
         let (title, checks) = if kind == JobKind::Move {
             (fl!("move-title"), Vec::new())
         } else {
             let preserve = (fl!("copy-preserve"), self.copy_choices.preserve);
             (fl!("copy-title"), vec![preserve])
         };
-        let dialog =
-            Dialog::form(&title, &message, &text, &checks, COPY_DIALOG_WIDTH).with_completion();
+        let dialog = Dialog::form(&title, message, &text, &checks, COPY_DIALOG_WIDTH)
+            .with_completion()
+            .with_cursor(cursor);
         let panel = self.shown(self.active);
         self.dialogs.push_back(Open {
             dialog,
@@ -5316,7 +5353,7 @@ impl App {
                 fl!("copy-error", path = path, reason = reason)
             }
         };
-        if target == dir {
+        if target == dir || sources.contains(&target) {
             self.show_error(&error(fl!("transfer-same")));
             return Vec::new();
         }
@@ -7824,6 +7861,12 @@ fn cd_text(location: &Location) -> String {
         }
         _ => location_text(location),
     }
+}
+
+/// A name for the prompt of a dialog, where `&` marks the letter of the field; a name's is a
+/// character.
+fn prompt_name(name: &[u8]) -> String {
+    label::escape(&cells::sanitize(name))
 }
 
 /// The label of an action in the F-key bar.
@@ -10477,6 +10520,123 @@ mod tests {
             &RemotePath::from("a"),
             &RemotePath::from("/a")
         ));
+    }
+
+    /// Puts the cursor of the left panel on `name`.
+    fn cursor_on(app: &mut App, name: &str) {
+        app.handle(action(Action::Home));
+        for _ in 0..10 {
+            if app.panel(Side::Left).name_under_cursor() == Some(name.as_bytes()) {
+                return;
+            }
+            app.handle(action(Action::Down));
+        }
+        panic!("no {name}");
+    }
+
+    /// The text of the field of the dialog in front.
+    fn field_text(app: &App) -> String {
+        app.dialogs
+            .front()
+            .map(|open| open.dialog.text().to_owned())
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn shift_f5_copies_the_entry_under_the_cursor_beside_it_under_a_new_name() {
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
+        let listing = Listing::Dir(vec![file("report.pdf", 1), dir("docs"), file("~", 2)]);
+        answer(&mut app, effects, &listing);
+        // The marks stay out of it.
+        cursor_on(&mut app, "docs");
+        app.handle(action(Action::Mark));
+        cursor_on(&mut app, "report.pdf");
+        app.handle(action(Action::Duplicate));
+        let text = screen(&mut app);
+        assert!(text.contains("Copy \"report.pdf\" to:"), "{text}");
+        assert!(text.contains("[x] Preserve attributes"), "{text}");
+        assert_eq!(field_text(&app), "report.pdf");
+        type_text(&mut app, " (1)");
+        let (_, sources, target, ends, options) = copy_job(app.handle(action(Action::Confirm)));
+        assert_eq!(sources, [local("/srv/report.pdf")]);
+        assert_eq!(target, local("/srv/report (1).pdf"), "before the extension");
+        assert_eq!(ends, (false, false));
+        assert!(options.preserve && !options.remove_sources);
+        let chosen: Vec<&[u8]> = app
+            .panel(Side::Left)
+            .chosen()
+            .iter()
+            .map(|entry| entry.name.as_slice())
+            .collect();
+        assert_eq!(chosen, [b"docs"], "still marked");
+        app.jobs.clear();
+
+        // The same name: the source itself.
+        app.handle(action(Action::Duplicate));
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        let text = screen(&mut app);
+        assert!(
+            text.contains("Cannot copy to /srv/report.pdf: the source and the target are the same"),
+            "{text}"
+        );
+        app.handle(action(Action::Confirm));
+
+        // A directory's name is whole; elsewhere is typed as for F5.
+        cursor_on(&mut app, "docs");
+        app.handle(action(Action::Duplicate));
+        type_text(&mut app, "-2");
+        let (_, sources, target, _, _) = copy_job(app.handle(action(Action::Confirm)));
+        assert_eq!(
+            (sources, target),
+            (vec![local("/srv/docs")], local("/srv/docs-2"))
+        );
+        app.jobs.clear();
+        app.handle(action(Action::Duplicate));
+        retype(&mut app, "/tmp");
+        let (_, _, target, _, _) = copy_job(app.handle(action(Action::Confirm)));
+        assert_eq!(target, local("/tmp"));
+        app.jobs.clear();
+
+        // `~` alone would be the home directory.
+        cursor_on(&mut app, "~");
+        app.handle(action(Action::Duplicate));
+        assert_eq!(field_text(&app), "\\~");
+        type_text(&mut app, "2");
+        let (_, _, target, _, _) = copy_job(app.handle(action(Action::Confirm)));
+        assert_eq!(target, local("/srv/~2"));
+        app.jobs.clear();
+
+        // Visual mode ends, and the entry under the cursor goes alone.
+        cursor_on(&mut app, "docs");
+        app.handle(action(Action::Down));
+        app.handle(action(Action::VisualMode));
+        app.handle(action(Action::Up));
+        app.handle(action(Action::Duplicate));
+        assert!(!app.panel(Side::Left).visual());
+        assert_eq!(field_text(&app), "docs");
+        app.handle(action(Action::Cancel));
+
+        // Not on `..`.
+        app.handle(action(Action::Home));
+        app.handle(action(Action::Duplicate));
+        assert_eq!(app.context(), Context::Panel);
+    }
+
+    #[test]
+    fn shift_f5_cannot_edit_a_name_that_is_not_utf8() {
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
+        let entry = DirEntry {
+            name: b"caf\xe9".to_vec(),
+            ..file("x", 1)
+        };
+        answer(&mut app, effects, &Listing::Dir(vec![entry]));
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Duplicate));
+        let text = screen(&mut app);
+        assert!(
+            text.contains("the name is not valid UTF-8; F5 can copy it"),
+            "{text}"
+        );
     }
 
     #[test]

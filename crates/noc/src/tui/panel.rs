@@ -2842,7 +2842,7 @@ fn selection(style: Style) -> Style {
 /// Characters of `name` that renaming selects: a directory's whole name; a file's name
 /// without its last extension, unless that would leave nothing, as for `.profile`, or the name
 /// ends with the dot.
-fn stem_chars(name: &str, dir: bool) -> usize {
+pub(crate) fn stem_chars(name: &str, dir: bool) -> usize {
     let whole = name.chars().count();
     if dir {
         return whole;

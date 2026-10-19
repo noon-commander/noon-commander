@@ -1182,15 +1182,23 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   where to, opening with the other panel's location (`host:/path` for a host), and whether to
   preserve attributes (times and permission bits; on, and remembered). A typed target is
   `host:path` for a host the app knows, or a path from the active panel's directory, as F7
-  takes it. A target that is the source directory, or in one of the sources, is an error; so
-  is, from the job, a source under its name spelled otherwise, where the file system ignores
-  case (see File operations).
+  takes it. A target that is the source directory, a source, or in one of the sources, is an
+  error; so is, from the job, a source under its name spelled otherwise, where the file system
+  ignores case (see File operations).
   The job's window shows entries and bytes, with the gauge on the bytes. A taken name asks in
   red, as mc does, with the path, both sizes and times, and Yes, No (the default), All, None,
   Older, and Abort. Copies are written under a temporary name and renamed when complete,
   unless `transfer.atomic_upload` is off.
   When the job ends, panels on the target, its parent, and the source directory read them
   again.
+- **Shift+F5 copies the entry under the cursor** (`y p`, as vim's `y y p` puts a copy of a
+  line under it), not the marked ones, which stay marked, as mc's and Far's Shift+F5: the dialog
+  of F5 opens with its name, in Insert mode with the cursor where Shift+F6 puts it, before a
+  file's last extension, so that the copy goes beside it under the name typed (`report
+  (1).pdf`). A path or `host:path` there copies elsewhere, as with F5; the name unchanged is an
+  error, the source itself; a name that is not UTF-8 cannot be edited, which an error says: F5
+  copies it. In Visual mode and in quick search, Shift+F5 ends them first, as the other F-keys
+  do.
 - **F3 views** the file under the cursor, as mc does (on a directory it opens it): the viewer
   (`noc-viewer`) takes the screen, with the path and the position (first line, lines, and how far
   the last line on screen is, or `End` once the end shows) on top, a scroll bar on the right when

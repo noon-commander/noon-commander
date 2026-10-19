@@ -131,6 +131,7 @@ not:
 | F3 | `view` | mc | g f (vim) | Same | mc's key to view. |
 | e<br>F4 | `edit` | noc, mc | e (noc) | Same | e for edit, as ranger's E; F4 is mc's. vim's e goes to the end of a word. |
 | F5 | `copy` | mc | Y, y y (vim) | Same | mc's key to copy. |
+| y p<br>Shift+F5 | `duplicate` | noc, mc | y p (noc) | Same | Copy the entry under the cursor beside it under a new name, as vim's y y p puts a copy of a line under it; Shift+F5 is mc's and Far's key for it. vim's y waits for a motion, which p is not, so y p does nothing there. ranger copies the path with y p; paths to the clipboard, when noc has them, take yazi's c keys. |
 | x<br>F6 | `move` | yazi, mc | x (yazi) | Same | yazi cuts with x to move; F6 is mc's. vim's x deletes the character under the cursor into a register. |
 | r<br>Shift+F6 | `rename` | yazi, mc | r (yazi) | Same | yazi renames with r, and mc with Shift+F6. vim's r replaces the character under the cursor; this r replaces the name, in its row. |
 | A<br>F7 | `mkdir` | noc, mc | A (noc) | Same | A adds a directory, as yazi's a adds an entry; F7 is mc's. vim's A appends at the end of the line. |
@@ -148,7 +149,7 @@ not:
 | x<br>F6 | `move` | yazi, mc | x (yazi) | Same | As in Normal mode, on the rows selected. vim's x deletes what Visual mode selects. |
 | F8 | `delete` | mc | d, D, X (vim) | Same | As in Normal mode, on the rows selected. |
 | f # | `checksum` | noc | f # (noc) | Same | As in Normal mode, on the rows selected. |
-| F1<br>F3<br>F4<br>Shift+F6<br>F7<br>Shift+F7<br>F9<br>Shift+F9<br>F10 | `help`<br>`view`<br>`edit`<br>`rename`<br>`mkdir`<br>`next_match`<br>`pull_down`<br>`pull_down_last`<br>`quit` | mc | — | Same | mc's F-keys work in Visual mode too ([ADR 0022](adr/0022-vim-modes.md)). These do not act on the rows selected, so they end Visual mode, then do what they do in Normal mode. |
+| F1<br>F3<br>F4<br>Shift+F5<br>Shift+F6<br>F7<br>Shift+F7<br>F9<br>Shift+F9<br>F10 | `help`<br>`view`<br>`edit`<br>`duplicate`<br>`rename`<br>`mkdir`<br>`next_match`<br>`pull_down`<br>`pull_down_last`<br>`quit` | mc | — | Same | mc's F-keys work in Visual mode too ([ADR 0022](adr/0022-vim-modes.md)). These do not act on the rows selected, so they end Visual mode, then do what they do in Normal mode. |
 | Alt+F1<br>Alt+F2 | `location_menu_left`<br>`location_menu_right` | Far | — | Same | As the F-keys: they end Visual mode first. |
 | Tab | `switch_panel` | mc, Far | Ctrl+w w, Ctrl+w Ctrl+w, Ctrl+w p (vim) | Nothing, as Ctrl+i in Visual mode, as in vim | As in Normal mode; it ends Visual mode first. |
 
@@ -158,7 +159,7 @@ not:
 | --- | --- | --- | --- | --- | --- |
 | Ctrl+s | `search_mode` | noc | Ctrl+s (noc) | Same | Switch how the search matches, round: as it is, as fzf does, or as a regular expression ([ADR 0030](adr/0030-search-modes.md)); the search of a tree and the filters of the lists take it too. vim binds no Ctrl+s in Normal mode, in Insert mode, or on its command line; terminals stop their output with it (XOFF), which raw mode turns off, so it arrives, as a byte of its own without the kitty keyboard protocol too. Ctrl+x is vim's to subtract in Normal mode and to start completion in Insert mode, as Ctrl+x Ctrl+f completes file names; Ctrl+Shift+s arrives as Ctrl+s without the protocol, and kitty takes it to paste from the selection. mc's Ctrl+s searches again, which Ctrl+g does here, as on vim's command line. It replaced Alt+r, which an Esc and a quick r arrived as, so that Esc then r switched the mode rather than give the search up and rename ([ADR 0033](adr/0033-letters-in-dialogs.md)). |
 | Up<br>Down<br>PgUp<br>PgDn | `up`<br>`down`<br>`page_up`<br>`page_down` | mc | — | Same | End the search and move in the panel, as in mc. On vim's command line they go through the history. |
-| F1<br>F3<br>F4<br>F5<br>F6<br>Shift+F6<br>F7<br>F8<br>F9<br>Shift+F9<br>F10 | `help`<br>`view`<br>`edit`<br>`copy`<br>`move`<br>`rename`<br>`mkdir`<br>`delete`<br>`pull_down`<br>`pull_down_last`<br>`quit` | mc | — | Same | End the search and do what they do in the panel, as in mc ([ADR 0022](adr/0022-vim-modes.md)). |
+| F1<br>F3<br>F4<br>F5<br>Shift+F5<br>F6<br>Shift+F6<br>F7<br>F8<br>F9<br>Shift+F9<br>F10 | `help`<br>`view`<br>`edit`<br>`copy`<br>`duplicate`<br>`move`<br>`rename`<br>`mkdir`<br>`delete`<br>`pull_down`<br>`pull_down_last`<br>`quit` | mc | — | Same | End the search and do what they do in the panel, as in mc ([ADR 0022](adr/0022-vim-modes.md)). |
 | Shift+F7 | `next_match` | mc, Far | Ctrl+g (vim) | Same | The next match, with their key to search again. |
 | Alt+F1<br>Alt+F2 | `location_menu_left`<br>`location_menu_right` | Far | — | Same | As the F-keys: they end the search first. |
 

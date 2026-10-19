@@ -21,10 +21,10 @@ no registers.
   second preset. Bindings are looked up by mode and context: Normal, Insert, and Visual mode,
   each with the context chains of before. The keys of `global` work in every mode.
 - **The F-keys of the panels stay mc's**, in Normal and Visual mode and in quick search: F1 …
-  F10, Shift+F6, Shift+F7, Shift+F9, Alt+F1, and Alt+F2; in Visual mode, those that do not act on
-  the rows selected end it first. Dialogs keep F10, which cancels, as mc's do. No other key of mc
-  stays: not `Ctrl+x …`, `Ctrl+u`, `Alt+o`, Insert, or readline's keys in text fields. Alt+1 …
-  Alt+0 no longer stand for F1 … F10. mc's `+`, `-`, and `*`, which mark by a pattern and invert
+  F10, Shift+F5, Shift+F6, Shift+F7, Shift+F9, Alt+F1, and Alt+F2; in Visual mode, those that do
+  not act on the rows selected end it first. Dialogs keep F10, which cancels, as mc's do. No other
+  key of mc stays: not `Ctrl+x …`, `Ctrl+u`, `Alt+o`, Insert, or readline's keys in text fields.
+  Alt+1 … Alt+0 no longer stand for F1 … F10. mc's `+`, `-`, and `*`, which mark by a pattern and invert
   the marks, go under `g` as `g +`, `g -`, and `g *`, which vim gives to its undo tree and to a
   search for the word under the cursor, neither of which a listing has; `+`, `-`, and `*` alone,
   vim's line motions and search, stay unbound rather than mark files where a vim user moves.

@@ -323,6 +323,7 @@ impl PullDown {
                     Some((fl!("pulldown-edit"), Action::Edit)),
                     Some((fl!("pulldown-system-open"), Action::SystemOpen)),
                     Some((fl!("pulldown-copy"), Action::Copy)),
+                    Some((fl!("pulldown-duplicate"), Action::Duplicate)),
                     Some((fl!("pulldown-move"), Action::Move)),
                     Some((fl!("pulldown-rename"), Action::Rename)),
                     Some((fl!("pulldown-mkdir"), Action::Mkdir)),
@@ -1011,7 +1012,7 @@ mod tests {
         menu.handle(action(Action::Right), &status);
         assert_eq!(menu.menu().title.text, "File");
         assert_eq!(chosen(&menu), Some(Command::Do(Action::View)));
-        for _ in 0..7 {
+        for _ in 0..8 {
             menu.handle(action(Action::Down), &status);
         }
         assert_eq!(
@@ -1209,17 +1210,17 @@ mod tests {
         assert_eq!(menu.menu().title.text, "File");
         assert!(menu.open);
         assert_eq!(
-            press(&mut menu, Press::Click, 14, 9),
+            press(&mut menu, Press::Click, 14, 10),
             PullDownEvent::Pending,
             "Delete cannot run"
         );
-        press(&mut menu, Press::WheelUp, 14, 9);
+        press(&mut menu, Press::WheelUp, 14, 10);
         assert!(menu.open, "the wheel stops at the first command");
         assert_eq!(chosen(&menu), Some(Command::Do(Action::View)));
-        press(&mut menu, Press::WheelDown, 14, 9);
+        press(&mut menu, Press::WheelDown, 14, 10);
         assert_eq!(chosen(&menu), Some(Command::Do(Action::Edit)));
         assert_eq!(
-            press(&mut menu, Press::Click, 14, 8),
+            press(&mut menu, Press::Click, 14, 9),
             PullDownEvent::Run(Command::Do(Action::Mkdir))
         );
         assert_eq!(chosen(&menu), Some(Command::Do(Action::Mkdir)));

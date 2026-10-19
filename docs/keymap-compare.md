@@ -140,8 +140,10 @@ files, neither of which mc's Ctrl+x has. Ctrl+w switches the panels, as it switc
 Ctrl+w h and Ctrl+w l go to the left and the right one, and Ctrl+w 1 and Ctrl+w 2 open their
 location menus, as Alt+F1 and Alt+F2 do. / searches down and ? up, as in vim and yazi; n and N
 repeat the last quick search, the way it went and the other way, as in vim, yazi, and ranger;
-Shift+F7, mc's and Far's key to search again, repeats it forward too. Of mc's keys, only the F-keys
-stay; they work in Visual mode and in quick search too, as their sections say.
+Shift+F7, mc's and Far's key to search again, repeats it forward too. Y and y y copy, as vim's yank
+lines, and y p copies the entry under the cursor beside it, as vim's y y p puts a copy of a line
+under it, and as Shift+F5 does in mc and Far. Of mc's keys, only the F-keys stay; they work in
+Visual mode and in quick search too, as their sections say.
 
 A count goes before a motion, a mark, n, or N, and repeats it: 3j goes three rows down. Before G or
 g g, it goes to the row of that number, 5G to the fifth; before g t, to the tab of that number, 2g t
@@ -229,6 +231,7 @@ section says: the commands of files act on the rows it selects, which become the
 | Edit the file under the cursor in $VISUAL or $EDITOR | `edit` | ✅ | e<br>F4 | F4 | F4<br>Ctrl+Shift+F4 (always internal) | — | F4<br>E |
 | Open the marked entries, or the one under the cursor, with the programs of the desktop (`open`, `xdg-open`), as vim's gx; local ones only (Far: in a window of its own; yazi, ranger: through their openers) | `system_open` | ✅ | g x | — | Shift+Enter | o<br>Enter | l<br>Right<br>Enter |
 | Copy the marked entries, or the one under the cursor | `copy` | ✅ | Y<br>y y<br>F5 | F5 | F5 | y, then p | y y, then p p<br>F5, then p p |
+| Copy the entry under the cursor, not the marked ones: the dialog opens with its name, so that the copy goes beside it under a new one | `duplicate` | ⏳ | y p<br>Shift+F5 | Shift+F5 | Shift+F5 | — | — |
 | Move or rename the marked entries, or the one under the cursor | `move` | ✅ | x<br>F6 | F6 | F6 | x, then p | d d, then p p<br>F6, then p p |
 | Rename the entry under the cursor in its row | `rename` | ✅ | r<br>Shift+F6 | Shift+F6 | Shift+F6 | r | F2 (before the extension)<br>c w (a new name)<br>a (before the extension)<br>A (at the end)<br>I (at the start) |
 | Make a directory | `mkdir` | ✅ | A<br>F7 | F7 | F7 | a (a name that ends in /) | F7 |
@@ -250,7 +253,6 @@ section says: the commands of files act on the rows it selects, which become the
 | Edit new file | — | ⏳ | — | Shift+F4 | Shift+F4 | — | — |
 | Make an empty file | — | ⏳ | — | — | — | a | Insert |
 | Make several files at once | — | ⏳ | — | — | — | A | — |
-| Copy current file (ignoring selection) | — | ⏳ | — | Shift+F5 | Shift+F5 | — | — |
 | Paste, replacing the files of the same names | — | ⏳ | — | — | — | P | p o |
 | Paste after the jobs already queued, not before them | — | ⏳ | — | — | — | — | p P<br>p O (replacing) |
 | Paste to a directory typed on the console | — | ⏳ | — | — | — | — | p d |
@@ -441,6 +443,7 @@ keys that leave it.
 | Leave Visual mode, and show the help | `help` | ⏳ | F1 | — | — | — | — |
 | Leave Visual mode, and view the file under the cursor | `view` | ⏳ | F3 | — | — | — | — |
 | Leave Visual mode, and edit the file under the cursor | `edit` | ⏳ | F4 | — | — | — | — |
+| Leave Visual mode, and copy the entry under the cursor beside it | `duplicate` | ⏳ | Shift+F5 | — | — | — | — |
 | Leave Visual mode, and rename the entry under the cursor in its row | `rename` | ⏳ | Shift+F6 | — | — | — | — |
 | Leave Visual mode, and make a directory | `mkdir` | ⏳ | F7 | — | — | — | — |
 | Leave Visual mode, and go to the next name that matches the last quick search | `next_match` | ⏳ | Shift+F7 | — | — | — | — |
@@ -647,6 +650,7 @@ search is over.
 | End the search, and view the file under the cursor | `view` | ⏳ | F3 | — | — | — | — |
 | End the search, and edit the file under the cursor | `edit` | ⏳ | F4 | — | — | — | — |
 | End the search, and copy the marked entries, or the one under the cursor | `copy` | ⏳ | F5 | — | — | — | — |
+| End the search, and copy the entry under the cursor beside it | `duplicate` | ⏳ | Shift+F5 | — | — | — | — |
 | End the search, and move or rename the marked entries, or the one under the cursor | `move` | ⏳ | F6 | — | — | — | — |
 | End the search, and rename the entry under the cursor in its row | `rename` | ⏳ | Shift+F6 | — | — | — | — |
 | Next match, with mc's and Far's key to search again | `next_match` | ⏳ | Shift+F7 | — | — | — | — |

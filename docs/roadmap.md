@@ -100,6 +100,9 @@
 - [x] Tab completion of paths in Quick cd, F5, F6, and F7, with a list of choices
 - [x] Shift+F6 renames the entry under the cursor in its row, in Insert mode with the cursor
       before the last extension
+- [x] Shift+F5 (`y p`) copies the entry under the cursor, not the marked ones, in the dialog of F5
+      opening with its name, as mc does; a copy never goes over its source under a name in
+      another case, where the file system ignores case
 - [x] Fuzzy search as fzf does it in quick search, the location menu, and the zoxide window
       ([ADR 0016](adr/0016-fuzzy-search.md))
 - [x] Search modes: plain, fzf, and regex in quick search and the filters of the lists,

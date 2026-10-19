@@ -710,8 +710,12 @@ fn the_f_keys_work_in_visual_mode_too() {
         keymap.fkeys(Mode::Normal, Context::Panel)
     );
     assert_eq!(
-        typed(VISUAL_PANEL, &["shift-f6", "shift-f9", "alt-f2"]),
+        typed(
+            VISUAL_PANEL,
+            &["shift-f5", "shift-f6", "shift-f9", "alt-f2"]
+        ),
         actions(&[
+            Action::Duplicate,
             Action::Rename,
             Action::PullDownLast,
             Action::LocationMenuRight
@@ -921,14 +925,30 @@ fn f_keys_are_mcs() {
     assert_eq!(keymap.fkeys(Mode::Normal, Context::Dialog), dialog);
     assert_eq!(keymap.fkeys(Mode::Insert, Context::DialogInput), dialog);
     assert_eq!(
-        typed(PANEL, &["alt-f1", "alt-f2", "shift-f6", "shift-f9"]),
+        typed(
+            PANEL,
+            &["alt-f1", "alt-f2", "shift-f5", "shift-f6", "shift-f9"]
+        ),
         actions(&[
             Action::LocationMenuLeft,
             Action::LocationMenuRight,
+            Action::Duplicate,
             Action::Rename,
             Action::PullDownLast
         ])
     );
+    let search = (Mode::Insert, Context::QuickSearch);
+    assert_eq!(
+        typed(search, &["shift-f5", "shift-f6"]),
+        actions(&[Action::Duplicate, Action::Rename])
+    );
+}
+
+#[test]
+fn y_p_copies_the_entry_under_the_cursor_beside_it_as_vims_y_y_p() {
+    assert_eq!(typed(PANEL, &["y", "p"]), actions(&[Action::Duplicate]));
+    assert_eq!(typed(PANEL, &["y", "y"]), actions(&[Action::Copy]));
+    assert_eq!(typed(VISUAL_PANEL, &["y"]), actions(&[Action::Copy]));
 }
 
 #[test]

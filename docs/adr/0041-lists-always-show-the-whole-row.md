@@ -20,9 +20,11 @@ taken from them.
 ## Decision
 
 - **Every list shows the whole row under the cursor**, in two lines under its rows, while it has
-  rows: the location menu, the tab menu, the zoxide window, the Workspaces window, and the list of
-  the key hints. The command history keeps its footer, the whole command under the cursor. A list
-  without rows, whose filter matches nothing or that says why it has none, shows no such lines.
+  rows: the location menu, the tab menu, the zoxide window, and the list of the key hints. The
+  command history keeps its footer, the whole command under the cursor, and the Workspaces window
+  has one of its own, where the tabs of the workspace under the cursor are, in a column for each
+  panel. A list without rows, whose filter matches nothing or that says why it has none, shows no
+  such lines.
 - **`K` is for the panels alone.** The lists' Normal mode binds it no more; Options → Show whole
   names still shows the frame below the panels.
 - **A skeleton takes the lines of the whole row too**, past the rows of the last list, so that the

@@ -273,11 +273,12 @@ tabs-title-right = Right tabs
 workspaces-title = Workspaces
 # When no workspace is saved yet.
 workspaces-none = No workspace is saved yet. a here, or t W in a panel, saves the tabs of both panels under a name.
-# Right of a workspace: how many tabs it has, in both panels together.
-workspaces-tabs = { $count ->
-        [one] { $count } tab
-       *[other] { $count } tabs
-    }
+# Under the workspaces, the tabs of the one under the cursor, by panel: the headings of their
+# columns.
+workspaces-left = Left
+workspaces-right = Right
+# The last line of a column that shows only its first tabs: how many more the panel has.
+workspaces-more = { $count } more…
 # The dialog of t W, and of a in the window. The & of a prompt marks the letter of its field.
 workspaces-save-title = Save workspace
 workspaces-save-prompt = &Save the tabs of both panels as:

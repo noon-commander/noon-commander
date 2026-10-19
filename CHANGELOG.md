@@ -150,9 +150,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `K` shows the whole name under the cursor in a frame below the panels, in the colors of dialogs,
   following the cursor until `K` or Esc; Options → Show whole names does it too. The lists always
   show the whole row under the cursor under their rows, while they have rows: the location menu,
-  the tab menu, the zoxide window, the Workspaces window, where the paths of a workspace's tabs
-  show, and the key hints, with all the keys of a hint
+  the tab menu, the zoxide window, and the key hints, with all the keys of a hint
   ([ADR 0041](docs/adr/0041-lists-always-show-the-whole-row.md)).
+- The Workspaces window shows, under its rows, where the tabs of the workspace under the cursor
+  are: a column for each panel, headed Left and Right, one tab to a line, its whole location, in
+  as many lines as the workspace with the most tabs on a side needs, four at most, the last saying
+  how many more; the heading of the side with the keys, and the tab that shows on each side, stand
+  out. A line between the columns joins the frame (`┬`, `╧`).
 - The z keys scroll sideways as vim's do on lines that do not wrap: `z h` and `z l` a column,
   with a count that many, `z H` and `z L` half the width, `z s` to the start, and `z e` the end
   into view; the names in the panels, and the lines in the viewer while they are cut.
@@ -179,6 +183,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   leaves `Cannot open web: reason` behind.
 - The status line no longer says `Rename: name` during a rename in the row; it shows the name
   and size of the entry as ever.
+- The Workspaces window counts the tabs of each panel apart, the left panel's, then the right's,
+  as `2 │ 1`, in place of `3 tabs`.
 - The lists (the location menu, the tab menu, the Workspaces window, the command history, and the
   list of the key hints) open in Insert mode with their filter taking what is typed, as the
   zoxide window does: Esc goes to the rows, in Normal mode, where `j`, `k`, `d d`, and `q` work,

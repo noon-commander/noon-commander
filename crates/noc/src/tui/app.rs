@@ -13089,7 +13089,7 @@ mod tests {
         app.open_workspaces();
         let text = screen_of(&mut app, 16);
         assert!(
-            text.contains("Workspaces") && text.contains("3 tabs"),
+            text.contains("Workspaces") && text.contains("2 │ 1") && text.contains("web:/var/www"),
             "{text}"
         );
         assert!(

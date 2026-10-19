@@ -5,15 +5,17 @@
 
 use std::path::Path;
 
-use noc_config::{Place, SavedTab, SearchMode, SortBy, Workspace, Workspaces};
+use noc_config::{PanelSide, Place, SavedTab, SearchMode, SortBy, Workspace, Workspaces};
 use noc_scroll::scrollbar::Bar;
 use noc_vfs::{Location, RemotePath};
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::text::Span;
+use ratatui::style::{Modifier, Style};
+use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Cut};
 use super::dialog::Colors;
+use super::glyphs;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
 use super::panel::{Destination, Panel, SortKey};
@@ -25,6 +27,9 @@ use crate::i18n::fl;
 const WIDTH: u16 = 60;
 /// Rows the window shows at most.
 const MAX_ROWS: u16 = 16;
+/// Lines of tabs each column under the rows shows at most; the last says how many more there
+/// are on a side with more.
+const FOOTER_TABS: usize = 4;
 
 /// What a key did in the window.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,10 +50,31 @@ pub(crate) enum WorkspacesEvent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Row {
     pub(crate) name: String,
-    /// The tabs of both panels together.
-    pub(crate) tabs: usize,
-    /// Where the tabs are, those of the left panel first.
+    pub(crate) left: SideTabs,
+    pub(crate) right: SideTabs,
+    /// The side whose panel has the keys.
+    pub(crate) active: PanelSide,
+}
+
+/// The tabs of a side of a workspace, as the window shows them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SideTabs {
+    /// Where each tab is, terminal-safe.
     pub(crate) places: Vec<String>,
+    /// The index of the tab that shows.
+    pub(crate) current: usize,
+}
+
+impl SideTabs {
+    fn of(tabs: &[SavedTab]) -> Self {
+        Self {
+            places: tabs
+                .iter()
+                .map(|tab| cells::sanitize(tab.place.to_string().as_bytes()))
+                .collect(),
+            current: current_of(tabs),
+        }
+    }
 }
 
 impl Row {
@@ -59,15 +85,16 @@ impl Row {
             .iter()
             .map(|workspace| Self {
                 name: workspace.name.clone(),
-                tabs: workspace.left.len() + workspace.right.len(),
-                places: workspace
-                    .left
-                    .iter()
-                    .chain(&workspace.right)
-                    .map(|tab| tab.place.to_string())
-                    .collect(),
+                left: SideTabs::of(&workspace.left),
+                right: SideTabs::of(&workspace.right),
+                active: workspace.active,
             })
             .collect()
+    }
+
+    /// The lines of tabs its column under the rows needs: those of its side with more.
+    fn tab_lines(&self) -> usize {
+        self.left.places.len().max(self.right.places.len())
     }
 }
 
@@ -183,19 +210,43 @@ impl WorkspacesWindow {
     }
 
     /// Draws the window centered over `area`, the panels: the filter, then the workspaces,
-    /// scrolled to the cursor.
+    /// scrolled to the cursor, each with how many tabs each panel has; under them, a column
+    /// for each panel with where the tabs of the one under the cursor are.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let shown = self.picker.shown(&self.rows);
         let lines: Vec<MenuLine> = (0..shown.len()).map(MenuLine::Row).collect();
-        let counts: Vec<String> = shown
+        let formats = noc_locale::current();
+        let integer = |count: usize| formats.integer(u64::try_from(count).unwrap_or(u64::MAX));
+        let counts: Vec<(String, String)> = shown
             .iter()
-            .map(|row| fl!("workspaces-tabs", count = row.tabs))
+            .map(|row| {
+                (
+                    integer(row.left.places.len()),
+                    integer(row.right.places.len()),
+                )
+            })
             .collect();
-        let count_width = counts
-            .iter()
-            .map(|count| cells::width(count))
-            .max()
-            .unwrap_or(0);
+        let widest = |side: fn(&(String, String)) -> &String| {
+            counts
+                .iter()
+                .map(|count| cells::width(side(count)))
+                .max()
+                .unwrap_or(0)
+        };
+        let count_widths = (widest(|count| &count.0), widest(|count| &count.1));
+        let separator = format!(" {} ", glyphs::COLUMN);
+        let count_width = count_widths.0 + cells::width(&separator) + count_widths.1;
+        // The room inside the box the picker draws.
+        let width = usize::from(WIDTH.min(area.width).saturating_sub(4));
+        // As many for every workspace, so that the box keeps its height as the cursor moves.
+        let tab_lines = (self.rows.iter().map(Row::tab_lines).max())
+            .unwrap_or(0)
+            .min(FOOTER_TABS);
+        let cursor = self.picker.cursor().min(shown.len().saturating_sub(1));
+        let (footer, footer_column) = shown.get(cursor).map_or((Vec::new(), None), |row| {
+            let (lines, column) = footer(row, (width, tab_lines), theme);
+            (lines, Some(column))
+        });
         let title = fl!("workspaces-title");
         let body = Body {
             title: &title,
@@ -203,37 +254,110 @@ impl WorkspacesWindow {
             lines: &lines,
             max_lines: Some(MAX_ROWS),
             message: self.rows.is_empty().then(|| fl!("workspaces-none")),
-            full: shown.get(self.picker.cursor()).map(|row| {
-                let places = row.places.join("  ");
-                cells::sanitize(places.as_bytes())
-            }),
+            footer,
+            footer_column,
             ..Body::default()
         };
         let focused = Colors::of(theme, false).focused_style();
         self.picker.render(frame, area, theme, body, &mut |row| {
-            // The name, a space, the tabs.
+            // The name, a space, the tabs of the left panel, a line, those of the right one.
             let name_width = row.width.saturating_sub(count_width + 1);
-            let (style, mark) = if row.selected {
+            let styles = if row.selected {
                 (focused, theme.truncated_cursor)
             } else {
                 (theme.dialog, theme.truncated_dialog)
             };
             let name = cells::sanitize(shown[row.index].name.as_bytes());
             let fit = (Align::Left, Cut::End);
-            let mut line = cells::fitted(&name, name_width, fit, (style, mark), theme.glyphs.marks);
-            let count = &counts[row.index];
-            let count = cells::fit(
-                count,
-                count_width,
-                Align::Right,
-                (style, mark),
-                theme.glyphs.marks,
-            );
-            line.spans.push(Span::styled(" ", style));
-            line.spans.extend(count);
+            let mut line = cells::fitted(&name, name_width, fit, styles, theme.glyphs.marks);
+            let count = |count: &str, width| {
+                cells::fit(count, width, Align::Right, styles, theme.glyphs.marks)
+            };
+            let (left, right) = &counts[row.index];
+            line.spans.push(Span::styled(" ", styles.0));
+            line.spans.extend(count(left, count_widths.0));
+            line.spans.push(Span::styled(separator.clone(), styles.0));
+            line.spans.extend(count(right, count_widths.1));
             line
         });
     }
+}
+
+/// The lines under the rows for `row`, in `width` cells: a column for each panel, headed by its
+/// side, with `tabs` lines of where its tabs are under the heading; the heading of the side with
+/// the keys, and the tab that shows on each side, stand out. And the cell, from the left, of the
+/// line between the columns, which the picker draws.
+fn footer(row: &Row, (width, tabs): (usize, usize), theme: &Theme) -> (Vec<Line<'static>>, u16) {
+    // A blank cell on either side of the line, as between the text and the frame.
+    let column = width.saturating_sub(1) / 2;
+    let widths = (column.saturating_sub(1), width.saturating_sub(column + 2));
+    let heading = |text: String, side: PanelSide| {
+        let style = if side == row.active {
+            theme.dialog_title.add_modifier(Modifier::BOLD)
+        } else {
+            theme.dialog
+        };
+        (text, style)
+    };
+    let left = column_lines(
+        heading(fl!("workspaces-left"), PanelSide::Left),
+        &row.left,
+        (widths.0, tabs),
+        theme,
+    );
+    let right = column_lines(
+        heading(fl!("workspaces-right"), PanelSide::Right),
+        &row.right,
+        (widths.1, tabs),
+        theme,
+    );
+    let lines = left
+        .into_iter()
+        .zip(right)
+        .map(|(mut spans, right)| {
+            spans.push(Span::styled(" ".repeat(3), theme.dialog));
+            spans.extend(right);
+            Line::from(spans)
+        })
+        .collect();
+    (lines, u16::try_from(column).unwrap_or(u16::MAX))
+}
+
+/// A column under the rows, `width` cells across: its `heading`, then where the tabs of a side
+/// are, in `lines` lines; the last of them says how many more there are if they do not fit.
+fn column_lines(
+    (heading, style): (String, Style),
+    tabs: &SideTabs,
+    (width, lines): (usize, usize),
+    theme: &Theme,
+) -> Vec<Vec<Span<'static>>> {
+    let fit = |text: &str, cut: Cut, style: Style| {
+        let fitted = cells::fit_cut(text, width, Align::Left, cut);
+        cells::spans(fitted, (style, theme.truncated_dialog), theme.glyphs.marks)
+    };
+    let count = tabs.places.len();
+    let shown = if count > lines {
+        lines.saturating_sub(1)
+    } else {
+        count
+    };
+    let mut column = vec![fit(&heading, Cut::End, style)];
+    for (index, place) in tabs.places.iter().take(shown).enumerate() {
+        let style = if index == tabs.current {
+            theme.dialog.add_modifier(Modifier::BOLD)
+        } else {
+            theme.dialog
+        };
+        // The end of a path says most about it.
+        column.push(fit(place, Cut::Start, style));
+    }
+    if shown < count {
+        let more: usize = count - shown;
+        let more = fl!("workspaces-more", count = more);
+        column.push(fit(&more, Cut::End, theme.dialog));
+    }
+    column.resize(lines + 1, fit("", Cut::End, theme.dialog));
+    column
 }
 
 /// A tab as a workspace saves it: where `panel` is, or goes, its sort order, and what is
@@ -340,15 +464,39 @@ mod tests {
 
     use super::*;
 
+    /// A workspace with `left` tabs on the left, the last of them showing, and `right` on the
+    /// right, the first showing; the right panel has the keys.
+    fn row(name: &str, left: usize, right: usize) -> Row {
+        let places = [
+            "~/src/noc",
+            "~/Downloads",
+            "/var/log",
+            "web:/var/www",
+            "/tmp",
+        ];
+        let tabs = |places: Vec<&str>, current| SideTabs {
+            places: places.into_iter().map(str::to_owned).collect(),
+            current,
+        };
+        Row {
+            name: name.to_owned(),
+            left: tabs(
+                places.iter().copied().cycle().take(left).collect(),
+                left - 1,
+            ),
+            right: tabs(
+                places.iter().rev().copied().cycle().take(right).collect(),
+                0,
+            ),
+            active: PanelSide::Right,
+        }
+    }
+
     fn rows(names: &[&str]) -> Vec<Row> {
         names
             .iter()
             .enumerate()
-            .map(|(index, name)| Row {
-                name: (*name).to_owned(),
-                tabs: index + 2,
-                places: vec!["~/src/noc".to_owned(); index + 2],
-            })
+            .map(|(index, name)| row(name, index + 1, 1 + index % 2))
             .collect()
     }
 
@@ -371,9 +519,13 @@ mod tests {
     }
 
     fn draw(window: &mut WorkspacesWindow, height: u16) -> String {
+        draw_with(window, height, &Theme::terminal())
+    }
+
+    fn draw_with(window: &mut WorkspacesWindow, height: u16, theme: &Theme) -> String {
         let mut terminal = Terminal::new(TestBackend::new(64, height)).unwrap();
         terminal
-            .draw(|frame| window.render(frame, frame.area(), &Theme::terminal()))
+            .draw(|frame| window.render(frame, frame.area(), theme))
             .unwrap();
         terminal.backend().to_string()
     }
@@ -475,7 +627,43 @@ mod tests {
     #[test]
     fn draws_names_and_their_tabs_and_where_those_under_the_cursor_are() {
         let mut window = window();
-        insta::assert_snapshot!(draw(&mut window, 12));
+        press(&mut window, Action::End);
+        insta::assert_snapshot!(draw(&mut window, 16));
+    }
+
+    #[test]
+    fn a_side_with_more_tabs_than_fit_says_how_many_more() {
+        let mut window = WorkspacesWindow::new(vec![row("many", 7, 1)], SearchMode::Plain);
+        let text = draw(&mut window, 16);
+        assert!(text.contains("7 │ 1"), "{text}");
+        assert!(
+            text.contains("/var/log") && text.contains("4 more…"),
+            "{text}"
+        );
+        assert!(
+            !text.contains("web:/var/www"),
+            "the fourth does not show: {text}"
+        );
+    }
+
+    #[test]
+    fn the_line_between_the_columns_joins_the_frame() {
+        let mut window = window();
+        let double = draw(&mut window, 16);
+        assert!(double.contains('┬') && double.contains('╧'), "{double}");
+        let single = Theme::terminal().with_borders(noc_config::Borders::Single);
+        let single = draw_with(&mut window, 16, &single);
+        assert!(single.contains('┬') && single.contains('┴'), "{single}");
+        assert!(!single.contains('╧'), "{single}");
+    }
+
+    #[test]
+    fn the_box_keeps_its_height_as_the_cursor_moves() {
+        let mut window = window();
+        let height = |text: &str| text.lines().filter(|line| line.contains('║')).count();
+        let first = height(&draw(&mut window, 20));
+        press(&mut window, Action::End);
+        assert_eq!(height(&draw(&mut window, 20)), first);
     }
 
     #[test]

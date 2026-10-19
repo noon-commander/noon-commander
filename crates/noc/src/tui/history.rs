@@ -198,6 +198,9 @@ impl HistoryWindow {
         let footer = shown.get(cursor).map_or_else(Vec::new, |entry| {
             let width = usize::from(WIDTH.min(area.width).saturating_sub(4));
             preview_rows(&entry.command, width)
+                .into_iter()
+                .map(|text| Line::styled(text, theme.dialog))
+                .collect()
         });
         let scope = if self.all {
             fl!("history-all-hosts")

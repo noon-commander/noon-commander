@@ -18,6 +18,7 @@ use super::dialog::{
     Colors, Field, draw_box, draw_separator, draw_skeleton, draw_title_dots, frame_around,
     right_frame, rows_area,
 };
+use super::glyphs;
 use super::keymap::{Action, Mode, Resolved};
 use super::loading::Loading;
 use super::mouse::{Drawn, Pointer};
@@ -92,7 +93,10 @@ pub(crate) struct Body<'a> {
     /// stands in their place, and dots turn in front of the title while the window waits.
     pub(crate) loading: Option<(&'a Loading, &'a Spin)>,
     /// Lines under the rows, apart from them, such as the whole command under the cursor.
-    pub(crate) footer: Vec<String>,
+    pub(crate) footer: Vec<Line<'static>>,
+    /// Where a line parts the footer in two columns, in cells from the left of the room inside
+    /// the box; it joins the line over the footer and the bottom of the frame.
+    pub(crate) footer_column: Option<u16>,
     /// The whole text of the row under the cursor, which always shows under the rows while
     /// there are rows, unless the window has a footer.
     pub(crate) full: Option<String>,
@@ -574,13 +578,9 @@ impl Picker {
                         theme.glyphs.marks,
                     )
                 }
-                None => body
-                    .footer
-                    .into_iter()
-                    .map(|text| Line::styled(text, theme.dialog))
-                    .collect(),
+                None => body.footer,
             };
-            draw_footer(frame, inner, (below, footer), theme);
+            draw_footer(frame, inner, (below, footer, body.footer_column), theme);
         }
         self.cursor = cursor;
     }
@@ -658,11 +658,12 @@ impl Picker {
 }
 
 /// The `footer`, in the last `below` lines of `inner` but the first, a line across it that joins
+/// the frame; down the cells of `column`, if any, a line that joins that line and the bottom of
 /// the frame.
 fn draw_footer(
     frame: &mut Frame<'_>,
     inner: Rect,
-    (below, footer): (u16, Vec<Line<'static>>),
+    (below, footer, column): (u16, Vec<Line<'static>>, Option<u16>),
     theme: &Theme,
 ) {
     let top = inner.height.saturating_sub(below);
@@ -670,6 +671,19 @@ fn draw_footer(
     for (index, text) in (top + 1..inner.height).zip(footer) {
         frame.render_widget(text, Rect::new(inner.x, inner.y + index, inner.width, 1));
     }
+    let Some(column) = column.filter(|column| *column < inner.width) else {
+        return;
+    };
+    let x = inner.x + column;
+    let mut glyph = |y: u16, glyph: char| {
+        let cell = Rect::new(x, inner.y + y, 1, 1).intersection(frame.area());
+        frame.render_widget(Line::styled(glyph.to_string(), theme.dialog), cell);
+    };
+    glyph(top, glyphs::COLUMN_HEAD);
+    for y in top + 1..inner.height {
+        glyph(y, glyphs::COLUMN);
+    }
+    glyph(inner.height, theme.lines().bottom_tee);
 }
 
 /// A heading over the rows after it, `width` cells across: its text alone, in the color of

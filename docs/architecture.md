@@ -557,10 +557,12 @@ goes to the filter, in Insert mode. There are no digit hotkeys.
   a filter; and why no rows came, in their place.
 - Every list shows the whole row under the cursor in two lines under the rows, while it has rows
   (`Body.full`; [ADR 0041](adr/0041-lists-always-show-the-whole-row.md)): the directory of the
-  zoxide window, the place of the location menu, the title of a tab, where the tabs of a workspace
-  go, a key hint with all its keys. The command history shows the whole command there instead. A
-  skeleton that stands for the rows of the last list takes those lines too, so that the box does
-  not grow when the rows come. `K` is the panels' alone.
+  zoxide window, the place of the location menu, the title of a tab, a key hint with all its keys.
+  The command history shows the whole command there instead, and the Workspaces window where the
+  tabs of the workspace are, in two columns (`Body.footer`, `Body.footer_column`), whose line
+  joins the line over them and the bottom of the frame (`┬`, `╧`). A skeleton that stands for the
+  rows of the last list takes those lines too, so that the box does not grow when the rows come.
+  `K` is the panels' alone.
 
 ### Tabs
 
@@ -628,15 +630,25 @@ sort order, and the name under its cursor, and the tab that shows; and the side 
   workspaces, one of the [lists](#lists), with a filter, which matches in the
   [search mode](#search-modes) (keymap context `workspaces`): Enter restores, `a` saves the tabs
   as a new workspace, starting with an empty name, `r` or F6 renames, and `d d` or F8 deletes
-  after a question. A workspace just saved there gets the cursor.
+  after a question. A workspace just saved there gets the cursor. Each row counts the tabs of the
+  left panel, then those of the right. Under the rows, a column for each panel lists where the
+  tabs of the workspace under the cursor are, one to a line, cut at the start where they do not
+  fit, in as many lines as the workspace with the most tabs on a side needs, four at most, the
+  last saying how many more; the heading of the side with the keys is in the color of titles, and
+  the tab that shows on each side is bold.
 
   ```text
   ╔═══════════════════════ Workspaces ═══════════════════════╗
-  ║ Filter:                                                  ║
-  ║ ──────────────────────────────────────────────────────── ║
-  ║ noon                                              3 tabs ║
-  ║ deploy                                            2 tabs ║
-  ╚══════════════════════════════════════════════════════════╝
+  ║ Filter =:                                                ║
+  ╟──────────────────────────────────────────────────────────╢
+  ║ noon                                               2 │ 1 ║
+  ║ deploy                                             1 │ 3 ║
+  ╟────────────────────────────┬─────────────────────────────╢
+  ║ Left                       │ Right                       ║
+  ║ ~/src/noc                  │ web:/var/www                ║
+  ║ ~/Downloads                │                             ║
+  ║                            │                             ║
+  ╚════════════════════════════╧═════════════════════════════╝
   ```
 
 - F9 → Workspace lists the saved workspaces below its two commands, the first ten with

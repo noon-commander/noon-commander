@@ -258,9 +258,10 @@ pub(crate) const SECRET: char = '*';
 /// A single line across a dialog, a menu, or a list, and the line after the end of a text.
 pub(crate) const LINE: &str = "─";
 /// The line between columns, between tabs, and beside the categories of the Configuration
-/// dialog, and where it meets a line across below.
+/// dialog, and where it meets a line across below it and above it.
 pub(crate) const COLUMN: char = '│';
 pub(crate) const COLUMN_FOOT: char = '┴';
+pub(crate) const COLUMN_HEAD: char = '┬';
 
 /// The lines of frames, by `ui.borders`: double, as mc's, or single.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -275,6 +276,8 @@ pub(crate) struct Lines {
     pub(crate) column_tees: (char, char),
     /// Where the sides of a line of tabs above it meet its top corners: `╠` and `╣`.
     pub(crate) corner_tees: (char, char),
+    /// Where a line between columns meets its bottom: `╧` on a double frame.
+    pub(crate) bottom_tee: char,
 }
 
 impl Lines {
@@ -284,6 +287,7 @@ impl Lines {
         tees: ('╟', '╢'),
         column_tees: ('╤', '┴'),
         corner_tees: ('╠', '╣'),
+        bottom_tee: '╧',
     };
 
     pub(crate) const SINGLE: Self = Self {
@@ -292,6 +296,7 @@ impl Lines {
         tees: ('├', '┤'),
         column_tees: ('┬', '┴'),
         corner_tees: ('├', '┤'),
+        bottom_tee: '┴',
     };
 
     /// The lines of `ui.borders`.

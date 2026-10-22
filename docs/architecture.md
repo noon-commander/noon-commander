@@ -151,7 +151,7 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
 - A failed connection, the first attempt or a lost one, opens a dialog, Connection, that says
   `Cannot connect to web: reason` or `Lost the connection to web: reason`, with Retry (the
   default) and Cancel. While it is open, the panels that wait for the host keep waiting, with
-  the dots in their titles in the color of a failed host.
+  the host's marker of a failure in their titles, still, so the event loop sleeps until the answer.
   On a lost connection, the panels on the host, in every tab, keep their entries, toned down,
   and wait to read the same directory, with the cursor where it was. Retry connects again, and
   the waiting panels read their directories once it is connected, keeping the marks on names

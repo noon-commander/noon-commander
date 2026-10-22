@@ -1976,6 +1976,9 @@ impl Panel {
             },
             Location::Remote { host, .. } => {
                 let status = (view.hosts)(host).status;
+                // A host that does not answer waits for the answer to its dialog, not for work:
+                // its marker stands still.
+                let dots = dots.filter(|_| status != HostStatus::Stalled);
                 let color = match status {
                     HostStatus::Idle | HostStatus::Connected | HostStatus::Failed
                         if dots.is_some() =>
@@ -4043,9 +4046,9 @@ mod tests {
         };
         assert_eq!(shown(dots), shown(title_style.patch(theme.host_connecting)));
         assert_eq!(shown(path), shown(title_style));
-        // A host that does not answer turns the dots red; its dialog asks what to do.
+        // A host that does not answer shows its marker in red, still; its dialog asks what to do.
         let ([title, status], [dots, _]) = waiting_lines(&mut panel, HostStatus::Stalled);
-        assert!(title.starts_with("╔ … web "), "{title}");
+        assert!(title.starts_with("╔ ✗ web "), "{title}");
         assert_eq!(status, "║..                                    ║");
         assert_eq!(shown(dots), shown(title_style.patch(theme.host_failed)));
         // Listing a host that is connected, the dots are busy as any other.

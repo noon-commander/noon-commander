@@ -39,14 +39,16 @@ too, which some users want and others do not, apart from windows.
   panel reads a directory, the dots turn in that cell, so the path never moves when they come and
   go, and the title shows the path it reads, `⠹ web:/var/www`, at once: the path says what it waits
   for, which the old one would not, and the status line under the rows keeps the name under the
-  cursor. The dots take the color of the host's status while it connects or does not answer, so
-  connecting and reading look apart without a word that would take the room of the path. A host that
-  does not answer still asks `web: Retry or Cancel?` on the status line, in the colors of errors: it
-  is a question, not a wait ([ADR 0039](0039-errors-of-panels-in-dialogs.md) leaves the question to
-  the Connection dialog alone). A reading that fails puts the old path back. Work that the panel
-  started in its directory, a directory of F7 or a rename, turns the same dots until it is done and
-  the directory is read again, as one wait, so the dots do not start over in between; work on a host
-  whose connection goes stops being waited for, as its result never comes.
+  cursor. The dots take the color of the host's status while it connects, so connecting and reading
+  look apart without a word that would take the room of the path. A host that does not answer still
+  asks `web: Retry or Cancel?` on the status line, in the colors of errors: it is a question, not a
+  wait ([ADR 0039](0039-errors-of-panels-in-dialogs.md) leaves the question to the Connection dialog
+  alone). So until the answer the cell shows the host's marker of a failure, still, and the event
+  loop sleeps: red dots that turned behind the dialog drew 25 frames a second for as long as it
+  waited, for hours after a laptop slept. A reading that fails puts the old path back. Work that
+  the panel started in its directory, a directory of F7 or a rename, turns the same dots until it
+  is done and the directory is read again, as one wait, so the dots do not start over in between;
+  work on a host whose connection goes stops being waited for, as its result never comes.
 - **The viewer waits in its title.** Its title has one cell in front of the path too, the icon of
   the file (devicons' for its name; mc's marker of files, a space, without icons), where the dots
   turn while the file is read, so the path never moves. A skeleton of one line, of 80 cells at most,

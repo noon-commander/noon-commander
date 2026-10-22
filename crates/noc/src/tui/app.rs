@@ -6934,7 +6934,10 @@ impl App {
                 .chain(viewing.reading.as_ref().and_then(Reading::wait))
                 .collect();
         }
-        let panels = [Side::Left, Side::Right].map(|side| self.panel(side).wait());
+        let panels = [Side::Left, Side::Right].map(|side| {
+            let panel = self.panel(side);
+            panel.wait().filter(|_| !self.stalls(panel))
+        });
         panels
             .into_iter()
             .flatten()
@@ -6943,6 +6946,14 @@ impl App {
             .chain(self.find.as_ref().and_then(FindWindow::wait))
             .chain(self.in_front().and_then(|job| job.view.shining()))
             .collect()
+    }
+
+    /// Whether `panel` waits to read a directory on a host that does not answer, whose dialog
+    /// asks what to do: a question, not a wait, so nothing turns until the answer.
+    fn stalls(&self, panel: &Panel) -> bool {
+        self.hosts
+            .iter()
+            .any(|(host, state)| matches!(state, Host::Stalled { .. }) && waits_for(panel, host))
     }
 
     /// Stops every job, for quitting; they clean up before the connections go.
@@ -11503,9 +11514,10 @@ mod tests {
         assert_eq!(app.host_state("db").status, HostStatus::Stalled);
         assert_eq!(app.dialogs.len(), 1);
         let text = screen_of(&mut app, 20);
-        assert!(
-            app.spin_due(Instant::now()).is_some(),
-            "the spinner of the panel is due"
+        assert_eq!(
+            app.spin_due(Instant::now()),
+            None,
+            "the panel waits for the answer, not for work: nothing turns"
         );
         assert!(
             text.contains("Cannot connect to db: deploy@db: Permission denied (publickey)."),
@@ -11522,6 +11534,10 @@ mod tests {
         };
         assert_ne!(again, connection);
         assert_eq!(app.host_state("db").status, HostStatus::Connecting);
+        assert!(
+            app.spin_due(Instant::now()).is_some(),
+            "the dots turn again"
+        );
         let waiting = app.panel(Side::Left).pending_request();
         assert_eq!(
             waiting.map(|request| request.location),
@@ -11596,6 +11612,11 @@ mod tests {
         );
         assert_eq!(app.dialogs.len(), 1);
         assert_eq!(app.panel(Side::Left).location(), &remote("web", ""));
+        assert_eq!(
+            app.spin_due(Instant::now()),
+            None,
+            "the dialog may wait for hours; the screen sleeps"
+        );
 
         // Retry reads the directory again once the host is back.
         let Effect::Connect { connection, .. } = one(app.handle(action(Action::Confirm))) else {

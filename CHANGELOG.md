@@ -301,6 +301,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   error now, locally and on a host. There a move to its own name in another case renames it, a
   directory too, rather than ask about a taken name or go into itself; and renaming in place to
   another entry's name in another case asks before replacing it, rather than replace it unasked.
+- A copy no longer keeps a CPU core busy drawing the screen: its progress came hundreds of times
+  a second, as each chunk was written, and every report drew a frame. Results of background work
+  now draw at most 25 frames a second; keys still draw at once.
 
 ## [0.2.0] - 2026-10-14
 

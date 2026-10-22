@@ -790,7 +790,10 @@ does not compile without.
 - One-way data flow: events (keys, VFS replies, job progress, connection state) →
   `update(state, msg)` → effects (spawned tasks with a `CancellationToken`) → render. Reports
   that queue up, such as the progress of a job, are all taken before the next frame, so a job
-  that reports every entry does not draw every entry.
+  that reports every entry does not draw every entry. Results of background work draw at most
+  once every 40 ms (`Pace` in `tui/mod.rs`): a copy reports every chunk, hundreds a second, each
+  apart from the next, and drew a frame for each. Keys and the mouse draw at once, and so do
+  results after a quiet spell.
 - Every request carries a generation number, so stale replies (for example, a listing of a
   directory the user has already left) are dropped.
 - The UI task never awaits network I/O.

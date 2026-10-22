@@ -48,9 +48,7 @@ mod zoom;
 use std::io::{self, IsTerminal as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-#[cfg(debug_assertions)]
-use std::time::Duration;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use color_eyre::eyre::{Result, bail};
 use crossterm::cursor::SetCursorStyle;
@@ -89,6 +87,20 @@ pub(crate) fn is_valid_theme(name: &str) -> bool {
 
 pub(crate) fn theme_names() -> &'static [&'static str] {
     theme::Theme::NAMES
+}
+
+/// Hands `first` to the app, and every result after it that waits in `done`, so that they draw
+/// once: jobs report every entry.
+fn take_all_done(
+    app: &mut App,
+    tasks: &mut Tasks,
+    done: &mut mpsc::UnboundedReceiver<Done>,
+    first: Done,
+) {
+    take_done(app, tasks, first);
+    while let Ok(next) = done.try_recv() {
+        take_done(app, tasks, next);
+    }
 }
 
 /// Hands finished background work to the app, and runs what the app asks for next.
@@ -260,9 +272,11 @@ pub(crate) async fn run(
     let mut events = EventStream::new();
     let mut keys = KeyState::default();
     let mut clicks = Clicks::default();
-    // The last event changed nothing, so the screen stays as it is.
+    // The last event changed nothing, or results that wait for their frame, so the screen stays
+    // as it is.
     let mut idle = false;
     let mut drawn = Instant::now();
+    let mut pace = Pace::default();
     let context = Arc::new(context);
     let (done_tx, mut done) = mpsc::unbounded_channel();
     #[cfg(debug_assertions)]
@@ -307,6 +321,7 @@ pub(crate) async fn run(
                 break Err(error.into());
             }
             drawn = now;
+            pace.drew();
         }
         let timer = key_timer(&app, &keys);
         let frame_due = app.frame_due();
@@ -327,12 +342,10 @@ pub(crate) async fn run(
             },
             () = sleep_until(timer) => key_time(&mut app, &mut tasks, &mut keys),
             Some(job) = done.recv() => {
-                // Jobs report every entry; take all that waits, then draw once.
-                take_done(&mut app, &mut tasks, job);
-                while let Ok(job) = done.try_recv() {
-                    take_done(&mut app, &mut tasks, job);
-                }
+                take_all_done(&mut app, &mut tasks, &mut done, job);
+                idle = !pace.came(Instant::now());
             }
+            () = sleep_until(pace.due) => pace.release(Instant::now()),
             // A window growing or shrinking, a spinner, or a clock needs its next frame.
             () = sleep_until(frame_due) => {}
             () = sleep_until(spin_due) => {}
@@ -797,6 +810,50 @@ async fn sleep_until(deadline: Option<Instant>) {
     }
 }
 
+/// The shortest time between two frames drawn for results of background work, which can come
+/// faster than frames are drawn: a copy reports every chunk it moves, hundreds a second.
+const RESULTS_FRAME: Duration = Duration::from_millis(40);
+
+/// Draws results of background work at most once each [`RESULTS_FRAME`]. Keys and the mouse
+/// draw at once, and so do results after a quiet spell, so neither waits behind a busy job.
+#[derive(Debug, Default)]
+struct Pace {
+    /// When results last had a frame of their own.
+    drawn: Option<Instant>,
+    /// When the results that came since get theirs, if some wait.
+    due: Option<Instant>,
+}
+
+impl Pace {
+    /// Takes results that came at `now`: whether they draw now; if not, they wait for `due`.
+    fn came(&mut self, now: Instant) -> bool {
+        if self.due.is_some() {
+            return false;
+        }
+        match self.drawn.map(|drawn| drawn + RESULTS_FRAME) {
+            Some(due) if now < due => {
+                self.due = Some(due);
+                false
+            }
+            _ => {
+                self.drawn = Some(now);
+                true
+            }
+        }
+    }
+
+    /// The results that wait are due at `now`, and get their frame.
+    fn release(&mut self, now: Instant) {
+        self.due = None;
+        self.drawn = Some(now);
+    }
+
+    /// A frame was drawn, which shows the results that waited.
+    fn drew(&mut self) {
+        self.due = None;
+    }
+}
+
 /// Releases the mouse and leaves raw mode and the alternate screen however [`run`] ends.
 /// Panics are covered by the hook that `ratatui::try_init` installs, and the one around it.
 #[derive(Default)]
@@ -839,5 +896,39 @@ mod tests {
         );
         assert_eq!(written(&mut title, None), "\x1b[23;0t");
         assert_eq!(written(&mut title, None), "", "given back once");
+    }
+
+    #[test]
+    fn results_draw_at_most_once_a_frame() {
+        let start = Instant::now();
+        let at = |ms| start + Duration::from_millis(ms);
+        let mut pace = Pace::default();
+        assert!(pace.came(at(0)), "the first results draw at once");
+        assert!(!pace.came(at(3)));
+        assert_eq!(pace.due, Some(at(40)));
+        assert!(!pace.came(at(30)), "more results wait for the same frame");
+        assert_eq!(pace.due, Some(at(40)));
+        pace.release(at(40));
+        assert_eq!(pace.due, None);
+        assert!(
+            !pace.came(at(45)),
+            "and the next ones a whole frame after it"
+        );
+        assert_eq!(pace.due, Some(at(80)));
+    }
+
+    #[test]
+    fn results_after_a_quiet_spell_or_a_key_draw_at_once() {
+        let start = Instant::now();
+        let at = |ms| start + Duration::from_millis(ms);
+        let mut pace = Pace::default();
+        assert!(pace.came(at(0)));
+        assert!(!pace.came(at(10)));
+        pace.drew();
+        assert_eq!(
+            pace.due, None,
+            "a key's frame shows the results that waited"
+        );
+        assert!(pace.came(at(100)), "after a quiet spell");
     }
 }

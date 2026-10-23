@@ -169,6 +169,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- F7 opens with an empty name instead of the name under the cursor, which what was typed went
+  after.
 - In the fzf search mode, every list shows the best match first, as fzf does: the location menu,
   the tab menu, the Workspaces window, the command history, and the key hints, as the zoxide
   window did; matches as good keep their order. The location menu drops the headings of its

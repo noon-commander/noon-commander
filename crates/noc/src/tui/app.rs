@@ -5995,16 +5995,10 @@ impl App {
         self.go(panel, destination)
     }
 
-    /// Opens the dialog of F7 for the active panel, with the name under the cursor, as in mc.
+    /// Opens the dialog of F7 for the active panel, with an empty field.
     fn ask_mkdir(&mut self) {
-        let panel = self.panel(self.active);
-        let name = panel
-            .name_under_cursor()
-            .map(|name| String::from_utf8_lossy(name).into_owned())
-            .unwrap_or_default();
         let (title, prompt) = (fl!("mkdir-title"), fl!("mkdir-prompt"));
-        let dialog =
-            Dialog::form(&title, &prompt, &name, &[], MKDIR_DIALOG_WIDTH).with_completion();
+        let dialog = Dialog::form(&title, &prompt, "", &[], MKDIR_DIALOG_WIDTH).with_completion();
         let panel = self.shown(self.active);
         self.dialogs.push_back(Open {
             dialog,
@@ -9835,16 +9829,16 @@ mod tests {
             "stays"
         );
 
-        // The name under the cursor is filled in, the cursor after it, as in vim's Insert mode;
-        // Ctrl+u takes it away.
+        // The field opens empty, not with the name under the cursor.
         app.handle(action(Action::Mkdir));
-        retype(&mut app, "x");
+        assert_eq!(app.dialogs.front().map(|open| open.dialog.text()), Some(""));
+        type_text(&mut app, "x");
         let (_, location, _) = create_dir(app.handle(action(Action::Confirm)));
         assert_eq!(location, local("/srv/x"));
         app.handle(action(Action::Mkdir));
-        type_text(&mut app, "2");
+        type_text(&mut app, "y");
         let (_, location, _) = create_dir(app.handle(action(Action::Confirm)));
-        assert_eq!(location, local("/srv/new2"));
+        assert_eq!(location, local("/srv/y"));
         // A directory that is not made ends the wait as well, in an error.
         app.created(panel, &local("/srv/x"), Ok(()));
         assert!(

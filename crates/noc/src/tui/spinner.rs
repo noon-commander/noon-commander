@@ -20,21 +20,35 @@ const SHINE_REST: Duration = Duration::from_millis(400);
 /// When a wait began: as the first frame that drew it saw it. Its spinner shows [`DELAY`]
 /// after that, from its first frame.
 #[derive(Debug, Default)]
-pub(crate) struct Wait(Cell<Option<Instant>>);
+pub(crate) struct Wait {
+    since: Cell<Option<Instant>>,
+    /// The last frame that drew its shine.
+    shone: Cell<Option<Instant>>,
+}
 
 impl Wait {
     /// When it began, `at` if this is its first frame.
     pub(crate) fn since(&self, at: Instant) -> Instant {
-        if let Some(since) = self.0.get() {
+        if let Some(since) = self.since.get() {
             return since;
         }
-        self.0.set(Some(at));
+        self.since.set(Some(at));
         at
     }
 
     /// When its spinner shows, if a frame drew it.
     pub(crate) fn shows(&self) -> Option<Instant> {
-        self.0.get().map(|since| since + DELAY)
+        self.since.get().map(|since| since + DELAY)
+    }
+
+    /// How long after the frame drawn at `drawn` its spinner moves next: a step of the shine if
+    /// that frame drew one, else a frame of the dots, so that dots alone draw half as often.
+    pub(crate) fn step_after(&self, drawn: Instant) -> Duration {
+        if self.shone.get().is_some_and(|shone| shone >= drawn) {
+            SHINE_STEP
+        } else {
+            DOTS_FRAME
+        }
     }
 }
 
@@ -114,7 +128,11 @@ impl Spin {
     pub(crate) fn shine(&self, wait: &Wait) -> Option<Shine> {
         let since = wait.since(self.at);
         let elapsed = self.at.checked_duration_since(since)?.checked_sub(DELAY)?;
-        self.turns.then_some(Shine(elapsed))
+        if !self.turns {
+            return None;
+        }
+        wait.shone.set(Some(self.at));
+        Some(Shine(elapsed))
     }
 
     fn dots_after(&self, elapsed: Duration) -> char {
@@ -199,6 +217,24 @@ mod tests {
         let next = shown + SHINE_STEP * 20 + SHINE_REST;
         assert_eq!(over(next, 20), Some(0));
         assert_eq!(over(next, 50), Some(30), "a longer sweep rests later");
+    }
+
+    #[test]
+    fn a_wait_moves_next_at_its_shine_if_the_frame_drew_one_else_at_its_dots() {
+        let start = Instant::now();
+        let wait = Wait::default();
+        let shown = start + DELAY;
+        assert_eq!(spin(start, true).shine(&wait), None);
+        assert_eq!(wait.step_after(start), DOTS_FRAME, "nothing showed yet");
+        assert!(spin(shown, true).wait_dots(&wait).is_some());
+        assert_eq!(wait.step_after(shown), DOTS_FRAME, "dots alone");
+        assert!(spin(shown, true).shine(&wait).is_some());
+        assert_eq!(wait.step_after(shown), SHINE_STEP);
+        let later = shown + DOTS_FRAME;
+        assert!(spin(later, true).wait_dots(&wait).is_some());
+        assert_eq!(wait.step_after(later), DOTS_FRAME, "the shine went");
+        assert_eq!(spin(later, false).shine(&wait), None);
+        assert_eq!(wait.step_after(later), DOTS_FRAME, "a resting shine");
     }
 
     #[test]

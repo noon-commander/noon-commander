@@ -6891,11 +6891,11 @@ impl App {
         let turns = self.config.animations.spinners;
         let mut due: Option<Instant> = None;
         let mut at = |time: Instant| due = Some(due.map_or(time, |due| due.min(time)));
-        for shows in self.waits().into_iter().filter_map(Wait::shows) {
-            if shows > drawn {
-                at(shows);
-            } else if turns {
-                at(drawn + spinner::SHINE_STEP);
+        for wait in self.waits() {
+            match wait.shows() {
+                Some(shows) if shows > drawn => at(shows),
+                Some(_) if turns => at(drawn + wait.step_after(drawn)),
+                _ => {}
             }
         }
         let connecting = self
@@ -8261,6 +8261,37 @@ mod tests {
         app.handle(action(Action::Help));
         assert_eq!(screen_at(&mut app, 12, at(9000)), whole);
         assert_eq!(app.frame_due(), None);
+    }
+
+    #[test]
+    fn dots_alone_draw_half_as_often_as_a_shine() {
+        let mut app = loaded();
+        app.config.animations.spinners = true;
+        let start = Instant::now();
+        let at = |ms| start + Duration::from_millis(ms);
+        let shows = at(0) + spinner::DELAY;
+
+        // A panel reads its directory again: dots turn in its title, alone.
+        let reload = app.handle(action(Action::Reload));
+        assert!(matches!(&reload[..], [Effect::List { .. }]), "{reload:?}");
+        screen_at(&mut app, 20, at(0));
+        assert_eq!(app.spin_due(at(0)), Some(shows), "nothing shows before");
+        screen_at(&mut app, 20, shows);
+        assert_eq!(app.spin_due(shows), Some(shows + spinner::DOTS_FRAME));
+
+        // The location menu waits for its places: a shine crosses the skeleton of its rows.
+        let Effect::ListPlaces { .. } = one(app.handle(action(Action::LocationMenuRight))) else {
+            panic!("expected the places");
+        };
+        let opened = shows + spinner::DOTS_FRAME;
+        screen_at(&mut app, 20, opened);
+        let shines = opened + spinner::DELAY;
+        let text = screen_at(&mut app, 20, shines);
+        assert_eq!(
+            app.spin_due(shines),
+            Some(shines + spinner::SHINE_STEP),
+            "{text}"
+        );
     }
 
     #[test]

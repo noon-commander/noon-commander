@@ -307,6 +307,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The Connection dialog of a lost or failed host no longer keeps the screen drawing 25 times a
   second for as long as it waits, as after a laptop slept: the panels that wait for the host show
   its marker of a failure in their titles, still, rather than red dots that turned.
+- Waits that only turn dots, as a panel that reads a directory or connects, or the title of the
+  viewer, draw half as many frames: one for each frame of the dots, 12 a second, rather than 25.
 
 ## [0.2.0] - 2026-10-14
 

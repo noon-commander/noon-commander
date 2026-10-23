@@ -61,7 +61,9 @@ too, which some users want and others do not, apart from windows.
   the wait showed, divided by its step, so every spinner on screen moves together, and tests draw a
   given instant. `App::spin_due` tells the event loop when the next frame is due: when a `Wait`
   starts to show, the next step of a spinner, or the next second of a job's clock. Nothing waiting,
-  the loop sleeps until an event.
+  the loop sleeps until an event. A `Wait` remembers the last frame that drew its shine: the next
+  step is 40 ms after such a frame, and 80 ms, a frame of the dots, after one with the dots alone:
+  each frame draws the whole screen, and at 40 ms every other one drew the same dots again.
 - **Settings of their own.** A new section, `[animations]`, holds `windows` (the frames of windows,
   which was `ui.animations`) and `spinners`, both on by default, each a check box under Animations
   in the Configuration dialog. `ui.animations` is gone with no fallback, before the first release; a
@@ -107,7 +109,8 @@ too, which some users want and others do not, apart from windows.
 - A new place that waits keeps a `Wait`, gives it to `App::waits`, and draws `Spin::wait` with
   `Spin::wait_dots` in its title, with a skeleton where rows or text are to come. It needs no tick
   of its own.
-- The event loop wakes at most every 40 ms while a spinner shows, and not at all before 150 ms.
+- The event loop wakes at most every 40 ms while a shine shows, every 80 ms while dots alone
+  turn, and not at all before 150 ms.
 - Spinners and windows are turned off apart. Configs with `ui.animations` must move it to
   `animations.windows`.
 - The glyphs of spinners live in `glyphs.rs`, in `Spinners`, by `ui.icons`.

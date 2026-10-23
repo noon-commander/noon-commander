@@ -1772,7 +1772,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   connections made or ended, in a queue of their own, so the dots of a host connecting can be
   watched in the location menu. Each frame goes out as synchronized output (`draw_whole` in
   `tui/mod.rs`), so the cursor of a field does not show on its way through the cells a shine
-  changes.
+  changes. A spinner's next frame is due 40 ms after a frame that drew the shine of its `Wait`,
+  which remembers it, else 80 ms later, the next frame of the dots.
 - **Glyphs.** Every special character the UI draws is in `tui/glyphs.rs`: `Glyphs::NERD` and
   `Glyphs::PLAIN`, which `ui.icons` picks and the theme carries (`Theme.glyphs`), with the icons
   and markers of kinds, hosts, and volumes, the glyph of root, the scroll bars, the marks of text

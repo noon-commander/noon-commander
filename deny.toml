@@ -10,7 +10,10 @@ targets = [
 all-features = true
 
 [advisories]
-ignore = []
+# Advisories with no fixed release to move to; drop an entry once cargo-deny reports it unused.
+ignore = [
+    { id = "RUSTSEC-2026-0374", reason = "basic-toml is unmaintained; only the proc macros of i18n-embed use it, to read i18n.toml at build time; cargo-i18n moved to toml after i18n-config 0.4.8, in no release yet" },
+]
 
 [licenses]
 # Every license here must be compatible with GPL-3.0-or-later.

@@ -15,7 +15,7 @@ use noc_ops::{Algorithm, Conflict, CopyOptions, Decision, Sum};
 use noc_scroll::Motion;
 use noc_scroll::scrollbar::{self, Part};
 use noc_tools::zoxide::Scored;
-use noc_vfs::{FileKind, Location, Metadata, RemotePath, Volume};
+use noc_vfs::{DirEntry, FileKind, Location, Metadata, RemotePath, Volume};
 use noc_viewer::{
     Command as ViewerCommand, Part as ViewerPart, Progress as ReadProgress, Sizes as ViewerSizes,
     Styles as ViewerStyles, Taken, Viewer, Want,
@@ -5172,7 +5172,10 @@ impl App {
                     fl!("delete-file", name = name)
                 }
             }
-            many => fl!("delete-many", count = many.len()),
+            many => {
+                let (files, dirs) = files_and_dirs(many);
+                fl!("delete-many", files = files, dirs = dirs)
+            }
         };
         let names = chosen.iter().map(|entry| entry.name.clone()).collect();
         let dir = panel.location().clone();
@@ -5257,8 +5260,14 @@ impl App {
             ([], _) => return,
             ([entry], JobKind::Move) => fl!("move-one", name = prompt_name(&entry.name)),
             ([entry], _) => fl!("copy-one", name = prompt_name(&entry.name)),
-            (many, JobKind::Move) => fl!("move-many", count = many.len()),
-            (many, _) => fl!("copy-many", count = many.len()),
+            (many, kind) => {
+                let (files, dirs) = files_and_dirs(many);
+                if kind == JobKind::Move {
+                    fl!("move-many", files = files, dirs = dirs)
+                } else {
+                    fl!("copy-many", files = files, dirs = dirs)
+                }
+            }
         };
         let names = chosen.iter().map(|entry| entry.name.clone()).collect();
         let other = self.panel(self.active.other()).location().clone();
@@ -5630,7 +5639,10 @@ impl App {
             [] => return,
             [entry] if single_file => fl!("checksum-one", name = cells::sanitize(&entry.name)),
             [entry] => fl!("checksum-directory", name = cells::sanitize(&entry.name)),
-            many => fl!("checksum-many", count = many.len()),
+            many => {
+                let (files, dirs) = files_and_dirs(many);
+                fl!("checksum-many", files = files, dirs = dirs)
+            }
         };
         let names: Vec<Vec<u8>> = chosen.iter().map(|entry| entry.name.clone()).collect();
         let dir = panel.location().clone();
@@ -7908,6 +7920,13 @@ fn prompt_name(name: &[u8]) -> String {
     label::escape(&cells::sanitize(name))
 }
 
+/// How many of `entries` are files and how many directories, counted as the panel's frame
+/// counts them: a symlink to a directory is a directory.
+fn files_and_dirs(entries: &[&DirEntry]) -> (usize, usize) {
+    let dirs = entries.iter().filter(|entry| entry.is_dir_like()).count();
+    (entries.len() - dirs, dirs)
+}
+
 /// The label of an action in the F-key bar.
 fn fkey_label(action: Action) -> Option<String> {
     match action {
@@ -10040,7 +10059,7 @@ mod tests {
 
         app.handle(action(Action::InvertMarks));
         app.handle(action(Action::Delete));
-        assert!(screen(&mut app).contains("Delete 2 files and directories?"));
+        assert!(screen(&mut app).contains("Delete 2 files?"));
         let (_, targets, _, _) = delete_job(app.handle(action(Action::Confirm)));
         assert_eq!(targets, [local("/srv/a.txt"), local("/srv/b.txt")]);
     }
@@ -10594,6 +10613,42 @@ mod tests {
             text.contains("Cannot move to /srv: the source and the target are the same"),
             "{text}"
         );
+    }
+
+    #[test]
+    fn f5_f6_and_f8_count_the_marked_files_and_directories() {
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
+        let mut link = dir("link");
+        link.metadata.kind = FileKind::Symlink;
+        link.target_kind = Some(FileKind::Dir);
+        let entries = vec![dir("a"), dir("b"), link, file("c", 1), file("d", 2)];
+        answer(&mut app, effects, &Listing::Dir(entries));
+        app.handle(action(Action::Home));
+        app.handle(action(Action::Down));
+        for _ in 0..5 {
+            app.handle(action(Action::Mark));
+        }
+        let asks = [
+            (Action::Copy, "Copy 2 files and 3 directories to:"),
+            (Action::Move, "Move 2 files and 3 directories to:"),
+            (Action::Delete, "Delete 2 files and 3 directories?"),
+        ];
+        for (ask, question) in asks {
+            app.handle(action(ask));
+            let text = screen(&mut app);
+            assert!(text.contains(question), "{text}");
+            app.handle(action(Action::Cancel));
+            assert!(app.dialogs.is_empty(), "{question}");
+        }
+
+        let mut app = loaded();
+        app.handle(action(Action::Home));
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Mark));
+        app.handle(action(Action::Mark));
+        app.handle(action(Action::Copy));
+        let text = screen(&mut app);
+        assert!(text.contains("Copy 2 directories to:"), "{text}");
     }
 
     #[test]
@@ -12823,7 +12878,7 @@ mod tests {
         app.handle(action(Action::Checksum));
         let text = screen_of(&mut app, 20);
         assert!(
-            text.contains("Checksums of 2 files and directories"),
+            text.contains("Checksums of 1 file and 1 directory with:"),
             "{text}"
         );
         assert!(!text.contains("Expected"), "{text}");

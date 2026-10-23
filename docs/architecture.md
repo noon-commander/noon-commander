@@ -1275,7 +1275,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   keeps the field on its entry; the field goes with the entry or when the panel goes elsewhere.
 - **F8 deletes** the marked entries, or the one under the cursor, after a red question with Yes as
   the default, as in mc: `Delete file "x"?`, `Delete directory "x" and everything in it?`, or
-  `Delete 3 files and directories?`. mc asks a second time before it goes into a directory that is
+  `Delete 2 files and 1 directory?`. mc asks a second time before it goes into a directory that is
   not empty; Noon Commander says so in the first question instead. The job runs in a task of its
   own, or in the host's task, with a window that shows what it counts, the entry at hand, a gauge,
   and done/total; Esc or Abort stops it. A failure asks in a red dialog, with mc's buttons: Ignore,

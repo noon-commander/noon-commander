@@ -205,6 +205,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   several entries, the limit of the search of a tree, and the sizes in the question about a taken
   name; a translation gets the number itself, never `1` written out. The units of sizes, the marks
   of a time and a speed not known yet, and the percentage of a job's gauge are in the messages.
+- F5, F6, F8, and `f #` on several entries say how many are files and how many directories, as
+  `Copy 2 files and 1 directory to:`, `Move 3 files to:`, or `Delete 2 directories?`, rather than
+  `2 files and directories`. Symlinks to directories count as directories, as on the panel's
+  frame.
 - Quick search, the filters of the lists, `g +` and `g -`, and the completion of paths match
   names in either Unicode form, so a name that macOS keeps in NFD matches the accented letter
   typed, and ignore case by full case folding, so `strasse` finds `Straße`; the highlight covers

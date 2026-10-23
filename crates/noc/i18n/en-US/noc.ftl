@@ -1000,15 +1000,37 @@ quit-jobs = { $count ->
        *[other] { $count } jobs are still running. Quit and stop them?
     }
 
+## The marked entries that F8, F5, F6, and f # take (src/tui/app). Prefix: marked-.
+
+# How many of them are files and how many directories, in the messages that name them, which
+# pass on their own $files and $dirs; symlinks to directories count as directories. One of the
+# two may be 0, never both.
+marked-entries = { $dirs ->
+        [0] { $files ->
+                [one] { $files } file
+               *[other] { $files } files
+            }
+       *[other] { $files ->
+                [0] { $dirs ->
+                        [one] { $dirs } directory
+                       *[other] { $dirs } directories
+                    }
+               *[other] { $files ->
+                        [one] { $files } file
+                       *[other] { $files } files
+                    } and { $dirs ->
+                        [one] { $dirs } directory
+                       *[other] { $dirs } directories
+                    }
+            }
+    }
+
 ## Deleting, F8 (src/tui/app). Prefix: delete-. As in mc.
 
 delete-title = Delete
 delete-file = Delete file "{ $name }"?
 delete-directory = Delete directory "{ $name }" and everything in it?
-delete-many = { $count ->
-        [one] Delete { $count } file or directory?
-       *[other] Delete { $count } files and directories?
-    }
+delete-many = Delete { marked-entries }?
 # Above the entry the job works on.
 delete-deleting = Deleting
 delete-error = Cannot delete { $path }: { $reason }
@@ -1019,10 +1041,7 @@ copy-title = Copy
 # Above the target field, which opens with the other panel's directory, or with the name itself
 # after Shift+F5; the & marks its letter.
 copy-one = &Copy "{ $name }" to:
-copy-many = { $count ->
-        [one] &Copy { $count } file or directory to:
-       *[other] &Copy { $count } files and directories to:
-    }
+copy-many = &Copy { marked-entries } to:
 copy-preserve = &Preserve attributes
 # Above the entry the job works on.
 copy-copying = Copying
@@ -1051,10 +1070,7 @@ duplicate-not-utf8 = "{ $name }" cannot be edited: the name is not valid UTF-8; 
 
 move-title = Move
 move-one = &Move "{ $name }" to:
-move-many = { $count ->
-        [one] &Move { $count } file or directory to:
-       *[other] &Move { $count } files and directories to:
-    }
+move-many = &Move { marked-entries } to:
 move-moving = Moving
 move-error = Cannot move to { $path }: { $reason }
 
@@ -1082,10 +1098,7 @@ checksum-title = Checksum
 # Above the algorithms. Directories count with the files in them.
 checksum-one = Checksum of "{ $name }" with:
 checksum-directory = Checksums of the files in "{ $name }" with:
-checksum-many = { $count ->
-        [one] Checksums of { $count } file or directory with:
-       *[other] Checksums of { $count } files and directories with:
-    }
+checksum-many = Checksums of { marked-entries } with:
 # Above a field for a checksum to compare with, as a download page gives it.
 checksum-expected = &Expected checksum (optional; paste it):
 # A check box: also hash the file under the cursor of the other panel, and compare the two.

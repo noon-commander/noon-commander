@@ -2462,11 +2462,13 @@ mod tests {
             Dialog::form("Title", &message, "", checks, 60)
         };
         let preserve = [(fl!("copy-preserve"), true)];
+        let copy_many = fl!("copy-many", files = 1, dirs = 1);
+        let move_many = fl!("move-many", files = 1, dirs = 1);
         let forms = [
             ("copy", form(fl!("copy-one", name = "R&&D"), &preserve)),
-            ("copy many", form(fl!("copy-many", count = 2), &preserve)),
+            ("copy many", form(copy_many, &preserve)),
             ("move", form(fl!("move-one", name = "x"), &[])),
-            ("move many", form(fl!("move-many", count = 2), &[])),
+            ("move many", form(move_many, &[])),
             ("mkdir", form(fl!("mkdir-prompt"), &[])),
             ("quick cd", form(fl!("cd-prompt"), &[])),
             ("save checksums", form(fl!("checksum-save-prompt"), &[])),

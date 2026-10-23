@@ -90,21 +90,23 @@ pub(crate) fn theme_names() -> &'static [&'static str] {
 }
 
 /// Hands `first` to the app, and every result after it that waits in `done`, so that they draw
-/// once: jobs report every entry.
+/// once: jobs report every entry. Whether the screen changes with any of them.
 fn take_all_done(
     app: &mut App,
     tasks: &mut Tasks,
     done: &mut mpsc::UnboundedReceiver<Done>,
     first: Done,
-) {
-    take_done(app, tasks, first);
+) -> bool {
+    let mut changes = take_done(app, tasks, first);
     while let Ok(next) = done.try_recv() {
-        take_done(app, tasks, next);
+        changes |= take_done(app, tasks, next);
     }
+    changes
 }
 
-/// Hands finished background work to the app, and runs what the app asks for next.
-fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
+/// Hands finished background work to the app, and runs what the app asks for next. Whether
+/// the screen changes with it: not with every report of a job in the background.
+fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) -> bool {
     match done {
         Done::Listed {
             panel,
@@ -117,7 +119,11 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
             location,
             result,
         } => tasks.run(app.created(panel, &location, result)),
-        Done::Job { id, event } => tasks.run(app.job_event(id, event)),
+        Done::Job { id, event } => {
+            let (effects, changes) = app.job_report(id, event);
+            tasks.run(effects);
+            return changes;
+        }
         Done::Read { id, result } => tasks.run(app.read(id, result)),
         Done::ReadProgress { id, progress } => app.read_progress(id, progress),
         Done::Detected(tool, detected) => app.detected(tool, detected),
@@ -169,6 +175,7 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) {
             result,
         } => tasks.run(app.entry_renamed(panel, &from, &to, result)),
     }
+    true
 }
 
 /// The time zone, from /etc/localtime, and the formats of the region, put to use, from the
@@ -342,8 +349,8 @@ pub(crate) async fn run(
             },
             () = sleep_until(timer) => key_time(&mut app, &mut tasks, &mut keys),
             Some(job) = done.recv() => {
-                take_all_done(&mut app, &mut tasks, &mut done, job);
-                idle = !pace.came(Instant::now());
+                let changes = take_all_done(&mut app, &mut tasks, &mut done, job);
+                idle = !(changes && pace.came(Instant::now()));
             }
             () = sleep_until(pace.due) => pace.release(Instant::now()),
             // A window growing or shrinking, a spinner, or a clock needs its next frame.

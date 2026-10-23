@@ -309,6 +309,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   its marker of a failure in their titles, still, rather than red dots that turned.
 - Waits that only turn dots, as a panel that reads a directory or connects, or the title of the
   viewer, draw half as many frames: one for each frame of the dots, 12 a second, rather than 25.
+- A job in the background draws the screen only when the percentage in the corner changes, about
+  once a second for a large copy, rather than up to 25 times a second for every chunk it moves.
 
 ## [0.2.0] - 2026-10-14
 

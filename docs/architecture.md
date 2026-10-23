@@ -793,7 +793,9 @@ does not compile without.
   that reports every entry does not draw every entry. Results of background work draw at most
   once every 40 ms (`Pace` in `tui/mod.rs`): a copy reports every chunk, hundreds a second, each
   apart from the next, and drew a frame for each. Keys and the mouse draw at once, and so do
-  results after a quiet spell.
+  results after a quiet spell. A report of a job in the background draws nothing unless the
+  percentage in the corner changes (`App::job_report`); its window and the list of jobs, when
+  open, show every report.
 - Every request carries a generation number, so stale replies (for example, a listing of a
   directory the user has already left) are dropped.
 - The UI task never awaits network I/O.

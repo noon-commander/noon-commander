@@ -2454,6 +2454,12 @@ impl App {
         self.jobs.iter().find(|job| !job.background)
     }
 
+    /// Whether the screen shows all of how far `job` is, in its window or in the list of jobs,
+    /// rather than only its share of the corner.
+    fn watched(&self, job: &Job) -> bool {
+        !job.background || self.jobs_list.is_some()
+    }
+
     /// The help screen, for the keymap and the settings, where it was when it closed last.
     fn help_screen(&self) -> Help {
         Help::new(&self.keymap, &self.about).at(self.help_spot)
@@ -5440,6 +5446,22 @@ impl App {
         });
     }
 
+    /// Takes a report from the job `id`, as [`App::job_event`] does, and tells whether the
+    /// screen changes with it. A job in the background reports every chunk it moves, hundreds a
+    /// second, while the corner shows only how far the jobs there are together, in percent: the
+    /// screen draws when that changes, not for every report.
+    pub(crate) fn job_report(&mut self, id: u64, event: JobEvent) -> (Vec<Effect>, bool) {
+        let progress = matches!(event, JobEvent::Scanning { .. } | JobEvent::Progress { .. });
+        let unseen = progress
+            && self
+                .jobs
+                .iter()
+                .any(|job| job.id == id && !self.watched(job));
+        let corner = self.corner();
+        let effects = self.job_event(id, event);
+        (effects, !unseen || self.corner() != corner)
+    }
+
     /// Takes a report from the job `id`: progress for its window, a failure for a dialog
     /// that waits for an answer, or its end.
     pub(crate) fn job_event(&mut self, id: u64, event: JobEvent) -> Vec<Effect> {
@@ -6909,7 +6931,7 @@ impl App {
         let timed = self
             .jobs
             .iter()
-            .any(|job| job.view.ticking() && (!job.background || self.jobs_list.is_some()));
+            .any(|job| job.view.ticking() && self.watched(job));
         if timed {
             at(drawn + CLOCK_FRAME);
         }
@@ -7303,12 +7325,15 @@ impl App {
         })
     }
 
-    /// The jobs in the background at the top right of `area`, where Far has its clock: how
-    /// many, and how far they are together.
-    fn render_jobs(&self, frame: &mut Frame<'_>, area: Rect) {
+    /// What the corner shows of the jobs in the background: how many, and how far they are
+    /// together, in percent; nothing without any, or while the viewer covers the panels.
+    fn corner(&self) -> Option<(usize, u64)> {
+        if self.viewing.is_some() {
+            return None;
+        }
         let behind: Vec<&Job> = self.jobs.iter().filter(|job| job.background).collect();
         if behind.is_empty() {
-            return;
+            return None;
         }
         let ratio = behind.iter().map(|job| job.view.ratio()).sum::<f64>();
         // A few jobs, each at 0 … 1.
@@ -7318,9 +7343,18 @@ impl App {
             clippy::cast_precision_loss
         )]
         let percent = (ratio / behind.len() as f64 * 100.0).round() as u64;
+        Some((behind.len(), percent))
+    }
+
+    /// The jobs in the background at the top right of `area`, where Far has its clock: how
+    /// many, and how far they are together.
+    fn render_jobs(&self, frame: &mut Frame<'_>, area: Rect) {
+        let Some((count, percent)) = self.corner() else {
+            return;
+        };
         let text = format!(
             " {} ",
-            fl!("jobs-running", count = behind.len(), percent = percent)
+            fl!("jobs-running", count = count, percent = percent)
         );
         // Inside the corner of the right panel's frame.
         let room = usize::from(area.width.saturating_sub(2));
@@ -10106,6 +10140,45 @@ mod tests {
         assert!(!screen(&mut app).contains(" job"));
         app.handle(action(Action::Quit));
         assert!(app.quits(), "nothing to ask");
+    }
+
+    #[test]
+    fn a_job_in_the_background_draws_when_its_percentage_changes() {
+        let mut app = loaded();
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        let (id, _, _, _) = delete_job(app.handle(action(Action::Confirm)));
+        let changes = |app: &mut App, done| {
+            let progress = JobEvent::Progress {
+                current: local("/srv/left/a"),
+                done,
+                total: 1000,
+                bytes_done: 0,
+                bytes_total: 0,
+                bytes_copied: 0,
+            };
+            let (effects, changes) = app.job_report(id, progress);
+            assert!(effects.is_empty());
+            changes
+        };
+        assert!(changes(&mut app, 1), "its window shows every report");
+        assert!(changes(&mut app, 2));
+
+        app.handle(action(Action::Confirm));
+        assert!(screen(&mut app).contains(" 1 job 0% "));
+        assert!(!changes(&mut app, 3), "still 0%");
+        assert!(changes(&mut app, 10));
+        assert!(screen(&mut app).contains(" 1 job 1% "));
+        assert!(!changes(&mut app, 11));
+
+        app.handle(action(Action::Jobs));
+        assert!(changes(&mut app, 12), "the list of jobs shows every report");
+        app.handle(action(Action::Cancel));
+        assert!(app.jobs_list.is_none());
+        assert!(!changes(&mut app, 13));
+
+        let (_, changes) = app.job_report(id, JobEvent::Finished { complete: true });
+        assert!(changes, "its end shows");
     }
 
     #[test]

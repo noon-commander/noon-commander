@@ -1,6 +1,6 @@
 # 0030. Search modes
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0033](0033-letters-in-dialogs.md), Ctrl+s in place of Alt+r
 - Date: 2026-10-16
 - Amends: [ADR 0016](0016-fuzzy-search.md), [ADR 0027](0027-search-of-a-whole-tree.md),
   [ADR 0029](0029-files-and-directories-with-fd.md)
@@ -15,7 +15,7 @@ the other way, the user goes there, changes it for every list, and comes back. N
 says which way a search matches, so a search that finds nothing does not tell a missing name from
 the wrong mode.
 
-Neither way takes a regular expression, which the search of a tree takes with Alt+r
+Neither way takes a regular expression, which the search of a tree takes with a check box
 ([ADR 0027](0027-search-of-a-whole-tree.md), [ADR 0029](0029-files-and-directories-with-fd.md)):
 `^\d` for the names that start with a digit, `\.(jpe?g|png)$` for images.
 
@@ -26,9 +26,11 @@ Neither way takes a regular expression, which the search of a tree takes with Al
   escaped, as `\S` is not.
 - **`ui.search_mode`** (`"plain"`, `"fzf"`, `"regex"`; `"fzf"` by default) replaces
   `ui.fuzzy_search`. The old key is not read: it is an unknown key, as any other.
-- **Alt+r switches the mode** of the search or the window it is pressed in, round: plain, fzf,
-  regex. It is the search of a tree's key for regular expressions. The mode lasts until the search
-  ends or the window closes; the next one starts in `ui.search_mode` again. Nothing is saved.
+- **Ctrl+s switches the mode** of the search or the window it is pressed in, round: plain, fzf,
+  regex. It is the search of a tree's key for regular expressions too. The mode lasts until the
+  search ends or the window closes; the next one starts in `ui.search_mode` again. Nothing is saved.
+  Alt+r was the key first, which an Esc and a quick `r` arrived as;
+  [ADR 0033](0033-letters-in-dialogs.md) made it Ctrl+s.
   `n` and `N` match the last search the way it matched.
 - **A glyph after the word of the prompt** says which mode, as in `Filter ~:`:
   nf-cod-whole_word, nf-md-approximately_equal, and nf-cod-regex with icons; `=`, `~`, and `.*`
@@ -37,11 +39,11 @@ Neither way takes a regular expression, which the search of a tree takes with Al
   says, in place of the rows.
 - **The search of a tree (`g /`) starts in the search mode too**, and its check box of regular
   expressions goes. It has no fzf mode, ripgrep and fd matching a pattern rather than ranking
-  names, so there `fzf` is regex, which the check box was by default. Alt+r switches its text
+  names, so there `fzf` is regex, which the check box was by default. Ctrl+s switches its text
   between plain and regex, for this dialog only, and the label of the field says which:
   `Text .*:`. The check box of case stays.
 - **The zoxide window** asks zoxide for every directory and filters them itself in the fzf and
-  regex modes, and gives zoxide the keywords in the plain mode, as before; Alt+r going to or
+  regex modes, and gives zoxide the keywords in the plain mode, as before; Ctrl+s going to or
   from the plain mode asks zoxide again.
 - **One engine for regular expressions**: the new `noc-pattern` crate builds them, with the
   `regex` crate, smart case, and the last line of its error, for the regex mode and for fd's
@@ -64,6 +66,6 @@ Neither way takes a regular expression, which the search of a tree takes with Al
 - A `config.toml` with `ui.fuzzy_search` does not load until the key is removed or changed to
   `search_mode`; Noon Commander is pre-alpha, and the error names the key.
 - `noc-tools` depends on `noc-pattern`, which depends on no other `noc-*` crate.
-- Alt+r is one action everywhere, `search_mode`; in the search of a tree it goes round two modes
+- Ctrl+s is one action everywhere, `search_mode`; in the search of a tree it goes round two modes
   rather than three. `toggle_regex` goes.
 - The dialog of `g /` is a line shorter.

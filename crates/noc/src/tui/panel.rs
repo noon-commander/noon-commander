@@ -1,5 +1,6 @@
 //! A panel that lists a local or remote directory.
 
+use std::cell::Cell;
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::ops::RangeInclusive;
@@ -471,6 +472,8 @@ pub(crate) struct Panel {
     wait: Wait,
     /// Quick search, while it runs.
     search: Option<Search>,
+    /// Where the last render drew the glyph of how quick search matches, for the mouse.
+    search_glyph: Cell<Option<Rect>>,
     /// The entry under the cursor, while its name is edited in its row.
     renaming: Option<Renaming>,
     /// The row where Visual mode started, while it selects the rows from there to the cursor.
@@ -536,6 +539,7 @@ impl Panel {
             working: Vec::new(),
             wait: Wait::default(),
             search: None,
+            search_glyph: Cell::new(None),
             renaming: None,
             visual: None,
             last_visual: None,
@@ -575,6 +579,7 @@ impl Panel {
             working: Vec::new(),
             wait: Wait::default(),
             search: None,
+            search_glyph: Cell::new(None),
             renaming: None,
             visual: None,
             last_visual: None,
@@ -1048,6 +1053,14 @@ impl Panel {
     /// Whether quick search runs.
     pub(crate) fn searching(&self) -> bool {
         self.search.is_some()
+    }
+
+    /// Whether quick search runs and switches how it matches, which puts Ctrl+s in front of its
+    /// keys (ADR 0045).
+    pub(crate) fn search_switches(&self) -> bool {
+        self.search
+            .as_ref()
+            .is_some_and(|search| search.input.switchable())
     }
 
     /// What quick search has typed, while it runs.
@@ -2033,40 +2046,15 @@ impl Panel {
     fn render_status(&self, frame: &mut Frame<'_>, area: Rect, active: bool, view: &View<'_>) {
         let theme = view.theme;
         let width = usize::from(area.width);
-        let mut status_style = (Style::new(), theme.truncated);
-        // Quick search, whose glyph of its mode has a style of its own.
-        let mut searching = None;
-        // A symlink under the cursor, with its target.
-        let mut linked = None;
+        self.search_glyph.set(None);
+        if let Some(search) = &self.search {
+            self.render_search(frame, area, active, (search, theme));
+            return;
+        }
+        let status_style = (Style::new(), theme.truncated);
+        let (status, linked) = self.cursor_status(view);
         // The size of the file under the cursor, every byte of it.
-        let mut size = None;
-        let status = if let Some(search) = &self.search {
-            let field = &search.field;
-            status_style = (theme.quick_search, theme.truncated_cursor);
-            let invalid = self.finder().is_some_and(|finder| finder.error().is_some());
-            let mark = search.input.mark(invalid, theme.quick_search, theme);
-            let prompt = Prompt::new(|text| {
-                if search.back {
-                    fl!("panel-search-back", mode = mark.glyph, text = text)
-                } else {
-                    fl!("panel-search", mode = mark.glyph, text = text)
-                }
-            });
-            let (shown, column) = field.visible(width.saturating_sub(prompt.width()));
-            if active {
-                let column =
-                    u16::try_from(cells::width(&prompt.before) + column).unwrap_or(u16::MAX);
-                let x = area.x.saturating_add(column).min(area.right() - 1);
-                frame.set_cursor_position((x, area.y));
-            }
-            searching = Some(mark.spans(&prompt, &shown, theme.quick_search));
-            prompt.with(&shown)
-        } else {
-            let (status, link) = self.cursor_status(view);
-            linked = link;
-            size = self.cursor_size(view.formats);
-            status
-        };
+        let size = self.cursor_size(view.formats);
         let mut line = Line::default().style(status_style.0);
         let mut room = width;
         // At the right, as in Far, while the name keeps some room.
@@ -2075,17 +2063,67 @@ impl Panel {
             .filter(|size| cells::width(size) + MIN_NAME_WIDTH <= room);
         room -= size.as_deref().map_or(0, cells::width);
         let marks = theme.glyphs.marks;
-        // What is typed is not of the host.
-        let typed = searching.is_some();
-        let fitted = match (searching, linked) {
-            (Some(spans), _) => cells::fit_spans(spans, room, status_style, marks),
-            (None, Some(linked)) => linked.fit(&status, room, status_style, marks),
-            (None, None) => cells::fit(&status, room, Align::Left, status_style, marks),
+        let fitted = match linked {
+            Some(linked) => linked.fit(&status, room, status_style, marks),
+            None => cells::fit(&status, room, Align::Left, status_style, marks),
         };
         line.spans.extend(fitted);
         line.spans.extend(size.map(Span::raw));
-        let line = if typed { line } else { self.toned(line) };
+        frame.render_widget(self.toned(line), area);
+    }
+
+    /// The status line of quick search, at `area`: what is typed after its prompt, with the
+    /// cursor in the active panel, and the glyph of how it matches at the right end, crossed
+    /// out while what is typed is no regular expression (ADR 0045). What is typed is not of
+    /// the host, so it is never toned down.
+    fn render_search(
+        &self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        active: bool,
+        (search, theme): (&Search, &Theme),
+    ) {
+        let width = usize::from(area.width);
+        let style = (theme.quick_search, theme.truncated_cursor);
+        let invalid = self.finder().is_some_and(|finder| finder.error().is_some());
+        let mark = search.input.mark(invalid, theme.quick_search, theme);
+        let prompt = Prompt::new(|text| {
+            if search.back {
+                fl!("panel-search-back", text = text)
+            } else {
+                fl!("panel-search", text = text)
+            }
+        });
+        // The glyph, when what is typed keeps some room.
+        let glyph = Some(mark.width()).filter(|glyph| prompt.width() + glyph < width);
+        let room = width - glyph.unwrap_or(0);
+        let (shown, column) = search.field.visible(room.saturating_sub(prompt.width()));
+        if active {
+            let column = u16::try_from(cells::width(&prompt.before) + column).unwrap_or(u16::MAX);
+            let x = area.x.saturating_add(column).min(area.right() - 1);
+            frame.set_cursor_position((x, area.y));
+        }
+        let text = prompt.with(&shown);
+        let spans = vec![Span::styled(text, theme.quick_search)];
+        let mut line = Line::from(cells::fit_spans(spans, room, style, theme.glyphs.marks))
+            .style(theme.quick_search);
+        if let Some(glyph) = glyph {
+            let at = area.x + u16::try_from(width - glyph + 1).unwrap_or(u16::MAX);
+            line.spans.push(Span::raw(" "));
+            line.spans.push(Span::styled(mark.glyph, mark.style));
+            let drawn = Rect::new(at, area.y, u16::try_from(glyph - 1).unwrap_or(0), 1);
+            self.search_glyph.set(Some(drawn));
+        }
         frame.render_widget(line, area);
+    }
+
+    /// Whether `at` is on the glyph of how quick search matches, where the last render drew it.
+    pub(crate) fn search_glyph_at(&self, at: Position) -> bool {
+        self.search.is_some()
+            && self
+                .search_glyph
+                .get()
+                .is_some_and(|glyph| glyph.contains(at))
     }
 
     /// `line` toned down if it shows what the panel kept from a host that is not connected.
@@ -3246,11 +3284,18 @@ mod tests {
         let hosts = |_: &str| HostState::default();
         let mut terminal = render_with(&mut panel, (40, 6), true, &hosts, Decor::new(false));
         let plain = Theme::terminal().glyphs.search_modes.plain;
-        let status = format!("║Search {plain}: Bo");
-        assert!(terminal.backend().to_string().contains(&status));
+        let screen = terminal.backend().to_string();
+        let status = screen
+            .lines()
+            .find(|line| line.contains("║Search: Bo"))
+            .unwrap();
+        assert!(
+            status.contains(&format!(" {plain}║")),
+            "the glyph of how it matches at the right end: {status}"
+        );
         assert_eq!(
             terminal.get_cursor_position().unwrap(),
-            Position::new(13, 4),
+            Position::new(11, 4),
             "after the text"
         );
         let end = panel.end_search();
@@ -3550,12 +3595,10 @@ mod tests {
         typed(&mut panel, "c");
         panel.search_edit(Action::TextStart);
         let mut terminal = render_with(&mut panel, (40, 6), true, &hosts, Decor::new(false));
-        let plain = Theme::terminal().glyphs.search_modes.plain;
-        let status = format!("║Search {plain}: c");
-        assert!(terminal.backend().to_string().contains(&status));
+        assert!(terminal.backend().to_string().contains("║Search: c"));
         assert_eq!(
             terminal.get_cursor_position().unwrap(),
-            Position::new(11, 4),
+            Position::new(9, 4),
             "on the text cursor"
         );
     }

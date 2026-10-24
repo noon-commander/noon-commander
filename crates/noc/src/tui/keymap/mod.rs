@@ -26,7 +26,7 @@ use std::time::{Duration, Instant};
 use crokey::KeyCombination;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-pub(crate) use action::{Action, Context, Mode};
+pub(crate) use action::{Action, Context, Mode, Place};
 
 /// How long a sequence such as `g g` waits for its next key.
 pub(crate) const SEQUENCE_TIMEOUT: Duration = Duration::from_secs(1);
@@ -147,8 +147,7 @@ impl Bindings {
 /// The keys of a command typed so far.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct KeyState {
-    mode: Option<Mode>,
-    context: Option<Context>,
+    place: Option<Place>,
     keys: Sequence,
     deadline: Option<Instant>,
     /// When the last key of the pending sequence came.
@@ -179,9 +178,9 @@ impl KeyState {
         self.deadline
     }
 
-    /// The mode and the context of the keys typed last.
-    pub(crate) fn place(&self) -> Option<(Mode, Context)> {
-        Some((self.mode?, self.context?))
+    /// Where the keys typed last went.
+    pub(crate) fn place(&self) -> Option<Place> {
+        self.place
     }
 
     /// What the pending command has typed so far, as vim's `showcmd` shows it, in the order it
@@ -279,8 +278,7 @@ pub(crate) struct Hint {
 /// The hints to show: the keys typed so far, and the keys that can follow them in `context`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Hints {
-    pub(crate) mode: Mode,
-    pub(crate) context: Context,
+    pub(crate) place: Place,
     /// The keys typed so far as the help writes them; `None` while none is typed.
     pub(crate) typed: Option<String>,
     /// The keys typed so far.
@@ -334,14 +332,13 @@ impl Keymap {
         self.bindings.get(&(mode, context))
     }
 
-    /// What the first context in `context`'s chain that knows `keys` knows about them, in
-    /// `mode`. A prefix that this context does not bind itself does, once it times out, what a
-    /// later context binds it to.
-    fn lookup(&self, mode: Mode, context: Context, keys: &[KeyCombination]) -> Lookup {
-        let mut known = context
-            .chain(mode)
-            .iter()
-            .filter_map(|context| self.bindings(mode, *context))
+    /// What the first context in `place`'s chain that knows `keys` knows about them. A prefix
+    /// that this context does not bind itself does, once it times out, what a later context
+    /// binds it to.
+    fn lookup(&self, place: Place, keys: &[KeyCombination]) -> Lookup {
+        let mut known = place
+            .chain()
+            .filter_map(|context| self.bindings(place.mode, context))
             .map(|bindings| bindings.lookup(keys))
             .filter(|lookup| *lookup != Lookup::Unknown);
         match known.next() {
@@ -360,22 +357,22 @@ impl Keymap {
             .is_some_and(|own| own.lookup(keys) != Lookup::Unknown)
     }
 
-    /// Feeds one key press, typed in `mode` where `context` has the keys. Returns what to do
-    /// now; nothing while a command waits for its next key. A change of `mode` or `context`
-    /// forgets a pending command, and closes the hints.
+    /// Feeds one key press, typed where `place` says. Returns what to do now; nothing while a
+    /// command waits for its next key. A change of place forgets a pending command, and closes
+    /// the hints.
     pub(crate) fn feed(
         &self,
         state: &mut KeyState,
-        (mode, context): (Mode, Context),
+        place: impl Into<Place>,
         event: KeyEvent,
         now: Instant,
     ) -> Vec<Typed> {
-        if state.hinting && state.place() == Some((mode, context)) {
+        let place = place.into();
+        if state.hinting && state.place() == Some(place) {
             let key = KeyCombination::from(event);
             let mut keys = state.keys.clone();
             keys.push(key);
-            let continues =
-                !state.keys.is_empty() && self.lookup(mode, context, &keys) != Lookup::Unknown;
+            let continues = !state.keys.is_empty() && self.lookup(place, &keys) != Lookup::Unknown;
             if !continues && (key == ESC || key == CTRL_BRACKET) {
                 state.drop_command();
                 state.hinting = false;
@@ -391,7 +388,7 @@ impl Keymap {
                 return Vec::new();
             }
         }
-        let typed = self.feed_key(state, (mode, context), event, now);
+        let typed = self.feed_key(state, place, event, now);
         if state.keys.is_empty() {
             state.hinting = false;
         }
@@ -401,15 +398,15 @@ impl Keymap {
     fn feed_key(
         &self,
         state: &mut KeyState,
-        (mode, context): (Mode, Context),
+        place: Place,
         event: KeyEvent,
         now: Instant,
     ) -> Vec<Typed> {
-        if state.place() != Some((mode, context)) {
+        let Place { mode, context, .. } = place;
+        if state.place() != Some(place) {
             state.reset();
             state.hinting = false;
-            state.mode = Some(mode);
-            state.context = Some(context);
+            state.place = Some(place);
         }
         let key = KeyCombination::from(event);
         if let Some((action, _)) = state.awaiting.take() {
@@ -440,14 +437,14 @@ impl Keymap {
             && state.keys.is_empty()
             && let Some(plain) = without_alt(event)
             && let Some(c) = text(plain)
-            && self.lookup(mode, context, &[key]) == Lookup::Unknown
+            && self.lookup(place, &[key]) == Lookup::Unknown
         {
             // The letter is the command: a count typed before it goes with nothing.
             state.reset();
             return vec![Typed::from(Resolved::Hotkey(c))];
         }
         state.keys.push(key);
-        match self.lookup(mode, context, &state.keys) {
+        match self.lookup(place, &state.keys) {
             // The hints show what can follow a count or a register, which wait for it, as they
             // do after the first key of a sequence.
             Lookup::Exact(Action::KeyHints)
@@ -484,20 +481,17 @@ impl Keymap {
                 state.keys.pop();
                 // The key of the hints shows what can follow the keys typed so far; again, it
                 // gives the hints the keys.
-                if self.lookup(mode, context, &[key]) == Lookup::Exact(Action::KeyHints) {
+                if self.lookup(place, &[key]) == Lookup::Exact(Action::KeyHints) {
                     if state.hinting {
                         return Self::focus_hints(state);
                     }
-                    self.show_hints(state, (mode, context));
+                    self.show_hints(state, place);
                     return Vec::new();
                 }
                 // In Normal and Visual mode, as in vim, a key that cannot go on with a
                 // sequence that does nothing alone gives up both, as `g x` or Ctrl+w and a key
                 // that names no panel: run alone, it would do what was never asked.
-                let own = matches!(
-                    self.lookup(mode, context, &state.keys),
-                    Lookup::Prefix(Some(_))
-                );
+                let own = matches!(self.lookup(place, &state.keys), Lookup::Prefix(Some(_)));
                 if mode != Mode::Insert && !own {
                     state.drop_command();
                     return Vec::new();
@@ -506,7 +500,7 @@ impl Keymap {
                 // a key of its own, which may be a count, text, or the character an action
                 // waits for.
                 let mut typed = self.settle(state);
-                typed.extend(self.feed_key(state, (mode, context), event, now));
+                typed.extend(self.feed_key(state, place, event, now));
                 typed
             }
         }
@@ -601,11 +595,11 @@ impl Keymap {
     }
 
     fn settle(&self, state: &mut KeyState) -> Vec<Typed> {
-        let Some((mode, context)) = state.place() else {
+        let Some(place) = state.place() else {
             state.reset();
             return Vec::new();
         };
-        match self.lookup(mode, context, &state.keys) {
+        match self.lookup(place, &state.keys) {
             Lookup::Prefix(Some(action)) | Lookup::Exact(action) => {
                 Self::resolve(state, action).into_iter().collect()
             }
@@ -627,24 +621,26 @@ impl Keymap {
     pub(crate) fn alt_as_esc(
         &self,
         state: &KeyState,
-        (mode, context): (Mode, Context),
+        place: impl Into<Place>,
         event: KeyEvent,
     ) -> Option<KeyEvent> {
+        let place = place.into();
+        let Place { mode, context, .. } = place;
         let applies = mode != Mode::Normal || context.alt_stands_for_esc();
         if !applies || context.alt_letters_are_hotkeys() {
             return None;
         }
         let key = KeyCombination::from(event);
-        let here = state.place() == Some((mode, context));
+        let here = state.place() == Some(place);
         if here && !state.keys.is_empty() {
             let mut keys = state.keys.clone();
             keys.push(key);
-            if self.lookup(mode, context, &keys) != Lookup::Unknown {
+            if self.lookup(place, &keys) != Lookup::Unknown {
                 return None;
             }
         }
         let plain = alt_off(event)?;
-        (self.lookup(mode, context, &[key]) == Lookup::Unknown).then_some(plain)
+        (self.lookup(place, &[key]) == Lookup::Unknown).then_some(plain)
     }
 
     /// The actions `context` binds itself in `mode`, in the order of the preset, each with its
@@ -657,7 +653,7 @@ impl Keymap {
             .into_iter()
             .flat_map(|bindings| &bindings.0);
         for (sequence, action) in own {
-            let does = match self.lookup(mode, context, sequence) {
+            let does = match self.lookup(Place::from((mode, context)), sequence) {
                 Lookup::Exact(bound) | Lookup::Prefix(Some(bound)) => bound == *action,
                 Lookup::Prefix(None) | Lookup::Unknown => false,
             };
@@ -679,16 +675,12 @@ impl Keymap {
     /// The first key sequence along `context`'s chain that does `action` there in Normal mode,
     /// as text such as `g t`, for the pull-down menu.
     pub(crate) fn key(&self, context: Context, action: Action) -> Option<String> {
-        let mode = Mode::Normal;
-        let does = |sequence: &[KeyCombination]| match self.lookup(mode, context, sequence) {
+        let place = Place::from((Mode::Normal, context));
+        let does = |sequence: &[KeyCombination]| match self.lookup(place, sequence) {
             Lookup::Exact(bound) | Lookup::Prefix(Some(bound)) => bound == action,
             Lookup::Prefix(None) | Lookup::Unknown => false,
         };
-        context
-            .chain(mode)
-            .iter()
-            .filter_map(|context| self.bindings(mode, *context))
-            .flat_map(|bindings| &bindings.0)
+        self.chain_bindings(place)
             .find(|(sequence, bound)| *bound == action && does(sequence))
             .map(|(sequence, _)| describe(sequence))
     }
@@ -698,7 +690,7 @@ impl Keymap {
         std::array::from_fn(|index| {
             let number = u8::try_from(index + 1).unwrap_or_else(|_| unreachable!());
             let key = KeyCombination::one_key(KeyCode::F(number), KeyModifiers::NONE);
-            match self.lookup(mode, context, &[key]) {
+            match self.lookup(Place::from((mode, context)), &[key]) {
                 Lookup::Exact(action) | Lookup::Prefix(Some(action)) => Some(action),
                 Lookup::Prefix(None) | Lookup::Unknown => None,
             }
@@ -709,45 +701,39 @@ impl Keymap {
     /// they show already, or for a sequence that does something alone, which has none. Until
     /// then the sequence does not time out.
     pub(crate) fn hints_due(&self, state: &KeyState, delay: Duration) -> Option<Instant> {
-        let (mode, context) = state.place()?;
+        let place = state.place()?;
         let since = state.since?;
         let hinted = !state.hinting
             && !state.keys.is_empty()
-            && self.lookup(mode, context, &state.keys) == Lookup::Prefix(None);
+            && self.lookup(place, &state.keys) == Lookup::Prefix(None);
         hinted.then_some(since + delay)
     }
 
-    /// Shows the hints in `mode` and `context`: of the keys that can follow the pending
-    /// sequence, or of every key while none is pending. They show until a key ends the
-    /// sequence.
-    pub(crate) fn show_hints(&self, state: &mut KeyState, (mode, context): (Mode, Context)) {
-        if state.place() != Some((mode, context)) {
+    /// Shows the hints where `place` says: of the keys that can follow the pending sequence,
+    /// or of every key while none is pending. They show until a key ends the sequence.
+    pub(crate) fn show_hints(&self, state: &mut KeyState, place: impl Into<Place>) {
+        let place = place.into();
+        if state.place() != Some(place) {
             state.reset();
-            state.mode = Some(mode);
-            state.context = Some(context);
+            state.place = Some(place);
         }
         state.hinting = true;
         // A sequence that does something alone still does it when it times out.
-        if state.keys.is_empty() || self.lookup(mode, context, &state.keys) == Lookup::Prefix(None)
-        {
+        if state.keys.is_empty() || self.lookup(place, &state.keys) == Lookup::Prefix(None) {
             state.deadline = None;
         }
     }
 
-    /// The hints that show in `mode` and `context`, if they do.
-    pub(crate) fn hints_of(
-        &self,
-        state: &KeyState,
-        (mode, context): (Mode, Context),
-    ) -> Option<Hints> {
-        if !state.hinting || state.place() != Some((mode, context)) {
+    /// The hints that show where `place` says, if they do.
+    pub(crate) fn hints_of(&self, state: &KeyState, place: impl Into<Place>) -> Option<Hints> {
+        let place = place.into();
+        if !state.hinting || state.place() != Some(place) {
             return None;
         }
-        let rows = self.hints((mode, context), &state.keys);
+        let rows = self.hints(place, &state.keys);
         let typed = (!state.keys.is_empty()).then(|| describe(&state.keys));
         (!rows.is_empty()).then_some(Hints {
-            mode,
-            context,
+            place,
             typed,
             prefix: state.keys.clone(),
             rows,
@@ -760,12 +746,14 @@ impl Keymap {
     /// commas. The hints leave out the same keys as [`hints`](Self::hints).
     pub(crate) fn sequences(
         &self,
-        (mode, context): (Mode, Context),
+        place: impl Into<Place>,
         prefix: &[KeyCombination],
     ) -> Vec<Hint> {
+        let place = place.into();
+        let Place { mode, context, .. } = place;
         let mut seen: Vec<&Sequence> = Vec::new();
         let mut rows: Vec<Hint> = Vec::new();
-        for (sequence, action) in self.chain_bindings(mode, context) {
+        for (sequence, action) in self.chain_bindings(place) {
             if sequence.len() <= prefix.len()
                 || !sequence.starts_with(prefix)
                 || seen.contains(&sequence)
@@ -779,7 +767,7 @@ impl Keymap {
             let text = matches!(sequence.as_slice(), [key] if mode == Mode::Insert
                 && is_character(*key)
                 && !self.binds_itself(mode, context, sequence));
-            let does = match self.lookup(mode, context, sequence) {
+            let does = match self.lookup(place, sequence) {
                 Lookup::Exact(bound) | Lookup::Prefix(Some(bound)) => bound == *action,
                 Lookup::Prefix(None) | Lookup::Unknown => false,
             };
@@ -807,13 +795,11 @@ impl Keymap {
     /// longer sequences has one of its own. `Esc` and `Ctrl+[`, which close the hints, are left
     /// out, and in Insert mode, so are characters that only a fallback context binds, which are
     /// text.
-    pub(crate) fn hints(
-        &self,
-        (mode, context): (Mode, Context),
-        prefix: &[KeyCombination],
-    ) -> Vec<Hint> {
+    pub(crate) fn hints(&self, place: impl Into<Place>, prefix: &[KeyCombination]) -> Vec<Hint> {
+        let place = place.into();
+        let Place { mode, context, .. } = place;
         let mut next: Vec<KeyCombination> = Vec::new();
-        for (sequence, _) in self.chain_bindings(mode, context) {
+        for (sequence, _) in self.chain_bindings(place) {
             if sequence.len() > prefix.len()
                 && sequence.starts_with(prefix)
                 && sequence
@@ -836,9 +822,9 @@ impl Keymap {
             }
             let mut keys = prefix.to_vec();
             keys.push(key);
-            let (action, longer) = match self.lookup(mode, context, &keys) {
+            let (action, longer) = match self.lookup(place, &keys) {
                 Lookup::Exact(action) => (Some(action), 0),
-                Lookup::Prefix(action) => (action, self.count_under(mode, context, &keys)),
+                Lookup::Prefix(action) => (action, self.count_under(place, &keys)),
                 Lookup::Unknown => continue,
             };
             let text = describe_key(key);
@@ -860,25 +846,20 @@ impl Keymap {
         hints
     }
 
-    /// The bindings of `context`'s chain in `mode`, most specific first.
-    fn chain_bindings(
-        &self,
-        mode: Mode,
-        context: Context,
-    ) -> impl Iterator<Item = &(Sequence, Action)> {
-        context
-            .chain(mode)
-            .iter()
-            .filter_map(move |context| self.bindings(mode, *context))
+    /// The bindings of `place`'s chain, most specific first.
+    fn chain_bindings(&self, place: Place) -> impl Iterator<Item = &(Sequence, Action)> {
+        place
+            .chain()
+            .filter_map(move |context| self.bindings(place.mode, context))
             .flat_map(|bindings| &bindings.0)
     }
 
-    /// How many sequences longer than `prefix` that start with it do something in `context`.
-    fn count_under(&self, mode: Mode, context: Context, prefix: &[KeyCombination]) -> usize {
+    /// How many sequences longer than `prefix` that start with it do something in `place`.
+    fn count_under(&self, place: Place, prefix: &[KeyCombination]) -> usize {
         let mut counted: Vec<&Sequence> = Vec::new();
-        for (sequence, _) in self.chain_bindings(mode, context) {
+        for (sequence, _) in self.chain_bindings(place) {
             let does = matches!(
-                self.lookup(mode, context, sequence),
+                self.lookup(place, sequence),
                 Lookup::Exact(_) | Lookup::Prefix(Some(_))
             );
             if sequence.len() > prefix.len()

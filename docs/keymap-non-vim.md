@@ -157,7 +157,6 @@ not:
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
 | --- | --- | --- | --- | --- | --- |
-| Ctrl+s | `search_mode` | noc | Ctrl+s (noc) | Same | Switch how the search matches, round: as it is, as fzf does, or as a regular expression ([ADR 0030](adr/0030-search-modes.md)); the search of a tree and the filters of the lists take it too. vim binds no Ctrl+s in Normal mode, in Insert mode, or on its command line; terminals stop their output with it (XOFF), which raw mode turns off, so it arrives, as a byte of its own without the kitty keyboard protocol too. Ctrl+x is vim's to subtract in Normal mode and to start completion in Insert mode, as Ctrl+x Ctrl+f completes file names; Ctrl+Shift+s arrives as Ctrl+s without the protocol, and kitty takes it to paste from the selection. mc's Ctrl+s searches again, which Ctrl+g does here, as on vim's command line. It replaced Alt+r, which an Esc and a quick r arrived as, so that Esc then r switched the mode rather than give the search up and rename ([ADR 0033](adr/0033-letters-in-dialogs.md)). |
 | Up<br>Down<br>PgUp<br>PgDn | `up`<br>`down`<br>`page_up`<br>`page_down` | mc | — | Same | End the search and move in the panel, as in mc. On vim's command line they go through the history. |
 | F1<br>F3<br>F4<br>F5<br>Shift+F5<br>F6<br>Shift+F6<br>F7<br>F8<br>F9<br>Shift+F9<br>F10 | `help`<br>`view`<br>`edit`<br>`copy`<br>`duplicate`<br>`move`<br>`rename`<br>`mkdir`<br>`delete`<br>`pull_down`<br>`pull_down_last`<br>`quit` | mc | — | Same | End the search and do what they do in the panel, as in mc ([ADR 0022](adr/0022-vim-modes.md)). |
 | Shift+F7 | `next_match` | mc, Far | Ctrl+g (vim) | Same | The next match, with their key to search again. |
@@ -195,6 +194,12 @@ not:
 | --- | --- | --- | --- | --- | --- |
 | F10 | `cancel` | mc | Ctrl+c (vim) | Same | As in `dialog`. |
 
+## Fields that search (`search_input`, Insert and Normal mode)
+
+| Keys | Action | From | Vim-style keys | Without kitty | Why |
+| --- | --- | --- | --- | --- | --- |
+| Ctrl+s | `search_mode` | noc | Ctrl+s (noc) | Same | Switch how the field with the focus matches, round through the ways it has: as it is, as fzf does, as a regular expression, or as a pattern ([ADR 0030](adr/0030-search-modes.md), [ADR 0045](adr/0045-ctrl-s-switches-the-field-typed-in.md)): quick search, the filter of a list while it takes text, and the text of the search of a tree; nowhere else, so that two such fields in one dialog never ask which. vim binds no Ctrl+s in Normal mode, in Insert mode, or on its command line; terminals stop their output with it (XOFF), which raw mode turns off, so it arrives, as a byte of its own without the kitty keyboard protocol too. Ctrl+x is vim's to subtract in Normal mode and to start completion in Insert mode, as Ctrl+x Ctrl+f completes file names; Ctrl+Shift+s arrives as Ctrl+s without the protocol, and kitty takes it to paste from the selection. mc's Ctrl+s searches again, which Ctrl+g does here, as on vim's command line. It replaced Alt+r, which an Esc and a quick r arrived as, so that Esc then r switched the mode rather than give the search up and rename ([ADR 0033](adr/0033-letters-in-dialogs.md)). |
+
 ## Viewer (`viewer`, Normal mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
@@ -208,14 +213,12 @@ not:
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
 | --- | --- | --- | --- | --- | --- |
-| Ctrl+s | `search_mode` | noc | Ctrl+s (noc) | Same | As in quick search, for the filter, until the window closes. |
 | q<br>F10 | `cancel` | less, ranger, mc | Esc, Ctrl+c (vim); q (less, ranger) | Same | As in `dialog`; F10 closes mc's lists too. |
 
 ## Lists (`list`, Insert mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
 | --- | --- | --- | --- | --- | --- |
-| Ctrl+s | `search_mode` | noc | Ctrl+s (noc) | Same | As in Normal mode. |
 | F10 | `cancel` | mc | Ctrl+c (vim) | Same | As in Normal mode. |
 
 ## Location menu (`location_menu`, Normal mode)
@@ -286,4 +289,3 @@ not:
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
 | --- | --- | --- | --- | --- | --- |
 | F3<br>F4 | `view`<br>`edit` | mc, Far | — | Same | View the file of the row from its line, or edit it at the line, as in the results of mc's and Far's Find file. |
-| Ctrl+s | `search_mode` | noc | Ctrl+s (noc) | Same | Take the text as a regular expression or as it is, wherever the focus is, as Ctrl+s switches the mode of quick search ([ADR 0030](adr/0030-search-modes.md), [ADR 0033](adr/0033-letters-in-dialogs.md)). Case, VS Code's Alt+c, is the check box Match case, whose letter is c, as under `dialog`. |

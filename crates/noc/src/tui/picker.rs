@@ -21,7 +21,7 @@ use super::dialog::{
 use super::glyphs;
 use super::keymap::{Action, Mode, Resolved};
 use super::loading::Loading;
-use super::mouse::{Drawn, Pointer};
+use super::mouse::{Drawn, Pointer, Press};
 use super::scroll::Window;
 use super::search::{Case, Input, Kind, Prompt, Way};
 use super::spinner::Spin;
@@ -68,8 +68,8 @@ pub(crate) enum MenuLine {
     Heading(String),
 }
 
-/// Makes the words around the filter of the glyph of its search mode and its text.
-pub(crate) type MakePrompt = fn(&'static str, String) -> String;
+/// Makes the words around the filter of its text.
+pub(crate) type MakePrompt = fn(String) -> String;
 
 /// What a window draws in its box.
 #[derive(Debug, Default)]
@@ -174,6 +174,8 @@ pub(crate) struct Picker {
     drawn: Drawn,
     /// The scroll bar of the lines at the last render, on the right of the frame.
     bar: Option<Bar>,
+    /// Where the last render drew the glyph of how the filter matches, if a click switches it.
+    glyph: Option<Rect>,
 }
 
 impl Picker {
@@ -196,6 +198,7 @@ impl Picker {
             pages: 1,
             drawn: Drawn::default(),
             bar: None,
+            glyph: None,
         }
     }
 
@@ -230,6 +233,12 @@ impl Picker {
     /// fzf mode, while the filter has text. Their groups then do not hold.
     pub(crate) fn ranked(&self) -> bool {
         self.filters() && self.input.way() == Way::Fzf && !self.filter.text().is_empty()
+    }
+
+    /// Whether the filter takes the keys and switches how it matches, which puts Ctrl+s in front
+    /// of the keys of the window (ADR 0045).
+    pub(crate) fn switches(&self) -> bool {
+        self.filtering && self.input.switchable()
     }
 
     /// The mode keys are typed in: Insert while the filter takes them.
@@ -461,8 +470,16 @@ impl Picker {
 
     /// Takes a press of the mouse, where the window was drawn last: a click puts the cursor on
     /// a row, and returns the key that a double click on one, or a click outside the window,
-    /// stands for: Enter or Esc.
+    /// stands for: Enter or Esc. A click on the glyph of how the filter matches gives the filter
+    /// the keys and stands for Ctrl+s.
     pub(crate) fn pointer(&mut self, pointer: Pointer) -> Option<Action> {
+        if self.glyph.is_some_and(|glyph| glyph.contains(pointer.at)) {
+            if pointer.press != Press::Click {
+                return None;
+            }
+            self.filtering = true;
+            return Some(Action::SearchMode);
+        }
         self.drawn.menu_press(pointer, &mut self.cursor)
     }
 
@@ -505,12 +522,14 @@ impl Picker {
             ..Drawn::default()
         };
         self.bar = None;
+        self.glyph = None;
         if inner.height < 3 || inner.width < 4 {
             return;
         }
         let width = usize::from(inner.width);
         let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
-        self.draw_filter(frame, inner, theme, (body.prompt, body.note));
+        let glyph = self.draw_filter(frame, inner, theme, (body.prompt, body.note));
+        self.glyph = glyph.filter(|_| self.input.switchable());
 
         self.page = usize::from(inner.height.saturating_sub(2 + below)).max(1);
         let rows = self.len();
@@ -592,16 +611,17 @@ impl Picker {
         })
     }
 
-    /// The filter, a text field in the colors of those of dialogs after its prompt, with its
-    /// cursor while it takes text, and the note at the right, on the first line of `inner`; a
-    /// line under them. The line joins the frame, as the one over the buttons of a dialog does.
+    /// The filter, a text field in the colors of those of dialogs after its prompt, which ends
+    /// with the glyph of how it matches, with its cursor while it takes text, and the note at
+    /// the right, on the first line of `inner`; a line under them. The line joins the frame, as
+    /// the one over the buttons of a dialog does. Returns where the glyph is.
     fn draw_filter(
         &self,
         frame: &mut Frame<'_>,
         inner: Rect,
         theme: &Theme,
         (prompt, note): (Option<MakePrompt>, Option<Line<'static>>),
-    ) {
+    ) -> Option<Rect> {
         let width = usize::from(inner.width);
         let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
         let note = note.map(|note| {
@@ -627,10 +647,12 @@ impl Picker {
             Some(note) => width.saturating_sub(note.iter().map(Span::width).sum::<usize>() + 1),
             None => width,
         };
-        let mark = self.input.mark(self.error.is_some(), theme.dialog, theme);
+        let mark = self
+            .input
+            .mark(self.error.is_some(), theme.dialog_input, theme);
         let prompt = Prompt::new(|text| match prompt {
-            Some(prompt) => prompt(mark.glyph, text),
-            None => fl!("picker-filter", mode = mark.glyph, text = text),
+            Some(prompt) => prompt(text),
+            None => fl!("picker-filter", text = text),
         });
         if let Some(mut note) = note {
             note.insert(0, Span::raw(" "));
@@ -641,7 +663,7 @@ impl Picker {
         }
         let area = Rect::new(inner.x, inner.y, u16::try_from(room).unwrap_or(u16::MAX), 1);
         let field = (&prompt, &self.filter);
-        let column = mark.render_field(frame, area, field, theme.dialog, theme);
+        let (column, glyph) = mark.render_field(frame, area, field, theme.dialog, theme);
         if self.filtering {
             frame.set_cursor_position(Position::new(
                 inner.x.saturating_add(column).min(inner.right() - 1),
@@ -649,6 +671,7 @@ impl Picker {
             ));
         }
         draw_separator(frame, inner, inner.y + 1, Colors::of(theme, false), theme);
+        glyph
     }
 }
 

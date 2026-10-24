@@ -44,7 +44,7 @@ use super::jobs::{JobsEvent, JobsList, Row};
 use super::jump::{JumpEvent, JumpMenu};
 use super::key_hints::{KeyHintsEvent, KeyHintsWindow};
 use super::keymap::{
-    Action, Context, Extra, Hints, KeyState, Keyboard, Keymap, Mode, Resolved, Typed,
+    self, Action, Context, Extra, Hints, KeyState, Keyboard, Keymap, Mode, Resolved, Typed,
 };
 use super::label::{self, Label};
 use super::machine::{self, Machine};
@@ -882,7 +882,7 @@ pub(crate) struct App {
     /// state has them.
     hints: Option<Hints>,
     /// The key hints were asked for, with every key of this mode and context.
-    hints_asked: Option<(Mode, Context)>,
+    hints_asked: Option<keymap::Place>,
     /// The key hints with the keys, after Ctrl+k while they show: over everything, the dialogs
     /// too.
     key_hints: Option<KeyHintsWindow>,
@@ -1263,17 +1263,17 @@ impl App {
 
     /// The mode and the context whose every key the key hints were asked for, since the last
     /// call.
-    pub(crate) fn take_hints_asked(&mut self) -> Option<(Mode, Context)> {
+    pub(crate) fn take_hints_asked(&mut self) -> Option<keymap::Place> {
         self.hints_asked.take()
     }
 
     /// Shows the key hints that `keys` has, if any, and what its pending command has typed,
     /// from the next render.
     pub(crate) fn set_hints(&mut self, keys: &KeyState) {
-        self.hints = self.keymap.hints_of(keys, self.place());
+        self.hints = self.keymap.hints_of(keys, self.key_place());
         // Keys typed where the keys no longer go, as under a dialog that opened, are forgotten
         // at the next key.
-        self.showcmd = if keys.place() == Some(self.place()) {
+        self.showcmd = if keys.place() == Some(self.key_place()) {
             keys.showcmd()
         } else {
             String::new()
@@ -1375,6 +1375,13 @@ impl App {
             return self.pointer_command_line(pointer);
         }
         if self.panel(self.active).renaming() {
+            return Vec::new();
+        }
+        // A click on the glyph of quick search switches how it matches, as Ctrl+s does.
+        if self.panel(self.active).search_glyph_at(at) {
+            if press == Press::Click {
+                return self.handle(Resolved::Action(Action::SearchMode));
+            }
             return Vec::new();
         }
         if let Some(index) = self
@@ -2048,6 +2055,43 @@ impl App {
         (self.mode(), self.context())
     }
 
+    /// Where the next key goes, for the keymap: the mode, the context, and whether the field
+    /// that has the keys switches how it searches (ADR 0045).
+    pub(crate) fn key_place(&self) -> keymap::Place {
+        let (mode, context) = self.place();
+        keymap::Place {
+            mode,
+            context,
+            search: self.search_focused(),
+        }
+    }
+
+    /// Whether the field that has the keys switches how it searches: quick search, the filter
+    /// of a list while it takes text, or such a field of a dialog.
+    fn search_focused(&self) -> bool {
+        match self.context() {
+            Context::QuickSearch => self.panel(self.active).search_switches(),
+            Context::KeyHints => self
+                .key_hints
+                .as_ref()
+                .is_some_and(KeyHintsWindow::switches),
+            Context::LocationMenu => self.menu.as_ref().is_some_and(LocationMenu::switches),
+            Context::TabMenu => self.tab_menu.as_ref().is_some_and(TabMenu::switches),
+            Context::Jump => self.jump.as_ref().is_some_and(JumpMenu::switches),
+            Context::Workspaces => {
+                (self.workspaces_window.as_ref()).is_some_and(WorkspacesWindow::switches)
+            }
+            Context::CommandHistory => {
+                (self.history_window.as_ref()).is_some_and(HistoryWindow::switches)
+            }
+            Context::DialogInput | Context::PathInput => {
+                (self.dialogs.front()).is_some_and(|open| open.dialog.search_focused())
+            }
+            Context::FindInput => self.find.as_ref().is_some_and(FindWindow::search_focused),
+            _ => false,
+        }
+    }
+
     /// The operator that a text field with the keys has waiting for its motion, as `showcmd`
     /// shows it.
     /// The editor of the text field that has the keys, if one does.
@@ -2101,7 +2145,7 @@ impl App {
         let split = if self.typing_secret() {
             None
         } else {
-            self.keymap.alt_as_esc(keys, self.place(), key)
+            self.keymap.alt_as_esc(keys, self.key_place(), key)
         };
         let (first, then) = match split {
             Some(plain) => (KeyEvent::from(KeyCode::Esc), Some(plain)),
@@ -2122,7 +2166,7 @@ impl App {
 
     fn feed(&mut self, keys: &mut KeyState, key: KeyEvent, now: Instant) -> Vec<Effect> {
         keys.set_operator(self.pending_operator().is_some());
-        let typed = self.keymap.feed(keys, self.place(), key, now);
+        let typed = self.keymap.feed(keys, self.key_place(), key, now);
         self.take_typed(keys, typed)
     }
 
@@ -2878,9 +2922,9 @@ impl App {
             // The hints show their keys over what is in front, which stays open; again while
             // they show, they take the keys, as a list.
             Action::KeyHints => {
-                let place = self.place();
+                let place = self.key_place();
                 match self.hints.take() {
-                    Some(hints) if (hints.mode, hints.context) == place => {
+                    Some(hints) if hints.place == place => {
                         let mode = self.config.ui.search_mode;
                         let window = KeyHintsWindow::new(&self.keymap, &hints, self.extra, mode);
                         self.key_hints = Some(window);
@@ -6272,17 +6316,13 @@ impl App {
             fl!("pattern-unselect")
         };
         let options = &self.pattern_options;
-        let input = Input::new(search::Kind::MARK, options.way);
-        let prompt = fl!(
-            "pattern-text",
-            mode = input.glyph(self.theme.glyphs.search_modes)
-        );
         let checks = [
             (fl!("pattern-files-only"), options.files_only),
             (fl!("pattern-case-sensitive"), options.case_sensitive),
         ];
-        let dialog = Dialog::form(&title, &prompt, &options.pattern, &checks)
-            .with_width(PATTERN_DIALOG_WIDTH);
+        let dialog = Dialog::form(&title, &fl!("pattern-text"), &options.pattern, &checks)
+            .with_width(PATTERN_DIALOG_WIDTH)
+            .with_search(0, Input::new(search::Kind::MARK, options.way));
         let panel = self.shown(self.active);
         self.dialogs.push_back(Open {
             dialog,
@@ -6298,7 +6338,7 @@ impl App {
         }
         let options = PatternOptions {
             pattern: dialog.text().to_owned(),
-            way: self.pattern_options.way,
+            way: dialog.way(0).unwrap_or(self.pattern_options.way),
             files_only: dialog.checked(0),
             case_sensitive: dialog.checked(1),
         };
@@ -7556,6 +7596,7 @@ fn window_kind(context: Context) -> Option<String> {
         | Context::Global
         | Context::List
         | Context::Input
+        | Context::SearchInput
         | Context::UserScreen => return None,
     };
     Some(kind)
@@ -8235,12 +8276,25 @@ mod tests {
         screen_of(app, 9)
     }
 
-    /// What the prompt of quick search or of a filter shows in the search mode of the
-    /// settings: `prompt`, the glyph of the mode, and `text`.
-    fn prompt(app: &App, prompt: &str, text: &str) -> String {
-        let glyphs = app.theme.glyphs.search_modes;
-        let glyph = Way::from(app.config.ui.search_mode).glyph(glyphs);
-        format!("{prompt} {glyph}: {text}")
+    /// What the prompt of quick search or of a filter shows: `prompt` and `text`. The glyph of
+    /// how it matches is at the end of the field.
+    fn prompt(prompt: &str, text: &str) -> String {
+        format!("{prompt}: {text}")
+    }
+
+    /// Whether the status line shows quick search with `text` typed, and `glyph` at its right
+    /// end.
+    fn searching(app: &mut App, text: &str, glyph: &str) -> bool {
+        let screen = screen(app);
+        let end = format!(" {glyph}║");
+        screen
+            .lines()
+            .any(|line| line.contains(&format!("║Search: {text}")) && line.contains(&end))
+    }
+
+    /// The glyph of how quick search or a filter matches in the search mode of the settings.
+    fn glyph(app: &App) -> &'static str {
+        Way::from(app.config.ui.search_mode).glyph(app.theme.glyphs.search_modes)
     }
 
     /// The screen once spinners that start now show, with what they wait for.
@@ -8948,7 +9002,7 @@ mod tests {
         let mut app = with_files(&["a1", "b2", "a3", "b4"]);
         app.config.ui.search_mode = SearchMode::Plain;
         keys(&mut app, &["shift-g", "?"]);
-        assert!(screen(&mut app).contains(&prompt(&app, "Search up", "")));
+        assert!(screen(&mut app).contains(&prompt("Search up", "")));
         keys(&mut app, &["a", "enter"]);
         assert_eq!(cursor_name(&app, Side::Left), "a3");
         keys(&mut app, &["n"]);
@@ -9022,7 +9076,8 @@ mod tests {
         let text = screen_of(&mut app, 24);
         assert!(
             text.contains("Find in /srv")
-                && text.contains(&format!("Text {}:", app.theme.glyphs.search_modes.regex))
+                && text.contains("Text:")
+                && text.contains(&format!(" {} ║", app.theme.glyphs.search_modes.regex))
                 && text.contains("1 line"),
             "{text}"
         );
@@ -9296,10 +9351,10 @@ mod tests {
         keys(&mut app, &["\"", "a", "y", "y", "esc", "t", "n", "t", "h"]);
         app.paste("srv");
         assert_eq!(app.place(), (Mode::Insert, Context::TabMenu));
-        assert!(screen_of(&mut app, 16).contains(&prompt(&app, "Filter", "srv")));
+        assert!(screen_of(&mut app, 16).contains(&prompt("Filter", "srv")));
         // Ctrl+r types a register there, as in a text field.
         keys(&mut app, &["ctrl-u", "ctrl-r", "a"]);
-        assert!(screen_of(&mut app, 16).contains(&prompt(&app, "Filter", "report.pdf")));
+        assert!(screen_of(&mut app, 16).contains(&prompt("Filter", "report.pdf")));
     }
 
     #[test]
@@ -9308,7 +9363,7 @@ mod tests {
         keys(&mut app, &["t", "n", "t", "h"]);
         assert_eq!(app.place(), (Mode::Insert, Context::TabMenu));
         keys(&mut app, &["x"]);
-        assert!(screen_of(&mut app, 16).contains(&prompt(&app, "Filter", "x")));
+        assert!(screen_of(&mut app, 16).contains(&prompt("Filter", "x")));
         keys(&mut app, &["backspace", "esc"]);
         assert_eq!(app.place(), (Mode::Normal, Context::TabMenu));
         keys(&mut app, &["/"]);
@@ -9324,6 +9379,62 @@ mod tests {
             keys(&mut app, opens);
             assert_eq!(app.mode(), Mode::Insert, "after {opens:?}");
         }
+    }
+
+    /// Where `glyph` ends a field on the line of `screen` that holds `text`.
+    fn glyph_cell(screen: &str, text: &str, glyph: &str) -> Position {
+        let (y, line) = (screen.lines().enumerate())
+            .find(|(_, line)| line.contains(text))
+            .unwrap_or_else(|| panic!("no {text:?} in {screen}"));
+        let at = [format!(" {glyph}║"), format!(" {glyph} ║")]
+            .iter()
+            .find_map(|end| line.find(end.as_str()))
+            .unwrap_or_else(|| panic!("no {glyph:?} at the end of a field in {line}"));
+        // The test backend quotes each line, and a blank comes before the glyph.
+        let x = line[..at].chars().count();
+        Position::new(u16::try_from(x).unwrap(), u16::try_from(y).unwrap())
+    }
+
+    #[test]
+    fn ctrl_s_and_a_click_on_its_glyph_switch_how_the_field_with_the_focus_matches() {
+        let mut app = loaded();
+        let glyphs = app.theme.glyphs.search_modes;
+        // Quick search, whose glyph ends the status line.
+        app.config.ui.search_mode = SearchMode::Plain;
+        app.handle(action(Action::QuickSearch));
+        app.handle(Resolved::Insert('r'));
+        assert!(app.key_place().search, "Ctrl+s goes before its keys");
+        let at = glyph_cell(&screen_of(&mut app, 12), "║Search: r", glyphs.plain);
+        assert!(press(&mut app, Press::Click, at.x, at.y).is_empty());
+        assert!(searching(&mut app, "r", glyphs.fzf), "the search goes on");
+        keys(&mut app, &["esc"]);
+        // A list, whose filter has the focus while it takes the keys.
+        app.config.ui.search_mode = SearchMode::Fzf;
+        keys(&mut app, &["t", "n", "t", "h"]);
+        keys(&mut app, &["x"]);
+        let screen = screen_of(&mut app, 16);
+        let at = glyph_cell(&screen, &prompt("Filter", "x"), glyph(&app));
+        keys(&mut app, &["esc"]);
+        assert!(!app.key_place().search, "the rows have the focus");
+        keys(&mut app, &["ctrl-s"]);
+        glyph_cell(&screen_of(&mut app, 16), &prompt("Filter", "x"), glyphs.fzf);
+        press(&mut app, Press::Click, at.x, at.y);
+        assert_eq!(
+            app.place(),
+            (Mode::Insert, Context::TabMenu),
+            "the filter takes the keys"
+        );
+        glyph_cell(
+            &screen_of(&mut app, 16),
+            &prompt("Filter", "x"),
+            glyphs.regex,
+        );
+        keys(&mut app, &["ctrl-s"]);
+        glyph_cell(
+            &screen_of(&mut app, 16),
+            &prompt("Filter", "x"),
+            glyphs.plain,
+        );
     }
 
     #[test]
@@ -9759,9 +9870,10 @@ mod tests {
         assert!(text.contains("Select"));
         let glob = app.theme.glyphs.search_modes.glob;
         assert!(
-            text.contains(&format!("Pattern {glob}:")),
-            "the glyph of shell patterns, as every field that searches shows its way: {text}"
+            text.contains("Pattern:") && text.contains(&format!(" {glob} ║")),
+            "the glyph of shell patterns ends the field, as every field that searches shows its way: {text}"
         );
+        assert!(!app.key_place().search, "one way: no Ctrl+s");
         retype(&mut app, "*.md");
         app.handle(action(Action::Confirm));
         assert_eq!(app.context(), Context::Panel);
@@ -12534,7 +12646,7 @@ mod tests {
         assert!(keys(&mut app, &["/", "r"]).is_empty());
         assert_eq!(app.context(), Context::QuickSearch);
         let shown = screen(&mut app);
-        assert!(shown.contains(&prompt(&app, "Search", "r")));
+        assert!(shown.contains(&prompt("Search", "r")));
         assert_eq!(mode_of(&mut app), "INSERT · Quick search");
         // Enter ends the search on what it found, as in vim; l opens it.
         assert!(keys(&mut app, &["enter"]).is_empty());
@@ -12553,7 +12665,7 @@ mod tests {
         );
         app.handle(Resolved::Insert('l'));
         app.handle(action(Action::Backspace));
-        assert!(screen(&mut app).contains(&prompt(&app, "Search", "")));
+        assert!(screen(&mut app).contains(&prompt("Search", "")));
         assert!(app.handle(action(Action::Cancel)).is_empty());
         assert_eq!(app.context(), Context::Panel, "Esc ends it");
     }
@@ -12575,9 +12687,9 @@ mod tests {
         assert_eq!(under(&app), "boot");
         assert_eq!(app.context(), Context::QuickSearch);
         app.handle(action(Action::DeleteChar));
-        assert!(screen(&mut app).contains(&prompt(&app, "Search", "o")));
+        assert!(screen(&mut app).contains(&prompt("Search", "o")));
         app.handle(action(Action::DeleteToEnd));
-        assert!(screen(&mut app).contains(&prompt(&app, "Search", "")));
+        assert!(screen(&mut app).contains(&prompt("Search", "")));
         assert_eq!(app.context(), Context::QuickSearch, "still searching");
         app.handle(Resolved::Insert('d'));
         assert_eq!(under(&app), "dev");
@@ -12630,7 +12742,7 @@ mod tests {
         // With nothing typed, Ctrl+g searches for what the last search found.
         keys(&mut app, &["/", "ctrl-g"]);
         assert_eq!(under(&app), "bar");
-        assert!(screen(&mut app).contains(&prompt(&app, "Search", "b")));
+        assert!(screen(&mut app).contains(&prompt("Search", "b")));
         // A key that ends a search keeps it too.
         keys(&mut app, &["i", "down"]);
         app.handle(action(Action::Home));
@@ -13821,7 +13933,7 @@ mod tests {
         app.jumps(*first, found(&["/stale"]));
         app.jumps(*generation, found(&["/home/me/src", "/opt/scripts"]));
         let text = screen_of(&mut app, 12);
-        assert!(text.contains(&prompt(&app, "Jump to", "sc")), "{text}");
+        assert!(text.contains(&prompt("Jump to", "sc")), "{text}");
         assert!(
             text.contains("~/src") && text.contains("/opt/scripts") && !text.contains("/stale"),
             "{text}"
@@ -14147,7 +14259,7 @@ mod tests {
         app.handle(action(Action::Cancel));
         app.handle(action(Action::QuickSearch));
         app.paste("ri\nght");
-        assert!(screen(&mut app).contains(&prompt(&app, "Search", "right")));
+        assert!(screen(&mut app).contains(&prompt("Search", "right")));
     }
 
     #[test]
@@ -14400,7 +14512,7 @@ mod tests {
         assert!(!screen_of(&mut app, 16).contains("Esc closes"));
         app.handle(action(Action::KeyHints));
         let place = app.take_hints_asked().unwrap();
-        assert_eq!(place, (Mode::Normal, Context::Panel));
+        assert_eq!(place, (Mode::Normal, Context::Panel).into());
         assert_eq!(app.take_hints_asked(), None, "asked once");
         app.keymap().show_hints(&mut keys, place);
         app.set_hints(&keys);
@@ -14417,7 +14529,7 @@ mod tests {
         let dialog = app.place();
         assert_eq!(dialog, (Mode::Insert, Context::PathInput));
         assert!(app.handle(action(Action::KeyHints)).is_empty());
-        assert_eq!(app.take_hints_asked(), Some(dialog));
+        assert_eq!(app.take_hints_asked(), Some(dialog.into()));
         assert_eq!(app.place(), dialog);
         app.keymap().show_hints(&mut keys, dialog);
         app.set_hints(&keys);
@@ -14433,7 +14545,7 @@ mod tests {
         app.handle(action(Action::KeyHints));
         assert_eq!(
             app.take_hints_asked(),
-            Some((Mode::Normal, Context::PullDown))
+            Some((Mode::Normal, Context::PullDown).into())
         );
         assert_eq!(app.context(), Context::PullDown);
     }
@@ -14465,7 +14577,7 @@ mod tests {
         assert!(app.hints.is_none(), "the list takes the place of the hints");
         let text = screen_of(&mut app, 30);
         assert!(
-            text.contains("Ctrl+w h") && text.contains(&prompt(&app, "Filter", "")),
+            text.contains("Ctrl+w h") && text.contains(&prompt("Filter", "")),
             "{text}"
         );
         // What is typed filters, and Enter runs the command in the panel, with the count.
@@ -14539,7 +14651,7 @@ mod tests {
         );
         keys(&mut app, &["ctrl-s"]);
         let glyphs = app.theme.glyphs.search_modes;
-        assert!(screen(&mut app).contains(&format!("Search {}: ^r", glyphs.regex)));
+        assert!(searching(&mut app, "^r", glyphs.regex));
         assert_eq!(
             app.panel(app.active).name_under_cursor(),
             Some(&b"right"[..]),
@@ -14553,14 +14665,11 @@ mod tests {
             start,
             "as it is: no name holds it"
         );
-        assert!(
-            screen(&mut app).contains(&format!("Search {}: ^r", glyphs.plain)),
-            "the text stays"
-        );
+        assert!(searching(&mut app, "^r", glyphs.plain), "the text stays");
         keys(&mut app, &["ctrl-s", "ctrl-s", "enter"]);
         app.handle(action(Action::QuickSearch));
         assert!(
-            screen(&mut app).contains(&format!("Search {}: ", glyphs.plain)),
+            searching(&mut app, "", glyphs.plain),
             "the next search starts in the search mode"
         );
         keys(&mut app, &["esc"]);
@@ -14579,7 +14688,7 @@ mod tests {
         app.handle(action(Action::QuickSearch));
         app.handle(Resolved::Insert('r'));
         app.handle(Resolved::Insert('t'));
-        assert!(screen(&mut app).contains(&prompt(&app, "Search", "rt")));
+        assert!(screen(&mut app).contains(&prompt("Search", "rt")));
         let Effect::List { request, .. } = one(app.handle(action(Action::Enter))) else {
             panic!("expected a listing");
         };

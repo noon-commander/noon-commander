@@ -208,7 +208,7 @@ grouped under headings:
 
 ```text
  ╔════════════════════ Left ════════════════════╗
- ║ Filter:                                      ║
+ ║ Filter:                                    ~ ║
  ╟──────────────────────────────────────────────╢
  ║ Favorites                                    ║
  ║ ~ Home                                  212G ║
@@ -377,7 +377,7 @@ directories, which Enter opens in the active panel:
 
 ```text
 ╔═════════════════════════════ zoxide ═════════════════════════════╗
-║ Jump to: src                                                     ║
+║ Jump to: src                                                   = ║
 ║ ──────────────────────────────────────────────────────────────── ║
 ║ ~/src/noc                                                   56.0 ║
 ║ /srv/www/src                                                12.5 ║
@@ -406,11 +406,14 @@ directories, which Enter opens in the active panel:
 ### Search modes
 
 Every field that searches matches what is typed in one of its ways
-([ADR 0030](adr/0030-search-modes.md), [ADR 0044](adr/0044-one-base-for-search-fields.md)).
-`tui/search.rs` says which: each kind of field is a `search::Kind`, with its ways in the order
-Ctrl+s goes round them and the way it starts in for each value of `ui.search_mode`, `fzf` by
-default; a field while it is open is a `search::Input`, which switches its way, builds its
-`Matcher`, and gives the glyph of its prompt. A field never chooses its ways itself.
+([ADR 0030](adr/0030-search-modes.md), [ADR 0044](adr/0044-one-base-for-search-fields.md),
+[ADR 0045](adr/0045-ctrl-s-switches-the-field-typed-in.md)). `tui/search.rs` says which: each
+kind of field is a `search::Kind`, with its ways in the order Ctrl+s goes round them and the way
+it starts in for each value of `ui.search_mode`, `fzf` by default; a field while it is open is a
+`search::Input`, which switches its way, builds its `Matcher`, and gives the glyph at the end of
+the field. A field never chooses its ways itself. A field of a dialog searches when the dialog
+gives it an `Input` (`Dialog::with_search`); the dialog then draws its glyph, takes Ctrl+s and
+the click on the glyph, and says its way (`Dialog::way`).
 
 | Field | `search::Kind` | Ways, as Ctrl+s goes | `ui.search_mode` `fzf` starts it in |
 | --- | --- | --- | --- |
@@ -423,12 +426,24 @@ default; a field while it is open is a `search::Input`, which switches its way, 
 The filters of the lists are those of the location menu, the tab menu, the Workspaces window, the
 command history, and the list of the key hints. The way is not kept: the next search or window
 starts in `ui.search_mode` again, but `n` and `N` match as the last search did, and `g +` and
-`g -` start in the way they matched last. A glyph after the word of the prompt says which way,
-in every field, even one with a single way (`Search ~:`, `Filter ~:`, `Jump to ~:`, `Text .*:`,
-`Pattern *:`; in `glyphs.rs`: nf-cod-whole_word, nf-md-approximately_equal, nf-cod-regex,
-nf-md-asterisk; `=`, `~`, `.*`, `*` without icons); crossed out, in the color of a broken link,
-while the text is no regular expression, when the lists say what is wrong with it in place of the
-rows. The [search of a whole tree](#search-of-a-whole-tree) has no fzf way, ripgrep and fd
+`g -` start in the way they matched last. A glyph at the end of the field says which way, in
+every field, even one with a single way: at the right end of the status line of quick search,
+and in the field of the filters and of the dialogs, after a blank (`Filter: text   ~`; in
+`glyphs.rs`: nf-cod-whole_word, nf-md-approximately_equal, nf-cod-regex, nf-md-asterisk; `=`,
+`~`, `.*`, `*` without icons); crossed out, in the color of a broken link, while the text is no
+regular expression, when the lists say what is wrong with it in place of the rows.
+
+Ctrl+s switches the way of the field that has the focus, and of no other: quick search, the
+filter of a list while it takes the keys, in Insert mode, and a field of a dialog that searches,
+in either mode. Elsewhere, on the rows of a list, on a check box or a button, or in a field with
+one way, it does nothing. A click on the glyph does what Ctrl+s does, and gives the field the
+focus first: a list goes to its filter, in Insert mode. The key lives in the keymap context
+`search_input`, which goes in front of the chain of where the keys go while such a field has
+the focus: `App::key_place` gives the keymap a `keymap::Place`, the mode, the context, and
+whether the field switches, and `Place::chain` puts `search_input` first. So the F-key bar, the
+help, and the key hints show Ctrl+s where it works, and nowhere else.
+
+The [search of a whole tree](#search-of-a-whole-tree) has no fzf way, ripgrep and fd
 matching a pattern rather than ranking names, so `fzf` starts it in regex. Whether case counts
 is given to the `Matcher` (`search::Case`): its own, as below, or always, as the check box of
 `g +` asks. The ways:
@@ -472,8 +487,8 @@ dirs…, opens it in its Files and dirs mode, which finds their names with fd
 ```text
 ╔════════════════════════ Find in ~/src/noc ═════════════════════════╗
 ║ (*) Text   ( ) Files and dirs                                      ║
-║ Text .*:                                                           ║
-║ handle                                                             ║
+║ Text:                                                              ║
+║ handle                                                          .* ║
 ║ Files:                                                             ║
 ║ *.rs !target                                                       ║
 ║ [ ] Match case                                                     ║
@@ -495,14 +510,15 @@ dirs…, opens it in its Files and dirs mode, which finds their names with fd
   globs of the files, split at blanks, `!` before one leaving those out; a check box, Match case,
   matching case rather than only when the text has a capital letter; the rows; and four buttons.
   The text is a regular expression in the regex and fzf [search modes](#search-modes) and as it is
-  in the plain one; Ctrl+s switches it for this dialog, and the glyph after `Text` says which
-  (`Dialog::set_label`). With no text it lists the files. The dialog keeps the cursor of the
-  rows and scrolls them; `FindWindow` (`tui/find.rs`) keeps what was found and draws each row
-  (`ListView`).
+  in the plain one; Ctrl+s in its field switches it for this dialog, and the glyph at the end of
+  the field says which (`Dialog::with_search`). With no text it lists the files. The dialog keeps
+  the cursor of the rows and scrolls them; `FindWindow` (`tui/find.rs`) keeps what was found and
+  draws each row (`ListView`).
 - Two modes, radio buttons on a line above the fields (`Dialog::in_a_row`): Text, with ripgrep
   (`FindQuery::Lines`), and Files and dirs, with fd (`FindQuery::Names`), whose buttons are Go to
   and Cancel (`Dialog::set_buttons`). By name, fd matches the text against the names, as a
-  regular expression or as it is, with smart case or case, as Ctrl+s and the check box say; `!`
+  regular expression or as it is, with smart case or case, as the way of the text and the check
+  box say; `!`
   globs go to it as `--exclude`, and `noc_tools::fd::Names` keeps what the other globs let through and
   finds where the name matches, with fd's regex engine, for `find_match`. On a host `fd` runs,
   or `fdfind` where the shell says 127. Its rows (`Finding::Entry`) are the files and
@@ -521,8 +537,9 @@ dirs…, opens it in its Files and dirs mode, which finds their names with fd
 - Its keys are those of dialogs (contexts `find_input` in a field, `find` elsewhere): it opens in
   Insert mode, typing in the text; Tab, Up, and Down go through the fields, the check box, the
   rows, and the buttons; Esc leaves Insert mode in a field, and again closes the dialog. While the
-  rows have the focus, the motions and the page keys move their cursor. F3, F4, and Ctrl+s work
-  wherever the focus is, and so do the letters of the dialog, as in every dialog: Alt+c, the letter
+  rows have the focus, the motions and the page keys move their cursor. F3 and F4 work wherever
+  the focus is, Ctrl+s in the field of the text, and the letters of the dialog work as in every
+  dialog: Alt+c, the letter
   of `Match &case`, switches case ([ADR 0033](adr/0033-letters-in-dialogs.md)). The wheel scrolls
   the rows.
 - The rows are the files, in the order of their paths, each with how many lines matched, and their
@@ -657,7 +674,7 @@ sort order, and the name under its cursor, and the tab that shows; and the side 
 
   ```text
   ╔═══════════════════════ Workspaces ═══════════════════════╗
-  ║ Filter =:                                                ║
+  ║ Filter:                                                = ║
   ╟──────────────────────────────────────────────────────────╢
   ║ noon                                               2 │ 1 ║
   ║ deploy                                             1 │ 3 ║
@@ -1072,7 +1089,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   `Quick search`, `Rename`, `List` for the location menu, the tab menu, the zoxide window, the
   workspaces, the command history, and the list of the key hints, `Menu` for F9, `Dialog` for
   every dialog, the Configuration dialog, the search of a tree, the jobs, and the checksums,
-  `Help`, and `Viewer`; `window_kind` maps every context. The panels show the mode alone. Where
+  `Help`, and `Viewer`; `window_kind` maps every context, and none to the contexts that are
+  only fallbacks, such as `search_input`. The panels show the mode alone. Where
   the line is short the kind goes first, then the mode is cut. On the right it shows the count,
   register, operator, or keys of a command typed so far, as typed, or how much Visual mode
   selects, as vim's `showcmd` does. Unlike vim's `showmode`, it shows every mode everywhere,
@@ -1359,7 +1377,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   `:` open the [command line](#command-line-of--and-). As vim's search, it looks from the row after
   the one where it started, round, or after `?` up from the row before it, round to the bottom, and
   a count before `/` or `?` goes to the match of that number (`2/`). It matches in the
-  [search mode](#search-modes), which Ctrl+s switches while it runs. As fzf, the default, the cursor
+  [search mode](#search-modes), which Ctrl+s, or a click on the glyph at the right end of the
+  status line, switches while it runs. As fzf, the default, the cursor
   jumps to the best match as fzf ranks it, the first after where it started of those as good, and
   Ctrl+g to the next best, round to the best; in the plain and regex modes, to the first name after
   where it started that holds the text anywhere, ignoring case, or that matches it as a regular

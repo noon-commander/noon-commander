@@ -143,6 +143,11 @@ impl JumpMenu {
         self.picker.mode()
     }
 
+    /// Whether its filter takes the keys and switches how it matches.
+    pub(crate) fn switches(&self) -> bool {
+        self.picker.switches()
+    }
+
     /// The rows, for the count before a page key.
     pub(crate) fn picker_mut(&mut self) -> &mut Picker {
         &mut self.picker
@@ -213,7 +218,7 @@ impl JumpMenu {
             width: WIDTH,
             lines: &lines,
             max_lines: Some(MAX_ROWS),
-            prompt: Some(|mode, text| fl!("jump-keywords", mode = mode, text = text)),
+            prompt: Some(|text| fl!("jump-keywords", text = text)),
             message: self.loading.error().map(str::to_owned),
             nothing: Some(fl!("jump-nothing")),
             loading: Some((&self.loading, spin)),
@@ -527,10 +532,10 @@ mod tests {
                 .unwrap();
             terminal.get_cursor_position().unwrap()
         };
-        // The frame is in column 0, a blank in column 1, the glyph of the mode and a blank 2
-        // cells, and `Jump to: ` 9.
+        // The frame is in column 0, a blank in column 1, and `Jump to: ` 9; the glyph of the
+        // mode ends the field.
         let empty = cursor_after(&mut menu, "");
-        assert_eq!(empty.x, 2 + 2 + 9);
+        assert_eq!(empty.x, 2 + 9);
         assert_eq!(cursor_after(&mut menu, "src").x, empty.x + 3);
         assert_eq!(
             cursor_after(&mut menu, " ").x,

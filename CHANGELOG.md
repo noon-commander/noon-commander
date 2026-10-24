@@ -83,11 +83,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `f /` searches the files below the panel's directory for text with
   [ripgrep](https://github.com/BurntSushi/ripgrep), locally or on a host, where rg runs over
   the connection, in a dialog over both panels; so does F9 → Command → Find file…. One field
-  takes the text, another the globs of the files (`*.rs !target`); Ctrl+s takes the text as a
-  regular expression or as it is, starting from `ui.search_mode` (fzf there is a regular
-  expression), the glyph after Text saying which, and a check box, Match case, switches case
-  (Alt+c, its letter); it searches again as any of them changes, and
-  with no text lists the files. Each file found shows with its lines that match, the matches
+  takes the text, another the globs of the files (`*.rs !target`); Ctrl+s in the text takes it as
+  a regular expression or as it is, starting from `ui.search_mode` (fzf there is a regular
+  expression), the glyph at the end of the field saying which, and a check box, Match case,
+  switches case (Alt+c, its letter); it searches again as any of them changes, and with no text
+  lists the files. Each file found shows with its lines that match, the matches
   highlighted. Go to, the default button, goes to the file in the panel (Ctrl+o back), View (F3)
   views it from the line, and Edit (F4) edits it at the line. Its other mode, Files and dirs,
   finds files and directories by name with [fd](https://github.com/sharkdp/fd), locally or on a
@@ -102,9 +102,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Search modes: quick search and the filters of the lists (the location menu, the tab menu, the
   zoxide window, the workspaces, the command history, the list of the key hints) match what is
   typed as fzf does, as plain text anywhere, or as a regular expression with smart case. Each
-  starts in `ui.search_mode` (`fzf`), a choice in the Configuration dialog, and Ctrl+s switches
-  its own until it closes; a glyph after the word of the prompt says which (`Filter ~:`), crossed
-  out while the text is no regular expression. `n` and `N` match as the last search did.
+  starts in `ui.search_mode` (`fzf`), a choice in the Configuration dialog. A glyph at the end of
+  the field says which (`Filter: text  ~`), crossed out while the text is no regular expression;
+  Ctrl+s in the field, or a click on the glyph, switches the way of that field alone until it
+  closes, and nowhere else: not from the rows of a list
+  ([ADR 0045](docs/adr/0045-ctrl-s-switches-the-field-typed-in.md)). `n` and `N` match as the
+  last search did.
 - Letters in every dialog, as in Far and mc: each element but Cancel has a letter, highlighted in
   its label, and Alt and the letter put the focus in a text field, switch a check box, choose a
   radio button, or press a button, from anywhere in the dialog, while typing in a field too. A
@@ -176,8 +179,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dialog of F6 gets Preserve attributes too, shared with copies. Off, a move between the local
   file system and a host, or two hosts, leaves the attributes behind
   ([ADR 0043](docs/adr/0043-one-dialog-for-copy-and-move.md)).
-- The dialog of `g +` and `g -` has a prompt, `Pattern *:`, whose glyph says that it takes shell
-  patterns, as every field that searches shows how it matches
+- The dialog of `g +` and `g -` has a prompt, `Pattern:`, and its field ends with the glyph of
+  shell patterns (`*` without icons), as every field that searches shows how it matches
   ([ADR 0044](docs/adr/0044-one-base-for-search-fields.md)).
 - F7 opens with an empty name instead of the name under the cursor, which what was typed went
   after.

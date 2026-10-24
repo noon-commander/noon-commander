@@ -26,6 +26,7 @@ use super::keymap::{Action, Context, Extra, Mode, Resolved, Typed};
 use super::label::{self, Label};
 use super::mouse::{Pointer, Press, Scroll};
 use super::scroll::Window;
+use super::search::{Input, Way};
 use super::spinner::Shine;
 use super::theme::{self, Theme};
 use crate::i18n::fl;
@@ -348,6 +349,9 @@ impl fmt::Debug for Field {
 struct LabelledField {
     label: Label,
     field: Field,
+    /// How it matches, if it searches: the glyph of the way ends it, and Ctrl+s or a click on
+    /// the glyph switches the way while it has the focus (ADR 0045).
+    search: Option<Input>,
 }
 
 impl LabelledField {
@@ -355,6 +359,7 @@ impl LabelledField {
         Self {
             label: Label::default(),
             field,
+            search: None,
         }
     }
 }
@@ -503,6 +508,9 @@ pub(crate) struct Dialog {
     field_area: Cell<Option<Rect>>,
     /// Where each choice, field, check box, and button was drawn last, for the mouse.
     spots: RefCell<Vec<(Focus, Rect)>>,
+    /// Where the glyph of each field that switches how it searches was drawn last, by the
+    /// field's index, for the mouse.
+    glyphs: RefCell<Vec<(usize, Rect)>>,
     /// The first line of a message taller than the screen shown, and how many show, at the
     /// last render.
     offset: Cell<usize>,
@@ -585,6 +593,7 @@ impl Dialog {
             .map(|(label, text)| LabelledField {
                 label: Label::parse(&cells::sanitize(label.as_bytes())),
                 field: Field::plain(text),
+                search: None,
             })
             .collect();
         let focus = if fields.is_empty() {
@@ -628,6 +637,7 @@ impl Dialog {
             completes: false,
             field_area: Cell::new(None),
             spots: RefCell::new(Vec::new()),
+            glyphs: RefCell::new(Vec::new()),
             offset: Cell::new(0),
             page: Cell::new(1),
             bar: Cell::new(None),
@@ -836,13 +846,6 @@ impl Dialog {
         self
     }
 
-    /// Puts `label` over text field `index`.
-    pub(crate) fn set_label(&mut self, index: usize, label: &str) {
-        if let Some(field) = self.fields.get_mut(index) {
-            field.label = Label::parse(&cells::sanitize(label.as_bytes()));
-        }
-    }
-
     /// Puts `buttons` in place of the buttons, the first the default; the focus on one of them
     /// stays on one.
     pub(crate) fn set_buttons(&mut self, buttons: Vec<Button>) {
@@ -895,6 +898,43 @@ impl Dialog {
         }
         *field = Field::plain(text);
         self.focus = Focus::Field(index);
+    }
+
+    /// The same dialog, whose field `index` searches as `input` says, starting in its way.
+    pub(crate) fn with_search(mut self, index: usize, input: Input) -> Self {
+        if let Some(field) = self.fields.get_mut(index) {
+            field.search = Some(input);
+        }
+        self
+    }
+
+    /// How field `index` matches, if it searches.
+    pub(crate) fn way(&self, index: usize) -> Option<Way> {
+        self.fields.get(index)?.search.map(Input::way)
+    }
+
+    /// Whether the field with the focus switches how it searches, which puts Ctrl+s in front of
+    /// the keys of the dialog.
+    pub(crate) fn search_focused(&self) -> bool {
+        match self.focus {
+            Focus::Field(index) => self
+                .fields
+                .get(index)
+                .and_then(|field| field.search)
+                .is_some_and(Input::switchable),
+            Focus::Choice(_) | Focus::Check(_) | Focus::List | Focus::Button(_) => false,
+        }
+    }
+
+    /// Switches how field `index` matches to its next way, as Ctrl+s does in it.
+    fn switch_search(&mut self, index: usize) {
+        if let Some(input) = self
+            .fields
+            .get_mut(index)
+            .and_then(|field| field.search.as_mut())
+        {
+            input.switch();
+        }
     }
 
     /// Whether check box `index` is checked.
@@ -1031,6 +1071,12 @@ impl Dialog {
                 Focus::Field(_) | Focus::List => DialogEvent::Pending,
             },
             Action::Cancel => DialogEvent::Cancelled,
+            Action::SearchMode => {
+                if let Focus::Field(index) = self.focus {
+                    self.switch_search(index);
+                }
+                DialogEvent::Pending
+            }
             Action::NextField | Action::PrevField => {
                 self.move_focus(action == Action::NextField, Mode::Insert);
                 DialogEvent::Pending
@@ -1105,9 +1151,25 @@ impl Dialog {
     /// Takes a press of the mouse, where the dialog was drawn last: a click chooses a choice,
     /// puts the cursor in a field or on a row of the list, switches a check box, or presses a
     /// button. A double click on a choice or a row presses the default button too, as Enter
-    /// does there.
+    /// does there. A click on the glyph at the end of a field that searches gives it the focus
+    /// and switches how it matches, as Ctrl+s does there.
     pub(crate) fn pointer(&mut self, pointer: Pointer) -> DialogEvent {
         let Pointer { press, at } = pointer;
+        let glyph = self
+            .glyphs
+            .borrow()
+            .iter()
+            .find(|(_, area)| area.contains(at))
+            .map(|(index, _)| *index);
+        if let Some(index) = glyph {
+            if press == Press::Click {
+                if self.focus != Focus::Field(index) {
+                    self.focus_on(Focus::Field(index), Mode::Insert);
+                }
+                self.switch_search(index);
+            }
+            return DialogEvent::Pending;
+        }
         let row = self.list.as_ref().and_then(|list| {
             let rows = list.rows.borrow();
             rows.iter()
@@ -1316,6 +1378,7 @@ impl Dialog {
         let row = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
         let mut spots = self.spots.borrow_mut();
         spots.clear();
+        self.glyphs.borrow_mut().clear();
         // The line and the buttons below the rest.
         let rest = height
             .saturating_sub(rows(lines.len()))
@@ -1323,37 +1386,15 @@ impl Dialog {
             .saturating_add(below);
         let message = (lines.as_slice(), letter);
         let mut index = self.render_message(frame, inner, message, rest, colors, theme);
-        let room = usize::from(inner.width).max(1);
         let Some(after) = self.draw_choices(frame, (inner, index), colors, &mut spots) else {
             return;
         };
         index = after;
-        for (number, LabelledField { label, field }) in self.fields.iter().enumerate() {
-            if !label.text.is_empty() {
-                if index >= inner.height {
-                    return;
-                }
-                frame.render_widget(
-                    Line::from(label_spans(label, room, colors, theme)),
-                    row(index),
-                );
-                index += 1;
-            }
-            if index >= inner.height {
-                return;
-            }
-            let (line, column) = field_line(field, room, theme);
-            frame.render_widget(line, row(index));
-            spots.push((Focus::Field(number), row(index)));
-            if number == 0 {
-                self.field_area.set(Some(row(index)));
-            }
-            if self.focus == Focus::Field(number) {
-                let column = u16::try_from(column).unwrap_or(0);
-                frame.set_cursor_position(Position::new(inner.x + column, inner.y + index));
-            }
-            index += 1;
-        }
+        let Some(after) = self.draw_fields(frame, (inner, index), (colors, theme), &mut spots)
+        else {
+            return;
+        };
+        index = after;
         let Some(after) = self.draw_checks(frame, (inner, index), colors, &mut spots) else {
             return;
         };
@@ -1380,6 +1421,50 @@ impl Dialog {
 }
 
 impl Dialog {
+    /// Draws the fields under their labels from row `index` of `inner`, the room inside the
+    /// frame, with the terminal cursor in the focused one, and keeps where for the mouse in
+    /// `spots`, and where the glyph of each that switches how it searches is. Returns the row
+    /// after them, or `None` without room.
+    fn draw_fields(
+        &self,
+        frame: &mut Frame<'_>,
+        (inner, mut index): (Rect, u16),
+        (colors, theme): (Colors, &Theme),
+        spots: &mut Vec<(Focus, Rect)>,
+    ) -> Option<u16> {
+        let row = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
+        let room = usize::from(inner.width).max(1);
+        let mut glyphs = self.glyphs.borrow_mut();
+        for (number, labelled) in self.fields.iter().enumerate() {
+            let label = &labelled.label;
+            if !label.text.is_empty() {
+                if index >= inner.height {
+                    return None;
+                }
+                frame.render_widget(
+                    Line::from(label_spans(label, room, colors, theme)),
+                    row(index),
+                );
+                index += 1;
+            }
+            if index >= inner.height {
+                return None;
+            }
+            let (column, area, glyph) = draw_field(frame, row(index), labelled, theme);
+            glyphs.extend(glyph.map(|glyph| (number, glyph)));
+            spots.push((Focus::Field(number), area));
+            if number == 0 {
+                self.field_area.set(Some(row(index)));
+            }
+            if self.focus == Focus::Field(number) {
+                let column = u16::try_from(column).unwrap_or(0);
+                frame.set_cursor_position(Position::new(inner.x + column, inner.y + index));
+            }
+            index += 1;
+        }
+        Some(index)
+    }
+
     /// Draws the check boxes from row `index` of `inner`, the room inside the frame, and keeps
     /// where for the mouse in `spots`. Returns the row after them, or `None` without room.
     fn draw_checks(
@@ -1869,6 +1954,36 @@ pub(crate) fn shine_bar(
             Span::styled(glyph.to_owned(), style)
         })
         .collect()
+}
+
+/// Draws the field of `labelled` on the line `area`, with the glyph of how it matches at its end
+/// if it searches. Returns the cursor's column in `area`, where the field takes a click, and where
+/// the glyph is if a click switches how it matches.
+fn draw_field(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    labelled: &LabelledField,
+    theme: &Theme,
+) -> (usize, Rect, Option<Rect>) {
+    let field = &labelled.field;
+    let Some(input) = labelled.search else {
+        let (line, column) = field_line(field, usize::from(area.width), theme);
+        frame.render_widget(line, area);
+        return (column, area, None);
+    };
+    let invalid = input.invalid(field.text());
+    let mark = input.mark(invalid, theme.dialog_input, theme);
+    let (column, glyph) = mark.render_in_field(frame, area, field, theme);
+    let room = area.width - glyph.map_or(0, |glyph| glyph.width + 1);
+    let switches = glyph.filter(|_| input.switchable());
+    (
+        usize::from(column),
+        Rect {
+            width: room,
+            ..area
+        },
+        switches,
+    )
 }
 
 /// What of `field` fits in `room` cells, in the color of fields, what Visual mode selects
@@ -2510,8 +2625,7 @@ mod tests {
         let dialogs = [
             (
                 "select",
-                Dialog::form("Select", &fl!("pattern-text", mode = "*"), "*", &select)
-                    .with_width(50),
+                Dialog::form("Select", &fl!("pattern-text"), "*", &select).with_width(50),
             ),
             (
                 "host",

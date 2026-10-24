@@ -1,6 +1,7 @@
 # 0044. One base for every field that searches
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0045](0045-ctrl-s-switches-the-field-typed-in.md), the
+  glyph at the end of the field
 - Date: 2026-10-24
 - Amends: [ADR 0030](0030-search-modes.md)
 

@@ -25,7 +25,6 @@ use super::cells::{self, Align};
 use super::decor::Decor;
 use super::dialog::{Button, Dialog, DialogEvent, Field, ListView};
 use super::edit::Registers;
-use super::glyphs::Glyphs;
 use super::keymap::{Action, Context, Mode, Resolved, Typed};
 use super::mouse::Pointer;
 use super::panel::child;
@@ -204,9 +203,6 @@ pub(crate) struct FindWindow {
     /// before it; `None` is the first row.
     cursor: Option<(Vec<u8>, Option<usize>)>,
     decor: Decor,
-    /// How the text matches: as a regular expression or as it is, `ui.search_mode` (its fzf
-    /// mode as a regular expression, which has no meaning here) until Ctrl+s switches it.
-    input: Input,
     /// Stops the search, which the dialog does when it goes or a new one starts.
     cancel: CancellationToken,
     /// For the end of the search, while a skeleton stands for how many it found.
@@ -232,9 +228,8 @@ impl FindWindow {
         mode: SearchMode,
         decor: Decor,
     ) -> Self {
-        let input = Input::new(Kind::TREE, mode);
         let fields = [
-            (text_label(input, decor), String::new()),
+            (fl!("find-text"), String::new()),
             (fl!("find-files"), String::new()),
         ];
         let checks = [(fl!("find-match-case"), false)];
@@ -245,7 +240,8 @@ impl FindWindow {
             .with_width(WIDTH)
             .with_choices(&modes, chosen)
             .in_a_row()
-            .with_list();
+            .with_list()
+            .with_search(TEXT, Input::new(Kind::TREE, mode));
         Self {
             root,
             dialog,
@@ -259,7 +255,6 @@ impl FindWindow {
             state: State::Searching,
             cursor: None,
             decor,
-            input,
             cancel: CancellationToken::new(),
             wait: Wait::default(),
         }
@@ -280,7 +275,7 @@ impl FindWindow {
             .split_whitespace()
             .map(str::to_owned)
             .collect();
-        let regex = self.input.way() == Way::Regex;
+        let regex = self.way() == Way::Regex;
         let match_case = self.dialog.checked(MATCH_CASE);
         if self.dialog.chosen() == NAMES_MODE {
             return FindQuery::Names(fd::Query {
@@ -420,6 +415,18 @@ impl FindWindow {
         self.put_cursor();
     }
 
+    /// How the text matches: as a regular expression or as it is, `ui.search_mode` (its fzf
+    /// mode as a regular expression, which has no meaning here) until Ctrl+s in its field
+    /// switches it.
+    fn way(&self) -> Way {
+        self.dialog.way(TEXT).unwrap_or(Way::Plain)
+    }
+
+    /// Whether the field with the focus switches how it searches: the text's.
+    pub(crate) fn search_focused(&self) -> bool {
+        self.dialog.search_focused()
+    }
+
     /// The keymap context for the next key: `FindInput` while a field has the focus.
     pub(crate) fn context(&self) -> Context {
         if self.dialog.focused_field().is_some() {
@@ -455,7 +462,7 @@ impl FindWindow {
             self.dialog.chosen(),
             self.dialog.text_of(TEXT).to_owned(),
             self.dialog.text_of(FILES).to_owned(),
-            self.input.way(),
+            self.way(),
             self.dialog.checked(MATCH_CASE),
         )
     }
@@ -576,21 +583,14 @@ impl FindWindow {
 
     /// Takes a key as a dialog does: the fields edit, Tab and the motions move the focus, and
     /// over the list they move its cursor; Enter presses Go to, the default, and Alt and a
-    /// letter act on what has it. F3 and F4 view and edit the file of the row, and Ctrl+s takes
-    /// the text as it is or as a regular expression, from anywhere.
+    /// letter act on what has it. F3 and F4 view and edit the file of the row; in the field of
+    /// the text, Ctrl+s takes it as it is or as a regular expression.
     pub(crate) fn handle(&mut self, typed: Typed, registers: &mut Registers) -> FindEvent {
         let before = self.settings();
         let cursor = self.dialog.list_cursor();
         let event = match typed.resolved {
             Resolved::Action(Action::View) => return self.press(Button::View),
             Resolved::Action(Action::Edit) => return self.press(Button::Edit),
-            Resolved::Action(Action::SearchMode) => {
-                if self.input.switch() {
-                    let label = text_label(self.input, self.decor);
-                    self.dialog.set_label(TEXT, &label);
-                }
-                DialogEvent::Pending
-            }
             _ => self.dialog.handle_typed(typed, registers),
         };
         self.take_cursor(cursor);
@@ -728,13 +728,6 @@ impl FindWindow {
         };
         self.dialog.render_list(frame, area, theme, &view);
     }
-}
-
-/// The label of the text field: `Text`, and the glyph of how `input` matches, as every field
-/// that searches shows it.
-fn text_label(input: Input, decor: Decor) -> String {
-    let glyphs = Glyphs::of(decor.icons()).search_modes;
-    fl!("find-text", mode = input.glyph(glyphs))
 }
 
 /// The buttons of `mode`: by name, nothing to view or edit at a line.
@@ -919,8 +912,11 @@ mod tests {
 
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
+    use ratatui::layout::Position;
 
     use super::*;
+    use crate::tui::glyphs::Glyphs;
+    use crate::tui::mouse::Press;
     use crate::tui::spinner;
 
     fn window() -> FindWindow {
@@ -1002,6 +998,21 @@ mod tests {
         terminal.backend().to_string()
     }
 
+    /// Where `glyph` ends the field of the text, as `window` draws it, if it does.
+    fn glyph_at(window: &mut FindWindow, glyph: &str) -> Option<Position> {
+        let screen = draw(window, 80);
+        let end = format!(" {glyph} ║");
+        screen.lines().enumerate().find_map(|(y, line)| {
+            let at = line.find(&end)?;
+            let x = line[..at].chars().count() + 1;
+            // The test backend quotes each line.
+            Some(Position::new(
+                u16::try_from(x - 1).ok()?,
+                u16::try_from(y).ok()?,
+            ))
+        })
+    }
+
     #[test]
     fn the_search_mode_says_how_the_text_matches_and_ctrl_s_switches_it() {
         let mut window = window();
@@ -1010,12 +1021,29 @@ mod tests {
             window.query().lines().regex,
             "fzf has no meaning here: regex"
         );
-        assert!(draw(&mut window, 80).contains(&format!("Text {}:", glyphs.regex)));
+        assert!(draw(&mut window, 80).contains("Text:"));
+        assert!(
+            glyph_at(&mut window, glyphs.regex).is_some(),
+            "at the end of its field"
+        );
         assert_eq!(press(&mut window, Action::SearchMode), FindEvent::Search);
         assert!(!window.query().lines().regex);
-        assert!(draw(&mut window, 80).contains(&format!("Text {}:", glyphs.plain)));
+        assert!(glyph_at(&mut window, glyphs.plain).is_some());
         press(&mut window, Action::SearchMode);
         assert!(window.query().lines().regex, "and back");
+        // In the other field, it does nothing: the field with the focus switches alone.
+        press(&mut window, Action::Down);
+        assert_ne!(press(&mut window, Action::SearchMode), FindEvent::Search);
+        assert!(window.query().lines().regex);
+        // A click on the glyph switches it, from anywhere, and gives the text the focus.
+        let at = glyph_at(&mut window, glyphs.regex).unwrap();
+        let click = Pointer {
+            press: Press::Click,
+            at,
+        };
+        assert_eq!(window.pointer(click), FindEvent::Search);
+        assert!(!window.query().lines().regex);
+        assert!(window.search_focused());
         let plain = FindWindow::new(
             (Location::Local("/src/noc".into()), "~/src/noc".to_owned()),
             FindMode::Text,
@@ -1086,11 +1114,11 @@ mod tests {
             (Mode::Insert, Context::FindInput)
         );
         typed(&mut window, "fn x");
+        assert_eq!(press(&mut window, Action::SearchMode), FindEvent::Search);
         // Down goes to the next field, as in every dialog.
         press(&mut window, Action::Down);
         typed(&mut window, "*.rs  !target");
         assert_eq!(press(&mut window, Action::Backspace), FindEvent::Search);
-        assert_eq!(press(&mut window, Action::SearchMode), FindEvent::Search);
         let query = window.query();
         let query = query.lines();
         assert_eq!(query.pattern, "fn x");

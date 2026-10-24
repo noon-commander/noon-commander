@@ -171,6 +171,11 @@ impl WorkspacesWindow {
         self.picker.mode()
     }
 
+    /// Whether its filter takes the keys and switches how it matches.
+    pub(crate) fn switches(&self) -> bool {
+        self.picker.switches()
+    }
+
     /// Takes a key: the picker's, where Enter restores a workspace, and a, which saves the
     /// tabs as a new workspace, r and F6, which rename, and d d and F8, which delete.
     pub(crate) fn handle(&mut self, input: Resolved) -> WorkspacesEvent {

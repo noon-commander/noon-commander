@@ -44,6 +44,10 @@ pub(crate) enum Context {
     /// entry renamed in its row, the text fields of dialogs, the command line, and the filters
     /// of the windows that list items fall back to it. Keys never go to it alone.
     Input,
+    /// Keys of a field that switches how it searches, while it has the focus: quick search, the
+    /// filter of a list while it takes text, and such a field of a dialog. It goes in front of
+    /// the chain of where the field is ([`Place`]). Keys never go to it alone.
+    SearchInput,
     /// Quick search in the active panel; falls back to `Input`.
     QuickSearch,
     /// The name field of the entry being renamed in its panel row; falls back to `Input`. Other
@@ -84,6 +88,38 @@ pub(crate) enum Context {
     UserScreen,
 }
 
+/// Where keys go: the mode they are typed in, the context that has them, and whether the field
+/// with the focus switches how it searches, which puts [`Context::SearchInput`] in front of the
+/// context's chain (ADR 0045).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct Place {
+    pub(crate) mode: Mode,
+    pub(crate) context: Context,
+    pub(crate) search: bool,
+}
+
+impl From<(Mode, Context)> for Place {
+    /// Where no field that switches how it searches has the focus.
+    fn from((mode, context): (Mode, Context)) -> Self {
+        Self {
+            mode,
+            context,
+            search: false,
+        }
+    }
+}
+
+impl Place {
+    /// The contexts keys are looked up in, most specific first: `SearchInput` if a field that
+    /// switches how it searches has the focus, then the context's chain.
+    pub(crate) fn chain(self) -> impl Iterator<Item = Context> {
+        let search = self.search.then_some(Context::SearchInput);
+        search
+            .into_iter()
+            .chain(self.context.chain(self.mode).iter().copied())
+    }
+}
+
 impl Context {
     /// This context and its fallbacks in `mode`, most specific first.
     pub(crate) fn chain(self, mode: Mode) -> &'static [Self] {
@@ -95,6 +131,7 @@ impl Context {
             Self::Panel => &[Self::Panel, Self::Global],
             // Text fields edit their text with the keys of `Input` before anything else does.
             Self::Input => &[Self::Input, Self::Global],
+            Self::SearchInput => &[Self::SearchInput, Self::Global],
             Self::QuickSearch => &[Self::QuickSearch, Self::Input, Self::Global],
             Self::Rename => &[Self::Rename, Self::Input, Self::Global],
             // Dialogs are modal: panel keys do nothing while one is open.

@@ -138,6 +138,11 @@ impl Part {
             ],
             Self::SearchAndRenaming => vec![
                 (Mode::Insert, Context::QuickSearch, fl!("help-quick-search")),
+                (
+                    Mode::Insert,
+                    Context::SearchInput,
+                    fl!("help-search-fields"),
+                ),
                 (Mode::Insert, Context::FindInput, fl!("help-find-fields")),
                 (Mode::Normal, Context::Find, fl!("help-find")),
                 (Mode::Insert, Context::Rename, fl!("help-renaming-insert")),
@@ -973,7 +978,7 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::QuickSearch, Action::Abort) => fl!("help-search-abort"),
         (Context::QuickSearch, Action::QuickSearch) => fl!("help-search-next"),
         (Context::QuickSearch, Action::PrevMatch) => fl!("help-search-prev"),
-        (Context::QuickSearch, Action::SearchMode) => fl!("help-search-mode"),
+        (Context::SearchInput, Action::SearchMode) => fl!("help-search-mode"),
         (Context::QuickSearch, Action::TextStart) => fl!("help-field-home"),
         (Context::QuickSearch, Action::TextEnd) => fl!("help-field-end"),
         (Context::Dialog | Context::DialogInput, Action::Up) => fl!("help-dialog-up"),
@@ -1116,7 +1121,6 @@ fn describe_find(context: Context, action: Action) -> Option<String> {
     let text = match action {
         Action::View => fl!("help-find-view"),
         Action::Edit => fl!("help-find-edit"),
-        Action::SearchMode => fl!("help-find-regex"),
         _ => return None,
     };
     Some(text)
@@ -1258,7 +1262,6 @@ fn describe_list(context: Context, action: Action) -> Option<String> {
         Action::Home => fl!("help-first-row"),
         Action::End => fl!("help-last-row"),
         Action::QuickSearch => fl!("help-list-filter"),
-        Action::SearchMode => fl!("help-list-search-mode"),
         Action::NormalMode => fl!("help-list-rows"),
         Action::Confirm => fl!("help-list-take"),
         Action::Cancel => fl!("help-list-close"),
@@ -1553,6 +1556,7 @@ mod tests {
                     "Search and renaming",
                     vec![
                         "Quick search",
+                        "Every field that searches, while it has the focus",
                         "Search of a whole tree, in its fields",
                         "Search of a whole tree",
                         "Renaming in place",

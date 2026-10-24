@@ -1,6 +1,7 @@
 # 0033. Letters in dialogs
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0045](0045-ctrl-s-switches-the-field-typed-in.md), Ctrl+s
+  in the field of the text of the search of a tree alone
 - Date: 2026-10-16
 - Amends: [ADR 0022](0022-vim-modes.md), [ADR 0027](0027-search-of-a-whole-tree.md),
   [ADR 0030](0030-search-modes.md)

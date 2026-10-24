@@ -78,6 +78,11 @@ impl TabMenu {
         self.picker.mode()
     }
 
+    /// Whether its filter takes the keys and switches how it matches.
+    pub(crate) fn switches(&self) -> bool {
+        self.picker.switches()
+    }
+
     /// Takes a key, as the picker does, and d d and F8, which close the tab under the cursor.
     pub(crate) fn handle(&mut self, input: Resolved) -> TabMenuEvent {
         let tab =
@@ -233,7 +238,8 @@ mod tests {
         typed(&mut menu, "www");
         let text = draw(&mut menu, 40, 10);
         assert!(
-            text.contains("Filter =: www")
+            text.contains("Filter: www")
+                && text.contains(" = ║")
                 && text.contains("web:/var/www")
                 && !text.contains("~/src"),
             "{text}"

@@ -1,7 +1,9 @@
 # 0030. Search modes
 
 - Status: Accepted; amended by [ADR 0033](0033-letters-in-dialogs.md), Ctrl+s in place of Alt+r,
-  and by [ADR 0044](0044-one-base-for-search-fields.md), one base for every field that searches
+  by [ADR 0044](0044-one-base-for-search-fields.md), one base for every field that searches, and
+  by [ADR 0045](0045-ctrl-s-switches-the-field-typed-in.md), Ctrl+s in the field typed in and the
+  glyph at its end
 - Date: 2026-10-16
 - Amends: [ADR 0016](0016-fuzzy-search.md), [ADR 0027](0027-search-of-a-whole-tree.md),
   [ADR 0029](0029-files-and-directories-with-fd.md)

@@ -123,6 +123,11 @@ impl HistoryWindow {
         self.picker.mode()
     }
 
+    /// Whether its filter takes the keys and switches how it matches.
+    pub(crate) fn switches(&self) -> bool {
+        self.picker.switches()
+    }
+
     /// Takes a key: the picker's, where Enter takes the command, and Tab, which switches
     /// between this host and all hosts, and d d and F8, which remove the command.
     pub(crate) fn handle(&mut self, input: Resolved) -> HistoryEvent {

@@ -290,8 +290,8 @@ pub(super) const PRESET: Preset = &[
     // match, and Esc and Ctrl+c go back to where it started. Ctrl+g and Ctrl+t go to the next and the
     // previous match, and Ctrl+b and Ctrl+e to the start and the end, as on vim's command line.
     // The arrows and the page keys, and the F-keys, end it and do what they do in the panel,
-    // as in mc; Shift+F7 goes to the next match. Ctrl+s switches how it matches, as in the lists
-    // and the search of a tree; vim binds no Ctrl+s.
+    // as in mc; Shift+F7 goes to the next match. Ctrl+s, which switches how it matches, is the
+    // key of every field that searches (`search_input`).
     (
         Mode::Insert,
         Context::QuickSearch,
@@ -300,7 +300,6 @@ pub(super) const PRESET: Preset = &[
             (Action::Abort, &["esc", "ctrl-[", "ctrl-c"]),
             (Action::QuickSearch, &["ctrl-g"]),
             (Action::PrevMatch, &["ctrl-t"]),
-            (Action::SearchMode, &["ctrl-s"]),
             (Action::TextStart, &["ctrl-b"]),
             (Action::TextEnd, &["ctrl-e"]),
             (Action::Up, &["up"]),
@@ -418,6 +417,20 @@ pub(super) const PRESET: Preset = &[
         Context::PathInput,
         &[(Action::Complete, &["tab", "ctrl-i"])],
     ),
+    // A field that switches how it searches, while it has the focus: quick search, the filter
+    // of a list while it takes the keys, and such a field of a dialog, as the text of the search
+    // of a tree; its keys come before those of where it is (ADR 0045). Ctrl+s switches the way
+    // it matches to the next, round: vim binds no Ctrl+s.
+    (
+        Mode::Normal,
+        Context::SearchInput,
+        &[(Action::SearchMode, &["ctrl-s"])],
+    ),
+    (
+        Mode::Insert,
+        Context::SearchInput,
+        &[(Action::SearchMode, &["ctrl-s"])],
+    ),
     // The list of completions under a path field or over the command line, as vim's `wildmenu`:
     // Tab, Ctrl+n, and Down put the next match in the field, Shift+Tab, Ctrl+p, and Up the one
     // before, round through what was typed; Left and Right complete in the directory above and
@@ -474,7 +487,8 @@ pub(super) const PRESET: Preset = &[
     // the zoxide window, the workspaces, the command history, and the list of the key hints
     // fall back to it. They open with the filter taking the keys, in Insert mode, where Esc goes
     // back to the list and `/` or `i` types in the filter again, as `i` starts Insert mode in a
-    // text field. Ctrl+s switches how the filter matches, in either mode.
+    // text field. While the filter takes the keys, Ctrl+s switches how it matches
+    // (`search_input`).
     (
         Mode::Normal,
         Context::List,
@@ -488,7 +502,6 @@ pub(super) const PRESET: Preset = &[
             (Action::Home, &["g g", "home"]),
             (Action::End, &["shift-g", "end"]),
             (Action::QuickSearch, &["/", "i"]),
-            (Action::SearchMode, &["ctrl-s"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c", "q", "f10"]),
         ],
@@ -502,7 +515,6 @@ pub(super) const PRESET: Preset = &[
             (Action::PageUp, &["pageup"]),
             (Action::PageDown, &["pagedown"]),
             (Action::Confirm, &["enter", "ctrl-m", "ctrl-y"]),
-            (Action::SearchMode, &["ctrl-s"]),
             (Action::NormalMode, &["esc", "ctrl-["]),
             (Action::Cancel, &["ctrl-c", "f10"]),
         ],
@@ -640,16 +652,16 @@ pub(super) const PRESET: Preset = &[
         ],
     ),
     // The dialog of the search of a whole tree, on top of the dialogs': F3 and F4 view and edit
-    // the file of the row at the line, as in the results of mc's Find File, and Ctrl+s switches
-    // regular expressions, as in quick search, wherever the focus is; Alt+c is the letter of the
-    // check box of case. On the rows, Ctrl+u and Ctrl+d move half a page, as in the lists.
+    // the file of the row at the line, as in the results of mc's Find File, wherever the focus
+    // is; Alt+c is the letter of the check box of case. On the rows, Ctrl+u and Ctrl+d move half
+    // a page, as in the lists. In the field of the text, Ctrl+s switches how it matches
+    // (`search_input`).
     (
         Mode::Normal,
         Context::Find,
         &[
             (Action::View, &["f3"]),
             (Action::Edit, &["f4"]),
-            (Action::SearchMode, &["ctrl-s"]),
             (Action::HalfPageUp, &["ctrl-u"]),
             (Action::HalfPageDown, &["ctrl-d"]),
         ],
@@ -657,20 +669,12 @@ pub(super) const PRESET: Preset = &[
     (
         Mode::Normal,
         Context::FindInput,
-        &[
-            (Action::View, &["f3"]),
-            (Action::Edit, &["f4"]),
-            (Action::SearchMode, &["ctrl-s"]),
-        ],
+        &[(Action::View, &["f3"]), (Action::Edit, &["f4"])],
     ),
     (
         Mode::Insert,
         Context::FindInput,
-        &[
-            (Action::View, &["f3"]),
-            (Action::Edit, &["f4"]),
-            (Action::SearchMode, &["ctrl-s"]),
-        ],
+        &[(Action::View, &["f3"]), (Action::Edit, &["f4"])],
     ),
     // The terminal's own screen, with the output of commands. Enter and q go back, as from the
     // prompt under the output that vim's g < shows.

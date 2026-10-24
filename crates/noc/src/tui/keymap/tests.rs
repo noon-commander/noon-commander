@@ -12,14 +12,15 @@ fn key(text: &str) -> KeyEvent {
     KeyEvent::new(*combination.codes.first(), combination.modifiers)
 }
 
-/// Feeds `keys` one by one at the same instant, typed in `mode` where `context` has the keys,
-/// and collects what they resolved to.
+/// Feeds `keys` one by one at the same instant, typed where `place` says, and collects what
+/// they resolved to.
 fn feed(
     keymap: &Keymap,
     state: &mut KeyState,
-    place: (Mode, Context),
+    place: impl Into<Place>,
     keys: &[&str],
 ) -> Vec<Typed> {
+    let place = place.into();
     let now = Instant::now();
     keys.iter()
         .flat_map(|text| keymap.feed(state, place, key(text), now))
@@ -27,7 +28,7 @@ fn feed(
 }
 
 /// What `keys` resolve to from a fresh state.
-fn typed(place: (Mode, Context), keys: &[&str]) -> Vec<Typed> {
+fn typed(place: impl Into<Place>, keys: &[&str]) -> Vec<Typed> {
     feed(&Keymap::default(), &mut KeyState::default(), place, keys)
 }
 
@@ -550,30 +551,48 @@ fn dialogs_take_alt_and_a_letter_as_their_hotkeys_in_every_mode() {
     let help = (Mode::Normal, Context::Help);
     assert_eq!(typed(help, &["alt-v"]), hotkeys("v"));
     assert_eq!(typed(help, &["j"]), actions(&[Action::Down]));
-    // Ctrl+s switches regular expressions in the search of a tree, from anywhere.
-    for place in [
-        (Mode::Normal, Context::Find),
-        (Mode::Insert, Context::FindInput),
-    ] {
-        assert_eq!(typed(place, &["ctrl-s"]), actions(&[Action::SearchMode]));
+}
+
+/// `place` with a field that switches how it searches in the focus.
+fn searching((mode, context): (Mode, Context)) -> Place {
+    Place {
+        mode,
+        context,
+        search: true,
     }
 }
 
 #[test]
-fn ctrl_s_switches_how_quick_search_and_the_filters_match() {
-    for place in [
+fn ctrl_s_switches_how_the_field_with_the_focus_matches_and_nothing_elsewhere() {
+    let fields = [
         (Mode::Insert, Context::QuickSearch),
-        (Mode::Normal, Context::LocationMenu),
         (Mode::Insert, Context::LocationMenu),
-        (Mode::Normal, Context::Jump),
         (Mode::Insert, Context::KeyHints),
-    ] {
+        (Mode::Insert, Context::DialogInput),
+        (Mode::Normal, Context::DialogInput),
+        (Mode::Insert, Context::FindInput),
+        (Mode::Normal, Context::FindInput),
+    ];
+    for place in fields {
         assert_eq!(
-            typed(place, &["ctrl-s"]),
+            typed(searching(place), &["ctrl-s"]),
             actions(&[Action::SearchMode]),
             "{place:?}"
         );
+        assert_eq!(typed(place, &["ctrl-s"]), [], "{place:?}: no such field");
     }
+    // The rows of a list, and the rest of the search of a tree, have no field in the focus.
+    for place in [
+        (Mode::Normal, Context::LocationMenu),
+        (Mode::Normal, Context::Jump),
+        (Mode::Normal, Context::Find),
+    ] {
+        assert_eq!(typed(place, &["ctrl-s"]), [], "{place:?}");
+    }
+    // The layer goes before the keys of where the field is, which keep theirs.
+    let find = searching((Mode::Insert, Context::FindInput));
+    assert_eq!(typed(find, &["f3"]), actions(&[Action::View]));
+    assert_eq!(typed(find, &["x"]), inserts("x"), "characters are text");
 }
 
 #[test]

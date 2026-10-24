@@ -283,6 +283,11 @@ impl LocationMenu {
         self.picker.mode()
     }
 
+    /// Whether its filter takes the keys and switches how it matches.
+    pub(crate) fn switches(&self) -> bool {
+        self.picker.switches()
+    }
+
     /// Takes a key: the picker's, and F4, which edits the settings of a host, F8, which
     /// disconnects it, and R, which reads the volumes and hosts again. Enter on the row of the
     /// rest of a group shows them.

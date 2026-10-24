@@ -5,7 +5,7 @@ expression: draw(&mut window)
 "                                                                                "
 "                                                                                "
 "  ╔════════════════════════════ Command history ═════════════════════════════╗  "
-"  ║ Filter ~:                                           all hosts ⇄ this one ║  "
+"  ║ Filter:                                           ~ all hosts ⇄ this one ║  "
 "  ╟──────────────────────────────────────────────────────────────────────────╢  "
 "  ║  local /home/me/src/noc   cargo test -p noc-ops                          ║  "
 "  ║  Site  /var/log           for f in *.log; do »                       +2  ║  "

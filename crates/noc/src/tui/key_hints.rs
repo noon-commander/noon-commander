@@ -64,7 +64,7 @@ impl KeyHintsWindow {
     /// the hints had typed; the command run from it gets `extra`. Its filter matches in `mode`
     /// (`ui.search_mode`).
     pub(crate) fn new(keymap: &Keymap, hints: &Hints, extra: Extra, mode: SearchMode) -> Self {
-        let place = (hints.mode, hints.context);
+        let place = hints.place;
         let rows: Vec<Row> = keymap
             .sequences(place, &hints.prefix)
             .into_iter()
@@ -103,6 +103,11 @@ impl KeyHintsWindow {
     /// The mode keys are typed in: Insert while the filter takes them.
     pub(crate) fn mode(&self) -> Mode {
         self.picker.mode()
+    }
+
+    /// Whether its filter takes the keys and switches how it matches.
+    pub(crate) fn switches(&self) -> bool {
+        self.picker.switches()
     }
 
     /// Takes a key, as the picker does: Enter runs the command under the cursor, unless it

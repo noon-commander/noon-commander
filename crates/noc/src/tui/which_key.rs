@@ -9,7 +9,7 @@ use ratatui::text::{Line, Span};
 use super::cells::{self, Align, Cut, Fitted};
 use super::dialog::{Colors, draw_box};
 use super::help;
-use super::keymap::{Action, Context, Hint, Hints, Mode};
+use super::keymap::{Action, Hint, Hints, Place};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -28,12 +28,12 @@ struct Row {
     group: bool,
 }
 
-/// What `action` does in `context`, or in the first context of its chain in `mode` that says.
-pub(crate) fn describe((mode, context): (Mode, Context), action: Action) -> Option<String> {
-    context
-        .chain(mode)
-        .iter()
-        .find_map(|context| help::describe_in((mode, *context), action))
+/// What `action` does where `place` says, in the first context of its chain that says.
+pub(crate) fn describe(place: impl Into<Place>, action: Action) -> Option<String> {
+    let place = place.into();
+    place
+        .chain()
+        .find_map(|context| help::describe_in((place.mode, context), action))
 }
 
 /// The rows of `hints`, without the actions the app cannot do yet.
@@ -42,7 +42,7 @@ fn rows(hints: &Hints) -> Vec<Row> {
         .rows
         .iter()
         .filter_map(|Hint { keys, action, more }| {
-            let text = action.and_then(|action| describe((hints.mode, hints.context), action));
+            let text = action.and_then(|action| describe(hints.place, action));
             let text = match (text, *more) {
                 (Some(text), 0) => text,
                 (None, 0) => return None,
@@ -216,7 +216,7 @@ mod tests {
 
     use super::*;
     use crate::tui::glyphs::Glyphs;
-    use crate::tui::keymap::{KeyState, Keymap};
+    use crate::tui::keymap::{Context, KeyState, Keymap, Mode};
 
     fn draw(hints: &Hints, width: u16, height: u16) -> String {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
@@ -336,8 +336,7 @@ mod tests {
         let ctrl_w = crokey::parse("ctrl-w").unwrap().normalized();
         let place = (Mode::Normal, Context::Panel);
         let hints = Hints {
-            mode: Mode::Normal,
-            context: Context::Panel,
+            place: place.into(),
             typed: Some("Ctrl+w".to_owned()),
             prefix: vec![ctrl_w],
             rows: keymap.hints(place, &[ctrl_w]),

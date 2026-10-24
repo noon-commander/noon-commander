@@ -171,12 +171,22 @@ impl Input {
         Matcher::new(self.way, self.kind.target, typed, case)
     }
 
-    /// Its glyph in a prompt.
+    /// Whether it has more than one way, which Ctrl+s and a click on its glyph switch.
+    pub(crate) fn switchable(self) -> bool {
+        self.kind.ways.len() > 1
+    }
+
+    /// Whether `typed` matches nothing for being no regular expression, in the regex way.
+    pub(crate) fn invalid(self, typed: &str) -> bool {
+        self.way == Way::Regex && self.matcher(typed, Case::Own).error().is_some()
+    }
+
+    /// Its glyph.
     pub(crate) fn glyph(self, glyphs: SearchModes) -> &'static str {
         self.way.glyph(glyphs)
     }
 
-    /// Its glyph, and its style in a prompt in `style`: the style of what is wrong if
+    /// Its glyph, and its style at the end of a field in `style`: the style of what is wrong if
     /// `invalid`, a text that is no regular expression.
     pub(crate) fn mark(self, invalid: bool, style: Style, theme: &Theme) -> Mark {
         Mark {
@@ -226,7 +236,7 @@ impl Prompt {
     }
 }
 
-/// The glyph of a mode in a prompt, as it is drawn.
+/// The glyph of a way at the end of a field, as it is drawn.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Mark {
     pub(crate) glyph: &'static str,
@@ -234,37 +244,52 @@ pub(crate) struct Mark {
 }
 
 impl Mark {
-    /// `prompt` with `typed` in it as spans in `style`, with the glyph in its own style where
-    /// the message has it, before or after what is typed, which is never searched for it.
-    pub(crate) fn spans(self, prompt: &Prompt, typed: &str, style: Style) -> Vec<Span<'static>> {
-        let mut spans = Vec::with_capacity(5);
-        let mut marked = false;
-        for (part, message) in [
-            (&prompt.before[..], true),
-            (typed, false),
-            (&prompt.after, true),
-        ] {
-            match part.find(self.glyph).filter(|_| message && !marked) {
-                Some(at) => {
-                    marked = true;
-                    spans.push(Span::styled(part[..at].to_owned(), style));
-                    spans.push(Span::styled(self.glyph, self.style));
-                    spans.push(Span::styled(
-                        part[at + self.glyph.len()..].to_owned(),
-                        style,
-                    ));
-                }
-                None => spans.push(Span::styled(part.to_owned(), style)),
-            }
-        }
-        spans.retain(|span| !span.content.is_empty());
-        spans
+    /// The cells it takes at the end of a field: the glyph, and a blank before it.
+    pub(crate) fn width(self) -> usize {
+        cells::width(self.glyph) + 1
     }
 
-    /// Draws `prompt` on the line `area` in `style`, the glyph marked, with `field` in its
-    /// place in the colors of the text fields of dialogs, as wide as the prompt leaves room
-    /// for. Returns the cursor's column in `area`. Where no room is left, the prompt and the
-    /// text are cut as one.
+    /// Draws `field` on the line `area` in the colors of the fields of dialogs, with the glyph
+    /// at its right end (ADR 0045). Returns the cursor's column in `area`, and where the glyph
+    /// is, for the mouse; without room for both, the field shows alone.
+    pub(crate) fn render_in_field(
+        self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        field: &Field,
+        theme: &Theme,
+    ) -> (u16, Option<Rect>) {
+        let width = usize::from(area.width);
+        let glyph = self.width();
+        if width <= glyph {
+            let (line, column) = dialog::field_line(field, width, theme);
+            frame.render_widget(line, area);
+            return (to_u16(column), None);
+        }
+        let room = to_u16(width - glyph);
+        let (line, column) = dialog::field_line(field, usize::from(room), theme);
+        frame.render_widget(
+            line,
+            Rect {
+                width: room,
+                ..area
+            },
+        );
+        let at = Rect::new(area.x + room, area.y, to_u16(glyph), 1);
+        let spans = vec![Span::raw(" "), Span::styled(self.glyph, self.style)];
+        frame.render_widget(Line::from(spans).style(theme.dialog_input), at);
+        let drawn = Rect {
+            x: at.x + 1,
+            width: at.width - 1,
+            ..at
+        };
+        (to_u16(column), Some(drawn))
+    }
+
+    /// Draws `prompt` on the line `area` in `style`, with `field` in its place in the colors
+    /// of the text fields of dialogs, as wide as the prompt leaves room for, and the glyph at
+    /// the end of the field. Returns the cursor's column in `area`, and where the glyph is, for
+    /// the mouse. Where no room is left, the prompt and the text are cut as one, without it.
     pub(crate) fn render_field(
         self,
         frame: &mut Frame<'_>,
@@ -272,48 +297,38 @@ impl Mark {
         (prompt, field): (&Prompt, &Field),
         style: Style,
         theme: &Theme,
-    ) -> u16 {
+    ) -> (u16, Option<Rect>) {
         let width = usize::from(area.width);
         let (before, after) = (cells::width(&prompt.before), cells::width(&prompt.after));
         let room = width.saturating_sub(before + after);
-        let to_u16 = |n: usize| u16::try_from(n).unwrap_or(u16::MAX);
-        if room == 0 {
+        if room <= self.width() {
             let (shown, column) = field.visible(0);
             let spans = cells::fit_spans(
-                self.spans(prompt, &shown, style),
+                vec![Span::styled(prompt.with(&shown), style)],
                 width,
                 (style, theme.truncated_dialog),
                 theme.glyphs.marks,
             );
             frame.render_widget(Line::from(spans).style(style), area);
-            return to_u16(before + column).min(area.width.saturating_sub(1));
+            return (
+                to_u16(before + column).min(area.width.saturating_sub(1)),
+                None,
+            );
         }
-        let part = |text: &str, mark: bool| {
-            let alone = Prompt {
-                before: text.to_owned(),
-                after: String::new(),
-            };
-            if mark {
-                self.spans(&alone, "", style)
-            } else {
-                vec![Span::styled(text.to_owned(), style)]
-            }
-        };
-        let in_before = prompt.before.contains(self.glyph);
-        let (field_line, column) = dialog::field_line(field, room, theme);
         let field_area = Rect::new(area.x + to_u16(before), area.y, to_u16(room), 1);
         let after_area = Rect::new(field_area.right(), area.y, to_u16(after), 1);
         frame.render_widget(
-            Line::from(part(&prompt.before, true)).style(style),
+            Line::styled(prompt.before.clone(), style),
             Rect::new(area.x, area.y, to_u16(before), 1),
         );
-        frame.render_widget(field_line, field_area);
-        frame.render_widget(
-            Line::from(part(&prompt.after, !in_before)).style(style),
-            after_area,
-        );
-        to_u16(before + column)
+        let (column, glyph) = self.render_in_field(frame, field_area, field, theme);
+        frame.render_widget(Line::styled(prompt.after.clone(), style), after_area);
+        (to_u16(before) + column, glyph)
     }
+}
+
+fn to_u16(n: usize) -> u16 {
+    u16::try_from(n).unwrap_or(u16::MAX)
 }
 
 /// What was typed, ready to match texts with in its way.
@@ -539,63 +554,69 @@ mod tests {
     }
 
     #[test]
-    fn the_glyph_is_marked_in_the_message_and_never_in_what_is_typed() {
-        let mark = Mark {
-            glyph: "*",
-            style: Style::new().bold(),
-        };
-        let text = |spans: &[Span<'_>]| -> Vec<(String, bool)> {
-            spans
-                .iter()
-                .map(|span| (span.content.to_string(), span.style == mark.style))
-                .collect()
-        };
-        let owned = |text: &str, marked| (text.to_owned(), marked);
-        let after = Prompt::new(|text| format!("{text} — *"));
-        assert_eq!(
-            text(&mark.spans(&after, "a*é", Style::new())),
-            [owned("a*é", false), owned(" — ", false), owned("*", true)],
-            "typed text before the glyph, with a wide character, as a translation may put it"
-        );
-        let before = Prompt::new(|text| format!("* {text}"));
-        assert_eq!(
-            text(&mark.spans(&before, "*", Style::new())),
-            [owned("*", true), owned(" ", false), owned("*", false)]
-        );
-    }
-
-    #[test]
-    fn the_field_of_a_prompt_has_the_colors_of_the_fields_of_dialogs() {
+    fn the_field_of_a_prompt_has_the_colors_of_the_fields_of_dialogs_and_ends_with_the_glyph() {
         use ratatui::Terminal;
         use ratatui::backend::TestBackend;
 
         let theme = Theme::terminal();
-        let mark = Input::new(Kind::FILTER, Way::Fzf).mark(false, theme.dialog, &theme);
-        let prompt = Prompt::new(|text| format!("Filter {}: {text} !", mark.glyph));
+        let mark = Input::new(Kind::FILTER, Way::Regex).mark(false, theme.dialog_input, &theme);
+        let prompt = Prompt::new(|text| format!("Filter: {text} !"));
         let before = cells::width(&prompt.before);
         let field = Field::plain("ab");
         let mut terminal = Terminal::new(TestBackend::new(30, 1)).unwrap();
-        let mut column = 0;
+        let mut drawn = (0, None);
         terminal
             .draw(|frame| {
                 let area = frame.area();
-                column = mark.render_field(frame, area, (&prompt, &field), theme.dialog, &theme);
+                drawn = mark.render_field(frame, area, (&prompt, &field), theme.dialog, &theme);
             })
             .unwrap();
         let buffer = terminal.backend().buffer();
         let bg = |x: usize| buffer[(u16::try_from(x).unwrap(), 0)].bg;
+        let (column, glyph) = drawn;
         assert_eq!(usize::from(column), before + 2, "after what is typed");
         assert_eq!(bg(0), theme.dialog.bg.unwrap_or_default());
         for x in before..28 {
             assert_eq!(bg(x), theme.dialog_input.bg.unwrap_or_default(), "cell {x}");
         }
+        let glyph = glyph.unwrap();
+        assert_eq!((glyph.x, glyph.width), (26, 2), "at the end of the field");
+        let at = |x: u16| buffer[(x, 0)].symbol().to_owned();
+        assert_eq!(at(26) + &at(27), mark.glyph);
+        assert_eq!(at(25), " ", "a blank before it");
         assert_eq!(
             bg(29),
             theme.dialog.bg.unwrap_or_default(),
             "the prompt after it"
         );
-        assert_eq!(buffer[(28, 0)].symbol(), " ");
         assert_eq!(buffer[(29, 0)].symbol(), "!");
+    }
+
+    #[test]
+    fn a_field_too_narrow_for_its_glyph_shows_alone() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+
+        let theme = Theme::terminal();
+        let mark = Input::new(Kind::FILTER, Way::Regex).mark(false, theme.dialog_input, &theme);
+        let mut terminal = Terminal::new(TestBackend::new(3, 1)).unwrap();
+        let mut glyph = Some(Rect::default());
+        terminal
+            .draw(|frame| {
+                (_, glyph) = mark.render_in_field(frame, frame.area(), &Field::plain("ab"), &theme);
+            })
+            .unwrap();
+        assert_eq!(glyph, None);
+    }
+
+    #[test]
+    fn only_a_regular_expression_is_invalid() {
+        assert!(Input::new(Kind::FILTER, Way::Regex).invalid("("));
+        assert!(!Input::new(Kind::FILTER, Way::Regex).invalid("a"));
+        assert!(!Input::new(Kind::FILTER, Way::Plain).invalid("("));
+        assert!(!Input::new(Kind::MARK, Way::Glob).invalid("["));
+        assert!(Input::new(Kind::FILTER, Way::Fzf).switchable());
+        assert!(!Input::new(Kind::MARK, Way::Glob).switchable());
     }
 
     #[test]

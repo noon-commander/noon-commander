@@ -2510,7 +2510,8 @@ mod tests {
         let dialogs = [
             (
                 "select",
-                Dialog::form("Select", "", "*", &select).with_width(50),
+                Dialog::form("Select", &fl!("pattern-text", mode = "*"), "*", &select)
+                    .with_width(50),
             ),
             (
                 "host",

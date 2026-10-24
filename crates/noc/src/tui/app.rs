@@ -8,8 +8,8 @@ use std::time::{Duration, Instant, SystemTime};
 
 use jiff::tz::TimeZone;
 use noc_config::{
-    Config, HistoryEntry, HostConfig, Hosts, MenuBar, PanelSide, Recent, SearchMode, SftpHost,
-    TabBar, UiConfig, Wheel, Workspace, Workspaces,
+    Config, HistoryEntry, HostConfig, Hosts, MenuBar, PanelSide, Recent, SftpHost, TabBar,
+    UiConfig, Wheel, Workspace, Workspaces,
 };
 use noc_ops::{Algorithm, Conflict, CopyOptions, Decision, Sum};
 use noc_scroll::Motion;
@@ -54,12 +54,12 @@ use super::panel::{
     Destination, Failure, HostState, HostStatus, ListError, ListErrorKind, ListRequest, Listed,
     Panel, SearchEnd, View, child, home_text, location_text, stem_chars,
 };
-use super::pattern::Pattern;
 use super::picker::FULL_ROWS;
 use super::places::{Places, volume_of};
 use super::progress::{Counts, JobButton, JobView};
 use super::pulldown::{self, Command, PullDown, PullDownEvent, Status};
 use super::reading::{ReadButton, Reading};
+use super::search::{self, Case, Input, Way};
 use super::spinner::{self, Spin, Wait};
 use super::sums::{Mark, SumRow, SumsButton, SumsEvent, SumsWindow, Verdict};
 use super::tab_menu::{TabMenu, TabMenuEvent};
@@ -727,6 +727,8 @@ struct CopyChoices {
 #[derive(Debug, Clone)]
 struct PatternOptions {
     pattern: String,
+    /// How the pattern matches.
+    way: Way,
     /// Leaves directories alone.
     files_only: bool,
     case_sensitive: bool,
@@ -737,6 +739,7 @@ impl Default for PatternOptions {
     fn default() -> Self {
         Self {
             pattern: "*".to_owned(),
+            way: Way::Glob,
             files_only: false,
             case_sensitive: true,
         }
@@ -759,7 +762,7 @@ pub(crate) struct App {
     /// What the last quick search found, in any panel, for `n` and `N`, as vim keeps the last
     /// pattern; whether it went up the rows, as `?` does, which `n` then does too; and how it
     /// matched, as `n` matches too.
-    last_search: Option<(String, bool, SearchMode)>,
+    last_search: Option<(String, bool, Way)>,
     hosts: HashMap<String, Host>,
     connections: u64,
     /// The settings, with `~` expanded; `ui.show_hidden` follows `o h`.
@@ -3054,8 +3057,8 @@ impl App {
         let panel = self.panel_mut(self.active);
         let typed = panel.search_text().is_some_and(|text| !text.is_empty());
         match last {
-            Some((last, _, mode)) if panel.searching() && !typed => {
-                panel.search_resume(&last, mode);
+            Some((last, _, way)) if panel.searching() && !typed => {
+                panel.search_resume(&last, way);
             }
             _ if panel.searching() => panel.search_step(true),
             _ => panel.search_down(count, mode),
@@ -3066,7 +3069,7 @@ impl App {
     /// what the last quick search found, `next` the way it went; where it was goes to the jump
     /// list.
     fn search_again(&mut self, next: bool) {
-        let Some((last, back, mode)) = self.last_search.clone() else {
+        let Some((last, back, way)) = self.last_search.clone() else {
             self.message = Some(fl!("message-search-none"));
             return;
         };
@@ -3074,7 +3077,7 @@ impl App {
         let times = self.extra.times();
         let round = self
             .panel_mut(self.active)
-            .search_again((&last, mode), forward, times);
+            .search_again((&last, way), forward, times);
         self.message = match round {
             None => Some(fl!("message-search-not-found", text = last)),
             Some(true) if forward => Some(fl!("message-search-bottom")),
@@ -3097,7 +3100,7 @@ impl App {
     /// `N`, with the way it went, found or not, as vim keeps its pattern; how it ended.
     fn end_search(&mut self, side: Side) -> Option<SearchEnd> {
         let end = self.panel_mut(side).end_search()?;
-        self.last_search = Some((end.text.clone(), end.back, end.mode));
+        self.last_search = Some((end.text.clone(), end.back, end.way));
         Some(end)
     }
 
@@ -6269,12 +6272,17 @@ impl App {
             fl!("pattern-unselect")
         };
         let options = &self.pattern_options;
+        let input = Input::new(search::Kind::MARK, options.way);
+        let prompt = fl!(
+            "pattern-text",
+            mode = input.glyph(self.theme.glyphs.search_modes)
+        );
         let checks = [
             (fl!("pattern-files-only"), options.files_only),
             (fl!("pattern-case-sensitive"), options.case_sensitive),
         ];
-        let dialog =
-            Dialog::form(&title, "", &options.pattern, &checks).with_width(PATTERN_DIALOG_WIDTH);
+        let dialog = Dialog::form(&title, &prompt, &options.pattern, &checks)
+            .with_width(PATTERN_DIALOG_WIDTH);
         let panel = self.shown(self.active);
         self.dialogs.push_back(Open {
             dialog,
@@ -6290,22 +6298,21 @@ impl App {
         }
         let options = PatternOptions {
             pattern: dialog.text().to_owned(),
+            way: self.pattern_options.way,
             files_only: dialog.checked(0),
             case_sensitive: dialog.checked(1),
         };
-        // Names match in either Unicode form, and ignoring case by folding it.
-        let fold = |text: &str| {
-            if options.case_sensitive {
-                noc_pattern::nfc(text).into_owned()
-            } else {
-                noc_pattern::fold(text).into_owned()
-            }
+        let case = if options.case_sensitive {
+            Case::Counts
+        } else {
+            Case::Own
         };
-        let pattern = Pattern::new(&fold(&options.pattern));
+        let mut matcher =
+            Input::new(search::Kind::MARK, options.way).matcher(&options.pattern, case);
         if let Some(panel) = self.panel_of_mut(panel) {
             panel.mark_where(mark, |entry| {
                 !(options.files_only && entry.is_dir_like())
-                    && pattern.matches(&fold(&entry.display_name()))
+                    && matcher.score(&entry.display_name()).is_some()
             });
         }
         self.pattern_options = options;
@@ -7942,7 +7949,7 @@ mod tests {
 
     use std::sync::mpsc;
 
-    use noc_config::{AnimationsConfig, TransferConfig, ZoxideConfig};
+    use noc_config::{AnimationsConfig, SearchMode, TransferConfig, ZoxideConfig};
     use noc_ssh::askpass::PromptKind;
     use noc_vfs::{DirEntry, FileKind, Metadata, RemotePath};
     use noc_viewer::Stamp;
@@ -8232,7 +8239,7 @@ mod tests {
     /// settings: `prompt`, the glyph of the mode, and `text`.
     fn prompt(app: &App, prompt: &str, text: &str) -> String {
         let glyphs = app.theme.glyphs.search_modes;
-        let glyph = crate::tui::search_mode::glyph(app.config.ui.search_mode, glyphs);
+        let glyph = Way::from(app.config.ui.search_mode).glyph(glyphs);
         format!("{prompt} {glyph}: {text}")
     }
 
@@ -9748,7 +9755,13 @@ mod tests {
 
         app.handle(action(Action::Select));
         assert_eq!(app.context(), Context::DialogInput);
-        assert!(screen(&mut app).contains("Select"));
+        let text = screen(&mut app);
+        assert!(text.contains("Select"));
+        let glob = app.theme.glyphs.search_modes.glob;
+        assert!(
+            text.contains(&format!("Pattern {glob}:")),
+            "the glyph of shell patterns, as every field that searches shows its way: {text}"
+        );
         retype(&mut app, "*.md");
         app.handle(action(Action::Confirm));
         assert_eq!(app.context(), Context::Panel);

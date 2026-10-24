@@ -932,6 +932,9 @@ host-other-dir-invalid = the other panel directory must start with / or ~/
 # Dialog titles.
 pattern-select = Select
 pattern-unselect = Unselect
+# The prompt of the pattern: the glyph of how it matches (shell patterns), as the prompts of
+# the other fields that search show it.
+pattern-text = &Pattern { $mode }:
 # Check boxes: leave directories alone; tell upper and lower case apart.
 pattern-files-only = &Files only
 pattern-case-sensitive = &Case sensitive

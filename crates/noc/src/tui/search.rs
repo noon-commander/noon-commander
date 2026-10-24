@@ -1,7 +1,8 @@
-//! How quick search and the filters of the lists match what is typed (ADR 0030): as it is, as
-//! fzf does, or as a regular expression. Each search and each window starts with
-//! `ui.search_mode`, and Ctrl+s switches its own, round; a glyph in its prompt, after the word,
-//! says which.
+//! How every field that searches matches what is typed (ADR 0030, ADR 0044): quick search, the
+//! filters of the lists, the search of a tree, and the marking of `g +` and `g -`. Each is a
+//! [`Kind`], which says the ways it matches, in the order Ctrl+s goes round them, and the way it
+//! starts in for each of `ui.search_mode`; an [`Input`] is one of them while it is open. A glyph
+//! in its prompt says which way, in every field.
 
 use noc_config::SearchMode;
 use noc_pattern::{Normalized, Options, PatternError};
@@ -15,32 +16,173 @@ use super::cells;
 use super::dialog::{self, Field};
 use super::fuzzy::Fuzzy;
 use super::glyphs::SearchModes;
+use super::pattern::Pattern;
 use super::theme::Theme;
 
-/// The mode after `mode`, as Ctrl+s goes round: plain, fzf, regex.
-pub(crate) fn next(mode: SearchMode) -> SearchMode {
-    match mode {
-        SearchMode::Plain => SearchMode::Fzf,
-        SearchMode::Fzf => SearchMode::Regex,
-        SearchMode::Regex => SearchMode::Plain,
+/// A way to match what is typed: the three of `ui.search_mode`, and shell patterns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Way {
+    /// The text anywhere.
+    Plain,
+    /// The characters in order, as fzf does, best first.
+    Fzf,
+    /// A regular expression, anywhere.
+    Regex,
+    /// A shell pattern, `*`, `?`, `[a-z]`, `{a,b}`, which the whole name matches, as mc's `+`.
+    Glob,
+}
+
+impl From<SearchMode> for Way {
+    fn from(mode: SearchMode) -> Self {
+        match mode {
+            SearchMode::Plain => Self::Plain,
+            SearchMode::Fzf => Self::Fzf,
+            SearchMode::Regex => Self::Regex,
+        }
     }
 }
 
-/// The glyph of `mode` in a prompt.
-pub(crate) fn glyph(mode: SearchMode, glyphs: SearchModes) -> &'static str {
-    match mode {
-        SearchMode::Plain => glyphs.plain,
-        SearchMode::Fzf => glyphs.fzf,
-        SearchMode::Regex => glyphs.regex,
+impl Way {
+    /// Its glyph in a prompt.
+    pub(crate) fn glyph(self, glyphs: SearchModes) -> &'static str {
+        match self {
+            Self::Plain => glyphs.plain,
+            Self::Fzf => glyphs.fzf,
+            Self::Regex => glyphs.regex,
+            Self::Glob => glyphs.glob,
+        }
     }
 }
 
-/// The glyph of `mode`, and its style in a prompt in `style`: the style of what is wrong if
-/// `invalid`, a text that is no regular expression.
-pub(crate) fn marked(mode: SearchMode, invalid: bool, style: Style, theme: &Theme) -> Mark {
-    Mark {
-        glyph: glyph(mode, theme.glyphs.search_modes),
-        style: if invalid { theme.invalid(style) } else { style },
+/// What is matched: names, or paths, where fzf has a word start after a `/`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Target {
+    Names,
+    Paths,
+}
+
+/// Whether case counts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Case {
+    /// As the way has it: plain text and patterns ignore case; fzf and regular expressions count
+    /// it once what is typed has a capital letter.
+    Own,
+    /// Always.
+    Counts,
+}
+
+/// A kind of field that searches: the ways it matches, and what.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Kind {
+    /// In the order Ctrl+s goes round them.
+    ways: &'static [Way],
+    /// The way it starts in when the one asked for is not among them.
+    instead: Way,
+    target: Target,
+}
+
+impl Kind {
+    /// Quick search in a panel: `/` and `?`.
+    pub(crate) const QUICK_SEARCH: Self = Self {
+        ways: &[Way::Plain, Way::Fzf, Way::Regex],
+        instead: Way::Fzf,
+        target: Target::Names,
+    };
+    /// The filter of a list of names: the location menu, the tab menu, the workspaces, the
+    /// command history, the key hints.
+    pub(crate) const FILTER: Self = Self {
+        ways: &[Way::Plain, Way::Fzf, Way::Regex],
+        instead: Way::Fzf,
+        target: Target::Names,
+    };
+    /// The filter of a list of paths: the zoxide window.
+    pub(crate) const FILTER_PATHS: Self = Self {
+        target: Target::Paths,
+        ..Self::FILTER
+    };
+    /// The text of the search of a tree, `f /` and `f f`: ripgrep and fd match a pattern rather
+    /// than rank names, so fzf is a regular expression there.
+    pub(crate) const TREE: Self = Self {
+        ways: &[Way::Plain, Way::Regex],
+        instead: Way::Regex,
+        target: Target::Names,
+    };
+    /// The pattern of `g +` and `g -`.
+    pub(crate) const MARK: Self = Self {
+        ways: &[Way::Glob],
+        instead: Way::Glob,
+        target: Target::Names,
+    };
+
+    /// The way it starts in when `way` is asked for.
+    fn start(self, way: Way) -> Way {
+        if self.ways.contains(&way) {
+            way
+        } else {
+            self.instead
+        }
+    }
+
+    /// The way after `way`, as Ctrl+s goes round.
+    fn next(self, way: Way) -> Way {
+        let at = self.ways.iter().position(|&each| each == way);
+        at.and_then(|at| self.ways.get((at + 1) % self.ways.len()))
+            .copied()
+            .unwrap_or(self.instead)
+    }
+}
+
+/// A field that searches, while it is open: its kind, and the way it matches now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Input {
+    kind: Kind,
+    way: Way,
+}
+
+impl Input {
+    /// A field of `kind` that starts in `way`, `ui.search_mode` mostly; in the kind's own if it
+    /// has no such way.
+    pub(crate) fn new(kind: Kind, way: impl Into<Way>) -> Self {
+        Self {
+            kind,
+            way: kind.start(way.into()),
+        }
+    }
+
+    pub(crate) fn kind(self) -> Kind {
+        self.kind
+    }
+
+    /// The way it matches now.
+    pub(crate) fn way(self) -> Way {
+        self.way
+    }
+
+    /// Goes to the next way, as Ctrl+s does; whether it changed, which it does not in a kind of
+    /// one way.
+    pub(crate) fn switch(&mut self) -> bool {
+        let before = self.way;
+        self.way = self.kind.next(self.way);
+        self.way != before
+    }
+
+    /// What `typed` matches, in the way it matches now.
+    pub(crate) fn matcher(self, typed: &str, case: Case) -> Matcher {
+        Matcher::new(self.way, self.kind.target, typed, case)
+    }
+
+    /// Its glyph in a prompt.
+    pub(crate) fn glyph(self, glyphs: SearchModes) -> &'static str {
+        self.way.glyph(glyphs)
+    }
+
+    /// Its glyph, and its style in a prompt in `style`: the style of what is wrong if
+    /// `invalid`, a text that is no regular expression.
+    pub(crate) fn mark(self, invalid: bool, style: Style, theme: &Theme) -> Mark {
+        Mark {
+            glyph: self.glyph(theme.glyphs.search_modes),
+            style: if invalid { theme.invalid(style) } else { style },
+        }
     }
 }
 
@@ -174,42 +316,45 @@ impl Mark {
     }
 }
 
-/// What was typed, ready to match texts with in its mode.
+/// What was typed, ready to match texts with in its way.
 #[derive(Debug)]
 pub(crate) enum Matcher {
-    /// The text in lower case, anywhere, ignoring case.
-    Plain(String),
+    /// The text in NFC, anywhere; case folded if `fold`, as it ignores case then.
+    Plain {
+        typed: String,
+        fold: bool,
+    },
     Fuzzy(Fuzzy),
-    /// A regular expression with smart case, or why it is none, which matches nothing.
+    /// A regular expression, or why it is none, which matches nothing.
     Regex(Result<Regex, PatternError>),
+    /// A shell pattern, which the whole name matches; in NFC, and case folded if `fold`.
+    Glob {
+        pattern: Pattern,
+        fold: bool,
+    },
 }
 
 impl Matcher {
-    /// For names, such as files or hosts.
-    pub(crate) fn names(mode: SearchMode, typed: &str) -> Self {
-        match mode {
-            SearchMode::Fzf => Self::Fuzzy(Fuzzy::names(typed)),
-            _ => Self::literal(mode, typed),
-        }
-    }
-
-    /// For paths: fzf has a word start after a `/`.
-    pub(crate) fn paths(mode: SearchMode, typed: &str) -> Self {
-        match mode {
-            SearchMode::Fzf => Self::Fuzzy(Fuzzy::paths(typed)),
-            _ => Self::literal(mode, typed),
-        }
-    }
-
-    fn literal(mode: SearchMode, typed: &str) -> Self {
-        if mode == SearchMode::Regex {
-            let options = Options {
-                regex: true,
-                match_case: false,
-            };
-            Self::Regex(noc_pattern::text(&noc_pattern::nfc(typed), options))
-        } else {
-            Self::Plain(noc_pattern::fold(typed).into_owned())
+    /// `typed`, to match `target` in `way`, with `case`.
+    pub(crate) fn new(way: Way, target: Target, typed: &str, case: Case) -> Self {
+        let counts = case == Case::Counts;
+        match way {
+            Way::Plain => Self::Plain {
+                typed: form(typed, !counts),
+                fold: !counts,
+            },
+            Way::Fzf => Self::Fuzzy(Fuzzy::new(typed, target == Target::Paths, counts)),
+            Way::Regex => {
+                let options = Options {
+                    regex: true,
+                    match_case: counts,
+                };
+                Self::Regex(noc_pattern::text(&noc_pattern::nfc(typed), options))
+            }
+            Way::Glob => Self::Glob {
+                pattern: Pattern::new(&form(typed, !counts)),
+                fold: !counts,
+            },
         }
     }
 
@@ -218,7 +363,7 @@ impl Matcher {
         matches!(self, Self::Fuzzy(_))
     }
 
-    /// Why what was typed is not a regular expression, in the regex mode.
+    /// Why what was typed is not a regular expression, in the regex way.
     pub(crate) fn error(&self) -> Option<&PatternError> {
         match self {
             Self::Regex(Err(error)) => Some(error),
@@ -230,25 +375,24 @@ impl Matcher {
     /// every match scores the same.
     pub(crate) fn score(&mut self, text: &str) -> Option<u32> {
         match self {
-            Self::Plain(typed) => noc_pattern::fold(text)
-                .contains(typed.as_str())
-                .then_some(0),
+            Self::Plain { typed, fold } => form(text, *fold).contains(typed.as_str()).then_some(0),
             Self::Fuzzy(fuzzy) => fuzzy.score(text),
             Self::Regex(regex) => regex
                 .as_ref()
                 .ok()?
                 .is_match(&noc_pattern::nfc(text))
                 .then_some(0),
+            Self::Glob { pattern, fold } => pattern.matches(&form(text, *fold)).then_some(0),
         }
     }
 
     /// The characters of `text` that match, by their indexes, in order; each place it matches
-    /// but in fzf's mode, which has one.
+    /// but in fzf's way, which has one. A pattern marks none, as the whole name matches it.
     pub(crate) fn positions(&mut self, text: &str) -> Vec<usize> {
         match self {
-            Self::Plain(typed) => {
+            Self::Plain { typed, fold } => {
                 let typed: Vec<char> = typed.chars().collect();
-                text_positions(text, &typed)
+                text_positions(text, &typed, *fold)
             }
             Self::Fuzzy(fuzzy) => fuzzy.positions(text).unwrap_or_default(),
             Self::Regex(Ok(regex)) => {
@@ -261,20 +405,33 @@ impl Matcher {
                     first..end
                 }))
             }
-            Self::Regex(Err(_)) => Vec::new(),
+            Self::Regex(Err(_)) | Self::Glob { .. } => Vec::new(),
         }
     }
 }
 
-/// The characters of `name` that hold `text`, folded as [`noc_pattern::fold`] folds it, each
-/// place it does, ignoring case and Unicode form.
-fn text_positions(name: &str, text: &[char]) -> Vec<usize> {
+/// `text` in NFC, and case folded if `fold`.
+fn form(text: &str, fold: bool) -> String {
+    if fold {
+        noc_pattern::fold(text).into_owned()
+    } else {
+        noc_pattern::nfc(text).into_owned()
+    }
+}
+
+/// The characters of `name` that hold `text`, in NFC and folded as [`noc_pattern::fold`]
+/// folds it if `fold`, each place it does.
+fn text_positions(name: &str, text: &[char], fold: bool) -> Vec<usize> {
     if text.is_empty() {
         return Vec::new();
     }
     // A character may fold to several, and several in NFD to one: each stands for its own.
-    let folded = Normalized::folded(name);
-    let chars: Vec<char> = folded.text.chars().collect();
+    let normalized = if fold {
+        Normalized::folded(name)
+    } else {
+        Normalized::nfc(name)
+    };
+    let chars: Vec<char> = normalized.text.chars().collect();
     let mut found = Vec::new();
     let mut at = 0;
     while at + text.len() <= chars.len() {
@@ -285,18 +442,82 @@ fn text_positions(name: &str, text: &[char]) -> Vec<usize> {
             at += 1;
         }
     }
-    folded.original(found)
+    normalized.original(found)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn names(way: Way, typed: &str) -> Matcher {
+        Matcher::new(way, Target::Names, typed, Case::Own)
+    }
+
+    /// The ways a kind starts in for each of `ui.search_mode`: plain, fzf, regex.
+    fn starts(kind: Kind) -> [Way; 3] {
+        [SearchMode::Plain, SearchMode::Fzf, SearchMode::Regex]
+            .map(|mode| Input::new(kind, mode).way())
+    }
+
+    /// The ways Ctrl+s goes round from the one it starts in, back to it.
+    fn round(kind: Kind, way: Way) -> Vec<Way> {
+        let mut input = Input::new(kind, way);
+        let mut ways = vec![input.way()];
+        while input.switch() && input.way() != way {
+            ways.push(input.way());
+        }
+        ways
+    }
+
     #[test]
-    fn alt_r_goes_round_the_modes() {
-        assert_eq!(next(SearchMode::Plain), SearchMode::Fzf);
-        assert_eq!(next(SearchMode::Fzf), SearchMode::Regex);
-        assert_eq!(next(SearchMode::Regex), SearchMode::Plain);
+    fn each_kind_of_search_has_its_ways() {
+        use Way::{Fzf, Glob, Plain, Regex};
+
+        let kinds = [
+            (
+                "quick search",
+                Kind::QUICK_SEARCH,
+                &[Plain, Fzf, Regex][..],
+                [Plain, Fzf, Regex],
+            ),
+            (
+                "filters",
+                Kind::FILTER,
+                &[Plain, Fzf, Regex],
+                [Plain, Fzf, Regex],
+            ),
+            (
+                "filters of paths",
+                Kind::FILTER_PATHS,
+                &[Plain, Fzf, Regex],
+                [Plain, Fzf, Regex],
+            ),
+            (
+                "search of a tree",
+                Kind::TREE,
+                &[Plain, Regex],
+                [Plain, Regex, Regex],
+            ),
+            ("g + and g -", Kind::MARK, &[Glob], [Glob, Glob, Glob]),
+        ];
+        for (name, kind, ways, start) in kinds {
+            assert_eq!(kind.ways, ways, "{name}");
+            assert_eq!(
+                starts(kind),
+                start,
+                "{name}: what ui.search_mode starts it in"
+            );
+            assert_eq!(round(kind, ways[0]), ways, "{name}: Ctrl+s goes round them");
+        }
+        assert_eq!(Kind::FILTER_PATHS.target, Target::Paths);
+    }
+
+    #[test]
+    fn ctrl_s_changes_nothing_in_a_kind_of_one_way() {
+        let mut input = Input::new(Kind::MARK, Way::Regex);
+        assert_eq!(input.way(), Way::Glob, "a way it has not");
+        assert!(!input.switch());
+        assert_eq!(input.way(), Way::Glob);
     }
 
     #[test]
@@ -349,7 +570,7 @@ mod tests {
         use ratatui::backend::TestBackend;
 
         let theme = Theme::terminal();
-        let mark = marked(SearchMode::Fzf, false, theme.dialog, &theme);
+        let mark = Input::new(Kind::FILTER, Way::Fzf).mark(false, theme.dialog, &theme);
         let prompt = Prompt::new(|text| format!("Filter {}: {text} !", mark.glyph));
         let before = cells::width(&prompt.before);
         let field = Field::plain("ab");
@@ -379,7 +600,7 @@ mod tests {
 
     #[test]
     fn plain_text_matches_anywhere_ignoring_case() {
-        let mut plain = Matcher::names(SearchMode::Plain, "Fi");
+        let mut plain = names(Way::Plain, "Fi");
         assert_eq!(plain.score("profile"), Some(0));
         assert_eq!(plain.score("cfg"), None);
         assert_eq!(plain.positions("FileFI"), [0, 1, 4, 5]);
@@ -389,56 +610,56 @@ mod tests {
     #[test]
     fn text_positions_are_each_place_the_text_is_ignoring_case() {
         let text = |text: &str| text.chars().collect::<Vec<_>>();
-        assert_eq!(text_positions("ReadMe.md", &text("e")), [1, 5]);
-        assert_eq!(text_positions("aaaa", &text("aa")), [0, 1, 2, 3]);
-        assert_eq!(text_positions("aaa", &text("aa")), [0, 1]);
-        assert_eq!(text_positions("ДОКУМЕНТ.txt", &text("кум")), [2, 3, 4]);
-        assert_eq!(text_positions("abc", &text("x")), Vec::<usize>::new());
+        assert_eq!(text_positions("ReadMe.md", &text("e"), true), [1, 5]);
+        assert_eq!(text_positions("aaaa", &text("aa"), true), [0, 1, 2, 3]);
+        assert_eq!(text_positions("aaa", &text("aa"), true), [0, 1]);
+        assert_eq!(
+            text_positions("ДОКУМЕНТ.txt", &text("кум"), true),
+            [2, 3, 4]
+        );
+        assert_eq!(text_positions("abc", &text("x"), true), Vec::<usize>::new());
     }
 
     #[test]
     fn plain_text_matches_either_unicode_form_and_case_by_folding() {
         // A name in NFD, as macOS keeps it, and the text typed in NFC.
-        let mut plain = Matcher::names(SearchMode::Plain, "Caf\u{e9}");
+        let mut plain = names(Way::Plain, "Caf\u{e9}");
         assert_eq!(plain.score("my cafe\u{301}.txt"), Some(0));
         assert_eq!(plain.positions("my cafe\u{301}.txt"), [3, 4, 5, 6, 7]);
-        let mut sharp = Matcher::names(SearchMode::Plain, "strasse");
+        let mut sharp = names(Way::Plain, "strasse");
         assert_eq!(sharp.score("Stra\u{df}e"), Some(0));
         assert_eq!(sharp.positions("Stra\u{df}e"), [0, 1, 2, 3, 4, 5]);
-        let mut sigma = Matcher::names(SearchMode::Plain, "\u{3c3}\u{3b1}\u{3c2}");
+        let mut sigma = names(Way::Plain, "\u{3c3}\u{3b1}\u{3c2}");
         assert_eq!(sigma.score("\u{3a3}\u{391}\u{3a3}"), Some(0));
         assert_eq!(
             sigma.positions("\u{3a3}\u{391}\u{3a3}"),
             [0, 1, 2],
             "every sigma"
         );
-        let mut regex = Matcher::names(SearchMode::Regex, "f\u{e9}$");
+        let mut regex = names(Way::Regex, "f\u{e9}$");
         assert_eq!(regex.score("cafe\u{301}"), Some(0));
         assert_eq!(regex.positions("cafe\u{301}"), [2, 3, 4]);
     }
 
     #[test]
     fn a_regular_expression_matches_with_smart_case() {
-        let mut regex = Matcher::names(SearchMode::Regex, r"^.\.rs$");
+        let mut regex = names(Way::Regex, r"^.\.rs$");
         assert_eq!(regex.score("a.rs"), Some(0));
         assert_eq!(regex.score("ab.rs"), None);
-        let mut smart = Matcher::names(SearchMode::Regex, "R");
+        let mut smart = names(Way::Regex, "R");
         assert_eq!(smart.score("r"), None, "a capital");
-        let mut any = Matcher::names(SearchMode::Regex, ".ö");
+        let mut any = names(Way::Regex, ".ö");
         assert_eq!(
             any.positions("föo.ö"),
             [0, 1, 3, 4],
             "characters, not bytes"
         );
-        assert_eq!(
-            Matcher::names(SearchMode::Regex, "^").positions("a"),
-            [] as [usize; 0]
-        );
+        assert_eq!(names(Way::Regex, "^").positions("a"), [] as [usize; 0]);
     }
 
     #[test]
     fn what_is_not_a_regular_expression_matches_nothing() {
-        let mut bad = Matcher::names(SearchMode::Regex, "(");
+        let mut bad = names(Way::Regex, "(");
         assert_eq!(bad.score("("), None);
         assert_eq!(bad.positions("("), [] as [usize; 0]);
         assert_eq!(
@@ -449,9 +670,38 @@ mod tests {
 
     #[test]
     fn fzf_ranks_what_matches() {
-        let mut fuzzy = Matcher::paths(SearchMode::Fzf, "cfg");
+        let mut fuzzy = Matcher::new(Way::Fzf, Target::Paths, "cfg", Case::Own);
         assert!(fuzzy.ranks());
         assert!(fuzzy.score("config.rs").is_some());
         assert_eq!(fuzzy.positions("config.rs"), [0, 3, 5]);
+    }
+
+    #[test]
+    fn a_pattern_matches_the_whole_name_in_either_form_ignoring_case_by_folding() {
+        let mut glob = names(Way::Glob, "*.RS");
+        assert_eq!(glob.score("main.rs"), Some(0));
+        assert_eq!(glob.score("main.rs.bak"), None, "the whole name");
+        assert_eq!(glob.positions("main.rs"), [] as [usize; 0]);
+        assert!(!glob.ranks() && glob.error().is_none());
+        let mut nfd = names(Way::Glob, "caf\u{e9}*");
+        assert_eq!(nfd.score("Cafe\u{301}.txt"), Some(0));
+        let mut counts = Matcher::new(Way::Glob, Target::Names, "*.RS", Case::Counts);
+        assert_eq!(counts.score("main.rs"), None);
+        assert_eq!(counts.score("MAIN.RS"), Some(0));
+    }
+
+    #[test]
+    fn case_counts_in_every_way_when_asked() {
+        let counts = |way, typed| Matcher::new(way, Target::Names, typed, Case::Counts);
+        for way in [Way::Plain, Way::Fzf, Way::Regex] {
+            assert_eq!(counts(way, "read").score("README"), None, "{way:?}");
+            assert!(counts(way, "READ").score("README").is_some(), "{way:?}");
+        }
+        let mut plain = counts(Way::Plain, "caf\u{e9}");
+        assert_eq!(
+            plain.positions("my cafe\u{301}"),
+            [3, 4, 5, 6, 7],
+            "either form"
+        );
     }
 }

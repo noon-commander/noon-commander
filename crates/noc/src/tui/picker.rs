@@ -23,7 +23,7 @@ use super::keymap::{Action, Mode, Resolved};
 use super::loading::Loading;
 use super::mouse::{Drawn, Pointer};
 use super::scroll::Window;
-use super::search_mode::{self, Matcher, Prompt};
+use super::search::{Case, Input, Kind, Prompt, Way};
 use super::spinner::Spin;
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -150,9 +150,7 @@ pub(crate) struct Picker {
     /// The filter, a text field.
     filter: Field,
     /// How the filter matches: `ui.search_mode` until Ctrl+s switches it.
-    mode: SearchMode,
-    /// The texts are paths, where a word starts after `/` most.
-    paths: bool,
+    input: Input,
     /// In the plain mode the filter is keywords that a program, such as zoxide, picks the rows
     /// by: the window asks it, and the picker shows every row it gets.
     plain_keywords: bool,
@@ -186,8 +184,7 @@ impl Picker {
             texts: Vec::new(),
             shows: Vec::new(),
             filter: Field::plain(""),
-            mode,
-            paths: false,
+            input: Input::new(Kind::FILTER, mode),
             plain_keywords: false,
             error: None,
             filtering: true,
@@ -205,7 +202,7 @@ impl Picker {
     /// The same picker, whose rows are paths: in the fzf mode a word starts after `/` most, as
     /// with fzf's `--scheme=path`.
     pub(crate) fn paths(mut self) -> Self {
-        self.paths = true;
+        self.input = Input::new(Kind::FILTER_PATHS, self.input.way());
         self.refilter();
         self
     }
@@ -221,7 +218,7 @@ impl Picker {
     /// Whether the picker picks the rows by the filter itself, rather than a program by the
     /// keywords typed.
     pub(crate) fn filters(&self) -> bool {
-        !(self.plain_keywords && self.mode == SearchMode::Plain)
+        !(self.plain_keywords && self.input.way() == Way::Plain)
     }
 
     /// What is typed in the filter.
@@ -232,7 +229,7 @@ impl Picker {
     /// Whether the rows show best first, as fzf ranks them, rather than in their order: in the
     /// fzf mode, while the filter has text. Their groups then do not hold.
     pub(crate) fn ranked(&self) -> bool {
-        self.filters() && self.mode == SearchMode::Fzf && !self.filter.text().is_empty()
+        self.filters() && self.input.way() == Way::Fzf && !self.filter.text().is_empty()
     }
 
     /// The mode keys are typed in: Insert while the filter takes them.
@@ -246,7 +243,7 @@ impl Picker {
 
     /// Matches in `mode` from now on.
     pub(crate) fn set_mode(&mut self, mode: SearchMode) {
-        self.mode = mode;
+        self.input = Input::new(self.input.kind(), mode);
         self.refilter();
     }
 
@@ -301,11 +298,7 @@ impl Picker {
     fn refilter(&mut self) {
         let text = self.filter.text();
         let empty = text.is_empty();
-        let mut matcher = if self.paths {
-            Matcher::paths(self.mode, text)
-        } else {
-            Matcher::names(self.mode, text)
-        };
+        let mut matcher = self.input.matcher(text, Case::Own);
         let filters = self.filters() && !empty;
         self.error = matcher.error().filter(|_| filters).map(ToString::to_string);
         let ranks = self.ranked();
@@ -352,7 +345,9 @@ impl Picker {
                 Action::QuickSearch => self.filtering = true,
                 Action::NormalMode => self.filtering = false,
                 Action::SearchMode => {
-                    self.mode = search_mode::next(self.mode);
+                    if !self.input.switch() {
+                        return Pick::Pending;
+                    }
                     return self.filtered();
                 }
                 Action::Left
@@ -632,7 +627,7 @@ impl Picker {
             Some(note) => width.saturating_sub(note.iter().map(Span::width).sum::<usize>() + 1),
             None => width,
         };
-        let mark = search_mode::marked(self.mode, self.error.is_some(), theme.dialog, theme);
+        let mark = self.input.mark(self.error.is_some(), theme.dialog, theme);
         let prompt = Prompt::new(|text| match prompt {
             Some(prompt) => prompt(mark.glyph, text),
             None => fl!("picker-filter", mode = mark.glyph, text = text),
@@ -947,10 +942,10 @@ mod tests {
         typed(&mut picker, "ms");
         assert_eq!(picker.len(), 0, "as it is");
         press(&mut picker, Action::SearchMode);
-        assert_eq!(picker.mode, SearchMode::Fzf);
+        assert_eq!(picker.input.way(), Way::Fzf);
         assert_eq!(picker.shown(0..3), [0], "m, then s");
         press(&mut picker, Action::SearchMode);
-        assert_eq!(picker.mode, SearchMode::Regex);
+        assert_eq!(picker.input.way(), Way::Regex);
         assert_eq!(picker.len(), 0);
         press(&mut picker, Action::DeleteToStart);
         typed(&mut picker, "^r|toml$");
@@ -961,8 +956,8 @@ mod tests {
         assert_eq!(picker.error.as_deref(), Some("error: unclosed group"));
         press(&mut picker, Action::SearchMode);
         assert_eq!(
-            (picker.mode, picker.error.as_deref()),
-            (SearchMode::Plain, None)
+            (picker.input.way(), picker.error.as_deref()),
+            (Way::Plain, None)
         );
     }
 }

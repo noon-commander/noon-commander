@@ -1,5 +1,5 @@
 //! Matching what is typed as fzf does (ADR 0016), the fzf mode of quick search and of the
-//! filters of the lists (`search_mode.rs`, ADR 0030): the location menu, the tab menu, the zoxide
+//! filters of the lists (`search.rs`, ADR 0030): the location menu, the tab menu, the zoxide
 //! window, the workspaces, the command history, and the list of the key hints.
 //!
 //! The characters typed must come in a text in order, not necessarily together; runs of them,
@@ -24,22 +24,37 @@ pub(crate) struct Fuzzy {
 }
 
 impl Fuzzy {
-    /// For names, such as files or hosts.
-    pub(crate) fn names(typed: &str) -> Self {
-        Self::new(typed, Config::DEFAULT)
-    }
-
-    /// For paths: after a `/` starts a word, as fzf's `--scheme=path` has it.
-    pub(crate) fn paths(typed: &str) -> Self {
-        Self::new(typed, Config::DEFAULT.match_paths())
-    }
-
-    fn new(typed: &str, config: Config) -> Self {
+    /// For names, such as files or hosts; for paths if `paths`, where after a `/` starts a word,
+    /// as fzf's `--scheme=path` has it. Case counts once `typed` has a capital letter, or always
+    /// if `match_case`.
+    pub(crate) fn new(typed: &str, paths: bool, match_case: bool) -> Self {
+        let config = if paths {
+            Config::DEFAULT.match_paths()
+        } else {
+            Config::DEFAULT
+        };
+        let case = if match_case {
+            CaseMatching::Respect
+        } else {
+            CaseMatching::Smart
+        };
         Self {
-            pattern: Pattern::parse(typed, CaseMatching::Smart, Normalization::Smart),
+            pattern: Pattern::parse(typed, case, Normalization::Smart),
             matcher: Matcher::new(config),
             chars: Vec::new(),
         }
+    }
+
+    /// For names, case smart.
+    #[cfg(test)]
+    fn names(typed: &str) -> Self {
+        Self::new(typed, false, false)
+    }
+
+    /// For paths, case smart.
+    #[cfg(test)]
+    fn paths(typed: &str) -> Self {
+        Self::new(typed, true, false)
     }
 
     /// How well `text` matches, higher for better; `None` if it does not.

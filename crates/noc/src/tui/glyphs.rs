@@ -39,13 +39,14 @@ pub(crate) struct Spinners {
     pub(crate) still: char,
 }
 
-/// In front of the prompt of quick search and of the filters of the lists: how they match what
-/// is typed.
+/// In the prompt of every field that searches: how it matches what is typed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct SearchModes {
     pub(crate) plain: &'static str,
     pub(crate) fzf: &'static str,
     pub(crate) regex: &'static str,
+    /// Shell patterns, as `g +` and `g -` take.
+    pub(crate) glob: &'static str,
 }
 
 /// The characters that differ with icons and without.
@@ -132,11 +133,12 @@ impl Glyphs {
         // nf-md-chevron_right and nf-md-chevron_down.
         folds: ('󰅂', '󰅀'),
         bullet: '•',
-        // nf-cod-whole_word, nf-md-approximately_equal, and nf-cod-regex.
+        // nf-cod-whole_word, nf-md-approximately_equal, nf-cod-regex, and nf-md-asterisk.
         search_modes: SearchModes {
             plain: "",
             fzf: "󰾞",
             regex: "",
+            glob: "󰛄",
         },
         // nf-md-arrow_right.
         link_arrow: "󰁔",
@@ -194,6 +196,7 @@ impl Glyphs {
             plain: "=",
             fzf: "~",
             regex: ".*",
+            glob: "*",
         },
         // As mc and `ls -l` write it.
         link_arrow: "->",

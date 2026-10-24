@@ -33,7 +33,7 @@ mod progress;
 mod pulldown;
 mod reading;
 mod scroll;
-mod search_mode;
+mod search;
 mod sidebar;
 mod spinner;
 mod sums;

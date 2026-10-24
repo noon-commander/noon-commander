@@ -29,7 +29,7 @@ use super::glyphs::Glyphs;
 use super::keymap::{Action, Context, Mode, Resolved, Typed};
 use super::mouse::Pointer;
 use super::panel::child;
-use super::search_mode;
+use super::search::{Input, Kind, Way};
 use super::spinner::{Spin, Wait};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -174,8 +174,9 @@ enum State {
     Failed(String),
 }
 
-/// What the search depends on in the dialog: the mode, the fields, and the check boxes.
-type Settings = (usize, String, String, bool, bool);
+/// What the search depends on in the dialog: the mode, the fields, how the text matches, and the
+/// check boxes.
+type Settings = (usize, String, String, Way, bool);
 
 /// The dialog, with what the last search found.
 #[derive(Debug)]
@@ -203,9 +204,9 @@ pub(crate) struct FindWindow {
     /// before it; `None` is the first row.
     cursor: Option<(Vec<u8>, Option<usize>)>,
     decor: Decor,
-    /// The text is a regular expression, rather than as it is: the regex mode of `ui.search_mode`
-    /// (its fzf mode too, which has no meaning here), or the plain one, until Ctrl+s switches it.
-    regex: bool,
+    /// How the text matches: as a regular expression or as it is, `ui.search_mode` (its fzf
+    /// mode as a regular expression, which has no meaning here) until Ctrl+s switches it.
+    input: Input,
     /// Stops the search, which the dialog does when it goes or a new one starts.
     cancel: CancellationToken,
     /// For the end of the search, while a skeleton stands for how many it found.
@@ -231,9 +232,9 @@ impl FindWindow {
         mode: SearchMode,
         decor: Decor,
     ) -> Self {
-        let regex = mode != SearchMode::Plain;
+        let input = Input::new(Kind::TREE, mode);
         let fields = [
-            (text_label(regex, decor), String::new()),
+            (text_label(input, decor), String::new()),
             (fl!("find-files"), String::new()),
         ];
         let checks = [(fl!("find-match-case"), false)];
@@ -258,7 +259,7 @@ impl FindWindow {
             state: State::Searching,
             cursor: None,
             decor,
-            regex,
+            input,
             cancel: CancellationToken::new(),
             wait: Wait::default(),
         }
@@ -279,7 +280,8 @@ impl FindWindow {
             .split_whitespace()
             .map(str::to_owned)
             .collect();
-        let (regex, match_case) = (self.regex, self.dialog.checked(MATCH_CASE));
+        let regex = self.input.way() == Way::Regex;
+        let match_case = self.dialog.checked(MATCH_CASE);
         if self.dialog.chosen() == NAMES_MODE {
             return FindQuery::Names(fd::Query {
                 pattern,
@@ -453,7 +455,7 @@ impl FindWindow {
             self.dialog.chosen(),
             self.dialog.text_of(TEXT).to_owned(),
             self.dialog.text_of(FILES).to_owned(),
-            self.regex,
+            self.input.way(),
             self.dialog.checked(MATCH_CASE),
         )
     }
@@ -583,9 +585,10 @@ impl FindWindow {
             Resolved::Action(Action::View) => return self.press(Button::View),
             Resolved::Action(Action::Edit) => return self.press(Button::Edit),
             Resolved::Action(Action::SearchMode) => {
-                self.regex = !self.regex;
-                let label = text_label(self.regex, self.decor);
-                self.dialog.set_label(TEXT, &label);
+                if self.input.switch() {
+                    let label = text_label(self.input, self.decor);
+                    self.dialog.set_label(TEXT, &label);
+                }
                 DialogEvent::Pending
             }
             _ => self.dialog.handle_typed(typed, registers),
@@ -727,16 +730,11 @@ impl FindWindow {
     }
 }
 
-/// The label of the text field: `Text`, and the glyph of the regex mode, or of the plain one
-/// unless `regex`, as quick search and the filters show how they match.
-fn text_label(regex: bool, decor: Decor) -> String {
-    let mode = if regex {
-        SearchMode::Regex
-    } else {
-        SearchMode::Plain
-    };
+/// The label of the text field: `Text`, and the glyph of how `input` matches, as every field
+/// that searches shows it.
+fn text_label(input: Input, decor: Decor) -> String {
     let glyphs = Glyphs::of(decor.icons()).search_modes;
-    fl!("find-text", mode = search_mode::glyph(mode, glyphs))
+    fl!("find-text", mode = input.glyph(glyphs))
 }
 
 /// The buttons of `mode`: by name, nothing to view or edit at a line.

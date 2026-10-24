@@ -176,6 +176,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dialog of F6 gets Preserve attributes too, shared with copies. Off, a move between the local
   file system and a host, or two hosts, leaves the attributes behind
   ([ADR 0043](docs/adr/0043-one-dialog-for-copy-and-move.md)).
+- The dialog of `g +` and `g -` has a prompt, `Pattern *:`, whose glyph says that it takes shell
+  patterns, as every field that searches shows how it matches
+  ([ADR 0044](docs/adr/0044-one-base-for-search-fields.md)).
 - F7 opens with an empty name instead of the name under the cursor, which what was typed went
   after.
 - In the fzf search mode, every list shows the best match first, as fzf does: the location menu,

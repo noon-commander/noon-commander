@@ -28,7 +28,7 @@ use super::glyphs;
 use super::keymap::Action;
 use super::mouse::Scroll;
 use super::scroll::Window;
-use super::search_mode::{self, Matcher, Prompt};
+use super::search::{Case, Input, Kind, Matcher, Prompt, Way};
 use super::spinner::{Spin, Wait};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -238,11 +238,11 @@ struct Search {
     /// The rows on screen that Esc puts back, as vim's `old_viewstate`.
     view: Window,
     /// How it matches what is typed: `ui.search_mode` until Ctrl+s switches it.
-    mode: SearchMode,
+    input: Input,
 }
 
 impl Search {
-    fn new(origin: usize, count: usize, back: bool, view: Window, mode: SearchMode) -> Self {
+    fn new(origin: usize, count: usize, back: bool, view: Window, way: Way) -> Self {
         Self {
             field: Field::plain(""),
             origin,
@@ -251,7 +251,7 @@ impl Search {
             count: count.max(1),
             back,
             view,
-            mode,
+            input: Input::new(Kind::QUICK_SEARCH, way),
         }
     }
 
@@ -267,7 +267,7 @@ pub(crate) struct SearchEnd {
     pub(crate) text: String,
     pub(crate) back: bool,
     /// How it matched, which `n` and `N` match the same way.
-    pub(crate) mode: SearchMode,
+    pub(crate) way: Way,
     /// Whether it went round past the end, or the start, if it found a match.
     pub(crate) found: Option<bool>,
 }
@@ -1003,7 +1003,7 @@ impl Panel {
     }
 
     /// Marks, or unmarks, the shown entries for which `test` holds.
-    pub(crate) fn mark_where(&mut self, mark: bool, test: impl Fn(&DirEntry) -> bool) {
+    pub(crate) fn mark_where(&mut self, mark: bool, mut test: impl FnMut(&DirEntry) -> bool) {
         let Listing::Dir(entries) = &self.listing;
         for &index in &self.shown {
             let entry = &entries[index];
@@ -1058,13 +1058,25 @@ impl Panel {
     /// Starts quick search down the rows, as vim's `/`: to match `count` of what is typed,
     /// from the row after the cursor, round to the top, in `mode`.
     pub(crate) fn search_down(&mut self, count: usize, mode: SearchMode) {
-        self.search = Some(Search::new(self.cursor, count, false, self.window, mode));
+        self.search = Some(Search::new(
+            self.cursor,
+            count,
+            false,
+            self.window,
+            mode.into(),
+        ));
     }
 
     /// Starts quick search up the rows, as vim's `?`: to match `count` of what is typed, from
     /// the row before the cursor, round to the bottom, in `mode`.
     pub(crate) fn search_up(&mut self, count: usize, mode: SearchMode) {
-        self.search = Some(Search::new(self.cursor, count, true, self.window, mode));
+        self.search = Some(Search::new(
+            self.cursor,
+            count,
+            true,
+            self.window,
+            mode.into(),
+        ));
     }
 
     /// Switches how quick search matches to the next mode, as Ctrl+s does, and searches again.
@@ -1072,8 +1084,9 @@ impl Panel {
         let Some(search) = &mut self.search else {
             return;
         };
-        search.mode = search_mode::next(search.mode);
-        self.search_again_typed();
+        if search.input.switch() {
+            self.search_again_typed();
+        }
     }
 
     /// Jumps to the next match down, or the next up, of the search that runs, as vim's Ctrl+g
@@ -1088,9 +1101,9 @@ impl Panel {
         if text.trim().is_empty() {
             return;
         }
-        let (count, back, mode) = (search.count, search.back, search.mode);
+        let (count, back) = (search.count, search.back);
         let current = search.found.unwrap_or_else(|| search.start_row());
-        let mut matcher = Matcher::names(mode, &text);
+        let mut matcher = search.input.matcher(&text, Case::Own);
         let ranks = matcher.ranks();
         let target = if ranks {
             self.step_ranked(&mut matcher, current, forward, count)
@@ -1130,29 +1143,29 @@ impl Panel {
         }
     }
 
-    /// Searches for `text`, what an earlier search found in `mode`, as if it were typed in that
-    /// mode: Ctrl+g with nothing typed yet, as mc's Ctrl+s Ctrl+s.
-    pub(crate) fn search_resume(&mut self, text: &str, mode: SearchMode) {
+    /// Searches for `text`, what an earlier search found in `way`, as if it were typed in that
+    /// way: Ctrl+g with nothing typed yet, as mc's Ctrl+s Ctrl+s.
+    pub(crate) fn search_resume(&mut self, text: &str, way: Way) {
         let Some(search) = &mut self.search else {
             return;
         };
         search.field = Field::plain(text);
-        search.mode = mode;
+        search.input = Input::new(Kind::QUICK_SEARCH, way);
         self.search_again_typed();
     }
 
-    /// Moves the cursor `times` matches of `text` in `mode` on, as vim's `3n`, and puts where
+    /// Moves the cursor `times` matches of `text` in `way` on, as vim's `3n`, and puts where
     /// it was in the jump list, once, even if the match is on the same row, as vim does; a
     /// search that finds nothing leaves the jumps as they are. Whether it went round past the
     /// end, or the start, if it found one.
     pub(crate) fn search_again(
         &mut self,
-        (text, mode): (&str, SearchMode),
+        (text, way): (&str, Way),
         forward: bool,
         times: usize,
     ) -> Option<bool> {
         let here = self.here();
-        let mut matcher = Matcher::names(mode, text);
+        let mut matcher = Input::new(Kind::QUICK_SEARCH, way).matcher(text, Case::Own);
         let (row, round) = if matcher.ranks() {
             let ranked = self.ranked(&mut matcher);
             let count = ranked.len();
@@ -1202,7 +1215,7 @@ impl Panel {
             return;
         };
         let text = typed_at_cursor(&search.field, c);
-        let mut matcher = Matcher::names(search.mode, &text);
+        let mut matcher = search.input.matcher(&text, Case::Own);
         let found = self.find_typed(search, &mut matcher, &text);
         if found.is_none() && !text.trim().is_empty() && matcher.error().is_none() {
             return;
@@ -1234,7 +1247,7 @@ impl Panel {
             return;
         };
         let text = search.field.text().to_owned();
-        let mut matcher = Matcher::names(search.mode, &text);
+        let mut matcher = search.input.matcher(&text, Case::Own);
         let found = self.find_typed(search, &mut matcher, &text);
         self.show_found(found);
     }
@@ -1343,7 +1356,7 @@ impl Panel {
             return None;
         }
         let start = search.start_row();
-        let mut matcher = Matcher::names(search.mode, &text);
+        let mut matcher = search.input.matcher(&text, Case::Own);
         let ranks = matcher.ranks();
         let found = if ranks {
             search.found.map(|row| (row, false))
@@ -1371,7 +1384,7 @@ impl Panel {
         Some(SearchEnd {
             text,
             back: search.back,
-            mode: search.mode,
+            way: search.input.way(),
             found: found.map(|(_, round)| round),
         })
     }
@@ -1394,7 +1407,7 @@ impl Panel {
         if text.trim().is_empty() {
             return None;
         }
-        Some(Matcher::names(search.mode, text))
+        Some(search.input.matcher(text, Case::Own))
     }
 
     /// The name that quick search finds a row by: the name it shows.
@@ -2031,7 +2044,7 @@ impl Panel {
             let field = &search.field;
             status_style = (theme.quick_search, theme.truncated_cursor);
             let invalid = self.finder().is_some_and(|finder| finder.error().is_some());
-            let mark = search_mode::marked(search.mode, invalid, theme.quick_search, theme);
+            let mark = search.input.mark(invalid, theme.quick_search, theme);
             let prompt = Prompt::new(|text| {
                 if search.back {
                     fl!("panel-search-back", mode = mark.glyph, text = text)
@@ -3246,7 +3259,7 @@ mod tests {
             Some(SearchEnd {
                 text: "Bo".to_owned(),
                 back: false,
-                mode: SearchMode::Plain,
+                way: Way::Plain,
                 found: Some(false),
             })
         );
@@ -3254,7 +3267,7 @@ mod tests {
         // Enter on a text that nothing matches, as the last search's may be, stays where the
         // search started.
         panel.search_up(1, SearchMode::Plain);
-        panel.search_resume("z", SearchMode::Plain);
+        panel.search_resume("z", Way::Plain);
         assert_eq!(
             panel.search_text(),
             Some("z"),
@@ -3357,20 +3370,17 @@ mod tests {
             "after Ctrl+g, Enter stays on the match without going round, as vim's"
         );
         assert_eq!(
-            panel.search_again(("x", SearchMode::Plain), true, 1),
+            panel.search_again(("x", Way::Plain), true, 1),
             None,
             "no match"
         );
         assert_eq!(under_cursor(&panel), "bar", "the cursor stays");
-        assert_eq!(
-            panel.search_again(("B", SearchMode::Plain), false, 1),
-            Some(true)
-        );
+        assert_eq!(panel.search_again(("B", Way::Plain), false, 1), Some(true));
         assert_eq!(under_cursor(&panel), "boot", "ignoring case, round");
 
         // Fuzzy: the previous one as fzf ranks them, round to the worst.
         panel.search_down(1, SearchMode::Plain);
-        panel.search_resume("bt", SearchMode::Fzf);
+        panel.search_resume("bt", Way::Fzf);
         assert_eq!(panel.search_text(), Some("bt"));
         let best = under_cursor(&panel);
         panel.search_step(false);
@@ -3433,10 +3443,7 @@ mod tests {
         panel.search_step(true);
         assert_eq!(under_cursor(&panel), "Tabs", "ignoring case");
         panel.end_search();
-        assert_eq!(
-            panel.search_again(("ab", SearchMode::Plain), true, 1),
-            Some(true)
-        );
+        assert_eq!(panel.search_again(("ab", Way::Plain), true, 1), Some(true));
         assert_eq!(under_cursor(&panel), "cab", "round");
     }
 
@@ -3802,7 +3809,7 @@ mod tests {
         assert_eq!(panel.cursor, 0);
         assert!(
             panel
-                .search_again(("nothing", SearchMode::Plain), true, 1)
+                .search_again(("nothing", Way::Plain), true, 1)
                 .is_none()
         );
         assert!(panel.jump_forward(1).is_none());

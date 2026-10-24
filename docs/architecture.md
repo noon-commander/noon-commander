@@ -405,19 +405,33 @@ directories, which Enter opens in the active panel:
 
 ### Search modes
 
-Quick search and the filters of the lists (the location menu, the tab menu, the zoxide window,
-the Workspaces window, the command history, and the list of the key hints) match what is typed
-in one of three modes ([ADR 0030](adr/0030-search-modes.md)). Each search and each window starts
-in `ui.search_mode`, `fzf` by default, and Ctrl+s switches its own, round: plain, fzf, regex. The
-mode is not kept: the next search or window starts in `ui.search_mode` again, but `n` and `N`
-match as the last search did. A glyph after the word of the prompt says which mode
-(`Search ~:`, `Filter ~:`, `Jump to ~:`; in `glyphs.rs`: nf-cod-whole_word,
-nf-md-approximately_equal, nf-cod-regex; `=`, `~`, `.*` without icons); crossed out, in the color
-of a broken link, while the text is no regular expression, when the lists say what is wrong with
-it in place of the rows. The [search of a whole tree](#search-of-a-whole-tree) starts in the
-search mode too, but has no fzf mode: there `fzf` is the regex mode, Ctrl+s switches between it
-and the plain one, and its Text field shows which (`Text .*:`). `tui/search_mode.rs` holds the
-`Matcher` of each mode:
+Every field that searches matches what is typed in one of its ways
+([ADR 0030](adr/0030-search-modes.md), [ADR 0044](adr/0044-one-base-for-search-fields.md)).
+`tui/search.rs` says which: each kind of field is a `search::Kind`, with its ways in the order
+Ctrl+s goes round them and the way it starts in for each value of `ui.search_mode`, `fzf` by
+default; a field while it is open is a `search::Input`, which switches its way, builds its
+`Matcher`, and gives the glyph of its prompt. A field never chooses its ways itself.
+
+| Field | `search::Kind` | Ways, as Ctrl+s goes | `ui.search_mode` `fzf` starts it in |
+| --- | --- | --- | --- |
+| Quick search, `/` and `?` | `QUICK_SEARCH` | plain, fzf, regex | fzf |
+| Filters of the lists | `FILTER` | plain, fzf, regex | fzf |
+| Filter of the zoxide window | `FILTER_PATHS` | plain, fzf, regex, on paths | fzf |
+| Text of the search of a tree, `f /` and `f f` | `TREE` | plain, regex | regex |
+| Pattern of `g +` and `g -` | `MARK` | glob | glob |
+
+The filters of the lists are those of the location menu, the tab menu, the Workspaces window, the
+command history, and the list of the key hints. The way is not kept: the next search or window
+starts in `ui.search_mode` again, but `n` and `N` match as the last search did, and `g +` and
+`g -` start in the way they matched last. A glyph after the word of the prompt says which way,
+in every field, even one with a single way (`Search ~:`, `Filter ~:`, `Jump to ~:`, `Text .*:`,
+`Pattern *:`; in `glyphs.rs`: nf-cod-whole_word, nf-md-approximately_equal, nf-cod-regex,
+nf-md-asterisk; `=`, `~`, `.*`, `*` without icons); crossed out, in the color of a broken link,
+while the text is no regular expression, when the lists say what is wrong with it in place of the
+rows. The [search of a whole tree](#search-of-a-whole-tree) has no fzf way, ripgrep and fd
+matching a pattern rather than ranking names, so `fzf` starts it in regex. Whether case counts
+is given to the `Matcher` (`search::Case`): its own, as below, or always, as the check box of
+`g +` asks. The ways:
 
 - **Plain**: the text anywhere, ignoring case. The rows keep their order, and quick search goes
   down them as vim's search does.
@@ -426,6 +440,9 @@ and the plain one, and its Text field shows which (`Text .*:`). `tui/search_mode
   builds its patterns for fd: the `regex` crate, smart case (case counts only once the
   expression has a capital letter that is not escaped, as `\S` is not), and the last line of
   what the engine says is wrong. The rows keep their order, as in the plain mode.
+- **Glob**: a shell pattern, as mc's `+` and `-` read it (`tui/pattern.rs`): `*`, `?`,
+  `[a-z]`, `{a,b}`, and `\`; the whole name matches, ignoring case unless its check box says
+  otherwise. What does not parse is taken as it is, so nothing is ever wrong with it.
 
 The fzf mode follows [ADR 0016](adr/0016-fuzzy-search.md). `tui/fuzzy.rs` wraps
 `nucleo-matcher`, Helix's port of fzf's algorithm:
@@ -541,7 +558,7 @@ goes to the filter, in Insert mode. There are no digit hotkeys.
 
 - All share `tui/picker.rs` ([ADR 0040](adr/0040-one-picker-for-every-list.md)): the filter, a
   text field with a cursor (`dialog::Field`), drawn in the colors of the fields of dialogs after
-  its prompt (`search_mode::Mark::render_field`), which matches in the
+  its prompt (`search::Mark::render_field`), which matches in the
   [search mode](#search-modes); the cursor, scrolling, the mouse, and the box, which the menus
   draw over their panel and the windows over both. The only lines across a list are under the
   filter and over the whole row under the cursor, and they join the frame (`╟───╢`) as the line
@@ -1683,7 +1700,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   are passed to messages as numbers, so that plural forms see them, and written by
   `noc_locale::fluent`, the formatter of every bundle, in the formats of the region. A prompt
   with what is typed in it (`Search: …`) is split where its message puts the typed text
-  (`search_mode::Prompt`), so a translation may put it anywhere.
+  (`search::Prompt`), so a translation may put it anywhere.
 - **Formats of the region** ([ADR 0035](adr/0035-formats-of-the-region.md)). `noc-locale` writes
   numbers, dates, and times, and compares names, as `ui.formats` says: `auto` takes each part
   from `LC_ALL`, its own `LC_TIME`, `LC_NUMERIC`, or `LC_COLLATE`, then, on macOS, System

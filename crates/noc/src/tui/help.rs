@@ -1080,7 +1080,7 @@ fn describe_panel(context: Context, action: Action) -> Option<String> {
         Action::LocationMenuLeft => fl!("help-menu-left"),
         Action::LocationMenuRight => fl!("help-menu-right"),
         Action::Jump => fl!("help-jump-open"),
-        Action::QuickCd => fl!("help-quick-cd"),
+        Action::GoToDir => fl!("help-goto"),
         Action::PullDown => fl!("help-pulldown-open"),
         Action::PullDownLast => fl!("help-pulldown-last"),
         Action::Quit => fl!("help-quit"),

@@ -2477,7 +2477,7 @@ mod tests {
         };
         let forms = [
             ("mkdir", form(fl!("mkdir-prompt"), &[])),
-            ("quick cd", form(fl!("cd-prompt"), &[])),
+            ("go to directory", form(fl!("goto-prompt"), &[])),
             ("save checksums", form(fl!("checksum-save-prompt"), &[])),
             ("save workspace", form(fl!("workspaces-save-prompt"), &[])),
             (

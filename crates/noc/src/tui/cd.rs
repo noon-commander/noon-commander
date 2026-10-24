@@ -1,5 +1,5 @@
-//! Quick cd, `g d`, as in mc: a path typed as for `cd` in a shell, read from the directory of
-//! the active panel.
+//! Go to directory, `g d`, as mc's Quick cd: a path typed as for `cd` in a shell, read from
+//! the directory of the active panel.
 
 use std::path::{Component, Path, PathBuf};
 

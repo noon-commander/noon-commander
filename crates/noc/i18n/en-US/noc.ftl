@@ -144,7 +144,8 @@ reconnect-lost = Lost the connection to { $host }: { $reason }
 reconnect-not-connected = Not connected to { $host }
 
 ## The dialog after a directory could not be read (src/tui/app): OK stays, Retry reads it again,
-## Up goes to the nearest parent that is there, Go to opens Quick cd with its path. Prefix: list-.
+## Up goes to the nearest parent that is there, Go to opens Go to directory with its path.
+## Prefix: list-.
 
 # A subdirectory of the panel's directory is named by its name alone, as the title shows the
 # directory.
@@ -353,7 +354,7 @@ pulldown-find-names = Find f&iles and dirs…
 pulldown-swap = S&wap panels
 pulldown-other-open = &Open in the other panel
 pulldown-other-sync = &This directory in the other panel
-pulldown-quick-cd = Quick &cd…
+pulldown-goto = &Go to directory…
 # Opens the zoxide window.
 pulldown-jump = &Jump to a directory (zoxide)…
 pulldown-jobs = &Background jobs…
@@ -735,7 +736,7 @@ help-jobs = The running jobs: bring one to the front, or abort it
 help-checksum = Checksums of the marked files, or the one under the cursor
 help-menu-left = Change the left panel's location: a volume or a host
 help-menu-right = Change the right panel's location: a volume or a host
-help-quick-cd = Quick cd: type a path as for cd, with ~, .., -, or host:path
+help-goto = Go to a directory by its path: ~, .., - (the previous one), host:path
 help-jump-open = Jump to a directory that zoxide ranks, in this panel
 help-jump-go = Open the directory in the active panel
 help-find-view = View the file, from the line
@@ -935,11 +936,11 @@ pattern-unselect = Unselect
 pattern-files-only = &Files only
 pattern-case-sensitive = &Case sensitive
 
-## Quick cd, g d (src/tui/app, src/tui/cd). Prefix: cd-. As in mc.
+## Go to directory, g d (src/tui/app, src/tui/cd). Prefix: goto-. mc's Quick cd.
 
-cd-title = Quick cd
-# Above the field: a path as cd takes it in a shell.
-cd-prompt = &cd
+goto-title = Go to directory
+# Above the field: a path as cd takes it in a shell, with ~, .., -, and host:path.
+goto-prompt = &Path:
 
 ## Making directories, F7 (src/tui/app). Prefix: mkdir-. As in mc.
 

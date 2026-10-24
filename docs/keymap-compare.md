@@ -226,7 +226,7 @@ section says: the commands of files act on the rows it selects, which become the
 | Open the command line for a command of noc | `command` | ✅ | : | — | — | — | :<br>; |
 | The command history | `command_history` | ✅ | q : | Alt+h | Alt+F8 | — | — |
 | Jump to a directory that zoxide ranks | `jump` | ✅ | g z | — | — | Z | — |
-| Quick cd: type a path as for cd | `quick_cd` | ✅ | g d | Alt+c | — | g Space | c d |
+| Go to a directory: type its path | `go_to_dir` | ✅ | g d | Alt+c | — | g Space | c d |
 | View the file under the cursor | `view` | ✅ | g f<br>F3 | F3 | F3<br>Numpad5<br>Ctrl+Shift+F3 (always internal) | — | i<br>F3 |
 | Edit the file under the cursor in $VISUAL or $EDITOR | `edit` | ✅ | e<br>F4 | F4 | F4<br>Ctrl+Shift+F4 (always internal) | — | F4<br>E |
 | Open the marked entries, or the one under the cursor, with the programs of the desktop (`open`, `xdg-open`), as vim's gx; local ones only (Far: in a window of its own; yazi, ranger: through their openers) | `system_open` | ✅ | g x | — | Shift+Enter | o<br>Enter | l<br>Right<br>Enter |
@@ -820,7 +820,7 @@ back to Normal mode, then to `dialog` and `global`.
 
 ## Path fields (`path_input`, Insert mode)
 
-A text field for a path, in Quick cd, F5, F6, and F7, in Insert mode; it falls back to
+A text field for a path, in Go to directory, F5, F6, and F7, in Insert mode; it falls back to
 `dialog_input`, then as text fields do. Tab completes as vim's command line: one match goes in, or
 the first of several, which the completion list shows. Shift+Tab and Down still leave the field.
 yazi lists the choices for a path as it is typed, without a key; ranger completes on its console

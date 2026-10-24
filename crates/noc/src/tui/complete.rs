@@ -2,7 +2,7 @@
 //! last part of a path is completed from what its directory holds. One match goes in with `/`
 //! after a directory and `:` after a host; of several, the first goes in whole and a list of
 //! them shows by the field, where Tab and the arrows put the others in, round through what was
-//! typed. The fields of Quick cd, F5, F6, and F7 complete paths; the command line completes
+//! typed. The fields of Go to directory, F5, F6, and F7 complete paths; the command line completes
 //! the word before the cursor, escaped for sh, as vim's `:!` does.
 
 use noc_scroll::scrollbar::{self, Bar};

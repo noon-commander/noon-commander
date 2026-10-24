@@ -168,7 +168,7 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
   the directory again, Local, which goes to the last local directory of the panel's jump list or
   else the home directory, and Cancel; so do the keys that look through entries where the panel
   has none. Keys that do not touch the panel's entries work without it: other panels and tabs,
-  menus, help, jobs, Quit, Quick cd, the jump list, workspaces, hidden files
+  menus, help, jobs, Quit, Go to directory, the jump list, workspaces, hidden files
   (`works_unconnected`). `R` connects at once
   ([ADR 0039](adr/0039-errors-of-panels-in-dialogs.md)).
 - F8 or `d d` in the location menu, or Disconnect in the menus of F9, closes the connection to a
@@ -178,7 +178,7 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
 - A directory that cannot be read opens a dialog, Error, `Cannot open dir: reason`, and the
   panel keeps what it showed. OK stays; Retry reads it again; Up, where it leads elsewhere, goes
   to the nearest parent, on the directory it came from, past parents that are not there either;
-  Go to opens Quick cd with the path. The default is Up for a directory gone under the panel,
+  Go to opens Go to directory with the path. The default is Up for a directory gone under the panel,
   OK for one not there or not allowed, Retry for other errors. A panel has one such dialog at a
   time, the last failure's.
 - F4 in the location menu edits the settings of a host in a dialog (label, remote directory,
@@ -257,10 +257,10 @@ grouped under headings:
 - `recent.toml` in the state directory keeps the places used last: the aliases of hosts and
   the mount points of volumes, most recent first, up to 50 of each. A host counts as used when
   a connection to it succeeds; a volume when a panel arrives in a directory on it in any way:
-  the menu, Quick cd, zoxide, Enter, or a workspace. The app reads the file at start, and after
-  a turn of the event loop that changed the lists, a task writes it through `noc-config`, whole
-  and atomically, one change after another. Mount points that are not UTF-8 are not kept, since
-  TOML cannot hold them.
+  the menu, Go to directory, zoxide, Enter, or a workspace. The app reads the file at start, and
+  after a turn of the event loop that changed the lists, a task writes it through `noc-config`,
+  whole and atomically, one change after another. Mount points that are not UTF-8 are not kept,
+  since TOML cannot hold them.
 - The menu is modal (keymap context `location_menu`). Each time it opens, and on `R`, a
   background task reads the volumes, scans the ssh config, and loads the cache of `ssh -G`;
   that listing carries a generation of its own, so a stale one is dropped. A host that connects
@@ -292,12 +292,12 @@ menu:
   order (`•` marks the current one), Rescan, Disconnect while it shows a host, and its
   [tabs](#tabs): New tab, Close tab, and Tab list…. File has F3, F4, Open externally (`g x`), F5 …
   F8, `g +`, `g -`, `g *`, Checksums, and Exit; Command has quick search, Find file… (the [search of
-  a whole tree](#search-of-a-whole-tree)), [Quick cd](#quick-cd), the [zoxide](#zoxide) window, the
-  other-panel commands, the jobs, host settings and disconnect for the host the active panel shows,
-  help, and redraw; Options has Configuration… and Show hidden files (`✓` while on); Workspace has
-  Save workspace…, Workspace list…, and the saved [workspaces](#workspaces), with digits as their
-  letters, typed with Alt. Without icons, the marks are `*` and `x`. A menu taller than the screen
-  scrolls with the cursor.
+  a whole tree](#search-of-a-whole-tree)), [Go to directory](#go-to-directory), the
+  [zoxide](#zoxide) window, the other-panel commands, the jobs, host settings and disconnect for the
+  host the active panel shows, help, and redraw; Options has Configuration… and Show hidden files
+  (`✓` while on); Workspace has Save workspace…, Workspace list…, and the saved
+  [workspaces](#workspaces), with digits as their letters, typed with Alt. Without icons, the marks
+  are `*` and `x`. A menu taller than the screen scrolls with the cursor.
 - Commands do what their keys do, through the same `Action`s. Each shows the key that does
   it in the active panel's context (`Keymap::key`); Left and Right show sort and rescan keys
   only for the active panel, as keys act there. Commands that cannot run now are dimmed, and
@@ -323,7 +323,7 @@ menu:
   its hotkeys, so the plain letters stay vim's motions. The keymap hands them to the menu as
   `Resolved::Hotkey`, as it does to the dialogs, and Alt and a letter that nothing has do nothing.
 
-### Quick cd
+### Go to directory
 
 `g d`, as mc's Quick cd, asks for a path and opens it in the active panel, as `cd`
 in a shell reads it: relative to the panel's directory, `/…` absolute, `~` and `~/…` the home
@@ -335,7 +335,7 @@ F9 → Command.
 
 ### Completion
 
-Tab completes the path before the cursor in the fields of Quick cd, F5, F6, and F7, in Insert
+Tab completes the path before the cursor in the fields of Go to directory, F5, F6, and F7, in Insert
 mode (keymap context `path_input`), and the word before the cursor on the [command
 line](#command-line-of--and-), as vim's command line completes with defaults.vim's 'wildmenu'
 (`tui/complete.rs`), from a listing of the directory it names, read as the dialog reads its text:
@@ -357,14 +357,14 @@ line](#command-line-of--and-), as vim's command line completes with defaults.vim
   panel the first word of the command, without a `/`, completes as the executable files of the
   directories of `$PATH`, read once at startup, and with a `/` as the executable files and the
   directories there; the others as files and directories of the panel's directory, where the command
-  runs, with `~` and absolute paths as Quick cd reads them. On a host every word completes as its
-  files, through its session, and the first as a command never. Names go in escaped for `sh` with
-  backslashes, as vim's do; the list shows over the line.
+  runs, with `~` and absolute paths as Go to directory reads them. On a host every word completes
+  as its files, through its session, and the first as a command never. Names go in escaped for
+  `sh` with backslashes, as vim's do; the list shows over the line.
 - Names that start with a dot count only after a typed dot. Case never counts, as vim's
   'fileignorecase' has it on macOS. Names that are not UTF-8 or hold control characters cannot be
   typed and are left out.
-- Quick cd and F7 offer directories and links to them; F5 and F6 files too. Before a `:`,
-  Quick cd offers every host of the ssh config, F5 and F6 the connected ones, F7 none.
+- Go to directory and F7 offer directories and links to them; F5 and F6 files too. Before a
+  `:`, Go to directory offers every host of the ssh config, F5 and F6 the connected ones, F7 none.
 - Local directories are read in the background, remote ones through the session of their
   host; a host that is not connected offers nothing, and a Tab never connects. Each listing
   has a generation, and a reply for text that changed since is dropped.
@@ -1168,10 +1168,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   the keys to the other one or to another tab. The selection is held by the entries on its ends,
   so that a listing of the same directory or another sort order keeps it on them.
 - **Jumps.** Each tab keeps a jump list, as vim does with `jumpoptions=stack`: going to another
-  directory (Enter, `h`, Quick cd, a menu, zoxide, a workspace's tab), `G`, `g g`, `n`, `N`, and a
-  quick search that found a match put where the panel was on it, up to 100 places, even when they
-  stay on the row, as vim's; a jump after Ctrl+o keeps the place Ctrl+o went to, and drops those
-  after it. `n` with a count puts it there once, and one that finds nothing, never; nor does a
+  directory (Enter, `h`, Go to directory, a menu, zoxide, a workspace's tab), `G`, `g g`, `n`, `N`,
+  and a quick search that found a match put where the panel was on it, up to 100 places, even when
+  they stay on the row, as vim's; a jump after Ctrl+o keeps the place Ctrl+o went to, and drops
+  those after it. `n` with a count puts it there once, and one that finds nothing, never; nor does a
   directory that cannot be read. Ctrl+o goes back, and Ctrl+i forward again (Tab too without the
   kitty keyboard protocol), with a count too, without changing the places, as vim's; after a jump
   that stayed on the row, the first Ctrl+o stays there too. A count past the end of the list goes
@@ -1670,12 +1670,12 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   element from anywhere in the dialog, in every mode, while typing in a field too: a text field
   gets the focus, in Insert mode, as with Tab; a check box switches and a radio button is chosen,
   each getting the focus; a button is pressed. The one field of a form without a label (Copy,
-  Move, Create a new directory, Quick cd, Save workspace, Rename workspace, Save checksums) takes
-  its letter from the prompt over it, as `&Copy "x" to:`. What ssh asks is ssh's text, with no
-  letter, but the buttons of its dialogs have theirs. Names that the user gave, of files, paths,
-  workspaces, and hosts, have their `&` doubled before they go into a label, so they never make a
-  letter. The window of a job, the jobs, the checksums, and the Configuration dialog have letters
-  too. Letters are unique within a dialog, which a test checks.
+  Move, Create a new directory, Go to directory, Save workspace, Rename workspace, Save
+  checksums) takes its letter from the prompt over it, as `&Copy "x" to:`. What ssh asks is ssh's
+  text, with no letter, but the buttons of its dialogs have theirs. Names that the user gave, of
+  files, paths, workspaces, and hosts, have their `&` doubled before they go into a label, so they
+  never make a letter. The window of a job, the jobs, the checksums, and the Configuration dialog
+  have letters too. Letters are unique within a dialog, which a test checks.
 - **Text.** Fluent files under `crates/noc/i18n/`, embedded in the binary and read with
   `fl!` from `i18n-embed-fl`, which checks message IDs against `en-US` at compile time; only
   `en-US` for now. `ui.language = "auto"` follows the system locale (through `sys-locale`).

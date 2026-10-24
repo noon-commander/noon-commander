@@ -108,7 +108,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Command, &[":"]),
             (Action::CommandHistory, &["q :"]),
             (Action::Jump, &["g z"]),
-            (Action::QuickCd, &["g d"]),
+            (Action::GoToDir, &["g d"]),
             (Action::View, &["g f", "f3"]),
             (Action::Edit, &["e", "f4"]),
             (Action::SystemOpen, &["g x"]),

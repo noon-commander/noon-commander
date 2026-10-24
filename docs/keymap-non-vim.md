@@ -127,7 +127,7 @@ not:
 | f /<br>f f | `find_file`<br>`find_names` | noc | f / (noc)<br>f f (noc) | Same | Group `f`: search the files below for text, / as quick search's `/` ([ADR 0027](adr/0027-search-of-a-whole-tree.md)), or find them by name, in the Files and dirs mode of the same dialog, f f as telescope's `<leader>ff` finds files ([ADR 0029](adr/0029-files-and-directories-with-fd.md)). |
 | i | `shell` | noc | i (noc); ! (vim) | Same | Open the command line for a shell command, in Insert mode, as typing in mc's panels goes into its command line. vim's i starts Insert mode, which a listing has not; this i starts it where there is text to type. |
 | g z | `jump` | noc | g z (noc) | Same | z for zoxide, whose command is z. vim binds no g z. |
-| g d | `quick_cd` | noc | g d (noc) | Same | d for directory: go to one typed as for cd. vim's g d goes to a declaration, which a listing has not. |
+| g d | `go_to_dir` | noc | g d (noc) | Same | d for directory: go to one typed as for cd. vim's g d goes to a declaration, which a listing has not. |
 | F3 | `view` | mc | g f (vim) | Same | mc's key to view. |
 | e<br>F4 | `edit` | noc, mc | e (noc) | Same | e for edit, as ranger's E; F4 is mc's. vim's e goes to the end of a word. |
 | F5 | `copy` | mc | Y, y y (vim) | Same | mc's key to copy. |

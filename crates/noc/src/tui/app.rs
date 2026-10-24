@@ -456,15 +456,15 @@ enum Purpose {
         location: Location,
         bytes: Vec<u8>,
     },
-    /// Quick cd in `panel`: OK opens the path typed there.
-    QuickCd { panel: PanelId },
+    /// Go to directory in `panel`: OK opens the path typed there.
+    GoToDir { panel: PanelId },
     /// A question about workspaces.
     Workspace(WorkspaceQuestion),
     /// Connecting to `host` failed for `reason`, or its connection was lost: Retry tries
     /// again for the panels that wait for it.
     Reconnect { host: String, reason: String },
     /// `panel` could not read a directory: Retry reads it again, Up goes to the nearest parent
-    /// that is there, Go to opens Quick cd with its path; OK stays.
+    /// that is there, Go to opens Go to directory with its path; OK stays.
     ListFailed { panel: PanelId, failure: Failure },
     /// A key in `panel`, which is on a host that is not connected: Connect reads its directory
     /// again, Local goes to the last local directory of the panel.
@@ -493,7 +493,7 @@ enum WorkspaceQuestion {
 /// Which hosts a path field takes before a `:`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FieldHosts {
-    /// Every host of the ssh config, which Quick cd connects to.
+    /// Every host of the ssh config, which Go to directory connects to.
     All,
     /// The hosts that are connected, as the targets of F5 and F6.
     Connected,
@@ -2798,7 +2798,7 @@ impl App {
             Action::Jump => return self.open_jump(),
             Action::FindFile => return self.open_find(FindMode::Text),
             Action::FindNames => return self.open_find(FindMode::Names),
-            Action::QuickCd => self.ask_cd(),
+            Action::GoToDir => self.ask_go_to(),
             Action::SaveWorkspace => self.ask_save_workspace(true),
             Action::Workspaces => self.open_workspaces(),
             Action::PullDown => self.open_pulldown(false),
@@ -3557,7 +3557,7 @@ impl App {
     /// and which hosts.
     fn completion_of(purpose: &Purpose) -> Option<(PanelId, Offer, FieldHosts)> {
         match purpose {
-            Purpose::QuickCd { panel } => Some((*panel, Offer::Dirs, FieldHosts::All)),
+            Purpose::GoToDir { panel } => Some((*panel, Offer::Dirs, FieldHosts::All)),
             Purpose::Transfer { panel, .. } => Some((*panel, Offer::Any, FieldHosts::Connected)),
             Purpose::Mkdir { panel } => Some((*panel, Offer::Dirs, FieldHosts::None)),
             _ => None,
@@ -4164,7 +4164,7 @@ impl App {
                     | Action::FindFile
                     | Action::FindNames
                     | Action::Jump
-                    | Action::QuickCd
+                    | Action::GoToDir
                     | Action::SwapPanels
                     | Action::OtherPanelOpen
                     | Action::OtherPanelSync
@@ -4355,7 +4355,7 @@ impl App {
             {
                 return self.rename_entry(panel, from, to, true);
             }
-            Purpose::QuickCd { panel } if ok => return self.cd(panel, dialog.text()),
+            Purpose::GoToDir { panel } if ok => return self.cd(panel, dialog.text()),
             Purpose::Workspace(question) => {
                 return self.workspace_dialog_closed(dialog.text(), question, event);
             }
@@ -4371,7 +4371,7 @@ impl App {
             Purpose::NotConnected { panel } => return self.not_connected_closed(panel, event),
             Purpose::Quit => self.quit = event == DialogEvent::Pressed(Button::Yes),
             Purpose::EditHost { .. }
-            | Purpose::QuickCd { .. }
+            | Purpose::GoToDir { .. }
             | Purpose::Checksum { .. }
             | Purpose::SaveSums { .. }
             | Purpose::OverwriteSums { .. }
@@ -5960,19 +5960,19 @@ impl App {
         }
     }
 
-    /// Opens the dialog of Quick cd, `g d`, for the active panel, as in mc.
-    fn ask_cd(&mut self) {
-        self.ask_cd_in(self.shown(self.active), "");
+    /// Opens Go to directory, `g d`, for the active panel, as mc's Quick cd.
+    fn ask_go_to(&mut self) {
+        self.ask_go_to_in(self.shown(self.active), "");
     }
 
-    /// Opens the dialog of Quick cd for `panel`, with `text` typed.
-    fn ask_cd_in(&mut self, panel: PanelId, text: &str) {
-        let (title, prompt) = (fl!("cd-title"), fl!("cd-prompt"));
+    /// Opens Go to directory for `panel`, with `text` typed.
+    fn ask_go_to_in(&mut self, panel: PanelId, text: &str) {
+        let (title, prompt) = (fl!("goto-title"), fl!("goto-prompt"));
         let dialog = Dialog::form(&title, &prompt, text, &[]).with_completion();
         // First, as it may follow a dialog that just closed, ahead of others waiting.
         self.dialogs.push_front(Open {
             dialog,
-            purpose: Purpose::QuickCd { panel },
+            purpose: Purpose::GoToDir { panel },
         });
     }
 
@@ -6660,7 +6660,7 @@ impl App {
                 None => Vec::new(),
             },
             DialogEvent::Pressed(Button::GoTo) => {
-                self.ask_cd_in(panel, &cd_text(failure.destination.location()));
+                self.ask_go_to_in(panel, &cd_text(failure.destination.location()));
                 Vec::new()
             }
             _ => Vec::new(),
@@ -7840,7 +7840,7 @@ fn works_unconnected(action: Action) -> bool {
             | Action::Disconnect
             | Action::EditHost
             | Action::Jump
-            | Action::QuickCd
+            | Action::GoToDir
             | Action::JumpBack
             | Action::JumpForward
             | Action::SaveWorkspace
@@ -7891,7 +7891,7 @@ fn works_offline(action: Action) -> bool {
     )
 }
 
-/// `location` as Quick cd reads it: a host's home directory as `host:`.
+/// `location` as Go to directory reads it: a host's home directory as `host:`.
 fn cd_text(location: &Location) -> String {
     match location {
         Location::Remote { host, path } if path.as_bytes().is_empty() => {
@@ -14588,26 +14588,29 @@ mod tests {
         );
     }
 
-    /// Types `text` into Quick cd in the active panel and presses Enter.
-    fn quick_cd(app: &mut App, text: &str) -> Vec<Effect> {
-        assert!(app.handle(action(Action::QuickCd)).is_empty());
+    /// Types `text` into Go to directory in the active panel and presses Enter.
+    fn go_to_dir(app: &mut App, text: &str) -> Vec<Effect> {
+        assert!(app.handle(action(Action::GoToDir)).is_empty());
         assert_eq!(app.context(), Context::PathInput);
         type_text(app, text);
         app.handle(action(Action::Confirm))
     }
 
     #[test]
-    fn alt_c_goes_where_cd_would_and_back_with_a_dash() {
+    fn g_d_goes_where_cd_would_and_back_with_a_dash() {
         let mut app = loaded();
         let text = {
-            app.handle(action(Action::QuickCd));
+            app.handle(action(Action::GoToDir));
             let text = screen_of(&mut app, 16);
             app.handle(action(Action::Cancel));
             text
         };
-        assert!(text.contains("Quick cd") && text.contains("cd"), "{text}");
+        assert!(
+            text.contains("Go to directory") && text.contains("Path:"),
+            "{text}"
+        );
 
-        let effects = quick_cd(&mut app, "left/../right/./x");
+        let effects = go_to_dir(&mut app, "left/../right/./x");
         let [Effect::List { request, .. }] = &effects[..] else {
             panic!("expected a listing, got {effects:?}");
         };
@@ -14616,7 +14619,7 @@ mod tests {
         assert_eq!(app.panel(Side::Left).location(), &local("/srv/right/x"));
 
         // `..` puts the cursor on where the panel was, as Ctrl+PgUp does.
-        let effects = quick_cd(&mut app, "..");
+        let effects = go_to_dir(&mut app, "..");
         answer(
             &mut app,
             effects,
@@ -14625,31 +14628,31 @@ mod tests {
         assert_eq!(app.panel(Side::Left).name_under_cursor(), Some(&b"x"[..]));
 
         // `-` goes back, and back again.
-        let effects = quick_cd(&mut app, "-");
+        let effects = go_to_dir(&mut app, "-");
         let [Effect::List { request, .. }] = &effects[..] else {
             panic!("expected a listing, got {effects:?}");
         };
         assert_eq!(request.location, local("/srv/right/x"));
         answer(&mut app, effects, &Listing::Dir(Vec::new()));
-        let effects = quick_cd(&mut app, "-");
+        let effects = go_to_dir(&mut app, "-");
         answer(&mut app, effects, &Listing::Dir(Vec::new()));
         assert_eq!(app.panel(Side::Left).location(), &local("/srv/right"));
 
         // `~`, an empty line, and where the panel is already.
-        let [Effect::List { request, .. }] = &quick_cd(&mut app, "~/src")[..] else {
+        let [Effect::List { request, .. }] = &go_to_dir(&mut app, "~/src")[..] else {
             panic!("expected a listing");
         };
         assert_eq!(request.location, local("/home/me/src"));
         app.panel_mut(Side::Left).cancel();
-        assert!(quick_cd(&mut app, "").is_empty());
-        assert!(quick_cd(&mut app, ".").is_empty());
+        assert!(go_to_dir(&mut app, "").is_empty());
+        assert!(go_to_dir(&mut app, ".").is_empty());
         assert_eq!(app.context(), Context::Panel);
     }
 
     #[test]
     fn alt_c_opens_hosts_and_a_path_that_is_not_there_says_so() {
         let mut app = loaded();
-        let effects = quick_cd(&mut app, "web:/var/log");
+        let effects = go_to_dir(&mut app, "web:/var/log");
         let [Effect::Connect { host, .. }] = &effects[..] else {
             panic!("expected a connection, got {effects:?}");
         };
@@ -14660,7 +14663,7 @@ mod tests {
         );
 
         let mut app = loaded();
-        let effects = quick_cd(&mut app, "/nowhere");
+        let effects = go_to_dir(&mut app, "/nowhere");
         fail(&mut app, effects, ListErrorKind::NotFound);
         assert_eq!(app.panel(Side::Left).location(), &local("/srv"), "it stays");
         let text = screen(&mut app);
@@ -14671,7 +14674,7 @@ mod tests {
     fn a_directory_that_cannot_be_read_asks_what_to_do() {
         let mut app = loaded();
         // OK, the default when it is not allowed, stays; Up would lead where the panel is.
-        let effects = quick_cd(&mut app, "left");
+        let effects = go_to_dir(&mut app, "left");
         assert!(fail(&mut app, effects, ListErrorKind::Denied).is_empty());
         let text = screen_of(&mut app, 12);
         assert!(
@@ -14685,7 +14688,7 @@ mod tests {
         assert_eq!(app.panel(Side::Left).location(), &local("/srv"));
 
         // Retry, the default for other errors, reads it again.
-        let effects = quick_cd(&mut app, "left");
+        let effects = go_to_dir(&mut app, "left");
         assert!(fail(&mut app, effects, ListErrorKind::Other).is_empty());
         let Effect::List { request, .. } = one(app.handle(action(Action::Confirm))) else {
             panic!("expected the directory again");
@@ -14704,9 +14707,9 @@ mod tests {
         let text = screen_of(&mut app, 12);
         assert!(text.contains("Cannot open /srv: second"), "{text}");
 
-        // Go to opens Quick cd with the path, to mend it.
+        // Go to opens Go to directory with the path, to mend it.
         app.handle(action(Action::Cancel));
-        let effects = quick_cd(&mut app, "/nowhere/deep");
+        let effects = go_to_dir(&mut app, "/nowhere/deep");
         fail(&mut app, effects, ListErrorKind::NotFound);
         assert!(app.handle(Resolved::Hotkey('g')).is_empty());
         assert_eq!(app.context(), Context::PathInput);
@@ -14719,7 +14722,7 @@ mod tests {
     #[test]
     fn up_climbs_to_the_nearest_directory_that_is_there() {
         let mut app = loaded();
-        let effects = quick_cd(&mut app, "/srv/x/y/z");
+        let effects = go_to_dir(&mut app, "/srv/x/y/z");
         answer(&mut app, effects, &Listing::Dir(Vec::new()));
 
         // The directory of the panel is gone: Up is the default.
@@ -14883,7 +14886,7 @@ mod tests {
     #[test]
     fn ctrl_c_in_the_list_of_completions_closes_the_dialog_as_everywhere() {
         let mut app = loaded();
-        app.handle(action(Action::QuickCd));
+        app.handle(action(Action::GoToDir));
         type_text(&mut app, "left/");
         let (generation, ..) = names_request(&app.handle(action(Action::Complete)));
         app.names(generation, Ok(names_of(&[("a", true), ("b", true)])), &[]);
@@ -14893,9 +14896,9 @@ mod tests {
     }
 
     #[test]
-    fn tab_completes_quick_cd_from_the_directory_typed() {
+    fn tab_completes_go_to_dir_from_the_directory_typed() {
         let mut app = loaded();
-        app.handle(action(Action::QuickCd));
+        app.handle(action(Action::GoToDir));
         type_text(&mut app, "left/pr");
         let (generation, dir, through, hosts) =
             names_request(&app.handle(action(Action::Complete)));
@@ -15000,7 +15003,7 @@ mod tests {
     #[test]
     fn enter_in_the_list_of_completions_confirms_with_the_match() {
         let mut app = loaded();
-        app.handle(action(Action::QuickCd));
+        app.handle(action(Action::GoToDir));
         type_text(&mut app, "ri");
         let (generation, ..) = names_request(&app.handle(action(Action::Complete)));
         app.names(
@@ -15019,7 +15022,7 @@ mod tests {
     #[test]
     fn a_click_on_the_list_of_completions_puts_a_match_in_and_a_double_click_keeps_it() {
         let mut app = loaded();
-        app.handle(action(Action::QuickCd));
+        app.handle(action(Action::GoToDir));
         let (generation, ..) = names_request(&app.handle(action(Action::Complete)));
         let entries = names_of(&[("alpha", true), ("beta", true), ("gamma", true)]);
         app.names(generation, Ok(entries), &[]);
@@ -15040,9 +15043,9 @@ mod tests {
     }
 
     #[test]
-    fn quick_cd_completes_hosts_and_home() {
+    fn go_to_dir_completes_hosts_and_home() {
         let mut app = loaded();
-        app.handle(action(Action::QuickCd));
+        app.handle(action(Action::GoToDir));
         type_text(&mut app, "~");
         assert!(app.handle(action(Action::Complete)).is_empty());
         assert_eq!(field(&app), "~/|");

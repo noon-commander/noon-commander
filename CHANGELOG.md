@@ -170,6 +170,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Quick cd (`g d`) is now Go to directory, in its title, in F9 → Command, and in the help; its
+  field is labelled Path.
 - F5, F6, and Shift+F5 open one dialog, the same for a copy and a move but for its words: the
   dialog of F6 gets Preserve attributes too, shared with copies. Off, a move between the local
   file system and a host, or two hosts, leaves the attributes behind
@@ -183,8 +185,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ([ADR 0040](docs/adr/0040-one-picker-for-every-list.md)).
 - A directory that cannot be read opens a dialog, `Cannot open dir: reason`, instead of a line
   under the panel, with ways out: OK stays, Retry reads it again, Up goes to the nearest parent
-  that is there, and Go to opens Quick cd with the path. A directory gone under the panel has Up
-  as its default ([ADR 0039](docs/adr/0039-errors-of-panels-in-dialogs.md)).
+  that is there, and Go to opens Go to directory with the path. A directory gone under the panel
+  has Up as its default ([ADR 0039](docs/adr/0039-errors-of-panels-in-dialogs.md)).
 - A panel on a host that is no longer connected, after a lost connection or a disconnection,
   keeps its entries, cursor, and marks, toned down, instead of emptying: the cursor moves, quick
   search, sorting, and marks work on them. A key that needs the host asks, `Not connected to

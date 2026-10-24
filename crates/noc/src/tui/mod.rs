@@ -191,24 +191,30 @@ async fn region(context: &Context) -> Result<TimeZone> {
 }
 
 /// Debug builds only: how long results of background work are held back, so spinners stay
-/// long enough to watch, and how long windows take to grow or shrink.
+/// long enough to watch, how long windows take to grow or shrink, and whether windows show
+/// their sizes.
 #[cfg(debug_assertions)]
 #[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct Slow {
+pub(crate) struct DebugOptions {
     /// Every result (`--slow-spinners`).
-    pub(crate) spinners: Option<Duration>,
+    pub(crate) slow_spinners: Option<Duration>,
     /// A connection made or ended, on top of that (`--slow-connections`).
-    pub(crate) connections: Option<Duration>,
+    pub(crate) slow_connections: Option<Duration>,
     /// A window growing or shrinking, from start to end (`--slow-windows`).
-    pub(crate) windows: Option<Duration>,
+    pub(crate) slow_windows: Option<Duration>,
+    /// Each window writes its size on its frame (`--show-sizes`).
+    pub(crate) show_sizes: bool,
 }
 
-/// Debug builds only: holds back each result of background work as `slow` says, from when it
+/// Debug builds only: holds back each result of background work as `debug` says, from when it
 /// comes. Connections have a queue of their own, so the results behind them do not wait for
 /// them; each queue keeps its order.
 #[cfg(debug_assertions)]
-fn slow_down(done: mpsc::UnboundedSender<Done>, slow: Slow) -> mpsc::UnboundedSender<Done> {
-    if slow.spinners.is_none() && slow.connections.is_none() {
+fn slow_down(
+    done: mpsc::UnboundedSender<Done>,
+    debug: DebugOptions,
+) -> mpsc::UnboundedSender<Done> {
+    if debug.slow_spinners.is_none() && debug.slow_connections.is_none() {
         return done;
     }
     let (sender, mut results) = mpsc::unbounded_channel::<Done>();
@@ -216,9 +222,9 @@ fn slow_down(done: mpsc::UnboundedSender<Done>, slow: Slow) -> mpsc::UnboundedSe
     let connections = release(done);
     tokio::spawn(async move {
         while let Some(result) = results.recv().await {
-            let mut delay = slow.spinners.unwrap_or_default();
+            let mut delay = debug.slow_spinners.unwrap_or_default();
             let queue = if matches!(result, Done::Connected { .. } | Done::Closed { .. }) {
-                delay += slow.connections.unwrap_or_default();
+                delay += debug.slow_connections.unwrap_or_default();
                 &connections
             } else {
                 &others
@@ -252,12 +258,12 @@ fn release(
 }
 
 /// Runs the TUI with both panels on the local directory `start` until the user quits or the
-/// process gets SIGTERM, SIGHUP, or SIGINT. In debug builds, `slow` holds back the results of
-/// background work and slows down windows.
+/// process gets SIGTERM, SIGHUP, or SIGINT. In debug builds, `debug` holds back the results of
+/// background work, slows down windows, and has them show their sizes.
 pub(crate) async fn run(
     context: Context,
     start: PathBuf,
-    #[cfg(debug_assertions)] slow: Slow,
+    #[cfg(debug_assertions)] debug: DebugOptions,
 ) -> Result<()> {
     if !io::stdout().is_terminal() {
         bail!("the TUI needs a terminal; in scripts, use the subcommands (`noc --help`)");
@@ -288,11 +294,11 @@ pub(crate) async fn run(
     let context = Arc::new(context);
     let (done_tx, mut done) = mpsc::unbounded_channel();
     #[cfg(debug_assertions)]
-    let done_tx = slow_down(done_tx, slow);
+    let done_tx = slow_down(done_tx, debug);
     let mut tasks = Tasks::start(Arc::clone(&context), done_tx).await;
     let (mut app, effects) = start_app(&context, &start, (&tz, system), asked.modes.keys());
     #[cfg(debug_assertions)]
-    app.slow_windows(slow.windows);
+    app.debug_windows(debug);
     tasks.run(effects);
     let result = loop {
         if app.quits() {

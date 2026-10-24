@@ -244,8 +244,8 @@
       Alt+1 … Alt+8 open the categories of the Configuration dialog, and Alt and a letter the
       sections of the help ([ADR 0033](adr/0033-letters-in-dialogs.md))
 - [x] Windows grow from their middle as they open and shrink back as they close, the menus of
-      F9 drop from their bar; `animations.windows`; `--slow-windows` in debug builds
-      ([ADR 0034](adr/0034-animated-windows.md))
+      F9 drop from their bar; `animations.windows`; `--slow-windows` and `--show-sizes` in debug
+      builds ([ADR 0034](adr/0034-animated-windows.md))
 - [x] One spinner for everything that waits, shown after 150 ms; `animations.spinners`; a panel
   turns braille dots in place of the icon before the path in its title, and the viewer in place of
   the file's icon; the location menu, the zoxide window, and the

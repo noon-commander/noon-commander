@@ -72,7 +72,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Debug builds take `--slow-spinners SECONDS`, which holds back every result of background work by
   that long, and `--slow-connections SECONDS`, which holds back only a connection made or ended, to
   watch the spinners; `--slow-windows SECONDS` has a window take that long to grow as it opens and
-  to shrink as it closes.
+  to shrink as it closes; `--show-sizes` has each window write its size, frame included, as
+  `WIDTHxHEIGHT` at the right of the bottom line of its frame.
 - Who is where: the prompt of the command line is a shell's, `alice@mac:~/src $` locally and
   `deploy@web:/var/www $` on a host, with the user from `ssh -G`, and the line of the mode shows
   `alice@mac` of the active panel left of the keys typed. Where the user is root, `user@host` is
@@ -286,11 +287,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dialog's letters, and other Alt keys do nothing. Without the kitty keyboard protocol, an Esc and
   a quick letter typed in a field arrive as Alt and the letter, and so act on its element rather
   than leave Insert mode.
-
 - Dialogs are one width, 76 cells where the screen has room: those of F5, F6, and Shift+F5, F7,
   F4 on a host, checksums and saving them, changing directory, saving and renaming a workspace,
   and the window of a running job, were 60 or 70. Selecting by pattern (`g +`, `g -`) keeps mc's
   50, and find its 120.
+
 ### Fixed
 
 - A prompt whose translation put what is typed before the glyph of the search mode could

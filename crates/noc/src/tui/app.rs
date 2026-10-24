@@ -1102,12 +1102,14 @@ impl App {
         handover
     }
 
-    /// Debug builds only: windows take `whole`, if given, to grow or shrink.
+    /// Debug builds only: windows take as long to grow or shrink as `debug` says, and show their
+    /// sizes if it says so.
     #[cfg(debug_assertions)]
-    pub(crate) fn slow_windows(&mut self, whole: Option<Duration>) {
-        if let Some(whole) = whole {
+    pub(crate) fn debug_windows(&mut self, debug: super::DebugOptions) {
+        if let Some(whole) = debug.slow_windows {
             self.stage.slow(whole);
         }
+        self.stage.show_sizes(debug.show_sizes);
     }
 
     /// When the next frame of a window growing or shrinking is due, if one is.

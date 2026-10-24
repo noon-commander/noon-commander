@@ -31,6 +31,12 @@ pub(crate) struct Cli {
     #[arg(long, value_name = "SECONDS", value_parser = seconds)]
     pub(crate) slow_windows: Option<Duration>,
 
+    /// Debug builds only: write the size of each window, frame included, as `WIDTHxHEIGHT` on
+    /// the bottom line of its frame.
+    #[cfg(debug_assertions)]
+    #[arg(long)]
+    pub(crate) show_sizes: bool,
+
     #[command(subcommand)]
     pub(crate) command: Option<Command>,
 }
@@ -113,5 +119,19 @@ mod tests {
         );
         let cli = Cli::try_parse_from(["noc", "--slow-windows", "2"]).unwrap();
         assert_eq!(cli.slow_windows, Some(std::time::Duration::from_secs(2)));
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn show_sizes_is_a_switch() {
+        use clap::Parser as _;
+
+        assert!(!Cli::try_parse_from(["noc"]).unwrap().show_sizes);
+        assert!(
+            Cli::try_parse_from(["noc", "--show-sizes"])
+                .unwrap()
+                .show_sizes
+        );
+        assert!(Cli::try_parse_from(["noc", "--show-sizes", "yes"]).is_err());
     }
 }

@@ -1749,7 +1749,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   another program show their windows at once. Completion lists and the key hints of which-key appear
   at once, as they come while typing. In debug builds, `--slow-windows SECONDS` has a frame take
   that long to grow or shrink, its six sizes shown for equal parts of it (`Stage::slow`), so each
-  can be watched.
+  can be watched; `--show-sizes` has each window write the size of its frame as `WIDTHxHEIGHT` at
+  the right of its bottom line, once it shows whole, animations on or off (`Stage::show_sizes`).
+  Only windows drawn through `Stage::show` have it; the panels, the bars, and which-key do not.
 - **Spinners.** Whatever waits for work in the background shows one spinner, next to what tells what
   it waits for ([ADR 0037](adr/0037-spinners.md)). `tui/spinner.rs` keeps its clock. Braille dots
   turn, in the theme's `busy` color, where one cell is all there is: in place of the icon in front

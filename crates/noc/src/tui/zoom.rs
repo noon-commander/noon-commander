@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Margin, Position, Rect};
-use ratatui::style::Style;
+use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, BorderType, Clear, Widget as _};
 
 use super::app::Side;
@@ -123,6 +123,10 @@ pub(crate) struct Stage {
     now: Option<Now>,
     /// How long each size of a frame shows: [`STEP`], or longer in debug builds.
     each: Duration,
+    /// The lines of the frames of this frame's windows.
+    border: BorderType,
+    /// Debug builds only: each window writes its size on its frame.
+    sizes: bool,
 }
 
 impl Default for Stage {
@@ -136,6 +140,8 @@ impl Default for Stage {
             opened: false,
             now: None,
             each: STEP,
+            border: BorderType::default(),
+            sizes: false,
         }
     }
 }
@@ -146,6 +152,13 @@ impl Stage {
     #[cfg(debug_assertions)]
     pub(crate) fn slow(&mut self, whole: Duration) {
         self.each = (whole / STEPS).max(STEP);
+    }
+
+    /// Debug builds only: each window writes its size on its frame if `on`, once it shows
+    /// whole.
+    #[cfg(debug_assertions)]
+    pub(crate) fn show_sizes(&mut self, on: bool) {
+        self.sizes = on;
     }
 
     /// Starts a frame drawn `at` on `screen`, with the viewer on it or not, in `theme`;
@@ -161,6 +174,8 @@ impl Stage {
         if !on {
             *self = Self {
                 each: self.each,
+                border: theme.border_type(),
+                sizes: self.sizes,
                 ..Self::default()
             };
             return;
@@ -171,6 +186,7 @@ impl Stage {
         self.screen = Some((screen, viewing));
         self.drawing.clear();
         self.opened = false;
+        self.border = theme.border_type();
         self.now = Some(Now {
             at,
             border: theme.border_type(),
@@ -191,14 +207,18 @@ impl Stage {
         (window, grows): (Window, Grows),
         draw: impl FnOnce(&mut Frame<'_>),
     ) {
-        let Some(now) = self.now else {
+        if self.now.is_none() && !self.sizes {
             draw(frame);
             return;
-        };
+        }
         let before = frame.buffer_mut().clone();
         draw(frame);
         let after = frame.buffer_mut();
-        let Some(drawn) = find(&before, after, now.border, grows) else {
+        let Some(drawn) = find(&before, after, self.border, grows) else {
+            return;
+        };
+        let Some(now) = self.now else {
+            draw_size(after, &drawn);
             return;
         };
         self.drawing.push((window, drawn));
@@ -222,6 +242,8 @@ impl Stage {
         if let Some((zoom, step)) = step {
             put_back(&before, after, &drawn, now.shadow.is_some());
             draw_frame(after, &drawn, zoom.parts(step), now);
+        } else if self.sizes {
+            draw_size(after, &drawn);
         }
     }
 
@@ -380,6 +402,27 @@ fn draw_frame(buffer: &mut Buffer, drawn: &Drawn, parts: u32, now: Now) {
         .render(framed, buffer);
 }
 
+/// Writes the size of the frame at `drawn` as `WIDTHxHEIGHT` at the right of its bottom line,
+/// between a line on either side and its corners, if it fits; over the other windows below it,
+/// under those drawn after it.
+fn draw_size(buffer: &mut Buffer, drawn: &Drawn) {
+    let frame = drawn.outer.inner(drawn.margin);
+    let formats = noc_locale::current();
+    let size = format!(
+        "{}x{}",
+        formats.integer(u64::from(frame.width)),
+        formats.integer(u64::from(frame.height))
+    );
+    let Ok(width) = u16::try_from(noc_text::width(&size)) else {
+        return;
+    };
+    if frame.height < 2 || frame.width < width.saturating_add(4) {
+        return;
+    }
+    let style = drawn.style.add_modifier(Modifier::REVERSED);
+    buffer.set_string(frame.right() - 2 - width, frame.bottom() - 1, size, style);
+}
+
 #[cfg(test)]
 mod tests {
     use ratatui::Terminal;
@@ -401,6 +444,15 @@ mod tests {
     /// A screen of dots in the colors of panels, with the dialog `id` on it if there is one,
     /// drawn on `stage` at `at`.
     fn screen(stage: &mut Stage, dialog: Option<u64>, at: Instant) -> Terminal<TestBackend> {
+        screen_animated(stage, (dialog, at), true)
+    }
+
+    /// As [`screen`], with windows that animate if `on`.
+    fn screen_animated(
+        stage: &mut Stage,
+        (dialog, at): (Option<u64>, Instant),
+        on: bool,
+    ) -> Terminal<TestBackend> {
         let mut terminal = Terminal::new(TestBackend::new(WIDTH, HEIGHT)).unwrap();
         let theme = theme();
         terminal
@@ -414,7 +466,7 @@ mod tests {
                         theme.panel,
                     );
                 }
-                stage.begin(true, (area, false), &theme, at);
+                stage.begin(on, (area, false), &theme, at);
                 if let Some(id) = dialog {
                     stage.show(frame, (Window::Dialog(id), Grows::FromMiddle), |frame| {
                         let colors = Colors::of(&theme, false);
@@ -497,6 +549,59 @@ mod tests {
         assert_eq!(stage.due(), None);
         stage.slow(Duration::ZERO);
         assert_eq!(stage.each, STEP);
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn a_window_writes_its_size_once_it_shows_whole() {
+        let start = Instant::now();
+        let mut stage = Stage::default();
+        stage.show_sizes(true);
+        let first = screen(&mut stage, Some(1), start);
+        insta::assert_snapshot!("size_shown", text(&first));
+        screen(&mut stage, None, start);
+        let opened = start + Duration::from_secs(1);
+        let growing = screen(&mut stage, Some(2), opened);
+        assert!(!text(&growing).contains("16x5"), "{}", text(&growing));
+        let whole = screen(&mut stage, Some(2), opened + STEP * STEPS);
+        assert_eq!(text(&whole), text(&first));
+        stage.show_sizes(false);
+        let off = screen(&mut stage, Some(2), opened + STEP * STEPS);
+        assert!(!text(&off).contains("16x5"), "{}", text(&off));
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn a_window_writes_its_size_without_animations() {
+        let start = Instant::now();
+        let mut stage = Stage::default();
+        stage.show_sizes(true);
+        let shown = screen(&mut stage, Some(1), start);
+        let still = screen_animated(&mut stage, (Some(1), start), false);
+        assert_eq!(text(&still), text(&shown));
+        assert!(text(&still).contains("16x5"), "{}", text(&still));
+    }
+
+    #[test]
+    fn a_size_needs_room_on_its_frame() {
+        let drawn = |width| Drawn {
+            outer: Rect::new(0, 0, width, 3),
+            margin: Margin::new(0, 0),
+            style: Style::default(),
+            bounds: Rect::new(0, 0, width, 3),
+            grows: Grows::FromMiddle,
+        };
+        let line = |buffer: &Buffer| {
+            (0..buffer.area.width)
+                .map(|x| buffer[(x, 2)].symbol().to_owned())
+                .collect::<String>()
+        };
+        let mut buffer = Buffer::filled(Rect::new(0, 0, 7, 3), ratatui::buffer::Cell::new("-"));
+        draw_size(&mut buffer, &drawn(7));
+        assert_eq!(line(&buffer), "--7x3--");
+        let mut buffer = Buffer::filled(Rect::new(0, 0, 6, 3), ratatui::buffer::Cell::new("-"));
+        draw_size(&mut buffer, &drawn(6));
+        assert_eq!(line(&buffer), "------");
     }
 
     #[test]

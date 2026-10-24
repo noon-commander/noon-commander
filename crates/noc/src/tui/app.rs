@@ -66,6 +66,7 @@ use super::tab_menu::{TabMenu, TabMenuEvent};
 use super::tabs::{self, Bar, PanelId, Tab, Tabs};
 use super::tasks::{HostHandle, JobEvent};
 use super::theme::{ColorDepth, Theme};
+use super::transfer::{self, Sources};
 use super::which_key;
 use super::workspaces::{self, WorkspacesEvent, WorkspacesWindow};
 use super::zoom::{self, Grows, Stage};
@@ -378,9 +379,8 @@ const SHOWCMD_WIDTH: usize = 10;
 const PROMPT_DIR_WIDTH: usize = 8;
 /// Width of the dialogs of `g +` and `g -`, as of mc's `+` and `-`.
 const PATTERN_DIALOG_WIDTH: u16 = 50;
-/// Width of the dialogs of F7 and F5.
+/// Width of the dialog of F7.
 const MKDIR_DIALOG_WIDTH: u16 = 60;
-const COPY_DIALOG_WIDTH: u16 = 70;
 const HOST_DIALOG_WIDTH: u16 = 70;
 const CHECKSUM_DIALOG_WIDTH: u16 = 70;
 const WORKSPACE_DIALOG_WIDTH: u16 = 60;
@@ -413,10 +413,11 @@ enum Purpose {
         from: Location,
         to: Location,
     },
-    /// F5 or F6 (by `kind`) in `panel`, which shows `dir`, for the entries `names`. The field
-    /// opened with `offered`, the text for the other panel's location, if it shows one.
+    /// F5, F6, or Shift+F5 (by `kind`) in `panel`, which shows `dir`, for the entries `names`.
+    /// The field opened with `offered`, the text for the other panel's location, if it shows
+    /// one.
     Transfer {
-        kind: JobKind,
+        kind: transfer::Kind,
         panel: PanelId,
         dir: Location,
         names: Vec<Vec<u8>>,
@@ -550,8 +551,7 @@ fn choices_for(completion: &mut Option<Completing>, target: Completes) -> Option
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum JobKind {
     Delete,
-    Copy,
-    Move,
+    Transfer(transfer::Kind),
     Checksum,
 }
 
@@ -640,8 +640,7 @@ impl Job {
             .collect();
         let view = match kind {
             JobKind::Delete => JobView::new(fl!("delete-title"), fl!("delete-deleting")),
-            JobKind::Copy => JobView::new(fl!("copy-title"), fl!("copy-copying")),
-            JobKind::Move => JobView::new(fl!("move-title"), fl!("move-moving")),
+            JobKind::Transfer(kind) => JobView::new(kind.title(), kind.working()),
             JobKind::Checksum => JobView::new(fl!("checksum-title"), fl!("checksum-hashing")),
         };
         Self {
@@ -720,7 +719,8 @@ impl Viewing {
     }
 }
 
-/// How F5 copies: what its dialog asked for last, which it starts with, and the setting.
+/// How F5 and F6 copy and move: what their dialog asked for last, which it starts with, and
+/// the setting.
 #[derive(Debug, Clone, Copy)]
 struct CopyChoices {
     preserve: bool,
@@ -2779,9 +2779,9 @@ impl App {
             Action::View => return self.view(),
             Action::Edit => return self.edit(),
             Action::SystemOpen => return self.system_open(),
-            Action::Copy => self.ask_transfer(JobKind::Copy),
+            Action::Copy => self.ask_transfer(transfer::Kind::Copy),
             Action::Duplicate => self.ask_duplicate(),
-            Action::Move => self.ask_transfer(JobKind::Move),
+            Action::Move => self.ask_transfer(transfer::Kind::Move),
             Action::Rename => self.start_rename(),
             Action::Select | Action::Unselect => self.ask_pattern(action == Action::Select),
             // Esc closes the whole name below the panels when it waits for no listing.
@@ -4316,9 +4316,7 @@ impl App {
                 names,
                 offered,
             } if ok => {
-                if kind == JobKind::Copy {
-                    self.copy_choices.preserve = dialog.checked(0);
-                }
+                self.copy_choices.preserve = transfer::preserve(dialog);
                 let target = match offered {
                     Some((text, location)) if text == dialog.text() => Some(location),
                     _ => self.resolve_target(panel, dialog.text()),
@@ -4524,7 +4522,13 @@ impl App {
             .runtime_dir
             .join(std::ffi::OsStr::from_bytes(&temporary));
         let cancel = CancellationToken::new();
-        let mut job = Job::new(id, JobKind::Copy, Vec::new(), cancel.clone()).then(Then::Edit);
+        let mut job = Job::new(
+            id,
+            JobKind::Transfer(transfer::Kind::Copy),
+            Vec::new(),
+            cancel.clone(),
+        )
+        .then(Then::Edit);
         job.hosts.push(on);
         self.jobs.push(job);
         self.editing = Some(Editing {
@@ -4620,7 +4624,13 @@ impl App {
             copy: editing.file.clone(),
             remote: remote.clone(),
         };
-        let job = Job::new(id, JobKind::Copy, vec![editing.dir], cancel.clone()).then(then);
+        let job = Job::new(
+            id,
+            JobKind::Transfer(transfer::Kind::Copy),
+            vec![editing.dir],
+            cancel.clone(),
+        )
+        .then(then);
         self.jobs.push(job);
         vec![Effect::Copy {
             id,
@@ -5251,29 +5261,23 @@ impl App {
     }
 
     /// Asks where F5 copies, or F6 moves, the marked entries of the active panel, or the one
-    /// under the cursor, as mc does: the field opens with the other panel's location. Copies
-    /// may preserve attributes; moves always do.
-    fn ask_transfer(&mut self, kind: JobKind) {
+    /// under the cursor, as mc does: the field opens with the other panel's location.
+    fn ask_transfer(&mut self, kind: transfer::Kind) {
         let panel = self.panel(self.active);
         let chosen = panel.chosen();
-        let message = match (chosen.as_slice(), kind) {
-            ([], _) => return,
-            ([entry], JobKind::Move) => fl!("move-one", name = prompt_name(&entry.name)),
-            ([entry], _) => fl!("copy-one", name = prompt_name(&entry.name)),
-            (many, kind) => {
+        let sources = match chosen.as_slice() {
+            [] => return,
+            [entry] => Sources::One(prompt_name(&entry.name)),
+            many => {
                 let (files, dirs) = files_and_dirs(many);
-                if kind == JobKind::Move {
-                    fl!("move-many", files = files, dirs = dirs)
-                } else {
-                    fl!("copy-many", files = files, dirs = dirs)
-                }
+                Sources::Many { files, dirs }
             }
         };
         let names = chosen.iter().map(|entry| entry.name.clone()).collect();
         let other = self.panel(self.active.other()).location().clone();
         let text = location_text(&other);
         let field = (text.clone(), text.chars().count());
-        self.open_transfer(kind, &message, names, field, Some((text, other)));
+        self.open_transfer(kind, &sources, names, field, Some((text, other)));
     }
 
     /// Asks where Shift+F5 copies the entry under the cursor of the active panel, not the
@@ -5297,32 +5301,26 @@ impl App {
         } else {
             (text.to_owned(), cursor)
         };
-        let message = fl!("copy-one", name = prompt_name(&name));
-        self.open_transfer(JobKind::Copy, &message, vec![name], field, None);
+        let sources = Sources::One(prompt_name(&name));
+        self.open_transfer(transfer::Kind::Copy, &sources, vec![name], field, None);
     }
 
-    /// Opens the dialog of F5, F6, and Shift+F5 for `names` in the active panel's directory:
-    /// `message` over a field that opens with a text and the cursor before its character of
-    /// that number, and for a copy, whether to preserve attributes. `offered` is the location
-    /// that the text stands for while it stays as it was.
+    /// Opens the dialog of F5, F6, and Shift+F5 to do `kind` to `names` in the active panel's
+    /// directory, which its prompt names as `sources`: a field that opens with a text and the
+    /// cursor before its character of that number, and whether to preserve attributes, for a
+    /// copy or a move alike. `offered` is the location that the text stands for while it stays
+    /// as it was.
     fn open_transfer(
         &mut self,
-        kind: JobKind,
-        message: &str,
+        kind: transfer::Kind,
+        sources: &Sources,
         names: Vec<Vec<u8>>,
         (text, cursor): (String, usize),
         offered: Option<(String, Location)>,
     ) {
         let dir = self.panel(self.active).location().clone();
-        let (title, checks) = if kind == JobKind::Move {
-            (fl!("move-title"), Vec::new())
-        } else {
-            let preserve = (fl!("copy-preserve"), self.copy_choices.preserve);
-            (fl!("copy-title"), vec![preserve])
-        };
-        let dialog = Dialog::form(&title, message, &text, &checks, COPY_DIALOG_WIDTH)
-            .with_completion()
-            .with_cursor(cursor);
+        let preserve = self.copy_choices.preserve;
+        let dialog = transfer::dialog(kind, sources, (&text, cursor), preserve);
         let panel = self.shown(self.active);
         self.dialogs.push_back(Open {
             dialog,
@@ -5354,20 +5352,13 @@ impl App {
     /// target that is one of the sources, or in one, is an error.
     fn start_transfer(
         &mut self,
-        kind: JobKind,
+        kind: transfer::Kind,
         dir: Location,
         names: &[Vec<u8>],
         target: Location,
     ) -> Vec<Effect> {
         let sources: Vec<Location> = names.iter().map(|name| child(&dir, name)).collect();
-        let error = |reason: String| {
-            let path = location_text(&target);
-            if kind == JobKind::Move {
-                fl!("move-error", path = path, reason = reason)
-            } else {
-                fl!("copy-error", path = path, reason = reason)
-            }
-        };
+        let error = |reason: String| kind.error(&location_text(&target), &reason);
         if target == dir || sources.contains(&target) {
             self.show_error(&error(fl!("transfer-same")));
             return Vec::new();
@@ -5399,12 +5390,11 @@ impl App {
             .into_iter()
             .flatten()
             .collect();
-        let job = Job::new(id, kind, changes, cancel.clone());
-        let moving = kind == JobKind::Move;
+        let job = Job::new(id, JobKind::Transfer(kind), changes, cancel.clone());
         let options = CopyOptions {
-            preserve: self.copy_choices.preserve || moving,
+            preserve: self.copy_choices.preserve,
             atomic: self.copy_choices.atomic,
-            remove_sources: moving,
+            remove_sources: kind == transfer::Kind::Move,
             overwrite: false,
         };
         let effect = Effect::Copy {
@@ -5513,8 +5503,7 @@ impl App {
                 let reason = cells::sanitize(error.as_bytes());
                 let message = match job.kind {
                     JobKind::Delete => fl!("delete-error", path = path, reason = reason),
-                    JobKind::Copy => fl!("copy-error", path = path, reason = reason),
-                    JobKind::Move => fl!("move-error", path = path, reason = reason),
+                    JobKind::Transfer(kind) => kind.error(&path, &reason),
                     JobKind::Checksum => fl!("checksum-error", path = path, reason = reason),
                 };
                 let buttons = vec![Button::Skip, Button::SkipAll, Button::Retry, Button::Abort];
@@ -10545,9 +10534,8 @@ mod tests {
 
         // Preserve attributes, switched off, stays off.
         app.handle(action(Action::Copy));
-        for step in [Action::NextField, Action::Toggle, Action::Confirm] {
-            app.handle(action(step));
-        }
+        app.handle(Resolved::Hotkey('p'));
+        app.handle(action(Action::Confirm));
         app.jobs.clear();
         app.handle(action(Action::Copy));
         assert!(screen(&mut app).contains("[ ] Preserve attributes"));
@@ -10585,7 +10573,7 @@ mod tests {
         let text = screen(&mut app);
         assert!(text.contains("Move \"left\" to:"), "{text}");
         assert!(text.contains("/srv/right"), "{text}");
-        assert!(!text.contains("Preserve"), "moves always preserve: {text}");
+        assert!(text.contains("[x] Preserve attributes"), "{text}");
         let (id, sources, target, _, options) = copy_job(app.handle(action(Action::Confirm)));
         assert_eq!(
             (sources, target),
@@ -10613,6 +10601,20 @@ mod tests {
             text.contains("Cannot move to /srv: the source and the target are the same"),
             "{text}"
         );
+    }
+
+    #[test]
+    fn f6_may_leave_the_attributes_as_f5_does() {
+        let mut app = two_directories();
+        app.handle(action(Action::Move));
+        app.handle(Resolved::Hotkey('p'));
+        let (_, _, _, _, options) = copy_job(app.handle(action(Action::Confirm)));
+        assert!(options.remove_sources && !options.preserve);
+        app.jobs.clear();
+
+        // One setting for both.
+        app.handle(action(Action::Copy));
+        assert!(screen(&mut app).contains("[ ] Preserve attributes"));
     }
 
     #[test]

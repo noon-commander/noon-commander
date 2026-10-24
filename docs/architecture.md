@@ -1185,11 +1185,13 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   that asked with the cursor on it. An error shows in a red dialog, as mc shows errors.
 - **F5 copies** the marked entries, or the one under the cursor, as mc does: a dialog asks
   where to, opening with the other panel's location (`host:/path` for a host), and whether to
-  preserve attributes (times and permission bits; on, and remembered). A typed target is
-  `host:path` for a host the app knows, or a path from the active panel's directory, as F7
-  takes it. A target that is the source directory, a source, or in one of the sources, is an
-  error; so is, from the job, a source under its name spelled otherwise, where the file system
-  ignores case (see File operations).
+  preserve attributes (times and permission bits; on, and remembered). F5, F6, and Shift+F5
+  share the dialog (`tui/transfer.rs`, [ADR 0043](adr/0043-one-dialog-for-copy-and-move.md)):
+  the same field and check box, only the words differ. A typed target is `host:path` for a
+  host the app knows, or a path from the active panel's directory, as F7 takes it. A target
+  that is the source directory, a source, or in one of the sources, is an error; so is, from
+  the job, a source under its name spelled otherwise, where the file system ignores case (see
+  File operations).
   The job's window shows entries and bytes, with the gauge on the bytes. A taken name asks in
   red, as mc does, with the path, both sizes and times, and Yes, No (the default), All, None,
   Older, and Abort. Copies are written under a temporary name and renamed when complete,
@@ -1252,7 +1254,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   on a host, the line of the mode says that only local files open externally, and the command
   is dimmed in the File menu.
 - **F6 moves or renames** the marked entries, or the one under the cursor, with the dialog
-  of F5 (`Move "x" to:`, without Preserve attributes: moves keep them); a new name in the
+  of F5 (`Move "x" to:`). Preserve attributes, shared with copies, applies where a move copies;
+  a rename keeps them anyway. A new name in the
   field renames in place, as in mc, its own name in another case too, where the file system
   ignores case. Locally, and within one host, the job renames (`move_within`); between the
   local file system and a host, or two hosts, it copies and removes each source once all of it

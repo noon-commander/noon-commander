@@ -1,0 +1,14 @@
+---
+source: crates/noc/src/tui/dialog.rs
+expression: terminal.backend()
+---
+"                                                            "
+"  ╔════════════════════════ Move ════════════════════════╗  "
+"  ║ Move "notes.txt" to:                                 ║  "
+"  ║ /srv/backup                                          ║  "
+"  ║ [x] Preserve attributes                              ║  "
+"  ╟──────────────────────────────────────────────────────╢  "
+"  ║                 [< OK >] [ Cancel ]                  ║  "
+"  ╚══════════════════════════════════════════════════════╝  "
+"                                                            "
+"                                                            "

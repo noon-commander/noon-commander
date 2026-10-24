@@ -41,6 +41,7 @@ mod tab_menu;
 mod tabs;
 mod tasks;
 mod theme;
+mod transfer;
 mod which_key;
 mod workspaces;
 mod zoom;

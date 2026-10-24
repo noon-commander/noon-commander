@@ -169,6 +169,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- F5, F6, and Shift+F5 open one dialog, the same for a copy and a move but for its words: the
+  dialog of F6 gets Preserve attributes too, shared with copies. Off, a move between the local
+  file system and a host, or two hosts, leaves the attributes behind
+  ([ADR 0043](docs/adr/0043-one-dialog-for-copy-and-move.md)).
 - F7 opens with an empty name instead of the name under the cursor, which what was typed went
   after.
 - In the fzf search mode, every list shows the best match first, as fzf does: the location menu,

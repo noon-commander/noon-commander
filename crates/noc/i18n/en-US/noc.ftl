@@ -1035,19 +1035,43 @@ delete-many = Delete { marked-entries }?
 delete-deleting = Deleting
 delete-error = Cannot delete { $path }: { $reason }
 
-## Copying, F5 (src/tui/app). Prefix: copy-. As in mc.
+## Copying and moving, F5, F6, and Shift+F5 (src/tui/transfer, src/tui/app): one dialog, as in
+## mc, whose words alone differ. Prefix: transfer-. $kind is copy or move.
 
-copy-title = Copy
+transfer-title = { $kind ->
+        [move] Move
+       *[copy] Copy
+    }
 # Above the target field, which opens with the other panel's directory, or with the name itself
-# after Shift+F5; the & marks its letter.
-copy-one = &Copy "{ $name }" to:
-copy-many = &Copy { marked-entries } to:
-copy-preserve = &Preserve attributes
+# after Shift+F5; the & marks its letter. A new name in the field of a move renames.
+transfer-one = { $kind ->
+        [move] &Move
+       *[copy] &Copy
+    } "{ $name }" to:
+transfer-many = { $kind ->
+        [move] &Move
+       *[copy] &Copy
+    } { marked-entries } to:
+# The check box under the field, for moves too: where a move copies, between file systems.
+transfer-preserve = &Preserve attributes
 # Above the entry the job works on.
-copy-copying = Copying
-copy-error = Cannot copy to { $path }: { $reason }
-# A taken name: what is to be copied, what is there, and the question. The sizes are in bytes,
-# written as the region writes numbers, and the times are dates and times of the region.
+transfer-working = { $kind ->
+        [move] Moving
+       *[copy] Copying
+    }
+transfer-error = { $kind ->
+        [move] Cannot move to { $path }: { $reason }
+       *[copy] Cannot copy to { $path }: { $reason }
+    }
+# Why a copy or a move cannot start.
+transfer-same = the source and the target are the same
+# The target is in a source directory.
+transfer-into-itself = it is in { $path }
+
+## A taken name in a copy or a move (src/tui/app). Prefix: copy-. As in mc.
+
+# What is to be copied, what is there, and the question. The sizes are in bytes, written as the
+# region writes numbers, and the times are dates and times of the region.
 copy-exists-title = File exists
 copy-exists =
     { $path } is there already.
@@ -1066,14 +1090,6 @@ copy-exists =
 
 duplicate-not-utf8 = "{ $name }" cannot be edited: the name is not valid UTF-8; F5 can copy it
 
-## Moving, F6 (src/tui/app). Prefix: move-. As in mc; a new name in the field renames.
-
-move-title = Move
-move-one = &Move "{ $name }" to:
-move-many = &Move { marked-entries } to:
-move-moving = Moving
-move-error = Cannot move to { $path }: { $reason }
-
 ## Renaming in place, Shift+F6 (src/tui/app, src/tui/tasks). Prefix: rename-.
 
 rename-error = Cannot rename { $path }: { $reason }
@@ -1085,12 +1101,6 @@ rename-dir-exists = a directory has that name
 # A name with a slash, or . or ..: renaming only gives a new name in the same directory.
 rename-invalid = "{ $name }" cannot be a name: renaming does not move
 rename-not-utf8 = "{ $name }" cannot be edited: the name is not valid UTF-8; F6 can rename it
-
-## Why a copy or a move cannot start (src/tui/app). Prefix: transfer-.
-
-transfer-same = the source and the target are the same
-# The target is in a source directory.
-transfer-into-itself = it is in { $path }
 
 ## Checksums, f # (src/tui/app, src/tui/sums). Prefix: checksum-.
 

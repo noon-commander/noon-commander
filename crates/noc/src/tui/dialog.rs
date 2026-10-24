@@ -2454,6 +2454,22 @@ mod tests {
     }
 
     #[test]
+    fn every_element_of_the_transfer_dialog_has_a_letter_of_its_own() {
+        use super::super::transfer::{self, Kind, Sources};
+
+        let one = Sources::One("R&&D".to_owned());
+        let many = Sources::Many { files: 1, dirs: 1 };
+        for kind in [Kind::Copy, Kind::Move] {
+            for sources in [&one, &many] {
+                let dialog = transfer::dialog(kind, sources, ("", 0), true);
+                let name = format!("{kind:?} {sources:?}");
+                assert!(dialog.message.letter().is_some(), "{name}: the prompt");
+                assert_letters(&name, &dialog);
+            }
+        }
+    }
+
+    #[test]
     fn every_element_of_the_apps_dialogs_has_a_letter_of_its_own() {
         use crate::i18n::fl;
 
@@ -2461,14 +2477,7 @@ mod tests {
         let form = |message: String, checks: &[(String, bool)]| {
             Dialog::form("Title", &message, "", checks, 60)
         };
-        let preserve = [(fl!("copy-preserve"), true)];
-        let copy_many = fl!("copy-many", files = 1, dirs = 1);
-        let move_many = fl!("move-many", files = 1, dirs = 1);
         let forms = [
-            ("copy", form(fl!("copy-one", name = "R&&D"), &preserve)),
-            ("copy many", form(copy_many, &preserve)),
-            ("move", form(fl!("move-one", name = "x"), &[])),
-            ("move many", form(move_many, &[])),
             ("mkdir", form(fl!("mkdir-prompt"), &[])),
             ("quick cd", form(fl!("cd-prompt"), &[])),
             ("save checksums", form(fl!("checksum-save-prompt"), &[])),
@@ -2695,6 +2704,16 @@ mod tests {
         dialog.handle(action(Action::DeleteToStart));
         typed(&mut dialog, "*.md");
         dialog.handle(action(Action::NextField));
+        let terminal = draw(&dialog, 60, 10);
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn draws_the_transfer_dialog_of_a_move_as_that_of_a_copy() {
+        use super::super::transfer::{self, Kind, Sources};
+
+        let sources = Sources::One("notes.txt".to_owned());
+        let dialog = transfer::dialog(Kind::Move, &sources, ("/srv/backup", 11), true);
         let terminal = draw(&dialog, 60, 10);
         insta::assert_snapshot!(terminal.backend());
     }

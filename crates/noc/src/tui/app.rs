@@ -379,11 +379,6 @@ const SHOWCMD_WIDTH: usize = 10;
 const PROMPT_DIR_WIDTH: usize = 8;
 /// Width of the dialogs of `g +` and `g -`, as of mc's `+` and `-`.
 const PATTERN_DIALOG_WIDTH: u16 = 50;
-/// Width of the dialog of F7.
-const MKDIR_DIALOG_WIDTH: u16 = 60;
-const HOST_DIALOG_WIDTH: u16 = 70;
-const CHECKSUM_DIALOG_WIDTH: u16 = 70;
-const WORKSPACE_DIALOG_WIDTH: u16 = 60;
 /// The fields of the dialog of F4 on a host.
 const HOST_LABEL: usize = 0;
 const HOST_START_DIR: usize = 1;
@@ -3307,7 +3302,7 @@ impl App {
             _ => String::new(),
         };
         let (title, prompt) = (fl!("workspaces-save-title"), fl!("workspaces-save-prompt"));
-        let dialog = Dialog::form(&title, &prompt, &name, &[], WORKSPACE_DIALOG_WIDTH);
+        let dialog = Dialog::form(&title, &prompt, &name, &[]);
         self.dialogs.push_back(Open {
             dialog,
             purpose: Purpose::Workspace(WorkspaceQuestion::Save),
@@ -3452,7 +3447,7 @@ impl App {
                 let shown = label::escape(&cells::sanitize(from.as_bytes()));
                 let title = fl!("workspaces-rename-title");
                 let prompt = fl!("workspaces-rename-prompt", name = shown);
-                let dialog = Dialog::form(&title, &prompt, &from, &[], WORKSPACE_DIALOG_WIDTH);
+                let dialog = Dialog::form(&title, &prompt, &from, &[]);
                 self.dialogs.push_back(Open {
                     dialog,
                     purpose: Purpose::Workspace(WorkspaceQuestion::Rename { from }),
@@ -5663,7 +5658,7 @@ impl App {
             .unwrap_or(0);
         let buttons = vec![Button::Ok, Button::Cancel];
         let title = fl!("checksum-title");
-        let dialog = Dialog::fields(&title, &fields, &checks, buttons, CHECKSUM_DIALOG_WIDTH)
+        let dialog = Dialog::fields(&title, &fields, &checks, buttons)
             .with_message(&message)
             .with_choices(&choices, chosen);
         self.dialogs.push_back(Open {
@@ -5878,7 +5873,7 @@ impl App {
                     let bytes = sums_file(&results.lines);
                     let window = results.id;
                     let (title, prompt) = (fl!("checksum-save-title"), fl!("checksum-save-prompt"));
-                    let dialog = Dialog::form(&title, &prompt, &name, &[], MKDIR_DIALOG_WIDTH);
+                    let dialog = Dialog::form(&title, &prompt, &name, &[]);
                     self.dialogs.push_back(Open {
                         dialog,
                         purpose: Purpose::SaveSums { window, dir, bytes },
@@ -5971,7 +5966,7 @@ impl App {
     /// Opens the dialog of Quick cd for `panel`, with `text` typed.
     fn ask_cd_in(&mut self, panel: PanelId, text: &str) {
         let (title, prompt) = (fl!("cd-title"), fl!("cd-prompt"));
-        let dialog = Dialog::form(&title, &prompt, text, &[], MKDIR_DIALOG_WIDTH).with_completion();
+        let dialog = Dialog::form(&title, &prompt, text, &[]).with_completion();
         // First, as it may follow a dialog that just closed, ahead of others waiting.
         self.dialogs.push_front(Open {
             dialog,
@@ -5999,7 +5994,7 @@ impl App {
     /// Opens the dialog of F7 for the active panel, with an empty field.
     fn ask_mkdir(&mut self) {
         let (title, prompt) = (fl!("mkdir-title"), fl!("mkdir-prompt"));
-        let dialog = Dialog::form(&title, &prompt, "", &[], MKDIR_DIALOG_WIDTH).with_completion();
+        let dialog = Dialog::form(&title, &prompt, "", &[]).with_completion();
         let panel = self.shown(self.active);
         self.dialogs.push_back(Open {
             dialog,
@@ -6276,7 +6271,8 @@ impl App {
             (fl!("pattern-files-only"), options.files_only),
             (fl!("pattern-case-sensitive"), options.case_sensitive),
         ];
-        let dialog = Dialog::form(&title, "", &options.pattern, &checks, PATTERN_DIALOG_WIDTH);
+        let dialog =
+            Dialog::form(&title, "", &options.pattern, &checks).with_width(PATTERN_DIALOG_WIDTH);
         let panel = self.shown(self.active);
         self.dialogs.push_back(Open {
             dialog,
@@ -6340,7 +6336,7 @@ impl App {
             buttons.insert(1, Button::UseCurrent);
         }
         let title = fl!("host-edit-title", host = cells::sanitize(name.as_bytes()));
-        let dialog = Dialog::fields(&title, &fields, &checks, buttons, HOST_DIALOG_WIDTH);
+        let dialog = Dialog::fields(&title, &fields, &checks, buttons);
         self.dialogs.push_back(Open {
             dialog,
             purpose: Purpose::EditHost { name, old, current },

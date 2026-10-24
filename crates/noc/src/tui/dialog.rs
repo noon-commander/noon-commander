@@ -33,8 +33,9 @@ use crate::i18n::fl;
 /// Bytes a secret may have. Reserved up front, so typing never moves it in memory and leaves
 /// no copy behind.
 const SECRET_CAPACITY: usize = 1024;
-/// Widest a dialog gets, in cells, borders included.
-const MAX_WIDTH: u16 = 76;
+/// Width of a dialog, in cells, borders included, where the screen has room; `with_width`
+/// sets another.
+pub(crate) const MAX_WIDTH: u16 = 76;
 /// Cells between a dialog's frame and its edge, as mc leaves them.
 const MARGIN: u16 = 1;
 
@@ -560,33 +561,24 @@ impl Dialog {
     }
 
     /// `message`, a text field that opens with `text`, check boxes with their labels and
-    /// states, and OK and Cancel, `width` cells wide. An `&` in `message` marks the letter of
-    /// the field.
-    pub(crate) fn form(
-        title: &str,
-        message: &str,
-        text: &str,
-        checks: &[(String, bool)],
-        width: u16,
-    ) -> Self {
+    /// states, and OK and Cancel. An `&` in `message` marks the letter of the field.
+    pub(crate) fn form(title: &str, message: &str, text: &str, checks: &[(String, bool)]) -> Self {
         Self {
             message: Label::parse(message.trim_end()),
             fields: vec![LabelledField::unlabelled(Field::plain(text))],
             checks: Self::checks(checks),
             focus: Focus::Field(0),
-            width,
             ..Self::new(title, "", vec![Button::Ok, Button::Cancel])
         }
     }
 
     /// Text fields with their labels and the texts they open with, check boxes with their
-    /// labels and states, and `buttons`, the first of them the default, `width` cells wide.
+    /// labels and states, and `buttons`, the first of them the default.
     pub(crate) fn fields(
         title: &str,
         fields: &[(String, String)],
         checks: &[(String, bool)],
         buttons: Vec<Button>,
-        width: u16,
     ) -> Self {
         let fields: Vec<LabelledField> = fields
             .iter()
@@ -604,7 +596,6 @@ impl Dialog {
             fields,
             checks: Self::checks(checks),
             focus,
-            width,
             ..Self::new(title, "", buttons)
         }
     }
@@ -666,6 +657,12 @@ impl Dialog {
     /// Tells this dialog from every other one.
     pub(crate) fn id(&self) -> u64 {
         self.id
+    }
+
+    /// The same dialog, `width` cells wide where the screen has room.
+    pub(crate) fn with_width(mut self, width: u16) -> Self {
+        self.width = width;
+        self
     }
 
     /// The same dialog, with a path in its first field, which Tab completes.
@@ -2209,7 +2206,7 @@ mod tests {
             ("Files only".to_owned(), false),
             ("Case sensitive".to_owned(), true),
         ];
-        Dialog::form("Select", "", "*", &checks, 50)
+        Dialog::form("Select", "", "*", &checks).with_width(50)
     }
 
     #[test]
@@ -2339,7 +2336,8 @@ mod tests {
             ("&Files only".to_owned(), false),
             ("&Case sensitive".to_owned(), false),
         ];
-        Dialog::form("Select", "&Pattern:", "*", &checks, 50)
+        Dialog::form("Select", "&Pattern:", "*", &checks)
+            .with_width(50)
             .with_choices(&["O&ne".to_owned(), "T&wo".to_owned()], 0)
     }
 
@@ -2475,7 +2473,7 @@ mod tests {
 
         let ok_cancel = || vec![Button::Ok, Button::Cancel];
         let form = |message: String, checks: &[(String, bool)]| {
-            Dialog::form("Title", &message, "", checks, 60)
+            Dialog::form("Title", &message, "", checks)
         };
         let forms = [
             ("mkdir", form(fl!("mkdir-prompt"), &[])),
@@ -2510,7 +2508,10 @@ mod tests {
         ];
         let question = |buttons: Vec<Button>| Dialog::question("Title", "?", buttons, 0, false);
         let dialogs = [
-            ("select", Dialog::form("Select", "", "*", &select, 50)),
+            (
+                "select",
+                Dialog::form("Select", "", "*", &select).with_width(50),
+            ),
             (
                 "host",
                 Dialog::fields(
@@ -2518,7 +2519,6 @@ mod tests {
                     &host_fields,
                     &[(fl!("host-remember-dir"), false)],
                     host_buttons,
-                    70,
                 ),
             ),
             (
@@ -2528,7 +2528,6 @@ mod tests {
                     &[(fl!("checksum-expected"), String::new())],
                     &[(fl!("checksum-compare", path = "/x"), false)],
                     ok_cancel(),
-                    70,
                 )
                 .with_message(&fl!("checksum-one", name = "x"))
                 .with_choices(&algorithms, 0),
@@ -2686,7 +2685,8 @@ mod tests {
     #[test]
     fn a_double_click_on_a_choice_chooses_it_and_confirms() {
         let choices = ["one".to_owned(), "two".to_owned()];
-        let mut dialog = Dialog::fields("Pick", &[], &[], vec![Button::Ok, Button::Cancel], 40)
+        let mut dialog = Dialog::fields("Pick", &[], &[], vec![Button::Ok, Button::Cancel])
+            .with_width(40)
             .with_choices(&choices, 0);
         press_on(&mut dialog, Press::Click, "two");
         assert_eq!((dialog.chosen(), dialog.focus), (1, Focus::Choice(1)));
@@ -2726,7 +2726,7 @@ mod tests {
         ];
         let checks = [("Remember".to_owned(), true)];
         let buttons = vec![Button::Ok, Button::UseCurrent, Button::Cancel];
-        Dialog::fields("Host web", &fields, &checks, buttons, 60)
+        Dialog::fields("Host web", &fields, &checks, buttons).with_width(60)
     }
 
     #[test]
@@ -2815,14 +2815,9 @@ mod tests {
     fn with_rows(len: usize) -> Dialog {
         let fields = [("Text:".to_owned(), String::new())];
         let checks = [("Case".to_owned(), false)];
-        let mut dialog = Dialog::fields(
-            "Find",
-            &fields,
-            &checks,
-            vec![Button::Ok, Button::Cancel],
-            40,
-        )
-        .with_list();
+        let mut dialog = Dialog::fields("Find", &fields, &checks, vec![Button::Ok, Button::Cancel])
+            .with_width(40)
+            .with_list();
         dialog.set_list_len(len);
         dialog
     }

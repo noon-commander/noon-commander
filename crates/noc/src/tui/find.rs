@@ -240,7 +240,8 @@ impl FindWindow {
         let title = fl!("find-title", dir = title);
         let modes = [fl!("find-mode-text"), fl!("find-mode-names")];
         let chosen = find.choice();
-        let dialog = Dialog::fields(&title, &fields, &checks, buttons(chosen), WIDTH)
+        let dialog = Dialog::fields(&title, &fields, &checks, buttons(chosen))
+            .with_width(WIDTH)
             .with_choices(&modes, chosen)
             .in_a_row()
             .with_list();

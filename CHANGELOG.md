@@ -287,6 +287,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a quick letter typed in a field arrive as Alt and the letter, and so act on its element rather
   than leave Insert mode.
 
+- Dialogs are one width, 76 cells where the screen has room: those of F5, F6, and Shift+F5, F7,
+  F4 on a host, checksums and saving them, changing directory, saving and renaming a workspace,
+  and the window of a running job, were 60 or 70. Selecting by pattern (`g +`, `g -`) keeps mc's
+  50, and find its 120.
 ### Fixed
 
 - A prompt whose translation put what is typed before the glyph of the search mode could

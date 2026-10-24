@@ -9,7 +9,7 @@ use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Cut};
 use super::dialog::{
-    Colors, button_line, button_spots, draw_box, draw_separator, frame_around, shine_bar,
+    Colors, MAX_WIDTH, button_line, button_spots, draw_box, draw_separator, frame_around, shine_bar,
 };
 use super::glyphs;
 use super::keymap::{Action, Resolved};
@@ -20,8 +20,6 @@ use super::spinner::{Shine, Spin, Wait};
 use super::theme::Theme;
 use crate::i18n::fl;
 
-/// Width of the window, borders included.
-const WIDTH: u16 = 60;
 /// Work the speed needs behind it before it means anything.
 const SETTLED: Duration = Duration::from_secs(1);
 
@@ -331,7 +329,7 @@ impl JobView {
     ) {
         let colors = Colors::of(theme, false);
         // Borders, what it does, where, the gauge, the count, the time, a line, the buttons.
-        let inner = draw_box(frame, area, (WIDTH, 9), &self.title, colors, theme);
+        let inner = draw_box(frame, area, (MAX_WIDTH, 9), &self.title, colors, theme);
         let width = usize::from(inner.width);
         // On a small screen, what fits.
         let mut put = |index: u16, line: Line<'static>| {
@@ -510,7 +508,7 @@ mod tests {
     use crate::tui::spinner;
 
     fn draw_at(view: &JobView, now: Instant) -> String {
-        let mut terminal = Terminal::new(TestBackend::new(64, 11)).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(80, 11)).unwrap();
         terminal
             .draw(|frame| {
                 let spin = Spin::new(now, now, false, Glyphs::PLAIN.spinners);
@@ -523,7 +521,7 @@ mod tests {
     /// The title line of the window drawn at `now` with turning spinners, the gauge line, and
     /// which cells of the gauge are dim.
     fn busy_lines(view: &JobView, now: Instant) -> (String, String, Vec<bool>) {
-        let mut terminal = Terminal::new(TestBackend::new(64, 11)).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(80, 11)).unwrap();
         terminal
             .draw(|frame| {
                 let spin = Spin::new(now, now, true, Glyphs::PLAIN.spinners);
@@ -539,7 +537,7 @@ mod tests {
                 .to_owned()
         };
         // The gauge, inside the frame and its margin.
-        let dim = (4..60)
+        let dim = (4..76)
             .map(|x| buffer[(x, 4)].modifier.contains(Modifier::DIM))
             .collect();
         (line(1), line(4), dim)
@@ -558,11 +556,11 @@ mod tests {
         let (title, _, dim) = busy_lines(&view, start + spinner::DELAY + secs(1) / 2);
         assert!(title.contains("═ Delete ═"), "{title}");
         assert_eq!(dim.iter().filter(|dim| !**dim).count(), 9, "{dim:?}");
-        // It turns at the end of the bar of 56 cells and runs back: eight cells after the last.
-        let back = start + spinner::DELAY + Duration::from_millis(40) * 63;
+        // It turns at the end of the bar of 72 cells and runs back: eight cells after the last.
+        let back = start + spinner::DELAY + Duration::from_millis(40) * 79;
         let (_, _, dim) = busy_lines(&view, back);
         let lit: Vec<usize> = (0..dim.len()).filter(|x| !dim[*x]).collect();
-        assert_eq!(lit, (43..=51).collect::<Vec<_>>());
+        assert_eq!(lit, (59..=67).collect::<Vec<_>>());
         // A stop leaves it still.
         view.abort();
         let (_, _, dim) = busy_lines(&view, start + spinner::DELAY + secs(1) / 2);

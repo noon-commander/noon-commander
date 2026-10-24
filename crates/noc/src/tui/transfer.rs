@@ -5,8 +5,6 @@
 use super::dialog::Dialog;
 use crate::i18n::fl;
 
-/// Widest the dialog gets, in cells, borders included.
-const WIDTH: u16 = 70;
 /// The check box of attributes.
 const PRESERVE: usize = 0;
 
@@ -77,7 +75,7 @@ pub(crate) fn dialog(
     preserve: bool,
 ) -> Dialog {
     let checks = [(fl!("transfer-preserve"), preserve)];
-    Dialog::form(&kind.title(), &kind.prompt(sources), text, &checks, WIDTH)
+    Dialog::form(&kind.title(), &kind.prompt(sources), text, &checks)
         .with_completion()
         .with_cursor(cursor)
 }

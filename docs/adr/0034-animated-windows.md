@@ -28,9 +28,11 @@ after an event, or on the spinner's tick while something spins.
 - **The animation sits on top of rendering, not in each window.** `tui/zoom.rs` keeps a `Stage`.
   `App::render` draws each window through `Stage::show` under a `zoom::Window` naming it: a dialog
   by its id, a job's window and checksum results by the job's id, a panel's menu by its side.
-  `show` keeps the screen as it was before the window drew, and finds the frame by what changed:
-  the first new top left corner of the theme's lines, the corners to its right and below, and
-  the blank cells drawn on both sides of it. A window that the last frame did not have grows:
+  `show` keeps the screen as it was before the window drew, and finds the frame by the cells the
+  window drew: the first top left corner of the theme's lines that it drew, the corners to its
+  right and below, and the blank cells drawn on both sides of it. Every cell holds a mark while
+  the window draws, so that a cell it drew as it was counts too, as the frame of a dialog over a
+  window of its size. A window that the last frame did not have grows:
   its cells and its shadow's are put back from before, and the smaller frame drawn there. Those
   of the last frame that this one did not draw shrink, drawn over everything at the end of the
   frame from where they were last.

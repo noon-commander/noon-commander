@@ -1806,8 +1806,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   shrinks back as it closes: six sizes, 20 ms each, empty and in the window's colors, with its
   shadow; a menu of F9 drops from its bar. `tui/zoom.rs` does it on top of rendering: `App::render`
   draws each window through `Stage::show` under a `zoom::Window` that tells it apart (a dialog by
-  its id, a job by its own), which compares the screen before and after it to find the frame (its
-  first new top left corner, and the blank cells drawn around it); a window new since the last frame
+  its id, a job by its own), which marks every cell before the window draws to tell the cells it
+  drew, even as they were, and finds the frame among them (its first top left corner, and the blank
+  cells drawn around it); a window new since the last frame
   grows, its cells under it put back from before, and one of the last frame that is gone shrinks
   over everything at the end, unless another opened in its place. Keys reach the window at once;
   only the screen waits. The event loop wakes for the next size at `App::frame_due`. The first

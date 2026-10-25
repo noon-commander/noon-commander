@@ -21,6 +21,10 @@ use super::theme::Theme;
 const STEPS: u32 = 6;
 /// How long each size shows.
 const STEP: Duration = Duration::from_millis(20);
+/// What every cell holds while a window draws, to tell the cells it drew from the others even
+/// where it drew what was there, as a dialog over one of its size; ratatui writes no control
+/// characters.
+const MARK: &str = "\0";
 
 /// A window that animates, told apart from the others.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -212,9 +216,13 @@ impl Stage {
             return;
         }
         let before = frame.buffer_mut().clone();
+        for cell in &mut frame.buffer_mut().content {
+            cell.set_symbol(MARK);
+        }
         draw(frame);
         let after = frame.buffer_mut();
-        let Some(drawn) = find(&before, after, self.border, grows) else {
+        let new = unmark(&before, after);
+        let Some(drawn) = find(after, &new, self.border, grows) else {
             return;
         };
         let Some(now) = self.now else {
@@ -289,14 +297,33 @@ impl Stage {
     }
 }
 
-/// Where the window drawn between `before` and `after` has its frame, in the lines of
-/// `border`: the first top left corner it drew, and around it the blank cells it drew on
-/// both sides.
-fn find(before: &Buffer, after: &Buffer, border: BorderType, grows: Grows) -> Option<Drawn> {
-    let bounds = changed(before, after)?;
+/// Puts back in `after` the symbols of `before` where the window drawn left [`MARK`], and
+/// tells which cells the window drew, by their index: those it wrote, even as they were, and
+/// those whose colors it changed.
+fn unmark(before: &Buffer, after: &mut Buffer) -> Vec<bool> {
+    before
+        .content
+        .iter()
+        .zip(&mut after.content)
+        .map(|(was, is)| {
+            if is.symbol() == MARK {
+                is.set_symbol(was.symbol());
+                is != was
+            } else {
+                true
+            }
+        })
+        .collect()
+}
+
+/// Where the window drawn on `after` has its frame, in the lines of `border`: the first top
+/// left corner it drew, and around it the blank cells it drew on both sides. `new` tells the
+/// cells it drew, as [`unmark`] does.
+fn find(after: &Buffer, new: &[bool], border: BorderType, grows: Grows) -> Option<Drawn> {
+    let bounds = changed(after, new)?;
     let set = border.to_border_set();
     let symbol = |x: u16, y: u16| after[(x, y)].symbol();
-    let new = |x: u16, y: u16| before[(x, y)] != after[(x, y)];
+    let new = |x: u16, y: u16| new[after.index_of(x, y)];
     let blank =
         |x: u16, y: u16| bounds.contains(Position::new(x, y)) && new(x, y) && symbol(x, y) == " ";
     let (x, y) = bounds
@@ -323,15 +350,13 @@ fn find(before: &Buffer, after: &Buffer, border: BorderType, grows: Grows) -> Op
     })
 }
 
-/// The smallest rectangle around every cell that differs between `before` and `after`.
-fn changed(before: &Buffer, after: &Buffer) -> Option<Rect> {
-    let mut cells = before
-        .content
+/// The smallest rectangle around every cell of `buffer` that `new` tells was drawn.
+fn changed(buffer: &Buffer, new: &[bool]) -> Option<Rect> {
+    let mut cells = new
         .iter()
-        .zip(&after.content)
         .enumerate()
-        .filter(|(_, (was, is))| was != is)
-        .map(|(index, _)| after.pos_of(index));
+        .filter(|&(_, &new)| new)
+        .map(|(index, _)| buffer.pos_of(index));
     let (x, y) = cells.next()?;
     let (left, top, right, bottom) = cells
         .fold((x, y, x, y), |(left, top, right, bottom), (x, y)| {
@@ -580,6 +605,31 @@ mod tests {
         let still = screen_animated(&mut stage, (Some(1), start), false);
         assert_eq!(text(&still), text(&shown));
         assert!(text(&still).contains("16x5"), "{}", text(&still));
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn a_window_over_one_of_its_size_writes_its_size() {
+        let mut stage = Stage::default();
+        stage.show_sizes(true);
+        let mut terminal = Terminal::new(TestBackend::new(WIDTH, HEIGHT)).unwrap();
+        let theme = theme();
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                stage.begin(false, (area, false), &theme, Instant::now());
+                for (id, title) in [(1, "Below"), (2, "Above")] {
+                    stage.show(frame, (Window::Dialog(id), Grows::FromMiddle), |frame| {
+                        let colors = Colors::of(&theme, false);
+                        draw_box(frame, area, SIZE, title, colors, &theme);
+                    });
+                }
+                stage.end(frame);
+            })
+            .unwrap();
+        let text = text(&terminal);
+        assert!(text.contains("Above"), "{text}");
+        assert!(text.contains("16x5"), "{text}");
     }
 
     #[test]

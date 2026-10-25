@@ -937,7 +937,7 @@ host-remember-dir = Re&member the last directory in this session
 # The reason names the file.
 host-save-error = Cannot save the host settings: { $reason }
 # The other panel directory must be a local path.
-host-other-dir-invalid = the other panel directory must start with / or ~/
+host-other-dir-invalid = The other panel directory must start with / or ~/
 
 ## Marking by pattern, g + and g - (src/tui/app). Prefix: pattern-. As mc's + and -.
 

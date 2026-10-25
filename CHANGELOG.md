@@ -311,6 +311,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The error after OK in a host's settings with an other panel directory that is not local
+  starts with a capital letter, as every other error does.
 - A prompt whose translation put what is typed before the glyph of the search mode could
   panic, and the cursor of every prompt went after the whole message, wherever the typed text
   was in it.

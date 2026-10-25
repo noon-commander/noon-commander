@@ -1762,7 +1762,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 - **Themes.** Built in: `mc-classic`, the colors of mc's default skin (blue panels, a cyan
   cursor that replaces the row's colors, a dark gray one under them in the inactive panel,
   yellow headers; directories white, executables green, broken links red, devices magenta; gray
-  dialogs with mc's shadow; a black-and-cyan F-key bar; red error dialogs); `terminal`, the
+  dialogs with mc's shadow; a black-and-cyan F-key bar; red error dialogs, and warnings black
+  on yellow); `terminal`, the
   terminal's own colors with reverse video; `noon-dark` and `noon-light`, the colors of the
   logo (`assets/icons/logo.svg`); and `catppuccin-mocha` and `catppuccin-latte`, the dark and
   light flavors of [Catppuccin](https://catppuccin.com)
@@ -1773,16 +1774,20 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   `base`, dialogs, menus, and the F-key labels on `surface0`, text fields on `surface1`, the
   idle menu bar on `mantle`, the F-key numbers and the shadow on `crust`; a `blue` cursor, the
   active panel's title, and focused buttons; `lavender` headers, `mauve` marks and dialog
-  titles; directories `blue`, executables `green`, symlinks `teal`, broken links `red`,
+  titles, warnings on `peach`, darkened in Latte; directories `blue`, executables `green`,
+  symlinks `teal`, broken links `red`,
   devices `pink`; hosts `overlay1`, `yellow`, `green`, `red` by state; the units of sizes G in
   `peach`, the color Catppuccin gives numbers, and T `red`. The Noon themes are
   built the same way from a palette of roles taken from the logo: the cursor, the active
   panel's title, and focused buttons are on the logo's gold (`#A46D00`), and the menu bar on
   its amber frame (`#996400`), with cream text; error dialogs and the cursor where the user is
   root are on a deep red (`#A63A32`) with cream text, as the gold is deep, rather than on the
-  bright red of text, which glares as a background; the F-key bar is dark, its numbers bold in
-  the color of the headers; `noon-dark` has the logo's navy panels and dialogs a shade lighter,
-  cream directories, and bright gold headers (`#FFC24A`), which read better on navy;
+  bright red of text, which glares as a background; warnings are on a dark orange, nearly brown
+  (`#8F4F0C`), with cream text, in 256 colors on `#D75F00`, as the nearest is the menu bar's,
+  and in `noon-light` on a light orange (`#F9955F`) with navy text
+  ([ADR 0048](adr/0048-errors-and-warnings-in-dialogs.md)); the F-key bar is dark, its
+  numbers bold in the color of the headers; `noon-dark` has the logo's navy panels and dialogs a
+  shade lighter, cream directories, and bright gold headers (`#FFC24A`), which read better on navy;
   `noon-light` has cream panels (`#FFFBEA`) with navy text, pale blue-gray dialogs, the gold
   and the amber twice as light (`#FFC24A`, `#FFB833`) and a pale red (`#F2A39A`) with navy
   text, and a dark amber for headers, which the bright gold is too pale for on cream. These

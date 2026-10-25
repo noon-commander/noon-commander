@@ -10,7 +10,7 @@ use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
-use super::dialog::Colors;
+use super::dialog::{Colors, Tone};
 use super::keymap::{Action, Extra, Hints, Keymap, Mode, Resolved, Typed};
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker};
@@ -169,7 +169,7 @@ impl KeyHintsWindow {
             full,
             ..Body::default()
         };
-        let focused = Colors::of(theme, false).focused_style();
+        let focused = Colors::of(theme, Tone::Plain).focused_style();
         self.picker
             .render(frame, area, theme, body, &mut |shown_row| {
                 let row = shown[shown_row.index];

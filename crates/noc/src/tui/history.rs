@@ -13,7 +13,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Marks};
-use super::dialog::Colors;
+use super::dialog::{Colors, Tone};
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker};
@@ -249,7 +249,7 @@ impl HistoryWindow {
             footer,
             ..Body::default()
         };
-        let focused = Colors::of(theme, false).focused_style();
+        let focused = Colors::of(theme, Tone::Plain).focused_style();
         self.picker.render(frame, area, theme, body, &mut |row| {
             let entry = shown[row.index];
             let dir_width = DIR_WIDTH.min(row.width / 4);

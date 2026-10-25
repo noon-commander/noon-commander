@@ -16,7 +16,7 @@ use ratatui::layout::Rect;
 use ratatui::text::Span;
 
 use super::cells::{self, Align, Cut};
-use super::dialog::Colors;
+use super::dialog::{Colors, Tone};
 use super::keymap::{Action, Mode, Resolved};
 use super::loading::Loading;
 use super::mouse::Pointer;
@@ -231,7 +231,7 @@ impl JumpMenu {
             full: paths.get(self.picker.cursor()).cloned(),
             ..Body::default()
         };
-        let focused = Colors::of(theme, false).focused_style();
+        let focused = Colors::of(theme, Tone::Plain).focused_style();
         let marks = theme.glyphs.marks;
         self.picker.render(frame, area, theme, body, &mut |row| {
             let ShownRow {

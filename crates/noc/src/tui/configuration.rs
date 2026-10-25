@@ -16,7 +16,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Marks};
-use super::dialog::{Colors, Field, draw_box, draw_separator, right_frame};
+use super::dialog::{Colors, Field, Tone, draw_box, draw_separator, right_frame};
 use super::edit::Registers;
 use super::glyphs::{self, categories};
 use super::keymap::{Action, Context, Mode, Resolved, Typed};
@@ -950,7 +950,7 @@ impl Configuration {
 
     /// Draws the dialog centered in `area`, with the terminal cursor in a focused text field.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        let colors = Colors::of(theme, false);
+        let colors = Colors::of(theme, Tone::Plain);
         let size = (
             WIDTH.min(area.width.saturating_sub(4)),
             HEIGHT.min(area.height.saturating_sub(2)),

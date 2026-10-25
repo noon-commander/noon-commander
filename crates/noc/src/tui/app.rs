@@ -34,7 +34,7 @@ use super::command::{self, CommandEvent, CommandLine, Place, Run};
 use super::complete::{self, Candidate, Choices, ChoicesEvent, Kind, Offer, Outcome, Quote};
 use super::configuration::{ConfigEvent, Configuration};
 use super::decor::Decor;
-use super::dialog::{Ask, Button, Dialog, DialogEvent, Field, Reply};
+use super::dialog::{Ask, Button, Dialog, DialogEvent, Field, Reply, Tone};
 use super::edit::{Editor, Registers};
 use super::find::{FindEvent, FindMode, FindQuery, FindSummary, FindWindow, Finding};
 use super::glyphs::{self, Glyphs};
@@ -2516,7 +2516,7 @@ impl App {
         }
         let message = fl!("quit-jobs", count = self.jobs.len());
         let buttons = vec![Button::Yes, Button::No];
-        let dialog = Dialog::question(&fl!("quit-title"), &message, buttons, 1, false);
+        let dialog = Dialog::question(&fl!("quit-title"), &message, buttons, 1, Tone::Warning);
         self.dialogs.push_back(Open {
             dialog,
             purpose: Purpose::Quit,
@@ -3416,7 +3416,7 @@ impl App {
             );
             let buttons = vec![Button::Yes, Button::No];
             let title = fl!("workspaces-replace-title");
-            let dialog = Dialog::question(&title, &message, buttons, 0, false);
+            let dialog = Dialog::question(&title, &message, buttons, 0, Tone::Warning);
             self.dialogs.push_back(Open {
                 dialog,
                 purpose: Purpose::Workspace(WorkspaceQuestion::Replace { workspace }),
@@ -3549,7 +3549,7 @@ impl App {
                 let message = fl!("workspaces-delete", name = shown);
                 let buttons = vec![Button::Yes, Button::No];
                 let title = fl!("workspaces-delete-title");
-                let dialog = Dialog::question(&title, &message, buttons, 0, true);
+                let dialog = Dialog::question(&title, &message, buttons, 0, Tone::Warning);
                 self.dialogs.push_back(Open {
                     dialog,
                     purpose: Purpose::Workspace(WorkspaceQuestion::Delete { name }),
@@ -3573,7 +3573,7 @@ impl App {
             );
             let buttons = vec![Button::Yes, Button::No];
             let title = fl!("workspaces-rename-title");
-            let dialog = Dialog::question(&title, &message, buttons, 1, false);
+            let dialog = Dialog::question(&title, &message, buttons, 1, Tone::Warning);
             let to = to.to_owned();
             self.dialogs.push_back(Open {
                 dialog,
@@ -5279,7 +5279,7 @@ impl App {
         let names = chosen.iter().map(|entry| entry.name.clone()).collect();
         let dir = panel.location().clone();
         let buttons = vec![Button::Yes, Button::No];
-        let dialog = Dialog::question(&fl!("delete-title"), &message, buttons, 0, true);
+        let dialog = Dialog::question(&fl!("delete-title"), &message, buttons, 0, Tone::Warning);
         self.dialogs.push_back(Open {
             dialog,
             purpose: Purpose::Delete { dir, names },
@@ -5527,7 +5527,7 @@ impl App {
             Button::Abort,
         ];
         let title = fl!("copy-exists-title");
-        let dialog = Dialog::question(&title, &message, buttons, 1, true);
+        let dialog = Dialog::question(&title, &message, buttons, 1, Tone::Warning);
         self.dialogs.push_back(Open {
             dialog,
             purpose: Purpose::Conflict { job: id, reply },
@@ -5596,7 +5596,7 @@ impl App {
                     JobKind::Checksum => fl!("checksum-error", path = path, reason = reason),
                 };
                 let buttons = vec![Button::Skip, Button::SkipAll, Button::Retry, Button::Abort];
-                let dialog = Dialog::question(&fl!("dialog-error"), &message, buttons, 0, true);
+                let dialog = Dialog::failure(&message, buttons, 0);
                 self.dialogs.push_back(Open {
                     dialog,
                     purpose: Purpose::Failure { job: id, reply },
@@ -6033,7 +6033,7 @@ impl App {
                 let message = fl!("checksum-exists", path = path);
                 let buttons = vec![Button::Yes, Button::No];
                 let title = fl!("copy-exists-title");
-                let dialog = Dialog::question(&title, &message, buttons, 1, true);
+                let dialog = Dialog::question(&title, &message, buttons, 1, Tone::Warning);
                 self.dialogs.push_back(Open {
                     dialog,
                     purpose: Purpose::OverwriteSums {
@@ -6324,7 +6324,7 @@ impl App {
                 let message = fl!("rename-exists", name = cells::sanitize(&name));
                 let buttons = vec![Button::Yes, Button::No];
                 let title = fl!("copy-exists-title");
-                let dialog = Dialog::question(&title, &message, buttons, 1, true);
+                let dialog = Dialog::question(&title, &message, buttons, 1, Tone::Warning);
                 self.dialogs.push_back(Open {
                     dialog,
                     purpose: Purpose::RenameOver {
@@ -6344,10 +6344,18 @@ impl App {
         }
     }
 
-    /// Shows `message` in an error dialog.
+    /// Shows `message` in an error dialog, after the dialogs open before it.
     fn show_error(&mut self, message: &str) {
         self.dialogs.push_back(Open {
-            dialog: Dialog::error(&fl!("dialog-error"), message),
+            dialog: Dialog::error(message),
+            purpose: Purpose::Info,
+        });
+    }
+
+    /// Shows `message` in an error dialog over the dialog in front, which stays open under it.
+    fn show_error_over(&mut self, message: &str) {
+        self.dialogs.push_front(Open {
+            dialog: Dialog::error(message),
             purpose: Purpose::Info,
         });
     }
@@ -6450,11 +6458,7 @@ impl App {
                 if other_dir.is_empty() || noc_config::local_dir(other_dir, &self.home).is_some() {
                     return false;
                 }
-                let error = Dialog::error(&fl!("dialog-error"), &fl!("host-other-dir-invalid"));
-                self.dialogs.push_front(Open {
-                    dialog: error,
-                    purpose: Purpose::Info,
-                });
+                self.show_error_over(&fl!("host-other-dir-invalid"));
                 true
             }
             _ => false,
@@ -6715,7 +6719,7 @@ impl App {
             path = failure.shown.as_str(),
             reason = failure.error.reason.as_str()
         );
-        let dialog = Dialog::question(&fl!("dialog-error"), &message, buttons, default, true);
+        let dialog = Dialog::failure(&message, buttons, default);
         let open = Open {
             dialog,
             purpose: Purpose::ListFailed { panel, failure },
@@ -6775,7 +6779,7 @@ impl App {
             host = cells::sanitize(host.as_bytes())
         );
         let buttons = vec![Button::Connect, Button::Local, Button::Cancel];
-        let dialog = Dialog::question(&fl!("reconnect-title"), &message, buttons, 0, true);
+        let dialog = Dialog::question(&fl!("reconnect-title"), &message, buttons, 0, Tone::Error);
         let panel = self.shown(side);
         self.dialogs.push_back(Open {
             dialog,
@@ -6911,7 +6915,7 @@ impl App {
             fl!("reconnect-failed", host = shown, reason = why)
         };
         let buttons = vec![Button::Retry, Button::Cancel];
-        let dialog = Dialog::question(&fl!("reconnect-title"), &message, buttons, 0, true);
+        let dialog = Dialog::question(&fl!("reconnect-title"), &message, buttons, 0, Tone::Error);
         self.dialogs.push_back(Open {
             dialog,
             purpose: Purpose::Reconnect {

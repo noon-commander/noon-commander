@@ -12,7 +12,7 @@ use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Marks};
 use super::dialog::{
-    Colors, button_line, button_spots, draw_box, draw_separator, frame_around, right_frame,
+    Colors, Tone, button_line, button_spots, draw_box, draw_separator, frame_around, right_frame,
 };
 use super::glyphs;
 use super::keymap::{Action, Resolved};
@@ -222,7 +222,7 @@ impl SumsWindow {
     /// Draws the window centered in `area`: the list of files if there are several, then the
     /// selected one with its whole checksum, the verdict, and the buttons.
     pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        let colors = Colors::of(theme, false);
+        let colors = Colors::of(theme, Tone::Plain);
         let width = WIDTH.min(area.width.saturating_sub(4)).max(20);
         let room = usize::from(width.saturating_sub(4)).max(1);
         let mut lines: Vec<Line<'static>> = Vec::new();

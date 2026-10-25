@@ -14,7 +14,7 @@ use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Cut};
 use super::dialog::{
-    Colors, Field, draw_box, draw_separator, draw_skeleton, draw_title_dots, frame_around,
+    Colors, Field, Tone, draw_box, draw_separator, draw_skeleton, draw_title_dots, frame_around,
     right_frame, rows_area,
 };
 use super::glyphs;
@@ -522,7 +522,7 @@ impl Picker {
             (0, None) => 0,
             (footer, _) => u16::try_from(footer + 1).unwrap_or(u16::MAX),
         };
-        let colors = Colors::of(theme, false);
+        let colors = Colors::of(theme, Tone::Plain);
         // Borders, the filter, the line under it, the rows, the footer; or the skeleton, in
         // place of the rows and of the whole row under them.
         let height = shown.saturating_add(4).saturating_add(below);
@@ -686,7 +686,13 @@ impl Picker {
                 inner.y,
             ));
         }
-        draw_separator(frame, inner, inner.y + 1, Colors::of(theme, false), theme);
+        draw_separator(
+            frame,
+            inner,
+            inner.y + 1,
+            Colors::of(theme, Tone::Plain),
+            theme,
+        );
         glyphs
     }
 }
@@ -701,7 +707,13 @@ fn draw_footer(
     theme: &Theme,
 ) {
     let top = inner.height.saturating_sub(below);
-    draw_separator(frame, inner, inner.y + top, Colors::of(theme, false), theme);
+    draw_separator(
+        frame,
+        inner,
+        inner.y + top,
+        Colors::of(theme, Tone::Plain),
+        theme,
+    );
     for (index, text) in (top + 1..inner.height).zip(footer) {
         frame.render_widget(text, Rect::new(inner.x, inner.y + index, inner.width, 1));
     }

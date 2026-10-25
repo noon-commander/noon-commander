@@ -179,6 +179,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Questions before something that cannot be undone are no longer red as errors: deleting, a file
+  that is there already, replacing or deleting a workspace, and quitting with jobs that would stop
+  are on a background of their own, yellow in mc-classic, peach in Catppuccin, orange in the Noon
+  themes. Errors stay red, and a panel on a host that is not connected now asks in one.
 - Quick cd (`g d`) is now Go to directory, in its title, in F9 → Command, and in the help; its
   field is labelled Path.
 - F5, F6, and Shift+F5 open one dialog, the same for a copy and a move but for its words: the

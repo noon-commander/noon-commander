@@ -8,7 +8,7 @@ use ratatui::layout::Rect;
 
 use super::app::Side;
 use super::cells::{self, Align, Cut};
-use super::dialog::Colors;
+use super::dialog::{Colors, Tone};
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker};
@@ -142,7 +142,7 @@ impl TabMenu {
                 .map(|title| (*title).clone()),
             ..Body::default()
         };
-        let focused = Colors::of(theme, false).focused_style();
+        let focused = Colors::of(theme, Tone::Plain).focused_style();
         self.picker.render(frame, area, theme, body, &mut |row| {
             let styles = if row.selected {
                 (focused, theme.truncated_cursor)

@@ -11,7 +11,7 @@ use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
 use super::dialog::{
-    Colors, button_line, button_spots, draw_box, draw_separator, frame_around, right_frame,
+    Colors, Tone, button_line, button_spots, draw_box, draw_separator, frame_around, right_frame,
 };
 use super::keymap::{Action, Resolved};
 use super::label::Label;
@@ -184,7 +184,7 @@ impl JobsList {
 
     /// Draws the list centered in `area`: a row for each job, scrolled to the selected one.
     pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, rows: &[Row]) {
-        let colors = Colors::of(theme, false);
+        let colors = Colors::of(theme, Tone::Plain);
         let listed = u16::try_from(rows.len().max(1)).unwrap_or(u16::MAX);
         // Borders, the rows, a line, the buttons.
         let size = (WIDTH, listed.saturating_add(4));

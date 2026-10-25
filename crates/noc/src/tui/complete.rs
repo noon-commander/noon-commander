@@ -12,7 +12,7 @@ use ratatui::text::Line;
 use ratatui::widgets::{Block, BorderType, Borders, Clear};
 
 use super::cells::{self, Align};
-use super::dialog::Colors;
+use super::dialog::{Colors, Tone};
 use super::keymap::Action;
 use super::mouse::{Drawn, Pointer, Press};
 use super::theme::Theme;
@@ -460,7 +460,7 @@ impl Choices {
         let bar = Rect::new(outer.right() - 1, inner.y, 1, inner.height);
         let position = (self.items.len(), page, self.offset);
         self.bar = scrollbar::render(frame, bar, position, theme.dialog, theme.glyphs.scroll_bar);
-        let focused = Colors::of(theme, false).focused_style();
+        let focused = Colors::of(theme, Tone::Plain).focused_style();
         let width = usize::from(inner.width);
         for (index, (row, item)) in self
             .items

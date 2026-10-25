@@ -399,20 +399,11 @@ impl Colors {
         (self.body, self.mark)
     }
 
-    /// A dialog's colors, or an error's: mc draws errors and warnings red.
-    pub(crate) fn of(theme: &Theme, error: bool) -> Self {
-        if error {
-            Self {
-                body: theme.error_dialog,
-                title: theme.error_title,
-                button: theme.error_dialog,
-                focused: theme.error_button_focused,
-                mark: theme.truncated_error,
-                hotkey: theme.error_hotkey,
-                hotkey_focused: theme.error_hotkey_focused,
-            }
-        } else {
-            Self {
+    /// The colors of a dialog in `tone`: errors red, as mc draws them, and warnings on a
+    /// background of their own.
+    pub(crate) fn of(theme: &Theme, tone: Tone) -> Self {
+        match tone {
+            Tone::Plain => Self {
                 body: theme.dialog,
                 title: theme.dialog_title,
                 button: theme.dialog_button,
@@ -420,9 +411,39 @@ impl Colors {
                 mark: theme.truncated_dialog,
                 hotkey: theme.dialog_hotkey,
                 hotkey_focused: theme.dialog_hotkey_focused,
-            }
+            },
+            Tone::Warning => Self {
+                body: theme.warning_dialog,
+                title: theme.warning_title,
+                button: theme.warning_dialog,
+                focused: theme.warning_button_focused,
+                mark: theme.truncated_warning,
+                hotkey: theme.warning_hotkey,
+                hotkey_focused: theme.warning_hotkey_focused,
+            },
+            Tone::Error => Self {
+                body: theme.error_dialog,
+                title: theme.error_title,
+                button: theme.error_dialog,
+                focused: theme.error_button_focused,
+                mark: theme.truncated_error,
+                hotkey: theme.error_hotkey,
+                hotkey_focused: theme.error_hotkey_focused,
+            },
         }
     }
+}
+
+/// What a dialog says, which its colors show.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Tone {
+    /// Anything else.
+    Plain,
+    /// Something went wrong.
+    Error,
+    /// A question before something that cannot be undone, such as deleting or writing over a
+    /// file.
+    Warning,
 }
 
 /// A check box.
@@ -500,8 +521,7 @@ pub(crate) struct Dialog {
     focus: Focus,
     /// Widest the dialog gets, in cells, borders included.
     width: u16,
-    /// Drawn in the colors of errors.
-    error: bool,
+    tone: Tone,
     /// Its first field holds a path, which Tab completes.
     completes: bool,
     /// Where its first field was drawn last, for the list of completions under it.
@@ -543,29 +563,31 @@ impl Dialog {
         Self::new(context, message, vec![Button::Ok])
     }
 
-    /// A question with `buttons`, of which `default` has the focus, in the colors of errors if
-    /// `error`, as mc asks before deleting and after a failure.
+    /// A question in `tone` with `buttons`, of which `default` has the focus.
     pub(crate) fn question(
         title: &str,
         message: &str,
         buttons: Vec<Button>,
         default: usize,
-        error: bool,
+        tone: Tone,
     ) -> Self {
         Self {
             default,
             focus: Focus::Button(default),
-            error,
+            tone,
             ..Self::new(title, message, buttons)
         }
     }
 
-    /// Something that went wrong, with OK, in the colors of errors.
-    pub(crate) fn error(title: &str, message: &str) -> Self {
-        Self {
-            error: true,
-            ..Self::new(title, message, vec![Button::Ok])
-        }
+    /// Something that went wrong, titled Error, with OK.
+    pub(crate) fn error(message: &str) -> Self {
+        Self::failure(message, vec![Button::Ok], 0)
+    }
+
+    /// Something that went wrong, titled Error, with `buttons` for what to do now, of which
+    /// `default` has the focus.
+    pub(crate) fn failure(message: &str, buttons: Vec<Button>, default: usize) -> Self {
+        Self::question(&fl!("dialog-error"), message, buttons, default, Tone::Error)
     }
 
     /// `message`, a text field that opens with `text`, check boxes with their labels and
@@ -633,7 +655,7 @@ impl Dialog {
             default: 0,
             focus: Focus::Button(0),
             width: MAX_WIDTH,
-            error: false,
+            tone: Tone::Plain,
             completes: false,
             field_area: Cell::new(None),
             spots: RefCell::new(Vec::new()),
@@ -1368,7 +1390,7 @@ impl Dialog {
             0 => 2,
             status => rows(status).saturating_add(3),
         });
-        let colors = Colors::of(theme, self.error);
+        let colors = Colors::of(theme, self.tone);
         let size = if list.is_some() {
             (width, u16::MAX)
         } else {
@@ -2285,7 +2307,8 @@ mod tests {
     #[test]
     fn a_message_taller_than_the_screen_scrolls_and_keeps_the_buttons() {
         let lines: Vec<String> = (1..=30).map(|n| format!("line {n}")).collect();
-        let mut dialog = Dialog::question("Long", &lines.join("\n"), vec![Button::Ok], 0, false);
+        let mut dialog =
+            Dialog::question("Long", &lines.join("\n"), vec![Button::Ok], 0, Tone::Plain);
         let shown = |dialog: &Dialog| draw(dialog, 40, 12).backend().to_string();
         let top = shown(&dialog);
         assert!(top.contains("line 1 ") && top.contains("[< OK >]"), "{top}");
@@ -2300,7 +2323,7 @@ mod tests {
         dialog.scroll(Scroll::To(usize::MAX));
         let end = shown(&dialog);
         assert!(end.contains("line 30") && end.contains("[< OK >]"), "{end}");
-        let short = Dialog::question("Short", "one line", vec![Button::Ok], 0, false);
+        let short = Dialog::question("Short", "one line", vec![Button::Ok], 0, Tone::Plain);
         let text = shown(&short);
         assert!(!text.contains('░') && short.bar().is_none(), "{text}");
     }
@@ -2523,7 +2546,7 @@ mod tests {
         let buffer = terminal.backend().buffer();
         let find = |text: &str| super::super::mouse::find(buffer, text);
         let fg = |at: Position, offset: u16| buffer[(at.x + offset, at.y)].fg;
-        let colors = Colors::of(&Theme::mc_classic(), false);
+        let colors = Colors::of(&Theme::mc_classic(), Tone::Plain);
         assert_eq!(colors.hotkey_style(false).fg, Some(Color::Blue));
         let prompt = find("Pattern:");
         assert_eq!((fg(prompt, 0), fg(prompt, 1)), (Color::Blue, Color::Black));
@@ -2617,7 +2640,8 @@ mod tests {
             fl!("checksum-md5"),
             fl!("checksum-blake3"),
         ];
-        let question = |buttons: Vec<Button>| Dialog::question("Title", "?", buttons, 0, false);
+        let question =
+            |buttons: Vec<Button>| Dialog::question("Title", "?", buttons, 0, Tone::Plain);
         let dialogs = [
             (
                 "select",
@@ -2670,7 +2694,7 @@ mod tests {
                 ]),
             ),
             ("reconnect", question(vec![Button::Retry, Button::Cancel])),
-            ("error", Dialog::error("Error", "No.")),
+            ("error", Dialog::error("No.")),
         ];
         for (name, dialog) in &dialogs {
             assert_letters(name, dialog);
@@ -3041,7 +3065,7 @@ mod tests {
     fn errors_are_red_in_mc_classic() {
         use ratatui::style::{Color, Modifier};
 
-        let mut dialog = Dialog::error("Error", "Cannot create directory /x: already exists");
+        let mut dialog = Dialog::error("Cannot create directory /x: already exists");
         let terminal = draw_themed(&dialog, 60, 8, &Theme::mc_classic());
         let buffer = terminal.backend().buffer();
         let colors = |x: u16, y: u16| (buffer[(x, y)].fg, buffer[(x, y)].bg);
@@ -3064,5 +3088,25 @@ mod tests {
             dialog.handle(action(Action::Confirm)),
             DialogEvent::Pressed(Button::Ok)
         );
+    }
+
+    #[test]
+    fn warnings_have_a_background_apart_from_dialogs_and_errors() {
+        use ratatui::style::Color;
+
+        let theme = Theme::mc_classic();
+        // The colors of the title and the message.
+        let colors = |tone: Tone| {
+            let dialog = Dialog::question("Delete", "Delete x?", vec![Button::Yes], 0, tone);
+            let terminal = draw_themed(&dialog, 60, 8, &theme);
+            let buffer = terminal.backend().buffer();
+            let at = |x: u16, y: u16| (buffer[(x, y)].fg, buffer[(x, y)].bg);
+            (at(title_column(buffer, "Delete"), 1), at(4, 2))
+        };
+        let (title, body) = colors(Tone::Warning);
+        assert_eq!(body, (Color::Black, Color::Yellow));
+        assert_eq!(title, (Color::Black, Color::Yellow));
+        assert_ne!(body, colors(Tone::Plain).1);
+        assert_ne!(body, colors(Tone::Error).1);
     }
 }

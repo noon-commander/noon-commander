@@ -9,7 +9,8 @@ use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Cut};
 use super::dialog::{
-    Colors, MAX_WIDTH, button_line, button_spots, draw_box, draw_separator, frame_around, shine_bar,
+    Colors, MAX_WIDTH, Tone, button_line, button_spots, draw_box, draw_separator, frame_around,
+    shine_bar,
 };
 use super::glyphs;
 use super::keymap::{Action, Resolved};
@@ -327,7 +328,7 @@ impl JobView {
         theme: &Theme,
         (now, spin): (Instant, &Spin),
     ) {
-        let colors = Colors::of(theme, false);
+        let colors = Colors::of(theme, Tone::Plain);
         // Borders, what it does, where, the gauge, the count, the time, a line, the buttons.
         let inner = draw_box(frame, area, (MAX_WIDTH, 9), &self.title, colors, theme);
         let width = usize::from(inner.width);

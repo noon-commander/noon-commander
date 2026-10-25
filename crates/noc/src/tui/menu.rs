@@ -19,7 +19,7 @@ use ratatui::text::{Line, Span};
 use super::app::Side;
 use super::cells::{self, Align};
 use super::decor::Decor;
-use super::dialog::Colors;
+use super::dialog::{Colors, Tone};
 use super::keymap::{Action, Mode, Resolved};
 use super::loading::Loading;
 use super::mouse::Pointer;
@@ -396,7 +396,7 @@ impl LocationMenu {
             decor,
             hosts,
             dots: spin.dots(),
-            focused: Colors::of(theme, false).focused_style(),
+            focused: Colors::of(theme, Tone::Plain).focused_style(),
         };
         let full = items.get(self.picker.cursor()).map(|item| {
             let texts = texts(*item).join("  ");

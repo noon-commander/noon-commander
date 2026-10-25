@@ -14,7 +14,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Cut};
-use super::dialog::Colors;
+use super::dialog::{Colors, Tone};
 use super::glyphs;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
@@ -269,7 +269,7 @@ impl WorkspacesWindow {
             footer_column,
             ..Body::default()
         };
-        let focused = Colors::of(theme, false).focused_style();
+        let focused = Colors::of(theme, Tone::Plain).focused_style();
         self.picker.render(frame, area, theme, body, &mut |row| {
             // The name, a space, the tabs of the left panel, a line, those of the right one.
             let name_width = row.width.saturating_sub(count_width + 1);

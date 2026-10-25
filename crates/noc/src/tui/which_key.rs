@@ -7,7 +7,7 @@ use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Cut, Fitted};
-use super::dialog::{Colors, draw_box};
+use super::dialog::{Colors, Tone, draw_box};
 use super::help;
 use super::keymap::{Action, Hint, Hints, Place};
 use super::theme::Theme;
@@ -117,7 +117,7 @@ pub(crate) fn render(frame: &mut Frame<'_>, area: Rect, hints: &Hints, theme: &T
         .typed
         .clone()
         .unwrap_or_else(|| fl!("which-key-title"));
-    let colors = Colors::of(theme, false);
+    let colors = Colors::of(theme, Tone::Plain);
     let inner = draw_box(frame, strip, (area.width, height), &title, colors, theme);
     render_cells(frame, inner, grid, &rows, theme);
     let close = format!(" {} ", fl!("which-key-close"));

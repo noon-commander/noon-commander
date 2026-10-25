@@ -87,16 +87,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a regular expression or as it is, starting from `ui.default_search_mode` (fzf there is a regular
   expression), and switch its case, smart at first, and in the globs, shell patterns, switch their
   case, glob by glob (`--iglob` where it does not count; by name, fd tells case apart in them), the
-  glyphs at the end of each field saying which; it searches again as any of them changes, and with
-  no text lists the files. Each file found shows with its lines that match, the matches highlighted.
-  Go to, the default button, goes to the file in the panel (Ctrl+o back), View (F3) views it from
-  the line, and Edit (F4) edits it at the line. Its other mode, Files and dirs, finds files and
-  directories by name with [fd](https://github.com/sharkdp/fd), locally or on a host, where fd or
-  fdfind runs; Go to goes into a directory. `f f` and F9 → Command → Find files and dirs… open the
-  dialog in it. `[search] fd` names the program. It finds at most `[search] max_results` (10000)
-  lines, and `max_per_file` (100) in one file, whose count then shows as `100+`; they and `program`
-  (`rg`) are in the new Search category of the Configuration dialog. Hidden files are searched while
-  the panels show them, and `.gitignore` is respected.
+  glyphs at the end of each field saying which, dimmed where a click does not switch them; it
+  searches again as any of them changes, and with no text lists the files. Each file found shows
+  with its lines that match, the matches highlighted. Go to, the default button, goes to the file in
+  the panel (Ctrl+o back), View (F3) views it from the line, and Edit (F4) edits it at the line. Its
+  other mode, Files and dirs, finds files and directories by name with
+  [fd](https://github.com/sharkdp/fd), locally or on a host, where fd or fdfind runs; Go to goes
+  into a directory. `f f` and F9 → Command → Find files and dirs… open the dialog in it. `[search]
+  fd` names the program. It finds at most `[search] max_results` (10000) lines, and `max_per_file`
+  (100) in one file, whose count then shows as `100+`; they and `program` (`rg`) are in the new
+  Search category of the Configuration dialog. Hidden files are searched while the panels show them,
+  and `.gitignore` is respected.
 - Quick search highlights where each name on screen matches what is typed: each place it holds
   the text, or the letters that fuzzy search matched, on the cursor's row too.
 - Search modes: quick search and the filters of the lists (the location menu, the tab menu, the

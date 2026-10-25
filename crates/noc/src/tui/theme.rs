@@ -101,10 +101,12 @@ pub(crate) struct Theme {
     /// A pull-down menu: body, frame, and commands; the command under the cursor.
     pub(crate) menu: Style,
     pub(crate) menu_selected: Style,
-    /// Drawn over the others: the letter of a command or a menu, and a command that cannot
-    /// run now.
+    /// Drawn over the others: the letter of a command or a menu.
     pub(crate) menu_hotkey: Style,
-    pub(crate) menu_disabled: Style,
+    /// Drawn over the others: what cannot be used now, as a command of the pull-down menu that
+    /// cannot run or a glyph of a field that searches that a click does not switch; and text
+    /// that only helps, as the hint of a setting.
+    pub(crate) disabled: Style,
     /// The letter on the command under the cursor and on the menu bar, where a color of the
     /// menu's may not show, as mc's `menuhotsel`.
     pub(crate) menu_hotkey_selected: Style,
@@ -288,7 +290,7 @@ impl Theme {
             menu: on(Color::White, Color::Cyan),
             menu_selected: on(Color::White, Color::Black),
             menu_hotkey: fg(Color::LightYellow),
-            menu_disabled: fg(Color::DarkGray),
+            disabled: fg(Color::DarkGray),
             // mc's `menuhotsel`.
             menu_hotkey_selected: fg(Color::LightYellow),
             // Magenta does not read on the cyan of menus; the labels there are white.
@@ -378,7 +380,7 @@ impl Theme {
             menu: plain,
             menu_selected: reversed,
             menu_hotkey: Style::new().underlined(),
-            menu_disabled: Style::new().dim(),
+            disabled: Style::new().dim(),
             menu_hotkey_selected: Style::new().underlined(),
             menu_keys: plain.bold(),
             dialog: plain,
@@ -461,7 +463,7 @@ impl Theme {
             // In the color of titles, as the letters of dialogs; underlined where that would not
             // show, on the cursor.
             menu_hotkey: fg(p.mauve),
-            menu_disabled: fg(p.subtext0),
+            disabled: fg(p.subtext0),
             menu_hotkey_selected: Style::new().underlined(),
             menu_keys: fg(p.blue),
             dialog: on(p.text, p.surface0),
@@ -550,7 +552,7 @@ impl Theme {
             // In the gold of titles, as the letters of dialogs; underlined on the cursor and the
             // amber menu bar, where gold would not show.
             menu_hotkey: fg(p.accent),
-            menu_disabled: fg(p.muted),
+            disabled: fg(p.muted),
             menu_hotkey_selected: Style::new().underlined(),
             menu_keys: fg(p.teal),
             dialog: on(p.text, p.surface),
@@ -1133,6 +1135,22 @@ mod tests {
                     assert_ne!(on_cursor.bg, theme.dialog.bg, "{name} {depth:?}");
                     assert_ne!(on_cursor.bg, theme.panel.bg, "{name} {depth:?}");
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn what_cannot_be_used_shows_apart_in_a_field() {
+        for name in Theme::NAMES {
+            for depth in [ColorDepth::TrueColor, ColorDepth::Indexed] {
+                let theme = Theme::by_name(name, depth).unwrap();
+                let field = theme.dialog_input;
+                let disabled = field.patch(theme.disabled);
+                assert!(disabled != field, "{name} {depth:?}");
+                assert!(
+                    disabled.fg.is_none() || disabled.fg != field.bg,
+                    "{name} {depth:?}: shows on the field"
+                );
             }
         }
     }

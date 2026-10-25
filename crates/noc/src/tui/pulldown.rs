@@ -800,7 +800,7 @@ fn item_line(
     let style = match (selected, status.enabled) {
         (true, _) => theme.menu_selected,
         (false, true) => theme.menu,
-        (false, false) => theme.menu.patch(theme.menu_disabled),
+        (false, false) => theme.menu.patch(theme.disabled),
     };
     let mark = match (item.mark, status.checked) {
         (Mark::Radio, true) => radio,
@@ -1410,10 +1410,7 @@ mod tests {
         };
         assert_eq!(key_style(false, true), theme.menu.patch(theme.menu_keys));
         assert_eq!(key_style(true, true), theme.menu_selected);
-        assert_eq!(
-            key_style(false, false),
-            theme.menu.patch(theme.menu_disabled)
-        );
+        assert_eq!(key_style(false, false), theme.menu.patch(theme.disabled));
     }
 
     #[test]

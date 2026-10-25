@@ -300,8 +300,8 @@ menu:
   are `*` and `x`. A menu taller than the screen scrolls with the cursor.
 - Commands do what their keys do, through the same `Action`s. Each shows the key that does
   it in the active panel's context (`Keymap::key`); Left and Right show sort and rescan keys
-  only for the active panel, as keys act there. Commands that cannot run now are dimmed, and
-  the cursor skips them.
+  only for the active panel, as keys act there. Commands that cannot run now are dimmed, in the
+  theme's `disabled`, and the cursor skips them.
 - On the bar, `h` and `l` (Left and Right, Shift+Tab and Tab) select the next menu, round the bar;
   Enter, `j` (Down), or Alt and the menu's highlighted letter (`&` in the Fluent messages, which
   `Label` in `tui/label.rs` reads, for the menus and the [dialogs](#ui) alike) opens it,
@@ -459,7 +459,9 @@ nf-md-format_letter_case_upper, nf-md-format_letter_case_lower, nf-cod-case_sens
 nf-seti-shell (`=`, `~`, `.*`, `*`). The glyph of the way is crossed out, in the color of a
 broken link, while the text is no regular expression, when the lists say what is wrong with it in
 place of the rows, and while a glob of the Files field is none that globset reads
-(`noc_tools::globs`).
+(`noc_tools::globs`). A glyph that a click does not switch, as the field has one way or one case,
+shows in the theme's `disabled`, as a command of the pull-down menu that cannot run: the glyph of
+shell patterns of the Files field, and by name its case too. What is wrong shows over it.
 
 The keys switch the field that has the focus, and no other: quick search, the filter of a list
 while it takes the keys, in Insert mode, and a field of a dialog that searches, in either mode.

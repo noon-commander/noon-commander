@@ -983,10 +983,7 @@ impl Configuration {
             Rect::new(x, body.bottom(), 1, 1),
         );
 
-        let hint_style = (
-            theme.dialog.patch(theme.menu_disabled),
-            theme.truncated_dialog,
-        );
+        let hint_style = (theme.dialog.patch(theme.disabled), theme.truncated_dialog);
         let (hint, styles) = match (&self.error, self.settings().get(self.row)) {
             (Some(error), _) => (error.clone(), (theme.error_dialog, theme.truncated_error)),
             (None, Some(setting)) if self.focus == Focus::Settings && setting.restart => (

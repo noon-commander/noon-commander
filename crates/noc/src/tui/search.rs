@@ -287,16 +287,31 @@ impl Input {
         }
     }
 
-    /// Its glyphs, and their style at the end of a field in `style`; the way's in the style of
-    /// what is wrong if `invalid`, a text that is no regular expression.
+    /// Its glyphs, and their style at the end of a field in `style`: each that a click does not
+    /// switch, as the field has nothing else, in the style of what cannot be used; the way's in
+    /// the style of what is wrong if `invalid`, a text that is no regular expression or no globs.
     pub(crate) fn mark(self, invalid: bool, style: Style, theme: &Theme) -> Mark {
+        let (switches, cases) = (self.switchable(), self.kind.cases.len() > 1);
+        let usable = |usable: bool| {
+            if usable {
+                style
+            } else {
+                style.patch(theme.disabled)
+            }
+        };
+        let way_style = usable(switches);
         Mark {
             case: case_glyph(self.case, theme.glyphs.case_modes),
             way: self.way.glyph(theme.glyphs.search_modes),
             style,
-            way_style: if invalid { theme.invalid(style) } else { style },
-            switches: self.switchable(),
-            cases: self.kind.cases.len() > 1,
+            case_style: usable(cases),
+            way_style: if invalid {
+                theme.invalid(way_style)
+            } else {
+                way_style
+            },
+            switches,
+            cases,
         }
     }
 }
@@ -425,7 +440,11 @@ pub(crate) struct Mark {
     pub(crate) way: &'static str,
     /// The style of the field.
     style: Style,
-    /// The style of the way's glyph: the field's, or that of what is wrong.
+    /// The style of the case's glyph: the field's, or that of what cannot be used where a click
+    /// does not switch it.
+    case_style: Style,
+    /// The style of the way's glyph: the field's, that of what cannot be used, or that of what
+    /// is wrong, which shows over it.
     way_style: Style,
     /// Whether a click on the way's glyph switches it.
     switches: bool,
@@ -444,7 +463,7 @@ impl Mark {
     pub(crate) fn spans(self) -> Vec<Span<'static>> {
         vec![
             Span::styled(" ", self.style),
-            Span::styled(self.case, self.style),
+            Span::styled(self.case, self.case_style),
             Span::styled(" ", self.style),
             Span::styled(self.way, self.way_style),
             Span::styled(" ", self.style),
@@ -813,6 +832,38 @@ mod tests {
                 .case(),
             Case::Ignore
         );
+    }
+
+    #[test]
+    fn a_glyph_that_a_click_does_not_switch_shows_that_it_cannot_be_used() {
+        let theme = Theme::terminal();
+        let field = theme.dialog_input;
+        let disabled = field.patch(theme.disabled);
+        let styles = |input: Input, invalid: bool| {
+            let spans = input.mark(invalid, field, &theme).spans();
+            (spans[1].style, spans[3].style)
+        };
+        assert_eq!(
+            styles(Input::new(Kind::FILTER, Way::Fzf), false),
+            (field, field),
+            "both switch"
+        );
+        assert_eq!(
+            styles(Input::new(Kind::FILES, Way::Glob), false),
+            (field, disabled),
+            "one way"
+        );
+        assert_eq!(
+            styles(Input::new(Kind::FILES_FD, Way::Glob), false),
+            (disabled, disabled),
+            "one case too"
+        );
+        assert_eq!(
+            styles(Input::new(Kind::FILES, Way::Glob), true).1,
+            theme.invalid(disabled),
+            "what is wrong shows over it"
+        );
+        assert_eq!(theme.invalid(disabled).fg, theme.invalid(field).fg);
     }
 
     #[test]

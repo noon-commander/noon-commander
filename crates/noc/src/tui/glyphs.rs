@@ -39,7 +39,7 @@ pub(crate) struct Spinners {
     pub(crate) still: char,
 }
 
-/// In the prompt of every field that searches: how it matches what is typed.
+/// At the end of every field that searches: how it matches what is typed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct SearchModes {
     pub(crate) plain: &'static str,
@@ -47,6 +47,17 @@ pub(crate) struct SearchModes {
     pub(crate) regex: &'static str,
     /// Shell patterns, as `g +` and `g -` take.
     pub(crate) glob: &'static str,
+}
+
+/// At the end of every field that searches, before its search mode: whether case counts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CaseModes {
+    /// Once what is typed has a capital letter.
+    pub(crate) smart: &'static str,
+    /// Never.
+    pub(crate) ignore: &'static str,
+    /// Always.
+    pub(crate) exact: &'static str,
 }
 
 /// The characters that differ with icons and without.
@@ -82,6 +93,7 @@ pub(crate) struct Glyphs {
     /// In front of each point of a tip in the help.
     pub(crate) bullet: char,
     pub(crate) search_modes: SearchModes,
+    pub(crate) case_modes: CaseModes,
     /// Between a symlink's name and its target on the status line.
     pub(crate) link_arrow: &'static str,
 }
@@ -133,12 +145,20 @@ impl Glyphs {
         // nf-md-chevron_right and nf-md-chevron_down.
         folds: ('󰅂', '󰅀'),
         bullet: '•',
-        // nf-cod-whole_word, nf-md-approximately_equal, nf-cod-regex, and nf-md-asterisk.
+        // nf-cod-whole_word, nf-md-approximately_equal, nf-cod-regex, and nf-seti-shell, which
+        // is smaller than nf-md-asterisk.
         search_modes: SearchModes {
             plain: "",
             fzf: "󰾞",
             regex: "",
-            glob: "󰛄",
+            glob: "",
+        },
+        // nf-md-format_letter_case_upper, nf-md-format_letter_case_lower, and
+        // nf-cod-case_sensitive, as VS Code's Match Case.
+        case_modes: CaseModes {
+            smart: "󰬶",
+            ignore: "󰬵",
+            exact: "",
         },
         // nf-md-arrow_right.
         link_arrow: "󰁔",
@@ -197,6 +217,11 @@ impl Glyphs {
             fzf: "~",
             regex: ".*",
             glob: "*",
+        },
+        case_modes: CaseModes {
+            smart: "Aa",
+            ignore: "aa",
+            exact: "AA",
         },
         // As mc and `ls -l` write it.
         link_arrow: "->",

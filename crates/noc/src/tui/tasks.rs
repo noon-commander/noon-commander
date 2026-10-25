@@ -2391,7 +2391,7 @@ mod tests {
             pattern: pattern.to_owned(),
             globs: Vec::new(),
             regex: true,
-            match_case: false,
+            case: noc_pattern::Case::Smart,
             hidden: true,
             max_per_file: 1000,
         };
@@ -2501,7 +2501,7 @@ mod tests {
             pattern: "x".to_owned(),
             globs: Vec::new(),
             regex: true,
-            match_case: false,
+            case: noc_pattern::Case::Smart,
             hidden: false,
             max_per_file: 10,
         };
@@ -2561,7 +2561,7 @@ mod tests {
             pattern: pattern.to_owned(),
             globs: Vec::new(),
             regex: false,
-            match_case: false,
+            case: noc_pattern::Case::Smart,
             hidden: false,
         }
     }

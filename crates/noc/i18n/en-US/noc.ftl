@@ -90,8 +90,9 @@ panel-name-by-extension = Name, by extension
 # The size column of the `..` row and of directories.
 panel-up-dir = UP--DIR
 panel-dir = DIR
-# Status line during quick search: what was typed so far. The glyph of how it matches (plain,
-# fzf, or regex; Ctrl+s switches it) shows at the right end of the line.
+# Status line during quick search: what was typed so far. The glyphs of whether case counts and
+# how it matches (plain, fzf, or regex; the keys after Ctrl+s switch them) show at the right end
+# of the line.
 panel-search = Search: { $text }
 # Status line during quick search up the rows, as vim's ?: the same.
 panel-search-back = Search up: { $text }
@@ -164,12 +165,13 @@ error-not-openssh = { $program } is not OpenSSH
 ## the tab menu, the workspaces, the command history, and the list of the key hints. Prefix:
 ## picker-.
 
-# The first line: what was typed to filter the window. The glyph of how the filter matches
-# (plain, fzf, or regex; Ctrl+s switches it) shows at the end of its field.
+# The first line: what was typed to filter the window. The glyphs of whether case counts and how
+# the filter matches (plain, fzf, or regex; the keys after Ctrl+s switch them) show at the end of
+# its field.
 picker-filter = Filter: { $text }
 # When the filter leaves no row.
 picker-nothing = Nothing matches.
-# In the regex mode of the filter (Ctrl+s), when what is typed is no regular expression: what is
+# In the regex mode of the filter (Ctrl+s r), when what is typed is no regular expression: what is
 # wrong with it, as the regex engine says.
 picker-not-regex = Not a regular expression: { $reason }
 
@@ -197,8 +199,9 @@ menu-reload-failed = Not listed again: { $reason }
 ## keywords typed, as `z` picks them in a shell. Prefix: jump-.
 
 jump-title = zoxide
-# The first line: the keywords typed, separated by spaces. The glyph of how they match (plain,
-# fzf, or regex; Ctrl+s switches it) shows at the end of their field.
+# The first line: the keywords typed, separated by spaces. The glyphs of whether case counts and
+# how they match (plain, fzf, or regex; the keys after Ctrl+s switch them) show at the end of
+# their field.
 jump-keywords = Jump to: { $text }
 # When zoxide lists no directory.
 jump-nothing = zoxide knows no directory that matches. It learns the directories you work in.
@@ -217,12 +220,11 @@ find-title = Find in { $dir }
 # with fd.
 find-mode-text = Te&xt
 find-mode-names = Files and &dirs
-# The labels of the fields: the text to find, whose field ends with the glyph of how it matches,
-# as it is or as a regular expression (Ctrl+s), and the globs of the files to search.
+# The labels of the fields: the text to find, whose field ends with the glyphs of whether case
+# counts and how it matches, as it is or as a regular expression (the keys after Ctrl+s), and the
+# globs of the files to search.
 find-text = &Text:
 find-files = &Files:
-# The check box: matching case rather than only when the text has a capital letter.
-find-match-case = Match &case
 # Under the rows: how many lines matched, in how many files.
 find-count = { $lines ->
         [one] { $lines } line
@@ -399,7 +401,7 @@ config-show-hidden-hint = Names that begin with a dot; o h switches them.
 config-natural-sort = Natural so&rt
 config-natural-sort-hint = Names in the order of their language, numbers by value: file2 before file10. Off: by their characters, ignoring case.
 config-search-mode = &Search mode
-config-search-mode-hint = How quick search and the filters of the lists match what is typed: the text anywhere, the letters in order as fzf does, or a regular expression. Ctrl+s switches it in one of them until it closes. f / and f f start in it too, fzf as a regular expression.
+config-search-mode-hint = How quick search and the filters of the lists match what is typed: the text anywhere, the letters in order as fzf does, or a regular expression. Ctrl+s Ctrl+s switches it in one of them until it closes. f / and f f start in it too, fzf as a regular expression.
 config-search-mode-plain = Plain
 config-search-mode-fzf = fzf
 config-search-mode-regex = Regular expression
@@ -779,7 +781,15 @@ help-search-abort = Give the search up and go back to where it started
 help-search-next = The next match; with nothing typed, the last search
 help-search-next-match = The next match
 help-search-prev = The previous match
-help-search-mode = Match the next way this field has: as it is, as fzf does, as a regular expression, or as a pattern; the glyph at its end says which, and a click on it does the same
+help-search-mode = Next search mode
+help-search-plain = Plain text
+help-search-fzf = As fzf matches
+help-search-regex = Regular expression
+help-search-glob = Shell pattern
+help-case-mode = Next case mode
+help-case-smart = Smart case
+help-case-ignore = Ignore case
+help-case-match = Match case
 help-dialog-up = Previous button; in this help, the section above, or one line up
 help-dialog-down = Next button; in this help, the section below, or one line down
 help-dialog-left = Previous button; in this help, back to the sections, then up to Keys, and fold it
@@ -874,10 +884,12 @@ help-tip-lists = Lists
 help-tip-lists-open = The lists open in Insert mode, typing in the filter: Esc goes to the rows, in Normal mode, / or i types in the filter again, and Esc there closes the list.
 help-tip-lists-jump = In the zoxide window, what is typed filters its directories, or, in the plain search mode, is keywords, as z takes them in a shell.
 help-tip-search = Search modes
-help-tip-search-where = Quick search and the filters of the lists (the location menu, the tab menu, the zoxide window, the workspaces, the command history, and the key hints) start in the search mode of Configuration, and the Text field of f / in its way of the two it has. The glyph at the end of each field says which; Ctrl+s in the field, or a click on the glyph, switches it for that field alone.
-help-tip-search-plain = Plain: the text anywhere, ignoring case.
+help-tip-search-where = Quick search and the filters of the lists (the location menu, the tab menu, the zoxide window, the workspaces, the command history, and the key hints) start in the search mode of Configuration, the Text field of f / in its way of the two it has, and the pattern of g + in the way it had last. The last glyph at the end of each field says which; Ctrl+s Ctrl+s in the field, or a click on the glyph, goes to the next for that field alone, and Ctrl+s p, f, r, or g to plain text, fzf, a regular expression, or a shell pattern, of those it has.
+help-tip-search-case = Every field starts with smart case: case counts only once what is typed has a capital letter. The glyph before the mode says whether case counts; Ctrl+s c, or a click on it, goes round smart case, case ignored, and case, and Ctrl+s a, i, or m goes to one.
+help-tip-search-plain = Plain: the text anywhere.
 help-tip-search-fzf = fzf: the letters typed in order, not necessarily together, best match first. Words separated by spaces must all match; 'word matches as it is, ^word at the start, word$ at the end, and !word where it is not.
-help-tip-search-regex = Regular expression: case counts only once it has a capital letter, as in the search of a tree; a glyph crossed out says it is none.
+help-tip-search-regex = Regular expression: a glyph crossed out says it is none.
+help-tip-search-glob = Shell pattern, in g + and g -: *, ?, [a-z], and { "{" }a,b{ "}" }, which the whole name must match.
 help-tip-workspaces = Workspaces
 help-tip-workspaces-what = A workspace holds the tabs of both panels: where each is, its sort order, and the row under its cursor.
 help-tip-workspaces-list = t w and F9 → Workspace list them; restoring one replaces every tab.
@@ -931,12 +943,11 @@ host-other-dir-invalid = the other panel directory must start with / or ~/
 # Dialog titles.
 pattern-select = Select
 pattern-unselect = Unselect
-# The prompt of the pattern, whose field ends with the glyph of how it matches (shell patterns),
-# as every field that searches does.
+# The prompt of the pattern, whose field ends with the glyphs of whether case counts and how it
+# matches (shell patterns, text, or a regular expression), as every field that searches does.
 pattern-text = &Pattern:
-# Check boxes: leave directories alone; tell upper and lower case apart.
+# Check box: leave directories alone.
 pattern-files-only = &Files only
-pattern-case-sensitive = &Case sensitive
 
 ## Go to directory, g d (src/tui/app, src/tui/cd). Prefix: goto-. mc's Quick cd.
 

@@ -21,6 +21,7 @@ use super::keymap::{Action, Mode, Resolved};
 use super::loading::Loading;
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker, ShownRow};
+use super::search::Kind;
 use super::spinner::{Spin, Wait};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -143,9 +144,9 @@ impl JumpMenu {
         self.picker.mode()
     }
 
-    /// Whether its filter takes the keys and switches how it matches.
-    pub(crate) fn switches(&self) -> bool {
-        self.picker.switches()
+    /// The kind of its filter while that takes the keys.
+    pub(crate) fn search(&self) -> Option<Kind> {
+        self.picker.search()
     }
 
     /// The rows, for the count before a page key.

@@ -64,11 +64,11 @@ show_hidden = true
 # How quick search and the filters of the lists (the location menu, the tab menu, the zoxide
 # window, the workspaces, the command history, the list of the key hints) match what is typed.
 # "fzf": its characters in order, not necessarily together, best matches first; words
-# separated by spaces must all match, and fzf's ' ^ $ ! work. "plain": the text anywhere,
-# ignoring case; the zoxide window gives it to zoxide as keywords, as z does. "regex": a
-# regular expression, whose case counts only once it has a capital letter. Each search and each
-# window starts with it; Ctrl+s switches it there. The search of a tree (f /, f f) starts with it
-# too, taking "fzf" as "regex", and Ctrl+s switches it between "plain" and "regex".
+# separated by spaces must all match, and fzf's ' ^ $ ! work. "plain": the text anywhere; the
+# zoxide window gives it to zoxide as keywords, as z does. "regex": a regular expression. Case
+# counts only once what is typed has a capital letter, until Ctrl+s c switches it. Each search
+# and each window starts with it; Ctrl+s Ctrl+s switches it there. The search of a tree (f /, f f)
+# starts with it too, taking "fzf" as "regex", and switches between "plain" and "regex".
 search_mode = "fzf"
 # The menu bar of F9 (Left, File, Command, Options, Right): "on-demand" shows it only while a
 # menu is open, over the panels, as Far Manager does; "always" keeps it above the panels, as

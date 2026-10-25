@@ -1,6 +1,7 @@
 # 0045. Ctrl+s switches the field it is typed in
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0046](0046-case-and-the-keys-of-search-fields.md), Ctrl+s as
+  a leader and the glyph of the case
 - Date: 2026-10-24
 - Amends: [ADR 0030](0030-search-modes.md), [ADR 0033](0033-letters-in-dialogs.md),
   [ADR 0044](0044-one-base-for-search-fields.md)

@@ -81,33 +81,36 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   as root, a shield glyph (`#` without icons) stays on the line of the mode whichever panel is
   active, and the terminal title starts with `[root]`.
 - `f /` searches the files below the panel's directory for text with
-  [ripgrep](https://github.com/BurntSushi/ripgrep), locally or on a host, where rg runs over
-  the connection, in a dialog over both panels; so does F9 → Command → Find file…. One field
-  takes the text, another the globs of the files (`*.rs !target`); Ctrl+s in the text takes it as
+  [ripgrep](https://github.com/BurntSushi/ripgrep), locally or on a host, where rg runs over the
+  connection, in a dialog over both panels; so does F9 → Command → Find file…. One field takes the
+  text, another the globs of the files (`*.rs !target`); Ctrl+s and a letter in the text take it as
   a regular expression or as it is, starting from `ui.search_mode` (fzf there is a regular
-  expression), the glyph at the end of the field saying which, and a check box, Match case,
-  switches case (Alt+c, its letter); it searches again as any of them changes, and with no text
-  lists the files. Each file found shows with its lines that match, the matches
-  highlighted. Go to, the default button, goes to the file in the panel (Ctrl+o back), View (F3)
-  views it from the line, and Edit (F4) edits it at the line. Its other mode, Files and dirs,
-  finds files and directories by name with [fd](https://github.com/sharkdp/fd), locally or on a
-  host, where fd or fdfind runs; Go to goes into a directory. `f f` and F9 → Command → Find files
-  and dirs… open the dialog in it. `[search] fd` names the program.
-  It finds at most `[search] max_results` (10000) lines, and `max_per_file` (100) in one file,
-  whose count then shows as `100+`; they and `program` (`rg`) are in the new Search category of
-  the Configuration dialog. Hidden files are searched while the panels show them, and
-  `.gitignore` is respected.
+  expression), and switch its case, smart at first, the glyphs at the end of the field saying which;
+  it searches again as any of them changes, and with no text lists the files. Each file found shows
+  with its lines that match, the matches highlighted. Go to, the default button, goes to the file in
+  the panel (Ctrl+o back), View (F3) views it from the line, and Edit (F4) edits it at the line. Its
+  other mode, Files and dirs, finds files and directories by name with
+  [fd](https://github.com/sharkdp/fd), locally or on a host, where fd or fdfind runs; Go to goes
+  into a directory. `f f` and F9 → Command → Find files and dirs… open the dialog in it.
+  `[search] fd` names the program. It finds at most `[search] max_results` (10000) lines, and
+  `max_per_file` (100) in one file, whose count then shows as `100+`; they and `program` (`rg`)
+  are in the new Search category of the Configuration dialog. Hidden files are searched while the
+  panels show them, and `.gitignore` is respected.
 - Quick search highlights where each name on screen matches what is typed: each place it holds
   the text, or the letters that fuzzy search matched, on the cursor's row too.
 - Search modes: quick search and the filters of the lists (the location menu, the tab menu, the
   zoxide window, the workspaces, the command history, the list of the key hints) match what is
-  typed as fzf does, as plain text anywhere, or as a regular expression with smart case. Each
-  starts in `ui.search_mode` (`fzf`), a choice in the Configuration dialog. A glyph at the end of
-  the field says which (`Filter: text  ~`), crossed out while the text is no regular expression;
-  Ctrl+s in the field, or a click on the glyph, switches the way of that field alone until it
-  closes, and nowhere else: not from the rows of a list
-  ([ADR 0045](docs/adr/0045-ctrl-s-switches-the-field-typed-in.md)). `n` and `N` match as the
-  last search did.
+  typed as fzf does, as plain text anywhere, or as a regular expression. Each starts in
+  `ui.search_mode` (`fzf`), a choice in the Configuration dialog, and in smart case: case counts
+  only once what is typed has a capital letter. Two glyphs at the end of the field say the case
+  and the way (`Filter: text   Aa ~`), the way's crossed out while the text is no regular
+  expression. In the field, and nowhere else, not on the rows of a list, Ctrl+s leads the keys
+  that switch them: `Ctrl+s Ctrl+s` or `Ctrl+s s` the next way, `Ctrl+s p`, `f`, `r`, `g` a way by
+  its letter, `Ctrl+s c` the next case, and `Ctrl+s a`, `i`, `m` smart case, case ignored, or
+  case; a click on a glyph switches it too
+  ([ADR 0045](docs/adr/0045-ctrl-s-switches-the-field-typed-in.md),
+  [ADR 0046](docs/adr/0046-case-and-the-keys-of-search-fields.md)). `n` and `N` match as the
+  last search did, with its case.
 - Letters in every dialog, as in Far and mc: each element but Cancel has a letter, highlighted in
   its label, and Alt and the letter put the focus in a text field, switch a check box, choose a
   radio button, or press a button, from anywhere in the dialog, while typing in a field too. A
@@ -179,9 +182,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dialog of F6 gets Preserve attributes too, shared with copies. Off, a move between the local
   file system and a host, or two hosts, leaves the attributes behind
   ([ADR 0043](docs/adr/0043-one-dialog-for-copy-and-move.md)).
-- The dialog of `g +` and `g -` has a prompt, `Pattern:`, and its field ends with the glyph of
-  shell patterns (`*` without icons), as every field that searches shows how it matches
-  ([ADR 0044](docs/adr/0044-one-base-for-search-fields.md)).
+- The dialog of `g +` and `g -` has a prompt, `Pattern:`, and its field ends with the glyphs of
+  its case and its way, as every field that searches
+  ([ADR 0044](docs/adr/0044-one-base-for-search-fields.md)). Besides shell patterns it takes
+  plain text and regular expressions, and the case of the field replaces the Case sensitive check
+  box: smart case at first, then as it was last
+  ([ADR 0046](docs/adr/0046-case-and-the-keys-of-search-fields.md)).
 - F7 opens with an empty name instead of the name under the cursor, which what was typed went
   after.
 - In the fzf search mode, every list shows the best match first, as fzf does: the location menu,

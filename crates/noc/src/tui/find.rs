@@ -1,7 +1,8 @@
 //! The search of a whole tree: `f /` in a panel, or F9 → Command → Find file…. ripgrep searches
 //! the files under the panel's directory, local or on a host, for the text of the first field,
-//! among the files that the globs of the second let through, again as either changes, the check
-//! box of case switches, or Ctrl+s takes the text as it is or as a regular expression. The
+//! among the files that the globs of the second let through, again as either changes, or the
+//! keys after Ctrl+s in the text switch whether case counts or take it as it is or as a regular
+//! expression. The
 //! dialog lists each file it found, in the order of their paths, with the lines
 //! that match under it, the matches highlighted; with no text it lists the files. Its buttons go
 //! to the file in the panel, and view and edit it at the line, as in the results of mc's Find
@@ -28,7 +29,7 @@ use super::edit::Registers;
 use super::keymap::{Action, Context, Mode, Resolved, Typed};
 use super::mouse::Pointer;
 use super::panel::child;
-use super::search::{Input, Kind, Way};
+use super::search::{Case, Input, Kind, Way};
 use super::spinner::{Spin, Wait};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -40,7 +41,6 @@ const BEFORE_MATCH: usize = 8;
 /// The fields of the dialog, and its check boxes.
 const TEXT: usize = 0;
 const FILES: usize = 1;
-const MATCH_CASE: usize = 0;
 /// Its modes, as its choices: text in the files, or files and directories by name.
 const TEXT_MODE: usize = 0;
 const NAMES_MODE: usize = 1;
@@ -173,9 +173,9 @@ enum State {
     Failed(String),
 }
 
-/// What the search depends on in the dialog: the mode, the fields, how the text matches, and the
-/// check boxes.
-type Settings = (usize, String, String, Way, bool);
+/// What the search depends on in the dialog: the mode, the fields, and how the text matches and
+/// whether case counts.
+type Settings = (usize, String, String, Way, Case);
 
 /// The dialog, with what the last search found.
 #[derive(Debug)]
@@ -232,11 +232,10 @@ impl FindWindow {
             (fl!("find-text"), String::new()),
             (fl!("find-files"), String::new()),
         ];
-        let checks = [(fl!("find-match-case"), false)];
         let title = fl!("find-title", dir = title);
         let modes = [fl!("find-mode-text"), fl!("find-mode-names")];
         let chosen = find.choice();
-        let dialog = Dialog::fields(&title, &fields, &checks, buttons(chosen))
+        let dialog = Dialog::fields(&title, &fields, &[], buttons(chosen))
             .with_width(WIDTH)
             .with_choices(&modes, chosen)
             .in_a_row()
@@ -275,14 +274,15 @@ impl FindWindow {
             .split_whitespace()
             .map(str::to_owned)
             .collect();
-        let regex = self.way() == Way::Regex;
-        let match_case = self.dialog.checked(MATCH_CASE);
+        let input = self.input();
+        let regex = input.way() == Way::Regex;
+        let case = input.case();
         if self.dialog.chosen() == NAMES_MODE {
             return FindQuery::Names(fd::Query {
                 pattern,
                 globs,
                 regex,
-                match_case,
+                case,
                 hidden: self.hidden,
             });
         }
@@ -290,7 +290,7 @@ impl FindWindow {
             pattern,
             globs,
             regex,
-            match_case,
+            case,
             hidden: self.hidden,
             max_per_file: self.max_per_file,
         })
@@ -416,14 +416,14 @@ impl FindWindow {
     }
 
     /// How the text matches: as a regular expression or as it is, `ui.search_mode` (its fzf
-    /// mode as a regular expression, which has no meaning here) until Ctrl+s in its field
-    /// switches it.
-    fn way(&self) -> Way {
-        self.dialog.way(TEXT).unwrap_or(Way::Plain)
+    /// mode as a regular expression, which has no meaning here), and with smart case, until the
+    /// keys after Ctrl+s in its field switch them.
+    fn input(&self) -> Input {
+        (self.dialog.search(TEXT)).unwrap_or_else(|| Input::new(Kind::TREE, Way::Plain))
     }
 
-    /// Whether the field with the focus switches how it searches: the text's.
-    pub(crate) fn search_focused(&self) -> bool {
+    /// The kind of the field with the focus, if it searches: the text's.
+    pub(crate) fn search_focused(&self) -> Option<Kind> {
         self.dialog.search_focused()
     }
 
@@ -462,8 +462,8 @@ impl FindWindow {
             self.dialog.chosen(),
             self.dialog.text_of(TEXT).to_owned(),
             self.dialog.text_of(FILES).to_owned(),
-            self.way(),
-            self.dialog.checked(MATCH_CASE),
+            self.input().way(),
+            self.input().case(),
         )
     }
 
@@ -584,7 +584,7 @@ impl FindWindow {
     /// Takes a key as a dialog does: the fields edit, Tab and the motions move the focus, and
     /// over the list they move its cursor; Enter presses Go to, the default, and Alt and a
     /// letter act on what has it. F3 and F4 view and edit the file of the row; in the field of
-    /// the text, Ctrl+s takes it as it is or as a regular expression.
+    /// the text, the keys after Ctrl+s switch how it matches and whether case counts.
     pub(crate) fn handle(&mut self, typed: Typed, registers: &mut Registers) -> FindEvent {
         let before = self.settings();
         let cursor = self.dialog.list_cursor();
@@ -979,7 +979,7 @@ mod tests {
 
     /// Tab from the text to the rows: past the files and the check box.
     fn to_rows(window: &mut FindWindow) {
-        for _ in 0..3 {
+        for _ in 0..2 {
             press(window, Action::NextField);
         }
         assert_eq!(window.context(), Context::Find);
@@ -1001,7 +1001,7 @@ mod tests {
     /// Where `glyph` ends the field of the text, as `window` draws it, if it does.
     fn glyph_at(window: &mut FindWindow, glyph: &str) -> Option<Position> {
         let screen = draw(window, 80);
-        let end = format!(" {glyph} ║");
+        let end = format!(" {glyph}  ║");
         screen.lines().enumerate().find_map(|(y, line)| {
             let at = line.find(&end)?;
             let x = line[..at].chars().count() + 1;
@@ -1043,7 +1043,16 @@ mod tests {
         };
         assert_eq!(window.pointer(click), FindEvent::Search);
         assert!(!window.query().lines().regex);
-        assert!(window.search_focused());
+        assert_eq!(window.search_focused(), Some(Kind::TREE));
+        // The glyph of the case, before it, switches the case.
+        let way = glyph_at(&mut window, glyphs.plain).unwrap();
+        let click = Pointer {
+            press: Press::Click,
+            at: Position::new(way.x - 3, way.y),
+        };
+        assert_eq!(window.pointer(click), FindEvent::Search);
+        assert_eq!(window.query().lines().case, Case::Ignore);
+        assert!(!window.query().lines().regex, "the way stays");
         let plain = FindWindow::new(
             (Location::Local("/src/noc".into()), "~/src/noc".to_owned()),
             FindMode::Text,
@@ -1060,20 +1069,14 @@ mod tests {
     }
 
     #[test]
-    fn alt_and_the_letters_switch_case_choose_the_mode_and_reach_the_fields() {
+    fn alt_and_the_letters_choose_the_mode_and_reach_the_fields() {
         let mut window = window();
         let letters = window.dialog.letters();
-        assert_eq!(
-            letters,
-            ['x', 'd', 't', 'f', 'c', 'g', 'v', 'e'],
-            "each its own"
-        );
+        assert_eq!(letters, ['x', 'd', 't', 'f', 'g', 'v', 'e'], "each its own");
         let hotkey = |window: &mut FindWindow, c| {
             window.handle(Typed::from(Resolved::Hotkey(c)), &mut Registers::default())
         };
         typed(&mut window, "fn");
-        assert_eq!(hotkey(&mut window, 'c'), FindEvent::Search, "from the text");
-        assert!(window.query().lines().match_case);
         assert_eq!(hotkey(&mut window, 'f'), FindEvent::Pending);
         assert_eq!(
             (window.mode(), window.context()),
@@ -1089,7 +1092,7 @@ mod tests {
         assert!(matches!(window.query(), FindQuery::Names(_)));
         assert_eq!(
             window.dialog.letters(),
-            ['x', 'd', 't', 'f', 'c', 'g'],
+            ['x', 'd', 't', 'f', 'g'],
             "Go to alone"
         );
         assert_eq!(
@@ -1107,7 +1110,7 @@ mod tests {
     }
 
     #[test]
-    fn the_fields_and_the_check_boxes_make_the_query_as_in_a_dialog() {
+    fn the_fields_and_the_case_of_the_text_make_the_query_as_in_a_dialog() {
         let mut window = window();
         assert_eq!(
             (window.mode(), window.context()),
@@ -1123,20 +1126,19 @@ mod tests {
         let query = query.lines();
         assert_eq!(query.pattern, "fn x");
         assert_eq!(query.globs, ["*.rs", "!targe"]);
-        assert!(!query.regex && !query.match_case && query.hidden);
+        assert!(!query.regex && query.case == Case::Smart && query.hidden);
         assert_eq!(query.max_per_file, 2);
-        // Tab goes on to the check box, where Space switches it.
-        press(&mut window, Action::NextField);
-        assert_eq!(window.context(), Context::Find);
-        assert_eq!(press(&mut window, Action::Toggle), FindEvent::Search);
-        assert!(window.query().lines().match_case);
+        // The globs have no case of their own.
+        assert_eq!(press(&mut window, Action::CaseMatch), FindEvent::Pending);
         press(&mut window, Action::Up);
+        assert_eq!(press(&mut window, Action::CaseMatch), FindEvent::Search);
+        assert_eq!(window.query().lines().case, Case::Match);
+        assert_eq!(press(&mut window, Action::CaseMode), FindEvent::Search);
+        assert_eq!(window.query().lines().case, Case::Smart, "round");
+        press(&mut window, Action::NormalMode);
+        press(&mut window, Action::Down);
         press(&mut window, Action::Up);
-        assert_eq!(
-            window.mode(),
-            Mode::Normal,
-            "a motion brings it in Normal mode"
-        );
+        assert_eq!(window.mode(), Mode::Normal, "a motion keeps Normal mode");
         press(&mut window, Action::Append);
         typed(&mut window, "y");
         assert_eq!(window.query().lines().pattern, "fn xy");
@@ -1256,8 +1258,8 @@ mod tests {
                 line: None
             }
         );
-        // Back to the text, the first mode, five stops before the rows: its buttons come back.
-        for _ in 0..5 {
+        // Back to the text, the first mode, four stops before the rows: its buttons come back.
+        for _ in 0..4 {
             press(&mut window, Action::PrevField);
         }
         press(&mut window, Action::Toggle);
@@ -1299,7 +1301,7 @@ mod tests {
 
     /// Tab from the second mode to the rows: past the fields and the check box.
     fn to_rows_from_the_modes(window: &mut FindWindow) {
-        for _ in 0..4 {
+        for _ in 0..3 {
             press(window, Action::NextField);
         }
         assert_eq!(window.context(), Context::Find);

@@ -4,7 +4,7 @@ expression: "draw(&mut menu, 40, 13)"
 ---
 "                                        "
 "     ╔════════ Left tabs ═════════╗     "
-"     ║ Filter:                  = ║     "
+"     ║ Filter:              Aa =  ║     "
 "     ╟────────────────────────────╢     "
 "     ║ ~/src                      ║     "
 "     ║ /var/log                   ║     "

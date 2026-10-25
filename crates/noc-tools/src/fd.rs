@@ -21,6 +21,8 @@ use regex::bytes::Regex;
 use tokio::io::AsyncRead;
 use tokio::process::{Child, Command};
 
+use noc_pattern::Case;
+
 use crate::ripgrep::{Ended, Hit, Hits};
 use crate::{ToolError, process};
 
@@ -37,9 +39,9 @@ pub struct Query {
     pub globs: Vec<String>,
     /// A regular expression; else `--fixed-strings`.
     pub regex: bool,
-    /// `--case-sensitive`; else fd's smart case, its default: case counts only once the
-    /// pattern has a capital letter.
-    pub match_case: bool,
+    /// Smart case, fd's default: case counts only once the pattern has a capital letter;
+    /// `--ignore-case`; or `--case-sensitive`.
+    pub case: Case,
     /// `--hidden`.
     pub hidden: bool,
 }
@@ -57,8 +59,10 @@ impl Query {
         if !self.regex {
             args.push("--fixed-strings".into());
         }
-        if self.match_case {
-            args.push("--case-sensitive".into());
+        match self.case {
+            Case::Smart => {}
+            Case::Ignore => args.push("--ignore-case".into()),
+            Case::Match => args.push("--case-sensitive".into()),
         }
         for glob in self.globs.iter().filter_map(|glob| glob.strip_prefix('!')) {
             args.push("--exclude".into());
@@ -99,7 +103,7 @@ impl Query {
         } else {
             let options = noc_pattern::Options {
                 regex: self.regex,
-                match_case: self.match_case,
+                case: self.case,
             };
             let built = noc_pattern::bytes(&self.pattern, options)
                 .map_err(|error| PatternError::Regex(error.to_string()))?;
@@ -294,7 +298,7 @@ mod tests {
             pattern: pattern.to_owned(),
             globs: Vec::new(),
             regex: false,
-            match_case: false,
+            case: Case::Smart,
             hidden: false,
         }
     }
@@ -332,7 +336,7 @@ mod tests {
         let every = Query {
             globs: vec!["*.rs".to_owned(), "!target".to_owned()],
             regex: true,
-            match_case: true,
+            case: Case::Match,
             hidden: true,
             ..query("^ma.n$")
         };
@@ -357,6 +361,11 @@ mod tests {
             ["--fixed-strings", "--", "", "."],
             "every name"
         );
+        let ignore = Query {
+            case: Case::Ignore,
+            ..query("x")
+        };
+        assert_eq!(strings(&ignore.args())[5], "--ignore-case");
     }
 
     #[test]
@@ -394,10 +403,15 @@ mod tests {
         assert_eq!(found(query("ab"), "cAb-ab.AB"), [1..3, 4..6, 7..9]);
         assert_eq!(found(query("Ab"), "cAb-ab.AB"), [1..3], "smart case");
         let exact = Query {
-            match_case: true,
+            case: Case::Match,
             ..query("ab")
         };
         assert_eq!(found(exact, "cAb-ab"), [4..6]);
+        let ignore = Query {
+            case: Case::Ignore,
+            ..query("Ab")
+        };
+        assert_eq!(found(ignore, "cAb-ab"), [1..3, 4..6], "case ignored");
         assert_eq!(found(query("a.b"), "axb a.b"), [4..7], "as it is");
         let regex = Query {
             regex: true,
@@ -547,7 +561,7 @@ mod tests {
         assert_eq!(paths, [&b"src/deep/Main.md"[..], b"src/main.rs"]);
 
         let exact = Query {
-            match_case: true,
+            case: Case::Match,
             hidden: true,
             globs: vec!["!deep".to_owned()],
             ..query("main")

@@ -29,7 +29,7 @@ use super::glyphs;
 use super::keymap::Action;
 use super::mouse::Scroll;
 use super::scroll::Window;
-use super::search::{Case, Input, Kind, Matcher, Prompt, Way};
+use super::search::{GlyphSpots, Input, Kind, Matcher, Prompt, Switch, Way};
 use super::spinner::{Spin, Wait};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -238,7 +238,8 @@ struct Search {
     back: bool,
     /// The rows on screen that Esc puts back, as vim's `old_viewstate`.
     view: Window,
-    /// How it matches what is typed: `ui.search_mode` until Ctrl+s switches it.
+    /// How it matches what is typed: `ui.search_mode` and smart case until the keys after
+    /// Ctrl+s switch them.
     input: Input,
 }
 
@@ -267,8 +268,8 @@ impl Search {
 pub(crate) struct SearchEnd {
     pub(crate) text: String,
     pub(crate) back: bool,
-    /// How it matched, which `n` and `N` match the same way.
-    pub(crate) way: Way,
+    /// How it matched, and whether case counted, which `n` and `N` match the same way.
+    pub(crate) input: Input,
     /// Whether it went round past the end, or the start, if it found a match.
     pub(crate) found: Option<bool>,
 }
@@ -472,8 +473,8 @@ pub(crate) struct Panel {
     wait: Wait,
     /// Quick search, while it runs.
     search: Option<Search>,
-    /// Where the last render drew the glyph of how quick search matches, for the mouse.
-    search_glyph: Cell<Option<Rect>>,
+    /// Where the last render drew the glyphs of how quick search matches, for the mouse.
+    search_glyphs: Cell<Option<GlyphSpots>>,
     /// The entry under the cursor, while its name is edited in its row.
     renaming: Option<Renaming>,
     /// The row where Visual mode started, while it selects the rows from there to the cursor.
@@ -539,7 +540,7 @@ impl Panel {
             working: Vec::new(),
             wait: Wait::default(),
             search: None,
-            search_glyph: Cell::new(None),
+            search_glyphs: Cell::new(None),
             renaming: None,
             visual: None,
             last_visual: None,
@@ -579,7 +580,7 @@ impl Panel {
             working: Vec::new(),
             wait: Wait::default(),
             search: None,
-            search_glyph: Cell::new(None),
+            search_glyphs: Cell::new(None),
             renaming: None,
             visual: None,
             last_visual: None,
@@ -1055,12 +1056,10 @@ impl Panel {
         self.search.is_some()
     }
 
-    /// Whether quick search runs and switches how it matches, which puts Ctrl+s in front of its
-    /// keys (ADR 0045).
-    pub(crate) fn search_switches(&self) -> bool {
-        self.search
-            .as_ref()
-            .is_some_and(|search| search.input.switchable())
+    /// The kind of quick search while it runs, whose keys after Ctrl+s go in front of its own
+    /// (ADR 0045).
+    pub(crate) fn search_kind(&self) -> Option<Kind> {
+        self.search.as_ref().map(|search| search.input.kind())
     }
 
     /// What quick search has typed, while it runs.
@@ -1092,12 +1091,13 @@ impl Panel {
         ));
     }
 
-    /// Switches how quick search matches to the next mode, as Ctrl+s does, and searches again.
-    pub(crate) fn switch_search_mode(&mut self) {
+    /// Switches how quick search matches, or whether case counts, as `switch` says, as the keys
+    /// after Ctrl+s do, and searches again.
+    pub(crate) fn switch_search(&mut self, switch: Switch) {
         let Some(search) = &mut self.search else {
             return;
         };
-        if search.input.switch() {
+        if search.input.switch(switch) {
             self.search_again_typed();
         }
     }
@@ -1116,7 +1116,7 @@ impl Panel {
         }
         let (count, back) = (search.count, search.back);
         let current = search.found.unwrap_or_else(|| search.start_row());
-        let mut matcher = search.input.matcher(&text, Case::Own);
+        let mut matcher = search.input.matcher(&text);
         let ranks = matcher.ranks();
         let target = if ranks {
             self.step_ranked(&mut matcher, current, forward, count)
@@ -1156,29 +1156,29 @@ impl Panel {
         }
     }
 
-    /// Searches for `text`, what an earlier search found in `way`, as if it were typed in that
-    /// way: Ctrl+g with nothing typed yet, as mc's Ctrl+s Ctrl+s.
-    pub(crate) fn search_resume(&mut self, text: &str, way: Way) {
+    /// Searches for `text`, what an earlier search found as `input` matched, as if it were typed
+    /// that way: Ctrl+g with nothing typed yet, as mc's Ctrl+s Ctrl+s.
+    pub(crate) fn search_resume(&mut self, text: &str, input: Input) {
         let Some(search) = &mut self.search else {
             return;
         };
         search.field = Field::plain(text);
-        search.input = Input::new(Kind::QUICK_SEARCH, way);
+        search.input = input;
         self.search_again_typed();
     }
 
-    /// Moves the cursor `times` matches of `text` in `way` on, as vim's `3n`, and puts where
+    /// Moves the cursor `times` matches of `text` as `input` matches on, as vim's `3n`, and puts where
     /// it was in the jump list, once, even if the match is on the same row, as vim does; a
     /// search that finds nothing leaves the jumps as they are. Whether it went round past the
     /// end, or the start, if it found one.
     pub(crate) fn search_again(
         &mut self,
-        (text, way): (&str, Way),
+        (text, input): (&str, Input),
         forward: bool,
         times: usize,
     ) -> Option<bool> {
         let here = self.here();
-        let mut matcher = Input::new(Kind::QUICK_SEARCH, way).matcher(text, Case::Own);
+        let mut matcher = input.matcher(text);
         let (row, round) = if matcher.ranks() {
             let ranked = self.ranked(&mut matcher);
             let count = ranked.len();
@@ -1228,7 +1228,7 @@ impl Panel {
             return;
         };
         let text = typed_at_cursor(&search.field, c);
-        let mut matcher = search.input.matcher(&text, Case::Own);
+        let mut matcher = search.input.matcher(&text);
         let found = self.find_typed(search, &mut matcher, &text);
         if found.is_none() && !text.trim().is_empty() && matcher.error().is_none() {
             return;
@@ -1260,7 +1260,7 @@ impl Panel {
             return;
         };
         let text = search.field.text().to_owned();
-        let mut matcher = search.input.matcher(&text, Case::Own);
+        let mut matcher = search.input.matcher(&text);
         let found = self.find_typed(search, &mut matcher, &text);
         self.show_found(found);
     }
@@ -1369,7 +1369,7 @@ impl Panel {
             return None;
         }
         let start = search.start_row();
-        let mut matcher = search.input.matcher(&text, Case::Own);
+        let mut matcher = search.input.matcher(&text);
         let ranks = matcher.ranks();
         let found = if ranks {
             search.found.map(|row| (row, false))
@@ -1397,7 +1397,7 @@ impl Panel {
         Some(SearchEnd {
             text,
             back: search.back,
-            way: search.input.way(),
+            input: search.input,
             found: found.map(|(_, round)| round),
         })
     }
@@ -1420,7 +1420,7 @@ impl Panel {
         if text.trim().is_empty() {
             return None;
         }
-        Some(search.input.matcher(text, Case::Own))
+        Some(search.input.matcher(text))
     }
 
     /// The name that quick search finds a row by: the name it shows.
@@ -2046,7 +2046,7 @@ impl Panel {
     fn render_status(&self, frame: &mut Frame<'_>, area: Rect, active: bool, view: &View<'_>) {
         let theme = view.theme;
         let width = usize::from(area.width);
-        self.search_glyph.set(None);
+        self.search_glyphs.set(None);
         if let Some(search) = &self.search {
             self.render_search(frame, area, active, (search, theme));
             return;
@@ -2094,9 +2094,9 @@ impl Panel {
                 fl!("panel-search", text = text)
             }
         });
-        // The glyph, when what is typed keeps some room.
-        let glyph = Some(mark.width()).filter(|glyph| prompt.width() + glyph < width);
-        let room = width - glyph.unwrap_or(0);
+        // The glyphs, when what is typed keeps some room.
+        let glyphs = Some(mark.width()).filter(|glyphs| prompt.width() + glyphs < width);
+        let room = width - glyphs.unwrap_or(0);
         let (shown, column) = search.field.visible(room.saturating_sub(prompt.width()));
         if active {
             let column = u16::try_from(cells::width(&prompt.before) + column).unwrap_or(u16::MAX);
@@ -2107,23 +2107,19 @@ impl Panel {
         let spans = vec![Span::styled(text, theme.quick_search)];
         let mut line = Line::from(cells::fit_spans(spans, room, style, theme.glyphs.marks))
             .style(theme.quick_search);
-        if let Some(glyph) = glyph {
-            let at = area.x + u16::try_from(width - glyph + 1).unwrap_or(u16::MAX);
-            line.spans.push(Span::raw(" "));
-            line.spans.push(Span::styled(mark.glyph, mark.style));
-            let drawn = Rect::new(at, area.y, u16::try_from(glyph - 1).unwrap_or(0), 1);
-            self.search_glyph.set(Some(drawn));
+        if glyphs.is_some() {
+            let at = area.x + u16::try_from(room).unwrap_or(u16::MAX);
+            line.spans.extend(mark.spans());
+            self.search_glyphs.set(Some(mark.drawn_at(at, area.y)));
         }
         frame.render_widget(line, area);
     }
 
-    /// Whether `at` is on the glyph of how quick search matches, where the last render drew it.
-    pub(crate) fn search_glyph_at(&self, at: Position) -> bool {
-        self.search.is_some()
-            && self
-                .search_glyph
-                .get()
-                .is_some_and(|glyph| glyph.contains(at))
+    /// What a click at `at` stands for on the glyphs of quick search, where the last render
+    /// drew them, as the keys after Ctrl+s.
+    pub(crate) fn search_action_at(&self, at: Position) -> Option<Action> {
+        self.search.as_ref()?;
+        self.search_glyphs.get()?.action_at(at)
     }
 
     /// `line` toned down if it shows what the panel kept from a host that is not connected.
@@ -2981,7 +2977,13 @@ mod tests {
 
     use super::*;
     use crate::tui::keymap::Mode;
+    use crate::tui::search::Case;
     use crate::tui::spinner;
+
+    /// Quick search in `way`, with smart case.
+    fn quick(way: Way) -> Input {
+        Input::new(Kind::QUICK_SEARCH, way)
+    }
 
     /// 2023-11-14 22:13:20 UTC.
     const NOW: u64 = 1_700_000_000;
@@ -3264,7 +3266,14 @@ mod tests {
         panel.search_down(1, SearchMode::Plain);
         assert!(panel.searching());
         typed(&mut panel, "B");
-        assert_eq!(under_cursor(&panel), "bar", "case does not matter");
+        assert_eq!(
+            panel.search_text(),
+            Some(""),
+            "smart case: a capital counts, and matches nothing"
+        );
+        panel.switch_search(Switch::Case(Case::Ignore));
+        typed(&mut panel, "B");
+        assert_eq!(under_cursor(&panel), "bar", "case ignored");
         typed(&mut panel, "i");
         assert_eq!(under_cursor(&panel), "bin");
         typed(&mut panel, "x");
@@ -3290,7 +3299,7 @@ mod tests {
             .find(|line| line.contains("║Search: Bo"))
             .unwrap();
         assert!(
-            status.contains(&format!(" {plain}║")),
+            status.contains(&format!(" {plain} ║")),
             "the glyph of how it matches at the right end: {status}"
         );
         assert_eq!(
@@ -3304,7 +3313,7 @@ mod tests {
             Some(SearchEnd {
                 text: "Bo".to_owned(),
                 back: false,
-                way: Way::Plain,
+                input: quick(Way::Plain).with_case(Case::Ignore),
                 found: Some(false),
             })
         );
@@ -3312,7 +3321,7 @@ mod tests {
         // Enter on a text that nothing matches, as the last search's may be, stays where the
         // search started.
         panel.search_up(1, SearchMode::Plain);
-        panel.search_resume("z", Way::Plain);
+        panel.search_resume("z", quick(Way::Plain));
         assert_eq!(
             panel.search_text(),
             Some("z"),
@@ -3402,7 +3411,7 @@ mod tests {
     fn matches_go_both_ways_round_and_an_ended_search_says_what_it_found() {
         let mut panel = search_files(&["bar", "bin", "cat", "boot"]);
         panel.search_down(1, SearchMode::Plain);
-        typed(&mut panel, "B");
+        typed(&mut panel, "b");
         assert_eq!(under_cursor(&panel), "bar");
         panel.search_step(false);
         assert_eq!(under_cursor(&panel), "boot", "up, round to the bottom");
@@ -3411,21 +3420,24 @@ mod tests {
         let end = panel.end_search().expect("a search");
         assert_eq!(
             (end.text.as_str(), end.found),
-            ("B", Some(false)),
+            ("b", Some(false)),
             "after Ctrl+g, Enter stays on the match without going round, as vim's"
         );
         assert_eq!(
-            panel.search_again(("x", Way::Plain), true, 1),
+            panel.search_again(("x", quick(Way::Plain)), true, 1),
             None,
             "no match"
         );
         assert_eq!(under_cursor(&panel), "bar", "the cursor stays");
-        assert_eq!(panel.search_again(("B", Way::Plain), false, 1), Some(true));
-        assert_eq!(under_cursor(&panel), "boot", "ignoring case, round");
+        assert_eq!(
+            panel.search_again(("b", quick(Way::Plain)), false, 1),
+            Some(true)
+        );
+        assert_eq!(under_cursor(&panel), "boot", "round");
 
         // Fuzzy: the previous one as fzf ranks them, round to the worst.
         panel.search_down(1, SearchMode::Plain);
-        panel.search_resume("bt", Way::Fzf);
+        panel.search_resume("bt", quick(Way::Fzf));
         assert_eq!(panel.search_text(), Some("bt"));
         let best = under_cursor(&panel);
         panel.search_step(false);
@@ -3483,12 +3495,19 @@ mod tests {
     fn literal_quick_search_finds_the_text_anywhere_in_a_name_as_the_filters_do() {
         let mut panel = search_files(&["bar", "cab", "Tabs"]);
         panel.search_down(1, SearchMode::Plain);
-        typed(&mut panel, "AB");
+        typed(&mut panel, "ab");
         assert_eq!(under_cursor(&panel), "cab");
         panel.search_step(true);
-        assert_eq!(under_cursor(&panel), "Tabs", "ignoring case");
+        assert_eq!(
+            under_cursor(&panel),
+            "Tabs",
+            "without a capital, either case"
+        );
         panel.end_search();
-        assert_eq!(panel.search_again(("ab", Way::Plain), true, 1), Some(true));
+        assert_eq!(
+            panel.search_again(("ab", quick(Way::Plain)), true, 1),
+            Some(true)
+        );
         assert_eq!(under_cursor(&panel), "cab", "round");
     }
 
@@ -3526,6 +3545,7 @@ mod tests {
         let mut panel = search_files(&["abab", "cab", "Tabs", "note"]);
         panel.search_down(1, SearchMode::Plain);
         assert!(found(&mut panel, 60).is_empty(), "nothing typed");
+        panel.switch_search(Switch::Case(Case::Ignore));
         typed(&mut panel, "AB");
         // On the cursor's row too, which is cab's, and ignoring case.
         assert_eq!(found(&mut panel, 60), ["abab", "ab", "ab"]);
@@ -3852,7 +3872,7 @@ mod tests {
         assert_eq!(panel.cursor, 0);
         assert!(
             panel
-                .search_again(("nothing", Way::Plain), true, 1)
+                .search_again(("nothing", quick(Way::Plain)), true, 1)
                 .is_none()
         );
         assert!(panel.jump_forward(1).is_none());

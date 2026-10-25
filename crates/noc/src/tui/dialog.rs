@@ -26,7 +26,7 @@ use super::keymap::{Action, Context, Extra, Mode, Resolved, Typed};
 use super::label::{self, Label};
 use super::mouse::{Pointer, Press, Scroll};
 use super::scroll::Window;
-use super::search::{Input, Way};
+use super::search::{GlyphSpots, Input, Kind, Switch};
 use super::spinner::Shine;
 use super::theme::{self, Theme};
 use crate::i18n::fl;
@@ -349,8 +349,8 @@ impl fmt::Debug for Field {
 struct LabelledField {
     label: Label,
     field: Field,
-    /// How it matches, if it searches: the glyph of the way ends it, and Ctrl+s or a click on
-    /// the glyph switches the way while it has the focus (ADR 0045).
+    /// How it matches, if it searches: the glyphs of its case and its way end it, and the keys
+    /// after Ctrl+s or a click on a glyph switch them while it has the focus (ADR 0045).
     search: Option<Input>,
 }
 
@@ -508,9 +508,9 @@ pub(crate) struct Dialog {
     field_area: Cell<Option<Rect>>,
     /// Where each choice, field, check box, and button was drawn last, for the mouse.
     spots: RefCell<Vec<(Focus, Rect)>>,
-    /// Where the glyph of each field that switches how it searches was drawn last, by the
-    /// field's index, for the mouse.
-    glyphs: RefCell<Vec<(usize, Rect)>>,
+    /// Where the glyphs of each field that searches were drawn last, by the field's index, for
+    /// the mouse.
+    glyphs: RefCell<Vec<(usize, GlyphSpots)>>,
     /// The first line of a message taller than the screen shown, and how many show, at the
     /// last render.
     offset: Cell<usize>,
@@ -908,32 +908,29 @@ impl Dialog {
         self
     }
 
-    /// How field `index` matches, if it searches.
-    pub(crate) fn way(&self, index: usize) -> Option<Way> {
-        self.fields.get(index)?.search.map(Input::way)
+    /// How field `index` matches, and whether case counts, if it searches.
+    pub(crate) fn search(&self, index: usize) -> Option<Input> {
+        self.fields.get(index)?.search
     }
 
-    /// Whether the field with the focus switches how it searches, which puts Ctrl+s in front of
-    /// the keys of the dialog.
-    pub(crate) fn search_focused(&self) -> bool {
+    /// The kind of the field with the focus if it searches, whose keys after Ctrl+s go in front
+    /// of those of the dialog.
+    pub(crate) fn search_focused(&self) -> Option<Kind> {
         match self.focus {
-            Focus::Field(index) => self
-                .fields
-                .get(index)
-                .and_then(|field| field.search)
-                .is_some_and(Input::switchable),
-            Focus::Choice(_) | Focus::Check(_) | Focus::List | Focus::Button(_) => false,
+            Focus::Field(index) => Some(self.fields.get(index)?.search?.kind()),
+            Focus::Choice(_) | Focus::Check(_) | Focus::List | Focus::Button(_) => None,
         }
     }
 
-    /// Switches how field `index` matches to its next way, as Ctrl+s does in it.
-    fn switch_search(&mut self, index: usize) {
+    /// Switches how field `index` matches, or whether case counts, as `switch` says, as the keys
+    /// after Ctrl+s do in it.
+    fn switch_search(&mut self, index: usize, switch: Switch) {
         if let Some(input) = self
             .fields
             .get_mut(index)
             .and_then(|field| field.search.as_mut())
         {
-            input.switch();
+            input.switch(switch);
         }
     }
 
@@ -1046,6 +1043,12 @@ impl Dialog {
         if self.focus == Focus::List && self.move_in_list(action, extra) {
             return DialogEvent::Pending;
         }
+        if let Some(switch) = Switch::of(action) {
+            if let Focus::Field(index) = self.focus {
+                self.switch_search(index, switch);
+            }
+            return DialogEvent::Pending;
+        }
         match action {
             // Enter takes the choice it is on, as that is the one that looks chosen.
             Action::Confirm => match self.focus {
@@ -1071,12 +1074,6 @@ impl Dialog {
                 Focus::Field(_) | Focus::List => DialogEvent::Pending,
             },
             Action::Cancel => DialogEvent::Cancelled,
-            Action::SearchMode => {
-                if let Focus::Field(index) = self.focus {
-                    self.switch_search(index);
-                }
-                DialogEvent::Pending
-            }
             Action::NextField | Action::PrevField => {
                 self.move_focus(action == Action::NextField, Mode::Insert);
                 DialogEvent::Pending
@@ -1151,22 +1148,23 @@ impl Dialog {
     /// Takes a press of the mouse, where the dialog was drawn last: a click chooses a choice,
     /// puts the cursor in a field or on a row of the list, switches a check box, or presses a
     /// button. A double click on a choice or a row presses the default button too, as Enter
-    /// does there. A click on the glyph at the end of a field that searches gives it the focus
-    /// and switches how it matches, as Ctrl+s does there.
+    /// does there. A click on a glyph at the end of a field that searches gives it the focus
+    /// and switches whether case counts, or how it matches, as the keys after Ctrl+s do there.
     pub(crate) fn pointer(&mut self, pointer: Pointer) -> DialogEvent {
         let Pointer { press, at } = pointer;
         let glyph = self
             .glyphs
             .borrow()
             .iter()
-            .find(|(_, area)| area.contains(at))
-            .map(|(index, _)| *index);
-        if let Some(index) = glyph {
+            .find_map(|(index, drawn)| Some((*index, drawn.action_at(at)?)));
+        if let Some((index, action)) = glyph {
             if press == Press::Click {
                 if self.focus != Focus::Field(index) {
                     self.focus_on(Focus::Field(index), Mode::Insert);
                 }
-                self.switch_search(index);
+                if let Some(switch) = Switch::of(action) {
+                    self.switch_search(index, switch);
+                }
             }
             return DialogEvent::Pending;
         }
@@ -1956,15 +1954,15 @@ pub(crate) fn shine_bar(
         .collect()
 }
 
-/// Draws the field of `labelled` on the line `area`, with the glyph of how it matches at its end
-/// if it searches. Returns the cursor's column in `area`, where the field takes a click, and where
-/// the glyph is if a click switches how it matches.
+/// Draws the field of `labelled` on the line `area`, with the glyphs of how it matches at its
+/// end if it searches. Returns the cursor's column in `area`, where the field takes a click, and
+/// where the glyphs are.
 fn draw_field(
     frame: &mut Frame<'_>,
     area: Rect,
     labelled: &LabelledField,
     theme: &Theme,
-) -> (usize, Rect, Option<Rect>) {
+) -> (usize, Rect, Option<GlyphSpots>) {
     let field = &labelled.field;
     let Some(input) = labelled.search else {
         let (line, column) = field_line(field, usize::from(area.width), theme);
@@ -1973,17 +1971,13 @@ fn draw_field(
     };
     let invalid = input.invalid(field.text());
     let mark = input.mark(invalid, theme.dialog_input, theme);
-    let (column, glyph) = mark.render_in_field(frame, area, field, theme);
-    let room = area.width - glyph.map_or(0, |glyph| glyph.width + 1);
-    let switches = glyph.filter(|_| input.switchable());
-    (
-        usize::from(column),
-        Rect {
-            width: room,
-            ..area
-        },
-        switches,
-    )
+    let (column, drawn) = mark.render_in_field(frame, area, field, theme);
+    let right = drawn.map_or(area.right(), GlyphSpots::left);
+    let text = Rect {
+        width: right.saturating_sub(area.x),
+        ..area
+    };
+    (usize::from(column), text, drawn)
 }
 
 /// What of `field` fits in `room` cells, in the color of fields, what Visual mode selects
@@ -2604,10 +2598,7 @@ mod tests {
             assert!(dialog.message.letter().is_some(), "{name}: the prompt");
             assert_letters(name, dialog);
         }
-        let select = [
-            (fl!("pattern-files-only"), false),
-            (fl!("pattern-case-sensitive"), false),
-        ];
+        let select = [(fl!("pattern-files-only"), false)];
         let host_fields = [
             (fl!("host-label"), String::new()),
             (fl!("host-start-dir"), String::new()),

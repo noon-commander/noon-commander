@@ -2,6 +2,8 @@
 
 use noc_scroll::Motion;
 
+use crate::tui::search::Kind;
+
 /// Which of vim's modes keys are typed in. The app says which from what has the keys: a text
 /// field in Insert mode takes characters as text, the panels and the lists take them as
 /// commands, and a selection takes the keys that act on it.
@@ -88,35 +90,41 @@ pub(crate) enum Context {
     UserScreen,
 }
 
-/// Where keys go: the mode they are typed in, the context that has them, and whether the field
-/// with the focus switches how it searches, which puts [`Context::SearchInput`] in front of the
-/// context's chain (ADR 0045).
+/// Where keys go: the mode they are typed in, the context that has them, and the kind of the
+/// field with the focus if it searches, which puts [`Context::SearchInput`] in front of the
+/// context's chain (ADR 0045) and says which of its keys work there (ADR 0046).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct Place {
     pub(crate) mode: Mode,
     pub(crate) context: Context,
-    pub(crate) search: bool,
+    pub(crate) search: Option<Kind>,
 }
 
 impl From<(Mode, Context)> for Place {
-    /// Where no field that switches how it searches has the focus.
+    /// Where no field that searches has the focus.
     fn from((mode, context): (Mode, Context)) -> Self {
         Self {
             mode,
             context,
-            search: false,
+            search: None,
         }
     }
 }
 
 impl Place {
     /// The contexts keys are looked up in, most specific first: `SearchInput` if a field that
-    /// switches how it searches has the focus, then the context's chain.
+    /// searches has the focus, then the context's chain.
     pub(crate) fn chain(self) -> impl Iterator<Item = Context> {
-        let search = self.search.then_some(Context::SearchInput);
+        let search = self.search.map(|_| Context::SearchInput);
         search
             .into_iter()
             .chain(self.context.chain(self.mode).iter().copied())
+    }
+
+    /// Whether `action` works here, for the hints: of the ways to match, only those the field
+    /// that searches has.
+    pub(crate) fn allows(self, action: Action) -> bool {
+        self.search.is_none_or(|kind| kind.allows(action))
     }
 }
 
@@ -386,10 +394,26 @@ pub(crate) enum Action {
     /// Finds the files and directories under the panel's directory by name, in the same window,
     /// in its Files and dirs mode.
     FindNames,
-    /// In quick search and the filters of the lists, matches what is typed the next way: as
-    /// it is, as fzf does, or as a regular expression, round; in the search of a tree, as it is
-    /// or as a regular expression.
+    /// In a field that searches, matches what is typed the next way it has, round: as it is,
+    /// as fzf does, as a regular expression, or as a shell pattern.
     SearchMode,
+    /// In a field that searches, matches what is typed as it is, if it can.
+    SearchPlain,
+    /// Likewise, as fzf does.
+    SearchFzf,
+    /// Likewise, as a regular expression.
+    SearchRegex,
+    /// Likewise, as a shell pattern.
+    SearchGlob,
+    /// In a field that searches, switches whether case counts to the next, round: smart case,
+    /// case ignored, case.
+    CaseMode,
+    /// Likewise, to smart case: case counts once what is typed has a capital letter.
+    CaseSmart,
+    /// Likewise, to case ignored.
+    CaseIgnore,
+    /// Likewise, to case.
+    CaseMatch,
     /// Goes back to where the panel was before its last jump, as vim's Ctrl+o.
     JumpBack,
     /// Goes forward again to where a jump back came from, as vim's Ctrl+i.
@@ -665,6 +689,14 @@ impl Action {
         Self::FindFile,
         Self::FindNames,
         Self::SearchMode,
+        Self::SearchPlain,
+        Self::SearchFzf,
+        Self::SearchRegex,
+        Self::SearchGlob,
+        Self::CaseMode,
+        Self::CaseSmart,
+        Self::CaseIgnore,
+        Self::CaseMatch,
         Self::JumpBack,
         Self::JumpForward,
         Self::Shell,

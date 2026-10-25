@@ -13,6 +13,7 @@ use super::dialog::Colors;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker};
+use super::search::Kind;
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -78,9 +79,9 @@ impl TabMenu {
         self.picker.mode()
     }
 
-    /// Whether its filter takes the keys and switches how it matches.
-    pub(crate) fn switches(&self) -> bool {
-        self.picker.switches()
+    /// The kind of its filter while that takes the keys.
+    pub(crate) fn search(&self) -> Option<Kind> {
+        self.picker.search()
     }
 
     /// Takes a key, as the picker does, and d d and F8, which close the tab under the cursor.
@@ -219,7 +220,7 @@ mod tests {
     #[test]
     fn typing_filters_by_location() {
         let mut menu = menu();
-        typed(&mut menu, "SRC");
+        typed(&mut menu, "src");
         assert_eq!(press(&mut menu, Action::Down), TabMenuEvent::Pending);
         assert_eq!(
             press(&mut menu, Action::Confirm),
@@ -239,7 +240,7 @@ mod tests {
         let text = draw(&mut menu, 40, 10);
         assert!(
             text.contains("Filter: www")
-                && text.contains(" = ║")
+                && text.contains(" Aa =  ║")
                 && text.contains("web:/var/www")
                 && !text.contains("~/src"),
             "{text}"

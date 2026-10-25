@@ -1,5 +1,5 @@
-//! Patterns typed to match names: a regular expression, or text as it is, with smart case, as
-//! fd and ripgrep match them. The search of a tree and quick search build them here, so that a
+//! Patterns typed to match names: a regular expression, or text as it is, with smart case, case
+//! ignored, or case, as fd and ripgrep match them. The search of a tree and quick search build them here, so that a
 //! pattern matches the same names in both, with the regex engine fd and ripgrep use. Text is
 //! compared in one Unicode form, and case folded where case does not count ([`fold`]).
 
@@ -13,13 +13,36 @@ pub use fold::{Normalized, fold, nfc};
 #[error("{0}")]
 pub struct PatternError(String);
 
+/// Whether case counts, as fd and ripgrep have it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum Case {
+    /// Only once the pattern has a capital letter.
+    #[default]
+    Smart,
+    /// Never.
+    Ignore,
+    /// Always.
+    Match,
+}
+
+impl Case {
+    /// Whether case counts for `pattern`, a regular expression if `regex`, whose escapes are
+    /// no capitals.
+    pub fn counts(self, pattern: &str, regex: bool) -> bool {
+        match self {
+            Self::Smart => has_capital(pattern, regex),
+            Self::Ignore => false,
+            Self::Match => true,
+        }
+    }
+}
+
 /// How a pattern matches.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Options {
     /// A regular expression; else the text as it is.
     pub regex: bool,
-    /// Case always counts; else smart case: only once the pattern has a capital letter.
-    pub match_case: bool,
+    pub case: Case,
 }
 
 /// `pattern` built to match text.
@@ -47,7 +70,7 @@ fn source(pattern: &str, options: Options) -> String {
 }
 
 fn caseless(pattern: &str, options: Options) -> bool {
-    !options.match_case && !has_capital(pattern, options.regex)
+    !options.case.counts(pattern, options.regex)
 }
 
 /// Whether `pattern` has a capital letter, as smart case asks; in a regular expression, one not
@@ -81,7 +104,7 @@ mod tests {
 
     const REGEX: Options = Options {
         regex: true,
-        match_case: false,
+        case: Case::Smart,
     };
 
     #[test]
@@ -91,10 +114,18 @@ mod tests {
         assert!(!text("a.b", plain).unwrap().is_match("axb"));
         assert!(!text("Ab", plain).unwrap().is_match("ab"), "a capital");
         let exact = Options {
-            match_case: true,
+            case: Case::Match,
             ..plain
         };
         assert!(!text("ab", exact).unwrap().is_match("AB"));
+        let ignore = Options {
+            case: Case::Ignore,
+            ..plain
+        };
+        assert!(
+            text("Ab", ignore).unwrap().is_match("aB"),
+            "even with a capital"
+        );
         assert!(text("(", plain).is_ok());
     }
 

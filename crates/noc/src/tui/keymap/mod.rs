@@ -846,12 +846,15 @@ impl Keymap {
         hints
     }
 
-    /// The bindings of `place`'s chain, most specific first.
+    /// The bindings of `place`'s chain that work there, most specific first: a key after
+    /// Ctrl+s for a way the field has not still does its nothing, rather than type, but no
+    /// hints show it.
     fn chain_bindings(&self, place: Place) -> impl Iterator<Item = &(Sequence, Action)> {
         place
             .chain()
             .filter_map(move |context| self.bindings(place.mode, context))
             .flat_map(|bindings| &bindings.0)
+            .filter(move |(_, action)| place.allows(*action))
     }
 
     /// How many sequences longer than `prefix` that start with it do something in `place`.

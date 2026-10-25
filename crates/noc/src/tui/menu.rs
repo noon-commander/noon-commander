@@ -26,6 +26,7 @@ use super::mouse::Pointer;
 use super::panel::HostState;
 use super::picker::{Body, MenuLine, Pick, Picker, ShownRow, Shows};
 use super::places::{KnownHost, Places, volume_name, volume_of};
+use super::search::Kind;
 use super::spinner::{Spin, Wait};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -283,9 +284,9 @@ impl LocationMenu {
         self.picker.mode()
     }
 
-    /// Whether its filter takes the keys and switches how it matches.
-    pub(crate) fn switches(&self) -> bool {
-        self.picker.switches()
+    /// The kind of its filter while that takes the keys.
+    pub(crate) fn search(&self) -> Option<Kind> {
+        self.picker.search()
     }
 
     /// Takes a key: the picker's, and F4, which edits the settings of a host, F8, which

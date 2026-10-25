@@ -17,6 +17,7 @@ use super::dialog::Colors;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker};
+use super::search::Kind;
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -123,9 +124,9 @@ impl HistoryWindow {
         self.picker.mode()
     }
 
-    /// Whether its filter takes the keys and switches how it matches.
-    pub(crate) fn switches(&self) -> bool {
-        self.picker.switches()
+    /// The kind of its filter while that takes the keys.
+    pub(crate) fn search(&self) -> Option<Kind> {
+        self.picker.search()
     }
 
     /// Takes a key: the picker's, where Enter takes the command, and Tab, which switches

@@ -14,6 +14,8 @@ use serde::Deserialize;
 use tokio::io::{AsyncBufReadExt as _, AsyncRead, BufReader};
 use tokio::process::{Child, Command};
 
+use noc_pattern::Case;
+
 use crate::{ToolError, process};
 
 /// The most bytes of a matching line that a [`Hit::Line`] keeps.
@@ -36,8 +38,8 @@ pub struct Query {
     pub globs: Vec<String>,
     /// A regular expression; else `--fixed-strings`.
     pub regex: bool,
-    /// `--case-sensitive`; else `--smart-case`.
-    pub match_case: bool,
+    /// `--smart-case`, `--ignore-case`, or `--case-sensitive`.
+    pub case: Case,
     /// `--hidden`.
     pub hidden: bool,
     /// `--max-count`: the most lines it finds in one file, at least 1.
@@ -72,10 +74,10 @@ impl Query {
                 args.push("--fixed-strings".into());
             }
             args.push(
-                if self.match_case {
-                    "--case-sensitive"
-                } else {
-                    "--smart-case"
+                match self.case {
+                    Case::Smart => "--smart-case",
+                    Case::Ignore => "--ignore-case",
+                    Case::Match => "--case-sensitive",
                 }
                 .into(),
             );
@@ -426,7 +428,7 @@ mod tests {
             pattern: pattern.to_owned(),
             globs: Vec::new(),
             regex: false,
-            match_case: false,
+            case: Case::Smart,
             hidden: false,
             max_per_file: 3,
         }
@@ -476,6 +478,11 @@ mod tests {
                 "."
             ]
         );
+        let ignore = Query {
+            case: Case::Ignore,
+            ..query
+        };
+        assert_eq!(strings(&ignore.args())[5], "--ignore-case");
     }
 
     #[test]
@@ -483,7 +490,7 @@ mod tests {
         let query = Query {
             globs: vec!["*.rs".to_owned(), "!target".to_owned()],
             regex: true,
-            match_case: true,
+            case: Case::Match,
             hidden: true,
             max_per_file: 0,
             ..query("fn \\w+")
@@ -520,7 +527,7 @@ mod tests {
         let every = Query {
             globs: vec!["*.md".to_owned()],
             regex: true,
-            match_case: true,
+            case: Case::Match,
             hidden: true,
             max_per_file: 7,
             ..plain
@@ -789,7 +796,7 @@ mod tests {
         );
 
         let exact = Query {
-            match_case: true,
+            case: Case::Match,
             hidden: true,
             globs: vec!["!*.md".to_owned()],
             ..search.clone()

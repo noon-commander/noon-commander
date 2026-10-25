@@ -15,6 +15,7 @@ use super::dialog::Colors;
 use super::keymap::{Action, Extra, Hints, Keymap, Mode, Resolved, Typed};
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker};
+use super::search::Kind;
 use super::theme::Theme;
 use super::which_key;
 use crate::i18n::fl;
@@ -105,9 +106,9 @@ impl KeyHintsWindow {
         self.picker.mode()
     }
 
-    /// Whether its filter takes the keys and switches how it matches.
-    pub(crate) fn switches(&self) -> bool {
-        self.picker.switches()
+    /// The kind of its filter while that takes the keys.
+    pub(crate) fn search(&self) -> Option<Kind> {
+        self.picker.search()
     }
 
     /// Takes a key, as the picker does: Enter runs the command under the cursor, unless it

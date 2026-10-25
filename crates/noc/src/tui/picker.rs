@@ -23,7 +23,7 @@ use super::keymap::{Action, Mode, Resolved};
 use super::loading::Loading;
 use super::mouse::{Drawn, Pointer, Press};
 use super::scroll::Window;
-use super::search::{Case, Input, Kind, Prompt, Way};
+use super::search::{Case, GlyphSpots, Input, Kind, Prompt, Switch, Way};
 use super::spinner::Spin;
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -149,7 +149,8 @@ pub(crate) struct Picker {
     shows: Vec<Shows>,
     /// The filter, a text field.
     filter: Field,
-    /// How the filter matches: `ui.search_mode` until Ctrl+s switches it.
+    /// How the filter matches: `ui.search_mode` and smart case until the keys after Ctrl+s
+    /// switch them.
     input: Input,
     /// In the plain mode the filter is keywords that a program, such as zoxide, picks the rows
     /// by: the window asks it, and the picker shows every row it gets.
@@ -174,8 +175,8 @@ pub(crate) struct Picker {
     drawn: Drawn,
     /// The scroll bar of the lines at the last render, on the right of the frame.
     bar: Option<Bar>,
-    /// Where the last render drew the glyph of how the filter matches, if a click switches it.
-    glyph: Option<Rect>,
+    /// Where the last render drew the glyphs of how the filter matches, for the mouse.
+    glyphs: Option<GlyphSpots>,
 }
 
 impl Picker {
@@ -198,7 +199,7 @@ impl Picker {
             pages: 1,
             drawn: Drawn::default(),
             bar: None,
-            glyph: None,
+            glyphs: None,
         }
     }
 
@@ -235,10 +236,10 @@ impl Picker {
         self.filters() && self.input.way() == Way::Fzf && !self.filter.text().is_empty()
     }
 
-    /// Whether the filter takes the keys and switches how it matches, which puts Ctrl+s in front
-    /// of the keys of the window (ADR 0045).
-    pub(crate) fn switches(&self) -> bool {
-        self.filtering && self.input.switchable()
+    /// The kind of the filter while it takes the keys, whose keys after Ctrl+s go in front of
+    /// those of the window (ADR 0045).
+    pub(crate) fn search(&self) -> Option<Kind> {
+        self.filtering.then_some(self.input.kind())
     }
 
     /// The mode keys are typed in: Insert while the filter takes them.
@@ -303,11 +304,19 @@ impl Picker {
     /// Matches the rows against the filter again. Rows for an empty filter, or for one with
     /// text, show as `shows` says; an empty filter hides no other. With text, a row shows if one
     /// of its texts matches the filter; as fzf, if they match it as one line, best first. A
-    /// program that picks the rows by keywords picked them all.
+    /// program that picks the rows by keywords picked them all; where case counts, which such
+    /// a program may ignore, a row shows if it has each keyword in its case.
     fn refilter(&mut self) {
         let text = self.filter.text();
         let empty = text.is_empty();
-        let mut matcher = self.input.matcher(text, Case::Own);
+        let mut matcher = self.input.matcher(text);
+        let mut keywords: Option<Vec<_>> =
+            (!self.filters() && self.input.case().counts(text, false)).then(|| {
+                let exact = Input::new(Kind::FILTER, Way::Plain).with_case(Case::Match);
+                text.split_whitespace()
+                    .map(|word| exact.matcher(word))
+                    .collect()
+            });
         let filters = self.filters() && !empty;
         self.error = matcher.error().filter(|_| filters).map(ToString::to_string);
         let ranks = self.ranked();
@@ -316,7 +325,16 @@ impl Picker {
                 let score = match shows {
                     Shows::Unfiltered => empty.then_some(0),
                     Shows::Filtered if empty => None,
-                    Shows::Always | Shows::Filtered if !filters => Some(0),
+                    Shows::Always | Shows::Filtered if !filters => match &mut keywords {
+                        Some(words) => {
+                            let line = texts.join(" ");
+                            words
+                                .iter_mut()
+                                .all(|word| word.score(&line).is_some())
+                                .then_some(0)
+                        }
+                        None => Some(0),
+                    },
                     Shows::Always | Shows::Filtered if ranks => matcher.score(&texts.join(" ")),
                     Shows::Always | Shows::Filtered => texts
                         .iter()
@@ -335,6 +353,14 @@ impl Picker {
     /// filter, and the keys of text fields edit it, until Esc goes back to the rows; `/` types
     /// in it again. Other keys are the window's.
     pub(crate) fn handle(&mut self, input: Resolved) -> Pick {
+        if let Resolved::Action(action) = input
+            && let Some(switch) = Switch::of(action)
+        {
+            if !self.input.switch(switch) {
+                return Pick::Pending;
+            }
+            return self.filtered();
+        }
         let rows = self.len();
         let last = rows.saturating_sub(1);
         match input {
@@ -353,12 +379,6 @@ impl Picker {
                 Action::End => self.cursor = last,
                 Action::QuickSearch => self.filtering = true,
                 Action::NormalMode => self.filtering = false,
-                Action::SearchMode => {
-                    if !self.input.switch() {
-                        return Pick::Pending;
-                    }
-                    return self.filtered();
-                }
                 Action::Left
                 | Action::Right
                 | Action::TextStart
@@ -470,15 +490,15 @@ impl Picker {
 
     /// Takes a press of the mouse, where the window was drawn last: a click puts the cursor on
     /// a row, and returns the key that a double click on one, or a click outside the window,
-    /// stands for: Enter or Esc. A click on the glyph of how the filter matches gives the filter
-    /// the keys and stands for Ctrl+s.
+    /// stands for: Enter or Esc. A click on a glyph of how the filter matches gives the filter
+    /// the keys and stands for the keys after Ctrl+s that switch it.
     pub(crate) fn pointer(&mut self, pointer: Pointer) -> Option<Action> {
-        if self.glyph.is_some_and(|glyph| glyph.contains(pointer.at)) {
+        if let Some(action) = self.glyphs.and_then(|glyphs| glyphs.action_at(pointer.at)) {
             if pointer.press != Press::Click {
                 return None;
             }
             self.filtering = true;
-            return Some(Action::SearchMode);
+            return Some(action);
         }
         self.drawn.menu_press(pointer, &mut self.cursor)
     }
@@ -522,14 +542,13 @@ impl Picker {
             ..Drawn::default()
         };
         self.bar = None;
-        self.glyph = None;
+        self.glyphs = None;
         if inner.height < 3 || inner.width < 4 {
             return;
         }
         let width = usize::from(inner.width);
         let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
-        let glyph = self.draw_filter(frame, inner, theme, (body.prompt, body.note));
-        self.glyph = glyph.filter(|_| self.input.switchable());
+        self.glyphs = self.draw_filter(frame, inner, theme, (body.prompt, body.note));
 
         self.page = usize::from(inner.height.saturating_sub(2 + below)).max(1);
         let rows = self.len();
@@ -612,16 +631,16 @@ impl Picker {
     }
 
     /// The filter, a text field in the colors of those of dialogs after its prompt, which ends
-    /// with the glyph of how it matches, with its cursor while it takes text, and the note at
+    /// with the glyphs of how it matches, with its cursor while it takes text, and the note at
     /// the right, on the first line of `inner`; a line under them. The line joins the frame, as
-    /// the one over the buttons of a dialog does. Returns where the glyph is.
+    /// the one over the buttons of a dialog does. Returns where the glyphs are.
     fn draw_filter(
         &self,
         frame: &mut Frame<'_>,
         inner: Rect,
         theme: &Theme,
         (prompt, note): (Option<MakePrompt>, Option<Line<'static>>),
-    ) -> Option<Rect> {
+    ) -> Option<GlyphSpots> {
         let width = usize::from(inner.width);
         let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
         let note = note.map(|note| {
@@ -663,7 +682,7 @@ impl Picker {
         }
         let area = Rect::new(inner.x, inner.y, u16::try_from(room).unwrap_or(u16::MAX), 1);
         let field = (&prompt, &self.filter);
-        let (column, glyph) = mark.render_field(frame, area, field, theme.dialog, theme);
+        let (column, glyphs) = mark.render_field(frame, area, field, theme.dialog, theme);
         if self.filtering {
             frame.set_cursor_position(Position::new(
                 inner.x.saturating_add(column).min(inner.right() - 1),
@@ -671,7 +690,7 @@ impl Picker {
             ));
         }
         draw_separator(frame, inner, inner.y + 1, Colors::of(theme, false), theme);
-        glyph
+        glyphs
     }
 }
 
@@ -869,6 +888,12 @@ mod tests {
         press(&mut picker, Action::Down);
         assert_eq!(picker.cursor(), 2, "stops at the last");
         typed(&mut picker, "S");
+        assert_eq!(
+            picker.shown(0..3),
+            [] as [usize; 0],
+            "smart case: a capital counts"
+        );
+        press(&mut picker, Action::CaseIgnore);
         assert_eq!(picker.shown(0..3), [0, 1], "ignoring case");
         assert_eq!(picker.cursor(), 0);
         press(&mut picker, Action::Backspace);
@@ -960,7 +985,28 @@ mod tests {
     }
 
     #[test]
-    fn alt_r_switches_how_the_filter_matches() {
+    fn keywords_keep_their_case_where_it_counts_as_the_program_may_not() {
+        let mut picker =
+            picker(&["~/Src/noc", "~/src/web", "~/docs"], SearchMode::Plain).plain_keywords();
+        typed(&mut picker, "src");
+        assert_eq!(picker.shown(0..3), [0, 1, 2], "every row the program gave");
+        press(&mut picker, Action::DeleteToStart);
+        typed(&mut picker, "Src noc");
+        assert_eq!(
+            picker.shown(0..3),
+            [0],
+            "smart case: each keyword in its case"
+        );
+        assert_eq!(press(&mut picker, Action::CaseIgnore), Pick::Filtered);
+        assert_eq!(picker.shown(0..3), [0, 1, 2]);
+        press(&mut picker, Action::DeleteToStart);
+        typed(&mut picker, "web");
+        press(&mut picker, Action::CaseMatch);
+        assert_eq!(picker.shown(0..3), [1]);
+    }
+
+    #[test]
+    fn the_keys_after_ctrl_s_switch_how_the_filter_matches() {
         let mut picker = picker(&["main.rs", "Cargo.toml", "rs.md"], SearchMode::Plain);
         typed(&mut picker, "ms");
         assert_eq!(picker.len(), 0, "as it is");
@@ -982,5 +1028,13 @@ mod tests {
             (picker.input.way(), picker.error.as_deref()),
             (Way::Plain, None)
         );
+        assert_eq!(press(&mut picker, Action::SearchRegex), Pick::Filtered);
+        assert_eq!(picker.input.way(), Way::Regex, "a way by its key");
+        assert_eq!(
+            press(&mut picker, Action::SearchGlob),
+            Pick::Pending,
+            "one it has not"
+        );
+        assert_eq!(picker.input.way(), Way::Regex);
     }
 }

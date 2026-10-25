@@ -7,9 +7,10 @@
 //! small letter), score higher. Words separated by spaces must all match, in any order. As in
 //! fzf's extended search, `'word` matches the word as it is, `^word` at the start, `word$` at
 //! the end, and `!word` only texts without it; `\` before a space or one of these takes it as
-//! it is. Case counts only once the text has a capital letter, and letters with accents match
-//! those without.
+//! it is. Case counts as the field says, smart by default: only once the text has a capital
+//! letter; letters with accents match those without.
 
+use noc_pattern::Case;
 use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
 use nucleo_matcher::{Config, Matcher, Utf32Str};
 use unicode_segmentation::UnicodeSegmentation as _;
@@ -25,18 +26,17 @@ pub(crate) struct Fuzzy {
 
 impl Fuzzy {
     /// For names, such as files or hosts; for paths if `paths`, where after a `/` starts a word,
-    /// as fzf's `--scheme=path` has it. Case counts once `typed` has a capital letter, or always
-    /// if `match_case`.
-    pub(crate) fn new(typed: &str, paths: bool, match_case: bool) -> Self {
+    /// as fzf's `--scheme=path` has it. Case counts as `case` says.
+    pub(crate) fn new(typed: &str, paths: bool, case: Case) -> Self {
         let config = if paths {
             Config::DEFAULT.match_paths()
         } else {
             Config::DEFAULT
         };
-        let case = if match_case {
-            CaseMatching::Respect
-        } else {
-            CaseMatching::Smart
+        let case = match case {
+            Case::Smart => CaseMatching::Smart,
+            Case::Ignore => CaseMatching::Ignore,
+            Case::Match => CaseMatching::Respect,
         };
         Self {
             pattern: Pattern::parse(typed, case, Normalization::Smart),
@@ -48,13 +48,13 @@ impl Fuzzy {
     /// For names, case smart.
     #[cfg(test)]
     fn names(typed: &str) -> Self {
-        Self::new(typed, false, false)
+        Self::new(typed, false, Case::Smart)
     }
 
     /// For paths, case smart.
     #[cfg(test)]
     fn paths(typed: &str) -> Self {
-        Self::new(typed, true, false)
+        Self::new(typed, true, Case::Smart)
     }
 
     /// How well `text` matches, higher for better; `None` if it does not.

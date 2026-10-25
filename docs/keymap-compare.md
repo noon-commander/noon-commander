@@ -614,7 +614,8 @@ register; it falls back to `input`, then to `global`. As vim's incremental searc
 first match after the row the cursor was on, round, or before it, up, after ?, and with a count
 before / or ? the match of that number (2/); each edit searches again from there. As in mc, not
 vim, a character after which nothing matches is not typed, but one that leaves a regular expression
-unfinished is; while nothing matches, as after Ctrl+s, the cursor stays where the search goes from.
+unfinished is; while nothing matches, as after a switch of how it matches, the cursor stays where
+the search goes from.
 Enter and Ctrl+j end the search, on the
 match, or say that nothing matches, and Esc and Ctrl+c give it up, putting back the cursor and the
 rows on screen, as in vim, but Backspace and Delete with nothing typed do not, as on the command
@@ -625,9 +626,10 @@ as the count before / or ?, and the search goes on from there, and Ctrl+b and Ct
 and the end of the text, as on vim's command line. Up, Down, PgUp, PgDn, and the F-keys, Alt+F1 and
 Alt+F2 among them, end the search and do what they do in the panel, as in mc, but Shift+F7, which
 goes to the next match; Left, Right, Home, and End move in the text, and other keys that none of
-them binds do nothing. Its field switches how it matches, so `search_input` goes before it: Ctrl+s,
-or a click on the glyph at the right end of the status line, goes round as it is, as fzf does, and
-as a regular expression; the next search starts in `ui.search_mode` again. mc's Ctrl+s starts quick
+them binds do nothing. Its field searches, so `search_input` goes before it: Ctrl+s and a letter, or
+a click on a glyph at the right end of the status line, switch how it matches, as it is, as fzf
+does, or as a regular expression, and whether case counts, smart case at first; the next search
+starts in `ui.search_mode` and smart case again. mc's Ctrl+s starts quick
 search and goes to the next match, but of mc's keys noc keeps only the F-keys, and its next match is
 Ctrl+g, as on vim's command line. The last search stays for n, N, and Shift+F7 in the
 panel, which match as it did. yazi searches as the name is typed in an input box, and ranger as it
@@ -832,19 +834,32 @@ without a list.
 
 ## Fields that search (`search_input`, Insert and Normal mode)
 
-A field that switches how it matches what is typed, while it has the focus: quick search, the
-filter of a list while it takes text, in Insert mode, and a field of a dialog that searches, the
-text of the search of a tree, in either mode ([ADR 0045](adr/0045-ctrl-s-switches-the-field-typed-in.md)).
-Its keys go before those of where the field is, which keep theirs; keys never go to it alone, and
-the rows of a list, the check boxes and buttons of a dialog, and a field with one way, as the
-pattern of g + and g -, do not have it. Ctrl+s switches the way of that field alone, round
-through the ways it has, until it closes; the glyph at the end of the field says which, and a
-click on the glyph does the same, giving the field the focus first. vim binds no Ctrl+s; VS Code
-switches its regular expressions with Alt+r, and mc, Far, yazi, and ranger have no such key.
+A field that searches, while it has the focus: quick search, the filter of a list while it takes
+text, in Insert mode, and a field of a dialog that searches, the text of the search of a tree and
+the pattern of g + and g -, in either mode
+([ADR 0045](adr/0045-ctrl-s-switches-the-field-typed-in.md),
+[ADR 0046](adr/0046-case-and-the-keys-of-search-fields.md)). Its keys go before those of where the
+field is, which keep theirs; keys never go to it alone, and the rows of a list and the check boxes
+and buttons of a dialog do not have it. Ctrl+s leads them, as g leads keys of the panels: the key
+after it switches how that field alone matches, or whether case counts, until it closes; Ctrl+s
+alone waits for it, and the key hints show what can follow, of the ways the field has. The glyphs
+at the end of the field say which, the case before the way, and a click on one goes to the next,
+giving the field the focus first. Every field starts in smart case: case counts only once what is
+typed has a capital letter. vim binds no Ctrl+s; VS Code switches case and regular expressions with
+Alt+c and Alt+r, Far has a check box of case in its Find file, and mc, yazi, and ranger have no
+such keys.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
-| Match the next way this field has: as it is, as fzf does, as a regular expression, or as a pattern | `search_mode` | ⏳ | Ctrl+s | — | — | — | — |
+| Match the next way this field has: as it is, as fzf does, as a regular expression, or as a shell pattern | `search_mode` | ⏳ | Ctrl+s Ctrl+s<br>Ctrl+s s | — | — | — | — |
+| Match as it is | `search_plain` | ⏳ | Ctrl+s p | — | — | — | — |
+| Match as fzf does | `search_fzf` | ⏳ | Ctrl+s f | — | — | — | — |
+| Match as a regular expression | `search_regex` | ⏳ | Ctrl+s r | — | — | — | — |
+| Match as a shell pattern | `search_glob` | ⏳ | Ctrl+s g | — | — | — | — |
+| The next case: smart case, case ignored, case | `case_mode` | ⏳ | Ctrl+s c | — | — | — | — |
+| Smart case: case counts once a capital is typed | `case_smart` | ⏳ | Ctrl+s a | — | — | — | — |
+| Ignore case | `case_ignore` | ⏳ | Ctrl+s i | — | — | — | — |
+| Match case | `case_match` | ⏳ | Ctrl+s m | — | Alt+letter of the check box | — | — |
 
 ## Completion list (`completion`, Insert mode)
 
@@ -984,8 +999,8 @@ The filter takes text, in Insert mode, as every list opens and after `/` or `i`:
 text, and the windows fall back to `list`, then to `input`, whose keys edit the filter, then to
 `global`. Home and End go to the start and the end of the filter here, and to the first and the
 last item in Normal mode. Ctrl+r types the text of a register, as in a text field. The filter
-switches how it matches, so `search_input` goes before them: Ctrl+s, or a click on the glyph at the
-end of the filter, which brings the keys back to it from the rows. Esc goes back to the rows with
+searches, so `search_input` goes before them: Ctrl+s and a letter, or a click on a glyph at the end
+of the filter, which brings the keys back to it from the rows. Esc goes back to the rows with
 the filter kept, and Ctrl+c closes the window. mc, Far, and yazi have no modes in
 their lists: their keys are under Normal mode.
 
@@ -1212,19 +1227,18 @@ then to `global`; Tab and F8 still switch the hosts and remove the command.
 
 f / in a panel, or F9 → Command → Find file…: ripgrep searches the files under the panel's
 directory, local or on a host, for the text of the first field, among those the globs of the second
-let through, again as either changes, the check box switches, or the text switches how it matches;
-with no text it lists the files. It is a dialog: two fields, a check box, the rows, and the buttons
-Go to, View, Edit, and Cancel, as in the results of mc's Find File, which, as Far's Find file, asks
-for a mask and a text in a dialog first. Its other mode, Files and dirs, a radio button above the
-fields, finds files and directories by name with fd, and Go to goes into a directory; f f, or F9 →
-Command → Find files and dirs…, opens the dialog in it. Its focus on a check box, the rows, or a
-button, it falls back to `dialog`, whose motions move the cursor of the rows while they have the
-focus, and Tab leaves them. F3 and F4 work wherever the focus is. In the field of the text, Ctrl+s
-takes it as it is or as a regular expression (`search_input`), starting from the search mode
-(`ui.search_mode`, where fzf is regex), and the glyph at the end of the field says which; elsewhere
-Ctrl+s does nothing. Alt and the letters of the dialog act on its elements, as in every dialog:
-Alt+c, the letter of Match case, switches case. yazi's s and S find with fd and rg, and show the
-result as a directory of its own.
+let through, again as either changes, or the text switches how it matches or whether case counts;
+with no text it lists the files. It is a dialog: two fields, the rows, and the buttons Go to, View,
+Edit, and Cancel, as in the results of mc's Find File, which, as Far's Find file, asks for a mask
+and a text in a dialog first. Its other mode, Files and dirs, a radio button above the fields, finds
+files and directories by name with fd, and Go to goes into a directory; f f, or F9 → Command → Find
+files and dirs…, opens the dialog in it. Its focus on the rows or a button, it falls back to
+`dialog`, whose motions move the cursor of the rows while they have the focus, and Tab leaves them.
+F3 and F4 work wherever the focus is. In the field of the text, Ctrl+s and a letter take it as it is
+or as a regular expression and switch its case (`search_input`), starting from the search mode
+(`ui.search_mode`, where fzf is regex) and smart case, and the glyphs at the end of the field say
+which; elsewhere they do nothing. Alt and the letters of the dialog act on its elements, as in every
+dialog. yazi's s and S find with fd and rg, and show the result as a directory of its own.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -1284,7 +1298,7 @@ panel, its columns, and its tabs, and ranger in its pager too; neither has a dou
 | Close the menu bar | — | ⏳ | Click outside it | Click outside it | Click outside it | — | — |
 | Dialog: press a button, switch a check box, choose a radio button | — | ⏳ | Click | Click | Click | — | — |
 | Dialog: put the cursor in a text field | — | ⏳ | Click | Click | Click | — | — |
-| Switch how a field that searches matches, as Ctrl+s: quick search, a filter, a field of a dialog | — | ⏳ | Click on the glyph at the end of the field | — | — | — | — |
+| Switch how a field that searches matches, as Ctrl+s Ctrl+s, or its case, as Ctrl+s c: quick search, a filter, a field of a dialog | — | ⏳ | Click on the glyph of the way, or of the case, at the end of the field | — | — | — | — |
 | Dialog: choose a radio button and press the default button | — | ⏳ | Double click | — | — | — | — |
 | Menu or list in a window: move the cursor / open the row | — | ⏳ | Click / Double click | Click / Double click | Click / Click in a menu, Double click in a dialog's list | — | — |
 | Close a menu or the list of completions | — | ⏳ | Click outside it | Click outside a menu | Click outside it | — | — |

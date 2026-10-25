@@ -7,7 +7,20 @@
 //! The keys are those of a terminal that speaks the kitty keyboard protocol, where Ctrl+i
 //! arrives apart from Tab; elsewhere the keymap gives Tab what Ctrl+i does (`Keyboard`).
 
-use super::{Action, Context, Mode, Preset};
+use super::{Action, Bound, Context, Mode, Preset};
+
+/// The keys of a field that searches, in Normal and Insert mode alike.
+const SEARCH_INPUT: Bound = &[
+    (Action::SearchMode, &["ctrl-s ctrl-s", "ctrl-s s"]),
+    (Action::SearchPlain, &["ctrl-s p"]),
+    (Action::SearchFzf, &["ctrl-s f"]),
+    (Action::SearchRegex, &["ctrl-s r"]),
+    (Action::SearchGlob, &["ctrl-s g"]),
+    (Action::CaseMode, &["ctrl-s c"]),
+    (Action::CaseSmart, &["ctrl-s a"]),
+    (Action::CaseIgnore, &["ctrl-s i"]),
+    (Action::CaseMatch, &["ctrl-s m"]),
+];
 
 pub(super) const PRESET: Preset = &[
     // Everywhere but the output of commands: the other contexts fall back to it last. `"`
@@ -290,8 +303,9 @@ pub(super) const PRESET: Preset = &[
     // match, and Esc and Ctrl+c go back to where it started. Ctrl+g and Ctrl+t go to the next and the
     // previous match, and Ctrl+b and Ctrl+e to the start and the end, as on vim's command line.
     // The arrows and the page keys, and the F-keys, end it and do what they do in the panel,
-    // as in mc; Shift+F7 goes to the next match. Ctrl+s, which switches how it matches, is the
-    // key of every field that searches (`search_input`).
+    // as in mc; Shift+F7 goes to the next match. Ctrl+s and the key after it, which switch how
+    // it matches and whether case counts, are the keys of every field that searches
+    // (`search_input`).
     (
         Mode::Insert,
         Context::QuickSearch,
@@ -417,20 +431,14 @@ pub(super) const PRESET: Preset = &[
         Context::PathInput,
         &[(Action::Complete, &["tab", "ctrl-i"])],
     ),
-    // A field that switches how it searches, while it has the focus: quick search, the filter
-    // of a list while it takes the keys, and such a field of a dialog, as the text of the search
-    // of a tree; its keys come before those of where it is (ADR 0045). Ctrl+s switches the way
-    // it matches to the next, round: vim binds no Ctrl+s.
-    (
-        Mode::Normal,
-        Context::SearchInput,
-        &[(Action::SearchMode, &["ctrl-s"])],
-    ),
-    (
-        Mode::Insert,
-        Context::SearchInput,
-        &[(Action::SearchMode, &["ctrl-s"])],
-    ),
+    // A field that searches, while it has the focus: quick search, the filter of a list while
+    // it takes the keys, and such a field of a dialog, as the text of the search of a tree; its
+    // keys come before those of where it is (ADR 0045). Ctrl+s starts them, and the key after it
+    // says what (ADR 0046): Ctrl+s again or `s` the next way to match, round, or a way by its
+    // letter, of those the field has; `c` the next of smart case, case ignored, and case, or one
+    // by its letter. vim binds no Ctrl+s.
+    (Mode::Normal, Context::SearchInput, SEARCH_INPUT),
+    (Mode::Insert, Context::SearchInput, SEARCH_INPUT),
     // The list of completions under a path field or over the command line, as vim's `wildmenu`:
     // Tab, Ctrl+n, and Down put the next match in the field, Shift+Tab, Ctrl+p, and Up the one
     // before, round through what was typed; Left and Right complete in the directory above and
@@ -487,8 +495,8 @@ pub(super) const PRESET: Preset = &[
     // the zoxide window, the workspaces, the command history, and the list of the key hints
     // fall back to it. They open with the filter taking the keys, in Insert mode, where Esc goes
     // back to the list and `/` or `i` types in the filter again, as `i` starts Insert mode in a
-    // text field. While the filter takes the keys, Ctrl+s switches how it matches
-    // (`search_input`).
+    // text field. While the filter takes the keys, Ctrl+s and the key after it switch how it
+    // matches (`search_input`).
     (
         Mode::Normal,
         Context::List,
@@ -653,9 +661,8 @@ pub(super) const PRESET: Preset = &[
     ),
     // The dialog of the search of a whole tree, on top of the dialogs': F3 and F4 view and edit
     // the file of the row at the line, as in the results of mc's Find File, wherever the focus
-    // is; Alt+c is the letter of the check box of case. On the rows, Ctrl+u and Ctrl+d move half
-    // a page, as in the lists. In the field of the text, Ctrl+s switches how it matches
-    // (`search_input`).
+    // is. On the rows, Ctrl+u and Ctrl+d move half a page, as in the lists. In the field of the
+    // text, Ctrl+s and the key after it switch how it matches (`search_input`).
     (
         Mode::Normal,
         Context::Find,

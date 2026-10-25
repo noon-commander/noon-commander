@@ -1,4 +1,5 @@
 use super::*;
+use crate::tui::search::Kind;
 
 /// A key press from its `crokey` name, or a single character such as `é`.
 fn key(text: &str) -> KeyEvent {
@@ -553,17 +554,17 @@ fn dialogs_take_alt_and_a_letter_as_their_hotkeys_in_every_mode() {
     assert_eq!(typed(help, &["j"]), actions(&[Action::Down]));
 }
 
-/// `place` with a field that switches how it searches in the focus.
-fn searching((mode, context): (Mode, Context)) -> Place {
+/// `place` with a field of `kind` that searches in the focus.
+fn searching((mode, context): (Mode, Context), kind: Kind) -> Place {
     Place {
         mode,
         context,
-        search: true,
+        search: Some(kind),
     }
 }
 
 #[test]
-fn ctrl_s_switches_how_the_field_with_the_focus_matches_and_nothing_elsewhere() {
+fn the_keys_after_ctrl_s_switch_the_field_with_the_focus_and_nothing_elsewhere() {
     let fields = [
         (Mode::Insert, Context::QuickSearch),
         (Mode::Insert, Context::LocationMenu),
@@ -573,26 +574,64 @@ fn ctrl_s_switches_how_the_field_with_the_focus_matches_and_nothing_elsewhere() 
         (Mode::Insert, Context::FindInput),
         (Mode::Normal, Context::FindInput),
     ];
+    let keys = [
+        (&["ctrl-s", "ctrl-s"][..], Action::SearchMode),
+        (&["ctrl-s", "s"], Action::SearchMode),
+        (&["ctrl-s", "p"], Action::SearchPlain),
+        (&["ctrl-s", "f"], Action::SearchFzf),
+        (&["ctrl-s", "r"], Action::SearchRegex),
+        (&["ctrl-s", "c"], Action::CaseMode),
+        (&["ctrl-s", "a"], Action::CaseSmart),
+        (&["ctrl-s", "i"], Action::CaseIgnore),
+        (&["ctrl-s", "m"], Action::CaseMatch),
+    ];
     for place in fields {
+        let field = searching(place, Kind::QUICK_SEARCH);
+        for (keys, action) in keys {
+            assert_eq!(typed(field, keys), actions(&[action]), "{place:?} {keys:?}");
+            let switched = actions(&[action]);
+            assert!(
+                !typed(place, keys).ends_with(&switched),
+                "{place:?}: no such field"
+            );
+        }
         assert_eq!(
-            typed(searching(place), &["ctrl-s"]),
-            actions(&[Action::SearchMode]),
-            "{place:?}"
+            typed(field, &["ctrl-s"]),
+            [],
+            "{place:?}: waits for the next key"
         );
-        assert_eq!(typed(place, &["ctrl-s"]), [], "{place:?}: no such field");
     }
+    // A way the field has not does nothing, rather than type, and its key shows in no hints.
+    let filter = searching(TYPING, Kind::FILTER);
+    assert_eq!(
+        typed(filter, &["ctrl-s", "g"]),
+        actions(&[Action::SearchGlob])
+    );
+    let tree = searching((Mode::Insert, Context::FindInput), Kind::TREE);
+    assert_eq!(
+        typed(tree, &["ctrl-s", "r"]),
+        actions(&[Action::SearchRegex])
+    );
+    let keymap = Keymap::default();
+    let hints: Vec<Option<Action>> = keymap
+        .hints(tree, &[KeyCombination::from(key("ctrl-s"))])
+        .into_iter()
+        .map(|hint| hint.action)
+        .collect();
+    assert!(hints.contains(&Some(Action::SearchRegex)), "{hints:?}");
+    assert!(!hints.contains(&Some(Action::SearchFzf)), "{hints:?}");
+    assert!(!hints.contains(&Some(Action::SearchGlob)), "{hints:?}");
     // The rows of a list, and the rest of the search of a tree, have no field in the focus.
     for place in [
         (Mode::Normal, Context::LocationMenu),
         (Mode::Normal, Context::Jump),
         (Mode::Normal, Context::Find),
     ] {
-        assert_eq!(typed(place, &["ctrl-s"]), [], "{place:?}");
+        assert_eq!(typed(place, &["ctrl-s", "ctrl-s"]), [], "{place:?}");
     }
     // The layer goes before the keys of where the field is, which keep theirs.
-    let find = searching((Mode::Insert, Context::FindInput));
-    assert_eq!(typed(find, &["f3"]), actions(&[Action::View]));
-    assert_eq!(typed(find, &["x"]), inserts("x"), "characters are text");
+    assert_eq!(typed(tree, &["f3"]), actions(&[Action::View]));
+    assert_eq!(typed(tree, &["x"]), inserts("x"), "characters are text");
 }
 
 #[test]

@@ -59,7 +59,7 @@ use super::places::{Places, volume_of};
 use super::progress::{Counts, JobButton, JobView};
 use super::pulldown::{self, Command, PullDown, PullDownEvent, Status};
 use super::reading::{ReadButton, Reading};
-use super::search::{self, Case, Input, Way};
+use super::search::{self, Input, Switch, Way};
 use super::spinner::{self, Spin, Wait};
 use super::sums::{Mark, SumRow, SumsButton, SumsEvent, SumsWindow, Verdict};
 use super::tab_menu::{TabMenu, TabMenuEvent};
@@ -727,21 +727,20 @@ struct CopyChoices {
 #[derive(Debug, Clone)]
 struct PatternOptions {
     pattern: String,
-    /// How the pattern matches.
-    way: Way,
+    /// How the pattern matches, and whether case counts.
+    input: Input,
     /// Leaves directories alone.
     files_only: bool,
-    case_sensitive: bool,
 }
 
 impl Default for PatternOptions {
-    /// As in mc: case counts, and directories match too.
+    /// As in mc, a shell pattern that directories match too; with smart case, as every field
+    /// that searches starts.
     fn default() -> Self {
         Self {
             pattern: "*".to_owned(),
-            way: Way::Glob,
+            input: Input::new(search::Kind::MARK, Way::Glob),
             files_only: false,
-            case_sensitive: true,
         }
     }
 }
@@ -762,7 +761,7 @@ pub(crate) struct App {
     /// What the last quick search found, in any panel, for `n` and `N`, as vim keeps the last
     /// pattern; whether it went up the rows, as `?` does, which `n` then does too; and how it
     /// matched, as `n` matches too.
-    last_search: Option<(String, bool, Way)>,
+    last_search: Option<(String, bool, Input)>,
     hosts: HashMap<String, Host>,
     connections: u64,
     /// The settings, with `~` expanded; `ui.show_hidden` follows `o h`.
@@ -1377,10 +1376,11 @@ impl App {
         if self.panel(self.active).renaming() {
             return Vec::new();
         }
-        // A click on the glyph of quick search switches how it matches, as Ctrl+s does.
-        if self.panel(self.active).search_glyph_at(at) {
+        // A click on a glyph of quick search switches how it matches, or whether case counts,
+        // as the keys after Ctrl+s do.
+        if let Some(action) = self.panel(self.active).search_action_at(at) {
             if press == Press::Click {
-                return self.handle(Resolved::Action(Action::SearchMode));
+                return self.handle(Resolved::Action(action));
             }
             return Vec::new();
         }
@@ -2055,8 +2055,8 @@ impl App {
         (self.mode(), self.context())
     }
 
-    /// Where the next key goes, for the keymap: the mode, the context, and whether the field
-    /// that has the keys switches how it searches (ADR 0045).
+    /// Where the next key goes, for the keymap: the mode, the context, and the kind of the field
+    /// that has the keys if it searches (ADR 0045, ADR 0046).
     pub(crate) fn key_place(&self) -> keymap::Place {
         let (mode, context) = self.place();
         keymap::Place {
@@ -2066,29 +2066,22 @@ impl App {
         }
     }
 
-    /// Whether the field that has the keys switches how it searches: quick search, the filter
-    /// of a list while it takes text, or such a field of a dialog.
-    fn search_focused(&self) -> bool {
+    /// The kind of the field that has the keys, if it searches: quick search, the filter of a
+    /// list while it takes text, or such a field of a dialog.
+    fn search_focused(&self) -> Option<search::Kind> {
         match self.context() {
-            Context::QuickSearch => self.panel(self.active).search_switches(),
-            Context::KeyHints => self
-                .key_hints
-                .as_ref()
-                .is_some_and(KeyHintsWindow::switches),
-            Context::LocationMenu => self.menu.as_ref().is_some_and(LocationMenu::switches),
-            Context::TabMenu => self.tab_menu.as_ref().is_some_and(TabMenu::switches),
-            Context::Jump => self.jump.as_ref().is_some_and(JumpMenu::switches),
-            Context::Workspaces => {
-                (self.workspaces_window.as_ref()).is_some_and(WorkspacesWindow::switches)
-            }
-            Context::CommandHistory => {
-                (self.history_window.as_ref()).is_some_and(HistoryWindow::switches)
-            }
+            Context::QuickSearch => self.panel(self.active).search_kind(),
+            Context::KeyHints => self.key_hints.as_ref()?.search(),
+            Context::LocationMenu => self.menu.as_ref()?.search(),
+            Context::TabMenu => self.tab_menu.as_ref()?.search(),
+            Context::Jump => self.jump.as_ref()?.search(),
+            Context::Workspaces => self.workspaces_window.as_ref()?.search(),
+            Context::CommandHistory => self.history_window.as_ref()?.search(),
             Context::DialogInput | Context::PathInput => {
-                (self.dialogs.front()).is_some_and(|open| open.dialog.search_focused())
+                self.dialogs.front()?.dialog.search_focused()
             }
-            Context::FindInput => self.find.as_ref().is_some_and(FindWindow::search_focused),
-            _ => false,
+            Context::FindInput => self.find.as_ref()?.search_focused(),
+            _ => None,
         }
     }
 
@@ -3017,6 +3010,13 @@ impl App {
     fn search_key(&mut self, input: Resolved) -> Option<Action> {
         let side = self.active;
         let searching = self.panel(side).searching();
+        if searching
+            && let Resolved::Action(action) = input
+            && let Some(switch) = Switch::of(action)
+        {
+            self.panel_mut(side).switch_search(switch);
+            return None;
+        }
         match input {
             Resolved::Insert(c) => {
                 if searching {
@@ -3040,10 +3040,6 @@ impl App {
                 | Action::DeleteToEnd
                 | Action::DeleteWord => {
                     self.panel_mut(side).search_edit(action);
-                    None
-                }
-                Action::SearchMode => {
-                    self.panel_mut(side).switch_search_mode();
                     None
                 }
                 Action::QuickSearch => {
@@ -3101,8 +3097,8 @@ impl App {
         let panel = self.panel_mut(self.active);
         let typed = panel.search_text().is_some_and(|text| !text.is_empty());
         match last {
-            Some((last, _, way)) if panel.searching() && !typed => {
-                panel.search_resume(&last, way);
+            Some((last, _, input)) if panel.searching() && !typed => {
+                panel.search_resume(&last, input);
             }
             _ if panel.searching() => panel.search_step(true),
             _ => panel.search_down(count, mode),
@@ -3113,7 +3109,7 @@ impl App {
     /// what the last quick search found, `next` the way it went; where it was goes to the jump
     /// list.
     fn search_again(&mut self, next: bool) {
-        let Some((last, back, way)) = self.last_search.clone() else {
+        let Some((last, back, input)) = self.last_search.clone() else {
             self.message = Some(fl!("message-search-none"));
             return;
         };
@@ -3121,7 +3117,7 @@ impl App {
         let times = self.extra.times();
         let round = self
             .panel_mut(self.active)
-            .search_again((&last, way), forward, times);
+            .search_again((&last, input), forward, times);
         self.message = match round {
             None => Some(fl!("message-search-not-found", text = last)),
             Some(true) if forward => Some(fl!("message-search-bottom")),
@@ -3144,7 +3140,7 @@ impl App {
     /// `N`, with the way it went, found or not, as vim keeps its pattern; how it ended.
     fn end_search(&mut self, side: Side) -> Option<SearchEnd> {
         let end = self.panel_mut(side).end_search()?;
-        self.last_search = Some((end.text.clone(), end.back, end.way));
+        self.last_search = Some((end.text.clone(), end.back, end.input));
         Some(end)
     }
 
@@ -6316,13 +6312,10 @@ impl App {
             fl!("pattern-unselect")
         };
         let options = &self.pattern_options;
-        let checks = [
-            (fl!("pattern-files-only"), options.files_only),
-            (fl!("pattern-case-sensitive"), options.case_sensitive),
-        ];
+        let checks = [(fl!("pattern-files-only"), options.files_only)];
         let dialog = Dialog::form(&title, &fl!("pattern-text"), &options.pattern, &checks)
             .with_width(PATTERN_DIALOG_WIDTH)
-            .with_search(0, Input::new(search::Kind::MARK, options.way));
+            .with_search(0, options.input);
         let panel = self.shown(self.active);
         self.dialogs.push_back(Open {
             dialog,
@@ -6338,17 +6331,10 @@ impl App {
         }
         let options = PatternOptions {
             pattern: dialog.text().to_owned(),
-            way: dialog.way(0).unwrap_or(self.pattern_options.way),
+            input: dialog.search(0).unwrap_or(self.pattern_options.input),
             files_only: dialog.checked(0),
-            case_sensitive: dialog.checked(1),
         };
-        let case = if options.case_sensitive {
-            Case::Counts
-        } else {
-            Case::Own
-        };
-        let mut matcher =
-            Input::new(search::Kind::MARK, options.way).matcher(&options.pattern, case);
+        let mut matcher = options.input.matcher(&options.pattern);
         if let Some(panel) = self.panel_of_mut(panel) {
             panel.mark_where(mark, |entry| {
                 !(options.files_only && entry.is_dir_like())
@@ -7922,6 +7908,14 @@ fn works_offline(action: Action) -> bool {
             | Action::NextMatch
             | Action::PrevMatch
             | Action::SearchMode
+            | Action::SearchPlain
+            | Action::SearchFzf
+            | Action::SearchRegex
+            | Action::SearchGlob
+            | Action::CaseMode
+            | Action::CaseSmart
+            | Action::CaseIgnore
+            | Action::CaseMatch
             | Action::Abort
             | Action::SortByName
             | Action::SortByExtension
@@ -8286,7 +8280,7 @@ mod tests {
     /// end.
     fn searching(app: &mut App, text: &str, glyph: &str) -> bool {
         let screen = screen(app);
-        let end = format!(" {glyph}║");
+        let end = format!(" {glyph} ║");
         screen
             .lines()
             .any(|line| line.contains(&format!("║Search: {text}")) && line.contains(&end))
@@ -9077,7 +9071,7 @@ mod tests {
         assert!(
             text.contains("Find in /srv")
                 && text.contains("Text:")
-                && text.contains(&format!(" {} ║", app.theme.glyphs.search_modes.regex))
+                && text.contains(&format!(" {}  ║", app.theme.glyphs.search_modes.regex))
                 && text.contains("1 line"),
             "{text}"
         );
@@ -9133,8 +9127,8 @@ mod tests {
             ]),
         );
         app.find_ended(generation, Ok(FindSummary::default()));
-        // Past the two fields and the check box.
-        keys(app, &["tab", "tab", "tab", "down"]);
+        // Past the two fields.
+        keys(app, &["tab", "tab", "down"]);
         assert_eq!(app.context(), Context::Find);
     }
 
@@ -9207,8 +9201,8 @@ mod tests {
         };
         app.found(generation, vec![found]);
         app.find_ended(generation, Ok(FindSummary::default()));
-        // Past the fields and the check boxes, to the rows.
-        keys(&mut app, &["tab", "tab", "tab", "tab", "tab"]);
+        // Past the choice and the fields, to the rows.
+        keys(&mut app, &["tab", "tab", "tab", "tab"]);
         let effects = keys(&mut app, &["enter"]);
         assert_eq!(app.context(), Context::Panel);
         let [Effect::List { request, .. }] = &effects[..] else {
@@ -9386,10 +9380,14 @@ mod tests {
         let (y, line) = (screen.lines().enumerate())
             .find(|(_, line)| line.contains(text))
             .unwrap_or_else(|| panic!("no {text:?} in {screen}"));
-        let at = [format!(" {glyph}║"), format!(" {glyph} ║")]
-            .iter()
-            .find_map(|end| line.find(end.as_str()))
-            .unwrap_or_else(|| panic!("no {glyph:?} at the end of a field in {line}"));
+        let start = line.find(text).unwrap_or(0) + text.len();
+        let end = line[start..]
+            .find('║')
+            .map_or(line.len(), |end| start + end);
+        let at = start
+            + line[start..end]
+                .rfind(&format!(" {glyph} "))
+                .unwrap_or_else(|| panic!("no {glyph:?} at the end of the field in {line}"));
         // The test backend quotes each line, and a blank comes before the glyph.
         let x = line[..at].chars().count();
         Position::new(u16::try_from(x).unwrap(), u16::try_from(y).unwrap())
@@ -9399,14 +9397,33 @@ mod tests {
     fn ctrl_s_and_a_click_on_its_glyph_switch_how_the_field_with_the_focus_matches() {
         let mut app = loaded();
         let glyphs = app.theme.glyphs.search_modes;
-        // Quick search, whose glyph ends the status line.
+        let cases = app.theme.glyphs.case_modes;
+        // Quick search, whose glyphs end the status line.
         app.config.ui.search_mode = SearchMode::Plain;
         app.handle(action(Action::QuickSearch));
         app.handle(Resolved::Insert('r'));
-        assert!(app.key_place().search, "Ctrl+s goes before its keys");
+        assert_eq!(
+            app.key_place().search,
+            Some(search::Kind::QUICK_SEARCH),
+            "the keys after Ctrl+s go before its own"
+        );
         let at = glyph_cell(&screen_of(&mut app, 12), "║Search: r", glyphs.plain);
         assert!(press(&mut app, Press::Click, at.x, at.y).is_empty());
         assert!(searching(&mut app, "r", glyphs.fzf), "the search goes on");
+        assert!(
+            screen(&mut app).contains(&format!(" {} {} ║", cases.smart, glyphs.fzf)),
+            "the case before the way"
+        );
+        let at = glyph_cell(&screen_of(&mut app, 12), "║Search: r", cases.smart);
+        press(&mut app, Press::Click, at.x, at.y);
+        assert!(screen(&mut app).contains(&format!(" {} {} ║", cases.ignore, glyphs.fzf)));
+        keys(&mut app, &["ctrl-s", "m"]);
+        assert!(screen(&mut app).contains(&format!(" {} {} ║", cases.exact, glyphs.fzf)));
+        keys(&mut app, &["ctrl-s", "r"]);
+        assert!(
+            searching(&mut app, "r", glyphs.regex),
+            "a way by its letter"
+        );
         keys(&mut app, &["esc"]);
         // A list, whose filter has the focus while it takes the keys.
         app.config.ui.search_mode = SearchMode::Fzf;
@@ -9415,8 +9432,8 @@ mod tests {
         let screen = screen_of(&mut app, 16);
         let at = glyph_cell(&screen, &prompt("Filter", "x"), glyph(&app));
         keys(&mut app, &["esc"]);
-        assert!(!app.key_place().search, "the rows have the focus");
-        keys(&mut app, &["ctrl-s"]);
+        assert_eq!(app.key_place().search, None, "the rows have the focus");
+        keys(&mut app, &["ctrl-s", "ctrl-s"]);
         glyph_cell(&screen_of(&mut app, 16), &prompt("Filter", "x"), glyphs.fzf);
         press(&mut app, Press::Click, at.x, at.y);
         assert_eq!(
@@ -9429,7 +9446,7 @@ mod tests {
             &prompt("Filter", "x"),
             glyphs.regex,
         );
-        keys(&mut app, &["ctrl-s"]);
+        keys(&mut app, &["ctrl-s", "ctrl-s"]);
         glyph_cell(
             &screen_of(&mut app, 16),
             &prompt("Filter", "x"),
@@ -9869,28 +9886,28 @@ mod tests {
         let text = screen(&mut app);
         assert!(text.contains("Select"));
         let glob = app.theme.glyphs.search_modes.glob;
+        let smart = app.theme.glyphs.case_modes.smart;
         assert!(
-            text.contains("Pattern:") && text.contains(&format!(" {glob} ║")),
-            "the glyph of shell patterns ends the field, as every field that searches shows its way: {text}"
+            text.contains("Pattern:") && text.contains(&format!(" {smart} {glob}  ║")),
+            "smart case, and shell patterns, end the field, as in every field that searches: {text}"
         );
-        assert!(!app.key_place().search, "one way: no Ctrl+s");
+        assert_eq!(app.key_place().search, Some(search::Kind::MARK));
         retype(&mut app, "*.md");
+        app.handle(action(Action::CaseMatch));
         app.handle(action(Action::Confirm));
         assert_eq!(app.context(), Context::Panel);
         let text = screen(&mut app);
         assert!(text.contains(" 10 B in 2 files "), "case counts: {text}");
 
-        // The dialog opens with the last pattern; Case sensitive is the second box.
+        // The dialog opens with the last pattern, and its case.
         app.handle(action(Action::Select));
-        for step in [
-            Action::NextField,
-            Action::Down,
-            Action::Toggle,
-            Action::Confirm,
-        ] {
-            app.handle(action(step));
-        }
-        assert!(screen(&mut app).contains(" 30 B in 3 files "));
+        assert_eq!(app.pattern_options.input.case(), search::Case::Match);
+        app.handle(action(Action::CaseSmart));
+        app.handle(action(Action::Confirm));
+        assert!(
+            screen(&mut app).contains(" 30 B in 3 files "),
+            "smart case: no capital"
+        );
 
         // `g -` with Files only leaves the directory marked.
         app.handle(action(Action::Unselect));
@@ -14634,7 +14651,7 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_s_switches_how_one_quick_search_matches_and_n_matches_as_it_did() {
+    fn ctrl_s_ctrl_s_switches_how_one_quick_search_matches_and_n_matches_as_it_did() {
         let mut app = loaded();
         app.config.ui.search_mode = SearchMode::Plain;
         let start = app
@@ -14642,14 +14659,14 @@ mod tests {
             .name_under_cursor()
             .map(<[u8]>::to_vec);
         app.handle(action(Action::QuickSearch));
-        keys(&mut app, &["ctrl-s"]);
+        keys(&mut app, &["ctrl-s", "ctrl-s"]);
         type_text(&mut app, "^r");
         assert_eq!(
             app.panel(app.active).name_under_cursor(),
             Some(&b"right"[..]),
             "fzf"
         );
-        keys(&mut app, &["ctrl-s"]);
+        keys(&mut app, &["ctrl-s", "ctrl-s"]);
         let glyphs = app.theme.glyphs.search_modes;
         assert!(searching(&mut app, "^r", glyphs.regex));
         assert_eq!(
@@ -14657,7 +14674,7 @@ mod tests {
             Some(&b"right"[..]),
             "a regular expression"
         );
-        keys(&mut app, &["ctrl-s"]);
+        keys(&mut app, &["ctrl-s", "ctrl-s"]);
         assert_eq!(
             app.panel(app.active)
                 .name_under_cursor()
@@ -14666,7 +14683,10 @@ mod tests {
             "as it is: no name holds it"
         );
         assert!(searching(&mut app, "^r", glyphs.plain), "the text stays");
-        keys(&mut app, &["ctrl-s", "ctrl-s", "enter"]);
+        keys(
+            &mut app,
+            &["ctrl-s", "s", "ctrl-s", "s", "ctrl-s", "m", "enter"],
+        );
         app.handle(action(Action::QuickSearch));
         assert!(
             searching(&mut app, "", glyphs.plain),
@@ -14680,6 +14700,8 @@ mod tests {
             Some(&b"right"[..]),
             "a regular expression, as the last search"
         );
+        let last = app.last_search.as_ref().map(|(_, _, input)| input.case());
+        assert_eq!(last, Some(search::Case::Match), "and its case");
     }
 
     #[test]

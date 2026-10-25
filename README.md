@@ -39,7 +39,8 @@ The same panels in the theme `mc-classic`, with the blue of Midnight Commander:
   ranks, and the directories you work in from Noon Commander count there too.
 - **Fuzzy search, as in fzf.** Quick search and the filters of every list (the location menu,
   the tab menu, the zoxide window, the workspaces, the command history) find `config.rs` from
-  `cfg`, best match first. Ctrl+s switches to the plain text or a regular expression.
+  `cfg`, best match first, with smart case. Ctrl+s and a letter switch to the plain text or a
+  regular expression, or tell case apart or not.
 - **Search with ripgrep and fd.** `f /` finds text in the files below, as you type, on a server
   too, where [ripgrep](https://github.com/BurntSushi/ripgrep) runs; F3 and F4 open a file at the
   line. `f f` finds names with [fd](https://github.com/sharkdp/fd).

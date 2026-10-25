@@ -26,7 +26,7 @@ use super::mouse::Pointer;
 use super::panel::HostState;
 use super::picker::{Body, MenuLine, Pick, Picker, ShownRow, Shows};
 use super::places::{KnownHost, Places, volume_name, volume_of};
-use super::search::Kind;
+use super::search::{Input, Kind};
 use super::spinner::{Spin, Wait};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -135,16 +135,16 @@ impl LocationMenu {
                 expanded: HashSet::new(),
             },
             loading: Loading::new(generation),
-            picker: Picker::new(SearchMode::Plain),
+            picker: Picker::new(Input::new(Kind::FILTER, SearchMode::Plain)),
         };
         // The home directory, before the listing.
         menu.picker.set_rows_showing(menu.texts());
         menu
     }
 
-    /// The same menu, whose filter matches in `mode` (`ui.search_mode`).
-    pub(crate) fn search_mode(mut self, mode: SearchMode) -> Self {
-        self.picker.set_mode(mode);
+    /// The same menu, whose filter matches as `input` says, as it was last.
+    pub(crate) fn with_input(mut self, input: Input) -> Self {
+        self.picker.set_input(input);
         self
     }
 
@@ -287,6 +287,11 @@ impl LocationMenu {
     /// The kind of its filter while that takes the keys.
     pub(crate) fn search(&self) -> Option<Kind> {
         self.picker.search()
+    }
+
+    /// How its filter matches now, and whether case counts.
+    pub(crate) fn input(&self) -> Input {
+        self.picker.input()
     }
 
     /// Takes a key: the picker's, and F4, which edits the settings of a host, F8, which
@@ -876,7 +881,7 @@ mod tests {
     #[test]
     fn a_fuzzy_filter_ranks_the_places_best_first_out_of_their_groups() {
         let mut menu = LocationMenu::new(Side::Left, home(), PathBuf::from("/Users/me"), 1)
-            .search_mode(SearchMode::Fzf);
+            .with_input(Input::new(Kind::FILTER, SearchMode::Fzf));
         menu.listed(1, Ok(places()));
         typed(&mut menu, "pxy");
         assert_eq!(

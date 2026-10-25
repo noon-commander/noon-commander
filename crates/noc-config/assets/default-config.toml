@@ -61,15 +61,17 @@ borders = "double"
 icons = true
 # Show files whose names begin with a dot. o h switches it while Noon Commander runs.
 show_hidden = true
-# How quick search and the filters of the lists (the location menu, the tab menu, the zoxide
-# window, the workspaces, the command history, the list of the key hints) match what is typed.
-# "fzf": its characters in order, not necessarily together, best matches first; words
-# separated by spaces must all match, and fzf's ' ^ $ ! work. "plain": the text anywhere; the
-# zoxide window gives it to zoxide as keywords, as z does. "regex": a regular expression. Case
-# counts only once what is typed has a capital letter, until Ctrl+s c switches it. Each search
-# and each window starts with it; Ctrl+s Ctrl+s switches it there. The search of a tree (f /, f f)
-# starts with it too, taking "fzf" as "regex", and switches between "plain" and "regex".
-search_mode = "fzf"
+# How each field that searches matches what is typed the first time it opens while Noon
+# Commander runs: quick search, the filters of the lists (the location menu, the tab menu, the
+# zoxide window, the workspaces, the command history, the list of the key hints), the text of the
+# search of a tree (f /, f f), and the pattern of g + and g -. "fzf": its characters in order, not
+# necessarily together, best matches first; words separated by spaces must all match, and fzf's '
+# ^ $ ! work. "plain": the text anywhere; the zoxide window gives it to zoxide as keywords, as z
+# does. "regex": a regular expression. The search of a tree takes "fzf" as "regex", and g + as a
+# shell pattern. Ctrl+s Ctrl+s switches the way in a field, and Ctrl+s c whether case counts,
+# smart at first: only once what is typed has a capital letter. Each field keeps the way and the
+# case it had last until Noon Commander quits.
+default_search_mode = "fzf"
 # The menu bar of F9 (Left, File, Command, Options, Right): "on-demand" shows it only while a
 # menu is open, over the panels, as Far Manager does; "always" keeps it above the panels, as
 # Midnight Commander does.

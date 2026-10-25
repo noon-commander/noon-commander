@@ -628,8 +628,8 @@ Alt+F2 among them, end the search and do what they do in the panel, as in mc, bu
 goes to the next match; Left, Right, Home, and End move in the text, and other keys that none of
 them binds do nothing. Its field searches, so `search_input` goes before it: Ctrl+s and a letter, or
 a click on a glyph at the right end of the status line, switch how it matches, as it is, as fzf
-does, or as a regular expression, and whether case counts, smart case at first; the next search
-starts in `ui.search_mode` and smart case again. mc's Ctrl+s starts quick
+does, or as a regular expression, and whether case counts; the next search starts as the last one
+was, at first in `ui.default_search_mode` and smart case. mc's Ctrl+s starts quick
 search and goes to the next match, but of mc's keys noc keeps only the F-keys, and its next match is
 Ctrl+g, as on vim's command line. The last search stays for n, N, and Shift+F7 in the
 panel, which match as it did. yazi searches as the name is typed in an input box, and ranger as it
@@ -835,17 +835,19 @@ without a list.
 ## Fields that search (`search_input`, Insert and Normal mode)
 
 A field that searches, while it has the focus: quick search, the filter of a list while it takes
-text, in Insert mode, and a field of a dialog that searches, the text of the search of a tree and
-the pattern of g + and g -, in either mode
+text, in Insert mode, and a field of a dialog that searches, the text and the globs of the search of
+a tree and the pattern of g + and g -, in either mode
 ([ADR 0045](adr/0045-ctrl-s-switches-the-field-typed-in.md),
-[ADR 0046](adr/0046-case-and-the-keys-of-search-fields.md)). Its keys go before those of where the
-field is, which keep theirs; keys never go to it alone, and the rows of a list and the check boxes
-and buttons of a dialog do not have it. Ctrl+s leads them, as g leads keys of the panels: the key
-after it switches how that field alone matches, or whether case counts, until it closes; Ctrl+s
-alone waits for it, and the key hints show what can follow, of the ways the field has. The glyphs
-at the end of the field say which, the case before the way, and a click on one goes to the next,
-giving the field the focus first. Every field starts in smart case: case counts only once what is
-typed has a capital letter. vim binds no Ctrl+s; VS Code switches case and regular expressions with
+[ADR 0046](adr/0046-case-and-the-keys-of-search-fields.md),
+[ADR 0047](adr/0047-search-fields-remember-their-way-and-case.md)). Its keys go before those of
+where the field is, which keep theirs; keys never go to it alone, and the rows of a list and the
+check boxes and buttons of a dialog do not have it. Ctrl+s leads them, as g leads keys of the
+panels: the key after it switches how that field alone matches, or whether case counts, which the
+field keeps the next time it opens, until noc quits; Ctrl+s alone waits for it, and the key hints
+show what can follow, of the ways and cases the field has. The glyphs at the end of the field say
+which, the case before the way, and a click on one goes to the next, giving the field the focus
+first. Every field starts in smart case: case counts only once what is typed has a capital
+letter. vim binds no Ctrl+s; VS Code switches case and regular expressions with
 Alt+c and Alt+r, Far has a check box of case in its Find file, and mc, yazi, and ranger have no
 such keys.
 
@@ -1227,18 +1229,20 @@ then to `global`; Tab and F8 still switch the hosts and remove the command.
 
 f / in a panel, or F9 → Command → Find file…: ripgrep searches the files under the panel's
 directory, local or on a host, for the text of the first field, among those the globs of the second
-let through, again as either changes, or the text switches how it matches or whether case counts;
-with no text it lists the files. It is a dialog: two fields, the rows, and the buttons Go to, View,
-Edit, and Cancel, as in the results of mc's Find File, which, as Far's Find file, asks for a mask
-and a text in a dialog first. Its other mode, Files and dirs, a radio button above the fields, finds
-files and directories by name with fd, and Go to goes into a directory; f f, or F9 → Command → Find
-files and dirs…, opens the dialog in it. Its focus on the rows or a button, it falls back to
-`dialog`, whose motions move the cursor of the rows while they have the focus, and Tab leaves them.
-F3 and F4 work wherever the focus is. In the field of the text, Ctrl+s and a letter take it as it is
-or as a regular expression and switch its case (`search_input`), starting from the search mode
-(`ui.search_mode`, where fzf is regex) and smart case, and the glyphs at the end of the field say
-which; elsewhere they do nothing. Alt and the letters of the dialog act on its elements, as in every
-dialog. yazi's s and S find with fd and rg, and show the result as a directory of its own.
+let through, again as either changes, or either switches how it matches or whether case counts; with
+no text it lists the files. It is a dialog: two fields, the rows, and the buttons Go to, View, Edit,
+and Cancel, as in the results of mc's Find File, which, as Far's Find file, asks for a mask and a
+text in a dialog first. Its other mode, Files and dirs, a radio button above the fields, finds files
+and directories by name with fd, and Go to goes into a directory; f f, or F9 → Command → Find files
+and dirs…, opens the dialog in it. Its focus on the rows or a button, it falls back to `dialog`,
+whose motions move the cursor of the rows while they have the focus, and Tab leaves them. F3 and F4
+work wherever the focus is. In the field of the text, Ctrl+s and a letter take it as it is or as a
+regular expression and switch its case (`search_input`); in the field of the globs, shell patterns,
+they switch their case, which by name, where fd tells case apart in them, they cannot. Each field
+opens as it was last, at first in `ui.default_search_mode` (fzf is regex there) and smart case, and
+the glyphs at the end of the field say which; elsewhere they do nothing. Alt and the letters of the
+dialog act on its elements, as in every dialog. yazi's s and S find with fd and rg, and show the
+result as a directory of its own.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |

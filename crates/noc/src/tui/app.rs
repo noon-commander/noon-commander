@@ -59,7 +59,7 @@ use super::places::{Places, volume_of};
 use super::progress::{Counts, JobButton, JobView};
 use super::pulldown::{self, Command, PullDown, PullDownEvent, Status};
 use super::reading::{ReadButton, Reading};
-use super::search::{self, Input, Switch, Way};
+use super::search::{self, Input, Slot, Switch};
 use super::spinner::{self, Spin, Wait};
 use super::sums::{Mark, SumRow, SumsButton, SumsEvent, SumsWindow, Verdict};
 use super::tab_menu::{TabMenu, TabMenuEvent};
@@ -723,23 +723,20 @@ struct CopyChoices {
     atomic: bool,
 }
 
-/// What `g +` and `g -` asked for last; their dialogs start with it.
+/// What `g +` and `g -` asked for last; their dialogs start with it, and with how the pattern
+/// matched (`Slot::Mark`).
 #[derive(Debug, Clone)]
 struct PatternOptions {
     pattern: String,
-    /// How the pattern matches, and whether case counts.
-    input: Input,
     /// Leaves directories alone.
     files_only: bool,
 }
 
 impl Default for PatternOptions {
-    /// As in mc, a shell pattern that directories match too; with smart case, as every field
-    /// that searches starts.
+    /// As in mc: every name, directories too.
     fn default() -> Self {
         Self {
             pattern: "*".to_owned(),
-            input: Input::new(search::Kind::MARK, Way::Glob),
             files_only: false,
         }
     }
@@ -788,6 +785,8 @@ pub(crate) struct App {
     /// never takes the keys from a dialog in use.
     dialogs: VecDeque<Open>,
     pattern_options: PatternOptions,
+    /// How each field that searches was last, which it opens with again.
+    searches: search::Memory,
     copy_choices: CopyChoices,
     /// The algorithm the checksum dialog chose last.
     algorithm: Algorithm,
@@ -1009,6 +1008,7 @@ impl App {
             last_dirs: HashMap::new(),
             dialogs: VecDeque::new(),
             pattern_options: PatternOptions::default(),
+            searches: search::Memory::default(),
             copy_choices: CopyChoices {
                 preserve: true,
                 atomic: transfer.atomic_upload,
@@ -1287,6 +1287,12 @@ impl App {
     /// Takes a press of the mouse at a cell, as the last render drew the screen. What is in
     /// front takes it, as it takes keys.
     pub(crate) fn pointer(&mut self, pointer: Pointer) -> Vec<Effect> {
+        let effects = self.pointer_input(pointer);
+        self.remember_searches();
+        effects
+    }
+
+    fn pointer_input(&mut self, pointer: Pointer) -> Vec<Effect> {
         if !self.config.ui.mouse {
             return Vec::new();
         }
@@ -2635,9 +2641,9 @@ impl App {
     /// Opens the tab menu for the panel on `side`, which lists where its tabs are.
     fn open_tab_menu(&mut self, side: Side) {
         let titles = self.tab_titles(side);
-        let mode = self.config.ui.search_mode;
+        let input = self.search_opens(Slot::TabMenu);
         let current = self.tabs(side).index();
-        self.tab_menu = Some(TabMenu::new(side, titles, current, mode));
+        self.tab_menu = Some(TabMenu::new(side, titles, current, input));
     }
 
     /// Where the tabs on `side` are, as the tab menu lists them.
@@ -2746,7 +2752,47 @@ impl App {
         None
     }
 
+    /// Takes what a key, or keys, resolved to; the fields that search then keep how they match.
     pub(crate) fn handle(&mut self, input: Resolved) -> Vec<Effect> {
+        let effects = self.handle_input(input);
+        self.remember_searches();
+        effects
+    }
+
+    /// How the field of `slot` opens: as it was last, else in `ui.default_search_mode`.
+    fn search_opens(&self, slot: Slot) -> Input {
+        self.searches
+            .input(slot, self.config.ui.default_search_mode)
+    }
+
+    /// Keeps how each field that searches and is open matches now, and whether case counts,
+    /// which it opens with again (ADR 0047): after each key or press, so that a field keeps
+    /// what was switched in it however it closes.
+    fn remember_searches(&mut self) {
+        for slot in Slot::ALL {
+            let input = match slot {
+                Slot::QuickSearch => self.panel(self.active).search_input(),
+                Slot::LocationMenu => self.menu.as_ref().map(LocationMenu::input),
+                Slot::TabMenu => self.tab_menu.as_ref().map(TabMenu::input),
+                Slot::Workspaces => self.workspaces_window.as_ref().map(WorkspacesWindow::input),
+                Slot::CommandHistory => self.history_window.as_ref().map(HistoryWindow::input),
+                Slot::KeyHints => self.key_hints.as_ref().map(KeyHintsWindow::input),
+                Slot::Jump => self.jump.as_ref().map(JumpMenu::input),
+                Slot::FindText => self.find.as_ref().map(FindWindow::text_input),
+                Slot::FindFiles => self.find.as_ref().map(FindWindow::files_input),
+                Slot::Mark => self
+                    .dialogs
+                    .iter()
+                    .find(|open| matches!(open.purpose, Purpose::Pattern { .. }))
+                    .and_then(|open| open.dialog.search(0)),
+            };
+            if let Some(input) = input {
+                self.searches.keep(slot, input);
+            }
+        }
+    }
+
+    fn handle_input(&mut self, input: Resolved) -> Vec<Effect> {
         self.sync_connected();
         if let Some(effects) = self.handle_everywhere(input) {
             return effects;
@@ -2772,8 +2818,8 @@ impl App {
         match action {
             Action::QuickSearch => self.quick_search(),
             Action::QuickSearchBack => {
-                let (count, mode) = (self.extra.times(), self.config.ui.search_mode);
-                self.panel_mut(self.active).search_up(count, mode);
+                let (count, input) = (self.extra.times(), self.search_opens(Slot::QuickSearch));
+                self.panel_mut(self.active).search_up(count, input);
             }
             Action::NextMatch | Action::PrevMatch => self.search_again(action == Action::NextMatch),
             Action::Shell | Action::Command | Action::CommandHistory => {
@@ -2918,8 +2964,8 @@ impl App {
                 let place = self.key_place();
                 match self.hints.take() {
                     Some(hints) if hints.place == place => {
-                        let mode = self.config.ui.search_mode;
-                        let window = KeyHintsWindow::new(&self.keymap, &hints, self.extra, mode);
+                        let input = self.search_opens(Slot::KeyHints);
+                        let window = KeyHintsWindow::new(&self.keymap, &hints, self.extra, input);
                         self.key_hints = Some(window);
                     }
                     _ => self.hints_asked = Some(place),
@@ -3091,7 +3137,7 @@ impl App {
     /// with nothing typed yet, searches for what the last search found, as mc's Ctrl+s Ctrl+s
     /// does.
     fn quick_search(&mut self) {
-        let mode = self.config.ui.search_mode;
+        let input = self.search_opens(Slot::QuickSearch);
         let last = self.last_search.clone();
         let count = self.extra.times();
         let panel = self.panel_mut(self.active);
@@ -3101,7 +3147,7 @@ impl App {
                 panel.search_resume(&last, input);
             }
             _ if panel.searching() => panel.search_step(true),
-            _ => panel.search_down(count, mode),
+            _ => panel.search_down(count, input),
         }
     }
 
@@ -3291,7 +3337,7 @@ impl App {
         let drawn = if self.swapped { side.other() } else { side };
         let mut menu = LocationMenu::new(side, current, self.home.clone(), generation)
             .drawn(drawn)
-            .search_mode(self.config.ui.search_mode)
+            .with_input(self.search_opens(Slot::LocationMenu))
             .recent(&self.recent)
             .lines_like(self.sizes.menu);
         menu.set_connected(self.hosts.keys().cloned().collect());
@@ -3470,7 +3516,7 @@ impl App {
     /// Opens the window of the saved workspaces.
     fn open_workspaces(&mut self) {
         let rows = workspaces::Row::all(&self.workspaces);
-        let window = WorkspacesWindow::new(rows, self.config.ui.search_mode);
+        let window = WorkspacesWindow::new(rows, self.search_opens(Slot::Workspaces));
         self.workspaces_window = Some(window);
     }
 
@@ -3807,7 +3853,7 @@ impl App {
             Location::Remote { .. } => None,
         };
         let jump = JumpMenu::new(self.home.clone(), exclude, 0)
-            .search_mode(self.config.ui.search_mode)
+            .with_input(self.search_opens(Slot::Jump))
             .rows_like(self.sizes.jump);
         self.jump = Some(jump);
         self.query_jump()
@@ -3881,7 +3927,10 @@ impl App {
             mode,
             (search.max_results.get(), search.max_per_file.get()),
             self.config.ui.show_hidden,
-            self.config.ui.search_mode,
+            (
+                self.search_opens(Slot::FindText),
+                self.search_opens(Slot::FindFiles),
+            ),
             self.decor,
         ));
         self.search_tree(Duration::ZERO)
@@ -4815,8 +4864,8 @@ impl App {
                 Some((host.to_owned(), label.to_owned()))
             })
             .collect();
-        let mode = self.config.ui.search_mode;
-        self.history_window = Some(HistoryWindow::new(&self.history, here, labels, mode));
+        let input = self.search_opens(Slot::CommandHistory);
+        self.history_window = Some(HistoryWindow::new(&self.history, here, labels, input));
     }
 
     /// Gives a key to the window of the command history: a command it takes goes on the command
@@ -6315,7 +6364,7 @@ impl App {
         let checks = [(fl!("pattern-files-only"), options.files_only)];
         let dialog = Dialog::form(&title, &fl!("pattern-text"), &options.pattern, &checks)
             .with_width(PATTERN_DIALOG_WIDTH)
-            .with_search(0, options.input);
+            .with_search(0, self.search_opens(Slot::Mark));
         let panel = self.shown(self.active);
         self.dialogs.push_back(Open {
             dialog,
@@ -6331,10 +6380,12 @@ impl App {
         }
         let options = PatternOptions {
             pattern: dialog.text().to_owned(),
-            input: dialog.search(0).unwrap_or(self.pattern_options.input),
             files_only: dialog.checked(0),
         };
-        let mut matcher = options.input.matcher(&options.pattern);
+        let input = dialog
+            .search(0)
+            .unwrap_or_else(|| self.search_opens(Slot::Mark));
+        let mut matcher = input.matcher(&options.pattern);
         if let Some(panel) = self.panel_of_mut(panel) {
             panel.mark_where(mark, |entry| {
                 !(options.files_only && entry.is_dir_like())
@@ -7997,6 +8048,7 @@ mod tests {
     use noc_tools::ripgrep::Hit;
 
     use super::*;
+    use crate::tui::search::Way;
     use crossterm::event::KeyEvent;
 
     fn dir(name: &str) -> DirEntry {
@@ -8288,7 +8340,7 @@ mod tests {
 
     /// The glyph of how quick search or a filter matches in the search mode of the settings.
     fn glyph(app: &App) -> &'static str {
-        Way::from(app.config.ui.search_mode).glyph(app.theme.glyphs.search_modes)
+        Way::from(app.config.ui.default_search_mode).glyph(app.theme.glyphs.search_modes)
     }
 
     /// The screen once spinners that start now show, with what they wait for.
@@ -8983,7 +9035,7 @@ mod tests {
         // So does Enter in quick search, typed as vim's search, on a match before where it
         // started; fuzzy search ranks the rows instead.
         let mut app = with_files(&["a1", "b2", "c3"]);
-        app.config.ui.search_mode = SearchMode::Plain;
+        app.config.ui.default_search_mode = SearchMode::Plain;
         keys(&mut app, &["shift-g", "/", "b", "enter"]);
         assert_eq!(cursor_name(&app, Side::Left), "b2");
         assert!(screen(&mut app).contains("search hit BOTTOM, continuing at TOP"));
@@ -8994,7 +9046,7 @@ mod tests {
     #[test]
     fn question_mark_searches_up_and_n_goes_the_same_way_as_vims() {
         let mut app = with_files(&["a1", "b2", "a3", "b4"]);
-        app.config.ui.search_mode = SearchMode::Plain;
+        app.config.ui.default_search_mode = SearchMode::Plain;
         keys(&mut app, &["shift-g", "?"]);
         assert!(screen(&mut app).contains(&prompt("Search up", "")));
         keys(&mut app, &["a", "enter"]);
@@ -9249,7 +9301,7 @@ mod tests {
     #[test]
     fn backspace_and_delete_with_nothing_typed_keep_quick_search_open() {
         let mut app = with_files(&["a1", "b2"]);
-        app.config.ui.search_mode = SearchMode::Plain;
+        app.config.ui.default_search_mode = SearchMode::Plain;
         let location = app.panel(Side::Left).location().clone();
         for key in ["backspace", "delete"] {
             keys(&mut app, &["g", "g", "j", "/", "b"]);
@@ -9399,7 +9451,7 @@ mod tests {
         let glyphs = app.theme.glyphs.search_modes;
         let cases = app.theme.glyphs.case_modes;
         // Quick search, whose glyphs end the status line.
-        app.config.ui.search_mode = SearchMode::Plain;
+        app.config.ui.default_search_mode = SearchMode::Plain;
         app.handle(action(Action::QuickSearch));
         app.handle(Resolved::Insert('r'));
         assert_eq!(
@@ -9426,7 +9478,7 @@ mod tests {
         );
         keys(&mut app, &["esc"]);
         // A list, whose filter has the focus while it takes the keys.
-        app.config.ui.search_mode = SearchMode::Fzf;
+        app.config.ui.default_search_mode = SearchMode::Fzf;
         keys(&mut app, &["t", "n", "t", "h"]);
         keys(&mut app, &["x"]);
         let screen = screen_of(&mut app, 16);
@@ -9901,7 +9953,8 @@ mod tests {
 
         // The dialog opens with the last pattern, and its case.
         app.handle(action(Action::Select));
-        assert_eq!(app.pattern_options.input.case(), search::Case::Match);
+        let dialog = &app.dialogs.front().unwrap().dialog;
+        assert_eq!(dialog.search(0).map(Input::case), Some(search::Case::Match));
         app.handle(action(Action::CaseSmart));
         app.handle(action(Action::Confirm));
         assert!(
@@ -9927,6 +9980,42 @@ mod tests {
         app.handle(action(Action::Confirm));
         assert!(screen(&mut app).contains(" 0 B in 1 file "));
         assert_eq!(app.pattern_options.pattern, "*");
+    }
+
+    #[test]
+    fn each_field_that_searches_opens_as_it_was_last_until_noc_quits() {
+        let mut app = loaded();
+        app.config.ui.default_search_mode = SearchMode::Plain;
+        let glyphs = app.theme.glyphs.search_modes;
+        let cases = app.theme.glyphs.case_modes;
+        let ends = |app: &mut App, case: &str, way: &str| {
+            let text = screen(app);
+            assert!(
+                text.contains(&format!(" {case} {way} ║"))
+                    || text.contains(&format!(" {case} {way}  ║")),
+                "{case} {way}: {text}"
+            );
+        };
+        // g + starts in the default too, which it has.
+        app.handle(action(Action::Select));
+        ends(&mut app, cases.smart, glyphs.plain);
+        keys(&mut app, &["ctrl-s", "g", "ctrl-s", "i", "esc", "esc"]);
+        assert_eq!(app.context(), Context::Panel);
+        // The tab menu, switched and given up with Esc.
+        app.handle(action(Action::TabListLeft));
+        ends(&mut app, cases.smart, glyphs.plain);
+        keys(&mut app, &["ctrl-s", "r", "ctrl-s", "m", "esc", "esc"]);
+        assert_eq!(app.context(), Context::Panel);
+        app.config.ui.default_search_mode = SearchMode::Fzf;
+        app.handle(action(Action::TabListRight));
+        ends(&mut app, cases.exact, glyphs.regex);
+        keys(&mut app, &["esc", "esc"]);
+        // Each its own: the workspaces open in the default, which changed.
+        app.handle(action(Action::Workspaces));
+        ends(&mut app, cases.smart, glyphs.fzf);
+        keys(&mut app, &["esc", "esc"]);
+        app.handle(action(Action::Select));
+        ends(&mut app, cases.ignore, glyphs.glob);
     }
 
     /// The only effect, which must make a directory: where, and through which host.
@@ -12692,7 +12781,7 @@ mod tests {
         let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
         let names = ["bar", "bin", "boot", "dev"];
         answer(&mut app, effects, &Listing::Dir(names.map(dir).to_vec()));
-        app.config.ui.search_mode = SearchMode::Plain;
+        app.config.ui.default_search_mode = SearchMode::Plain;
         let under = |app: &App| cursor_name(app, Side::Left);
         app.handle(action(Action::QuickSearch));
         for c in "bo".chars() {
@@ -12733,7 +12822,7 @@ mod tests {
         let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
         let names = ["bar", "bin", "boot", "dev"];
         answer(&mut app, effects, &Listing::Dir(names.map(dir).to_vec()));
-        app.config.ui.search_mode = SearchMode::Plain;
+        app.config.ui.default_search_mode = SearchMode::Plain;
         let under = |app: &App| cursor_name(app, Side::Left);
         app.handle(action(Action::NextMatch));
         assert_eq!(under(&app), "", "no search yet: the cursor stays on ..");
@@ -13905,7 +13994,7 @@ mod tests {
     fn alt_z_asks_zoxide_and_jumps_in_the_active_panel() {
         let mut app = recording();
         // zoxide matches the keywords.
-        app.config.ui.search_mode = SearchMode::Plain;
+        app.config.ui.default_search_mode = SearchMode::Plain;
         app.active = Side::Right;
         let effects = app.handle(action(Action::Jump));
         let [
@@ -14653,7 +14742,7 @@ mod tests {
     #[test]
     fn ctrl_s_ctrl_s_switches_how_one_quick_search_matches_and_n_matches_as_it_did() {
         let mut app = loaded();
-        app.config.ui.search_mode = SearchMode::Plain;
+        app.config.ui.default_search_mode = SearchMode::Plain;
         let start = app
             .panel(app.active)
             .name_under_cursor()
@@ -14687,11 +14776,14 @@ mod tests {
             &mut app,
             &["ctrl-s", "s", "ctrl-s", "s", "ctrl-s", "m", "enter"],
         );
+        app.config.ui.default_search_mode = SearchMode::Fzf;
         app.handle(action(Action::QuickSearch));
         assert!(
-            searching(&mut app, "", glyphs.plain),
-            "the next search starts in the search mode"
+            searching(&mut app, "", glyphs.regex),
+            "the next search starts as the last one was, whatever the default"
         );
+        let cases = app.theme.glyphs.case_modes;
+        assert!(screen(&mut app).contains(&format!(" {} {} ║", cases.exact, glyphs.regex)));
         keys(&mut app, &["esc"]);
         app.handle(action(Action::Home));
         app.handle(action(Action::NextMatch));
@@ -14716,7 +14808,8 @@ mod tests {
         };
         assert_eq!(request.location, local("/srv/right"));
 
-        app.config.ui.search_mode = SearchMode::Plain;
+        let mut app = loaded();
+        app.config.ui.default_search_mode = SearchMode::Plain;
         app.handle(action(Action::QuickSearch));
         app.handle(Resolved::Insert('r'));
         app.handle(Resolved::Insert('t'));

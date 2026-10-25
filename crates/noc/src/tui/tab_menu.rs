@@ -2,7 +2,6 @@
 //! is, to show one, or to close one. Typing filters it; while the filter is empty, `1` … `9` and
 //! `0` show the first ten tabs.
 
-use noc_config::SearchMode;
 use noc_scroll::scrollbar::Bar;
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -13,7 +12,7 @@ use super::dialog::Colors;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker};
-use super::search::Kind;
+use super::search::{Input, Kind};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -43,9 +42,9 @@ pub(crate) struct TabMenu {
 
 impl TabMenu {
     /// A menu of the tabs on `side`, which are where `titles` say, with the cursor on the one
-    /// at `current`, which shows; its filter matches in `mode` (`ui.search_mode`).
-    pub(crate) fn new(side: Side, titles: Vec<String>, current: usize, mode: SearchMode) -> Self {
-        let mut picker = Picker::new(mode);
+    /// at `current`, which shows; its filter matches as `input` says, as it was last.
+    pub(crate) fn new(side: Side, titles: Vec<String>, current: usize, input: Input) -> Self {
+        let mut picker = Picker::new(input);
         picker.set_rows(titles.iter().map(|title| vec![title.clone()]).collect());
         picker.set_cursor(current);
         Self {
@@ -82,6 +81,11 @@ impl TabMenu {
     /// The kind of its filter while that takes the keys.
     pub(crate) fn search(&self) -> Option<Kind> {
         self.picker.search()
+    }
+
+    /// How its filter matches now, and whether case counts.
+    pub(crate) fn input(&self) -> Input {
+        self.picker.input()
     }
 
     /// Takes a key, as the picker does, and d d and F8, which close the tab under the cursor.
@@ -153,6 +157,7 @@ impl TabMenu {
 
 #[cfg(test)]
 mod tests {
+    use noc_config::SearchMode;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
@@ -160,7 +165,12 @@ mod tests {
 
     fn menu() -> TabMenu {
         let titles = ["~/src", "/var/log", "web:/var/www", "~/src/noc"].map(str::to_owned);
-        TabMenu::new(Side::Left, titles.to_vec(), 1, SearchMode::Plain)
+        TabMenu::new(
+            Side::Left,
+            titles.to_vec(),
+            1,
+            Input::new(Kind::FILTER, SearchMode::Plain),
+        )
     }
 
     fn typed(menu: &mut TabMenu, text: &str) {

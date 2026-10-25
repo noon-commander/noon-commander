@@ -6,7 +6,8 @@
 //!
 //! fd matches its pattern against the name of each entry, and leaves out the globs of the Files
 //! field that start with `!` (`--exclude`); it cannot take the others with a pattern, so
-//! [`Names`] keeps what they let through. [`Names`] also shows where a name matches, with the
+//! [`Names`] keeps what they let through. Case always counts in the globs, as fd has no
+//! `--exclude` that ignores it. [`Names`] also shows where a name matches, with the
 //! regex engine fd uses.
 
 use std::ffi::{OsStr, OsString};
@@ -16,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::process::{ExitStatus, Stdio};
 use std::time::Duration;
 
-use globset::{Glob, GlobBuilder, GlobSet, GlobSetBuilder};
+use globset::{GlobSet, GlobSetBuilder};
 use regex::bytes::Regex;
 use tokio::io::AsyncRead;
 use tokio::process::{Child, Command};
@@ -24,7 +25,7 @@ use tokio::process::{Child, Command};
 use noc_pattern::Case;
 
 use crate::ripgrep::{Ended, Hit, Hits};
-use crate::{ToolError, process};
+use crate::{ToolError, globs, process};
 
 /// How long `fd --version` may take.
 const VERSION_TIMEOUT: Duration = Duration::from_secs(5);
@@ -81,15 +82,13 @@ impl Query {
         let mut paths = GlobSetBuilder::new();
         let (mut any_name, mut any_path) = (false, false);
         for glob in self.globs.iter().filter(|glob| !glob.starts_with('!')) {
-            let invalid = |error: globset::Error| PatternError::Glob(error.to_string());
-            // As in a `.gitignore`: a glob with a `/` matches the path, others the name.
+            let built =
+                globs::build(glob).map_err(|error| PatternError::Glob(error.to_string()))?;
             if glob.contains('/') {
-                let glob = glob.trim_start_matches('/');
-                let built = GlobBuilder::new(glob).literal_separator(true).build();
-                paths.add(built.map_err(invalid)?);
+                paths.add(built);
                 any_path = true;
             } else {
-                names.add(Glob::new(glob).map_err(invalid)?);
+                names.add(built);
                 any_name = true;
             }
         }

@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use noc_config::{HistoryEntry, SearchMode};
+use noc_config::HistoryEntry;
 use noc_scroll::scrollbar::Bar;
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -17,7 +17,7 @@ use super::dialog::Colors;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker};
-use super::search::Kind;
+use super::search::{Input, Kind};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -65,19 +65,19 @@ pub(crate) struct HistoryWindow {
 
 impl HistoryWindow {
     /// A window on `history`, oldest first as `history.toml` keeps it, for a panel on `here`;
-    /// `labels` name hosts, and the filter matches in `mode` (`ui.search_mode`).
+    /// `labels` name hosts, and the filter matches as `input` says, as it was last.
     pub(crate) fn new(
         history: &[HistoryEntry],
         here: Option<String>,
         labels: HashMap<String, String>,
-        mode: SearchMode,
+        input: Input,
     ) -> Self {
         let mut window = Self {
             entries: history.iter().rev().cloned().collect(),
             here,
             labels,
             all: false,
-            picker: Picker::new(mode),
+            picker: Picker::new(input),
         };
         window.picker.set_rows(window.texts());
         window
@@ -127,6 +127,11 @@ impl HistoryWindow {
     /// The kind of its filter while that takes the keys.
     pub(crate) fn search(&self) -> Option<Kind> {
         self.picker.search()
+    }
+
+    /// How its filter matches now, and whether case counts.
+    pub(crate) fn input(&self) -> Input {
+        self.picker.input()
     }
 
     /// Takes a key: the picker's, where Enter takes the command, and Tab, which switches
@@ -344,6 +349,7 @@ fn preview_rows(command: &str, width: usize) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    use noc_config::SearchMode;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
@@ -374,7 +380,12 @@ mod tests {
 
     fn window(here: Option<&str>) -> HistoryWindow {
         let labels = HashMap::from([("web".to_owned(), "Site".to_owned())]);
-        HistoryWindow::new(&history(), here.map(str::to_owned), labels, SearchMode::Fzf)
+        HistoryWindow::new(
+            &history(),
+            here.map(str::to_owned),
+            labels,
+            Input::new(Kind::FILTER, SearchMode::Fzf),
+        )
     }
 
     fn press(window: &mut HistoryWindow, action: Action) -> HistoryEvent {

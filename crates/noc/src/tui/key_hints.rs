@@ -3,7 +3,6 @@
 //! list that `/` filters. Enter closes it and runs the command under the cursor where the keys
 //! went before; Esc closes it.
 
-use noc_config::SearchMode;
 use noc_scroll::scrollbar::Bar;
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -15,7 +14,7 @@ use super::dialog::Colors;
 use super::keymap::{Action, Extra, Hints, Keymap, Mode, Resolved, Typed};
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker};
-use super::search::Kind;
+use super::search::{Input, Kind};
 use super::theme::Theme;
 use super::which_key;
 use crate::i18n::fl;
@@ -62,9 +61,9 @@ pub(crate) struct KeyHintsWindow {
 
 impl KeyHintsWindow {
     /// A window on the commands of `hints` in `keymap`, each sequence whole, after the keys
-    /// the hints had typed; the command run from it gets `extra`. Its filter matches in `mode`
-    /// (`ui.search_mode`).
-    pub(crate) fn new(keymap: &Keymap, hints: &Hints, extra: Extra, mode: SearchMode) -> Self {
+    /// the hints had typed; the command run from it gets `extra`. Its filter matches as `input`
+    /// says, as it was last.
+    pub(crate) fn new(keymap: &Keymap, hints: &Hints, extra: Extra, input: Input) -> Self {
         let place = hints.place;
         let rows: Vec<Row> = keymap
             .sequences(place, &hints.prefix)
@@ -79,7 +78,7 @@ impl KeyHintsWindow {
                 })
             })
             .collect();
-        let mut picker = Picker::new(mode);
+        let mut picker = Picker::new(input);
         picker.set_rows(
             rows.iter()
                 .map(|row| vec![row.keys.clone(), row.text.clone()])
@@ -109,6 +108,11 @@ impl KeyHintsWindow {
     /// The kind of its filter while that takes the keys.
     pub(crate) fn search(&self) -> Option<Kind> {
         self.picker.search()
+    }
+
+    /// How its filter matches now, and whether case counts.
+    pub(crate) fn input(&self) -> Input {
+        self.picker.input()
     }
 
     /// Takes a key, as the picker does: Enter runs the command under the cursor, unless it
@@ -205,6 +209,7 @@ impl KeyHintsWindow {
 
 #[cfg(test)]
 mod tests {
+    use noc_config::SearchMode;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
@@ -217,7 +222,12 @@ mod tests {
         let mut state = KeyState::default();
         keymap.show_hints(&mut state, place);
         let hints = keymap.hints_of(&state, place).unwrap();
-        KeyHintsWindow::new(&keymap, &hints, extra, SearchMode::Fzf)
+        KeyHintsWindow::new(
+            &keymap,
+            &hints,
+            extra,
+            Input::new(Kind::FILTER, SearchMode::Fzf),
+        )
     }
 
     fn press(window: &mut KeyHintsWindow, action: Action) -> KeyHintsEvent {

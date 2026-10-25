@@ -2390,6 +2390,7 @@ mod tests {
         let query = Query {
             pattern: pattern.to_owned(),
             globs: Vec::new(),
+            globs_case: noc_pattern::Case::Smart,
             regex: true,
             case: noc_pattern::Case::Smart,
             hidden: true,
@@ -2500,6 +2501,7 @@ mod tests {
         let query = Query {
             pattern: "x".to_owned(),
             globs: Vec::new(),
+            globs_case: noc_pattern::Case::Smart,
             regex: true,
             case: noc_pattern::Case::Smart,
             hidden: false,

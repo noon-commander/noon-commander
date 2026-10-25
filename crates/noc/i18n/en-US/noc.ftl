@@ -222,7 +222,8 @@ find-mode-text = Te&xt
 find-mode-names = Files and &dirs
 # The labels of the fields: the text to find, whose field ends with the glyphs of whether case
 # counts and how it matches, as it is or as a regular expression (the keys after Ctrl+s), and the
-# globs of the files to search.
+# globs of the files to search, whose field ends with the glyphs of whether case counts and of
+# shell patterns.
 find-text = &Text:
 find-files = &Files:
 # Under the rows: how many lines matched, in how many files.
@@ -400,11 +401,11 @@ config-show-hidden = Show &hidden files
 config-show-hidden-hint = Names that begin with a dot; o h switches them.
 config-natural-sort = Natural so&rt
 config-natural-sort-hint = Names in the order of their language, numbers by value: file2 before file10. Off: by their characters, ignoring case.
-config-search-mode = &Search mode
-config-search-mode-hint = How quick search and the filters of the lists match what is typed: the text anywhere, the letters in order as fzf does, or a regular expression. Ctrl+s Ctrl+s switches it in one of them until it closes. f / and f f start in it too, fzf as a regular expression.
-config-search-mode-plain = Plain
-config-search-mode-fzf = fzf
-config-search-mode-regex = Regular expression
+config-default-search-mode = Default &search mode
+config-default-search-mode-hint = How each field that searches matches what is typed the first time it opens: the text anywhere, the letters in order as fzf does, or a regular expression. Ctrl+s Ctrl+s switches it in a field, which keeps it, and its case, until Noon Commander quits. f / and f f take fzf as a regular expression, g + and g - as a shell pattern.
+config-default-search-mode-plain = Plain
+config-default-search-mode-fzf = fzf
+config-default-search-mode-regex = Regular expression
 config-mouse = &Mouse
 config-mouse-hint = Clicks move the cursor, open, and mark, and the wheel scrolls. The terminal then selects text with Shift held, or Option in iTerm2.
 config-wheel = Mouse &wheel
@@ -884,12 +885,12 @@ help-tip-lists = Lists
 help-tip-lists-open = The lists open in Insert mode, typing in the filter: Esc goes to the rows, in Normal mode, / or i types in the filter again, and Esc there closes the list.
 help-tip-lists-jump = In the zoxide window, what is typed filters its directories, or, in the plain search mode, is keywords, as z takes them in a shell.
 help-tip-search = Search modes
-help-tip-search-where = Quick search and the filters of the lists (the location menu, the tab menu, the zoxide window, the workspaces, the command history, and the key hints) start in the search mode of Configuration, the Text field of f / in its way of the two it has, and the pattern of g + in the way it had last. The last glyph at the end of each field says which; Ctrl+s Ctrl+s in the field, or a click on the glyph, goes to the next for that field alone, and Ctrl+s p, f, r, or g to plain text, fzf, a regular expression, or a shell pattern, of those it has.
-help-tip-search-case = Every field starts with smart case: case counts only once what is typed has a capital letter. The glyph before the mode says whether case counts; Ctrl+s c, or a click on it, goes round smart case, case ignored, and case, and Ctrl+s a, i, or m goes to one.
+help-tip-search-where = Quick search, the filters of the lists (the location menu, the tab menu, the zoxide window, the workspaces, the command history, and the key hints), the Text field of f /, and the pattern of g + open in the default search mode of Configuration the first time, or in their own way if they have not that one; then each opens as it was last, until Noon Commander quits. The last glyph at the end of each field says which; Ctrl+s Ctrl+s in the field, or a click on the glyph, goes to the next for that field alone, and Ctrl+s p, f, r, or g to plain text, fzf, a regular expression, or a shell pattern, of those it has.
+help-tip-search-case = Every field starts with smart case: case counts only once what is typed has a capital letter. The glyph before the mode says whether case counts; Ctrl+s c, or a click on it, goes round smart case, case ignored, and case, and Ctrl+s a, i, or m goes to one. The Files field of f / tells case apart in each glob alike; by name, fd always does.
 help-tip-search-plain = Plain: the text anywhere.
 help-tip-search-fzf = fzf: the letters typed in order, not necessarily together, best match first. Words separated by spaces must all match; 'word matches as it is, ^word at the start, word$ at the end, and !word where it is not.
 help-tip-search-regex = Regular expression: a glyph crossed out says it is none.
-help-tip-search-glob = Shell pattern, in g + and g -: *, ?, [a-z], and { "{" }a,b{ "}" }, which the whole name must match.
+help-tip-search-glob = Shell pattern, in g + and g - and the Files field of f /: *, ?, [a-z], and { "{" }a,b{ "}" }, which the whole name must match.
 help-tip-workspaces = Workspaces
 help-tip-workspaces-what = A workspace holds the tabs of both panels: where each is, its sort order, and the row under its cursor.
 help-tip-workspaces-list = t w and F9 → Workspace list them; restoring one replaces every tab.

@@ -106,7 +106,9 @@
 - [x] Fuzzy search as fzf does it in quick search, the location menu, and the zoxide window
       ([ADR 0016](adr/0016-fuzzy-search.md))
 - [x] Search modes: plain, fzf, and regex in quick search and the filters of the lists,
-      `ui.search_mode`, switched by Ctrl+s ([ADR 0030](adr/0030-search-modes.md))
+      `ui.default_search_mode`, switched by Ctrl+s, each field keeping its way and case
+      ([ADR 0030](adr/0030-search-modes.md),
+      [ADR 0047](adr/0047-search-fields-remember-their-way-and-case.md))
 - [x] `f /` searches the files below for text with ripgrep, local or on the host, in a dialog
       with a field for the text and one for the files; `[search]`
       ([ADR 0027](adr/0027-search-of-a-whole-tree.md),

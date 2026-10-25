@@ -1,6 +1,7 @@
 # 0046. Case, and the keys of fields that search
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0047](0047-search-fields-remember-their-way-and-case.md),
+  each field keeping its case, and the cases a kind of field can take
 - Date: 2026-10-24
 - Amends: [ADR 0030](0030-search-modes.md), [ADR 0044](0044-one-base-for-search-fields.md),
   [ADR 0045](0045-ctrl-s-switches-the-field-typed-in.md)

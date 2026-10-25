@@ -902,10 +902,15 @@ impl Dialog {
 
     /// The same dialog, whose field `index` searches as `input` says, starting in its way.
     pub(crate) fn with_search(mut self, index: usize, input: Input) -> Self {
+        self.set_search(index, input);
+        self
+    }
+
+    /// Field `index` searches as `input` says from now on.
+    pub(crate) fn set_search(&mut self, index: usize, input: Input) {
         if let Some(field) = self.fields.get_mut(index) {
             field.search = Some(input);
         }
-        self
     }
 
     /// How field `index` matches, and whether case counts, if it searches.

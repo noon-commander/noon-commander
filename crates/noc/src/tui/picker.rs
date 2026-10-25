@@ -7,7 +7,6 @@
 
 use std::cmp::Reverse;
 
-use noc_config::SearchMode;
 use noc_scroll::scrollbar::{self, Bar};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
@@ -149,8 +148,8 @@ pub(crate) struct Picker {
     shows: Vec<Shows>,
     /// The filter, a text field.
     filter: Field,
-    /// How the filter matches: `ui.search_mode` and smart case until the keys after Ctrl+s
-    /// switch them.
+    /// How the filter matches, and whether case counts, as they were last until the keys after
+    /// Ctrl+s switch them.
     input: Input,
     /// In the plain mode the filter is keywords that a program, such as zoxide, picks the rows
     /// by: the window asks it, and the picker shows every row it gets.
@@ -180,14 +179,15 @@ pub(crate) struct Picker {
 }
 
 impl Picker {
-    /// A picker without rows, whose filter matches in `mode` (`ui.search_mode`). It opens with
-    /// the filter taking what is typed, in Insert mode, as the zoxide window does (ADR 0036).
-    pub(crate) fn new(mode: SearchMode) -> Self {
+    /// A picker without rows, whose filter matches as `input` says, as it was last. It opens
+    /// with the filter taking what is typed, in Insert mode, as the zoxide window does
+    /// (ADR 0036).
+    pub(crate) fn new(input: Input) -> Self {
         Self {
             texts: Vec::new(),
             shows: Vec::new(),
             filter: Field::plain(""),
-            input: Input::new(Kind::FILTER, mode),
+            input,
             plain_keywords: false,
             error: None,
             filtering: true,
@@ -201,14 +201,6 @@ impl Picker {
             bar: None,
             glyphs: None,
         }
-    }
-
-    /// The same picker, whose rows are paths: in the fzf mode a word starts after `/` most, as
-    /// with fzf's `--scheme=path`.
-    pub(crate) fn paths(mut self) -> Self {
-        self.input = Input::new(Kind::FILTER_PATHS, self.input.way());
-        self.refilter();
-        self
     }
 
     /// The same picker, whose filter in the plain mode is keywords that a program picks the
@@ -251,10 +243,15 @@ impl Picker {
         }
     }
 
-    /// Matches in `mode` from now on.
-    pub(crate) fn set_mode(&mut self, mode: SearchMode) {
-        self.input = Input::new(self.input.kind(), mode);
+    /// Matches as `input` says from now on.
+    pub(crate) fn set_input(&mut self, input: Input) {
+        self.input = input;
         self.refilter();
+    }
+
+    /// How the filter matches now, and whether case counts.
+    pub(crate) fn input(&self) -> Input {
+        self.input
     }
 
     /// Takes the rows again, each by the texts the filter finds it by. The cursor stays on its
@@ -740,9 +737,10 @@ fn heading_line(heading: &str, width: usize, theme: &Theme) -> Line<'static> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use noc_config::SearchMode;
 
     fn picker(rows: &[&str], mode: SearchMode) -> Picker {
-        let mut picker = Picker::new(mode);
+        let mut picker = Picker::new(Input::new(Kind::FILTER, mode));
         picker.set_rows(rows.iter().map(|row| vec![(*row).to_owned()]).collect());
         picker
     }
@@ -865,7 +863,7 @@ mod tests {
 
     #[test]
     fn rows_show_while_the_filter_is_empty_or_has_text_as_they_say() {
-        let mut picker = Picker::new(SearchMode::Plain);
+        let mut picker = Picker::new(Input::new(Kind::FILTER, SearchMode::Plain));
         let row = |text: &str, shows| (vec![text.to_owned()], shows);
         picker.set_rows_showing(vec![
             row("web", Shows::Always),
@@ -953,14 +951,15 @@ mod tests {
         assert_eq!(press(&mut picker, Action::SearchMode), Pick::Filtered);
         assert!(!picker.ranked());
         assert_eq!(picker.shown(0..3), [0, 1, 2], "as a regular expression");
-        picker.set_mode(SearchMode::Plain);
+        picker.set_input(Input::new(Kind::FILTER, SearchMode::Plain));
         assert_eq!(picker.shown(0..3), [0, 1, 2], "all contain sh");
     }
 
     #[test]
     fn paths_rank_whole_directories_first() {
         let rows = ["~/srv/scripts/c", "~/work/src"];
-        let mut picker = picker(&rows, SearchMode::Fzf).paths();
+        let mut picker = Picker::new(Input::new(Kind::FILTER_PATHS, SearchMode::Fzf));
+        picker.set_rows(rows.iter().map(|row| vec![(*row).to_owned()]).collect());
         typed(&mut picker, "src");
         assert_eq!(picker.shown(0..2), [1, 0]);
     }

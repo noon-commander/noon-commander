@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use jiff::tz::TimeZone;
-use noc_config::{SearchMode, Wheel};
+use noc_config::Wheel;
 use noc_locale::Formats;
 use noc_scroll::Motion;
 use noc_scroll::scrollbar::{self, Bar};
@@ -29,7 +29,7 @@ use super::glyphs;
 use super::keymap::Action;
 use super::mouse::Scroll;
 use super::scroll::Window;
-use super::search::{GlyphSpots, Input, Kind, Matcher, Prompt, Switch, Way};
+use super::search::{GlyphSpots, Input, Kind, Matcher, Prompt, Switch};
 use super::spinner::{Spin, Wait};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -238,13 +238,13 @@ struct Search {
     back: bool,
     /// The rows on screen that Esc puts back, as vim's `old_viewstate`.
     view: Window,
-    /// How it matches what is typed: `ui.search_mode` and smart case until the keys after
-    /// Ctrl+s switch them.
+    /// How it matches what is typed, and whether case counts: as the last quick search did,
+    /// until the keys after Ctrl+s switch them.
     input: Input,
 }
 
 impl Search {
-    fn new(origin: usize, count: usize, back: bool, view: Window, way: Way) -> Self {
+    fn new(origin: usize, count: usize, back: bool, view: Window, input: Input) -> Self {
         Self {
             field: Field::plain(""),
             origin,
@@ -253,7 +253,7 @@ impl Search {
             count: count.max(1),
             back,
             view,
-            input: Input::new(Kind::QUICK_SEARCH, way),
+            input,
         }
     }
 
@@ -1059,7 +1059,12 @@ impl Panel {
     /// The kind of quick search while it runs, whose keys after Ctrl+s go in front of its own
     /// (ADR 0045).
     pub(crate) fn search_kind(&self) -> Option<Kind> {
-        self.search.as_ref().map(|search| search.input.kind())
+        self.search_input().map(Input::kind)
+    }
+
+    /// How quick search matches while it runs, and whether case counts.
+    pub(crate) fn search_input(&self) -> Option<Input> {
+        self.search.as_ref().map(|search| search.input)
     }
 
     /// What quick search has typed, while it runs.
@@ -1068,27 +1073,15 @@ impl Panel {
     }
 
     /// Starts quick search down the rows, as vim's `/`: to match `count` of what is typed,
-    /// from the row after the cursor, round to the top, in `mode`.
-    pub(crate) fn search_down(&mut self, count: usize, mode: SearchMode) {
-        self.search = Some(Search::new(
-            self.cursor,
-            count,
-            false,
-            self.window,
-            mode.into(),
-        ));
+    /// from the row after the cursor, round to the top, as `input` matches.
+    pub(crate) fn search_down(&mut self, count: usize, input: Input) {
+        self.search = Some(Search::new(self.cursor, count, false, self.window, input));
     }
 
     /// Starts quick search up the rows, as vim's `?`: to match `count` of what is typed, from
-    /// the row before the cursor, round to the bottom, in `mode`.
-    pub(crate) fn search_up(&mut self, count: usize, mode: SearchMode) {
-        self.search = Some(Search::new(
-            self.cursor,
-            count,
-            true,
-            self.window,
-            mode.into(),
-        ));
+    /// the row before the cursor, round to the bottom, as `input` matches.
+    pub(crate) fn search_up(&mut self, count: usize, input: Input) {
+        self.search = Some(Search::new(self.cursor, count, true, self.window, input));
     }
 
     /// Switches how quick search matches, or whether case counts, as `switch` says, as the keys
@@ -2977,7 +2970,7 @@ mod tests {
 
     use super::*;
     use crate::tui::keymap::Mode;
-    use crate::tui::search::Case;
+    use crate::tui::search::{Case, Way};
     use crate::tui::spinner;
 
     /// Quick search in `way`, with smart case.
@@ -3263,7 +3256,7 @@ mod tests {
     #[test]
     fn quick_search_searches_from_where_it_started_as_vims_incremental_search() {
         let mut panel = search_files(&["bar", "bin", "boot", "cab"]);
-        panel.search_down(1, SearchMode::Plain);
+        panel.search_down(1, quick(Way::Plain));
         assert!(panel.searching());
         typed(&mut panel, "B");
         assert_eq!(
@@ -3320,7 +3313,7 @@ mod tests {
         assert!(!panel.searching());
         // Enter on a text that nothing matches, as the last search's may be, stays where the
         // search started.
-        panel.search_up(1, SearchMode::Plain);
+        panel.search_up(1, quick(Way::Plain));
         panel.search_resume("z", quick(Way::Plain));
         assert_eq!(
             panel.search_text(),
@@ -3331,7 +3324,7 @@ mod tests {
         assert_eq!(panel.end_search().map(|end| end.found), Some(None));
         assert_eq!(under_cursor(&panel), "boot");
         // Opening another directory ends a search.
-        panel.search_down(1, SearchMode::Plain);
+        panel.search_down(1, quick(Way::Plain));
         typed(&mut panel, "b");
         panel.handle(Action::Reload);
         assert!(!panel.searching());
@@ -3340,7 +3333,7 @@ mod tests {
     #[test]
     fn quick_search_types_no_character_that_nothing_matches_but_finishes_a_regex() {
         let mut panel = search_files(&["bar", "boot"]);
-        panel.search_down(1, SearchMode::Regex);
+        panel.search_down(1, quick(Way::Regex));
         typed(&mut panel, "(oz");
         assert_eq!(
             panel.search_text(),
@@ -3357,14 +3350,14 @@ mod tests {
         panel.abort_search();
 
         // A blank text searches for nothing, so it is typed.
-        panel.search_down(1, SearchMode::Plain);
+        panel.search_down(1, quick(Way::Plain));
         typed(&mut panel, " x");
         assert_eq!(panel.search_text(), Some(" "));
         assert_eq!(panel.cursor, 0);
 
         // Nothing matches in a directory without names.
         let mut panel = search_files(&[]);
-        panel.search_down(1, SearchMode::Fzf);
+        panel.search_down(1, quick(Way::Fzf));
         typed(&mut panel, "a");
         assert_eq!(panel.search_text(), Some(""));
     }
@@ -3372,7 +3365,7 @@ mod tests {
     #[test]
     fn fuzzy_quick_search_goes_to_the_best_match_and_on_to_the_next_best() {
         let mut panel = search_files(&["Cargo.toml", "config.rs", "cfg-if", "notes", "x.cfg"]);
-        panel.search_down(1, SearchMode::Fzf);
+        panel.search_down(1, quick(Way::Fzf));
         typed(&mut panel, "cfg");
         assert_eq!(under_cursor(&panel), "cfg-if", "together, at the start");
         panel.search_step(true);
@@ -3396,7 +3389,7 @@ mod tests {
 
         let mut panel = search_files(&["bar", "bat", "baz"]);
         panel.handle(Action::End);
-        panel.search_down(1, SearchMode::Fzf);
+        panel.search_down(1, quick(Way::Fzf));
         typed(&mut panel, "b");
         assert_eq!(
             under_cursor(&panel),
@@ -3410,7 +3403,7 @@ mod tests {
     #[test]
     fn matches_go_both_ways_round_and_an_ended_search_says_what_it_found() {
         let mut panel = search_files(&["bar", "bin", "cat", "boot"]);
-        panel.search_down(1, SearchMode::Plain);
+        panel.search_down(1, quick(Way::Plain));
         typed(&mut panel, "b");
         assert_eq!(under_cursor(&panel), "bar");
         panel.search_step(false);
@@ -3436,7 +3429,7 @@ mod tests {
         assert_eq!(under_cursor(&panel), "boot", "round");
 
         // Fuzzy: the previous one as fzf ranks them, round to the worst.
-        panel.search_down(1, SearchMode::Plain);
+        panel.search_down(1, quick(Way::Plain));
         panel.search_resume("bt", quick(Way::Fzf));
         assert_eq!(panel.search_text(), Some("bt"));
         let best = under_cursor(&panel);
@@ -3451,7 +3444,7 @@ mod tests {
     #[test]
     fn a_count_before_the_search_and_ctrl_g_go_that_many_matches_on() {
         let mut panel = search_files(&["a1", "a2", "a3", "a4"]);
-        panel.search_down(2, SearchMode::Plain);
+        panel.search_down(2, quick(Way::Plain));
         typed(&mut panel, "a");
         assert_eq!(under_cursor(&panel), "a2");
         panel.search_step(true);
@@ -3463,7 +3456,7 @@ mod tests {
         assert_eq!(under_cursor(&panel), "a3");
         // A count that goes round the end says so.
         panel.handle(Action::Home);
-        panel.search_down(5, SearchMode::Plain);
+        panel.search_down(5, quick(Way::Plain));
         typed(&mut panel, "a");
         assert_eq!(under_cursor(&panel), "a1");
         assert_eq!(panel.end_search().map(|end| end.found), Some(Some(true)));
@@ -3480,7 +3473,7 @@ mod tests {
         }
         panel.scroll(10);
         let (cursor, top) = (panel.cursor, panel.window.top());
-        panel.search_down(1, SearchMode::Plain);
+        panel.search_down(1, quick(Way::Plain));
         typed(&mut panel, "f5");
         panel.scroll(10);
         assert_eq!(under_cursor(&panel), "f50");
@@ -3494,7 +3487,7 @@ mod tests {
     #[test]
     fn literal_quick_search_finds_the_text_anywhere_in_a_name_as_the_filters_do() {
         let mut panel = search_files(&["bar", "cab", "Tabs"]);
-        panel.search_down(1, SearchMode::Plain);
+        panel.search_down(1, quick(Way::Plain));
         typed(&mut panel, "ab");
         assert_eq!(under_cursor(&panel), "cab");
         panel.search_step(true);
@@ -3543,7 +3536,7 @@ mod tests {
     #[test]
     fn quick_search_shows_where_each_name_on_screen_holds_the_text() {
         let mut panel = search_files(&["abab", "cab", "Tabs", "note"]);
-        panel.search_down(1, SearchMode::Plain);
+        panel.search_down(1, quick(Way::Plain));
         assert!(found(&mut panel, 60).is_empty(), "nothing typed");
         panel.switch_search(Switch::Case(Case::Ignore));
         typed(&mut panel, "AB");
@@ -3556,11 +3549,11 @@ mod tests {
     #[test]
     fn fuzzy_quick_search_shows_the_characters_it_matched() {
         let mut panel = search_files(&["abab", "cab", "config.rs"]);
-        panel.search_down(1, SearchMode::Fzf);
+        panel.search_down(1, quick(Way::Fzf));
         typed(&mut panel, "cb");
         assert_eq!(found(&mut panel, 60), ["cb"]);
         let mut panel = search_files(&["config.rs"]);
-        panel.search_down(1, SearchMode::Fzf);
+        panel.search_down(1, quick(Way::Fzf));
         typed(&mut panel, "cfg");
         assert_eq!(found(&mut panel, 60), ["cfg"]);
     }
@@ -3569,7 +3562,7 @@ mod tests {
     fn a_name_cut_short_shows_what_it_found_where_it_shows() {
         let name = format!("ab{}ab.md", "x".repeat(60));
         let mut panel = search_files(&[&name]);
-        panel.search_down(1, SearchMode::Plain);
+        panel.search_down(1, quick(Way::Plain));
         typed(&mut panel, "ab");
         // The start and the end of the name show, not what it found in the middle.
         assert_eq!(found(&mut panel, 47), ["abab"]);
@@ -3579,7 +3572,7 @@ mod tests {
         // shows what it found.
         let mut panel = search_files(&[&format!("x{name}")]);
         panel.shift_names(2);
-        panel.search_down(1, SearchMode::Plain);
+        panel.search_down(1, quick(Way::Plain));
         typed(&mut panel, "ab");
         assert_eq!(found(&mut panel, 47), ["b"]);
     }
@@ -3587,7 +3580,7 @@ mod tests {
     #[test]
     fn quick_search_edits_its_text_as_a_text_field_does() {
         let mut panel = search_files(&["bar", "bat", "boot", "cab"]);
-        panel.search_down(1, SearchMode::Plain);
+        panel.search_down(1, quick(Way::Plain));
         typed(&mut panel, "bo");
         assert_eq!(under_cursor(&panel), "boot");
         // Typed in the middle, a character searches again, and one that nothing matches is not
@@ -4313,7 +4306,7 @@ mod tests {
         assert!(bottom.contains(" in "), "the total stays: {bottom}");
 
         // Quick search types what is not of the host.
-        panel.search_down(1, SearchMode::Plain);
+        panel.search_down(1, quick(Way::Plain));
         let backend = draw(&mut panel, 40, 12, true);
         assert!(!dim(&backend, status));
     }

@@ -34,8 +34,11 @@ pub struct Query {
     /// The text to search for; empty lists the files instead (`--files`).
     pub pattern: String,
     /// The globs of the Files field, split at whitespace by the caller; `!` excludes. Each is
-    /// a `--glob`.
+    /// a `--glob`, or an `--iglob` where case does not count for it.
     pub globs: Vec<String>,
+    /// Whether case counts in each glob: smart case, once the glob has a capital letter; never;
+    /// or always.
+    pub globs_case: Case,
     /// A regular expression; else `--fixed-strings`.
     pub regex: bool,
     /// `--smart-case`, `--ignore-case`, or `--case-sensitive`.
@@ -83,7 +86,8 @@ impl Query {
             );
         }
         for glob in &self.globs {
-            args.push("--glob".into());
+            let counts = self.globs_case.counts(glob, false);
+            args.push(if counts { "--glob" } else { "--iglob" }.into());
             args.push(glob.into());
         }
         if !files {
@@ -427,6 +431,7 @@ mod tests {
         Query {
             pattern: pattern.to_owned(),
             globs: Vec::new(),
+            globs_case: Case::Smart,
             regex: false,
             case: Case::Smart,
             hidden: false,
@@ -504,9 +509,9 @@ mod tests {
                 "1",
                 "--hidden",
                 "--case-sensitive",
-                "--glob",
+                "--iglob",
                 "*.rs",
-                "--glob",
+                "--iglob",
                 "!target",
                 "--regexp",
                 "fn \\w+",
@@ -514,6 +519,23 @@ mod tests {
                 "."
             ]
         );
+    }
+
+    #[test]
+    fn each_glob_tells_case_apart_as_the_case_of_the_globs_says() {
+        let query = |globs_case| Query {
+            globs: vec!["*.rs".to_owned(), "!Target".to_owned()],
+            globs_case,
+            ..query("")
+        };
+        let globs = |globs_case| strings(&query(globs_case).args())[3..7].join(" ");
+        assert_eq!(
+            globs(Case::Smart),
+            "--iglob *.rs --glob !Target",
+            "smart case, glob by glob"
+        );
+        assert_eq!(globs(Case::Ignore), "--iglob *.rs --iglob !Target");
+        assert_eq!(globs(Case::Match), "--glob *.rs --glob !Target");
     }
 
     #[test]
@@ -526,6 +548,7 @@ mod tests {
         );
         let every = Query {
             globs: vec!["*.md".to_owned()],
+            globs_case: Case::Match,
             regex: true,
             case: Case::Match,
             hidden: true,

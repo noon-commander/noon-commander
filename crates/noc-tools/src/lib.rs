@@ -12,6 +12,7 @@
 pub mod editor;
 mod error;
 pub mod fd;
+pub mod globs;
 pub mod opener;
 mod process;
 pub mod ripgrep;

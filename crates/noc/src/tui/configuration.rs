@@ -44,7 +44,7 @@ enum Key {
     Icons,
     ShowHidden,
     NaturalSort,
-    SearchMode,
+    DefaultSearchMode,
     Mouse,
     Wheel,
     TerminalTitle,
@@ -181,8 +181,8 @@ impl Setting {
             Key::Icons => ui.icons = self.on(),
             Key::ShowHidden => ui.show_hidden = self.on(),
             Key::NaturalSort => ui.natural_sort = self.on(),
-            Key::SearchMode => {
-                ui.search_mode = match text {
+            Key::DefaultSearchMode => {
+                ui.default_search_mode = match text {
                     "plain" => SearchMode::Plain,
                     "regex" => SearchMode::Regex,
                     _ => SearchMode::Fzf,
@@ -1166,7 +1166,7 @@ fn interface(config: &Config, themes: &[&str]) -> Category {
         Borders::Double => "double",
         Borders::Single => "single",
     };
-    let search_mode = match ui.search_mode {
+    let search_mode = match ui.default_search_mode {
         SearchMode::Plain => "plain",
         SearchMode::Fzf => "fzf",
         SearchMode::Regex => "regex",
@@ -1205,13 +1205,16 @@ fn interface(config: &Config, themes: &[&str]) -> Category {
             Value::Toggle(ui.natural_sort),
         ),
         Setting::new(
-            Key::SearchMode,
-            (fl!("config-search-mode"), fl!("config-search-mode-hint")),
+            Key::DefaultSearchMode,
+            (
+                fl!("config-default-search-mode"),
+                fl!("config-default-search-mode-hint"),
+            ),
             choice(
                 &[
-                    ("plain", fl!("config-search-mode-plain")),
-                    ("fzf", fl!("config-search-mode-fzf")),
-                    ("regex", fl!("config-search-mode-regex")),
+                    ("plain", fl!("config-default-search-mode-plain")),
+                    ("fzf", fl!("config-default-search-mode-fzf")),
+                    ("regex", fl!("config-default-search-mode-regex")),
                 ],
                 search_mode,
             ),
@@ -2038,12 +2041,13 @@ mod tests {
                 .collect();
             (underlined, terminal.backend().to_string())
         };
-        assert_eq!(underlined(76).0, "1L2F3T4B5I6h7r8S9MweKdna");
+        assert_eq!(underlined(76).0, "1L2F3T4B5I6h7r8s9MweKdna");
         // Names cut short keep the letter before the cut, as Command line its 7 and Show hidden
-        // files its h, and lose one after it, as Key hints delay its d.
+        // files its h, and lose one after it, as Default search mode its s and Key hints delay
+        // its d.
         let (letters, screen) = underlined(40);
         assert!(screen.contains(" 7 Co"), "{screen}");
-        assert_eq!(letters, "1L2F3T4B5I6h7r8S9MweKna", "{screen}");
+        assert_eq!(letters, "1L2F3T4B5I6h7r89MweKna", "{screen}");
     }
 
     #[test]

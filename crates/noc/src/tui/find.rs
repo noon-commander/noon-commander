@@ -2,16 +2,14 @@
 //! the files under the panel's directory, local or on a host, for the text of the first field,
 //! among the files that the globs of the second let through, again as either changes, or the
 //! keys after Ctrl+s in the text switch whether case counts or take it as it is or as a regular
-//! expression. The
-//! dialog lists each file it found, in the order of their paths, with the lines
-//! that match under it, the matches highlighted; with no text it lists the files. Its buttons go
+//! expression, or in the globs whether case counts. The dialog lists each file it found, in the
+//! order of their paths, with the lines that match under it, the matches highlighted; with no text it lists the files. Its buttons go
 //! to the file in the panel, and view and edit it at the line, as in the results of mc's Find
 //! File. Its other mode, Files and dirs, finds files and directories whose names match the text
 //! with fd, and goes to them; `f f` and F9 → Command → Find files and dirs… open the dialog in it.
 
 use std::ops::Range;
 
-use noc_config::SearchMode;
 use noc_scroll::scrollbar::Bar;
 use noc_tools::fd;
 use noc_tools::ripgrep::{self, Hit};
@@ -173,18 +171,21 @@ enum State {
     Failed(String),
 }
 
-/// What the search depends on in the dialog: the mode, the fields, and how the text matches and
-/// whether case counts.
-type Settings = (usize, String, String, Way, Case);
+/// What the search depends on in the dialog: the mode, the fields, how the text matches and
+/// whether case counts in it, and whether case counts in the globs.
+type Settings = (usize, String, String, Way, Case, Case);
 
 /// The dialog, with what the last search found.
 #[derive(Debug)]
 pub(crate) struct FindWindow {
     /// Where it searches.
     root: Location,
-    /// The text and the globs of the files in its fields, case in its check box, the rows in
-    /// its list, and its buttons.
+    /// The text and the globs of the files in its fields, the rows in its list, and its
+    /// buttons.
     dialog: Dialog,
+    /// The globs as ripgrep takes them, whose case the field shows in the text mode: fd tells
+    /// case apart in them always.
+    rg_files: Input,
     /// Hidden files too, as the panels show them, and how much it finds: in all, and in a
     /// file.
     hidden: bool,
@@ -218,14 +219,14 @@ impl Drop for FindWindow {
 impl FindWindow {
     /// The dialog of the search in `root`, shown as `title`, in `find` mode, typing in its text,
     /// which takes as many results as `[search]` says, in all and in a file; hidden files too
-    /// if `hidden`. The text is a regular expression unless `mode` (`ui.search_mode`) is the
-    /// plain one.
+    /// if `hidden`. The text and the globs match as `text` and `files` say, as they were last;
+    /// fd tells case apart in the globs.
     pub(crate) fn new(
         (root, title): (Location, String),
         find: FindMode,
         (max_results, max_per_file): (usize, usize),
         hidden: bool,
-        mode: SearchMode,
+        (text, files): (Input, Input),
         decor: Decor,
     ) -> Self {
         let fields = [
@@ -240,10 +241,12 @@ impl FindWindow {
             .with_choices(&modes, chosen)
             .in_a_row()
             .with_list()
-            .with_search(TEXT, Input::new(Kind::TREE, mode));
+            .with_search(TEXT, text)
+            .with_search(FILES, files_in(chosen, files));
         Self {
             root,
             dialog,
+            rg_files: files,
             hidden,
             max_results,
             max_per_file,
@@ -274,7 +277,7 @@ impl FindWindow {
             .split_whitespace()
             .map(str::to_owned)
             .collect();
-        let input = self.input();
+        let input = self.text_input();
         let regex = input.way() == Way::Regex;
         let case = input.case();
         if self.dialog.chosen() == NAMES_MODE {
@@ -289,6 +292,7 @@ impl FindWindow {
         FindQuery::Lines(ripgrep::Query {
             pattern,
             globs,
+            globs_case: self.files_input().case(),
             regex,
             case,
             hidden: self.hidden,
@@ -415,11 +419,19 @@ impl FindWindow {
         self.put_cursor();
     }
 
-    /// How the text matches: as a regular expression or as it is, `ui.search_mode` (its fzf
-    /// mode as a regular expression, which has no meaning here), and with smart case, until the
-    /// keys after Ctrl+s in its field switch them.
-    fn input(&self) -> Input {
+    /// How the text matches: as a regular expression or as it is, and whether case counts, as
+    /// they were last until the keys after Ctrl+s in its field switch them.
+    pub(crate) fn text_input(&self) -> Input {
         (self.dialog.search(TEXT)).unwrap_or_else(|| Input::new(Kind::TREE, Way::Plain))
+    }
+
+    /// Whether case counts in the globs as ripgrep takes them, which the field shows in the
+    /// text mode.
+    pub(crate) fn files_input(&self) -> Input {
+        match self.dialog.search(FILES) {
+            Some(files) if self.dialog.chosen() == TEXT_MODE => files,
+            _ => self.rg_files,
+        }
     }
 
     /// The kind of the field with the focus, if it searches: the text's.
@@ -462,8 +474,9 @@ impl FindWindow {
             self.dialog.chosen(),
             self.dialog.text_of(TEXT).to_owned(),
             self.dialog.text_of(FILES).to_owned(),
-            self.input().way(),
-            self.input().case(),
+            self.text_input().way(),
+            self.text_input().case(),
+            self.dialog.search(FILES).map_or(Case::Match, Input::case),
         )
     }
 
@@ -597,11 +610,18 @@ impl FindWindow {
         self.event(event, &before)
     }
 
-    /// The buttons of the mode chosen now.
+    /// The buttons of the mode chosen now, and the case of the globs: fd's, or ripgrep's as
+    /// it was.
     fn follow_mode(&mut self, before: &Settings) {
         let mode = self.dialog.chosen();
         if mode != before.0 {
+            if before.0 == TEXT_MODE
+                && let Some(files) = self.dialog.search(FILES)
+            {
+                self.rg_files = files;
+            }
             self.dialog.set_buttons(buttons(mode));
+            self.dialog.set_search(FILES, files_in(mode, self.rg_files));
         }
     }
 
@@ -727,6 +747,15 @@ impl FindWindow {
             shine: wait.and_then(|wait| spin.shine(wait)),
         };
         self.dialog.render_list(frame, area, theme, &view);
+    }
+}
+
+/// How the globs match in `mode`, `rg` as ripgrep takes them: fd tells case apart in them.
+fn files_in(mode: usize, rg: Input) -> Input {
+    if mode == NAMES_MODE {
+        Input::new(Kind::FILES_FD, Way::Glob)
+    } else {
+        rg
     }
 }
 
@@ -910,6 +939,7 @@ fn line_spans(
 mod tests {
     use std::time::Instant;
 
+    use noc_config::SearchMode;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
     use ratatui::layout::Position;
@@ -919,13 +949,21 @@ mod tests {
     use crate::tui::mouse::Press;
     use crate::tui::spinner;
 
+    /// The text and the globs as they open the first time, the text in `mode`.
+    fn opens(mode: SearchMode) -> (Input, Input) {
+        (
+            Input::new(Kind::TREE, mode),
+            Input::new(Kind::FILES, Way::Glob),
+        )
+    }
+
     fn window() -> FindWindow {
         FindWindow::new(
             (Location::Local("/src/noc".into()), "~/src/noc".to_owned()),
             FindMode::Text,
             (50, 2),
             true,
-            SearchMode::Fzf,
+            opens(SearchMode::Fzf),
             Decor::new(false),
         )
     }
@@ -1058,7 +1096,7 @@ mod tests {
             FindMode::Text,
             (50, 2),
             true,
-            SearchMode::Plain,
+            opens(SearchMode::Plain),
             Decor::new(false),
         );
         assert!(!plain.query().lines().regex);
@@ -1066,6 +1104,38 @@ mod tests {
             !draw(&mut window, 80).contains("Regular expression"),
             "no check box"
         );
+    }
+
+    #[test]
+    fn the_globs_keep_their_case_as_ripgrep_takes_them_and_fd_tells_case_apart() {
+        let mut window = window();
+        let glob = Glyphs::of(window.decor.icons()).search_modes.glob;
+        let at = glyph_at(&mut window, glob).expect("the glyph of globs ends Files");
+        let click = |at| Pointer {
+            press: Press::Click,
+            at,
+        };
+        let case = Position::new(at.x - 3, at.y);
+        assert_eq!(window.pointer(click(at)), FindEvent::Pending, "one way");
+        assert_eq!(window.pointer(click(case)), FindEvent::Search);
+        assert_eq!(window.query().lines().globs_case, Case::Ignore);
+        assert_eq!(window.search_focused(), Some(Kind::FILES));
+        // By name, fd tells case apart in the globs, which have no other case there.
+        let hotkey = |window: &mut FindWindow, c| {
+            window.handle(Typed::from(Resolved::Hotkey(c)), &mut Registers::default())
+        };
+        hotkey(&mut window, 'd');
+        hotkey(&mut window, 'f');
+        assert_eq!(window.search_focused(), Some(Kind::FILES_FD));
+        assert_eq!(press(&mut window, Action::CaseIgnore), FindEvent::Pending);
+        assert_eq!(window.pointer(click(case)), FindEvent::Pending);
+        assert_eq!(
+            window.files_input().case(),
+            Case::Ignore,
+            "ripgrep's is kept"
+        );
+        hotkey(&mut window, 'x');
+        assert_eq!(window.query().lines().globs_case, Case::Ignore, "and back");
     }
 
     #[test]
@@ -1127,9 +1197,22 @@ mod tests {
         assert_eq!(query.pattern, "fn x");
         assert_eq!(query.globs, ["*.rs", "!targe"]);
         assert!(!query.regex && query.case == Case::Smart && query.hidden);
+        assert_eq!(query.globs_case, Case::Smart);
         assert_eq!(query.max_per_file, 2);
-        // The globs have no case of their own.
-        assert_eq!(press(&mut window, Action::CaseMatch), FindEvent::Pending);
+        // The globs have a case of their own, which the text keeps apart.
+        assert_eq!(press(&mut window, Action::CaseMatch), FindEvent::Search);
+        assert_eq!(
+            (
+                window.query().lines().globs_case,
+                window.query().lines().case
+            ),
+            (Case::Match, Case::Smart)
+        );
+        assert_eq!(
+            press(&mut window, Action::SearchMode),
+            FindEvent::Pending,
+            "one way"
+        );
         press(&mut window, Action::Up);
         assert_eq!(press(&mut window, Action::CaseMatch), FindEvent::Search);
         assert_eq!(window.query().lines().case, Case::Match);
@@ -1274,7 +1357,7 @@ mod tests {
             FindMode::Names,
             (50, 2),
             true,
-            SearchMode::Fzf,
+            opens(SearchMode::Fzf),
             Decor::new(false),
         );
         assert_eq!(

@@ -1,5 +1,5 @@
 //! The zoxide window of `g z`: the directories zoxide ranks highest for the keywords typed,
-//! best first, as `z foo bar` picks them in a shell, in the plain mode of `ui.search_mode`; or
+//! best first, as `z foo bar` picks them in a shell, in the plain search mode; or
 //! all of them, filtered by what is typed, as fzf ranks them or as a regular expression in
 //! zoxide's order. A list as the others, on [`Picker`]: it opens in Insert mode, as `zi` does,
 //! and Esc goes to the rows, where `/` types the keywords again; Enter opens one in the active
@@ -21,7 +21,7 @@ use super::keymap::{Action, Mode, Resolved};
 use super::loading::Loading;
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker, ShownRow};
-use super::search::Kind;
+use super::search::{Input, Kind};
 use super::spinner::{Spin, Wait};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -67,13 +67,13 @@ impl JumpMenu {
             exclude,
             loading: Loading::new(generation),
             found: Vec::new(),
-            picker: Picker::new(SearchMode::Plain).paths().plain_keywords(),
+            picker: Picker::new(Input::new(Kind::FILTER_PATHS, SearchMode::Plain)).plain_keywords(),
         }
     }
 
-    /// The same window, which matches in `mode` (`ui.search_mode`).
-    pub(crate) fn search_mode(mut self, mode: SearchMode) -> Self {
-        self.picker.set_mode(mode);
+    /// The same window, which matches as `input` says, as it was last.
+    pub(crate) fn with_input(mut self, input: Input) -> Self {
+        self.picker.set_input(input);
         self
     }
 
@@ -147,6 +147,11 @@ impl JumpMenu {
     /// The kind of its filter while that takes the keys.
     pub(crate) fn search(&self) -> Option<Kind> {
         self.picker.search()
+    }
+
+    /// How its filter matches now, and whether case counts.
+    pub(crate) fn input(&self) -> Input {
+        self.picker.input()
     }
 
     /// The rows, for the count before a page key.
@@ -389,8 +394,8 @@ mod tests {
 
     #[test]
     fn fuzzy_keywords_filter_without_asking_zoxide() {
-        let mut menu =
-            JumpMenu::new(PathBuf::from("/home/me"), None, 1).search_mode(SearchMode::Fzf);
+        let mut menu = JumpMenu::new(PathBuf::from("/home/me"), None, 1)
+            .with_input(Input::new(Kind::FILTER_PATHS, SearchMode::Fzf));
         menu.found(1, Ok(found()));
         assert_eq!(menu.keywords(), [] as [String; 0]);
         for c in "dl".chars() {
@@ -419,8 +424,8 @@ mod tests {
 
     #[test]
     fn a_regular_expression_filters_in_zoxides_order_and_alt_r_switches_the_mode() {
-        let mut menu =
-            JumpMenu::new(PathBuf::from("/home/me"), None, 1).search_mode(SearchMode::Regex);
+        let mut menu = JumpMenu::new(PathBuf::from("/home/me"), None, 1)
+            .with_input(Input::new(Kind::FILTER_PATHS, SearchMode::Regex));
         menu.found(1, Ok(found()));
         for c in "^~/[sD]".chars() {
             assert_eq!(menu.handle(Resolved::Insert(c)), JumpEvent::Pending);

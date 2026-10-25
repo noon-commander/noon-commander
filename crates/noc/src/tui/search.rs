@@ -1,9 +1,12 @@
-//! How every field that searches matches what is typed (ADR 0030, ADR 0044, ADR 0046): quick
-//! search, the filters of the lists, the search of a tree, and the marking of `g +` and `g -`.
-//! Each is a [`Kind`], which says the ways it matches, in the order Ctrl+s Ctrl+s goes round
-//! them, and the way it starts in for each of `ui.search_mode`; an [`Input`] is one of them while
-//! it is open, with its way and whether case counts, smart case to start. Glyphs at the end of the
-//! field say both, in every field.
+//! How every field that searches matches what is typed (ADR 0030, ADR 0044, ADR 0046,
+//! ADR 0047): quick search, the filters of the lists, the search of a tree, and the marking of
+//! `g +` and `g -`. Each is a [`Kind`], which says the ways it matches, in the order Ctrl+s
+//! Ctrl+s goes round them, the way it starts in for each of `ui.default_search_mode`, and the
+//! cases it can take; an [`Input`] is one of them while it is open, with its way and whether case
+//! counts. Glyphs at the end of the field say both, in every field. Each field keeps how it was
+//! last until Noon Commander quits ([`Memory`]).
+
+use std::collections::HashMap;
 
 use noc_config::SearchMode;
 pub(crate) use noc_pattern::Case;
@@ -22,7 +25,7 @@ use super::keymap::Action;
 use super::pattern::Pattern;
 use super::theme::Theme;
 
-/// A way to match what is typed: the three of `ui.search_mode`, and shell patterns.
+/// A way to match what is typed: the three of `ui.default_search_mode`, and shell patterns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum Way {
     /// The text anywhere.
@@ -69,11 +72,13 @@ pub(crate) fn case_glyph(case: Case, glyphs: CaseModes) -> &'static str {
 /// Whether case counts in the order Ctrl+s c goes round them.
 const CASES: [Case; 3] = [Case::Smart, Case::Ignore, Case::Match];
 
-/// What is matched: names, or paths, where fzf has a word start after a `/`.
+/// What is matched: names, or paths, where fzf has a word start after a `/`; or the files that
+/// ripgrep or fd search, by globs that they match.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum Target {
     Names,
     Paths,
+    Files,
 }
 
 /// What a key typed after Ctrl+s in a field that searches does to it.
@@ -83,8 +88,9 @@ pub(crate) enum Switch {
     NextWay,
     /// This way, if the field has it.
     Way(Way),
-    /// The next of smart case, case ignored, and case, round.
+    /// The next of smart case, case ignored, and case that the field has, round.
     NextCase,
+    /// This case, if the field has it.
     Case(Case),
 }
 
@@ -107,7 +113,7 @@ impl Switch {
     }
 }
 
-/// A kind of field that searches: the ways it matches, and what.
+/// A kind of field that searches: the ways it matches, what, and whether case counts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct Kind {
     /// In the order Ctrl+s Ctrl+s goes round them.
@@ -115,6 +121,8 @@ pub(crate) struct Kind {
     /// The way it starts in when the one asked for is not among them.
     instead: Way,
     target: Target,
+    /// In the order Ctrl+s c goes round them; it starts in the first.
+    cases: &'static [Case],
 }
 
 impl Kind {
@@ -123,6 +131,7 @@ impl Kind {
         ways: &[Way::Plain, Way::Fzf, Way::Regex],
         instead: Way::Fzf,
         target: Target::Names,
+        cases: &CASES,
     };
     /// The filter of a list of names: the location menu, the tab menu, the workspaces, the
     /// command history, the key hints.
@@ -130,6 +139,7 @@ impl Kind {
         ways: &[Way::Plain, Way::Fzf, Way::Regex],
         instead: Way::Fzf,
         target: Target::Names,
+        cases: &CASES,
     };
     /// The filter of a list of paths: the zoxide window.
     pub(crate) const FILTER_PATHS: Self = Self {
@@ -142,6 +152,20 @@ impl Kind {
         ways: &[Way::Plain, Way::Regex],
         instead: Way::Regex,
         target: Target::Names,
+        cases: &CASES,
+    };
+    /// The globs of the files of the search of a tree, which ripgrep matches, each with smart
+    /// case, case ignored, or case (`--iglob` or `--glob`).
+    pub(crate) const FILES: Self = Self {
+        ways: &[Way::Glob],
+        instead: Way::Glob,
+        target: Target::Files,
+        cases: &CASES,
+    };
+    /// The same globs when fd searches names, whose `--exclude` always tells case apart.
+    pub(crate) const FILES_FD: Self = Self {
+        cases: &[Case::Match],
+        ..Self::FILES
     };
     /// The pattern of `g +` and `g -`: shell patterns first, as mc's, then text and regular
     /// expressions.
@@ -149,6 +173,7 @@ impl Kind {
         ways: &[Way::Glob, Way::Plain, Way::Regex],
         instead: Way::Glob,
         target: Target::Names,
+        cases: &CASES,
     };
 
     /// The way it starts in when `way` is asked for.
@@ -168,13 +193,23 @@ impl Kind {
             .unwrap_or(self.instead)
     }
 
-    /// Whether `action` does something in a field of this kind: going to a way it has, or to
-    /// the next if it has more than one; every other action does.
+    /// The case after `case`, as Ctrl+s c goes round.
+    fn next_case(self, case: Case) -> Case {
+        let at = self.cases.iter().position(|&each| each == case);
+        at.and_then(|at| self.cases.get((at + 1) % self.cases.len()))
+            .copied()
+            .unwrap_or(self.cases[0])
+    }
+
+    /// Whether `action` does something in a field of this kind: going to a way or a case it
+    /// has, or to the next if it has more than one; every other action does.
     pub(crate) fn allows(self, action: Action) -> bool {
         match Switch::of(action) {
             Some(Switch::NextWay) => self.ways.len() > 1,
             Some(Switch::Way(way)) => self.ways.contains(&way),
-            Some(Switch::NextCase | Switch::Case(_)) | None => true,
+            Some(Switch::NextCase) => self.cases.len() > 1,
+            Some(Switch::Case(case)) => self.cases.contains(&case),
+            None => true,
         }
     }
 }
@@ -189,19 +224,20 @@ pub(crate) struct Input {
 }
 
 impl Input {
-    /// A field of `kind` that starts in `way`, `ui.search_mode` mostly, or in the kind's own if
-    /// it has no such way; with smart case.
+    /// A field of `kind` that starts in `way`, `ui.default_search_mode` mostly, or in the kind's
+    /// own if it has no such way; with its first case, smart case but where it has only one.
     pub(crate) fn new(kind: Kind, way: impl Into<Way>) -> Self {
         Self {
             kind,
             way: kind.start(way.into()),
-            case: Case::Smart,
+            case: kind.cases[0],
         }
     }
 
-    /// The same field, with `case`.
-    pub(crate) fn with_case(self, case: Case) -> Self {
-        Self { case, ..self }
+    /// The same field, with `case` if it has it.
+    pub(crate) fn with_case(mut self, case: Case) -> Self {
+        self.switch(Switch::Case(case));
+        self
     }
 
     pub(crate) fn kind(self) -> Kind {
@@ -219,26 +255,15 @@ impl Input {
     }
 
     /// Does what `switch` says, as the keys after Ctrl+s do; whether the way or the case
-    /// changed. A way the kind has not changes nothing.
+    /// changed. A way or a case the kind has not changes nothing.
     pub(crate) fn switch(&mut self, switch: Switch) -> bool {
         let before = *self;
         match switch {
             Switch::NextWay => self.way = self.kind.next(self.way),
-            Switch::Way(way) => {
-                self.way = if self.kind.ways.contains(&way) {
-                    way
-                } else {
-                    self.way
-                }
-            }
-            Switch::NextCase => {
-                let at = CASES
-                    .iter()
-                    .position(|&case| case == self.case)
-                    .unwrap_or(0);
-                self.case = CASES[(at + 1) % CASES.len()];
-            }
-            Switch::Case(case) => self.case = case,
+            Switch::Way(way) if self.kind.ways.contains(&way) => self.way = way,
+            Switch::NextCase => self.case = self.kind.next_case(self.case),
+            Switch::Case(case) if self.kind.cases.contains(&case) => self.case = case,
+            Switch::Way(_) | Switch::Case(_) => {}
         }
         *self != before
     }
@@ -253,9 +278,13 @@ impl Input {
         self.kind.ways.len() > 1
     }
 
-    /// Whether `typed` matches nothing for being no regular expression, in the regex way.
+    /// Whether `typed` is wrong: no regular expression in the regex way, or no globs of files.
     pub(crate) fn invalid(self, typed: &str) -> bool {
-        self.way == Way::Regex && self.matcher(typed).error().is_some()
+        match (self.kind.target, self.way) {
+            (Target::Files, _) => !noc_tools::globs::valid(typed),
+            (_, Way::Regex) => self.matcher(typed).error().is_some(),
+            _ => false,
+        }
     }
 
     /// Its glyphs, and their style at the end of a field in `style`; the way's in the style of
@@ -267,6 +296,82 @@ impl Input {
             style,
             way_style: if invalid { theme.invalid(style) } else { style },
             switches: self.switchable(),
+            cases: self.kind.cases.len() > 1,
+        }
+    }
+}
+
+/// A field that searches, of those that keep how they were last apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum Slot {
+    /// Quick search, `/` and `?`, in either panel.
+    QuickSearch,
+    LocationMenu,
+    TabMenu,
+    Workspaces,
+    CommandHistory,
+    KeyHints,
+    /// The zoxide window.
+    Jump,
+    /// The text of the search of a tree, in either of its modes.
+    FindText,
+    /// Its globs, as ripgrep takes them.
+    FindFiles,
+    /// The pattern of `g +` and `g -`.
+    Mark,
+}
+
+impl Slot {
+    /// Every slot.
+    pub(crate) const ALL: [Self; 10] = [
+        Self::QuickSearch,
+        Self::LocationMenu,
+        Self::TabMenu,
+        Self::Workspaces,
+        Self::CommandHistory,
+        Self::KeyHints,
+        Self::Jump,
+        Self::FindText,
+        Self::FindFiles,
+        Self::Mark,
+    ];
+
+    /// The kind of its field.
+    pub(crate) fn kind(self) -> Kind {
+        match self {
+            Self::QuickSearch => Kind::QUICK_SEARCH,
+            Self::LocationMenu
+            | Self::TabMenu
+            | Self::Workspaces
+            | Self::CommandHistory
+            | Self::KeyHints => Kind::FILTER,
+            Self::Jump => Kind::FILTER_PATHS,
+            Self::FindText => Kind::TREE,
+            Self::FindFiles => Kind::FILES,
+            Self::Mark => Kind::MARK,
+        }
+    }
+}
+
+/// How each field that searches was last, its way and its case, until Noon Commander quits
+/// (ADR 0047): the next time it opens, it opens so. One not yet open opens in
+/// `ui.default_search_mode`, with smart case.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Memory(HashMap<Slot, Input>);
+
+impl Memory {
+    /// How the field of `slot` opens: as it was last, else in `mode`.
+    pub(crate) fn input(&self, slot: Slot, mode: SearchMode) -> Input {
+        self.0
+            .get(&slot)
+            .copied()
+            .unwrap_or_else(|| Input::new(slot.kind(), mode))
+    }
+
+    /// Keeps how the field of `slot` is now, if it is of the slot's kind.
+    pub(crate) fn keep(&mut self, slot: Slot, input: Input) {
+        if input.kind == slot.kind() {
+            self.0.insert(slot, input);
         }
     }
 }
@@ -324,6 +429,8 @@ pub(crate) struct Mark {
     way_style: Style,
     /// Whether a click on the way's glyph switches it.
     switches: bool,
+    /// Whether a click on the case's glyph switches it.
+    cases: bool,
 }
 
 impl Mark {
@@ -349,12 +456,13 @@ impl Mark {
     pub(crate) fn drawn_at(self, x: u16, y: u16) -> GlyphSpots {
         let case = to_u16(cells::width(self.case) + 1);
         let way = to_u16(cells::width(self.way) + 1);
-        let x = x.saturating_add(1);
+        let first = x.saturating_add(1);
         GlyphSpots {
-            case: Rect::new(x, y, case, 1),
+            left: x,
+            case: self.cases.then(|| Rect::new(first, y, case, 1)),
             way: self
                 .switches
-                .then(|| Rect::new(x.saturating_add(case), y, way, 1)),
+                .then(|| Rect::new(first.saturating_add(case), y, way, 1)),
         }
     }
 
@@ -434,7 +542,10 @@ impl Mark {
 /// Where the glyphs at the end of a field that searches were drawn, for the mouse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct GlyphSpots {
-    case: Rect,
+    /// The blank before them, where the field before them ends.
+    left: u16,
+    /// `None` if the field has one case.
+    case: Option<Rect>,
     /// `None` if the field has one way.
     way: Option<Rect>,
 }
@@ -443,7 +554,7 @@ impl GlyphSpots {
     /// What a click at `at` stands for: on the glyph of the case, Ctrl+s c; on that of the way,
     /// Ctrl+s Ctrl+s.
     pub(crate) fn action_at(self, at: Position) -> Option<Action> {
-        if self.case.contains(at) {
+        if self.case.is_some_and(|case| case.contains(at)) {
             Some(Action::CaseMode)
         } else if self.way.is_some_and(|way| way.contains(at)) {
             Some(Action::SearchMode)
@@ -454,7 +565,7 @@ impl GlyphSpots {
 
     /// The first column of the glyphs, where the field before them ends.
     pub(crate) fn left(self) -> u16 {
-        self.case.x.saturating_sub(1)
+        self.left
     }
 }
 
@@ -597,7 +708,7 @@ mod tests {
         Matcher::new(way, Target::Names, typed, Case::Smart)
     }
 
-    /// The ways a kind starts in for each of `ui.search_mode`: plain, fzf, regex.
+    /// The ways a kind starts in for each of `ui.default_search_mode`: plain, fzf, regex.
     fn starts(kind: Kind) -> [Way; 3] {
         [SearchMode::Plain, SearchMode::Fzf, SearchMode::Regex]
             .map(|mode| Input::new(kind, mode).way())
@@ -648,13 +759,25 @@ mod tests {
                 &[Glob, Plain, Regex],
                 [Plain, Glob, Regex],
             ),
+            (
+                "the globs of files",
+                Kind::FILES,
+                &[Glob],
+                [Glob, Glob, Glob],
+            ),
+            (
+                "the globs for fd",
+                Kind::FILES_FD,
+                &[Glob],
+                [Glob, Glob, Glob],
+            ),
         ];
         for (name, kind, ways, start) in kinds {
             assert_eq!(kind.ways, ways, "{name}");
             assert_eq!(
                 starts(kind),
                 start,
-                "{name}: what ui.search_mode starts it in"
+                "{name}: what ui.default_search_mode starts it in"
             );
             assert_eq!(
                 round(kind, ways[0]),
@@ -689,6 +812,60 @@ mod tests {
                 .with_case(Case::Ignore)
                 .case(),
             Case::Ignore
+        );
+    }
+
+    #[test]
+    fn a_field_for_fd_tells_case_apart_alone() {
+        let mut fd = Input::new(Kind::FILES_FD, Way::Glob);
+        assert_eq!(fd.case(), Case::Match);
+        assert!(!fd.switch(Switch::NextCase));
+        assert!(!fd.switch(Switch::Case(Case::Ignore)));
+        assert_eq!(fd.with_case(Case::Smart).case(), Case::Match);
+        for action in [
+            Action::CaseMode,
+            Action::CaseSmart,
+            Action::CaseIgnore,
+            Action::SearchMode,
+        ] {
+            assert!(!Kind::FILES_FD.allows(action), "{action:?}");
+        }
+        assert!(Kind::FILES.allows(Action::CaseIgnore));
+        assert!(!Kind::FILES.allows(Action::SearchMode), "one way");
+    }
+
+    #[test]
+    fn each_field_opens_as_it_was_last_else_in_the_default() {
+        let mut memory = Memory::default();
+        let fresh = memory.input(Slot::Mark, SearchMode::Plain);
+        assert_eq!((fresh.way(), fresh.case()), (Way::Plain, Case::Smart));
+        assert_eq!(
+            memory.input(Slot::Mark, SearchMode::Fzf).way(),
+            Way::Glob,
+            "no fzf"
+        );
+        assert_eq!(
+            memory.input(Slot::FindText, SearchMode::Fzf).way(),
+            Way::Regex
+        );
+        let mut regex = Input::new(Kind::FILTER, Way::Regex);
+        regex.switch(Switch::Case(Case::Match));
+        memory.keep(Slot::TabMenu, regex);
+        assert_eq!(
+            memory.input(Slot::TabMenu, SearchMode::Plain),
+            regex,
+            "whatever the default"
+        );
+        assert_eq!(
+            memory.input(Slot::Workspaces, SearchMode::Plain).way(),
+            Way::Plain,
+            "each field its own"
+        );
+        memory.keep(Slot::QuickSearch, Input::new(Kind::MARK, Way::Glob));
+        assert_eq!(
+            memory.input(Slot::QuickSearch, SearchMode::Plain).way(),
+            Way::Plain,
+            "a field of another kind is not kept"
         );
     }
 
@@ -807,7 +984,8 @@ mod tests {
         let mark = Input::new(Kind::FILTER, Way::Regex).mark(false, theme.dialog_input, &theme);
         let mut terminal = Terminal::new(TestBackend::new(7, 1)).unwrap();
         let mut glyphs = Some(GlyphSpots {
-            case: Rect::default(),
+            left: 0,
+            case: None,
             way: None,
         });
         terminal
@@ -824,7 +1002,13 @@ mod tests {
         assert!(Input::new(Kind::FILTER, Way::Regex).invalid("("));
         assert!(!Input::new(Kind::FILTER, Way::Regex).invalid("a"));
         assert!(!Input::new(Kind::FILTER, Way::Plain).invalid("("));
-        assert!(!Input::new(Kind::MARK, Way::Glob).invalid("["));
+        assert!(
+            !Input::new(Kind::MARK, Way::Glob).invalid("["),
+            "taken as it is"
+        );
+        let files = Input::new(Kind::FILES, Way::Glob);
+        assert!(files.invalid("*.rs ["), "globs of files are globset's");
+        assert!(!files.invalid("*.rs !target"));
         assert!(Input::new(Kind::FILTER, Way::Fzf).switchable());
     }
 

@@ -316,6 +316,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `t l`), goes to its panel and leaves the keys with the active one, as Ctrl+w f and Ctrl+w v do,
   rather than move them to the panel it changed
   ([ADR 0049](docs/adr/0049-menus-of-a-panel-keep-the-active-panel.md)).
+- The speed of a job that moves data, and the time left at it, follow the last five seconds of
+  work rather than the average since the start, so a slow start no longer holds them down for
+  the rest of the copy. While no data moves the speed falls to `0B/s`, and the time left shows
+  `-:--`.
 
 ### Removed
 

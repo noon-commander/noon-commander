@@ -1,6 +1,7 @@
 //! The window of a running job: what it does, where it is, a gauge, and its time and speed.
 
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 use ratatui::Frame;
@@ -23,6 +24,13 @@ use crate::i18n::fl;
 
 /// Work the speed needs behind it before it means anything.
 const SETTLED: Duration = Duration::from_secs(1);
+
+/// The last stretch of work that the speed and the time left follow: long enough to even out
+/// chunks and small files, short enough that a slow start or a change of pace is soon behind.
+const RECENT: Duration = Duration::from_secs(5);
+
+/// The least time between two [`Samples`], so that [`RECENT`] holds a few dozen.
+const SAMPLE: Duration = Duration::from_millis(250);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Stage {
@@ -79,13 +87,52 @@ impl Stopwatch {
     }
 }
 
+/// The bytes a job had copied at moments of the time it worked, back to the start of the last
+/// [`RECENT`] of it. Times of work, not of the clock, so that a question left open is no gap.
+#[derive(Debug, Default)]
+struct Samples(VecDeque<(Duration, u64)>);
+
+impl Samples {
+    /// The job had copied `bytes` when it had worked `at`.
+    fn note(&mut self, at: Duration, bytes: u64) {
+        if self.0.back().is_none_or(|&(last, _)| at >= last + SAMPLE) {
+            self.0.push_back((at, bytes));
+        }
+        // The last sample at or before the start of the stretch stays: the stretch starts there.
+        while self.0.get(1).is_some_and(|&(next, _)| next + RECENT <= at) {
+            self.0.pop_front();
+        }
+    }
+
+    /// Bytes per second over the last [`RECENT`] of work up to `at`, with `bytes` copied by
+    /// then, or since the first sample if the job has worked less. The stretch starts at a
+    /// sample, so it is wider while reports are rare, and falls to nothing when they stop.
+    fn speed(&self, at: Duration, bytes: u64) -> Option<f64> {
+        let start = at.saturating_sub(RECENT);
+        let &(since, from) = self
+            .0
+            .iter()
+            .rev()
+            .find(|(time, _)| *time <= start)
+            .or_else(|| self.0.front())?;
+        let span = at.saturating_sub(since);
+        (!span.is_zero()).then(|| {
+            // Sizes stay far below 2^52, where `f64` would round them.
+            #[allow(clippy::cast_precision_loss)]
+            let copied = bytes.saturating_sub(from) as f64;
+            copied / span.as_secs_f64()
+        })
+    }
+}
+
 /// The time and speed of a job at some moment.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Timing {
     elapsed: Duration,
-    /// Bytes per second on average, once there is enough behind it; for jobs that move data.
+    /// Bytes per second over the last [`RECENT`] of work, once there is enough behind it; for
+    /// jobs that move data.
     speed: Option<f64>,
-    /// The time left at that speed.
+    /// The time left at that speed, while data moves.
     left: Option<Duration>,
 }
 
@@ -129,6 +176,7 @@ pub(crate) struct JobView {
     /// The job waits for an answer to a question.
     asking: bool,
     clock: Stopwatch,
+    samples: Samples,
     buttons: Vec<JobButton>,
     focus: usize,
     /// Where the last render drew it, for the mouse.
@@ -146,6 +194,7 @@ impl JobView {
             aborting: false,
             asking: false,
             clock: Stopwatch::default(),
+            samples: Samples::default(),
             buttons: vec![JobButton::Background, JobButton::Abort],
             focus: 0,
             drawn: RefCell::default(),
@@ -175,6 +224,8 @@ impl JobView {
         if !self.asking {
             self.clock.start(now);
         }
+        self.samples
+            .note(self.clock.elapsed(now), counts.bytes_copied);
     }
 
     /// The job asked a question and waits for the answer: its clock stands, however long the
@@ -224,14 +275,12 @@ impl JobView {
             return None;
         };
         let elapsed = self.clock.elapsed(now);
-        let speed =
-            (counts.bytes_total > 0 && counts.bytes_copied > 0 && elapsed >= SETTLED).then(|| {
-                // Sizes stay far below 2^52, where `f64` would round them.
-                #[allow(clippy::cast_precision_loss)]
-                let copied = counts.bytes_copied as f64;
-                copied / elapsed.as_secs_f64()
-            });
-        let left = speed.map(|speed| {
+        let speed = if counts.bytes_total > 0 && elapsed >= SETTLED {
+            self.samples.speed(elapsed, counts.bytes_copied)
+        } else {
+            None
+        };
+        let left = speed.filter(|speed| *speed > 0.0).map(|speed| {
             #[allow(clippy::cast_precision_loss)]
             let left = counts.bytes_total.saturating_sub(counts.bytes_done) as f64;
             Duration::try_from_secs_f64(left / speed).unwrap_or(Duration::MAX)
@@ -651,12 +700,13 @@ mod tests {
     fn time_waiting_for_an_answer_does_not_count() {
         let start = Instant::now();
         let mut view = JobView::new("Copy".to_owned(), "Copying".to_owned());
-        view.working("a".to_owned(), copying(10, 10), start);
+        view.working("a".to_owned(), copying(0, 0), start);
+        view.working("a".to_owned(), copying(5, 5), start + secs(5));
         // A question after 5 seconds stays open for an hour.
         view.ask(start + secs(5));
         assert!(!view.ticking());
         // Reports that were on their way change nothing.
-        view.working("a".to_owned(), copying(10, 10), start + secs(6));
+        view.working("a".to_owned(), copying(5, 5), start + secs(6));
         assert!(!view.ticking());
         let open = start + secs(3605);
         let timing = view.timing(open).unwrap();
@@ -664,6 +714,7 @@ mod tests {
         view.answered(open);
         assert!(view.ticking());
 
+        view.working("a".to_owned(), copying(10, 10), open + secs(5));
         let timing = view.timing(open + secs(5)).unwrap();
         assert_eq!(timing.elapsed, secs(10));
         let speed = timing.speed.unwrap();
@@ -679,15 +730,69 @@ mod tests {
         let mut view = JobView::new("Copy".to_owned(), "Copying".to_owned());
         // 10 MiB in 10 seconds, then 80 MiB skipped at once, then a retry from the start of a
         // file: the speed follows the bytes that moved.
-        view.working("a".to_owned(), copying(10, 10), start);
-        view.working("b".to_owned(), copying(90, 10), start);
+        view.working("a".to_owned(), copying(0, 0), start);
+        view.working("a".to_owned(), copying(10, 10), start + secs(10));
+        view.working("b".to_owned(), copying(90, 10), start + secs(10));
         let timing = view.timing(start + secs(10)).unwrap();
         assert!((timing.speed.unwrap() - 1024.0 * 1024.0).abs() < 1.0);
         assert_eq!(timing.left.map(|left| left.as_secs()), Some(10));
-        view.working("b".to_owned(), copying(85, 15), start);
+        view.working("b".to_owned(), copying(85, 15), start + secs(10));
         let timing = view.timing(start + secs(10)).unwrap();
         assert!((timing.speed.unwrap() - 1.5 * 1024.0 * 1024.0).abs() < 1.0);
         assert_eq!(timing.left.map(|left| left.as_secs()), Some(10));
+    }
+
+    #[test]
+    fn a_slow_start_is_soon_behind_the_speed() {
+        let start = Instant::now();
+        let mut view = JobView::new("Copy".to_owned(), "Copying".to_owned());
+        // 1 MiB a second for 10 seconds, then 5 MiB a second, reported every second.
+        let copied = |second: u64| {
+            if second <= 10 {
+                second
+            } else {
+                10 + (second - 10) * 5
+            }
+        };
+        for second in 0..=20 {
+            let counts = copying(copied(second), copied(second));
+            view.working("a".to_owned(), counts, start + secs(second));
+        }
+        // Averaged since the start, it would be 3 MiB a second, with 13 seconds left.
+        let timing = view.timing(start + secs(20)).unwrap();
+        let speed = timing.speed.unwrap();
+        assert!(
+            (speed - 5.0 * 1024.0 * 1024.0).abs() < 1.0,
+            "5 MiB/s: {speed}"
+        );
+        assert_eq!(timing.left.map(|left| left.as_secs()), Some(8));
+    }
+
+    #[test]
+    fn the_speed_falls_while_no_data_moves() {
+        let start = Instant::now();
+        let mut view = JobView::new("Copy".to_owned(), "Copying".to_owned());
+        for second in 0..=10 {
+            view.working(
+                "a".to_owned(),
+                copying(second, second),
+                start + secs(second),
+            );
+        }
+        // Then nothing comes: the seconds that moved data leave the stretch one by one.
+        let timing = view.timing(start + secs(12)).unwrap();
+        let speed = timing.speed.unwrap();
+        assert!(
+            (speed - 0.6 * 1024.0 * 1024.0).abs() < 1.0,
+            "0.6 MiB/s: {speed}"
+        );
+        assert_eq!(timing.left.map(|left| left.as_secs()), Some(150));
+        let timing = view.timing(start + secs(15)).unwrap();
+        assert!(timing.speed.unwrap() < f64::EPSILON);
+        assert_eq!(timing.left, None);
+        let text = draw_at(&view, start + secs(15));
+        assert!(text.contains("Time 0:15   ETA -:--   0B/s"), "{text}");
+        assert_eq!(view.summary(start + secs(15)).left, "");
     }
 
     #[test]

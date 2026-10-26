@@ -906,10 +906,14 @@ entries done, entries skipped, and whether it was aborted.
 
 `Progress` carries two byte counts. `bytes_done` drives the gauge: it takes a skipped file's
 size at once and goes back to the start of a file that is retried. `bytes_copied` counts only
-bytes read and written and never goes back, so the UI derives the average speed from it and the
-time left from both. The job's window times only work: its stopwatch starts with the first
+bytes read and written and never goes back, so the UI derives the speed from it and the time
+left from both. The job's window times only work: its stopwatch starts with the first
 `Progress` and stands from a `Failed` or `Exists` question until the answer, including while
-the question waits behind other dialogs.
+the question waits behind other dialogs. The speed is that of the last five seconds of work, by
+the stopwatch: the window keeps `bytes_copied` at moments of work at least a quarter of a second
+apart, and divides what was copied since the last of them five seconds back by the time since.
+A slow start is behind it after five seconds; when no data comes it falls to zero, and the time
+left is unknown.
 
 Renaming one entry in its directory (`rename`) is no job: one call with no progress, which
 the UI runs like a new directory, through the host's shared session (`Arc<SftpFs>`) for a

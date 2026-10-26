@@ -352,6 +352,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A copy no longer keeps a CPU core busy drawing the screen: its progress came hundreds of times
   a second, as each chunk was written, and every report drew a frame. Results of background work
   now draw at most 25 frames a second; keys still draw at once.
+- A copy to a host no longer keeps a CPU core busy: every chunk it wrote was packed into the
+  request one byte at a time. The chunks now go to the SFTP channel as they are.
 - The Connection dialog of a lost or failed host no longer keeps the screen drawing 25 times a
   second for as long as it waits, as after a laptop slept: the panels that wait for the host show
   its marker of a failure in their titles, still, rather than red dots that turned.

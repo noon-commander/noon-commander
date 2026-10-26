@@ -3,7 +3,7 @@ use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::Path;
 use std::time::SystemTime;
 
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use futures_util::stream::FuturesUnordered;
 use futures_util::{StreamExt, TryStreamExt, future, stream};
 use openssh_sftp_client::error::SftpErrorKind;
@@ -72,17 +72,22 @@ impl SftpWriter {
 
 impl FileWriter for SftpWriter {
     async fn write(&mut self, data: Vec<u8>) -> Result<(), VfsError> {
-        for part in data.chunks(CHUNK as usize) {
+        let data = Bytes::from(data);
+        let mut start = 0;
+        while start < data.len() {
             while self.in_flight >= u64::from(IN_FLIGHT) {
                 self.settle_one().await?;
             }
+            let end = data.len().min(start + CHUNK as usize);
+            let part = data.slice(start..end);
+            start = end;
             let mut file = self.file.clone();
             let offset = self.offset;
-            let part = part.to_vec();
             let length = part.len() as u64;
             self.pending.push(Box::pin(async move {
+                // `write_all` packs the data one byte at a time; this sends it as it is.
                 let result = match file.seek(io::SeekFrom::Start(offset)).await {
-                    Ok(_) => file.write_all(&part).await,
+                    Ok(_) => file.write_all_zero_copy(&mut [part]).await,
                     Err(err) => Err(Error::IOError(err)),
                 };
                 (length, result)

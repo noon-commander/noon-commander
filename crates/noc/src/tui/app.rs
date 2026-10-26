@@ -56,7 +56,7 @@ use super::panel::{
 };
 use super::picker::FULL_ROWS;
 use super::places::{Places, volume_of};
-use super::progress::{Counts, JobButton, JobView, Look};
+use super::progress::{Counts, JobButton, JobView, Look, RowLook};
 use super::pulldown::{self, Command, PullDown, PullDownEvent, Status};
 use super::reading::{ReadButton, Reading};
 use super::search::{self, Input, Slot, Switch};
@@ -595,6 +595,24 @@ struct Editing {
     dir: Location,
     /// The line the editor starts at, if not the first.
     line: Option<u64>,
+}
+
+/// How much the screen shows of a job.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Sight {
+    /// Its window, in front.
+    Window,
+    /// Its row in the list of jobs, from the background.
+    Row,
+    /// Only its share of the corner, from the background.
+    Corner,
+}
+
+/// What the screen shows of a job beyond its share of the corner, before it is put in words.
+#[derive(Debug, PartialEq)]
+enum Shown {
+    Window(Look),
+    Row(RowLook),
 }
 
 /// A running job: in front, in its window over the panels, or in the background.
@@ -2495,10 +2513,16 @@ impl App {
         self.jobs.iter().find(|job| !job.background)
     }
 
-    /// Whether the screen shows all of how far `job` is, in its window or in the list of jobs,
-    /// rather than only its share of the corner.
-    fn watched(&self, job: &Job) -> bool {
-        !job.background || self.jobs_list.is_some()
+    /// How much the screen shows of `job`: its window while it is in front, else its row while
+    /// the list of jobs is open, else only its share of the corner.
+    fn sight(&self, job: &Job) -> Sight {
+        if !job.background {
+            Sight::Window
+        } else if self.jobs_list.is_some() {
+            Sight::Row
+        } else {
+            Sight::Corner
+        }
     }
 
     /// The help screen, for the keymap and the settings, where it was when it closed last.
@@ -5543,20 +5567,21 @@ impl App {
             return (self.job_event(id, event), true);
         }
         let now = Instant::now();
-        let look = self.watched_look(id, now);
+        let shown = self.job_shown(id, now);
         let corner = self.corner();
         let effects = self.job_event(id, event);
-        let changes = self.watched_look(id, now) != look || self.corner() != corner;
+        let changes = self.job_shown(id, now) != shown || self.corner() != corner;
         (effects, changes)
     }
 
-    /// What the window of the job `id` shows at `now`, if the screen shows more of it than its
-    /// share of the corner. The list of jobs shows less, so its row may draw for nothing.
-    fn watched_look(&self, id: u64, now: Instant) -> Option<Look> {
-        self.jobs
-            .iter()
-            .find(|job| job.id == id && self.watched(job))
-            .map(|job| job.view.look(now))
+    /// What the screen shows at `now` of the job `id` beyond its share of the corner.
+    fn job_shown(&self, id: u64, now: Instant) -> Option<Shown> {
+        let job = self.jobs.iter().find(|job| job.id == id)?;
+        match self.sight(job) {
+            Sight::Window => Some(Shown::Window(job.view.look(now))),
+            Sight::Row => Some(Shown::Row(job.view.look(now).row())),
+            Sight::Corner => None,
+        }
     }
 
     /// Takes a report from the job `id`: progress for its window, a failure for a dialog
@@ -7022,7 +7047,11 @@ impl App {
         let ticks = self
             .jobs
             .iter()
-            .filter(|job| self.watched(job))
+            .filter(|job| match self.sight(job) {
+                Sight::Window => true,
+                Sight::Row => job.view.moves_data(),
+                Sight::Corner => false,
+            })
             .filter_map(|job| job.view.next_tick(drawn));
         for tick in ticks {
             at(tick);
@@ -10424,13 +10453,49 @@ mod tests {
         assert!(!changes(&mut app, 11));
 
         app.handle(action(Action::Jobs));
-        assert!(changes(&mut app, 12), "the list of jobs shows every report");
+        assert!(
+            !changes(&mut app, 12),
+            "its row shows 1%, as the corner does"
+        );
         app.handle(action(Action::Cancel));
         assert!(app.jobs_list.is_none());
         assert!(!changes(&mut app, 13));
 
         let (_, changes) = app.job_report(id, JobEvent::Finished { complete: true });
         assert!(changes, "its end shows");
+    }
+
+    #[test]
+    fn the_list_of_jobs_draws_for_a_job_behind_only_when_its_row_changes() {
+        let mut app = loaded();
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        let (id, _, _, _) = delete_job(app.handle(action(Action::Confirm)));
+        app.handle(action(Action::Confirm));
+        app.handle(action(Action::Jobs));
+        let changes = |app: &mut App, current: &str, done, bytes_total| {
+            let progress = JobEvent::Progress {
+                current: local(current),
+                done,
+                total: 1000,
+                bytes_done: 0,
+                bytes_total,
+                bytes_copied: 0,
+            };
+            app.job_report(id, progress).1
+        };
+        assert!(changes(&mut app, "/srv/left/a", 1, 0), "counted, it works");
+        assert!(
+            !changes(&mut app, "/srv/left/a", 2, 0),
+            "its row shows no count"
+        );
+        assert!(changes(&mut app, "/srv/left/b", 3, 0), "the entry at hand");
+        assert_eq!(app.spin_due(Instant::now()), None, "its row shows no time");
+        changes(&mut app, "/srv/left/b", 3, 1024);
+        assert!(
+            app.spin_due(Instant::now()).is_some(),
+            "the time left shows"
+        );
     }
 
     #[test]

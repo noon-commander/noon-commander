@@ -180,6 +180,52 @@ enum Seen {
     },
 }
 
+impl Look {
+    /// Only what the row of the job in the list of jobs shows.
+    pub(crate) fn row(self) -> RowLook {
+        let (phase, left, current) = match self.stage {
+            Seen::Waiting => (Phase::Waiting, None, String::new()),
+            Seen::Scanning { .. } => (Phase::Counting, None, String::new()),
+            Seen::Working {
+                current,
+                percent,
+                data,
+                ..
+            } => (
+                Phase::Working { percent },
+                data.and_then(|data| data.left),
+                current,
+            ),
+        };
+        RowLook {
+            aborting: self.aborting,
+            phase,
+            left,
+            current,
+        }
+    }
+}
+
+/// What the row of a job in the list of jobs shows, before it is put in words: less than its
+/// window, so that a report which changes only the window does not draw the list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RowLook {
+    aborting: bool,
+    phase: Phase,
+    /// The time left, for jobs that move data, once it is known.
+    left: Option<Duration>,
+    /// The entry at hand, while it works.
+    current: String,
+}
+
+/// How far a job is, as its row in the list of jobs says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Phase {
+    Waiting,
+    Counting,
+    Working { percent: u64 },
+}
+
 /// What the window of a job that moves data shows of it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Data {
@@ -444,28 +490,28 @@ impl JobView {
 
     /// How far the job is at `now`, for the list of jobs.
     pub(crate) fn summary(&self, now: Instant) -> Summary {
-        let look = self.look(now);
-        let state = match &look.stage {
-            _ if look.aborting => fl!("jobs-state-aborting"),
-            Seen::Waiting => fl!("jobs-state-waiting"),
-            Seen::Scanning { .. } => fl!("jobs-state-counting"),
-            &Seen::Working { percent, .. } => fl!("jobs-state-percent", percent = percent),
+        let row = self.look(now).row();
+        let state = match row.phase {
+            _ if row.aborting => fl!("jobs-state-aborting"),
+            Phase::Waiting => fl!("jobs-state-waiting"),
+            Phase::Counting => fl!("jobs-state-counting"),
+            Phase::Working { percent } => fl!("jobs-state-percent", percent = percent),
         };
-        let (left, current) = match look.stage {
-            Seen::Working { current, data, .. } => {
-                let left = data
-                    .and_then(|data| data.left)
-                    .map(|left| fl!("jobs-left", left = duration(left)))
-                    .unwrap_or_default();
-                (left, current)
-            }
-            Seen::Waiting | Seen::Scanning { .. } => (String::new(), String::new()),
-        };
+        let left = row
+            .left
+            .map(|left| fl!("jobs-left", left = duration(left)))
+            .unwrap_or_default();
         Summary {
             state,
             left,
-            current,
+            current: row.current,
         }
+    }
+
+    /// Whether it moves data, so that its row in the list of jobs shows the time left, which
+    /// changes as time passes.
+    pub(crate) fn moves_data(&self) -> bool {
+        matches!(&self.stage, Stage::Working { counts, .. } if counts.bytes_total > 0)
     }
 
     /// Takes a key: Enter or Space presses the focused button, Esc aborts, as in mc, arrows

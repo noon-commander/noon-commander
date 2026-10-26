@@ -138,7 +138,8 @@ chattr, l, s, and v links, j the jobs. mc has no checksums, so they take #; the 
 below takes / for text, as quick search's /, and f for names, as telescope's `<leader>ff` finds
 files, neither of which mc's Ctrl+x has. Ctrl+w switches the panels, as it switches vim's windows:
 Ctrl+w h and Ctrl+w l go to the left and the right one, and Ctrl+w 1 and Ctrl+w 2 open their
-location menus, as Alt+F1 and Alt+F2 do. / searches down and ? up, as in vim and yazi; n and N
+location menus, as Far's Alt+F1 and Alt+F2, but the keys stay with the active panel, as after
+Ctrl+w f and Ctrl+w v. / searches down and ? up, as in vim and yazi; n and N
 repeat the last quick search, the way it went and the other way, as in vim, yazi, and ranger;
 Shift+F7, mc's and Far's key to search again, repeats it forward too. Y and y y copy, as vim's yank
 lines, and y p copies the entry under the cursor beside it, as vim's y y p puts a copy of a line
@@ -186,8 +187,8 @@ section says: the commands of files act on the rows it selects, which become the
 | Swap the panels | `swap_panels` | ✅ | Ctrl+w x<br>Ctrl+w r | Ctrl+u | Ctrl+u | — | — |
 | Open the directory under the cursor in the other panel | `other_panel_open` | ✅ | Ctrl+w f | Alt+o | — | — | — |
 | Show this directory in the other panel | `other_panel_sync` | ✅ | Ctrl+w v | Alt+i | — | — | — |
-| Change the location of the panel drawn on the left, after a swap too | `location_menu_left` | ⏳ | Ctrl+w 1<br>Alt+F1 | — | Alt+F1 | — | — |
-| Change the location of the panel drawn on the right | `location_menu_right` | ⏳ | Ctrl+w 2<br>Alt+F2 | — | Alt+F2 | — | — |
+| Change the location of the panel drawn on the left, after a swap too; the active panel stays active | `location_menu_left` | ⏳ | Ctrl+w 1 | — | Alt+F1 | — | — |
+| Change the location of the panel drawn on the right | `location_menu_right` | ⏳ | Ctrl+w 2 | — | Alt+F2 | — | — |
 | A new tab in this panel, on the same directory | `new_tab` | ✅ | t n<br>g n | — | — | t t | Ctrl+n<br>g n |
 | Close this tab; the last one stays | `close_tab` | ✅ | t c<br>g c | — | — | — | Ctrl+w<br>g c |
 | The next tab in this panel; after a count, the tab of that number | `next_tab` | ⏳ | g t<br>] t | — | — | ] | Tab<br>Alt+Right<br>g t |
@@ -414,8 +415,8 @@ Visual mode ends, and the cursor goes to the first row, as after vim's operators
 them as d does, as vim's delete the lines selected. Space marks them beside the marks already
 there, and Esc and Ctrl+c leave Visual mode, as does the key of v and V that started it, while the
 other switches its kind, as in vim; g v, in Normal mode, selects the same rows again. The other
-F-keys, Alt+F1, Alt+F2, and the keys of Ctrl+w that go to another panel end Visual mode and do what
-they do in Normal mode, and so do Alt and a key, as Esc and the key; other keys that neither binds
+F-keys and the keys of Ctrl+w that go to another panel end Visual mode and do what they do in
+Normal mode, and so do Alt and a key, as Esc and the key; other keys that neither binds
 do nothing. yazi's and ranger's visual modes mark the rows that the cursor moves over with the
 keys of their panels, whose commands then act on the marks, so their columns here have only the
 keys that leave it.
@@ -450,8 +451,6 @@ keys that leave it.
 | Leave Visual mode, and open the pull-down menu | `pull_down` | ⏳ | F9 | — | — | — | — |
 | Leave Visual mode, and open the pull-down menu on the command that ran from it last | `pull_down_last` | ⏳ | Shift+F9 | — | — | — | — |
 | Leave Visual mode, and quit | `quit` | ⏳ | F10 | — | — | — | — |
-| Leave Visual mode, and change the location of the panel drawn on the left | `location_menu_left` | ⏳ | Alt+F1 | — | — | — | — |
-| Leave Visual mode, and change the location of the panel drawn on the right | `location_menu_right` | ⏳ | Alt+F2 | — | — | — | — |
 | Leave Visual mode, and go to the other panel | `switch_panel` | ⏳ | Ctrl+w w<br>Ctrl+w Ctrl+w<br>Ctrl+w p<br>Tab | — | — | — | — |
 | Leave Visual mode, and go to the left panel, wherever the panels were swapped | `focus_left` | ⏳ | Ctrl+w h | — | — | — | — |
 | Leave Visual mode, and go to the right panel, wherever the panels were swapped | `focus_right` | ⏳ | Ctrl+w l | — | — | — | — |
@@ -623,9 +622,9 @@ line, so that one too many does not go to the parent directory; Delete at the en
 deletes the character before it, and Shift and Ctrl with Left and Right go by what spaces part, as
 on vim's command line; Ctrl+g and Ctrl+t go to the next match down and the next up, as many
 as the count before / or ?, and the search goes on from there, and Ctrl+b and Ctrl+e go to the start
-and the end of the text, as on vim's command line. Up, Down, PgUp, PgDn, and the F-keys, Alt+F1 and
-Alt+F2 among them, end the search and do what they do in the panel, as in mc, but Shift+F7, which
-goes to the next match; Left, Right, Home, and End move in the text, and other keys that none of
+and the end of the text, as on vim's command line. Up, Down, PgUp, PgDn, and the F-keys end the
+search and do what they do in the panel, as in mc, but Shift+F7, which goes to the next match;
+Left, Right, Home, and End move in the text, and other keys that none of
 them binds do nothing. Its field searches, so `search_input` goes before it: Ctrl+s and a letter, or
 a click on a glyph at the right end of the status line, switch how it matches, as it is, as fzf
 does, or as a regular expression, and whether case counts; the next search starts as the last one
@@ -661,8 +660,6 @@ search is over.
 | End the search, and open the pull-down menu | `pull_down` | ⏳ | F9 | — | — | — | — |
 | End the search, and open the pull-down menu on the command that ran from it last | `pull_down_last` | ⏳ | Shift+F9 | — | — | — | — |
 | End the search, and quit | `quit` | ⏳ | F10 | — | — | — | — |
-| End the search, and change the location of the panel drawn on the left | `location_menu_left` | ⏳ | Alt+F1 | — | — | — | — |
-| End the search, and change the location of the panel drawn on the right | `location_menu_right` | ⏳ | Alt+F2 | — | — | — | — |
 | Paste from clipboard | — | 🚫 | — | — | Ctrl+v<br>Shift+Insert | — | — |
 
 ## Renaming in place (`rename`, Insert mode)
@@ -1018,9 +1015,10 @@ their lists: their keys are under Normal mode.
 
 ## Location menu (`location_menu`, Normal mode)
 
-Ctrl+w 1 or Alt+F1, and Ctrl+w 2 or Alt+F2: the home directory, the volumes, and the hosts, under
-their headings. It falls back to `list`, whose Enter opens the place in the panel, or, on the last
-row of a group that shows only its first places, shows the rest. The far column has the keys of
+Ctrl+w 1 and Ctrl+w 2: the home directory, the volumes, and the hosts, under their headings. It
+falls back to `list`, whose Enter opens the place in the panel, while the keys stay with the active
+one, or, on the last row of a group that shows only its first places, shows the rest. The far
+column has the keys of
 Far's menus, its drive menu among them.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
@@ -1050,7 +1048,8 @@ then to `global`; F4 and F8 still edit and disconnect the host under the cursor.
 ## Tab menu (`tab_menu`, Normal mode)
 
 t h and t l: the tabs of the left or the right panel, drawn over it as the location menu is. It
-falls back to `list`, whose Enter shows the tab in the panel; d d and F8 close the tab under the
+falls back to `list`, whose Enter shows the tab in the panel, while the keys stay with the active
+one, as after the location menu; d d and F8 close the tab under the
 cursor, as they delete a workspace, and the menu stays open; with a count, 3d d closes three, as
 vim's deletes three lines, and so do d d in the location menu, the workspaces, and the history. mc,
 Far, yazi, and ranger have no menu of tabs.

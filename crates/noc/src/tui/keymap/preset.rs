@@ -70,8 +70,8 @@ pub(super) const PRESET: Preset = &[
             (Action::SwapPanels, &["ctrl-w x", "ctrl-w r"]),
             (Action::OtherPanelOpen, &["ctrl-w f"]),
             (Action::OtherPanelSync, &["ctrl-w v"]),
-            (Action::LocationMenuLeft, &["ctrl-w 1", "alt-f1"]),
-            (Action::LocationMenuRight, &["ctrl-w 2", "alt-f2"]),
+            (Action::LocationMenuLeft, &["ctrl-w 1"]),
+            (Action::LocationMenuRight, &["ctrl-w 2"]),
             // Tabs & Workspaces
             (Action::NewTab, &["t n", "g n"]),
             (Action::CloseTab, &["t c", "g c"]),
@@ -176,8 +176,6 @@ pub(super) const PRESET: Preset = &[
             (Action::PullDown, &["f9"]),
             (Action::PullDownLast, &["shift-f9"]),
             (Action::Quit, &["f10"]),
-            (Action::LocationMenuLeft, &["alt-f1"]),
-            (Action::LocationMenuRight, &["alt-f2"]),
             (
                 Action::SwitchPanel,
                 &["ctrl-w w", "ctrl-w ctrl-w", "ctrl-w p", "tab"],
@@ -333,8 +331,6 @@ pub(super) const PRESET: Preset = &[
             (Action::PullDown, &["f9"]),
             (Action::PullDownLast, &["shift-f9"]),
             (Action::Quit, &["f10"]),
-            (Action::LocationMenuLeft, &["alt-f1"]),
-            (Action::LocationMenuRight, &["alt-f2"]),
         ],
     ),
     // The name field of an entry renamed in its row. Enter renames in every mode; Esc leaves

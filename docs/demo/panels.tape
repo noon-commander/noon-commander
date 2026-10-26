@@ -18,14 +18,15 @@ Sleep 2s
 Show
 
 # The right panel goes to prod-web through its location menu, Ctrl+w 2, whose filter takes what
-# is typed: the browser behind vhs sends neither Alt nor F-keys, so Alt+F2 does not reach noc.
-# Choosing a place makes the right panel active.
+# is typed. The keys stay with the left panel; Ctrl+w l goes to the right one.
 Ctrl+W
 Type "2"
 Sleep 300ms
 Type "prod-web"
 Enter
 Sleep 2s
+Ctrl+W
+Type "l"
 Down
 Down
 Ctrl+W

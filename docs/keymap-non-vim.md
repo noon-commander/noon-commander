@@ -111,8 +111,7 @@ not:
 | g m<br>F9 | `pull_down` | noc, mc | g m (noc) | Same | F9 is mc's key for the pull-down menu. g m is its key among vim's g keys, m for menu; vim's g m goes to the middle of the screen line. |
 | g M<br>Shift+F9 | `pull_down_last` | noc, mc | g M (noc) | Same | The menu on the command that ran from it last, as Far's Shift+F10, so that Shift+F9 Enter runs it again; Shift+F9 is mc's key for its menu where it was left. g M goes with g m; vim's g M goes to the middle of the text of the line. |
 | Tab | `switch_panel` | mc, Far | Ctrl+w w, Ctrl+w Ctrl+w, Ctrl+w p (vim) | What Ctrl+i does: forward through the jump list | The other panel, as mc's and Far's Tab. Only the kitty keyboard protocol tells it from Ctrl+i, vim's key forward through the jump list, which noc keeps ([ADR 0022](adr/0022-vim-modes.md)). |
-| Ctrl+w 1<br>Ctrl+w 2 | `location_menu_left`<br>`location_menu_right` | noc | Ctrl+w 1 (noc)<br>Ctrl+w 2 (noc) | Same | The location menu of the panel drawn on the left or the right, for terminals that do not send Alt+F1 and Alt+F2 ([ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)), under Ctrl+w, which acts on the panels as vim's on windows. |
-| Alt+F1<br>Alt+F2 | `location_menu_left`<br>`location_menu_right` | Far | Ctrl+w 1 (noc)<br>Ctrl+w 2 (noc) | Same | Far's menus to change the drive of the left and the right panel ([ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md), [ADR 0021](adr/0021-location-menu-replaces-the-virtual-root.md)). |
+| Ctrl+w 1<br>Ctrl+w 2 | `location_menu_left`<br>`location_menu_right` | noc | Ctrl+w 1 (noc)<br>Ctrl+w 2 (noc) | Same | The location menu of the panel drawn on the left or the right, as Far's Alt+F1 and Alt+F2 change the drive of a panel ([ADR 0021](adr/0021-location-menu-replaces-the-virtual-root.md)), under Ctrl+w, which acts on the panels as vim's on windows. The keys stay with the active panel, as after Ctrl+w f and Ctrl+w v; Alt+F1 and Alt+F2, which desktops take, are not bound ([ADR 0049](adr/0049-menus-of-a-panel-keep-the-active-panel.md)). |
 | t n<br>t c | `new_tab`<br>`close_tab` | noc | t n (noc); g n (ranger)<br>t c (noc); g c (ranger) | Same | Group `t`: n for new, c for close. |
 | g n<br>g c | `new_tab`<br>`close_tab` | ranger | t n (noc); g n (ranger)<br>t c (noc); g c (ranger) | Same | ranger's keys for a new tab and to close one. vim's g n selects the next match of the search; vim binds no g c, which nvim comments with. |
 | ] t<br>[ t | `next_tab`<br>`prev_tab` | yazi | g t (vim); ] t (yazi)<br>g T (vim); [ t (yazi) | Same | yazi goes through the tabs with ] and [; t says what to go to, as in vim's pairs of ] and [ (] s, ] c). vim binds no ] t; nvim 0.11 goes through tags with it. |
@@ -150,7 +149,6 @@ not:
 | F8 | `delete` | mc | d, D, X (vim) | Same | As in Normal mode, on the rows selected. |
 | f # | `checksum` | noc | f # (noc) | Same | As in Normal mode, on the rows selected. |
 | F1<br>F3<br>F4<br>Shift+F5<br>Shift+F6<br>F7<br>Shift+F7<br>F9<br>Shift+F9<br>F10 | `help`<br>`view`<br>`edit`<br>`duplicate`<br>`rename`<br>`mkdir`<br>`next_match`<br>`pull_down`<br>`pull_down_last`<br>`quit` | mc | — | Same | mc's F-keys work in Visual mode too ([ADR 0022](adr/0022-vim-modes.md)). These do not act on the rows selected, so they end Visual mode, then do what they do in Normal mode. |
-| Alt+F1<br>Alt+F2 | `location_menu_left`<br>`location_menu_right` | Far | — | Same | As the F-keys: they end Visual mode first. |
 | Tab | `switch_panel` | mc, Far | Ctrl+w w, Ctrl+w Ctrl+w, Ctrl+w p (vim) | Nothing, as Ctrl+i in Visual mode, as in vim | As in Normal mode; it ends Visual mode first. |
 
 ## Quick search (`quick_search`, Insert mode)
@@ -160,7 +158,6 @@ not:
 | Up<br>Down<br>PgUp<br>PgDn | `up`<br>`down`<br>`page_up`<br>`page_down` | mc | — | Same | End the search and move in the panel, as in mc. On vim's command line they go through the history. |
 | F1<br>F3<br>F4<br>F5<br>Shift+F5<br>F6<br>Shift+F6<br>F7<br>F8<br>F9<br>Shift+F9<br>F10 | `help`<br>`view`<br>`edit`<br>`copy`<br>`duplicate`<br>`move`<br>`rename`<br>`mkdir`<br>`delete`<br>`pull_down`<br>`pull_down_last`<br>`quit` | mc | — | Same | End the search and do what they do in the panel, as in mc ([ADR 0022](adr/0022-vim-modes.md)). |
 | Shift+F7 | `next_match` | mc, Far | Ctrl+g (vim) | Same | The next match, with their key to search again. |
-| Alt+F1<br>Alt+F2 | `location_menu_left`<br>`location_menu_right` | Far | — | Same | As the F-keys: they end the search first. |
 
 ## Dialogs and help (`dialog`, Normal mode)
 

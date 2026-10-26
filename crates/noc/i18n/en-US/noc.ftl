@@ -175,7 +175,7 @@ picker-nothing = Nothing matches.
 # wrong with it, as the regex engine says.
 picker-not-regex = Not a regular expression: { $reason }
 
-## The location menu of Alt+F1 and Alt+F2 (src/tui/menu), as Far Manager's menu to change
+## The location menu of Ctrl+w 1 and Ctrl+w 2 (src/tui/menu), as Far Manager's menu to change
 ## drives. Prefix: menu-.
 
 # Titles: the panel the menu changes.

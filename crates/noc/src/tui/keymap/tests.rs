@@ -462,7 +462,10 @@ fn alt_and_a_key_stand_for_esc_and_the_key_in_insert_mode_and_the_panels() {
         assert_eq!(keymap.alt_as_esc(&state, place, left), None, "{place:?}");
     }
     let alt_f1 = KeyEvent::new(KeyCode::F(1), KeyModifiers::ALT);
-    assert_eq!(keymap.alt_as_esc(&state, PANEL, alt_f1), None, "bound");
+    let f1 = Some(KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE));
+    assert_eq!(keymap.alt_as_esc(&state, PANEL, alt_f1), f1);
+    let bound = Keymap::of(&[(Mode::Normal, Context::Panel, &[(Action::Help, &["alt-f1"])])]);
+    assert_eq!(bound.alt_as_esc(&state, PANEL, alt_f1), None, "bound");
     // Any key: an Esc and a quick Enter, Backspace, or arrow arrive with Alt too.
     for code in [
         KeyCode::Enter,
@@ -742,8 +745,8 @@ fn quick_search_is_typed_as_vims_search() {
         "the arrows and the page keys end it, characters are text"
     );
     assert_eq!(
-        typed(search, &["f5", "shift-f9", "alt-f1"]),
-        actions(&[Action::Copy, Action::PullDownLast, Action::LocationMenuLeft]),
+        typed(search, &["f5", "shift-f9"]),
+        actions(&[Action::Copy, Action::PullDownLast]),
         "and its F-keys"
     );
     assert_eq!(
@@ -768,16 +771,8 @@ fn the_f_keys_work_in_visual_mode_too() {
         keymap.fkeys(Mode::Normal, Context::Panel)
     );
     assert_eq!(
-        typed(
-            VISUAL_PANEL,
-            &["shift-f5", "shift-f6", "shift-f9", "alt-f2"]
-        ),
-        actions(&[
-            Action::Duplicate,
-            Action::Rename,
-            Action::PullDownLast,
-            Action::LocationMenuRight
-        ])
+        typed(VISUAL_PANEL, &["shift-f5", "shift-f6", "shift-f9"]),
+        actions(&[Action::Duplicate, Action::Rename, Action::PullDownLast])
     );
 }
 
@@ -983,17 +978,8 @@ fn f_keys_are_mcs() {
     assert_eq!(keymap.fkeys(Mode::Normal, Context::Dialog), dialog);
     assert_eq!(keymap.fkeys(Mode::Insert, Context::DialogInput), dialog);
     assert_eq!(
-        typed(
-            PANEL,
-            &["alt-f1", "alt-f2", "shift-f5", "shift-f6", "shift-f9"]
-        ),
-        actions(&[
-            Action::LocationMenuLeft,
-            Action::LocationMenuRight,
-            Action::Duplicate,
-            Action::Rename,
-            Action::PullDownLast
-        ])
+        typed(PANEL, &["shift-f5", "shift-f6", "shift-f9"]),
+        actions(&[Action::Duplicate, Action::Rename, Action::PullDownLast])
     );
     let search = (Mode::Insert, Context::QuickSearch);
     assert_eq!(

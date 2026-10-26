@@ -265,8 +265,8 @@ directory Noon Commander uses.
 
 ### The Option key on macOS
 
-A few keys use Alt: Alt+F1 and Alt+F2, and Alt and the highlighted letter of a command of the
-pull-down menu, or of a button, a field, a check box, or a choice of a dialog. In Insert and Visual
+A few keys use Alt: Alt and the highlighted letter of a command of the pull-down menu, or of a
+button, a field, a check box, or a choice of a dialog. In Insert and Visual
 mode, and in the panels, Alt and a key also stand for Esc and the key, as in vim, but on a password
 and in the dialogs and the menu. On macOS the Option key types characters such as `ø` instead,
 unless the terminal sends it as Alt:
@@ -277,8 +277,8 @@ unless the terminal sends it as Alt:
 - kitty: `macos_option_as_alt yes`.
 - Alacritty: `option_as_alt = "Both"` under `[window]`.
 
-Without it, Ctrl+w 1 and Ctrl+w 2 open the location menus, and the arrows and Enter run the
-commands of the pull-down menu and press the buttons of dialogs.
+Without it, the arrows and Enter run the commands of the pull-down menu and press the buttons of
+dialogs.
 
 ## Contributing
 

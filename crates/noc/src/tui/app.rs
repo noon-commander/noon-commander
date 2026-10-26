@@ -835,7 +835,7 @@ pub(crate) struct App {
     help_spot: Spot,
     /// What the About page of the help tells.
     about: About,
-    /// The location menu of Alt+F1 or Alt+F2, over the panels and under the dialogs.
+    /// The location menu of Ctrl+w 1 or Ctrl+w 2, over the panels and under the dialogs.
     menu: Option<LocationMenu>,
     /// The generation of the last listing for the menu.
     menu_listings: u64,
@@ -2654,8 +2654,9 @@ impl App {
             .collect()
     }
 
-    /// Gives a key to the tab menu: the tab it shows is its panel's, which becomes active, as
-    /// the location menu's panel does. A tab it closes goes as `t c` closes it; the menu stays.
+    /// Gives a key to the tab menu: the tab it shows is its panel's, and the keys stay with the
+    /// active one, as after the location menu. A tab it closes goes as `t c` closes it; the menu
+    /// stays.
     fn handle_tab_menu(&mut self, input: Resolved) -> Vec<Effect> {
         let Some(menu) = &mut self.tab_menu else {
             return Vec::new();
@@ -2669,7 +2670,6 @@ impl App {
             TabMenuEvent::Show(index) => {
                 let side = menu.side();
                 self.tab_menu = None;
-                self.active = side;
                 self.end_search(side);
                 if self.tabs_mut(side).select(index) {
                     return self.revealed(side);
@@ -3356,7 +3356,8 @@ impl App {
         vec![Effect::ListPlaces { generation }]
     }
 
-    /// Gives a key to the location menu: what it opens goes to its panel, which becomes active.
+    /// Gives a key to the location menu: what it opens goes to its panel, and the keys stay with
+    /// the active one, as after Ctrl+w f and Ctrl+w v.
     fn handle_menu(&mut self, input: Resolved) -> Vec<Effect> {
         let Some(menu) = &mut self.menu else {
             return Vec::new();
@@ -3370,7 +3371,6 @@ impl App {
             MenuEvent::Open(location) => {
                 let side = menu.side();
                 self.menu = None;
-                self.active = side;
                 self.go(self.shown(side), Destination::to(location))
             }
             MenuEvent::Disconnect(host) => {
@@ -9656,6 +9656,12 @@ mod tests {
             (Side::Right, local("/Volumes/USB"))
         );
         assert!(app.menu.is_none());
+        assert_eq!(
+            app.active,
+            Side::Left,
+            "the keys stay with the active panel"
+        );
+        app.handle(action(Action::FocusRight));
         open_menu(&mut app, Action::LocationMenuRight);
         screen_of(&mut app, 12);
         press(&mut app, Press::Click, 10, 3);
@@ -10595,6 +10601,7 @@ mod tests {
         // A local job waits behind the one on the host, and starts when the host goes.
         let effects = enter_host(&mut app, Side::Right, 0);
         answer(&mut app, effects, &Listing::Dir(vec![file("a", 1)]));
+        app.handle(action(Action::FocusRight));
         app.handle(action(Action::Down));
         app.handle(action(Action::Delete));
         assert!(app.handle(action(Action::Confirm)).is_empty());
@@ -12097,7 +12104,7 @@ mod tests {
     }
 
     #[test]
-    fn alt_f1_and_alt_f2_change_the_location_of_their_panel() {
+    fn ctrl_w_1_and_ctrl_w_2_change_the_location_of_their_panel() {
         let mut app = loaded();
         open_menu(&mut app, Action::LocationMenuRight);
         assert_eq!(app.context(), Context::LocationMenu);
@@ -12126,12 +12133,13 @@ mod tests {
         );
         assert_eq!(
             app.active,
-            Side::Right,
-            "the panel it changed becomes active"
+            Side::Left,
+            "the keys stay with the active panel"
         );
         assert_eq!(app.context(), Context::Panel);
 
         // Esc closes the menu; a host connects.
+        app.handle(action(Action::SwitchPanel));
         open_menu(&mut app, Action::LocationMenuLeft);
         app.handle(action(Action::Cancel));
         assert!(app.menu.is_none());
@@ -12142,11 +12150,11 @@ mod tests {
             matches!(&effect, Effect::Connect { host, .. } if host == "web"),
             "a host connects: {effect:?}"
         );
-        assert_eq!(app.active, Side::Left);
+        assert_eq!(app.active, Side::Right, "from the right panel too");
     }
 
     #[test]
-    fn alt_f1_changes_the_panel_drawn_on_the_left_after_ctrl_u() {
+    fn ctrl_w_1_changes_the_panel_drawn_on_the_left_after_ctrl_w_x() {
         let mut app = loaded();
         app.handle(action(Action::SwapPanels));
         open_menu(&mut app, Action::LocationMenuLeft);
@@ -13388,7 +13396,7 @@ mod tests {
     }
 
     #[test]
-    fn the_list_of_the_other_panels_tabs_makes_it_active() {
+    fn the_list_of_the_other_panels_tabs_leaves_the_keys_here() {
         let mut app = loaded();
         app.handle(action(Action::NewTab));
         app.handle(action(Action::TabListRight));
@@ -13404,7 +13412,11 @@ mod tests {
         );
         assert!(app.handle(action(Action::Confirm)).is_empty());
         assert!(app.tab_menu.is_none());
-        assert_eq!(app.active, Side::Right);
+        assert_eq!(
+            app.active,
+            Side::Left,
+            "the keys stay with the active panel"
+        );
         assert_eq!(tab_numbers(&app, Side::Right), (vec![2], 2));
         assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3], 3));
     }

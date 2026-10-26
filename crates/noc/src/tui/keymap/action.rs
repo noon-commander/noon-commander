@@ -31,7 +31,7 @@ pub(crate) enum Context {
     /// Keys that the windows listing items to choose from share: the menus, the zoxide window,
     /// the workspaces, and the command history fall back to it. Keys never go to it alone.
     List,
-    /// The location menu of Alt+F1 and Alt+F2; falls back to `List`, and, while its filter
+    /// The location menu of Ctrl+w 1 and Ctrl+w 2; falls back to `List`, and, while its filter
     /// takes text, to `Input`.
     LocationMenu,
     /// The tab menu of a panel; falls back as the location menu does.

@@ -200,11 +200,13 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
 
 ### Location menu
 
-Ctrl+w 1 and Ctrl+w 2 open a menu over the left or the right panel (Alt+F1 and Alt+F2 too, as Far
-Manager's menus to change drives, and F9 → Left or Right → Change location). Left and right are
-where the panels are drawn, as in Far: after Ctrl+w x, Ctrl+w 1 opens the menu of the right panel,
-drawn on the left, and its title says Left. It is the one place to choose a volume or a host,
-grouped under headings:
+Ctrl+w 1 and Ctrl+w 2 open a menu over the left or the right panel, as Far Manager's Alt+F1 and
+Alt+F2 open its menus to change drives (F9 → Left or Right → Change location too). noc binds no
+Alt+F1 and Alt+F2, which desktops take
+([ADR 0049](adr/0049-menus-of-a-panel-keep-the-active-panel.md)). Left and right are where the
+panels are drawn, as in Far: after Ctrl+w x, Ctrl+w 1 opens the menu of the right panel, drawn on
+the left, and its title says Left. It is the one place to choose a volume or a host, grouped under
+headings:
 
 ```text
  ╔════════════════════ Left ════════════════════╗
@@ -242,9 +244,9 @@ grouped under headings:
   whole group until the menu closes.
 - The menu opens in Insert mode, as the other [lists](#lists) do, with the filter taking the keys
   and the cursor on the home directory or the volume that holds the panel's directory, whichever
-  is nearer, or on its host. Up and Down move, and Enter opens the row in that panel, which
-  becomes active; after Esc, `j` and `k` move too, and `g g` and `G` go to the first and the last
-  row.
+  is nearer, or on its host. Up and Down move, and Enter opens the row in that panel; the keys stay
+  with the active panel, as after Ctrl+w f and Ctrl+w v. After Esc, `j` and `k` move too, and
+  `g g` and `G` go to the first and the last row.
 - The filter, which `/` or `i` types in again, finds the places by name, path or mount point,
   alias, label, and address, and finds every one, hidden ones too; the rows of more go away while
   the filter has text. It matches them in the [search mode](#search-modes): as fzf does, the
@@ -653,7 +655,8 @@ row and names the tab that shows by its whole location:
   one shows. `g t` and `g T`, or `] t` and `[ t`, go round the tabs, and `g t` with a count goes
   to the tab of that number, as in vim; `t h` and `t l` open the tab menu of the left and the
   right panel, whichever is active: the tabs with their whole locations, over that panel, to show
-  one. The panel whose tab is shown becomes active. `d d` and F8 (`close_tab`) close the tab
+  one. The keys stay with the active panel, as after the location menu. `d d` and F8 (`close_tab`)
+  close the tab
   under the cursor there as `t c` closes the one that shows
   (`Tabs::close_at`), and the menu stays open with the rest. Left and Right in F9 do the same for
   the panel on that side.

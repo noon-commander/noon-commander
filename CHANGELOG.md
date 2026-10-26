@@ -312,6 +312,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   F4 on a host, checksums and saving them, changing directory, saving and renaming a workspace,
   and the window of a running job, were 60 or 70. Selecting by pattern (`g +`, `g -`) keeps mc's
   50, and find its 120.
+- A place chosen in the location menu (Ctrl+w 1, Ctrl+w 2), or a tab in the tab menu (`t h`,
+  `t l`), goes to its panel and leaves the keys with the active one, as Ctrl+w f and Ctrl+w v do,
+  rather than move them to the panel it changed
+  ([ADR 0049](docs/adr/0049-menus-of-a-panel-keep-the-active-panel.md)).
+
+### Removed
+
+- Alt+F1 and Alt+F2, which desktops take: Ctrl+w 1 and Ctrl+w 2 open the location menus. In the
+  panels they now stand for Esc and F1 or F2, as other Alt keys that nothing binds do
+  ([ADR 0049](docs/adr/0049-menus-of-a-panel-keep-the-active-panel.md)).
 
 ### Fixed
 

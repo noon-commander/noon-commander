@@ -319,7 +319,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The speed of a job that moves data, and the time left at it, follow the last five seconds of
   work rather than the average since the start, so a slow start no longer holds them down for
   the rest of the copy. While no data moves the speed falls to `0B/s`, and the time left shows
-  `-:--`.
+  `-:--`. Both change once a second, with the time the job has worked, rather than with every
+  frame, and a time left over a minute goes by five seconds (`1:35`, `1:30`).
 
 ### Removed
 

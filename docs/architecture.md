@@ -913,7 +913,9 @@ the question waits behind other dialogs. The speed is that of the last five seco
 the stopwatch: the window keeps `bytes_copied` at moments of work at least a quarter of a second
 apart, and divides what was copied since the last of them five seconds back by the time since.
 A slow start is behind it after five seconds; when no data comes it falls to zero, and the time
-left is unknown.
+left is unknown. Both are worked out once in each second that the time shows and held until the
+next, so they change with it rather than with every frame; a time left over a minute goes by five
+seconds.
 
 Renaming one entry in its directory (`rename`) is no job: one call with no progress, which
 the UI runs like a new directory, through the host's shared session (`Arc<SftpFs>`) for a

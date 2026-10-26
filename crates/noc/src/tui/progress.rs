@@ -1,6 +1,6 @@
 //! The window of a running job: what it does, where it is, a gauge, and its time and speed.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
@@ -31,6 +31,13 @@ const RECENT: Duration = Duration::from_secs(5);
 
 /// The least time between two [`Samples`], so that [`RECENT`] holds a few dozen.
 const SAMPLE: Duration = Duration::from_millis(250);
+
+/// The seconds from which the time left goes by [`LEFT_STEP`], so that it does not jump to and
+/// fro by a second or two.
+const ROUGH_LEFT: u64 = 60;
+
+/// The step of a time left over [`ROUGH_LEFT`], in seconds.
+const LEFT_STEP: u64 = 5;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Stage {
@@ -132,7 +139,15 @@ struct Timing {
     /// Bytes per second over the last [`RECENT`] of work, once there is enough behind it; for
     /// jobs that move data.
     speed: Option<f64>,
-    /// The time left at that speed, while data moves.
+    /// The time left at that speed, while data moves, as [`rough_left`] gives it.
+    left: Option<Duration>,
+}
+
+/// The speed and the time left of a job, worked out for one second of its time as it shows.
+#[derive(Debug, Clone, Copy)]
+struct Held {
+    second: u64,
+    speed: Option<f64>,
     left: Option<Duration>,
 }
 
@@ -177,6 +192,9 @@ pub(crate) struct JobView {
     asking: bool,
     clock: Stopwatch,
     samples: Samples,
+    /// The speed and the time left change with the second that the time shows, rather than
+    /// with every frame.
+    held: Cell<Option<Held>>,
     buttons: Vec<JobButton>,
     focus: usize,
     /// Where the last render drew it, for the mouse.
@@ -195,6 +213,7 @@ impl JobView {
             asking: false,
             clock: Stopwatch::default(),
             samples: Samples::default(),
+            held: Cell::default(),
             buttons: vec![JobButton::Background, JobButton::Abort],
             focus: 0,
             drawn: RefCell::default(),
@@ -269,12 +288,32 @@ impl JobView {
         }
     }
 
-    /// The time and speed at `now`, while the job works.
+    /// The time and speed at `now`, while the job works. The speed and the time left are those
+    /// of the first call in the second that the time shows.
     fn timing(&self, now: Instant) -> Option<Timing> {
         let Stage::Working { counts, .. } = &self.stage else {
             return None;
         };
         let elapsed = self.clock.elapsed(now);
+        let second = whole_seconds(elapsed);
+        let held = match self.held.get() {
+            Some(held) if held.second == second => held,
+            _ => {
+                let held = self.measure(counts, elapsed, second);
+                self.held.set(Some(held));
+                held
+            }
+        };
+        Some(Timing {
+            elapsed,
+            speed: held.speed,
+            left: held.left,
+        })
+    }
+
+    /// The speed and the time left after `elapsed` of work, in its `second`, with `counts`
+    /// behind it.
+    fn measure(&self, counts: &Counts, elapsed: Duration, second: u64) -> Held {
         let speed = if counts.bytes_total > 0 && elapsed >= SETTLED {
             self.samples.speed(elapsed, counts.bytes_copied)
         } else {
@@ -283,13 +322,13 @@ impl JobView {
         let left = speed.filter(|speed| *speed > 0.0).map(|speed| {
             #[allow(clippy::cast_precision_loss)]
             let left = counts.bytes_total.saturating_sub(counts.bytes_done) as f64;
-            Duration::try_from_secs_f64(left / speed).unwrap_or(Duration::MAX)
+            rough_left(Duration::try_from_secs_f64(left / speed).unwrap_or(Duration::MAX))
         });
-        Some(Timing {
-            elapsed,
+        Held {
+            second,
             speed,
             left,
-        })
+        }
     }
 
     /// What the job does, such as `Copy`.
@@ -490,9 +529,25 @@ pub(crate) fn ratio(done: u64, total: u64) -> f64 {
     ratio.clamp(0.0, 1.0)
 }
 
+/// The whole seconds of `duration`, to the nearest, as [`duration`] shows them.
+fn whole_seconds(duration: Duration) -> u64 {
+    duration
+        .as_secs()
+        .saturating_add(u64::from(duration.subsec_millis() >= 500))
+}
+
+/// A time left in whole seconds, and over [`ROUGH_LEFT`] to the nearest [`LEFT_STEP`].
+fn rough_left(left: Duration) -> Duration {
+    let seconds = whole_seconds(left);
+    if seconds <= ROUGH_LEFT {
+        return Duration::from_secs(seconds);
+    }
+    Duration::from_secs(seconds.saturating_add(LEFT_STEP / 2) / LEFT_STEP * LEFT_STEP)
+}
+
 /// A duration in whole seconds, as `M:SS`, or `H:MM:SS` from an hour on.
 fn duration(duration: Duration) -> String {
-    let seconds = duration.as_secs() + u64::from(duration.subsec_millis() >= 500);
+    let seconds = whole_seconds(duration);
     let (hours, minutes, seconds) = (seconds / 3600, seconds / 60 % 60, seconds % 60);
     if hours > 0 {
         format!("{hours}:{minutes:02}:{seconds:02}")
@@ -728,18 +783,60 @@ mod tests {
     fn skipped_and_retried_bytes_do_not_bend_the_speed() {
         let start = Instant::now();
         let mut view = JobView::new("Copy".to_owned(), "Copying".to_owned());
-        // 10 MiB in 10 seconds, then 80 MiB skipped at once, then a retry from the start of a
-        // file: the speed follows the bytes that moved.
-        view.working("a".to_owned(), copying(0, 0), start);
-        view.working("a".to_owned(), copying(10, 10), start + secs(10));
+        // 1 MiB a second for 10 seconds, then 80 MiB skipped at once, then a retry that takes
+        // 6 MiB back to the start of a file: the speed follows the bytes that moved.
+        for second in 0..=10 {
+            view.working(
+                "a".to_owned(),
+                copying(second, second),
+                start + secs(second),
+            );
+        }
         view.working("b".to_owned(), copying(90, 10), start + secs(10));
         let timing = view.timing(start + secs(10)).unwrap();
         assert!((timing.speed.unwrap() - 1024.0 * 1024.0).abs() < 1.0);
         assert_eq!(timing.left.map(|left| left.as_secs()), Some(10));
-        view.working("b".to_owned(), copying(85, 15), start + secs(10));
-        let timing = view.timing(start + secs(10)).unwrap();
-        assert!((timing.speed.unwrap() - 1.5 * 1024.0 * 1024.0).abs() < 1.0);
-        assert_eq!(timing.left.map(|left| left.as_secs()), Some(10));
+        view.working("c".to_owned(), copying(85, 11), start + secs(11));
+        let timing = view.timing(start + secs(11)).unwrap();
+        assert!((timing.speed.unwrap() - 1024.0 * 1024.0).abs() < 1.0);
+        assert_eq!(timing.left.map(|left| left.as_secs()), Some(15));
+    }
+
+    #[test]
+    fn the_speed_and_the_time_left_change_with_the_second_shown() {
+        let start = Instant::now();
+        let mut view = JobView::new("Copy".to_owned(), "Copying".to_owned());
+        for second in 0..=10 {
+            view.working(
+                "a".to_owned(),
+                copying(second, second),
+                start + secs(second),
+            );
+        }
+        let shown = view.timing(start + secs(10)).unwrap();
+        // A burst of 3 MiB within the second that shows changes neither.
+        let burst = start + Duration::from_millis(10_300);
+        view.working("a".to_owned(), copying(13, 13), burst);
+        let timing = view.timing(start + Duration::from_millis(10_400)).unwrap();
+        assert_eq!((timing.speed, timing.left), (shown.speed, shown.left));
+        assert_eq!(timing.elapsed, Duration::from_millis(10_400));
+        // The time shows 0:11 from 10.5 seconds on, and they follow.
+        let timing = view.timing(start + Duration::from_millis(10_500)).unwrap();
+        let speed = timing.speed.unwrap();
+        assert!(speed > 1.4 * 1024.0 * 1024.0, "{speed}");
+        assert_ne!(timing.left, shown.left);
+    }
+
+    #[test]
+    fn a_long_time_left_goes_by_five_seconds() {
+        let left = |millis: u64| rough_left(Duration::from_millis(millis)).as_secs();
+        assert_eq!(left(41_400), 41);
+        assert_eq!(left(59_600), 60);
+        assert_eq!(left(62_400), 60);
+        assert_eq!(left(62_600), 65);
+        assert_eq!(left(92_000), 90);
+        assert_eq!(left(3_723_000), 3_725);
+        assert_eq!(rough_left(Duration::MAX).as_secs() % 5, 0);
     }
 
     #[test]

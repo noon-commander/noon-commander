@@ -151,6 +151,62 @@ struct Held {
     left: Option<Duration>,
 }
 
+/// What the window of a job shows at some moment, before it is put in words, apart from its
+/// buttons and the shine over a gauge not known yet: the window draws the same as long as this
+/// stays the same. It takes no formatting, so it can be made for every report.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Look {
+    aborting: bool,
+    stage: Seen,
+}
+
+/// The stage of a job as its window shows it.
+#[derive(Debug, Clone, PartialEq)]
+enum Seen {
+    Waiting,
+    Scanning {
+        items: u64,
+    },
+    Working {
+        current: String,
+        done: u64,
+        total: u64,
+        /// How far it is in whole percent, which the bar of the gauge follows too.
+        percent: u64,
+        /// The whole seconds that its time shows.
+        second: u64,
+        /// For jobs that move data.
+        data: Option<Data>,
+    },
+}
+
+/// What the window of a job that moves data shows of it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Data {
+    done: Size,
+    total: Size,
+    speed: Option<f64>,
+    left: Option<Duration>,
+}
+
+/// A size in bytes, equal to another that reads the same.
+#[derive(Debug, Clone, Copy)]
+struct Size(u64);
+
+impl Size {
+    fn key(self) -> (usize, usize, u64) {
+        // Sizes stay far below 2^52, where `f64` would round them.
+        #[allow(clippy::cast_precision_loss)]
+        cells::short_size_key(self.0 as f64)
+    }
+}
+
+impl PartialEq for Size {
+    fn eq(&self, other: &Self) -> bool {
+        self.key() == other.key()
+    }
+}
+
 /// A button of a job's window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum JobButton {
@@ -267,6 +323,17 @@ impl JobView {
         self.clock.running()
     }
 
+    /// When the second that its time shows changes next after `now`, and with it the speed
+    /// and the time left, while its time runs.
+    pub(crate) fn next_tick(&self, now: Instant) -> Option<Instant> {
+        self.ticking().then(|| {
+            let elapsed = self.clock.elapsed(now);
+            let next = Duration::from_secs(whole_seconds(elapsed))
+                .saturating_add(Duration::from_millis(500));
+            now + next.saturating_sub(elapsed)
+        })
+    }
+
     /// Its wait while it waits its turn or counts, whose shine crosses the gauge.
     pub(crate) fn shining(&self) -> Option<&Wait> {
         (!self.aborting && !self.measured()).then_some(&self.wait)
@@ -288,12 +355,18 @@ impl JobView {
         }
     }
 
-    /// The time and speed at `now`, while the job works. The speed and the time left are those
-    /// of the first call in the second that the time shows.
+    /// The time and speed at `now`, while the job works.
+    #[cfg(test)]
     fn timing(&self, now: Instant) -> Option<Timing> {
-        let Stage::Working { counts, .. } = &self.stage else {
-            return None;
-        };
+        match &self.stage {
+            Stage::Working { counts, .. } => Some(self.timing_of(counts, now)),
+            Stage::Waiting | Stage::Scanning { .. } => None,
+        }
+    }
+
+    /// The time and speed at `now` of the job at work with `counts` behind it. The speed and
+    /// the time left are those of the first call in the second that the time shows.
+    fn timing_of(&self, counts: &Counts, now: Instant) -> Timing {
         let elapsed = self.clock.elapsed(now);
         let second = whole_seconds(elapsed);
         let held = match self.held.get() {
@@ -304,11 +377,44 @@ impl JobView {
                 held
             }
         };
-        Some(Timing {
+        Timing {
             elapsed,
             speed: held.speed,
             left: held.left,
-        })
+        }
+    }
+
+    /// What its window shows at `now`.
+    pub(crate) fn look(&self, now: Instant) -> Look {
+        let stage = match &self.stage {
+            Stage::Waiting => Seen::Waiting,
+            &Stage::Scanning { items } => Seen::Scanning { items },
+            Stage::Working { current, counts } => {
+                let timing = self.timing_of(counts, now);
+                // Data takes the time, so the gauge follows the bytes, if there are any.
+                let data = (counts.bytes_total > 0).then_some(Data {
+                    done: Size(counts.bytes_done),
+                    total: Size(counts.bytes_total),
+                    speed: timing.speed,
+                    left: timing.left,
+                });
+                // A ratio within 0 … 1.
+                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                let percent = (self.ratio() * 100.0).round() as u64;
+                Seen::Working {
+                    current: current.clone(),
+                    done: counts.done,
+                    total: counts.total,
+                    percent,
+                    second: whole_seconds(timing.elapsed),
+                    data,
+                }
+            }
+        };
+        Look {
+            aborting: self.aborting,
+            stage,
+        }
     }
 
     /// The speed and the time left after `elapsed` of work, in its `second`, with `counts`
@@ -338,25 +444,22 @@ impl JobView {
 
     /// How far the job is at `now`, for the list of jobs.
     pub(crate) fn summary(&self, now: Instant) -> Summary {
-        let state = match &self.stage {
-            _ if self.aborting => fl!("jobs-state-aborting"),
-            Stage::Waiting => fl!("jobs-state-waiting"),
-            Stage::Scanning { .. } => fl!("jobs-state-counting"),
-            Stage::Working { .. } => {
-                // A ratio within 0 … 1.
-                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                let percent = (self.ratio() * 100.0).round() as u64;
-                fl!("jobs-state-percent", percent = percent)
-            }
+        let look = self.look(now);
+        let state = match &look.stage {
+            _ if look.aborting => fl!("jobs-state-aborting"),
+            Seen::Waiting => fl!("jobs-state-waiting"),
+            Seen::Scanning { .. } => fl!("jobs-state-counting"),
+            &Seen::Working { percent, .. } => fl!("jobs-state-percent", percent = percent),
         };
-        let left = self
-            .timing(now)
-            .and_then(|timing| timing.left)
-            .map(|left| fl!("jobs-left", left = duration(left)))
-            .unwrap_or_default();
-        let current = match &self.stage {
-            Stage::Working { current, .. } => current.clone(),
-            Stage::Waiting | Stage::Scanning { .. } => String::new(),
+        let (left, current) = match look.stage {
+            Seen::Working { current, data, .. } => {
+                let left = data
+                    .and_then(|data| data.left)
+                    .map(|left| fl!("jobs-left", left = duration(left)))
+                    .unwrap_or_default();
+                (left, current)
+            }
+            Seen::Waiting | Seen::Scanning { .. } => (String::new(), String::new()),
         };
         Summary {
             state,
@@ -427,32 +530,45 @@ impl JobView {
                 frame.render_widget(line, row);
             }
         };
-        let (doing, current, ratio, count) = match &self.stage {
-            Stage::Waiting => (fl!("job-waiting"), String::new(), 0.0, String::new()),
-            &Stage::Scanning { items } => (
+        let look = self.look(now);
+        let (doing, current, percent, count, time) = match &look.stage {
+            Seen::Waiting => (fl!("job-waiting"), "", None, String::new(), String::new()),
+            &Seen::Scanning { items } => (
                 fl!("job-scanning"),
-                String::new(),
-                0.0,
+                "",
+                None,
                 fl!("job-found", items = items),
+                String::new(),
             ),
-            Stage::Working { current, counts } => {
-                let (done, total) = (counts.done, counts.total);
-                // Data takes the time, so the gauge follows the bytes, if there are any.
-                let count = if counts.bytes_total > 0 {
-                    fl!(
+            &Seen::Working {
+                ref current,
+                done,
+                total,
+                percent,
+                second,
+                data,
+            } => {
+                let count = match data {
+                    Some(data) => fl!(
                         "job-count-bytes",
                         done = done,
                         total = total,
-                        bytes_done = short_size(counts.bytes_done),
-                        bytes_total = short_size(counts.bytes_total)
-                    )
-                } else {
-                    fl!("job-count", done = done, total = total)
+                        bytes_done = short_size(data.done.0),
+                        bytes_total = short_size(data.total.0)
+                    ),
+                    None => fl!("job-count", done = done, total = total),
                 };
-                (self.doing.clone(), current.clone(), self.ratio(), count)
+                let time = time_line(second, data.as_ref());
+                (
+                    self.doing.clone(),
+                    current.as_str(),
+                    Some(percent),
+                    count,
+                    time,
+                )
             }
         };
-        let doing = if self.aborting {
+        let doing = if look.aborting {
             fl!("job-aborting")
         } else {
             doing
@@ -468,8 +584,11 @@ impl JobView {
             ))
         };
         put(0, text(&doing));
-        put(1, text(&current));
-        if self.measured() {
+        put(1, text(current));
+        if let Some(percent) = percent {
+            // At most 100.
+            #[allow(clippy::cast_precision_loss)]
+            let ratio = percent as f64 / 100.0;
             put(2, gauge(ratio, width, theme));
         } else {
             // A stop leaves it still: nothing more is to come.
@@ -477,7 +596,7 @@ impl JobView {
             put(2, unknown_gauge(inner.width, shine, theme));
         }
         put(3, text(&count));
-        put(4, text(&self.time_line(now)));
+        put(4, text(&time));
         let labels: Vec<Label> = self.buttons.iter().map(|button| button.label()).collect();
         let buttons = button_line(&labels, 0, Some(self.focus), colors);
         let row = Rect::new(inner.x, inner.y + 6, inner.width, 1);
@@ -495,27 +614,20 @@ impl JobView {
             draw_separator(frame, inner, inner.y + 5, colors, theme);
         }
     }
+}
 
-    /// The time the job has worked, and for jobs that move data the time left and the speed.
-    fn time_line(&self, now: Instant) -> String {
-        let Some(timing) = self.timing(now) else {
-            return String::new();
-        };
-        let elapsed = duration(timing.elapsed);
-        let moves_data =
-            matches!(&self.stage, Stage::Working { counts, .. } if counts.bytes_total > 0);
-        if !moves_data {
-            return fl!("job-elapsed", elapsed = elapsed);
-        }
-        let left = timing
-            .left
-            .map_or_else(|| fl!("job-unknown-time"), duration);
-        let speed = timing.speed.map_or_else(
-            || fl!("job-unknown-speed"),
-            |speed| fl!("job-speed", size = speed_size(speed)),
-        );
-        fl!("job-timing", elapsed = elapsed, left = left, speed = speed)
-    }
+/// The `second`s a job has worked, and for one that moves `data` the time left and the speed.
+fn time_line(second: u64, data: Option<&Data>) -> String {
+    let elapsed = duration(Duration::from_secs(second));
+    let Some(data) = data else {
+        return fl!("job-elapsed", elapsed = elapsed);
+    };
+    let left = data.left.map_or_else(|| fl!("job-unknown-time"), duration);
+    let speed = data.speed.map_or_else(
+        || fl!("job-unknown-speed"),
+        |speed| fl!("job-speed", size = speed_size(speed)),
+    );
+    fl!("job-timing", elapsed = elapsed, left = left, speed = speed)
 }
 
 /// `done` of `total`, from 0 to 1.
@@ -825,6 +937,54 @@ mod tests {
         let speed = timing.speed.unwrap();
         assert!(speed > 1.4 * 1024.0 * 1024.0, "{speed}");
         assert_ne!(timing.left, shown.left);
+    }
+
+    #[test]
+    fn the_look_changes_only_with_what_the_window_shows() {
+        const MIB: u64 = 1024 * 1024;
+        /// Reports `done` entries and `bytes` of 100 MiB at `now`, and looks.
+        fn report(view: &mut JobView, (done, bytes): (u64, u64), now: Instant) -> Look {
+            let counts = Counts {
+                done,
+                total: 2,
+                bytes_done: bytes,
+                bytes_total: 100 * MIB,
+                bytes_copied: bytes,
+            };
+            view.working("a".to_owned(), counts, now);
+            view.look(now)
+        }
+        let start = Instant::now();
+        let at = |millis| start + Duration::from_millis(millis);
+        let mut view = JobView::new("Copy".to_owned(), "Copying".to_owned());
+        let shown = report(&mut view, (0, 20 * MIB), at(0));
+        let look = report(&mut view, (0, 20 * MIB + 1_000), at(100));
+        assert_eq!(look, shown, "still 20.0M, 20%, 0:00");
+        let look = report(&mut view, (0, 20 * MIB + 200 * 1024), at(200));
+        assert_ne!(look, shown, "20.2M");
+        let shown = look;
+        assert_ne!(
+            report(&mut view, (1, 20 * MIB + 200 * 1024), at(300)),
+            shown,
+            "1 of 2"
+        );
+        let shown = view.look(at(300));
+        assert_eq!(view.look(at(499)), shown);
+        assert_ne!(view.look(at(500)), shown, "0:01");
+    }
+
+    #[test]
+    fn the_time_draws_again_when_the_second_it_shows_changes() {
+        let start = Instant::now();
+        let at = |millis| start + Duration::from_millis(millis);
+        let mut view = JobView::new("Copy".to_owned(), "Copying".to_owned());
+        assert_eq!(view.next_tick(start), None, "nothing to time yet");
+        view.working("a".to_owned(), copying(0, 0), start);
+        assert_eq!(view.next_tick(at(200)), Some(at(500)));
+        assert_eq!(view.next_tick(at(500)), Some(at(1_500)));
+        assert_eq!(view.next_tick(at(1_499)), Some(at(1_500)));
+        view.ask(at(2_000));
+        assert_eq!(view.next_tick(at(9_000)), None, "it stands");
     }
 
     #[test]

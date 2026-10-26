@@ -56,7 +56,7 @@ use super::panel::{
 };
 use super::picker::FULL_ROWS;
 use super::places::{Places, volume_of};
-use super::progress::{Counts, JobButton, JobView};
+use super::progress::{Counts, JobButton, JobView, Look};
 use super::pulldown::{self, Command, PullDown, PullDownEvent, Status};
 use super::reading::{ReadButton, Reading};
 use super::search::{self, Input, Slot, Switch};
@@ -369,8 +369,6 @@ const MAX_REPEAT: usize = 10_000;
 /// How long the search of a tree waits after a key before it starts again, so that typing a
 /// word starts one search rather than one for each letter.
 const FIND_DELAY: Duration = Duration::from_millis(150);
-/// How often the time of a working job is drawn again.
-const CLOCK_FRAME: Duration = Duration::from_millis(150);
 /// Cells of what a pending command has typed that the line above the F-key bar shows, as
 /// vim's `showcmd` shows at most.
 const SHOWCMD_WIDTH: usize = 10;
@@ -5535,19 +5533,30 @@ impl App {
     }
 
     /// Takes a report from the job `id`, as [`App::job_event`] does, and tells whether the
-    /// screen changes with it. A job in the background reports every chunk it moves, hundreds a
-    /// second, while the corner shows only how far the jobs there are together, in percent: the
-    /// screen draws when that changes, not for every report.
+    /// screen changes with it. A job reports every chunk it moves, hundreds a second, while its
+    /// window, or its row in the list of jobs, changes only when what it shows does, and the
+    /// corner shows only how far the jobs in the background are together, in percent: the
+    /// screen draws when one of these changes, not for every report.
     pub(crate) fn job_report(&mut self, id: u64, event: JobEvent) -> (Vec<Effect>, bool) {
         let progress = matches!(event, JobEvent::Scanning { .. } | JobEvent::Progress { .. });
-        let unseen = progress
-            && self
-                .jobs
-                .iter()
-                .any(|job| job.id == id && !self.watched(job));
+        if !progress {
+            return (self.job_event(id, event), true);
+        }
+        let now = Instant::now();
+        let look = self.watched_look(id, now);
         let corner = self.corner();
         let effects = self.job_event(id, event);
-        (effects, !unseen || self.corner() != corner)
+        let changes = self.watched_look(id, now) != look || self.corner() != corner;
+        (effects, changes)
+    }
+
+    /// What the window of the job `id` shows at `now`, if the screen shows more of it than its
+    /// share of the corner. The list of jobs shows less, so its row may draw for nothing.
+    fn watched_look(&self, id: u64, now: Instant) -> Option<Look> {
+        self.jobs
+            .iter()
+            .find(|job| job.id == id && self.watched(job))
+            .map(|job| job.view.look(now))
     }
 
     /// Takes a report from the job `id`: progress for its window, a failure for a dialog
@@ -6989,7 +6998,8 @@ impl App {
 
     /// When the screen needs drawing again, after the frame drawn at `drawn`, for what changes
     /// as time passes: a spinner that is due to show, or that turns; a host that connects in the
-    /// location menu; the time of a working job in its window or in the list of jobs.
+    /// location menu; the second that the time of a working job shows, with its speed and time
+    /// left, in its window or in the list of jobs.
     pub(crate) fn spin_due(&self, drawn: Instant) -> Option<Instant> {
         let turns = self.config.animations.spinners;
         let mut due: Option<Instant> = None;
@@ -7009,12 +7019,13 @@ impl App {
         if turns && connecting && self.viewing.is_none() {
             at(drawn + spinner::DOTS_FRAME);
         }
-        let timed = self
+        let ticks = self
             .jobs
             .iter()
-            .any(|job| job.view.ticking() && self.watched(job));
-        if timed {
-            at(drawn + CLOCK_FRAME);
+            .filter(|job| self.watched(job))
+            .filter_map(|job| job.view.next_tick(drawn));
+        for tick in ticks {
+            at(tick);
         }
         let finished = self
             .viewing
@@ -10423,6 +10434,30 @@ mod tests {
     }
 
     #[test]
+    fn a_job_in_front_draws_only_when_its_window_changes() {
+        const MIB: u64 = 1024 * 1024;
+        let mut app = loaded();
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        let (id, _, _, _) = delete_job(app.handle(action(Action::Confirm)));
+        let mut changes = |done, bytes_done| {
+            let progress = JobEvent::Progress {
+                current: local("/srv/left/a"),
+                done,
+                total: 2,
+                bytes_done,
+                bytes_total: 100 * MIB,
+                bytes_copied: bytes_done,
+            };
+            app.job_report(id, progress).1
+        };
+        assert!(changes(0, 20 * MIB), "how far it is shows");
+        assert!(!changes(0, 20 * MIB + 1_000), "still 20.0M of 100M, 20%");
+        assert!(changes(0, 20 * MIB + 200 * 1024), "20.2M");
+        assert!(changes(1, 20 * MIB + 200 * 1024), "1 of 2");
+    }
+
+    #[test]
     fn the_clock_of_a_job_stands_while_its_question_is_open() {
         let mut app = loaded();
         app.handle(action(Action::Down));
@@ -10450,7 +10485,11 @@ mod tests {
         }
         assert!(ticking(&app, first) && ticking(&app, second));
         let now = Instant::now();
-        assert!(app.spin_due(now).is_some(), "the time in front moves");
+        let due = app.spin_due(now).unwrap();
+        assert!(
+            due > now && due <= now + Duration::from_millis(500),
+            "the time in front shows 0:01 from half a second on"
+        );
 
         // Both ask; the question of the second waits behind that of the first.
         let mut decisions = Vec::new();

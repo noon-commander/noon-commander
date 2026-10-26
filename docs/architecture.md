@@ -859,9 +859,14 @@ does not compile without.
   that reports every entry does not draw every entry. Results of background work draw at most
   once every 40 ms (`Pace` in `tui/mod.rs`): a copy reports every chunk, hundreds a second, each
   apart from the next, and drew a frame for each. Keys and the mouse draw at once, and so do
-  results after a quiet spell. A report of a job in the background draws nothing unless the
-  percentage in the corner changes (`App::job_report`); its window and the list of jobs, when
-  open, show every report.
+  results after a quiet spell. A report of a job draws only when what the screen shows of it
+  changes (`App::job_report`): its window, or its row in the list of jobs, when either is open,
+  and else the percentage in the corner. The window's `Look` holds what it shows before it is
+  put in words: entries, sizes as they read, the whole percent that the gauge follows too, the
+  second that the time shows, and the speed and the time left held for that second. Making it
+  takes no formatting, which goes through the system on macOS, so it is made for every report,
+  and the window draws from it. The time of a working job wakes the loop when the second it
+  shows changes (`JobView::next_tick`), not at a fixed rate.
 - Every request carries a generation number, so stale replies (for example, a listing of a
   directory the user has already left) are dropped.
 - The UI task never awaits network I/O.

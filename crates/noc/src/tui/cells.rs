@@ -35,6 +35,24 @@ pub(crate) fn short_size(bytes: f64, formats: &Formats) -> String {
 
 /// [`short_size`] apart: the number, and the power of 1024 of its unit, 0 for bytes.
 pub(crate) fn size_parts(bytes: f64, formats: &Formats) -> (String, usize) {
+    let (value, power, fraction) = size_scale(bytes);
+    (formats.decimal(value, fraction, true), power)
+}
+
+/// What [`short_size`] writes, without writing it, which takes the formats of the region:
+/// sizes that read the same have the same key.
+pub(crate) fn short_size_key(bytes: f64) -> (usize, usize, u64) {
+    let (value, power, fraction) = size_scale(bytes);
+    let scale = if fraction == 0 { 1.0 } else { 10.0 };
+    // Below 1024 with at most one decimal; formats round halves to even.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let digits = (value * scale).round_ties_even() as u64;
+    (power, fraction, digits)
+}
+
+/// A size in the unit that [`short_size`] writes it in: the number, the power of 1024 of the
+/// unit, and the digits after the decimal separator.
+fn size_scale(bytes: f64) -> (f64, usize, usize) {
     let mut value = bytes.max(0.0);
     let mut power = 0;
     while value >= 1024.0 && power + 1 < UNITS.len() {
@@ -42,7 +60,7 @@ pub(crate) fn size_parts(bytes: f64, formats: &Formats) -> (String, usize) {
         power += 1;
     }
     let fraction = usize::from(power > 0 && value < 99.95);
-    (formats.decimal(value, fraction, true), power)
+    (value, power, fraction)
 }
 
 /// The unit of sizes in `power`s of 1024: `B`, `K`, `M`, …; the largest beyond them.
@@ -345,6 +363,22 @@ mod tests {
         let root = Formats::detect("und");
         assert_eq!(short_size(1_047_552.0, &root), "1,023K");
         assert_eq!(short_size_width(&root), 6);
+    }
+
+    #[test]
+    fn sizes_that_read_the_same_have_the_same_key() {
+        let iso = Formats::iso();
+        // Bytes into K with the halves of their decimal, K from a decimal to none, M into G.
+        let sizes = (0..3_000)
+            .chain(99 * 1024..101 * 1024)
+            .map(f64::from)
+            .chain((0..2_000).map(|step| f64::from(1_023 * 1024 + step) * 1024.0));
+        let sizes: Vec<f64> = sizes.collect();
+        for pair in sizes.windows(2) {
+            let read = short_size(pair[0], &iso) == short_size(pair[1], &iso);
+            let keys = short_size_key(pair[0]) == short_size_key(pair[1]);
+            assert_eq!(read, keys, "{pair:?}");
+        }
     }
 
     #[test]

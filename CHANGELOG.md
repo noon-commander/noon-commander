@@ -321,6 +321,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the rest of the copy. While no data moves the speed falls to `0B/s`, and the time left shows
   `-:--`. Both change once a second, with the time the job has worked, rather than with every
   frame, and a time left over a minute goes by five seconds (`1:35`, `1:30`).
+- A job in its window, or in the list of jobs, draws the screen only when what it shows changes,
+  not for every chunk it reports, and its time draws once a second rather than every 150 ms. The
+  bar of the gauge moves with the whole percent beside it.
 
 ### Removed
 

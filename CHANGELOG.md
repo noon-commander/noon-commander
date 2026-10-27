@@ -326,8 +326,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   as well as the bytes, at what each has cost so far, so that many small files left no longer
   look done in no time; while no data moves it grows
   ([ADR 0050](docs/adr/0050-time-left-of-a-job.md)). Both change once a second, with the time the
-  job has worked, rather than with every frame, and a time left over a minute goes by five
-  seconds (`1:35`, `1:30`).
+  job has worked, rather than with every frame, and the time left counts down a second each
+  second while it keeps within a tenth of what the pace says; beyond that it moves halfway there
+  each second.
 - A job in its window, or in the list of jobs, draws the screen only when what it shows changes,
   not for every chunk it reports, and its time draws once a second rather than every 150 ms. The
   bar of the gauge moves with the whole percent beside it.

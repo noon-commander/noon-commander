@@ -36,13 +36,21 @@ in no time.
   some: its entries count neither for the pace nor for their cost, as those skipped took no time
   and which they were is not known. Entries without data that are skipped cannot be told apart
   and count.
+- **The time left shown counts down by the clock** (`count_down`). Each second it is the one
+  shown before less a second, while that keeps within a tenth of the forecast (`ETA_SLACK`);
+  beyond it, it moves halfway to the forecast each second, up or down, so that a lasting change
+  shows within a few seconds without a jump. The first one, and one counted down to nothing, is
+  the forecast. It is in whole seconds: with the clock it no longer jumps to and fro by a second
+  or two, which rounding a time left over a minute to five seconds hid before.
 - It all comes from the counts that jobs report (`Counts`), with no change to `noc-ops`.
 
 ## Consequences
 
 - Over an uneven link the time left keeps within a few percent of the average pace while the
-  speed swings by a fifth either way; tests check both, and a change of pace that lasts shows in
-  the time left within a minute.
+  speed swings by a fifth either way, and the one shown goes down by a second each second; tests
+  check all three, and a change of pace that lasts shows in the time left within a minute.
+- The time left shown can be off by up to a tenth of the forecast for as long as it counts
+  down; as the count goes down, so does a tenth of it, and the rest is made up.
 - The 1,000 small files after big ones take about the time that the per-entry cost says, where
   bytes alone gave a fraction of a second; tests check that, and that 5,000 entries skipped at
   once leave it so.

@@ -37,12 +37,10 @@ const SAMPLE: Duration = Duration::from_millis(250);
 /// speed shows, short enough to follow a change of pace within a minute or so.
 const ETA_HORIZON: Duration = Duration::from_secs(30);
 
-/// The seconds from which the time left goes by [`LEFT_STEP`], so that it does not jump to and
-/// fro by a second or two.
-const ROUGH_LEFT: u64 = 60;
-
-/// The step of a time left over [`ROUGH_LEFT`], in seconds.
-const LEFT_STEP: u64 = 5;
+/// How far the time left shown may stray from the forecast, as a share of it, and still count
+/// down by the clock: within it, the time left goes down by a second each second, through the
+/// small ups and downs of the forecast; beyond it, it moves halfway to the forecast each second.
+const ETA_SLACK: f64 = 0.1;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Stage {
@@ -309,7 +307,7 @@ struct Timing {
     /// Bytes per second over the last [`RECENT`] of work, once there is enough behind it; for
     /// jobs that move data.
     speed: Option<f64>,
-    /// The time left at that speed, while data moves, as [`rough_left`] gives it.
+    /// The time left, counted down as [`count_down`] does.
     left: Option<Duration>,
 }
 
@@ -641,7 +639,14 @@ impl JobView {
     fn measure(&self, counts: &Counts, elapsed: Duration, second: u64) -> Held {
         let (speed, left) = if counts.bytes_total > 0 && elapsed >= SETTLED {
             let speed = self.samples.speed(elapsed, counts.bytes_copied);
-            let left = self.forecast.left(elapsed, counts).map(rough_left);
+            let shown = self
+                .held
+                .get()
+                .and_then(|held| Some((held.second, held.left?)));
+            let left = self
+                .forecast
+                .left(elapsed, counts)
+                .map(|forecast| count_down(shown, second, forecast));
             (speed, left)
         } else {
             (None, None)
@@ -864,13 +869,26 @@ fn whole_seconds(duration: Duration) -> u64 {
         .saturating_add(u64::from(duration.subsec_millis() >= 500))
 }
 
-/// A time left in whole seconds, and over [`ROUGH_LEFT`] to the nearest [`LEFT_STEP`].
-fn rough_left(left: Duration) -> Duration {
-    let seconds = whole_seconds(left);
-    if seconds <= ROUGH_LEFT {
-        return Duration::from_secs(seconds);
+/// The time left to show in `second`, in whole seconds, by the `forecast`: the one `shown` in an
+/// earlier second, less the seconds since, while that keeps within [`ETA_SLACK`] of the
+/// forecast; else halfway closer to the forecast for each second since. The forecast itself
+/// without one shown, or once the count is down to nothing.
+fn count_down(shown: Option<(u64, Duration)>, second: u64, forecast: Duration) -> Duration {
+    let whole = |left: Duration| Duration::from_secs(whole_seconds(left));
+    let Some((then, shown)) = shown else {
+        return whole(forecast);
+    };
+    let passed = second.saturating_sub(then);
+    let counted = shown.saturating_sub(Duration::from_secs(passed));
+    if counted.is_zero() {
+        return whole(forecast);
     }
-    Duration::from_secs(seconds.saturating_add(LEFT_STEP / 2) / LEFT_STEP * LEFT_STEP)
+    let (from, to) = (counted.as_secs_f64(), forecast.as_secs_f64());
+    if (to - from).abs() <= ETA_SLACK * from {
+        return counted;
+    }
+    let rest = 0.5_f64.powi(i32::try_from(passed).unwrap_or(i32::MAX));
+    whole(Duration::try_from_secs_f64(to + (from - to) * rest).unwrap_or(Duration::MAX))
 }
 
 /// A duration in whole seconds, as `M:SS`, or `H:MM:SS` from an hour on.
@@ -1127,7 +1145,10 @@ mod tests {
         view.working("c".to_owned(), copying(85, 11), start + secs(11));
         let timing = view.timing(start + secs(11)).unwrap();
         assert!((timing.speed.unwrap() - 1024.0 * 1024.0).abs() < 1.0);
-        assert_eq!(timing.left.map(|left| left.as_secs()), Some(15));
+        let forecast = view.forecast.left(secs(11), &copying(85, 11));
+        assert_eq!(forecast.map(|left| left.as_secs()), Some(15));
+        // The time left shown moves there from the 9 seconds counted down, halfway at once.
+        assert_eq!(timing.left.map(|left| left.as_secs()), Some(12));
     }
 
     #[test]
@@ -1204,15 +1225,27 @@ mod tests {
     }
 
     #[test]
-    fn a_long_time_left_goes_by_five_seconds() {
-        let left = |millis: u64| rough_left(Duration::from_millis(millis)).as_secs();
-        assert_eq!(left(41_400), 41);
-        assert_eq!(left(59_600), 60);
-        assert_eq!(left(62_400), 60);
-        assert_eq!(left(62_600), 65);
-        assert_eq!(left(92_000), 90);
-        assert_eq!(left(3_723_000), 3_725);
-        assert_eq!(rough_left(Duration::MAX).as_secs() % 5, 0);
+    fn the_time_left_counts_down_by_the_clock_near_the_forecast() {
+        let left = |shown: Option<(u64, u64)>, second, forecast_millis| {
+            let shown = shown.map(|(then, left)| (then, secs(left)));
+            count_down(shown, second, Duration::from_millis(forecast_millis)).as_secs()
+        };
+        // The first is the forecast, in whole seconds.
+        assert_eq!(left(None, 10, 99_600), 100);
+        // Within a tenth of it, a second less each second.
+        assert_eq!(left(Some((10, 100)), 11, 108_000), 99);
+        assert_eq!(left(Some((10, 100)), 11, 90_000), 99);
+        assert_eq!(left(Some((10, 100)), 13, 104_000), 97);
+        // Beyond it, halfway there each second, up or down.
+        assert_eq!(left(Some((10, 100)), 11, 151_000), 125);
+        assert_eq!(left(Some((10, 100)), 11, 39_000), 69);
+        assert_eq!(left(Some((10, 100)), 12, 178_000), 158);
+        // Counted down to nothing, the forecast.
+        assert_eq!(left(Some((10, 2)), 12, 30_000), 30);
+        assert_eq!(left(Some((10, 0)), 11, 30_000), 30);
+        // Nothing overflows.
+        let far = count_down(Some((0, Duration::MAX)), 1, Duration::MAX);
+        assert!(far > secs(u64::MAX / 2));
     }
 
     #[test]
@@ -1354,10 +1387,12 @@ mod tests {
             run.stream(pace(second), pace(second));
         }
         let mut speeds = Vec::new();
+        let mut shown = Vec::new();
         for second in 60..70 {
             run.stream(pace(second), pace(second));
             let timing = run.view.timing(run.now()).unwrap();
             speeds.push(timing.speed.unwrap() / float(MIB));
+            shown.push(timing.left.unwrap().as_secs());
             // The time left keeps within 3% of what 5 MiB a second leaves …
             let left = run.left();
             let bytes = run.counts.bytes_total - run.counts.bytes_done;
@@ -1371,6 +1406,10 @@ mod tests {
                 (slow.min(*speed), fast.max(*speed))
             });
         assert!(slow < 4.5 && fast > 5.5, "{speeds:?}");
+        // The time left shown goes down by the clock.
+        for pair in shown.windows(2) {
+            assert_eq!(pair[0] - pair[1], 1, "{shown:?}");
+        }
     }
 
     #[test]

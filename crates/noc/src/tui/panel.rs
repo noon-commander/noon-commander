@@ -494,7 +494,8 @@ pub(crate) struct Panel {
     /// a top of the frame drawn again over the panel's.
     column_lines: Vec<u16>,
     /// How far the names are scrolled left, in cells, as vim's `zl` scrolls lines that do not
-    /// wrap; from their start again in another directory.
+    /// wrap, their icons or markers staying in front; from their start again in another
+    /// directory.
     shift: usize,
     /// The icons and the width of the names at the last render, which the scrolling of the
     /// names goes by.
@@ -956,20 +957,21 @@ impl Panel {
     /// row counts even before a render brings it on screen.
     fn shift_limit(&self) -> usize {
         let on_screen = (self.window.top()..self.rows()).take(self.page);
-        let longest = on_screen
+        on_screen
             .chain([self.cursor])
             .filter_map(|index| self.row(index))
-            .map(|row| cells::width(&shown_name(row, self.names.0).concat()))
+            .map(|row| self.shift_to_end(row))
             .max()
-            .unwrap_or(0);
-        longest.saturating_sub(self.names.1)
+            .unwrap_or(0)
     }
 
-    /// The name under the cursor as its row shows it, after its icon or marker, as the last
-    /// render drew them.
-    fn cursor_name(&self) -> Option<String> {
-        self.row(self.cursor)
-            .map(|row| shown_name(row, self.names.0).concat())
+    /// How far the names scroll for the end of `row`'s name to be at the right edge, as the
+    /// last render drew them: its icon or marker stays in front, and only the name scrolls.
+    fn shift_to_end(&self, row: Row<'_>) -> usize {
+        let (decor, column) = self.names;
+        let [prefix, name] = shown_name(row, decor);
+        let room = column.saturating_sub(cells::width(&prefix));
+        cells::width(&name).saturating_sub(room)
     }
 
     /// How far the names are scrolled left, in cells.
@@ -1521,8 +1523,9 @@ impl Panel {
             Action::ScrollHalfRight => self.shift_names(self.shift + self.names.1 / 2),
             Action::ScrollStart => self.shift = 0,
             Action::ScrollEnd => {
-                let width = cells::width(&self.cursor_name().unwrap_or_default());
-                self.shift = width.saturating_sub(self.names.1);
+                self.shift = self
+                    .row(self.cursor)
+                    .map_or(0, |row| self.shift_to_end(row));
             }
             Action::InvertMarks => self.invert_marks(),
             Action::Enter => return self.row_destination().map(|to| self.go(to)),
@@ -2623,10 +2626,11 @@ fn first_from(text: &[char], cells: usize) -> usize {
 
 /// The name cell, `cells` wide, in `style`, with the icon of its `prefix` in a toned-down
 /// `style`, and the indexes of the spans that are marks: `…` where a name that does not fit
-/// loses its middle, as in mc; scrolled `shift` cells left, `‹` over its first cell and `…`
-/// where it goes on past the right one. A cell cut so short that the prefix lost its end, mc's
-/// markers, and a scrolled name are drawn whole in `style`. The characters of the name that
-/// quick search `found` get spans of their own.
+/// loses its middle, as in mc; scrolled `shift` cells left, the name alone, its prefix staying
+/// in front of it, `‹` over its first cell and `…` where it goes on past the right one. A cell
+/// that leaves no room after the prefix does not scroll. A cell cut so short that the prefix
+/// lost its end, and mc's markers, are drawn in `style`. The characters of the name that quick
+/// search `found` get spans of their own.
 fn name_spans(
     prefix: &str,
     name: &str,
@@ -2646,14 +2650,22 @@ fn name_spans(
     let of = (chars.as_slice(), hits.as_slice());
     let shown_marks = view.theme.glyphs.marks;
     let mut spans = NameSpans::default();
-    let fitted = if shift > 0 && cells > 0 {
-        let (_, shown) = cells::split(&text, shift);
+    let prefix_cells = cells::width(prefix);
+    let fitted = if shift > 0 && cells > prefix_cells {
+        let prefix_style = if view.decor.icons() {
+            Theme::icon(style)
+        } else {
+            style
+        };
+        spans.push(prefix, prefix_style, Shows::Nothing, of);
+        let (_, shown) = cells::split(name, shift);
         let (_, rest) = cells::split(&shown, 1);
         spans.mark(shown_marks.before, style);
-        let fitted = cells::fit_cut(&rest, cells - 1, Align::Left, Cut::End);
-        // The characters that start past the cells scrolled and the mark, after the blanks
-        // left of a wide character cut.
-        let start = first_from(&chars, shift + 1);
+        let room = cells - prefix_cells - 1;
+        let fitted = cells::fit_cut(&rest, room, Align::Left, Cut::End);
+        // The characters of the name that start past the cells scrolled and the mark, after the
+        // blanks left of a wide character cut.
+        let start = offset + first_from(&chars[offset..], shift + 1);
         let skip = rest.chars().count().saturating_sub(chars.len() - start);
         spans.push(&fitted.head, style, Shows::From { start, skip }, of);
         fitted
@@ -3568,10 +3580,9 @@ mod tests {
         assert_eq!(found(&mut panel, 47), ["abab"]);
         typed(&mut panel, ".");
         assert_eq!(found(&mut panel, 47), ["ab."]);
-        // Scrolled past the blank of the marker and the x, the mark over the a: the b after it
-        // shows what it found.
+        // Scrolled past the x, the mark over the a: the b after it shows what it found.
         let mut panel = search_files(&[&format!("x{name}")]);
-        panel.shift_names(2);
+        panel.shift_names(1);
         panel.search_down(1, quick(Way::Plain));
         typed(&mut panel, "ab");
         assert_eq!(found(&mut panel, 47), ["b"]);
@@ -4549,40 +4560,41 @@ mod tests {
             }
             name_rows(panel)
         };
-        // `zl`: a column, `«` over the first cell, and a name cut short at its end.
+        // `zl`: a column of the names alone, the markers staying in front, `«` over the first
+        // cell after them, and a name cut short at its end.
         assert_eq!(
             press(&mut panel, &[Action::ScrollRight]),
             [
-                "«.          ",
-                "«ir         ",
-                "«bcdefghijk»",
-                "«hort       "
+                "/«          ",
+                "/«r         ",
+                " «cdefghijk»",
+                " «ort       "
             ]
         );
         // `zL`: half the column of 12.
         assert_eq!(
             press(&mut panel, &[Action::ScrollHalfRight])[2],
-            "«hijklmnopq»"
+            " «ijklmnopq»"
         );
         assert_eq!(panel.shift, 7);
         // `zh` and `zH`, never past the start.
-        assert_eq!(press(&mut panel, &[Action::ScrollLeft])[2], "«ghijklmnop»");
+        assert_eq!(press(&mut panel, &[Action::ScrollLeft])[2], " «hijklmnop»");
         press(
             &mut panel,
             &[Action::ScrollHalfLeft, Action::ScrollHalfLeft],
         );
         assert_eq!(panel.shift, 0);
         // `ze`: the end of the name under the cursor at the right edge.
-        assert_eq!(press(&mut panel, &[Action::ScrollEnd])[2], "«jklmnopqrst");
+        assert_eq!(press(&mut panel, &[Action::ScrollEnd])[2], " «klmnopqrst");
         // `zl` stops where `ze` does for the longest name on screen, its end at the right edge,
         // so that the column never scrolls empty.
         assert_eq!(
             press(&mut panel, &[Action::ScrollRight; 40])[2],
-            "«jklmnopqrst"
+            " «klmnopqrst"
         );
         assert_eq!(
             panel.shift, 9,
-            "' abcdefghijklmnopqrst' is 21 cells, the column 12"
+            "'abcdefghijklmnopqrst' is 20 cells, the 11 after the marker"
         );
         // `zs`: from the start again.
         press(&mut panel, &[Action::ScrollStart]);
@@ -4615,13 +4627,13 @@ mod tests {
         }
         assert_eq!(
             panel.shift, 9,
-            "' abcdefghijklmnopqrst' is 21 cells, the column 12"
+            "'abcdefghijklmnopqrst' is 20 cells, the 11 after the marker"
         );
         panel.handle(Action::End);
         let rows = name_rows(&mut panel);
         assert!(panel.window.top() > 1, "the long name is off screen");
-        assert_eq!(panel.shift, 1, "' medium-name8' is 13 cells");
-        assert_eq!(rows[3], "«edium-name8");
+        assert_eq!(panel.shift, 1, "'medium-name8' is 12 cells");
+        assert_eq!(rows[3], " «dium-name8");
         panel.handle(Action::ScrollRight);
         assert_eq!(panel.shift, 1);
         // Back by the long name, it scrolls as far again.
@@ -4636,6 +4648,45 @@ mod tests {
         name_rows(&mut panel);
         panel.handle(Action::ScrollRight);
         assert_eq!(panel.shift, 0);
+    }
+
+    #[test]
+    fn scrolled_names_keep_their_icons_in_front() {
+        use ratatui::style::Modifier;
+
+        let long = entry("abcdefghijklmnopqrst", FileKind::File, 1);
+        let mut panel = loaded("/srv", vec![long.clone()]);
+        let hosts = |_: &str| HostState::default();
+        let theme = Theme::mc_classic();
+        let decor = Decor::new(true);
+        let draw = |panel: &mut Panel| render_themed(panel, (14, 8), true, &hosts, decor, &theme);
+        draw(&mut panel);
+        panel.handle(Action::ScrollRight);
+        let row = |terminal: &Terminal<TestBackend>, y: u16| -> String {
+            let buffer = terminal.backend().buffer();
+            (1..13).map(|x| buffer[(x, y)].symbol()).collect()
+        };
+        let marks = theme.glyphs.marks;
+        let terminal = draw(&mut panel);
+        // Rows: frame, header, `..`, the long name; a column of 12.
+        assert_eq!(
+            row(&terminal, 2),
+            format!("{}{}{}", decor.parent(), marks.before, " ".repeat(9))
+        );
+        let (icon, before, after) = (decor.entry(&long), marks.before, marks.after);
+        assert_eq!(row(&terminal, 3), format!("{icon}{before}cdefghij{after}"));
+        let buffer = terminal.backend().buffer();
+        assert!(
+            buffer[(1, 3)].modifier.contains(Modifier::DIM),
+            "the icon is toned down as ever"
+        );
+        assert!(!buffer[(4, 3)].modifier.contains(Modifier::DIM));
+        // A rename in the row draws its field after the icon, which stays.
+        panel.handle(Action::Down);
+        assert!(panel.start_rename());
+        let terminal = draw(&mut panel);
+        assert_eq!(panel.shift, 1);
+        assert!(row(&terminal, 3).starts_with(&decor.entry(&long)));
     }
 
     #[test]

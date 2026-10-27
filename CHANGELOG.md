@@ -290,6 +290,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   shorter one, and could leave the column empty.
 - The names in the panels and the lines in the viewer scroll back by themselves as far as the
   ones on screen need, as after paging to shorter ones or widening the terminal.
+- The z keys in the panels scroll the names alone: the icon, or mc's marker without icons, stays
+  in front, with `«` after it, as on the frame; before, it scrolled out of sight with the name,
+  and a rename in a scrolled row showed part of the name in its place.
 - The zoxide window (`g z`) opens in Insert mode, so keywords can be typed at once, as in `zi`,
   without `/` first. Esc goes to the rows, and Esc there closes the window.
 - `ui.default_search_mode` (`"plain"`, `"fzf"`, `"regex"`) replaces `ui.fuzzy_search`, which is

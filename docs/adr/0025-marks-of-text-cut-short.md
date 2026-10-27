@@ -41,8 +41,9 @@ rows looked like lines of their own.
   one key of mc beside the F-keys that ADR 0022 keeps.
 - **The z keys scroll sideways as vim's do on lines that do not wrap**: `z h` and `z l` a column,
   with a count that many; `z H` and `z L` half the width; `z s` to the start; `z e` the end into
-  view. In a panel they scroll the names, all rows together, with `«` over the first cell of
-  a name that goes on to the left and `»` at the end of one cut short. Vim's `zl` stops with the
+  view. In a panel they scroll the names, all rows together, their icons or markers staying in
+  front, as the title keeps its icon before a path cut at its start, with `«` over the first cell
+  of a name that goes on to the left and `»` at the end of one cut short. Vim's `zl` stops with the
   last character of the cursor line at the left edge, under the `«` that would cover it, which
   scrolls the text out of sight; and since all names scroll together, a limit set by the name
   under the cursor went further on a longer one and jumped back on a shorter one. So `z l`,

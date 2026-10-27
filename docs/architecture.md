@@ -1175,8 +1175,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   to 0 in another directory): `z h`/`z l` a column, `z H`/`z L` half the column, `z s` the
   start, `z e` the end of the name under the cursor into view; `z l` and `z L` stop with the end
   of the longest name on screen at the right edge (`Panel::shift_limit`), and each render brings
-  the scroll back as far as the names on screen need. A scrolled name shows `«` over its first
-  cell and `»` where it is cut.
+  the scroll back as far as the names on screen need. Only the names scroll: the icon or marker
+  stays in front, and a scrolled name shows `«` over its first cell after it and `»` where it is
+  cut.
 - **Scrolling.** The rows of a panel and of the lists scroll as vim 9.1 scrolls a window
   (`tui/scroll.rs`, a port of vim's `move.c` for lines one row high, checked against vim on random
   keys): five rows stay above and below the cursor, as vim's `defaults.vim` sets 'scrolloff'

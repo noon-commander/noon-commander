@@ -923,11 +923,15 @@ apart, and divides what was copied since the last of them five seconds back by t
 A slow start is behind it after five seconds; when no data comes it falls to zero. The time
 left looks further back, so that it does not swing with the speed
 ([ADR 0050](adr/0050-time-left-of-a-job.md)): its `Forecast` sums the time, the bytes copied, and
-the entries done over stretches of work, each weighing less by a third every half minute
-(`ETA_HORIZON`), and learns what an entry costs beside a byte from least squares over the
-stretches between finished entries. The time left is the bytes and entries left at those costs
-and that pace; the stretch since the last sum counts too, so it grows while nothing moves.
-Entries of a stretch that skipped data count for neither. Both are worked out once in each
+the entries done over stretches of work, each weighing a third as much every half minute older
+(`ETA_HORIZON`). A byte costs what it does in the stretches in which no entry was done, data
+streaming within entries; an entry, what the stretches between finished entries took beyond
+their bytes, by least squares. Until any data streams, as among small files only, both come from
+the least squares while the cost of an entry stands clear of the noise, else bytes alone count;
+never entries alone while data is left. The time left is the bytes and entries left at those
+costs and that pace. It is unknown once no report has come for five seconds (`RECENT`), and only
+those five of a longer gap count for the pace; a stretch that skipped data is a pause. Both are
+worked out once in each
 second that the time shows and held until the next, so they change with it rather than with
 every frame. The time left shown counts down by the clock, a second each second, while it keeps
 within a tenth of the forecast (`ETA_SLACK`), and moves halfway to it each second beyond that

@@ -13,6 +13,14 @@ left jumped with it over a link or a disk whose pace comes and goes, by as much 
 take their time opening, creating, and setting attributes rather than moving data, looked done
 in no time.
 
+A first version of what follows was reviewed against a simulator of the reports that jobs send
+(`noc-ops` reports before each entry it tries and after each chunk). It made the time left 35
+times too long while Skip all went over thousands of files on a host, as their time looked like
+a stall; let it grow beyond any use while no data moved, `62:35:27` after two minutes, as the
+work behind faded meanwhile; and took a big file after many tiny ones for no time at all, where
+the noise of opening them made the cost of a byte come out below nothing. The decisions below
+are those after the review.
+
 ## Decision
 
 - **The speed and the time left look back over different stretches.** The speed keeps to the
@@ -23,19 +31,28 @@ in no time.
   the speed; longer, a minute or the whole job, holds on to a slow start and to an old pace for
   minutes.
 - **Work is bytes and entries.** An entry costs time as some bytes do; the time left is the
-  bytes left and the entries left, each at its cost, at the pace of the work behind. The costs
-  come from least squares of the time of the stretches between finished entries on their bytes
-  and their entries, fading with the same horizon, so that big and small files tell them apart.
-  Where they cannot, as while one file is copied, or files of one size, or where a cost comes out
-  below zero, bytes alone count, or entries alone; the job starts with bytes alone.
-- **The pace counts every second of work.** Its sums of time, bytes, and entries go over
-  stretches of at least a quarter of a second, and the time left counts the stretch since the
-  last of them: while no data moves, it grows. The time is that of the job's stopwatch, so a
+  bytes left and the entries left, each at its cost, at the pace of the work behind (sums of
+  time, bytes, and entries over stretches of at least a quarter of a second). What a byte costs
+  comes from the stretches in which no entry was done: data streaming within entries. What an
+  entry costs is what the stretches between finished entries took beyond their bytes, by least
+  squares. Both fade with the same horizon.
+- **Before any data streams, small files tell what they can.** A job whose files have all been
+  small takes both costs from least squares of the time of the stretches between finished
+  entries on their bytes and their entries, while the cost of an entry stands at least twice
+  its standard error clear of the noise; the cost of their bytes is mostly noise then, and no
+  less than nothing. Where the entries tell nothing, as for files of one size, bytes alone
+  count. Never entries alone while data is left: a big file after tiny ones looks as quick as
+  an entry only until a quarter of a second of its data has streamed.
+- **Standing still is unknown.** Once no report has come for five seconds (`RECENT`), the time
+  left is unknown, `-:--`, as the speed falls to nothing in the same time; and of such a gap,
+  only those five seconds count for the pace, so that when work goes on its pace is that of the
+  work, not of the stall. Gaps up to five seconds count in full, as a slow link that sends a
+  chunk every few seconds works all that time. The time is that of the job's stopwatch, so a
   question left open is no gap (as for the speed).
-- **Skipped entries do not count.** A stretch in which more bytes were done than copied skipped
-  some: its entries count neither for the pace nor for their cost, as those skipped took no time
-  and which they were is not known. Entries without data that are skipped cannot be told apart
-  and count.
+- **Skipping is a pause.** A stretch in which more bytes were done than copied skipped some:
+  neither its time nor its entries count, and the work behind it does not fade, so that Skip all
+  over thousands of files, each found out by a round trip to the host, is no stall. Entries
+  without data that are skipped cannot be told apart and count.
 - **The time left shown counts down by the clock** (`count_down`). Each second it is the one
   shown before less a second, while that keeps within a tenth of the forecast (`ETA_SLACK`);
   beyond it, it moves halfway to the forecast each second, up or down, so that a lasting change
@@ -48,12 +65,25 @@ in no time.
 
 - Over an uneven link the time left keeps within a few percent of the average pace while the
   speed swings by a fifth either way, and the one shown goes down by a second each second; tests
-  check all three, and a change of pace that lasts shows in the time left within a minute.
+  check all three.
 - The time left shown can be off by up to a tenth of the forecast for as long as it counts
   down; as the count goes down, so does a tenth of it, and the rest is made up.
-- The 1,000 small files after big ones take about the time that the per-entry cost says, where
-  bytes alone gave a fraction of a second; tests check that, and that 5,000 entries skipped at
-  once leave it so.
-- The time left no longer shows `-:--` while no data moves: it grows.
+- In the simulator, the forecast keeps within 1 to 3% of the time that is left for files of
+  sizes spread as in real trees, with directories and empty files among them, locally and on a
+  host; through Skip all over 5,000 files on a host it falls as they leave the work, where it grew
+  to 35 times too long, and is within 2% after it (before it, the files to skip count as work,
+  which nothing can tell); a link that sends a chunk every four seconds, within 2% rather than
+  10%; a big
+  file after 2,000 tiny ones, exact within seconds of its start. Tests check the big file after
+  tiny ones over ten random runs, the small files left after big ones, Skip all one entry at a
+  time, a stall and the work after it, and each way to the costs.
+- Limits of a pace learned as the job goes: small files of one size, then a big file, show the
+  big file at their own pace, hours for minutes, until its data streams; a big file, then small
+  ones, shows them at the cost of bytes until the first of them is done. A lasting change of
+  pace shows in full within about 70 seconds if it halves, 100 if it quarters; swings as long as
+  the horizon, half a minute fast and half a minute slow, move the time left by a third either
+  way.
 - The model is two costs and a pace: a link that is fast for big files and slow to open each
   one is right; one whose pace changes with the size of the files in other ways is not.
+- What a job does without reports, such as setting the times of directories at its end, is not
+  in the work left: the time left shows `0:00` meanwhile.

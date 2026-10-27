@@ -54,11 +54,16 @@ are those after the review.
   over thousands of files, each found out by a round trip to the host, is no stall. Entries
   without data that are skipped cannot be told apart and count.
 - **The time left shown counts down by the clock** (`count_down`). Each second it is the one
-  shown before less a second, while that keeps within a tenth of the forecast (`ETA_SLACK`);
-  beyond it, it moves halfway to the forecast each second, up or down, so that a lasting change
-  shows within a few seconds without a jump. The first one, and one counted down to nothing, is
-  the forecast. It is in whole seconds: with the clock it no longer jumps to and fro by a second
-  or two, which rounding a time left over a minute to five seconds hid before.
+  shown before less a second, while that keeps within 3% of the forecast (`ETA_NEAR`), which the
+  forecast's own ups and downs over an uneven link mostly do. Up to a tenth from it
+  (`ETA_SLACK`), it also moves a tenth of the way to the forecast each second, so that it does
+  not stay off for the rest of the job: 10:00 shown where 9:15 are left goes 9:55, 9:49, … and
+  keeps within 3% of the forecast half a minute later. Beyond a tenth, it moves halfway each
+  second, up or down, so that a lasting change shows within a few seconds without a jump. The
+  first one, and one counted down to nothing, is the forecast. It keeps its fraction of a second
+  and shows rounded, so that a count shows a second less each second and a tenth of a small gap
+  is not lost to the rounding. With the clock it no longer jumps to and fro by a second or two,
+  which rounding a time left over a minute to five seconds hid before.
 - It all comes from the counts that jobs report (`Counts`), with no change to `noc-ops`.
 
 ## Consequences
@@ -66,8 +71,11 @@ are those after the review.
 - Over an uneven link the time left keeps within a few percent of the average pace while the
   speed swings by a fifth either way, and the one shown goes down by a second each second; tests
   check all three.
-- The time left shown can be off by up to a tenth of the forecast for as long as it counts
-  down; as the count goes down, so does a tenth of it, and the rest is made up.
+- The time left shown keeps within 3% of the forecast once it has caught up; in the simulator it
+  is off by 1 to 3% of the time that is left for real trees, where counting down alone kept the
+  error of its start, 5 to 10%, for the whole job. Where the forecast itself drifts by more, as
+  over a link whose speed jumps every second, it follows: about one second in four goes down by
+  other than one. A band of 5% halved that but doubled the error elsewhere.
 - In the simulator, the forecast keeps within 1 to 3% of the time that is left for files of
   sizes spread as in real trees, with directories and empty files among them, locally and on a
   host; through Skip all over 5,000 files on a host it falls as they leave the work, where it grew

@@ -934,8 +934,9 @@ those five of a longer gap count for the pace; a stretch that skipped data is a 
 worked out once in each
 second that the time shows and held until the next, so they change with it rather than with
 every frame. The time left shown counts down by the clock, a second each second, while it keeps
-within a tenth of the forecast (`ETA_SLACK`), and moves halfway to it each second beyond that
-(`count_down`).
+within 3% of the forecast (`ETA_NEAR`); up to a tenth from it (`ETA_SLACK`), it also moves a
+tenth of the way there each second, and beyond, halfway (`count_down`). It keeps its fraction
+of a second and shows rounded.
 
 Renaming one entry in its directory (`rename`) is no job: one call with no progress, which
 the UI runs like a new directory, through the host's shared session (`Arc<SftpFs>`) for a

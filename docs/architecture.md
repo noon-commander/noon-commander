@@ -920,10 +920,16 @@ left from both. The job's window times only work: its stopwatch starts with the 
 the question waits behind other dialogs. The speed is that of the last five seconds of work, by
 the stopwatch: the window keeps `bytes_copied` at moments of work at least a quarter of a second
 apart, and divides what was copied since the last of them five seconds back by the time since.
-A slow start is behind it after five seconds; when no data comes it falls to zero, and the time
-left is unknown. Both are worked out once in each second that the time shows and held until the
-next, so they change with it rather than with every frame; a time left over a minute goes by five
-seconds.
+A slow start is behind it after five seconds; when no data comes it falls to zero. The time
+left looks further back, so that it does not swing with the speed
+([ADR 0050](adr/0050-time-left-of-a-job.md)): its `Forecast` sums the time, the bytes copied, and
+the entries done over stretches of work, each weighing less by a third every half minute
+(`ETA_HORIZON`), and learns what an entry costs beside a byte from least squares over the
+stretches between finished entries. The time left is the bytes and entries left at those costs
+and that pace; the stretch since the last sum counts too, so it grows while nothing moves.
+Entries of a stretch that skipped data count for neither. Both are worked out once in each
+second that the time shows and held until the next, so they change with it rather than with
+every frame; a time left over a minute goes by five seconds.
 
 Renaming one entry in its directory (`rename`) is no job: one call with no progress, which
 the UI runs like a new directory, through the host's shared session (`Arc<SftpFs>`) for a

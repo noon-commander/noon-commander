@@ -32,6 +32,11 @@ const RECENT: Duration = Duration::from_secs(5);
 /// The least time between two [`Samples`], so that [`RECENT`] holds a few dozen.
 const SAMPLE: Duration = Duration::from_millis(250);
 
+/// How far back the time left looks: work this much older weighs a third as much, a minute
+/// older an eighth. Long enough to ride out the ups and downs of a link or a disk, which the
+/// speed shows, short enough to follow a change of pace within a minute or so.
+const ETA_HORIZON: Duration = Duration::from_secs(30);
+
 /// The seconds from which the time left goes by [`LEFT_STEP`], so that it does not jump to and
 /// fro by a second or two.
 const ROUGH_LEFT: u64 = 60;
@@ -130,6 +135,171 @@ impl Samples {
             copied / span.as_secs_f64()
         })
     }
+}
+
+/// Where a job was after some work, for its [`Forecast`].
+#[derive(Debug, Clone, Copy)]
+struct Point {
+    /// The time it had worked.
+    at: Duration,
+    /// Entries done or skipped.
+    entries: u64,
+    /// Bytes done or skipped.
+    done: u64,
+    copied: u64,
+}
+
+impl Point {
+    fn new(at: Duration, counts: &Counts) -> Self {
+        Self {
+            at,
+            entries: counts.done,
+            done: counts.bytes_done,
+            copied: counts.bytes_copied,
+        }
+    }
+}
+
+/// Sums over stretches of a job's work, each weighing less the longer ago it ended, by
+/// [`ETA_HORIZON`].
+#[derive(Debug, Clone, Copy, Default)]
+struct Sums {
+    /// Seconds worked, bytes copied, and entries done, over stretches of at least [`SAMPLE`].
+    time: f64,
+    bytes: f64,
+    entries: f64,
+    /// For the least squares of the seconds of a stretch on its bytes and its entries, over
+    /// stretches that end as entries are done: the products of bytes (`b`), entries (`n`),
+    /// and seconds (`t`).
+    bb: f64,
+    bn: f64,
+    nn: f64,
+    bt: f64,
+    nt: f64,
+}
+
+impl Sums {
+    /// Adds the stretch of work from `from` to `to` to the pace, after which every stretch
+    /// before weighs less.
+    fn add(&mut self, from: Point, to: Point) {
+        let time = to.at.saturating_sub(from.at).as_secs_f64();
+        let keep = (-time / ETA_HORIZON.as_secs_f64()).exp();
+        for sum in [
+            &mut self.time,
+            &mut self.bytes,
+            &mut self.entries,
+            &mut self.bb,
+            &mut self.bn,
+            &mut self.nn,
+            &mut self.bt,
+            &mut self.nt,
+        ] {
+            *sum *= keep;
+        }
+        self.time += time;
+        self.bytes += float(to.copied.saturating_sub(from.copied));
+        if !skipped(from, to) {
+            self.entries += float(to.entries.saturating_sub(from.entries));
+        }
+    }
+
+    /// Adds the stretch from `from` to `to`, which ends as entries are done, to what tells
+    /// the cost of an entry from that of a byte: a stretch for each entry, or for a few that
+    /// have no data, so that big and small ones tell them apart.
+    fn fit(&mut self, from: Point, to: Point) {
+        if skipped(from, to) {
+            return;
+        }
+        let time = to.at.saturating_sub(from.at).as_secs_f64();
+        let bytes = float(to.copied.saturating_sub(from.copied));
+        let entries = float(to.entries.saturating_sub(from.entries));
+        self.bb += bytes * bytes;
+        self.bn += bytes * entries;
+        self.nn += entries * entries;
+        self.bt += bytes * time;
+        self.nt += entries * time;
+    }
+
+    /// What a byte and an entry cost, in proportion, from the least squares: bytes alone where
+    /// the entries tell nothing apart from them, as while one file is copied, or files of one
+    /// size.
+    fn costs(&self) -> (f64, f64) {
+        let det = self.bb * self.nn - self.bn * self.bn;
+        if det > 1e-6 * self.bb * self.nn {
+            let byte = (self.bt * self.nn - self.bn * self.nt) / det;
+            let entry = (self.bb * self.nt - self.bn * self.bt) / det;
+            match (byte > 0.0, entry > 0.0) {
+                (true, true) => return (byte, entry),
+                (false, true) => return (0.0, 1.0),
+                (_, false) => {}
+            }
+        }
+        (1.0, 0.0)
+    }
+}
+
+/// The time left of a job: the work left, bytes and entries, at the pace of the work behind
+/// it over about [`ETA_HORIZON`] of it. An entry costs time as some bytes do, opening,
+/// creating, setting attributes, and how many is learned as the job goes, so that many small
+/// files left take longer than their bytes say.
+#[derive(Debug, Default)]
+struct Forecast {
+    /// Where the last stretch of the pace ended.
+    last: Option<Point>,
+    /// Where the job was when it last had done more entries.
+    finished: Option<Point>,
+    sums: Sums,
+}
+
+impl Forecast {
+    /// The job had `counts` behind it when it had worked `at`.
+    fn note(&mut self, at: Duration, counts: &Counts) {
+        let point = Point::new(at, counts);
+        let (Some(last), Some(finished)) = (self.last, self.finished) else {
+            self.last = Some(point);
+            self.finished = Some(point);
+            return;
+        };
+        if at >= last.at + SAMPLE {
+            self.sums.add(last, point);
+            self.last = Some(point);
+        }
+        if point.entries > finished.entries {
+            self.sums.fit(finished, point);
+            self.finished = Some(point);
+        }
+    }
+
+    /// The time left at `at`, with `counts` behind the job, counting the stretch since the last
+    /// one, so that it grows while nothing moves.
+    fn left(&self, at: Duration, counts: &Counts) -> Option<Duration> {
+        let mut sums = self.sums;
+        sums.add(self.last?, Point::new(at, counts));
+        let bytes = float(counts.bytes_total.saturating_sub(counts.bytes_done));
+        let entries = float(counts.total.saturating_sub(counts.done));
+        let (byte, entry) = sums.costs();
+        // The model, else bytes alone, else entries alone: whichever has work behind it.
+        let seconds = [(byte, entry), (1.0, 0.0), (0.0, 1.0)]
+            .into_iter()
+            .map(|(byte, entry)| (byte * sums.bytes + entry * sums.entries, byte, entry))
+            .find(|(done, _, _)| *done > 0.0)
+            .map(|(done, byte, entry)| sums.time * (byte * bytes + entry * entries) / done)?;
+        Some(Duration::try_from_secs_f64(seconds).unwrap_or(Duration::MAX))
+    }
+}
+
+/// Whether data was skipped from `from` to `to`: entries skipped with it took no time, and
+/// which of the stretch's were is not known, so that none of them count.
+fn skipped(from: Point, to: Point) -> bool {
+    to.done.saturating_sub(from.done) > to.copied.saturating_sub(from.copied)
+}
+
+/// A count or a size as a float, for the sums of a [`Forecast`].
+fn float(count: u64) -> f64 {
+    // Counts and sizes stay far below 2^52, where `f64` would round them.
+    #[allow(clippy::cast_precision_loss)]
+    let float = count as f64;
+    float
 }
 
 /// The time and speed of a job at some moment.
@@ -294,6 +464,7 @@ pub(crate) struct JobView {
     asking: bool,
     clock: Stopwatch,
     samples: Samples,
+    forecast: Forecast,
     /// The speed and the time left change with the second that the time shows, rather than
     /// with every frame.
     held: Cell<Option<Held>>,
@@ -315,6 +486,7 @@ impl JobView {
             asking: false,
             clock: Stopwatch::default(),
             samples: Samples::default(),
+            forecast: Forecast::default(),
             held: Cell::default(),
             buttons: vec![JobButton::Background, JobButton::Abort],
             focus: 0,
@@ -345,8 +517,9 @@ impl JobView {
         if !self.asking {
             self.clock.start(now);
         }
-        self.samples
-            .note(self.clock.elapsed(now), counts.bytes_copied);
+        let at = self.clock.elapsed(now);
+        self.samples.note(at, counts.bytes_copied);
+        self.forecast.note(at, &counts);
     }
 
     /// The job asked a question and waits for the answer: its clock stands, however long the
@@ -466,16 +639,13 @@ impl JobView {
     /// The speed and the time left after `elapsed` of work, in its `second`, with `counts`
     /// behind it.
     fn measure(&self, counts: &Counts, elapsed: Duration, second: u64) -> Held {
-        let speed = if counts.bytes_total > 0 && elapsed >= SETTLED {
-            self.samples.speed(elapsed, counts.bytes_copied)
+        let (speed, left) = if counts.bytes_total > 0 && elapsed >= SETTLED {
+            let speed = self.samples.speed(elapsed, counts.bytes_copied);
+            let left = self.forecast.left(elapsed, counts).map(rough_left);
+            (speed, left)
         } else {
-            None
+            (None, None)
         };
-        let left = speed.filter(|speed| *speed > 0.0).map(|speed| {
-            #[allow(clippy::cast_precision_loss)]
-            let left = counts.bytes_total.saturating_sub(counts.bytes_done) as f64;
-            rough_left(Duration::try_from_secs_f64(left / speed).unwrap_or(Duration::MAX))
-        });
         Held {
             second,
             speed,
@@ -1061,18 +1231,20 @@ mod tests {
             let counts = copying(copied(second), copied(second));
             view.working("a".to_owned(), counts, start + secs(second));
         }
-        // Averaged since the start, it would be 3 MiB a second, with 13 seconds left.
         let timing = view.timing(start + secs(20)).unwrap();
         let speed = timing.speed.unwrap();
         assert!(
             (speed - 5.0 * 1024.0 * 1024.0).abs() < 1.0,
             "5 MiB/s: {speed}"
         );
-        assert_eq!(timing.left.map(|left| left.as_secs()), Some(8));
+        // The time left looks further back: between the 8 seconds of the last pace and the 13
+        // of the average since the start.
+        let left = timing.left.unwrap().as_secs();
+        assert!((9..13).contains(&left), "{left}");
     }
 
     #[test]
-    fn the_speed_falls_while_no_data_moves() {
+    fn while_no_data_moves_the_speed_falls_and_the_time_left_grows() {
         let start = Instant::now();
         let mut view = JobView::new("Copy".to_owned(), "Copying".to_owned());
         for second in 0..=10 {
@@ -1082,20 +1254,179 @@ mod tests {
                 start + secs(second),
             );
         }
-        // Then nothing comes: the seconds that moved data leave the stretch one by one.
+        let before = view.timing(start + secs(10)).unwrap().left.unwrap();
+        assert_eq!(before.as_secs(), 90);
+        // Then nothing comes: the seconds that moved data leave the speed's stretch one by one,
+        // and the pace that the time left follows slows.
         let timing = view.timing(start + secs(12)).unwrap();
         let speed = timing.speed.unwrap();
         assert!(
             (speed - 0.6 * 1024.0 * 1024.0).abs() < 1.0,
             "0.6 MiB/s: {speed}"
         );
-        assert_eq!(timing.left.map(|left| left.as_secs()), Some(150));
+        let later = timing.left.unwrap();
+        assert!(later > before, "{later:?}");
         let timing = view.timing(start + secs(15)).unwrap();
         assert!(timing.speed.unwrap() < f64::EPSILON);
-        assert_eq!(timing.left, None);
+        assert!(timing.left.unwrap() > later);
         let text = draw_at(&view, start + secs(15));
-        assert!(text.contains("Time 0:15   ETA -:--   0B/s"), "{text}");
-        assert_eq!(view.summary(start + secs(15)).left, "");
+        assert!(text.contains("0B/s") && !text.contains("-:--"), "{text}");
+    }
+
+    const MIB: u64 = 1024 * 1024;
+
+    /// A copy at work, reported as a job reports: after each chunk, a quarter of a second of
+    /// data at most, and after each entry.
+    struct Run {
+        view: JobView,
+        start: Instant,
+        /// Seconds worked.
+        at: f64,
+        counts: Counts,
+    }
+
+    impl Run {
+        fn new(total: u64, bytes_total: u64) -> Self {
+            let mut run = Self {
+                view: JobView::new("Copy".to_owned(), "Copying".to_owned()),
+                start: Instant::now(),
+                at: 0.0,
+                counts: Counts {
+                    total,
+                    bytes_total,
+                    ..Counts::default()
+                },
+            };
+            run.report();
+            run
+        }
+
+        fn now(&self) -> Instant {
+            self.start + Duration::from_secs_f64(self.at)
+        }
+
+        fn report(&mut self) {
+            let now = self.now();
+            self.view.working("f".to_owned(), self.counts, now);
+        }
+
+        /// Moves `bytes` at `speed` bytes a second, within an entry.
+        fn stream(&mut self, bytes: u64, speed: u64) {
+            let mut left = bytes;
+            while left > 0 {
+                let chunk = left.min(speed / 4);
+                self.at += float(chunk) / float(speed);
+                self.counts.bytes_done += chunk;
+                self.counts.bytes_copied += chunk;
+                left -= chunk;
+                self.report();
+            }
+        }
+
+        /// Copies a file of `size` bytes at `speed` bytes a second, after `opening` seconds.
+        fn copy(&mut self, size: u64, speed: u64, opening: f64) {
+            self.at += opening;
+            self.stream(size, speed);
+            self.counts.done += 1;
+            self.report();
+        }
+
+        /// The time left in seconds, as the forecast has it, before it is rounded.
+        fn left(&self) -> f64 {
+            let at = self.view.clock.elapsed(self.now());
+            let left = self.view.forecast.left(at, &self.counts).unwrap();
+            left.as_secs_f64()
+        }
+    }
+
+    #[test]
+    fn the_time_left_rides_out_a_pace_that_comes_and_goes() {
+        // 2 and 8 MiB a second, by turns, through one file of 2,000 MiB.
+        let mut run = Run::new(1, 2_000 * MIB);
+        let pace = |second: u64| {
+            if second.is_multiple_of(2) {
+                2 * MIB
+            } else {
+                8 * MIB
+            }
+        };
+        for second in 0..60 {
+            run.stream(pace(second), pace(second));
+        }
+        let mut speeds = Vec::new();
+        for second in 60..70 {
+            run.stream(pace(second), pace(second));
+            let timing = run.view.timing(run.now()).unwrap();
+            speeds.push(timing.speed.unwrap() / float(MIB));
+            // The time left keeps within 3% of what 5 MiB a second leaves …
+            let left = run.left();
+            let bytes = run.counts.bytes_total - run.counts.bytes_done;
+            let even = float(bytes) / float(5 * MIB);
+            assert!((left - even).abs() < even * 0.03, "{left} for {even}");
+        }
+        // … while the speed of the last five seconds swings by a fifth either way.
+        let (slow, fast) = speeds
+            .iter()
+            .fold((f64::MAX, 0.0_f64), |(slow, fast), speed| {
+                (slow.min(*speed), fast.max(*speed))
+            });
+        assert!(slow < 4.5 && fast > 5.5, "{speeds:?}");
+    }
+
+    #[test]
+    fn the_time_left_follows_a_new_pace_within_a_minute() {
+        let mut run = Run::new(1, 4_000 * MIB);
+        run.stream(600 * MIB, 10 * MIB);
+        // Half as fast from now on.
+        run.stream(150 * MIB, 5 * MIB);
+        let left = run.left();
+        let (old, new) = (3_250.0 / 10.0, 3_250.0 / 5.0);
+        assert!(left > old * 1.2 && left < new, "{left}");
+        run.stream(150 * MIB, 5 * MIB);
+        let left = run.left();
+        let new = 3_100.0 / 5.0;
+        assert!((left - new).abs() < new * 0.15, "{left}");
+    }
+
+    #[test]
+    fn many_small_files_left_take_longer_than_their_bytes_say() {
+        // A twentieth of a second to open each entry, then 10 MiB a second: files of 64 KiB
+        // and of 4 MiB by turns, then 1,000 files of 1 KiB, which take some 50 seconds.
+        let mut run = Run::new(1_200, 100 * (64 * 1024 + 4 * MIB) + 1_000 * 1024);
+        for _ in 0..100 {
+            run.copy(64 * 1024, 10 * MIB, 0.05);
+            run.copy(4 * MIB, 10 * MIB, 0.05);
+        }
+        let left = run.left();
+        let then = run.at;
+        for _ in 0..1_000 {
+            run.copy(1024, 10 * MIB, 0.05);
+        }
+        let took = run.at - then;
+        assert!((left - took).abs() < took * 0.2, "{left} for {took}");
+    }
+
+    #[test]
+    fn entries_skipped_at_once_do_not_make_the_rest_look_quick() {
+        let mut run = Run::new(6_200, 100 * (64 * 1024 + 4 * MIB) + 6_000 * 1024);
+        for _ in 0..100 {
+            run.copy(64 * 1024, 10 * MIB, 0.05);
+            run.copy(4 * MIB, 10 * MIB, 0.05);
+        }
+        // Skip all: 5,000 files of 1 KiB that are there already, in one report.
+        run.counts.done += 5_000;
+        run.counts.bytes_done += 5_000 * 1024;
+        run.report();
+        for _ in 0..20 {
+            run.copy(1024, 10 * MIB, 0.05);
+        }
+        let left = run.left();
+        let then = run.at;
+        for _ in 0..980 {
+            run.copy(1024, 10 * MIB, 0.05);
+        }
+        let took = run.at - then;
+        assert!((left - took).abs() < took * 0.2, "{left} for {took}");
     }
 
     #[test]

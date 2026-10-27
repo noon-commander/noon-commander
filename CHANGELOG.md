@@ -319,11 +319,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `t l`), goes to its panel and leaves the keys with the active one, as Ctrl+w f and Ctrl+w v do,
   rather than move them to the panel it changed
   ([ADR 0049](docs/adr/0049-menus-of-a-panel-keep-the-active-panel.md)).
-- The speed of a job that moves data, and the time left at it, follow the last five seconds of
-  work rather than the average since the start, so a slow start no longer holds them down for
-  the rest of the copy. While no data moves the speed falls to `0B/s`, and the time left shows
-  `-:--`. Both change once a second, with the time the job has worked, rather than with every
-  frame, and a time left over a minute goes by five seconds (`1:35`, `1:30`).
+- The speed of a job that moves data follows the last five seconds of work rather than the
+  average since the start, so a slow start no longer holds it down for the rest of the copy;
+  while no data moves it falls to `0B/s`. The time left follows the pace of about the last half
+  minute, so it no longer swings with the speed over an uneven link, and counts the entries left
+  as well as the bytes, at what each has cost so far, so that many small files left no longer
+  look done in no time; while no data moves it grows
+  ([ADR 0050](docs/adr/0050-time-left-of-a-job.md)). Both change once a second, with the time the
+  job has worked, rather than with every frame, and a time left over a minute goes by five
+  seconds (`1:35`, `1:30`).
 - A job in its window, or in the list of jobs, draws the screen only when what it shows changes,
   not for every chunk it reports, and its time draws once a second rather than every 150 ms. The
   bar of the gauge moves with the whole percent beside it.

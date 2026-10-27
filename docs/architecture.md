@@ -1445,13 +1445,14 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   side active, whichever it is after Ctrl+w x. Keys act on the active panel; Ctrl+x before one
   sends it to the other panel, and the keys stay with the active one, as after Ctrl+w f and
   Ctrl+w v ([ADR 0051](adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md)). It comes with the
-  command, as a register does (`Extra`), and only the commands that need neither the cursor nor
-  the marks the panel has take it (`Action::takes_other_panel`): `g l`, `g d`, `g z`, `t t`,
-  `t n`, `t c`, `g t`, `g T`, `o n`, `o e`, `o m`, `o s`, `g +`, `g -`, and `R`. A count goes
-  before it or after it (`2 Ctrl+x g t`, `Ctrl+x 2g t`). Any other key after it gives it up, as
-  vim gives up a key that cannot go on, and so does Esc. The location menu, the tab menu, Go to
+  command, as a register does (`Extra`), and only the commands that need not the cursor and act
+  on no entry the panel marked take it (`Action::takes_other_panel`): `g l`, `g d`, `g z`, `t t`,
+  `t n`, `t c`, `g t`, `g T`, `o n`, `o e`, `o m`, `o s`, `g +`, `g -`, `g *`, and `R`. A count
+  goes before it or after it (`2 Ctrl+x g t`, `Ctrl+x 2g t`). Any other key after it gives it up,
+  as vim gives up a key that cannot go on, and so does Esc. The location menu, the tab menu, Go to
   directory, the zoxide window, and the dialogs of `g +` and `g -` that it opens go over the other
-  panel; Go to directory and zoxide start from its directory, and `g +` and `g -` mark its names.
+  panel; Go to directory and zoxide start from its directory, and `g +`, `g -`, and `g *` mark its
+  names.
 - **Quick search.** `/` starts quick search, typed as vim's search, in Insert mode, and `?` starts
   it up the rows; typing in a panel in Normal mode does nothing but its commands, and `i`, `!`, and
   `:` open the [command line](#command-line-of--and-). As vim's search, it looks from the row after

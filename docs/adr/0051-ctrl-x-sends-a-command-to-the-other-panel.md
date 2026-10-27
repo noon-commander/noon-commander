@@ -39,12 +39,12 @@ Ctrl+\\, Ctrl+], and Ctrl+^ are hard to type on many layouts.
   side; vim's Ctrl+x subtracts from the number under the cursor, which a listing has not. It
   arrives the same in every terminal, with or without the kitty keyboard protocol.
 - **It comes with the command, as a count or a register does** (`keymap::Extra`), not as bindings
-  of its own. The commands that take it are those of a panel that need neither its cursor nor the
-  marks it has: where it goes (`g l`, `g d`, `g z`), its tabs (`t t`, `t n`, `t c`, `g t`, `g T`),
-  its order (`o n`, `o e`, `o m`, `o s`), its marks by a pattern (`g +`, `g -`), and reading it
-  again (`R`). A count goes before it or after it: `2 Ctrl+x g t` and `Ctrl+x 2g t` show the second
-  tab of the other panel. Any other command typed after it is given up, as vim gives up a key that
-  cannot go on; Esc gives it up too.
+  of its own. The commands that take it are those of a panel that need not its cursor and act on
+  no entry it marked: where it goes (`g l`, `g d`, `g z`), its tabs (`t t`, `t n`, `t c`, `g t`,
+  `g T`), its order (`o n`, `o e`, `o m`, `o s`), its marks as a whole (`g +`, `g -`, `g *`), and
+  reading it again (`R`). A count goes before it or after it: `2 Ctrl+x g t` and `Ctrl+x 2g t`
+  show the second tab of the other panel. Any other command typed after it is given up, as vim
+  gives up a key that cannot go on; Esc gives it up too.
 - **`g l` opens the location menu and `t t` the tab menu**, of the active panel; Ctrl+x `g l` and
   Ctrl+x `t t` those of the other. l for location, beside `g d` and `g z`, which also choose where
   the panel goes; vim binds no `g l`. `t t` in the group of the tabs, as vim's `:tabs` lists them.

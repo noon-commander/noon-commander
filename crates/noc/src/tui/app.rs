@@ -10048,6 +10048,12 @@ mod tests {
         retype(&mut app, "a*");
         app.handle(action(Action::Confirm));
         assert_eq!(chosen_names(&app, Side::Right), ["c.md"]);
+
+        // g * inverts the marks of the other panel, which has no dialog.
+        assert!(keys(&mut app, &["ctrl-x", "g", "*"]).is_empty());
+        assert_eq!(chosen_names(&app, Side::Right), ["a.md", "b.txt"]);
+        assert_eq!(chosen_names(&app, Side::Left), [] as [String; 0]);
+        assert_eq!(app.active, Side::Left);
     }
 
     #[test]

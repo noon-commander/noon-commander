@@ -178,9 +178,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   there copies elsewhere. File → Duplicate does it too.
 - Ctrl+x before a command of the panels sends it to the other panel, and the keys stay with the
   active one, as after Ctrl+w f and Ctrl+w v: `g l`, `g d`, `g z`, `t t`, `t n`, `t c`, `g t`, with
-  a count too (`2 Ctrl+x g t`, `Ctrl+x 2g t`), `g T`, `o n`, `o e`, `o m`, `o s`, `g +`, `g -`, and
-  `R`. Any other key after it gives it up, as Esc does; the key hints after it show only the keys
-  it takes, and the line of the mode shows it as `^X`
+  a count too (`2 Ctrl+x g t`, `Ctrl+x 2g t`), `g T`, `o n`, `o e`, `o m`, `o s`, `g +`, `g -`,
+  `g *`, and `R`. Any other key after it gives it up, as Esc does; the key hints after it show only
+  the keys it takes, and the line of the mode shows it as `^X`
   ([ADR 0051](docs/adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md)).
 
 ### Changed

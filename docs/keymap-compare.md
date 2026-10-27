@@ -142,11 +142,11 @@ Ctrl+w h and Ctrl+w l go to the left and the right one. Keys act on the active p
 one sends it to the other panel, and the keys stay with the active one, as after Ctrl+w f and
 Ctrl+w v: g l opens the location menu of the active panel, as Far's Alt+F1 and Alt+F2 that of a
 side, and Ctrl+x g l that of the other. Ctrl+x comes with the command, as a count or a register
-does, and takes the commands that choose where a panel goes, its tabs, its order, its marks by a
-pattern, and R: g l, g d, g z, t t, t n, t c, g t, g T, o n, o e, o m, o s, g +, g -, and R. A
-count goes before it or after it, as 2 Ctrl+x g t or Ctrl+x 2g t. Any other key after it gives it
-up, as vim gives up a key that cannot go on, and so does Esc; mc's Ctrl+x letters do nothing after
-it. / searches down and ? up, as in vim and yazi; n and N
+does, and takes the commands that choose where a panel goes, its tabs, its order, its marks, and
+R: g l, g d, g z, t t, t n, t c, g t, g T, o n, o e, o m, o s, g +, g -, g *, and R. A count goes
+before it or after it, as 2 Ctrl+x g t or Ctrl+x 2g t. Any other key after it gives it up, as vim
+gives up a key that cannot go on, and so does Esc; mc's Ctrl+x letters do nothing after it.
+/ searches down and ? up, as in vim and yazi; n and N
 repeat the last quick search, the way it went and the other way, as in vim, yazi, and ranger;
 Shift+F7, mc's and Far's key to search again, repeats it forward too. Y and y y copy, as vim's yank
 lines, and y p copies the entry under the cursor beside it, as vim's y y p puts a copy of a line
@@ -194,7 +194,7 @@ section says: the commands of files act on the rows it selects, which become the
 | Swap the panels | `swap_panels` | ✅ | Ctrl+w x<br>Ctrl+w r | Ctrl+u | Ctrl+u | — | — |
 | Open the directory under the cursor in the other panel | `other_panel_open` | ✅ | Ctrl+w f | Alt+o | — | — | — |
 | Show this directory in the other panel | `other_panel_sync` | ✅ | Ctrl+w v | Alt+i | — | — | — |
-| Before a command: do it in the other panel, the keys staying with the active one; for g l, g d, g z, t t, t n, t c, g t, g T, o n, o e, o m, o s, g +, g -, and R | `other_panel` | ⏳ | Ctrl+x | — | — | — | — |
+| Before a command: do it in the other panel, the keys staying with the active one; for g l, g d, g z, t t, t n, t c, g t, g T, o n, o e, o m, o s, g +, g -, g *, and R | `other_panel` | ⏳ | Ctrl+x | — | — | — | — |
 | A new tab in this panel, on the same directory | `new_tab` | ✅ | t n<br>g n | — | — | t t | Ctrl+n<br>g n |
 | Close this tab; the last one stays | `close_tab` | ✅ | t c<br>g c | — | — | — | Ctrl+w<br>g c |
 | The next tab in this panel; after a count, the tab of that number | `next_tab` | ⏳ | g t<br>] t | — | — | ] | Tab<br>Alt+Right<br>g t |

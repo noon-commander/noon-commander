@@ -588,8 +588,8 @@ impl Action {
     }
 
     /// Whether Ctrl+x before the action sends it to the other panel: the commands of a panel
-    /// that choose where it goes, its tabs, its order, its marks by a pattern, and reading it
-    /// again, which need neither its cursor nor the marks it has.
+    /// that choose where it goes, its tabs, its order, its marks as a whole, and reading it
+    /// again, which need not its cursor and act on no entry it marked.
     pub(crate) fn takes_other_panel(self) -> bool {
         matches!(
             self,
@@ -607,6 +607,7 @@ impl Action {
                 | Self::SortBySize
                 | Self::Select
                 | Self::Unselect
+                | Self::InvertMarks
                 | Self::Reload
         )
     }

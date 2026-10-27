@@ -878,7 +878,7 @@ fn the_hints_after_ctrl_x_show_the_keys_it_takes() {
     assert_eq!(hints.typed.as_deref(), Some("Ctrl+x g"));
     assert_eq!(
         hint_keys(&hints.rows),
-        ["n", "c", "t", "T", "+", "-", "z", "d", "l"]
+        ["n", "c", "t", "T", "+", "-", "*", "z", "d", "l"]
     );
     let sequences = keymap.sequences_after(PANEL, &hints.prefix, true);
     assert_eq!(

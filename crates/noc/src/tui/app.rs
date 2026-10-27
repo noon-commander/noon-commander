@@ -473,6 +473,18 @@ enum Purpose {
     Info,
 }
 
+impl Purpose {
+    /// The side of the panel the dialog is drawn over, as the location menu is: those of Go to
+    /// directory and of `g +` and `g -`, which Ctrl+x sends to either panel. The others are
+    /// drawn over both.
+    fn over(&self) -> Option<Side> {
+        match self {
+            Self::GoToDir { panel } | Self::Pattern { panel, .. } => Some(panel.side),
+            _ => None,
+        }
+    }
+}
+
 /// What a dialog about workspaces is for.
 #[derive(Debug)]
 enum WorkspaceQuestion {
@@ -851,11 +863,11 @@ pub(crate) struct App {
     help_spot: Spot,
     /// What the About page of the help tells.
     about: About,
-    /// The location menu of Ctrl+w 1 or Ctrl+w 2, over the panels and under the dialogs.
+    /// The location menu of `g l`, over its panel and under the dialogs.
     menu: Option<LocationMenu>,
     /// The generation of the last listing for the menu.
     menu_listings: u64,
-    /// The tab menu of `t h` or `t l`, over the panels and under the dialogs.
+    /// The tab menu of `t t`, over its panel and under the dialogs.
     tab_menu: Option<TabMenu>,
     /// Tab completion in the dialog in front, or on the command line.
     completion: Option<Completing>,
@@ -2660,12 +2672,13 @@ impl App {
         self.route(id, request)
     }
 
-    /// Opens the tab menu for the panel on `side`, which lists where its tabs are.
+    /// Opens the tab menu for the panel on `side`, which lists where its tabs are, over it.
     fn open_tab_menu(&mut self, side: Side) {
         let titles = self.tab_titles(side);
         let input = self.search_opens(Slot::TabMenu);
         let current = self.tabs(side).index();
-        self.tab_menu = Some(TabMenu::new(side, titles, current, input));
+        let drawn = if self.swapped { side.other() } else { side };
+        self.tab_menu = Some(TabMenu::new(side, titles, current, input).drawn(drawn));
     }
 
     /// Where the tabs on `side` are, as the tab menu lists them.
@@ -2831,7 +2844,8 @@ impl App {
         let Some(action) = self.search_key(input) else {
             return Vec::new();
         };
-        if self.ask_connect(self.active, action) {
+        let target = self.target();
+        if self.ask_connect(target, action) {
             return Vec::new();
         }
         if let Some(effects) = self.handle_vim(action) {
@@ -2855,10 +2869,9 @@ impl App {
                 self.active = self.drawn_on(action == Action::FocusLeft);
             }
             Action::NewTab | Action::CloseTab | Action::NextTab | Action::PrevTab => {
-                return self.tab_action(self.active, action);
+                return self.tab_action(target, action);
             }
-            Action::TabListLeft => self.open_tab_menu(Side::Left),
-            Action::TabListRight => self.open_tab_menu(Side::Right),
+            Action::TabList => self.open_tab_menu(target),
             // The active panel moves to the other side and stays active, as in mc.
             Action::SwapPanels => self.swapped = !self.swapped,
             Action::OtherPanelOpen => {
@@ -2888,7 +2901,7 @@ impl App {
             Action::Duplicate => self.ask_duplicate(),
             Action::Move => self.ask_transfer(transfer::Kind::Move),
             Action::Rename => self.start_rename(),
-            Action::Select | Action::Unselect => self.ask_pattern(action == Action::Select),
+            Action::Select | Action::Unselect => self.ask_pattern(target, action == Action::Select),
             // Esc closes the whole name below the panels when it waits for no listing.
             Action::Cancel if self.panel(self.active).pending_request().is_none() => {
                 self.whole = Whole::Cut;
@@ -2900,25 +2913,33 @@ impl App {
                     self.ask_edit_host(host);
                 }
             }
-            // As in Far, of the panel drawn on that side, whichever it is after Ctrl+w x.
-            Action::LocationMenuLeft => return self.open_menu(self.drawn_on(true)),
-            Action::LocationMenuRight => return self.open_menu(self.drawn_on(false)),
-            Action::Jump => return self.open_jump(),
+            Action::LocationMenu => return self.open_menu(target),
+            Action::Jump => return self.open_jump(target),
             Action::FindFile => return self.open_find(FindMode::Text),
             Action::FindNames => return self.open_find(FindMode::Names),
-            Action::GoToDir => self.ask_go_to(),
+            Action::GoToDir => self.ask_go_to_in(self.shown(target), ""),
             Action::SaveWorkspace => self.ask_save_workspace(true),
             Action::Workspaces => self.open_workspaces(),
             Action::PullDown => self.open_pulldown(false),
             Action::PullDownLast => self.open_pulldown(true),
             _ => {
-                let id = self.shown(self.active);
+                let id = self.shown(target);
                 if let Some(request) = self.panel_mut(id.side).handle(action) {
                     return self.open(id, request);
                 }
             }
         }
         Vec::new()
+    }
+
+    /// The panel that the command at hand acts on: the other one after Ctrl+x, which the keymap
+    /// lets come only with the commands that take it, else the active one.
+    fn target(&self) -> Side {
+        if self.extra.other {
+            self.active.other()
+        } else {
+            self.active
+        }
     }
 
     /// Does what vim's keys do in a panel that mc's have no likes of: Visual mode, the jump
@@ -2963,9 +2984,10 @@ impl App {
             }
             // With a count, the tab of that number, as vim's `g t`.
             Action::NextTab if count.is_some() => {
-                self.end_search(id.side);
-                if self.tabs_mut(id.side).select(count.unwrap_or(1) - 1) {
-                    return Some(self.revealed(id.side));
+                let side = self.target();
+                self.end_search(side);
+                if self.tabs_mut(side).select(count.unwrap_or(1) - 1) {
+                    return Some(self.revealed(side));
                 }
             }
             _ => return None,
@@ -3867,14 +3889,15 @@ impl App {
         }
     }
 
-    /// Opens the zoxide window for the active panel, and asks zoxide for its best directories;
-    /// in a search mode but the plain one, for all of them, which the window filters itself.
-    fn open_jump(&mut self) -> Vec<Effect> {
-        let exclude = match self.panel(self.active).location() {
+    /// Opens the zoxide window for the panel on `side`, over it, and asks zoxide for its best
+    /// directories; in a search mode but the plain one, for all of them, which the window
+    /// filters itself.
+    fn open_jump(&mut self, side: Side) -> Vec<Effect> {
+        let exclude = match self.panel(side).location() {
             Location::Local(path) => Some(path.clone()),
             Location::Remote { .. } => None,
         };
-        let jump = JumpMenu::new(self.home.clone(), exclude, 0)
+        let jump = JumpMenu::new(side, self.home.clone(), exclude, 0)
             .with_input(self.search_opens(Slot::Jump))
             .rows_like(self.sizes.jump);
         self.jump = Some(jump);
@@ -3896,12 +3919,14 @@ impl App {
         }]
     }
 
-    /// Gives a key to the zoxide window: the directory it opens goes to the active panel, and
-    /// counts in zoxide, as `z` counts it.
+    /// Gives a key to the zoxide window: the directory it opens goes to its panel, and counts in
+    /// zoxide, as `z` counts it; the keys stay with the active panel, as after the location
+    /// menu.
     fn handle_jump(&mut self, input: Resolved) -> Vec<Effect> {
         let Some(jump) = &mut self.jump else {
             return Vec::new();
         };
+        let side = jump.side();
         match jump.handle(input) {
             JumpEvent::Pending => Vec::new(),
             JumpEvent::Closed => {
@@ -3911,7 +3936,7 @@ impl App {
             JumpEvent::Query => self.query_jump(),
             JumpEvent::Open(path) => {
                 self.jump = None;
-                let id = self.shown(self.active);
+                let id = self.shown(side);
                 let record = self.config.zoxide.record;
                 if let Some(tab) = self.tab_mut(id) {
                     tab.arriving = record.then(|| path.clone());
@@ -4256,6 +4281,16 @@ impl App {
         }
     }
 
+    /// The key that does `action` in the panel on `side`, for the pull-down menu: its own in the
+    /// active panel, and Ctrl+x and it in the other, if Ctrl+x takes it.
+    fn key_on(&self, side: Side, action: Action) -> Option<String> {
+        if side == self.active {
+            self.keymap.key(Context::Panel, action)
+        } else {
+            self.keymap.other_key(Context::Panel, action)
+        }
+    }
+
     /// Whether a command of the pull-down menu runs now, its mark, and its key.
     fn command_status(&self, command: Command) -> Status {
         let context = Context::Panel;
@@ -4304,32 +4339,17 @@ impl App {
                     _ => true,
                 },
                 checked: self.panel(side).sort_action() == action,
-                // Keys act on the active panel only.
-                key: (side == self.active)
-                    .then(|| self.keymap.key(context, action))
-                    .flatten(),
+                key: self.key_on(side, action),
             },
             Command::Location(side) => Status {
                 enabled: true,
                 checked: false,
-                key: self.keymap.key(
-                    context,
-                    match side {
-                        Side::Left => Action::LocationMenuLeft,
-                        Side::Right => Action::LocationMenuRight,
-                    },
-                ),
+                key: self.key_on(side, Action::LocationMenu),
             },
             Command::Tabs(side) => Status {
                 enabled: true,
                 checked: false,
-                key: self.keymap.key(
-                    context,
-                    match side {
-                        Side::Left => Action::TabListLeft,
-                        Side::Right => Action::TabListRight,
-                    },
-                ),
+                key: self.key_on(side, Action::TabList),
             },
             Command::DisconnectPanel(side) => Status {
                 enabled: self.host_of(side).is_some(),
@@ -6086,12 +6106,7 @@ impl App {
         }
     }
 
-    /// Opens Go to directory, `g d`, for the active panel, as mc's Quick cd.
-    fn ask_go_to(&mut self) {
-        self.ask_go_to_in(self.shown(self.active), "");
-    }
-
-    /// Opens Go to directory for `panel`, with `text` typed.
+    /// Opens Go to directory, `g d` as mc's Quick cd, for `panel`, over it, with `text` typed.
     fn ask_go_to_in(&mut self, panel: PanelId, text: &str) {
         let (title, prompt) = (fl!("goto-title"), fl!("goto-prompt"));
         let dialog = Dialog::form(&title, &prompt, text, &[]).with_completion();
@@ -6394,9 +6409,9 @@ impl App {
         });
     }
 
-    /// Opens the dialog of `g +` (`mark`) or `g -` for the active panel, as mc's `+` and `-`:
-    /// a pattern, and whether it applies to files only and whether case counts.
-    fn ask_pattern(&mut self, mark: bool) {
+    /// Opens the dialog of `g +` (`mark`) or `g -` for the panel on `side`, over it, as mc's `+`
+    /// and `-`: a pattern, and whether it applies to files only and whether case counts.
+    fn ask_pattern(&mut self, side: Side, mark: bool) {
         let title = if mark {
             fl!("pattern-select")
         } else {
@@ -6407,7 +6422,7 @@ impl App {
         let dialog = Dialog::form(&title, &fl!("pattern-text"), &options.pattern, &checks)
             .with_width(PATTERN_DIALOG_WIDTH)
             .with_search(0, self.search_opens(Slot::Mark));
-        let panel = self.shown(self.active);
+        let panel = self.shown(side);
         self.dialogs.push_back(Open {
             dialog,
             purpose: Purpose::Pattern { panel, mark },
@@ -7195,10 +7210,9 @@ impl App {
         if self.viewing.is_none() {
             // On the menu bar, or on the top line of the panels without it.
             self.render_jobs(frame, menu_bar);
-            let sides = ([left, right], panels);
-            self.render_menus(frame, sides, (&hosts, &spin), &mut stage);
+            self.render_menus(frame, [left, right], (&hosts, &spin), &mut stage);
         }
-        self.render_windows(frame, panels, &spin, &mut stage);
+        self.render_windows(frame, ([left, right], panels), &spin, &mut stage);
         self.render_command_choices(frame, command_line, &prompt_text);
         if let Some(window) = &mut self.key_hints {
             stage.show(
@@ -7226,19 +7240,16 @@ impl App {
         )
     }
 
-    /// The menus of a panel, over the panel on its side of `sides`, and the zoxide window over
-    /// `panels`; they grow and shrink on `stage`.
+    /// The windows of a panel, the location menu, the tab menu, and the zoxide window, over the
+    /// panel on its side of `sides`; they grow and shrink on `stage`.
     fn render_menus(
         &mut self,
         frame: &mut Frame<'_>,
-        ([left, right], panels): ([Rect; 2], Rect),
+        sides: [Rect; 2],
         (hosts, spin): (&dyn Fn(&str) -> HostState, &Spin),
         stage: &mut Stage,
     ) {
-        let over = |side| match side {
-            Side::Left => left,
-            Side::Right => right,
-        };
+        let over = |side| over_side(sides, side);
         let (theme, decor) = (&self.theme, self.decor);
         if let Some(menu) = &mut self.menu {
             let side = menu.side();
@@ -7261,9 +7272,14 @@ impl App {
             );
         }
         if let Some(jump) = &mut self.jump {
-            stage.show(frame, (zoom::Window::Jump, Grows::FromMiddle), |frame| {
-                jump.render(frame, panels, theme, spin);
-            });
+            let side = jump.side();
+            stage.show(
+                frame,
+                (zoom::Window::Jump(side), Grows::FromMiddle),
+                |frame| {
+                    jump.render(frame, over(side), theme, spin);
+                },
+            );
         }
     }
 
@@ -7317,12 +7333,12 @@ impl App {
     }
 
     /// The windows over `panels`, those in front last: the workspaces, the Configuration
-    /// dialog, the help, the jobs, the checksums, and the dialogs; they grow and shrink on
-    /// `stage`.
+    /// dialog, the help, the jobs, the checksums, and the dialogs, but a dialog for one panel,
+    /// over that panel of `sides`; they grow and shrink on `stage`.
     fn render_windows(
         &mut self,
         frame: &mut Frame<'_>,
-        panels: Rect,
+        (sides, panels): ([Rect; 2], Rect),
         spin: &Spin,
         stage: &mut Stage,
     ) {
@@ -7373,17 +7389,21 @@ impl App {
             });
         }
         if let Some(open) = self.dialogs.front() {
+            let area = match open.purpose.over() {
+                Some(side) if self.viewing.is_none() => over_side(sides, side),
+                _ => panels,
+            };
             stage.show(
                 frame,
                 middle(zoom::Window::Dialog(open.dialog.id())),
                 |frame| {
-                    open.dialog.render(frame, panels, theme);
+                    open.dialog.render(frame, area, theme);
                 },
             );
             if let Some(choices) = choices_for(&mut self.completion, Completes::Field)
                 && let Some(field) = open.dialog.field_area()
             {
-                choices.render(frame, field, panels, &self.theme);
+                choices.render(frame, field, area, &self.theme);
             }
         }
     }
@@ -7925,6 +7945,14 @@ fn file_name(location: &Location) -> Option<Vec<u8>> {
     }
 }
 
+/// The area of the panel on `side`, of the areas of the left and the right panel.
+fn over_side([left, right]: [Rect; 2], side: Side) -> Rect {
+    match side {
+        Side::Left => left,
+        Side::Right => right,
+    }
+}
+
 /// Whether `location` is on `host`.
 fn is_on(location: &Location, host: &str) -> bool {
     matches!(location, Location::Remote { host: shown, .. } if shown == host)
@@ -7959,10 +7987,9 @@ fn works_unconnected(action: Action) -> bool {
             | Action::CloseTab
             | Action::NextTab
             | Action::PrevTab
-            | Action::TabListLeft
-            | Action::TabListRight
-            | Action::LocationMenuLeft
-            | Action::LocationMenuRight
+            | Action::TabList
+            | Action::LocationMenu
+            | Action::OtherPanel
             | Action::PullDown
             | Action::PullDownLast
             | Action::Reload
@@ -8216,6 +8243,17 @@ mod tests {
         Resolved::Action(action)
     }
 
+    /// What Ctrl+x and `action` do: `action` in the other panel.
+    fn on_other(app: &mut App, action: Action) -> Vec<Effect> {
+        app.typed(Typed {
+            resolved: Resolved::Action(action),
+            extra: Extra {
+                other: true,
+                ..Extra::default()
+            },
+        })
+    }
+
     /// The only effect.
     fn one(effects: Vec<Effect>) -> Effect {
         let [effect] = <[Effect; 1]>::try_from(effects).unwrap();
@@ -8312,12 +8350,14 @@ mod tests {
         app
     }
 
-    /// Opens the location menu of the panel on `side`, with its places.
+    /// Opens the location menu of the panel on `side`, with its places: `g l` in the active
+    /// panel, Ctrl+x `g l` in the other.
     fn menu_on(app: &mut App, side: Side) {
-        let effects = app.handle(action(match side {
-            Side::Left => Action::LocationMenuLeft,
-            Side::Right => Action::LocationMenuRight,
-        }));
+        let effects = if side == app.active {
+            app.handle(action(Action::LocationMenu))
+        } else {
+            on_other(app, Action::LocationMenu)
+        };
         let Effect::ListPlaces { generation } = one(effects) else {
             panic!("expected the places");
         };
@@ -8334,7 +8374,7 @@ mod tests {
         assert_eq!(app.sizes.menu, lines);
         app.handle(action(Action::Cancel));
         assert!(app.menu.is_none());
-        let effects = app.handle(action(Action::LocationMenuLeft));
+        let effects = app.handle(action(Action::LocationMenu));
         let Effect::ListPlaces { generation } = one(effects) else {
             panic!("expected the places");
         };
@@ -8465,7 +8505,7 @@ mod tests {
         assert_eq!(app.spin_due(shows), Some(shows + spinner::DOTS_FRAME));
 
         // The location menu waits for its places: a shine crosses the skeleton of its rows.
-        let Effect::ListPlaces { .. } = one(app.handle(action(Action::LocationMenuRight))) else {
+        let Effect::ListPlaces { .. } = one(on_other(&mut app, Action::LocationMenu)) else {
             panic!("expected the places");
         };
         let opened = shows + spinner::DOTS_FRAME;
@@ -8698,10 +8738,10 @@ mod tests {
     #[test]
     fn k_is_for_the_panels_alone_as_the_lists_always_show_their_row_whole() {
         let mut app = with_files(&["a"]);
-        keys(&mut app, &["t", "h", "esc", "shift-k"]);
+        keys(&mut app, &["t", "t", "esc", "shift-k"]);
         assert!(app.tab_menu.is_some(), "K closes no list");
         assert_eq!(app.whole, Whole::Cut, "nor shows the name below the panels");
-        keys(&mut app, &["esc", "shift-k", "t", "h"]);
+        keys(&mut app, &["esc", "shift-k", "t", "t"]);
         assert_eq!(app.whole, Whole::Shown, "the panels keep it under a list");
     }
 
@@ -9040,7 +9080,7 @@ mod tests {
         );
         keys(&mut app, &["esc", "t", "n", "t", "n", "t", "n"]);
         assert_eq!(app.tabs(Side::Left).len(), 4);
-        keys(&mut app, &["t", "h", "esc", "g", "g", "3", "d", "d"]);
+        keys(&mut app, &["t", "t", "esc", "g", "g", "3", "d", "d"]);
         assert_eq!(app.tabs(Side::Left).len(), 1);
     }
 
@@ -9438,7 +9478,7 @@ mod tests {
             .rename_field()
             .map(|field| field.text().to_owned());
         assert_eq!(text.as_deref(), Some("report.pdf"), "undone at once");
-        keys(&mut app, &["\"", "a", "y", "y", "esc", "t", "n", "t", "h"]);
+        keys(&mut app, &["\"", "a", "y", "y", "esc", "t", "n", "t", "t"]);
         app.paste("srv");
         assert_eq!(app.place(), (Mode::Insert, Context::TabMenu));
         assert!(screen_of(&mut app, 16).contains(&prompt("Filter", "srv")));
@@ -9450,7 +9490,7 @@ mod tests {
     #[test]
     fn lists_open_in_insert_mode_with_the_filter_taking_the_keys() {
         let mut app = loaded();
-        keys(&mut app, &["t", "n", "t", "h"]);
+        keys(&mut app, &["t", "n", "t", "t"]);
         assert_eq!(app.place(), (Mode::Insert, Context::TabMenu));
         keys(&mut app, &["x"]);
         assert!(screen_of(&mut app, 16).contains(&prompt("Filter", "x")));
@@ -9464,7 +9504,7 @@ mod tests {
         assert_eq!(app.tabs(Side::Left).len(), 1, "d d closes the tab");
         keys(&mut app, &["q"]);
         assert_eq!(app.context(), Context::Panel);
-        for opens in [&["ctrl-w", "1"][..], &["t", "w"], &["q", ":"], &["g", "z"]] {
+        for opens in [&["g", "l"][..], &["t", "w"], &["q", ":"], &["g", "z"]] {
             let mut app = loaded();
             keys(&mut app, opens);
             assert_eq!(app.mode(), Mode::Insert, "after {opens:?}");
@@ -9523,7 +9563,7 @@ mod tests {
         keys(&mut app, &["esc"]);
         // A list, whose filter has the focus while it takes the keys.
         app.config.ui.default_search_mode = SearchMode::Fzf;
-        keys(&mut app, &["t", "n", "t", "h"]);
+        keys(&mut app, &["t", "n", "t", "t"]);
         keys(&mut app, &["x"]);
         let screen = screen_of(&mut app, 16);
         let at = glyph_cell(&screen, &prompt("Filter", "x"), glyph(&app));
@@ -9683,7 +9723,7 @@ mod tests {
     #[test]
     fn the_mouse_chooses_in_menus_and_presses_the_buttons_of_windows() {
         let mut app = loaded();
-        open_menu(&mut app, Action::LocationMenuRight);
+        open_menu(&mut app, Side::Right);
         let (x, y) = find(&mut app, "USB");
         press(&mut app, Press::Click, x, y);
         assert!(app.menu.is_some(), "a click puts the cursor on the row");
@@ -9702,7 +9742,7 @@ mod tests {
             "the keys stay with the active panel"
         );
         app.handle(action(Action::FocusRight));
-        open_menu(&mut app, Action::LocationMenuRight);
+        open_menu(&mut app, Side::Right);
         screen_of(&mut app, 12);
         press(&mut app, Press::Click, 10, 3);
         assert!(app.menu.is_none(), "a click outside closes the menu");
@@ -9973,6 +10013,44 @@ mod tests {
     }
 
     #[test]
+    fn ctrl_x_g_plus_and_g_minus_mark_in_the_other_panel_over_it() {
+        let mut app = with_files(&["a.md", "b.txt", "c.md"]);
+        app.handle(action(Action::Select));
+        let text = screen_of(&mut app, 16);
+        assert!(
+            column_of(&text, "Select").is_some_and(|column| column < 80),
+            "over the active panel: {text}"
+        );
+        app.handle(action(Action::Cancel));
+
+        assert!(keys(&mut app, &["ctrl-x", "g", "+"]).is_empty());
+        let text = screen_of(&mut app, 16);
+        assert!(
+            column_of(&text, "Select").is_some_and(|column| column > 80),
+            "over the other panel: {text}"
+        );
+        retype(&mut app, "*.md");
+        app.handle(action(Action::Confirm));
+        assert_eq!(chosen_names(&app, Side::Right), ["a.md", "c.md"]);
+        assert_eq!(chosen_names(&app, Side::Left), [] as [String; 0]);
+        assert_eq!(
+            app.active,
+            Side::Left,
+            "the keys stay with the active panel"
+        );
+
+        on_other(&mut app, Action::Unselect);
+        let text = screen_of(&mut app, 16);
+        assert!(
+            column_of(&text, "Unselect").is_some_and(|column| column > 80),
+            "{text}"
+        );
+        retype(&mut app, "a*");
+        app.handle(action(Action::Confirm));
+        assert_eq!(chosen_names(&app, Side::Right), ["c.md"]);
+    }
+
+    #[test]
     fn g_plus_and_g_minus_mark_and_unmark_by_pattern() {
         let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
         let entries = vec![
@@ -10052,12 +10130,12 @@ mod tests {
         keys(&mut app, &["ctrl-s", "g", "ctrl-s", "i", "esc", "esc"]);
         assert_eq!(app.context(), Context::Panel);
         // The tab menu, switched and given up with Esc.
-        app.handle(action(Action::TabListLeft));
+        app.handle(action(Action::TabList));
         ends(&mut app, cases.smart, glyphs.plain);
         keys(&mut app, &["ctrl-s", "r", "ctrl-s", "m", "esc", "esc"]);
         assert_eq!(app.context(), Context::Panel);
         app.config.ui.default_search_mode = SearchMode::Fzf;
-        app.handle(action(Action::TabListRight));
+        on_other(&mut app, Action::TabList);
         ends(&mut app, cases.exact, glyphs.regex);
         keys(&mut app, &["esc", "esc"]);
         // Each its own: the workspaces open in the default, which changed.
@@ -12184,10 +12262,15 @@ mod tests {
         assert!(app.handle(action(Action::Disconnect)).is_empty());
     }
 
-    /// Opens a location menu with `key`, and answers its listing with the system volume, a USB
-    /// stick, and the hosts `web` and `db`.
-    fn open_menu(app: &mut App, key: Action) {
-        let Effect::ListPlaces { generation } = one(app.handle(action(key))) else {
+    /// Opens the location menu of the panel on `side`, `g l` or Ctrl+x `g l`, and answers its
+    /// listing with the system volume, a USB stick, and the hosts `web` and `db`.
+    fn open_menu(app: &mut App, side: Side) {
+        let effects = if side == app.active {
+            app.handle(action(Action::LocationMenu))
+        } else {
+            on_other(app, Action::LocationMenu)
+        };
+        let Effect::ListPlaces { generation } = one(effects) else {
             panic!("expected a listing for the menu");
         };
         let volume = |path: &str, kind| noc_vfs::Volume {
@@ -12208,9 +12291,9 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_w_1_and_ctrl_w_2_change_the_location_of_their_panel() {
+    fn g_l_and_ctrl_x_g_l_change_the_location_of_their_panel() {
         let mut app = loaded();
-        open_menu(&mut app, Action::LocationMenuRight);
+        open_menu(&mut app, Side::Right);
         assert_eq!(app.context(), Context::LocationMenu);
         let text = screen_of(&mut app, 14);
         assert!(
@@ -12244,10 +12327,10 @@ mod tests {
 
         // Esc closes the menu; a host connects.
         app.handle(action(Action::SwitchPanel));
-        open_menu(&mut app, Action::LocationMenuLeft);
+        open_menu(&mut app, Side::Left);
         app.handle(action(Action::Cancel));
         assert!(app.menu.is_none());
-        open_menu(&mut app, Action::LocationMenuLeft);
+        open_menu(&mut app, Side::Left);
         filter(&mut app, "w");
         let effect = one(app.handle(action(Action::Confirm)));
         assert!(
@@ -12258,10 +12341,10 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_w_1_changes_the_panel_drawn_on_the_left_after_ctrl_w_x() {
+    fn the_menus_of_a_panel_name_the_side_it_is_drawn_on_after_ctrl_w_x() {
         let mut app = loaded();
         app.handle(action(Action::SwapPanels));
-        open_menu(&mut app, Action::LocationMenuLeft);
+        open_menu(&mut app, Side::Right);
         let text = screen_of(&mut app, 14);
         let title = line_with(&text, "Left");
         let column = title.chars().take_while(|c| *c != 'L').count();
@@ -12274,6 +12357,16 @@ mod tests {
             panic!("expected a listing");
         };
         assert_eq!(side, Side::Right, "the right panel is drawn on the left");
+
+        assert!(on_other(&mut app, Action::TabList).is_empty());
+        let text = screen_of(&mut app, 14);
+        let title = line_with(&text, "Left tabs");
+        let column = title.chars().take_while(|c| *c != 'L').count();
+        assert!(
+            !title.is_empty() && column < 80,
+            "the tabs too, over the left half: {text}"
+        );
+        assert_eq!(app.tab_menu.as_ref().map(TabMenu::side), Some(Side::Right));
     }
 
     /// The line of `text` that holds `needle`.
@@ -12294,23 +12387,36 @@ mod tests {
         assert!(!text.contains("Change location…"), "the bar alone: {text}");
         app.handle(action(Action::Down));
         let text = screen_of(&mut app, 20);
+        let location = line_with(&text, "Change location…");
         assert!(
-            line_with(&text, "Change location…").contains("Ctrl+w 2"),
+            location.contains("g l") && !location.contains("Ctrl+x"),
             "{text}"
         );
+        let sort = line_with(&text, "Sort by size");
         assert!(
-            line_with(&text, "Sort by size").contains("o s"),
-            "keys show for the active panel: {text}"
+            sort.contains("o s") && !sort.contains("Ctrl+x"),
+            "the keys of the active panel: {text}"
         );
         assert!(
             text.contains("9Cancel") && text.contains("10Cancel"),
             "{text}"
         );
 
-        // Right goes round to Left, which acts on the panel on its side.
+        // Right goes round to Left, which acts on the panel on its side: Ctrl+x and its keys.
         app.handle(action(Action::Right));
         let text = screen_of(&mut app, 20);
-        assert!(!line_with(&text, "Sort by size").contains("o s"), "{text}");
+        assert!(
+            line_with(&text, "Sort by size").contains("Ctrl+x o s"),
+            "{text}"
+        );
+        assert!(
+            line_with(&text, "Change location…").contains("Ctrl+x g l"),
+            "{text}"
+        );
+        assert!(
+            line_with(&text, "Tab list…").contains("Ctrl+x t t"),
+            "{text}"
+        );
         assert!(app.handle(Resolved::Hotkey('z')).is_empty());
         assert!(app.pulldown.is_none(), "a command closes the menu");
         assert_eq!(app.panel(Side::Left).sort_action(), Action::SortBySize);
@@ -12497,7 +12603,7 @@ mod tests {
     fn the_menu_disconnects_hosts_and_reads_its_listing_again() {
         let mut app = loaded();
         app.handle(action(Action::Down));
-        open_menu(&mut app, Action::LocationMenuLeft);
+        open_menu(&mut app, Side::Left);
         assert!(
             app.handle(action(Action::Disconnect)).is_empty(),
             "a volume"
@@ -12505,7 +12611,7 @@ mod tests {
         app.handle(action(Action::End));
         let effect = one(app.handle(action(Action::Confirm)));
         assert!(matches!(effect, Effect::Connect { .. }));
-        open_menu(&mut app, Action::LocationMenuLeft);
+        open_menu(&mut app, Side::Left);
         assert!(app.hosts.contains_key("db"));
         app.handle(action(Action::End));
         assert!(app.handle(action(Action::Disconnect)).is_empty());
@@ -13457,7 +13563,7 @@ mod tests {
         app.handle(action(Action::Down));
         let effects = app.handle(action(Action::Enter));
         answer(&mut app, effects, &Listing::Dir(Vec::new()));
-        app.handle(action(Action::TabListLeft));
+        app.handle(action(Action::TabList));
         let text = screen_of(&mut app, 16);
         assert!(text.contains("Left tabs"), "{text}");
         assert!(
@@ -13475,7 +13581,7 @@ mod tests {
         app.handle(action(Action::NewTab));
         app.handle(action(Action::NewTab));
         assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3, 4], 4));
-        app.handle(action(Action::TabListLeft));
+        app.handle(action(Action::TabList));
         let fkey = |app: &App| app.fkey_actions()[7].as_ref().map(|(action, _)| *action);
         assert_eq!(fkey(&app), Some(Action::CloseTab), "F8");
         // A tab that does not show goes; the one that shows stays.
@@ -13503,7 +13609,7 @@ mod tests {
     fn the_list_of_the_other_panels_tabs_leaves_the_keys_here() {
         let mut app = loaded();
         app.handle(action(Action::NewTab));
-        app.handle(action(Action::TabListRight));
+        on_other(&mut app, Action::TabList);
         assert_eq!(app.context(), Context::TabMenu);
         let text = screen_of(&mut app, 16);
         let title = text.lines().find_map(|line| {
@@ -13877,7 +13983,11 @@ mod tests {
         assert!(!status.enabled, "one tab on the left");
         let status = app.command_status(Command::On(Side::Right, Action::CloseTab));
         assert!(status.enabled);
-        assert_eq!(status.key, None, "keys act on the active panel");
+        assert_eq!(
+            status.key.as_deref(),
+            Some("Ctrl+x t c"),
+            "keys act on the active panel, and after Ctrl+x on the other"
+        );
         app.run(Command::On(Side::Right, Action::CloseTab));
         assert_eq!(tab_numbers(&app, Side::Right), (vec![2], 2));
     }
@@ -14570,9 +14680,9 @@ mod tests {
             (&["/"], "INSERT · Quick search"),
             (&["?"], "INSERT · Quick search"),
             (&["j", "r", "esc"], "NORMAL · Rename"),
-            (&["ctrl-w", "1"], "INSERT · List"),
-            (&["t", "h"], "INSERT · List"),
-            (&["t", "h", "esc"], "NORMAL · List"),
+            (&["g", "l"], "INSERT · List"),
+            (&["t", "t"], "INSERT · List"),
+            (&["t", "t", "esc"], "NORMAL · List"),
             (&["g", "z"], "INSERT · List"),
             (&["t", "w"], "INSERT · List"),
             (&["q", ":"], "INSERT · List"),
@@ -14744,7 +14854,7 @@ mod tests {
         app.set_hints(&keys);
         let text = screen_of(&mut app, 16);
         assert!(
-            text.contains("Esc closes") && text.contains("Ctrl+w") && text.contains("+11 keys"),
+            text.contains("Esc closes") && text.contains("Ctrl+w") && text.contains("+9 keys"),
             "{text}"
         );
         // A dialog in front hides them…
@@ -14943,6 +15053,163 @@ mod tests {
             Some(&b"right"[..]),
             "the cursor stays"
         );
+    }
+
+    /// The column of the first line of `text` that holds `needle`, where it starts.
+    fn column_of(text: &str, needle: &str) -> Option<usize> {
+        text.lines()
+            .find_map(|line| Some(line[..line.find(needle)?].chars().count()))
+    }
+
+    #[test]
+    fn ctrl_x_g_d_goes_in_the_other_panel_from_where_it_is_over_it() {
+        let mut app = loaded();
+        app.handle(action(Action::GoToDir));
+        let text = screen_of(&mut app, 16);
+        assert!(
+            column_of(&text, "Go to directory").is_some_and(|column| column < 80),
+            "over the active panel: {text}"
+        );
+        app.handle(action(Action::Cancel));
+
+        assert!(on_other(&mut app, Action::GoToDir).is_empty());
+        let text = screen_of(&mut app, 16);
+        assert!(
+            column_of(&text, "Go to directory").is_some_and(|column| column > 80),
+            "over the other panel: {text}"
+        );
+        type_text(&mut app, "right");
+        let effects = app.handle(action(Action::Confirm));
+        let [Effect::List { panel, request, .. }] = &effects[..] else {
+            panic!("expected a listing, got {effects:?}");
+        };
+        assert_eq!(
+            (panel.side, &request.location),
+            (Side::Right, &local("/srv/right"))
+        );
+        answer(&mut app, effects, &Listing::Dir(vec![dir("deeper")]));
+        assert_eq!(
+            app.active,
+            Side::Left,
+            "the keys stay with the active panel"
+        );
+
+        // `-` and relative paths read from the other panel's directory.
+        on_other(&mut app, Action::GoToDir);
+        type_text(&mut app, "deeper");
+        let effects = app.handle(action(Action::Confirm));
+        let [Effect::List { request, .. }] = &effects[..] else {
+            panic!("expected a listing, got {effects:?}");
+        };
+        assert_eq!(request.location, local("/srv/right/deeper"));
+        answer(&mut app, effects, &Listing::Dir(Vec::new()));
+        on_other(&mut app, Action::GoToDir);
+        type_text(&mut app, "-");
+        let effects = app.handle(action(Action::Confirm));
+        let [Effect::List { panel, request, .. }] = &effects[..] else {
+            panic!("expected a listing, got {effects:?}");
+        };
+        assert_eq!(
+            (panel.side, &request.location),
+            (Side::Right, &local("/srv/right"))
+        );
+        assert_eq!(app.panel(Side::Left).location(), &local("/srv"));
+    }
+
+    #[test]
+    fn ctrl_x_g_z_jumps_in_the_other_panel_over_it() {
+        let mut app = recording();
+        app.config.ui.default_search_mode = SearchMode::Plain;
+        on_other(&mut app, Action::GoToDir);
+        type_text(&mut app, "sub");
+        let effects = app.handle(action(Action::Confirm));
+        answer(&mut app, effects, &Listing::Dir(Vec::new()));
+
+        let effects = keys(&mut app, &["ctrl-x", "g", "z"]);
+        let [
+            Effect::ZoxideQuery {
+                generation,
+                exclude,
+                ..
+            },
+        ] = &effects[..]
+        else {
+            panic!("expected a query, got {effects:?}");
+        };
+        assert_eq!(
+            exclude.as_deref(),
+            Some(Path::new("/srv/sub")),
+            "the other panel's directory"
+        );
+        app.jumps(
+            *generation,
+            Ok(vec![Scored {
+                score: 1.0,
+                path: PathBuf::from("/opt/scripts"),
+            }]),
+        );
+        let text = screen_of(&mut app, 12);
+        assert!(
+            column_of(&text, "zoxide").is_some_and(|column| column > 80),
+            "over the other panel: {text}"
+        );
+        let effects = app.handle(action(Action::Confirm));
+        assert_eq!(zoxide_adds(&effects), [PathBuf::from("/opt/scripts")]);
+        let effects = without_zoxide(effects);
+        let [Effect::List { panel, request, .. }] = &effects[..] else {
+            panic!("expected a listing, got {effects:?}");
+        };
+        assert_eq!(
+            (panel.side, &request.location),
+            (Side::Right, &local("/opt/scripts"))
+        );
+        assert_eq!(
+            app.active,
+            Side::Left,
+            "the keys stay with the active panel"
+        );
+    }
+
+    #[test]
+    fn ctrl_x_sends_tabs_sorting_and_reading_again_to_the_other_panel() {
+        let mut app = loaded();
+        assert!(keys(&mut app, &["ctrl-x", "t", "n"]).is_empty());
+        assert_eq!(tab_numbers(&app, Side::Right), (vec![2, 3], 3));
+        assert_eq!(tab_numbers(&app, Side::Left), (vec![1], 1));
+        keys(&mut app, &["ctrl-x", "1", "g", "t"]);
+        assert_eq!(
+            tab_numbers(&app, Side::Right),
+            (vec![2, 3], 2),
+            "by its number"
+        );
+        keys(&mut app, &["ctrl-x", "g", "shift-t"]);
+        assert_eq!(tab_numbers(&app, Side::Right), (vec![2, 3], 3));
+        keys(&mut app, &["ctrl-x", "t", "c"]);
+        assert_eq!(tab_numbers(&app, Side::Right), (vec![2], 2));
+
+        keys(&mut app, &["ctrl-x", "o", "s"]);
+        assert_eq!(app.panel(Side::Right).sort_action(), Action::SortBySize);
+        assert_eq!(app.panel(Side::Left).sort_action(), Action::SortByName);
+        let effects = keys(&mut app, &["ctrl-x", "shift-r"]);
+        let [Effect::List { panel, .. }] = &effects[..] else {
+            panic!("expected a listing, got {effects:?}");
+        };
+        assert_eq!(panel.side, Side::Right);
+
+        // What needs the cursor or the marks does nothing after Ctrl+x.
+        let (left, right) = (
+            cursor_name(&app, Side::Left),
+            cursor_name(&app, Side::Right),
+        );
+        assert!(keys(&mut app, &["ctrl-x", "j"]).is_empty());
+        assert_eq!(
+            (
+                cursor_name(&app, Side::Left),
+                cursor_name(&app, Side::Right)
+            ),
+            (left, right)
+        );
+        assert_eq!(app.active, Side::Left);
     }
 
     /// Types `text` into Go to directory in the active panel and presses Enter.

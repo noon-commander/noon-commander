@@ -200,13 +200,14 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
 
 ### Location menu
 
-Ctrl+w 1 and Ctrl+w 2 open a menu over the left or the right panel, as Far Manager's Alt+F1 and
-Alt+F2 open its menus to change drives (F9 → Left or Right → Change location too). noc binds no
-Alt+F1 and Alt+F2, which desktops take
-([ADR 0049](adr/0049-menus-of-a-panel-keep-the-active-panel.md)). Left and right are where the
-panels are drawn, as in Far: after Ctrl+w x, Ctrl+w 1 opens the menu of the right panel, drawn on
-the left, and its title says Left. It is the one place to choose a volume or a host, grouped under
-headings:
+`g l` opens a menu over the active panel, and Ctrl+x `g l` over the other one, as Far Manager's
+Alt+F1 and Alt+F2 open its menus to change the drive of the left or the right panel (F9 → Left or
+Right → Change location too). noc binds no Alt+F1 and Alt+F2, which desktops take
+([ADR 0049](adr/0049-menus-of-a-panel-keep-the-active-panel.md)), and names the panel as active or
+other, not by its side ([ADR 0051](adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md)). The
+title says the side where the panel is drawn, as in Far: after Ctrl+w x, the menu of the right
+panel, drawn on the left, says Left. It is the one place to choose a volume or a host, grouped
+under headings:
 
 ```text
  ╔════════════════════ Left ════════════════════╗
@@ -277,17 +278,17 @@ menu:
 
 ```text
   Left     File     Command     Options     Workspace     Right         2 jobs 37%
- ╔══════════════════════════════╗
- ║   Change location…  Ctrl+w 1 ║
- ╟──────────────────────────────╢
- ║ • Sort by name           o n ║
- ║   Sort by extension      o e ║
- ║   Sort by time           o m ║
- ║   Sort by size           o s ║
- ╟──────────────────────────────╢
- ║   Rescan                   R ║
- ║   Disconnect                 ║
- ╚══════════════════════════════╝
+ ╔══════════════════════════╗
+ ║   Change location…   g l ║
+ ╟──────────────────────────╢
+ ║ • Sort by name       o n ║
+ ║   Sort by extension  o e ║
+ ║   Sort by time       o m ║
+ ║   Sort by size       o s ║
+ ╟──────────────────────────╢
+ ║   Rescan               R ║
+ ║   Disconnect             ║
+ ╚══════════════════════════╝
 ```
 
 - Left and Right act on the panel drawn on that side, after Ctrl+w x too: its location menu, sort
@@ -301,9 +302,11 @@ menu:
   [workspaces](#workspaces), with digits as their letters, typed with Alt. Without icons, the marks
   are `*` and `x`. A menu taller than the screen scrolls with the cursor.
 - Commands do what their keys do, through the same `Action`s. Each shows the key that does
-  it in the active panel's context (`Keymap::key`); Left and Right show sort and rescan keys
-  only for the active panel, as keys act there. Commands that cannot run now are dimmed, in the
-  theme's `disabled`, and the cursor skips them.
+  it in the active panel's context (`Keymap::key`). Left and Right show the keys of the active
+  panel's menu as they are, `g l` for Change location… and `t t` for Tab list…, and those of the
+  other panel's after Ctrl+x, `Ctrl+x g l` and `Ctrl+x t t`; the sort orders, Rescan, New tab,
+  and Close tab too. Commands that cannot run now are dimmed, in the theme's `disabled`, and the
+  cursor skips them.
 - On the bar, `h` and `l` (Left and Right, Shift+Tab and Tab) select the next menu, round the bar;
   Enter, `j` (Down), or Alt and the menu's highlighted letter (`&` in the Fluent messages, which
   `Label` in `tui/label.rs` reads, for the menus and the [dialogs](#ui) alike) opens it,
@@ -327,13 +330,15 @@ menu:
 
 ### Go to directory
 
-`g d`, as mc's Quick cd, asks for a path and opens it in the active panel, as `cd`
-in a shell reads it: relative to the panel's directory, `/…` absolute, `~` and `~/…` the home
+`g d`, as mc's Quick cd, asks for a path in a dialog over the active panel, or after Ctrl+x over
+the other one, as the [location menu](#location-menu) does, and opens the path in that panel, as
+`cd` in a shell reads it: relative to the panel's directory, `/…` absolute, `~` and `~/…` the home
 directory, `..` and `.` resolved by name, `-` the directory the tab showed before, and
 `host:path` on a host, scp-style, which connects to it if needed. On a host, paths stay on it
-and `~` is the remote home. `cd ..` puts the cursor on the directory left, as `h` does; a
-path that is not there leaves the panel where it is, with the reason below the listing. It is in
-F9 → Command.
+and `~` is the remote home. [Completion](#completion) reads from the panel's directory too, and
+the keys stay with the active panel. `cd ..` puts the cursor on the directory left, as `h` does; a
+path that is not there leaves the panel where it is, with the reason below the listing. The Go to
+button of a listing that failed opens it over the panel that failed. It is in F9 → Command.
 
 ### Completion
 
@@ -375,7 +380,9 @@ line](#command-line-of--and-), as vim's command line completes with defaults.vim
 
 [zoxide](https://github.com/ajeetdsouza/zoxide) ranks the directories the user works in
 ([ADR 0012](adr/0012-external-tools-and-zoxide.md)). `g z` opens a window of its best
-directories, which Enter opens in the active panel:
+directories over the active panel, or after Ctrl+x over the other one, as the
+[location menu](#location-menu) does; Enter opens the directory in that panel, and the keys stay
+with the active one:
 
 ```text
 ╔═════════════════════════════ zoxide ═════════════════════════════╗
@@ -387,7 +394,7 @@ directories, which Enter opens in the active panel:
 ```
 
 - In the fzf and regex [search modes](#search-modes), the window asks
-  `zoxide query --list --score --exclude <dir> --` once, for every directory but the panel's,
+  `zoxide query --list --score --exclude <dir> --` once, for every directory but that panel's,
   and what is typed filters them: as fzf does, best match first and those as good in zoxide's
   order, as `zi` does with fzf, or as a regular expression, in zoxide's order. In the plain
   mode what is typed is zoxide keywords, as `z foo bar` in a shell; each change asks
@@ -608,8 +615,9 @@ goes to the filter, in Insert mode. There are no digit hotkeys.
   text field with a cursor (`dialog::Field`), drawn in the colors of the fields of dialogs after
   its prompt (`search::Mark::render_field`), which matches in the
   [search mode](#search-modes); the cursor, scrolling, the mouse, and the box, which the menus
-  draw over their panel and the windows over both. The only lines across a list are under the
-  filter and over the whole row under the cursor, and they join the frame (`╟───╢`) as the line
+  and the zoxide window draw over their panel and the other windows over both. The only lines
+  across a list are under the filter and over the whole row under the cursor, and they join the
+  frame (`╟───╢`) as the line
   over the buttons of a dialog does; a heading is its text alone, in the color of titles. Each
   holds its own rows, says what the filter finds them by, and draws them. A row may show only
   while the filter is empty, as the rows of more in the location menu do, or only while it has
@@ -653,13 +661,14 @@ row and names the tab that shows by its whole location:
 - `t n` opens a new tab after the one that shows, on the same directory with the same listing
   and cursor, without marks; `t c` closes the tab that shows (the last one stays), and the next
   one shows. `g t` and `g T`, or `] t` and `[ t`, go round the tabs, and `g t` with a count goes
-  to the tab of that number, as in vim; `t h` and `t l` open the tab menu of the left and the
-  right panel, whichever is active: the tabs with their whole locations, over that panel, to show
-  one. The keys stay with the active panel, as after the location menu. `d d` and F8 (`close_tab`)
-  close the tab
-  under the cursor there as `t c` closes the one that shows
-  (`Tabs::close_at`), and the menu stays open with the rest. Left and Right in F9 do the same for
-  the panel on that side.
+  to the tab of that number, as in vim; `t t` opens the tab menu of the active panel, as vim's
+  `:tabs` lists them: the tabs with their whole locations, over that panel, to show one, under
+  the title of the side it is drawn on, `Left tabs` or `Right tabs`, after Ctrl+w x too. Ctrl+x
+  before `t t`, `t n`, `t c`, `g t`, and `g T` does it in the other panel, with a count before it
+  or after it (`2 Ctrl+x g t`, `Ctrl+x 2g t`), and the keys stay with the active panel, as after
+  the location menu. `d d` and F8 (`close_tab`) close the tab under the cursor there as `t c`
+  closes the one that shows (`Tabs::close_at`), and the menu stays open with the rest. Left and
+  Right in F9 do the same for the panel on that side.
 - Names on the line of tabs are brief: the last component of a directory, `~` for the home
   directory, `host:name` on a host, and the host alone in its start directory. The frame's
   verticals close each side's line, and its top corners become tees (`╠`, `╣`) that join it,
@@ -669,10 +678,10 @@ row and names the tab that shows by its whole location:
 - Panels are named by a `PanelId`, their side and tab number, which is never used again.
   Listings, new directories, and the dialogs of `g +`, `g -`, F5, F6, and F7 carry it, so a reply
   reaches the tab that asked even after a switch, and one for a closed tab is dropped. What
-  acts on the other side (Ctrl+w f, Ctrl+w v, F5's target, `other_dir`) acts on the tab that shows
-  there. Disconnecting or losing a host leaves every tab on it there, hidden or not, without
-  its entries; after a lost connection they wait for Retry and read their directories when the
-  host is back.
+  acts on the other side (Ctrl+w f, Ctrl+w v, Ctrl+x, F5's target, `other_dir`) acts on the tab
+  that shows there. Disconnecting or losing a host leaves every tab on it there, hidden or not,
+  without its entries; after a lost connection they wait for Retry and read their directories
+  when the host is back.
 - Tabs look like tabs: the line is dark (`tab`: gray on black in mc-classic, as the F-key
   bar; `crust` in Catppuccin; dim text in `terminal`), and the tab that shows takes the
   panel's colors as if it grew out of it (`tab_active`), with its number in an accent on the
@@ -1151,9 +1160,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   `Help`, and `Viewer`; `window_kind` maps every context, and none to the contexts that are
   only fallbacks, such as `search_input`. The panels show the mode alone. Where
   the line is short the kind goes first, then the mode is cut. On the right it shows the count,
-  register, operator, or keys of a command typed so far, as typed, or how much Visual mode
-  selects, as vim's `showcmd` does. Unlike vim's `showmode`, it shows every mode everywhere,
-  Normal mode and quick search too. A message, such as that a search went round, takes the place
+  register, operator, or keys of a command typed so far, as typed, Ctrl+x as `^X`, or how much
+  Visual mode selects, as vim's `showcmd` does. Unlike vim's `showmode`, it shows every mode
+  everywhere, Normal mode and quick search too. A message, such as that a search went round, takes
+  the place
   of the mode until the next key, as vim's messages do on its command line. Left of the cells of
   what is typed it shows who is where in the active panel, `alice@mac` or `deploy@web`, as long
   as it fits after the mode or the message ([ADR 0031](adr/0031-who-and-where-on-screen.md)). The
@@ -1432,7 +1442,16 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   mc's Alt+i. Panels keep their identity when swapped (only where they are drawn changes), so a
   listing still in flight reaches the panel that asked for it. Sort order and errors go with the
   panel; mc keeps the sort order on its side. Ctrl+w h and Ctrl+w l make the panel drawn on that
-  side active, whichever it is after Ctrl+w x.
+  side active, whichever it is after Ctrl+w x. Keys act on the active panel; Ctrl+x before one
+  sends it to the other panel, and the keys stay with the active one, as after Ctrl+w f and
+  Ctrl+w v ([ADR 0051](adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md)). It comes with the
+  command, as a register does (`Extra`), and only the commands that need neither the cursor nor
+  the marks the panel has take it (`Action::takes_other_panel`): `g l`, `g d`, `g z`, `t t`,
+  `t n`, `t c`, `g t`, `g T`, `o n`, `o e`, `o m`, `o s`, `g +`, `g -`, and `R`. A count goes
+  before it or after it (`2 Ctrl+x g t`, `Ctrl+x 2g t`). Any other key after it gives it up, as
+  vim gives up a key that cannot go on, and so does Esc. The location menu, the tab menu, Go to
+  directory, the zoxide window, and the dialogs of `g +` and `g -` that it opens go over the other
+  panel; Go to directory and zoxide start from its directory, and `g +` and `g -` mark its names.
 - **Quick search.** `/` starts quick search, typed as vim's search, in Insert mode, and `?` starts
   it up the rows; typing in a panel in Normal mode does nothing but its commands, and `i`, `!`, and
   `:` open the [command line](#command-line-of--and-). As vim's search, it looks from the row after
@@ -1562,15 +1581,16 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   Ctrl+l, which redraws the screen; the app takes them before whatever is in front, which stays as
   it was. The first context that knows a key sequence decides, except that a sequence it only starts
   does what a later context binds it to. Bindings are key sequences matched by prefix with a
-  1-second timeout (`g g`, `Z Z`, `Ctrl+w h`). The panels group keys under `g`, Ctrl+w (the other
-  panel, as vim's windows), `t` (tabs and workspaces), `o` (sort order and hidden names), and `f`
+  1-second timeout (`g g`, `Z Z`, `Ctrl+w h`). The panels group keys under `g`, Ctrl+w (the
+  panels, as vim's windows), `t` (tabs and workspaces), `o` (sort order and hidden names), and `f`
   (`f j` the jobs, `f #` the checksums, `f /` and `f f` the search of the files below by text and
   by name, the rest of mc's Ctrl+x letters left for later). In Insert mode a character is text
   unless the context itself binds it, and in Normal and Visual mode a
   character nothing binds does nothing. The keymap reads what vim lets come with a command and hands
   it to the app with the action (`Typed`, `Extra`): a count before it (digits, `0` only after
-  another), a register after `"`, and the character after the actions that take one (`f`, `t`, `F`,
-  `T`, `r`, `"`, and Ctrl+r and Ctrl+v in Insert mode). The app repeats a motion over rows a count's
+  another), a register after `"`, the character after the actions that take one (`f`, `t`, `F`,
+  `T`, `r`, `"`, and Ctrl+r and Ctrl+v in Insert mode), and, in the panels, noc's Ctrl+x before
+  it, which sends it to the other panel. The app repeats a motion over rows a count's
   times, and gives the count to what takes it as a number (`G`, `g g`, `g t`, Ctrl+o) and to the
   text fields, whose editor (`tui/edit.rs`) reads it itself. `Esc` acts at once: it never waits for
   a key after it, and while a command is pending it gives the command up; so does a key that cannot
@@ -1696,7 +1716,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   `tui/which_key.rs` in columns across the bottom of the panels). The event loop owns the
   `KeyState`: with `ui.which_key` on, a sequence that does nothing alone and does not start with
   `Esc` (such as `g` or Ctrl+w) does not time out; its hints show `ui.which_key_delay_ms` after its
-  last key (`Keymap::hints_due`), and it then waits for the next key. The action `key_hints` shows
+  last key (`Keymap::hints_due`), and it then waits for the next key. So does Ctrl+x, whose hints
+  list only the commands it takes. The action `key_hints` shows
   every key of the mode and context at once: Ctrl+k everywhere, in every mode, bound once in the
   `global` context. In Insert mode the hints leave out characters, which are text. The app takes it
   before whatever is in front, which stays open under the hints. While hints show, the next key runs
@@ -1736,10 +1757,11 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   counts only if its first click left the same thing in front, so one that closed a menu or
   a dialog does not reach what is under it. While the mouse is captured, the terminal selects
   text with a modifier held: Shift in most terminals, Option in iTerm2.
-- **Dialogs.** Modal and centered over the panels, with mc-style buttons: `[< OK >]` marks the
-  default one, and a line across the dialog (`╟───╢`, or `├───┤` with single lines) sets the buttons
-  apart from what is above them, in every dialog and window. A dialog has a message, radio buttons
-  (`(*)` on the chosen one), text fields, check boxes, and buttons, each optional but the buttons;
+- **Dialogs.** Modal and centered over the panels, but Go to directory and those of `g +` and
+  `g -` over their panel (`Purpose::over`), with mc-style buttons: `[< OK >]` marks the default
+  one, and a line across the dialog (`╟───╢`, or `├───┤` with single lines) sets the buttons apart
+  from what is above them, in every dialog and window. A dialog has a message, radio buttons (`(*)`
+  on the chosen one), text fields, check boxes, and buttons, each optional but the buttons;
   ssh's prompts and the app's own questions are the same kind of dialog, and each one in the queue
   knows where its answer goes. Keys go to the first dialog in the queue (contexts `dialog` and
   `dialog_input`). A dialog whose first focus is a text field opens in Insert mode, with the cursor

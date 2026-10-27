@@ -28,9 +28,9 @@ The same panels in the theme `mc-classic`, with the blue of Midnight Commander:
 - **Your `~/.ssh/config` just works.** Noon Commander never implements SSH. It runs the `ssh` you
   already use, so `ProxyJump`, `Match`, `Include`, agents, FIDO keys, certificates, and
   `known_hosts` behave exactly as in your terminal.
-- **Every disk and server in one place.** Ctrl+w 1 and Ctrl+w 2 open a menu of the mounted volumes
-  and all hosts from your ssh config, as in Far Manager, with the ones you used last first and
-  a filter that finds any of them.
+- **Every disk and server in one place.** `g l` opens a menu of the mounted volumes and all hosts
+  from your ssh config, as in Far Manager, with the ones you used last first and a filter that
+  finds any of them; Ctrl+x `g l` opens it for the other panel.
 - **Tabs in each panel.** Keep several directories and servers open on each side, and switch
   between them with `g t` and `g T`.
 - **Workspaces.** Save the tabs of both panels under a name with t W, and bring the

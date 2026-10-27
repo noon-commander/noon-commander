@@ -322,7 +322,7 @@ mod tests {
             row("Ctrl+w"),
             Some(Row {
                 keys: "Ctrl+w".to_owned(),
-                text: "+11 keys".to_owned(),
+                text: "+9 keys".to_owned(),
                 group: true
             })
         );
@@ -339,6 +339,7 @@ mod tests {
             place: place.into(),
             typed: Some("Ctrl+w".to_owned()),
             prefix: vec![ctrl_w],
+            other: false,
             rows: keymap.hints(place, &[ctrl_w]),
         };
         insta::assert_snapshot!(draw(&hints, 100, 13));

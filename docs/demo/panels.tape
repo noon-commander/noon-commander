@@ -17,10 +17,10 @@ Enter
 Sleep 2s
 Show
 
-# The right panel goes to prod-web through its location menu, Ctrl+w 2, whose filter takes what
-# is typed. The keys stay with the left panel; Ctrl+w l goes to the right one.
-Ctrl+W
-Type "2"
+# The right panel goes to prod-web through its location menu, Ctrl+x g l, whose filter takes
+# what is typed. The keys stay with the left panel; Ctrl+w l goes to the right one.
+Ctrl+X
+Type "gl"
 Sleep 300ms
 Type "prod-web"
 Enter

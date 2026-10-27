@@ -1,7 +1,8 @@
 # 0021. The location menu replaces the virtual root
 
 - Status: Accepted; amended by [ADR 0039](0039-errors-of-panels-in-dialogs.md),
-  [ADR 0049](0049-menus-of-a-panel-keep-the-active-panel.md)
+  [ADR 0049](0049-menus-of-a-panel-keep-the-active-panel.md),
+  [ADR 0051](0051-ctrl-x-sends-a-command-to-the-other-panel.md)
 - Date: 2026-10-12
 
 ## Context

@@ -70,15 +70,16 @@ pub(super) const PRESET: Preset = &[
             (Action::SwapPanels, &["ctrl-w x", "ctrl-w r"]),
             (Action::OtherPanelOpen, &["ctrl-w f"]),
             (Action::OtherPanelSync, &["ctrl-w v"]),
-            (Action::LocationMenuLeft, &["ctrl-w 1"]),
-            (Action::LocationMenuRight, &["ctrl-w 2"]),
-            // Tabs & Workspaces
+            // Before a command, as a register goes before it: that command in the other panel,
+            // the keys staying here (ADR 0051). x as crossing over; vim's Ctrl+x subtracts from
+            // a number, which a listing has not.
+            (Action::OtherPanel, &["ctrl-x"]),
+            // Tabs & Workspaces; t t lists the tabs, as vim's :tabs.
             (Action::NewTab, &["t n", "g n"]),
             (Action::CloseTab, &["t c", "g c"]),
             (Action::NextTab, &["g t", "] t"]),
             (Action::PrevTab, &["g shift-t", "[ t"]),
-            (Action::TabListLeft, &["t h"]),
-            (Action::TabListRight, &["t l"]),
+            (Action::TabList, &["t t"]),
             (Action::Workspaces, &["t w"]),
             (Action::SaveWorkspace, &["t shift-w"]),
             // Items
@@ -120,8 +121,11 @@ pub(super) const PRESET: Preset = &[
             (Action::Shell, &["i", "!"]),
             (Action::Command, &[":"]),
             (Action::CommandHistory, &["q :"]),
+            // Where the panel goes: zoxide's directories, a path typed, and the location menu's
+            // volumes and hosts.
             (Action::Jump, &["g z"]),
             (Action::GoToDir, &["g d"]),
+            (Action::LocationMenu, &["g l"]),
             (Action::View, &["g f", "f3"]),
             (Action::Edit, &["e", "f4"]),
             (Action::SystemOpen, &["g x"]),

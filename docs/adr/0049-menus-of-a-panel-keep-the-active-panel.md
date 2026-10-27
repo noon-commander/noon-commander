@@ -1,6 +1,6 @@
 # 0049. The menus of a panel keep the active panel
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0051](0051-ctrl-x-sends-a-command-to-the-other-panel.md)
 - Date: 2026-10-26
 - Amends: [ADR 0021](0021-location-menu-replaces-the-virtual-root.md),
   [ADR 0022](0022-vim-modes.md)

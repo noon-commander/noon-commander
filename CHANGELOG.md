@@ -176,6 +176,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   cursor, not the marked ones, as mc's and Far's Shift+F5: the dialog of F5 opens with its name,
   the cursor before the extension, so that the copy goes beside it under the name typed; a path
   there copies elsewhere. File → Duplicate does it too.
+- Ctrl+x before a command of the panels sends it to the other panel, and the keys stay with the
+  active one, as after Ctrl+w f and Ctrl+w v: `g l`, `g d`, `g z`, `t t`, `t n`, `t c`, `g t`, with
+  a count too (`2 Ctrl+x g t`, `Ctrl+x 2g t`), `g T`, `o n`, `o e`, `o m`, `o s`, `g +`, `g -`, and
+  `R`. Any other key after it gives it up, as Esc does; the key hints after it show only the keys
+  it takes, and the line of the mode shows it as `^X`
+  ([ADR 0051](docs/adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md)).
 
 ### Changed
 
@@ -315,10 +321,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   F4 on a host, checksums and saving them, changing directory, saving and renaming a workspace,
   and the window of a running job, were 60 or 70. Selecting by pattern (`g +`, `g -`) keeps mc's
   50, and find its 120.
-- A place chosen in the location menu (Ctrl+w 1, Ctrl+w 2), or a tab in the tab menu (`t h`,
-  `t l`), goes to its panel and leaves the keys with the active one, as Ctrl+w f and Ctrl+w v do,
-  rather than move them to the panel it changed
+- A place chosen in the location menu (`g l`, Ctrl+x `g l`), or a tab in the tab menu (`t t`,
+  Ctrl+x `t t`), goes to its panel and leaves the keys with the active one, as Ctrl+w f and
+  Ctrl+w v do, rather than move them to the panel it changed
   ([ADR 0049](docs/adr/0049-menus-of-a-panel-keep-the-active-panel.md)).
+- `g l` opens the location menu of the active panel, in place of Ctrl+w 1 and Ctrl+w 2, which
+  named a side, and `t t` its tab menu, as vim's `:tabs` lists the tabs, in place of `t h` and
+  `t l`; Ctrl+x before them opens those of the other panel. After Ctrl+w x, no key opens the tabs
+  of the panel drawn on the other side any more, as `t h` did
+  ([ADR 0051](docs/adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md)).
+- Go to directory (`g d`, and the Go to button after a listing fails), the zoxide window (`g z`),
+  and the dialogs of `g +` and `g -` open over their panel, as the location menu does, rather than
+  over both panels. For the other panel, after Ctrl+x, Go to directory reads relative paths, `-`,
+  and completion from that panel's directory, the zoxide window leaves that directory out and
+  opens the one chosen there, and `g +` and `g -` mark and unmark its names.
+- The title of the tab menu names the side where its panel is drawn, `Left tabs` or `Right tabs`,
+  after Ctrl+w x too, as the location menu's does.
+- F9 → Left and Right show the keys of their commands on both sides: as they are in the menu of
+  the active panel, `g l` for Change location… and `t t` for Tab list…, and after Ctrl+x in the
+  other's, as `Ctrl+x g l`; so do the sort orders, Rescan, New tab, and Close tab, which showed no
+  key on the other side.
 - The speed of a job that moves data follows the last five seconds of work rather than the
   average since the start, so a slow start no longer holds it down for the rest of the copy;
   while no data moves it falls to `0B/s`. The time left follows the pace of about the last half
@@ -336,9 +358,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed
 
-- Alt+F1 and Alt+F2, which desktops take: Ctrl+w 1 and Ctrl+w 2 open the location menus. In the
+- Alt+F1 and Alt+F2, which desktops take: `g l` and Ctrl+x `g l` open the location menus. In the
   panels they now stand for Esc and F1 or F2, as other Alt keys that nothing binds do
   ([ADR 0049](docs/adr/0049-menus-of-a-panel-keep-the-active-panel.md)).
+- Ctrl+w 1, Ctrl+w 2, `t h`, and `t l`: `g l` and `t t` open the menus of the active panel, and
+  Ctrl+x before them those of the other
+  ([ADR 0051](docs/adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md)). Ctrl+w keeps the
+  panels as vim's windows: Ctrl+w w, Ctrl+w p, Ctrl+w h, Ctrl+w l, Ctrl+w x, Ctrl+w r, Ctrl+w f,
+  and Ctrl+w v.
 
 ### Fixed
 

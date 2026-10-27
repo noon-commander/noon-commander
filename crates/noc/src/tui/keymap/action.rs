@@ -31,8 +31,8 @@ pub(crate) enum Context {
     /// Keys that the windows listing items to choose from share: the menus, the zoxide window,
     /// the workspaces, and the command history fall back to it. Keys never go to it alone.
     List,
-    /// The location menu of Ctrl+w 1 and Ctrl+w 2; falls back to `List`, and, while its filter
-    /// takes text, to `Input`.
+    /// The location menu of `g l`; falls back to `List`, and, while its filter takes text, to
+    /// `Input`.
     LocationMenu,
     /// The tab menu of a panel; falls back as the location menu does.
     TabMenu,
@@ -339,10 +339,11 @@ pub(crate) enum Action {
     OtherPanelOpen,
     /// Shows this panel's directory in the other panel.
     OtherPanelSync,
-    /// Opens the location menu of the left panel: volumes and hosts.
-    LocationMenuLeft,
-    /// Opens the location menu of the right panel.
-    LocationMenuRight,
+    /// Sends the next command to the other panel, if it [takes it](Self::takes_other_panel),
+    /// and keeps the keys here; it comes with the command, as a register does.
+    OtherPanel,
+    /// Opens the location menu of the panel: volumes and hosts.
+    LocationMenu,
     /// Opens the zoxide window, to jump to a directory zoxide ranks.
     Jump,
     /// Asks for a path, as `cd` in a shell takes it, and opens it in the panel.
@@ -359,10 +360,8 @@ pub(crate) enum Action {
     NextTab,
     /// Shows the panel's previous tab, round.
     PrevTab,
-    /// Lists the left panel's tabs to choose one.
-    TabListLeft,
-    /// Lists the right panel's tabs to choose one.
-    TabListRight,
+    /// Lists the panel's tabs to choose one.
+    TabList,
     /// Asks for a name and saves the tabs of both panels as a workspace.
     SaveWorkspace,
     /// Opens the window of the saved workspaces.
@@ -588,6 +587,30 @@ impl Action {
         )
     }
 
+    /// Whether Ctrl+x before the action sends it to the other panel: the commands of a panel
+    /// that choose where it goes, its tabs, its order, its marks by a pattern, and reading it
+    /// again, which need neither its cursor nor the marks it has.
+    pub(crate) fn takes_other_panel(self) -> bool {
+        matches!(
+            self,
+            Self::LocationMenu
+                | Self::GoToDir
+                | Self::Jump
+                | Self::TabList
+                | Self::NewTab
+                | Self::CloseTab
+                | Self::NextTab
+                | Self::PrevTab
+                | Self::SortByName
+                | Self::SortByExtension
+                | Self::SortByTime
+                | Self::SortBySize
+                | Self::Select
+                | Self::Unselect
+                | Self::Reload
+        )
+    }
+
     /// How the action moves a page of text, the help's and the viewer's, if it does.
     pub(crate) fn motion(self) -> Option<Motion> {
         Some(match self {
@@ -662,8 +685,8 @@ impl Action {
         Self::SwapPanels,
         Self::OtherPanelOpen,
         Self::OtherPanelSync,
-        Self::LocationMenuLeft,
-        Self::LocationMenuRight,
+        Self::OtherPanel,
+        Self::LocationMenu,
         Self::Jump,
         Self::GoToDir,
         Self::PullDown,
@@ -672,8 +695,7 @@ impl Action {
         Self::CloseTab,
         Self::NextTab,
         Self::PrevTab,
-        Self::TabListLeft,
-        Self::TabListRight,
+        Self::TabList,
         Self::SaveWorkspace,
         Self::Workspaces,
         Self::Reload,

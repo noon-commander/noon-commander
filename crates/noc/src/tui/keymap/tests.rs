@@ -777,6 +777,138 @@ fn the_f_keys_work_in_visual_mode_too() {
 }
 
 #[test]
+fn ctrl_x_goes_with_the_command_after_it_to_the_other_panel() {
+    let other = |count, outer| Extra {
+        count,
+        outer,
+        other: true,
+        ..Extra::default()
+    };
+    assert_eq!(
+        typed(PANEL, &["ctrl-x", "g", "l"]),
+        with(Action::LocationMenu, other(None, None))
+    );
+    assert_eq!(
+        typed(PANEL, &["ctrl-x", "shift-r"]),
+        with(Action::Reload, other(None, None))
+    );
+    assert_eq!(
+        typed(PANEL, &["2", "ctrl-x", "3", "g", "t"]),
+        with(Action::NextTab, other(Some(6), Some(2))),
+        "the counts multiply, as around a register"
+    );
+    let keymap = Keymap::default();
+    let mut state = KeyState::default();
+    feed(&keymap, &mut state, PANEL, &["2", "ctrl-x", "g"]);
+    assert_eq!(state.showcmd(), "2^Xg", "as typed");
+    // Ctrl+x again keeps it; a register goes with the command too.
+    assert_eq!(
+        typed(PANEL, &["ctrl-x", "ctrl-x", "t", "t"]),
+        with(Action::TabList, other(None, None))
+    );
+    assert_eq!(
+        typed(PANEL, &["\"", "a", "ctrl-x", "o", "s"]),
+        with(
+            Action::SortBySize,
+            Extra {
+                register: Some('a'),
+                other: true,
+                ..Extra::default()
+            }
+        )
+    );
+}
+
+#[test]
+fn ctrl_x_gives_up_a_command_that_does_not_take_it() {
+    let keymap = Keymap::default();
+    let mut state = KeyState::default();
+    // The cursor and the marks are the active panel's: j and F5 do nothing after Ctrl+x.
+    assert_eq!(feed(&keymap, &mut state, PANEL, &["ctrl-x", "j"]), []);
+    assert!(state.take_dropped());
+    assert_eq!(
+        feed(&keymap, &mut state, PANEL, &["j"]),
+        actions(&[Action::Down])
+    );
+    assert_eq!(feed(&keymap, &mut state, PANEL, &["ctrl-x", "f5"]), []);
+    assert_eq!(feed(&keymap, &mut state, PANEL, &["ctrl-x", "g", "g"]), []);
+    assert_eq!(
+        feed(&keymap, &mut state, PANEL, &["ctrl-x", "ctrl-w", "v"]),
+        []
+    );
+    // Esc gives it up too, and the next key is a key of its own.
+    assert_eq!(feed(&keymap, &mut state, PANEL, &["ctrl-x", "esc"]), []);
+    assert_eq!(state.showcmd(), "");
+    assert_eq!(
+        feed(&keymap, &mut state, PANEL, &["g", "l"]),
+        actions(&[Action::LocationMenu])
+    );
+    // Nothing binds it but the panels in Normal mode: elsewhere it does nothing, and the key
+    // after it is a key of its own.
+    assert_eq!(
+        typed(VISUAL_PANEL, &["ctrl-x", "j"]),
+        actions(&[Action::Down])
+    );
+    assert_eq!(
+        typed((Mode::Normal, Context::List), &["ctrl-x", "j"]),
+        actions(&[Action::Down])
+    );
+}
+
+#[test]
+fn the_hints_after_ctrl_x_show_the_keys_it_takes() {
+    let keymap = Keymap::default();
+    let mut state = KeyState::default();
+    let start = Instant::now();
+    let delay = Duration::from_millis(500);
+    assert_eq!(keymap.feed(&mut state, PANEL, key("ctrl-x"), start), []);
+    assert_eq!(
+        state.deadline(),
+        None,
+        "it waits for its command, as a register does"
+    );
+    assert_eq!(keymap.hints_due(&state, delay), Some(start + delay));
+    keymap.show_hints(&mut state, PANEL);
+    let hints = keymap.hints_of(&state, PANEL).unwrap();
+    assert_eq!(hints.typed.as_deref(), Some("Ctrl+x"));
+    assert!(hints.other);
+    assert_eq!(hint_keys(&hints.rows), ["R", "t", "g", "]", "[", "o"]);
+    assert_eq!(keymap.feed(&mut state, PANEL, key("g"), start), []);
+    let hints = keymap.hints_of(&state, PANEL).unwrap();
+    assert_eq!(hints.typed.as_deref(), Some("Ctrl+x g"));
+    assert_eq!(
+        hint_keys(&hints.rows),
+        ["n", "c", "t", "T", "+", "-", "z", "d", "l"]
+    );
+    let sequences = keymap.sequences_after(PANEL, &hints.prefix, true);
+    assert_eq!(
+        sequences
+            .iter()
+            .find(|row| row.action == Some(Action::LocationMenu))
+            .map(|row| row.keys.as_str()),
+        Some("g l")
+    );
+    assert_eq!(
+        keymap.feed(&mut state, PANEL, key("z"), start),
+        with(
+            Action::Jump,
+            Extra {
+                other: true,
+                ..Extra::default()
+            }
+        )
+    );
+    assert_eq!(keymap.hints_of(&state, PANEL), None, "done");
+    assert_eq!(
+        keymap
+            .other_key(Context::Panel, Action::LocationMenu)
+            .as_deref(),
+        Some("Ctrl+x g l")
+    );
+    assert_eq!(keymap.other_key(Context::Panel, Action::Copy), None);
+}
+
+#[test]
 fn a_count_before_a_register_and_one_after_it_multiply() {
     let keymap = Keymap::default();
     let mut state = KeyState::default();
@@ -790,7 +922,7 @@ fn a_count_before_a_register_and_one_after_it_multiply() {
                 count: Some(6),
                 register: Some('a'),
                 outer: Some(2),
-                char: None
+                ..Extra::default()
             }
         )
     );
@@ -1145,11 +1277,11 @@ fn hints_list_the_keys_that_can_follow_in_the_order_of_the_preset() {
     let ctrl_w = parse_sequence("ctrl-w").unwrap();
     assert_eq!(
         hint_keys(&keymap.hints(PANEL, &ctrl_w)),
-        ["w, Ctrl+w, p", "h", "l", "x, r", "f", "v", "1", "2"]
+        ["w, Ctrl+w, p", "h", "l", "x, r", "f", "v"]
     );
     let t = parse_sequence("t").unwrap();
     let hints = keymap.hints(PANEL, &t);
-    assert_eq!(hint_keys(&hints), ["n", "c", "h", "l", "w", "W"]);
+    assert_eq!(hint_keys(&hints), ["n", "c", "t", "w", "W"]);
     assert_eq!(
         hints[0],
         Hint {
@@ -1160,7 +1292,7 @@ fn hints_list_the_keys_that_can_follow_in_the_order_of_the_preset() {
     );
     let every = keymap.hints(PANEL, &[]);
     let hint = |keys: &str| every.iter().find(|hint| hint.keys == keys).cloned();
-    assert_eq!(hint("Ctrl+w").map(|hint| hint.more), Some(11));
+    assert_eq!(hint("Ctrl+w").map(|hint| hint.more), Some(9));
     assert_eq!(hint("Z").map(|hint| hint.more), Some(1));
     assert!(
         every.iter().all(|hint| !hint.keys.contains("Esc")),
@@ -1316,8 +1448,6 @@ fn sequences_list_every_command_whole_after_the_keys_typed() {
             "Ctrl+w x, Ctrl+w r",
             "Ctrl+w f",
             "Ctrl+w v",
-            "Ctrl+w 1",
-            "Ctrl+w 2"
         ]
     );
     let every = keymap.sequences(PANEL, &[]);

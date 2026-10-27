@@ -1,6 +1,6 @@
-//! The tab menu of `t h` and `t l`: the tabs of one panel, drawn over it as the location menu
-//! is, to show one, or to close one. Typing filters it; while the filter is empty, `1` … `9` and
-//! `0` show the first ten tabs.
+//! The tab menu of `t t`, and of Ctrl+x `t t` for the other panel: the tabs of one panel, drawn
+//! over it as the location menu is, to show one, or to close one. Typing filters it; while the
+//! filter is empty, `1` … `9` and `0` show the first ten tabs.
 
 use noc_scroll::scrollbar::Bar;
 use ratatui::Frame;
@@ -35,6 +35,9 @@ pub(crate) enum TabMenuEvent {
 #[derive(Debug)]
 pub(crate) struct TabMenu {
     side: Side,
+    /// Where the panel is drawn, which the title names: the other side once the panels are
+    /// swapped.
+    drawn: Side,
     /// Where each tab is, as the panel's title shows it.
     titles: Vec<String>,
     picker: Picker,
@@ -49,9 +52,16 @@ impl TabMenu {
         picker.set_cursor(current);
         Self {
             side,
+            drawn: side,
             titles,
             picker,
         }
+    }
+
+    /// The same menu, for a panel drawn on `drawn`, which the title names.
+    pub(crate) fn drawn(mut self, drawn: Side) -> Self {
+        self.drawn = drawn;
+        self
     }
 
     /// The panel the menu is for.
@@ -124,7 +134,7 @@ impl TabMenu {
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let shown = self.picker.shown(&self.titles);
         let lines: Vec<MenuLine> = (0..shown.len()).map(MenuLine::Row).collect();
-        let title = match self.side {
+        let title = match self.drawn {
             Side::Left => fl!("tabs-title-left"),
             Side::Right => fl!("tabs-title-right"),
         };

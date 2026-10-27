@@ -48,18 +48,20 @@ pub(crate) enum Resolved {
 }
 
 /// What vim lets come with a command: a count and a register before it, and a character after
-/// it.
+/// it; and noc's Ctrl+x before it, which sends it to the other panel.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct Extra {
     /// The count typed before it: `3` in `3j`.
     pub(crate) count: Option<usize>,
     /// The register named before it: `a` in `"ayw`.
     pub(crate) register: Option<char>,
-    /// The count typed before the register, which `count` takes in: `2` in `2"a3d`, for the
-    /// command to show as typed.
+    /// The count typed before the register or Ctrl+x, which `count` takes in: `2` in `2"a3d`,
+    /// for the command to show as typed.
     pub(crate) outer: Option<usize>,
     /// The character typed after an action that takes one: `x` in `fx`.
     pub(crate) char: Option<char>,
+    /// Ctrl+x came before it: it acts on the other panel.
+    pub(crate) other: bool,
 }
 
 impl Extra {
@@ -162,6 +164,8 @@ pub(crate) struct KeyState {
     outer: Option<usize>,
     /// The register named after `"`.
     register: Option<char>,
+    /// The keys of Ctrl+x, if typed: the command sent to the other panel follows.
+    other: Option<Sequence>,
     /// An action that waits for the character typed after it, and the keys that typed it.
     awaiting: Option<(Action, Sequence)>,
     /// A command was given up since the app last asked: by Esc, or by a key that cannot go on
@@ -184,7 +188,8 @@ impl KeyState {
     }
 
     /// What the pending command has typed so far, as vim's `showcmd` shows it, in the order it
-    /// was typed: the count, the register, and the keys, such as `2"ag` or `^W`.
+    /// was typed: the count, the register, Ctrl+x, and the keys, such as `2"ag`, `^W`, or
+    /// `^Xg`.
     pub(crate) fn showcmd(&self) -> String {
         let mut text = self
             .outer
@@ -193,6 +198,9 @@ impl KeyState {
         if let Some(register) = self.register {
             text.push('"');
             text.push(register);
+        }
+        for key in self.other.iter().flatten() {
+            text.push_str(&short_key(*key));
         }
         if let Some(count) = self.count {
             text.push_str(&count.to_string());
@@ -222,14 +230,24 @@ impl KeyState {
         self.operator = waits;
     }
 
-    /// Forgets the whole command: the keys, the counts, the register, and what waits for a
-    /// character.
+    /// Forgets the whole command: the keys, the counts, the register, Ctrl+x, and what waits
+    /// for a character.
     fn reset(&mut self) {
         self.clear();
         self.count = None;
         self.outer = None;
         self.register = None;
+        self.other = None;
         self.awaiting = None;
+    }
+
+    /// Takes the count typed so far in with the one before it, which a count typed after the
+    /// register or Ctrl+x multiplies, as in vim's `2"a3x`.
+    fn count_outside(&mut self) {
+        if let Some(count) = self.count.take() {
+            let outer = self.outer.unwrap_or(1).saturating_mul(count);
+            self.outer = Some(outer.min(MAX_COUNT));
+        }
     }
 
     /// Gives up the whole command, and says so to the app.
@@ -238,8 +256,8 @@ impl KeyState {
         self.dropped = true;
     }
 
-    /// The count and the register typed for the command that resolves now, which they leave:
-    /// the counts before and after the register multiplied.
+    /// The count, the register, and Ctrl+x typed for the command that resolves now, which they
+    /// leave: the counts before and after the register multiplied.
     fn take_extra(&mut self) -> Extra {
         let outer = self.outer.take();
         let count = match (outer, self.count.take()) {
@@ -251,16 +269,21 @@ impl KeyState {
             register: self.register.take(),
             outer,
             char: None,
+            other: self.other.take().is_some(),
         }
+    }
+
+    /// Whether a count, a register, or Ctrl+x waits for the command they go with.
+    fn waits_with(&self) -> bool {
+        self.count.is_some()
+            || self.outer.is_some()
+            || self.register.is_some()
+            || self.other.is_some()
     }
 
     /// Whether anything of a command is typed.
     fn pending(&self) -> bool {
-        !self.keys.is_empty()
-            || self.count.is_some()
-            || self.outer.is_some()
-            || self.register.is_some()
-            || self.awaiting.is_some()
+        !self.keys.is_empty() || self.waits_with() || self.awaiting.is_some()
     }
 }
 
@@ -279,10 +302,13 @@ pub(crate) struct Hint {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Hints {
     pub(crate) place: Place,
-    /// The keys typed so far as the help writes them; `None` while none is typed.
+    /// The keys typed so far as the help writes them, Ctrl+x with them; `None` while none is
+    /// typed.
     pub(crate) typed: Option<String>,
     /// The keys typed so far.
     pub(crate) prefix: Vec<KeyCombination>,
+    /// Ctrl+x came before them: only the commands that take it show.
+    pub(crate) other: bool,
     pub(crate) rows: Vec<Hint>,
 }
 
@@ -445,21 +471,23 @@ impl Keymap {
         }
         state.keys.push(key);
         match self.lookup(place, &state.keys) {
-            // The hints show what can follow a count or a register, which wait for it, as they
-            // do after the first key of a sequence.
-            Lookup::Exact(Action::KeyHints)
-                if state.keys.len() == 1
-                    && (state.count.is_some()
-                        || state.outer.is_some()
-                        || state.register.is_some()) =>
-            {
+            // The hints show what can follow a count, a register, or Ctrl+x, which wait for it,
+            // as they do after the first key of a sequence.
+            Lookup::Exact(Action::KeyHints) if state.keys.len() == 1 && state.waits_with() => {
                 state.keys.clear();
                 if state.hinting {
                     return Self::focus_hints(state);
                 }
                 vec![Typed::from(Resolved::Action(Action::KeyHints))]
             }
-            Lookup::Exact(action) => Self::resolve(state, action).into_iter().collect(),
+            Lookup::Exact(action) => {
+                let typed = Self::resolve(state, action);
+                // The hints of what Ctrl+x takes are due as those of a key that starts others.
+                if action == Action::OtherPanel && state.other.is_some() {
+                    state.since = Some(now);
+                }
+                typed.into_iter().collect()
+            }
             Lookup::Prefix(own) => {
                 state.since = Some(now);
                 // While the hints show, a sequence that does nothing alone waits.
@@ -519,9 +547,21 @@ impl Keymap {
     }
 
     /// What `action` does now that its keys are typed: it waits for a character if it takes
-    /// one, and else goes with the count and the register typed for it.
+    /// one, and else goes with the count, the register, and Ctrl+x typed for it. After Ctrl+x,
+    /// a command that does not take it is given up, as a key that cannot go on with a sequence.
     fn resolve(state: &mut KeyState, action: Action) -> Option<Typed> {
         if action == Action::Register && state.operator {
+            state.drop_command();
+            return None;
+        }
+        if action == Action::OtherPanel {
+            let keys = std::mem::take(&mut state.keys);
+            state.clear();
+            state.count_outside();
+            state.other = Some(keys);
+            return None;
+        }
+        if state.other.is_some() && action != Action::Register && !action.takes_other_panel() {
             state.drop_command();
             return None;
         }
@@ -555,10 +595,7 @@ impl Keymap {
             // which a count typed after it multiplies.
             Action::Register => {
                 state.register = Some(c);
-                if let Some(count) = state.count.take() {
-                    let outer = state.outer.unwrap_or(1).saturating_mul(count);
-                    state.outer = Some(outer.min(MAX_COUNT));
-                }
+                state.count_outside();
                 Vec::new()
             }
             Action::InsertLiteral => {
@@ -680,9 +717,20 @@ impl Keymap {
             Lookup::Exact(bound) | Lookup::Prefix(Some(bound)) => bound == action,
             Lookup::Prefix(None) | Lookup::Unknown => false,
         };
-        self.chain_bindings(place)
+        self.chain_bindings(place, false)
             .find(|(sequence, bound)| *bound == action && does(sequence))
             .map(|(sequence, _)| describe(sequence))
+    }
+
+    /// The keys that do `action` in the other panel, Ctrl+x and its key, as text such as
+    /// `Ctrl+x g l`, for the pull-down menu; `None` for an action that Ctrl+x does not take.
+    pub(crate) fn other_key(&self, context: Context, action: Action) -> Option<String> {
+        if !action.takes_other_panel() {
+            return None;
+        }
+        let other = self.key(context, Action::OtherPanel)?;
+        let key = self.key(context, action)?;
+        Some(format!("{other} {key}"))
     }
 
     /// The actions on F1 … F10 in `context`'s chain in `mode`, for the F-key bar.
@@ -697,15 +745,18 @@ impl Keymap {
         })
     }
 
-    /// When the hints of the pending sequence are due, `delay` after its last key; `None` if
-    /// they show already, or for a sequence that does something alone, which has none. Until
-    /// then the sequence does not time out.
+    /// When the hints of the pending sequence are due, `delay` after its last key, or of the
+    /// keys that Ctrl+x takes, after it; `None` if they show already, or for a sequence that
+    /// does something alone, which has none. Until then the sequence does not time out.
     pub(crate) fn hints_due(&self, state: &KeyState, delay: Duration) -> Option<Instant> {
         let place = state.place()?;
         let since = state.since?;
         let hinted = !state.hinting
-            && !state.keys.is_empty()
-            && self.lookup(place, &state.keys) == Lookup::Prefix(None);
+            && if state.keys.is_empty() {
+                state.other.is_some()
+            } else {
+                self.lookup(place, &state.keys) == Lookup::Prefix(None)
+            };
         hinted.then_some(since + delay)
     }
 
@@ -730,30 +781,47 @@ impl Keymap {
         if !state.hinting || state.place() != Some(place) {
             return None;
         }
-        let rows = self.hints(place, &state.keys);
-        let typed = (!state.keys.is_empty()).then(|| describe(&state.keys));
+        let other = state.other.is_some();
+        let rows = self.hints_after(place, &state.keys, other);
+        let typed: Sequence = (state.other.iter().flatten())
+            .chain(&state.keys)
+            .copied()
+            .collect();
         (!rows.is_empty()).then_some(Hints {
             place,
-            typed,
+            typed: (!typed.is_empty()).then(|| describe(&typed)),
             prefix: state.keys.clone(),
+            other,
             rows,
         })
     }
 
-    /// Every sequence longer than `prefix` that starts with it and does something in
-    /// `context`'s chain in `mode`, whole, for the key hints with the keys: one row for each
-    /// action, in the order of the preset, the context's own first, with its sequences apart by
-    /// commas. The hints leave out the same keys as [`hints`](Self::hints).
+    /// The sequences of [`sequences_after`](Self::sequences_after) without Ctrl+x before them.
+    #[cfg(test)]
     pub(crate) fn sequences(
         &self,
         place: impl Into<Place>,
         prefix: &[KeyCombination],
     ) -> Vec<Hint> {
+        self.sequences_after(place, prefix, false)
+    }
+
+    /// Every sequence longer than `prefix` that starts with it and does something in
+    /// `context`'s chain in `mode`, whole, for the key hints with the keys, after Ctrl+x if
+    /// `other`, which leaves only the commands that take it: one row for each action, in the
+    /// order of the preset, the context's own first, with its sequences apart by commas. The
+    /// hints leave out the same keys as [`hints_after`](Self::hints_after).
+    pub(crate) fn sequences_after(
+        &self,
+        place: impl Into<Place>,
+        prefix: &[KeyCombination],
+        other: bool,
+    ) -> Vec<Hint> {
         let place = place.into();
         let Place { mode, context, .. } = place;
         let mut seen: Vec<&Sequence> = Vec::new();
         let mut rows: Vec<Hint> = Vec::new();
-        for (sequence, action) in self.chain_bindings(place) {
+        for (sequence, action) in self.chain_bindings(place, other) {
             if sequence.len() <= prefix.len()
                 || !sequence.starts_with(prefix)
                 || seen.contains(&sequence)
@@ -790,16 +858,22 @@ impl Keymap {
         rows
     }
 
-    /// The keys that can follow `prefix` in `context`'s chain in `mode`, in the order of the
-    /// preset, the context's own first. Keys that do the same share a row; a key that starts
-    /// longer sequences has one of its own. `Esc` and `Ctrl+[`, which close the hints, are left
-    /// out, and in Insert mode, so are characters that only a fallback context binds, which are
-    /// text.
+    /// The keys of [`hints_after`](Self::hints_after) without Ctrl+x before them.
+    #[cfg(test)]
     pub(crate) fn hints(&self, place: impl Into<Place>, prefix: &[KeyCombination]) -> Vec<Hint> {
-        let place = place.into();
+        self.hints_after(place.into(), prefix, false)
+    }
+
+    /// The keys that can follow `prefix` in `context`'s chain in `mode`, after Ctrl+x if
+    /// `other`, which leaves only those that go on to the commands that take it, in the order
+    /// of the preset, the context's own first. Keys that do the same share a row; a key that
+    /// starts longer sequences has one of its own. `Esc` and `Ctrl+[`, which close the hints,
+    /// are left out, and in Insert mode, so are characters that only a fallback context binds,
+    /// which are text.
+    fn hints_after(&self, place: Place, prefix: &[KeyCombination], other: bool) -> Vec<Hint> {
         let Place { mode, context, .. } = place;
         let mut next: Vec<KeyCombination> = Vec::new();
-        for (sequence, _) in self.chain_bindings(place) {
+        for (sequence, _) in self.chain_bindings(place, other) {
             if sequence.len() > prefix.len()
                 && sequence.starts_with(prefix)
                 && sequence
@@ -824,9 +898,10 @@ impl Keymap {
             keys.push(key);
             let (action, longer) = match self.lookup(place, &keys) {
                 Lookup::Exact(action) => (Some(action), 0),
-                Lookup::Prefix(action) => (action, self.count_under(place, &keys)),
+                Lookup::Prefix(action) => (action, self.count_under(place, &keys, other)),
                 Lookup::Unknown => continue,
             };
+            let action = action.filter(|action| !other || action.takes_other_panel());
             let text = describe_key(key);
             match hints
                 .iter_mut()
@@ -846,21 +921,27 @@ impl Keymap {
         hints
     }
 
-    /// The bindings of `place`'s chain that work there, most specific first: a key after
-    /// Ctrl+s for a way the field has not still does its nothing, rather than type, but no
-    /// hints show it.
-    fn chain_bindings(&self, place: Place) -> impl Iterator<Item = &(Sequence, Action)> {
+    /// The bindings of `place`'s chain that work there, most specific first, of the commands
+    /// that Ctrl+x takes if `other`: a key after Ctrl+s for a way the field has not still does
+    /// its nothing, rather than type, but no hints show it.
+    fn chain_bindings(
+        &self,
+        place: Place,
+        other: bool,
+    ) -> impl Iterator<Item = &(Sequence, Action)> {
         place
             .chain()
             .filter_map(move |context| self.bindings(place.mode, context))
             .flat_map(|bindings| &bindings.0)
             .filter(move |(_, action)| place.allows(*action))
+            .filter(move |(_, action)| !other || action.takes_other_panel())
     }
 
-    /// How many sequences longer than `prefix` that start with it do something in `place`.
-    fn count_under(&self, place: Place, prefix: &[KeyCombination]) -> usize {
+    /// How many sequences longer than `prefix` that start with it do something in `place`,
+    /// after Ctrl+x if `other`.
+    fn count_under(&self, place: Place, prefix: &[KeyCombination], other: bool) -> usize {
         let mut counted: Vec<&Sequence> = Vec::new();
-        for (sequence, _) in self.chain_bindings(place) {
+        for (sequence, _) in self.chain_bindings(place, other) {
             let does = matches!(
                 self.lookup(place, sequence),
                 Lookup::Exact(_) | Lookup::Prefix(Some(_))

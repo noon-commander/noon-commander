@@ -32,10 +32,10 @@ pub(crate) enum Window {
     KeyHints,
     /// A dialog, by its id.
     Dialog(u64),
-    /// The location menu over the panel on its side.
+    /// The location menu over the panel on its side; the tab menu and the zoxide window too.
     Menu(Side),
     TabMenu(Side),
-    Jump,
+    Jump(Side),
     Workspaces,
     History,
     Find,

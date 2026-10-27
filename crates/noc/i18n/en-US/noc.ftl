@@ -175,10 +175,10 @@ picker-nothing = Nothing matches.
 # wrong with it, as the regex engine says.
 picker-not-regex = Not a regular expression: { $reason }
 
-## The location menu of Ctrl+w 1 and Ctrl+w 2 (src/tui/menu), as Far Manager's menu to change
-## drives. Prefix: menu-.
+## The location menu of g l, and of Ctrl+x g l for the other panel (src/tui/menu), as Far
+## Manager's menu to change drives. Prefix: menu-.
 
-# Titles: the panel the menu changes.
+# Titles: the side of the panel the menu changes, as it is drawn.
 menu-left = Left
 menu-right = Right
 # Headings of the groups of places.
@@ -268,8 +268,8 @@ find-errors = { $count ->
 
 ## Tabs (src/tui/tabs, src/tui/app). Prefix: tabs-. Each side has tabs of its own.
 
-# Titles of the tab menu of t h and t l, drawn over the panel whose tabs it lists;
-# each row is where a tab is.
+# Titles of the tab menu of t t, drawn over the panel whose tabs it lists, by the side it is
+# drawn on; each row is where a tab is.
 tabs-title-left = Left tabs
 tabs-title-right = Right tabs
 
@@ -737,8 +737,8 @@ help-mkdir = Make a directory
 help-delete = Delete the marked entries, or the one under the cursor
 help-jobs = The running jobs: bring one to the front, or abort it
 help-checksum = Checksums of the marked files, or the one under the cursor
-help-menu-left = Change the left panel's location: a volume or a host
-help-menu-right = Change the right panel's location: a volume or a host
+help-other-panel = Before a command: do it in the other panel, and stay here
+help-location-menu = Change the panel's location: a volume or a host
 help-goto = Go to a directory by its path: ~, .., - (the previous one), host:path
 help-jump-open = Jump to a directory that zoxide ranks, in this panel
 help-jump-go = Open the directory in the active panel
@@ -748,8 +748,7 @@ help-new-tab = A new tab in this panel, on the same directory
 help-close-tab = Close this tab; the last one stays
 help-next-tab = The next tab in this panel
 help-prev-tab = The previous tab in this panel
-help-tab-list-left = The tabs of the left panel, to choose one
-help-tab-list-right = The tabs of the right panel, to choose one
+help-tab-list = The tabs of this panel, to choose one
 help-save-workspace = Save the tabs of both panels as a workspace
 help-workspaces-open = The saved workspaces: restore, rename, or delete one
 help-workspaces-save = Save the tabs of both panels as a new workspace

@@ -1,9 +1,9 @@
-//! The location menu of Ctrl+w 1 and Ctrl+w 2, as Far Manager's menu to change drives, for one
-//! panel: groups of places under their headings, the home directory in Favorites, the volumes
-//! in Mounts, and the hosts of the ssh config in SFTP. Mounts and SFTP put those used last
-//! first and show the first ten, with a row that shows the rest; the filter finds them all.
-//! Typing filters the menu; while the filter is empty, `1` … `9` and `0` open the first ten
-//! places.
+//! The location menu of `g l`, and of Ctrl+x `g l` for the other panel, as Far Manager's menu to
+//! change drives, for one panel: groups of places under their headings, the home directory in
+//! Favorites, the volumes in Mounts, and the hosts of the ssh config in SFTP. Mounts and SFTP put
+//! those used last first and show the first ten, with a row that shows the rest; the filter finds
+//! them all. Typing filters the menu; while the filter is empty, `1` … `9` and `0` open the first
+//! ten places.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};

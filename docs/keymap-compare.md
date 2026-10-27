@@ -45,9 +45,10 @@ something binds that Alt key, as a quick Esc and the key arrive from a terminal.
 pull-down menu are the exception, in every mode: there Alt and a letter or a digit act on what it
 marks in a label, as in Far and mc, and other Alt keys do nothing, on a password field too
 ([ADR 0033](adr/0033-letters-in-dialogs.md)). Ctrl+c closes or cancels in every mode. Counts,
-registers, and the character typed after f, t, r, ", Ctrl+r, or Ctrl+v come with the action rather
-than as bindings; the sections say where they apply. mc, Far, and ranger have no modes; yazi has
-vi's in its input boxes, and a visual mode in its panels.
+registers, Ctrl+x before a command of the panels, and the character typed after f, t, r, ",
+Ctrl+r, or Ctrl+v come with the action rather than as bindings; the sections say where they apply.
+mc, Far, and ranger have no modes; yazi has vi's in its input boxes, and a visual mode in its
+panels.
 
 yazi and ranger show one directory between its parent and a preview, with tabs and no second
 panel, so the keys of the other panel are "—" for them. Both copy and move in two steps: they
@@ -137,9 +138,15 @@ operations. f stands for mc's Ctrl+x, whose letters it keeps for mc's commands: 
 chattr, l, s, and v links, j the jobs. mc has no checksums, so they take #; the search of the files
 below takes / for text, as quick search's /, and f for names, as telescope's `<leader>ff` finds
 files, neither of which mc's Ctrl+x has. Ctrl+w switches the panels, as it switches vim's windows:
-Ctrl+w h and Ctrl+w l go to the left and the right one, and Ctrl+w 1 and Ctrl+w 2 open their
-location menus, as Far's Alt+F1 and Alt+F2, but the keys stay with the active panel, as after
-Ctrl+w f and Ctrl+w v. / searches down and ? up, as in vim and yazi; n and N
+Ctrl+w h and Ctrl+w l go to the left and the right one. Keys act on the active panel; Ctrl+x before
+one sends it to the other panel, and the keys stay with the active one, as after Ctrl+w f and
+Ctrl+w v: g l opens the location menu of the active panel, as Far's Alt+F1 and Alt+F2 that of a
+side, and Ctrl+x g l that of the other. Ctrl+x comes with the command, as a count or a register
+does, and takes the commands that choose where a panel goes, its tabs, its order, its marks by a
+pattern, and R: g l, g d, g z, t t, t n, t c, g t, g T, o n, o e, o m, o s, g +, g -, and R. A
+count goes before it or after it, as 2 Ctrl+x g t or Ctrl+x 2g t. Any other key after it gives it
+up, as vim gives up a key that cannot go on, and so does Esc; mc's Ctrl+x letters do nothing after
+it. / searches down and ? up, as in vim and yazi; n and N
 repeat the last quick search, the way it went and the other way, as in vim, yazi, and ranger;
 Shift+F7, mc's and Far's key to search again, repeats it forward too. Y and y y copy, as vim's yank
 lines, and y p copies the entry under the cursor beside it, as vim's y y p puts a copy of a line
@@ -187,14 +194,12 @@ section says: the commands of files act on the rows it selects, which become the
 | Swap the panels | `swap_panels` | ✅ | Ctrl+w x<br>Ctrl+w r | Ctrl+u | Ctrl+u | — | — |
 | Open the directory under the cursor in the other panel | `other_panel_open` | ✅ | Ctrl+w f | Alt+o | — | — | — |
 | Show this directory in the other panel | `other_panel_sync` | ✅ | Ctrl+w v | Alt+i | — | — | — |
-| Change the location of the panel drawn on the left, after a swap too; the active panel stays active | `location_menu_left` | ⏳ | Ctrl+w 1 | — | Alt+F1 | — | — |
-| Change the location of the panel drawn on the right | `location_menu_right` | ⏳ | Ctrl+w 2 | — | Alt+F2 | — | — |
+| Before a command: do it in the other panel, the keys staying with the active one; for g l, g d, g z, t t, t n, t c, g t, g T, o n, o e, o m, o s, g +, g -, and R | `other_panel` | ⏳ | Ctrl+x | — | — | — | — |
 | A new tab in this panel, on the same directory | `new_tab` | ✅ | t n<br>g n | — | — | t t | Ctrl+n<br>g n |
 | Close this tab; the last one stays | `close_tab` | ✅ | t c<br>g c | — | — | — | Ctrl+w<br>g c |
 | The next tab in this panel; after a count, the tab of that number | `next_tab` | ⏳ | g t<br>] t | — | — | ] | Tab<br>Alt+Right<br>g t |
 | The previous tab in this panel | `prev_tab` | ⏳ | g T<br>[ t | — | — | [ | Shift+Tab<br>Alt+Left<br>g T |
-| The tabs of the left panel, to choose one | `tab_list_left` | ✅ | t h | — | — | — | — |
-| The tabs of the right panel, to choose one | `tab_list_right` | ✅ | t l | — | — | — | — |
+| The tabs of this panel, in a menu over it, to choose one; the keys stay with the active panel | `tab_list` | ⏳ | t t | — | — | — | — |
 | The saved workspaces: restore, rename, or delete one | `workspaces` | ✅ | t w | — | — | — | — |
 | Save the tabs of both panels as a workspace | `save_workspace` | ✅ | t W | — | — | — | — |
 | Show or hide names that start with a dot | `toggle_hidden` | ✅ | o h | Alt+. | Ctrl+h | . | z h<br>Ctrl+h<br>Backspace |
@@ -228,6 +233,7 @@ section says: the commands of files act on the rows it selects, which become the
 | The command history | `command_history` | ✅ | q : | Alt+h | Alt+F8 | — | — |
 | Jump to a directory that zoxide ranks | `jump` | ✅ | g z | — | — | Z | — |
 | Go to a directory: type its path | `go_to_dir` | ✅ | g d | Alt+c | — | g Space | c d |
+| Change the location of this panel: its home, volumes, and hosts, in a menu over it; the keys stay with the active panel (Far: of the left or the right panel) | `location_menu` | ⏳ | g l | — | Alt+F1 (left panel)<br>Alt+F2 (right panel) | — | — |
 | View the file under the cursor | `view` | ✅ | g f<br>F3 | F3 | F3<br>Numpad5<br>Ctrl+Shift+F3 (always internal) | — | i<br>F3 |
 | Edit the file under the cursor in $VISUAL or $EDITOR | `edit` | ✅ | e<br>F4 | F4 | F4<br>Ctrl+Shift+F4 (always internal) | — | F4<br>E |
 | Open the marked entries, or the one under the cursor, with the programs of the desktop (`open`, `xdg-open`), as vim's gx; local ones only (Far: in a window of its own; yazi, ranger: through their openers) | `system_open` | ✅ | g x | — | Shift+Enter | o<br>Enter | l<br>Right<br>Enter |
@@ -1015,11 +1021,10 @@ their lists: their keys are under Normal mode.
 
 ## Location menu (`location_menu`, Normal mode)
 
-Ctrl+w 1 and Ctrl+w 2: the home directory, the volumes, and the hosts, under their headings. It
-falls back to `list`, whose Enter opens the place in the panel, while the keys stay with the active
-one, or, on the last row of a group that shows only its first places, shows the rest. The far
-column has the keys of
-Far's menus, its drive menu among them.
+g l, or Ctrl+x g l for the other panel: the home directory, the volumes, and the hosts, under their
+headings, over the panel. It falls back to `list`, whose Enter opens the place in the panel, while
+the keys stay with the active one, or, on the last row of a group that shows only its first places,
+shows the rest. The far column has the keys of Far's menus, its drive menu among them.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -1047,9 +1052,10 @@ then to `global`; F4 and F8 still edit and disconnect the host under the cursor.
 
 ## Tab menu (`tab_menu`, Normal mode)
 
-t h and t l: the tabs of the left or the right panel, drawn over it as the location menu is. It
-falls back to `list`, whose Enter shows the tab in the panel, while the keys stay with the active
-one, as after the location menu; d d and F8 close the tab under the
+t t, as vim's `:tabs` lists them, or Ctrl+x t t for the other panel: the tabs of the panel, drawn
+over it as the location menu is, under the title of the side it is drawn on. It falls back to
+`list`, whose Enter shows the tab in the panel, while the keys stay with the active one, as after
+the location menu; d d and F8 close the tab under the
 cursor, as they delete a workspace, and the menu stays open; with a count, 3d d closes three, as
 vim's deletes three lines, and so do d d in the location menu, the workspaces, and the history. mc,
 Far, yazi, and ranger have no menu of tabs.
@@ -1069,11 +1075,12 @@ then to `global`.
 
 ## zoxide window (`jump`, Normal mode)
 
-g z: the directories that zoxide ranks. It opens in Insert mode, as every list does, its keywords
-taking text, as z takes them in a shell; Esc goes to the rows, in Normal mode, where `/` or `i`
-types again and Esc closes it. It binds no keys of its own, in either mode: it falls back to `list`,
-whose Enter opens the directory in the active panel, and, while the keywords take text, to `input`
-too.
+g z, or Ctrl+x g z for the other panel: the directories that zoxide ranks but the panel's own, over
+the panel. It opens in Insert mode, as every list does, its keywords taking text, as z takes them in
+a shell; Esc goes to the rows, in Normal mode, where `/` or `i` types again and Esc closes it. It
+binds no keys of its own, in either mode: it falls back to `list`, whose Enter opens the directory
+in the panel, while the keys stay with the active one, and, while the keywords take text, to
+`input` too.
 
 ## Workspaces window (`workspaces`, Normal mode)
 

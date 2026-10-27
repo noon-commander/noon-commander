@@ -1,7 +1,8 @@
 # 0022. One keymap, in vim's modes
 
 - Status: Accepted; amended by [ADR 0042](0042-quick-search-types-only-what-matches.md),
-  [ADR 0049](0049-menus-of-a-panel-keep-the-active-panel.md)
+  [ADR 0049](0049-menus-of-a-panel-keep-the-active-panel.md),
+  [ADR 0051](0051-ctrl-x-sends-a-command-to-the-other-panel.md)
 - Date: 2026-10-13
 - Supersedes: [ADR 0020](0020-esc-acts-at-once.md)
 

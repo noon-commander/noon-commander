@@ -62,8 +62,11 @@
 
 - [x] Virtual root of mounted volumes and a list of SFTP hosts, with the connected hosts in the
       root; `[volumes] hide` ([ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md))
-- [x] Location menu: Ctrl+w 1, Ctrl+w 2, with a filter; the keys stay with the active panel
+- [x] Location menu: `g l`, with a filter; the keys stay with the active panel
       ([ADR 0049](adr/0049-menus-of-a-panel-keep-the-active-panel.md))
+- [x] Ctrl+x sends the next command to the other panel, as Ctrl+x `g l` its location menu, and
+      the keys stay with the active one
+      ([ADR 0051](adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md))
 - [x] Host settings in `hosts.toml`, typed and edited with F4 on a host: `other_dir`,
       `remember_dir` ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md))
 - [x] Clipboard through OSC 52 ([ADR 0008](adr/0008-clipboard-through-osc-52.md))
@@ -220,7 +223,7 @@
       keep, as vim's `'scroll'`
 - [ ] `/` and Enter with nothing typed searches for the last pattern again
 - [ ] Visual mode in the panels: `/`, `?`, `n`, and `N` move its end; `g ?`, `g m`, `g M`, `Z Z`,
-      and `Y` do what they do in Normal mode, as their F-keys already do, and Ctrl+w 1 and 2 too
+      and `Y` do what they do in Normal mode, as their F-keys already do, and `g l` and `t t` too
 - [ ] The jump list as vim's by default: a jump after Ctrl+o keeps the places after it, and a
       place already in the list moves to its end, rather than as `jumpoptions=stack`
 - [ ] Up and Down on the command line recall only the commands that start with what is typed,

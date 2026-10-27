@@ -3611,7 +3611,7 @@ mod tests {
             count: Some(count),
             register: Some('a'),
             outer,
-            char: None,
+            ..Extra::default()
         };
         let mut editor = at("abc", 0);
         run(

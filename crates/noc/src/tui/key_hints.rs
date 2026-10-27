@@ -66,7 +66,7 @@ impl KeyHintsWindow {
     pub(crate) fn new(keymap: &Keymap, hints: &Hints, extra: Extra, input: Input) -> Self {
         let place = hints.place;
         let rows: Vec<Row> = keymap
-            .sequences(place, &hints.prefix)
+            .sequences_after(place, &hints.prefix, hints.other)
             .into_iter()
             .filter_map(|hint| {
                 let action = hint.action?;

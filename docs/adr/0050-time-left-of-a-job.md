@@ -62,8 +62,9 @@ are those after the review.
   least: the time left is unknown, `-:--`, as the speed falls to nothing; and of such a pause
   only the usual one counts for the pace, none before any long pause, so that when work goes on
   its pace is that of the work, not of the stall. Pauses like those before count in full, so a
-  slow link or disk shows a time left throughout after its first pause. The time is that of the
-  job's stopwatch, so a question left open is no pause (as for the speed).
+  slow link or disk shows a time left throughout after its first pause. Until a pause is known
+  to be standing still, the forecast is that of the last report. The time is that of the job's
+  stopwatch, so a question left open is no pause (as for the speed).
 - **Skipping is a pause.** A stretch in which more bytes were done than copied skipped some:
   neither its time nor its entries count, and the work behind it does not fade, so that Skip all
   over thousands of files, each found out by a round trip to the host, is no stall. Entries
@@ -132,8 +133,15 @@ are those after the review.
   within 7 to 8% where each file takes 6 to 9 seconds to open, rather than 13 to 39%.
   After a stall of a minute and a half the time left is within 2% at once, where the five
   seconds of it that counted made it a fifth too long. Tests check both, and the stall.
-- The first pause of such work is unknown and does not count, and a second stall within a
-  minute of the first counts as work, its time left growing rather than unknown.
+- The first pause of such work is unknown and does not count. Through a shorter pause the
+  forecast stands where the last report left it, and the time left shown holds near it as the
+  clock goes on, rather than count down or grow. So does a second stall within a minute of the
+  first, rather than show `-:--`, until the first is more than a minute old: then it is unknown,
+  even partway through. One that ends before that counts as work, and the time left after it is
+  longer by its share of the pace; one that does not, does not count either. In the simulator,
+  with two stalls of 40 seconds, 30 seconds apart, the time left held between 1:49 and 1:42 for
+  the first 28 seconds of the second, while two and a half minutes were left; it showed `-:--`
+  for the rest of it, and was right after it.
 - Limits of a pace learned as the job goes: small files of one size, then a big file, show the
   big file at their own pace, hours for minutes, until its data streams; a big file, then small
   ones, shows them at the cost of bytes until the first of them is done. A lasting change of

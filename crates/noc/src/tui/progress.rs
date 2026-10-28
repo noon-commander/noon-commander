@@ -46,6 +46,11 @@ const ETA_NEAR: f64 = 0.03;
 /// of the way to it each second, so that it does not stay off for long; beyond this, halfway.
 const ETA_SLACK: f64 = 0.1;
 
+/// How far back the pauses between a job's reports tell how long it may go without one and
+/// still work: a link that sends a chunk every few seconds, a disk that takes its time to
+/// write what it holds back, every so often.
+const PAUSES: Duration = Duration::from_secs(60);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Stage {
     /// Waiting for other jobs to finish.
@@ -343,8 +348,11 @@ struct Forecast {
     /// When the job last reported, in the time it worked, and with how many entries done.
     seen: Option<Duration>,
     entries: u64,
-    /// Time in which no report came beyond [`RECENT`]: the job stood still, and the time is
-    /// left out, so that the pace is that of work when work goes on.
+    /// The pauses between reports of over half [`RECENT`] within the last [`PAUSES`] of work:
+    /// when each ended, and how long it was.
+    pauses: VecDeque<(Duration, Duration)>,
+    /// Time in which the job stood still, beyond the pauses it takes as it works: it is left
+    /// out, so that the pace is that of work when work goes on.
     still: Duration,
     sums: Sums,
 }
@@ -354,7 +362,21 @@ impl Forecast {
     fn note(&mut self, at: Duration, counts: &Counts) {
         let mut point = Point::new(at, counts);
         if let Some(seen) = self.seen {
-            self.still += at.saturating_sub(seen).saturating_sub(RECENT);
+            let pause = at.saturating_sub(seen);
+            let (usual, stall) = self.pace_of_pauses(at);
+            if pause >= stall {
+                self.still += pause.saturating_sub(usual);
+            }
+            while self
+                .pauses
+                .front()
+                .is_some_and(|&(end, _)| end + PAUSES < at)
+            {
+                self.pauses.pop_front();
+            }
+            if pause > RECENT / 2 {
+                self.pauses.push_back((at, pause));
+            }
             point.starts = counts.done > self.entries;
         }
         self.seen = Some(at);
@@ -375,10 +397,25 @@ impl Forecast {
         }
     }
 
+    /// The pauses the job takes as it works, at `at`: the longest of the last [`PAUSES`], and
+    /// how long one may be before the job stands still: twice that, or [`RECENT`] at least.
+    fn pace_of_pauses(&self, at: Duration) -> (Duration, Duration) {
+        let usual = self
+            .pauses
+            .iter()
+            .filter(|&&(end, _)| end + PAUSES >= at)
+            .map(|&(_, pause)| pause)
+            .max()
+            .unwrap_or_default();
+        (usual, (usual * 2).max(RECENT))
+    }
+
     /// The time left at `at`, with `counts` behind the job: unknown once no report has come
-    /// for [`RECENT`], as the speed then falls to nothing, or before any work has a pace.
+    /// for longer than the job pauses as it works, five seconds at least, as the speed falls
+    /// to nothing then; or before any work has a pace.
     fn left(&self, at: Duration, counts: &Counts) -> Option<Duration> {
-        if at.saturating_sub(self.seen?) >= RECENT {
+        let (_, stall) = self.pace_of_pauses(at);
+        if at.saturating_sub(self.seen?) >= stall {
             return None;
         }
         let sums = &self.sums;
@@ -1225,8 +1262,10 @@ mod tests {
     fn time_waiting_for_an_answer_does_not_count() {
         let start = Instant::now();
         let mut view = JobView::new("Copy".to_owned(), "Copying".to_owned());
-        view.working("a".to_owned(), copying(0, 0), start);
-        view.working("a".to_owned(), copying(5, 5), start + secs(5));
+        for second in 0..=5 {
+            let counts = copying(second, second);
+            view.working("a".to_owned(), counts, start + secs(second));
+        }
         // A question after 5 seconds stays open for an hour.
         view.ask(start + secs(5));
         assert!(!view.ticking());
@@ -1239,7 +1278,10 @@ mod tests {
         view.answered(open);
         assert!(view.ticking());
 
-        view.working("a".to_owned(), copying(10, 10), open + secs(5));
+        for second in 6..=10 {
+            let counts = copying(second, second);
+            view.working("a".to_owned(), counts, open + secs(second - 5));
+        }
         let timing = view.timing(open + secs(5)).unwrap();
         assert_eq!(timing.elapsed, secs(10));
         let speed = timing.speed.unwrap();
@@ -1800,19 +1842,61 @@ mod tests {
             assert_eq!(run.left_at(stalled + seconds), None);
         }
         run.at += 90.0;
-        // The work goes on at the same pace: of the stall, five seconds count at most.
+        // The work goes on at the same pace: the stall does not count, the pace is that of the
+        // work at once.
         run.stream(10 * MIB, 10 * MIB);
         let even = float(run.counts.bytes_total - run.counts.bytes_done) / float(10 * MIB);
         let left = run.left();
         assert!(
-            left > even && left < even * 1.25,
+            (left - even).abs() < even * 0.02,
             "{left} for {even}, {pace} before"
         );
-        // Those five fade as the others: a minute later they are all but gone.
-        run.stream(600 * MIB, 10 * MIB);
-        let even = float(run.counts.bytes_total - run.counts.bytes_done) / float(10 * MIB);
+    }
+
+    #[test]
+    fn pauses_that_come_again_are_part_of_the_work() {
+        // A link that sends a chunk of 32 KiB every 8 seconds: only the first pause looks like a
+        // stall, and the time left keeps to the pace of the chunks.
+        let mut run = Run::new(1, 2 * MIB);
+        let mut unknown = Vec::new();
+        for n in 1..=40 {
+            let seen = run.at;
+            for second in 1..8 {
+                if run.left_at(seen + f64::from(second)).is_none() {
+                    unknown.push((n, second));
+                }
+            }
+            run.at += 8.0;
+            run.counts.bytes_done += CHUNK;
+            run.counts.bytes_copied += CHUNK;
+            run.report();
+        }
+        // Before the first chunk no pace is known, and its pause looked like a stall.
+        assert!(unknown.iter().all(|(n, _)| *n <= 2), "{unknown:?}");
+        let even = float(run.counts.bytes_total - run.counts.bytes_done) / float(CHUNK) * 8.0;
         let left = run.left();
         assert!((left - even).abs() < even * 0.05, "{left} for {even}");
+
+        // A disk that takes 64 MiB in a third of a second, then 12 seconds to write them: after
+        // the first time, the time it takes counts, and the time left is known throughout.
+        let mut run = Run::new(1, 4_096 * MIB);
+        let mut unknown = 0;
+        for n in 0..30 {
+            run.stream(64 * MIB, 192 * MIB);
+            let seen = run.at;
+            unknown += (1..12)
+                .filter(|second| run.left_at(seen + f64::from(*second)).is_none())
+                .count();
+            run.at += 12.0;
+            if n == 10 {
+                let cycles =
+                    float(run.counts.bytes_total - run.counts.bytes_done) / float(64 * MIB);
+                let even = cycles * (12.0 + 1.0 / 3.0);
+                let left = run.left();
+                assert!((left - even).abs() < even * 0.1, "{left} for {even}");
+            }
+        }
+        assert_eq!(unknown, 7, "the first 12 seconds, from 5 on");
     }
 
     #[test]

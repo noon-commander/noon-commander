@@ -941,8 +941,10 @@ does in the stretches in which no entry was done but for those that start with a
 opening, and an entry what its stretches took beyond their bytes; among small files only, the
 least squares still give the cost of an entry if it stands clear; else bytes alone count. The
 time left is the bytes and entries left at those costs and that pace. It is unknown once no
-report has come for five seconds (`RECENT`), and only those five of a longer gap count for the
-pace; a stretch that skipped data is a pause. Both are worked out once in each second that the
+report has come for longer than twice the longest pause between reports in the last minute
+(`PAUSES`), five seconds (`RECENT`) at least, so that a slow link or disk that pauses as it
+works keeps a time left; of such a stall only the usual pause counts for the pace, and a
+stretch that skipped data is a pause. Both are worked out once in each second that the
 time shows and held until the next, so they change with it rather than with every frame. The
 time left shown counts down by the clock, a second each second, while it keeps within 3% of the
 forecast (`ETA_NEAR`); up to a tenth from it (`ETA_SLACK`), it also moves a tenth of the way

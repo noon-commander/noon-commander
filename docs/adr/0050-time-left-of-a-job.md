@@ -52,12 +52,15 @@ are those after the review.
   the cost of their bytes is mostly noise then, and no less than nothing, so a big file after
   tiny ones can look as quick as an entry until a quarter of a second of its data has streamed.
   Where the entries tell nothing, bytes alone count.
-- **Standing still is unknown.** Once no report has come for five seconds (`RECENT`), the time
-  left is unknown, `-:--`, as the speed falls to nothing in the same time; and of such a gap,
-  only those five seconds count for the pace, so that when work goes on its pace is that of the
-  work, not of the stall. Gaps up to five seconds count in full, as a slow link that sends a
-  chunk every few seconds works all that time. The time is that of the job's stopwatch, so a
-  question left open is no gap (as for the speed).
+- **Standing still is unknown.** A job may pause between reports as it works: a link that sends
+  a chunk every few seconds, a disk that takes its time now and then to write what it holds
+  back. A pause is standing still once it is longer than twice the longest pause of over two and
+  a half seconds within the last minute of work (`PAUSES`), and five seconds (`RECENT`) at
+  least: the time left is unknown, `-:--`, as the speed falls to nothing; and of such a pause
+  only the usual one counts for the pace, none before any long pause, so that when work goes on
+  its pace is that of the work, not of the stall. Pauses like those before count in full, so a
+  slow link or disk shows a time left throughout after its first pause. The time is that of the
+  job's stopwatch, so a question left open is no pause (as for the speed).
 - **Skipping is a pause.** A stretch in which more bytes were done than copied skipped some:
   neither its time nor its entries count, and the work behind it does not fade, so that Skip all
   over thousands of files, each found out by a round trip to the host, is no stall. Entries
@@ -98,6 +101,13 @@ are those after the review.
   ten random runs, the small files left after big ones, files of one size and of many sizes up
   and down, Skip all one entry at a time, a stall and the work after it, hours of one kind of
   work forgetting the other's cost, and each way to the costs.
+- With five seconds for every pause, a link that sent a chunk every eight seconds, and a disk
+  that blocked for twelve every 64 MiB, showed `-:--` half the time and a time left short by 37
+  and 59%; now only their first pause is unknown, and the time left keeps within 5 and 10%.
+  After a stall of a minute and a half the time left is within 2% at once, where the five
+  seconds of it that counted made it a fifth too long. Tests check both, and the stall.
+- The first pause of such work is unknown and does not count, and a second stall within a
+  minute of the first counts as work, its time left growing rather than unknown.
 - Limits of a pace learned as the job goes: small files of one size, then a big file, show the
   big file at their own pace, hours for minutes, until its data streams; a big file, then small
   ones, shows them at the cost of bytes until the first of them is done. A lasting change of

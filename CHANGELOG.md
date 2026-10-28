@@ -417,6 +417,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   move removes the source directory then; so a copy that is aborted keeps them for the
   directories it finished
   ([ADR 0053](docs/adr/0053-a-directory-is-finished-once-all-in-it-is-done.md)).
+- The time left of a job shows `-:--` until its forecasts agree, three a second apart within a
+  quarter of each other, or for half a minute at most, rather than show after the first second
+  of work, when it could be three times too long for seconds.
 - The Connection dialog of a lost or failed host no longer keeps the screen drawing 25 times a
   second for as long as it waits, as after a laptop slept: the panels that wait for the host show
   its marker of a failure in their titles, still, rather than red dots that turned.

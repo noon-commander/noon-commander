@@ -56,6 +56,17 @@ const ETA_SMOOTH: f64 = ETA_SLACK - ETA_NEAR;
 /// The longest the time left shown takes to follow the forecast.
 const ETA_SMOOTH_MAX: Duration = Duration::from_secs(30);
 
+/// How many forecasts, a second of work apart at least, must agree before the time left shows:
+/// early in a job the forecast knows little of its pace, and may be off three times over.
+const ETA_SETTLE: usize = 3;
+
+/// How far those forecasts may differ, each less the time since it was made: the longest at most
+/// this many times the shortest.
+const ETA_AGREE: f64 = 1.25;
+
+/// The time left shows after this much work, whether or not its forecasts agree.
+const ETA_SETTLE_MAX: Duration = ETA_HORIZON;
+
 /// How far back the pauses between a job's reports tell how long it may go without one and
 /// still work: a link that sends a chunk every few seconds, a disk that takes its time to
 /// write what it holds back, every so often.
@@ -364,6 +375,11 @@ struct Forecast {
     /// out, so that the pace is that of work when work goes on.
     still: Duration,
     sums: Sums,
+    /// The last [`ETA_SETTLE`] forecasts, a second of work apart at least, with the time each
+    /// was made, until they agree.
+    settling: [Option<(Duration, Duration)>; ETA_SETTLE],
+    /// They have agreed once, so that the time left shows.
+    settled: bool,
 }
 
 impl Forecast {
@@ -404,6 +420,22 @@ impl Forecast {
             self.sums.fit(finished, point);
             self.finished = Some(point);
         }
+        self.settle(at, counts);
+    }
+
+    /// Takes the forecast at `at`, with `counts` behind the job, a second of work after the last
+    /// one taken, until the last [`ETA_SETTLE`] of them agree.
+    fn settle(&mut self, at: Duration, counts: &Counts) {
+        let taken = self.settling[ETA_SETTLE - 1];
+        if self.settled || taken.is_some_and(|(then, _)| at < then + Duration::from_secs(1)) {
+            return;
+        }
+        let Some(left) = self.left(at, counts) else {
+            return;
+        };
+        self.settling.rotate_left(1);
+        self.settling[ETA_SETTLE - 1] = Some((at, left));
+        self.settled = agree(&self.settling, at);
     }
 
     /// The pauses the job takes as it works, at `at`: the longest of the last [`PAUSES`], and
@@ -442,6 +474,20 @@ impl Forecast {
         };
         Some(Duration::try_from_secs_f64(seconds).unwrap_or(Duration::MAX))
     }
+}
+
+/// Whether the forecasts `taken`, each with the time it was made, agree at `at`: all are there
+/// and, each less the time since, the longest is at most [`ETA_AGREE`] times the shortest.
+fn agree(taken: &[Option<(Duration, Duration)>], at: Duration) -> bool {
+    let (mut shortest, mut longest) = (f64::INFINITY, 0.0_f64);
+    for &taken in taken {
+        let Some((then, left)) = taken else {
+            return false;
+        };
+        let now = left.as_secs_f64() - at.saturating_sub(then).as_secs_f64();
+        (shortest, longest) = (shortest.min(now), longest.max(now));
+    }
+    shortest > 0.0 && longest <= ETA_AGREE * shortest
 }
 
 /// Whether data was skipped from `from` to `to`: entries skipped with it, and which of the
@@ -805,7 +851,8 @@ impl JobView {
     }
 
     /// The speed and the time left after `elapsed` of work, in its `second`, with `counts`
-    /// behind it.
+    /// behind it. The time left is unknown until its forecasts have agreed, or the job has worked
+    /// [`ETA_SETTLE_MAX`].
     fn measure(&self, counts: &Counts, elapsed: Duration, second: u64) -> Held {
         let (speed, left) = if counts.bytes_total > 0 && elapsed >= SETTLED {
             let speed = self.samples.speed(elapsed, counts.bytes_copied);
@@ -813,9 +860,11 @@ impl JobView {
                 .held
                 .get()
                 .and_then(|held| Some((held.second, held.left?)));
+            let settled = self.forecast.settled || elapsed >= ETA_SETTLE_MAX;
             let left = self
                 .forecast
                 .left(elapsed, counts)
+                .filter(|_| settled)
                 .map(|forecast| count_down(before, second, forecast));
             (speed, left)
         } else {
@@ -1956,6 +2005,67 @@ mod tests {
                     "queued {queued}, one size {one_size}: {left} for {truth} at {at}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn forecasts_agree_once_they_keep_within_a_quarter_of_each_other() {
+        let taken = |forecasts: &[(u64, u64)]| -> Vec<Option<(Duration, Duration)>> {
+            forecasts
+                .iter()
+                .map(|&(at, left)| Some((secs(at), secs(left))))
+                .collect()
+        };
+        // A forecast that is right says the same end each second.
+        assert!(agree(&taken(&[(0, 100), (1, 99), (2, 98)]), secs(2)));
+        // Each less the time since: 100, 112, and 125, at most a quarter longer, or 126.
+        assert!(agree(&taken(&[(0, 102), (1, 113), (2, 125)]), secs(2)));
+        assert!(!agree(&taken(&[(0, 102), (1, 113), (2, 126)]), secs(2)));
+        assert!(agree(&taken(&[(0, 127), (1, 113), (2, 100)]), secs(2)));
+        assert!(!agree(&taken(&[(0, 128), (1, 113), (2, 100)]), secs(2)));
+        // Two seconds left two seconds ago are none now.
+        assert!(!agree(&taken(&[(0, 2), (1, 2), (2, 2)]), secs(2)));
+        // Fewer than all.
+        let mut few = taken(&[(0, 100), (1, 99), (2, 98)]);
+        few[0] = None;
+        assert!(!agree(&few, secs(2)));
+    }
+
+    #[test]
+    fn the_time_left_shows_once_its_forecasts_agree() {
+        let mut run = Run::new(1, 1000 * MIB);
+        // A fast first second, then an eighth of its pace, which the forecast takes on as the
+        // first second fades: it grows by more than a quarter a second, then less.
+        run.stream(16 * MIB, 16 * MIB);
+        let mut first = None;
+        for second in 2..=15 {
+            run.stream(2 * MIB, 2 * MIB);
+            let timing = run.view.timing(run.now()).unwrap();
+            let forecast = run.left();
+            match (first, timing.left) {
+                (None, None) => {}
+                (None, Some(left)) => {
+                    // The forecast itself, with none shown before.
+                    assert!((left.as_secs_f64() - forecast).abs() < 1e-6, "{second}");
+                    first = Some(second);
+                }
+                (Some(_), left) => assert!(left.is_some(), "it stays, at {second}"),
+            }
+        }
+        let first = first.expect("shown");
+        assert!((5..=10).contains(&first), "shown at {first}");
+    }
+
+    #[test]
+    fn the_time_left_shows_after_half_a_minute_whether_or_not_its_forecasts_agree() {
+        let mut run = Run::new(1, 1000 * MIB);
+        for second in 1..=31 {
+            run.stream(MIB, MIB);
+            // Forecasts that never agree.
+            run.view.forecast.settled = false;
+            run.view.forecast.settling = Default::default();
+            let left = run.view.timing(run.now()).unwrap().left;
+            assert_eq!(left.is_some(), second >= 30, "{second}");
         }
     }
 

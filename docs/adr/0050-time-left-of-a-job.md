@@ -69,6 +69,12 @@ are those after the review.
   neither its time nor its entries count, and the work behind it does not fade, so that Skip all
   over thousands of files, each found out by a round trip to the host, is no stall. Entries
   without data that are skipped cannot be told apart and count.
+- **It shows once its forecasts agree.** Early in a job the forecast knows little of its pace:
+  shown after the first second of work, it was three times too long for five seconds of an
+  upload of a tree. So the time left is unknown until the last three forecasts, a second of work
+  apart at least, agree: each less the time since it was made, the longest is at most a quarter
+  longer than the shortest (`ETA_SETTLE`, `ETA_AGREE`). A forecast that is right agrees within
+  three seconds. After half a minute of work it shows whether or not they do (`ETA_SETTLE_MAX`).
 - **The time left shown follows the end the forecast says, smoothed** (`count_down`). The time at
   which the forecast says the job ends is smoothed, each second taking 9% of the time left as long
   to follow, from a second to half a minute (`ETA_SMOOTH`, `ETA_SMOOTH_MAX`). A forecast that is
@@ -114,6 +120,12 @@ are those after the review.
   minute, where moving to the edge of the band around the forecast stayed 3% off. A forecast more
   than a tenth off for a single second moves the time left halfway, and the smoothing starts
   over from there, so it takes up to a minute to come back within 2%.
+- In a check that runs the copy of `noc-ops` over file systems that take their time, the time
+  left first shows after 2.5 to 10 seconds of work rather than one, a little nearer on average,
+  and the most it is off over a job falls from 28–35% to 10–13% for a local tree of 20,000
+  files, from 37–109% to 4–16% for a download of a tree, and from 31–226% to 25–173% for an
+  upload of one, where the forecasts of its first small files can agree and still be three times
+  too long. After a stretch of Skip all, which tells no pace, it shows three seconds later.
 - In the simulator, the forecast keeps within 1 to 3% of the time that is left for files of
   sizes spread as in real trees, with directories and empty files among them, locally and on a
   host; through Skip all over 5,000 files on a host it falls as they leave the work, where it grew

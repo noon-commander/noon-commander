@@ -955,8 +955,11 @@ time left is the bytes and entries left at those costs and that pace. It is unkn
 report has come for longer than twice the longest pause between reports in the last minute
 (`PAUSES`), five seconds (`RECENT`) at least, so that a slow link or disk that pauses as it
 works keeps a time left; of such a stall only the usual pause counts for the pace, and a
-stretch that skipped data is a pause. Both are worked out once in each second that the
-time shows and held until the next, so they change with it rather than with every frame. The
+stretch that skipped data is a pause. It is unknown, too, until the last three forecasts, a
+second of work apart, agree within a quarter, each less the time since it was made (`ETA_SETTLE`,
+`ETA_AGREE`), or the job has worked half a minute (`ETA_SETTLE_MAX`), as early forecasts know
+little of the pace. Both are worked out once in each second that the time shows and held until
+the next, so they change with it rather than with every frame. The
 time left shown follows the end that the forecast says, smoothed over 9% of the time left, from
 a second to half a minute (`ETA_SMOOTH`, `ETA_SMOOTH_MAX`), which a forecast that is right does
 not move (`count_down`); 9%, so that following a forecast that stands still, it lags no further

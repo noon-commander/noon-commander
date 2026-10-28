@@ -1,9 +1,9 @@
 //! The zoxide window of `g z`: the directories zoxide ranks highest for the keywords typed,
 //! best first, as `z foo bar` picks them in a shell, in the plain search mode; or
 //! all of them, filtered by what is typed, as fzf ranks them or as a regular expression in
-//! zoxide's order. A list as the others, on [`Picker`], over the panel it is for, as the location
-//! menu is: it opens in Insert mode, as `zi` does, and Esc goes to the rows, where `/` types the
-//! keywords again; Enter opens one in that panel.
+//! zoxide's order. A list as the others, on [`Picker`], over the active panel, as the location
+//! menu is over its panel: it opens in Insert mode, as `zi` does, and Esc goes to the rows, where
+//! `/` types the keywords again; Enter opens one in that panel.
 
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
@@ -15,7 +15,6 @@ use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::text::Span;
 
-use super::app::Side;
 use super::cells::{self, Align, Cut};
 use super::dialog::{Colors, Tone};
 use super::keymap::{Action, Mode, Resolved};
@@ -39,15 +38,13 @@ pub(crate) enum JumpEvent {
     Closed,
     /// The keywords changed: ask zoxide again.
     Query,
-    /// Open this directory in the window's panel.
+    /// Open this directory in the active panel.
     Open(PathBuf),
 }
 
 /// The window, with the answer to the last query it asked.
 #[derive(Debug)]
 pub(crate) struct JumpMenu {
-    /// The panel it is for.
-    side: Side,
     /// `~` stands for it.
     home: PathBuf,
     /// The local directory the panel shows, which zoxide leaves out.
@@ -62,16 +59,10 @@ pub(crate) struct JumpMenu {
 }
 
 impl JumpMenu {
-    /// A window for the panel on `side`, which shows `exclude` if it is local, waiting for the
-    /// query `generation`. It opens with the keywords taking what is typed, as `zi` does.
-    pub(crate) fn new(
-        side: Side,
-        home: PathBuf,
-        exclude: Option<PathBuf>,
-        generation: u64,
-    ) -> Self {
+    /// A window for a panel on `exclude`, if it is local, waiting for the query `generation`.
+    /// It opens with the keywords taking what is typed, as `zi` does.
+    pub(crate) fn new(home: PathBuf, exclude: Option<PathBuf>, generation: u64) -> Self {
         Self {
-            side,
             home,
             exclude,
             loading: Loading::new(generation),
@@ -108,11 +99,6 @@ impl JumpMenu {
             .split_whitespace()
             .map(str::to_owned)
             .collect()
-    }
-
-    /// The panel the window is for.
-    pub(crate) fn side(&self) -> Side {
-        self.side
     }
 
     pub(crate) fn exclude(&self) -> Option<&Path> {
@@ -299,7 +285,7 @@ mod tests {
     }
 
     fn menu() -> JumpMenu {
-        let mut menu = JumpMenu::new(Side::Left, PathBuf::from("/home/me"), None, 1);
+        let mut menu = JumpMenu::new(PathBuf::from("/home/me"), None, 1);
         menu.found(1, Ok(found()));
         menu
     }
@@ -370,7 +356,7 @@ mod tests {
 
     #[test]
     fn its_thumb_scrolls_the_rows_and_the_cursor_stays_on_screen() {
-        let mut menu = JumpMenu::new(Side::Left, PathBuf::from("/home/me"), None, 1);
+        let mut menu = JumpMenu::new(PathBuf::from("/home/me"), None, 1);
         let many = (0..30).map(|n| scored(f64::from(30 - n), &format!("/d/{n:02}")));
         menu.found(1, Ok(many.collect()));
         let top = draw(&mut menu, 16);
@@ -408,7 +394,7 @@ mod tests {
 
     #[test]
     fn fuzzy_keywords_filter_without_asking_zoxide() {
-        let mut menu = JumpMenu::new(Side::Left, PathBuf::from("/home/me"), None, 1)
+        let mut menu = JumpMenu::new(PathBuf::from("/home/me"), None, 1)
             .with_input(Input::new(Kind::FILTER_PATHS, SearchMode::Fzf));
         menu.found(1, Ok(found()));
         assert_eq!(menu.keywords(), [] as [String; 0]);
@@ -438,7 +424,7 @@ mod tests {
 
     #[test]
     fn a_regular_expression_filters_in_zoxides_order_and_alt_r_switches_the_mode() {
-        let mut menu = JumpMenu::new(Side::Left, PathBuf::from("/home/me"), None, 1)
+        let mut menu = JumpMenu::new(PathBuf::from("/home/me"), None, 1)
             .with_input(Input::new(Kind::FILTER_PATHS, SearchMode::Regex));
         menu.found(1, Ok(found()));
         for c in "^~/[sD]".chars() {
@@ -489,7 +475,7 @@ mod tests {
 
     #[test]
     fn says_why_it_lists_nothing() {
-        let mut menu = JumpMenu::new(Side::Left, PathBuf::from("/home/me"), None, 1);
+        let mut menu = JumpMenu::new(PathBuf::from("/home/me"), None, 1);
         let text = draw(&mut menu, 10);
         assert!(text.contains("═ … zoxide ═"), "{text}");
         let bars = text.lines().filter(|line| line.contains("---")).count();
@@ -509,8 +495,8 @@ mod tests {
         first.found(2, Ok(found()[1..2].to_vec()));
         assert_eq!(first.rows_listed(), Some(4), "keywords pick only some");
 
-        let mut next = JumpMenu::new(Side::Left, PathBuf::from("/home/me"), None, 1)
-            .rows_like(first.rows_listed());
+        let mut next =
+            JumpMenu::new(PathBuf::from("/home/me"), None, 1).rows_like(first.rows_listed());
         let text = draw(&mut next, 20);
         let bars = text.lines().filter(|line| line.contains("---")).count();
         let full = usize::from(FULL_ROWS + 1);
@@ -527,7 +513,7 @@ mod tests {
 
     #[test]
     fn scrolls_to_the_cursor() {
-        let mut menu = JumpMenu::new(Side::Left, PathBuf::from("/home/me"), None, 1);
+        let mut menu = JumpMenu::new(PathBuf::from("/home/me"), None, 1);
         let many = (0..30)
             .map(|index| scored(f64::from(30 - index), &format!("/d/{index}")))
             .collect();
@@ -572,7 +558,7 @@ mod tests {
 
     #[test]
     fn shows_the_whole_directory_under_the_cursor_under_the_rows() {
-        let mut menu = JumpMenu::new(Side::Left, PathBuf::from("/home/me"), None, 1);
+        let mut menu = JumpMenu::new(PathBuf::from("/home/me"), None, 1);
         let long = "/srv/www/clients/acme-corporation-international/deploy/releases/2026-10-15";
         menu.found(1, Ok(vec![scored(9.0, long), scored(1.0, "/srv")]));
         insta::assert_snapshot!(draw(&mut menu, 12));

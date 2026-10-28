@@ -39,6 +39,9 @@ mode-visual-line = VISUAL LINE
 # After Ctrl+o in Insert mode, for the one command of Normal mode, as vim says it.
 mode-insert-once = (insert)
 mode-insert-visual = (insert) VISUAL
+# While the command that Ctrl+x runs in the other panel has the keys, which then come back:
+# the key as vim's showcmd writes it (^X), then the mode.
+mode-other = ({ $key }) { $mode }
 
 ## What kind of window has the keys, after the mode on its line (src/tui/app), by the keys
 ## that work there: INSERT · Quick search, NORMAL · List. The panels go by the mode alone.
@@ -737,7 +740,7 @@ help-mkdir = Make a directory
 help-delete = Delete the marked entries, or the one under the cursor
 help-jobs = The running jobs: bring one to the front, or abort it
 help-checksum = Checksums of the marked files, or the one under the cursor
-help-other-panel = Before a command: do it in the other panel, and stay here
+help-other-panel = Before a command: run it in the other panel, then come back here
 help-location-menu = Change the panel's location: a volume or a host
 help-goto = Go to a directory by its path: ~, .., - (the previous one), host:path
 help-jump-open = Jump to a directory that zoxide ranks, in this panel

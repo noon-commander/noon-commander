@@ -339,8 +339,9 @@ pub(crate) enum Action {
     OtherPanelOpen,
     /// Shows this panel's directory in the other panel.
     OtherPanelSync,
-    /// Sends the next command to the other panel, if it [takes it](Self::takes_other_panel),
-    /// and keeps the keys here; it comes with the command, as a register does.
+    /// Runs the next command in the other panel, which has the keys until it ends, as vim's
+    /// Ctrl+o in Insert mode runs one of Normal mode; it comes with the command, as a register
+    /// does.
     OtherPanel,
     /// Opens the location menu of the panel: volumes and hosts.
     LocationMenu,
@@ -584,31 +585,6 @@ impl Action {
                 | Self::Register
                 | Self::PasteRegister
                 | Self::InsertLiteral
-        )
-    }
-
-    /// Whether Ctrl+x before the action sends it to the other panel: the commands of a panel
-    /// that choose where it goes, its tabs, its order, its marks as a whole, and reading it
-    /// again, which need not its cursor and act on no entry it marked.
-    pub(crate) fn takes_other_panel(self) -> bool {
-        matches!(
-            self,
-            Self::LocationMenu
-                | Self::GoToDir
-                | Self::Jump
-                | Self::TabList
-                | Self::NewTab
-                | Self::CloseTab
-                | Self::NextTab
-                | Self::PrevTab
-                | Self::SortByName
-                | Self::SortByExtension
-                | Self::SortByTime
-                | Self::SortBySize
-                | Self::Select
-                | Self::Unselect
-                | Self::InvertMarks
-                | Self::Reload
         )
     }
 

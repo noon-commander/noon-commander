@@ -339,7 +339,6 @@ mod tests {
             place: place.into(),
             typed: Some("Ctrl+w".to_owned()),
             prefix: vec![ctrl_w],
-            other: false,
             rows: keymap.hints(place, &[ctrl_w]),
         };
         insta::assert_snapshot!(draw(&hints, 100, 13));

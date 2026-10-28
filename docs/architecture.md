@@ -335,8 +335,8 @@ the other one, as the [location menu](#location-menu) does, and opens the path i
 `cd` in a shell reads it: relative to the panel's directory, `/…` absolute, `~` and `~/…` the home
 directory, `..` and `.` resolved by name, `-` the directory the tab showed before, and
 `host:path` on a host, scp-style, which connects to it if needed. On a host, paths stay on it
-and `~` is the remote home. [Completion](#completion) reads from the panel's directory too, and
-the keys stay with the active panel. `cd ..` puts the cursor on the directory left, as `h` does; a
+and `~` is the remote home. [Completion](#completion) reads from the panel's directory too.
+`cd ..` puts the cursor on the directory left, as `h` does; a
 path that is not there leaves the panel where it is, with the reason below the listing. The Go to
 button of a listing that failed opens it over the panel that failed. It is in F9 → Command.
 
@@ -381,8 +381,7 @@ line](#command-line-of--and-), as vim's command line completes with defaults.vim
 [zoxide](https://github.com/ajeetdsouza/zoxide) ranks the directories the user works in
 ([ADR 0012](adr/0012-external-tools-and-zoxide.md)). `g z` opens a window of its best
 directories over the active panel, or after Ctrl+x over the other one, as the
-[location menu](#location-menu) does; Enter opens the directory in that panel, and the keys stay
-with the active one:
+[location menu](#location-menu) does; Enter opens the directory in that panel:
 
 ```text
 ╔═════════════════════════════ zoxide ═════════════════════════════╗
@@ -664,9 +663,9 @@ row and names the tab that shows by its whole location:
   to the tab of that number, as in vim; `t t` opens the tab menu of the active panel, as vim's
   `:tabs` lists them: the tabs with their whole locations, over that panel, to show one, under
   the title of the side it is drawn on, `Left tabs` or `Right tabs`, after Ctrl+w x too. Ctrl+x
-  before `t t`, `t n`, `t c`, `g t`, and `g T` does it in the other panel, with a count before it
-  or after it (`2 Ctrl+x g t`, `Ctrl+x 2g t`), and the keys stay with the active panel, as after
-  the location menu. `d d` and F8 (`close_tab`) close the tab under the cursor there as `t c`
+  before `t t`, `t n`, `t c`, `g t`, and `g T` does it in the other panel, with a count after
+  Ctrl+x (`Ctrl+x 2g t`), as before any command. `d d` and F8 (`close_tab`) close the tab under
+  the cursor there as `t c`
   closes the one that shows (`Tabs::close_at`), and the menu stays open with the rest. Left and
   Right in F9 do the same for the panel on that side.
 - Names on the line of tabs are brief: the last component of a directory, `~` for the home
@@ -1161,7 +1160,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   only fallbacks, such as `search_input`. The panels show the mode alone. Where
   the line is short the kind goes first, then the mode is cut. On the right it shows the count,
   register, operator, or keys of a command typed so far, as typed, Ctrl+x as `^X`, or how much
-  Visual mode selects, as vim's `showcmd` does. Unlike vim's `showmode`, it shows every mode
+  Visual mode selects, as vim's `showcmd` does; while the command of Ctrl+x has the keys, the mode
+  starts with `(^X)`, as vim's `(insert)` after Ctrl+o. Unlike vim's `showmode`, it shows every mode
   everywhere, Normal mode and quick search too. A message, such as that a search went round, takes
   the place
   of the mode until the next key, as vim's messages do on its command line. Left of the cells of
@@ -1442,17 +1442,17 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   mc's Alt+i. Panels keep their identity when swapped (only where they are drawn changes), so a
   listing still in flight reaches the panel that asked for it. Sort order and errors go with the
   panel; mc keeps the sort order on its side. Ctrl+w h and Ctrl+w l make the panel drawn on that
-  side active, whichever it is after Ctrl+w x. Keys act on the active panel; Ctrl+x before one
-  sends it to the other panel, and the keys stay with the active one, as after Ctrl+w f and
-  Ctrl+w v ([ADR 0051](adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md)). It comes with the
-  command, as a register does (`Extra`), and only the commands that need not the cursor and act
-  on no entry the panel marked take it (`Action::takes_other_panel`): `g l`, `g d`, `g z`, `t t`,
-  `t n`, `t c`, `g t`, `g T`, `o n`, `o e`, `o m`, `o s`, `g +`, `g -`, `g *`, and `R`. A count
-  goes before it or after it (`2 Ctrl+x g t`, `Ctrl+x 2g t`). Any other key after it gives it up,
-  as vim gives up a key that cannot go on, and so does Esc. The location menu, the tab menu, Go to
-  directory, the zoxide window, and the dialogs of `g +` and `g -` that it opens go over the other
-  panel; Go to directory and zoxide start from its directory, and `g +`, `g -`, and `g *` mark its
-  names.
+  side active, whichever it is after Ctrl+w x. Keys act on the active panel; Ctrl+x runs the next
+  command in the other panel, then gives the keys back, as vim's Ctrl+o in Insert mode runs one
+  command of Normal mode ([ADR 0051](adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md)). It
+  comes with the command, as a register does (`Extra`), with the count and the register after it
+  (`Ctrl+x 2g t`); those typed before it go, and Esc and Ctrl+x again give it up. `App::typed`
+  makes the other panel active for the command and keeps where the keys were (`returns`), so any
+  command works there as in the active panel, those of the cursor, the marks, and the files too,
+  and needs nothing of its own. `App::come_back` gives the keys back once the panel has them in
+  Normal mode with nothing in front and no program to hand the terminal to: after the key, or, as
+  the event loop asks before each frame, once the mouse closed its window or the program it ran
+  returned. Windows of a panel open over it, so after Ctrl+x over the other one.
 - **Quick search.** `/` starts quick search, typed as vim's search, in Insert mode, and `?` starts
   it up the rows; typing in a panel in Normal mode does nothing but its commands, and `i`, `!`, and
   `:` open the [command line](#command-line-of--and-). As vim's search, it looks from the row after
@@ -1591,7 +1591,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   it to the app with the action (`Typed`, `Extra`): a count before it (digits, `0` only after
   another), a register after `"`, the character after the actions that take one (`f`, `t`, `F`,
   `T`, `r`, `"`, and Ctrl+r and Ctrl+v in Insert mode), and, in the panels, noc's Ctrl+x before
-  it, which sends it to the other panel. The app repeats a motion over rows a count's
+  it, which runs it in the other panel. The app repeats a motion over rows a count's
   times, and gives the count to what takes it as a number (`G`, `g g`, `g t`, Ctrl+o) and to the
   text fields, whose editor (`tui/edit.rs`) reads it itself. `Esc` acts at once: it never waits for
   a key after it, and while a command is pending it gives the command up; so does a key that cannot
@@ -1718,7 +1718,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   `KeyState`: with `ui.which_key` on, a sequence that does nothing alone and does not start with
   `Esc` (such as `g` or Ctrl+w) does not time out; its hints show `ui.which_key_delay_ms` after its
   last key (`Keymap::hints_due`), and it then waits for the next key. So does Ctrl+x, whose hints
-  list only the commands it takes. The action `key_hints` shows
+  list every key of the panel. The action `key_hints` shows
   every key of the mode and context at once: Ctrl+k everywhere, in every mode, bound once in the
   `global` context. In Insert mode the hints leave out characters, which are text. The app takes it
   before whatever is in front, which stays open under the hints. While hints show, the next key runs

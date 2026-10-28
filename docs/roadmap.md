@@ -64,8 +64,8 @@
       root; `[volumes] hide` ([ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md))
 - [x] Location menu: `g l`, with a filter; the keys stay with the active panel
       ([ADR 0049](adr/0049-menus-of-a-panel-keep-the-active-panel.md))
-- [x] Ctrl+x sends the next command to the other panel, as Ctrl+x `g l` its location menu, and
-      the keys stay with the active one
+- [x] Ctrl+x runs the next command in the other panel, as Ctrl+x `g l` its location menu, and
+      gives the keys back once it ends
       ([ADR 0051](adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md))
 - [x] Host settings in `hosts.toml`, typed and edited with F4 on a host: `other_dir`,
       `remember_dir` ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md))

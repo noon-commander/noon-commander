@@ -777,37 +777,34 @@ fn the_f_keys_work_in_visual_mode_too() {
 }
 
 #[test]
-fn ctrl_x_goes_with_the_command_after_it_to_the_other_panel() {
-    let other = |count, outer| Extra {
+fn ctrl_x_goes_with_any_command_after_it_and_the_count_and_register_after_it() {
+    let other = |count| Extra {
         count,
-        outer,
         other: true,
         ..Extra::default()
     };
     assert_eq!(
         typed(PANEL, &["ctrl-x", "g", "l"]),
-        with(Action::LocationMenu, other(None, None))
+        with(Action::LocationMenu, other(None))
     );
     assert_eq!(
-        typed(PANEL, &["ctrl-x", "shift-r"]),
-        with(Action::Reload, other(None, None))
+        typed(PANEL, &["ctrl-x", "j"]),
+        with(Action::Down, other(None))
     );
     assert_eq!(
-        typed(PANEL, &["2", "ctrl-x", "3", "g", "t"]),
-        with(Action::NextTab, other(Some(6), Some(2))),
-        "the counts multiply, as around a register"
-    );
-    let keymap = Keymap::default();
-    let mut state = KeyState::default();
-    feed(&keymap, &mut state, PANEL, &["2", "ctrl-x", "g"]);
-    assert_eq!(state.showcmd(), "2^Xg", "as typed");
-    // Ctrl+x again keeps it; a register goes with the command too.
-    assert_eq!(
-        typed(PANEL, &["ctrl-x", "ctrl-x", "t", "t"]),
-        with(Action::TabList, other(None, None))
+        typed(PANEL, &["ctrl-x", "f5"]),
+        with(Action::Copy, other(None))
     );
     assert_eq!(
-        typed(PANEL, &["\"", "a", "ctrl-x", "o", "s"]),
+        typed(PANEL, &["ctrl-x", "ctrl-w", "v"]),
+        with(Action::OtherPanelSync, other(None))
+    );
+    assert_eq!(
+        typed(PANEL, &["ctrl-x", "3", "g", "t"]),
+        with(Action::NextTab, other(Some(3)))
+    );
+    assert_eq!(
+        typed(PANEL, &["ctrl-x", "\"", "a", "o", "s"]),
         with(
             Action::SortBySize,
             Extra {
@@ -817,31 +814,43 @@ fn ctrl_x_goes_with_the_command_after_it_to_the_other_panel() {
             }
         )
     );
+    // Those typed before it go: they belong to the command, which comes after it.
+    assert_eq!(
+        typed(PANEL, &["2", "ctrl-x", "g", "t"]),
+        with(Action::NextTab, other(None))
+    );
+    assert_eq!(
+        typed(PANEL, &["\"", "a", "ctrl-x", "o", "s"]),
+        with(Action::SortBySize, other(None))
+    );
+    let keymap = Keymap::default();
+    let mut state = KeyState::default();
+    feed(&keymap, &mut state, PANEL, &["2", "ctrl-x", "3", "g"]);
+    assert_eq!(
+        state.showcmd(),
+        "^X3g",
+        "as typed, without the count before it"
+    );
 }
 
 #[test]
-fn ctrl_x_gives_up_a_command_that_does_not_take_it() {
+fn esc_and_ctrl_x_again_give_ctrl_x_up() {
     let keymap = Keymap::default();
     let mut state = KeyState::default();
-    // The cursor and the marks are the active panel's: j and F5 do nothing after Ctrl+x.
-    assert_eq!(feed(&keymap, &mut state, PANEL, &["ctrl-x", "j"]), []);
-    assert!(state.take_dropped());
-    assert_eq!(
-        feed(&keymap, &mut state, PANEL, &["j"]),
-        actions(&[Action::Down])
-    );
-    assert_eq!(feed(&keymap, &mut state, PANEL, &["ctrl-x", "f5"]), []);
-    assert_eq!(feed(&keymap, &mut state, PANEL, &["ctrl-x", "g", "g"]), []);
-    assert_eq!(
-        feed(&keymap, &mut state, PANEL, &["ctrl-x", "ctrl-w", "v"]),
-        []
-    );
-    // Esc gives it up too, and the next key is a key of its own.
     assert_eq!(feed(&keymap, &mut state, PANEL, &["ctrl-x", "esc"]), []);
+    assert!(state.take_dropped());
     assert_eq!(state.showcmd(), "");
     assert_eq!(
         feed(&keymap, &mut state, PANEL, &["g", "l"]),
         actions(&[Action::LocationMenu])
+    );
+    // Again, the keys would come back where they are.
+    assert_eq!(feed(&keymap, &mut state, PANEL, &["ctrl-x", "ctrl-x"]), []);
+    assert!(state.take_dropped());
+    assert_eq!(state.showcmd(), "");
+    assert_eq!(
+        feed(&keymap, &mut state, PANEL, &["j"]),
+        actions(&[Action::Down])
     );
     // Nothing binds it but the panels in Normal mode: elsewhere it does nothing, and the key
     // after it is a key of its own.
@@ -856,7 +865,7 @@ fn ctrl_x_gives_up_a_command_that_does_not_take_it() {
 }
 
 #[test]
-fn the_hints_after_ctrl_x_show_the_keys_it_takes() {
+fn the_hints_after_ctrl_x_show_the_keys_of_the_panel() {
     let keymap = Keymap::default();
     let mut state = KeyState::default();
     let start = Instant::now();
@@ -871,22 +880,14 @@ fn the_hints_after_ctrl_x_show_the_keys_it_takes() {
     keymap.show_hints(&mut state, PANEL);
     let hints = keymap.hints_of(&state, PANEL).unwrap();
     assert_eq!(hints.typed.as_deref(), Some("Ctrl+x"));
-    assert!(hints.other);
-    assert_eq!(hint_keys(&hints.rows), ["R", "t", "g", "]", "[", "o"]);
+    assert_eq!(hints.rows, keymap.hints(PANEL, &[]), "every key");
     assert_eq!(keymap.feed(&mut state, PANEL, key("g"), start), []);
     let hints = keymap.hints_of(&state, PANEL).unwrap();
     assert_eq!(hints.typed.as_deref(), Some("Ctrl+x g"));
-    assert_eq!(
-        hint_keys(&hints.rows),
-        ["n", "c", "t", "T", "+", "-", "*", "z", "d", "l"]
-    );
-    let sequences = keymap.sequences_after(PANEL, &hints.prefix, true);
-    assert_eq!(
-        sequences
-            .iter()
-            .find(|row| row.action == Some(Action::LocationMenu))
-            .map(|row| row.keys.as_str()),
-        Some("g l")
+    assert!(
+        hint_keys(&hints.rows).contains(&"g") && hint_keys(&hints.rows).contains(&"x"),
+        "g g and g x, which the other panel's cursor takes: {:?}",
+        hint_keys(&hints.rows)
     );
     assert_eq!(
         keymap.feed(&mut state, PANEL, key("z"), start),
@@ -905,7 +906,16 @@ fn the_hints_after_ctrl_x_show_the_keys_it_takes() {
             .as_deref(),
         Some("Ctrl+x g l")
     );
-    assert_eq!(keymap.other_key(Context::Panel, Action::Copy), None);
+    assert_eq!(
+        keymap.other_key(Context::Panel, Action::Copy).as_deref(),
+        Some("Ctrl+x Y")
+    );
+    assert_eq!(
+        keymap
+            .short_key(Context::Panel, Action::OtherPanel)
+            .as_deref(),
+        Some("^X")
+    );
 }
 
 #[test]

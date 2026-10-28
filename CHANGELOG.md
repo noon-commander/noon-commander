@@ -176,11 +176,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   cursor, not the marked ones, as mc's and Far's Shift+F5: the dialog of F5 opens with its name,
   the cursor before the extension, so that the copy goes beside it under the name typed; a path
   there copies elsewhere. File → Duplicate does it too.
-- Ctrl+x before a command of the panels sends it to the other panel, and the keys stay with the
-  active one, as after Ctrl+w f and Ctrl+w v: `g l`, `g d`, `g z`, `t t`, `t n`, `t c`, `g t`, with
-  a count too (`2 Ctrl+x g t`, `Ctrl+x 2g t`), `g T`, `o n`, `o e`, `o m`, `o s`, `g +`, `g -`,
-  `g *`, and `R`. Any other key after it gives it up, as Esc does; the key hints after it show only
-  the keys it takes, and the line of the mode shows it as `^X`
+- Ctrl+x runs the next command in the other panel, then gives the keys back, as vim's Ctrl+o in
+  Insert mode runs one command of Normal mode: any command, as if the other panel were active, so
+  Ctrl+x `g l` opens its location menu, Ctrl+x `j` moves its cursor, and Ctrl+x F5 copies from it
+  to this panel. The keys come back once the command ends: at once, or when its window closes, its
+  Visual mode or quick search ends, or the program it ran returns. Its count goes after it
+  (Ctrl+x `2g t`); Esc and Ctrl+x again give it up. While the command has the keys, the line of the
+  mode starts with `(^X)`
   ([ADR 0051](docs/adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md)).
 
 ### Changed
@@ -321,9 +323,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   F4 on a host, checksums and saving them, changing directory, saving and renaming a workspace,
   and the window of a running job, were 60 or 70. Selecting by pattern (`g +`, `g -`) keeps mc's
   50, and find its 120.
-- A place chosen in the location menu (`g l`, Ctrl+x `g l`), or a tab in the tab menu (`t t`,
-  Ctrl+x `t t`), goes to its panel and leaves the keys with the active one, as Ctrl+w f and
-  Ctrl+w v do, rather than move them to the panel it changed
+- A place chosen in the location menu, or a tab in the tab menu, goes to its panel and leaves the
+  keys with the active one, as Ctrl+w f and Ctrl+w v do, rather than move them to the panel it
+  changed
   ([ADR 0049](docs/adr/0049-menus-of-a-panel-keep-the-active-panel.md)).
 - `g l` opens the location menu of the active panel, in place of Ctrl+w 1 and Ctrl+w 2, which
   named a side, and `t t` its tab menu, as vim's `:tabs` lists the tabs, in place of `t h` and
@@ -332,9 +334,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ([ADR 0051](docs/adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md)).
 - Go to directory (`g d`, and the Go to button after a listing fails), the zoxide window (`g z`),
   and the dialogs of `g +` and `g -` open over their panel, as the location menu does, rather than
-  over both panels. For the other panel, after Ctrl+x, Go to directory reads relative paths, `-`,
-  and completion from that panel's directory, the zoxide window leaves that directory out and
-  opens the one chosen there, and `g +` and `g -` mark and unmark its names.
+  over both panels; after Ctrl+x, over the other panel.
 - The title of the tab menu names the side where its panel is drawn, `Left tabs` or `Right tabs`,
   after Ctrl+w x too, as the location menu's does.
 - F9 → Left and Right show the keys of their commands on both sides: as they are in the menu of

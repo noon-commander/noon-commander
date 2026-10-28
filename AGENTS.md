@@ -138,10 +138,11 @@ Paths come from `crates/noc-config/src/paths.rs`.
 - The app says where keys go: `App::place` returns the mode and the context. A new window or
   field reports its mode; text fields keep theirs in their `edit::Editor`.
 - Counts, registers, and the character after `f`, `t`, `r`, `"`, Ctrl+r, Ctrl+v come with the
-  action (`keymap::Typed`, `Extra`), never as bindings. So does Ctrl+x, which sends the command
-  to the other panel (ADR 0051); `Action::takes_other_panel` lists the commands it takes.
-- Keys act on the active panel, Ctrl+x and a key on the other one; the keys stay where they were.
-  What Ctrl+x can send opens over the panel it is for, as the location menu does.
+  action (`keymap::Typed`, `Extra`), never as bindings. So does Ctrl+x, which runs the command
+  in the other panel (ADR 0051).
+- Keys act on the active panel. Ctrl+x gives the other panel the keys for one command, any
+  command, and gives them back once it ends (`App::come_back`); a command needs nothing of its
+  own for it. A window of one panel opens over that panel, as the location menu does.
 - The F-key bar and help are generated from the keymap, per mode and context.
 - Changing any binding: update the `noc` column of
   [docs/keymap-compare.md](docs/keymap-compare.md) in the same change. A new action gets a row

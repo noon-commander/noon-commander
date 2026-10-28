@@ -304,12 +304,9 @@ pub(crate) async fn run(
         if app.quits() {
             break Ok(());
         }
-        if let Some(dir) = app.take_work_dir() {
-            tasks.change_work_dir(dir);
-        }
-        if let Some(recent) = app.take_recent() {
-            tasks.run(vec![app::Effect::Recent(app::RecentChange::Save(recent))]);
-        }
+        // The command of Ctrl+x may end without a key: by the mouse, or a program it ran.
+        app.come_back();
+        take_requests(&mut app, &mut tasks);
         if let Some(handover) = app.take_handover() {
             let (fresh, after) =
                 hand_over((&mut terminal, &mut asked), events, &mut app, handover).await;
@@ -630,6 +627,17 @@ struct Asked {
     /// The cursor is a bar, for Insert mode, or a block, for the others, as asked last; `None`
     /// while it has the terminal's own shape.
     bar: Option<bool>,
+}
+
+/// Does what the app asks of the tasks between events: the work directory of the process, which
+/// follows the active panel, and the places used last, to save.
+fn take_requests(app: &mut App, tasks: &mut Tasks) {
+    if let Some(dir) = app.take_work_dir() {
+        tasks.change_work_dir(dir);
+    }
+    if let Some(recent) = app.take_recent() {
+        tasks.run(vec![app::Effect::Recent(app::RecentChange::Save(recent))]);
+    }
 }
 
 /// Does what the app asks of the terminal: a full redraw, text for the clipboard, capturing

@@ -68,10 +68,14 @@ are those after the review.
   over thousands of files, each found out by a round trip to the host, is no stall. Entries
   without data that are skipped cannot be told apart and count.
 - **The time left shown follows the end the forecast says, smoothed** (`count_down`). The time at
-  which the forecast says the job ends is smoothed, each second taking 15% of the time left as
-  long to follow, from a second to half a minute (`ETA_SMOOTH`, `ETA_HORIZON`). A forecast that
-  is right says the same end every second, so smoothing the end evens out its ups and downs
-  without lagging behind; one still settling, early in a short job, is soon followed.
+  which the forecast says the job ends is smoothed, each second taking 9% of the time left as long
+  to follow, from a second to half a minute (`ETA_SMOOTH`, `ETA_SMOOTH_MAX`). A forecast that is
+  right says the same end every second, so smoothing the end evens out its ups and downs without
+  lagging behind; one still settling, early in a short job, is soon followed. Following a
+  forecast that stands still, the smoothed one lags by about as much, which with the band below
+  must keep within the tenth that moves it halfway: at 15%, a review found it went beyond, from
+  half a minute to five minutes left, moved halfway up, lagged again, and went up by up to 15
+  seconds every half minute. So the share is that tenth less the band.
 - **It counts down by the clock.** Each second it is the one shown before less a second, while
   that keeps within 1% of the forecast smoothed (`ETA_NEAR`); else the nearer edge of that band.
   So it follows the smoothed forecast without going up and down, and holds still where the
@@ -93,16 +97,21 @@ are those after the review.
   check all three.
 - The time left shown keeps within 1% of the forecast smoothed, never going up where the
   forecast stands still; tests check that and the catching up. Where the forecast stands still
-  for minutes, it comes to rest below it by what the forecast moves in the half minute the
-  smoothing takes, and 1% more: 9:25 for 10:00. In the
+  for minutes, it comes to rest below it by as much as the end it says moves in the time the
+  smoothing lags, a second less than it takes, and 1% more: 9:25 for 10:00, 1:31 for 1:40. In the
   simulator it is off by 1.3 to 3.7% of the time that is left for real trees on jobs of minutes,
-  and by 2 to 4% on jobs of under a minute, where it moved to the edge of a band of 3% around
-  the forecast itself before, and was off by 1 to 4% and by 4 to 8%. Over all the simulator's
-  cases a second goes down by other than one a fifth less often, and the time left goes up a
+  and by 2 to 3.5% on jobs of under a minute, where it moved to the edge of a band of 3% around
+  the forecast itself before, and was off by 1 to 4% and by 1 to 8%. Over all the simulator's
+  cases a second goes down by other than one a tenth less often, and the time left goes up a
   third less often. Counting down alone kept the error of its start, 5 to 10%, for the whole
   job; moving all the way to the forecast went up and down where the forecast went down slower
   than the clock; smoothing the end alone, with no band, was a little nearer but went down by
-  other than one twice as often.
+  other than one two thirds as often again.
+- A lasting change of under a tenth shows over the time the smoothing takes: 8% off with five
+  minutes left is 6% off ten seconds later, 3% after half a minute, and within 2% within a
+  minute, where moving to the edge of the band around the forecast stayed 3% off. A forecast more
+  than a tenth off for a single second moves the time left halfway, and the smoothing starts
+  over from there, so it takes up to a minute to come back within 2%.
 - In the simulator, the forecast keeps within 1 to 3% of the time that is left for files of
   sizes spread as in real trees, with directories and empty files among them, locally and on a
   host; through Skip all over 5,000 files on a host it falls as they leave the work, where it grew

@@ -952,13 +952,14 @@ report has come for longer than twice the longest pause between reports in the l
 works keeps a time left; of such a stall only the usual pause counts for the pace, and a
 stretch that skipped data is a pause. Both are worked out once in each second that the
 time shows and held until the next, so they change with it rather than with every frame. The
-time left shown follows the end that the forecast says, smoothed over 15% of the time left, from
-a second to half a minute (`ETA_SMOOTH`), which a forecast that is right does not move
-(`count_down`). It counts down by the clock, a second each second, while it keeps within 1% of
-the forecast smoothed (`ETA_NEAR`), and else shows the nearer edge of that band, so that it
-holds still where the forecast does rather than go up and down; beyond a tenth from the
-forecast (`ETA_SLACK`), it moves halfway there each second. It keeps its fraction of a second
-and shows rounded.
+time left shown follows the end that the forecast says, smoothed over 9% of the time left, from
+a second to half a minute (`ETA_SMOOTH`, `ETA_SMOOTH_MAX`), which a forecast that is right does
+not move (`count_down`); 9%, so that following a forecast that stands still, it lags no further
+than the tenth beyond which it moves halfway. It counts down by the clock, a second each
+second, while it keeps within 1% of the forecast smoothed (`ETA_NEAR`), and else shows the
+nearer edge of that band, so that it holds still where the forecast does rather than go up and
+down; beyond a tenth from the forecast (`ETA_SLACK`), it moves halfway there each second. It
+keeps its fraction of a second and shows rounded.
 
 Renaming one entry in its directory (`rename`) is no job: one call with no progress, which
 the UI runs like a new directory, through the host's shared session (`Arc<SftpFs>`) for a

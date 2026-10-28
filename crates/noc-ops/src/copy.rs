@@ -811,7 +811,9 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
             .await
             .map_err(|error| Stop::Failed((self.from.report)(&item.source), error))?;
         let (writer, written) = self.create(target, replace).await?;
-        let result = self.transfer(item, &mut reader, writer, &written).await;
+        let result = self
+            .transfer(item, &mut reader, writer, (&written, target))
+            .await;
         let result = match result {
             Ok(()) if self.options.atomic => self.rename_over(&written, target, replace).await,
             other => other,
@@ -874,15 +876,16 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
         }
     }
 
-    /// Moves the data of `item` from `reader` to `writer`, which writes `written`, and gives
-    /// it the attributes of `item` if the copy preserves them. Bytes count as they arrive, which
-    /// on a host is when the server has taken them.
+    /// Moves the data of `item` from `reader` to `writer`, which writes `written` for `target`,
+    /// and gives it the attributes of `item` if the copy preserves them. Bytes count as they
+    /// arrive, which on a host is when the server has taken them. Failures name `target`, not
+    /// a temporary name the user never sees.
     async fn transfer(
         &mut self,
         item: &Item<A::Path>,
         reader: &mut A::Reader,
         mut writer: B::Writer,
-        written: &B::Path,
+        (written, target): (&B::Path, &B::Path),
     ) -> Result<(), Stop<L>> {
         let mut counted = 0;
         loop {
@@ -897,12 +900,12 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
             // What the server took before a write it refused still counts.
             let wrote = writer.write(chunk).await;
             self.arrived(item, &writer, &mut counted);
-            wrote.map_err(|error| self.at_target(written, error))?;
+            wrote.map_err(|error| self.at_target(target, error))?;
         }
         loop {
             let more = writer.settle().await;
             self.arrived(item, &writer, &mut counted);
-            if !more.map_err(|error| self.at_target(written, error))? {
+            if !more.map_err(|error| self.at_target(target, error))? {
                 break;
             }
             if self.reporter.cancelled() {
@@ -912,11 +915,11 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
         writer
             .finish()
             .await
-            .map_err(|error| self.at_target(written, error))?;
+            .map_err(|error| self.at_target(target, error))?;
         if self.options.preserve {
             self.set_attributes(written, &item.metadata)
                 .await
-                .map_err(|error| self.at_target(written, error))?;
+                .map_err(|error| self.at_target(target, error))?;
         }
         Ok(())
     }
@@ -1523,6 +1526,8 @@ mod tests {
         let target = (&sftp, RemotePath::from("file"));
         let (outcome, seen) = run((&LocalFs, vec![src]), target, BOTH, &answers, false).await;
         assert_eq!(outcome.skipped, 1);
+        // Written under a temporary name, the file failed under its own.
+        assert_eq!(seen.failed, ["file", "file"]);
         assert_eq!(seen.copied_at_failures, [taken, 2 * taken], "{seen:?}");
         assert_eq!(seen.copied, 2 * taken);
         assert_eq!(leftovers(&remote), Vec::<PathBuf>::new());

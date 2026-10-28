@@ -991,10 +991,10 @@ data of each chunk arrives. With `preserve`, copies get the modification times a
 bits of their sources, and directories that the copy made get theirs last, since writing into a
 directory changes its time; directories that were there keep their own. With `atomic`, each file
 is written under a hidden temporary name next to its target (`.name.noc-PID-N`) and renamed when
-complete, so the target never holds part of a
-file; without it, the target is written directly. Either way, a file that does not finish
-(an error, Skip, or cancellation) is removed; written directly over an existing file, that
-file is gone too.
+complete, so the target never holds part of a file; its failures name the target, not the name
+the user never sees. Without it, the target is written directly. Either way, a file that does
+not finish (an error, Skip, or cancellation) is removed; written directly over an existing file,
+that file is gone too.
 
 When the name of a file or symlink is taken, the job sends `Exists` with the metadata of both, for
 sizes and times, and waits for a `Conflict`: Overwrite, Skip, Overwrite all, Skip all, Overwrite

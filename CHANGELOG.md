@@ -420,6 +420,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The time left of a job shows `-:--` until its forecasts agree, three a second apart within a
   quarter of each other, or for half a minute at most, rather than show after the first second
   of work, when it could be three times too long for seconds.
+- A time left shown more than twice as long as the forecast, or less than half as long, goes to
+  it at once, rather than halfway each second: a big file after many small ones showed hours for
+  nine seconds after its forecast had come down to a minute.
 - The Connection dialog of a lost or failed host no longer keeps the screen drawing 25 times a
   second for as long as it waits, as after a laptop slept: the panels that wait for the host show
   its marker of a failure in their titles, still, rather than red dots that turned.

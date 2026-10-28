@@ -46,6 +46,11 @@ const ETA_NEAR: f64 = 0.01;
 /// each second, so that a lasting change shows within a few seconds without a jump.
 const ETA_SLACK: f64 = 0.1;
 
+/// More than this many times as long as the forecast, or as short, the time left shown goes to
+/// it at once: halving the way from hours to the minutes a forecast has learned took seconds of
+/// showing hours.
+const ETA_JUMP: f64 = 2.0;
+
 /// How long the time left shown takes to follow the forecast, as a share of the time left, up
 /// to [`ETA_SMOOTH_MAX`]: long enough to even out the forecast's ups and downs, short enough
 /// that one still settling, early in a short job, is soon followed. Following a forecast that
@@ -1098,8 +1103,9 @@ fn whole_seconds(duration: Duration) -> u64 {
 /// forecast smoothed; else the nearer edge of that band, so that the time left counts down by
 /// the clock, follows the forecast without going up and down, and holds still where the
 /// forecast does. Beyond [`ETA_SLACK`] from the forecast, it moves halfway there for each second
-/// since, and the smoothing starts over from it. The forecast itself without one before, or once
-/// the count is down to nothing. It keeps its fraction of a second, which shows rounded.
+/// since, and the smoothing starts over from it. The forecast itself without one before, once
+/// the count is down to nothing, or [`ETA_JUMP`] times as far from it, either way. It keeps its
+/// fraction of a second, which shows rounded.
 fn count_down(before: Option<(u64, Left)>, second: u64, forecast: Duration) -> Left {
     let fresh = Left {
         shown: forecast,
@@ -1115,6 +1121,9 @@ fn count_down(before: Option<(u64, Left)>, second: u64, forecast: Duration) -> L
     }
     let times = i32::try_from(passed).unwrap_or(i32::MAX);
     let (from, to) = (counted.as_secs_f64(), forecast.as_secs_f64());
+    if from > ETA_JUMP * to || to > ETA_JUMP * from {
+        return fresh;
+    }
     if (to - from).abs() > ETA_SLACK * to {
         let left = seconds(to + (from - to) * 0.5_f64.powi(times));
         return Left {
@@ -1525,16 +1534,23 @@ mod tests {
         // Beyond a tenth, halfway there each second.
         assert_eq!(left(before(10, 100, 100), 11, 110_100), (105, 105));
         assert_eq!(left(before(10, 100, 100), 11, 151_000), (125, 125));
-        assert_eq!(left(before(10, 100, 100), 11, 39_000), (69, 69));
+        assert_eq!(left(before(10, 100, 100), 11, 52_000), (76, 76));
         assert_eq!(left(before(10, 100, 100), 12, 178_000), (158, 158));
-        // Counted down to nothing, the forecast; to a little more, halfway to it.
+        // Up to twice as long as the forecast, or as short, halfway; beyond, the forecast.
+        assert_eq!(left(before(10, 100, 100), 11, 49_600), (74, 74));
+        assert_eq!(left(before(10, 100, 100), 11, 49_400), (49, 49));
+        assert_eq!(left(before(10, 100, 100), 11, 198_000), (149, 149));
+        assert_eq!(left(before(10, 100, 100), 11, 198_100), (198, 198));
+        assert_eq!(left(before(10, 100, 100), 11, 39_000), (39, 39));
+        assert_eq!(left(before(10, 36_000, 36_000), 11, 60_000), (60, 60));
+        // Counted down to nothing, the forecast; to a little more, the forecast too.
         assert_eq!(left(before(10, 2, 2), 12, 30_000), (30, 30));
         assert_eq!(left(before(10, 0, 0), 11, 30_000), (30, 30));
         let little = Left {
             shown: Duration::from_millis(1_300),
             smooth: Duration::from_millis(1_300),
         };
-        assert_eq!(left(Some((10, little)), 11, 30_000), (15, 15));
+        assert_eq!(left(Some((10, little)), 11, 30_000), (30, 30));
         // Nothing overflows.
         let most = Left {
             shown: Duration::MAX,

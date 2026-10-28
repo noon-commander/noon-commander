@@ -966,8 +966,9 @@ not move (`count_down`); 9%, so that following a forecast that stands still, it 
 than the tenth beyond which it moves halfway. It counts down by the clock, a second each
 second, while it keeps within 1% of the forecast smoothed (`ETA_NEAR`), and else shows the
 nearer edge of that band, so that it holds still where the forecast does rather than go up and
-down; beyond a tenth from the forecast (`ETA_SLACK`), it moves halfway there each second. It
-keeps its fraction of a second and shows rounded.
+down; beyond a tenth from the forecast (`ETA_SLACK`), it moves halfway there each second, and
+more than twice as long, or less than half (`ETA_JUMP`), it is the forecast at once. It keeps its
+fraction of a second and shows rounded.
 
 Renaming one entry in its directory (`rename`) is no job: one call with no progress, which
 the UI runs like a new directory, through the host's shared session (`Arc<SftpFs>`) for a

@@ -91,10 +91,13 @@ are those after the review.
   then two seconds at a time or so, fewer as it comes near, and is within 3% a minute later.
   Beyond a tenth from the forecast (`ETA_SLACK`), it moves halfway there each second, up or
   down, so that a lasting change shows within a few seconds without a jump, and the smoothing
-  starts over from it. The first one, and one counted down to nothing, is the forecast. It keeps
-  its fraction of a second and shows rounded, so that a count shows a second less each second.
-  With the clock it no longer jumps to and fro by a second or two, which rounding a time left
-  over a minute to five seconds hid before.
+  starts over from it. More than twice as long as the forecast, or less than half as long
+  (`ETA_JUMP`), it is the forecast at once: halving the way, a time left of hours took nine
+  seconds to come down to the minute a big file after small ones had left, showing hours. The
+  first one, and one counted down to nothing, is the forecast too. It keeps its fraction of a
+  second and shows rounded, so that a count shows a second less each second. With the clock it
+  no longer jumps to and fro by a second or two, which rounding a time left over a minute to five
+  seconds hid before.
 - It all comes from the counts that jobs report (`Counts`), with no change to `noc-ops` but for
   when a byte written counts (ADR 0052) and when a directory is finished (ADR 0053).
 

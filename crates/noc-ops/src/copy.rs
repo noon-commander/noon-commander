@@ -868,10 +868,19 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
         };
         loop {
             let temporary = dir.join_name(&temporary_name(name));
-            match to.create_file(&temporary, false).await {
-                Ok(writer) => return Ok((writer, temporary)),
-                Err(VfsError::AlreadyExists(_)) => {}
-                Err(error) => return Err(self.at_target(target, error)),
+            let created = self
+                .reporter
+                .unless_cancelled(to.create_file(&temporary, false))
+                .await;
+            match created {
+                // On a host the file is still made once asked for, so it goes again after.
+                None => {
+                    let _ = to.remove_file(&temporary).await;
+                    return Err(Stop::Aborted);
+                }
+                Some(Ok(writer)) => return Ok((writer, temporary)),
+                Some(Err(VfsError::AlreadyExists(_))) => {}
+                Some(Err(error)) => return Err(self.at_target(target, error)),
             }
         }
     }
@@ -925,8 +934,10 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
             .ok_or(Stop::Aborted)?
             .map_err(|error| self.at_target(target, error))?;
         if self.options.preserve {
-            self.set_attributes(written, &item.metadata)
+            self.reporter
+                .unless_cancelled(self.set_attributes(written, &item.metadata))
                 .await
+                .ok_or(Stop::Aborted)?
                 .map_err(|error| self.at_target(target, error))?;
         }
         Ok(())
@@ -1676,31 +1687,51 @@ mod tests {
     }
 
     /// The local file system, where every rename crosses file systems, and what is written
-    /// arrives late, as on a host; or, if it `stalls`, as on a host that stops answering.
+    /// arrives late, as on a host; or, with a `stall`, as on a host that stops answering.
     #[derive(Default)]
     struct OtherDevice {
-        stalls: bool,
+        stall: Option<Stall>,
     }
 
-    /// A local file whose writes arrive only as the job waits for them, 64 KiB at a time; or,
-    /// if it `stalls`, whose first write arrives at once, and nothing after.
+    /// Where a host stops answering, and the job it cancels as it does.
+    #[derive(Debug, Clone)]
+    struct Stall {
+        at: Step,
+        cancel: CancellationToken,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Step {
+        Create,
+        Read,
+        Write,
+        Settle,
+        Finish,
+        Attributes,
+    }
+
+    /// Never ends at the `step` where `stall` stops answering, once it has cancelled its job.
+    async fn stall_at(stall: Option<&Stall>, step: Step) {
+        if let Some(stall) = stall.filter(|stall| stall.at == step) {
+            stall.cancel.cancel();
+            std::future::pending::<()>().await;
+        }
+    }
+
+    /// A local file whose writes arrive only as the job waits for them, 64 KiB at a time.
     #[derive(Debug)]
     struct Late {
         writer: noc_vfs::LocalWriter,
         arrived: u64,
-        stalls: bool,
+        stall: Option<Stall>,
     }
 
     impl noc_vfs::FileWriter for Late {
         async fn write(&mut self, data: Vec<u8>) -> Result<(), VfsError> {
-            if self.stalls && self.writer.written() > 0 {
-                std::future::pending::<()>().await;
+            if self.writer.written() > 0 {
+                stall_at(self.stall.as_ref(), Step::Write).await;
             }
-            self.writer.write(data).await?;
-            if self.stalls {
-                self.arrived = self.writer.written();
-            }
-            Ok(())
+            self.writer.write(data).await
         }
 
         fn written(&self) -> u64 {
@@ -1708,6 +1739,7 @@ mod tests {
         }
 
         async fn settle(&mut self) -> Result<bool, VfsError> {
+            stall_at(self.stall.as_ref(), Step::Settle).await;
             // As a server's answer, it comes after others have had their turn.
             tokio::task::yield_now().await;
             let left = self.writer.written() - self.arrived;
@@ -1716,13 +1748,32 @@ mod tests {
         }
 
         async fn finish(self) -> Result<(), VfsError> {
+            stall_at(self.stall.as_ref(), Step::Finish).await;
             self.writer.finish().await
+        }
+    }
+
+    /// A local file read as from a host, whose answers may stop after the first.
+    #[derive(Debug)]
+    struct Remote {
+        reader: noc_vfs::LocalReader,
+        read: bool,
+        stall: Option<Stall>,
+    }
+
+    impl noc_vfs::FileReader for Remote {
+        async fn read(&mut self) -> Result<Option<Vec<u8>>, VfsError> {
+            if self.read {
+                stall_at(self.stall.as_ref(), Step::Read).await;
+            }
+            self.read = true;
+            self.reader.read().await
         }
     }
 
     impl Vfs for OtherDevice {
         type Path = PathBuf;
-        type Reader = noc_vfs::LocalReader;
+        type Reader = Remote;
         type Writer = Late;
 
         async fn list_dir(&self, path: &PathBuf) -> Result<Vec<noc_vfs::DirEntry>, VfsError> {
@@ -1763,6 +1814,7 @@ mod tests {
             LocalFs.create_symlink(target, path).await
         }
         async fn set_permissions(&self, path: &PathBuf, mode: u32) -> Result<(), VfsError> {
+            stall_at(self.stall.as_ref(), Step::Attributes).await;
             LocalFs.set_permissions(path, mode).await
         }
         async fn set_modified(&self, path: &PathBuf, time: SystemTime) -> Result<(), VfsError> {
@@ -1773,18 +1825,24 @@ mod tests {
             path: &PathBuf,
             offset: u64,
         ) -> Result<Self::Reader, VfsError> {
-            LocalFs.open_file_at(path, offset).await
+            Ok(Remote {
+                reader: LocalFs.open_file_at(path, offset).await?,
+                read: false,
+                stall: self.stall.clone(),
+            })
         }
         async fn create_file(
             &self,
             path: &PathBuf,
             replace: bool,
         ) -> Result<Self::Writer, VfsError> {
+            // Made, as a host makes it once asked, whether or not its answer comes.
             let writer = LocalFs.create_file(path, replace).await?;
+            stall_at(self.stall.as_ref(), Step::Create).await;
             Ok(Late {
                 writer,
                 arrived: 0,
-                stalls: self.stalls,
+                stall: self.stall.clone(),
             })
         }
     }
@@ -1813,25 +1871,65 @@ mod tests {
         assert_eq!(fs::read(dst.join("file")).unwrap(), vec![7; 300_000]);
     }
 
+    /// Copies `source` to `target` with `cancel`, within the while a cancelled job has.
+    async fn cancelled_copy<A, B>(
+        (from, source): (&A, PathBuf),
+        (to, target): (&B, PathBuf),
+        cancel: &CancellationToken,
+    ) -> Option<Outcome>
+    where
+        A: Vfs<Path = PathBuf>,
+        B: Vfs<Path = PathBuf>,
+    {
+        let (events, incoming) = mpsc::unbounded_channel();
+        let mut reporter = Reporter::new(events, cancel.clone());
+        let job = async {
+            let from = Endpoint {
+                vfs: from,
+                report: &report::<PathBuf>,
+            };
+            let to = Endpoint {
+                vfs: to,
+                report: &report::<PathBuf>,
+            };
+            let outcome = copy(from, vec![source], to, target, BOTH, &mut reporter).await;
+            drop(reporter);
+            outcome
+        };
+        let job = crate::in_time(cancel, job);
+        let (ended, _) = tokio::join!(job, listen(incoming, cancel, Script::default()));
+        ended
+    }
+
     #[tokio::test]
-    async fn a_cancel_stops_the_wait_for_a_host_that_stopped_answering() {
-        let root = tempfile::tempdir().unwrap();
-        let src = root.path().join("file");
-        fs::write(&src, vec![7; 600_000]).unwrap();
-        let dst = root.path().join("dst");
-        fs::create_dir(&dst).unwrap();
-        // Cancelled once its first write has arrived, after which the host answers nothing.
-        let stalled = OtherDevice { stalls: true };
-        let from = (&LocalFs, vec![src]);
-        let copy = run(from, (&stalled, dst.clone()), BOTH, &[], true);
-        let (outcome, _) = tokio::time::timeout(Duration::from_secs(10), copy)
-            .await
-            .expect("it stops");
-        assert!(outcome.aborted);
-        assert!(
-            fs::read_dir(&dst).unwrap().next().is_none(),
-            "no part of it"
-        );
+    async fn a_cancel_stops_each_wait_on_a_host_and_takes_away_the_copy() {
+        use Step::{Attributes, Create, Finish, Read, Settle, Write};
+        for at in [Create, Read, Write, Settle, Finish, Attributes] {
+            let root = tempfile::tempdir().unwrap();
+            let src = root.path().join("file");
+            fs::write(&src, vec![7; 600_000]).unwrap();
+            let dst = root.path().join("dst");
+            fs::create_dir(&dst).unwrap();
+            // The host stops answering there and the copy is cancelled: it ends in time, with
+            // no part of the file left, under its name or a temporary one.
+            let cancel = CancellationToken::new();
+            let stall = Some(Stall {
+                at,
+                cancel: cancel.clone(),
+            });
+            let host = OtherDevice { stall };
+            let ended = if at == Read {
+                cancelled_copy((&host, src), (&LocalFs, dst.clone()), &cancel).await
+            } else {
+                cancelled_copy((&LocalFs, src), (&host, dst.clone()), &cancel).await
+            };
+            assert!(
+                ended.is_some_and(|outcome| outcome.aborted),
+                "{at:?}: {ended:?}"
+            );
+            let left: Vec<_> = fs::read_dir(&dst).unwrap().collect();
+            assert!(left.is_empty(), "{at:?}: {left:?}");
+        }
     }
 
     #[tokio::test]

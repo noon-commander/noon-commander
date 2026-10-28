@@ -386,7 +386,8 @@ impl<'r, L> Checksum<'r, L> {
             if self.reporter.cancelled() {
                 return Err(Stop::Aborted);
             }
-            let Some(chunk) = reader.read().await.map_err(Stop::Failed)? else {
+            let read = self.reporter.unless_cancelled(reader.read()).await;
+            let Some(chunk) = read.ok_or(Stop::Aborted)?.map_err(Stop::Failed)? else {
                 break;
             };
             let length = chunk.len() as u64;

@@ -921,11 +921,13 @@ fails soon with the channel gone; the UI ends the job at once. A job talks
 to the UI through a `Reporter`: it sends `Event`s (`Scanning`, `Progress` with the entry at
 hand and done/total counts, `Failed`), and when an operation fails it waits for a `Decision`:
 Retry, Skip, Skip all (no more questions), or Abort. A `CancellationToken` stops it between
-operations and while it waits for a decision or for data; so does a UI that stops listening.
-A request to a host that stopped answering never ends, so the task that runs a job gives it two
-seconds once cancelled (`noc_ops::in_time`), then drops it, which abandons what it waited for;
-work on a host is cancel-safe. It returns an `Outcome`: entries done, entries skipped, and
-whether it was aborted.
+operations and while it waits for a decision, for data, or for a host to open a file or set its
+attributes; so does a UI that stops listening. A request to a host that stopped answering never
+ends, so the task that runs a job gives it two seconds once cancelled (`noc_ops::in_time`), then
+drops it, which abandons what it waited for; work on a host is cancel-safe. A job dropped ends
+as not complete, without the sums a checksum found; what it asked of the host before, such as
+removing a file it did not finish, still happens there, in order, while the session lasts. It
+returns an `Outcome`: entries done, entries skipped, and whether it was aborted.
 
 `Progress` carries two byte counts. `bytes_done` drives the gauge: it takes a skipped file's
 size at once and goes back to the start of a file that is retried. `bytes_copied` counts only
@@ -997,7 +999,9 @@ is written under a hidden temporary name next to its target (`.name.noc-PID-N`) 
 complete, so the target never holds part of a file; its failures name the target, not the name
 the user never sees. Without it, the target is written directly. Either way, a file that does
 not finish (an error, Skip, or cancellation) is removed; written directly over an existing file,
-that file is gone too.
+that file is gone too. Cancelled while a host opens it, a temporary file goes as well, once made;
+a target written directly stays, empty, if the host does not open it within the two seconds a
+cancelled job has, since it may be one that another hand made just then.
 
 When the name of a file or symlink is taken, the job sends `Exists` with the metadata of both, for
 sizes and times, and waits for a `Conflict`: Overwrite, Skip, Overwrite all, Skip all, Overwrite

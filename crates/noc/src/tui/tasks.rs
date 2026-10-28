@@ -54,8 +54,9 @@ use crate::i18n::fl;
 
 /// How long quitting waits for connections to shut down.
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
-/// How long closing an SFTP session may take.
-const SFTP_CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
+/// How long closing an SFTP session may take: long enough, over a slow link, for what a job
+/// sent before it was cancelled and let go, as the removal of a file it did not finish.
+const SFTP_CLOSE_TIMEOUT: Duration = Duration::from_secs(4);
 /// How long a failed channel gets to exit and finish its stderr, which says why it failed.
 const CHANNEL_EXIT_WAIT: Duration = Duration::from_secs(1);
 

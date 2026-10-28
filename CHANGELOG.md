@@ -352,9 +352,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   many files is no stall
   ([ADR 0050](docs/adr/0050-time-left-of-a-job.md)). Both change once a second, with the time the
   job has worked, rather than with every frame, and the time left counts down a second each
-  second while it keeps within 3% of what the pace says; beyond that it moves toward it, a tenth
-  of the way each second within a tenth and halfway beyond, so that it does not stay off, and
-  never goes up and down where the pace slows.
+  second while it keeps within 1% of what the pace says, evened out over up to half a minute;
+  beyond that it follows it, halfway each second beyond a tenth, so that it does not stay off,
+  and never goes up and down where the pace slows.
 - A job in its window, or in the list of jobs, draws the screen only when what it shows changes,
   not for every chunk it reports, and its time draws once a second rather than every 150 ms. The
   bar of the gauge moves with the whole percent beside it.

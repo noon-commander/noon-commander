@@ -37,13 +37,18 @@ const SAMPLE: Duration = Duration::from_millis(250);
 /// speed shows, short enough to follow a change of pace within a minute or so.
 const ETA_HORIZON: Duration = Duration::from_secs(30);
 
-/// How far the time left shown may stray from the forecast, as a share of the forecast, and
-/// only count down by the clock, a second each second: the forecast's own small ups and downs
-/// keep within it.
-const ETA_NEAR: f64 = 0.03;
+/// How long the time left shown takes to follow the forecast, as a share of the time left, from
+/// a second to [`ETA_HORIZON`]: long enough to even out the forecast's ups and downs, short
+/// enough that one still settling, early in a short job, is soon followed.
+const ETA_SMOOTH: f64 = 0.15;
 
-/// Up to this far from the forecast, beyond [`ETA_NEAR`], the time left shown also moves a tenth
-/// of the way to it each second, so that it does not stay off for long; beyond this, halfway.
+/// How far the time left shown may stray from the forecast smoothed, as a share of it, and only
+/// count down by the clock, a second each second: what is left of the forecast's ups and downs
+/// keeps within it.
+const ETA_NEAR: f64 = 0.01;
+
+/// Beyond this far from the forecast, as a share of it, the time left shown moves halfway to it
+/// each second, so that a lasting change shows within a few seconds without a jump.
 const ETA_SLACK: f64 = 0.1;
 
 /// How far back the pauses between a job's reports tell how long it may go without one and
@@ -465,7 +470,16 @@ struct Timing {
 struct Held {
     second: u64,
     speed: Option<f64>,
-    left: Option<Duration>,
+    left: Option<Left>,
+}
+
+/// The time left of a job in some second, as [`count_down`] works it out.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Left {
+    /// As it shows, with its fraction of a second.
+    shown: Duration,
+    /// The forecast smoothed.
+    smooth: Duration,
 }
 
 /// What the window of a job shows at some moment, before it is put in words, apart from its
@@ -746,7 +760,7 @@ impl JobView {
         Timing {
             elapsed,
             speed: held.speed,
-            left: held.left,
+            left: held.left.map(|left| left.shown),
         }
     }
 
@@ -791,14 +805,14 @@ impl JobView {
     fn measure(&self, counts: &Counts, elapsed: Duration, second: u64) -> Held {
         let (speed, left) = if counts.bytes_total > 0 && elapsed >= SETTLED {
             let speed = self.samples.speed(elapsed, counts.bytes_copied);
-            let shown = self
+            let before = self
                 .held
                 .get()
                 .and_then(|held| Some((held.second, held.left?)));
             let left = self
                 .forecast
                 .left(elapsed, counts)
-                .map(|forecast| count_down(shown, second, forecast));
+                .map(|forecast| count_down(before, second, forecast));
             (speed, left)
         } else {
             (None, None)
@@ -1021,39 +1035,53 @@ fn whole_seconds(duration: Duration) -> u64 {
         .saturating_add(u64::from(duration.subsec_millis() >= 500))
 }
 
-/// The time left to show in `second` by the `forecast`: the one `shown` in an earlier second,
-/// less the seconds since, while that keeps within [`ETA_NEAR`] of the forecast. Beyond, it
-/// moves to the edge of that band, a tenth of the way for each second since while within
-/// [`ETA_SLACK`], halfway beyond: to the edge, not the forecast, so that it does not go in and
-/// out of the band, up and down, where the forecast goes down slower than the clock, and holds
-/// still where the forecast does. The forecast itself without one shown, or once the count is
-/// down to nothing. It keeps its fraction of a second, which shows rounded, so that a count
-/// shows a second less each second and a tenth of a small gap is not lost to the rounding.
-fn count_down(shown: Option<(u64, Duration)>, second: u64, forecast: Duration) -> Duration {
-    let Some((then, shown)) = shown else {
-        return forecast;
+/// The time left to show in `second` by the `forecast`, after the one shown `before`, in an
+/// earlier second.
+///
+/// The time at which the forecast says the job ends is smoothed, each second taking the
+/// [`ETA_SMOOTH`] part of the time left as long to follow: a forecast that is right says the
+/// same end every second, so its ups and downs even out and it does not lag behind. The one
+/// shown before, less the seconds since, shows while it keeps within [`ETA_NEAR`] of the
+/// forecast smoothed; else the nearer edge of that band, so that the time left counts down by
+/// the clock, follows the forecast without going up and down, and holds still where the
+/// forecast does. Beyond [`ETA_SLACK`] from the forecast, it moves halfway there for each second
+/// since, and the smoothing starts over from it. The forecast itself without one before, or once
+/// the count is down to nothing. It keeps its fraction of a second, which shows rounded.
+fn count_down(before: Option<(u64, Left)>, second: u64, forecast: Duration) -> Left {
+    let fresh = Left {
+        shown: forecast,
+        smooth: forecast,
+    };
+    let Some((then, before)) = before else {
+        return fresh;
     };
     let passed = second.saturating_sub(then);
-    let counted = shown.saturating_sub(Duration::from_secs(passed));
+    let counted = before.shown.saturating_sub(Duration::from_secs(passed));
     if counted.is_zero() {
-        return forecast;
+        return fresh;
     }
+    let times = i32::try_from(passed).unwrap_or(i32::MAX);
     let (from, to) = (counted.as_secs_f64(), forecast.as_secs_f64());
-    let off = (to - from).abs();
-    let keep: f64 = if off <= ETA_NEAR * to {
-        return counted;
-    } else if off <= ETA_SLACK * to {
-        0.9
-    } else {
-        0.5
-    };
-    let edge = if from > to {
-        to * (1.0 + ETA_NEAR)
-    } else {
-        to * (1.0 - ETA_NEAR)
-    };
-    let rest = keep.powi(i32::try_from(passed).unwrap_or(i32::MAX));
-    Duration::try_from_secs_f64(edge + (from - edge) * rest).unwrap_or(Duration::MAX)
+    if (to - from).abs() > ETA_SLACK * to {
+        let left = seconds(to + (from - to) * 0.5_f64.powi(times));
+        return Left {
+            shown: left,
+            smooth: left,
+        };
+    }
+    let lasting = (ETA_SMOOTH * to).clamp(1.0, ETA_HORIZON.as_secs_f64());
+    let smoothed = before.smooth.as_secs_f64() - float(passed);
+    let smooth = to + (smoothed - to) * (1.0 - 1.0 / lasting).powi(times);
+    let band = ETA_NEAR * smooth.max(0.0);
+    Left {
+        shown: seconds(from.clamp(smooth - band, smooth + band)),
+        smooth: seconds(smooth),
+    }
+}
+
+/// A time of so many seconds, none if less, and the longest there is if more.
+fn seconds(seconds: f64) -> Duration {
+    Duration::try_from_secs_f64(seconds.max(0.0)).unwrap_or(Duration::MAX)
 }
 
 /// A duration in whole seconds, as `M:SS`, or `H:MM:SS` from an hour on.
@@ -1399,74 +1427,102 @@ mod tests {
 
     #[test]
     fn the_time_left_counts_down_by_the_clock_near_the_forecast() {
-        let left = |shown: Option<(u64, u64)>, second, forecast_millis| {
-            let shown = shown.map(|(then, left)| (then, secs(left)));
-            whole_seconds(count_down(
-                shown,
-                second,
-                Duration::from_millis(forecast_millis),
-            ))
+        let before = |then, shown, smooth| {
+            let left = Left {
+                shown: secs(shown),
+                smooth: secs(smooth),
+            };
+            Some((then, left))
+        };
+        let left = |before, second, forecast_millis| {
+            let left = count_down(before, second, Duration::from_millis(forecast_millis));
+            (whole_seconds(left.shown), whole_seconds(left.smooth))
         };
         // The first is the forecast, in whole seconds.
-        assert_eq!(left(None, 10, 99_600), 100);
-        // Within 3% of it, a second less each second.
-        assert_eq!(left(Some((10, 100)), 11, 101_000), 99);
-        assert_eq!(left(Some((10, 100)), 11, 97_000), 99);
-        assert_eq!(left(Some((10, 100)), 13, 99_000), 97);
-        // Within a tenth, a tenth closer too each second to the edge of the 3%, up or down:
-        // 106 has its edge at 102.82, which 99 takes 0.38 of; 92 at 94.76.
-        assert_eq!(left(Some((10, 100)), 11, 106_000), 99);
-        assert_eq!(left(Some((10, 100)), 11, 92_000), 99);
-        assert_eq!(left(Some((10, 100)), 13, 105_000), 98);
-        // Beyond, halfway there each second.
-        assert_eq!(left(Some((10, 100)), 11, 151_000), 123);
-        assert_eq!(left(Some((10, 100)), 11, 39_000), 70);
-        assert_eq!(left(Some((10, 100)), 12, 178_000), 154);
+        assert_eq!(left(None, 10, 99_600), (100, 100));
+        // On time, a second less each second.
+        assert_eq!(left(before(10, 100, 100), 11, 99_000), (99, 99));
+        assert_eq!(left(before(10, 100, 100), 13, 97_000), (97, 97));
+        // The forecast a few seconds off for a second: it moves the smoothed one by less than
+        // a second, a fifteenth of the way, and the time left shown, within 1% of that, does not
+        // follow even where the smoothed one shows another second.
+        assert_eq!(left(before(10, 100, 100), 11, 103_000), (99, 99));
+        assert_eq!(left(before(10, 100, 100), 11, 95_000), (99, 99));
+        assert_eq!(left(before(10, 100, 100), 11, 109_500), (99, 100));
+        // Three seconds at once, as for a window not drawn: three steps of the smoothing take
+        // it to 98.59, whose band the count of 97 is below, so it shows the edge, 97.61.
+        assert_eq!(left(before(10, 100, 100), 13, 106_000), (98, 99));
+        // Six seconds more from then on: the time left shown comes to it, in step with the
+        // smoothed forecast, and within a minute is on time.
+        let mut last = before(11, 99, 99);
+        for second in 12..=71 {
+            let next = count_down(last, second, secs(105 - (second - 11)));
+            last = Some((second, next));
+        }
+        assert_eq!(left(last, 72, 44_000), (44, 44));
+        // Beyond a tenth, halfway there each second.
+        assert_eq!(left(before(10, 100, 100), 11, 151_000), (125, 125));
+        assert_eq!(left(before(10, 100, 100), 11, 39_000), (69, 69));
+        assert_eq!(left(before(10, 100, 100), 12, 178_000), (158, 158));
         // Counted down to nothing, the forecast.
-        assert_eq!(left(Some((10, 2)), 12, 30_000), 30);
-        assert_eq!(left(Some((10, 0)), 11, 30_000), 30);
+        assert_eq!(left(before(10, 2, 2), 12, 30_000), (30, 30));
+        assert_eq!(left(before(10, 0, 0), 11, 30_000), (30, 30));
         // Nothing overflows.
-        let far = count_down(Some((0, Duration::MAX)), 1, Duration::MAX);
-        assert!(far > secs(u64::MAX / 2));
+        let most = Left {
+            shown: Duration::MAX,
+            smooth: Duration::MAX,
+        };
+        let far = count_down(Some((0, most)), 1, Duration::MAX);
+        assert!(far.shown > secs(u64::MAX / 2));
     }
 
     #[test]
     fn a_time_left_shown_too_long_comes_down_to_the_forecast() {
         // 10:00 shown, where 9:15 are left and the forecast says so from then on.
-        let mut shown = secs(600);
+        let mut left = Left {
+            shown: secs(600),
+            smooth: secs(600),
+        };
         let mut steps = Vec::new();
-        for second in 11..=70 {
+        for second in 11..=100 {
             let forecast = secs(555 - (second - 10));
-            let next = count_down(Some((second - 1, shown)), second, forecast);
-            steps.push(whole_seconds(shown) - whole_seconds(next));
-            shown = next;
-            // Within half a minute it comes to the edge of the 3% around the forecast.
-            if second >= 40 {
-                let off = shown.abs_diff(forecast).as_secs_f64();
-                assert!(off <= forecast.as_secs_f64() * 0.035, "{second}: {shown:?}");
+            let next = count_down(Some((second - 1, left)), second, forecast);
+            steps.push(whole_seconds(left.shown) - whole_seconds(next.shown));
+            left = next;
+            // Within a minute it comes within 3% of the forecast.
+            if second >= 70 {
+                let off = left.shown.abs_diff(forecast).as_secs_f64();
+                assert!(off <= forecast.as_secs_f64() * 0.03, "{second}: {left:?}");
             }
         }
-        // Down all the way, a few seconds at a time at first, then by the clock, but for a
-        // second skipped now and then as the last hundredths of the gap round away.
-        assert_eq!(steps[0], 4, "10:00, then 9:56");
-        assert!(steps.iter().all(|step| (1..=6).contains(step)), "{steps:?}");
-        let skips = steps[40..].iter().filter(|step| **step != 1).count();
-        assert!(skips <= 2, "{steps:?}");
+        // Down all the way: by the clock at first, while the forecast smoothed comes down,
+        // then two seconds at a time or so, fewer as it comes near.
+        assert!(steps[..3].iter().all(|step| *step == 1), "{steps:?}");
+        assert!(steps.iter().all(|step| (1..=3).contains(step)), "{steps:?}");
+        let quick = steps[60..].iter().filter(|step| **step != 1).count();
+        assert!(quick <= 10, "{steps:?}");
     }
 
     #[test]
     fn a_time_left_holds_still_where_the_forecast_does() {
         // The forecast stays at 10:00, as when the pace falls as fast as the work goes: the
-        // time left shown never goes up, and comes to rest.
-        let mut shown = secs(600);
+        // time left shown never goes up, and comes to rest at the lower edge of 1% around the
+        // forecast smoothed, which keeps behind it by as much as it goes in half a minute.
+        let mut left = Left {
+            shown: secs(600),
+            smooth: secs(600),
+        };
         let mut seen = Vec::new();
-        for second in 1..=120 {
-            shown = count_down(Some((second - 1, shown)), second, secs(600));
-            seen.push(whole_seconds(shown));
+        for second in 1..=180 {
+            left = count_down(Some((second - 1, left)), second, secs(600));
+            seen.push(whole_seconds(left.shown));
         }
         assert!(seen.windows(2).all(|pair| pair[1] <= pair[0]), "{seen:?}");
-        assert!(seen[90..].iter().all(|left| *left == seen[119]), "{seen:?}");
-        assert!((570..582).contains(&seen[119]), "{seen:?}");
+        assert!(
+            seen[150..].iter().all(|left| *left == seen[179]),
+            "{seen:?}"
+        );
+        assert_eq!(seen[179], 565, "{seen:?}");
     }
 
     #[test]

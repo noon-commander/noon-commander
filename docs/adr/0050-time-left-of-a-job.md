@@ -65,20 +65,22 @@ are those after the review.
   neither its time nor its entries count, and the work behind it does not fade, so that Skip all
   over thousands of files, each found out by a round trip to the host, is no stall. Entries
   without data that are skipped cannot be told apart and count.
-- **The time left shown counts down by the clock** (`count_down`). Each second it is the one
-  shown before less a second, while that keeps within 3% of the forecast (`ETA_NEAR`), which the
-  forecast's own ups and downs over an uneven link mostly do. Beyond it, it moves to the edge of
-  that band: a tenth of the way each second up to a tenth from the forecast (`ETA_SLACK`), so
-  that it does not stay off for the rest of the job, 10:00 shown where 9:15 are left going 9:56,
-  9:53, … to within a little over 3% half a minute later; halfway each second beyond, up or
-  down, so that a lasting change shows within a few seconds without a jump. It moves to the edge
-  rather than to the forecast, as the whole way took it in and out of the band where the
-  forecast went down slower than the clock, the second shown going up and down (582, 583, 584,
-  583); to the edge, it holds still where the forecast does. The first one, and one counted down
-  to nothing, is the forecast. It keeps its fraction of a second
-  and shows rounded, so that a count shows a second less each second and a tenth of a small gap
-  is not lost to the rounding. With the clock it no longer jumps to and fro by a second or two,
-  which rounding a time left over a minute to five seconds hid before.
+- **The time left shown follows the end the forecast says, smoothed** (`count_down`). The time at
+  which the forecast says the job ends is smoothed, each second taking 15% of the time left as
+  long to follow, from a second to half a minute (`ETA_SMOOTH`, `ETA_HORIZON`). A forecast that
+  is right says the same end every second, so smoothing the end evens out its ups and downs
+  without lagging behind; one still settling, early in a short job, is soon followed.
+- **It counts down by the clock.** Each second it is the one shown before less a second, while
+  that keeps within 1% of the forecast smoothed (`ETA_NEAR`); else the nearer edge of that band.
+  So it follows the smoothed forecast without going up and down, and holds still where the
+  forecast does: 10:00 shown where 9:15 are left counts down by the clock for four seconds,
+  then two seconds at a time or so, fewer as it comes near, and is within 3% a minute later.
+  Beyond a tenth from the forecast (`ETA_SLACK`), it moves halfway there each second, up or
+  down, so that a lasting change shows within a few seconds without a jump, and the smoothing
+  starts over from it. The first one, and one counted down to nothing, is the forecast. It keeps
+  its fraction of a second and shows rounded, so that a count shows a second less each second.
+  With the clock it no longer jumps to and fro by a second or two, which rounding a time left
+  over a minute to five seconds hid before.
 - It all comes from the counts that jobs report (`Counts`), with no change to `noc-ops`.
 
 ## Consequences
@@ -86,15 +88,18 @@ are those after the review.
 - Over an uneven link the time left keeps within a few percent of the average pace while the
   speed swings by a fifth either way, and the one shown goes down by a second each second; tests
   check all three.
-- The time left shown keeps within a little over 3% of the forecast once it has caught up, never
-  going up where the forecast stands still; tests check that and the catching up. In the
-  simulator it is off by 1 to 4% of the time that is left for real trees on jobs of minutes,
-  and by 4 to 8% on jobs of under a minute, which end before it has caught up. Counting down
-  alone kept the error of its start, 5 to 10%, for the whole job; moving all the way to the
-  forecast was off by 1 to 6%, but went up and down where the forecast went down slower than
-  the clock. Where the forecast itself drifts by more, as over a link whose speed jumps every
-  second, it follows: about one second in eight goes down by other than one. A band of 5%
-  halved that but doubled the error elsewhere.
+- The time left shown keeps within 1% of the forecast smoothed, never going up where the
+  forecast stands still; tests check that and the catching up. Where the forecast stands still
+  for minutes, it comes to rest below it by what the forecast moves in the half minute the
+  smoothing takes, and 1% more: 9:25 for 10:00. In the
+  simulator it is off by 1.3 to 3.7% of the time that is left for real trees on jobs of minutes,
+  and by 2 to 4% on jobs of under a minute, where it moved to the edge of a band of 3% around
+  the forecast itself before, and was off by 1 to 4% and by 4 to 8%. Over all the simulator's
+  cases a second goes down by other than one a fifth less often, and the time left goes up a
+  third less often. Counting down alone kept the error of its start, 5 to 10%, for the whole
+  job; moving all the way to the forecast went up and down where the forecast went down slower
+  than the clock; smoothing the end alone, with no band, was a little nearer but went down by
+  other than one twice as often.
 - In the simulator, the forecast keeps within 1 to 3% of the time that is left for files of
   sizes spread as in real trees, with directories and empty files among them, locally and on a
   host; through Skip all over 5,000 files on a host it falls as they leave the work, where it grew
@@ -110,7 +115,7 @@ are those after the review.
   work forgetting the other's cost, and each way to the costs.
 - With five seconds for every pause, a link that sent a chunk every eight seconds, and a disk
   that blocked for twelve every 64 MiB, showed `-:--` half the time and a time left short by 37
-  and 59%; now only their first pause is unknown, and the time left keeps within 4 and 7%, and
+  and 59%; now only their first pause is unknown, and the time left keeps within 4 and 8%, and
   within 7 to 8% where each file takes 6 to 9 seconds to open, rather than 13 to 39%.
   After a stall of a minute and a half the time left is within 2% at once, where the five
   seconds of it that counted made it a fifth too long. Tests check both, and the stall.

@@ -200,17 +200,17 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
 
 ### Location menu
 
-`g l` opens a menu over the active panel, and Ctrl+x `g l` over the other one, as Far Manager's
+`g l` opens a menu for the active panel, and Ctrl+x `g l` for the other one, as Far Manager's
 Alt+F1 and Alt+F2 open its menus to change the drive of the left or the right panel (F9 → Left or
 Right → Change location too). noc binds no Alt+F1 and Alt+F2, which desktops take
 ([ADR 0049](adr/0049-menus-of-a-panel-keep-the-active-panel.md)), and names the panel as active or
 other, not by its side ([ADR 0051](adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md)). The
-title says the side where the panel is drawn, as in Far: after Ctrl+w x, the menu of the right
-panel, drawn on the left, says Left. It is the one place to choose a volume or a host, grouped
-under headings:
+menu is centered over both panels, as every window is, and its title, Location, names no side:
+the panel drawn active is the one it changes, after Ctrl+x the other one. It is the one place to
+choose a volume or a host, grouped under headings:
 
 ```text
- ╔════════════════════ Left ════════════════════╗
+ ╔══════════════════ Location ══════════════════╗
  ║ Filter:                                    ~ ║
  ╟──────────────────────────────────────────────╢
  ║ Favorites                                    ║
@@ -330,7 +330,7 @@ menu:
 
 ### Go to directory
 
-`g d`, as mc's Quick cd, asks for a path in a dialog over the active panel, or after Ctrl+x over
+`g d`, as mc's Quick cd, asks for a path in a dialog for the active panel, or after Ctrl+x for
 the other one, as the [location menu](#location-menu) does, and opens the path in that panel, as
 `cd` in a shell reads it: relative to the panel's directory, `/…` absolute, `~` and `~/…` the home
 directory, `..` and `.` resolved by name, `-` the directory the tab showed before, and
@@ -338,7 +338,7 @@ directory, `..` and `.` resolved by name, `-` the directory the tab showed befor
 and `~` is the remote home. [Completion](#completion) reads from the panel's directory too.
 `cd ..` puts the cursor on the directory left, as `h` does; a
 path that is not there leaves the panel where it is, with the reason below the listing. The Go to
-button of a listing that failed opens it over the panel that failed. It is in F9 → Command.
+button of a listing that failed opens it for the panel that failed. It is in F9 → Command.
 
 ### Completion
 
@@ -380,7 +380,7 @@ line](#command-line-of--and-), as vim's command line completes with defaults.vim
 
 [zoxide](https://github.com/ajeetdsouza/zoxide) ranks the directories the user works in
 ([ADR 0012](adr/0012-external-tools-and-zoxide.md)). `g z` opens a window of its best
-directories over the active panel, or after Ctrl+x over the other one, as the
+directories for the active panel, or after Ctrl+x for the other one, as the
 [location menu](#location-menu) does; Enter opens the directory in that panel:
 
 ```text
@@ -613,8 +613,8 @@ goes to the filter, in Insert mode. There are no digit hotkeys.
 - All share `tui/picker.rs` ([ADR 0040](adr/0040-one-picker-for-every-list.md)): the filter, a
   text field with a cursor (`dialog::Field`), drawn in the colors of the fields of dialogs after
   its prompt (`search::Mark::render_field`), which matches in the
-  [search mode](#search-modes); the cursor, scrolling, the mouse, and the box, which the menus
-  and the zoxide window draw over their panel and the other windows over both. The only lines
+  [search mode](#search-modes); the cursor, scrolling, the mouse, and the box, which each draws
+  centered over both panels, the menus of one panel and the zoxide window too. The only lines
   across a list are under the filter and over the whole row under the cursor, and they join the
   frame (`╟───╢`) as the line
   over the buttons of a dialog does; a heading is its text alone, in the color of titles. Each
@@ -661,8 +661,9 @@ row and names the tab that shows by its whole location:
   and cursor, without marks; `t c` closes the tab that shows (the last one stays), and the next
   one shows. `g t` and `g T`, or `] t` and `[ t`, go round the tabs, and `g t` with a count goes
   to the tab of that number, as in vim; `t t` opens the tab menu of the active panel, as vim's
-  `:tabs` lists them: the tabs with their whole locations, over that panel, to show one, under
-  the title of the side it is drawn on, `Left tabs` or `Right tabs`, after Ctrl+w x too. Ctrl+x
+  `:tabs` lists them: the tabs with their whole locations, centered over both panels, to show
+  one, under the title `Tabs`, which names no side; it grows with the widest location up to the
+  width of the other lists, 76 cells. Ctrl+x
   before `t t`, `t n`, `t c`, `g t`, and `g T` does it in the other panel, with a count after
   Ctrl+x (`Ctrl+x 2g t`), as before any command. `d d` and F8 (`close_tab`) close the tab under
   the cursor there as `t c`
@@ -1452,7 +1453,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   and needs nothing of its own. `App::come_back` gives the keys back once the panel has them in
   Normal mode with nothing in front and no program to hand the terminal to: after the key, or, as
   the event loop asks before each frame, once the mouse closed its window or the program it ran
-  returned. Windows of a panel open over it, so after Ctrl+x over the other one.
+  returned. Windows of a panel open centered over both, as every window does; the panel drawn
+  active, after Ctrl+x the other one, says which they act on.
 - **Quick search.** `/` starts quick search, typed as vim's search, in Insert mode, and `?` starts
   it up the rows; typing in a panel in Normal mode does nothing but its commands, and `i`, `!`, and
   `:` open the [command line](#command-line-of--and-). As vim's search, it looks from the row after
@@ -1758,8 +1760,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   counts only if its first click left the same thing in front, so one that closed a menu or
   a dialog does not reach what is under it. While the mouse is captured, the terminal selects
   text with a modifier held: Shift in most terminals, Option in iTerm2.
-- **Dialogs.** Modal and centered over the panels, but Go to directory and those of `g +` and
-  `g -` over their panel (`Purpose::over`), with mc-style buttons: `[< OK >]` marks the default
+- **Dialogs.** Modal and centered over the panels, those for one panel too, such as Go to
+  directory and those of `g +` and `g -`, with mc-style buttons: `[< OK >]` marks the default
   one, and a line across the dialog (`╟───╢`, or `├───┤` with single lines) sets the buttons apart
   from what is above them, in every dialog and window. A dialog has a message, radio buttons (`(*)`
   on the chosen one), text fields, check boxes, and buttons, each optional but the buttons;

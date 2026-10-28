@@ -1,9 +1,9 @@
 //! The zoxide window of `g z`: the directories zoxide ranks highest for the keywords typed,
 //! best first, as `z foo bar` picks them in a shell, in the plain search mode; or
 //! all of them, filtered by what is typed, as fzf ranks them or as a regular expression in
-//! zoxide's order. A list as the others, on [`Picker`], over the active panel, as the location
-//! menu is over its panel: it opens in Insert mode, as `zi` does, and Esc goes to the rows, where
-//! `/` types the keywords again; Enter opens one in that panel.
+//! zoxide's order. A list as the others, on [`Picker`], centered over both panels, for the active
+//! one: it opens in Insert mode, as `zi` does, and Esc goes to the rows, where `/` types the
+//! keywords again; Enter opens one in that panel.
 
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
@@ -201,7 +201,7 @@ impl JumpMenu {
         }
     }
 
-    /// Draws the window centered over `area`, its panel: the keywords, then the directories
+    /// Draws the window centered over `area`, the panels: the keywords, then the directories
     /// with their scores, scrolled to the cursor, and the whole directory under the cursor below
     /// them.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, spin: &Spin) {

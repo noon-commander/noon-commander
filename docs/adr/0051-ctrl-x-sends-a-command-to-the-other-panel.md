@@ -2,8 +2,9 @@
 
 - Status: Accepted
 - Date: 2026-10-28
-- Amends: [ADR 0021](0021-location-menu-replaces-the-virtual-root.md),
-  [ADR 0022](0022-vim-modes.md), [ADR 0049](0049-menus-of-a-panel-keep-the-active-panel.md)
+- Amends: [ADR 0011](0011-tabs-per-panel.md),
+  [ADR 0021](0021-location-menu-replaces-the-virtual-root.md), [ADR 0022](0022-vim-modes.md),
+  [ADR 0049](0049-menus-of-a-panel-keep-the-active-panel.md)
 
 ## Context
 
@@ -15,8 +16,8 @@ F9 → Left and Right the commands of either
 
 Only the two menus could reach the other panel. `g d` and `g z`, which choose where a panel goes as
 well, could not: sending the other panel to a path typed, or to a directory of zoxide, took Tab,
-the command, and Tab back. Go to directory and the zoxide window were drawn over both panels, so
-nothing on screen said which panel they would send.
+the command, and Tab back. Go to directory and the zoxide window were drawn over both panels, for
+the active one; for the other panel, something on screen has to say which panel they send.
 
 The sides were not the same side, either. `t h` named the left panel, wherever it was drawn, and
 Ctrl+w 1 the panel drawn on the left, so after Ctrl+w x, `t h` opened the tabs of the panel drawn
@@ -62,12 +63,13 @@ many layouts.
   Ctrl+w 1, Ctrl+w 2, `t h`, and `t l` are bound nowhere. Ctrl+w keeps the panels as vim's
   windows: Ctrl+w w, Ctrl+w Ctrl+w, Ctrl+w p, Ctrl+w h, Ctrl+w l, Ctrl+w x, Ctrl+w r, Ctrl+w f,
   and Ctrl+w v.
-- **The windows of a panel open over it**, as the location menu does: the tab menu, Go to directory
-  (after `g d`, and after the Go to button of a listing that failed), the zoxide window, and the
-  dialogs of `g +` and `g -`, which were over both. After Ctrl+x they open over the other panel,
-  which has the keys.
-- **Titles name the side where the panel is drawn**: the tab menu says Left tabs or Right tabs,
-  after Ctrl+w x too, as the location menu says Left or Right.
+- **Every window opens centered over both panels, those of one panel too**: the location menu, the
+  tab menu, Go to directory (after `g d`, and after the Go to button of a listing that failed), the
+  zoxide window, and the dialogs of `g +` and `g -`. The panel drawn active says which one they act
+  on: after Ctrl+x, the other one, which has the keys. A window is where every other one is,
+  whichever panel it is for.
+- **Titles name no side**: the location menu says Location and the tab menu Tabs, after Ctrl+w x
+  too.
 - **F9 → Left and Right act on the panel drawn on their side**, as before, and show the keys that
   do the same from the active panel: in its menu the keys as they are, `g l` for Change location…
   and `t t` for Tab list…, and in the other's Ctrl+x and the key, `Ctrl+x g l` and `Ctrl+x t t`;
@@ -84,7 +86,9 @@ many layouts.
   the active one, and commands need nothing of their own for it.
 - The location menu, the tab menu, Go to directory, and the zoxide window are named as the active
   or the other panel, not by a side, so Ctrl+w x changes nothing about which panel a key reaches.
-- Far's users lose the keys of a side; F9 → Left and Right keep them.
+- Far's users lose the keys of a side; F9 → Left and Right keep them. Far draws its menu of drives
+  over its panel; noc's location menu is where every window is, and the frame of the active panel
+  says which one it changes.
 - Reaching the other panel's location menu takes three keys, Ctrl+x `g l`, where Ctrl+w 2 took two.
 - mc's users know Ctrl+x as the prefix of mc's commands of files (chmod, links), which noc keeps
   under `f` ([ADR 0022](0022-vim-modes.md)); after Ctrl+x a letter does what it does in the other

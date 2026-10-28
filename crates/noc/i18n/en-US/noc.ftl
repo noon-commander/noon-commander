@@ -181,9 +181,8 @@ picker-not-regex = Not a regular expression: { $reason }
 ## The location menu of g l, and of Ctrl+x g l for the other panel (src/tui/menu), as Far
 ## Manager's menu to change drives. Prefix: menu-.
 
-# Titles: the side of the panel the menu changes, as it is drawn.
-menu-left = Left
-menu-right = Right
+# The title. The menu is centered over both panels; the one it changes is drawn active.
+menu-title = Location
 # Headings of the groups of places.
 menu-favorites = Favorites
 menu-mounts = Mounts
@@ -271,10 +270,9 @@ find-errors = { $count ->
 
 ## Tabs (src/tui/tabs, src/tui/app). Prefix: tabs-. Each side has tabs of its own.
 
-# Titles of the tab menu of t t, drawn over the panel whose tabs it lists, by the side it is
-# drawn on; each row is where a tab is.
-tabs-title-left = Left tabs
-tabs-title-right = Right tabs
+# The title of the tab menu of t t, centered over both panels; the panel whose tabs it lists is
+# drawn active. Each row is where a tab is.
+tabs-title = Tabs
 
 ## Workspaces (src/tui/workspaces, src/tui/app): the tabs of both panels, saved under a name in
 ## workspaces.toml. Prefix: workspaces-.

@@ -95,8 +95,6 @@ impl Item<'_> {
 #[derive(Debug)]
 pub(crate) struct LocationMenu {
     side: Side,
-    /// Where the panel is drawn, which the title names: the other side after Ctrl+w x.
-    drawn: Side,
     contents: Contents,
     /// The listing; its lines are those with every group as it opens.
     loading: Loading,
@@ -125,7 +123,6 @@ impl LocationMenu {
     pub(crate) fn new(side: Side, current: Location, home: PathBuf, generation: u64) -> Self {
         let mut menu = Self {
             side,
-            drawn: side,
             contents: Contents {
                 current,
                 home,
@@ -151,12 +148,6 @@ impl LocationMenu {
     /// The same menu, with the hosts and volumes in `recent` first in their groups.
     pub(crate) fn recent(mut self, recent: &Recent) -> Self {
         self.contents.recent = recent.clone();
-        self
-    }
-
-    /// The same menu, for a panel drawn on `drawn`, which the title names.
-    pub(crate) fn drawn(mut self, drawn: Side) -> Self {
-        self.drawn = drawn;
         self
     }
 
@@ -364,7 +355,7 @@ impl LocationMenu {
         lines
     }
 
-    /// Draws the menu over `area`, the panel it is for: the filter, then the rows, scrolled to
+    /// Draws the menu centered over `area`, the panels: the filter, then the rows, scrolled to
     /// the cursor.
     pub(crate) fn render(
         &mut self,
@@ -378,10 +369,7 @@ impl LocationMenu {
         let rows = self.contents.rows();
         let items = self.picker.shown(rows.into_iter().map(|(item, _)| item));
         let lines = Self::lines(&items, self.picker.ranked());
-        let title = match self.drawn {
-            Side::Left => fl!("menu-left"),
-            Side::Right => fl!("menu-right"),
-        };
+        let title = fl!("menu-title");
         let message = (self.loading.error())
             .filter(|_| !self.loading.loaded())
             .map(str::to_owned);
@@ -1125,16 +1113,16 @@ mod tests {
         let text = draw(&mut loading, 10);
         let title = text
             .lines()
-            .find(|line| line.contains("Right"))
+            .find(|line| line.contains("Location"))
             .unwrap_or_default();
-        assert!(title.contains("═ … Right ═"), "{text}");
+        assert!(title.contains("═ … Location ═"), "{text}");
         loading.listed(1, Ok(places()));
         let listed = draw(&mut loading, 10);
         let still = listed
             .lines()
-            .find(|line| line.contains("Right"))
+            .find(|line| line.contains("Location"))
             .unwrap_or_default();
-        let column = |line: &str| line.find(" Right ").map(|at| line[..at].chars().count());
+        let column = |line: &str| line.find(" Location ").map(|at| line[..at].chars().count());
         assert_eq!(column(title), column(still), "the title stays in place");
     }
 
@@ -1182,14 +1170,14 @@ mod tests {
         menu.reload(2);
         assert!(menu.wait().is_some());
         let text = draw(&mut menu, 16);
-        assert!(text.contains("═ … Left ═"), "{text}");
+        assert!(text.contains("═ … Location ═"), "{text}");
         assert!(text.contains("Prod"), "the rows stay: {text}");
 
         menu.listed(1, Ok(places()));
         assert!(menu.wait().is_some(), "an older listing changes nothing");
         menu.listed(2, Ok(places()));
         assert!(menu.wait().is_none());
-        assert!(!draw(&mut menu, 16).contains("… Left"));
+        assert!(!draw(&mut menu, 16).contains("… Location"));
 
         menu.reload(3);
         menu.listed(3, Err("no ssh config".to_owned()));
@@ -1210,7 +1198,7 @@ mod tests {
         menu.reload(2);
         assert!(menu.wait().is_some());
         let text = draw(&mut menu, 10);
-        assert!(text.contains("═ … Left ═"), "{text}");
+        assert!(text.contains("═ … Location ═"), "{text}");
         assert!(!text.contains("no ssh config"), "{text}");
     }
 }

@@ -473,18 +473,6 @@ enum Purpose {
     Info,
 }
 
-impl Purpose {
-    /// The side of the panel the dialog is drawn over, as the location menu is: those of Go to
-    /// directory and of `g +` and `g -`, which are for one panel. The others are drawn over
-    /// both.
-    fn over(&self) -> Option<Side> {
-        match self {
-            Self::GoToDir { panel } | Self::Pattern { panel, .. } => Some(panel.side),
-            _ => None,
-        }
-    }
-}
-
 /// What a dialog about workspaces is for.
 #[derive(Debug)]
 enum WorkspaceQuestion {
@@ -866,11 +854,11 @@ pub(crate) struct App {
     help_spot: Spot,
     /// What the About page of the help tells.
     about: About,
-    /// The location menu of `g l`, over its panel and under the dialogs.
+    /// The location menu of `g l`, over the panels and under the dialogs.
     menu: Option<LocationMenu>,
     /// The generation of the last listing for the menu.
     menu_listings: u64,
-    /// The tab menu of `t t`, over its panel and under the dialogs.
+    /// The tab menu of `t t`, over the panels and under the dialogs.
     tab_menu: Option<TabMenu>,
     /// Tab completion in the dialog in front, or on the command line.
     completion: Option<Completing>,
@@ -2696,13 +2684,12 @@ impl App {
         self.route(id, request)
     }
 
-    /// Opens the tab menu for the panel on `side`, which lists where its tabs are, over it.
+    /// Opens the tab menu for the panel on `side`, which lists where its tabs are.
     fn open_tab_menu(&mut self, side: Side) {
         let titles = self.tab_titles(side);
         let input = self.search_opens(Slot::TabMenu);
         let current = self.tabs(side).index();
-        let drawn = if self.swapped { side.other() } else { side };
-        self.tab_menu = Some(TabMenu::new(side, titles, current, input).drawn(drawn));
+        self.tab_menu = Some(TabMenu::new(side, titles, current, input));
     }
 
     /// Where the tabs on `side` are, as the tab menu lists them.
@@ -3390,9 +3377,7 @@ impl App {
         self.menu_listings += 1;
         let generation = self.menu_listings;
         let current = self.panel(side).location().clone();
-        let drawn = if self.swapped { side.other() } else { side };
         let mut menu = LocationMenu::new(side, current, self.home.clone(), generation)
-            .drawn(drawn)
             .with_input(self.search_opens(Slot::LocationMenu))
             .recent(&self.recent)
             .lines_like(self.sizes.menu);
@@ -3901,7 +3886,7 @@ impl App {
         }
     }
 
-    /// Opens the zoxide window for the active panel, over it, and asks zoxide for its best
+    /// Opens the zoxide window for the active panel, and asks zoxide for its best
     /// directories; in a search mode but the plain one, for all of them, which the window
     /// filters itself.
     fn open_jump(&mut self) -> Vec<Effect> {
@@ -6121,7 +6106,7 @@ impl App {
         self.ask_go_to_in(self.shown(self.active), "");
     }
 
-    /// Opens Go to directory for `panel`, over it, with `text` typed.
+    /// Opens Go to directory for `panel`, with `text` typed.
     fn ask_go_to_in(&mut self, panel: PanelId, text: &str) {
         let (title, prompt) = (fl!("goto-title"), fl!("goto-prompt"));
         let dialog = Dialog::form(&title, &prompt, text, &[]).with_completion();
@@ -6424,7 +6409,7 @@ impl App {
         });
     }
 
-    /// Opens the dialog of `g +` (`mark`) or `g -` for the active panel, over it, as mc's `+`
+    /// Opens the dialog of `g +` (`mark`) or `g -` for the active panel, as mc's `+`
     /// and `-`: a pattern, and whether it applies to files only and whether case counts.
     fn ask_pattern(&mut self, mark: bool) {
         let title = if mark {
@@ -7225,9 +7210,9 @@ impl App {
         if self.viewing.is_none() {
             // On the menu bar, or on the top line of the panels without it.
             self.render_jobs(frame, menu_bar);
-            self.render_menus(frame, [left, right], (&hosts, &spin), &mut stage);
+            self.render_menus(frame, panels, (&hosts, &spin), &mut stage);
         }
-        self.render_windows(frame, ([left, right], panels), &spin, &mut stage);
+        self.render_windows(frame, panels, &spin, &mut stage);
         self.render_command_choices(frame, command_line, &prompt_text);
         if let Some(window) = &mut self.key_hints {
             stage.show(
@@ -7255,16 +7240,16 @@ impl App {
         )
     }
 
-    /// The windows of a panel, over it on its side of `sides`: the location menu, the tab menu,
-    /// and the zoxide window, which is the active panel's; they grow and shrink on `stage`.
+    /// The windows of a panel, centered over `panels` as every window is: the location menu,
+    /// the tab menu, and the zoxide window, which is the active panel's; they grow and shrink
+    /// on `stage`.
     fn render_menus(
         &mut self,
         frame: &mut Frame<'_>,
-        sides: [Rect; 2],
+        panels: Rect,
         (hosts, spin): (&dyn Fn(&str) -> HostState, &Spin),
         stage: &mut Stage,
     ) {
-        let over = |side| over_side(sides, side);
         let (theme, decor) = (&self.theme, self.decor);
         if let Some(menu) = &mut self.menu {
             let side = menu.side();
@@ -7272,7 +7257,7 @@ impl App {
                 frame,
                 (zoom::Window::Menu(side), Grows::FromMiddle),
                 |frame| {
-                    menu.render(frame, over(side), theme, decor, hosts, spin);
+                    menu.render(frame, panels, theme, decor, hosts, spin);
                 },
             );
         }
@@ -7282,7 +7267,7 @@ impl App {
                 frame,
                 (zoom::Window::TabMenu(side), Grows::FromMiddle),
                 |frame| {
-                    menu.render(frame, over(side), theme);
+                    menu.render(frame, panels, theme);
                 },
             );
         }
@@ -7292,7 +7277,7 @@ impl App {
                 frame,
                 (zoom::Window::Jump(side), Grows::FromMiddle),
                 |frame| {
-                    jump.render(frame, over(side), theme, spin);
+                    jump.render(frame, panels, theme, spin);
                 },
             );
         }
@@ -7347,13 +7332,13 @@ impl App {
         }
     }
 
-    /// The windows over `panels`, those in front last: the workspaces, the Configuration
-    /// dialog, the help, the jobs, the checksums, and the dialogs, but a dialog for one panel,
-    /// over that panel of `sides`; they grow and shrink on `stage`.
+    /// The windows centered over `panels`, those in front last: the workspaces, the
+    /// Configuration dialog, the help, the jobs, the checksums, and the dialogs, those for one
+    /// panel too; they grow and shrink on `stage`.
     fn render_windows(
         &mut self,
         frame: &mut Frame<'_>,
-        (sides, panels): ([Rect; 2], Rect),
+        panels: Rect,
         spin: &Spin,
         stage: &mut Stage,
     ) {
@@ -7404,21 +7389,17 @@ impl App {
             });
         }
         if let Some(open) = self.dialogs.front() {
-            let area = match open.purpose.over() {
-                Some(side) if self.viewing.is_none() => over_side(sides, side),
-                _ => panels,
-            };
             stage.show(
                 frame,
                 middle(zoom::Window::Dialog(open.dialog.id())),
                 |frame| {
-                    open.dialog.render(frame, area, theme);
+                    open.dialog.render(frame, panels, theme);
                 },
             );
             if let Some(choices) = choices_for(&mut self.completion, Completes::Field)
                 && let Some(field) = open.dialog.field_area()
             {
-                choices.render(frame, field, area, &self.theme);
+                choices.render(frame, field, panels, &self.theme);
             }
         }
     }
@@ -7964,14 +7945,6 @@ fn file_name(location: &Location) -> Option<Vec<u8>> {
     match location {
         Location::Local(path) => path.file_name().map(|name| name.as_bytes().to_vec()),
         Location::Remote { path, .. } => path.file_name().map(<[u8]>::to_vec),
-    }
-}
-
-/// The area of the panel on `side`, of the areas of the left and the right panel.
-fn over_side([left, right]: [Rect; 2], side: Side) -> Rect {
-    match side {
-        Side::Left => left,
-        Side::Right => right,
     }
 }
 
@@ -10039,23 +10012,17 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_x_g_plus_and_g_minus_mark_in_the_other_panel_over_it() {
+    fn ctrl_x_g_plus_and_g_minus_mark_in_the_other_panel() {
         let mut app = with_files(&["a.md", "b.txt", "c.md"]);
         app.handle(action(Action::Select));
         let text = screen_of(&mut app, 16);
-        assert!(
-            column_of(&text, "Select").is_some_and(|column| column < 80),
-            "over the active panel: {text}"
-        );
+        assert!(in_the_middle(&text, " Select "), "{text}");
         app.handle(action(Action::Cancel));
 
         assert!(keys(&mut app, &["ctrl-x", "g", "+"]).is_empty());
         assert_eq!(app.active, Side::Right, "the other panel has the keys");
         let text = screen_of(&mut app, 16);
-        assert!(
-            column_of(&text, "Select").is_some_and(|column| column > 80),
-            "over the other panel: {text}"
-        );
+        assert!(in_the_middle(&text, " Select "), "there too: {text}");
         retype(&mut app, "*.md");
         keys(&mut app, &["enter"]);
         assert_eq!(chosen_names(&app, Side::Right), ["a.md", "c.md"]);
@@ -10064,10 +10031,7 @@ mod tests {
 
         on_other(&mut app, Action::Unselect);
         let text = screen_of(&mut app, 16);
-        assert!(
-            column_of(&text, "Unselect").is_some_and(|column| column > 80),
-            "{text}"
-        );
+        assert!(in_the_middle(&text, " Unselect "), "{text}");
         retype(&mut app, "a*");
         keys(&mut app, &["enter"]);
         assert_eq!(chosen_names(&app, Side::Right), ["c.md"]);
@@ -12329,8 +12293,8 @@ mod tests {
         assert_eq!(app.context(), Context::LocationMenu);
         let text = screen_of(&mut app, 14);
         assert!(
-            text.contains("Right") && text.contains("/Volumes/USB"),
-            "{text}"
+            in_the_middle(&text, " Location ") && text.contains("/Volumes/USB"),
+            "centered over both panels, for the other one: {text}"
         );
         assert!(
             text.contains("8Disconn") && text.contains("10Cancel"),
@@ -12374,14 +12338,16 @@ mod tests {
     }
 
     #[test]
-    fn the_menus_of_a_panel_name_the_side_it_is_drawn_on_after_ctrl_w_x() {
+    fn the_menus_of_a_panel_name_no_side_and_reach_it_after_ctrl_w_x() {
         let mut app = loaded();
         app.handle(action(Action::SwapPanels));
         open_menu(&mut app, Side::Right);
         let text = screen_of(&mut app, 14);
-        let title = line_with(&text, "Left");
-        let column = title.chars().take_while(|c| *c != 'L').count();
-        assert!(column < 80, "titled Left, over the left half: {text}");
+        assert!(in_the_middle(&text, " Location "), "{text}");
+        assert!(
+            !text.contains(" Left ") && !text.contains(" Right "),
+            "{text}"
+        );
         let Effect::List {
             panel: PanelId { side, .. },
             ..
@@ -12389,16 +12355,12 @@ mod tests {
         else {
             panic!("expected a listing");
         };
-        assert_eq!(side, Side::Right, "the right panel is drawn on the left");
+        assert_eq!(side, Side::Right, "the right panel, drawn on the left");
 
         assert!(on_other(&mut app, Action::TabList).is_empty());
         let text = screen_of(&mut app, 14);
-        let title = line_with(&text, "Left tabs");
-        let column = title.chars().take_while(|c| *c != 'L').count();
-        assert!(
-            !title.is_empty() && column < 80,
-            "the tabs too, over the left half: {text}"
-        );
+        assert!(in_the_middle(&text, " Tabs "), "the tabs too: {text}");
+        assert!(!text.contains("Left tabs") && !text.contains("Right tabs"));
         assert_eq!(app.tab_menu.as_ref().map(TabMenu::side), Some(Side::Right));
     }
 
@@ -13598,7 +13560,7 @@ mod tests {
         answer(&mut app, effects, &Listing::Dir(Vec::new()));
         app.handle(action(Action::TabList));
         let text = screen_of(&mut app, 16);
-        assert!(text.contains("Left tabs"), "{text}");
+        assert!(in_the_middle(&text, " Tabs "), "{text}");
         assert!(
             text.contains("║ /srv ") && text.contains("║ /srv/left "),
             "{text}"
@@ -13645,13 +13607,9 @@ mod tests {
         on_other(&mut app, Action::TabList);
         assert_eq!(app.context(), Context::TabMenu);
         let text = screen_of(&mut app, 16);
-        let title = text.lines().find_map(|line| {
-            let at = line.find("Right tabs")?;
-            Some(line[..at].chars().count())
-        });
         assert!(
-            title.is_some_and(|column| column > 80),
-            "over the right panel: {text}"
+            in_the_middle(&text, " Tabs "),
+            "centered over both panels, as for the active one: {text}"
         );
         assert!(keys(&mut app, &["enter"]).is_empty());
         assert!(app.tab_menu.is_none());
@@ -15117,22 +15075,26 @@ mod tests {
             .find_map(|line| Some(line[..line.find(needle)?].chars().count()))
     }
 
+    /// Whether the first line of `text` that holds `needle` has it in the middle of the screen
+    /// of [`screen_at`], as a window centered over both panels has its title.
+    fn in_the_middle(text: &str, needle: &str) -> bool {
+        let width = needle.chars().count();
+        column_of(text, needle).is_some_and(|column| (column + width / 2).abs_diff(80) <= 1)
+    }
+
     #[test]
-    fn ctrl_x_g_d_goes_in_the_other_panel_from_where_it_is_over_it() {
+    fn ctrl_x_g_d_goes_in_the_other_panel_from_where_it_is() {
         let mut app = loaded();
         app.handle(action(Action::GoToDir));
         let text = screen_of(&mut app, 16);
-        assert!(
-            column_of(&text, "Go to directory").is_some_and(|column| column < 80),
-            "over the active panel: {text}"
-        );
+        assert!(in_the_middle(&text, " Go to directory "), "{text}");
         app.handle(action(Action::Cancel));
 
         assert!(on_other(&mut app, Action::GoToDir).is_empty());
         let text = screen_of(&mut app, 16);
         assert!(
-            column_of(&text, "Go to directory").is_some_and(|column| column > 80),
-            "over the other panel: {text}"
+            in_the_middle(&text, " Go to directory "),
+            "there too: {text}"
         );
         type_text(&mut app, "right");
         let effects = keys(&mut app, &["enter"]);
@@ -15173,7 +15135,7 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_x_g_z_jumps_in_the_other_panel_over_it() {
+    fn ctrl_x_g_z_jumps_in_the_other_panel() {
         let mut app = recording();
         app.config.ui.default_search_mode = SearchMode::Plain;
         on_other(&mut app, Action::GoToDir);
@@ -15205,10 +15167,7 @@ mod tests {
             }]),
         );
         let text = screen_of(&mut app, 12);
-        assert!(
-            column_of(&text, "zoxide").is_some_and(|column| column > 80),
-            "over the other panel: {text}"
-        );
+        assert!(in_the_middle(&text, " zoxide "), "{text}");
         let effects = keys(&mut app, &["enter"]);
         assert_eq!(zoxide_adds(&effects), [PathBuf::from("/opt/scripts")]);
         let effects = without_zoxide(effects);

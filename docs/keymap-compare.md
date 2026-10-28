@@ -199,7 +199,7 @@ section says: the commands of files act on the rows it selects, which become the
 | Close this tab; the last one stays | `close_tab` | ✅ | t c<br>g c | — | — | — | Ctrl+w<br>g c |
 | The next tab in this panel; after a count, the tab of that number | `next_tab` | ⏳ | g t<br>] t | — | — | ] | Tab<br>Alt+Right<br>g t |
 | The previous tab in this panel | `prev_tab` | ⏳ | g T<br>[ t | — | — | [ | Shift+Tab<br>Alt+Left<br>g T |
-| The tabs of this panel, in a menu over it, to choose one; the keys stay with the active panel | `tab_list` | ⏳ | t t | — | — | — | — |
+| The tabs of this panel, in a menu, to choose one; the keys stay with the active panel | `tab_list` | ⏳ | t t | — | — | — | — |
 | The saved workspaces: restore, rename, or delete one | `workspaces` | ✅ | t w | — | — | — | — |
 | Save the tabs of both panels as a workspace | `save_workspace` | ✅ | t W | — | — | — | — |
 | Show or hide names that start with a dot | `toggle_hidden` | ✅ | o h | Alt+. | Ctrl+h | . | z h<br>Ctrl+h<br>Backspace |
@@ -233,7 +233,7 @@ section says: the commands of files act on the rows it selects, which become the
 | The command history | `command_history` | ✅ | q : | Alt+h | Alt+F8 | — | — |
 | Jump to a directory that zoxide ranks | `jump` | ✅ | g z | — | — | Z | — |
 | Go to a directory: type its path | `go_to_dir` | ✅ | g d | Alt+c | — | g Space | c d |
-| Change the location of this panel: its home, volumes, and hosts, in a menu over it; the keys stay with the active panel (Far: of the left or the right panel) | `location_menu` | ⏳ | g l | — | Alt+F1 (left panel)<br>Alt+F2 (right panel) | — | — |
+| Change the location of this panel: its home, volumes, and hosts, in a menu; the keys stay with the active panel (Far: of the left or the right panel) | `location_menu` | ⏳ | g l | — | Alt+F1 (left panel)<br>Alt+F2 (right panel) | — | — |
 | View the file under the cursor | `view` | ✅ | g f<br>F3 | F3 | F3<br>Numpad5<br>Ctrl+Shift+F3 (always internal) | — | i<br>F3 |
 | Edit the file under the cursor in $VISUAL or $EDITOR | `edit` | ✅ | e<br>F4 | F4 | F4<br>Ctrl+Shift+F4 (always internal) | — | F4<br>E |
 | Open the marked entries, or the one under the cursor, with the programs of the desktop (`open`, `xdg-open`), as vim's gx; local ones only (Far: in a window of its own; yazi, ranger: through their openers) | `system_open` | ✅ | g x | — | Shift+Enter | o<br>Enter | l<br>Right<br>Enter |
@@ -1022,9 +1022,9 @@ their lists: their keys are under Normal mode.
 ## Location menu (`location_menu`, Normal mode)
 
 g l, or Ctrl+x g l for the other panel: the home directory, the volumes, and the hosts, under their
-headings, over the panel. It falls back to `list`, whose Enter opens the place in the panel, or, on
-the last row of a group that shows only its first places, shows the rest. The far column has the
-keys of Far's menus, its drive menu among them.
+headings, centered over both panels. It falls back to `list`, whose Enter opens the place in the
+panel, or, on the last row of a group that shows only its first places, shows the rest. The far
+column has the keys of Far's menus, its drive menu among them.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -1052,12 +1052,12 @@ then to `global`; F4 and F8 still edit and disconnect the host under the cursor.
 
 ## Tab menu (`tab_menu`, Normal mode)
 
-t t, as vim's `:tabs` lists them, or Ctrl+x t t for the other panel: the tabs of the panel, drawn
-over it as the location menu is, under the title of the side it is drawn on. It falls back to
-`list`, whose Enter shows the tab in the panel; d d and F8 close the tab under the cursor, as they
-delete a workspace, and the menu stays open; with a count, 3d d closes three, as vim's deletes three
-lines, and so do d d in the location menu, the workspaces, and the history. mc, Far, yazi, and
-ranger have no menu of tabs.
+t t, as vim's `:tabs` lists them, or Ctrl+x t t for the other panel: the tabs of the panel,
+centered over both panels as the location menu is, under a title that names no side. It falls
+back to `list`, whose Enter shows the tab in the panel; d d and F8 close the tab under the cursor,
+as they delete a workspace, and the menu stays open; with a count, 3d d closes three, as vim's
+deletes three lines, and so do d d in the location menu, the workspaces, and the history. mc, Far,
+yazi, and ranger have no menu of tabs.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |

@@ -3,7 +3,7 @@ source: crates/noc/src/tui/menu.rs
 expression: "draw(&mut menu, 19)"
 ---
 "                                                  "
-" ╔════════════════════ Left ════════════════════╗ "
+" ╔══════════════════ Location ══════════════════╗ "
 " ║ Filter:                                Aa =  ║ "
 " ╟──────────────────────────────────────────────╢ "
 " ║ Favorites                                    ║ "

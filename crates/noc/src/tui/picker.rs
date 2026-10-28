@@ -1,6 +1,6 @@
-//! What the windows that list rows to choose one from share: the location menu and the tab
-//! menu, drawn over their panel, the zoxide window, the window of the saved workspaces, the
-//! window of the command history, and the list of the key hints. They open in Insert mode,
+//! What the windows that list rows to choose one from share: the location menu, the tab menu,
+//! the zoxide window, the window of the saved workspaces, the window of the command history,
+//! and the list of the key hints, each centered over both panels. They open in Insert mode,
 //! typing in the filter, a text field; Esc goes to the rows with the filter kept, in Normal
 //! mode, where keys move and act and `/` types in the filter again (ADR 0036). In the fzf mode
 //! the filter ranks the rows, best first (ADR 0040).

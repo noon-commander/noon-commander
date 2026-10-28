@@ -142,7 +142,8 @@ Paths come from `crates/noc-config/src/paths.rs`.
   in the other panel (ADR 0051).
 - Keys act on the active panel. Ctrl+x gives the other panel the keys for one command, any
   command, and gives them back once it ends (`App::come_back`); a command needs nothing of its
-  own for it. A window of one panel opens over that panel, as the location menu does.
+  own for it. Every window opens centered over both panels, one panel's too: the panel drawn
+  active is the one it acts on, and its title names no side.
 - The F-key bar and help are generated from the keymap, per mode and context.
 - Changing any binding: update the `noc` column of
   [docs/keymap-compare.md](docs/keymap-compare.md) in the same change. A new action gets a row

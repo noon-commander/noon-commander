@@ -1,6 +1,6 @@
 //! The tab menu of `t t`, and of Ctrl+x `t t` for the other panel: the tabs of one panel, drawn
-//! over it as the location menu is, to show one, or to close one. Typing filters it; while the
-//! filter is empty, `1` … `9` and `0` show the first ten tabs.
+//! centered over both as every window is, to show one, or to close one. Typing filters it; while
+//! the filter is empty, `1` … `9` and `0` show the first ten tabs.
 
 use noc_scroll::scrollbar::Bar;
 use ratatui::Frame;
@@ -8,7 +8,7 @@ use ratatui::layout::Rect;
 
 use super::app::Side;
 use super::cells::{self, Align, Cut};
-use super::dialog::{Colors, Tone};
+use super::dialog::{Colors, MAX_WIDTH, Tone};
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker};
@@ -17,7 +17,8 @@ use super::theme::Theme;
 use crate::i18n::fl;
 
 /// Narrowest the menu gets, in cells, borders included; it grows with the widest location up
-/// to the width of the panel.
+/// to [`MAX_WIDTH`], as wide as the other lists, and shows the whole row under the cursor below
+/// the rows.
 const MIN_WIDTH: u16 = 30;
 
 /// What a key did in the menu.
@@ -35,9 +36,6 @@ pub(crate) enum TabMenuEvent {
 #[derive(Debug)]
 pub(crate) struct TabMenu {
     side: Side,
-    /// Where the panel is drawn, which the title names: the other side once the panels are
-    /// swapped.
-    drawn: Side,
     /// Where each tab is, as the panel's title shows it.
     titles: Vec<String>,
     picker: Picker,
@@ -52,16 +50,9 @@ impl TabMenu {
         picker.set_cursor(current);
         Self {
             side,
-            drawn: side,
             titles,
             picker,
         }
-    }
-
-    /// The same menu, for a panel drawn on `drawn`, which the title names.
-    pub(crate) fn drawn(mut self, drawn: Side) -> Self {
-        self.drawn = drawn;
-        self
     }
 
     /// The panel the menu is for.
@@ -129,20 +120,17 @@ impl TabMenu {
         self.picker.pointer(pointer)
     }
 
-    /// Draws the menu over `area`, the panel it is for: the filter, then the tabs, scrolled to
+    /// Draws the menu centered over `area`, the panels: the filter, then the tabs, scrolled to
     /// the cursor.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let shown = self.picker.shown(&self.titles);
         let lines: Vec<MenuLine> = (0..shown.len()).map(MenuLine::Row).collect();
-        let title = match self.drawn {
-            Side::Left => fl!("tabs-title-left"),
-            Side::Right => fl!("tabs-title-right"),
-        };
+        let title = fl!("tabs-title");
         let widest = self.titles.iter().map(|title| cells::width(title)).max();
         // The frame, and a cell of room on either side.
         let width = u16::try_from(widest.unwrap_or(0) + 4)
             .unwrap_or(u16::MAX)
-            .max(MIN_WIDTH);
+            .clamp(MIN_WIDTH, MAX_WIDTH);
         let body = Body {
             title: &title,
             width,
@@ -253,7 +241,26 @@ mod tests {
     }
 
     #[test]
-    fn draws_the_tabs_over_its_panel() {
+    fn grows_with_the_widest_location_as_wide_as_the_other_lists() {
+        let frame_width = |text: &str| {
+            let top = text.lines().find(|line| line.contains('╔')).unwrap_or("");
+            let start = top.chars().position(|c| c == '╔');
+            let end = top.chars().position(|c| c == '╗');
+            start.zip(end).map(|(start, end)| end - start + 1)
+        };
+        let input = || Input::new(Kind::FILTER, SearchMode::Plain);
+        let short = vec!["~/src".to_owned()];
+        let mut menu = TabMenu::new(Side::Left, short, 0, input());
+        let text = draw(&mut menu, 120, 10);
+        assert_eq!(frame_width(&text), Some(usize::from(MIN_WIDTH)), "{text}");
+        let long = vec![format!("~/{}", "a".repeat(200))];
+        let mut menu = TabMenu::new(Side::Left, long, 0, input());
+        let text = draw(&mut menu, 120, 10);
+        assert_eq!(frame_width(&text), Some(usize::from(MAX_WIDTH)), "{text}");
+    }
+
+    #[test]
+    fn draws_the_tabs() {
         let mut menu = menu();
         insta::assert_snapshot!(draw(&mut menu, 40, 13));
         typed(&mut menu, "www");

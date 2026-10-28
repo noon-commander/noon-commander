@@ -332,11 +332,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `t l`; Ctrl+x before them opens those of the other panel. After Ctrl+w x, no key opens the tabs
   of the panel drawn on the other side any more, as `t h` did
   ([ADR 0051](docs/adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md)).
-- Go to directory (`g d`, and the Go to button after a listing fails), the zoxide window (`g z`),
-  and the dialogs of `g +` and `g -` open over their panel, as the location menu does, rather than
-  over both panels; after Ctrl+x, over the other panel.
-- The title of the tab menu names the side where its panel is drawn, `Left tabs` or `Right tabs`,
-  after Ctrl+w x too, as the location menu's does.
+- The location menu (`g l`) and the tab menu (`t t`) open centered over both panels, as every
+  other window does, rather than over their panel; the panel drawn active, after Ctrl+x the other
+  one, is the one they change. Their titles, `Location` and `Tabs`, name no side, where they said
+  `Left` or `Right`, and `Left tabs` or `Right tabs`. The tab menu grows with its widest location
+  up to 76 cells, as the other lists, rather than to the width of its panel.
 - F9 → Left and Right show the keys of their commands on both sides: as they are in the menu of
   the active panel, `g l` for Change location… and `t t` for Tab list…, and after Ctrl+x in the
   other's, as `Ctrl+x g l`; so do the sort orders, Rescan, New tab, and Close tab, which showed no

@@ -245,9 +245,14 @@ pub(crate) async fn check_files<V: Vfs>(vfs: &V, root: &Path, path: impl Fn(&str
         let name = format!("file-{size}");
         let data = pattern(size);
         let mut writer = vfs.create_file(&path(&name), false).await.unwrap();
+        let mut given = 0;
         for part in data.chunks(100_000) {
             writer.write(part.to_vec()).await.unwrap();
+            given += part.len() as u64;
+            assert!(writer.written() <= given, "arrived before written: {size}");
         }
+        while writer.settle().await.unwrap() {}
+        assert_eq!(writer.written(), size as u64, "arrived: {size}");
         writer.finish().await.unwrap();
         assert!(fs::read(on_disk(&name)).unwrap() == data, "written: {size}");
         assert!(

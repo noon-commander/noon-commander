@@ -401,6 +401,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   now draw at most 25 frames a second; keys still draw at once.
 - A copy to a host no longer keeps a CPU core busy: every chunk it wrote was packed into the
   request one byte at a time. The chunks now go to the SFTP channel as they are.
+- The speed, gauge, and time left of a copy to a host follow what the host has taken, rather than
+  run up to 2 MiB ahead of the link at the start of each file and stand still while its end goes
+  out; a file under 2 MiB goes out as it is written rather than all at once as it closes
+  ([ADR 0052](docs/adr/0052-bytes-written-count-once-they-arrive.md)).
 - The Connection dialog of a lost or failed host no longer keeps the screen drawing 25 times a
   second for as long as it waits, as after a laptop slept: the panels that wait for the host show
   its marker of a failure in their titles, still, rather than red dots that turned.

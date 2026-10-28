@@ -17,8 +17,16 @@ pub trait FileReader: Send + fmt::Debug {
 /// A file open for writing, from its start.
 pub trait FileWriter: Send + fmt::Debug {
     /// Writes all of `data` after what was written before. Writes may still be on their way
-    /// when this returns; [`FileWriter::finish`] waits for them.
+    /// when this returns: [`FileWriter::written`] tells how much has arrived, and
+    /// [`FileWriter::settle`] and [`FileWriter::finish`] wait for the rest.
     fn write(&mut self, data: Vec<u8>) -> impl Future<Output = Result<(), VfsError>> + Send;
+
+    /// Bytes that have arrived so far: handed to the system for a local file, taken by the
+    /// server for a remote one.
+    fn written(&self) -> u64;
+
+    /// Waits until more of the writes on their way have arrived; `false` once none are left.
+    fn settle(&mut self) -> impl Future<Output = Result<bool, VfsError>> + Send;
 
     /// Waits for the writes and closes the file. Some errors, such as a full disk on a server,
     /// show only here; a writer dropped without this may leave a short file.

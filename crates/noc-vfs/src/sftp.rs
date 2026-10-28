@@ -1,6 +1,7 @@
 use std::io;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::Path;
+use std::task::Poll;
 use std::time::SystemTime;
 
 use bytes::{Bytes, BytesMut};
@@ -55,6 +56,8 @@ pub struct SftpWriter {
     /// Writes in flight, and their bytes.
     pending: FuturesUnordered<WriteFuture>,
     in_flight: u64,
+    /// Bytes the server has taken.
+    written: u64,
 }
 
 type WriteFuture = futures_util::future::BoxFuture<'static, (u64, Result<(), Error>)>;
@@ -62,10 +65,31 @@ type WriteFuture = futures_util::future::BoxFuture<'static, (u64, Result<(), Err
 impl SftpWriter {
     /// Waits for one write in flight.
     async fn settle_one(&mut self) -> Result<(), VfsError> {
-        if let Some((length, result)) = self.pending.next().await {
-            self.in_flight -= length;
-            result.map_err(|err| VfsError::remote(err, &self.path))?;
+        if let Some(answer) = self.pending.next().await {
+            self.take(answer)?;
         }
+        Ok(())
+    }
+
+    /// Sends the writes not sent yet, which go out only as they are polled, and takes the
+    /// answers that have come, without waiting for more.
+    async fn take_answers(&mut self) -> Result<(), VfsError> {
+        future::poll_fn(|context| {
+            while let Poll::Ready(Some(answer)) = self.pending.poll_next_unpin(context) {
+                if let Err(err) = self.take(answer) {
+                    return Poll::Ready(Err(err));
+                }
+            }
+            Poll::Ready(Ok(()))
+        })
+        .await
+    }
+
+    /// Takes the server's answer to a write of `length` bytes.
+    fn take(&mut self, (length, result): (u64, Result<(), Error>)) -> Result<(), VfsError> {
+        self.in_flight -= length;
+        result.map_err(|err| VfsError::remote(err, &self.path))?;
+        self.written += length;
         Ok(())
     }
 }
@@ -95,7 +119,20 @@ impl FileWriter for SftpWriter {
             self.offset += length;
             self.in_flight += length;
         }
-        Ok(())
+        self.take_answers().await
+    }
+
+    fn written(&self) -> u64 {
+        self.written
+    }
+
+    async fn settle(&mut self) -> Result<bool, VfsError> {
+        if self.pending.is_empty() {
+            return Ok(false);
+        }
+        self.settle_one().await?;
+        self.take_answers().await?;
+        Ok(true)
     }
 
     async fn finish(mut self) -> Result<(), VfsError> {
@@ -390,6 +427,7 @@ impl Vfs for SftpFs {
             offset: 0,
             pending: FuturesUnordered::new(),
             in_flight: 0,
+            written: 0,
         })
     }
 
@@ -522,6 +560,21 @@ mod tests {
             Some(Self::connect(command).await)
         }
 
+        /// A server that refuses to write files beyond `blocks` of what the shell's `ulimit -f`
+        /// counts in: 1 KiB, or 512 bytes in some shells.
+        async fn start_with_file_limit(dir: &Path, blocks: u32) -> Option<Self> {
+            let mut command = Command::new("/bin/sh");
+            command
+                .arg("-c")
+                // Without the trap, the signal for a file too big ends the server.
+                .arg(r#"trap '' XFSZ; ulimit -f "$1" && exec "$2" -e -d "$3""#)
+                .arg("sh")
+                .arg(blocks.to_string())
+                .arg(sftp_server()?)
+                .arg(dir);
+            Some(Self::connect(command).await)
+        }
+
         async fn connect(mut command: Command) -> Self {
             let mut child = command
                 .stdin(Stdio::piped())
@@ -647,6 +700,58 @@ mod tests {
             return;
         };
         fixture::check_files(&server.fs, dir.path(), |name: &str| RemotePath::from(name)).await;
+        server.stop().await;
+    }
+
+    #[tokio::test]
+    async fn writes_go_out_at_once_and_count_once_taken() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(server) = Server::start(dir.path()).await else {
+            return;
+        };
+        let name = RemotePath::from("new");
+        let mut writer = server.fs.create_file(&name, false).await.unwrap();
+        // Far less than the writes kept in flight, so nothing waits for room: they go out all
+        // the same, with nothing more asked of the writer.
+        writer.write(vec![7; 100_000]).await.unwrap();
+        let on_disk = dir.path().join("new");
+        let mut tries = 0;
+        while std::fs::metadata(&on_disk).unwrap().len() < 100_000 {
+            assert!(tries < 500, "never sent");
+            tries += 1;
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        // They count as the writer takes the answers.
+        assert!(writer.written() < 100_000, "not before");
+        while writer.settle().await.unwrap() {}
+        assert_eq!(writer.written(), 100_000);
+        writer.finish().await.unwrap();
+        server.stop().await;
+    }
+
+    #[tokio::test]
+    async fn writes_refused_do_not_count() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(server) = Server::start_with_file_limit(dir.path(), 64).await else {
+            return;
+        };
+        let name = RemotePath::from("new");
+        let mut writer = server.fs.create_file(&name, false).await.unwrap();
+        writer.write(vec![7; 300_000]).await.unwrap();
+        // Writes beyond 64 KiB, or 32 in some shells, fail, and those before do not.
+        let mut refused = 0;
+        loop {
+            match writer.settle().await {
+                Ok(true) => {}
+                Ok(false) => break,
+                Err(_) => refused += 1,
+            }
+        }
+        assert!(refused > 0);
+        let on_disk = std::fs::metadata(dir.path().join("new")).unwrap().len();
+        assert!(on_disk > 0 && on_disk < 300_000, "{on_disk}");
+        assert_eq!(writer.written(), on_disk);
+        drop(writer);
         server.stop().await;
     }
 

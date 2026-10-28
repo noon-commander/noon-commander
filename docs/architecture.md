@@ -99,11 +99,14 @@ targets stored as given, never resolved), sets permissions and modification time
 writes files as chunks (`FileReader`, `FileWriter`, whose `finish` reports errors that only show
 when a file is closed). Over SFTP, reads and writes of a file keep 64 requests of 32 KiB in flight,
 as `sftp(1)` does, so a long round trip does not idle the link; a read that comes back short is
-asked again for the rest. A listing tells of each symlink the kind of its target and the target as
-stored; over SFTP each link asks both at once, 64 links at a time. Symlinks go to the server in
-OpenSSH's argument order (target first), which the client uses and which differs from the protocol
-draft; a server that follows the draft would store them the other way round. Its futures are
-cancel-safe: a dropped one leaks nothing, though a change already sent may still happen. Errors are
+asked again for the rest. A write goes out as it is made, and counts once the server has taken it
+(`FileWriter::written`); `settle` waits for more of those on their way
+([ADR 0052](adr/0052-bytes-written-count-once-they-arrive.md)). A listing tells of each symlink
+the kind of its target and the target as stored; over SFTP each link asks both at once, 64 links
+at a time. Symlinks go to the server in OpenSSH's argument order (target first), which the client
+uses and which differs from the protocol draft; a server that follows the draft would store them
+the other way round. Its futures are cancel-safe: a dropped one leaks nothing, though a change
+already sent may still happen. Errors are
 typed, and the UI words them: not found, permission denied, already exists, the source itself (from
 a job), or the error of the OS or the server. SFTP v3 has no code for a name that is taken, so
 `SftpFs` reports a plain failure to create or rename as `AlreadyExists` when something has that
@@ -924,9 +927,12 @@ entries done, entries skipped, and whether it was aborted.
 `Progress` carries two byte counts. `bytes_done` drives the gauge: it takes a skipped file's
 size at once and goes back to the start of a file that is retried. `bytes_copied` counts only
 bytes read and written and never goes back, so the UI derives the speed from it and the time
-left from both. The job's window times only work: its stopwatch starts with the first
-`Progress` and stands from a `Failed` or `Exists` question until the answer, including while
-the question waits behind other dialogs. The speed is that of the last five seconds of work, by
+left from both. Both count a byte written once it has arrived: a copy reports as the writer's
+`written` grows, and after the last chunk of a file reports what arrives as it settles the rest,
+so that an upload follows the link rather than running up to 2 MiB ahead of it. The job's
+window times only work: its stopwatch starts with the first `Progress` and stands from a
+`Failed` or `Exists` question until the answer, including while the question waits behind other
+dialogs. The speed is that of the last five seconds of work, by
 the stopwatch: the window keeps `bytes_copied` at moments of work at least a quarter of a second
 apart, and divides what was copied since the last of them five seconds back by the time since.
 A slow start is behind it after five seconds; when no data comes it falls to zero. The time
@@ -936,9 +942,9 @@ the entries done over stretches of work, each weighing a third as much every hal
 (`ETA_HORIZON`), and forgets a group of them that has faded to nothing. What a byte and an entry
 cost come from least squares of the time of the stretches between finished entries on their
 bytes and their entries, when both stand clear of the noise: jobs report as an entry starts,
-before it opens, and an upload sends its end after its last report. Else a byte costs what it
-does in the stretches in which no entry was done but for those that start with an entry's
-opening, and an entry what its stretches took beyond their bytes; among small files only, the
+before it opens, and close it after their last report. Else a byte costs what it does in the
+stretches in which no entry was done but for those that start with an entry's opening, and an
+entry what its stretches took beyond their bytes; among small files only, the
 least squares still give the cost of an entry if it stands clear; else bytes alone count. The
 time left is the bytes and entries left at those costs and that pace. It is unknown once no
 report has come for longer than twice the longest pause between reports in the last minute
@@ -979,12 +985,12 @@ and how its paths are reported). If the target is a directory, the sources go in
 their own names; otherwise a single source becomes the target, and several make it a new
 directory. Directories merge into a directory of the same name; symlinks are copied as
 symlinks, with their targets as stored; FIFOs, sockets, and devices fail. The job counts
-entries and bytes first, then copies parents before what they hold, reporting progress after
-every chunk. With `preserve`, copies get the modification times and permission bits of their
-sources, and directories that the copy made get theirs last, since writing into a directory
-changes its time; directories that were there keep their own. With `atomic`,
-each file is written under a hidden temporary name next to its target
-(`.name.noc-PID-N`) and renamed when complete, so the target never holds part of a
+entries and bytes first, then copies parents before what they hold, reporting progress as the
+data of each chunk arrives. With `preserve`, copies get the modification times and permission
+bits of their sources, and directories that the copy made get theirs last, since writing into a
+directory changes its time; directories that were there keep their own. With `atomic`, each file
+is written under a hidden temporary name next to its target (`.name.noc-PID-N`) and renamed when
+complete, so the target never holds part of a
 file; without it, the target is written directly. Either way, a file that does not finish
 (an error, Skip, or cancellation) is removed; written directly over an existing file, that
 file is gone too.

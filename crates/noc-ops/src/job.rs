@@ -47,7 +47,8 @@ pub struct Progress<P> {
     pub bytes_done: u64,
     pub bytes_total: u64,
     /// Bytes actually read and written so far, retried ones included and skipped ones not: it
-    /// only grows, so speeds follow it rather than `bytes_done`.
+    /// only grows, so speeds follow it rather than `bytes_done`. Like `bytes_done`, it counts a
+    /// byte written once it has arrived, which on a host is once the server has taken it.
     pub bytes_copied: u64,
 }
 

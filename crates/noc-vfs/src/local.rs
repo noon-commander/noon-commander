@@ -50,6 +50,7 @@ impl FileReader for LocalReader {
 pub struct LocalWriter {
     file: tokio::fs::File,
     path: PathBuf,
+    written: u64,
 }
 
 impl FileWriter for LocalWriter {
@@ -57,7 +58,17 @@ impl FileWriter for LocalWriter {
         self.file
             .write_all(&data)
             .await
-            .map_err(|err| VfsError::local(err, &self.path))
+            .map_err(|err| VfsError::local(err, &self.path))?;
+        self.written += data.len() as u64;
+        Ok(())
+    }
+
+    fn written(&self) -> u64 {
+        self.written
+    }
+
+    fn settle(&mut self) -> impl Future<Output = Result<bool, VfsError>> + Send {
+        std::future::ready(Ok(false))
     }
 
     async fn finish(mut self) -> Result<(), VfsError> {
@@ -189,6 +200,7 @@ impl Vfs for LocalFs {
         Ok(LocalWriter {
             file,
             path: path.clone(),
+            written: 0,
         })
     }
 

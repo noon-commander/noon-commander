@@ -291,13 +291,12 @@ impl Sums {
     /// What a byte and an entry cost, in proportion.
     ///
     /// The stretches between finished entries tell both by least squares, wherever the time of
-    /// an entry falls among its reports, as that of sending what an upload queued falls after
-    /// its last chunk, while each stands well clear of the noise. Else a byte costs what it
-    /// does while data streams within entries, and an entry what the stretches of entries took
-    /// beyond their bytes. Else, with no data streaming yet, as among small files only, the
-    /// least squares still tell the cost of an entry if it stands clear; that of their bytes is
-    /// mostly noise then, and no less than nothing. Else bytes alone count, as for files of one
-    /// size.
+    /// an entry falls among its reports, even after the last of them, as where reports run ahead
+    /// of the data, while each stands well clear of the noise. Else a byte costs what it does
+    /// while data streams within entries, and an entry what the stretches of entries took beyond
+    /// their bytes. Else, with no data streaming yet, as among small files only, the least
+    /// squares still tell the cost of an entry if it stands clear; that of their bytes is mostly
+    /// noise then, and no less than nothing. Else bytes alone count, as for files of one size.
     fn costs(&self) -> (f64, f64) {
         let fitted = self.fitted();
         if let Some(((byte, entry), (true, true))) = fitted {
@@ -1665,10 +1664,10 @@ mod tests {
             self.counts.done += 1;
         }
 
-        /// The same file sent to a host, as an SFTP writer sends it: chunks go into a queue of
-        /// 2 MiB at once, and wait for room as the host takes those before; the job waits for
-        /// the last of them before it closes.
-        fn upload(&mut self, size: u64, speed: u64, (open, close): (f64, f64)) {
+        /// The same file through a writer that counts its chunks as it queues them: they go into
+        /// a queue of 2 MiB at once, and wait for room as the target takes those before; the job
+        /// waits for the last of them before it closes. Its reports run ahead of the data.
+        fn queued(&mut self, size: u64, speed: u64, (open, close): (f64, f64)) {
             const QUEUE: u64 = 2 * MIB;
             self.report();
             self.at += open;
@@ -1794,8 +1793,8 @@ mod tests {
         assert!((entry - 0.1).abs() < 0.01, "{entry}");
 
         // Whole entries that tell both costs clearly come before data streaming that says
-        // otherwise, as an upload's does, which queues its first 2 MiB at once: streaming says
-        // 40 MiB a second, entries of 1 and 3 MiB by turns, a tenth of a second each beside
+        // otherwise, as through a writer that counts what it queues, 2 MiB at once: streaming
+        // says 40 MiB a second, entries of 1 and 3 MiB by turns, a tenth of a second each beside
         // their bytes, 10.
         let mut sums = Sums::default();
         sums.add(point(0, 0, 0), point(1_000, 0, 40 * MIB));
@@ -1897,9 +1896,9 @@ mod tests {
     fn files_up_and_down_keep_to_the_time_left() {
         // 120 files at 2 MiB a second, each opened in 90 ms and closed in 120, then 2,000 files
         // of 2 KiB. Files of one size tell bytes and entries apart only by the data streaming
-        // within them, which must not hold the opening of the next; sent to a host, the queue of
-        // the writer moves the time of sending a file's last 2 MiB after its last report.
-        for (upload, one_size) in [(false, true), (false, false), (true, false)] {
+        // within them, which must not hold the opening of the next; through a writer that counts
+        // what it queues, the time of sending a file's last 2 MiB falls after its last report.
+        for (queued, one_size) in [(false, true), (false, false), (true, false)] {
             let mut noise = Noise(3);
             let sizes: Vec<u64> = (0..120)
                 .map(|_| {
@@ -1913,8 +1912,8 @@ mod tests {
             let bytes = sizes.iter().sum::<u64>() + 2_000 * 2_048;
             let mut run = Run::new(2_120, bytes);
             let copy = |run: &mut Run, size| {
-                if upload {
-                    run.upload(size, 2 * MIB, (0.09, 0.12));
+                if queued {
+                    run.queued(size, 2 * MIB, (0.09, 0.12));
                 } else {
                     run.file(size, 2 * MIB, (0.09, 0.12));
                 }
@@ -1935,7 +1934,7 @@ mod tests {
                 let off = (left - truth).abs();
                 assert!(
                     off < truth * 0.05,
-                    "upload {upload}, one size {one_size}: {left} for {truth} at {at}"
+                    "queued {queued}, one size {one_size}: {left} for {truth} at {at}"
                 );
             }
         }

@@ -1,6 +1,6 @@
 # 0050. The time left of a job
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0052](0052-bytes-written-count-once-they-arrive.md)
 - Date: 2026-10-28
 
 ## Context
@@ -40,9 +40,11 @@ are those after the review.
   finished entries on their bytes and their entries give both, wherever the time of an entry
   falls among its reports, when each stands at least twice its standard error above nothing.
   A job reports as it starts an entry, before it opens it, and after each chunk; closing and
-  setting attributes come after the last chunk with no report; and an upload queues up to 2 MiB
-  at once, so the time of sending a file's end comes after its last report too. Data streaming
-  alone said a byte cost half as much again as it did there, or a third.
+  setting attributes come after the last chunk with no report; and an upload queued up to 2 MiB
+  at once and counted it, so the time of sending a file's end came after its last report too,
+  until [ADR 0052](0052-bytes-written-count-once-they-arrive.md) counted bytes as they arrive.
+  Data streaming alone said a byte cost half as much again as it did there, or a third; whole
+  entries first still keep the forecast right where reports run ahead of the data.
 - **Else streaming tells the cost of a byte.** Where the entries do not tell both, as for files
   of one size, a byte costs what it does in the stretches in which no entry was done, but for
   those that start as an entry starts, which hold its opening; an entry costs what the
@@ -81,7 +83,8 @@ are those after the review.
   its fraction of a second and shows rounded, so that a count shows a second less each second.
   With the clock it no longer jumps to and fro by a second or two, which rounding a time left
   over a minute to five seconds hid before.
-- It all comes from the counts that jobs report (`Counts`), with no change to `noc-ops`.
+- It all comes from the counts that jobs report (`Counts`), with no change to `noc-ops` but for
+  when a byte written counts (ADR 0052).
 
 ## Consequences
 

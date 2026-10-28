@@ -386,8 +386,8 @@ struct Job<'a, 'r, A: Vfs, B: Vfs, L> {
     items_total: u64,
     bytes_done: u64,
     bytes_total: u64,
-    /// Bytes read and written, for speeds: unlike `bytes_done`, it neither jumps on a skip nor
-    /// goes back on a retry.
+    /// Bytes that arrived where they were written, for speeds: unlike `bytes_done`, it neither
+    /// jumps on a skip nor goes back on a retry.
     bytes_copied: u64,
     policy: Option<Policy>,
 }
@@ -875,7 +875,8 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
     }
 
     /// Moves the data of `item` from `reader` to `writer`, which writes `written`, and gives
-    /// it the attributes of `item` if the copy preserves them.
+    /// it the attributes of `item` if the copy preserves them. Bytes count as they arrive, which
+    /// on a host is when the server has taken them.
     async fn transfer(
         &mut self,
         item: &Item<A::Path>,
@@ -883,6 +884,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
         mut writer: B::Writer,
         written: &B::Path,
     ) -> Result<(), Stop<L>> {
+        let mut counted = 0;
         loop {
             if self.reporter.cancelled() {
                 return Err(Stop::Aborted);
@@ -892,14 +894,20 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                 .await
                 .map_err(|error| Stop::Failed((self.from.report)(&item.source), error))?;
             let Some(chunk) = chunk else { break };
-            let size = chunk.len() as u64;
-            self.bytes_done += size;
-            writer
-                .write(chunk)
-                .await
-                .map_err(|error| self.at_target(written, error))?;
-            self.bytes_copied += size;
-            self.progress(&item.source);
+            // What the server took before a write it refused still counts.
+            let wrote = writer.write(chunk).await;
+            self.arrived(item, &writer, &mut counted);
+            wrote.map_err(|error| self.at_target(written, error))?;
+        }
+        loop {
+            let more = writer.settle().await;
+            self.arrived(item, &writer, &mut counted);
+            if !more.map_err(|error| self.at_target(written, error))? {
+                break;
+            }
+            if self.reporter.cancelled() {
+                return Err(Stop::Aborted);
+            }
         }
         writer
             .finish()
@@ -911,6 +919,18 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                 .map_err(|error| self.at_target(written, error))?;
         }
         Ok(())
+    }
+
+    /// Counts what has arrived through `writer` beyond the `counted` bytes of `item`, and
+    /// reports it if there is any.
+    fn arrived(&mut self, item: &Item<A::Path>, writer: &B::Writer, counted: &mut u64) {
+        let new = writer.written().saturating_sub(*counted);
+        if new > 0 {
+            *counted += new;
+            self.bytes_done += new;
+            self.bytes_copied += new;
+            self.progress(&item.source);
+        }
     }
 
     async fn set_attributes(&self, path: &B::Path, metadata: &Metadata) -> Result<(), VfsError> {
@@ -981,6 +1001,8 @@ mod tests {
     #[derive(Debug, Default)]
     struct Seen {
         failed: Vec<String>,
+        /// `bytes_copied` as each failure came.
+        copied_at_failures: Vec<u64>,
         bytes: Vec<(u64, u64)>,
         /// The largest `bytes_copied` reported.
         copied: u64,
@@ -1104,6 +1126,7 @@ mod tests {
                 }
                 Event::Failed { path, reply, .. } => {
                     seen.failed.push(path);
+                    seen.copied_at_failures.push(seen.copied);
                     let answer = *failures.next().expect("an answer for each failure");
                     let _ = reply.send(answer);
                 }
@@ -1478,6 +1501,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn what_a_host_took_before_it_refused_counts() {
+        let root = tempfile::tempdir().unwrap();
+        let src = root.path().join("file");
+        fs::write(&src, vec![7; 300_000]).unwrap();
+        let remote = root.path().join("remote");
+        fs::create_dir(&remote).unwrap();
+        // A host that takes 64 KiB of a file, or 32, and refuses the rest.
+        let Some((_server, sftp)) = testing::sftp_server_with_file_limit(&remote, 64).await else {
+            return;
+        };
+        let mut probe = sftp.create_file(&"probe".into(), false).await.unwrap();
+        probe.write(vec![7; 300_000]).await.unwrap();
+        while probe.settle().await.unwrap_or(true) {}
+        drop(probe);
+        let taken = fs::metadata(remote.join("probe")).unwrap().len();
+        fs::remove_file(remote.join("probe")).unwrap();
+        assert!(taken > 0 && taken < 300_000, "{taken}");
+
+        let answers = [Decision::Retry, Decision::Skip];
+        let target = (&sftp, RemotePath::from("file"));
+        let (outcome, seen) = run((&LocalFs, vec![src]), target, BOTH, &answers, false).await;
+        assert_eq!(outcome.skipped, 1);
+        assert_eq!(seen.copied_at_failures, [taken, 2 * taken], "{seen:?}");
+        assert_eq!(seen.copied, 2 * taken);
+        assert_eq!(leftovers(&remote), Vec::<PathBuf>::new());
+    }
+
+    #[tokio::test]
     async fn copies_to_a_host_and_back() {
         let root = tempfile::tempdir().unwrap();
         let src = sources(root.path());
@@ -1497,6 +1548,7 @@ mod tests {
         .await;
         assert!(seen.failed.is_empty(), "{seen:?}");
         assert_eq!(outcome.done, 7);
+        assert_eq!(seen.copied, 100_011, "all of it, as the host took it");
         check_dir(&remote.join("up/dir"));
         assert_eq!(leftovers(&remote), Vec::<PathBuf>::new());
 
@@ -1610,13 +1662,43 @@ mod tests {
         assert!(!src.join("dir/sub").exists());
     }
 
-    /// The local file system, where every rename crosses file systems.
+    /// The local file system, where every rename crosses file systems, and what is written
+    /// arrives late, as on a host.
     struct OtherDevice;
+
+    /// A local file whose writes arrive only as the job waits for them, 64 KiB at a time.
+    #[derive(Debug)]
+    struct Late {
+        writer: noc_vfs::LocalWriter,
+        arrived: u64,
+    }
+
+    impl noc_vfs::FileWriter for Late {
+        async fn write(&mut self, data: Vec<u8>) -> Result<(), VfsError> {
+            self.writer.write(data).await
+        }
+
+        fn written(&self) -> u64 {
+            self.arrived
+        }
+
+        async fn settle(&mut self) -> Result<bool, VfsError> {
+            // As a server's answer, it comes after others have had their turn.
+            tokio::task::yield_now().await;
+            let left = self.writer.written() - self.arrived;
+            self.arrived += left.min(64 * 1024);
+            Ok(left > 0)
+        }
+
+        async fn finish(self) -> Result<(), VfsError> {
+            self.writer.finish().await
+        }
+    }
 
     impl Vfs for OtherDevice {
         type Path = PathBuf;
         type Reader = noc_vfs::LocalReader;
-        type Writer = noc_vfs::LocalWriter;
+        type Writer = Late;
 
         async fn list_dir(&self, path: &PathBuf) -> Result<Vec<noc_vfs::DirEntry>, VfsError> {
             LocalFs.list_dir(path).await
@@ -1673,8 +1755,44 @@ mod tests {
             path: &PathBuf,
             replace: bool,
         ) -> Result<Self::Writer, VfsError> {
-            LocalFs.create_file(path, replace).await
+            let writer = LocalFs.create_file(path, replace).await?;
+            Ok(Late { writer, arrived: 0 })
         }
+    }
+
+    #[tokio::test]
+    async fn bytes_count_as_they_arrive() {
+        let root = tempfile::tempdir().unwrap();
+        let src = root.path().join("file");
+        fs::write(&src, vec![7; 300_000]).unwrap();
+        let dst = root.path().join("dst");
+        fs::create_dir(&dst).unwrap();
+        let from = (&LocalFs, vec![src]);
+        let (outcome, seen) = run(from, (&OtherDevice, dst.clone()), BOTH, &[], false).await;
+        assert_eq!(outcome.done, 1);
+        // Read and written 256 KiB at a time, it arrives 64 KiB at a time once all is written.
+        let done: Vec<u64> = seen.bytes.iter().map(|(done, _)| *done).collect();
+        assert_eq!(done, [0, 65_536, 131_072, 196_608, 262_144, 300_000]);
+        assert_eq!(seen.copied, 300_000);
+        assert_eq!(fs::read(dst.join("file")).unwrap(), vec![7; 300_000]);
+    }
+
+    #[tokio::test]
+    async fn a_cancel_stops_the_wait_for_what_is_on_its_way() {
+        let root = tempfile::tempdir().unwrap();
+        let src = root.path().join("file");
+        fs::write(&src, vec![7; 300_000]).unwrap();
+        let dst = root.path().join("dst");
+        fs::create_dir(&dst).unwrap();
+        // Cancelled once the first 64 KiB have arrived, with all of it written.
+        let from = (&LocalFs, vec![src]);
+        let (outcome, seen) = run(from, (&OtherDevice, dst.clone()), BOTH, &[], true).await;
+        assert!(outcome.aborted);
+        assert!(seen.copied < 300_000, "{seen:?}");
+        assert!(
+            fs::read_dir(&dst).unwrap().next().is_none(),
+            "no part of it"
+        );
     }
 
     #[tokio::test]

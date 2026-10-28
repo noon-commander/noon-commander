@@ -947,9 +947,10 @@ works keeps a time left; of such a stall only the usual pause counts for the pac
 stretch that skipped data is a pause. Both are worked out once in each second that the
 time shows and held until the next, so they change with it rather than with every frame. The
 time left shown counts down by the clock, a second each second, while it keeps within 3% of the
-forecast (`ETA_NEAR`); up to a tenth from it (`ETA_SLACK`), it also moves a tenth of the way
-there each second, and beyond, halfway (`count_down`). It keeps its fraction of a second and
-shows rounded.
+forecast (`ETA_NEAR`); beyond, it moves to the edge of that 3%, a tenth of the way each second
+up to a tenth from the forecast (`ETA_SLACK`) and halfway beyond (`count_down`), so that it
+holds still where the forecast does rather than go up and down. It keeps its fraction of a
+second and shows rounded.
 
 Renaming one entry in its directory (`rename`) is no job: one call with no progress, which
 the UI runs like a new directory, through the host's shared session (`Arc<SftpFs>`) for a

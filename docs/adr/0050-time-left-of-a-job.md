@@ -67,12 +67,15 @@ are those after the review.
   without data that are skipped cannot be told apart and count.
 - **The time left shown counts down by the clock** (`count_down`). Each second it is the one
   shown before less a second, while that keeps within 3% of the forecast (`ETA_NEAR`), which the
-  forecast's own ups and downs over an uneven link mostly do. Up to a tenth from it
-  (`ETA_SLACK`), it also moves a tenth of the way to the forecast each second, so that it does
-  not stay off for the rest of the job: 10:00 shown where 9:15 are left goes 9:55, 9:49, … and
-  keeps within 3% of the forecast half a minute later. Beyond a tenth, it moves halfway each
-  second, up or down, so that a lasting change shows within a few seconds without a jump. The
-  first one, and one counted down to nothing, is the forecast. It keeps its fraction of a second
+  forecast's own ups and downs over an uneven link mostly do. Beyond it, it moves to the edge of
+  that band: a tenth of the way each second up to a tenth from the forecast (`ETA_SLACK`), so
+  that it does not stay off for the rest of the job, 10:00 shown where 9:15 are left going 9:56,
+  9:53, … to within a little over 3% half a minute later; halfway each second beyond, up or
+  down, so that a lasting change shows within a few seconds without a jump. It moves to the edge
+  rather than to the forecast, as the whole way took it in and out of the band where the
+  forecast went down slower than the clock, the second shown going up and down (582, 583, 584,
+  583); to the edge, it holds still where the forecast does. The first one, and one counted down
+  to nothing, is the forecast. It keeps its fraction of a second
   and shows rounded, so that a count shows a second less each second and a tenth of a small gap
   is not lost to the rounding. With the clock it no longer jumps to and fro by a second or two,
   which rounding a time left over a minute to five seconds hid before.
@@ -83,7 +86,9 @@ are those after the review.
 - Over an uneven link the time left keeps within a few percent of the average pace while the
   speed swings by a fifth either way, and the one shown goes down by a second each second; tests
   check all three.
-- The time left shown keeps within 3% of the forecast once it has caught up; in the simulator it
+- The time left shown keeps within a little over 3% of the forecast once it has caught up, never
+  going up where the forecast stands still; tests check that and the catching up. In the
+  simulator, before it went to the edge of the band, it
   is off by 1 to 3% of the time that is left for real trees, where counting down alone kept the
   error of its start, 5 to 10%, for the whole job. Where the forecast itself drifts by more, as
   over a link whose speed jumps every second, it follows: about one second in four goes down by

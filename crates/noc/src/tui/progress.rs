@@ -1022,11 +1022,13 @@ fn whole_seconds(duration: Duration) -> u64 {
 }
 
 /// The time left to show in `second` by the `forecast`: the one `shown` in an earlier second,
-/// less the seconds since, while that keeps within [`ETA_NEAR`] of the forecast; within
-/// [`ETA_SLACK`], a tenth closer to the forecast for each second since; beyond, halfway closer.
-/// The forecast itself without one shown, or once the count is down to nothing. It keeps its
-/// fraction of a second, which shows rounded, so that a count shows a second less each second
-/// and a tenth of a small gap is not lost to the rounding.
+/// less the seconds since, while that keeps within [`ETA_NEAR`] of the forecast. Beyond, it
+/// moves to the edge of that band, a tenth of the way for each second since while within
+/// [`ETA_SLACK`], halfway beyond: to the edge, not the forecast, so that it does not go in and
+/// out of the band, up and down, where the forecast goes down slower than the clock, and holds
+/// still where the forecast does. The forecast itself without one shown, or once the count is
+/// down to nothing. It keeps its fraction of a second, which shows rounded, so that a count
+/// shows a second less each second and a tenth of a small gap is not lost to the rounding.
 fn count_down(shown: Option<(u64, Duration)>, second: u64, forecast: Duration) -> Duration {
     let Some((then, shown)) = shown else {
         return forecast;
@@ -1045,8 +1047,13 @@ fn count_down(shown: Option<(u64, Duration)>, second: u64, forecast: Duration) -
     } else {
         0.5
     };
+    let edge = if from > to {
+        to * (1.0 + ETA_NEAR)
+    } else {
+        to * (1.0 - ETA_NEAR)
+    };
     let rest = keep.powi(i32::try_from(passed).unwrap_or(i32::MAX));
-    Duration::try_from_secs_f64(to + (from - to) * rest).unwrap_or(Duration::MAX)
+    Duration::try_from_secs_f64(edge + (from - edge) * rest).unwrap_or(Duration::MAX)
 }
 
 /// A duration in whole seconds, as `M:SS`, or `H:MM:SS` from an hour on.
@@ -1406,14 +1413,15 @@ mod tests {
         assert_eq!(left(Some((10, 100)), 11, 101_000), 99);
         assert_eq!(left(Some((10, 100)), 11, 97_000), 99);
         assert_eq!(left(Some((10, 100)), 13, 99_000), 97);
-        // Within a tenth, a tenth closer too each second, up or down.
-        assert_eq!(left(Some((10, 100)), 11, 106_000), 100);
-        assert_eq!(left(Some((10, 100)), 11, 92_000), 98);
-        assert_eq!(left(Some((10, 100)), 13, 105_000), 99);
+        // Within a tenth, a tenth closer too each second to the edge of the 3%, up or down:
+        // 106 has its edge at 102.82, which 99 takes 0.38 of; 92 at 94.76.
+        assert_eq!(left(Some((10, 100)), 11, 106_000), 99);
+        assert_eq!(left(Some((10, 100)), 11, 92_000), 99);
+        assert_eq!(left(Some((10, 100)), 13, 105_000), 98);
         // Beyond, halfway there each second.
-        assert_eq!(left(Some((10, 100)), 11, 151_000), 125);
-        assert_eq!(left(Some((10, 100)), 11, 39_000), 69);
-        assert_eq!(left(Some((10, 100)), 12, 178_000), 158);
+        assert_eq!(left(Some((10, 100)), 11, 151_000), 123);
+        assert_eq!(left(Some((10, 100)), 11, 39_000), 70);
+        assert_eq!(left(Some((10, 100)), 12, 178_000), 154);
         // Counted down to nothing, the forecast.
         assert_eq!(left(Some((10, 2)), 12, 30_000), 30);
         assert_eq!(left(Some((10, 0)), 11, 30_000), 30);
@@ -1427,23 +1435,38 @@ mod tests {
         // 10:00 shown, where 9:15 are left and the forecast says so from then on.
         let mut shown = secs(600);
         let mut steps = Vec::new();
-        for second in 11..=60 {
+        for second in 11..=70 {
             let forecast = secs(555 - (second - 10));
             let next = count_down(Some((second - 1, shown)), second, forecast);
             steps.push(whole_seconds(shown) - whole_seconds(next));
             shown = next;
-            // Within half a minute it keeps within 3% of the forecast.
+            // Within half a minute it comes to the edge of the 3% around the forecast.
             if second >= 40 {
                 let off = shown.abs_diff(forecast).as_secs_f64();
-                assert!(off <= forecast.as_secs_f64() * 0.03, "{second}: {shown:?}");
+                assert!(off <= forecast.as_secs_f64() * 0.035, "{second}: {shown:?}");
             }
         }
-        // Down all the way, a few seconds at a time at first, and then by the clock, but for
-        // a step now and then as what is left of the gap grows beyond 3% of what is left.
-        assert_eq!(steps[0], 5, "10:00, then 9:55");
+        // Down all the way, a few seconds at a time at first, then by the clock, but for a
+        // second skipped now and then as the last hundredths of the gap round away.
+        assert_eq!(steps[0], 4, "10:00, then 9:56");
         assert!(steps.iter().all(|step| (1..=6).contains(step)), "{steps:?}");
-        let ticks = steps[10..].iter().filter(|step| **step == 1).count();
-        assert!(ticks >= 36, "{steps:?}");
+        let skips = steps[40..].iter().filter(|step| **step != 1).count();
+        assert!(skips <= 2, "{steps:?}");
+    }
+
+    #[test]
+    fn a_time_left_holds_still_where_the_forecast_does() {
+        // The forecast stays at 10:00, as when the pace falls as fast as the work goes: the
+        // time left shown never goes up, and comes to rest.
+        let mut shown = secs(600);
+        let mut seen = Vec::new();
+        for second in 1..=120 {
+            shown = count_down(Some((second - 1, shown)), second, secs(600));
+            seen.push(whole_seconds(shown));
+        }
+        assert!(seen.windows(2).all(|pair| pair[1] <= pair[0]), "{seen:?}");
+        assert!(seen[90..].iter().all(|left| *left == seen[119]), "{seen:?}");
+        assert!((570..582).contains(&seen[119]), "{seen:?}");
     }
 
     #[test]

@@ -88,11 +88,13 @@ are those after the review.
   check all three.
 - The time left shown keeps within a little over 3% of the forecast once it has caught up, never
   going up where the forecast stands still; tests check that and the catching up. In the
-  simulator, before it went to the edge of the band, it
-  is off by 1 to 3% of the time that is left for real trees, where counting down alone kept the
-  error of its start, 5 to 10%, for the whole job. Where the forecast itself drifts by more, as
-  over a link whose speed jumps every second, it follows: about one second in four goes down by
-  other than one. A band of 5% halved that but doubled the error elsewhere.
+  simulator it is off by 1 to 4% of the time that is left for real trees on jobs of minutes,
+  and by 4 to 8% on jobs of under a minute, which end before it has caught up. Counting down
+  alone kept the error of its start, 5 to 10%, for the whole job; moving all the way to the
+  forecast was off by 1 to 6%, but went up and down where the forecast went down slower than
+  the clock. Where the forecast itself drifts by more, as over a link whose speed jumps every
+  second, it follows: about one second in eight goes down by other than one. A band of 5%
+  halved that but doubled the error elsewhere.
 - In the simulator, the forecast keeps within 1 to 3% of the time that is left for files of
   sizes spread as in real trees, with directories and empty files among them, locally and on a
   host; through Skip all over 5,000 files on a host it falls as they leave the work, where it grew
@@ -108,7 +110,8 @@ are those after the review.
   work forgetting the other's cost, and each way to the costs.
 - With five seconds for every pause, a link that sent a chunk every eight seconds, and a disk
   that blocked for twelve every 64 MiB, showed `-:--` half the time and a time left short by 37
-  and 59%; now only their first pause is unknown, and the time left keeps within 5 and 10%.
+  and 59%; now only their first pause is unknown, and the time left keeps within 4 and 7%, and
+  within 7 to 8% where each file takes 6 to 9 seconds to open, rather than 13 to 39%.
   After a stall of a minute and a half the time left is within 2% at once, where the five
   seconds of it that counted made it a fifth too long. Tests check both, and the stall.
 - The first pause of such work is unknown and does not count, and a second stall within a

@@ -1753,6 +1753,88 @@ mod tests {
         let (byte, entry) = sums.costs();
         assert!((byte * float(MIB) - 0.1).abs() < 1e-9, "{byte}");
         assert!((entry - 0.1).abs() < 1e-9, "{entry}");
+
+        // Four entries of 1 to 4 MiB at 0.1 s a MiB and a quarter of a second each, give or
+        // take some: two costs leave the noise two rows of the four, and so neither stands
+        // clear, so streaming tells the cost of a byte.
+        let mut sums = Sums::default();
+        sums.add(point(0, 0, 0), point(1_000, 0, 10 * MIB));
+        let (mut at, mut bytes) = (1_000, 10 * MIB);
+        for (n, took) in (0..).zip([400, 330, 650, 620]) {
+            let size = (n + 1) * MIB;
+            sums.fit(point(at, n, bytes), point(at + took, n + 1, bytes + size));
+            (at, bytes) = (at + took, bytes + size);
+        }
+        let (byte, entry) = sums.costs();
+        assert!(
+            (byte * float(MIB) - 0.1).abs() < 1e-9,
+            "streaming's: {byte}"
+        );
+        assert!((entry - 0.25).abs() < 1e-9, "{entry}");
+
+        // Small files that took a little less the bigger they were: a byte costs nothing,
+        // not less.
+        let mut sums = Sums::default();
+        let (mut at, mut bytes) = (0, 0);
+        for (n, took) in (0..).zip([99, 98, 97, 96, 95, 94]) {
+            let size = (n + 1) * 10 * 1024;
+            sums.fit(point(at, n, bytes), point(at + took, n + 1, bytes + size));
+            (at, bytes) = (at + took, bytes + size);
+        }
+        let (byte, entry) = sums.costs();
+        assert!(byte.abs() < f64::EPSILON, "{byte}");
+        assert!((entry - 0.1).abs() < 0.01, "{entry}");
+
+        // Streaming at a second a MiB, and files of 1 MiB that took half a second each: an
+        // entry costs nothing, not less.
+        let mut sums = Sums::default();
+        sums.add(point(0, 0, 0), point(1_000, 0, MIB));
+        for n in 0..4 {
+            let (from, to) = (1_000 + 500 * n, 1_500 + 500 * n);
+            sums.fit(
+                point(from, n, (n + 1) * MIB),
+                point(to, n + 1, (n + 2) * MIB),
+            );
+        }
+        let (byte, entry) = sums.costs();
+        assert!((byte * float(MIB) - 1.0).abs() < 1e-9, "{byte}");
+        assert!(entry.abs() < f64::EPSILON, "{entry}");
+    }
+
+    #[test]
+    fn entries_without_data_tell_nothing_of_the_data_left() {
+        // A hundred directories made in ten seconds, with 100 MiB of files still to come:
+        // entries alone would make the data look as if it took no time.
+        let mut run = Run::new(200, 100 * MIB);
+        for _ in 0..100 {
+            run.at += 0.1;
+            run.counts.done += 1;
+            run.report();
+        }
+        assert_eq!(run.left_at(run.at), None);
+        // With no data at all, entries alone tell: a tenth of a second each.
+        let mut run = Run::new(200, 0);
+        for _ in 0..100 {
+            run.at += 0.1;
+            run.counts.done += 1;
+            run.report();
+        }
+        let left = run.left_at(run.at).unwrap();
+        assert!((left - 10.0).abs() < 0.5, "{left}");
+    }
+
+    #[test]
+    fn a_pause_over_a_minute_ago_no_longer_stretches_a_stall() {
+        // A pause of 8 seconds, then 50 seconds of work, then nothing.
+        let mut run = Run::new(1, 4_000 * MIB);
+        run.stream(100 * MIB, 10 * MIB);
+        run.at += 8.0;
+        run.stream(500 * MIB, 10 * MIB);
+        let seen = run.at;
+        // Within a minute of it, a pause of up to 16 seconds is work …
+        assert!(run.left_at(seen + 9.0).is_some());
+        // … and past it, one of over five is a stall again.
+        assert_eq!(run.left_at(seen + 15.0), None);
     }
 
     #[test]

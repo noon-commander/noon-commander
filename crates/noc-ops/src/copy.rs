@@ -254,6 +254,19 @@ impl<Q: VfsPath> Destination<Q> {
     }
 }
 
+/// For each of `items`, the index of the last entry within it, at any depth, or its own if it
+/// holds none. Each entry comes after the directory it is in, so once the copy is past that
+/// index, all within the directory is done.
+fn last_within<P>(items: &[Item<P>]) -> Vec<usize> {
+    let mut last: Vec<usize> = (0..items.len()).collect();
+    for index in (0..items.len()).rev() {
+        if let Some(parent) = items[index].parent {
+            last[parent] = last[parent].max(last[index]);
+        }
+    }
+    last
+}
+
 /// Marks the source of `items[index]` and the directories it is in as staying.
 fn keep<P>(kept: &mut [bool], items: &[Item<P>], mut index: usize) {
     loop {
@@ -428,17 +441,20 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
     }
 
     /// Copies `items`, as counted, to `destination`; when moving, removes each source once
-    /// all of it is copied.
+    /// all of it is copied. A directory is finished once all in it is done: the copy gets the
+    /// attributes of its source, and a move removes the source.
     async fn copy_items(
         &mut self,
         items: &[Item<A::Path>],
         destination: &Destination<B::Path>,
     ) -> Result<(), Aborted> {
         self.items_total = self.outcome.done + self.outcome.skipped + items.len() as u64;
+        let last = last_within(items);
         let mut targets: Vec<Option<B::Path>> = Vec::with_capacity(items.len());
         // Sources that stay: not copied, or holding something that was not.
         let mut kept = vec![false; items.len()];
-        let mut made_dirs = Vec::new();
+        // Directories this copy made, rather than went into.
+        let mut made = vec![false; items.len()];
         for (index, item) in items.iter().enumerate() {
             if self.reporter.cancelled() {
                 return Err(Aborted);
@@ -455,16 +471,16 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                 self.bytes_done += size;
                 keep(&mut kept, items, index);
                 targets.push(None);
+                self.finish_dirs(items, index, &last, (&targets, &made), &mut kept)
+                    .await?;
                 continue;
             };
             self.progress(&item.source);
             let before = self.bytes_done;
             let copied = loop {
                 let attempt = match item.metadata.kind {
-                    FileKind::Dir => self.copy_dir(item, &target).await.map(|made| {
-                        if made {
-                            made_dirs.push((target.clone(), item.metadata.clone()));
-                        }
+                    FileKind::Dir => self.copy_dir(item, &target).await.map(|made_now| {
+                        made[index] = made_now;
                         true
                     }),
                     FileKind::Symlink => self.copy_link(item, &target).await,
@@ -504,24 +520,42 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                 keep(&mut kept, items, index);
                 targets.push(None);
             }
+            self.finish_dirs(items, index, &last, (&targets, &made), &mut kept)
+                .await?;
         }
-        // Writing into a directory changes its time, so directories get theirs last.
-        if self.options.preserve {
-            for (dir, metadata) in made_dirs.iter().rev() {
-                self.attributes(dir, metadata).await?;
+        Ok(())
+    }
+
+    /// Finishes the directories whose `last` entry is `items[index]`, now done: the deepest
+    /// first, each empty of anything to come by its turn. Writing into a directory changes its
+    /// time, so a copy that `made` it gives it the attributes of its source only then, at its
+    /// `targets`; a move removes the source, unless it is `kept`. So this work is done among the
+    /// entries, where the time left of the job counts it, and an aborted copy keeps it.
+    async fn finish_dirs(
+        &mut self,
+        items: &[Item<A::Path>],
+        index: usize,
+        last: &[usize],
+        (targets, made): (&[Option<B::Path>], &[bool]),
+        kept: &mut [bool],
+    ) -> Result<(), Aborted> {
+        let mut dir = if items[index].metadata.kind == FileKind::Dir {
+            Some(index)
+        } else {
+            items[index].parent
+        };
+        while let Some(at) = dir.filter(|&at| last[at] == index) {
+            let item = &items[at];
+            if self.options.preserve
+                && made[at]
+                && let Some(target) = &targets[at]
+            {
+                self.attributes(target, &item.metadata).await?;
             }
-        }
-        if self.options.remove_sources {
-            // The deepest first, so that each is empty by its turn.
-            for index in (0..items.len()).rev() {
-                let item = &items[index];
-                if item.metadata.kind == FileKind::Dir
-                    && !kept[index]
-                    && !self.remove_source(item).await?
-                {
-                    keep(&mut kept, items, index);
-                }
+            if self.options.remove_sources && !kept[at] && !self.remove_source(item).await? {
+                keep(kept, items, at);
             }
+            dir = item.parent;
         }
         Ok(())
     }
@@ -1282,6 +1316,65 @@ mod tests {
         );
         assert_eq!(seen.bytes.iter().map(|(done, _)| *done).max(), Some(total));
         assert_eq!(seen.copied, total);
+    }
+
+    #[tokio::test]
+    async fn an_aborted_copy_keeps_the_attributes_of_the_directories_it_finished() {
+        let root = tempfile::tempdir().unwrap();
+        let src = sources(root.path());
+        let dst = root.path().join("dst");
+        // A file does not replace a directory: Abort, after `dir` is copied.
+        fs::create_dir_all(dst.join("file")).unwrap();
+        let sources = vec![src.join("dir"), src.join("file")];
+        let (outcome, seen) = run(
+            (&LocalFs, sources),
+            (&LocalFs, dst.clone()),
+            BOTH,
+            &[Decision::Abort],
+            false,
+        )
+        .await;
+        assert!(outcome.aborted);
+        assert_eq!(seen.failed, [report(&dst.join("file"))]);
+        check_dir(&dst.join("dir"));
+    }
+
+    #[tokio::test]
+    async fn a_move_finishes_each_directory_once_all_in_it_has_moved() {
+        let root = tempfile::tempdir().unwrap();
+        let src = sources(root.path());
+        let dst = root.path().join("dst");
+        fs::create_dir(&dst).unwrap();
+        let (events, mut incoming) = mpsc::unbounded_channel();
+        let mut reporter = Reporter::new(events, CancellationToken::new());
+        let job = async {
+            let side = Endpoint {
+                vfs: &OtherDevice::default(),
+                report: &report::<PathBuf>,
+            };
+            let moving = vec![src.join("dir"), src.join("file")];
+            let outcome = move_within(side, moving, dst.clone(), BOTH, &mut reporter).await;
+            drop(reporter);
+            outcome
+        };
+        // As `file` starts to be copied, after the renames, `dir` is done with.
+        let watch = async {
+            let mut found = None;
+            while let Some(event) = incoming.recv().await {
+                if let Event::Progress(progress) = event
+                    && progress.bytes_total > 0
+                    && progress.current.ends_with("/file")
+                    && found.is_none()
+                {
+                    found = Some((src.join("dir").exists(), modified(&dst.join("dir"))));
+                }
+            }
+            found
+        };
+        let (outcome, found) = tokio::join!(job, watch);
+        assert_eq!((outcome.done, outcome.aborted), (7, false));
+        assert_eq!(found, Some((false, at(5_000))), "removed, with its time");
+        check_dir(&dst.join("dir"));
     }
 
     #[tokio::test]

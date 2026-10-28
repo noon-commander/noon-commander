@@ -993,15 +993,18 @@ directory. Directories merge into a directory of the same name; symlinks are cop
 symlinks, with their targets as stored; FIFOs, sockets, and devices fail. The job counts
 entries and bytes first, then copies parents before what they hold, reporting progress as the
 data of each chunk arrives. With `preserve`, copies get the modification times and permission
-bits of their sources, and directories that the copy made get theirs last, since writing into a
-directory changes its time; directories that were there keep their own. With `atomic`, each file
-is written under a hidden temporary name next to its target (`.name.noc-PID-N`) and renamed when
-complete, so the target never holds part of a file; its failures name the target, not the name
-the user never sees. Without it, the target is written directly. Either way, a file that does
-not finish (an error, Skip, or cancellation) is removed; written directly over an existing file,
-that file is gone too. Cancelled while a host opens it, a temporary file goes as well, once made;
-a target written directly stays, empty, if the host does not open it within the two seconds a
-cancelled job has, since it may be one that another hand made just then.
+bits of their sources, and directories that the copy made get theirs once the copy is past the
+last entry within them, the deepest first, since writing into a directory changes its time
+([ADR 0053](adr/0053-a-directory-is-finished-once-all-in-it-is-done.md)): among the entries,
+where the time left counts it, and before an abort; directories that were there keep their own.
+With `atomic`, each file is written under a hidden temporary name next to its target
+(`.name.noc-PID-N`) and renamed when complete, so the target never holds part of a file; its
+failures name the target, not the name the user never sees. Without it, the target is written
+directly. Either way, a file that does not finish (an error, Skip, or cancellation) is removed;
+written directly over an existing file, that file is gone too. Cancelled while a host opens it, a
+temporary file goes as well, once made; a target written directly stays, empty, if the host does
+not open it within the two seconds a cancelled job has, since it may be one that another hand
+made just then.
 
 When the name of a file or symlink is taken, the job sends `Exists` with the metadata of both, for
 sizes and times, and waits for a `Conflict`: Overwrite, Skip, Overwrite all, Skip all, Overwrite
@@ -1023,13 +1026,13 @@ asks, as for any taken name, and its temporary file keeps the source whole, unle
 
 Moving places sources as copying does. Between file systems (local and a host, or two
 hosts), it is a copy with `remove_sources`: each file or symlink goes from the source once
-it is copied, and each directory once everything in it has gone, so whatever is skipped or
-fails stays, with the directories around it. Within one file system (`move_within`), each
-source is renamed, after the same question if its name is taken by something a rename
-replaces; a directory whose name is taken by a directory merges into it by copying and
-removing, and so does anything the rename refuses as crossing file systems (`EXDEV`
-locally, or a plain failure over SFTP v3, which has no code for it). One source to its own name
-spelled otherwise is renamed to that spelling, without a question and without a copy, a
+it is copied, and each directory once everything in it has gone, as soon as the copy is past
+it, so whatever is skipped or fails stays, with the directories around it. Within one file
+system (`move_within`), each source is renamed, after the same question if its name is taken
+by something a rename replaces; a directory whose name is taken by a directory merges into it
+by copying and removing, and so does anything the rename refuses as crossing file systems
+(`EXDEV` locally, or a plain failure over SFTP v3, which has no code for it). One source to its
+own name spelled otherwise is renamed to that spelling, without a question and without a copy, a
 directory too, where it would otherwise go into itself; a target that is the source by device and
 inode is a failure, since a rename onto itself does nothing. Moves keep times and permissions.
 

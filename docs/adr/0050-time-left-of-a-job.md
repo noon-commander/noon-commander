@@ -1,6 +1,7 @@
 # 0050. The time left of a job
 
-- Status: Accepted; amended by [ADR 0052](0052-bytes-written-count-once-they-arrive.md)
+- Status: Accepted; amended by [ADR 0052](0052-bytes-written-count-once-they-arrive.md) and
+  [ADR 0053](0053-a-directory-is-finished-once-all-in-it-is-done.md)
 - Date: 2026-10-28
 
 ## Context
@@ -88,7 +89,7 @@ are those after the review.
   With the clock it no longer jumps to and fro by a second or two, which rounding a time left
   over a minute to five seconds hid before.
 - It all comes from the counts that jobs report (`Counts`), with no change to `noc-ops` but for
-  when a byte written counts (ADR 0052).
+  when a byte written counts (ADR 0052) and when a directory is finished (ADR 0053).
 
 ## Consequences
 
@@ -141,7 +142,10 @@ are those after the review.
   way.
 - The model is two costs and a pace: a link that is fast for big files and slow to open each
   one is right; one whose pace changes with the size of the files in other ways is not.
-- What a job does without reports, such as setting the times of directories at its end, is not
-  in the work left: the time left shows `0:00`, then `-:--` once it looks like a stall.
+- What a job does without reports is not in the work left: the time left shows `0:00`, then
+  `-:--` once it looks like a stall. Setting the attributes of directories at the end of a copy
+  was such work, two round trips to a host for each, two minutes of an upload of 20 minutes,
+  until [ADR 0053](0053-a-directory-is-finished-once-all-in-it-is-done.md) did it among the
+  entries.
 - Hours of one kind of work forget what the other costs: after a file of many hours, small
   files left look as quick as their bytes until the first of them are done.

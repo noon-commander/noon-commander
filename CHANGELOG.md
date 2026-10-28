@@ -410,6 +410,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   takes away the file it did not finish.
 - With Atomic copies on, a copy that fails names the file, rather than the hidden name it was
   written under.
+- The time left of a copy to a host counts the time to give its directories their times and
+  permissions, two round trips for each, which it left out: an upload of a tree with many
+  directories came to `0:00` minutes before its end, and showed `-:--` for the rest. Each
+  directory now gets them as soon as all in it is copied, rather than all at the end, and a
+  move removes the source directory then; so a copy that is aborted keeps them for the
+  directories it finished
+  ([ADR 0053](docs/adr/0053-a-directory-is-finished-once-all-in-it-is-done.md)).
 - The Connection dialog of a lost or failed host no longer keeps the screen drawing 25 times a
   second for as long as it waits, as after a laptop slept: the panels that wait for the host show
   its marker of a failure in their titles, still, rather than red dots that turned.

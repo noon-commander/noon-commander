@@ -405,6 +405,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   run up to 2 MiB ahead of the link at the start of each file and stand still while its end goes
   out; a file under 2 MiB goes out as it is written rather than all at once as it closes
   ([ADR 0052](docs/adr/0052-bytes-written-count-once-they-arrive.md)).
+- A job cancelled while its host does not answer ends within two seconds, rather than wait as
+  long as the host stays silent; a copy over a slow link stops at once, rather than wait for what
+  it had on its way.
 - A copy with Atomic copies that fails names the file, rather than the hidden name it was
   written under.
 - The Connection dialog of a lost or failed host no longer keeps the screen drawing 25 times a

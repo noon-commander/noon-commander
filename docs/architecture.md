@@ -921,8 +921,11 @@ fails soon with the channel gone; the UI ends the job at once. A job talks
 to the UI through a `Reporter`: it sends `Event`s (`Scanning`, `Progress` with the entry at
 hand and done/total counts, `Failed`), and when an operation fails it waits for a `Decision`:
 Retry, Skip, Skip all (no more questions), or Abort. A `CancellationToken` stops it between
-operations and while it waits; so does a UI that stops listening. It returns an `Outcome`:
-entries done, entries skipped, and whether it was aborted.
+operations and while it waits for a decision or for data; so does a UI that stops listening.
+A request to a host that stopped answering never ends, so the task that runs a job gives it two
+seconds once cancelled (`noc_ops::in_time`), then drops it, which abandons what it waited for;
+work on a host is cancel-safe. It returns an `Outcome`: entries done, entries skipped, and
+whether it was aborted.
 
 `Progress` carries two byte counts. `bytes_done` drives the gauge: it takes a skipped file's
 size at once and goes back to the start of a file that is retried. `bytes_copied` counts only

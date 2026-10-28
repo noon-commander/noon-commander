@@ -879,7 +879,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
     /// Moves the data of `item` from `reader` to `writer`, which writes `written` for `target`,
     /// and gives it the attributes of `item` if the copy preserves them. Bytes count as they
     /// arrive, which on a host is when the server has taken them. Failures name `target`, not
-    /// a temporary name the user never sees.
+    /// a temporary name the user never sees. A cancel stops the waits for data.
     async fn transfer(
         &mut self,
         item: &Item<A::Path>,
@@ -892,29 +892,37 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
             if self.reporter.cancelled() {
                 return Err(Stop::Aborted);
             }
-            let chunk = reader
-                .read()
+            let chunk = self
+                .reporter
+                .unless_cancelled(reader.read())
                 .await
+                .ok_or(Stop::Aborted)?
                 .map_err(|error| Stop::Failed((self.from.report)(&item.source), error))?;
             let Some(chunk) = chunk else { break };
+            let wrote = self.reporter.unless_cancelled(writer.write(chunk)).await;
             // What the server took before a write it refused still counts.
-            let wrote = writer.write(chunk).await;
             self.arrived(item, &writer, &mut counted);
-            wrote.map_err(|error| self.at_target(target, error))?;
+            wrote
+                .ok_or(Stop::Aborted)?
+                .map_err(|error| self.at_target(target, error))?;
         }
         loop {
-            let more = writer.settle().await;
+            let more = self.reporter.unless_cancelled(writer.settle()).await;
             self.arrived(item, &writer, &mut counted);
-            if !more.map_err(|error| self.at_target(target, error))? {
+            let more = more
+                .ok_or(Stop::Aborted)?
+                .map_err(|error| self.at_target(target, error))?;
+            if !more {
                 break;
             }
             if self.reporter.cancelled() {
                 return Err(Stop::Aborted);
             }
         }
-        writer
-            .finish()
+        self.reporter
+            .unless_cancelled(writer.finish())
             .await
+            .ok_or(Stop::Aborted)?
             .map_err(|error| self.at_target(target, error))?;
         if self.options.preserve {
             self.set_attributes(written, &item.metadata)
@@ -1668,19 +1676,31 @@ mod tests {
     }
 
     /// The local file system, where every rename crosses file systems, and what is written
-    /// arrives late, as on a host.
-    struct OtherDevice;
+    /// arrives late, as on a host; or, if it `stalls`, as on a host that stops answering.
+    #[derive(Default)]
+    struct OtherDevice {
+        stalls: bool,
+    }
 
-    /// A local file whose writes arrive only as the job waits for them, 64 KiB at a time.
+    /// A local file whose writes arrive only as the job waits for them, 64 KiB at a time; or,
+    /// if it `stalls`, whose first write arrives at once, and nothing after.
     #[derive(Debug)]
     struct Late {
         writer: noc_vfs::LocalWriter,
         arrived: u64,
+        stalls: bool,
     }
 
     impl noc_vfs::FileWriter for Late {
         async fn write(&mut self, data: Vec<u8>) -> Result<(), VfsError> {
-            self.writer.write(data).await
+            if self.stalls && self.writer.written() > 0 {
+                std::future::pending::<()>().await;
+            }
+            self.writer.write(data).await?;
+            if self.stalls {
+                self.arrived = self.writer.written();
+            }
+            Ok(())
         }
 
         fn written(&self) -> u64 {
@@ -1761,7 +1781,11 @@ mod tests {
             replace: bool,
         ) -> Result<Self::Writer, VfsError> {
             let writer = LocalFs.create_file(path, replace).await?;
-            Ok(Late { writer, arrived: 0 })
+            Ok(Late {
+                writer,
+                arrived: 0,
+                stalls: self.stalls,
+            })
         }
     }
 
@@ -1773,13 +1797,41 @@ mod tests {
         let dst = root.path().join("dst");
         fs::create_dir(&dst).unwrap();
         let from = (&LocalFs, vec![src]);
-        let (outcome, seen) = run(from, (&OtherDevice, dst.clone()), BOTH, &[], false).await;
+        let (outcome, seen) = run(
+            from,
+            (&OtherDevice::default(), dst.clone()),
+            BOTH,
+            &[],
+            false,
+        )
+        .await;
         assert_eq!(outcome.done, 1);
         // Read and written 256 KiB at a time, it arrives 64 KiB at a time once all is written.
         let done: Vec<u64> = seen.bytes.iter().map(|(done, _)| *done).collect();
         assert_eq!(done, [0, 65_536, 131_072, 196_608, 262_144, 300_000]);
         assert_eq!(seen.copied, 300_000);
         assert_eq!(fs::read(dst.join("file")).unwrap(), vec![7; 300_000]);
+    }
+
+    #[tokio::test]
+    async fn a_cancel_stops_the_wait_for_a_host_that_stopped_answering() {
+        let root = tempfile::tempdir().unwrap();
+        let src = root.path().join("file");
+        fs::write(&src, vec![7; 600_000]).unwrap();
+        let dst = root.path().join("dst");
+        fs::create_dir(&dst).unwrap();
+        // Cancelled once its first write has arrived, after which the host answers nothing.
+        let stalled = OtherDevice { stalls: true };
+        let from = (&LocalFs, vec![src]);
+        let copy = run(from, (&stalled, dst.clone()), BOTH, &[], true);
+        let (outcome, _) = tokio::time::timeout(Duration::from_secs(10), copy)
+            .await
+            .expect("it stops");
+        assert!(outcome.aborted);
+        assert!(
+            fs::read_dir(&dst).unwrap().next().is_none(),
+            "no part of it"
+        );
     }
 
     #[tokio::test]
@@ -1791,7 +1843,14 @@ mod tests {
         fs::create_dir(&dst).unwrap();
         // Cancelled once the first 64 KiB have arrived, with all of it written.
         let from = (&LocalFs, vec![src]);
-        let (outcome, seen) = run(from, (&OtherDevice, dst.clone()), BOTH, &[], true).await;
+        let (outcome, seen) = run(
+            from,
+            (&OtherDevice::default(), dst.clone()),
+            BOTH,
+            &[],
+            true,
+        )
+        .await;
         assert!(outcome.aborted);
         assert!(seen.copied < 300_000, "{seen:?}");
         assert!(
@@ -1807,7 +1866,13 @@ mod tests {
         let dst = root.path().join("dst");
         fs::create_dir(&dst).unwrap();
         let moving = vec![src.join("dir"), src.join("file")];
-        let (outcome, seen) = run_move(&OtherDevice, moving, dst.clone(), Script::default()).await;
+        let (outcome, seen) = run_move(
+            &OtherDevice::default(),
+            moving,
+            dst.clone(),
+            Script::default(),
+        )
+        .await;
         assert!(seen.failed.is_empty(), "{seen:?}");
         // dir, a, sub, b, link, dangling, and file, copied one by one.
         assert_eq!(outcome.done, 7);

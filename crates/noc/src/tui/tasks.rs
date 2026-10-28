@@ -1208,13 +1208,14 @@ async fn run_delete<V: Vfs>(
     location: impl Fn(V::Path) -> Location,
 ) -> Done {
     let (events, incoming) = mpsc::unbounded_channel();
-    let reporter = Reporter::new(events, cancel);
+    let reporter = Reporter::new(events, cancel.clone());
     let work = async move {
         let mut reporter = reporter;
         noc_ops::delete(vfs, targets, &mut reporter).await
     };
+    let work = noc_ops::in_time(&cancel, work);
     let (outcome, ()) = tokio::join!(work, forward(incoming, id, done, location));
-    finished(id, Some(outcome))
+    finished(id, outcome)
 }
 
 /// The end of the job `id`, with its outcome if it ran.
@@ -1290,7 +1291,7 @@ async fn run_checksum(
         sessions.push((group, fs));
     }
     let (events, incoming) = mpsc::unbounded_channel();
-    let reporter = Reporter::new(events, cancel);
+    let reporter = Reporter::new(events, cancel.clone());
     let work = async move {
         let mut reporter = reporter;
         let mut job = Checksum::new(algorithm, &mut reporter);
@@ -1355,7 +1356,11 @@ async fn run_checksum(
         }
         job.finish()
     };
-    let ((outcome, sums), ()) = tokio::join!(work, forward(incoming, id, done, |path| path));
+    let work = noc_ops::in_time(&cancel, work);
+    let (ended, ()) = tokio::join!(work, forward(incoming, id, done, |path| path));
+    let Some((outcome, sums)) = ended else {
+        return finished(id, None);
+    };
     if !outcome.aborted {
         let _ = done.send(Done::Job {
             id,
@@ -1861,8 +1866,9 @@ impl CopyJob<'_> {
                 noc_ops::copy_within(side, sources, target, options, &mut reporter).await
             }
         };
+        let work = noc_ops::in_time(&self.cancel, work);
         let (outcome, ()) = tokio::join!(work, forward(incoming, self.id, self.done, |path| path));
-        finished(self.id, Some(outcome))
+        finished(self.id, outcome)
     }
 
     async fn copy<A: Vfs, B: Vfs>(
@@ -1885,8 +1891,9 @@ impl CopyJob<'_> {
             };
             noc_ops::copy(from, sources, to, target, options, &mut reporter).await
         };
+        let work = noc_ops::in_time(&self.cancel, work);
         let (outcome, ()) = tokio::join!(work, forward(incoming, self.id, self.done, |path| path));
-        finished(self.id, Some(outcome))
+        finished(self.id, outcome)
     }
 }
 

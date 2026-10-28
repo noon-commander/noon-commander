@@ -149,6 +149,9 @@ struct Point {
     /// Bytes done or skipped.
     done: u64,
     copied: u64,
+    /// The report came as the job started an entry, those before it done: the entry opens
+    /// after it, before any of its data moves.
+    starts: bool,
 }
 
 impl Point {
@@ -158,9 +161,15 @@ impl Point {
             entries: counts.done,
             done: counts.bytes_done,
             copied: counts.bytes_copied,
+            starts: false,
         }
     }
 }
+
+/// Below this, a sum that fades and gets nothing new tells nothing: work some three hours old.
+/// Left to fade further, sums stick among the smallest floats, alike, and their ratios turn to
+/// one.
+const FADED: f64 = 1e-100;
 
 /// Sums over stretches of a job's work, each weighing less the longer ago it ended, by
 /// [`ETA_HORIZON`].
@@ -212,14 +221,41 @@ impl Sums {
         ] {
             *sum *= keep;
         }
+        self.forget();
         let bytes = float(to.copied.saturating_sub(from.copied));
         let entries = to.entries.saturating_sub(from.entries);
         self.time += time;
         self.bytes += bytes;
         self.entries += float(entries);
-        if entries == 0 && bytes > 0.0 {
+        // A stretch that starts as an entry starts holds its opening.
+        if entries == 0 && bytes > 0.0 && !from.starts {
             self.stream_time += time;
             self.stream_bytes += bytes;
+        }
+    }
+
+    /// Lets go of what has faded below [`FADED`]: each group of sums at once, so that what is
+    /// left keeps its ratios.
+    fn forget(&mut self) {
+        for sum in [&mut self.bytes, &mut self.entries] {
+            if *sum < FADED {
+                *sum = 0.0;
+            }
+        }
+        if self.stream_time < FADED || self.stream_bytes < FADED {
+            self.stream_time = 0.0;
+            self.stream_bytes = 0.0;
+        }
+        if self.rows < FADED {
+            let fit = Sums {
+                time: self.time,
+                bytes: self.bytes,
+                entries: self.entries,
+                stream_time: self.stream_time,
+                stream_bytes: self.stream_bytes,
+                ..Sums::default()
+            };
+            *self = fit;
         }
     }
 
@@ -242,13 +278,21 @@ impl Sums {
         self.tt += time * time;
     }
 
-    /// What a byte and an entry cost, in proportion. A byte costs what it does while data
-    /// streams within entries, and an entry what the stretches of entries took beyond their
-    /// bytes. A job with no data streaming yet, whose files are all small, takes both from the
-    /// least squares while the cost of an entry stands well clear of the noise; that of their
-    /// bytes is mostly noise, and no less than nothing, until data streams. Else bytes alone
-    /// count, as for files of one size.
+    /// What a byte and an entry cost, in proportion.
+    ///
+    /// The stretches between finished entries tell both by least squares, wherever the time of
+    /// an entry falls among its reports, as that of sending what an upload queued falls after
+    /// its last chunk, while each stands well clear of the noise. Else a byte costs what it
+    /// does while data streams within entries, and an entry what the stretches of entries took
+    /// beyond their bytes. Else, with no data streaming yet, as among small files only, the
+    /// least squares still tell the cost of an entry if it stands clear; that of their bytes is
+    /// mostly noise then, and no less than nothing. Else bytes alone count, as for files of one
+    /// size.
     fn costs(&self) -> (f64, f64) {
+        let fitted = self.fitted();
+        if let Some(((byte, entry), (true, true))) = fitted {
+            return (byte, entry);
+        }
         if self.stream_bytes > 0.0 && self.stream_time > 0.0 {
             let byte = self.stream_time / self.stream_bytes;
             let entry = if self.nn > 0.0 {
@@ -258,21 +302,31 @@ impl Sums {
             };
             return (byte, entry);
         }
-        let det = self.bb * self.nn - self.bn * self.bn;
-        if self.rows > 3.0 && det > 1e-3 * self.bb * self.nn {
-            let byte = (self.bt * self.nn - self.bn * self.nt) / det;
-            let entry = (self.bb * self.nt - self.bn * self.bt) / det;
-            let squares = self.tt - 2.0 * (byte * self.bt + entry * self.nt)
-                + byte * byte * self.bb
-                + 2.0 * byte * entry * self.bn
-                + entry * entry * self.nn;
-            let noise = squares.max(0.0) / (self.rows - 2.0);
-            // At least twice its standard error.
-            if entry > 0.0 && entry * entry * det >= 4.0 * noise * self.bb {
-                return (byte.max(0.0), entry);
-            }
+        if let Some(((byte, entry), (_, true))) = fitted {
+            return (byte.max(0.0), entry);
         }
         (1.0, 0.0)
+    }
+
+    /// The least squares of the time of the stretches between finished entries on their bytes
+    /// and their entries: what a byte and an entry cost, and whether each is above nothing by
+    /// at least twice its standard error. Nothing while the bytes and the entries of the
+    /// stretches go too much alike to tell apart, or there are too few.
+    fn fitted(&self) -> Option<((f64, f64), (bool, bool))> {
+        let det = self.bb * self.nn - self.bn * self.bn;
+        if self.rows <= 3.0 || det <= 1e-3 * self.bb * self.nn {
+            return None;
+        }
+        let byte = (self.bt * self.nn - self.bn * self.nt) / det;
+        let entry = (self.bb * self.nt - self.bn * self.bt) / det;
+        let squares = self.tt - 2.0 * (byte * self.bt + entry * self.nt)
+            + byte * byte * self.bb
+            + 2.0 * byte * entry * self.bn
+            + entry * entry * self.nn;
+        let noise = squares.max(0.0) / (self.rows - 2.0);
+        // The variance of a cost is the noise times its own sum of squares, over `det`.
+        let clear = |cost: f64, sum: f64| cost > 0.0 && cost * cost * det >= 4.0 * noise * sum;
+        Some(((byte, entry), (clear(byte, self.nn), clear(entry, self.bb))))
     }
 }
 
@@ -286,8 +340,9 @@ struct Forecast {
     last: Option<Point>,
     /// Where the job was when it last had done more entries.
     finished: Option<Point>,
-    /// When the job last reported, in the time it worked.
+    /// When the job last reported, in the time it worked, and with how many entries done.
     seen: Option<Duration>,
+    entries: u64,
     /// Time in which no report came beyond [`RECENT`]: the job stood still, and the time is
     /// left out, so that the pace is that of work when work goes on.
     still: Duration,
@@ -297,11 +352,14 @@ struct Forecast {
 impl Forecast {
     /// The job had `counts` behind it when it had worked `at`.
     fn note(&mut self, at: Duration, counts: &Counts) {
+        let mut point = Point::new(at, counts);
         if let Some(seen) = self.seen {
             self.still += at.saturating_sub(seen).saturating_sub(RECENT);
+            point.starts = counts.done > self.entries;
         }
         self.seen = Some(at);
-        let point = Point::new(at.saturating_sub(self.still), counts);
+        self.entries = counts.done;
+        point.at = at.saturating_sub(self.still);
         let (Some(last), Some(finished)) = (self.last, self.finished) else {
             self.last = Some(point);
             self.finished = Some(point);
@@ -1407,6 +1465,9 @@ mod tests {
 
     const MIB: u64 = 1024 * 1024;
 
+    /// The chunks of an SFTP channel, after each of which a job reports.
+    const CHUNK: u64 = 32 * 1024;
+
     /// A copy at work, reported as a job reports: after each chunk, a quarter of a second of
     /// data at most, and after each entry.
     struct Run {
@@ -1461,6 +1522,48 @@ mod tests {
             self.stream(size, speed);
             self.counts.done += 1;
             self.report();
+        }
+
+        /// A file of `size` bytes as a job copies it: a report as it starts, with those before
+        /// it done; `open` seconds; its data at `speed` bytes a second, with a report after each
+        /// chunk; then `close` seconds, setting attributes and the like, with no report, the
+        /// next start telling it done.
+        fn file(&mut self, size: u64, speed: u64, (open, close): (f64, f64)) {
+            self.report();
+            self.at += open;
+            let mut left = size;
+            while left > 0 {
+                let chunk = left.min(CHUNK);
+                self.at += float(chunk) / float(speed);
+                self.counts.bytes_done += chunk;
+                self.counts.bytes_copied += chunk;
+                left -= chunk;
+                self.report();
+            }
+            self.at += close;
+            self.counts.done += 1;
+        }
+
+        /// The same file sent to a host, as an SFTP writer sends it: chunks go into a queue of
+        /// 2 MiB at once, and wait for room as the host takes those before; the job waits for
+        /// the last of them before it closes.
+        fn upload(&mut self, size: u64, speed: u64, (open, close): (f64, f64)) {
+            const QUEUE: u64 = 2 * MIB;
+            self.report();
+            self.at += open;
+            let start = self.at;
+            let mut queued = 0;
+            while queued < size {
+                let chunk = CHUNK.min(size - queued);
+                queued += chunk;
+                let sent = queued.saturating_sub(QUEUE);
+                self.at = self.at.max(start + float(sent) / float(speed));
+                self.counts.bytes_done += chunk;
+                self.counts.bytes_copied += chunk;
+                self.report();
+            }
+            self.at = start + float(size) / float(speed) + close;
+            self.counts.done += 1;
         }
 
         /// Skips a file of `size` bytes that is there already, finding it out in `seconds`, and
@@ -1524,6 +1627,7 @@ mod tests {
             entries,
             done: bytes,
             copied: bytes,
+            starts: false,
         };
         // 10 MiB streaming in a second within an entry, then three entries without data, a
         // tenth of a second each.
@@ -1567,6 +1671,120 @@ mod tests {
         let (byte, entry) = sums.costs();
         assert!(byte >= 0.0 && byte * float(30 * 1024) < 0.01, "{byte}");
         assert!((entry - 0.1).abs() < 0.01, "{entry}");
+
+        // Whole entries that tell both costs clearly come before data streaming that says
+        // otherwise, as an upload's does, which queues its first 2 MiB at once: streaming says
+        // 40 MiB a second, entries of 1 and 3 MiB by turns, a tenth of a second each beside
+        // their bytes, 10.
+        let mut sums = Sums::default();
+        sums.add(point(0, 0, 0), point(1_000, 0, 40 * MIB));
+        let (mut at, mut bytes) = (1_000, 40 * MIB);
+        for n in 0..6 {
+            let size = if n % 2 == 0 { MIB } else { 3 * MIB };
+            let took = 100 + size * 1_000 / (10 * MIB);
+            sums.fit(point(at, n, bytes), point(at + took, n + 1, bytes + size));
+            (at, bytes) = (at + took, bytes + size);
+        }
+        let (byte, entry) = sums.costs();
+        assert!((byte * float(MIB) - 0.1).abs() < 1e-9, "{byte}");
+        assert!((entry - 0.1).abs() < 1e-9, "{entry}");
+    }
+
+    #[test]
+    fn files_up_and_down_keep_to_the_time_left() {
+        // 120 files at 2 MiB a second, each opened in 90 ms and closed in 120, then 2,000 files
+        // of 2 KiB. Files of one size tell bytes and entries apart only by the data streaming
+        // within them, which must not hold the opening of the next; sent to a host, the queue of
+        // the writer moves the time of sending a file's last 2 MiB after its last report.
+        for (upload, one_size) in [(false, true), (false, false), (true, false)] {
+            let mut noise = Noise(3);
+            let sizes: Vec<u64> = (0..120)
+                .map(|_| {
+                    if one_size {
+                        3 * MIB
+                    } else {
+                        MIB / 2 + noise.below(3 * MIB)
+                    }
+                })
+                .collect();
+            let bytes = sizes.iter().sum::<u64>() + 2_000 * 2_048;
+            let mut run = Run::new(2_120, bytes);
+            let copy = |run: &mut Run, size| {
+                if upload {
+                    run.upload(size, 2 * MIB, (0.09, 0.12));
+                } else {
+                    run.file(size, 2 * MIB, (0.09, 0.12));
+                }
+            };
+            let mut seen = Vec::new();
+            for (n, size) in sizes.into_iter().enumerate() {
+                copy(&mut run, size);
+                if n % 10 == 9 && run.at > 30.0 {
+                    seen.push((run.at, run.left()));
+                }
+            }
+            seen.push((run.at, run.left()));
+            for _ in 0..2_000 {
+                copy(&mut run, 2_048);
+            }
+            for (at, left) in seen {
+                let truth = run.at - at;
+                let off = (left - truth).abs();
+                assert!(
+                    off < truth * 0.05,
+                    "upload {upload}, one size {one_size}: {left} for {truth} at {at}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_cost_unheard_of_for_hours_is_forgotten() {
+        let point = |seconds: f64, entries: u64, bytes: u64| Point {
+            at: Duration::from_secs_f64(seconds),
+            entries,
+            done: bytes,
+            copied: bytes,
+            starts: false,
+        };
+        // A hundred files of 64 KiB, a tenth of a second each, then nine hours of one file at
+        // 10 MiB a second: the cost of an entry fades out of the sums.
+        let mut sums = Sums::default();
+        let (mut at, mut entries, mut bytes) = (0.0, 0, 0);
+        for _ in 0..100 {
+            let from = point(at, entries, bytes);
+            (at, entries, bytes) = (at + 0.1, entries + 1, bytes + 64 * 1024);
+            sums.fit(from, point(at, entries, bytes));
+            sums.add(from, point(at, entries, bytes));
+        }
+        for _ in 0..9 * 3_600 * 4 {
+            let from = point(at, entries, bytes);
+            (at, bytes) = (at + 0.25, bytes + 10 * MIB / 4);
+            sums.add(from, point(at, entries, bytes));
+        }
+        let (byte, entry) = sums.costs();
+        assert!((byte * float(10 * MIB) - 1.0).abs() < 1e-9, "{byte}");
+        assert!(
+            entry.abs() < f64::EPSILON,
+            "forgotten, not stuck at one: {entry}"
+        );
+        // Nine hours of files of up to 30 KiB then, each a tenth of a second give or take a
+        // third: the cost of streaming fades out as well, and the cost of an entry shows.
+        let mut noise = Noise(5);
+        for _ in 0..9 * 36_000 {
+            let from = point(at, entries, bytes);
+            at += noise.around(0.1, 0.3);
+            (entries, bytes) = (entries + 1, bytes + noise.below(30 * 1_024));
+            sums.fit(from, point(at, entries, bytes));
+            sums.add(from, point(at, entries, bytes));
+        }
+        assert!(sums.stream_time.abs() < f64::EPSILON);
+        let (byte, entry) = sums.costs();
+        assert!((entry - 0.1).abs() < 0.01, "{entry}");
+        assert!(
+            byte * float(30 * 1_024) < 0.01,
+            "not a second a byte: {byte}"
+        );
     }
 
     #[test]

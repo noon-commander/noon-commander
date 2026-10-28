@@ -346,7 +346,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   while no data moves it falls to `0B/s`. The time left follows the pace of about the last half
   minute, so it no longer swings with the speed over an uneven link, and counts the entries left
   as well as the bytes, at what each has cost so far, so that many small files left no longer
-  look done in no time. Five seconds after the last report it shows `-:--`, and the stall does not
+  look done in no time, sent to a host as well as copied from one. Five seconds after the last
+  report it shows `-:--`, and the stall does not
   slow the pace once work goes on; Skip all over many files is no stall
   ([ADR 0050](docs/adr/0050-time-left-of-a-job.md)). Both change once a second, with the time the
   job has worked, rather than with every frame, and the time left counts down a second each

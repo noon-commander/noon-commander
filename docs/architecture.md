@@ -933,19 +933,21 @@ A slow start is behind it after five seconds; when no data comes it falls to zer
 left looks further back, so that it does not swing with the speed
 ([ADR 0050](adr/0050-time-left-of-a-job.md)): its `Forecast` sums the time, the bytes copied, and
 the entries done over stretches of work, each weighing a third as much every half minute older
-(`ETA_HORIZON`). A byte costs what it does in the stretches in which no entry was done, data
-streaming within entries; an entry, what the stretches between finished entries took beyond
-their bytes, by least squares. Until any data streams, as among small files only, both come from
-the least squares while the cost of an entry stands clear of the noise, else bytes alone count;
-never entries alone while data is left. The time left is the bytes and entries left at those
-costs and that pace. It is unknown once no report has come for five seconds (`RECENT`), and only
-those five of a longer gap count for the pace; a stretch that skipped data is a pause. Both are
-worked out once in each
-second that the time shows and held until the next, so they change with it rather than with
-every frame. The time left shown counts down by the clock, a second each second, while it keeps
-within 3% of the forecast (`ETA_NEAR`); up to a tenth from it (`ETA_SLACK`), it also moves a
-tenth of the way there each second, and beyond, halfway (`count_down`). It keeps its fraction
-of a second and shows rounded.
+(`ETA_HORIZON`), and forgets a group of them that has faded to nothing. What a byte and an entry
+cost come from least squares of the time of the stretches between finished entries on their
+bytes and their entries, when both stand clear of the noise: jobs report as an entry starts,
+before it opens, and an upload sends its end after its last report. Else a byte costs what it
+does in the stretches in which no entry was done but for those that start with an entry's
+opening, and an entry what its stretches took beyond their bytes; among small files only, the
+least squares still give the cost of an entry if it stands clear; else bytes alone count. The
+time left is the bytes and entries left at those costs and that pace. It is unknown once no
+report has come for five seconds (`RECENT`), and only those five of a longer gap count for the
+pace; a stretch that skipped data is a pause. Both are worked out once in each second that the
+time shows and held until the next, so they change with it rather than with every frame. The
+time left shown counts down by the clock, a second each second, while it keeps within 3% of the
+forecast (`ETA_NEAR`); up to a tenth from it (`ETA_SLACK`), it also moves a tenth of the way
+there each second, and beyond, halfway (`count_down`). It keeps its fraction of a second and
+shows rounded.
 
 Renaming one entry in its directory (`rename`) is no job: one call with no progress, which
 the UI runs like a new directory, through the host's shared session (`Arc<SftpFs>`) for a

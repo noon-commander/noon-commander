@@ -12085,6 +12085,9 @@ mod tests {
     #[test]
     fn a_failed_connection_asks_to_retry_while_the_panel_waits() {
         let mut app = at_slash();
+        // The dots turn, so that whether they are due says what waits, however long the test
+        // takes: without turning, they are due only before they first show.
+        app.config.animations.spinners = true;
         let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 2)) else {
             panic!("expected a connection");
         };

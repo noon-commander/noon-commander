@@ -1219,6 +1219,9 @@ command-press-key = Press any key to return to Noon Commander.
 # a dialog's OK and Cancel, as Enter and Esc.
 command-stopped-mark = [stopped]
 command-stopped-keys = { $resume } continue · { $end } end
+# The same, once the command was asked to end and went on, as one that takes no SIGHUP: now the
+# key kills it.
+command-stopped-kill-keys = { $resume } continue · { $end } kill
 # Stays on the screen after a command that failed, after the key it waited for.
 command-exit-mark = [exit { $code }]
 command-signal-mark = [signal { $signal }]

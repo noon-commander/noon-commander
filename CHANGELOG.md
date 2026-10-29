@@ -19,7 +19,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   command and the editor of F4 run as jobs, in process groups of their own with the terminal,
   so that Ctrl+c and Ctrl+z reach them alone, and Noon Commander takes the terminal back when
   they end. Ctrl+z no longer suspends Noon Commander with them: `[stopped] Enter continue · Esc
-  end` shows under their output.
+  end` shows under their output; one that takes no SIGHUP and goes on after Esc shows `Esc
+  kill` the next time.
 - F3 reads a file in parts (`viewer.part_mib`, 16 MiB) and holds a window of it
   (`viewer.window_mib`, 128 MiB), both under Viewer in the Configuration dialog, so any part of
   a large file can be seen: the next part is read when the screen reaches the end of what is held,

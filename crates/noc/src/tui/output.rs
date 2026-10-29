@@ -117,7 +117,9 @@ pub(super) async fn finish(
             Waited::Ended(status) => return Ok(status),
             Waited::Stopped => {
                 // One that cannot go on ends, rather than stays stopped while it waits.
-                if !(goes_on(&mut out, keymap).await? && running.resume().is_ok()) {
+                if !(goes_on(&mut out, keymap, running.has_ended()).await?
+                    && running.resume().is_ok())
+                {
                     let _ = running.end();
                 }
             }
@@ -127,15 +129,16 @@ pub(super) async fn finish(
 
 /// Asks whether a command that was stopped, as by Ctrl+z, goes on or ends: on a line of its
 /// own, `[stopped]`, as the mark of a failure, then the keys of a dialog's question, which read
-/// the answer: Confirm goes on, Cancel ends it. The line goes after the answer, and the
-/// terminal is as it was before, for the command.
-async fn goes_on(out: &mut impl io::Write, keymap: &Keymap) -> Result<bool, String> {
+/// the answer: Confirm goes on, Cancel ends it, or kills it if it was `ended` before and went
+/// on. The line goes after the answer, and the terminal is as it was before, for the command.
+async fn goes_on(out: &mut impl io::Write, keymap: &Keymap, ended: bool) -> Result<bool, String> {
     let key = |action| keymap.key(Context::Dialog, action).unwrap_or_default();
-    let keys = fl!(
-        "command-stopped-keys",
-        resume = key(Action::Confirm),
-        end = key(Action::Cancel)
-    );
+    let (resume, end) = (key(Action::Confirm), key(Action::Cancel));
+    let keys = if ended {
+        fl!("command-stopped-kill-keys", resume = resume, end = end)
+    } else {
+        fl!("command-stopped-keys", resume = resume, end = end)
+    };
     end_line(out);
     print_mark(out, &fl!("command-stopped-mark"), &format!(" {keys}"));
     crossterm::terminal::enable_raw_mode().map_err(|error| error.to_string())?;

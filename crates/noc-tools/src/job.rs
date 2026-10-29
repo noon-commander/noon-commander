@@ -136,7 +136,8 @@ impl Running {
 
     /// Ends a stopped program as a shell ends the stopped jobs it leaves: SIGHUP, then
     /// SIGCONT, so that it hears it, with the terminal, so that it can put the terminal back as
-    /// it was. One that goes on after that gets SIGKILL the next time.
+    /// it was. One that goes on after that, as a server that takes SIGHUP for reading its
+    /// settings again, gets SIGKILL the next time; [`has_ended`](Self::has_ended) says so.
     pub fn end(&mut self) -> io::Result<()> {
         let Some(job) = &mut self.job else {
             return Ok(());
@@ -151,8 +152,30 @@ impl Running {
         Ok(kill_process_group(group, ProcessSignal::CONT)?)
     }
 
+    /// Whether [`end`](Self::end) has asked it to end, so that the next one kills it.
+    pub fn has_ended(&self) -> bool {
+        self.job.as_ref().is_some_and(|job| job.ended)
+    }
+
     pub fn program(&self) -> &Path {
         &self.program
+    }
+}
+
+impl Drop for Running {
+    /// One that has not ended goes with all of its group, which `kill_on_drop` alone would
+    /// leave, and the terminal comes back. Jobs that a shell moved to groups of their own are
+    /// out of reach: stopped ones end once their group is left without a parent in it, as the
+    /// kernel ends such groups; running ones go on, as with `nohup`.
+    fn drop(&mut self) {
+        let Some(job) = &self.job else {
+            return;
+        };
+        if matches!(self.child.try_wait(), Ok(Some(_))) {
+            return;
+        }
+        let _ = kill_process_group(job.pid, ProcessSignal::KILL);
+        let _ = set_foreground(getpgrp());
     }
 }
 
@@ -211,6 +234,7 @@ mod tests {
     use std::os::unix::fs::PermissionsExt as _;
     use std::os::unix::process::ExitStatusExt as _;
     use std::path::Path;
+    use std::time::{Duration, Instant};
 
     use noc_vars::Template;
 
@@ -227,6 +251,28 @@ mod tests {
         match running.wait().await.unwrap() {
             Waited::Ended(status) => status,
             Waited::Stopped => panic!("stopped"),
+        }
+    }
+
+    /// Whether process `pid` is there and not a zombie.
+    fn alive(pid: &str) -> bool {
+        let out = std::process::Command::new("ps")
+            .args(["-o", "stat=", "-p", pid])
+            .output()
+            .unwrap();
+        let stat = String::from_utf8_lossy(&out.stdout);
+        !stat.trim().is_empty() && !stat.trim().starts_with('Z')
+    }
+
+    /// The text of `path` once it has some, or after five seconds.
+    async fn text_of(path: &Path) -> String {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let text = std::fs::read_to_string(path).unwrap_or_default();
+            if text.ends_with('\n') || Instant::now() > deadline {
+                return text;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
         }
     }
 
@@ -279,11 +325,24 @@ mod tests {
         std::fs::remove_file(&out).unwrap();
         let mut running = sh.start(dir.path(), stops).unwrap();
         assert_eq!(running.wait().await.unwrap(), Waited::Stopped);
+        assert!(!running.has_ended());
         running.end().unwrap();
         assert_eq!(ended(&mut running).await.signal(), Some(1));
         assert!(!out.exists(), "it did not go on");
         assert!(in_foreground());
         println!("STOPPED: ENDS");
+
+        // One that takes no SIGHUP goes on, and the next end kills it.
+        let deaf = "trap '' HUP; kill -TSTP $$; kill -TSTP $$; echo went on > out";
+        let mut running = sh.start(dir.path(), deaf).unwrap();
+        assert_eq!(running.wait().await.unwrap(), Waited::Stopped);
+        running.end().unwrap();
+        assert_eq!(running.wait().await.unwrap(), Waited::Stopped);
+        assert!(running.has_ended());
+        running.end().unwrap();
+        assert_eq!(ended(&mut running).await.signal(), Some(9));
+        assert!(!out.exists(), "it did not go on");
+        println!("DEAF TO SIGHUP: KILLED");
 
         // The editor of F4 is a job too.
         let editor_path = dir.path().join("editor");
@@ -302,6 +361,23 @@ mod tests {
         assert!(ended(&mut running).await.success());
         assert_eq!(std::fs::read_to_string(&out).unwrap(), "edited\n");
         println!("EDITOR: A JOB");
+
+        // Dropped before it ends, it goes with all of its group, and the terminal comes back.
+        let pids = dir.path().join("pids");
+        let two = "sleep 30 & echo \"$! $$\" > pids; exec sleep 30";
+        let running = sh.start(dir.path(), two).unwrap();
+        let both = text_of(&pids).await;
+        let both: Vec<&str> = both.split_whitespace().collect();
+        assert_eq!(both.len(), 2, "{both:?}");
+        assert!(both.iter().all(|pid| alive(pid)));
+        drop(running);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while both.iter().any(|pid| alive(pid)) && Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(!both.iter().any(|pid| alive(pid)), "both went");
+        assert!(in_foreground());
+        println!("DROPPED: ALL OF ITS GROUP GOES");
     }
 
     #[test]
@@ -320,7 +396,9 @@ mod tests {
             "WHILE IT RUNS: ITS OWN",
             "STOPPED: GOES ON",
             "STOPPED: ENDS",
+            "DEAF TO SIGHUP: KILLED",
             "EDITOR: A JOB",
+            "DROPPED: ALL OF ITS GROUP GOES",
         ] {
             assert!(text.contains(line), "{line}: {text}");
         }

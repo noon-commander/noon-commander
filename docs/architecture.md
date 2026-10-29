@@ -1576,7 +1576,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   `pthread_sigmask`), which zsh, which `exec`s the last command of `-c`, never gives back. One
   stopped by Ctrl+z gets `[stopped]` under its output, as a mark of a failure, and the keys of a
   dialog, which are read (`output::finish`): Enter continues it (`Running::resume`), Esc ends it
-  with SIGHUP (`Running::end`). On a host, the
+  with SIGHUP (`Running::end`), and after that kills it, `[stopped] Enter continue · Esc kill`,
+  if it went on. A `Running` dropped before it ends kills all of its group. On a host, the
   host's task builds the ssh command from its session (`Session::command_in`) and the event loop
   runs it with the terminal: over the master, with `cd -- '<dir>' || exit` and then `exec` and
   the words of the host's `run` in `hosts.toml`, else of `shell.run`, quoted but for each

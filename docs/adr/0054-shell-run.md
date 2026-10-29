@@ -60,7 +60,11 @@ shell stayed in Noon Commander's group, and Ctrl+z suspended both.
   `Editor::start`) starts it in a process group of its own and gives that group the terminal,
   so that Ctrl+c and Ctrl+z reach it and not Noon Commander. One that found itself in the
   background first, as an interactive shell checks at once, and stopped itself with SIGTTIN or
-  SIGTTOU, is continued in front.
+  SIGTTOU, is continued in front. One dropped before it ends, as when Noon Commander cannot
+  ask what next, goes with all of its group, which tokio's `kill_on_drop` alone would leave,
+  and the terminal comes back. Jobs that a shell moved to groups of their own are out of reach:
+  stopped ones end once their group is left without a parent in it, as the kernel ends such
+  groups; running ones go on, as with `nohup`.
 - **Noon Commander waits as a shell waits** (`Running::wait`): for SIGCHLD, which comes when a
   child ends or is stopped, and then asks `waitid` (`WSTOPPED`, `WNOHANG`) whether its child,
   the shell or the command zsh ran in its place, is stopped. When it ends or is stopped,
@@ -73,8 +77,10 @@ shell stayed in Noon Commander's group, and Ctrl+z suspended both.
   the keymap: `[stopped] Enter continue · Esc end`. Confirm (Enter) gives it the terminal back
   and continues it; Cancel (Esc, Ctrl+c) ends it as a shell ends the stopped jobs it leaves,
   with SIGHUP and then SIGCONT, with the terminal, so that it can put the terminal back as it
-  was; one that goes on after that gets SIGKILL the next time. Ended so, it fails with signal
-  1, as any command ended by a signal. The editor of F4 asks so too. A command that bash or zsh
+  was. One that goes on after that, as a server that takes SIGHUP for reading its settings
+  again, says `Esc kill` the next time it is stopped, and Cancel then sends SIGKILL. Ended so,
+  it fails with signal 1, or 9, as any command ended by a signal. The editor of F4 asks so
+  too. A command that bash or zsh
   runs as a job of its own is theirs to stop: they say it is suspended and go on, or end.
 - **Text fields of dialogs show a placeholder**: faint text while the field is empty, which is
   never its value, in the style of the hints of settings. The field of `run` is the first.

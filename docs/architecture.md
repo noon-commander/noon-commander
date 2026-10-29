@@ -988,9 +988,10 @@ the job's first report and a question, after which Retry opens the entry again),
 entry what its stretches took beyond their bytes; among small files only, the
 least squares still give the cost of an entry if it stands clear; else bytes alone count. The
 time left is the bytes and entries left at those costs and that pace. It is unknown while the
-entries left are on average more than ten times as large as those done (`AHEAD`), until the work
-has told what a byte costs: data has streamed within an entry, or finished entries with data had
-sizes at least twice apart. It is unknown once no
+entries left are on average more than ten times as large as those done since the forecast's
+first report (`AHEAD`), not the renames of a move, until the work has told what a byte costs:
+data has streamed within an entry, or finished entries with data had sizes at least twice apart.
+It is unknown once no
 report has come for longer than twice the longest pause between reports in the last minute
 (`PAUSES`), five seconds (`RECENT`) at least, so that a slow link or disk that pauses as it
 works keeps a time left; of such a stall only the usual pause counts for the pace, and a

@@ -64,7 +64,9 @@ are those after the review.
   on average more than ten times as large as those done (`AHEAD`), the time left is unknown,
   `-:--`: small files of one size, then a big one, showed the big one at their own pace, nine
   hours for three quarters of a job of under five minutes. Once the work has told it, this
-  no longer holds for the rest of the job, so that the time left does not come and go.
+  no longer holds for the rest of the job, so that the time left does not come and go. The
+  entries done are those since the first report of the forecast: a move that copies after its
+  renames counts the entries it renamed among those done, with no data.
 - **Standing still is unknown.** A job may pause between reports as it works: a link that sends
   a chunk every few seconds, a disk that takes its time now and then to write what it holds
   back. A pause is standing still once it is longer than twice the longest pause of over two and
@@ -215,6 +217,10 @@ are those after the review.
   made a byte cost 47% more; now it is within 2%. A test checks it.
 - A move of 1,000 files after 40 seconds of renames and 4 of counting showed a time left 77% too
   long, and at once; now it is within 5%, once its forecasts agree. A test checks it.
+- In the check that runs the jobs of `noc-ops`, a move of 1,000 files of 1 MiB on a host after
+  3,000 renames showed `-:--` for 108 seconds of its copy, a third of it, while its forecast was
+  right, and after 600 renames for 22: the files done looked ten times smaller than those left.
+  Now it shows two and a half seconds into the copy, within 7%. A test checks it.
 - The model is two costs and a pace: a link that is fast for big files and slow to open each
   one is right; one whose pace changes with the size of the files in other ways is not.
 - What a job does without reports is not in the work left: the time left shows `0:00`, then

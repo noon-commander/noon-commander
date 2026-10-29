@@ -380,8 +380,8 @@ impl Sums {
 /// files left take longer than their bytes say.
 #[derive(Debug, Default)]
 struct Forecast {
-    /// When the job first reported, in the time it worked.
-    began: Option<Duration>,
+    /// Where the job was when it first reported, or reported again after counting.
+    first: Option<Point>,
     /// Where the last stretch of the pace ended.
     last: Option<Point>,
     /// Where the job was when it last had done more entries.
@@ -432,11 +432,11 @@ impl Forecast {
         }
         // A job's first report comes as it starts its first entry.
         point.starts = self.seen.is_none() || counts.done > self.entries;
-        self.began.get_or_insert(at);
         self.seen = Some(at);
         self.entries = counts.done;
         point.at = at.saturating_sub(self.still);
         let (Some(last), Some(finished)) = (self.last, self.finished) else {
+            self.first = Some(point);
             self.last = Some(point);
             self.finished = Some(point);
             return;
@@ -494,22 +494,30 @@ impl Forecast {
     /// Whether the time left shows at `at`: its forecasts have agreed, or the job has worked
     /// [`ETA_SETTLE_MAX`] since its first report.
     fn shows(&self, at: Duration) -> bool {
-        self.settled || self.began.is_some_and(|began| at >= began + ETA_SETTLE_MAX)
+        self.settled || self.began().is_some_and(|began| at >= began + ETA_SETTLE_MAX)
+    }
+
+    /// When the job first reported, or reported again after counting, in the time it worked.
+    fn began(&self) -> Option<Duration> {
+        self.first.map(|first| first.at)
     }
 
     /// Whether the entries left, with `counts` behind the job, are on average more than
-    /// [`AHEAD`] times as large as those it has finished, so that what their bytes cost cannot
-    /// come from those. Not before it has finished any data.
+    /// [`AHEAD`] times as large as those it has finished since its first report, so that what
+    /// their bytes cost cannot come from those. Not before it has finished any data. Those done
+    /// before do not count: a move counts the entries it renamed, which have no data.
     fn bigger_ahead(&self, counts: &Counts) -> bool {
-        let Some(finished) = self.finished else {
+        let (Some(first), Some(finished)) = (self.first, self.finished) else {
             return false;
         };
         let left = counts.total.saturating_sub(finished.entries);
-        if finished.entries == 0 || finished.done == 0 || left == 0 {
+        let entries = finished.entries.saturating_sub(first.entries);
+        let done = finished.done.saturating_sub(first.done);
+        if entries == 0 || done == 0 || left == 0 {
             return false;
         }
         let ahead = float(counts.bytes_total.saturating_sub(finished.done)) / float(left);
-        let behind = float(finished.done) / float(finished.entries);
+        let behind = float(done) / float(entries);
         ahead > AHEAD * behind
     }
 
@@ -968,7 +976,7 @@ impl JobView {
             None => None,
         };
         // Since the job first reported, or reported again after counting.
-        let worked = elapsed.saturating_sub(self.forecast.began.unwrap_or_default());
+        let worked = elapsed.saturating_sub(self.forecast.began().unwrap_or_default());
         let (speed, left) = if counts.bytes_total > 0 && worked >= SETTLED {
             let speed = self.samples.speed(elapsed, counts.bytes_copied);
             let shows = self.forecast.shows(elapsed);
@@ -2396,6 +2404,39 @@ mod tests {
         // Neither the renames nor the counting are the pace of the copy.
         let truth = 950.0 * (0.05 + 64.0 * 1024.0 / float(speed) + 0.005);
         let left = run.left();
+        assert!((left - truth).abs() < truth * 0.05, "{left} for {truth}");
+    }
+
+    #[test]
+    fn the_entries_a_move_renamed_are_no_small_files_behind_its_copy() {
+        // A move renames 1,000 entries, then copies 1,000 files of 1 MiB that it could not
+        // rename, at 10 MiB a second, each opened in a twentieth of a second. The renames count
+        // among the entries done, with no data: they made the files done look ten times smaller
+        // than those left until over a hundred were done, so the time left stayed unknown.
+        let speed = 10 * MIB;
+        let mut run = Run::new(1_000, 0);
+        for _ in 0..1_000 {
+            run.at += 0.1;
+            run.counts.done += 1;
+            run.report();
+        }
+        run.view.scanning(1_001);
+        run.counts.total = 1_000 + 1_001;
+        run.counts.bytes_total = 1_000 * MIB;
+        run.file(0, speed, (0.01, 0.0));
+        let start = run.at;
+        let mut shown = None;
+        for n in 1..=1_000 {
+            run.file(MIB, speed, (0.05, 0.005));
+            if let Some(left) = run.view.timing(run.now()).unwrap().left {
+                shown = Some((n, left));
+                break;
+            }
+        }
+        let (n, left) = shown.expect("shown");
+        assert!(run.at - start < 5.0, "shown after {} s", run.at - start);
+        let truth = float(1_000 - n) * (0.05 + 0.1 + 0.005);
+        let left = left.as_secs_f64();
         assert!((left - truth).abs() < truth * 0.05, "{left} for {truth}");
     }
 

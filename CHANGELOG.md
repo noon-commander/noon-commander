@@ -484,6 +484,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   once it has counted what it copies: the time of the renames and of the counting made the time
   left of the copy three quarters too long, and it showed at once rather than once its forecasts
   agreed.
+- After a move's renames, the time left of its copy shows within seconds rather than `-:--` for
+  a third of the copy: the entries it renamed counted among those done, with no data, so the
+  files done looked ten times smaller than those left.
 
 ## [0.2.0] - 2026-10-14
 

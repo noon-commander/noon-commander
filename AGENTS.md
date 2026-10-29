@@ -238,7 +238,8 @@ Paths come from `crates/noc-config/src/paths.rs`.
 ## Workflow
 
 - Platforms: macOS first (development and CI Rust jobs). Linux is a target: Unix APIs via
-  `rustix`, macOS-only code under `cfg(target_os = "macos")`. Windows is out of scope.
+  `rustix` (`nix` only for the signal mask, which `rustix` lacks; ADR 0054), macOS-only code
+  under `cfg(target_os = "macos")`. Windows is out of scope.
 - Git: never commit, push, tag, branch, or rewrite history unless explicitly asked. Commits use
   Conventional Commits, one logical change each.
 - ADRs: significant decisions go in `docs/adr/NNNN-title.md` (Status, Context, Decision,

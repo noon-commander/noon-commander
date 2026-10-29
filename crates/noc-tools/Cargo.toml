@@ -10,9 +10,11 @@ publish = false
 
 [dependencies]
 globset.workspace = true
+nix.workspace = true
 noc-pattern.workspace = true
 noc-vars.workspace = true
 regex.workspace = true
+rustix.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

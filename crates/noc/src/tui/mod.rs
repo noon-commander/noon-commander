@@ -501,7 +501,7 @@ async fn hand_over(
         }
         Handover::Run(run) => {
             let result = match suspended {
-                Ok(()) => output::run_command(run).await,
+                Ok(()) => output::run_command(run, app.keymap()).await,
                 Err(error) => Err(error),
             };
             let mut events = EventStream::new();

@@ -1869,9 +1869,11 @@ name = "noc-tools"
 version = "0.2.0"
 dependencies = [
  "globset",
+ "nix 0.30.1",
  "noc-pattern",
  "noc-vars",
  "regex",
+ "rustix",
  "serde",
  "serde_json",
  "tempfile",

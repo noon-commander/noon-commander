@@ -18,6 +18,15 @@ did not work after `!`.
 `-c`. An interactive shell starts slower, by as much as the rc files take, and the rc files of a
 server may be heavier than those of a laptop, or print.
 
+An interactive shell also has job control: it moves to a process group of its own and gives it
+the terminal. bash and dash give it back to Noon Commander's group when they end. zsh runs the
+last command of `-c`, if it is no builtin, in its own place, with `exec`, so nothing gives the
+terminal back once that command ends: Noon Commander is then in the background, and the first
+thing it does with the terminal, raw mode, stops it with SIGTTOU; the shell it was started from
+says it is suspended. And Ctrl+z stops that command with the terminal in its hands, while Noon
+Commander waits for it to end, which it never does: no key reaches anything. Before `-i`, the
+shell stayed in Noon Commander's group, and Ctrl+z suspended both.
+
 ## Decision
 
 - **`shell.run` says what runs a command**: a list of words, the program and its arguments,
@@ -42,6 +51,26 @@ server may be heavier than those of a laptop, or print.
 - **A host may have its own**: `run` in its table of `hosts.toml`, the same list, in place of
   `shell.run` there, for a server whose rc files are slow or print. F4 on the host edits it in a
   field that shows `shell.run`, faint, while it is empty; empty, `shell.run` counts.
+- **The shell runs as a job, as a shell runs one.** Where Noon Commander's group has the
+  terminal, `noc-tools` (`Shell::start`) starts the shell in a process group of its own and gives
+  that group the terminal, so that Ctrl+c and Ctrl+z reach it and not Noon Commander. One that
+  found itself in the background first, as an interactive shell checks at once, and stopped
+  itself with SIGTTIN or SIGTTOU, is continued in front.
+- **Noon Commander waits as a shell waits** (`Running::wait`): for SIGCHLD, which comes when a
+  child ends or is stopped, and then asks `waitid` (`WSTOPPED`, `WNOHANG`) whether its child,
+  the shell or the command zsh ran in its place, is stopped. When it ends or is stopped,
+  Noon Commander takes the terminal back for its own group. From the background that takes
+  SIGTTOU blocked, as shells do it: blocked in the calling thread for that one call, with `nix`'s
+  `pthread_sigmask`, since `rustix` has no safe signal mask and `unsafe` is denied; `rustix` does
+  the rest (`tcgetpgrp`, `tcsetpgrp`, `waitid`, `kill`).
+- **A command that is stopped, as by Ctrl+z, asks what next.** `[stopped]` under its output
+  says so, as `[exit N]` says a command failed, then the keys of a dialog's question, read from
+  the keymap: `[stopped] Enter continue · Esc end`. Confirm (Enter) gives it the terminal back
+  and continues it; Cancel (Esc, Ctrl+c) ends it as a shell ends the stopped jobs it leaves,
+  with SIGHUP and then SIGCONT, with the terminal, so that it can put the terminal back as it
+  was; one that goes on after that gets SIGKILL the next time. Ended so, it fails with signal
+  1, as any command ended by a signal. A command that bash or zsh runs as a job of its own is
+  theirs to stop: they say it is suspended and go on, or end.
 - **Text fields of dialogs show a placeholder**: faint text while the field is empty, which is
   never its value, in the style of the hints of settings. The field of `run` is the first.
 - **The variables are read by a crate of their own, `noc-vars`**, which depends on no other
@@ -56,6 +85,11 @@ server may be heavier than those of a laptop, or print.
   its rc files; `["$SHELL", "-c"]` gives the speed back, for all hosts or for one.
 - What the rc files print shows before the output of the command, on the terminal's screen.
 - `! $SHELL` starts a shell inside the shell of `shell.run`; it works as before.
+- Ctrl+z no longer suspends Noon Commander with a command, and Ctrl+c no longer reaches Noon
+  Commander while a local command runs. A command that is stopped asks, or its shell says so.
+- A command on a host is not a job of Noon Commander's: ssh takes its keys in raw mode, and
+  Ctrl+z and Ctrl+c go to the host's terminal, as before.
 - The shell of the command line stays the one exception to ADR 0012's rule against starting
   programs through a shell, now named `shell.run`.
-- `noc-config`, `noc-ssh`, and `noc-tools` depend on `noc-vars`.
+- `noc-config`, `noc-ssh`, and `noc-tools` depend on `noc-vars`; `noc-tools` depends on `rustix`
+  and, for the signal mask alone, on `nix`, with its `signal` feature only.

@@ -1567,7 +1567,13 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   `noc-tools`' `Shell`: the words of `shell.run`, `$SHELL -i -c` by default, with the variables of
   Noon Commander's environment in them (`/bin/sh` for a program that comes out empty), then the
   command in one argument as typed, in the panel's directory; `-i` gives the shell the aliases and
-  functions of its rc files ([ADR 0054](adr/0054-shell-run.md)). On a host, the
+  functions of its rc files ([ADR 0054](adr/0054-shell-run.md)). The shell runs as a job, as a shell
+  runs one: `Shell::start` puts it in a process group of its own with the terminal, and
+  `Running::wait` waits for SIGCHLD and asks `waitid` whether it ended or was stopped, then takes
+  the terminal back (`tcsetpgrp` with SIGTTOU blocked, through `nix`'s `pthread_sigmask`), which
+  zsh, which `exec`s the last command of `-c`, never gives back. A command stopped by Ctrl+z gets
+  `[stopped]` under its output, as a mark of a failure, and the keys of a dialog, which are read:
+  Enter continues it (`Running::resume`), Esc ends it with SIGHUP (`Running::end`). On a host, the
   host's task builds the ssh command from its session (`Session::command_in`) and the event loop
   runs it with the terminal: over the master, with `cd -- '<dir>' || exit` and then `exec` and
   the words of the host's `run` in `hosts.toml`, else of `shell.run`, quoted but for each

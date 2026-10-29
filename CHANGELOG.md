@@ -15,7 +15,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and `${NAME}` in its words take the value of a variable where the command runs: here for a
   local panel, on the host for a host, where the remote command now `exec`s the shell. A host
   may have its own `run` in `hosts.toml`, edited with F4 on the host, whose empty field shows
-  `shell.run` faint; `["$SHELL", "-c"]` there skips the rc files of a slow server.
+  `shell.run` faint; `["$SHELL", "-c"]` there skips the rc files of a slow server. A local
+  command runs as a job, in a process group of its own with the terminal, so that Ctrl+c and
+  Ctrl+z reach it alone, and Noon Commander takes the terminal back when it ends. Ctrl+z on a
+  command no longer suspends Noon Commander with it: `[stopped] Enter continue · Esc end`
+  shows under its output.
 - F3 reads a file in parts (`viewer.part_mib`, 16 MiB) and holds a window of it
   (`viewer.window_mib`, 128 MiB), both under Viewer in the Configuration dialog, so any part of
   a large file can be seen: the next part is read when the screen reaches the end of what is held,

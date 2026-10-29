@@ -902,7 +902,7 @@ help-tip-workspaces-what = A workspace holds the tabs of both panels: where each
 help-tip-workspaces-list = t w and F9 → Workspace list them; restoring one replaces every tab.
 help-tip-command = Command line
 help-tip-command-open = ! opens the command line, and : too, for commands of Noon Commander, of which :!command is the only one so far.
-help-tip-command-run = A command runs with the terminal, in the panel's directory, then a key brings the panels back; cd and export last only as long as the command.
+help-tip-command-run = A command runs with the terminal, in the panel's directory, then a key brings the panels back; cd and export last only as long as the command. Ctrl+z stops it and asks whether it goes on.
 help-tip-command-shell = The shell of Configuration → Command line → Run with runs it, $SHELL -i -c at first: interactive, it has the aliases and functions of its rc files. F4 on a host gives the host its own; ! $SHELL starts a shell of its own in the shell.
 help-tip-pulldown = Pull-down menu
 help-tip-pulldown-letters = Alt and the highlighted letter of a menu open it, and Alt and that of a command run it.
@@ -1215,6 +1215,10 @@ command-error = Cannot run { $program }: { $reason }
 command-exit-code = The command exited with { $code }.
 command-signal = The command was ended by signal { $signal }.
 command-press-key = Press any key to return to Noon Commander.
+# A command was stopped, as by Ctrl+z, and waits: a mark, as those of failures, then the keys of
+# a dialog's OK and Cancel, as Enter and Esc.
+command-stopped-mark = [stopped]
+command-stopped-keys = { $resume } continue · { $end } end
 # Stays on the screen after a command that failed, after the key it waited for.
 command-exit-mark = [exit { $code }]
 command-signal-mark = [signal { $signal }]

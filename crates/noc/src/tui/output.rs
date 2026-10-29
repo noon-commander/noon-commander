@@ -11,7 +11,7 @@ use crossterm::terminal::{Clear, ClearType};
 use futures_util::StreamExt as _;
 use noc_config::Pause;
 use noc_tools::ToolError;
-use noc_tools::shell::Shell;
+use noc_tools::shell::{Shell, Waited};
 
 use super::command::{Place, Run};
 use super::glyphs;
@@ -32,7 +32,7 @@ pub(super) struct Ran {
 /// its shell: locally, or on its host through ssh over the host's connection, after its
 /// prompt. Then ends its output on a line of its own and, if it waits, asks for a key there,
 /// in raw mode to read it; otherwise leaves the mark of a failure. Fails if it could not start.
-pub(super) async fn run_command(run: Run) -> Result<Ran, String> {
+pub(super) async fn run_command(run: Run, keymap: &Keymap) -> Result<Ran, String> {
     let Run {
         place,
         shell,
@@ -45,14 +45,26 @@ pub(super) async fn run_command(run: Run) -> Result<Ran, String> {
     let status = match place {
         Place::Local(dir) => {
             let shell = Shell::from_env(shell.words());
-            shell.run(&dir, &command).await.map_err(|error| {
+            let cannot_run = |error: ToolError| {
                 let reason = match &error {
                     ToolError::Spawn { source, .. } => source.to_string(),
                     other => describe::chain(other),
                 };
                 let program = shell.program().display().to_string();
                 fl!("command-error", program = program, reason = reason)
-            })?
+            };
+            let mut running = shell.start(&dir, &command).map_err(cannot_run)?;
+            loop {
+                match running.wait().await.map_err(cannot_run)? {
+                    Waited::Ended(status) => break status,
+                    Waited::Stopped => {
+                        // One that cannot go on ends, rather than stays stopped while it waits.
+                        if !(goes_on(&mut out, keymap).await? && running.resume().is_ok()) {
+                            let _ = running.end();
+                        }
+                    }
+                }
+            }
         }
         Place::Remote { handle, dir } => {
             let mut ssh = tasks::remote_command(&handle, dir, shell, command).await?;
@@ -99,6 +111,49 @@ pub(super) async fn run_command(run: Run) -> Result<Ran, String> {
     Ok(Ran { waits, mark })
 }
 
+/// Asks whether a command that was stopped, as by Ctrl+z, goes on or ends: on a line of its
+/// own, `[stopped]`, as the mark of a failure, then the keys of a dialog's question, which read
+/// the answer: Confirm goes on, Cancel ends it. The line goes after the answer, and the
+/// terminal is as it was before, for the command.
+async fn goes_on(out: &mut impl io::Write, keymap: &Keymap) -> Result<bool, String> {
+    let key = |action| keymap.key(Context::Dialog, action).unwrap_or_default();
+    let keys = fl!(
+        "command-stopped-keys",
+        resume = key(Action::Confirm),
+        end = key(Action::Cancel)
+    );
+    end_line(out);
+    print_mark(out, &fl!("command-stopped-mark"), &format!(" {keys}"));
+    crossterm::terminal::enable_raw_mode().map_err(|error| error.to_string())?;
+    let mut events = EventStream::new();
+    let mut keys = KeyState::default();
+    let mut answer = None;
+    while answer.is_none() {
+        let Some(Ok(event)) = events.next().await else {
+            break;
+        };
+        if let Event::Key(key) = event
+            && key.kind == KeyEventKind::Press
+        {
+            let place = (Mode::Normal, Context::Dialog);
+            for typed in keymap.feed(&mut keys, place, key, std::time::Instant::now()) {
+                match typed.resolved {
+                    Resolved::Action(Action::Confirm) => answer = Some(true),
+                    Resolved::Action(Action::Cancel) => answer = Some(false),
+                    _ => {}
+                }
+            }
+        }
+    }
+    // The command reads the keys from here on.
+    drop(events);
+    let _ = crossterm::queue!(out, Print("\r"), Clear(ClearType::CurrentLine));
+    let _ = out.flush();
+    crossterm::terminal::disable_raw_mode().map_err(|error| error.to_string())?;
+    // Without input to read, it ends, rather than waits for a key that never comes.
+    Ok(answer.unwrap_or(false))
+}
+
 /// After the key a command waited for: the line that asked for it goes, and the mark of a
 /// failure takes its place. In raw mode.
 pub(super) fn after_key(ran: &Ran) {
@@ -112,16 +167,17 @@ pub(super) fn after_key(ran: &Ran) {
     }
 }
 
-/// The mark of a failure, `[exit 2]`, bold and red in the terminal's own palette, so that it
-/// stands out whatever the theme; then `end`, the line break of the mode the terminal is in.
-fn print_mark(out: &mut impl io::Write, mark: &str, end: &str) {
+/// A mark, of a failure, `[exit 2]`, or of a command that is stopped, bold and red in the
+/// terminal's own palette, so that it stands out whatever the theme; then `after`, the line
+/// break of the mode the terminal is in, or the rest of the line.
+fn print_mark(out: &mut impl io::Write, mark: &str, after: &str) {
     let _ = crossterm::queue!(
         out,
         SetAttribute(Attribute::Bold),
         SetForegroundColor(Color::Red),
         Print(mark),
         SetAttribute(Attribute::Reset),
-        Print(end)
+        Print(after)
     );
     let _ = out.flush();
 }

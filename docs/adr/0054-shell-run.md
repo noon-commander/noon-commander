@@ -80,8 +80,8 @@ shell stayed in Noon Commander's group, and Ctrl+z suspended both.
   was. One that goes on after that, as a server that takes SIGHUP for reading its settings
   again, says `Esc kill` the next time it is stopped, and Cancel then sends SIGKILL. Ended so,
   it fails with signal 1, or 9, as any command ended by a signal. The editor of F4 asks so
-  too. A command that bash or zsh
-  runs as a job of its own is theirs to stop: they say it is suspended and go on, or end.
+  too. A command that bash or zsh runs as a job of its own is theirs to stop: they say it is
+  suspended and go on, or end.
 - **Text fields of dialogs show a placeholder**: faint text while the field is empty, which is
   never its value, in the style of the hints of settings. The field of `run` is the first.
 - **The variables are read by a crate of their own, `noc-vars`**, which depends on no other
@@ -99,7 +99,13 @@ shell stayed in Noon Commander's group, and Ctrl+z suspended both.
 - Ctrl+z no longer suspends Noon Commander with a command, and Ctrl+c no longer reaches Noon
   Commander while a local command runs. A command that is stopped asks, or its shell says so.
 - A command on a host is not a job of Noon Commander's: ssh takes its keys in raw mode, and
-  Ctrl+z and Ctrl+c go to the host's terminal, as before.
+  Ctrl+z and Ctrl+c go to the host's terminal, as before. There Ctrl+z does nothing to a
+  command in the shell's own process group, as a lone command is in zsh and bash, which run it
+  in their own place, and in fish: that group leads the session that sshd made and has no
+  parent in it, so the kernel discards the stop signals of the terminal there, and the one a
+  program sends itself, as vim does. A command that the shell runs as a job of its own, as bash
+  and zsh do one of several, stops, and the shell says so and goes on. Checked on Debian 13
+  with bash and fish as the login shell and zsh as the host's `run`.
 - A login shell of fish reads remote commands with `\` in them as a POSIX shell does, which it
   did not before, for the programs of ADR 0028 either.
 - The shell of the command line stays the one exception to ADR 0012's rule against starting

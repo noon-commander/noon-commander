@@ -458,6 +458,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reports the job made meanwhile counted all at once, as if it had stood still, then moved all
   its data in a quarter of a second. Each report now counts at the time the job made it, and a
   question at the time it was asked, which stops the clock there.
+- A fast copy no longer keeps the thread that draws the screen busy: it takes under 2% of a core
+  for a download of 1 GB/s over SFTP rather than 35 to 44%, and for a local copy of 3.5 GB/s
+  rather than 12 to 14%. The reports of progress, thousands a second, reach the window in
+  batches, at most 50 a second, rather than one by one; each still counts for the speed and the
+  time left ([ADR 0055](docs/adr/0055-a-job-s-reports-go-in-batches.md)).
 
 ## [0.2.0] - 2026-10-14
 

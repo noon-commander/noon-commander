@@ -875,8 +875,11 @@ does not compile without.
   `update(state, msg)` → effects (spawned tasks with a `CancellationToken`) → render. Reports
   that queue up, such as the progress of a job, are all taken before the next frame, so a job
   that reports every entry does not draw every entry. Results of background work draw at most
-  once every 40 ms (`Pace` in `tui/mod.rs`): a copy reports every chunk, hundreds a second, each
-  apart from the next, and drew a frame for each. Keys and the mouse draw at once, and so do
+  once every 40 ms (`Pace` in `tui/mod.rs`): a copy reports every chunk, thousands a second, each
+  apart from the next, and drew a frame for each. Its reports of progress reach the loop in
+  batches, at most one each 20 ms, each report with the time the job made it, so that the loop
+  turns once a batch rather than once a report
+  ([ADR 0055](adr/0055-a-job-s-reports-go-in-batches.md)). Keys and the mouse draw at once, and so do
   results after a quiet spell. A report of a job draws only when what the screen shows of it
   changes (`App::job_report`, `App::sight`): its window while it is in front; from the
   background its row while the list of jobs is open, and else the percentage in the corner. The
@@ -952,7 +955,11 @@ left from both. Both count a byte written once it has arrived: a copy reports as
 `written` grows, and after the last chunk of a file reports what arrives as it settles the rest,
 so that an upload follows the link rather than running up to 2 MiB ahead of it. The task that
 runs a job passes its reports on as it takes them (`forward` in `tui/tasks.rs`), in the job's own
-task, with the time it takes each: when the job made it. The window counts each report and
+task, with the time it takes each: when the job made it. Reports of progress go in batches, the
+first after a quiet spell at once, then at most one each 20 ms (`BATCH`), and those that wait go
+before a question or the end. The window counts each report of a batch (`JobView::passed`) and
+shows the last (`JobView::working`), so the speed and the time left are those of the reports one
+by one ([ADR 0055](adr/0055-a-job-s-reports-go-in-batches.md)). The window counts each report and
 question at that time, not when the UI takes it: while the terminal is handed over to another
 program the UI takes none, and those that waited come at once when it is back. One taken more
 than a quarter of a second after the speed and the time left of the second were worked out

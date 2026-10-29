@@ -5579,10 +5579,10 @@ impl App {
     }
 
     /// Takes a report from the job `id`, as [`App::job_event`] does, and tells whether the
-    /// screen changes with it. A job reports every chunk it moves, hundreds a second, while its
-    /// window, or its row in the list of jobs, changes only when what it shows does, and the
-    /// corner shows only how far the jobs in the background are together, in percent: the
-    /// screen draws when one of these changes, not for every report.
+    /// screen changes with it. A job reports every chunk it moves, which come in batches up to
+    /// 50 a second, while its window, or its row in the list of jobs, changes only when what it
+    /// shows does, and the corner shows only how far the jobs in the background are together,
+    /// in percent: the screen draws when one of these changes, not for every batch.
     pub(crate) fn job_report(&mut self, id: u64, event: JobEvent) -> (Vec<Effect>, bool) {
         let progress = matches!(event, JobEvent::Scanning { .. } | JobEvent::Progress { .. });
         if !progress {
@@ -5614,11 +5614,14 @@ impl App {
         };
         match event {
             JobEvent::Scanning { items } => job.view.scanning(items),
-            JobEvent::Progress {
-                current,
-                at,
-                counts,
-            } => job.view.working(location_text(&current), counts, at),
+            JobEvent::Progress { current, reports } => {
+                if let Some((&(at, counts), before)) = reports.split_last() {
+                    for &(at, counts) in before {
+                        job.view.passed(counts, at);
+                    }
+                    job.view.working(location_text(&current), counts, at);
+                }
+            }
             JobEvent::Exists {
                 at,
                 target,
@@ -10690,28 +10693,27 @@ mod tests {
         app.handle(action(Action::Delete));
         let (id, _, _, _) = delete_job(app.handle(action(Action::Confirm)));
         // Twenty seconds of work at a mebibyte a second that began half a minute ago, taken
-        // only now, as after the terminal was handed over: no stall, and 20 MiB left.
+        // only now, as after the terminal was handed over, in batches of eight reports: no
+        // stall, and 20 MiB left.
         let start = Instant::now().checked_sub(Duration::from_secs(30)).unwrap();
         let at = |millis| start + Duration::from_millis(millis);
-        for tick in 0..=80 {
-            let bytes = tick * MIB / 4;
-            let counts = Counts {
-                total: 1,
-                bytes_done: bytes,
-                bytes_total: 40 * MIB,
-                bytes_copied: bytes,
-                ..Counts::default()
-            };
+        let reports: Vec<(Instant, Counts)> = (0..=80)
+            .map(|tick| {
+                let bytes = tick * MIB / 4;
+                let counts = Counts {
+                    total: 1,
+                    bytes_done: bytes,
+                    bytes_total: 40 * MIB,
+                    bytes_copied: bytes,
+                    ..Counts::default()
+                };
+                (at(250 * tick), counts)
+            })
+            .collect();
+        for batch in reports.chunks(8) {
             let current = local("/srv/left/a");
-            let at = at(250 * tick);
-            app.job_event(
-                id,
-                JobEvent::Progress {
-                    current,
-                    at,
-                    counts,
-                },
-            );
+            let reports = batch.to_vec();
+            app.job_event(id, JobEvent::Progress { current, reports });
         }
         let text = screen_at(&mut app, 12, at(20_000));
         assert!(text.contains("Time 0:20   ETA 0:20"), "{text}");
@@ -10742,11 +10744,8 @@ mod tests {
 
     /// A report of a job at `current`, with `counts` behind it, made now.
     fn report(current: Location, counts: Counts) -> JobEvent {
-        JobEvent::Progress {
-            current,
-            at: Instant::now(),
-            counts,
-        }
+        let reports = vec![(Instant::now(), counts)];
+        JobEvent::Progress { current, reports }
     }
 
     /// The delete jobs that `effects` start: their ids and targets.

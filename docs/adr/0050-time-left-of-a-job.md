@@ -1,7 +1,8 @@
 # 0050. The time left of a job
 
-- Status: Accepted; amended by [ADR 0052](0052-bytes-written-count-once-they-arrive.md) and
-  [ADR 0053](0053-a-directory-is-finished-once-all-in-it-is-done.md)
+- Status: Accepted; amended by [ADR 0052](0052-bytes-written-count-once-they-arrive.md),
+  [ADR 0053](0053-a-directory-is-finished-once-all-in-it-is-done.md), and
+  [ADR 0055](0055-a-job-s-reports-go-in-batches.md)
 - Date: 2026-10-28
 
 ## Context
@@ -101,15 +102,16 @@ are those after the review.
 - It all comes from the counts that jobs report (`Counts`), with no change to `noc-ops` but for
   when a byte written counts (ADR 0052) and when a directory is finished (ADR 0053).
 - **Each report counts at the time the job made it**, which the task that runs the job takes as
-  it passes the report on, and a question at the time the job asked it, which stops the clock
-  there. The UI takes no reports while the terminal is handed over to the editor, a command, or
-  the user screen, and those that waited come at once when it is back. Counted when the UI took
-  them, the work meanwhile looked like a stall, left out, and then all its data had moved in a
-  quarter of a second: the time left was a half of what was left after half a minute away, a
-  fifth after two minutes, and took one or two minutes to come right. A report taken more than a
-  quarter of a second after the speed and the time left of the second were worked out
-  (`LATE`) makes them be worked out again, so that the time left is right in the same second,
-  rather than show `-:--` until the next.
+  it passes the report on, in a batch with others
+  ([ADR 0055](0055-a-job-s-reports-go-in-batches.md)), and a question at the time the job asked
+  it, which stops the clock there. The UI takes no reports while the terminal is handed over to
+  the editor, a command, or the user screen, and those that waited come at once when it is back.
+  Counted when the UI took them, the work meanwhile looked like a stall, left out, and then all
+  its data had moved in a quarter of a second: the time left was a half of what was left after
+  half a minute away, a fifth after two minutes, and took one or two minutes to come right. A
+  report taken more than a quarter of a second after the speed and the time left of the second
+  were worked out (`LATE`) makes them be worked out again, so that the time left is right in the
+  same second, rather than show `-:--` until the next.
 
 ## Consequences
 

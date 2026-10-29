@@ -187,11 +187,11 @@ pub(crate) enum Done {
 pub(crate) enum JobEvent {
     /// Counting what to do: `items` found so far.
     Scanning { items: u64 },
-    /// At `current`, with `counts` behind it.
+    /// How far the job is: what it had behind it in reports it made one after another, each
+    /// with `at`, the last at `current`. A busy job sends a batch at most every `BATCH`.
     Progress {
         current: Location,
-        at: Instant,
-        counts: Counts,
+        reports: Vec<(Instant, Counts)>,
     },
     /// Something failed at `path`; the job waits for `reply`.
     Failed {
@@ -1230,43 +1230,112 @@ fn finished(id: u64, outcome: Option<Outcome>) -> Done {
     }
 }
 
+/// The least time between two batches of a job's reports of how far it is: a copy reports
+/// every chunk it moves, thousands a second, and the UI takes a batch as it would take one
+/// report. Shorter than the frames drawn for results of background work (`RESULTS_FRAME`), so
+/// that a batch never waits for a frame.
+const BATCH: Duration = Duration::from_millis(20);
+
+/// A job's reports of how far it is that wait to go to the UI together, each with the time the
+/// job made it.
+struct Waiting<P> {
+    reports: Vec<(Instant, Counts)>,
+    /// The entry at hand in the last of them.
+    current: Option<P>,
+    /// When the last batch went.
+    sent: Option<Instant>,
+}
+
+impl<P> Waiting<P> {
+    fn new() -> Self {
+        Self {
+            reports: Vec::new(),
+            current: None,
+            sent: None,
+        }
+    }
+
+    /// Takes a report made at `at`, at `current` with `counts`, and tells whether the batch
+    /// goes now: the first after none went for [`BATCH`] goes at once.
+    fn take(&mut self, at: Instant, current: P, counts: Counts) -> bool {
+        self.reports.push((at, counts));
+        self.current = Some(current);
+        self.sent.is_none_or(|sent| at >= sent + BATCH)
+    }
+
+    /// When the reports that wait are due: [`BATCH`] after the last batch went.
+    fn due(&self) -> Option<Instant> {
+        self.current.as_ref()?;
+        self.sent.map(|sent| sent + BATCH)
+    }
+
+    /// The batch to send at `now`: the reports that wait, the last at its entry.
+    fn send(&mut self, now: Instant) -> Option<(P, Vec<(Instant, Counts)>)> {
+        let current = self.current.take()?;
+        self.sent = Some(now);
+        Some((current, std::mem::take(&mut self.reports)))
+    }
+}
+
 /// Passes the reports of the job `id` on to `done`, with paths made locations by `location`
 /// and errors in words. It runs in the job's task, so the time it takes a report is the time
-/// the job made it.
+/// the job made it. Reports of how far the job is go in batches, at most one each [`BATCH`];
+/// those that wait go before anything else the job reports, and before its end.
 async fn forward<P>(
     mut incoming: mpsc::UnboundedReceiver<Event<P>>,
     id: u64,
     done: &mpsc::UnboundedSender<Done>,
     location: impl Fn(P) -> Location,
 ) {
-    while let Some(event) = incoming.recv().await {
+    let mut waiting = Waiting::new();
+    let send = |waiting: &mut Waiting<P>, now| {
+        if let Some((current, reports)) = waiting.send(now) {
+            let current = location(current);
+            let event = JobEvent::Progress { current, reports };
+            let _ = done.send(Done::Job { id, event });
+        }
+    };
+    loop {
+        let event = tokio::select! {
+            event = incoming.recv() => event,
+            () = super::sleep_until(waiting.due()) => {
+                send(&mut waiting, Instant::now());
+                continue;
+            }
+        };
         let at = Instant::now();
         let event = match event {
-            Event::Scanning { items } => JobEvent::Scanning { items },
-            Event::Progress(progress) => JobEvent::Progress {
-                current: location(progress.current),
-                at,
-                counts: Counts {
+            None => {
+                send(&mut waiting, at);
+                return;
+            }
+            Some(Event::Progress(progress)) => {
+                let counts = Counts {
                     done: progress.items_done,
                     total: progress.items_total,
                     bytes_done: progress.bytes_done,
                     bytes_total: progress.bytes_total,
                     bytes_copied: progress.bytes_copied,
-                },
-            },
-            Event::Failed { path, error, reply } => JobEvent::Failed {
+                };
+                if waiting.take(at, progress.current, counts) {
+                    send(&mut waiting, at);
+                }
+                continue;
+            }
+            Some(Event::Scanning { items }) => JobEvent::Scanning { items },
+            Some(Event::Failed { path, error, reply }) => JobEvent::Failed {
                 at,
                 path: location(path),
                 error: describe::vfs_error(&error),
                 reply,
             },
-            Event::Exists {
+            Some(Event::Exists {
                 target,
                 source_metadata,
                 target_metadata,
                 reply,
                 ..
-            } => JobEvent::Exists {
+            }) => JobEvent::Exists {
                 at,
                 target: location(target),
                 source_metadata,
@@ -1274,6 +1343,7 @@ async fn forward<P>(
                 reply,
             },
         };
+        send(&mut waiting, at);
         let _ = done.send(Done::Job { id, event });
     }
 }
@@ -2747,5 +2817,123 @@ mod tests {
                 "an aborted job has no sums"
             );
         }
+    }
+
+    #[test]
+    fn reports_of_progress_wait_for_their_batch() {
+        let start = Instant::now();
+        let at = |millis| start + Duration::from_millis(millis);
+        let counts = |bytes| Counts {
+            bytes_done: bytes,
+            ..Counts::default()
+        };
+        let mut waiting = Waiting::new();
+        assert_eq!(waiting.due(), None);
+        // The first goes at once.
+        assert!(waiting.take(at(0), "a", counts(1)));
+        assert_eq!(waiting.send(at(0)), Some(("a", vec![(at(0), counts(1))])));
+        assert_eq!(waiting.due(), None, "none waits");
+        // Those that come within BATCH wait for it.
+        assert!(!waiting.take(at(5), "a", counts(2)));
+        assert!(!waiting.take(at(15), "b", counts(3)));
+        assert_eq!(waiting.due(), Some(at(20)));
+        // One that comes after it goes with them, at its entry.
+        assert!(waiting.take(at(25), "c", counts(4)));
+        let batch = vec![(at(5), counts(2)), (at(15), counts(3)), (at(25), counts(4))];
+        assert_eq!(waiting.send(at(25)), Some(("c", batch)));
+        // After a quiet spell, the next goes at once.
+        assert!(waiting.take(at(100), "d", counts(5)));
+    }
+
+    /// A report of a job's progress at `path`, with `bytes` of a thousand done.
+    fn progress(path: &str, bytes: u64) -> Event<PathBuf> {
+        Event::Progress(noc_ops::Progress {
+            current: PathBuf::from(path),
+            items_done: 0,
+            items_total: 1,
+            bytes_done: bytes,
+            bytes_total: 1000,
+            bytes_copied: bytes,
+        })
+    }
+
+    #[tokio::test]
+    async fn a_job_s_progress_goes_in_batches_before_what_it_reports_next() {
+        let (events, incoming) = mpsc::unbounded_channel();
+        for bytes in 1..=1000 {
+            events.send(progress(&format!("/f{bytes}"), bytes)).unwrap();
+        }
+        let (reply, _decision) = oneshot::channel();
+        let path = PathBuf::from("/f1000");
+        let error = VfsError::Io(std::io::ErrorKind::PermissionDenied.into());
+        events.send(Event::Failed { path, error, reply }).unwrap();
+        events.send(progress("/g", 1000)).unwrap();
+        drop(events);
+        let (done, mut forwarded) = mpsc::unbounded_channel();
+        forward(incoming, 7, &done, Location::Local).await;
+
+        let mut batches = Vec::new();
+        let mut asked = None;
+        while let Ok(Done::Job { id: 7, event }) = forwarded.try_recv() {
+            match event {
+                JobEvent::Progress { current, reports } => batches.push((current, reports)),
+                JobEvent::Failed { .. } => asked = Some(batches.len()),
+                other => panic!("{other:?}"),
+            }
+        }
+        // The first goes at once; those that came right after it wait, and go before the
+        // question; the last goes as the job ends.
+        assert_eq!(batches[0].1.len(), 1);
+        assert!(batches.len() < 10, "{} batches", batches.len());
+        let before: usize = batches[..asked.unwrap()]
+            .iter()
+            .map(|batch| batch.1.len())
+            .sum();
+        assert_eq!(before, 1000);
+        assert_eq!(
+            batches.last().unwrap().0,
+            Location::Local(PathBuf::from("/g"))
+        );
+        let reports: Vec<(Instant, Counts)> =
+            batches.iter().flat_map(|batch| batch.1.clone()).collect();
+        let bytes: Vec<u64> = reports.iter().map(|report| report.1.bytes_done).collect();
+        let expected: Vec<u64> = (1..=1000).chain([1000]).collect();
+        assert_eq!(bytes, expected, "every report, in order");
+        assert!(reports.windows(2).all(|pair| pair[0].0 <= pair[1].0));
+        for (current, reports) in &batches[..batches.len() - 1] {
+            let last = reports.last().unwrap().1.bytes_done;
+            assert_eq!(
+                *current,
+                Location::Local(PathBuf::from(format!("/f{last}")))
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn the_last_reports_of_a_job_go_once_it_is_quiet() {
+        let (events, incoming) = mpsc::unbounded_channel();
+        let (done, mut forwarded) = mpsc::unbounded_channel();
+        let forwarding =
+            tokio::spawn(async move { forward(incoming, 7, &done, Location::Local).await });
+        events.send(progress("/a", 1)).unwrap();
+        events.send(progress("/a", 2)).unwrap();
+        let mut next = async || {
+            let taken = tokio::time::timeout(Duration::from_secs(5), forwarded.recv()).await;
+            match taken {
+                Ok(Some(Done::Job {
+                    event: JobEvent::Progress { reports, .. },
+                    ..
+                })) => reports
+                    .iter()
+                    .map(|report| report.1.bytes_done)
+                    .collect::<Vec<_>>(),
+                _ => panic!("no batch"),
+            }
+        };
+        assert_eq!(next().await, [1]);
+        // The job goes on, and reports nothing more for now.
+        assert_eq!(next().await, [2]);
+        drop(events);
+        forwarding.await.unwrap();
     }
 }

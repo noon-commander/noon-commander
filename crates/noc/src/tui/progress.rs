@@ -739,6 +739,13 @@ impl JobView {
     /// after the waiting and the counting.
     pub(crate) fn working(&mut self, current: String, counts: Counts, now: Instant) {
         self.stage = Stage::Working { current, counts };
+        self.passed(counts, now);
+    }
+
+    /// The job had `counts` behind it at `now`, as a report said that a later one of the same
+    /// batch follows: it counts for the speed and the time left, as [`working`](Self::working)
+    /// does, but the window shows the last.
+    pub(crate) fn passed(&mut self, counts: Counts, now: Instant) {
         if !self.asking {
             self.clock.start(now);
         }
@@ -1451,6 +1458,49 @@ mod tests {
         let speed = timing.speed.unwrap();
         assert!(speed > 1.4 * 1024.0 * 1024.0, "{speed}");
         assert_ne!(timing.left, shown.left);
+    }
+
+    #[test]
+    fn a_batch_of_reports_counts_as_its_reports_one_by_one() {
+        const MIB: u64 = 1024 * 1024;
+        let start = Instant::now();
+        // Twenty files of 3 MiB, each opened in a tenth of a second, then six chunks of half a
+        // mebibyte, one each twentieth.
+        let mut reports = Vec::new();
+        let mut at = start;
+        for file in 0..20 {
+            for chunk in 0..=6 {
+                let bytes = file * 3 * MIB + chunk * MIB / 2;
+                let counts = Counts {
+                    done: file,
+                    total: 20,
+                    bytes_done: bytes,
+                    bytes_total: 60 * MIB,
+                    bytes_copied: bytes,
+                };
+                reports.push((at, counts));
+                at += Duration::from_millis(if chunk == 0 { 100 } else { 50 });
+            }
+        }
+        let mut one_by_one = JobView::new("Copy".to_owned(), "Copying".to_owned());
+        let mut batched = JobView::new("Copy".to_owned(), "Copying".to_owned());
+        for batch in reports.chunks(5) {
+            for &(at, counts) in batch {
+                one_by_one.working("a".to_owned(), counts, at);
+            }
+            let (&(at, counts), before) = batch.split_last().unwrap();
+            for &(at, counts) in before {
+                batched.passed(counts, at);
+            }
+            batched.working("a".to_owned(), counts, at);
+            let now = at + Duration::from_millis(5);
+            assert_eq!(batched.look(now), one_by_one.look(now));
+        }
+        let end = at + Duration::from_millis(5);
+        assert!(
+            batched.timing(end).unwrap().left.is_some(),
+            "it shows a time left"
+        );
     }
 
     #[test]

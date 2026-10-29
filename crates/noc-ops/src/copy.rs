@@ -1484,9 +1484,21 @@ mod tests {
             "newer"
         );
 
+        // The sources go in the order given, but what a directory holds goes in the order of its
+        // listing, which differs between file systems: tmpfs lists the newest first.
         let root = tempfile::tempdir().unwrap();
-        let (outcome, _, dir) = copy_taken(root.path(), &[Conflict::Abort]).await;
+        let (src, dst) = taken(root.path());
+        let script = Script {
+            conflicts: &[Conflict::Abort],
+            ..Script::default()
+        };
+        let sources = vec![src.join("dir/a"), src.join("dir/link")];
+        let dir = dst.join("dir");
+        let (outcome, seen) =
+            run_script((&LocalFs, sources), (&LocalFs, dir.clone()), BOTH, script).await;
         assert!(outcome.aborted);
+        assert_eq!(seen.exists.len(), 1);
+        assert_eq!(fs::read_to_string(dir.join("a")).unwrap(), "older");
         assert!(!dir.join("link").exists(), "stopped there");
     }
 

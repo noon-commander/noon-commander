@@ -193,7 +193,8 @@ struct Point {
     done: u64,
     copied: u64,
     /// The report came as the job started an entry, those before it done: the entry opens
-    /// after it, before any of its data moves.
+    /// after it, before any of its data moves. Or the job asked a question after it, and may
+    /// open the entry again once answered.
     starts: bool,
 }
 
@@ -448,6 +449,14 @@ impl Forecast {
         self.told |= self.sums.stream_bytes > 0.0
             || self.sizes.is_some_and(|(least, most)| most >= 2.0 * least);
         self.settle(at, counts);
+    }
+
+    /// The job asked a question: what it does once answered, such as opening the entry again
+    /// for Retry, comes with no report first, so the stretch now under way is no data streaming.
+    fn asked(&mut self) {
+        if let Some(last) = &mut self.last {
+            last.starts = true;
+        }
     }
 
     /// Takes the size of the entries done from `from` to `to`, if they had data.
@@ -816,6 +825,7 @@ impl JobView {
     pub(crate) fn ask(&mut self, now: Instant) {
         self.asking = true;
         self.clock.stop(now);
+        self.forecast.asked();
     }
 
     /// The question was answered, and the job goes on.
@@ -2337,6 +2347,25 @@ mod tests {
             (left - even).abs() < even * 0.02,
             "{left} for {even}, {pace} before"
         );
+    }
+
+    #[test]
+    fn opening_a_file_again_after_a_question_is_no_data_streaming() {
+        // Files of 20 MiB at 10 MiB a second. The second fails halfway, and Retry copies it
+        // again from its start, which takes two seconds to open: no report comes as it does.
+        let (size, speed) = (20 * MIB, 10 * MIB);
+        let mut run = Run::new(10, 10 * size);
+        run.file(size, speed, (0.05, 0.01));
+        run.report();
+        run.at += 0.05;
+        run.stream(size / 2, speed);
+        run.view.ask(run.now());
+        run.view.answered(run.now());
+        run.counts.bytes_done -= size / 2;
+        run.at += 2.0;
+        run.stream(size, speed);
+        let (byte, _) = run.view.forecast.sums.costs();
+        assert!((byte * float(speed) - 1.0).abs() < 0.02, "{byte}");
     }
 
     #[test]

@@ -983,8 +983,8 @@ the entries done over stretches of work, each weighing a third as much every hal
 cost come from least squares of the time of the stretches between finished entries on their
 bytes and their entries, when both stand clear of the noise: jobs report as an entry starts,
 before it opens, and close it after their last report. Else a byte costs what it does in the
-stretches in which no entry was done but for those that start with an entry's opening (as does
-the job's first report), and an
+stretches in which no entry was done but for those that start with an entry's opening (as do
+the job's first report and a question, after which Retry opens the entry again), and an
 entry what its stretches took beyond their bytes; among small files only, the
 least squares still give the cost of an entry if it stands clear; else bytes alone count. The
 time left is the bytes and entries left at those costs and that pace. It is unknown while the

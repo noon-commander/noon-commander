@@ -51,7 +51,8 @@ are those after the review.
   of one size, a byte costs what it does in the stretches in which no entry was done, but for
   those that start as an entry starts, which hold its opening; an entry costs what the
   stretches between finished entries took beyond their bytes. The job's first report starts an
-  entry too.
+  entry too, and so does a question: once it is answered, Retry opens the entry again with no
+  report first.
 - **Before any data streams, small files tell what they can.** A job whose files have all been
   small takes the cost of an entry from the least squares while it stands clear of the noise;
   the cost of their bytes is mostly noise then, and no less than nothing, so a big file after
@@ -203,6 +204,8 @@ are those after the review.
   30 KiB showed 6 seconds for 83. Now they show `-:--`, and within 1%; a test checks both.
 - A report taken late, worked out again, moved the time left shown from `1:19` to `1:24`, the
   forecast as it was; now it counts on from `1:19`. A test checks it.
+- Opening a file again after Retry, which comes with no report, counted as data streaming and
+  made a byte cost 47% more; now it is within 2%. A test checks it.
 - The model is two costs and a pace: a link that is fast for big files and slow to open each
   one is right; one whose pace changes with the size of the files in other ways is not.
 - What a job does without reports is not in the work left: the time left shows `0:00`, then

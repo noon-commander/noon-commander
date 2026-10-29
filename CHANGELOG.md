@@ -478,6 +478,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The time left no longer jumps when a report reaches the window more than a quarter of a second
   late, as while the screen is slow to draw: worked out again, it went to the forecast as it was,
   from `1:19` to `1:24`, rather than go on counting down.
+- After Retry, opening the file again no longer counts as the time of its data, which made the
+  bytes left look half as costly again.
 
 ## [0.2.0] - 2026-10-14
 

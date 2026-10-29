@@ -899,7 +899,7 @@ does not compile without.
   to close.
 - The terminal is restored on every exit: a guard leaves raw mode and the alternate screen when
   the TUI returns or fails, ratatui's panic hook does it before a panic message, and SIGTERM,
-  SIGHUP, and SIGINT end the event loop like a quit.
+  SIGHUP, SIGINT, and the terminal going away end the event loop like a quit.
 - Another program (the editor of F4, a command of the command line, the output of commands of
   `g <`) gets the terminal as the shell would give it: the event loop shows the cursor, gives it
   the terminal's own shape back, leaves the alternate
@@ -909,11 +909,16 @@ does not compile without.
   loop waits for the program, then takes the terminal back and draws everything. The editor and
   a local command run as jobs, in process groups of their own with the terminal, so Ctrl+c and
   Ctrl+z reach them alone (`noc_tools::job`, [ADR 0054](adr/0054-shell-run.md)); the SIGINT
-  stream is still made anew. SIGTERM and SIGHUP, heard meanwhile by `output::Told`, end every
-  wait for a key there, and the event loop ends without a new stream: a terminal that went away
-  leaves crossterm's reader of the last stream spinning at the end of its input with the lock
-  that a new stream would wait for, forever. ssh children are in sessions of their own and see
-  none of it.
+  stream is still made anew. SIGTERM, SIGHUP, and the terminal going away, which `tui::told`
+  hears for the whole run, end every wait for a key there, and the event loop ends without a new
+  stream: a terminal that went away leaves crossterm's reader of the last stream spinning at the
+  end of its input with the lock that a new stream would wait for, forever
+  ([crossterm#793](https://github.com/crossterm-rs/crossterm/issues/793)). The kernel sends
+  SIGHUP to the leader of the terminal's session alone, which may ignore it rather than pass it
+  on, as `nohup`, `trap '' HUP`, or `sudo` may; so a thread watches a copy of stdin with mio
+  (epoll, kqueue) for the end of its input, which a key does not wake it for twice. poll(2) on
+  macOS does not tell of that end, and tokio's `AsyncFd` takes `unsafe`. ssh children are in
+  sessions of their own and see none of it.
 - The working directory of the process follows the active panel: after each turn of the
   event loop, a local directory the active panel now shows (once its listing arrived)
   goes to a task that `chdir`s to it in `spawn_blocking`, the latest of the waiting ones only.

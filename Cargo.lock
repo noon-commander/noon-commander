@@ -1745,6 +1745,7 @@ dependencies = [
  "i18n-embed-fl",
  "insta",
  "jiff",
+ "mio",
  "noc-config",
  "noc-locale",
  "noc-ops",

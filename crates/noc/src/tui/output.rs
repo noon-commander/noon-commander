@@ -9,16 +9,16 @@ use std::process::ExitStatus;
 use crossterm::event::{Event, EventStream, KeyEvent, KeyEventKind};
 use crossterm::style::{Attribute, Color, Print, SetAttribute, SetForegroundColor};
 use crossterm::terminal::{Clear, ClearType};
-use futures_util::{FutureExt as _, StreamExt as _};
+use futures_util::StreamExt as _;
 use noc_config::Pause;
 use noc_tools::ToolError;
 use noc_tools::job::{Running, Waited};
 use noc_tools::shell::Shell;
-use tokio::signal::unix::{Signal, SignalKind, signal};
 
 use super::command::{Place, Run};
 use super::glyphs;
 use super::keymap::{Action, Context, KeyState, Keymap, Mode, Resolved};
+use super::told::Told;
 use super::{describe, tasks};
 use crate::i18n::fl;
 
@@ -277,65 +277,6 @@ async fn next_key(events: &mut EventStream, told: &mut Told) -> Option<KeyEvent>
     }
 }
 
-/// SIGHUP, as when the terminal goes away, and SIGTERM, which end Noon Commander, heard while
-/// the terminal is handed over, where the event loop does not listen. A wait for a key ends
-/// with them, rather than wait for one from a terminal that is gone, while crossterm's reader
-/// spins at its end of input; the event loop then ends.
-pub(super) struct Told {
-    hangup: Option<Signal>,
-    terminate: Option<Signal>,
-    /// One of them came.
-    came: bool,
-}
-
-impl Told {
-    /// Listens from now on.
-    pub(super) fn listen() -> Self {
-        Self {
-            hangup: signal(SignalKind::hangup()).ok(),
-            terminate: signal(SignalKind::terminate()).ok(),
-            came: false,
-        }
-    }
-
-    /// Ends once either came; never, if neither can be heard.
-    async fn came(&mut self) {
-        let Self {
-            hangup,
-            terminate,
-            came,
-        } = self;
-        if !*came {
-            tokio::select! {
-                () = heard(hangup) => {}
-                () = heard(terminate) => {}
-            }
-            *came = true;
-        }
-    }
-
-    /// Whether either came.
-    pub(super) fn has_come(&mut self) -> bool {
-        self.came().now_or_never().is_some()
-    }
-
-    /// A new stream of events, unless either came: a terminal that went away leaves the reader
-    /// of the last stream spinning at the end of its input with the lock that a new one would
-    /// wait for, forever.
-    pub(super) fn events(&mut self) -> Option<EventStream> {
-        (!self.has_come()).then(EventStream::new)
-    }
-}
-
-async fn heard(signal: &mut Option<Signal>) {
-    if let Some(signal) = signal
-        && signal.recv().await.is_some()
-    {
-        return;
-    }
-    std::future::pending::<()>().await;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -354,16 +295,6 @@ mod tests {
         print_mark(&mut out, "[exit 2]", "\r\n");
         let text = String::from_utf8(out).unwrap();
         assert_eq!(text, "\u{1b}[1m\u{1b}[38;5;9m[exit 2]\u{1b}[0m\r\n");
-    }
-
-    #[tokio::test]
-    async fn a_hangup_ends_a_wait_while_the_terminal_is_handed_over() {
-        let mut told = Told::listen();
-        let pid = rustix::process::getpid();
-        rustix::process::kill_process(pid, rustix::process::Signal::HUP).unwrap();
-        tokio::time::timeout(std::time::Duration::from_secs(5), told.came())
-            .await
-            .expect("heard");
     }
 
     #[test]

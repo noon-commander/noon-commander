@@ -41,6 +41,7 @@ mod tab_menu;
 mod tabs;
 mod tasks;
 mod theme;
+mod told;
 mod transfer;
 mod which_key;
 mod workspaces;
@@ -73,6 +74,7 @@ use help::{About, Files};
 use keymap::{KeyState, Keyboard, Keymap, Mode};
 use mouse::{Clicks, Press};
 use tasks::{Done, Tasks};
+use told::Told;
 
 use crate::about::{self, Build, Report, System, Tool};
 use crate::context::Context;
@@ -270,8 +272,7 @@ pub(crate) async fn run(
     }
     // Raw mode turns Ctrl+c into a key, but these can still come from elsewhere, such as `kill`
     // or a closed terminal window; quitting through them restores the terminal.
-    let mut terminate = signal(SignalKind::terminate())?;
-    let mut hangup = signal(SignalKind::hangup())?;
+    let mut told = Told::listen();
     let mut interrupt = signal(SignalKind::interrupt())?;
     let tz = region(&context).await?;
     // Reads the macOS version or the Linux distribution, for the About page of the help.
@@ -308,11 +309,9 @@ pub(crate) async fn run(
         app.come_back();
         take_requests(&mut app, &mut tasks);
         if let Some(handover) = app.take_handover() {
-            let Some((fresh, after)) =
-                hand_over((&mut terminal, &mut asked), events, &mut app, handover).await
-            else {
-                // Told to end while the terminal was handed over: SIGHUP, as when it went away,
-                // or SIGTERM.
+            let tty = (&mut terminal, &mut asked, &mut told);
+            let Some((fresh, after)) = hand_over(tty, events, &mut app, handover).await else {
+                // Told to end while the terminal was handed over.
                 break Ok(());
             };
             events = fresh;
@@ -365,8 +364,7 @@ pub(crate) async fn run(
             // A window growing or shrinking, a spinner, or a clock needs its next frame.
             () = sleep_until(frame_due) => {}
             () = sleep_until(spin_due) => {}
-            _ = terminate.recv() => break Ok(()),
-            _ = hangup.recv() => break Ok(()),
+            () = told.came() => break Ok(()),
             _ = interrupt.recv() => break Ok(()),
         }
     };
@@ -452,7 +450,7 @@ fn start_app(
 async fn edit(
     file: &Path,
     line: Option<u64>,
-    (keymap, told): (&Keymap, &mut output::Told),
+    (keymap, told): (&Keymap, &mut Told),
 ) -> Result<bool, String> {
     let stamp = |metadata: std::fs::Metadata| (metadata.len(), metadata.modified().ok());
     let before = tokio::fs::metadata(file)
@@ -484,12 +482,10 @@ async fn edit(
 /// does next and a new stream of SIGINT, since Ctrl+c in the program reached Noon Commander
 /// too, with a new stream of events in place of `events`. The program gets the mouse and the
 /// terminal's own title, and may set one of its own; the next turn of the event loop takes
-/// both again. `None` if Noon Commander was told to end meanwhile, by SIGHUP, as when the
-/// terminal goes away, or SIGTERM: then no new stream of events is made, since crossterm's
-/// reader of the old one spins at the end of the input of a terminal that went away and keeps
-/// the lock that a new one waits for.
+/// both again. `None` if Noon Commander was `told` to end meanwhile: then no new stream of
+/// events is made (`Told::events`).
 async fn hand_over(
-    (terminal, asked): (&mut DefaultTerminal, &mut Asked),
+    (terminal, asked, told): (&mut DefaultTerminal, &mut Asked, &mut Told),
     events: EventStream,
     app: &mut App,
     handover: Handover,
@@ -498,7 +494,6 @@ async fn hand_over(
     // waits, and a new stream takes that lock, so the old one goes first; the new one reads
     // nothing until it is polled.
     drop(events);
-    let mut told = output::Told::listen();
     asked.mouse = false;
     // Leaving the modes gives the cursor its own shape back.
     asked.bar = None;
@@ -510,21 +505,21 @@ async fn hand_over(
     let (events, effects) = match handover {
         Handover::Edit { file, line } => {
             let result = match suspended {
-                Ok(()) => edit(&file, line, (app.keymap(), &mut told)).await,
+                Ok(()) => edit(&file, line, (app.keymap(), told)).await,
                 Err(error) => Err(error),
             };
             (told.events()?, app.edited(result))
         }
         Handover::Run(run) => {
             let result = match suspended {
-                Ok(()) => output::run_command(run, (app.keymap(), &mut told)).await,
+                Ok(()) => output::run_command(run, (app.keymap(), told)).await,
                 Err(error) => Err(error),
             };
             let mut events = told.events()?;
             if let Ok(ran) = &result
                 && ran.waits
             {
-                output::wait_for_key(&mut events, &mut told).await;
+                output::wait_for_key(&mut events, told).await;
                 output::after_key(ran);
             }
             (events, app.ran(result.map(drop)))
@@ -535,7 +530,7 @@ async fn hand_over(
                 // The keys that go back are read as the panels read them, with the kitty keyboard
                 // protocol, which tells Ctrl+[ and Ctrl+m from other keys.
                 let _ = asked.modes.keyboard(true);
-                output::wait_to_go_back(&mut events, app.keymap(), &mut told).await;
+                output::wait_to_go_back(&mut events, app.keymap(), told).await;
                 let _ = asked.modes.keyboard(false);
             }
             (events, Vec::new())

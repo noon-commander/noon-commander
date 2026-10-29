@@ -384,10 +384,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Noon Commander ends when its terminal goes away while a command of the command line, its
-  output (`g <`), or the editor has the terminal, rather than stay behind at full CPU: crossterm's
-  reader spins at the end of the input of a terminal that is gone, and a new reader waited for
-  it forever.
+- Noon Commander ends when its terminal goes away, rather than stay behind at full CPU, also
+  while a command of the command line, its output (`g <`), or the editor has the terminal, and
+  when no SIGHUP comes, as when the shell it runs in ignores it: crossterm's reader spins at the
+  end of the input of a terminal that is gone, and a new reader waited for it forever.
 - `f /` and `f f` on a host whose login shell is fish find a pattern with a `\` before a `'` or
   at its end, which fish read as an escape inside single quotes, so that the search failed to
   start.

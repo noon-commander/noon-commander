@@ -458,6 +458,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reports the job made meanwhile counted all at once, as if it had stood still, then moved all
   its data in a quarter of a second. Each report now counts at the time the job made it, and a
   question at the time it was asked, which stops the clock there.
+- The time left of a job shows `-:--` while files far larger than those done are left and the
+  work has not told what a byte costs, rather than hours for minutes: 1,000 small files of one
+  size, then a big one, showed the big one at their pace, nine hours for a job of under five
+  minutes, until its data streamed. It shows within a second or two of the big file's start.
 - A fast copy no longer keeps the thread that draws the screen busy: it takes under 2% of a core
   for a download of 1 GB/s over SFTP rather than 35 to 44%, and for a local copy of 3.5 GB/s
   rather than 12 to 14%. The reports of progress, thousands a second, reach the window in

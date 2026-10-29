@@ -78,6 +78,12 @@ const ETA_SETTLE_MAX: Duration = ETA_HORIZON;
 /// reach the window.
 const LATE: Duration = Duration::from_millis(250);
 
+/// How many times as large as the entries done those left may be on average, while the work
+/// behind has not told what a byte costs, for the time left to show: small files of one size,
+/// then a big one, showed the big one at their own pace, hours for minutes, until its data
+/// streamed.
+const AHEAD: f64 = 10.0;
+
 /// How far back the pauses between a job's reports tell how long it may go without one and
 /// still work: a link that sends a chunk every few seconds, a disk that takes its time to
 /// write what it holds back, every so often.
@@ -391,6 +397,12 @@ struct Forecast {
     settling: [Option<(Duration, Duration)>; ETA_SETTLE],
     /// They have agreed once, so that the time left shows.
     settled: bool,
+    /// The least and the most bytes an entry had, of the finished ones with data.
+    sizes: Option<(f64, f64)>,
+    /// The work behind has told what a byte costs once: data streamed within an entry, or
+    /// entries with data of sizes at least twice apart. Then the time left shows whatever the
+    /// sizes of the entries left.
+    told: bool,
 }
 
 impl Forecast {
@@ -429,9 +441,25 @@ impl Forecast {
         }
         if point.entries > finished.entries {
             self.sums.fit(finished, point);
+            self.sized(finished, point);
             self.finished = Some(point);
         }
+        self.told |= self.sums.stream_bytes > 0.0
+            || self.sizes.is_some_and(|(least, most)| most >= 2.0 * least);
         self.settle(at, counts);
+    }
+
+    /// Takes the size of the entries done from `from` to `to`, if they had data.
+    fn sized(&mut self, from: Point, to: Point) {
+        if skipped(from, to) {
+            return;
+        }
+        let bytes = float(to.copied.saturating_sub(from.copied));
+        let size = bytes / float(to.entries - from.entries);
+        if size > 0.0 {
+            let (least, most) = self.sizes.unwrap_or((size, size));
+            self.sizes = Some((least.min(size), most.max(size)));
+        }
     }
 
     /// Takes the forecast at `at`, with `counts` behind the job, a second of work after the last
@@ -449,6 +477,22 @@ impl Forecast {
         self.settled = agree(&self.settling, at);
     }
 
+    /// Whether the entries left, with `counts` behind the job, are on average more than
+    /// [`AHEAD`] times as large as those it has finished, so that what their bytes cost cannot
+    /// come from those. Not before it has finished any data.
+    fn bigger_ahead(&self, counts: &Counts) -> bool {
+        let Some(finished) = self.finished else {
+            return false;
+        };
+        let left = counts.total.saturating_sub(finished.entries);
+        if finished.entries == 0 || finished.done == 0 || left == 0 {
+            return false;
+        }
+        let ahead = float(counts.bytes_total.saturating_sub(finished.done)) / float(left);
+        let behind = float(finished.done) / float(finished.entries);
+        ahead > AHEAD * behind
+    }
+
     /// The pauses the job takes as it works, at `at`: the longest of the last [`PAUSES`], and
     /// how long one may be before the job stands still: twice that, or [`RECENT`] at least.
     fn pace_of_pauses(&self, at: Duration) -> (Duration, Duration) {
@@ -464,10 +508,14 @@ impl Forecast {
 
     /// The time left at `at`, with `counts` behind the job: unknown once no report has come
     /// for longer than the job pauses as it works, five seconds at least, as the speed falls
-    /// to nothing then; or before any work has a pace.
+    /// to nothing then; before any work has a pace; or while the entries left are far larger
+    /// than those done and the work has not told what a byte costs.
     fn left(&self, at: Duration, counts: &Counts) -> Option<Duration> {
         let (_, stall) = self.pace_of_pauses(at);
         if at.saturating_sub(self.seen?) >= stall {
+            return None;
+        }
+        if !self.told && self.bigger_ahead(counts) {
             return None;
         }
         let sums = &self.sums;
@@ -2408,6 +2456,52 @@ mod tests {
         let left = run.left();
         let new = 3_100.0 / 5.0;
         assert!((left - new).abs() < new * 0.15, "{left}");
+    }
+
+    #[test]
+    fn a_big_file_after_small_ones_of_one_size_is_unknown_until_its_data_streams() {
+        // 1,000 files of 4 KiB, each opened in 20 ms and closed in 10, then one of 600 MiB, at
+        // 10 MiB a second: what a byte costs cannot come from the small ones, all alike.
+        let (small, big, speed) = (4 * 1024, 600 * MIB, 10 * MIB);
+        let mut run = Run::new(1_001, 1_000 * small + big);
+        for file in 0..1_000 {
+            run.file(small, speed, (0.02, 0.01));
+            if file > 1 {
+                assert_eq!(run.left_at(run.at), None, "file {file}");
+            }
+        }
+        run.report();
+        run.at += 0.02;
+        let start = run.at;
+        for second in 1..=60 {
+            run.stream(speed, speed);
+            if second > 1 {
+                let truth = float(big) / float(speed) - (run.at - start) + 0.01;
+                let left = run.left();
+                assert!(
+                    (left - truth).abs() < truth * 0.02 + 0.1,
+                    "{left} for {truth}"
+                );
+            }
+        }
+
+        // Small files of sizes twice apart tell it: the time left shows before the big file.
+        let mut run = Run::new(1_001, 500 * (2 * small + small / 2) + big);
+        for _ in 0..500 {
+            run.file(2 * small, speed, (0.02, 0.01));
+            run.file(small / 2, speed, (0.02, 0.01));
+        }
+        run.report();
+        assert!(run.left_at(run.at).is_some());
+
+        // Files of one size with more of the same left show their time left.
+        let mut run = Run::new(2_000, 2_000 * small);
+        for _ in 0..1_000 {
+            run.file(small, speed, (0.02, 0.01));
+        }
+        run.report();
+        let left = run.left();
+        assert!((left - 30.0).abs() < 30.0 * 0.05, "{left} for 30");
     }
 
     #[test]

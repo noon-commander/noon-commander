@@ -56,6 +56,13 @@ are those after the review.
   the cost of their bytes is mostly noise then, and no less than nothing, so a big file after
   tiny ones can look as quick as an entry until a quarter of a second of its data has streamed.
   Where the entries tell nothing, bytes alone count.
+- **Files far larger than those behind are unknown until a byte's cost is.** Until data has
+  streamed within an entry, or finished entries with data have had sizes at least twice apart,
+  the work tells nothing of what a byte costs beside an entry. While then the entries left are
+  on average more than ten times as large as those done (`AHEAD`), the time left is unknown,
+  `-:--`: small files of one size, then a big one, showed the big one at their own pace, nine
+  hours for three quarters of a job of under five minutes. Once the work has told it, this
+  no longer holds for the rest of the job, so that the time left does not come and go.
 - **Standing still is unknown.** A job may pause between reports as it works: a link that sends
   a chunk every few seconds, a disk that takes its time now and then to write what it holds
   back. A pause is standing still once it is longer than twice the longest pause of over two and
@@ -176,12 +183,15 @@ are those after the review.
   with two stalls of 40 seconds, 30 seconds apart, the time left held between 1:49 and 1:42 for
   the first 28 seconds of the second, while two and a half minutes were left; it showed `-:--`
   for the rest of it, and was right after it.
-- Limits of a pace learned as the job goes: small files of one size, then a big file, show the
-  big file at their own pace, hours for minutes, until its data streams; a big file, then small
-  ones, shows them at the cost of bytes until the first of them is done. A lasting change of
-  pace shows in full within about 70 seconds if it halves, 100 if it quarters; swings as long as
-  the horizon, half a minute fast and half a minute slow, move the time left by a third either
-  way.
+- Limits of a pace learned as the job goes: small files of one size, then a big file, show
+  `-:--` until its data streams, rather than the big file at their pace, hours for minutes; in
+  the check that runs the copy of `noc-ops`, it is within 2% once it shows, a second or two into
+  the big file, where it was 19 to 187 times too long, locally, to a host, and from one; and so
+  is a copy of 200 files of 1 MiB after 1,000 of 4 KiB, where it was 60 times too long. Files
+  of sizes apart, or a big one first, show as before. A big file, then small ones, shows them at
+  the cost of bytes until the first of them is done. A lasting change of pace shows in full
+  within about 70 seconds if it halves, 100 if it quarters; swings as long as the horizon, half a
+  minute fast and half a minute slow, move the time left by a third either way.
 - The model is two costs and a pace: a link that is fast for big files and slow to open each
   one is right; one whose pace changes with the size of the files in other ways is not.
 - What a job does without reports is not in the work left: the time left shows `0:00`, then

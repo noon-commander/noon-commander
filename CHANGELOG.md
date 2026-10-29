@@ -475,6 +475,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Where that took a quarter of a second or more, as on a host far away, 1,000 small files of one
   size, then a big one, showed 13 hours rather than `-:--`, and small files of many sizes showed
   a fifteenth of the time they took.
+- The time left no longer jumps when a report reaches the window more than a quarter of a second
+  late, as while the screen is slow to draw: worked out again, it went to the forecast as it was,
+  from `1:19` to `1:24`, rather than go on counting down.
 
 ## [0.2.0] - 2026-10-14
 

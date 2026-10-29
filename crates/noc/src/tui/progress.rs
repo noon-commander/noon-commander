@@ -583,6 +583,11 @@ struct Held {
     at: Duration,
     speed: Option<f64>,
     left: Option<Left>,
+    /// The time left of an earlier second that `left` counted down from.
+    before: Option<(u64, Left)>,
+    /// A report made well before they were worked out came after, so they are worked out
+    /// again.
+    late: bool,
 }
 
 /// The time left of a job in some second, as [`count_down`] works it out.
@@ -799,8 +804,8 @@ impl JobView {
             self.clock.start(now);
         }
         let at = self.clock.elapsed(now);
-        if self.held.get().is_some_and(|held| held.at > at + LATE) {
-            self.held.set(None);
+        if let Some(held) = self.held.get().filter(|held| held.at > at + LATE) {
+            self.held.set(Some(Held { late: true, ..held }));
         }
         self.samples.note(at, counts.bytes_copied);
         self.forecast.note(at, &counts);
@@ -874,7 +879,7 @@ impl JobView {
         let elapsed = self.clock.elapsed(now);
         let second = whole_seconds(elapsed);
         let held = match self.held.get() {
-            Some(held) if held.second == second => held,
+            Some(held) if held.second == second && !held.late => held,
             _ => {
                 let held = self.measure(counts, elapsed, second);
                 self.held.set(Some(held));
@@ -926,14 +931,16 @@ impl JobView {
 
     /// The speed and the time left after `elapsed` of work, in its `second`, with `counts`
     /// behind it. The time left is unknown until its forecasts have agreed, or the job has worked
-    /// [`ETA_SETTLE_MAX`].
+    /// [`ETA_SETTLE_MAX`]. It counts down from that of an earlier second, the one it counted down
+    /// from if worked out again within the same second.
     fn measure(&self, counts: &Counts, elapsed: Duration, second: u64) -> Held {
+        let before = match self.held.get() {
+            Some(held) if held.second == second => held.before,
+            Some(held) => held.left.map(|left| (held.second, left)),
+            None => None,
+        };
         let (speed, left) = if counts.bytes_total > 0 && elapsed >= SETTLED {
             let speed = self.samples.speed(elapsed, counts.bytes_copied);
-            let before = self
-                .held
-                .get()
-                .and_then(|held| Some((held.second, held.left?)));
             let settled = self.forecast.settled || elapsed >= ETA_SETTLE_MAX;
             let left = self
                 .forecast
@@ -949,6 +956,8 @@ impl JobView {
             at: elapsed,
             speed,
             left,
+            before,
+            late: false,
         }
     }
 
@@ -1583,6 +1592,32 @@ mod tests {
         );
         let again = view.timing(back + Duration::from_millis(200)).unwrap();
         assert_eq!((again.speed, again.left), (timing.speed, timing.left));
+    }
+
+    #[test]
+    fn a_report_taken_late_leaves_the_count_down_where_it_was() {
+        let start = Instant::now();
+        let mut view = JobView::new("Copy".to_owned(), "Copying".to_owned());
+        for second in 0..=20 {
+            let now = start + secs(second);
+            view.working("a".to_owned(), copying(second, second), now);
+            view.timing(now);
+        }
+        let shown = view
+            .timing(start + secs(21))
+            .unwrap()
+            .left
+            .map(whole_seconds);
+        assert_eq!(shown, Some(79));
+        // A report made 0.7 seconds after the last, with nothing more done, is taken after the
+        // second was worked out: the forecast grows by a twentieth, and the time left worked out
+        // again keeps counting down, rather than show the forecast as it is.
+        let late = start + Duration::from_millis(20_700);
+        view.working("a".to_owned(), copying(20, 20), late);
+        let forecast = view.forecast.left(secs(21), &copying(20, 20));
+        assert!(forecast.is_some_and(|left| left > secs(83)), "{forecast:?}");
+        let timing = view.timing(start + secs(21)).unwrap();
+        assert_eq!(timing.left.map(whole_seconds), shown);
     }
 
     #[test]

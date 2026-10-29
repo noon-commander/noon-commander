@@ -967,7 +967,8 @@ by one ([ADR 0055](adr/0055-a-job-s-reports-go-in-batches.md)). The window count
 question at that time, not when the UI takes it: a report waits for its batch, and a question
 asked while the terminal is handed over to another program waits until it is back, while the UI
 takes the reports of progress meanwhile. One taken more than a quarter of a second after the
-speed and the time left of the second were worked out makes them be worked out again. The job's
+speed and the time left of the second were worked out makes them be worked out again, the time
+left counting down from the one of the second before, as it would have. The job's
 window times only work: its stopwatch starts with the
 first `Progress` and stands from a `Failed` or `Exists` question, from when the job asked it,
 until the answer, including while the question waits behind other dialogs. The speed is that of

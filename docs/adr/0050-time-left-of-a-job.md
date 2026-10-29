@@ -120,7 +120,9 @@ are those after the review.
   away, a fifth after two minutes, and took one or two minutes to come right. A report taken
   more than a quarter of a second after the speed and the time left of the second were worked
   out (`LATE`) makes them be worked out again, so that the time left is right in the same
-  second, rather than show `-:--` until the next.
+  second, rather than show `-:--` until the next. It counts down from the one shown the second
+  before, as it would have: starting over from the forecast as it was, it jumped up to a tenth,
+  up as well as down.
 
 ## Consequences
 
@@ -199,6 +201,8 @@ are those after the review.
   later stretch faded away, as time and bytes fade alike: 1,000 files of 4 KiB, then one of
   600 MiB, showed 13 hours where `-:--` should be, and 200 files of 1 KiB after 200 of up to
   30 KiB showed 6 seconds for 83. Now they show `-:--`, and within 1%; a test checks both.
+- A report taken late, worked out again, moved the time left shown from `1:19` to `1:24`, the
+  forecast as it was; now it counts on from `1:19`. A test checks it.
 - The model is two costs and a pace: a link that is fast for big files and slow to open each
   one is right; one whose pace changes with the size of the files in other ways is not.
 - What a job does without reports is not in the work left: the time left shows `0:00`, then

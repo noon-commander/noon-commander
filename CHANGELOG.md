@@ -471,6 +471,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `g <`): its reports of progress, thousands a second, waited for the panels to come back, and
   the memory they took stayed with Noon Commander: 22 MiB for a minute of hashing a big file.
   The panels now count them as they come.
+- The time left of a job no longer takes the opening of its first file for the time of its data.
+  Where that took a quarter of a second or more, as on a host far away, 1,000 small files of one
+  size, then a big one, showed 13 hours rather than `-:--`, and small files of many sizes showed
+  a fifteenth of the time they took.
 
 ## [0.2.0] - 2026-10-14
 

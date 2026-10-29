@@ -50,7 +50,8 @@ are those after the review.
 - **Else streaming tells the cost of a byte.** Where the entries do not tell both, as for files
   of one size, a byte costs what it does in the stretches in which no entry was done, but for
   those that start as an entry starts, which hold its opening; an entry costs what the
-  stretches between finished entries took beyond their bytes.
+  stretches between finished entries took beyond their bytes. The job's first report starts an
+  entry too.
 - **Before any data streams, small files tell what they can.** A job whose files have all been
   small takes the cost of an entry from the least squares while it stands clear of the noise;
   the cost of their bytes is mostly noise then, and no less than nothing, so a big file after
@@ -193,6 +194,11 @@ are those after the review.
   the cost of bytes until the first of them is done. A lasting change of pace shows in full
   within about 70 seconds if it halves, 100 if it quarters; swings as long as the horizon, half a
   minute fast and half a minute slow, move the time left by a third either way.
+- The first report was not taken to start an entry, so where the first file took a quarter of a
+  second or more to open, as on a host far away, its opening was the cost of a byte, which no
+  later stretch faded away, as time and bytes fade alike: 1,000 files of 4 KiB, then one of
+  600 MiB, showed 13 hours where `-:--` should be, and 200 files of 1 KiB after 200 of up to
+  30 KiB showed 6 seconds for 83. Now they show `-:--`, and within 1%; a test checks both.
 - The model is two costs and a pace: a link that is fast for big files and slow to open each
   one is right; one whose pace changes with the size of the files in other ways is not.
 - What a job does without reports is not in the work left: the time left shows `0:00`, then

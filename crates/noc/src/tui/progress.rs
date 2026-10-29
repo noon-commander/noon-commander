@@ -425,8 +425,9 @@ impl Forecast {
             if pause > RECENT / 2 {
                 self.pauses.push_back((at, pause));
             }
-            point.starts = counts.done > self.entries;
         }
+        // A job's first report comes as it starts its first entry.
+        point.starts = self.seen.is_none() || counts.done > self.entries;
         self.seen = Some(at);
         self.entries = counts.done;
         point.at = at.saturating_sub(self.still);
@@ -2502,6 +2503,45 @@ mod tests {
         run.report();
         let left = run.left();
         assert!((left - 30.0).abs() < 30.0 * 0.05, "{left} for 30");
+    }
+
+    #[test]
+    fn opening_the_first_file_tells_nothing_of_what_a_byte_costs() {
+        // As above, over a link where each file takes longer to open than a stretch lasts, the
+        // first too, which the job's first report starts.
+        let (small, big, speed) = (4 * 1024, 600 * MIB, 10 * MIB);
+        let mut run = Run::new(1_001, 1_000 * small + big);
+        for file in 0..1_000 {
+            run.file(small, speed, (0.3, 0.01));
+            if file > 1 {
+                assert_eq!(run.left_at(run.at), None, "file {file}");
+            }
+        }
+        run.report();
+        run.at += 0.3;
+        let start = run.at;
+        for _ in 0..2 {
+            run.stream(speed, speed);
+        }
+        let truth = float(big) / float(speed) - (run.at - start) + 0.01;
+        let left = run.left();
+        assert!((left - truth).abs() < truth * 0.02, "{left} for {truth}");
+
+        // Small files of many sizes, each taking about 0.4 seconds to open, then smaller ones:
+        // what is left takes the time of its entries, not of its bytes.
+        let mut noise = Noise(3);
+        let sizes: Vec<u64> = (0..200).map(|_| 1 + noise.below(30 * 1024)).collect();
+        let mut run = Run::new(400, sizes.iter().sum::<u64>() + 200 * 1024);
+        for size in sizes {
+            run.file(size, speed, (noise.around(0.4, 0.3), 0.01));
+        }
+        run.report();
+        let (left, then) = (run.left(), run.at);
+        for _ in 0..200 {
+            run.file(1024, speed, (noise.around(0.4, 0.3), 0.01));
+        }
+        let took = run.at - then;
+        assert!((left - took).abs() < took * 0.2, "{left} for {took}");
     }
 
     #[test]

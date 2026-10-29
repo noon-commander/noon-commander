@@ -2,11 +2,11 @@
 
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
-use std::process::ExitStatus;
 
 use tokio::process::Command;
 
 use crate::ToolError;
+use crate::job::{self, Running};
 
 /// An editor command, such as `code -w`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,24 +51,15 @@ impl Editor {
         &self.args
     }
 
-    /// Runs the editor on `file` with this process's terminal, which the caller has handed
-    /// over, and waits for it. `file` is absolute, so no editor takes it for an option.
-    pub async fn edit(&self, file: &Path) -> Result<ExitStatus, ToolError> {
-        self.edit_at(file, None).await
-    }
-
-    /// The same, with the cursor on `line` (1-based) if there is one.
-    pub async fn edit_at(&self, file: &Path, line: Option<u64>) -> Result<ExitStatus, ToolError> {
+    /// Starts the editor on `file`, with the cursor on `line` (1-based) if there is one, with
+    /// this process's terminal, which the caller has handed over, as a job where this process's
+    /// group has the terminal, so that Ctrl+z in the editor stops it alone (ADR 0054). `file` is
+    /// absolute, so no editor takes it for an option.
+    pub fn start(&self, file: &Path, line: Option<u64>) -> Result<Running, ToolError> {
         debug_assert!(file.is_absolute());
-        Command::new(&self.program)
-            .args(&self.args)
-            .args(self.file_args(file, line))
-            .status()
-            .await
-            .map_err(|source| ToolError::Spawn {
-                program: self.program.clone(),
-                source,
-            })
+        let mut command = Command::new(&self.program);
+        command.args(&self.args).args(self.file_args(file, line));
+        job::start(command, &self.program)
     }
 }
 
@@ -103,6 +94,7 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::job::Waited;
 
     fn editor(vars: &[(&str, &str)]) -> Editor {
         Editor::from_vars(|name| {
@@ -153,7 +145,10 @@ mod tests {
                 "-w".to_owned(),
             ],
         };
-        let status = editor.edit(&file).await.unwrap();
+        let waited = editor.start(&file, None).unwrap().wait().await.unwrap();
+        let Waited::Ended(status) = waited else {
+            panic!("stopped");
+        };
         assert!(status.success());
         let args = std::fs::read_to_string(dir.path().join("notes.txt.args")).unwrap();
         assert_eq!(args, format!("-w|{}|", file.display()));
@@ -161,6 +156,6 @@ mod tests {
             program: PathBuf::from("/nonexistent/editor"),
             args: Vec::new(),
         };
-        assert!(missing.edit(&file).await.unwrap_err().is_not_found());
+        assert!(missing.start(&file, None).unwrap_err().is_not_found());
     }
 }

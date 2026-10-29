@@ -7,12 +7,14 @@
 //! lives in `noc-ssh`. Programs run without a shell, with their arguments after `--` where they
 //! take paths, and background ones end when their future is dropped; the shell of the command
 //! line, `shell.run`, is the one exception to the first rule (ADR 0019, ADR 0054), and the
-//! opener, which starts programs that outlive it, to the last (ADR 0026).
+//! opener, which starts programs that outlive it, to the last (ADR 0026). The shell and the
+//! editor, which get the terminal, run as jobs ([`job`]), as a shell runs them.
 
 pub mod editor;
 mod error;
 pub mod fd;
 pub mod globs;
+pub mod job;
 pub mod opener;
 mod process;
 pub mod ripgrep;

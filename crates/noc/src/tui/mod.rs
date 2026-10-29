@@ -70,7 +70,7 @@ use tokio::sync::mpsc;
 
 use app::{App, Handover};
 use help::{About, Files};
-use keymap::{KeyState, Keyboard, Mode};
+use keymap::{KeyState, Keyboard, Keymap, Mode};
 use mouse::{Clicks, Press};
 use tasks::{Done, Tasks};
 
@@ -441,26 +441,29 @@ fn start_app(
     (app, effects)
 }
 
-/// Runs the editor on `file`, at `line` if there is one, with the terminal handed over, and
+/// Runs the editor on `file`, at `line` if there is one, with the terminal handed over, as a
+/// job that asks what next when Ctrl+z stops it, as a command of the command line does; and
 /// tells whether the file changed (its size or time), or why the editor could not run.
-async fn edit(file: &Path, line: Option<u64>) -> Result<bool, String> {
+async fn edit(file: &Path, line: Option<u64>, keymap: &Keymap) -> Result<bool, String> {
     let stamp = |metadata: std::fs::Metadata| (metadata.len(), metadata.modified().ok());
     let before = tokio::fs::metadata(file)
         .await
         .map(stamp)
         .map_err(|error| error.to_string())?;
     let editor = Editor::from_env();
-    if let Err(error) = editor.edit_at(file, line).await {
+    let cannot_run = |error: ToolError| {
         let reason = match &error {
             ToolError::Spawn { source, .. } => source.to_string(),
             other => describe::chain(other),
         };
-        return Err(fl!(
+        fl!(
             "edit-cannot-run",
             program = editor.program().display().to_string(),
             reason = reason
-        ));
-    }
+        )
+    };
+    let mut running = editor.start(file, line).map_err(cannot_run)?;
+    output::finish(&mut running, keymap, cannot_run).await?;
     let after = tokio::fs::metadata(file)
         .await
         .map(stamp)
@@ -494,7 +497,7 @@ async fn hand_over(
     let (events, effects) = match handover {
         Handover::Edit { file, line } => {
             let result = match suspended {
-                Ok(()) => edit(&file, line).await,
+                Ok(()) => edit(&file, line, app.keymap()).await,
                 Err(error) => Err(error),
             };
             (EventStream::new(), app.edited(result))

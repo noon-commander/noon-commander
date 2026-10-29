@@ -906,9 +906,11 @@ does not compile without.
   screen and raw mode, and drops its `EventStream` first. The stream's reader thread holds
   crossterm's input lock while it waits, and a new stream takes that lock, so the old one must go
   before the program starts, or its reader eats the first key, and the new one is made after it. The
-  loop waits for the program, then takes the terminal back and draws everything. Ctrl+c in the
-  program reaches Noon Commander too, so the SIGINT stream is made anew; SIGTERM and SIGHUP wait
-  until the program ends. ssh children are in sessions of their own and see none of it.
+  loop waits for the program, then takes the terminal back and draws everything. The editor and
+  a local command run as jobs, in process groups of their own with the terminal, so Ctrl+c and
+  Ctrl+z reach them alone (`noc_tools::job`, [ADR 0054](adr/0054-shell-run.md)); the SIGINT
+  stream is still made anew. SIGTERM and SIGHUP wait until the program ends. ssh children are in
+  sessions of their own and see none of it.
 - The working directory of the process follows the active panel: after each turn of the
   event loop, a local directory the active panel now shows (once its listing arrived)
   goes to a task that `chdir`s to it in `spawn_blocking`, the latest of the waiting ones only.
@@ -1568,12 +1570,13 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   Noon Commander's environment in them (`/bin/sh` for a program that comes out empty), then the
   command in one argument as typed, in the panel's directory; `-i` gives the shell the aliases and
   functions of its rc files ([ADR 0054](adr/0054-shell-run.md)). The shell runs as a job, as a shell
-  runs one: `Shell::start` puts it in a process group of its own with the terminal, and
-  `Running::wait` waits for SIGCHLD and asks `waitid` whether it ended or was stopped, then takes
-  the terminal back (`tcsetpgrp` with SIGTTOU blocked, through `nix`'s `pthread_sigmask`), which
-  zsh, which `exec`s the last command of `-c`, never gives back. A command stopped by Ctrl+z gets
-  `[stopped]` under its output, as a mark of a failure, and the keys of a dialog, which are read:
-  Enter continues it (`Running::resume`), Esc ends it with SIGHUP (`Running::end`). On a host, the
+  runs one, and so does the editor of F4: `noc_tools::job` puts it in a process group of its own
+  with the terminal, and `Running::wait` waits for SIGCHLD and asks `waitid` whether it ended or
+  was stopped, then takes the terminal back (`tcsetpgrp` with SIGTTOU blocked, through `nix`'s
+  `pthread_sigmask`), which zsh, which `exec`s the last command of `-c`, never gives back. One
+  stopped by Ctrl+z gets `[stopped]` under its output, as a mark of a failure, and the keys of a
+  dialog, which are read (`output::finish`): Enter continues it (`Running::resume`), Esc ends it
+  with SIGHUP (`Running::end`). On a host, the
   host's task builds the ssh command from its session (`Session::command_in`) and the event loop
   runs it with the terminal: over the master, with `cd -- '<dir>' || exit` and then `exec` and
   the words of the host's `run` in `hosts.toml`, else of `shell.run`, quoted but for each

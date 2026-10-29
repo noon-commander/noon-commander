@@ -4,6 +4,7 @@
 
 use std::io::{self, Write as _};
 use std::os::unix::process::ExitStatusExt as _;
+use std::process::ExitStatus;
 
 use crossterm::event::{Event, EventStream, KeyEventKind};
 use crossterm::style::{Attribute, Color, Print, SetAttribute, SetForegroundColor};
@@ -11,7 +12,8 @@ use crossterm::terminal::{Clear, ClearType};
 use futures_util::StreamExt as _;
 use noc_config::Pause;
 use noc_tools::ToolError;
-use noc_tools::shell::{Shell, Waited};
+use noc_tools::job::{Running, Waited};
+use noc_tools::shell::Shell;
 
 use super::command::{Place, Run};
 use super::glyphs;
@@ -54,17 +56,7 @@ pub(super) async fn run_command(run: Run, keymap: &Keymap) -> Result<Ran, String
                 fl!("command-error", program = program, reason = reason)
             };
             let mut running = shell.start(&dir, &command).map_err(cannot_run)?;
-            loop {
-                match running.wait().await.map_err(cannot_run)? {
-                    Waited::Ended(status) => break status,
-                    Waited::Stopped => {
-                        // One that cannot go on ends, rather than stays stopped while it waits.
-                        if !(goes_on(&mut out, keymap).await? && running.resume().is_ok()) {
-                            let _ = running.end();
-                        }
-                    }
-                }
-            }
+            finish(&mut running, keymap, cannot_run).await?
         }
         Place::Remote { handle, dir } => {
             let mut ssh = tasks::remote_command(&handle, dir, shell, command).await?;
@@ -109,6 +101,28 @@ pub(super) async fn run_command(run: Run, keymap: &Keymap) -> Result<Ran, String
         print_mark(&mut out, mark, "\n");
     }
     Ok(Ran { waits, mark })
+}
+
+/// Waits for `running`, a command of the command line or the editor of F4, to end, and asks
+/// what next each time it is stopped, as by Ctrl+z. `cannot` says why it could not be waited
+/// for.
+pub(super) async fn finish(
+    running: &mut Running,
+    keymap: &Keymap,
+    cannot: impl Fn(ToolError) -> String,
+) -> Result<ExitStatus, String> {
+    let mut out = io::stdout();
+    loop {
+        match running.wait().await.map_err(&cannot)? {
+            Waited::Ended(status) => return Ok(status),
+            Waited::Stopped => {
+                // One that cannot go on ends, rather than stays stopped while it waits.
+                if !(goes_on(&mut out, keymap).await? && running.resume().is_ok()) {
+                    let _ = running.end();
+                }
+            }
+        }
+    }
 }
 
 /// Asks whether a command that was stopped, as by Ctrl+z, goes on or ends: on a line of its

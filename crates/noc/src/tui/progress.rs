@@ -73,9 +73,9 @@ const ETA_AGREE: f64 = 1.25;
 const ETA_SETTLE_MAX: Duration = ETA_HORIZON;
 
 /// A report made this much before the speed and the time left of a second were worked out
-/// comes late, as one that waited while the terminal was handed over: they knew nothing of it,
-/// and of what came after it, so they are worked out again. Far longer than a report takes to
-/// reach the window.
+/// comes late, as one that waited while the event loop was held up, by a terminal slow to take
+/// a frame: they knew nothing of it, and of what came after it, so they are worked out again.
+/// Far longer than a report takes to reach the window.
 const LATE: Duration = Duration::from_millis(250);
 
 /// How many times as large as the entries done those left may be on average, while the work

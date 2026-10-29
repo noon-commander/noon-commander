@@ -5584,8 +5584,7 @@ impl App {
     /// shows does, and the corner shows only how far the jobs in the background are together,
     /// in percent: the screen draws when one of these changes, not for every batch.
     pub(crate) fn job_report(&mut self, id: u64, event: JobEvent) -> (Vec<Effect>, bool) {
-        let progress = matches!(event, JobEvent::Scanning { .. } | JobEvent::Progress { .. });
-        if !progress {
+        if !event.is_progress() {
             return (self.job_event(id, event), true);
         }
         let now = Instant::now();
@@ -10693,8 +10692,8 @@ mod tests {
         app.handle(action(Action::Delete));
         let (id, _, _, _) = delete_job(app.handle(action(Action::Confirm)));
         // Twenty seconds of work at a mebibyte a second that began half a minute ago, taken
-        // only now, as after the terminal was handed over, in batches of eight reports: no
-        // stall, and 20 MiB left.
+        // only now, as by an event loop held up, in batches of eight reports: no stall, and
+        // 20 MiB left.
         let start = Instant::now().checked_sub(Duration::from_secs(30)).unwrap();
         let at = |millis| start + Duration::from_millis(millis);
         let reports: Vec<(Instant, Counts)> = (0..=80)

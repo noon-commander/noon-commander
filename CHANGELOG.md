@@ -467,6 +467,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   rather than 12 to 14%. The reports of progress, thousands a second, reach the window in
   batches, at most 50 a second, rather than one by one; each still counts for the speed and the
   time left ([ADR 0055](docs/adr/0055-a-job-s-reports-go-in-batches.md)).
+- A job no longer fills memory while another program has the terminal (the editor, a command,
+  `g <`): its reports of progress, thousands a second, waited for the panels to come back, and
+  the memory they took stayed with Noon Commander: 22 MiB for a minute of hashing a big file.
+  The panels now count them as they come.
 
 ## [0.2.0] - 2026-10-14
 

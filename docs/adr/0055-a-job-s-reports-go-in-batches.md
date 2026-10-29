@@ -33,6 +33,11 @@ check of ADR 0050, where it is off by 2 to 4%.
   their order.
 - 20 ms is under the 40 ms between frames drawn for results of background work
   (`RESULTS_FRAME`): no batch waits for a frame.
+- While the terminal is handed over to another program, the editor, a command, or the output of
+  commands (`g <`), the event loop still takes the batches as they come, and the windows count
+  them, without drawing (`meanwhile` in `tui/mod.rs`). The rest of what background work sends,
+  questions among it, waits in the order it came until the app has taken the program's end, as
+  before: the app does what it asks then, not while another program has the terminal.
 
 ## Consequences
 
@@ -41,7 +46,10 @@ check of ADR 0050, where it is off by 2 to 4%.
 - In the check of ADR 0050, batches of 20 ms change the mean error of the time left by half a
   point at most, and batches of 50 ms by under one.
 - What shows of a job is 20 ms behind it at most.
-- While the terminal is handed over, the reports that wait for the UI grow five times slower:
-  2.3 MiB a second for the download rather than 11. They still grow while it is away.
+- Batches alone made the reports that waited while the terminal was handed over grow five times
+  slower, 2.3 MiB a second for the download rather than 11; taken meanwhile, they no longer
+  grow. A checksum of a big file, at about 1.2 GB/s, left 22 MiB more with the process after a
+  minute of `g <`, which it kept after the return; now none. The time left after the return is
+  as right as before, within the swings of the job's own pace.
 - A task of its own for the terminal's events would make each turn of the loop cheaper, not
   fewer; with batches, the loop waits idle almost all the time, and it is not needed.

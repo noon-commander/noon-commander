@@ -49,6 +49,7 @@ mod zoom;
 
 use std::io::{self, IsTerminal as _};
 use std::path::{Path, PathBuf};
+use std::pin::{Pin, pin};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -310,20 +311,17 @@ pub(crate) async fn run(
         take_requests(&mut app, &mut tasks);
         if let Some(handover) = app.take_handover() {
             let tty = (&mut terminal, &mut asked, &mut told);
-            let Some((fresh, after)) = hand_over(tty, events, &mut app, handover).await else {
+            let background = (&mut app, &mut tasks, &mut done);
+            let Some((fresh, after)) = hand_over(tty, events, background, handover).await else {
                 // Told to end while the terminal was handed over.
                 break Ok(());
             };
             events = fresh;
-            let effects = match after {
-                Ok((effects, fresh)) => {
-                    interrupt = fresh;
-                    effects
-                }
+            match after {
+                Ok(fresh) => interrupt = fresh,
                 Err(error) => break Err(error.into()),
-            };
+            }
             keys = KeyState::default();
-            tasks.run(effects);
             continue;
         }
         if let Err(error) = take_terminal_requests(&mut terminal, &mut app, &mut asked) {
@@ -478,18 +476,23 @@ async fn edit(
     Ok(before != after)
 }
 
-/// Hands the terminal to the program of `handover`, takes it back, and returns what the app
-/// does next and a new stream of SIGINT, since Ctrl+c in the program reached Noon Commander
-/// too, with a new stream of events in place of `events`. The program gets the mouse and the
-/// terminal's own title, and may set one of its own; the next turn of the event loop takes
-/// both again. `None` if Noon Commander was `told` to end meanwhile: then no new stream of
-/// events is made (`Told::events`).
+/// Hands the terminal to the program of `handover`, takes it back, runs what the app does
+/// next, and returns a new stream of SIGINT, since Ctrl+c in the program reached Noon
+/// Commander too, with a new stream of events in place of `events`. The program gets the mouse
+/// and the terminal's own title, and may set one of its own; the next turn of the event loop
+/// takes both again. `None` if Noon Commander was `told` to end meanwhile: then no new stream
+/// of events is made (`Told::events`).
+///
+/// Meanwhile the app takes the reports of how far its jobs are from `done` as they come,
+/// without drawing them: a copy makes thousands a second, which would pile up until the
+/// terminal came back, and then all be counted at once. The rest of what background work sends
+/// waits, in the order it came, until the app has taken the program's end.
 async fn hand_over(
     (terminal, asked, told): (&mut DefaultTerminal, &mut Asked, &mut Told),
     events: EventStream,
-    app: &mut App,
+    (app, tasks, done): (&mut App, &mut Tasks, &mut mpsc::UnboundedReceiver<Done>),
     handover: Handover,
-) -> Option<(EventStream, io::Result<(Vec<app::Effect>, Signal)>)> {
+) -> Option<(EventStream, io::Result<Signal>)> {
     // The program gets every key. A stream's reader holds crossterm's input lock while it
     // waits, and a new stream takes that lock, so the old one goes first; the new one reads
     // nothing until it is polled.
@@ -502,24 +505,40 @@ async fn hand_over(
         .show(None)
         .and_then(|()| suspend(terminal, asked.modes))
         .map_err(|error| error.to_string());
+    let keymap = app.keymap().clone();
+    let mut held = Vec::new();
+    let mut take = |result: Done| match result {
+        Done::Job { id, event } if event.is_progress() => {
+            tasks.run(app.job_event(id, event));
+            None
+        }
+        other => Some(other),
+    };
     let (events, effects) = match handover {
         Handover::Edit { file, line } => {
             let result = match suspended {
-                Ok(()) => edit(&file, line, (app.keymap(), told)).await,
+                Ok(()) => {
+                    let editor = pin!(edit(&file, line, (&keymap, told)));
+                    meanwhile(editor, done, &mut held, &mut take).await
+                }
                 Err(error) => Err(error),
             };
             (told.events()?, app.edited(result))
         }
         Handover::Run(run) => {
             let result = match suspended {
-                Ok(()) => output::run_command(run, (app.keymap(), told)).await,
+                Ok(()) => {
+                    let command = pin!(output::run_command(run, (&keymap, told)));
+                    meanwhile(command, done, &mut held, &mut take).await
+                }
                 Err(error) => Err(error),
             };
             let mut events = told.events()?;
             if let Ok(ran) = &result
                 && ran.waits
             {
-                output::wait_for_key(&mut events, told).await;
+                let key = pin!(output::wait_for_key(&mut events, told));
+                meanwhile(key, done, &mut held, &mut take).await;
                 output::after_key(ran);
             }
             (events, app.ran(result.map(drop)))
@@ -530,7 +549,8 @@ async fn hand_over(
                 // The keys that go back are read as the panels read them, with the kitty keyboard
                 // protocol, which tells Ctrl+[ and Ctrl+m from other keys.
                 let _ = asked.modes.keyboard(true);
-                output::wait_to_go_back(&mut events, app.keymap(), told).await;
+                let back = pin!(output::wait_to_go_back(&mut events, &keymap, told));
+                meanwhile(back, done, &mut held, &mut take).await;
                 let _ = asked.modes.keyboard(false);
             }
             (events, Vec::new())
@@ -540,7 +560,31 @@ async fn hand_over(
         return None;
     }
     let after = resume(terminal, asked.modes).and_then(|()| signal(SignalKind::interrupt()));
-    Some((events, after.map(|interrupt| (effects, interrupt))))
+    if after.is_ok() {
+        tasks.run(effects);
+        for result in held {
+            take_done(app, tasks, result);
+        }
+    }
+    Some((events, after))
+}
+
+/// Waits for `work` while it hands what comes in `done` to `take`, which gives back what has
+/// to wait: that goes to `held`, in the order it came. What comes as `work` ends stays in
+/// `done`. `work` is pinned where it was made, so that this future does not hold a copy of it.
+async fn meanwhile<T, R>(
+    mut work: Pin<&mut impl Future<Output = T>>,
+    done: &mut mpsc::UnboundedReceiver<R>,
+    held: &mut Vec<R>,
+    mut take: impl FnMut(R) -> Option<R>,
+) -> T {
+    loop {
+        tokio::select! {
+            biased;
+            out = &mut work => return out,
+            Some(result) = done.recv() => held.extend(take(result)),
+        }
+    }
 }
 
 /// Hands the terminal over to another program as the shell has it: with the cursor and the
@@ -932,6 +976,37 @@ mod tests {
         );
         assert_eq!(written(&mut title, None), "\x1b[23;0t");
         assert_eq!(written(&mut title, None), "", "given back once");
+    }
+
+    #[tokio::test]
+    async fn results_are_taken_while_a_program_has_the_terminal() {
+        let (sender, mut done) = mpsc::unbounded_channel();
+        let (taken, mut heard) = mpsc::unbounded_channel();
+        let program = async {
+            for result in 0..7 {
+                sender.send(result).unwrap();
+            }
+            // It goes on only once they were taken: as they came, not after it.
+            for result in [0, 2, 4, 6] {
+                assert_eq!(heard.recv().await, Some(result));
+            }
+            sender.send(7).unwrap();
+            "ended"
+        };
+        let take = |result: u32| {
+            if result % 2 == 1 {
+                return Some(result);
+            }
+            taken.send(result).unwrap();
+            None
+        };
+        let mut held = Vec::new();
+        let program = pin!(program);
+        let ended = meanwhile(program, &mut done, &mut held, take);
+        let ended = tokio::time::timeout(Duration::from_secs(10), ended).await;
+        assert_eq!(ended, Ok("ended"));
+        assert_eq!(held, [1, 3, 5], "the others wait, in order");
+        assert_eq!(done.try_recv(), Ok(7), "and what came as it ended");
     }
 
     #[test]

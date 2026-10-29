@@ -111,14 +111,15 @@ are those after the review.
 - **Each report counts at the time the job made it**, which the task that runs the job takes as
   it passes the report on, in a batch with others
   ([ADR 0055](0055-a-job-s-reports-go-in-batches.md)), and a question at the time the job asked
-  it, which stops the clock there. The UI takes no reports while the terminal is handed over to
-  the editor, a command, or the user screen, and those that waited come at once when it is back.
-  Counted when the UI took them, the work meanwhile looked like a stall, left out, and then all
-  its data had moved in a quarter of a second: the time left was a half of what was left after
-  half a minute away, a fifth after two minutes, and took one or two minutes to come right. A
-  report taken more than a quarter of a second after the speed and the time left of the second
-  were worked out (`LATE`) makes them be worked out again, so that the time left is right in the
-  same second, rather than show `-:--` until the next.
+  it, which stops the clock there. The UI took no reports while the terminal was handed over to
+  the editor, a command, or the user screen, and those that waited came at once when it was back;
+  it now takes those of progress meanwhile, but a question still waits (ADR 0055). Counted when
+  the UI took them, the work meanwhile looked like a stall, left out, and then all its data had
+  moved in a quarter of a second: the time left was a half of what was left after half a minute
+  away, a fifth after two minutes, and took one or two minutes to come right. A report taken
+  more than a quarter of a second after the speed and the time left of the second were worked
+  out (`LATE`) makes them be worked out again, so that the time left is right in the same
+  second, rather than show `-:--` until the next.
 
 ## Consequences
 

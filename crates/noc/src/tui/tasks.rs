@@ -182,7 +182,8 @@ pub(crate) enum Done {
 
 /// A report from a job, with its paths as locations and its errors in words. Reports of how
 /// far it is and questions come with `at`, when the job made them: the UI may take them
-/// later, as when the terminal was handed over to another program.
+/// later, as a report that waits for its batch, or a question asked while the terminal was
+/// handed over to another program.
 #[derive(Debug)]
 pub(crate) enum JobEvent {
     /// Counting what to do: `items` found so far.
@@ -212,6 +213,14 @@ pub(crate) enum JobEvent {
     Sums(Vec<Sum<Location>>),
     /// The job is over; `complete` if it did all it was asked, without skipping or aborting.
     Finished { complete: bool },
+}
+
+impl JobEvent {
+    /// Whether it tells only how far the job is, which changes nothing but how its window, its
+    /// row, and the corner look.
+    pub(crate) fn is_progress(&self) -> bool {
+        matches!(self, Self::Scanning { .. } | Self::Progress { .. })
+    }
 }
 
 /// Work for the task of a connected host, for a panel.

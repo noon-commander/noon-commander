@@ -909,8 +909,12 @@ does not compile without.
   screen and raw mode, and drops its `EventStream` first. The stream's reader thread holds
   crossterm's input lock while it waits, and a new stream takes that lock, so the old one must go
   before the program starts, or its reader eats the first key, and the new one is made after it. The
-  loop waits for the program, then takes the terminal back and draws everything. The editor and
-  a local command run as jobs, in process groups of their own with the terminal, so Ctrl+c and
+  loop waits for the program, then takes the terminal back and draws everything. Meanwhile it
+  takes the jobs' reports of progress as they come, which their windows count without drawing,
+  so that a copy's thousands a second do not pile up until the terminal is back; the rest of what
+  background work sends, questions among it, waits in the order it came until the app has taken
+  the program's end ([ADR 0055](adr/0055-a-job-s-reports-go-in-batches.md)). The editor and a
+  local command run as jobs, in process groups of their own with the terminal, so Ctrl+c and
   Ctrl+z reach them alone (`noc_tools::job`, [ADR 0054](adr/0054-shell-run.md)); the SIGINT
   stream is still made anew. SIGTERM, SIGHUP, and the terminal going away, which `tui::told`
   hears for the whole run, end every wait for a key there, and the event loop ends without a new
@@ -960,10 +964,11 @@ first after a quiet spell at once, then at most one each 20 ms (`BATCH`), and th
 before a question or the end. The window counts each report of a batch (`JobView::passed`) and
 shows the last (`JobView::working`), so the speed and the time left are those of the reports one
 by one ([ADR 0055](adr/0055-a-job-s-reports-go-in-batches.md)). The window counts each report and
-question at that time, not when the UI takes it: while the terminal is handed over to another
-program the UI takes none, and those that waited come at once when it is back. One taken more
-than a quarter of a second after the speed and the time left of the second were worked out
-makes them be worked out again. The job's window times only work: its stopwatch starts with the
+question at that time, not when the UI takes it: a report waits for its batch, and a question
+asked while the terminal is handed over to another program waits until it is back, while the UI
+takes the reports of progress meanwhile. One taken more than a quarter of a second after the
+speed and the time left of the second were worked out makes them be worked out again. The job's
+window times only work: its stopwatch starts with the
 first `Progress` and stands from a `Failed` or `Exists` question, from when the job asked it,
 until the answer, including while the question waits behind other dialogs. The speed is that of
 the last five seconds of work, by

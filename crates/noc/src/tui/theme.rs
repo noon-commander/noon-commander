@@ -107,7 +107,7 @@ pub(crate) struct Theme {
     pub(crate) menu_hotkey: Style,
     /// Drawn over the others: what cannot be used now, as a command of the pull-down menu that
     /// cannot run or a glyph of a field that searches that a click does not switch; and text
-    /// that only helps, as the hint of a setting.
+    /// that only helps, as the hint of a setting or what an empty field stands for.
     pub(crate) disabled: Style,
     /// The letter on the command under the cursor and on the menu bar, where a color of the
     /// menu's may not show, as mc's `menuhotsel`.

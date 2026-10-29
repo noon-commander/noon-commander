@@ -40,8 +40,10 @@ server may be heavier than those of a laptop, or print.
   and `${NAME:-default}` do not, so neither is written. sshd always sets `SHELL`, so there is no
   `/bin/sh` there.
 - **A host may have its own**: `run` in its table of `hosts.toml`, the same list, in place of
-  `shell.run` there, for a server whose rc files are slow or print. F4 on the host edits it;
-  empty, `shell.run` counts.
+  `shell.run` there, for a server whose rc files are slow or print. F4 on the host edits it in a
+  field that shows `shell.run`, faint, while it is empty; empty, `shell.run` counts.
+- **Text fields of dialogs show a placeholder**: faint text while the field is empty, which is
+  never its value, in the style of the hints of settings. The field of `run` is the first.
 - **The variables are read by a crate of their own, `noc-vars`**, which depends on no other
   `noc-*` crate. `noc-config` keeps the words as its `Template`s, `noc-tools` expands them, and
   `noc-ssh` quotes their pieces; so the three depend on it, and a later setting with variables

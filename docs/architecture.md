@@ -1135,7 +1135,9 @@ Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
 Host settings live in `hosts.toml` next to `config.toml`, one table per host with a required
 `type` that decides its other keys ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md)).
 F4 on a host in the location menu rewrites only its table through `toml_edit`, keeping comments
-and the other tables, and replaces the file atomically. The settings sit behind a lock in the
+and the other tables, and replaces the file atomically. Its field of `run` shows `shell.run`,
+faint, while it is empty (`Dialog::with_placeholder`), since that is what counts then; a
+placeholder is never the field's text. The settings sit behind a lock in the
 shared `Context`, so the TUI and the host tasks see a change at once.
 
 ```toml

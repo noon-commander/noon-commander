@@ -352,6 +352,9 @@ struct LabelledField {
     /// How it matches, if it searches: the glyphs of its case and its way end it, and the keys
     /// after Ctrl+s or a click on a glyph switch them while it has the focus (ADR 0045).
     search: Option<Input>,
+    /// What shows, faint, while the field is empty, such as the value that then counts; it is
+    /// never the field's text. Terminal-safe. Fields that search show none.
+    placeholder: Option<String>,
 }
 
 impl LabelledField {
@@ -360,6 +363,7 @@ impl LabelledField {
             label: Label::default(),
             field,
             search: None,
+            placeholder: None,
         }
     }
 }
@@ -616,6 +620,7 @@ impl Dialog {
                 label: Label::parse(&cells::sanitize(label.as_bytes())),
                 field: Field::plain(text),
                 search: None,
+                placeholder: None,
             })
             .collect();
         let focus = if fields.is_empty() {
@@ -920,6 +925,14 @@ impl Dialog {
         }
         *field = Field::plain(text);
         self.focus = Focus::Field(index);
+    }
+
+    /// The same dialog, whose field `index` shows `text`, faint, while it is empty.
+    pub(crate) fn with_placeholder(mut self, index: usize, text: &str) -> Self {
+        if let Some(field) = self.fields.get_mut(index) {
+            field.placeholder = Some(cells::sanitize(text.as_bytes()));
+        }
+        self
     }
 
     /// The same dialog, whose field `index` searches as `input` says, starting in its way.
@@ -1992,7 +2005,13 @@ fn draw_field(
 ) -> (usize, Rect, Option<GlyphSpots>) {
     let field = &labelled.field;
     let Some(input) = labelled.search else {
-        let (line, column) = field_line(field, usize::from(area.width), theme);
+        let room = usize::from(area.width);
+        let (line, column) = match &labelled.placeholder {
+            Some(placeholder) if field.text().is_empty() => {
+                (placeholder_line(placeholder, room, theme), 0)
+            }
+            _ => field_line(field, room, theme),
+        };
         frame.render_widget(line, area);
         return (column, area, None);
     };
@@ -2028,6 +2047,19 @@ pub(crate) fn field_line(field: &Field, room: usize, theme: &Theme) -> (Line<'st
     ]);
     line.spans.extend(after);
     (line.style(theme.dialog_input), column)
+}
+
+/// `placeholder` in an empty field of `room` cells, faint, as the hints of settings are.
+fn placeholder_line(placeholder: &str, room: usize, theme: &Theme) -> Line<'static> {
+    let faint = theme.dialog_input.patch(theme.disabled);
+    let spans = cells::fit(
+        placeholder,
+        room,
+        cells::Align::Left,
+        (faint, theme.truncated_cursor),
+        theme.glyphs.marks,
+    );
+    Line::from(spans).style(theme.dialog_input)
 }
 
 /// `glyph` in a radio button or a check box that is on, `on`; a blank in one that is off.
@@ -2944,6 +2976,40 @@ mod tests {
             .map(|x| buffer[(x, cursor.y - 1)].symbol())
             .collect();
         assert!(above.contains("Remote directory:"), "{above}");
+    }
+
+    #[test]
+    fn an_empty_field_shows_its_placeholder_faint_until_typed_in() {
+        let theme = Theme::terminal();
+        let mut dialog = host_form().with_placeholder(2, "~/site\u{1b}[2J");
+        dialog.handle(action(Action::Down));
+        dialog.handle(action(Action::Down));
+        let row = |mut terminal: Terminal<TestBackend>| {
+            let cursor = terminal.get_cursor_position().unwrap();
+            let buffer = terminal.backend().buffer();
+            let text: String = (0..64).map(|x| buffer[(x, cursor.y)].symbol()).collect();
+            let first = (0..64)
+                .find(|&x| buffer[(x, cursor.y)].symbol() == "~")
+                .map(|x| (x, buffer[(x, cursor.y)].style()));
+            (cursor.x, text, first)
+        };
+        let (cursor, text, first) = row(draw_themed(&dialog, 64, 16, &theme));
+        assert!(text.contains("~/site"), "{text}");
+        assert!(!text.contains('\u{1b}'), "terminal-safe: {text}");
+        let (x, style) = first.unwrap();
+        assert_eq!(cursor, x, "the cursor stands at its start");
+        let faint = theme.dialog_input.patch(theme.disabled);
+        assert_eq!(style.add_modifier, faint.add_modifier);
+        assert_ne!(faint.add_modifier, theme.dialog_input.add_modifier);
+        assert_eq!(dialog.text_of(2), "", "it is not the text");
+
+        typed(&mut dialog, "/srv");
+        let (_, text, _) = row(draw_themed(&dialog, 64, 16, &theme));
+        assert!(text.contains("/srv") && !text.contains("~/site"), "{text}");
+        dialog.handle(action(Action::DeleteToStart));
+        let (_, text, _) = row(draw_themed(&dialog, 64, 16, &theme));
+        assert!(text.contains("~/site"), "back once empty: {text}");
+        assert_eq!(dialog.text_of(2), "");
     }
 
     /// A dialog with a field, a check box, a list of `len` rows, and OK and Cancel.

@@ -6490,7 +6490,8 @@ impl App {
             buttons.insert(1, Button::UseCurrent);
         }
         let title = fl!("host-edit-title", host = cells::sanitize(name.as_bytes()));
-        let dialog = Dialog::fields(&title, &fields, &checks, buttons);
+        let dialog = Dialog::fields(&title, &fields, &checks, buttons)
+            .with_placeholder(HOST_RUN, &run_text(&self.config.shell.run));
         self.dialogs.push_back(Open {
             dialog,
             purpose: Purpose::EditHost { name, old, current },
@@ -12095,9 +12096,11 @@ mod tests {
     }
 
     #[test]
-    fn f4_on_a_host_gives_it_a_run_of_its_own() {
+    fn f4_on_a_host_shows_shell_run_until_it_gets_a_run_of_its_own() {
         let mut app = at_slash();
         edit_web(&mut app);
+        let text = screen_of(&mut app, 24);
+        assert!(text.contains("$SHELL -i -c"), "the placeholder: {text}");
         for _ in 0..3 {
             app.handle(action(Action::Down));
         }

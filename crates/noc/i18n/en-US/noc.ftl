@@ -941,7 +941,8 @@ host-label = &Label (shown instead of the alias):
 host-start-dir = &Remote directory (opened on connect; empty: home):
 host-other-dir = Other panel &directory (local, / or ~/…; empty: unchanged):
 host-remember-dir = Re&member the last directory in this session
-# Words, as Command line → Run with in the Configuration dialog; empty, that one counts.
+# Words, as Command line → Run with in the Configuration dialog; empty, that one counts, and
+# the field shows it faint.
 host-run = Run commands of ! and : &with:
 # The reason is one of the config-run- errors.
 host-run-invalid = Run with: { $reason }

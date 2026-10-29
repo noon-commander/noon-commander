@@ -1,12 +1,14 @@
 # 0019. Shell command line
 
-- Status: Superseded in part by [ADR 0022](0022-vim-modes.md)
+- Status: Superseded in part by [ADR 0022](0022-vim-modes.md); amended by
+  [ADR 0054](0054-shell-run.md)
 - Date: 2026-10-05
 
 The command line, how commands run, and the history still hold. Its keys are vim's now: Esc
 closes the line, Ctrl+p and Ctrl+n go through the history, `q :` opens its window, and Ctrl+f
 goes to Normal mode; Ctrl+x Ctrl+e and `$EDITOR` gave way to that until a key of vim's is chosen
-for it.
+for it. What runs a command is `shell.run` now, `$SHELL -i -c` by default, and on a host a
+shell the remote command starts with `exec` (ADR 0054).
 
 ## Context
 

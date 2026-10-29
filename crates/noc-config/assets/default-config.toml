@@ -123,6 +123,13 @@ program = "zoxide"
 record = true
 
 [shell]
+# What runs a command of the command line (! and :): a program and its arguments, after which
+# the command comes as one more argument. $NAME and ${NAME} take the value of a variable where
+# the command runs: here for a local panel, on the host for a host; $$ is a $. Here, a program
+# that comes out empty is /bin/sh. -i makes the shell read its rc files, with their aliases and
+# functions; without it the shell starts faster. A host's run in hosts.toml takes the place of
+# this one there.
+run = ["$SHELL", "-i", "-c"]
 # How many commands of the command line (! and :) history.toml in the state directory keeps,
 # of all hosts together; each is kept with the host it ran on. 0 keeps none, and a command
 # that starts with a space is never kept.

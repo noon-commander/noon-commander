@@ -229,6 +229,24 @@ mod tests {
     }
 
     #[test]
+    fn writes_the_run_of_the_shell_as_a_list() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        fs::write(&path, DEFAULT_CONFIG).unwrap();
+        let words = vec!["$SHELL".to_owned(), "-c".to_owned()];
+        let new = changed(|config| config.shell.run = crate::Run::try_from(words).unwrap());
+        save_config(&path, &Config::default(), &new).unwrap();
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            DEFAULT_CONFIG.replace(
+                "run = [\"$SHELL\", \"-i\", \"-c\"]",
+                "run = [\"$SHELL\", \"-c\"]"
+            )
+        );
+        assert_eq!(Config::load(&path, dir.path()).unwrap(), new);
+    }
+
+    #[test]
     fn leaves_a_broken_file_alone() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");

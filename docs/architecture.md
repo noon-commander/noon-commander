@@ -32,9 +32,11 @@ crates/
 Dependencies point one way, toward the binary:
 
 ```text
-noc-config  noc-ssh  noc-text  noc-vfs  noc-scroll  noc-pattern  noc-locale  noc-vars
+noc-text  noc-vfs  noc-scroll  noc-pattern  noc-locale  noc-vars
             no other noc-* crate
-noc-tools   → noc-pattern
+noc-config  → noc-vars
+noc-ssh     → noc-vars
+noc-tools   → noc-pattern, noc-vars
 noc-ops     → noc-vfs
 noc-viewer  → noc-vfs, noc-text, noc-scroll, noc-locale
 noc         → all of them
@@ -50,17 +52,19 @@ that draws, gives them back (`Viewer::take`), and closes the viewer itself. `noc
 too, the scroll bar, but has no text ([ADR 0023](adr/0023-paging-stops-at-the-end.md)). Code
 that two crates need goes into a crate of its own topic, such as `noc-text`, or `noc-pattern`,
 which builds the regular expressions of fd's search in `noc-tools` and of the regex mode in the
-app, rather than into a common `core` crate.
+app, or `noc-vars`, which reads the variables of `shell.run` for `noc-config`, expands them for
+`noc-tools`, and gives their pieces to `noc-ssh` to quote, rather than into a common `core`
+crate.
 
 ssh runs only from `noc-ssh`, and every other program only from `noc-tools`
 ([ADR 0012](adr/0012-external-tools-and-zoxide.md)): without a shell, with `--` before paths,
 without input for background ones, and killed when their future is dropped or they time out.
 A program that is not installed is told apart from one that fails. The shell of the command
-line is the one program started through a shell, since the command is the user's
-([ADR 0019](adr/0019-shell-command-line.md)). The desktop's opener of `g x` is the one program
-left running: it starts programs that outlive it and Noon Commander, so its output goes nowhere,
-it is never killed, and it takes absolute paths without `--`, which `xdg-open` refuses
-([ADR 0026](adr/0026-open-externally.md)).
+line, `shell.run`, is the one program started through a shell, since the command is the user's
+([ADR 0019](adr/0019-shell-command-line.md), [ADR 0054](adr/0054-shell-run.md)). The desktop's
+opener of `g x` is the one program left running: it starts programs that outlive it and Noon
+Commander, so its output goes nowhere, it is never killed, and it takes absolute paths without
+`--`, which `xdg-open` refuses ([ADR 0026](adr/0026-open-externally.md)).
 
 ## Processes
 
@@ -71,7 +75,8 @@ socket ([ADR 0002](adr/0002-controlmaster-per-host.md)):
 ssh <master options> -M -N -S <sock> -o ControlPersist=no -- <alias>  # authenticates once
 ssh <channel options> -S <sock> -T -s -- <alias> sftp                 # panel channel
 ssh <channel options> -S <sock> -T -s -- <alias> sftp                 # transfer channels
-ssh <command options> -S <sock> -- <alias> 'cd -- <dir> || exit⏎<cmd>' # command line
+ssh <command options> -S <sock> -- <alias> 'cd -- <dir> || exit⏎exec "$SHELL" -i -c <cmd>'
+                                                                      # command line
 ssh -S <sock> -t -- <alias> 'cd <dir> && exec $SHELL -l'              # console (backlog)
 ssh -F /dev/null -S <sock> -O exit -- noc                             # disconnect
 ```
@@ -1114,6 +1119,7 @@ program = "zoxide"               # name in PATH or a path
 record = true                    # add directories where the user did something
 
 [shell]
+run = ["$SHELL", "-i", "-c"]     # runs ! and :!, the command last; $NAME where it runs
 history_size = 500               # commands of ! and : in history.toml, of all hosts together
 pause = "always"                 # output waits for a key: "always", "on-error", or "never"
 
@@ -1139,6 +1145,7 @@ label = "Prod"
 start_dir = "/var/www"           # opened on connect instead of the remote home
 other_dir = "~/projects/site"    # the other panel opens it with the host; / or ~/ for now
 remember_dir = true              # reopen the last directory of this session
+run = ["$SHELL", "-c"]           # runs ! there instead of shell.run; $SHELL is the host's
 ```
 
 Workspaces live in `workspaces.toml` in the data directory ([ADR 0017](adr/0017-workspaces.md)).
@@ -1555,10 +1562,15 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   `curswant`, which the next Ctrl+o keeps, and then the history, which goes on from the command an
   undo brings back (in Visual mode only its lines), and `q :` opens the window of the history. Enter
   hands the command to the event loop, which suspends the TUI as for F4 and runs it with
-  `noc-tools`' `Shell`: `$SHELL -c <command>` (`/bin/sh` without `$SHELL`) in the panel's directory,
-  the command in one argument as typed. On a host, the host's task builds the ssh command from its
-  session (`Session::command_in`) and the event loop runs it with the terminal: over the master,
-  with `cd -- '<dir>' || exit` before the command. `tui/output.rs` shows the command after its
+  `noc-tools`' `Shell`: the words of `shell.run`, `$SHELL -i -c` by default, with the variables of
+  Noon Commander's environment in them (`/bin/sh` for a program that comes out empty), then the
+  command in one argument as typed, in the panel's directory; `-i` gives the shell the aliases and
+  functions of its rc files ([ADR 0054](adr/0054-shell-run.md)). On a host, the
+  host's task builds the ssh command from its session (`Session::command_in`) and the event loop
+  runs it with the terminal: over the master, with `cd -- '<dir>' || exit` and then `exec` and
+  the words of the host's `run` in `hosts.toml`, else of `shell.run`, quoted but for each
+  variable, which the host's shell expands as `"$NAME"`, then the command quoted.
+  `tui/output.rs` shows the command after its
   prompt first, bold, and afterwards ends its output on a line of its own as zsh does (a dim `⏎`,
   spaces to the last column, `\r`, a cleared line); then a line in reverse video asks for a key,
   with the exit status of a failure, unless `shell.pause` says not to wait, and after the key `[exit

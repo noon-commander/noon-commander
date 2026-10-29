@@ -3,11 +3,12 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use noc_vars::Template;
 use serde::{Deserialize, Serialize};
 use toml_edit::{DocumentMut, Item, Table, TableLike, Value};
 
-use crate::ConfigError;
 use crate::write::{write_atomic, write_new};
+use crate::{ConfigError, Run};
 
 /// Commented template of `hosts.toml` written by `noc config init`; it holds no hosts.
 pub const DEFAULT_HOSTS: &str = include_str!("../assets/default-hosts.toml");
@@ -47,6 +48,9 @@ pub struct SftpHost {
     /// session, before `start_dir`.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub remember_dir: bool,
+    /// What runs a command of the command line on the host, instead of `shell.run`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run: Option<Run>,
 }
 
 impl HostConfig {
@@ -78,6 +82,12 @@ impl HostConfig {
     pub fn remember_dir(&self) -> bool {
         match self {
             Self::Sftp(host) => host.remember_dir,
+        }
+    }
+
+    pub fn run(&self) -> Option<&Run> {
+        match self {
+            Self::Sftp(host) => host.run.as_ref(),
         }
     }
 
@@ -188,6 +198,11 @@ fn fill(table: &mut dyn TableLike, host: &HostConfig) {
                 "remember_dir",
                 sftp.remember_dir.then(|| Value::from(true)),
             );
+            let run = sftp
+                .run
+                .as_ref()
+                .map(|run| Value::Array(run.words().iter().map(Template::as_str).collect()));
+            set(table, "run", run);
         }
     }
 }
@@ -201,6 +216,10 @@ fn set(table: &mut dyn TableLike, key: &str, value: Option<Value>) {
         let same = match (old, &value) {
             (Value::String(old), Value::String(new)) => old.value() == new.value(),
             (Value::Boolean(old), Value::Boolean(new)) => old.value() == new.value(),
+            (Value::Array(old), Value::Array(new)) => old
+                .iter()
+                .map(Value::as_str)
+                .eq(new.iter().map(Value::as_str)),
             _ => false,
         };
         if same {
@@ -248,6 +267,16 @@ mod tests {
         HostConfig::Sftp(host)
     }
 
+    fn run(words: &[&str]) -> Run {
+        Run::try_from(
+            words
+                .iter()
+                .map(|&word| word.to_owned())
+                .collect::<Vec<_>>(),
+        )
+        .unwrap()
+    }
+
     fn assert_parse_error(text: &str) {
         match Hosts::from_toml(text, Path::new(ORIGIN)) {
             Err(ConfigError::Parse { path, .. }) => assert_eq!(path, Path::new(ORIGIN)),
@@ -259,7 +288,7 @@ mod tests {
     fn parses_typed_tables() {
         let hosts = parse(
             "[\"prod-web\"]\ntype = \"sftp\"\nlabel = \"Prod\"\nstart_dir = \"/var/www\"\n\
-             other_dir = \"~/site\"\nremember_dir = true\n\n\
+             other_dir = \"~/site\"\nremember_dir = true\nrun = [\"$SHELL\", \"-c\"]\n\n\
              [\"web.example.com\"]\ntype = \"sftp\"\n",
         );
         assert_eq!(
@@ -269,6 +298,7 @@ mod tests {
                 start_dir: Some("/var/www".to_owned()),
                 other_dir: Some("~/site".to_owned()),
                 remember_dir: true,
+                run: Some(run(&["$SHELL", "-c"])),
             }))
         );
         assert_eq!(
@@ -291,6 +321,7 @@ mod tests {
         assert_eq!(host.label(), Some("Prod"));
         assert_eq!(host.other_dir(), Some("~/projects/site"));
         assert!(host.remember_dir());
+        assert_eq!(host.run(), Some(&run(&["$SHELL", "-c"])));
     }
 
     #[test]
@@ -301,6 +332,9 @@ mod tests {
             "[web]\ntype = \"sftp\"\nlable = \"Web\"",
             "[web]\ntype = \"sftp\"\nargs = [\"-v\"]",
             "[web]\ntype = \"sftp\"\nremember_dir = \"yes\"",
+            "[web]\ntype = \"sftp\"\nrun = []",
+            "[web]\ntype = \"sftp\"\nrun = \"$SHELL -c\"",
+            "[web]\ntype = \"sftp\"\nrun = [\"${SHELL\"]",
             "web = \"Web\"",
         ] {
             assert_parse_error(text);
@@ -354,6 +388,7 @@ mod tests {
             start_dir: Some("/srv".to_owned()),
             other_dir: Some("~/site".to_owned()),
             remember_dir: true,
+            run: None,
         });
         assert_eq!(
             saved(text, "web.example.com", Some(&host)),
@@ -362,6 +397,27 @@ mod tests {
              # The web server.\n\
              [\"web.example.com\"]\ntype = \"sftp\"\nlabel = \"Site\" # shown\nstart_dir = '/srv'\n\
              other_dir = \"~/site\"\nremember_dir = true\n"
+        );
+    }
+
+    #[test]
+    fn saving_writes_run_as_a_list_and_keeps_one_that_did_not_change() {
+        let host = sftp(SftpHost {
+            run: Some(run(&["$SHELL", "-c"])),
+            ..SftpHost::default()
+        });
+        let text = saved("", "web", Some(&host));
+        assert_eq!(text, "[web]\ntype = \"sftp\"\nrun = [\"$SHELL\", \"-c\"]\n");
+        assert_eq!(parse(&text).get("web"), Some(&host));
+        let mine = "[web]\ntype = \"sftp\"\nrun = [ '$SHELL',  '-c' ] # no rc files\n";
+        assert_eq!(saved(mine, "web", Some(&host)), mine);
+        let other = sftp(SftpHost {
+            run: Some(run(&["/bin/bash", "-ic"])),
+            ..SftpHost::default()
+        });
+        assert_eq!(
+            saved(mine, "web", Some(&other)),
+            "[web]\ntype = \"sftp\"\nrun = [\"/bin/bash\", \"-ic\"] # no rc files\n"
         );
     }
 

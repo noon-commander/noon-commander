@@ -7,9 +7,12 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use noc_config::{Borders, Config, MenuBar, Pause, SearchMode, TabBar, UiConfig, Wheel};
+use noc_config::{
+    Borders, Config, MenuBar, Pause, Run, RunError, SearchMode, TabBar, UiConfig, Wheel,
+};
 use noc_scroll::Motion;
 use noc_scroll::scrollbar::{self, Bar};
+use noc_vars::VarsError;
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Modifier, Style};
@@ -64,6 +67,7 @@ enum Key {
     HideVolumes,
     ZoxideRecord,
     ZoxideProgram,
+    Run,
     HistorySize,
     Pause,
     SearchProgram,
@@ -238,6 +242,7 @@ impl Setting {
             Key::HideHosts => config.discovery.hide = split_words(text),
             Key::HideVolumes => config.volumes.hide = split_words(text),
             Key::ZoxideRecord => config.zoxide.record = self.on(),
+            Key::Run => config.shell.run = run_of(text)?,
             Key::Pause => {
                 config.shell.pause = match text {
                     "on-error" => Pause::OnError,
@@ -435,6 +440,28 @@ fn split_words(text: &str) -> Vec<String> {
     }
     words.extend(word);
     words
+}
+
+/// What runs a command of the command line, `shell.run` or a host's `run`, as a field shows it.
+pub(crate) fn run_text(run: &Run) -> String {
+    join_words(&Vec::<String>::from(run.clone()))
+}
+
+/// What runs a command of the command line, from its words typed in a field, or why they do
+/// not name one.
+pub(crate) fn run_of(text: &str) -> Result<Run, String> {
+    Run::try_from(split_words(text)).map_err(|error| match error {
+        RunError::Empty => fl!("config-run-empty"),
+        RunError::Word(VarsError::Unclosed(text)) => {
+            fl!(
+                "config-run-unclosed",
+                text = cells::sanitize(text.as_bytes())
+            )
+        }
+        RunError::Word(VarsError::Name(text)) => {
+            fl!("config-run-name", text = cells::sanitize(text.as_bytes()))
+        }
+    })
 }
 
 /// A list as [`split_words`] reads it back.
@@ -1455,6 +1482,11 @@ fn shell(config: &Config) -> Category {
         title: fl!("config-shell"),
         settings: vec![
             Setting::new(
+                Key::Run,
+                (fl!("config-run"), fl!("config-run-hint")),
+                text(&run_text(&config.shell.run)),
+            ),
+            Setting::new(
                 Key::Pause,
                 (fl!("config-pause"), fl!("config-pause-hint")),
                 choice(
@@ -1783,6 +1815,8 @@ mod tests {
         dialog.handle(action(Action::Toggle));
         dialog.handle(action(Action::Down));
         typed(&mut dialog, "~/.cargo/bin/zoxide");
+        category(&mut dialog, 6);
+        typed(&mut dialog, "$SHELL --rcfile \"${HOME}/my rc\" -ic");
         category(&mut dialog, 7);
         typed(&mut dialog, "/opt/rg");
         dialog.handle(action(Action::Down));
@@ -1810,14 +1844,20 @@ mod tests {
         expected.volumes.hide = vec!["/mnt/*".to_owned()];
         expected.zoxide.record = false;
         expected.zoxide.program = PathBuf::from("~/.cargo/bin/zoxide");
+        let run = ["$SHELL", "--rcfile", "${HOME}/my rc", "-ic"].map(str::to_owned);
+        expected.shell.run = Run::try_from(run.to_vec()).unwrap();
         expected.search.program = PathBuf::from("/opt/rg");
         expected.search.fd = PathBuf::from("fdfind");
         assert_eq!(dialog.applied, expected);
+        assert_eq!(
+            run_text(&expected.shell.run),
+            "$SHELL --rcfile \"${HOME}/my rc\" -ic"
+        );
     }
 
     #[test]
     fn an_invalid_text_keeps_the_cursor_and_says_why() {
-        let cases: [(usize, usize, &str, &str); 12] = [
+        let cases: [(usize, usize, &str, &str); 15] = [
             (0, 0, "?", "is not auto or a language tag"),
             (0, 1, "not a tag", "is not auto, iso, or a language tag"),
             (0, 9, "0", "is not a step of the wheel"),
@@ -1826,7 +1866,10 @@ mod tests {
             (3, 2, "-F other_config", "Invalid extra ssh arguments"),
             (3, 0, "", "The ssh program cannot be empty"),
             (5, 1, " ", "The zoxide program cannot be empty"),
-            (6, 1, "-1", "is not a number of commands"),
+            (6, 0, "", "Run with needs a program"),
+            (6, 0, "$SHELL ${HOME -c", "has no closing }"),
+            (6, 0, "\"${1}\"", "\"${1}\" names no variable"),
+            (6, 2, "-1", "is not a number of commands"),
             (7, 0, "", "The ripgrep program cannot be empty"),
             (7, 1, " ", "The fd program cannot be empty"),
             (7, 2, "0", "is not a number of results"),

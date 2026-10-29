@@ -32,7 +32,7 @@ use super::cd;
 use super::cells::{self, Align};
 use super::command::{self, CommandEvent, CommandLine, Place, Run};
 use super::complete::{self, Candidate, Choices, ChoicesEvent, Kind, Offer, Outcome, Quote};
-use super::configuration::{ConfigEvent, Configuration};
+use super::configuration::{ConfigEvent, Configuration, run_of, run_text};
 use super::decor::Decor;
 use super::dialog::{Ask, Button, Dialog, DialogEvent, Field, Reply, Tone};
 use super::edit::{Editor, Registers};
@@ -381,6 +381,7 @@ const PATTERN_DIALOG_WIDTH: u16 = 50;
 const HOST_LABEL: usize = 0;
 const HOST_START_DIR: usize = 1;
 const HOST_OTHER_DIR: usize = 2;
+const HOST_RUN: usize = 3;
 
 /// A dialog on screen or waiting for its turn, and what it is for.
 #[derive(Debug)]
@@ -4857,6 +4858,7 @@ impl App {
             CommandEvent::Run(command) => {
                 self.command_line = None;
                 let dir = self.panel(self.active).location().clone();
+                let mut shell = &self.config.shell.run;
                 let place = match &dir {
                     Location::Local(path) => Place::Local(path.clone()),
                     Location::Remote { host, path } => {
@@ -4864,15 +4866,20 @@ impl App {
                             self.show_error(&fl!("error-connection-closed"));
                             return Vec::new();
                         };
+                        if let Some(run) = self.host_settings.get(host).and_then(HostConfig::run) {
+                            shell = run;
+                        }
                         Place::Remote {
                             handle: handle.clone(),
                             dir: path.clone(),
                         }
                     }
                 };
+                let shell = shell.clone();
                 let mut effects = self.remember(&dir, &command);
                 self.handover = Some(Handover::Run(Run {
                     place,
+                    shell,
                     command,
                     prompt: cells::text_of(&self.shell_prompt(u16::MAX)),
                     pause: self.config.shell.pause,
@@ -6472,6 +6479,10 @@ impl App {
             (fl!("host-label"), text(&sftp.label)),
             (fl!("host-start-dir"), text(&sftp.start_dir)),
             (fl!("host-other-dir"), text(&sftp.other_dir)),
+            (
+                fl!("host-run"),
+                sftp.run.as_ref().map(run_text).unwrap_or_default(),
+            ),
         ];
         let checks = [(fl!("host-remember-dir"), sftp.remember_dir)];
         let mut buttons = vec![Button::Ok, Button::Cancel];
@@ -6504,11 +6515,16 @@ impl App {
             }
             DialogEvent::Pressed(Button::Ok) => {
                 let other_dir = dialog.text_of(HOST_OTHER_DIR).trim();
-                if other_dir.is_empty() || noc_config::local_dir(other_dir, &self.home).is_some() {
-                    return false;
+                if !other_dir.is_empty() && noc_config::local_dir(other_dir, &self.home).is_none() {
+                    self.show_error_over(&fl!("host-other-dir-invalid"));
+                    return true;
                 }
-                self.show_error_over(&fl!("host-other-dir-invalid"));
-                true
+                let run = dialog.text_of(HOST_RUN).trim();
+                if let Err(reason) = (!run.is_empty()).then(|| run_of(run)).transpose() {
+                    self.show_error_over(&fl!("host-run-invalid", reason = reason));
+                    return true;
+                }
+                false
             }
             _ => false,
         }
@@ -7818,6 +7834,8 @@ fn save_host(name: String, old: Option<&HostConfig>, dialog: &Dialog) -> Vec<Eff
         start_dir: text(HOST_START_DIR),
         other_dir: text(HOST_OTHER_DIR),
         remember_dir: dialog.checked(0),
+        // OK checked it.
+        run: text(HOST_RUN).and_then(|run| run_of(&run).ok()),
     });
     let unchanged = match old {
         Some(old) => *old == host,
@@ -11897,11 +11915,22 @@ mod tests {
     #[test]
     fn bang_runs_a_command_on_the_host_of_the_panel() {
         let mut app = at_slash();
+        let words = |words: &[&str]| {
+            noc_config::Run::try_from(
+                words
+                    .iter()
+                    .map(|&word| word.to_owned())
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap()
+        };
         let site = SftpHost {
             label: Some("Site".to_owned()),
+            run: Some(words(&["$SHELL", "-c"])),
             ..SftpHost::default()
         };
         with_host(&mut app, "web", site);
+        app.config.shell.run = words(&["/bin/zsh", "-ic"]);
         let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
             panic!("expected a connection");
         };
@@ -11913,6 +11942,7 @@ mod tests {
         app.handle(action(Action::Confirm));
         let Some(Run {
             place: Place::Remote { dir, .. },
+            shell,
             command,
             ..
         }) = app.take_run()
@@ -11920,6 +11950,7 @@ mod tests {
             panic!("expected a remote command");
         };
         assert_eq!((dir.as_bytes(), command.as_str()), (&b"/var/www"[..], "ls"));
+        assert_eq!(shell, words(&["$SHELL", "-c"]), "the host's own");
         let effects = app.ran(Ok(()));
         assert!(
             effects.iter().any(|effect| matches!(
@@ -11928,6 +11959,21 @@ mod tests {
             )),
             "{effects:?}"
         );
+
+        // The local panel runs with shell.run.
+        app.handle(action(Action::SwitchPanel));
+        app.handle(action(Action::Shell));
+        type_text(&mut app, "ls");
+        app.handle(action(Action::Confirm));
+        let Some(Run {
+            place: Place::Local(_),
+            shell,
+            ..
+        }) = app.take_run()
+        else {
+            panic!("expected a local command");
+        };
+        assert_eq!(shell, words(&["/bin/zsh", "-ic"]));
     }
 
     #[test]
@@ -12049,6 +12095,28 @@ mod tests {
     }
 
     #[test]
+    fn f4_on_a_host_gives_it_a_run_of_its_own() {
+        let mut app = at_slash();
+        edit_web(&mut app);
+        for _ in 0..3 {
+            app.handle(action(Action::Down));
+        }
+        typed(&mut app, "${SHELL -c");
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        assert_eq!(app.dialogs.len(), 2, "the reason shows over the dialog");
+        let text = screen_of(&mut app, 24);
+        assert!(text.contains("has no closing }"), "{text}");
+        app.handle(action(Action::Confirm));
+        app.handle(action(Action::DeleteToStart));
+        typed(&mut app, "$SHELL -c");
+        let Effect::SaveHost { host, .. } = one(app.handle(action(Action::Confirm))) else {
+            panic!("expected the settings to be saved");
+        };
+        let run = host.as_ref().and_then(HostConfig::run).unwrap();
+        assert_eq!(Vec::<String>::from(run.clone()), ["$SHELL", "-c"]);
+    }
+
+    #[test]
     fn use_current_fills_in_the_directory_open_on_the_host() {
         let mut app = at_slash();
         let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Right, 1)) else {
@@ -12056,8 +12124,8 @@ mod tests {
         };
         connect_web(&mut app, Side::Right, connection, "/var/www");
         edit_web(&mut app);
-        // Past the three fields and the check box, then OK, to Use Current.
-        for _ in 0..5 {
+        // Past the four fields and the check box, then OK, to Use Current.
+        for _ in 0..6 {
             app.handle(action(Action::NextField));
         }
         assert!(app.handle(action(Action::Confirm)).is_empty());

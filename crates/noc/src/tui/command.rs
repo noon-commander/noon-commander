@@ -60,6 +60,8 @@ pub(crate) enum CommandEvent {
 #[derive(Debug)]
 pub(crate) struct Run {
     pub(crate) place: Place,
+    /// What runs it: `shell.run`, or the `run` of the host it runs on.
+    pub(crate) shell: noc_config::Run,
     pub(crate) command: String,
     /// What the terminal shows before the command, as a shell would.
     pub(crate) prompt: String,

@@ -467,6 +467,12 @@ config-zoxide-program = &Program
 config-zoxide-program-hint = The zoxide program: a name in PATH, or a path. g z jumps to the directories it ranks.
 config-zoxide-program-empty = The zoxide program cannot be empty.
 config-shell = Command line
+# A list of words, as the lists of [ssh]: a program and its arguments.
+config-run = &Run with
+config-run-hint = The shell and its arguments; the command comes after them. $NAME is a variable where the command runs, here or on the host. -i reads the shell's rc files, with their aliases; without it, the shell starts faster.
+config-run-empty = Run with needs a program: it takes words, the first of them the program.
+config-run-unclosed = "{ $text }" has no closing { "}" }.
+config-run-name = "{ $text }" names no variable: a name is letters, digits, and _, and does not start with a digit.
 config-pause = &Wait after a command
 config-pause-hint = When the output of a command stays on screen until a key; g < shows it again either way.
 config-pause-always = Always
@@ -897,6 +903,7 @@ help-tip-workspaces-list = t w and F9 → Workspace list them; restoring one rep
 help-tip-command = Command line
 help-tip-command-open = ! opens the command line, and : too, for commands of Noon Commander, of which :!command is the only one so far.
 help-tip-command-run = A command runs with the terminal, in the panel's directory, then a key brings the panels back; cd and export last only as long as the command.
+help-tip-command-shell = The shell of Configuration → Command line → Run with runs it, $SHELL -i -c at first: interactive, it has the aliases and functions of its rc files. F4 on a host gives the host its own; ! $SHELL starts a shell of its own in the shell.
 help-tip-pulldown = Pull-down menu
 help-tip-pulldown-letters = Alt and the highlighted letter of a menu open it, and Alt and that of a command run it.
 help-tip-dialogs = Dialogs
@@ -934,6 +941,10 @@ host-label = &Label (shown instead of the alias):
 host-start-dir = &Remote directory (opened on connect; empty: home):
 host-other-dir = Other panel &directory (local, / or ~/…; empty: unchanged):
 host-remember-dir = Re&member the last directory in this session
+# Words, as Command line → Run with in the Configuration dialog; empty, that one counts.
+host-run = Run commands of ! and : &with:
+# The reason is one of the config-run- errors.
+host-run-invalid = Run with: { $reason }
 # The reason names the file.
 host-save-error = Cannot save the host settings: { $reason }
 # The other panel directory must be a local path.
@@ -1192,7 +1203,8 @@ open-error = Cannot open { $path }: { $reason }
 # Why the opener did not run.
 open-cannot-run = cannot run { $program }: { $reason }
 
-## The command line of ! and : (src/tui). Prefix: command-. Commands run in $SHELL, or /bin/sh.
+## The command line of ! and : (src/tui). Prefix: command-. Commands run with shell.run, or a
+## host's run, by default $SHELL -i -c.
 
 # A command after : that Noon Commander does not have.
 command-unknown = Unknown command: { $command }. :!command runs a shell command.

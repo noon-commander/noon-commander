@@ -1,42 +1,56 @@
-//! The shell of the command line: `$SHELL`, else `/bin/sh` (ADR 0019).
+//! The shell of the command line: `shell.run`, by default `$SHELL -i -c`, with `/bin/sh` for a
+//! program that comes out empty (ADR 0019, ADR 0054).
 
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
 
+use noc_vars::Template;
 use tokio::process::Command;
 
 use crate::ToolError;
 
-/// The program that runs commands typed on the command line.
+/// The program that runs commands typed on the command line, and the arguments before them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shell {
     program: PathBuf,
+    args: Vec<OsString>,
 }
 
 impl Shell {
-    /// The shell this process's environment names.
-    pub fn from_env() -> Self {
-        Self::from_var(std::env::var_os("SHELL").map(PathBuf::from))
+    /// `words` with the variables of this process's environment in them.
+    pub fn from_env(words: &[Template]) -> Self {
+        Self::expand(words, |name| std::env::var_os(name))
     }
 
-    /// `shell`, unless it is missing or empty: then `/bin/sh`.
-    pub fn from_var(shell: Option<PathBuf>) -> Self {
-        let program = shell
-            .filter(|program| !program.as_os_str().is_empty())
-            .unwrap_or_else(|| PathBuf::from("/bin/sh"));
-        Self { program }
+    /// `words` with what `lookup` gives for each variable in them; the program, the first
+    /// word, is `/bin/sh` if there is none or it comes out empty.
+    pub fn expand(words: &[Template], mut lookup: impl FnMut(&str) -> Option<OsString>) -> Self {
+        let mut words = words.iter().map(|word| word.expand(&mut lookup));
+        let program = words
+            .next()
+            .filter(|program| !program.is_empty())
+            .map_or_else(|| PathBuf::from("/bin/sh"), PathBuf::from);
+        Self {
+            program,
+            args: words.collect(),
+        }
     }
 
     pub fn program(&self) -> &Path {
         &self.program
     }
 
-    /// Runs `command` as the shell's `-c` argument in `dir`, with this process's terminal,
-    /// which the caller has handed over, and waits for it. The command goes to the shell as
-    /// it was typed, in one argument; it may span lines.
+    pub fn args(&self) -> impl Iterator<Item = &OsStr> {
+        self.args.iter().map(OsString::as_os_str)
+    }
+
+    /// Runs `command` as the last argument of the shell in `dir`, with this process's
+    /// terminal, which the caller has handed over, and waits for it. The command goes to the
+    /// shell as it was typed, in one argument; it may span lines.
     pub async fn run(&self, dir: &Path, command: &str) -> Result<ExitStatus, ToolError> {
         Command::new(&self.program)
-            .arg("-c")
+            .args(&self.args)
             .arg(command)
             .current_dir(dir)
             .kill_on_drop(true)
@@ -53,28 +67,53 @@ impl Shell {
 mod tests {
     use super::*;
 
+    fn words(texts: &[&str]) -> Vec<Template> {
+        texts
+            .iter()
+            .map(|text| Template::parse(text).unwrap())
+            .collect()
+    }
+
+    fn shell(texts: &[&str], vars: &[(&str, &str)]) -> Shell {
+        Shell::expand(&words(texts), |name| {
+            vars.iter()
+                .find(|(key, _)| *key == name)
+                .map(|(_, value)| OsString::from(value))
+        })
+    }
+
     #[test]
-    fn shell_comes_first_and_sh_last() {
-        let zsh = Shell::from_var(Some(PathBuf::from("/bin/zsh")));
+    fn expands_the_words_and_falls_back_to_sh() {
+        let zsh = shell(&["$SHELL", "-i", "-c"], &[("SHELL", "/bin/zsh")]);
         assert_eq!(zsh.program(), Path::new("/bin/zsh"));
-        assert_eq!(
-            Shell::from_var(Some(PathBuf::new())).program(),
-            Path::new("/bin/sh")
+        assert_eq!(zsh.args().collect::<Vec<_>>(), ["-i", "-c"]);
+        let spaced = shell(
+            &["$SHELL", "--rcfile", "${HOME}/a b", "-c"],
+            &[("SHELL", "/bin/bash"), ("HOME", "/home/u")],
         );
-        assert_eq!(Shell::from_var(None).program(), Path::new("/bin/sh"));
+        assert_eq!(
+            spaced.args().collect::<Vec<_>>(),
+            ["--rcfile", "/home/u/a b", "-c"]
+        );
+        for empty in [("SHELL", ""), ("OTHER", "/bin/zsh")] {
+            let sh = shell(&["$SHELL", "-i", "-c"], &[empty]);
+            assert_eq!(sh.program(), Path::new("/bin/sh"));
+            assert_eq!(sh.args().collect::<Vec<_>>(), ["-i", "-c"]);
+        }
+        assert_eq!(shell(&[], &[]).program(), Path::new("/bin/sh"));
     }
 
     #[tokio::test]
     async fn runs_the_command_in_the_directory_as_typed() {
         let dir = tempfile::tempdir().unwrap();
-        let shell = Shell::from_var(None);
+        let shell = shell(&["/bin/sh", "-c"], &[]);
         let command = "pwd -P > out \\\n  && echo 'two  words' >> out\nexit 3";
         let status = shell.run(dir.path(), command).await.unwrap();
         assert_eq!(status.code(), Some(3));
         let out = std::fs::read_to_string(dir.path().join("out")).unwrap();
         let pwd = dir.path().canonicalize().unwrap();
         assert_eq!(out, format!("{}\ntwo  words\n", pwd.display()));
-        let missing = Shell::from_var(Some(PathBuf::from("/nonexistent/shell")));
+        let missing = Shell::expand(&words(&["/nonexistent/shell", "-c"]), |_| None);
         assert!(
             missing
                 .run(dir.path(), "true")
@@ -82,5 +121,16 @@ mod tests {
                 .unwrap_err()
                 .is_not_found()
         );
+    }
+
+    #[tokio::test]
+    async fn the_command_comes_after_the_arguments() {
+        let dir = tempfile::tempdir().unwrap();
+        // `-c` takes the script, and `sh -c script name args` gives `$0` and `$1`.
+        let shell = shell(&["/bin/sh", "-c", "echo \"$0 $1\" > out", "first"], &[]);
+        let status = shell.run(dir.path(), "second").await.unwrap();
+        assert!(status.success());
+        let out = std::fs::read_to_string(dir.path().join("out")).unwrap();
+        assert_eq!(out, "first second\n");
     }
 }

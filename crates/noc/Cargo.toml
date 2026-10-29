@@ -39,6 +39,7 @@ noc-pattern.workspace = true
 noc-scroll.workspace = true
 noc-text.workspace = true
 noc-tools.workspace = true
+noc-vars.workspace = true
 noc-vfs.workspace = true
 noc-viewer.workspace = true
 tokio.workspace = true

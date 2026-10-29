@@ -9,6 +9,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Aliases and functions from the shell's rc files work on the command line (`!` and `:!`):
+  `shell.run`, Command line → Run with in the Configuration dialog, says what runs a command,
+  `["$SHELL", "-i", "-c"]` by default, with the command after it as one more argument. `$NAME`
+  and `${NAME}` in its words take the value of a variable where the command runs: here for a
+  local panel, on the host for a host, where the remote command now `exec`s the shell. A host
+  may have its own `run` in `hosts.toml`, edited with F4 on the host; `["$SHELL", "-c"]` there
+  skips the rc files of a slow server.
 - F3 reads a file in parts (`viewer.part_mib`, 16 MiB) and holds a window of it
   (`viewer.window_mib`, 128 MiB), both under Viewer in the Configuration dialog, so any part of
   a large file can be seen: the next part is read when the screen reaches the end of what is held,

@@ -18,6 +18,7 @@ mod history;
 mod hosts;
 mod paths;
 mod recent;
+mod run;
 mod workspaces;
 mod write;
 
@@ -34,6 +35,7 @@ pub use hosts::{
 };
 pub use paths::Paths;
 pub use recent::{RECENT_MAX, Recent};
+pub use run::{Run, RunError};
 pub use workspaces::{
     PanelSide, Place, SavedTab, SortBy, Workspace, Workspaces, remove_workspace, rename_workspace,
     save_workspace,

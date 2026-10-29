@@ -250,7 +250,11 @@ fn tips() -> Vec<Entry> {
         ),
         (
             fl!("help-tip-command"),
-            vec![fl!("help-tip-command-open"), fl!("help-tip-command-run")],
+            vec![
+                fl!("help-tip-command-open"),
+                fl!("help-tip-command-run"),
+                fl!("help-tip-command-shell"),
+            ],
         ),
         (
             fl!("help-tip-pulldown"),

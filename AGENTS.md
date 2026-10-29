@@ -14,7 +14,8 @@ add false positives to `typos.toml`, with a comment if the reason is not obvious
 - Spawn other programs only from `noc-tools` (ADR 0012). Never through a shell. `--` before
   paths. Kill on drop. Tests use a fake program. At build time, `crates/noc/build.rs` runs
   `git` for `noc debug version`.
-- Sole shell exception: the command line's `$SHELL -c`, whose command is the user's (ADR 0019).
+- Sole shell exception: the command line's `shell.run` (`$SHELL -i -c`), whose command is the
+  user's (ADR 0019, ADR 0054).
 - Sole exception to kill on drop: the opener of `g x` (`open`, `xdg-open`), detached, output to
   `/dev/null`; it takes an absolute path without `--`, which `xdg-open` refuses (ADR 0026).
 - User-supplied ssh arguments must pass the validator (ADR 0004). Unknown flags are errors.
@@ -82,10 +83,11 @@ client; the system `ssh` is the single source of truth for connections and auth.
 | `crates/noc-vars` | Variables in text: `$NAME`, `${NAME}`, `$$`, read once, expanded where it runs (ADR 0054) |
 | `crates/noc-viewer` | The F3 viewer: reading through the `Vfs`, scrolling, wrapping; its own Fluent text |
 
-- `noc-config`, `noc-ssh`, `noc-vfs`, `noc-text`, `noc-scroll`, `noc-pattern`, `noc-locale`,
-  `noc-vars` depend on no other `noc-*` crate.
-- `noc-tools` → `noc-pattern`. `noc-ops` → `noc-vfs`. `noc-viewer` → `noc-vfs`, `noc-text`,
-  `noc-scroll`, `noc-locale`. The binary → all.
+- `noc-vfs`, `noc-text`, `noc-scroll`, `noc-pattern`, `noc-locale`, `noc-vars` depend on no
+  other `noc-*` crate.
+- `noc-config` → `noc-vars`. `noc-ssh` → `noc-vars`. `noc-tools` → `noc-pattern`, `noc-vars`.
+  `noc-ops` → `noc-vfs`. `noc-viewer` → `noc-vfs`, `noc-text`, `noc-scroll`, `noc-locale`. The
+  binary → all.
 - Library crates: no UI code, no user-facing text. Exceptions: `noc-viewer`, which knows nothing
   of the keymap, theme, or app (ADR 0015); `noc-scroll`, which draws the scroll bar but has no
   text (ADR 0023).

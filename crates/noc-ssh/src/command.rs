@@ -9,6 +9,7 @@ use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
+use noc_vars::{Piece, Template};
 use tokio::process::Command;
 
 use crate::askpass::AskpassEnv;
@@ -233,12 +234,37 @@ pub(crate) fn command_command(
 }
 
 /// What the host's shell runs for `command` in `dir`: a `cd` to the directory quoted for a
-/// POSIX shell, unless it is empty, the home directory where ssh starts; then the command as
-/// typed, on lines of its own, so that a failed `cd` runs none of it.
-pub(crate) fn remote_command(dir: &[u8], command: &str) -> OsString {
+/// POSIX shell, unless it is empty, the home directory where ssh starts; then, on a line of its
+/// own, so that a failed `cd` runs none of it, `exec` and the words of `run` and the command as
+/// typed, as one more word (ADR 0054). Text in the words, and the command, is quoted, and each
+/// variable is left to the host's shell as `"$NAME"`, which fish reads too.
+pub(crate) fn remote_command(dir: &[u8], run: &[Template], command: &str) -> OsString {
     let mut text = change_dir(dir);
-    text.extend_from_slice(command.as_bytes());
+    text.extend_from_slice(b"exec");
+    for word in run {
+        text.push(b' ');
+        push_word(&mut text, word);
+    }
+    text.push(b' ');
+    push_quoted(&mut text, command.as_bytes());
     OsStr::from_bytes(&text).to_owned()
+}
+
+/// Appends `word` for a POSIX shell to expand its variables, and nothing else, in.
+fn push_word(text: &mut Vec<u8>, word: &Template) {
+    if word.pieces().is_empty() {
+        text.extend_from_slice(b"''");
+    }
+    for piece in word.pieces() {
+        match piece {
+            Piece::Text(part) => push_quoted(text, part.as_bytes()),
+            Piece::Var(name) => {
+                text.extend_from_slice(b"\"$");
+                text.extend_from_slice(name.as_bytes());
+                text.push(b'"');
+            }
+        }
+    }
 }
 
 /// What the host's shell runs for `program` with `args` in `dir`: the `cd` of
@@ -470,16 +496,39 @@ mod tests {
         assert!(!direct.iter().any(|arg| arg == "-S"));
     }
 
+    fn words(texts: &[&str]) -> Vec<Template> {
+        texts
+            .iter()
+            .map(|text| Template::parse(text).unwrap())
+            .collect()
+    }
+
     #[test]
     fn the_remote_command_changes_to_the_quoted_directory_first() {
+        let run = words(&["$SHELL", "-i", "-c"]);
         assert_eq!(
-            remote_command(b"/srv/it's here", "make\nls"),
-            OsStr::new("cd -- '/srv/it'\\''s here' || exit\nmake\nls")
+            remote_command(b"/srv/it's here", &run, "make\nls"),
+            OsStr::new("cd -- '/srv/it'\\''s here' || exit\nexec \"$SHELL\" '-i' '-c' 'make\nls'")
         );
-        assert_eq!(remote_command(b"", "uptime"), OsStr::new("uptime"));
         assert_eq!(
-            remote_command(b"caf\xe9", "ls").as_bytes(),
-            b"cd -- 'caf\xe9' || exit\nls"
+            remote_command(b"", &run, "uptime"),
+            OsStr::new("exec \"$SHELL\" '-i' '-c' 'uptime'")
+        );
+        assert_eq!(
+            remote_command(b"caf\xe9", &run, "ls").as_bytes(),
+            b"cd -- 'caf\xe9' || exit\nexec \"$SHELL\" '-i' '-c' 'ls'"
+        );
+    }
+
+    #[test]
+    fn the_host_expands_the_variables_of_run_and_nothing_else() {
+        let run = words(&["${HOME}/bin/my shell", "-$$c", "a${B}c", "*", ""]);
+        assert_eq!(
+            remote_command(b"", &run, "echo 'it''s' $HOME"),
+            OsStr::new(
+                "exec \"$HOME\"'/bin/my shell' '-$c' 'a'\"$B\"'c' '*' '' \
+                 'echo '\\''it'\\'''\\''s'\\'' $HOME'"
+            )
         );
     }
 

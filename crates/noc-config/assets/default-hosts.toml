@@ -13,3 +13,4 @@
 # start_dir = "/var/www"            # remote directory opened on connect instead of home
 # other_dir = "~/projects/site"     # local directory the other panel opens with the host
 # remember_dir = true               # reopen the last directory in this session
+# run = ["$SHELL", "-c"]            # runs ! there instead of shell.run: here without -i

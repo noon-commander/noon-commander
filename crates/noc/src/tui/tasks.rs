@@ -14,8 +14,9 @@ use futures_util::StreamExt as _;
 use futures_util::future::{BoxFuture, FutureExt as _};
 use futures_util::stream::FuturesUnordered;
 use noc_config::{
-    Config, ConfigError, History, HistoryEntry, HostConfig, Hosts, Recent, Workspaces, add_command,
-    remove_command, remove_workspace, rename_workspace, save_config, save_host, save_workspace,
+    Config, ConfigError, History, HistoryEntry, HostConfig, Hosts, Recent, Run, Workspaces,
+    add_command, remove_command, remove_workspace, rename_workspace, save_config, save_host,
+    save_workspace,
 };
 use noc_locale::Formats;
 use noc_ops::{
@@ -228,10 +229,11 @@ pub(crate) enum HostRequest {
     /// Shares the host's SFTP session, for a job that runs elsewhere, such as a copy between
     /// two hosts.
     Share(oneshot::Sender<Arc<SftpFs>>),
-    /// The ssh command that runs `command` in `dir` on the host, for the event loop to start
-    /// with the terminal handed over, or why there is none.
+    /// The ssh command that runs `command` with `shell` in `dir` on the host, for the event
+    /// loop to start with the terminal handed over, or why there is none.
     Command {
         dir: RemotePath,
+        shell: Run,
         command: String,
         reply: oneshot::Sender<Result<tokio::process::Command, String>>,
     },
@@ -1439,16 +1441,18 @@ async fn rename(
     }
 }
 
-/// The ssh command that runs `command` in `dir` on the host of `handle`, over its connection,
-/// or why there is none.
+/// The ssh command that runs `command` with `shell` in `dir` on the host of `handle`, over its
+/// connection, or why there is none.
 pub(crate) async fn remote_command(
     handle: &HostHandle,
     dir: RemotePath,
+    shell: Run,
     command: String,
 ) -> Result<tokio::process::Command, String> {
     let (reply, answer) = oneshot::channel();
     let request = HostRequest::Command {
         dir,
+        shell,
         command,
         reply,
     };
@@ -2049,8 +2053,8 @@ impl HostTask {
                     HostRequest::Share(reply) => {
                         let _ = reply.send(Arc::clone(&fs));
                     }
-                    HostRequest::Command { dir, command, reply } => {
-                        let built = session.command_in(dir.as_bytes(), &command).map_err(|error| {
+                    HostRequest::Command { dir, shell, command, reply } => {
+                        let built = session.command_in(dir.as_bytes(), shell.words(), &command).map_err(|error| {
                             describe::ssh_error(&error)
                                 .unwrap_or_else(|| fl!("error-connection-closed"))
                         });

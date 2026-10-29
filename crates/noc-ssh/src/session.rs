@@ -7,6 +7,7 @@ use std::process::ExitStatus;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
+use noc_vars::Template;
 use rustix::process::{Pid, Signal, kill_process, kill_process_group};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
@@ -218,11 +219,17 @@ impl Session {
     }
 
     /// An ssh command that runs `command`, as typed, on the host in `dir` (the home directory
-    /// if empty), over the master if there is one. The caller starts it with the terminal
-    /// handed over, since the command gets a terminal of its own there (ADR 0019).
-    pub fn command_in(&self, dir: &[u8], command: &str) -> Result<Command, SshError> {
+    /// if empty), as the last argument of `run`, whose variables the host's shell expands, over
+    /// the master if there is one. The caller starts it with the terminal handed over, since
+    /// the command gets a terminal of its own there (ADR 0019, ADR 0054).
+    pub fn command_in(
+        &self,
+        dir: &[u8],
+        run: &[Template],
+        command: &str,
+    ) -> Result<Command, SshError> {
         let control_path = self.control_path()?;
-        let remote = remote_command(dir, command);
+        let remote = remote_command(dir, run, command);
         Ok(command_command(
             &self.settings,
             &self.target,

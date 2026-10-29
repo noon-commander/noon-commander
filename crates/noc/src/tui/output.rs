@@ -28,13 +28,14 @@ pub(super) struct Ran {
     pub(super) mark: Option<String>,
 }
 
-/// Runs the shell command of `run`, with the terminal handed over: locally in `$SHELL`, or on
-/// its host through ssh over the host's connection, after its prompt. Then ends its output on
-/// a line of its own and, if it waits, asks for a key there, in raw mode to read it; otherwise
-/// leaves the mark of a failure. Fails if it could not start.
+/// Runs the shell command of `run`, with the terminal handed over, as the last argument of
+/// its shell: locally, or on its host through ssh over the host's connection, after its
+/// prompt. Then ends its output on a line of its own and, if it waits, asks for a key there,
+/// in raw mode to read it; otherwise leaves the mark of a failure. Fails if it could not start.
 pub(super) async fn run_command(run: Run) -> Result<Ran, String> {
     let Run {
         place,
+        shell,
         command,
         prompt,
         pause,
@@ -43,7 +44,7 @@ pub(super) async fn run_command(run: Run) -> Result<Ran, String> {
     echo(&mut out, &prompt, &command);
     let status = match place {
         Place::Local(dir) => {
-            let shell = Shell::from_env();
+            let shell = Shell::from_env(shell.words());
             shell.run(&dir, &command).await.map_err(|error| {
                 let reason = match &error {
                     ToolError::Spawn { source, .. } => source.to_string(),
@@ -54,7 +55,7 @@ pub(super) async fn run_command(run: Run) -> Result<Ran, String> {
             })?
         }
         Place::Remote { handle, dir } => {
-            let mut ssh = tasks::remote_command(&handle, dir, command).await?;
+            let mut ssh = tasks::remote_command(&handle, dir, shell, command).await?;
             let program = ssh.as_std().get_program().to_string_lossy().into_owned();
             ssh.status().await.map_err(|error| {
                 let reason = error.to_string();

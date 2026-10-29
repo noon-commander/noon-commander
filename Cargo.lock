@@ -1753,6 +1753,7 @@ dependencies = [
  "noc-ssh",
  "noc-text",
  "noc-tools",
+ "noc-vars",
  "noc-vfs",
  "noc-viewer",
  "nucleo-matcher",
@@ -1775,6 +1776,7 @@ dependencies = [
 name = "noc-config"
 version = "0.2.0"
 dependencies = [
+ "noc-vars",
  "rustix",
  "serde",
  "tempfile",
@@ -1841,6 +1843,7 @@ version = "0.2.0"
 dependencies = [
  "getrandom 0.4.3",
  "glob",
+ "noc-vars",
  "openssh-sftp-client",
  "rustix",
  "secrecy",
@@ -1867,6 +1870,7 @@ version = "0.2.0"
 dependencies = [
  "globset",
  "noc-pattern",
+ "noc-vars",
  "regex",
  "serde",
  "serde_json",

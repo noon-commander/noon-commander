@@ -156,6 +156,9 @@
       `shell.pause`. `! $SHELL` gives an interactive shell, so there is no console of its own
 - [x] Command history per host: Up/Down (Ctrl+p/Ctrl+n) for the panel's host, a window
       (`q :`) for one host or all; `shell.history_size`, `history.toml` in the state directory
+- [x] Aliases and functions of the shell's rc files on the command line: `shell.run`,
+      `$SHELL -i -c` by default, with `$NAME` expanded where the command runs, and a host's
+      own `run` in `hosts.toml`, edited with F4 ([ADR 0054](adr/0054-shell-run.md))
 - [x] Terminal title: the active panel's directory, the terminal's own title back on quitting;
       `ui.terminal_title`
 - [x] Key hints, as which-key: the keys that can follow `g`, Ctrl+w, …, and every key of

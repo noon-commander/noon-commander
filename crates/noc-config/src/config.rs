@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::ConfigError;
 use crate::write::write_new;
+use crate::{ConfigError, Run};
 
 /// Commented default configuration written by `noc config init`.
 ///
@@ -96,6 +96,9 @@ impl Default for SearchConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ShellConfig {
+    /// What runs a command, locally and on a host without a `run` of its own in `hosts.toml`.
+    /// Default: `["$SHELL", "-i", "-c"]`.
+    pub run: Run,
     /// How many commands of the command line `history.toml` keeps, of all hosts together; `0`
     /// keeps none. Default: `500`, as bash's `HISTSIZE`.
     pub history_size: usize,
@@ -106,6 +109,7 @@ pub struct ShellConfig {
 impl Default for ShellConfig {
     fn default() -> Self {
         Self {
+            run: Run::default(),
             history_size: 500,
             pause: Pause::default(),
         }
@@ -539,7 +543,7 @@ mod tests {
         SearchConfig, SearchMode, ShellConfig, SshConfig, TabBar, TransferConfig, UiConfig,
         ViewerConfig, VolumesConfig, Wheel, ZoxideConfig,
     };
-    use crate::{ConfigError, write_default_config};
+    use crate::{ConfigError, Run, write_default_config};
 
     const ORIGIN: &str = "/cfg/noc/config.toml";
 
@@ -601,6 +605,7 @@ mod tests {
         record = false
 
         [shell]
+        run = ["/bin/bash", "--rcfile", "${HOME}/.noc-rc", "-ic"]
         history_size = 50
         pause = "on-error"
 
@@ -659,6 +664,13 @@ mod tests {
                 record: false,
             },
             shell: ShellConfig {
+                run: Run::try_from(strings(&[
+                    "/bin/bash",
+                    "--rcfile",
+                    "${HOME}/.noc-rc",
+                    "-ic",
+                ]))
+                .unwrap(),
                 history_size: 50,
                 pause: Pause::OnError,
             },
@@ -707,6 +719,7 @@ mod tests {
         assert_eq!(config.transfer.parallel_jobs.get(), 2);
         assert_eq!(config.zoxide.program, Path::new("zoxide"));
         assert!(config.zoxide.record);
+        assert_eq!(config.shell.run, Run::default());
         assert_eq!(config.shell.history_size, 500);
         assert_eq!(config.shell.pause, Pause::Always);
         assert_eq!(config.search.program, Path::new("rg"));
@@ -810,6 +823,9 @@ mod tests {
             "[ssh]\nargs = [1]",
             "[ssh]\nmultiplex = \"yes\"",
             "[discovery]\nhide = \"github.com\"",
+            "[shell]\nrun = \"$SHELL -c\"",
+            "[shell]\nrun = []",
+            "[shell]\nrun = [\"${SHELL\", \"-c\"]",
         ] {
             assert_parse_error(text);
         }
@@ -935,6 +951,7 @@ mod tests {
         assert!(table["animations"].get("spinners").is_some());
         assert!(table["zoxide"].get("program").is_some());
         assert!(table["zoxide"].get("record").is_some());
+        assert!(table["shell"].get("run").is_some());
         assert!(table["shell"].get("history_size").is_some());
         assert!(table["shell"].get("pause").is_some());
         assert!(table["search"].get("max_per_file").is_some());

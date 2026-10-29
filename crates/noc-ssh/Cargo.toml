@@ -16,6 +16,7 @@ forwarding = []
 [dependencies]
 getrandom.workspace = true
 glob.workspace = true
+noc-vars.workspace = true
 rustix.workspace = true
 secrecy.workspace = true
 serde.workspace = true

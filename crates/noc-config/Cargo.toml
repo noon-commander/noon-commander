@@ -9,6 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+noc-vars.workspace = true
 rustix.workspace = true
 serde.workspace = true
 thiserror.workspace = true

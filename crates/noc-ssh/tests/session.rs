@@ -14,6 +14,7 @@ use noc_ssh::askpass::AskpassServer;
 use noc_ssh::resolve::resolve;
 use noc_ssh::version::{OpenSshVersion, check_version};
 use noc_ssh::{Session, SftpChannel, SshError, SshSettings, Target, cleanup_stale};
+use noc_vars::Template;
 use openssh_sftp_client::{Sftp, SftpOptions};
 use rustix::process::{Pid, Signal, kill_process, test_kill_process};
 use tokio_util::sync::CancellationToken;
@@ -254,14 +255,23 @@ async fn multiplexes_sftp_channels_over_one_master() {
     assert!(fake.pids().into_iter().all(is_gone));
 }
 
+fn run_with(words: &[&str]) -> Vec<Template> {
+    words
+        .iter()
+        .map(|word| Template::parse(word).unwrap())
+        .collect()
+}
+
 #[tokio::test]
 async fn runs_a_command_in_a_directory_over_the_master() {
-    let fake = Fake::new(&[]);
+    // The variable is the host's: only the fake ssh has it.
+    let fake = Fake::new(&[("NOC_TEST_SHELL", "/bin/sh")]);
     let dir = fake.root.path().join("it's here");
     std::fs::create_dir(&dir).unwrap();
     let session = fake.connect(&fake.settings).await.unwrap();
+    let run = run_with(&["$NOC_TEST_SHELL", "-c"]);
     let mut command = session
-        .command_in(b"it's here", "pwd -P > out\necho done >> out")
+        .command_in(b"it's here", &run, "pwd -P > out\necho done >> out")
         .unwrap();
     let status = command.stdin(Stdio::null()).status().await.unwrap();
     assert!(status.success());
@@ -281,22 +291,33 @@ async fn runs_a_command_in_a_directory_over_the_master() {
         "--",
         "web",
         "cd -- 'it'\\''s here' || exit",
-        "pwd -P > out",
-        "echo done >> out",
+        "exec \"$NOC_TEST_SHELL\" '-c' 'pwd -P > out",
+        "echo done >> out'",
     ];
     assert!(ran.ends_with(&tail.map(String::from)), "{ran:?}");
 
     // A failed cd runs nothing; the home directory needs none.
-    let mut missing = session.command_in(b"gone", "touch made").unwrap();
+    let mut missing = session.command_in(b"gone", &run, "touch made").unwrap();
     let status = missing.stdin(Stdio::null()).status().await.unwrap();
     assert!(!status.success());
     assert!(!fake.root.path().join("made").exists());
-    let mut home = session.command_in(b"", "touch made").unwrap();
+    let mut home = session.command_in(b"", &run, "touch made").unwrap();
     assert!(home.status().await.unwrap().success());
     assert!(fake.root.path().join("made").exists());
+
+    // The command comes after the words of run, as one word, whatever is in it; `sh -c`
+    // gives the word after its script as `$0`, and the command as `$1`.
+    let script = "printf '%s|' \"$1\" \"$#\" \"$0\" > args";
+    let printf = run_with(&["/bin/sh", "-c", script, "${NOC_TEST_SHELL}x"]);
+    let mut args = session.command_in(b"", &printf, "it's $HOME *").unwrap();
+    assert!(args.status().await.unwrap().success());
+    let printed = std::fs::read_to_string(fake.root.path().join("args")).unwrap();
+    assert_eq!(printed, "it's $HOME *|1|/bin/shx|");
     session.close().await;
     assert!(matches!(
-        session_after_close(&fake).await.command_in(b"", "true"),
+        session_after_close(&fake)
+            .await
+            .command_in(b"", &run, "true"),
         Err(SshError::Disconnected { .. })
     ));
 }

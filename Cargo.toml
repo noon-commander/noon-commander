@@ -18,6 +18,7 @@ noc-scroll = { path = "crates/noc-scroll" }
 noc-ssh = { path = "crates/noc-ssh" }
 noc-text = { path = "crates/noc-text" }
 noc-tools = { path = "crates/noc-tools" }
+noc-vars = { path = "crates/noc-vars" }
 noc-vfs = { path = "crates/noc-vfs" }
 noc-viewer = { path = "crates/noc-viewer" }
 

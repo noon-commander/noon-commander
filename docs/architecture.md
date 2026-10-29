@@ -25,13 +25,14 @@ crates/
 ├── noc-pattern/   patterns typed to match names: regular expressions or text, smart case,
 │                  one Unicode form, case folding
 ├── noc-scroll/    paging text that ends: how far the page keys go, the scroll bar
+├── noc-vars/      variables in text: $NAME, ${NAME}, $$, read once, expanded where it runs
 └── noc-viewer/    the F3 viewer: reading through the Vfs, scrolling, wrapping; its own text
 ```
 
 Dependencies point one way, toward the binary:
 
 ```text
-noc-config  noc-ssh  noc-text  noc-vfs  noc-scroll  noc-pattern  noc-locale
+noc-config  noc-ssh  noc-text  noc-vfs  noc-scroll  noc-pattern  noc-locale  noc-vars
             no other noc-* crate
 noc-tools   → noc-pattern
 noc-ops     → noc-vfs

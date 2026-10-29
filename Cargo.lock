@@ -1876,6 +1876,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "noc-vars"
+version = "0.2.0"
+dependencies = [
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "noc-vfs"
 version = "0.2.0"
 dependencies = [

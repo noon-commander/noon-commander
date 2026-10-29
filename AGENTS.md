@@ -79,10 +79,11 @@ client; the system `ssh` is the single source of truth for connections and auth.
 | `crates/noc-text` | Terminal-safe text: sanitizing, widths in cells, fitting, wrapping |
 | `crates/noc-pattern` | Patterns typed to match names: regular expressions or text as it is, smart case |
 | `crates/noc-scroll` | Paging the help and the viewer: how far the page keys go, the scroll bar |
+| `crates/noc-vars` | Variables in text: `$NAME`, `${NAME}`, `$$`, read once, expanded where it runs (ADR 0054) |
 | `crates/noc-viewer` | The F3 viewer: reading through the `Vfs`, scrolling, wrapping; its own Fluent text |
 
-- `noc-config`, `noc-ssh`, `noc-vfs`, `noc-text`, `noc-scroll`, `noc-pattern`, `noc-locale`
-  depend on no other `noc-*` crate.
+- `noc-config`, `noc-ssh`, `noc-vfs`, `noc-text`, `noc-scroll`, `noc-pattern`, `noc-locale`,
+  `noc-vars` depend on no other `noc-*` crate.
 - `noc-tools` → `noc-pattern`. `noc-ops` → `noc-vfs`. `noc-viewer` → `noc-vfs`, `noc-text`,
   `noc-scroll`, `noc-locale`. The binary → all.
 - Library crates: no UI code, no user-facing text. Exceptions: `noc-viewer`, which knows nothing

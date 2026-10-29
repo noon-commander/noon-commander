@@ -72,6 +72,12 @@ const ETA_AGREE: f64 = 1.25;
 /// The time left shows after this much work, whether or not its forecasts agree.
 const ETA_SETTLE_MAX: Duration = ETA_HORIZON;
 
+/// A report made this much before the speed and the time left of a second were worked out
+/// comes late, as one that waited while the terminal was handed over: they knew nothing of it,
+/// and of what came after it, so they are worked out again. Far longer than a report takes to
+/// reach the window.
+const LATE: Duration = Duration::from_millis(250);
+
 /// How far back the pauses between a job's reports tell how long it may go without one and
 /// still work: a link that sends a chunk every few seconds, a disk that takes its time to
 /// write what it holds back, every so often.
@@ -524,6 +530,8 @@ struct Timing {
 #[derive(Debug, Clone, Copy)]
 struct Held {
     second: u64,
+    /// The time the job had worked when they were worked out.
+    at: Duration,
     speed: Option<f64>,
     left: Option<Left>,
 }
@@ -726,20 +734,24 @@ impl JobView {
         self.stage = Stage::Scanning { items };
     }
 
-    /// The job is at `current`, shown as given, with `counts` behind it. Its clock starts with
-    /// the first of these, after the waiting and the counting.
+    /// The job is at `current`, shown as given, with `counts` behind it, as it was at `now`,
+    /// when it made the report, however long ago. Its clock starts with the first of these,
+    /// after the waiting and the counting.
     pub(crate) fn working(&mut self, current: String, counts: Counts, now: Instant) {
         self.stage = Stage::Working { current, counts };
         if !self.asking {
             self.clock.start(now);
         }
         let at = self.clock.elapsed(now);
+        if self.held.get().is_some_and(|held| held.at > at + LATE) {
+            self.held.set(None);
+        }
         self.samples.note(at, counts.bytes_copied);
         self.forecast.note(at, &counts);
     }
 
-    /// The job asked a question and waits for the answer: its clock stands, however long the
-    /// question stays open or waits behind other dialogs.
+    /// The job asked a question at `now` and waits for the answer: its clock stands, however
+    /// long the question stays open or waits behind other dialogs.
     pub(crate) fn ask(&mut self, now: Instant) {
         self.asking = true;
         self.clock.stop(now);
@@ -800,7 +812,8 @@ impl JobView {
     }
 
     /// The time and speed at `now` of the job at work with `counts` behind it. The speed and
-    /// the time left are those of the first call in the second that the time shows.
+    /// the time left are those of the first call in the second that the time shows, or the
+    /// first since a report taken late (`working`).
     fn timing_of(&self, counts: &Counts, now: Instant) -> Timing {
         let elapsed = self.clock.elapsed(now);
         let second = whole_seconds(elapsed);
@@ -877,6 +890,7 @@ impl JobView {
         };
         Held {
             second,
+            at: elapsed,
             speed,
             left,
         }
@@ -1437,6 +1451,39 @@ mod tests {
         let speed = timing.speed.unwrap();
         assert!(speed > 1.4 * 1024.0 * 1024.0, "{speed}");
         assert_ne!(timing.left, shown.left);
+    }
+
+    #[test]
+    fn reports_taken_late_count_when_they_were_made_and_show_at_once() {
+        let start = Instant::now();
+        let mut view = JobView::new("Copy".to_owned(), "Copying".to_owned());
+        for second in 0..=10 {
+            let counts = copying(second, second);
+            view.working("a".to_owned(), counts, start + secs(second));
+        }
+        // The window is drawn 30 seconds later, as the terminal comes back from another
+        // program, before the reports the job made meanwhile: it looks still.
+        let back = start + secs(40);
+        let timing = view.timing(back).unwrap();
+        assert_eq!((timing.speed, timing.left), (Some(0.0), None));
+        for second in 11..=40 {
+            let counts = copying(second, second);
+            view.working("a".to_owned(), counts, start + secs(second));
+        }
+        // They count at the times the job made them, and show within the same second: the
+        // pace of a mebibyte a second, no stall, 60 MiB left.
+        let timing = view.timing(back).unwrap();
+        let speed = timing.speed.unwrap();
+        assert!((speed - 1024.0 * 1024.0).abs() < 1.0, "1 MiB/s: {speed}");
+        assert_eq!(timing.left.map(whole_seconds), Some(60));
+        // A report that comes in time leaves the second as it is.
+        view.working(
+            "a".to_owned(),
+            copying(41, 41),
+            back + Duration::from_millis(100),
+        );
+        let again = view.timing(back + Duration::from_millis(200)).unwrap();
+        assert_eq!((again.speed, again.left), (timing.speed, timing.left));
     }
 
     #[test]

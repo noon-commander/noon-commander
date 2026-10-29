@@ -56,7 +56,7 @@ use super::panel::{
 };
 use super::picker::FULL_ROWS;
 use super::places::{Places, volume_of};
-use super::progress::{Counts, JobButton, JobView, Look, RowLook};
+use super::progress::{JobButton, JobView, Look, RowLook};
 use super::pulldown::{self, Command, PullDown, PullDownEvent, Status};
 use super::reading::{ReadButton, Reading};
 use super::search::{self, Input, Slot, Switch};
@@ -5612,38 +5612,31 @@ impl App {
         let Some(job) = self.jobs.iter_mut().find(|job| job.id == id) else {
             return Vec::new();
         };
-        let now = Instant::now();
         match event {
             JobEvent::Scanning { items } => job.view.scanning(items),
             JobEvent::Progress {
                 current,
-                done,
-                total,
-                bytes_done,
-                bytes_total,
-                bytes_copied,
-            } => {
-                let counts = Counts {
-                    done,
-                    total,
-                    bytes_done,
-                    bytes_total,
-                    bytes_copied,
-                };
-                job.view.working(location_text(&current), counts, now);
-            }
+                at,
+                counts,
+            } => job.view.working(location_text(&current), counts, at),
             JobEvent::Exists {
+                at,
                 target,
                 source_metadata,
                 target_metadata,
                 reply,
             } => {
-                job.view.ask(now);
+                job.view.ask(at);
                 let metadata = (&source_metadata, &target_metadata);
                 self.ask_conflict(id, &target, metadata, reply);
             }
-            JobEvent::Failed { path, error, reply } => {
-                job.view.ask(now);
+            JobEvent::Failed {
+                at,
+                path,
+                error,
+                reply,
+            } => {
+                job.view.ask(at);
                 let path = location_text(&path);
                 let reason = cells::sanitize(error.as_bytes());
                 let message = match job.kind {
@@ -7396,8 +7389,7 @@ impl App {
         }
         if let Some(job) = self.in_front() {
             stage.show(frame, middle(zoom::Window::Job(job.id)), |frame| {
-                job.view
-                    .render(frame, panels, theme, (Instant::now(), spin));
+                job.view.render(frame, panels, theme, (spin.at(), spin));
             });
         }
         if let Some(results) = self.results.front() {
@@ -8130,6 +8122,7 @@ mod tests {
 
     use super::super::panel::Listing;
     use super::super::places::KnownHost;
+    use super::super::progress::Counts;
     use noc_tools::ripgrep::Hit;
 
     use super::*;
@@ -10358,14 +10351,14 @@ mod tests {
         app.job_event(id, JobEvent::Scanning { items: 3 });
         assert!(screen(&mut app).contains("3 found"));
         let current = local("/srv/left/a");
-        let progress = JobEvent::Progress {
+        let progress = report(
             current,
-            done: 1,
-            total: 3,
-            bytes_done: 0,
-            bytes_total: 0,
-            bytes_copied: 0,
-        };
+            Counts {
+                done: 1,
+                total: 3,
+                ..Counts::default()
+            },
+        );
         app.job_event(id, progress);
         let text = screen(&mut app);
         assert!(
@@ -10376,6 +10369,7 @@ mod tests {
         // A failure waits for an answer: Ignore all is next to Ignore.
         let (reply, mut decision) = oneshot::channel();
         let failed = JobEvent::Failed {
+            at: Instant::now(),
             path: local("/srv/left/b"),
             error: "permission denied".to_owned(),
             reply,
@@ -10435,7 +10429,7 @@ mod tests {
         let (reply, mut decision) = oneshot::channel();
         let path = local("/srv/left/x");
         let error = "busy".to_owned();
-        app.job_event(id, JobEvent::Failed { path, error, reply });
+        app.job_event(id, failed(path, error, reply));
         app.job_event(id, JobEvent::Finished { complete: true });
         assert_eq!(
             app.context(),
@@ -10450,7 +10444,7 @@ mod tests {
         let (reply, mut decision) = oneshot::channel();
         let path = local("/srv/left/y");
         let error = "busy".to_owned();
-        app.job_event(id, JobEvent::Failed { path, error, reply });
+        app.job_event(id, failed(path, error, reply));
         app.handle(action(Action::Cancel));
         assert_eq!(decision.try_recv(), Ok(Decision::Abort));
     }
@@ -10464,14 +10458,14 @@ mod tests {
         app.handle(action(Action::Confirm));
         assert!(!cancel.is_cancelled());
         assert_eq!(app.context(), Context::Panel, "the panels take the keys");
-        let progress = JobEvent::Progress {
-            current: local("/srv/left/a"),
-            done: 1,
-            total: 4,
-            bytes_done: 0,
-            bytes_total: 0,
-            bytes_copied: 0,
-        };
+        let progress = report(
+            local("/srv/left/a"),
+            Counts {
+                done: 1,
+                total: 4,
+                ..Counts::default()
+            },
+        );
         app.job_event(first, progress);
         let text = screen(&mut app);
         assert!(text.contains(" 1 job 25% ╗"), "{text}");
@@ -10488,7 +10482,7 @@ mod tests {
         let (reply, mut decision) = oneshot::channel();
         let path = local("/srv/right/x");
         let error = "busy".to_owned();
-        app.job_event(second, JobEvent::Failed { path, error, reply });
+        app.job_event(second, failed(path, error, reply));
         assert_eq!(app.context(), Context::Dialog);
         app.handle(action(Action::Confirm));
         assert_eq!(decision.try_recv(), Ok(Decision::Skip));
@@ -10520,14 +10514,14 @@ mod tests {
         app.handle(action(Action::Delete));
         let (id, _, _, _) = delete_job(app.handle(action(Action::Confirm)));
         let changes = |app: &mut App, done| {
-            let progress = JobEvent::Progress {
-                current: local("/srv/left/a"),
-                done,
-                total: 1000,
-                bytes_done: 0,
-                bytes_total: 0,
-                bytes_copied: 0,
-            };
+            let progress = report(
+                local("/srv/left/a"),
+                Counts {
+                    done,
+                    total: 1000,
+                    ..Counts::default()
+                },
+            );
             let (effects, changes) = app.job_report(id, progress);
             assert!(effects.is_empty());
             changes
@@ -10564,14 +10558,15 @@ mod tests {
         app.handle(action(Action::Confirm));
         app.handle(action(Action::Jobs));
         let changes = |app: &mut App, current: &str, done, bytes_total| {
-            let progress = JobEvent::Progress {
-                current: local(current),
-                done,
-                total: 1000,
-                bytes_done: 0,
-                bytes_total,
-                bytes_copied: 0,
-            };
+            let progress = report(
+                local(current),
+                Counts {
+                    done,
+                    total: 1000,
+                    bytes_total,
+                    ..Counts::default()
+                },
+            );
             app.job_report(id, progress).1
         };
         assert!(changes(&mut app, "/srv/left/a", 1, 0), "counted, it works");
@@ -10596,14 +10591,16 @@ mod tests {
         app.handle(action(Action::Delete));
         let (id, _, _, _) = delete_job(app.handle(action(Action::Confirm)));
         let mut changes = |done, bytes_done| {
-            let progress = JobEvent::Progress {
-                current: local("/srv/left/a"),
-                done,
-                total: 2,
-                bytes_done,
-                bytes_total: 100 * MIB,
-                bytes_copied: bytes_done,
-            };
+            let progress = report(
+                local("/srv/left/a"),
+                Counts {
+                    done,
+                    total: 2,
+                    bytes_done,
+                    bytes_total: 100 * MIB,
+                    bytes_copied: bytes_done,
+                },
+            );
             app.job_report(id, progress).1
         };
         assert!(changes(0, 20 * MIB), "how far it is shows");
@@ -10628,14 +10625,14 @@ mod tests {
             job.view.ticking()
         };
         for id in [first, second] {
-            let progress = JobEvent::Progress {
-                current: local("/srv/left/a"),
-                done: 1,
-                total: 4,
-                bytes_done: 0,
-                bytes_total: 0,
-                bytes_copied: 0,
-            };
+            let progress = report(
+                local("/srv/left/a"),
+                Counts {
+                    done: 1,
+                    total: 4,
+                    ..Counts::default()
+                },
+            );
             app.job_event(id, progress);
         }
         assert!(ticking(&app, first) && ticking(&app, second));
@@ -10652,7 +10649,7 @@ mod tests {
             let (reply, decision) = oneshot::channel();
             let path = local("/srv/left/b");
             let error = "busy".to_owned();
-            app.job_event(id, JobEvent::Failed { path, error, reply });
+            app.job_event(id, failed(path, error, reply));
             decisions.push(decision);
         }
         assert!(!ticking(&app, first) && !ticking(&app, second));
@@ -10673,6 +10670,7 @@ mod tests {
         let mut metadata = dir("a").metadata;
         metadata.kind = FileKind::File;
         let exists = JobEvent::Exists {
+            at: Instant::now(),
             target: local("/srv/right/a"),
             source_metadata: metadata.clone(),
             target_metadata: metadata,
@@ -10682,6 +10680,73 @@ mod tests {
         assert!(!ticking(&app, second));
         app.handle(action(Action::Cancel));
         assert!(ticking(&app, second));
+    }
+
+    #[test]
+    fn a_job_counts_its_reports_and_questions_at_the_times_it_made_them() {
+        const MIB: u64 = 1024 * 1024;
+        let mut app = loaded();
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        let (id, _, _, _) = delete_job(app.handle(action(Action::Confirm)));
+        // Twenty seconds of work at a mebibyte a second that began half a minute ago, taken
+        // only now, as after the terminal was handed over: no stall, and 20 MiB left.
+        let start = Instant::now().checked_sub(Duration::from_secs(30)).unwrap();
+        let at = |millis| start + Duration::from_millis(millis);
+        for tick in 0..=80 {
+            let bytes = tick * MIB / 4;
+            let counts = Counts {
+                total: 1,
+                bytes_done: bytes,
+                bytes_total: 40 * MIB,
+                bytes_copied: bytes,
+                ..Counts::default()
+            };
+            let current = local("/srv/left/a");
+            let at = at(250 * tick);
+            app.job_event(
+                id,
+                JobEvent::Progress {
+                    current,
+                    at,
+                    counts,
+                },
+            );
+        }
+        let text = screen_at(&mut app, 12, at(20_000));
+        assert!(text.contains("Time 0:20   ETA 0:20"), "{text}");
+
+        // A question it asked at 25 seconds, answered at once at 30, stopped its clock at 25.
+        let (reply, _decision) = oneshot::channel();
+        let failed = JobEvent::Failed {
+            at: at(25_000),
+            path: local("/srv/left/a"),
+            error: "busy".to_owned(),
+            reply,
+        };
+        app.job_event(id, failed);
+        app.handle(action(Action::Confirm));
+        let text = screen_at(&mut app, 12, at(30_000));
+        assert!(text.contains("Time 0:25"), "{text}");
+    }
+
+    /// A failure of a job at `path`, now, that waits for `reply`.
+    fn failed(path: Location, error: String, reply: oneshot::Sender<Decision>) -> JobEvent {
+        JobEvent::Failed {
+            at: Instant::now(),
+            path,
+            error,
+            reply,
+        }
+    }
+
+    /// A report of a job at `current`, with `counts` behind it, made now.
+    fn report(current: Location, counts: Counts) -> JobEvent {
+        JobEvent::Progress {
+            current,
+            at: Instant::now(),
+            counts,
+        }
     }
 
     /// The delete jobs that `effects` start: their ids and targets.
@@ -10747,14 +10812,14 @@ mod tests {
         app.handle(action(Action::Delete));
         app.handle(action(Action::Confirm));
         app.handle(action(Action::Confirm));
-        let progress = JobEvent::Progress {
-            current: local("/srv/left/a"),
-            done: 1,
-            total: 2,
-            bytes_done: 0,
-            bytes_total: 0,
-            bytes_copied: 0,
-        };
+        let progress = report(
+            local("/srv/left/a"),
+            Counts {
+                done: 1,
+                total: 2,
+                ..Counts::default()
+            },
+        );
         app.job_event(first, progress);
         app.handle(action(Action::Jobs));
         assert_eq!(app.context(), Context::Dialog);
@@ -10908,6 +10973,7 @@ mod tests {
         let ask = |app: &mut App| {
             let (reply, answer) = oneshot::channel();
             let event = JobEvent::Exists {
+                at: Instant::now(),
                 target: local("/srv/right/left/a"),
                 source_metadata: metadata.clone(),
                 target_metadata: metadata.clone(),

@@ -453,6 +453,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   viewer, draw half as many frames: one for each frame of the dots, 12 a second, rather than 25.
 - A job in the background draws the screen only when the percentage in the corner changes, about
   once a second for a large copy, rather than up to 25 times a second for every chunk it moves.
+- The time left of a job is right when the panels come back from the editor, a command, or the
+  user screen (`g <`), rather than a half to a fifth of what was left for a minute or two: the
+  reports the job made meanwhile counted all at once, as if it had stood still, then moved all
+  its data in a quarter of a second. Each report now counts at the time the job made it, and a
+  question at the time it was asked, which stops the clock there.
 
 ## [0.2.0] - 2026-10-14
 

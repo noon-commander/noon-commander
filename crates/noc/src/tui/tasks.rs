@@ -48,6 +48,7 @@ use super::dialog::{Ask, Reply};
 use super::find::{FindQuery, FindSummary, Finding};
 use super::panel::{ListError, ListRequest, Listed, Listing};
 use super::places::{self, Places};
+use super::progress::Counts;
 use super::tabs::PanelId;
 use crate::about::{self, Detected, Tool};
 use crate::context::Context;
@@ -179,30 +180,29 @@ pub(crate) enum Done {
     OpenFailed { path: PathBuf, reason: String },
 }
 
-/// A report from a job, with its paths as locations and its errors in words.
+/// A report from a job, with its paths as locations and its errors in words. Reports of how
+/// far it is and questions come with `at`, when the job made them: the UI may take them
+/// later, as when the terminal was handed over to another program.
 #[derive(Debug)]
 pub(crate) enum JobEvent {
     /// Counting what to do: `items` found so far.
     Scanning { items: u64 },
-    /// At `current`, with `done` of `total` entries and `bytes_done` of `bytes_total` bytes
-    /// behind it, `bytes_copied` of them read and written; jobs that move no data count no
-    /// bytes.
+    /// At `current`, with `counts` behind it.
     Progress {
         current: Location,
-        done: u64,
-        total: u64,
-        bytes_done: u64,
-        bytes_total: u64,
-        bytes_copied: u64,
+        at: Instant,
+        counts: Counts,
     },
     /// Something failed at `path`; the job waits for `reply`.
     Failed {
+        at: Instant,
         path: Location,
         error: String,
         reply: oneshot::Sender<Decision>,
     },
     /// The name `target` of a copy is taken; the job waits for `reply`.
     Exists {
+        at: Instant,
         target: Location,
         source_metadata: Metadata,
         target_metadata: Metadata,
@@ -1231,7 +1231,8 @@ fn finished(id: u64, outcome: Option<Outcome>) -> Done {
 }
 
 /// Passes the reports of the job `id` on to `done`, with paths made locations by `location`
-/// and errors in words.
+/// and errors in words. It runs in the job's task, so the time it takes a report is the time
+/// the job made it.
 async fn forward<P>(
     mut incoming: mpsc::UnboundedReceiver<Event<P>>,
     id: u64,
@@ -1239,17 +1240,22 @@ async fn forward<P>(
     location: impl Fn(P) -> Location,
 ) {
     while let Some(event) = incoming.recv().await {
+        let at = Instant::now();
         let event = match event {
             Event::Scanning { items } => JobEvent::Scanning { items },
             Event::Progress(progress) => JobEvent::Progress {
                 current: location(progress.current),
-                done: progress.items_done,
-                total: progress.items_total,
-                bytes_done: progress.bytes_done,
-                bytes_total: progress.bytes_total,
-                bytes_copied: progress.bytes_copied,
+                at,
+                counts: Counts {
+                    done: progress.items_done,
+                    total: progress.items_total,
+                    bytes_done: progress.bytes_done,
+                    bytes_total: progress.bytes_total,
+                    bytes_copied: progress.bytes_copied,
+                },
             },
             Event::Failed { path, error, reply } => JobEvent::Failed {
+                at,
                 path: location(path),
                 error: describe::vfs_error(&error),
                 reply,
@@ -1261,6 +1267,7 @@ async fn forward<P>(
                 reply,
                 ..
             } => JobEvent::Exists {
+                at,
                 target: location(target),
                 source_metadata,
                 target_metadata,

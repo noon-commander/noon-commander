@@ -100,6 +100,16 @@ are those after the review.
   seconds hid before.
 - It all comes from the counts that jobs report (`Counts`), with no change to `noc-ops` but for
   when a byte written counts (ADR 0052) and when a directory is finished (ADR 0053).
+- **Each report counts at the time the job made it**, which the task that runs the job takes as
+  it passes the report on, and a question at the time the job asked it, which stops the clock
+  there. The UI takes no reports while the terminal is handed over to the editor, a command, or
+  the user screen, and those that waited come at once when it is back. Counted when the UI took
+  them, the work meanwhile looked like a stall, left out, and then all its data had moved in a
+  quarter of a second: the time left was a half of what was left after half a minute away, a
+  fifth after two minutes, and took one or two minutes to come right. A report taken more than a
+  quarter of a second after the speed and the time left of the second were worked out
+  (`LATE`) makes them be worked out again, so that the time left is right in the same second,
+  rather than show `-:--` until the next.
 
 ## Consequences
 
@@ -129,6 +139,13 @@ are those after the review.
   files, from 37–109% to 4–16% for a download of a tree, and from 31–226% to 25–173% for an
   upload of one, where the forecasts of its first small files can agree and still be three times
   too long. After a stretch of Skip all, which tells no pace, it shows three seconds later.
+- In the same check, a copy of 20 GiB whose reports the UI took only after half a minute away
+  showed 2:38 left when 5:39 were, and was off by 23% on average over the next two minutes; two
+  minutes away, 0:45 for 4:09, and 44%. Counted at the times the job made them, the reports keep
+  it within 1.4% throughout, as does a question asked while the UI was away. In Noon Commander
+  itself, back from the user screen after 15 seconds of a copy of 100,000 small files, it showed
+  `-:--`, then `0:03` with 13 seconds left; now `0:13` with 15, at once. After 8 seconds of a
+  download over SFTP, `0:02` with 6 left; now `0:05` with 5.
 - In the simulator, the forecast keeps within 1 to 3% of the time that is left for files of
   sizes spread as in real trees, with directories and empty files among them, locally and on a
   host; through Skip all over 5,000 files on a host it falls as they leave the work, where it grew

@@ -950,10 +950,16 @@ size at once and goes back to the start of a file that is retried. `bytes_copied
 bytes read and written and never goes back, so the UI derives the speed from it and the time
 left from both. Both count a byte written once it has arrived: a copy reports as the writer's
 `written` grows, and after the last chunk of a file reports what arrives as it settles the rest,
-so that an upload follows the link rather than running up to 2 MiB ahead of it. The job's
-window times only work: its stopwatch starts with the first `Progress` and stands from a
-`Failed` or `Exists` question until the answer, including while the question waits behind other
-dialogs. The speed is that of the last five seconds of work, by
+so that an upload follows the link rather than running up to 2 MiB ahead of it. The task that
+runs a job passes its reports on as it takes them (`forward` in `tui/tasks.rs`), in the job's own
+task, with the time it takes each: when the job made it. The window counts each report and
+question at that time, not when the UI takes it: while the terminal is handed over to another
+program the UI takes none, and those that waited come at once when it is back. One taken more
+than a quarter of a second after the speed and the time left of the second were worked out
+makes them be worked out again. The job's window times only work: its stopwatch starts with the
+first `Progress` and stands from a `Failed` or `Exists` question, from when the job asked it,
+until the answer, including while the question waits behind other dialogs. The speed is that of
+the last five seconds of work, by
 the stopwatch: the window keeps `bytes_copied` at moments of work at least a quarter of a second
 apart, and divides what was copied since the last of them five seconds back by the time since.
 A slow start is behind it after five seconds; when no data comes it falls to zero. The time

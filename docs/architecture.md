@@ -991,17 +991,16 @@ time left is the bytes and entries left at those costs and that pace. It is unkn
 entries left are on average more than ten times as large as those done since the forecast's
 first report (`AHEAD`), not the renames of a move, until the work has told what a byte costs:
 data has streamed within an entry, or finished entries with data had sizes at least twice apart.
-It is unknown once no
-report has come for longer than twice the longest pause between reports in the last minute
-(`PAUSES`), five seconds (`RECENT`) at least, so that a slow link or disk that pauses as it
-works keeps a time left; of such a stall only the usual pause counts for the pace, and a
-stretch that skipped data is a pause. It is unknown, too, until the last three forecasts, a
-second of work apart, agree within a quarter, each less the time since it was made (`ETA_SETTLE`,
-`ETA_AGREE`), or the job has worked half a minute since its first report (`ETA_SETTLE_MAX`), as
-early forecasts know little of the pace. A job that counts after some work, as a move does
-before it copies what it could not rename, starts the speed and the time left over
-(`JobView::scanning`). Both are
-worked out once in each second that the time shows and held until
+It is unknown once no report has come for longer than twice the longest pause between reports
+in the last minute (`PAUSES`), five seconds (`RECENT`) at least, so that a slow link or disk
+that pauses as it works keeps a time left; of such a stall only the usual pause counts for the
+pace, and a stretch that skipped data is a pause. It is unknown, too, until the last three
+forecasts, a second of work apart, agree within a quarter, each less the time since it was made
+(`ETA_SETTLE`, `ETA_AGREE`), or the job has done half a minute of work that tells the pace,
+neither skipping nor standing still (`ETA_SETTLE_MAX`), as early forecasts know little of the
+pace. A job that counts after some work, as a move does before it copies what it could not
+rename, starts the speed and the time left over (`JobView::scanning`). Both are worked out once
+in each second that the time shows and held until
 the next, so they change with it rather than with every frame. The
 time left shown follows the end that the forecast says, smoothed over 9% of the time left, from
 a second to half a minute (`ETA_SMOOTH`, `ETA_SMOOTH_MAX`), which a forecast that is right does

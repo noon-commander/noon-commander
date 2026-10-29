@@ -69,8 +69,8 @@ const ETA_SETTLE: usize = 3;
 /// this many times the shortest.
 const ETA_AGREE: f64 = 1.25;
 
-/// The time left shows after this much work since the job first reported, or reported again
-/// after counting, whether or not its forecasts agree.
+/// The time left shows after this much work that tells the pace, whether or not its forecasts
+/// agree: neither skipping nor standing still, which tell none, however long they take.
 const ETA_SETTLE_MAX: Duration = ETA_HORIZON;
 
 /// A report made this much before the speed and the time left of a second were worked out
@@ -382,6 +382,9 @@ impl Sums {
 struct Forecast {
     /// Where the job was when it first reported, or reported again after counting.
     first: Option<Point>,
+    /// The time of the stretches that count for the pace: work, neither skipping nor standing
+    /// still.
+    paced: Duration,
     /// Where the last stretch of the pace ended.
     last: Option<Point>,
     /// Where the job was when it last had done more entries.
@@ -442,6 +445,9 @@ impl Forecast {
             return;
         };
         if point.at >= last.at + SAMPLE {
+            if !skipped(last, point) {
+                self.paced += point.at.saturating_sub(last.at);
+            }
             self.sums.add(last, point);
             self.last = Some(point);
         }
@@ -491,10 +497,10 @@ impl Forecast {
         self.settled = agree(&self.settling, at);
     }
 
-    /// Whether the time left shows at `at`: its forecasts have agreed, or the job has worked
-    /// [`ETA_SETTLE_MAX`] since its first report.
-    fn shows(&self, at: Duration) -> bool {
-        self.settled || self.began().is_some_and(|began| at >= began + ETA_SETTLE_MAX)
+    /// Whether the time left shows: its forecasts have agreed, or the job has done
+    /// [`ETA_SETTLE_MAX`] of work that tells the pace.
+    fn shows(&self) -> bool {
+        self.settled || self.paced >= ETA_SETTLE_MAX
     }
 
     /// When the job first reported, or reported again after counting, in the time it worked.
@@ -965,10 +971,10 @@ impl JobView {
     }
 
     /// The speed and the time left after `elapsed` of work, in its `second`, with `counts`
-    /// behind it. The time left is unknown until its forecasts have agreed, or the job has worked
-    /// [`ETA_SETTLE_MAX`] since its first report ([`Forecast::shows`]). It counts down from that
-    /// of an earlier second, the one it counted down from if worked out again within the same
-    /// second.
+    /// behind it. The time left is unknown until its forecasts have agreed, or the job has done
+    /// [`ETA_SETTLE_MAX`] of work that tells the pace ([`Forecast::shows`]). It counts down from
+    /// that of an earlier second, the one it counted down from if worked out again within the
+    /// same second.
     fn measure(&self, counts: &Counts, elapsed: Duration, second: u64) -> Held {
         let before = match self.held.get() {
             Some(held) if held.second == second => held.before,
@@ -979,7 +985,7 @@ impl JobView {
         let worked = elapsed.saturating_sub(self.forecast.began().unwrap_or_default());
         let (speed, left) = if counts.bytes_total > 0 && worked >= SETTLED {
             let speed = self.samples.speed(elapsed, counts.bytes_copied);
-            let shows = self.forecast.shows(elapsed);
+            let shows = self.forecast.shows();
             let left = self
                 .forecast
                 .left(elapsed, counts)
@@ -2438,6 +2444,36 @@ mod tests {
         let truth = float(1_000 - n) * (0.05 + 0.1 + 0.005);
         let left = left.as_secs_f64();
         assert!((left - truth).abs() < truth * 0.05, "{left} for {truth}");
+    }
+
+    #[test]
+    fn after_skip_all_the_time_left_waits_for_its_forecasts_to_agree() {
+        // Skip all over 5,000 files of 64 KiB, each found out in 30 ms, as over a link: two and
+        // a half minutes that tell no pace. Then 1,000 files of 64 KiB, each opened in a
+        // twentieth of a second. The half minute after which the time left shows whatever its
+        // forecasts say counted the skipping, so the first forecast showed at once.
+        let size = 64 * 1024;
+        let mut run = Run::new(6_000, 6_000 * size);
+        for _ in 0..5_000 {
+            run.skip(size, 0.03);
+        }
+        let start = run.at;
+        let mut first = None;
+        for n in 1..=1_000 {
+            run.copy(size, 10 * MIB, 0.05);
+            let known = run.left_at(run.at).is_some();
+            let shown = run.view.timing(run.now()).unwrap().left.is_some();
+            if known && first.is_none() {
+                first = Some(run.at - start);
+            }
+            if let Some(first) = first.filter(|_| shown) {
+                let worked = run.at - start;
+                assert!(worked >= first + 2.0, "shown {worked} s in, known {first}");
+                assert!(worked < first + 5.0, "shown {worked} s in, known {first}");
+                return;
+            }
+            assert!(n < 1_000, "never shown");
+        }
     }
 
     #[test]

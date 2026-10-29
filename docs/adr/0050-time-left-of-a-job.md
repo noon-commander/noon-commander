@@ -86,8 +86,11 @@ are those after the review.
   upload of a tree. So the time left is unknown until the last three forecasts, a second of work
   apart at least, agree: each less the time since it was made, the longest is at most a quarter
   longer than the shortest (`ETA_SETTLE`, `ETA_AGREE`). A forecast that is right agrees within
-  three seconds. Half a minute of work after the first report it shows whether or not they do
-  (`ETA_SETTLE_MAX`).
+  three seconds. After half a minute of work that tells the pace it shows whether or not they do
+  (`ETA_SETTLE_MAX`): the stretches that count for the pace, so that neither skipping nor standing
+  still counts, however long. Counted from the first report, two and a half minutes of Skip all
+  at the start of a job left the half minute behind before any forecast was made, and the first
+  one, from a second of copying, showed at once, 2.7 times too long.
 - **Counting after some work starts over.** A move renames what it can, then counts what it
   could not and copies that, with totals of its own. The renames tell nothing of the pace of the
   copy, and the time of the counting, under the five seconds of a stall, went into it as work
@@ -221,6 +224,11 @@ are those after the review.
   3,000 renames showed `-:--` for 108 seconds of its copy, a third of it, while its forecast was
   right, and after 600 renames for 22: the files done looked ten times smaller than those left.
   Now it shows two and a half seconds into the copy, within 7%. A test checks it.
+- In the same check, after Skip all over 5,000 files on a host, two and a half minutes, the first
+  forecast showed at once, up to 2.7 times too long; now two to five seconds later, once the
+  forecasts agree, within 12%. A disk that blocks for 12 seconds every 64 MiB first showed a time
+  left after 30 seconds, half as long as it was; as its first block no longer counts, after 48,
+  18% short. A test checks Skip all.
 - The model is two costs and a pace: a link that is fast for big files and slow to open each
   one is right; one whose pace changes with the size of the files in other ways is not.
 - What a job does without reports is not in the work left: the time left shows `0:00`, then

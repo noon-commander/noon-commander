@@ -487,6 +487,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - After a move's renames, the time left of its copy shows within seconds rather than `-:--` for
   a third of the copy: the entries it renamed counted among those done, with no data, so the
   files done looked ten times smaller than those left.
+- After a long Skip all, the time left of a job waits for its forecasts to agree before it shows:
+  the half minute after which it shows anyway counted the skipping, so after two and a half
+  minutes of it the first forecast, from a second of copying, showed at once, up to 2.7 times too
+  long. Standing still no longer counts toward that half minute either.
 
 ## [0.2.0] - 2026-10-14
 

@@ -308,8 +308,13 @@ pub(crate) async fn run(
         app.come_back();
         take_requests(&mut app, &mut tasks);
         if let Some(handover) = app.take_handover() {
-            let (fresh, after) =
-                hand_over((&mut terminal, &mut asked), events, &mut app, handover).await;
+            let Some((fresh, after)) =
+                hand_over((&mut terminal, &mut asked), events, &mut app, handover).await
+            else {
+                // Told to end while the terminal was handed over: SIGHUP, as when it went away,
+                // or SIGTERM.
+                break Ok(());
+            };
             events = fresh;
             let effects = match after {
                 Ok((effects, fresh)) => {
@@ -444,7 +449,11 @@ fn start_app(
 /// Runs the editor on `file`, at `line` if there is one, with the terminal handed over, as a
 /// job that asks what next when Ctrl+z stops it, as a command of the command line does; and
 /// tells whether the file changed (its size or time), or why the editor could not run.
-async fn edit(file: &Path, line: Option<u64>, keymap: &Keymap) -> Result<bool, String> {
+async fn edit(
+    file: &Path,
+    line: Option<u64>,
+    (keymap, told): (&Keymap, &mut output::Told),
+) -> Result<bool, String> {
     let stamp = |metadata: std::fs::Metadata| (metadata.len(), metadata.modified().ok());
     let before = tokio::fs::metadata(file)
         .await
@@ -463,7 +472,7 @@ async fn edit(file: &Path, line: Option<u64>, keymap: &Keymap) -> Result<bool, S
         )
     };
     let mut running = editor.start(file, line).map_err(cannot_run)?;
-    output::finish(&mut running, keymap, cannot_run).await?;
+    output::finish(&mut running, (keymap, told), cannot_run).await?;
     let after = tokio::fs::metadata(file)
         .await
         .map(stamp)
@@ -475,17 +484,21 @@ async fn edit(file: &Path, line: Option<u64>, keymap: &Keymap) -> Result<bool, S
 /// does next and a new stream of SIGINT, since Ctrl+c in the program reached Noon Commander
 /// too, with a new stream of events in place of `events`. The program gets the mouse and the
 /// terminal's own title, and may set one of its own; the next turn of the event loop takes
-/// both again.
+/// both again. `None` if Noon Commander was told to end meanwhile, by SIGHUP, as when the
+/// terminal goes away, or SIGTERM: then no new stream of events is made, since crossterm's
+/// reader of the old one spins at the end of the input of a terminal that went away and keeps
+/// the lock that a new one waits for.
 async fn hand_over(
     (terminal, asked): (&mut DefaultTerminal, &mut Asked),
     events: EventStream,
     app: &mut App,
     handover: Handover,
-) -> (EventStream, io::Result<(Vec<app::Effect>, Signal)>) {
+) -> Option<(EventStream, io::Result<(Vec<app::Effect>, Signal)>)> {
     // The program gets every key. A stream's reader holds crossterm's input lock while it
     // waits, and a new stream takes that lock, so the old one goes first; the new one reads
     // nothing until it is polled.
     drop(events);
+    let mut told = output::Told::listen();
     asked.mouse = false;
     // Leaving the modes gives the cursor its own shape back.
     asked.bar = None;
@@ -497,39 +510,42 @@ async fn hand_over(
     let (events, effects) = match handover {
         Handover::Edit { file, line } => {
             let result = match suspended {
-                Ok(()) => edit(&file, line, app.keymap()).await,
+                Ok(()) => edit(&file, line, (app.keymap(), &mut told)).await,
                 Err(error) => Err(error),
             };
-            (EventStream::new(), app.edited(result))
+            (told.events()?, app.edited(result))
         }
         Handover::Run(run) => {
             let result = match suspended {
-                Ok(()) => output::run_command(run, app.keymap()).await,
+                Ok(()) => output::run_command(run, (app.keymap(), &mut told)).await,
                 Err(error) => Err(error),
             };
-            let mut events = EventStream::new();
+            let mut events = told.events()?;
             if let Ok(ran) = &result
                 && ran.waits
             {
-                output::wait_for_key(&mut events).await;
+                output::wait_for_key(&mut events, &mut told).await;
                 output::after_key(ran);
             }
             (events, app.ran(result.map(drop)))
         }
         Handover::UserScreen => {
-            let mut events = EventStream::new();
+            let mut events = told.events()?;
             if suspended.is_ok() && crossterm::terminal::enable_raw_mode().is_ok() {
                 // The keys that go back are read as the panels read them, with the kitty keyboard
                 // protocol, which tells Ctrl+[ and Ctrl+m from other keys.
                 let _ = asked.modes.keyboard(true);
-                output::wait_to_go_back(&mut events, app.keymap()).await;
+                output::wait_to_go_back(&mut events, app.keymap(), &mut told).await;
                 let _ = asked.modes.keyboard(false);
             }
             (events, Vec::new())
         }
     };
+    if told.has_come() {
+        return None;
+    }
     let after = resume(terminal, asked.modes).and_then(|()| signal(SignalKind::interrupt()));
-    (events, after.map(|interrupt| (effects, interrupt)))
+    Some((events, after.map(|interrupt| (effects, interrupt))))
 }
 
 /// Hands the terminal over to another program as the shell has it: with the cursor and the

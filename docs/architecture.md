@@ -909,8 +909,11 @@ does not compile without.
   loop waits for the program, then takes the terminal back and draws everything. The editor and
   a local command run as jobs, in process groups of their own with the terminal, so Ctrl+c and
   Ctrl+z reach them alone (`noc_tools::job`, [ADR 0054](adr/0054-shell-run.md)); the SIGINT
-  stream is still made anew. SIGTERM and SIGHUP wait until the program ends. ssh children are in
-  sessions of their own and see none of it.
+  stream is still made anew. SIGTERM and SIGHUP, heard meanwhile by `output::Told`, end every
+  wait for a key there, and the event loop ends without a new stream: a terminal that went away
+  leaves crossterm's reader of the last stream spinning at the end of its input with the lock
+  that a new stream would wait for, forever. ssh children are in sessions of their own and see
+  none of it.
 - The working directory of the process follows the active panel: after each turn of the
   event loop, a local directory the active panel now shows (once its listing arrived)
   goes to a task that `chdir`s to it in `spawn_blocking`, the latest of the waiting ones only.

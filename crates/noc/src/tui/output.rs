@@ -6,14 +6,15 @@ use std::io::{self, Write as _};
 use std::os::unix::process::ExitStatusExt as _;
 use std::process::ExitStatus;
 
-use crossterm::event::{Event, EventStream, KeyEventKind};
+use crossterm::event::{Event, EventStream, KeyEvent, KeyEventKind};
 use crossterm::style::{Attribute, Color, Print, SetAttribute, SetForegroundColor};
 use crossterm::terminal::{Clear, ClearType};
-use futures_util::StreamExt as _;
+use futures_util::{FutureExt as _, StreamExt as _};
 use noc_config::Pause;
 use noc_tools::ToolError;
 use noc_tools::job::{Running, Waited};
 use noc_tools::shell::Shell;
+use tokio::signal::unix::{Signal, SignalKind, signal};
 
 use super::command::{Place, Run};
 use super::glyphs;
@@ -34,7 +35,10 @@ pub(super) struct Ran {
 /// its shell: locally, or on its host through ssh over the host's connection, after its
 /// prompt. Then ends its output on a line of its own and, if it waits, asks for a key there,
 /// in raw mode to read it; otherwise leaves the mark of a failure. Fails if it could not start.
-pub(super) async fn run_command(run: Run, keymap: &Keymap) -> Result<Ran, String> {
+pub(super) async fn run_command(
+    run: Run,
+    (keymap, told): (&Keymap, &mut Told),
+) -> Result<Ran, String> {
     let Run {
         place,
         shell,
@@ -56,7 +60,7 @@ pub(super) async fn run_command(run: Run, keymap: &Keymap) -> Result<Ran, String
                 fl!("command-error", program = program, reason = reason)
             };
             let mut running = shell.start(&dir, &command).map_err(cannot_run)?;
-            finish(&mut running, keymap, cannot_run).await?
+            finish(&mut running, (keymap, told), cannot_run).await?
         }
         Place::Remote { handle, dir } => {
             let mut ssh = tasks::remote_command(&handle, dir, shell, command).await?;
@@ -108,16 +112,20 @@ pub(super) async fn run_command(run: Run, keymap: &Keymap) -> Result<Ran, String
 /// for.
 pub(super) async fn finish(
     running: &mut Running,
-    keymap: &Keymap,
+    (keymap, told): (&Keymap, &mut Told),
     cannot: impl Fn(ToolError) -> String,
 ) -> Result<ExitStatus, String> {
     let mut out = io::stdout();
     loop {
         match running.wait().await.map_err(&cannot)? {
             Waited::Ended(status) => return Ok(status),
+            // With no terminal to ask in, or told to end, it ends.
+            Waited::Stopped if told.has_come() => {
+                let _ = running.end();
+            }
             Waited::Stopped => {
                 // One that cannot go on ends, rather than stays stopped while it waits.
-                if !(goes_on(&mut out, keymap, running.has_ended()).await?
+                if !(goes_on(&mut out, (keymap, told), running.has_ended()).await?
                     && running.resume().is_ok())
                 {
                     let _ = running.end();
@@ -131,7 +139,12 @@ pub(super) async fn finish(
 /// own, `[stopped]`, as the mark of a failure, then the keys of a dialog's question, which read
 /// the answer: Confirm goes on, Cancel ends it, or kills it if it was `ended` before and went
 /// on. The line goes after the answer, and the terminal is as it was before, for the command.
-async fn goes_on(out: &mut impl io::Write, keymap: &Keymap, ended: bool) -> Result<bool, String> {
+/// Without input to read, or told to end, it ends.
+async fn goes_on(
+    out: &mut impl io::Write,
+    (keymap, told): (&Keymap, &mut Told),
+    ended: bool,
+) -> Result<bool, String> {
     let key = |action| keymap.key(Context::Dialog, action).unwrap_or_default();
     let (resume, end) = (key(Action::Confirm), key(Action::Cancel));
     let keys = if ended {
@@ -139,26 +152,24 @@ async fn goes_on(out: &mut impl io::Write, keymap: &Keymap, ended: bool) -> Resu
     } else {
         fl!("command-stopped-keys", resume = resume, end = end)
     };
+    let Some(mut events) = told.events() else {
+        return Ok(false);
+    };
     end_line(out);
     print_mark(out, &fl!("command-stopped-mark"), &format!(" {keys}"));
     crossterm::terminal::enable_raw_mode().map_err(|error| error.to_string())?;
-    let mut events = EventStream::new();
     let mut keys = KeyState::default();
     let mut answer = None;
     while answer.is_none() {
-        let Some(Ok(event)) = events.next().await else {
+        let Some(key) = next_key(&mut events, told).await else {
             break;
         };
-        if let Event::Key(key) = event
-            && key.kind == KeyEventKind::Press
-        {
-            let place = (Mode::Normal, Context::Dialog);
-            for typed in keymap.feed(&mut keys, place, key, std::time::Instant::now()) {
-                match typed.resolved {
-                    Resolved::Action(Action::Confirm) => answer = Some(true),
-                    Resolved::Action(Action::Cancel) => answer = Some(false),
-                    _ => {}
-                }
+        let place = (Mode::Normal, Context::Dialog);
+        for typed in keymap.feed(&mut keys, place, key, std::time::Instant::now()) {
+            match typed.resolved {
+                Resolved::Action(Action::Confirm) => answer = Some(true),
+                Resolved::Action(Action::Cancel) => answer = Some(false),
+                _ => {}
             }
         }
     }
@@ -167,7 +178,6 @@ async fn goes_on(out: &mut impl io::Write, keymap: &Keymap, ended: bool) -> Resu
     let _ = crossterm::queue!(out, Print("\r"), Clear(ClearType::CurrentLine));
     let _ = out.flush();
     crossterm::terminal::disable_raw_mode().map_err(|error| error.to_string())?;
-    // Without input to read, it ends, rather than waits for a key that never comes.
     Ok(answer.unwrap_or(false))
 }
 
@@ -231,36 +241,99 @@ fn end_line(out: &mut impl io::Write) {
 }
 
 /// Waits for a key press; or for the end of the input, or an error, which the event loop meets
-/// again.
-pub(super) async fn wait_for_key(events: &mut EventStream) {
-    while let Some(Ok(event)) = events.next().await {
-        if let Event::Key(key) = event
-            && key.kind == KeyEventKind::Press
+/// again; or for Noon Commander to be told to end.
+pub(super) async fn wait_for_key(events: &mut EventStream, told: &mut Told) {
+    next_key(events, told).await;
+}
+
+/// Waits, while the terminal's screen shows, for a key that `keymap` binds to going back to
+/// the panels there, such as `g <` or Esc. Other keys do nothing.
+pub(super) async fn wait_to_go_back(events: &mut EventStream, keymap: &Keymap, told: &mut Told) {
+    let mut keys = KeyState::default();
+    while let Some(key) = next_key(events, told).await {
+        let now = std::time::Instant::now();
+        let place = (Mode::Normal, Context::UserScreen);
+        let typed = keymap.feed(&mut keys, place, key, now);
+        if typed
+            .iter()
+            .any(|typed| typed.resolved == Resolved::Action(Action::Cancel))
         {
             return;
         }
     }
 }
 
-/// Waits, while the terminal's screen shows, for a key that `keymap` binds to going back to
-/// the panels there, such as `g <` or Esc. Other keys do nothing.
-pub(super) async fn wait_to_go_back(events: &mut EventStream, keymap: &Keymap) {
-    let mut keys = KeyState::default();
-    while let Some(Ok(event)) = events.next().await {
-        if let Event::Key(key) = event
-            && key.kind == KeyEventKind::Press
-        {
-            let now = std::time::Instant::now();
-            let place = (Mode::Normal, Context::UserScreen);
-            let typed = keymap.feed(&mut keys, place, key, now);
-            if typed
-                .iter()
-                .any(|typed| typed.resolved == Resolved::Action(Action::Cancel))
-            {
-                return;
-            }
+/// The next key pressed; `None` once the input ends or fails, or Noon Commander is told to end.
+async fn next_key(events: &mut EventStream, told: &mut Told) -> Option<KeyEvent> {
+    loop {
+        tokio::select! {
+            event = events.next() => match event {
+                Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => return Some(key),
+                Some(Ok(_)) => {}
+                Some(Err(_)) | None => return None,
+            },
+            () = told.came() => return None,
         }
     }
+}
+
+/// SIGHUP, as when the terminal goes away, and SIGTERM, which end Noon Commander, heard while
+/// the terminal is handed over, where the event loop does not listen. A wait for a key ends
+/// with them, rather than wait for one from a terminal that is gone, while crossterm's reader
+/// spins at its end of input; the event loop then ends.
+pub(super) struct Told {
+    hangup: Option<Signal>,
+    terminate: Option<Signal>,
+    /// One of them came.
+    came: bool,
+}
+
+impl Told {
+    /// Listens from now on.
+    pub(super) fn listen() -> Self {
+        Self {
+            hangup: signal(SignalKind::hangup()).ok(),
+            terminate: signal(SignalKind::terminate()).ok(),
+            came: false,
+        }
+    }
+
+    /// Ends once either came; never, if neither can be heard.
+    async fn came(&mut self) {
+        let Self {
+            hangup,
+            terminate,
+            came,
+        } = self;
+        if !*came {
+            tokio::select! {
+                () = heard(hangup) => {}
+                () = heard(terminate) => {}
+            }
+            *came = true;
+        }
+    }
+
+    /// Whether either came.
+    pub(super) fn has_come(&mut self) -> bool {
+        self.came().now_or_never().is_some()
+    }
+
+    /// A new stream of events, unless either came: a terminal that went away leaves the reader
+    /// of the last stream spinning at the end of its input with the lock that a new one would
+    /// wait for, forever.
+    pub(super) fn events(&mut self) -> Option<EventStream> {
+        (!self.has_come()).then(EventStream::new)
+    }
+}
+
+async fn heard(signal: &mut Option<Signal>) {
+    if let Some(signal) = signal
+        && signal.recv().await.is_some()
+    {
+        return;
+    }
+    std::future::pending::<()>().await;
 }
 
 #[cfg(test)]
@@ -281,6 +354,16 @@ mod tests {
         print_mark(&mut out, "[exit 2]", "\r\n");
         let text = String::from_utf8(out).unwrap();
         assert_eq!(text, "\u{1b}[1m\u{1b}[38;5;9m[exit 2]\u{1b}[0m\r\n");
+    }
+
+    #[tokio::test]
+    async fn a_hangup_ends_a_wait_while_the_terminal_is_handed_over() {
+        let mut told = Told::listen();
+        let pid = rustix::process::getpid();
+        rustix::process::kill_process(pid, rustix::process::Signal::HUP).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), told.came())
+            .await
+            .expect("heard");
     }
 
     #[test]

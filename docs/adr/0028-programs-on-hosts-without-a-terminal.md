@@ -1,6 +1,6 @@
 # 0028. Programs on hosts without a terminal
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0054](0054-shell-run.md)
 - Date: 2026-10-15
 - Amends: [ADR 0019](0019-shell-command-line.md)
 
@@ -21,8 +21,9 @@ one string, so its words need quoting there.
   without a controlling terminal, and is killed when dropped. Without multiplexing it
   authenticates on its own, through the askpass bridge.
 - **The remote command** is `cd -- '<directory>' || exit`, then `exec` and the program and its
-  arguments, each quoted for a POSIX shell (`'` as `'\''`), so that nothing in them, such as the
-  text of a search, is read as shell syntax; the home directory needs no `cd`.
+  arguments, each quoted for a POSIX shell and for fish (`'` as `'\''`, `\` as `'\\'`, as ADR
+  0054 has it), so that nothing in them, such as the text of a search, is read as shell syntax;
+  the home directory needs no `cd`.
 - **Forced options** (`policy::EXEC_OPTIONS`): `PermitLocalCommand=no`, `RemoteCommand=none`,
   `RequestTTY=no`, `ControlMaster=no`; then `PROCESS_OPTIONS`; over a master `BatchMode=yes`, so
   that a master gone never makes ssh ask; and `session_options()`. The order of the command line

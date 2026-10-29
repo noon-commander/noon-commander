@@ -291,14 +291,16 @@ fn change_dir(dir: &[u8]) -> Vec<u8> {
     text
 }
 
-/// Appends `word` in single quotes for a POSIX shell, inside which only `'` is special.
+/// Appends `word` in single quotes, inside which a POSIX shell takes only `'` as special, and
+/// fish also `\` before `\` or `'`. Each of the two goes outside the quotes, after a `\`,
+/// which both read as the character itself: `'it'\''s'`, `'a'\\'b'`.
 fn push_quoted(text: &mut Vec<u8>, word: &[u8]) {
     text.push(b'\'');
     for &byte in word {
-        if byte == b'\'' {
-            text.extend_from_slice(b"'\\''");
-        } else {
-            text.push(byte);
+        match byte {
+            b'\'' => text.extend_from_slice(b"'\\''"),
+            b'\\' => text.extend_from_slice(b"'\\\\'"),
+            _ => text.push(byte),
         }
     }
     text.push(b'\'');
@@ -581,11 +583,14 @@ mod tests {
             OsString::new(),
             OsString::from("it's"),
             OsStr::from_bytes(b"caf\xe9").to_owned(),
+            // fish takes `\\` and `\'` inside single quotes for `\` and `'`.
+            OsString::from(r"a\\b\'c\"),
         ];
         assert_eq!(
             exec_command(b"/srv/it's here", "rg", &args).as_bytes(),
             b"cd -- '/srv/it'\\''s here' || exit\n\
-              exec 'rg' 'a b' '$HOME' '*' 'x\ny' '-x' '' 'it'\\''s' 'caf\xe9'"
+              exec 'rg' 'a b' '$HOME' '*' 'x\ny' '-x' '' 'it'\\''s' 'caf\xe9' \
+              'a'\\\\''\\\\'b'\\\\''\\''c'\\\\''"
         );
         assert_eq!(exec_command(b"", "rg", &[]), OsStr::new("exec 'rg'"));
     }

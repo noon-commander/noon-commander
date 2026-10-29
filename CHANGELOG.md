@@ -383,6 +383,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `f /` and `f f` on a host whose login shell is fish find a pattern with a `\` before a `'` or
+  at its end, which fish read as an escape inside single quotes, so that the search failed to
+  start.
 - The error after OK in a host's settings with an other panel directory that is not local
   starts with a capital letter, as every other error does.
 - A prompt whose translation put what is typed before the glyph of the search mode could

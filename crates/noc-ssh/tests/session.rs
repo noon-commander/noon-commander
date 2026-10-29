@@ -334,11 +334,11 @@ async fn spawns_a_program_without_a_terminal_and_reads_its_output() {
     // A word the shell expanded would print this name instead of `*`.
     std::fs::write(dir.join("file"), b"").unwrap();
     let session = fake.connect(&fake.settings).await.unwrap();
-    let args = os_args(&["%s|", "a b", "$HOME", "*", "-x", "it's"]);
+    let args = os_args(&["%s|", "a b", "$HOME", "*", "-x", "it's", r"a\\b\'c\"]);
     let child = session.spawn_in(b"it's here", "printf", &args).unwrap();
     let output = child.wait_with_output().await.unwrap();
     assert!(output.status.success(), "{output:?}");
-    assert_eq!(output.stdout, b"a b|$HOME|*|-x|it's|");
+    assert_eq!(output.stdout, br"a b|$HOME|*|-x|it's|a\\b\'c\|");
 
     let invocations = fake.invocations();
     let control_path = value_after(&invocations[0], "-S").unwrap();
@@ -356,7 +356,7 @@ async fn spawns_a_program_without_a_terminal_and_reads_its_output() {
         "--",
         "web",
         "cd -- 'it'\\''s here' || exit",
-        "exec 'printf' '%s|' 'a b' '$HOME' '*' '-x' 'it'\\''s'",
+        r"exec 'printf' '%s|' 'a b' '$HOME' '*' '-x' 'it'\''s' 'a'\\''\\'b'\\''\''c'\\''",
     ];
     assert!(ran.ends_with(&tail.map(String::from)), "{ran:?}");
 

@@ -1577,7 +1577,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   host's task builds the ssh command from its session (`Session::command_in`) and the event loop
   runs it with the terminal: over the master, with `cd -- '<dir>' || exit` and then `exec` and
   the words of the host's `run` in `hosts.toml`, else of `shell.run`, quoted but for each
-  variable, which the host's shell expands as `"$NAME"`, then the command quoted.
+  variable, which the host's shell expands as `"$NAME"`, then the command quoted, `'` and `\`
+  outside the quotes after a `\`, as POSIX shells and fish both read them.
   `tui/output.rs` shows the command after its
   prompt first, bold, and afterwards ends its output on a line of its own as zsh does (a dim `⏎`,
   spaces to the last column, `\r`, a cleared line); then a line in reverse video asks for a key,

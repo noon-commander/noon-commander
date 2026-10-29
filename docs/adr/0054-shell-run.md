@@ -2,7 +2,8 @@
 
 - Status: Accepted
 - Date: 2026-10-29
-- Amends: [ADR 0019](0019-shell-command-line.md)
+- Amends: [ADR 0019](0019-shell-command-line.md),
+  [ADR 0028](0028-programs-on-hosts-without-a-terminal.md)
 
 ## Context
 
@@ -45,9 +46,12 @@ shell stayed in Noon Commander's group, and Ctrl+z suspended both.
 - **On a host**, the host's shell expands them. The remote command is `cd -- '<directory>' ||
   exit`, as before, then on a line of its own `exec`, each word with its text in single quotes
   and each variable as `"$NAME"`, and the command in single quotes: `exec "$SHELL" '-i' '-c'
-  'make test'`. `"$NAME"` and `'…'\''…'` read the same in fish as in a POSIX shell; `${NAME}`
-  and `${NAME:-default}` do not, so neither is written. sshd always sets `SHELL`, so there is no
-  `/bin/sh` there.
+  'make test'`. A `'` or a `\` in the text goes outside the quotes after a `\`: `'it'\''s'`,
+  `'a'\\'b'`. A POSIX shell takes only `'` as special inside single quotes; fish, which may be
+  the login shell that reads the remote command, also takes `\\` and `\'` there, and quoting
+  a `\` as a `'` is quoted reads the same in both. The programs of ADR 0028 are quoted so too.
+  `"$NAME"` reads the same in fish as in a POSIX shell; `${NAME}` and `${NAME:-default}` do not,
+  so neither is written. sshd always sets `SHELL`, so there is no `/bin/sh` there.
 - **A host may have its own**: `run` in its table of `hosts.toml`, the same list, in place of
   `shell.run` there, for a server whose rc files are slow or print. F4 on the host edits it in a
   field that shows `shell.run`, faint, while it is empty; empty, `shell.run` counts.
@@ -89,6 +93,8 @@ shell stayed in Noon Commander's group, and Ctrl+z suspended both.
   Commander while a local command runs. A command that is stopped asks, or its shell says so.
 - A command on a host is not a job of Noon Commander's: ssh takes its keys in raw mode, and
   Ctrl+z and Ctrl+c go to the host's terminal, as before.
+- A login shell of fish reads remote commands with `\` in them as a POSIX shell does, which it
+  did not before, for the programs of ADR 0028 either.
 - The shell of the command line stays the one exception to ADR 0012's rule against starting
   programs through a shell, now named `shell.run`.
 - `noc-config`, `noc-ssh`, and `noc-tools` depend on `noc-vars`; `noc-tools` depends on `rustix`

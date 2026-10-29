@@ -1585,12 +1585,16 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   stopped by Ctrl+z gets `[stopped]` under its output, as a mark of a failure, and the keys of a
   dialog, which are read (`output::finish`): Enter continues it (`Running::resume`), Esc ends it
   with SIGHUP (`Running::end`), and after that kills it, `[stopped] Enter continue · Esc kill`,
-  if it went on. A `Running` dropped before it ends kills all of its group. On a host, the
+  if it went on. A `Running` dropped before it ends kills all of its group. What ends Noon
+  Commander while it runs goes on to it, as a shell passes SIGHUP on (`Running::pass_on`, from
+  `output::finish`): SIGHUP, or SIGTERM, then SIGCONT, to its group, which has a second to end
+  and is then let go (`Running::let_go`), not killed. On a host, the
   host's task builds the ssh command from its session (`Session::command_in`) and the event loop
   runs it with the terminal: over the master, with `cd -- '<dir>' || exit` and then `exec` and
   the words of the host's `run` in `hosts.toml`, else of `shell.run`, quoted but for each
   variable, which the host's shell expands as `"$NAME"`, then the command quoted, `'` and `\`
-  outside the quotes after a `\`, as POSIX shells and fish both read them.
+  outside the quotes after a `\`, as POSIX shells and fish both read them. What ends Noon
+  Commander goes on to that ssh, which ends the session, so that the host ends the command.
   `tui/output.rs` shows the command after its
   prompt first, bold, and afterwards ends its output on a line of its own as zsh does (a dim `⏎`,
   spaces to the last column, `\r`, a cleared line); then a line in reverse video asks for a key,

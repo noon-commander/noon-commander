@@ -16,8 +16,10 @@ add false positives to `typos.toml`, with a comment if the reason is not obvious
   `git` for `noc debug version`.
 - Sole shell exception: the command line's `shell.run` (`$SHELL -i -c`), whose command is the
   user's (ADR 0019, ADR 0054).
-- Sole exception to kill on drop: the opener of `g x` (`open`, `xdg-open`), detached, output to
-  `/dev/null`; it takes an absolute path without `--`, which `xdg-open` refuses (ADR 0026).
+- Exceptions to kill on drop: the opener of `g x` (`open`, `xdg-open`), detached, output to
+  `/dev/null`; it takes an absolute path without `--`, which `xdg-open` refuses (ADR 0026). And a
+  command of the command line or the editor that runs on after the SIGHUP or SIGTERM that ends
+  Noon Commander, which is let go, as a shell leaves it (ADR 0054).
 - User-supplied ssh arguments must pass the validator (ADR 0004). Unknown flags are errors.
 - Never pass `StrictHostKeyChecking=no`. Never write to `~/.ssh/`.
 - Clipboard: write through OSC 52 only. Never read it. Never call `pbcopy`/`xclip` (ADR 0008).

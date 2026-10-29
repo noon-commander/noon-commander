@@ -384,6 +384,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Killing Noon Commander (SIGHUP, SIGTERM) or closing its terminal while a command of the command
+  line or the editor runs ends that command too, as a shell ends its jobs, rather than leave Noon
+  Commander waiting for it: the command gets SIGHUP, or SIGTERM, and a second to end, and one
+  that ignores it runs on, as under `nohup`. A command on a host ends with its ssh.
 - Noon Commander ends when its terminal goes away, rather than stay behind at full CPU, also
   while a command of the command line, its output (`g <`), or the editor has the terminal, and
   when no SIGHUP comes, as when the shell it runs in ignores it: crossterm's reader spins at the

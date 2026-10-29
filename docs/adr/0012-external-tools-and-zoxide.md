@@ -1,6 +1,7 @@
 # 0012. External tools in noc-tools, and zoxide
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0026](0026-open-externally.md),
+  [ADR 0054](0054-shell-run.md)
 - Date: 2026-10-03
 
 ## Context

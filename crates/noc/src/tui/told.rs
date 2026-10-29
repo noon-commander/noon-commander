@@ -12,18 +12,19 @@ use crossterm::event::EventStream;
 use futures_util::FutureExt as _;
 use mio::unix::SourceFd;
 use mio::{Events, Interest, Poll, Token};
+use noc_tools::job::Ending;
 use tokio::signal::unix::{Signal, SignalKind, signal};
 use tokio::sync::watch;
 
 /// Listens for what ends Noon Commander, both in the event loop and while the terminal is handed
-/// over, where the waits for a key end with it.
+/// over, where the waits for a key end with it, and a program that runs hears it.
 pub(super) struct Told {
     hangup: Option<Signal>,
     terminate: Option<Signal>,
     /// Says when the terminal went away, if stdin is the terminal.
     terminal: Option<watch::Receiver<bool>>,
-    /// One of them came.
-    came: bool,
+    /// What came first.
+    came: Option<Ending>,
 }
 
 impl Told {
@@ -37,26 +38,29 @@ impl Told {
             hangup: signal(SignalKind::hangup()).ok(),
             terminate: signal(SignalKind::terminate()).ok(),
             terminal: terminal.and_then(Result::ok).and_then(watch_end),
-            came: false,
+            came: None,
         }
     }
 
-    /// Ends once one of them came; never, if none can be heard.
-    pub(super) async fn came(&mut self) {
+    /// What came, once one of them came; never, if none can be heard. A terminal that went away
+    /// is a hangup, as the kernel tells the leader of its session.
+    pub(super) async fn came(&mut self) -> Ending {
         let Self {
             hangup,
             terminate,
             terminal,
             came,
         } = self;
-        if !*came {
-            tokio::select! {
-                () = heard(hangup) => {}
-                () = heard(terminate) => {}
-                () = gone(terminal) => {}
-            }
-            *came = true;
+        if let Some(ending) = came {
+            return *ending;
         }
+        let ending = tokio::select! {
+            () = heard(hangup) => Ending::Hangup,
+            () = heard(terminate) => Ending::Terminate,
+            () = gone(terminal) => Ending::Hangup,
+        };
+        *came = Some(ending);
+        ending
     }
 
     /// Whether one of them came.
@@ -140,13 +144,12 @@ mod tests {
             hangup: signal(SignalKind::hangup()).ok(),
             terminate: None,
             terminal: None,
-            came: false,
+            came: None,
         };
         let pid = rustix::process::getpid();
         rustix::process::kill_process(pid, rustix::process::Signal::HUP).unwrap();
-        tokio::time::timeout(Duration::from_secs(5), told.came())
-            .await
-            .expect("heard");
+        let came = tokio::time::timeout(Duration::from_secs(5), told.came()).await;
+        assert_eq!(came, Ok(Ending::Hangup));
         assert!(told.has_come());
         assert!(told.events().is_none());
     }
@@ -159,16 +162,15 @@ mod tests {
             hangup: None,
             terminate: None,
             terminal: watch_end(OwnedFd::from(ours)),
-            came: false,
+            came: None,
         };
         other_end.write_all(b"x").unwrap();
         let keys = tokio::time::timeout(Duration::from_millis(200), told.came()).await;
         assert!(keys.is_err(), "a key ended it");
         assert!(!told.has_come());
         drop(other_end);
-        tokio::time::timeout(Duration::from_secs(5), told.came())
-            .await
-            .expect("gone");
+        let came = tokio::time::timeout(Duration::from_secs(5), told.came()).await;
+        assert_eq!(came, Ok(Ending::Hangup));
         assert!(told.has_come());
     }
 }

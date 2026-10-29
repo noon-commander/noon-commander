@@ -5,6 +5,7 @@
 use std::io::{self, Write as _};
 use std::os::unix::process::ExitStatusExt as _;
 use std::process::ExitStatus;
+use std::time::Duration;
 
 use crossterm::event::{Event, EventStream, KeyEvent, KeyEventKind};
 use crossterm::style::{Attribute, Color, Print, SetAttribute, SetForegroundColor};
@@ -12,8 +13,10 @@ use crossterm::terminal::{Clear, ClearType};
 use futures_util::StreamExt as _;
 use noc_config::Pause;
 use noc_tools::ToolError;
-use noc_tools::job::{Running, Waited};
+use noc_tools::job::{Ending, Running, Waited};
 use noc_tools::shell::Shell;
+use rustix::process;
+use tokio::process::Child;
 
 use super::command::{Place, Run};
 use super::glyphs;
@@ -65,13 +68,26 @@ pub(super) async fn run_command(
         Place::Remote { handle, dir } => {
             let mut ssh = tasks::remote_command(&handle, dir, shell, command).await?;
             let program = ssh.as_std().get_program().to_string_lossy().into_owned();
-            ssh.status().await.map_err(|error| {
+            let cannot_run = |error: io::Error| {
                 let reason = error.to_string();
-                fl!("command-error", program = program, reason = reason)
-            })?
+                fl!("command-error", program = program.clone(), reason = reason)
+            };
+            let mut ssh = ssh.spawn().map_err(cannot_run)?;
+            tokio::select! {
+                biased;
+                ending = told.came() => pass_on_to_ssh(&mut ssh, ending).await,
+                status = ssh.wait() => Some(status.map_err(cannot_run)?),
+            }
         }
     };
     end_line(&mut out);
+    // One that did not end in time, let go, or ssh, killed, shows nothing more.
+    let Some(status) = status else {
+        return Ok(Ran {
+            waits: false,
+            mark: None,
+        });
+    };
     let (ending, mark) = if let Some(code) = status.code().filter(|&code| code != 0) {
         (
             Some(fl!("command-exit-code", code = code)),
@@ -85,11 +101,13 @@ pub(super) async fn run_command(
     } else {
         (None, None)
     };
-    let waits = match pause {
-        Pause::Always => true,
-        Pause::OnError => mark.is_some(),
-        Pause::Never => false,
-    };
+    // Told to end, Noon Commander ends, and nothing waits for a key.
+    let waits = !told.has_come()
+        && match pause {
+            Pause::Always => true,
+            Pause::OnError => mark.is_some(),
+            Pause::Never => false,
+        };
     if waits {
         let press = fl!("command-press-key");
         let text = ending.map_or(press.clone(), |ending| format!("{ending} {press}"));
@@ -107,32 +125,76 @@ pub(super) async fn run_command(
     Ok(Ran { waits, mark })
 }
 
+/// How long a program that was told to end, as Noon Commander was, has to end before Noon
+/// Commander ends: its last output, and how it puts the terminal back, come before Noon
+/// Commander's own.
+const LAST_WORDS: Duration = Duration::from_secs(1);
+
 /// Waits for `running`, a command of the command line or the editor of F4, to end, and asks
-/// what next each time it is stopped, as by Ctrl+z. `cannot` says why it could not be waited
-/// for.
+/// what next each time it is stopped, as by Ctrl+z. What ends Noon Commander meanwhile goes on
+/// to it, as a shell passes SIGHUP on to its jobs; one that goes on after a while is let go,
+/// and its status is `None`. `cannot` says why it could not be waited for.
 pub(super) async fn finish(
     running: &mut Running,
     (keymap, told): (&Keymap, &mut Told),
     cannot: impl Fn(ToolError) -> String,
-) -> Result<ExitStatus, String> {
+) -> Result<Option<ExitStatus>, String> {
     let mut out = io::stdout();
     loop {
-        match running.wait().await.map_err(&cannot)? {
-            Waited::Ended(status) => return Ok(status),
-            // With no terminal to ask in, or told to end, it ends.
-            Waited::Stopped if told.has_come() => {
-                let _ = running.end();
-            }
+        let waited = tokio::select! {
+            biased;
+            ending = told.came() => return Ok(pass_on(running, ending).await),
+            waited = running.wait() => waited.map_err(&cannot)?,
+        };
+        match waited {
+            Waited::Ended(status) => return Ok(Some(status)),
             Waited::Stopped => {
+                let goes_on = goes_on(&mut out, (keymap, told), running.has_ended()).await?;
+                // Told to end meanwhile, it hears so next.
+                if told.has_come() {
+                    continue;
+                }
                 // One that cannot go on ends, rather than stays stopped while it waits.
-                if !(goes_on(&mut out, (keymap, told), running.has_ended()).await?
-                    && running.resume().is_ok())
-                {
+                if !(goes_on && running.resume().is_ok()) {
                     let _ = running.end();
                 }
             }
         }
     }
+}
+
+/// Passes `ending` on to `running` and gives it a while to end; one that goes on is let go, as a
+/// shell that ends leaves a job that took no SIGHUP, rather than killed.
+async fn pass_on(running: &mut Running, ending: Ending) -> Option<ExitStatus> {
+    let _ = running.pass_on(ending);
+    let ended = async {
+        loop {
+            match running.wait().await {
+                Ok(Waited::Ended(status)) => return Some(status),
+                Ok(Waited::Stopped) => {}
+                Err(_) => return None,
+            }
+        }
+    };
+    let status = tokio::time::timeout(LAST_WORDS, ended).await.ok().flatten();
+    if status.is_none() {
+        running.let_go();
+    }
+    status
+}
+
+/// Passes `ending` on to `ssh`, which ends its session then, so that the host ends the command
+/// there, and gives it a while to end; then it is killed.
+async fn pass_on_to_ssh(ssh: &mut Child, ending: Ending) -> Option<ExitStatus> {
+    if let Some(pid) = ssh
+        .id()
+        .and_then(|id| i32::try_from(id).ok())
+        .and_then(process::Pid::from_raw)
+    {
+        let _ = process::kill_process(pid, ending.signal());
+    }
+    let status = tokio::time::timeout(LAST_WORDS, ssh.wait()).await;
+    status.ok().and_then(Result::ok)
 }
 
 /// Asks whether a command that was stopped, as by Ctrl+z, goes on or ends: on a line of its
@@ -272,7 +334,7 @@ async fn next_key(events: &mut EventStream, told: &mut Told) -> Option<KeyEvent>
                 Some(Ok(_)) => {}
                 Some(Err(_)) | None => return None,
             },
-            () = told.came() => return None,
+            _ = told.came() => return None,
         }
     }
 }

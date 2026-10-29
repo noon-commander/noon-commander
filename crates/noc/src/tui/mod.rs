@@ -364,7 +364,7 @@ pub(crate) async fn run(
             // A window growing or shrinking, a spinner, or a clock needs its next frame.
             () = sleep_until(frame_due) => {}
             () = sleep_until(spin_due) => {}
-            () = told.came() => break Ok(()),
+            _ = told.came() => break Ok(()),
             _ = interrupt.recv() => break Ok(()),
         }
     };

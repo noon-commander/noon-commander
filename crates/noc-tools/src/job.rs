@@ -1,6 +1,7 @@
 //! A program that runs with the terminal handed over, as a shell runs a job (ADR 0054): in a
 //! process group of its own, which gets the terminal, so that Ctrl+c and Ctrl+z reach it alone,
-//! with the terminal taken back when it ends or is stopped.
+//! with the terminal taken back when it ends or is stopped. What ends Noon Commander meanwhile
+//! is passed on to it, as a shell passes SIGHUP on to its jobs.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -8,7 +9,8 @@ use std::process::ExitStatus;
 
 use nix::sys::signal::{SigSet, SigmaskHow, Signal, pthread_sigmask};
 use rustix::process::{
-    Pid, Signal as ProcessSignal, WaitId, WaitIdOptions, getpgrp, kill_process_group, waitid,
+    Pid, Signal as ProcessSignal, WaitId, WaitIdOptions, getpgrp, kill_process, kill_process_group,
+    waitid,
 };
 use tokio::process::{Child, Command};
 use tokio::signal::unix::{SignalKind, signal};
@@ -18,7 +20,8 @@ use crate::ToolError;
 /// Starts `command`, which runs `program`, with this process's terminal, which the caller has
 /// handed over. Where this process's group has the terminal, it runs as a job: in a process
 /// group of its own, which gets the terminal. Without the terminal, it runs in this process's
-/// group. Either way it is killed when the [`Running`] is dropped before it ends.
+/// group. Either way it is killed when the [`Running`] is dropped before it ends, unless it was
+/// let go.
 pub(crate) fn start(mut command: Command, program: &Path) -> Result<Running, ToolError> {
     let spawn_error = |source| ToolError::Spawn {
         program: program.to_path_buf(),
@@ -28,7 +31,6 @@ pub(crate) fn start(mut command: Command, program: &Path) -> Result<Running, Too
     let child_signals = in_foreground()
         .then(|| signal(SignalKind::child()).ok())
         .flatten();
-    command.kill_on_drop(true);
     if child_signals.is_some() {
         command.process_group(0);
     }
@@ -55,6 +57,7 @@ pub(crate) fn start(mut command: Command, program: &Path) -> Result<Running, Too
         child,
         program: program.to_path_buf(),
         job,
+        released: false,
     })
 }
 
@@ -66,6 +69,27 @@ pub struct Running {
     program: PathBuf,
     /// Where it runs as a job: in a group of its own with the terminal.
     job: Option<Job>,
+    /// [`Running::let_go`] let it go on when dropped.
+    released: bool,
+}
+
+/// What ends Noon Commander, passed on to a program that runs ([`Running::pass_on`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ending {
+    /// SIGHUP, which also stands for a terminal that went away, as the kernel sends it then.
+    Hangup,
+    /// SIGTERM.
+    Terminate,
+}
+
+impl Ending {
+    /// The signal it goes on as.
+    pub fn signal(self) -> ProcessSignal {
+        match self {
+            Self::Hangup => ProcessSignal::HUP,
+            Self::Terminate => ProcessSignal::TERM,
+        }
+    }
 }
 
 /// How a program that [`Running::wait`] waited for is.
@@ -86,6 +110,7 @@ impl Running {
             child,
             program,
             job,
+            ..
         } = self;
         let wait_error = |source| ToolError::Spawn {
             program: program.clone(),
@@ -142,14 +167,42 @@ impl Running {
         let Some(job) = &mut self.job else {
             return Ok(());
         };
-        let group = job.pid;
         if job.ended {
-            return Ok(kill_process_group(group, ProcessSignal::KILL)?);
+            return Ok(kill_process_group(job.pid, ProcessSignal::KILL)?);
         }
         job.ended = true;
-        let _ = set_foreground(group);
-        kill_process_group(group, ProcessSignal::HUP)?;
-        Ok(kill_process_group(group, ProcessSignal::CONT)?)
+        job.tell(ProcessSignal::HUP)
+    }
+
+    /// Passes on to the program, while it runs or is stopped, what ends Noon Commander, as a
+    /// shell passes SIGHUP on to its jobs: the signal of `ending`, then SIGCONT, so that a
+    /// stopped one hears it; where it runs as a job, to all of its group, with the terminal, so
+    /// that it can put the terminal back as it was. One that goes on after that may be let go.
+    pub fn pass_on(&mut self, ending: Ending) -> io::Result<()> {
+        if let Some(job) = &self.job {
+            return job.tell(ending.signal());
+        }
+        let Some(pid) = self
+            .child
+            .id()
+            .and_then(|id| i32::try_from(id).ok())
+            .and_then(Pid::from_raw)
+        else {
+            // It ended.
+            return Ok(());
+        };
+        kill_process(pid, ending.signal())?;
+        Ok(kill_process(pid, ProcessSignal::CONT)?)
+    }
+
+    /// Lets the program go on once the `Running` is dropped, rather than kill it, as a shell
+    /// that ends leaves a job that took no SIGHUP, and takes the terminal back for this
+    /// process's group, where it runs as a job.
+    pub fn let_go(&mut self) {
+        self.released = true;
+        if self.job.is_some() {
+            let _ = set_foreground(getpgrp());
+        }
     }
 
     /// Whether [`end`](Self::end) has asked it to end, so that the next one kills it.
@@ -163,19 +216,23 @@ impl Running {
 }
 
 impl Drop for Running {
-    /// One that has not ended goes with all of its group, which `kill_on_drop` alone would
-    /// leave, and the terminal comes back. Jobs that a shell moved to groups of their own are
-    /// out of reach: stopped ones end once their group is left without a parent in it, as the
-    /// kernel ends such groups; running ones go on, as with `nohup`.
+    /// One that has not ended, and was not let go, is killed: with all of its group, where it
+    /// runs as a job, and the terminal comes back. Jobs that a shell moved to groups of their
+    /// own are out of reach: stopped ones end once their group is left without a parent in it,
+    /// as the kernel ends such groups; running ones go on, as with `nohup`.
     fn drop(&mut self) {
-        let Some(job) = &self.job else {
-            return;
-        };
-        if matches!(self.child.try_wait(), Ok(Some(_))) {
+        if self.released || matches!(self.child.try_wait(), Ok(Some(_))) {
             return;
         }
-        let _ = kill_process_group(job.pid, ProcessSignal::KILL);
-        let _ = set_foreground(getpgrp());
+        match &self.job {
+            Some(job) => {
+                let _ = kill_process_group(job.pid, ProcessSignal::KILL);
+                let _ = set_foreground(getpgrp());
+            }
+            None => {
+                let _ = self.child.start_kill();
+            }
+        }
     }
 }
 
@@ -190,6 +247,13 @@ struct Job {
 }
 
 impl Job {
+    /// Sends `signal`, then SIGCONT, to its group, with the terminal.
+    fn tell(&self, signal: ProcessSignal) -> io::Result<()> {
+        let _ = set_foreground(self.pid);
+        kill_process_group(self.pid, signal)?;
+        Ok(kill_process_group(self.pid, ProcessSignal::CONT)?)
+    }
+
     /// Gives its group the terminal and continues it, if it was stopped.
     fn to_foreground(&self) -> io::Result<()> {
         set_foreground(self.pid)?;
@@ -262,6 +326,11 @@ mod tests {
             .unwrap();
         let stat = String::from_utf8_lossy(&out.stdout);
         !stat.trim().is_empty() && !stat.trim().starts_with('Z')
+    }
+
+    fn kill(pid: &str) {
+        let pid = Pid::from_raw(pid.parse().unwrap()).unwrap();
+        kill_process(pid, ProcessSignal::KILL).unwrap();
     }
 
     /// The text of `path` once it has some, or after five seconds.
@@ -378,6 +447,80 @@ mod tests {
         assert!(!both.iter().any(|pid| alive(pid)), "both went");
         assert!(in_foreground());
         println!("DROPPED: ALL OF ITS GROUP GOES");
+
+        told(dir.path(), &sh).await;
+    }
+
+    /// The parts of [`in_a_terminal_of_its_own`] about what ends Noon Commander while it runs.
+    async fn told(dir: &Path, sh: &Shell) {
+        // What ends Noon Commander goes to all of its group: to `sleep`, which ends, and to the
+        // shell, which hears it.
+        let (ready, out) = (dir.join("ready"), dir.join("out"));
+        let hears = "trap 'echo hup > out; exit 3' HUP; trap 'echo term > out; exit 4' TERM; \
+                     echo ready > ready; while :; do sleep 1; done";
+        for (ending, code, heard) in [
+            (Ending::Hangup, 3, "hup\n"),
+            (Ending::Terminate, 4, "term\n"),
+        ] {
+            let _ = std::fs::remove_file(&ready);
+            let mut running = sh.start(dir, hears).unwrap();
+            assert_eq!(text_of(&ready).await, "ready\n");
+            running.pass_on(ending).unwrap();
+            assert_eq!(ended(&mut running).await.code(), Some(code));
+            assert_eq!(std::fs::read_to_string(&out).unwrap(), heard);
+            assert!(in_foreground());
+        }
+        println!("TOLD WHILE IT RUNS: PASSED ON");
+
+        // One that takes no SIGHUP goes on, and let go, it goes on without the terminal.
+        let pid = dir.join("pid");
+        let deaf = "trap '' HUP; echo $$ > pid; exec sleep 30";
+        let mut running = sh.start(dir, deaf).unwrap();
+        let pid = text_of(&pid).await.trim().to_owned();
+        running.pass_on(Ending::Hangup).unwrap();
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(alive(&pid), "it took no SIGHUP");
+        running.let_go();
+        drop(running);
+        assert!(in_foreground(), "the terminal is back");
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(alive(&pid), "it goes on");
+        kill(&pid);
+        println!("LET GO: GOES ON");
+    }
+
+    #[tokio::test]
+    async fn what_ends_noon_commander_is_passed_on() {
+        let dir = tempfile::tempdir().unwrap();
+        let sh = shell(&["/bin/sh", "-c"]);
+        let hears = "trap 'exit 4' TERM; echo ready > ready; while :; do sleep 1; done";
+        let mut running = sh.start(dir.path(), hears).unwrap();
+        assert_eq!(text_of(&dir.path().join("ready")).await, "ready\n");
+        running.pass_on(Ending::Terminate).unwrap();
+        assert_eq!(ended(&mut running).await.code(), Some(4));
+    }
+
+    #[tokio::test]
+    async fn dropped_it_is_killed_unless_let_go() {
+        let dir = tempfile::tempdir().unwrap();
+        let sh = shell(&["/bin/sh", "-c"]);
+        let pid = dir.path().join("pid");
+        for let_go in [false, true] {
+            let _ = std::fs::remove_file(&pid);
+            let mut running = sh
+                .start(dir.path(), "echo $$ > pid; exec sleep 30")
+                .unwrap();
+            let pid = text_of(&pid).await.trim().to_owned();
+            if let_go {
+                running.let_go();
+            }
+            drop(running);
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            assert_eq!(alive(&pid), let_go, "let go: {let_go}");
+            if let_go {
+                kill(&pid);
+            }
+        }
     }
 
     #[test]
@@ -399,6 +542,8 @@ mod tests {
             "DEAF TO SIGHUP: KILLED",
             "EDITOR: A JOB",
             "DROPPED: ALL OF ITS GROUP GOES",
+            "TOLD WHILE IT RUNS: PASSED ON",
+            "LET GO: GOES ON",
         ] {
             assert!(text.contains(line), "{line}: {text}");
         }

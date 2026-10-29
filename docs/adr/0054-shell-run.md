@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-29
-- Amends: [ADR 0019](0019-shell-command-line.md),
+- Amends: [ADR 0012](0012-external-tools-and-zoxide.md), [ADR 0019](0019-shell-command-line.md),
   [ADR 0028](0028-programs-on-hosts-without-a-terminal.md)
 
 ## Context
@@ -82,6 +82,19 @@ shell stayed in Noon Commander's group, and Ctrl+z suspended both.
   it fails with signal 1, or 9, as any command ended by a signal. The editor of F4 asks so
   too. A command that bash or zsh runs as a job of its own is theirs to stop: they say it is
   suspended and go on, or end.
+- **What ends Noon Commander while a command runs goes on to it**, as a shell passes SIGHUP on
+  to its jobs (`Running::pass_on`): SIGHUP, and the terminal going away, as SIGHUP; SIGTERM as
+  SIGTERM; then SIGCONT, so that a stopped one hears it; to all of its group, with the terminal.
+  Its group is its own, so the SIGHUP that bash or zsh sends to Noon Commander's group, as to
+  any job of theirs, misses it, and only the kernel's SIGHUP to the terminal's foreground group,
+  when the leader of the session ends, reached it; Noon Commander waited for it to end on its
+  own, which `tail -f` or a server never does. It has a second to end, so that its last output
+  and how it puts the terminal back come before Noon Commander's own. One that goes on, as
+  under `nohup`, or a server that reads its settings again on SIGHUP, is let go rather than
+  killed (`Running::let_go`), as a shell that ends leaves a job that took no SIGHUP; Noon
+  Commander takes the terminal back and ends. The editor of F4 hears it so too. A command on a
+  host hears it through its ssh, which takes SIGHUP and SIGTERM alike: it ends the session, so
+  that the host ends the command, and is killed after that second.
 - **Text fields of dialogs show a placeholder**: faint text while the field is empty, which is
   never its value, in the style of the hints of settings. The field of `run` is the first.
 - **The variables are read by a crate of their own, `noc-vars`**, which depends on no other
@@ -110,5 +123,9 @@ shell stayed in Noon Commander's group, and Ctrl+z suspended both.
   did not before, for the programs of ADR 0028 either.
 - The shell of the command line stays the one exception to ADR 0012's rule against starting
   programs through a shell, now named `shell.run`.
+- A command that is let go is the second exception to ADR 0012's rule that a program is killed
+  when dropped, after the opener of ADR 0026. Killing Noon Commander or closing its terminal no
+  longer leaves it waiting for a command that runs on, and a command that ignores the signal
+  runs on without it.
 - `noc-config`, `noc-ssh`, and `noc-tools` depend on `noc-vars`; `noc-tools` depends on `rustix`
   and, for the signal mask alone, on `nix`, with its `signal` feature only.

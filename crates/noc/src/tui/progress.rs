@@ -69,7 +69,8 @@ const ETA_SETTLE: usize = 3;
 /// this many times the shortest.
 const ETA_AGREE: f64 = 1.25;
 
-/// The time left shows after this much work, whether or not its forecasts agree.
+/// The time left shows after this much work since the job first reported, or reported again
+/// after counting, whether or not its forecasts agree.
 const ETA_SETTLE_MAX: Duration = ETA_HORIZON;
 
 /// A report made this much before the speed and the time left of a second were worked out
@@ -379,6 +380,8 @@ impl Sums {
 /// files left take longer than their bytes say.
 #[derive(Debug, Default)]
 struct Forecast {
+    /// When the job first reported, in the time it worked.
+    began: Option<Duration>,
     /// Where the last stretch of the pace ended.
     last: Option<Point>,
     /// Where the job was when it last had done more entries.
@@ -429,6 +432,7 @@ impl Forecast {
         }
         // A job's first report comes as it starts its first entry.
         point.starts = self.seen.is_none() || counts.done > self.entries;
+        self.began.get_or_insert(at);
         self.seen = Some(at);
         self.entries = counts.done;
         point.at = at.saturating_sub(self.still);
@@ -485,6 +489,12 @@ impl Forecast {
         self.settling.rotate_left(1);
         self.settling[ETA_SETTLE - 1] = Some((at, left));
         self.settled = agree(&self.settling, at);
+    }
+
+    /// Whether the time left shows at `at`: its forecasts have agreed, or the job has worked
+    /// [`ETA_SETTLE_MAX`] since its first report.
+    fn shows(&self, at: Duration) -> bool {
+        self.settled || self.began.is_some_and(|began| at >= began + ETA_SETTLE_MAX)
     }
 
     /// Whether the entries left, with `counts` behind the job, are on average more than
@@ -793,7 +803,14 @@ impl JobView {
         self.stage = Stage::Waiting;
     }
 
+    /// The job counts what to do, `items` so far. Counting after some work, as a move does
+    /// before it copies what it could not rename, is no work of what follows, which has totals
+    /// of its own: the speed and the time left start over.
     pub(crate) fn scanning(&mut self, items: u64) {
+        if matches!(self.stage, Stage::Working { .. }) {
+            self.samples = Samples::default();
+            self.forecast = Forecast::default();
+        }
         self.stage = Stage::Scanning { items };
     }
 
@@ -941,21 +958,24 @@ impl JobView {
 
     /// The speed and the time left after `elapsed` of work, in its `second`, with `counts`
     /// behind it. The time left is unknown until its forecasts have agreed, or the job has worked
-    /// [`ETA_SETTLE_MAX`]. It counts down from that of an earlier second, the one it counted down
-    /// from if worked out again within the same second.
+    /// [`ETA_SETTLE_MAX`] since its first report ([`Forecast::shows`]). It counts down from that
+    /// of an earlier second, the one it counted down from if worked out again within the same
+    /// second.
     fn measure(&self, counts: &Counts, elapsed: Duration, second: u64) -> Held {
         let before = match self.held.get() {
             Some(held) if held.second == second => held.before,
             Some(held) => held.left.map(|left| (held.second, left)),
             None => None,
         };
-        let (speed, left) = if counts.bytes_total > 0 && elapsed >= SETTLED {
+        // Since the job first reported, or reported again after counting.
+        let worked = elapsed.saturating_sub(self.forecast.began.unwrap_or_default());
+        let (speed, left) = if counts.bytes_total > 0 && worked >= SETTLED {
             let speed = self.samples.speed(elapsed, counts.bytes_copied);
-            let settled = self.forecast.settled || elapsed >= ETA_SETTLE_MAX;
+            let shows = self.forecast.shows(elapsed);
             let left = self
                 .forecast
                 .left(elapsed, counts)
-                .filter(|_| settled)
+                .filter(|_| shows)
                 .map(|forecast| count_down(before, second, forecast));
             (speed, left)
         } else {
@@ -2347,6 +2367,36 @@ mod tests {
             (left - even).abs() < even * 0.02,
             "{left} for {even}, {pace} before"
         );
+    }
+
+    #[test]
+    fn counting_after_some_work_starts_the_time_left_over() {
+        // A move renames 400 entries in 40 seconds, then counts for four seconds what it could
+        // not rename: a directory of 1,000 files of 64 KiB, which it copies at 10 MiB a second,
+        // each opened in a twentieth of a second.
+        let speed = 10 * MIB;
+        let mut run = Run::new(401, 0);
+        for _ in 0..400 {
+            run.at += 0.1;
+            run.counts.done += 1;
+            run.report();
+        }
+        run.view.scanning(1_001);
+        run.at += 4.0;
+        run.counts.total = 400 + 1_001;
+        run.counts.bytes_total = 1_000 * 64 * 1024;
+        run.file(0, speed, (0.01, 0.0));
+        // Its forecasts have to agree first, however long the renames took.
+        let timing = run.view.timing(run.now()).unwrap();
+        assert_eq!((timing.speed, timing.left), (None, None));
+        for _ in 0..50 {
+            run.file(64 * 1024, speed, (0.05, 0.005));
+        }
+        run.report();
+        // Neither the renames nor the counting are the pace of the copy.
+        let truth = 950.0 * (0.05 + 64.0 * 1024.0 / float(speed) + 0.005);
+        let left = run.left();
+        assert!((left - truth).abs() < truth * 0.05, "{left} for {truth}");
     }
 
     #[test]

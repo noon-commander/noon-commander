@@ -84,7 +84,14 @@ are those after the review.
   upload of a tree. So the time left is unknown until the last three forecasts, a second of work
   apart at least, agree: each less the time since it was made, the longest is at most a quarter
   longer than the shortest (`ETA_SETTLE`, `ETA_AGREE`). A forecast that is right agrees within
-  three seconds. After half a minute of work it shows whether or not they do (`ETA_SETTLE_MAX`).
+  three seconds. Half a minute of work after the first report it shows whether or not they do
+  (`ETA_SETTLE_MAX`).
+- **Counting after some work starts over.** A move renames what it can, then counts what it
+  could not and copies that, with totals of its own. The renames tell nothing of the pace of the
+  copy, and the time of the counting, under the five seconds of a stall, went into it as work
+  that did nothing. So when a job counts after it has worked, the speed and the time left start
+  over, as at the start of a job: a second of work before the speed, and forecasts that agree
+  before the time left.
 - **The time left shown follows the end the forecast says, smoothed** (`count_down`). The time at
   which the forecast says the job ends is smoothed, each second taking 9% of the time left as long
   to follow, from a second to half a minute (`ETA_SMOOTH`, `ETA_SMOOTH_MAX`). A forecast that is
@@ -206,6 +213,8 @@ are those after the review.
   forecast as it was; now it counts on from `1:19`. A test checks it.
 - Opening a file again after Retry, which comes with no report, counted as data streaming and
   made a byte cost 47% more; now it is within 2%. A test checks it.
+- A move of 1,000 files after 40 seconds of renames and 4 of counting showed a time left 77% too
+  long, and at once; now it is within 5%, once its forecasts agree. A test checks it.
 - The model is two costs and a pace: a link that is fast for big files and slow to open each
   one is right; one whose pace changes with the size of the files in other ways is not.
 - What a job does without reports is not in the work left: the time left shows `0:00`, then

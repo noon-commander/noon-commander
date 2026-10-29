@@ -480,6 +480,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   from `1:19` to `1:24`, rather than go on counting down.
 - After Retry, opening the file again no longer counts as the time of its data, which made the
   bytes left look half as costly again.
+- A move that renames some entries and copies the others starts its speed and time left over
+  once it has counted what it copies: the time of the renames and of the counting made the time
+  left of the copy three quarters too long, and it showed at once rather than once its forecasts
+  agreed.
 
 ## [0.2.0] - 2026-10-14
 

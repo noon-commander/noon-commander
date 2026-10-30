@@ -281,8 +281,16 @@ pub(crate) async fn run(
     let restore = Restore::default();
     let mut terminal = ratatui::try_init()?;
     release_mouse_on_panic();
+    // A terminal that goes away before it answers leaves the reader that waits for the answer
+    // spinning at the end of its input, for good (crossterm-rs/crossterm#793); it is left
+    // behind, and `main` does not wait for it.
+    let modes = tokio::select! {
+        modes = Modes::start(&restore) => modes?,
+        _ = told.came() => return Ok(()),
+        _ = interrupt.recv() => return Ok(()),
+    };
     let mut asked = Asked {
-        modes: Modes::start(&restore).await?,
+        modes,
         ..Asked::default()
     };
     let mut events = EventStream::new();

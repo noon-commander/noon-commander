@@ -392,6 +392,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   while a command of the command line, its output (`g <`), or the editor has the terminal, and
   when no SIGHUP comes, as when the shell it runs in ignores it: crossterm's reader spins at the
   end of the input of a terminal that is gone, and a new reader waited for it forever.
+- Noon Commander ends when its terminal goes away as it starts, while it waits for the terminal
+  to say whether it speaks the kitty keyboard protocol, rather than stay behind at full CPU, deaf
+  to SIGHUP and SIGTERM, until `kill -9`.
 - `f /` and `f f` on a host whose login shell is fish find a pattern with a `\` before a `'` or
   at its end, which fish read as an escape inside single quotes, so that the search failed to
   start.

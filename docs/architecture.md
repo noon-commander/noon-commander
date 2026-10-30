@@ -925,7 +925,10 @@ does not compile without.
   on, as `nohup`, `trap '' HUP`, or `sudo` may; so a thread watches a copy of stdin with mio
   (epoll, kqueue) for the end of its input, which a key does not wake it for twice. poll(2) on
   macOS does not tell of that end, and tokio's `AsyncFd` takes `unsafe`. ssh children are in
-  sessions of their own and see none of it.
+  sessions of their own and see none of it. The same signals and the end of the terminal end the
+  start too, while `supports_keyboard_enhancement` waits for the terminal's answer: its reader
+  spins the same way where the terminal went away, and is left behind, since `main` waits only
+  200 ms for blocking work.
 - The working directory of the process follows the active panel: after each turn of the
   event loop, a local directory the active panel now shows (once its listing arrived)
   goes to a task that `chdir`s to it in `spawn_blocking`, the latest of the waiting ones only.

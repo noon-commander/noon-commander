@@ -625,7 +625,8 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
     }
 
     /// Lists the trees under `sources`, parents before what they hold, and counts their
-    /// bytes. Listings report symlinks without following them.
+    /// bytes, reporting how many entries it has found after each source and each directory.
+    /// Listings report symlinks without following them.
     async fn scan(&mut self, sources: Vec<A::Path>) -> Result<Vec<Item<A::Path>>, Aborted> {
         let from = self.from.vfs;
         let mut items: Vec<Item<A::Path>> = Vec::new();
@@ -651,6 +652,9 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
             };
             let name = source.name().unwrap_or_default().to_vec();
             self.add(&mut items, &mut dirs, source, None, name, metadata);
+            self.reporter.report(Event::Scanning {
+                items: items.len() as u64,
+            });
             while let Some(index) = dirs.pop() {
                 let entries = loop {
                     if self.reporter.cancelled() {
@@ -1067,8 +1071,9 @@ mod tests {
         copied: u64,
         /// Each taken name: the target, and the sizes of the source and the target.
         exists: Vec<(String, Option<u64>, Option<u64>)>,
-        /// How many reports of progress came before each report of counting.
-        scanned: Vec<usize>,
+        /// Each report of counting: how many reports of progress came before it, and how many
+        /// entries it had found.
+        scanned: Vec<(usize, u64)>,
     }
 
     /// The answers a copy gets, in turn, and whether it is cancelled once data has moved.
@@ -1176,7 +1181,7 @@ mod tests {
         let mut conflicts = script.conflicts.iter();
         while let Some(event) = incoming.recv().await {
             match event {
-                Event::Scanning { .. } => seen.scanned.push(seen.bytes.len()),
+                Event::Scanning { items } => seen.scanned.push((seen.bytes.len(), items)),
                 Event::Progress(progress) => {
                     seen.bytes.push((progress.bytes_done, progress.bytes_total));
                     assert!(progress.bytes_copied >= seen.copied, "it never goes back");
@@ -2092,7 +2097,8 @@ mod tests {
     async fn a_move_counts_what_it_could_not_rename_before_it_copies() {
         // Files alone, with no directory to list: the counting is reported all the same, so that
         // the window starts the speed and the time left of the copy over, rather than take the
-        // tries to rename for work.
+        // tries to rename for work; and each file counts as it is found, rather than none until
+        // the copy, as each takes a round trip on a host.
         let root = tempfile::tempdir().unwrap();
         let src = root.path().join("src");
         fs::create_dir(&src).unwrap();
@@ -2112,7 +2118,7 @@ mod tests {
         // A report as it tries each rename, with no data; then the copy, with its own.
         let copying = seen.bytes.iter().position(|&(_, total)| total > 0);
         assert_eq!(copying, Some(2), "{seen:?}");
-        assert_eq!(seen.scanned, [2], "{seen:?}");
+        assert_eq!(seen.scanned, [(2, 0), (2, 1), (2, 2)], "{seen:?}");
         assert_eq!(fs::read_to_string(dst.join("two")).unwrap(), "22");
         assert_eq!(fs::read_dir(&src).unwrap().count(), 0, "all of it moved");
     }

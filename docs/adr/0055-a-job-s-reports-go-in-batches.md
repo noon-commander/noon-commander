@@ -31,6 +31,12 @@ check of ADR 0050, where it is off by 2 to 4%.
   by one. The entry's location goes once a batch.
 - What waits goes before anything else the job reports, a question or its end, so that all keep
   their order.
+- Reports of counting go in the same batches, but only the last of those that wait: each tells
+  how many entries the job has found so far, which the next tells as well. One that comes after
+  progress waits behind that progress; progress that comes after it goes after it. Jobs report
+  counting after each entry they were given as well as after each directory they list, so that
+  files alone, a round trip each on a host, do not show `0 found` until the job starts on them;
+  locally, that is thousands of reports a second.
 - 20 ms is under the 40 ms between frames drawn for results of background work
   (`RESULTS_FRAME`): no batch waits for a frame.
 - While the terminal is handed over to another program, the editor, a command, or the output of
@@ -46,6 +52,9 @@ check of ADR 0050, where it is off by 2 to 4%.
 - In the check of ADR 0050, batches of 20 ms change the mean error of the time left by half a
   point at most, and batches of 50 ms by under one.
 - What shows of a job is 20 ms behind it at most.
+- A job given thousands of files counts them in a few batches, rather than one report each, and
+  the count of files on a host goes up as the job finds them, rather than stay at `0 found` for
+  50 seconds for 1,000 files a twentieth of a second away.
 - Batches alone made the reports that waited while the terminal was handed over grow five times
   slower, 2.3 MiB a second for the download rather than 11; taken meanwhile, they no longer
   grow. A checksum of a big file, at about 1.2 GB/s, left 22 MiB more with the process after a

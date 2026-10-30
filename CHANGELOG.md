@@ -503,6 +503,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   files, a copy of ten minutes showed 33 hours left at first and was two thirds too long half a
   minute later; small files, then a big one, showed days. Now it shows 4.5 seconds into the copy,
   within 3%.
+- While a job counts what it was given, its window shows the entries found as it finds each one,
+  not only each directory it lists: a copy, a move, a delete, or checksums of files alone showed
+  `0 found` until they started on them, 50 seconds for 1,000 files on a host. Thousands of such
+  counts a second locally reach the window in batches, as reports of progress do.
 
 ## [0.2.0] - 2026-10-14
 

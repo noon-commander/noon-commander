@@ -1245,9 +1245,12 @@ fn finished(id: u64, outcome: Option<Outcome>) -> Done {
 /// that a batch never waits for a frame.
 const BATCH: Duration = Duration::from_millis(20);
 
-/// A job's reports of how far it is that wait to go to the UI together, each with the time the
-/// job made it.
+/// A job's reports of how far it is that wait to go to the UI together: of its counting, the
+/// last, and of its progress, each with the time the job made it.
 struct Waiting<P> {
+    /// The entries found, as the last report of counting said. Reports of progress that came
+    /// before it went before it waited, so it goes before those that wait with it.
+    found: Option<u64>,
     reports: Vec<(Instant, Counts)>,
     /// The entry at hand in the last of them.
     current: Option<P>,
@@ -1255,9 +1258,14 @@ struct Waiting<P> {
     sent: Option<Instant>,
 }
 
+/// What goes to the UI at once of what a job reported: the entries found as it counts, then
+/// its reports of progress, the last at its entry.
+type Batch<P> = (Option<u64>, Option<(P, Vec<(Instant, Counts)>)>);
+
 impl<P> Waiting<P> {
     fn new() -> Self {
         Self {
+            found: None,
             reports: Vec::new(),
             current: None,
             sent: None,
@@ -1269,27 +1277,54 @@ impl<P> Waiting<P> {
     fn take(&mut self, at: Instant, current: P, counts: Counts) -> bool {
         self.reports.push((at, counts));
         self.current = Some(current);
+        self.free(at)
+    }
+
+    /// Takes a report of counting made at `at`, with `items` found, in place of one that
+    /// waits, and tells whether the batch goes now. Reports of progress that wait must go
+    /// first ([`progress`](Self::progress)).
+    fn count(&mut self, at: Instant, items: u64) -> bool {
+        self.found = Some(items);
+        self.free(at)
+    }
+
+    /// Whether reports of progress wait.
+    fn progress(&self) -> bool {
+        self.current.is_some()
+    }
+
+    /// Whether a batch may go at `at`: none went for [`BATCH`].
+    fn free(&self, at: Instant) -> bool {
         self.sent.is_none_or(|sent| at >= sent + BATCH)
     }
 
     /// When the reports that wait are due: [`BATCH`] after the last batch went.
     fn due(&self) -> Option<Instant> {
-        self.current.as_ref()?;
+        if self.found.is_none() && self.current.is_none() {
+            return None;
+        }
         self.sent.map(|sent| sent + BATCH)
     }
 
-    /// The batch to send at `now`: the reports that wait, the last at its entry.
-    fn send(&mut self, now: Instant) -> Option<(P, Vec<(Instant, Counts)>)> {
-        let current = self.current.take()?;
-        self.sent = Some(now);
-        Some((current, std::mem::take(&mut self.reports)))
+    /// The batch to send at `now`: what waits.
+    fn send(&mut self, now: Instant) -> Batch<P> {
+        let found = self.found.take();
+        let progress = self
+            .current
+            .take()
+            .map(|current| (current, std::mem::take(&mut self.reports)));
+        if found.is_some() || progress.is_some() {
+            self.sent = Some(now);
+        }
+        (found, progress)
     }
 }
 
 /// Passes the reports of the job `id` on to `done`, with paths made locations by `location`
 /// and errors in words. It runs in the job's task, so the time it takes a report is the time
-/// the job made it. Reports of how far the job is go in batches, at most one each [`BATCH`];
-/// those that wait go before anything else the job reports, and before its end.
+/// the job made it. Reports of how far the job is go in batches, at most one each [`BATCH`],
+/// with the last of its counting; those that wait go before anything else the job reports,
+/// and before its end.
 async fn forward<P>(
     mut incoming: mpsc::UnboundedReceiver<Event<P>>,
     id: u64,
@@ -1298,7 +1333,12 @@ async fn forward<P>(
 ) {
     let mut waiting = Waiting::new();
     let send = |waiting: &mut Waiting<P>, now| {
-        if let Some((current, reports)) = waiting.send(now) {
+        let (found, progress) = waiting.send(now);
+        if let Some(items) = found {
+            let event = JobEvent::Scanning { items };
+            let _ = done.send(Done::Job { id, event });
+        }
+        if let Some((current, reports)) = progress {
             let current = location(current);
             let event = JobEvent::Progress { current, reports };
             let _ = done.send(Done::Job { id, event });
@@ -1331,7 +1371,17 @@ async fn forward<P>(
                 }
                 continue;
             }
-            Some(Event::Scanning { items }) => JobEvent::Scanning { items },
+            Some(Event::Scanning { items }) => {
+                // Counting after some work starts the window's speed and time left over: the
+                // work goes first.
+                if waiting.progress() {
+                    send(&mut waiting, at);
+                }
+                if waiting.count(at, items) {
+                    send(&mut waiting, at);
+                }
+                continue;
+            }
             Some(Event::Failed { path, error, reply }) => JobEvent::Failed {
                 at,
                 path: location(path),
@@ -2840,7 +2890,8 @@ mod tests {
         assert_eq!(waiting.due(), None);
         // The first goes at once.
         assert!(waiting.take(at(0), "a", counts(1)));
-        assert_eq!(waiting.send(at(0)), Some(("a", vec![(at(0), counts(1))])));
+        let batch = vec![(at(0), counts(1))];
+        assert_eq!(waiting.send(at(0)), (None, Some(("a", batch))));
         assert_eq!(waiting.due(), None, "none waits");
         // Those that come within BATCH wait for it.
         assert!(!waiting.take(at(5), "a", counts(2)));
@@ -2849,9 +2900,32 @@ mod tests {
         // One that comes after it goes with them, at its entry.
         assert!(waiting.take(at(25), "c", counts(4)));
         let batch = vec![(at(5), counts(2)), (at(15), counts(3)), (at(25), counts(4))];
-        assert_eq!(waiting.send(at(25)), Some(("c", batch)));
+        assert_eq!(waiting.send(at(25)), (None, Some(("c", batch))));
         // After a quiet spell, the next goes at once.
         assert!(waiting.take(at(100), "d", counts(5)));
+    }
+
+    #[test]
+    fn reports_of_counting_wait_for_their_batch_and_only_the_last_goes() {
+        let start = Instant::now();
+        let at = |millis| start + Duration::from_millis(millis);
+        let mut waiting = Waiting::<&str>::new();
+        // The first goes at once.
+        assert!(waiting.count(at(0), 1));
+        assert_eq!(waiting.send(at(0)), (Some(1), None));
+        // Those that come within BATCH wait for it, the last in place of the others.
+        assert!(!waiting.count(at(5), 2));
+        assert!(!waiting.count(at(15), 3));
+        assert!(!waiting.progress());
+        assert_eq!(waiting.due(), Some(at(20)));
+        assert_eq!(waiting.send(at(20)), (Some(3), None));
+        assert_eq!(waiting.due(), None, "none waits");
+        // Progress that comes after a count goes after it.
+        assert!(!waiting.count(at(25), 4));
+        let counts = Counts::default();
+        assert!(waiting.take(at(40), "a", counts));
+        let batch = vec![(at(40), counts)];
+        assert_eq!(waiting.send(at(40)), (Some(4), Some(("a", batch))));
     }
 
     /// A report of a job's progress at `path`, with `bytes` of a thousand done.
@@ -2916,6 +2990,42 @@ mod tests {
                 Location::Local(PathBuf::from(format!("/f{last}")))
             );
         }
+    }
+
+    #[tokio::test]
+    async fn a_job_s_counting_goes_in_batches_in_order_with_its_progress() {
+        // A move tries to rename, then counts 1,000 files one by one, then copies them.
+        let (events, incoming) = mpsc::unbounded_channel();
+        events.send(progress("/a", 0)).unwrap();
+        for items in 1..=1000 {
+            events.send(Event::Scanning { items }).unwrap();
+        }
+        events.send(progress("/b", 1)).unwrap();
+        drop(events);
+        let (done, mut forwarded) = mpsc::unbounded_channel();
+        forward(incoming, 7, &done, Location::Local).await;
+
+        let mut seen = Vec::new();
+        while let Ok(Done::Job { id: 7, event }) = forwarded.try_recv() {
+            seen.push(match event {
+                JobEvent::Scanning { items } => Some(items),
+                JobEvent::Progress { .. } => None,
+                other => panic!("{other:?}"),
+            });
+        }
+        // The rename first, then a few counts, the last of all of them, then the copy.
+        assert_eq!(seen.first(), Some(&None), "{seen:?}");
+        assert_eq!(seen.last(), Some(&None), "{seen:?}");
+        let counts: Vec<u64> = seen[1..seen.len() - 1]
+            .iter()
+            .map(|count| count.expect("a count"))
+            .collect();
+        assert!(counts.len() < 10, "{counts:?}");
+        assert!(
+            counts.windows(2).all(|pair| pair[0] < pair[1]),
+            "{counts:?}"
+        );
+        assert_eq!(counts.last(), Some(&1000));
     }
 
     #[tokio::test]

@@ -200,10 +200,11 @@ impl<'r, L> Checksum<'r, L> {
         }
     }
 
-    /// Finds the files under `targets`, adding them to the totals. Symlinks among the targets
-    /// are followed; below them, symlinks to files are hashed and other symlinks left out, so
-    /// that a walk never loops. Special files are left out and never opened: reading a FIFO
-    /// would wait for a writer. Directories are walked in the order of their names.
+    /// Finds the files under `targets`, adding them to the totals, and reports how many it has
+    /// found after each target and each directory. Symlinks among the targets are followed;
+    /// below them, symlinks to files are hashed and other symlinks left out, so that a walk
+    /// never loops. Special files are left out and never opened: reading a FIFO would wait for
+    /// a writer. Directories are walked in the order of their names.
     pub async fn scan<V: Vfs>(
         &mut self,
         side: &Endpoint<'_, V, L>,
@@ -285,8 +286,8 @@ impl<'r, L> Checksum<'r, L> {
                     | FileKind::CharDevice => {}
                 }
             }
+            self.reporter.report(Event::Scanning { items: self.found });
         }
-        self.reporter.report(Event::Scanning { items: self.found });
         Ok(())
     }
 
@@ -483,7 +484,8 @@ mod tests {
     struct Seen {
         failed: Vec<String>,
         progress: Vec<Progress<String>>,
-        scanned: u64,
+        /// The files found, as each report of counting said.
+        scanned: Vec<u64>,
     }
 
     /// Takes the reports of a job and answers its failures with `answers` in turn.
@@ -496,8 +498,9 @@ mod tests {
         while let Some(event) = incoming.recv().await {
             match event {
                 Event::Scanning { items } => {
-                    assert!(items >= seen.scanned, "it never goes back");
-                    seen.scanned = items;
+                    let last = seen.scanned.last().copied().unwrap_or_default();
+                    assert!(items >= last, "it never goes back");
+                    seen.scanned.push(items);
                 }
                 Event::Progress(progress) => {
                     if let Some(last) = seen.progress.last() {
@@ -635,7 +638,7 @@ mod tests {
             assert_eq!(sum.digest.as_deref(), Some(&expected[..]));
         }
         assert_eq!(sums[0].path, report(&dir.join("a/sub/y")));
-        assert_eq!(seen.scanned, 5);
+        assert_eq!(seen.scanned.last(), Some(&5));
         let last = seen.progress.last().unwrap();
         assert!(
             seen.progress
@@ -643,6 +646,24 @@ mod tests {
                 .all(|progress| progress.items_total == 5 && progress.bytes_total == 13)
         );
         assert_eq!((last.bytes_done, last.bytes_copied), (13, 13));
+    }
+
+    #[tokio::test]
+    async fn files_alone_count_as_they_are_found() {
+        // Each takes a round trip on a host: the count goes up with each, rather than stay at
+        // none until all of them are found.
+        let root = tempfile::tempdir().unwrap();
+        let targets: Vec<PathBuf> = ["a", "b", "c"]
+            .into_iter()
+            .map(|name| {
+                let path = root.path().join(name);
+                fs::write(&path, name).unwrap();
+                path
+            })
+            .collect();
+        let (outcome, _, seen) = run(&LocalFs, targets, &[], CancellationToken::new()).await;
+        assert_eq!(outcome.done, 3);
+        assert_eq!(seen.scanned, [1, 2, 3]);
     }
 
     #[tokio::test]

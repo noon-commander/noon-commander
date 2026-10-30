@@ -946,8 +946,9 @@ in a task of its own with the sessions of the hosts at its ends, which their tas
 so on a slow link listings wait behind its data. Separate transfer channels may follow. When
 a host's task ends while a copy holds its session, the session goes with the copy, which
 fails soon with the channel gone; the UI ends the job at once. A job talks
-to the UI through a `Reporter`: it sends `Event`s (`Scanning`, `Progress` with the entry at
-hand and done/total counts, `Failed`), and when an operation fails it waits for a `Decision`:
+to the UI through a `Reporter`: it sends `Event`s (`Scanning` with the entries found, after
+each entry it was given and each directory it lists; `Progress` with the entry at hand and
+done/total counts; `Failed`), and when an operation fails it waits for a `Decision`:
 Retry, Skip, Skip all (no more questions), or Abort. A `CancellationToken` stops it between
 operations and while it waits for a decision, for data, or for a host to open a file or set its
 attributes; so does a UI that stops listening. A request to a host that stopped answering never
@@ -966,9 +967,11 @@ so that an upload follows the link rather than running up to 2 MiB ahead of it. 
 runs a job passes its reports on as it takes them (`forward` in `tui/tasks.rs`), in the job's own
 task, with the time it takes each: when the job made it. Reports of progress go in batches, the
 first after a quiet spell at once, then at most one each 20 ms (`BATCH`), and those that wait go
-before a question or the end. The window counts each report of a batch (`JobView::passed`) and
-shows the last (`JobView::working`), so the speed and the time left are those of the reports one
-by one ([ADR 0055](adr/0055-a-job-s-reports-go-in-batches.md)). The window counts each report and
+before a question or the end. Reports of counting go in the same batches, only the last of those
+that wait, and in order with the progress around them. The window counts each report of a batch
+(`JobView::passed`) and shows the last (`JobView::working`), so the speed and the time left are
+those of the reports one by one ([ADR 0055](adr/0055-a-job-s-reports-go-in-batches.md)). The
+window counts each report and
 question at that time, not when the UI takes it: a report waits for its batch, and a question
 asked while the terminal is handed over to another program waits until it is back, while the UI
 takes the reports of progress meanwhile. One taken more than a quarter of a second after the

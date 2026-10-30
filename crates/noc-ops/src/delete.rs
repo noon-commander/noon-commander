@@ -40,8 +40,9 @@ pub async fn delete<V: Vfs>(
     outcome
 }
 
-/// Lists the trees under `targets` into `items`, parents before what they hold. Symlinks are
-/// entries of their own: listings report them without following them.
+/// Lists the trees under `targets` into `items`, parents before what they hold, reporting how
+/// many entries it has found after each target and each directory. Symlinks are entries of
+/// their own: listings report them without following them.
 async fn scan<V: Vfs>(
     vfs: &V,
     targets: Vec<V::Path>,
@@ -78,6 +79,9 @@ async fn scan<V: Vfs>(
             dir,
             parent: None,
             kept: false,
+        });
+        reporter.report(Event::Scanning {
+            items: items.len() as u64,
         });
         while let Some(index) = dirs.pop() {
             let entries = loop {
@@ -186,13 +190,14 @@ mod tests {
     use crate::testing;
 
     /// Deletes `targets` with `vfs`, answering failures with `answers` in turn, and returns
-    /// the outcome, the paths that failed, and the totals that progress reported.
+    /// the outcome, the paths that failed, the totals that progress reported, and the entries
+    /// found as counting reported them.
     async fn run<V: Vfs>(
         vfs: &V,
         targets: Vec<V::Path>,
         answers: &[Decision],
         cancel: CancellationToken,
-    ) -> (Outcome, Vec<V::Path>, Vec<u64>) {
+    ) -> (Outcome, Vec<V::Path>, Vec<u64>, Vec<u64>) {
         let (events, mut incoming) = mpsc::unbounded_channel();
         let mut reporter = Reporter::new(events, cancel);
         let job = async {
@@ -201,11 +206,11 @@ mod tests {
             outcome
         };
         let listen = async {
-            let (mut failed, mut totals) = (Vec::new(), Vec::new());
+            let (mut failed, mut totals, mut found) = (Vec::new(), Vec::new(), Vec::new());
             let mut answers = answers.iter();
             while let Some(event) = incoming.recv().await {
                 match event {
-                    Event::Scanning { .. } => {}
+                    Event::Scanning { items } => found.push(items),
                     Event::Progress(progress) => totals.push(progress.items_total),
                     Event::Failed { path, reply, .. } => {
                         failed.push(path);
@@ -215,10 +220,10 @@ mod tests {
                     Event::Exists { .. } => panic!("deleting takes no names"),
                 }
             }
-            (failed, totals)
+            (failed, totals, found)
         };
-        let (outcome, (failed, totals)) = tokio::join!(job, listen);
-        (outcome, failed, totals)
+        let (outcome, (failed, totals, found)) = tokio::join!(job, listen);
+        (outcome, failed, totals, found)
     }
 
     /// `dir/` with `a`, `sub/b`, `sub/deeper/c`, a link to a directory outside, and a link
@@ -264,8 +269,11 @@ mod tests {
             root.path().join("file"),
             root.path().join("gone"),
         ];
-        let (outcome, failed, totals) = run(&LocalFs, targets, &[], CancellationToken::new()).await;
+        let (outcome, failed, totals, found) =
+            run(&LocalFs, targets, &[], CancellationToken::new()).await;
         assert_eq!(failed, Vec::<PathBuf>::new());
+        // dir as it is found; each directory as it is listed: dir, sub, deeper; then file.
+        assert_eq!(found, [1, 4, 7, 8, 9]);
         // dir, a, dangling, sub, b, out, deeper, c, and file.
         assert_eq!(
             outcome,
@@ -291,7 +299,7 @@ mod tests {
         if !lock(&deeper) {
             return;
         }
-        let (outcome, failed, _) = run(
+        let (outcome, failed, ..) = run(
             &LocalFs,
             vec![dir.clone()],
             &[Decision::Skip],
@@ -324,7 +332,7 @@ mod tests {
         }
         // Retry fails again while `sub` is locked; then skip that and everything after.
         let answers = [Decision::Retry, Decision::SkipAll];
-        let (outcome, failed, _) = run(
+        let (outcome, failed, ..) = run(
             &LocalFs,
             vec![dir.clone()],
             &answers,
@@ -356,7 +364,7 @@ mod tests {
         if !lock(&deeper) {
             return;
         }
-        let (outcome, _, _) = run(
+        let (outcome, ..) = run(
             &LocalFs,
             vec![dir.clone()],
             &[Decision::Abort],
@@ -369,7 +377,7 @@ mod tests {
 
         let cancel = CancellationToken::new();
         cancel.cancel();
-        let (outcome, _, _) = run(&LocalFs, vec![dir.clone()], &[], cancel).await;
+        let (outcome, ..) = run(&LocalFs, vec![dir.clone()], &[], cancel).await;
         assert_eq!(
             outcome,
             Outcome {
@@ -420,7 +428,7 @@ mod tests {
             return;
         };
         let targets = vec![RemotePath::from("dir")];
-        let (outcome, failed, _) = run(&fs, targets, &[], CancellationToken::new()).await;
+        let (outcome, failed, ..) = run(&fs, targets, &[], CancellationToken::new()).await;
         assert_eq!(failed, Vec::<RemotePath>::new());
         assert_eq!(outcome.done, 8);
         assert!(!dir.exists());

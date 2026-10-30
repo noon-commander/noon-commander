@@ -218,8 +218,9 @@ impl<'r, L> Checksum<'r, L> {
         Files { files }
     }
 
-    /// Hashes `files`, in the order they were found. When reading one fails it asks the
-    /// reporter what to do; a retry hashes the file from its start.
+    /// Hashes `files`, in the order they were found, reporting as it starts each and after each
+    /// chunk. When reading one fails it asks the reporter what to do; a retry hashes the file
+    /// from its start, with no report before it opens it again, as a copy does.
     pub async fn hash<V: Vfs>(&mut self, side: &Endpoint<'_, V, L>, files: Files<V::Path>) {
         if !self.outcome.aborted && self.hash_files(side, files).await.is_err() {
             self.outcome.aborted = true;
@@ -336,6 +337,7 @@ impl<'r, L> Checksum<'r, L> {
     ) -> Result<(), Aborted> {
         for file in files.files {
             let before = self.bytes_done;
+            self.progress(side, &file.path);
             let hashed = loop {
                 if self.reporter.cancelled() {
                     return Err(Aborted);
@@ -378,7 +380,6 @@ impl<'r, L> Checksum<'r, L> {
         side: &Endpoint<'_, V, L>,
         path: &V::Path,
     ) -> Result<(u64, Vec<u8>), Stop> {
-        self.progress(side, path);
         let mut reader = side.vfs.open_file(path).await.map_err(Stop::Failed)?;
         let mut running = Running::Ready(Box::new(Hasher::new(self.algorithm)));
         let mut batch = Vec::new();
@@ -721,6 +722,37 @@ mod tests {
         assert!(outcome.aborted);
         assert_eq!(names(&sums), ["dir/a/sub/y", "dir/a/x"], "stopped there");
         fs::set_permissions(&locked, fs::Permissions::from_mode(0o644)).unwrap();
+    }
+
+    #[tokio::test]
+    async fn retry_opens_a_file_again_with_no_report_first() {
+        // As a copy does. Another report as the file opens again, with nothing new in it, is no
+        // start of an entry for the time left, which took the opening for data streaming.
+        let root = tempfile::tempdir().unwrap();
+        let dir = tree(root.path());
+        let locked = dir.join("b");
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+        if fs::read(&locked).is_ok() {
+            // Root reads it anyway.
+            return;
+        }
+        let failed = report(&locked);
+        let answers = [Decision::Retry, Decision::Skip];
+        let (_, _, seen) = run(
+            &LocalFs,
+            vec![dir.clone()],
+            &answers,
+            CancellationToken::new(),
+        )
+        .await;
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o644)).unwrap();
+        assert_eq!(seen.failed, [failed.clone(), failed.clone()]);
+        let reports = seen
+            .progress
+            .iter()
+            .filter(|progress| progress.current == failed)
+            .count();
+        assert_eq!(reports, 1, "{:?}", seen.progress);
     }
 
     #[tokio::test]

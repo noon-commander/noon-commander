@@ -124,8 +124,9 @@ are those after the review.
   no longer jumps to and fro by a second or two, which rounding a time left over a minute to five
   seconds hid before.
 - It all comes from the counts that jobs report (`Counts`), with no change to `noc-ops` but for
-  when a byte written counts (ADR 0052), when a directory is finished (ADR 0053), and that a move
-  reports counting after its renames.
+  when a byte written counts (ADR 0052), when a directory is finished (ADR 0053), that a move
+  reports counting after its renames, and that checksums report a file once as they start it, as
+  copies do, not again before they open it for Retry.
 - **Each report counts at the time the job made it**, which the task that runs the job takes as
   it passes the report on, in a batch with others
   ([ADR 0055](0055-a-job-s-reports-go-in-batches.md)), and a question at the time the job asked
@@ -242,6 +243,12 @@ are those after the review.
   left. Now the move reports that it counts, and the time left shows 4.5 seconds into the copy,
   within 3%; after the small files, `-:--` until the big one streams, then within a second. A move
   with a directory to list is as before. A test checks the report.
+- Checksums reported a file again before they opened it once more for Retry, which copies do
+  not: its opening counted as data streaming, a byte cost half as much again, and a pause around
+  the failure long enough to be left out as a stall was split into two too short for one, which
+  counted. For files of 20 MiB at 10 MiB a second, one that failed halfway after a read that
+  waited four seconds, and took two to open again, showed the time left 133% too long, where a
+  copy's was within 1%. Checksums now report as copies do; a test checks it.
 - The model is two costs and a pace: a link that is fast for big files and slow to open each
   one is right; one whose pace changes with the size of the files in other ways is not.
 - What a job does without reports is not in the work left: the time left shows `0:00`, then

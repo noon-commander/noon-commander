@@ -992,8 +992,8 @@ cost come from least squares of the time of the stretches between finished entri
 bytes and their entries, when both stand clear of the noise: jobs report as an entry starts,
 before it opens, and close it after their last report. Else a byte costs what it does in the
 stretches in which no entry was done but for those that start with an entry's opening (as do
-the job's first report and a question, after which Retry opens the entry again), and an
-entry what its stretches took beyond their bytes; among small files only, the
+the job's first report and a question, after which Retry opens the entry again with no report
+first), and an entry what its stretches took beyond their bytes; among small files only, the
 least squares still give the cost of an entry if it stands clear; else bytes alone count. The
 time left is the bytes and entries left at those costs and that pace. It is unknown while the
 entries left are on average more than ten times as large as those done since the forecast's
@@ -1101,8 +1101,9 @@ FIFO would wait for a writer. Directories are walked in the order of their names
 file is named relative to the targets' directory (`dir/sub/file`), as `sha256sum` would name
 it from there. Files are read as streams through the `Vfs`, over SFTP too, and hashed off the
 async thread (`spawn_blocking`) in batches of 256 KiB while the next batch is read. A failure
-asks as other jobs do: Retry hashes the file from its start, and a skipped file has no
-checksum. The job returns its sums with its outcome; an aborted one shows none.
+asks as other jobs do: Retry hashes the file from its start, with no report before it opens
+it again, as a copy does, and a skipped file has no checksum. The job returns its sums with
+its outcome; an aborted one shows none.
 
 ## Configuration and paths
 

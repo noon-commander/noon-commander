@@ -507,6 +507,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   not only each directory it lists: a copy, a move, a delete, or checksums of files alone showed
   `0 found` until they started on them, 50 seconds for 1,000 files on a host. Thousands of such
   counts a second locally reach the window in batches, as reports of progress do.
+- After Retry, checksums no longer take opening the file again for the time of its data: they
+  reported the file again before they opened it, as copies do not, which also split a pause long
+  enough to be left out as a stall into two that counted, and showed the time left up to 133% too
+  long.
 
 ## [0.2.0] - 2026-10-14
 

@@ -928,7 +928,9 @@ does not compile without.
   sessions of their own and see none of it. The same signals and the end of the terminal end the
   start too, while `supports_keyboard_enhancement` waits for the terminal's answer: its reader
   spins the same way where the terminal went away, and is left behind, since `main` waits only
-  200 ms for blocking work.
+  200 ms for blocking work. On the way out the `Terminal` goes without its drop where it cannot
+  show the cursor, and `Restore` calls `ratatui::try_restore`: ratatui's own print why they failed
+  to stderr, the terminal that is gone, and printing there panics, which in a panic hook aborts.
 - The working directory of the process follows the active panel: after each turn of the
   event loop, a local directory the active panel now shows (once its listing arrived)
   goes to a task that `chdir`s to it in `spawn_blocking`, the latest of the waiting ones only.

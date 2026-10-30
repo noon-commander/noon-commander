@@ -395,6 +395,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Noon Commander ends when its terminal goes away as it starts, while it waits for the terminal
   to say whether it speaks the kitty keyboard protocol, rather than stay behind at full CPU, deaf
   to SIGHUP and SIGTERM, until `kill -9`.
+- Noon Commander no longer aborts as it ends after its terminal went away, which skipped stopping
+  its jobs and closing its connections, and left a crash report on macOS: ratatui printed that it
+  could not show the cursor to the terminal that was gone, and printing there panics.
 - `f /` and `f f` on a host whose login shell is fish find a pattern with a `\` before a `'` or
   at its end, which fish read as an escape inside single quotes, so that the search failed to
   start.

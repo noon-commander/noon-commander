@@ -386,12 +386,21 @@ async fn shut_down(
     mut tasks: Tasks,
 ) {
     let _ = asked.title.show(None);
-    drop(terminal);
+    give_back(terminal);
     drop(restore);
     app.stop_jobs();
     tasks.finish_jobs().await;
     app.disconnect_all();
     tasks.shutdown().await;
+}
+
+/// Drops `terminal`, which shows the cursor again. Where the terminal went away, ratatui's drop
+/// prints that it could not to stderr, the same terminal, and printing there panics; so then the
+/// terminal goes without its drop.
+fn give_back(mut terminal: DefaultTerminal) {
+    if terminal.show_cursor().is_err() {
+        std::mem::forget(terminal);
+    }
 }
 
 /// The app with both panels on `start`, set up for this terminal and `system`, and the work it
@@ -954,7 +963,9 @@ impl Drop for Restore {
     fn drop(&mut self) {
         let _ = capture_mouse(false);
         let _ = self.modes.get().leave();
-        ratatui::restore();
+        // Not `ratatui::restore`, which prints why it failed to stderr, the terminal: printing
+        // to one that went away panics.
+        let _ = ratatui::try_restore();
     }
 }
 

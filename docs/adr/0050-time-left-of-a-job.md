@@ -96,7 +96,10 @@ are those after the review.
   copy, and the time of the counting, under the five seconds of a stall, went into it as work
   that did nothing. So when a job counts after it has worked, the speed and the time left start
   over, as at the start of a job: a second of work before the speed, and forecasts that agree
-  before the time left.
+  before the time left. The move reports that it counts as it starts to, even where it lists no
+  directory: files alone that it could not rename, as across the file systems of a host, sent no
+  report of it, so the tries to rename them, three round trips each, counted as work that did
+  nothing.
 - **The time left shown follows the end the forecast says, smoothed** (`count_down`). The time at
   which the forecast says the job ends is smoothed, each second taking 9% of the time left as long
   to follow, from a second to half a minute (`ETA_SMOOTH`, `ETA_SMOOTH_MAX`). A forecast that is
@@ -121,7 +124,8 @@ are those after the review.
   no longer jumps to and fro by a second or two, which rounding a time left over a minute to five
   seconds hid before.
 - It all comes from the counts that jobs report (`Counts`), with no change to `noc-ops` but for
-  when a byte written counts (ADR 0052) and when a directory is finished (ADR 0053).
+  when a byte written counts (ADR 0052), when a directory is finished (ADR 0053), and that a move
+  reports counting after its renames.
 - **Each report counts at the time the job made it**, which the task that runs the job takes as
   it passes the report on, in a batch with others
   ([ADR 0055](0055-a-job-s-reports-go-in-batches.md)), and a question at the time the job asked
@@ -229,6 +233,15 @@ are those after the review.
   forecasts agree, within 12%. A disk that blocks for 12 seconds every 64 MiB first showed a time
   left after 30 seconds, half as long as it was; as its first block no longer counts, after 48,
   18% short. A test checks Skip all.
+- In the same check, a move of 1,000 files of 1 MiB on a host, across its file systems and with
+  no directory among them, tried to rename them for two and a half minutes and sent no report of
+  its counting: the time left of its copy, ten minutes, showed 33 hours at once, four times too
+  long after 10 seconds, two thirds after 30, and 8% after two minutes. As the copy's first
+  report did not start an entry either, the opening of its first file counted as data streaming:
+  1,000 files of 4 KiB, then one of 600 MiB, showed 54 days, and 10 hours with four minutes
+  left. Now the move reports that it counts, and the time left shows 4.5 seconds into the copy,
+  within 3%; after the small files, `-:--` until the big one streams, then within a second. A move
+  with a directory to list is as before. A test checks the report.
 - The model is two costs and a pace: a link that is fast for big files and slow to open each
   one is right; one whose pace changes with the size of the files in other ways is not.
 - What a job does without reports is not in the work left: the time left shows `0:00`, then

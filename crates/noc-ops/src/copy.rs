@@ -92,6 +92,9 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
         if left.is_empty() {
             return Ok(());
         }
+        // Counting is reported even where it lists no directory, as for files alone: the copy
+        // that follows has totals of its own, and the renames tell nothing of its pace.
+        self.reporter.report(Event::Scanning { items: 0 });
         let items = self.scan(left).await?;
         self.copy_items(&items, &destination).await
     }
@@ -1064,6 +1067,8 @@ mod tests {
         copied: u64,
         /// Each taken name: the target, and the sizes of the source and the target.
         exists: Vec<(String, Option<u64>, Option<u64>)>,
+        /// How many reports of progress came before each report of counting.
+        scanned: Vec<usize>,
     }
 
     /// The answers a copy gets, in turn, and whether it is cancelled once data has moved.
@@ -1171,7 +1176,7 @@ mod tests {
         let mut conflicts = script.conflicts.iter();
         while let Some(event) = incoming.recv().await {
             match event {
-                Event::Scanning { .. } => {}
+                Event::Scanning { .. } => seen.scanned.push(seen.bytes.len()),
                 Event::Progress(progress) => {
                     seen.bytes.push((progress.bytes_done, progress.bytes_total));
                     assert!(progress.bytes_copied >= seen.copied, "it never goes back");
@@ -2080,6 +2085,35 @@ mod tests {
         // dir, a, sub, b, link, dangling, and file, copied one by one.
         assert_eq!(outcome.done, 7);
         check_dir(&dst.join("dir"));
+        assert_eq!(fs::read_dir(&src).unwrap().count(), 0, "all of it moved");
+    }
+
+    #[tokio::test]
+    async fn a_move_counts_what_it_could_not_rename_before_it_copies() {
+        // Files alone, with no directory to list: the counting is reported all the same, so that
+        // the window starts the speed and the time left of the copy over, rather than take the
+        // tries to rename for work.
+        let root = tempfile::tempdir().unwrap();
+        let src = root.path().join("src");
+        fs::create_dir(&src).unwrap();
+        fs::write(src.join("one"), "1").unwrap();
+        fs::write(src.join("two"), "22").unwrap();
+        let dst = root.path().join("dst");
+        fs::create_dir(&dst).unwrap();
+        let moving = vec![src.join("one"), src.join("two")];
+        let (outcome, seen) = run_move(
+            &OtherDevice::default(),
+            moving,
+            dst.clone(),
+            Script::default(),
+        )
+        .await;
+        assert_eq!(outcome.done, 2, "{seen:?}");
+        // A report as it tries each rename, with no data; then the copy, with its own.
+        let copying = seen.bytes.iter().position(|&(_, total)| total > 0);
+        assert_eq!(copying, Some(2), "{seen:?}");
+        assert_eq!(seen.scanned, [2], "{seen:?}");
+        assert_eq!(fs::read_to_string(dst.join("two")).unwrap(), "22");
         assert_eq!(fs::read_dir(&src).unwrap().count(), 0, "all of it moved");
     }
 

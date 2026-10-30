@@ -497,6 +497,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the half minute after which it shows anyway counted the skipping, so after two and a half
   minutes of it the first forecast, from a second of copying, showed at once, up to 2.7 times too
   long. Standing still no longer counts toward that half minute either.
+- A move of files alone that it could not rename, as between the file systems of a host, starts
+  the speed and the time left of its copy over and shows that it counts: with no directory among
+  them, it sent no report of counting, so its tries to rename counted as work. After 1,000 such
+  files, a copy of ten minutes showed 33 hours left at first and was two thirds too long half a
+  minute later; small files, then a big one, showed days. Now it shows 4.5 seconds into the copy,
+  within 3%.
 
 ## [0.2.0] - 2026-10-14
 

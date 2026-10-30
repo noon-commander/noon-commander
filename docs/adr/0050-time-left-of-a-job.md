@@ -81,6 +81,13 @@ are those after the review.
   neither its time nor its entries count, and the work behind it does not fade, so that Skip all
   over thousands of files, each found out by a round trip to the host, is no stall. Entries
   without data that are skipped cannot be told apart and count.
+- **A failure is a pause.** When the job asks what to do about a failure, what it did since its
+  last report, a try that failed, perhaps after a read that waited, and what it does once
+  answered, such as opening the entry again for Retry, tell nothing of the pace of its work: the
+  stretches count again after the first that ends with more done or copied than before the
+  question, and the entry it was at tells no cost. A report with nothing new before it tries
+  again does not end it. A question about a taken name is no failure: nothing failed before it,
+  and with one for every file, the entries would tell no cost at all.
 - **It shows once its forecasts agree.** Early in a job the forecast knows little of its pace:
   shown after the first second of work, it was three times too long for five seconds of an
   upload of a tree. So the time left is unknown until the last three forecasts, a second of work
@@ -249,6 +256,14 @@ are those after the review.
   counted. For files of 20 MiB at 10 MiB a second, one that failed halfway after a read that
   waited four seconds, and took two to open again, showed the time left 133% too long, where a
   copy's was within 1%. Checksums now report as copies do; a test checks it.
+- A failure and Retry counted as work: for files of 20 MiB at 10 MiB a second, one that failed
+  halfway, a second after the read began to wait, and took two seconds to open again, made the
+  time left 68% too long after one file and 11% after forty, for half a minute and more. Now it
+  is within 1% after one file and 0.1% after forty, whether the failure took no time or four
+  seconds, the opening a third of a second or two, and whether or not the job reports again
+  before it tries again. Tests check both ways of reporting, and that a question about a taken
+  name before each file keeps their cost. Failures that come again and again are no part of the
+  time left either: it is that of the work.
 - The model is two costs and a pace: a link that is fast for big files and slow to open each
   one is right; one whose pace changes with the size of the files in other ways is not.
 - What a job does without reports is not in the work left: the time left shows `0:00`, then

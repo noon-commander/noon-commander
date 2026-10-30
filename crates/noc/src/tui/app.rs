@@ -5638,7 +5638,7 @@ impl App {
                 error,
                 reply,
             } => {
-                job.view.ask(at);
+                job.view.failed(at);
                 let path = location_text(&path);
                 let reason = cells::sanitize(error.as_bytes());
                 let message = match job.kind {

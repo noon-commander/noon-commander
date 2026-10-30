@@ -410,13 +410,23 @@ struct Forecast {
     /// entries with data of sizes at least twice apart. Then the time left shows whatever the
     /// sizes of the entries left.
     told: bool,
+    /// Bytes copied, as the last report said.
+    copied: u64,
+    /// The job asked about a failure after a report with these entries done and bytes copied:
+    /// the try that failed, and what it does once answered, such as opening the entry again
+    /// for Retry, tell nothing of its pace. Stretches count again after one that ends with more
+    /// of either.
+    failure: Option<(u64, u64)>,
+    /// The job asked about a failure within the entry under way, whose cost it does not tell.
+    failed_entry: bool,
 }
 
 impl Forecast {
     /// The job had `counts` behind it when it had worked `at`.
     fn note(&mut self, at: Duration, counts: &Counts) {
         let mut point = Point::new(at, counts);
-        if let Some(seen) = self.seen {
+        // A pause around a failure is not one the job takes as it works.
+        if let Some(seen) = self.seen.filter(|_| self.failure.is_none()) {
             let pause = at.saturating_sub(seen);
             let (usual, stall) = self.pace_of_pauses(at);
             if pause >= stall {
@@ -437,6 +447,7 @@ impl Forecast {
         point.starts = self.seen.is_none() || counts.done > self.entries;
         self.seen = Some(at);
         self.entries = counts.done;
+        self.copied = counts.bytes_copied;
         point.at = at.saturating_sub(self.still);
         let (Some(last), Some(finished)) = (self.last, self.finished) else {
             self.first = Some(point);
@@ -445,15 +456,25 @@ impl Forecast {
             return;
         };
         if point.at >= last.at + SAMPLE {
-            if !skipped(last, point) {
-                self.paced += point.at.saturating_sub(last.at);
+            if let Some((entries, copied)) = self.failure {
+                // As a pause, which the work behind does not fade over. A report with nothing
+                // new, as a job may send before it tries again, does not end it.
+                if point.entries > entries || point.copied > copied {
+                    self.failure = None;
+                }
+            } else {
+                if !skipped(last, point) {
+                    self.paced += point.at.saturating_sub(last.at);
+                }
+                self.sums.add(last, point);
             }
-            self.sums.add(last, point);
             self.last = Some(point);
         }
         if point.entries > finished.entries {
-            self.sums.fit(finished, point);
-            self.sized(finished, point);
+            if !std::mem::take(&mut self.failed_entry) {
+                self.sums.fit(finished, point);
+                self.sized(finished, point);
+            }
             self.finished = Some(point);
         }
         self.told |= self.sums.stream_bytes > 0.0
@@ -466,6 +487,15 @@ impl Forecast {
     fn asked(&mut self) {
         if let Some(last) = &mut self.last {
             last.starts = true;
+        }
+    }
+
+    /// The job asked what to do about a failure: since its last report it tried and failed,
+    /// and once answered it may try again, as for Retry. Neither is the pace of its work.
+    fn failed(&mut self) {
+        if self.last.is_some() {
+            self.failure = Some((self.entries, self.copied));
+            self.failed_entry = true;
         }
     }
 
@@ -857,6 +887,14 @@ impl JobView {
         self.asking = true;
         self.clock.stop(now);
         self.forecast.asked();
+    }
+
+    /// The job asked at `now` what to do about a failure, as [`ask`](Self::ask) does: what it
+    /// did since its last report, and does once answered until its work goes on, is no pace of
+    /// that work for the time left.
+    pub(crate) fn failed(&mut self, now: Instant) {
+        self.ask(now);
+        self.forecast.failed();
     }
 
     /// The question was answered, and the job goes on.
@@ -2493,6 +2531,73 @@ mod tests {
         run.stream(size, speed);
         let (byte, _) = run.view.forecast.sums.costs();
         assert!((byte * float(speed) - 1.0).abs() < 0.02, "{byte}");
+    }
+
+    #[test]
+    fn the_time_around_a_failure_is_no_pace_of_the_work() {
+        // 100 files of 20 MiB at 10 MiB a second. After one, or forty, the next fails halfway: a
+        // read waits a second, then fails; Retry opens it again in two seconds, and hashes it
+        // from its start. Checksums reported again before they opened it, copies do not.
+        let (size, speed, files) = (20 * MIB, 10 * MIB, 100);
+        let (open, close) = (0.05, 0.01);
+        let each = open + float(size) / float(speed) + close;
+        let chunks = |run: &mut Run, mut left: u64| {
+            while left > 0 {
+                let chunk = left.min(CHUNK);
+                run.at += float(chunk) / float(speed);
+                run.counts.bytes_done += chunk;
+                run.counts.bytes_copied += chunk;
+                left -= chunk;
+                run.report();
+            }
+        };
+        for (before, again) in [(1, false), (1, true), (40, false), (40, true)] {
+            let mut run = Run::new(files, files * size);
+            for _ in 0..before {
+                run.file(size, speed, (open, close));
+            }
+            run.report();
+            run.at += open;
+            chunks(&mut run, size / 2);
+            run.at += 1.0;
+            run.view.failed(run.now());
+            run.view.answered(run.now());
+            run.counts.bytes_done -= size / 2;
+            if again {
+                run.report();
+            }
+            run.at += 2.0;
+            chunks(&mut run, size);
+            // It was 68% too long after one file, 11% after forty.
+            let truth = close + float(files - before - 1) * each;
+            let left = run.left();
+            assert!(
+                (left - truth).abs() < truth * 0.02,
+                "after {before}, again {again}: {left} for {truth}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_question_about_a_taken_name_leaves_the_cost_of_its_entry_in() {
+        // 2,000 files of 64 KiB at 10 MiB a second, each opened in a twentieth of a second,
+        // each after a question about its name, which tells nothing of the pace but the time
+        // it stands: their entries cost their opening.
+        let (size, speed, files) = (64 * 1024, 10 * MIB, 2_000);
+        let mut run = Run::new(files, files * size);
+        for _ in 0..500 {
+            run.report();
+            run.view.ask(run.now());
+            run.view.answered(run.now());
+            run.at += 0.05;
+            run.stream(size, speed);
+            run.at += 0.005;
+            run.counts.done += 1;
+        }
+        run.report();
+        let truth = float(files - 500) * (0.05 + float(size) / float(speed) + 0.005);
+        let left = run.left();
+        assert!((left - truth).abs() < truth * 0.05, "{left} for {truth}");
     }
 
     #[test]

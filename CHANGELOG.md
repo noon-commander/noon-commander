@@ -511,6 +511,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reported the file again before they opened it, as copies do not, which also split a pause long
   enough to be left out as a stall into two that counted, and showed the time left up to 133% too
   long.
+- A failure no longer makes the time left of a job too long: the try that failed and opening the
+  file again for Retry counted as work, so a file that failed halfway, after a second's wait, and
+  took two seconds to open again made the time left 68% too long early on and 11% later, for half
+  a minute and more. Now it keeps within 1%.
 
 ## [0.2.0] - 2026-10-14
 

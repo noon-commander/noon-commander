@@ -1002,7 +1002,11 @@ data has streamed within an entry, or finished entries with data had sizes at le
 It is unknown once no report has come for longer than twice the longest pause between reports
 in the last minute (`PAUSES`), five seconds (`RECENT`) at least, so that a slow link or disk
 that pauses as it works keeps a time left; of such a stall only the usual pause counts for the
-pace, and a stretch that skipped data is a pause. It is unknown, too, until the last three
+pace, and a stretch that skipped data is a pause. So is a failure (`JobView::failed`): from the
+report before the `Failed` question to the first stretch after it that does more, the try that
+failed and what the job does once answered, such as opening the entry again for Retry, are no
+pace, and the entry it was at tells no cost. An `Exists` question is not, as nothing failed
+before it. It is unknown, too, until the last three
 forecasts, a second of work apart, agree within a quarter, each less the time since it was made
 (`ETA_SETTLE`, `ETA_AGREE`), or the job has done half a minute of work that tells the pace,
 neither skipping nor standing still (`ETA_SETTLE_MAX`), as early forecasts know little of the

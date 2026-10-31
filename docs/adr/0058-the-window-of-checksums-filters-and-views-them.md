@@ -29,6 +29,11 @@ typing in it (ADR 0036). The viewer of F3 reads files only, in parts, through a 
 - **It opens on the rows, in Normal mode**, unlike the lists: the window is first a result to
   read, and the buttons have the keys of a dialog. `/` types in the filter, Esc goes back to the
   rows, and Esc again closes the window. `Picker::on_rows` opens a picker so.
+- **`i` no longer types in a filter**, here or in any list: `/` alone does, as it starts quick
+  search in the panels. ADR 0036 had added `i`, as it starts Insert mode in a text field; but in
+  the panels `i` opens the command line, so the same key did two unlike things a window apart, and
+  the window of checksums, more a dialog than a list, would have had it too. In Normal mode a list
+  now takes `i` as no command, as it takes the other letters it does not bind.
 - **A context of its own, `checksums`.** In Normal mode it falls back to `dialog`, whose keys move
   the cursor of the rows and the focus of the buttons, Enter and Space press the button with the
   focus, and Esc closes; in Insert mode, while the filter takes text, to `list`, then `input`, and

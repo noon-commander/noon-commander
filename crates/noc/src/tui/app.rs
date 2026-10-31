@@ -9698,8 +9698,12 @@ mod tests {
         keys(&mut app, &["/"]);
         assert_eq!(app.place(), (Mode::Insert, Context::TabMenu));
         keys(&mut app, &["esc", "i"]);
-        assert_eq!(app.place(), (Mode::Insert, Context::TabMenu), "i as /");
-        keys(&mut app, &["esc", "g", "g", "d", "d"]);
+        assert_eq!(
+            app.place(),
+            (Mode::Normal, Context::TabMenu),
+            "i is not /, as it opens the command line in the panels"
+        );
+        keys(&mut app, &["g", "g", "d", "d"]);
         assert_eq!(app.tabs(Side::Left).len(), 1, "d d closes the tab");
         keys(&mut app, &["q"]);
         assert_eq!(app.context(), Context::Panel);

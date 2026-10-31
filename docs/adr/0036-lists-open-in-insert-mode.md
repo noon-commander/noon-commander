@@ -1,6 +1,8 @@
 # 0036. Lists open in Insert mode
 
-- Status: Accepted; amended by [ADR 0041](0041-lists-always-show-the-whole-row.md)
+- Status: Accepted; amended by [ADR 0041](0041-lists-always-show-the-whole-row.md) and
+  [ADR 0058](0058-the-window-of-checksums-filters-and-views-them.md), after which `i` no longer
+  types in the filter
 - Date: 2026-10-18
 - Amends: [ADR 0022](0022-vim-modes.md)
 

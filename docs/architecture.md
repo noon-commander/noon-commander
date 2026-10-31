@@ -259,7 +259,7 @@ choose a volume or a host, grouped under headings:
   is nearer, or on its host. Up and Down move, and Enter opens the row in that panel; the keys stay
   with the active panel, as after Ctrl+w f and Ctrl+w v. After Esc, `j` and `k` move too, and
   `g g` and `G` go to the first and the last row.
-- The filter, which `/` or `i` types in again, finds the places by name, path or mount point,
+- The filter, which `/` types in again, finds the places by name, path or mount point,
   alias, label, and address, and finds every one, hidden ones too; the rows of more go away while
   the filter has text. It matches them in the [search mode](#search-modes): as fzf does, the
   default, best first, without the headings of the groups; or a row's text must hold the filter,
@@ -415,7 +415,7 @@ directories for the active panel, or after Ctrl+x for the other one, as the
   is dropped. Going to or from the plain mode asks zoxide again. zoxide ignores case: where it
   counts, a directory shows only if it has each keyword in its case. As the other
   [lists](#lists), the window opens in Insert mode, typing keywords, as `zi` does: Esc goes to
-  the rows, in Normal mode, where `/` or `i` types again and Esc closes the window. Directories under
+  the rows, in Normal mode, where `/` types again and Esc closes the window. Directories under
   the home directory show from `~`, and the window matches them as shown.
 - A local directory goes to zoxide (`zoxide add -- <dir>`) once the user does something in it,
   at most once a visit: a copy, move, or delete from it, a copy or move into it when a panel
@@ -621,7 +621,7 @@ and Ctrl+c or F10 closes the window. Esc goes to the rows, with the filter kept,
 (keymap context `list`, which each one's context falls back to): `j`, `k`, Ctrl+j, Ctrl+d,
 Ctrl+u, Ctrl+f, Ctrl+b, `g g`, and `G` move, and the rows scroll as the panels' do, headings among
 them, a count repeats a motion, Enter takes the row, `d d` and F8 delete it where the window can,
-as many rows as a count says (`3d d`, as vim's deletes three lines), `/` or `i` types in the
+as many rows as a count says (`3d d`, as vim's deletes three lines), `/` types in the
 filter again, and Esc, `q`, Ctrl+c, or F10 closes the window. Text pasted while the rows have the keys
 goes to the filter, in Insert mode. There are no digit hotkeys.
 

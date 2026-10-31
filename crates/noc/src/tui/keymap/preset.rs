@@ -510,9 +510,9 @@ pub(super) const PRESET: Preset = &[
     // What the windows that list items to choose from share: the location menu, the tab menu,
     // the zoxide window, the workspaces, the command history, and the list of the key hints
     // fall back to it. They open with the filter taking the keys, in Insert mode, where Esc goes
-    // back to the list and `/` or `i` types in the filter again, as `i` starts Insert mode in a
-    // text field. While the filter takes the keys, Ctrl+s and the key after it switch how it
-    // matches (`search_input`).
+    // back to the list and `/` types in the filter again, as it starts quick search in the
+    // panels; `i` does not, as it opens the command line there (ADR 0058). While the filter
+    // takes the keys, Ctrl+s and the key after it switch how it matches (`search_input`).
     (
         Mode::Normal,
         Context::List,
@@ -525,7 +525,7 @@ pub(super) const PRESET: Preset = &[
             (Action::HalfPageDown, &["ctrl-d"]),
             (Action::Home, &["g g", "home"]),
             (Action::End, &["shift-g", "end"]),
-            (Action::QuickSearch, &["/", "i"]),
+            (Action::QuickSearch, &["/"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c", "q", "f10"]),
         ],

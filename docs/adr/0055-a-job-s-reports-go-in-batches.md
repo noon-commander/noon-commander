@@ -32,8 +32,10 @@ check of ADR 0050, where it is off by 2 to 4%.
 - What waits goes before anything else the job reports, a question or its end, so that all keep
   their order.
 - Reports of counting go in the same batches, but only the last of those that wait: each tells
-  how many entries the job has found so far, which the next tells as well. One that comes after
-  progress waits behind that progress; progress that comes after it goes after it. Jobs report
+  how many entries the job has found so far, which the next tells as well. It goes with the time
+  of the first of them, so that the window knows when a job began to count after some work, and
+  stops its clock there (ADR 0050). One that comes after progress waits behind that progress;
+  progress that comes after it goes after it. Jobs report
   counting after each entry they were given as well as after each directory they list, so that
   files alone, a round trip each on a host, do not show `0 found` until the job starts on them;
   locally, that is thousands of reports a second.

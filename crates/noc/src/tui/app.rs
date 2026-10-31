@@ -5385,7 +5385,7 @@ impl App {
                 break;
             }
             if let Some(effect) = job.queued.take() {
-                job.view.scanning(0);
+                job.view.scanning(0, Instant::now());
                 effects.push(effect);
                 running += 1;
             }
@@ -5612,7 +5612,7 @@ impl App {
             return Vec::new();
         };
         match event {
-            JobEvent::Scanning { items } => job.view.scanning(items),
+            JobEvent::Scanning { at, items } => job.view.scanning(items, at),
             JobEvent::Progress { current, reports } => {
                 if let Some((&(at, counts), before)) = reports.split_last() {
                     for &(at, counts) in before {
@@ -10350,7 +10350,11 @@ mod tests {
             Context::Dialog,
             "the job's window takes the keys"
         );
-        app.job_event(id, JobEvent::Scanning { items: 3 });
+        let counting = JobEvent::Scanning {
+            at: Instant::now(),
+            items: 3,
+        };
+        app.job_event(id, counting);
         assert!(screen(&mut app).contains("3 found"));
         let current = local("/srv/left/a");
         let progress = report(

@@ -186,8 +186,9 @@ pub(crate) enum Done {
 /// handed over to another program.
 #[derive(Debug)]
 pub(crate) enum JobEvent {
-    /// Counting what to do: `items` found so far.
-    Scanning { items: u64 },
+    /// Counting what to do: `items` found so far, as the last of the reports it stands for
+    /// said; `at` the first of them, made as the job started to count or went on counting.
+    Scanning { at: Instant, items: u64 },
     /// How far the job is: what it had behind it in reports it made one after another, each
     /// with `at`, the last at `current`. A busy job sends a batch at most every `BATCH`.
     Progress {
@@ -1246,11 +1247,12 @@ fn finished(id: u64, outcome: Option<Outcome>) -> Done {
 const BATCH: Duration = Duration::from_millis(20);
 
 /// A job's reports of how far it is that wait to go to the UI together: of its counting, the
-/// last, and of its progress, each with the time the job made it.
+/// last, with the time of the first, and of its progress, each with the time the job made it.
 struct Waiting<P> {
-    /// The entries found, as the last report of counting said. Reports of progress that came
-    /// before it went before it waited, so it goes before those that wait with it.
-    found: Option<u64>,
+    /// When the first report of counting that waits was made, and the entries found, as the
+    /// last said. Reports of progress that came before it went before it waited, so it goes
+    /// before those that wait with it.
+    found: Option<(Instant, u64)>,
     reports: Vec<(Instant, Counts)>,
     /// The entry at hand in the last of them.
     current: Option<P>,
@@ -1258,9 +1260,9 @@ struct Waiting<P> {
     sent: Option<Instant>,
 }
 
-/// What goes to the UI at once of what a job reported: the entries found as it counts, then
-/// its reports of progress, the last at its entry.
-type Batch<P> = (Option<u64>, Option<(P, Vec<(Instant, Counts)>)>);
+/// What goes to the UI at once of what a job reported: the entries found as it counts, with
+/// the time of the first report of them, then its reports of progress, the last at its entry.
+type Batch<P> = (Option<(Instant, u64)>, Option<(P, Vec<(Instant, Counts)>)>);
 
 impl<P> Waiting<P> {
     fn new() -> Self {
@@ -1281,10 +1283,11 @@ impl<P> Waiting<P> {
     }
 
     /// Takes a report of counting made at `at`, with `items` found, in place of one that
-    /// waits, and tells whether the batch goes now. Reports of progress that wait must go
-    /// first ([`progress`](Self::progress)).
+    /// waits, whose time it keeps, and tells whether the batch goes now. Reports of progress
+    /// that wait must go first ([`progress`](Self::progress)).
     fn count(&mut self, at: Instant, items: u64) -> bool {
-        self.found = Some(items);
+        let first = self.found.map_or(at, |(first, _)| first);
+        self.found = Some((first, items));
         self.free(at)
     }
 
@@ -1334,8 +1337,8 @@ async fn forward<P>(
     let mut waiting = Waiting::new();
     let send = |waiting: &mut Waiting<P>, now| {
         let (found, progress) = waiting.send(now);
-        if let Some(items) = found {
-            let event = JobEvent::Scanning { items };
+        if let Some((at, items)) = found {
+            let event = JobEvent::Scanning { at, items };
             let _ = done.send(Done::Job { id, event });
         }
         if let Some((current, reports)) = progress {
@@ -2912,20 +2915,24 @@ mod tests {
         let mut waiting = Waiting::<&str>::new();
         // The first goes at once.
         assert!(waiting.count(at(0), 1));
-        assert_eq!(waiting.send(at(0)), (Some(1), None));
-        // Those that come within BATCH wait for it, the last in place of the others.
+        assert_eq!(waiting.send(at(0)), (Some((at(0), 1)), None));
+        // Those that come within BATCH wait for it, the last in place of the others, with the
+        // time of the first.
         assert!(!waiting.count(at(5), 2));
         assert!(!waiting.count(at(15), 3));
         assert!(!waiting.progress());
         assert_eq!(waiting.due(), Some(at(20)));
-        assert_eq!(waiting.send(at(20)), (Some(3), None));
+        assert_eq!(waiting.send(at(20)), (Some((at(5), 3)), None));
         assert_eq!(waiting.due(), None, "none waits");
         // Progress that comes after a count goes after it.
         assert!(!waiting.count(at(25), 4));
         let counts = Counts::default();
         assert!(waiting.take(at(40), "a", counts));
         let batch = vec![(at(40), counts)];
-        assert_eq!(waiting.send(at(40)), (Some(4), Some(("a", batch))));
+        assert_eq!(
+            waiting.send(at(40)),
+            (Some((at(25), 4)), Some(("a", batch)))
+        );
     }
 
     /// A report of a job's progress at `path`, with `bytes` of a thousand done.
@@ -3008,7 +3015,7 @@ mod tests {
         let mut seen = Vec::new();
         while let Ok(Done::Job { id: 7, event }) = forwarded.try_recv() {
             seen.push(match event {
-                JobEvent::Scanning { items } => Some(items),
+                JobEvent::Scanning { items, .. } => Some(items),
                 JobEvent::Progress { .. } => None,
                 other => panic!("{other:?}"),
             });

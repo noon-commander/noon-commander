@@ -972,7 +972,8 @@ runs a job passes its reports on as it takes them (`forward` in `tui/tasks.rs`),
 task, with the time it takes each: when the job made it. Reports of progress go in batches, the
 first after a quiet spell at once, then at most one each 20 ms (`BATCH`), and those that wait go
 before a question or the end. Reports of counting go in the same batches, only the last of those
-that wait, and in order with the progress around them. The window counts each report of a batch
+that wait, with the time of the first, and in order with the progress around them. The window
+counts each report of a batch
 (`JobView::passed`) and shows the last (`JobView::working`), so the speed and the time left are
 those of the reports one by one ([ADR 0055](adr/0055-a-job-s-reports-go-in-batches.md)). The
 window counts each report and
@@ -983,7 +984,8 @@ speed and the time left of the second were worked out makes them be worked out a
 left counting down from the one of the second before, as it would have. The job's
 window times only work: its stopwatch starts with the
 first `Progress` and stands from a `Failed` or `Exists` question, from when the job asked it,
-until the answer, including while the question waits behind other dialogs. The speed is that of
+until the answer, including while the question waits behind other dialogs; and while the job
+counts after some work, from when it began to, until its next `Progress`. The speed is that of
 the last five seconds of work, by
 the stopwatch: the window keeps `bytes_copied` at moments of work at least a quarter of a second
 apart, and divides what was copied since the last of them five seconds back by the time since.
@@ -1021,8 +1023,9 @@ forecasts, a second of work apart, agree within a quarter, each less the time si
 (`ETA_SETTLE`, `ETA_AGREE`), or the job has done half a minute of work that tells the pace,
 neither skipping nor standing still (`ETA_SETTLE_MAX`), as early forecasts know little of the
 pace. A job that counts after some work, as a move does before it copies what it could not
-rename, starts the speed and the time left over (`JobView::scanning`); the move reports that it
-counts even where it lists no directory, as for files alone. Both are worked out once
+rename, starts the speed and the time left over (`JobView::scanning`), and its stopwatch stands
+while it counts, as before a job's first report; the move reports that it counts even where it
+lists no directory, as for files alone. Both are worked out once
 in each second that the time shows and held until
 the next, so they change with it rather than with every frame. The
 time left shown follows the end that the forecast says, smoothed over 9% of the time left, from

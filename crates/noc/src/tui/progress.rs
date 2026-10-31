@@ -979,13 +979,16 @@ impl JobView {
         self.stage = Stage::Waiting;
     }
 
-    /// The job counts what to do, `items` so far. Counting after some work, as a move does
-    /// before it copies what it could not rename, is no work of what follows, which has totals
-    /// of its own: the speed and the time left start over.
-    pub(crate) fn scanning(&mut self, items: u64) {
+    /// The job counts what to do, `items` so far, as it has since `now`. Counting after some
+    /// work, as a move does before it copies what it could not rename, is no work of what
+    /// follows, which has totals of its own: the speed and the time left start over, and the
+    /// clock stands while it counts, as it does before the first report.
+    pub(crate) fn scanning(&mut self, items: u64, now: Instant) {
         if matches!(self.stage, Stage::Working { .. }) {
+            self.clock.stop(now);
             self.samples = Samples::default();
             self.forecast = Forecast::default();
+            self.held.set(None);
         }
         self.stage = Stage::Scanning { items };
     }
@@ -1546,7 +1549,7 @@ mod tests {
     fn until_how_far_it_is_is_known_the_gauge_is_a_skeleton_that_a_shine_crosses() {
         let start = Instant::now();
         let mut view = JobView::new("Delete".to_owned(), "Deleting".to_owned());
-        view.scanning(42);
+        view.scanning(42, start);
         let (title, gauge, dim) = busy_lines(&view, start);
         assert!(title.contains("═ Delete ═"), "{title}");
         assert!(gauge.contains("▒▒▒▒▒▒") && !gauge.contains('%'), "{gauge}");
@@ -1594,7 +1597,7 @@ mod tests {
     fn shows_counting_then_progress() {
         let start = Instant::now();
         let mut view = JobView::new("Delete".to_owned(), "Deleting".to_owned());
-        view.scanning(42);
+        view.scanning(42, start);
         let text = draw_at(&view, start);
         assert!(text.contains("Counting"), "{text}");
         assert!(text.contains("42 found"), "{text}");
@@ -2565,7 +2568,7 @@ mod tests {
             run.counts.done += 1;
             run.report();
         }
-        run.view.scanning(1_001);
+        run.view.scanning(1_001, run.now());
         run.at += 4.0;
         run.counts.total = 400 + 1_001;
         run.counts.bytes_total = 1_000 * 64 * 1024;
@@ -2596,7 +2599,7 @@ mod tests {
             run.counts.done += 1;
             run.report();
         }
-        run.view.scanning(1_001);
+        run.view.scanning(1_001, run.now());
         run.counts.total = 1_000 + 1_001;
         run.counts.bytes_total = 1_000 * MIB;
         run.file(0, speed, (0.01, 0.0));
@@ -3105,6 +3108,34 @@ mod tests {
         assert!(!view.ticking(), "still counting");
         view.working("a".to_owned(), copying(0, 0), start + secs(7));
         assert_eq!(view.timing(start + secs(9)).unwrap().elapsed, secs(2));
+    }
+
+    #[test]
+    fn the_clock_stands_while_a_job_counts_after_some_work() {
+        // A move renames for ten seconds, then counts for a minute what it could not rename,
+        // with a question on the way, then copies for five seconds: it has worked fifteen, as
+        // the counting before a copy's first report does not count either.
+        let start = Instant::now();
+        let mut view = JobView::new("Move".to_owned(), "Moving".to_owned());
+        for second in 0..=10 {
+            let renames = Counts {
+                done: second,
+                total: 20,
+                ..Counts::default()
+            };
+            view.working("a".to_owned(), renames, start + secs(second));
+        }
+        view.scanning(0, start + secs(10));
+        assert!(!view.ticking(), "it counts");
+        view.failed(start + secs(30));
+        view.answered(start + secs(40));
+        assert!(!view.ticking(), "still counting");
+        view.scanning(5, start + secs(50));
+        for second in 0..=5 {
+            let counts = copying(second, second);
+            view.working("b".to_owned(), counts, start + secs(70 + second));
+        }
+        assert_eq!(view.timing(start + secs(75)).unwrap().elapsed, secs(15));
     }
 
     #[test]

@@ -119,7 +119,10 @@ are those after the review.
   before the time left. The move reports that it counts as it starts to, even where it lists no
   directory: files alone that it could not rename, as across the file systems of a host, sent no
   report of it, so the tries to rename them, three round trips each, counted as work that did
-  nothing.
+  nothing. The clock stands while it counts, from its first report of counting to the copy's
+  first report, as it does while a job counts before its first report: it ran on through the
+  counting, unless a question stopped it there, which the answer did not start again before the
+  copy did, so that the counting was in the time of the job or not by chance.
 - **The total is what the files hold.** The bytes left are the total less the bytes done, and
   the total starts as the sizes the job found as it counted. A file that grows or shrinks after
   that, a log being written or cut down, left the total off for the rest of the job: the bytes
@@ -300,6 +303,9 @@ are those after the review.
 - A file that grew after it was counted no longer takes the bytes done past the total, nor one
   that shrank leaves bytes left that will never come: at the end of a job the bytes done are
   the total, and the gauge is at 100%. Tests check both, for copies and for checksums.
+- The time of a move is that of its renames and its copy, not of the counting between them, as
+  the time of a copy leaves out the counting before it. A test checks it, with a question asked
+  as the move counts.
 - The model is two costs and a pace: a link that is fast for big files and slow to open each
   one is right; one whose pace changes with the size of the files in other ways is not.
 - What a job does without reports is not in the work left: the time left shows `0:00`, then

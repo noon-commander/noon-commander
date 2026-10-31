@@ -526,6 +526,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   to it and never go past it. A log cut down after it was counted kept its old size among the
   bytes left, so the time left was too long and the gauge stopped short of 100%; a file still
   being written showed more done than in all, and a time left too short.
+- The time of a move no longer runs while it counts what it could not rename, as that of a copy
+  does not while it counts before its first file. A question asked as it counted stopped the
+  time until the copy started, so the counting was in the time or not by chance.
 
 ## [0.2.0] - 2026-10-14
 

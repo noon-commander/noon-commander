@@ -706,8 +706,8 @@ pub(crate) struct Dialog {
     /// The scroll bar of such a message at the last render, on the right of the frame.
     bar: Cell<Option<Bar>>,
     list: Option<List>,
-    /// While its rows have the focus, the motions move their cursor, past the first row or the
-    /// last to the stop before or after, and what is typed goes to its filter after `/`.
+    /// While its rows have the focus, the motions move their cursor, which Tab leaves, and what
+    /// is typed goes to its filter after `/`.
     picker: Option<Box<Picker>>,
     /// Where the picker was drawn last, for the mouse.
     picker_area: Cell<Option<Rect>>,
@@ -1479,9 +1479,9 @@ impl Dialog {
 
     /// Gives a key to the picker, if there is one. `/` brings the focus to its rows, typing in
     /// its filter. While they have the focus they take every key but Enter, Space, Tab, and
-    /// Shift+Tab: Up on the first row and Down on the last go to the stop before or after, as
-    /// the motions go through the stops of a dialog, Left and Right too while the filter takes
-    /// nothing, and Esc on the rows closes the dialog. `None` for a key the dialog takes.
+    /// Shift+Tab, which leave them as the list's do: the motions move the cursor and stop at the
+    /// first row and the last, Left and Right go to the stop before or after while the filter
+    /// takes nothing, and Esc on the rows closes the dialog. `None` for a key the dialog takes.
     fn handle_picker(&mut self, resolved: Resolved) -> Option<DialogEvent> {
         self.picker.as_ref()?;
         if self.focus != Focus::Picker {
@@ -1491,15 +1491,10 @@ impl Dialog {
             self.focus_on(Focus::Picker, Mode::Normal);
         }
         let picker = self.picker.as_mut()?;
-        let edge = match resolved {
-            Resolved::Action(
-                Action::Confirm | Action::Toggle | Action::NextField | Action::PrevField,
-            ) => true,
-            Resolved::Action(Action::Up) => picker.cursor() == 0,
-            Resolved::Action(Action::Down) => picker.cursor() + 1 >= picker.len(),
-            _ => false,
-        };
-        if edge {
+        if let Resolved::Action(
+            Action::Confirm | Action::Toggle | Action::NextField | Action::PrevField,
+        ) = resolved
+        {
             return None;
         }
         match picker.handle(resolved) {
@@ -3613,7 +3608,7 @@ mod tests {
     }
 
     #[test]
-    fn the_rows_of_a_picker_are_a_stop_that_the_motions_go_past_at_either_end() {
+    fn the_rows_of_a_picker_are_a_stop_whose_motions_move_its_cursor() {
         let mut dialog = with_picker();
         assert_eq!(dialog.focus, Focus::Picker, "its rows start with the focus");
         assert_eq!(dialog.mode(), Mode::Insert, "typing in its filter");
@@ -3622,15 +3617,26 @@ mod tests {
         assert_eq!(dialog.picker().unwrap().len(), 2, "bravo and charlie");
         dialog.handle(action(Action::Left));
         assert_eq!(dialog.focus, Focus::Picker, "Left edits the filter");
+        // The motions stop at the last row and the first.
         dialog.handle(action(Action::Down));
-        assert_eq!(dialog.picker().unwrap().cursor(), 1);
+        dialog.handle(action(Action::Down));
+        assert_eq!(
+            (dialog.focus, dialog.picker().unwrap().cursor()),
+            (Focus::Picker, 1)
+        );
+        dialog.handle(action(Action::Up));
+        dialog.handle(action(Action::Up));
+        assert_eq!(
+            (dialog.focus, dialog.picker().unwrap().cursor()),
+            (Focus::Picker, 0)
+        );
         assert_eq!(
             dialog.handle(action(Action::Confirm)),
             DialogEvent::Pressed(Button::Ok),
             "Enter on a row presses the default button"
         );
-        // Down on the last row goes on to the buttons, and the filter takes no more.
-        dialog.handle(action(Action::Down));
+        // Tab leaves them for the buttons, and the filter takes no more.
+        dialog.handle(action(Action::NextField));
         assert_eq!(dialog.focus, Focus::Button(0));
         assert_eq!(dialog.mode(), Mode::Normal);
         assert_eq!(dialog.search_focused(), None);
@@ -3639,29 +3645,23 @@ mod tests {
             dialog.handle(action(Action::Toggle)),
             DialogEvent::Pressed(Button::Cancel)
         );
-        // Up from the first button comes back to the rows, the cursor where it was.
-        dialog.handle(action(Action::Up));
-        dialog.handle(action(Action::Up));
+        // On the buttons the motions go through the stops, back to the rows.
+        dialog.handle(action(Action::Down));
         assert_eq!(dialog.focus, Focus::Picker);
-        assert_eq!(dialog.picker().unwrap().cursor(), 1);
-        dialog.handle(action(Action::Up));
-        dialog.handle(action(Action::Up));
+        dialog.handle(action(Action::Right));
         assert_eq!(
             dialog.focus,
-            Focus::Button(1),
-            "Up on the first row goes round to the last button"
+            Focus::Button(0),
+            "Right on the rows moves the focus"
         );
-        // `/` on a button types in the filter again, and Tab leaves it.
+        // `/` on a button types in the filter again.
         dialog.handle(action(Action::QuickSearch));
         assert_eq!((dialog.focus, dialog.mode()), (Focus::Picker, Mode::Insert));
-        dialog.handle(action(Action::NextField));
-        assert_eq!(dialog.focus, Focus::Button(0));
         assert_eq!(
             dialog.handle(Resolved::Hotkey('o')),
             DialogEvent::Pressed(Button::Ok)
         );
-        dialog.handle(action(Action::PrevField));
-        assert_eq!((dialog.focus, dialog.mode()), (Focus::Picker, Mode::Normal));
+        dialog.handle(action(Action::NormalMode));
         assert_eq!(
             dialog.handle(action(Action::Cancel)),
             DialogEvent::Cancelled,

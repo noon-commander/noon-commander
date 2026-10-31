@@ -28,10 +28,10 @@ shows, their cursor and scrolling, headings, and a footer. Neither could be the 
 - **Its rows are a stop of the focus**, as a field or a check box is, in the order of the parts;
   without fields or combo boxes before them they start with it. While they have it, the motions
   and the page keys move their cursor, `/` types in the filter, and what is typed goes there
-  while it takes text, with the keys after Ctrl+s. Down, or `j`, on the last row goes on to the
-  stop after them, and Up, or `k`, on the first to the one before, as the motions go through the
-  stops of a dialog; so do Left and Right on the rows, where they edit nothing, and Tab and
-  Shift+Tab. On the buttons the motions go through them, round to the rows, which keep their
+  while it takes text, with the keys after Ctrl+s. The motions never leave the rows: they stop at
+  the first row and the last, as in the list of the search of a tree. Tab and Shift+Tab leave
+  them for the stop after or before, and so do Left and Right on the rows, where they edit
+  nothing. On the buttons the motions go through the stops, round to the rows, which keep their
   cursor, and `/` brings the focus back to the filter, typing in it. Leaving the rows, the filter
   stops taking text. Enter and Space on a row press the default button; Esc on the rows closes
   the dialog; Alt and a letter press a button, as in every dialog. The dialog's mode is the
@@ -53,9 +53,9 @@ shows, their cursor and scrolling, headings, and a footer. Neither could be the 
 ## Consequences
 
 - The window of checksums looks as it did, but its keys are a dialog's: with several files, the
-  rows have the focus, and `j` and `k` go on past them through the buttons and back, where the
-  focus stayed on the buttons and the motions never left the rows; with one file or two compared,
-  the motions move the focus of the buttons, where they did nothing.
+  rows have the focus, which Tab takes to the buttons and the motions there bring back, where the
+  focus stayed on the buttons; with one file or two compared, the motions move the focus of the
+  buttons, where they did nothing.
 - What a dialog learns, the window of checksums has; a window that wants a filter and buttons
   takes a picker in a dialog rather than drawing its own.
 - Two kinds of rows remain in dialogs, the list and the picker. Each list window could become a

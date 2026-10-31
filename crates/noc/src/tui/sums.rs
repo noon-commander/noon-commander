@@ -530,17 +530,23 @@ mod tests {
     }
 
     #[test]
-    fn arrows_choose_a_file_and_go_on_past_the_rows_through_the_buttons() {
+    fn arrows_choose_a_file_and_tab_goes_on_to_the_buttons() {
         let mut window = many();
         // Enter and Space on a row press the default button, To clipboard.
         assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Copy(0));
         press(&mut window, Action::Down);
         assert_eq!(press(&mut window, Action::Toggle), SumsEvent::Copy(1));
-        // Down on the last row goes on to the buttons, as `j` goes through a dialog.
+        // The motions stay in the rows, at the last one and the first.
         press(&mut window, Action::End);
         press(&mut window, Action::Down);
-        assert_eq!(window.selected(), Some(2), "the cursor stays");
         assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Copy(2));
+        press(&mut window, Action::Home);
+        press(&mut window, Action::Up);
+        assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Copy(0));
+        // Tab, or Right, goes on to the buttons, through which the motions go.
+        press(&mut window, Action::Down);
+        press(&mut window, Action::NextField);
+        assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Copy(1));
         press(&mut window, Action::Down);
         assert_eq!(press(&mut window, Action::Confirm), SumsEvent::CopyAll);
         press(&mut window, Action::Down);
@@ -549,15 +555,11 @@ mod tests {
         assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Save);
         press(&mut window, Action::Down);
         assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Closed);
-        // Round to the rows, and back up from the first: Up there goes to the last button.
+        // Round to the rows, which kept their cursor.
         press(&mut window, Action::Down);
-        press(&mut window, Action::Up);
-        assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Copy(1));
-        press(&mut window, Action::Up);
-        press(&mut window, Action::Up);
-        assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Closed);
+        assert_eq!(window.selected(), Some(1));
         press(&mut window, Action::Left);
-        assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Save);
+        assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Closed);
         assert_eq!(press(&mut window, Action::View), SumsEvent::View, "F3");
         assert_eq!(press(&mut window, Action::Cancel), SumsEvent::Closed);
     }

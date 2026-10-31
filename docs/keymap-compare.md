@@ -1299,9 +1299,9 @@ filter, and under them, apart, the whole checksum of the file under the cursor, 
 To clipboard, All to clipboard, View, Save…, and OK
 ([ADR 0058](adr/0058-the-window-of-checksums-filters-and-views-them.md),
 [ADR 0061](adr/0061-a-picker-is-a-part-of-a-dialog.md)). It opens on the rows, which have the
-focus, and falls back to `dialog`: there the motions move the cursor of the rows, and `j` on the
-last row or `k` on the first goes on to the buttons, as Left, Right, and Tab do; on the buttons the
-motions go through them and back to the rows. Enter and Space press the button with the focus, or
+focus, and falls back to `dialog`: there the motions move the cursor of the rows and stop at the
+first and the last, and Left, Right, and Tab go on to the buttons; on the buttons the motions go
+through them and back to the rows. Enter and Space press the button with the focus, or
 To clipboard on a row; Alt and the letter of a button press it, as in every dialog. `/` types in
 the filter from anywhere, as in the lists. F3 shows
 every line in the viewer, as `sha256sum` prints them, and the window comes back when it closes.

@@ -641,9 +641,9 @@ goes to the filter, in Insert mode. There are no digit hotkeys.
   several files: the dialog draws the frame, the title, and the buttons, and the picker its filter,
   its rows, and its footer between them (`Picker::render_in`); its owner gives it the lines and
   draws the rows (`Dialog::render_picker`). Its rows are a stop of the focus (`Focus::Picker`):
-  there the motions move the cursor, and `j` on the last row or `k` on the first goes on to the
-  stop after or before, as Tab, Shift+Tab, Left, and Right do; on the buttons the motions go
-  round, back to the rows, and `/` from anywhere types in the filter. Enter and Space on a row
+  there the motions move the cursor and stop at the first row and the last, and Tab, Shift+Tab,
+  Left, and Right go to the stop after or before; on the buttons the motions go round, back to
+  the rows, and `/` from anywhere types in the filter. Enter and Space on a row
   press the default button.
 - The zoxide window gives its own prompt, matches paths as paths, after `/` best, and in the
   plain mode lets zoxide pick its rows from the keywords typed: the picker says the filter changed

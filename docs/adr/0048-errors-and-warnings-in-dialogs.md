@@ -40,6 +40,12 @@ title and its flag; only an error with OK had a function of its own.
   colors, a field is white on black in errors and black on gray in warnings, where cyan is the
   focus. No accent reads both on the shades and on red or orange, so Catppuccin and Noon set the
   brackets apart by dim and the checks by bold.
+- **The letters of labels have a color in errors and warnings**, as in the other dialogs, and
+  are underlined on the focus, as there: a palette role `tone_hotkey` where the theme's accent
+  does not read on the tone (the gold of the letters in noon-dark, a dark brown in noon-light, a
+  dark bordeaux in Mocha, a light gold in Latte), and over the fields, in the list of a combo box,
+  `error_input_hotkey` and `warning_input_hotkey`: in Catppuccin the tone's own color, as its
+  fields are the other way from it.
 - **An error says Error**: `Dialog::error` with OK, `Dialog::failure` with the buttons for what to
   do now. A dialog on a connection keeps its own title.
 - **Paths and reasons are made safe where they go into the message** (`cells::sanitize`), not in

@@ -350,7 +350,7 @@ impl ComboBox {
                 let style = colors.selected_style();
                 (style, colors.selected_hotkey_style(theme), style)
             } else {
-                (body, colors.hotkey_style(false), symbol)
+                (body, colors.input_hotkey_style(), symbol)
             };
             let chosen = if row == self.chosen {
                 theme.glyphs.choice
@@ -557,10 +557,18 @@ mod tests {
         for name in Theme::NAMES {
             let theme = Theme::by_name(name, ColorDepth::TrueColor).unwrap();
             let tones = [
-                (Tone::Error, theme.error_input, theme.error_symbol),
-                (Tone::Warning, theme.warning_input, theme.warning_symbol),
+                (
+                    Tone::Error,
+                    theme.error_input,
+                    (theme.error_symbol, theme.error_input_hotkey),
+                ),
+                (
+                    Tone::Warning,
+                    theme.warning_input,
+                    (theme.warning_symbol, theme.warning_input_hotkey),
+                ),
             ];
-            for (tone, input, symbol) in tones {
+            for (tone, input, (symbol, letter)) in tones {
                 let screen = (&theme, tone);
                 let terminal = draw_toned(&combo, (24, 9), Position::new(2, 0), screen);
                 let buffer = terminal.backend().buffer();
@@ -573,6 +581,12 @@ mod tests {
                 assert_eq!(colors(style("SHA-256")), want, "{name} {tone:?}: the box");
                 // Past its letter.
                 assert_eq!(colors(style("LAKE3")), want, "{name} {tone:?}: a row");
+                let lettered = Style::reset().patch(input.patch(letter));
+                assert_eq!(
+                    colors(style("BLAKE3")),
+                    colors(lettered),
+                    "{name} {tone:?}: its letter"
+                );
                 let frame = buffer[(2, 1)].style();
                 assert_eq!(colors(frame), want, "{name} {tone:?}: the frame");
                 let selected = Colors::of(&theme, tone).selected_style();

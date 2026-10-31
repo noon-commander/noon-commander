@@ -25,6 +25,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Catppuccin themes fields and the focus are shades of the dialog's red or orange, no longer the
   blue or gray of other dialogs
   ([ADR 0048](docs/adr/0048-errors-and-warnings-in-dialogs.md)).
+- In error dialogs and warnings of the Noon and Catppuccin themes the letters for Alt have a
+  color, as in other dialogs, rather than only an underline; on the focus they stay underlined.
 - A move between two local disks asked twice about a taken name: once before it tried to rename
   the file, and again when it copied it instead.
 

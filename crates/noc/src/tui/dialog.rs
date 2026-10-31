@@ -388,6 +388,8 @@ pub(crate) struct Colors {
     hotkey_focused: Style,
     /// Text fields and combo boxes, and the lists the boxes open.
     input: Style,
+    /// The letters of the choices of those lists, over `input`.
+    input_hotkey: Style,
     /// The brackets of check boxes and combo boxes, and their checks and arrows, over `body`
     /// and over `input`.
     bracket: Style,
@@ -403,6 +405,12 @@ impl Colors {
     /// The style of text fields and combo boxes.
     pub(crate) fn input_style(self) -> Style {
         self.input
+    }
+
+    /// The style of the letters of the choices in the list of a combo box, over
+    /// [`input_style`](Self::input_style).
+    pub(crate) fn input_hotkey_style(self) -> Style {
+        self.input_hotkey
     }
 
     /// The styles of the brackets and of the symbols of a combo box, over `input`.
@@ -490,6 +498,7 @@ impl Colors {
                 hotkey: theme.dialog_hotkey,
                 hotkey_focused: theme.dialog_hotkey_focused,
                 input: theme.dialog_input,
+                input_hotkey: theme.dialog_hotkey,
                 bracket: theme.dialog_bracket,
                 symbol: theme.dialog_symbol,
             },
@@ -502,6 +511,7 @@ impl Colors {
                 hotkey: theme.warning_hotkey,
                 hotkey_focused: theme.warning_hotkey_focused,
                 input: theme.warning_input,
+                input_hotkey: theme.warning_input_hotkey,
                 bracket: theme.warning_bracket,
                 symbol: theme.warning_symbol,
             },
@@ -514,6 +524,7 @@ impl Colors {
                 hotkey: theme.error_hotkey,
                 hotkey_focused: theme.error_hotkey_focused,
                 input: theme.error_input,
+                input_hotkey: theme.error_input_hotkey,
                 bracket: theme.error_bracket,
                 symbol: theme.error_symbol,
             },

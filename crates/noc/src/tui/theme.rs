@@ -157,6 +157,8 @@ pub(crate) struct Theme {
     /// `error_input`.
     pub(crate) error_bracket: Style,
     pub(crate) error_symbol: Style,
+    /// The letters of the choices in the list of a combo box, over `error_input`.
+    pub(crate) error_input_hotkey: Style,
     /// Warnings, the dialogs that ask before something that cannot be undone: body, frame, text,
     /// and buttons without the focus, on a background of their own, apart from `dialog` and
     /// from the red of errors.
@@ -166,10 +168,12 @@ pub(crate) struct Theme {
     /// The letters of labels in warnings.
     pub(crate) warning_hotkey: Style,
     pub(crate) warning_hotkey_focused: Style,
-    /// The same as `error_input`, `error_bracket`, and `error_symbol`, in warnings.
+    /// The same as `error_input`, `error_bracket`, `error_symbol`, and `error_input_hotkey`, in
+    /// warnings.
     pub(crate) warning_input: Style,
     pub(crate) warning_bracket: Style,
     pub(crate) warning_symbol: Style,
+    pub(crate) warning_input_hotkey: Style,
     /// Tabs: the line of tabs, the tabs that do not show, and what parts them; tabs drawn
     /// in a panel's frame take it too.
     pub(crate) tab: Style,
@@ -352,6 +356,7 @@ impl Theme {
             error_input: on(Color::White, Color::Black),
             error_bracket: fg(Color::Gray),
             error_symbol: fg(Color::LightYellow),
+            error_input_hotkey: fg(Color::LightYellow),
             // Yellow, the nearest of the 16 colors to orange: the terminal's palette makes it
             // brown or a dark yellow, on which black reads, and blue as in the gray dialogs.
             warning_dialog: on(Color::Black, Color::Yellow),
@@ -363,6 +368,7 @@ impl Theme {
             warning_input: on(Color::Black, Color::Gray),
             warning_bracket: fg(Color::DarkGray),
             warning_symbol: fg(Color::Blue),
+            warning_input_hotkey: fg(Color::Blue),
             // Dark, as the F-key bar below the panels.
             tab: on(Color::Gray, Color::Black),
             tab_active: on(Color::White, Color::Blue).bold(),
@@ -455,6 +461,7 @@ impl Theme {
             error_input: reversed,
             error_bracket: Style::new().dim(),
             error_symbol: Style::new().bold(),
+            error_input_hotkey: Style::new().underlined(),
             // No color to tell them from errors.
             warning_dialog: plain,
             warning_title: plain.bold(),
@@ -464,6 +471,7 @@ impl Theme {
             warning_input: reversed,
             warning_bracket: Style::new().dim(),
             warning_symbol: Style::new().bold(),
+            warning_input_hotkey: Style::new().underlined(),
             tab: plain.dim(),
             tab_active: plain.bold().underlined(),
             tab_active_idle: plain.bold(),
@@ -551,21 +559,25 @@ impl Theme {
             error_title: on(p.base, p.red),
             // In shades of red, as fields and the focus of warnings in shades of theirs.
             error_button_focused: on(p.red_field, p.red_focus),
-            // No accent reads on red.
-            error_hotkey: Style::new().underlined(),
+            // No accent of Catppuccin reads on red or peach: a color of their own, and on their
+            // fields, which are the other way, the tone's own color; underlined on the focus, as
+            // in the other dialogs.
+            error_hotkey: fg(p.tone_hotkey),
             error_hotkey_focused: Style::new().underlined(),
-            // No accent reads on the shades: weight alone.
             error_input: on(p.red_focus, p.red_field),
+            // Weight alone, which reads on the tone and on its shades.
             error_bracket: Style::new().dim(),
             error_symbol: Style::new().bold(),
+            error_input_hotkey: fg(p.red),
             warning_dialog: on(p.base, p.warning),
             warning_title: on(p.base, p.warning),
             warning_button_focused: on(p.warning_field, p.warning_focus),
-            warning_hotkey: Style::new().underlined(),
+            warning_hotkey: fg(p.tone_hotkey),
             warning_hotkey_focused: Style::new().underlined(),
             warning_input: on(p.warning_focus, p.warning_field),
             warning_bracket: Style::new().dim(),
             warning_symbol: Style::new().bold(),
+            warning_input_hotkey: fg(p.warning),
             tab: on(p.overlay1, p.crust),
             tab_active: on(p.text, p.base).bold(),
             tab_active_idle: on(p.subtext0, p.base),
@@ -657,21 +669,25 @@ impl Theme {
             error_title: on(p.ink, p.danger).bold(),
             // In shades of red, as fields and the focus of warnings in shades of theirs.
             error_button_focused: on(p.danger_field, p.danger_focus),
-            // Gold reads poorly on the pale red of noon-light.
-            error_hotkey: Style::new().underlined(),
+            // The gold of the letters of dialogs in noon-dark, where it reads on the tones and
+            // their fields; in noon-light, where it does not, a dark brown. Underlined on the
+            // focus, as in the other dialogs.
+            error_hotkey: fg(p.tone_hotkey),
             error_hotkey_focused: Style::new().underlined(),
-            // Gold reads neither on the reds and oranges nor on their shades: weight alone.
             error_input: on(p.danger_focus, p.danger_field),
+            // Gold reads neither on the reds and oranges nor on their shades: weight alone.
             error_bracket: Style::new().dim(),
             error_symbol: Style::new().bold(),
+            error_input_hotkey: fg(p.tone_hotkey),
             warning_dialog: on(p.ink, p.warning),
             warning_title: on(p.ink, p.warning).bold(),
             warning_button_focused: on(p.warning_field, p.warning_focus),
-            warning_hotkey: Style::new().underlined(),
+            warning_hotkey: fg(p.tone_hotkey),
             warning_hotkey_focused: Style::new().underlined(),
             warning_input: on(p.warning_focus, p.warning_field),
             warning_bracket: Style::new().dim(),
             warning_symbol: Style::new().bold(),
+            warning_input_hotkey: fg(p.tone_hotkey),
             tab: on(p.muted, p.deep),
             tab_active: on(p.text, p.panel).bold(),
             tab_active_idle: on(p.muted, p.panel),
@@ -820,6 +836,9 @@ struct Palette {
     warning_focus: Color,
     red_field: Color,
     red_focus: Color,
+    /// The letters of labels on `warning` and `red`, where no accent reads: a dark bordeaux in
+    /// Mocha, a light gold in Latte.
+    tone_hotkey: Color,
     mauve: Color,
     red: Color,
     yellow: Color,
@@ -847,6 +866,7 @@ impl Palette {
         warning_focus: Color::from_u32(0x00fd_d9bf),
         red_field: Color::from_u32(0x007a_3f52),
         red_focus: Color::from_u32(0x00fb_d0dc),
+        tone_hotkey: Color::from_u32(0x005a_1530),
         mauve: Color::from_u32(0x00cb_a6f7),
         red: Color::from_u32(0x00f3_8ba8),
         yellow: Color::from_u32(0x00f9_e2af),
@@ -873,6 +893,7 @@ impl Palette {
         warning_focus: Color::from_u32(0x008a_3605),
         red_field: Color::from_u32(0x00fa_dadf),
         red_focus: Color::from_u32(0x008f_0a26),
+        tone_hotkey: Color::from_u32(0x00ff_d27a),
         mauve: Color::from_u32(0x0088_39ef),
         red: Color::from_u32(0x00d2_0f39),
         yellow: Color::from_u32(0x00df_8e1d),
@@ -901,6 +922,7 @@ impl Palette {
             warning_focus: indexed(self.warning_focus),
             red_field: indexed(self.red_field),
             red_focus: indexed(self.red_focus),
+            tone_hotkey: indexed(self.tone_hotkey),
             mauve: indexed(self.mauve),
             red: indexed(self.red),
             yellow: indexed(self.yellow),
@@ -970,6 +992,9 @@ struct Noon {
     danger_focus: Color,
     warning_field: Color,
     warning_focus: Color,
+    /// The letters of labels on `danger` and `warning` and on their fields: `accent` in the dark
+    /// variant, a dark brown in the light one, where `accent` does not read on them.
+    tone_hotkey: Color,
     pink: Color,
 }
 
@@ -1002,6 +1027,7 @@ impl Noon {
         danger_focus: Color::from_u32(0x00f2_a39a),
         warning_field: Color::from_u32(0x005c_2c08),
         warning_focus: Color::from_u32(0x00f0_b27a),
+        tone_hotkey: Color::from_u32(0x00ff_c24a),
         pink: Color::from_u32(0x00e5_9ae0),
     };
 
@@ -1031,6 +1057,7 @@ impl Noon {
         danger_focus: Color::from_u32(0x00b8_2a26),
         warning_field: Color::from_u32(0x00ff_e4c0),
         warning_focus: Color::from_u32(0x00a9_480f),
+        tone_hotkey: Color::from_u32(0x005c_2000),
         pink: Color::from_u32(0x00a8_439a),
     };
 
@@ -1064,6 +1091,7 @@ impl Noon {
             danger_focus: indexed(self.danger_focus),
             warning_field: indexed(self.warning_field),
             warning_focus: indexed(self.warning_focus),
+            tone_hotkey: indexed(self.tone_hotkey),
             pink: indexed(self.pink),
         }
     }
@@ -1283,6 +1311,12 @@ mod tests {
                         theme.warning_button_focused,
                         theme.warning_hotkey_focused,
                     ),
+                    ("error field", theme.error_input, theme.error_input_hotkey),
+                    (
+                        "warning field",
+                        theme.warning_input,
+                        theme.warning_input_hotkey,
+                    ),
                     ("menu", theme.menu, theme.menu_hotkey),
                     ("selected", theme.menu_selected, theme.menu_hotkey_selected),
                     ("menu bar", theme.menu_bar, theme.menu_hotkey_selected),
@@ -1293,6 +1327,38 @@ mod tests {
                     if let (Some(fg), Some(bg)) = (marked.fg, marked.bg) {
                         assert_ne!(fg, bg, "{name} {depth:?}: {surface}");
                     }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn letters_of_errors_and_warnings_have_a_color_as_those_of_dialogs() {
+        for name in Theme::NAMES {
+            for depth in [ColorDepth::TrueColor, ColorDepth::Indexed] {
+                let theme = Theme::by_name(name, depth).unwrap();
+                if theme.dialog_hotkey.fg.is_none() {
+                    continue;
+                }
+                let surfaces = [
+                    ("error", theme.error_dialog, theme.error_hotkey),
+                    ("warning", theme.warning_dialog, theme.warning_hotkey),
+                    ("error field", theme.error_input, theme.error_input_hotkey),
+                    (
+                        "warning field",
+                        theme.warning_input,
+                        theme.warning_input_hotkey,
+                    ),
+                ];
+                for (surface, style, letter) in surfaces {
+                    let marked = style.patch(letter);
+                    assert!(letter.fg.is_some(), "{name} {depth:?}: {surface}");
+                    assert_ne!(marked.fg, style.fg, "{name} {depth:?}: {surface}");
+                }
+                // On the focus, as in the other dialogs.
+                for focused in [theme.error_hotkey_focused, theme.warning_hotkey_focused] {
+                    let plain = theme.dialog_hotkey_focused;
+                    assert_eq!(focused.fg.is_some(), plain.fg.is_some(), "{name} {depth:?}");
                 }
             }
         }

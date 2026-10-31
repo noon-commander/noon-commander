@@ -17,6 +17,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The default button of a dialog is drawn bold in braces, `{ OK }`, rather than as mc's
   `[< OK >]`.
 
+### Fixed
+
+- A move between two local disks asked twice about a taken name: once before it tried to rename
+  the file, and again when it copied it instead.
+
 ## [0.3.0] - 2026-10-31
 
 ### Added

@@ -48,14 +48,14 @@ stayed behind.
   what follows the last dot, or `.tar` and what follows it; a dot that starts the name starts
   none. A number already at the end stays, as it may be a year or a version: `photo_2024_2.jpg`.
   The name itself comes first where it is free, as in another directory.
-- **A move asks the same.** It renames under the new name where it can.
+- **A move asks the same, once.** It renames under the new name where it can. Where it cannot,
+  across file systems, it copies where the answer said, over the file there if it said so,
+  without asking again.
 
 ## Consequences
 
 - Both files can be read before one goes over the other, and kept both.
 - Any choice for this file goes with any rule for the rest, in one press after the combo box.
 - The question is two lines taller than before.
-- After Rename… a move that cannot rename, across file systems, copies to the name it had and asks
-  again there.
 - A free name is found with a request for each name tried, on a host too; numbers far up take as
   many.

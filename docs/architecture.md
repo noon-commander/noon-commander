@@ -1101,11 +1101,12 @@ waits for a `Conflict` (ADR 0060). Its `Choice` is for this target: Overwrite, S
 path on the target's file system, which asks again if that is taken too, or Abort. Its `Rest` is
 for the later ones: ask about each, the same as this one (a renamed one's directory gets the free
 names of the rest), or overwrite those older, smaller, or larger than their sources, or not of
-their size, and keep the others; unknown times and sizes keep the target. With `overwrite`, the
-job replaces without asking, as when an edited file goes back where it came from. A directory
-where a file would go is a failure, not a question. A symlink in the way is removed first,
-so that a file written directly never goes through it; renaming replaces it anyway. Without
-`posix-rename`, the target is removed before the rename.
+their size, and keep the others; unknown times and sizes keep the target. A move that cannot
+rename a source it asked about copies it where the answer said, without asking again. With
+`overwrite`, the job replaces without asking, as when an edited file goes back where it came
+from. A directory where a file would go is a failure, not a question. A symlink in the way is
+removed first, so that a file written directly never goes through it; renaming replaces it
+anyway. Without `posix-rename`, the target is removed before the rename.
 
 A copy never goes over its source, which writing it directly would empty first: a target that is
 the source by device and inode, under a name spelled otherwise, through a directory spelled

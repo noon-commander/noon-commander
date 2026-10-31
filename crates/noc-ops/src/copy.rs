@@ -66,7 +66,7 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
                     self.progress(source);
                     match self.rename_one(source, &target, true).await? {
                         Renamed::Done => self.outcome.done += 1,
-                        Renamed::Skipped | Renamed::Copy => self.outcome.skipped += 1,
+                        Renamed::Skipped | Renamed::Copy(_) => self.outcome.skipped += 1,
                     }
                     return Ok(());
                 }
@@ -87,7 +87,12 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
             match self.rename_one(&source, &target, false).await? {
                 Renamed::Done => self.outcome.done += 1,
                 Renamed::Skipped => self.outcome.skipped += 1,
-                Renamed::Copy => left.push(source),
+                Renamed::Copy(answered) => {
+                    if let Some(answered) = answered {
+                        self.answered.push((source.clone(), answered));
+                    }
+                    left.push(source);
+                }
             }
         }
         if left.is_empty() {
@@ -164,7 +169,7 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
         source: &V::Path,
         target: &V::Path,
         respelled: bool,
-    ) -> Result<Renamed, Aborted> {
+    ) -> Result<Renamed<V::Path>, Aborted> {
         loop {
             match self.try_rename(source, target, respelled).await {
                 Ok(renamed) => return Ok(renamed),
@@ -186,7 +191,7 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
         source: &V::Path,
         target: &V::Path,
         respelled: bool,
-    ) -> Result<Renamed, Stop<L>> {
+    ) -> Result<Renamed<V::Path>, Stop<L>> {
         let vfs = self.to.vfs;
         let at_source = |error| Stop::Failed((self.from.report)(source), error);
         if respelled {
@@ -206,7 +211,7 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
                 return Err(self.at_target(&target, error));
             }
             Ok(existing) if existing.kind == FileKind::Dir && metadata.kind == FileKind::Dir => {
-                return Ok(Renamed::Copy);
+                return Ok(Renamed::Copy(None));
             }
             Ok(_) => {
                 let item = Item {
@@ -227,7 +232,13 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
         let target = &target;
         let error = match vfs.rename(source, target).await {
             Ok(()) => return Ok(Renamed::Done),
-            Err(error) if error.is_cross_device() => return Ok(Renamed::Copy),
+            Err(error) if error.is_cross_device() => {
+                let answered = Answered {
+                    target: target.clone(),
+                    replace,
+                };
+                return Ok(Renamed::Copy(Some(answered)));
+            }
             // Without posix-rename the target goes first.
             Err(VfsError::AlreadyExists(_)) if replace => match vfs.remove_file(target).await {
                 Ok(()) => vfs.rename(source, target).await.err(),
@@ -421,11 +432,20 @@ pub async fn move_within<V: Vfs, L>(
 }
 
 /// What a rename did.
-enum Renamed {
+enum Renamed<Q> {
     Done,
     Skipped,
-    /// It cannot rename this one; a copy has to move it.
-    Copy,
+    /// It cannot rename this one; a copy has to move it, where the question about a taken name
+    /// said, if it asked.
+    Copy(Option<Answered<Q>>),
+}
+
+/// Where a source goes after the question about its taken name, which its copy does not ask
+/// again: `target`, the name it had or a new one, over what is there if `replace`.
+#[derive(Debug, Clone)]
+struct Answered<Q> {
+    target: Q,
+    replace: bool,
 }
 
 struct Job<'a, 'r, A: Vfs, B: Vfs, L> {
@@ -441,6 +461,10 @@ struct Job<'a, 'r, A: Vfs, B: Vfs, L> {
     /// jumps on a skip nor goes back on a retry.
     bytes_copied: u64,
     policy: Option<Policy<B::Path>>,
+    /// Sources a move could not rename, with what the question about their taken names said.
+    answered: Vec<(A::Path, Answered<B::Path>)>,
+    /// The target that the entry being copied may replace without asking, as answered.
+    granted: Option<B::Path>,
 }
 
 impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
@@ -461,6 +485,8 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
             bytes_total: 0,
             bytes_copied: 0,
             policy: options.overwrite.then_some(Policy::OverwriteAll),
+            answered: Vec::new(),
+            granted: None,
         }
     }
 
@@ -497,11 +523,15 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
             if self.reporter.cancelled() {
                 return Err(Aborted);
             }
+            self.granted = None;
             let target = match item.parent {
                 Some(parent) => targets[parent]
                     .as_ref()
                     .map(|dir| dir.join_name(&item.name)),
-                None => Some(destination.path(&item.name)),
+                None => Some(
+                    self.answered_target(item)
+                        .unwrap_or_else(|| destination.path(&item.name)),
+                ),
             };
             let size = file_size(item);
             let Some(target) = target.filter(|_| !item.skip) else {
@@ -566,6 +596,18 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                 .await?;
         }
         Ok(())
+    }
+
+    /// Where a source that a move could not rename goes, as the question about its taken name
+    /// said; the target it may then replace without asking again.
+    fn answered_target(&mut self, item: &Item<A::Path>) -> Option<B::Path> {
+        let index = self
+            .answered
+            .iter()
+            .position(|(source, _)| *source == item.source)?;
+        let (_, answered) = self.answered.swap_remove(index);
+        self.granted = answered.replace.then(|| answered.target.clone());
+        Some(answered.target)
     }
 
     /// Finishes the directories whose `last` entry is `items[index]`, now done: the deepest
@@ -784,8 +826,8 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
     }
 
     /// What to do about the name `target` of a copy of `item`: free, or taken by something
-    /// that the answer to a question, or an earlier answer for all, says to replace or keep, or
-    /// to leave for another name, which `target` becomes. A directory there is a failure: a
+    /// that the answer to a question, or an earlier answer for it or for all, says to replace or
+    /// keep, or to leave for another name, which `target` becomes. A directory there is a failure: a
     /// file does not replace one; so is the source itself, which a copy would empty.
     async fn plan(&mut self, item: &Item<A::Path>, target: &mut B::Path) -> Result<Plan, Stop<L>> {
         loop {
@@ -801,6 +843,9 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
             if existing.kind == FileKind::Dir {
                 let error = VfsError::AlreadyExists(target.display());
                 return Err(self.at_target(target, error));
+            }
+            if self.granted.as_ref() == Some(&*target) {
+                return Ok(Plan::Replace(existing.kind));
             }
             let next = match self.policy.clone() {
                 Some(policy) => self.by_policy(policy, item, target, &existing).await?,
@@ -1762,6 +1807,30 @@ mod tests {
         assert!(!src.join("a").exists());
         assert_eq!(fs::read_to_string(dst.join("a")).unwrap(), "old");
         assert_eq!(fs::read_to_string(dst.join("a_2")).unwrap(), "new");
+    }
+
+    #[tokio::test]
+    async fn a_move_that_copies_across_devices_asks_once() {
+        for (rename, name, there) in [(true, "a_2", "old"), (false, "a", "new")] {
+            let root = tempfile::tempdir().unwrap();
+            let (src, dst) = both_sides(root.path(), &[("a", "new", "old")]);
+            let answer = if rename {
+                rename_to(&dst.join("a_2"))
+            } else {
+                Conflict::once(Choice::Overwrite)
+            };
+            let script = Script {
+                conflicts: &[answer],
+                ..Script::default()
+            };
+            let device = OtherDevice::default();
+            let (outcome, seen) = run_move(&device, vec![src.join("a")], dst.clone(), script).await;
+            assert_eq!(outcome.done, 1, "{seen:?}");
+            assert_eq!(seen.exists.len(), 1, "the copy asks no more");
+            assert!(!src.join("a").exists());
+            assert_eq!(fs::read_to_string(dst.join(name)).unwrap(), "new");
+            assert_eq!(fs::read_to_string(dst.join("a")).unwrap(), there);
+        }
     }
 
     #[tokio::test]

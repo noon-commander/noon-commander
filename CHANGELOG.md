@@ -19,6 +19,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- In error dialogs and warnings, text fields, combo boxes and their lists, and the brackets and
+  checks of check boxes have colors of their own: a combo box no longer looks like the button with
+  the focus, and with the focus it takes the colors of the buttons beside it. In the Noon and
+  Catppuccin themes fields and the focus are shades of the dialog's red or orange, no longer the
+  blue or gray of other dialogs
+  ([ADR 0048](docs/adr/0048-errors-and-warnings-in-dialogs.md)).
 - A move between two local disks asked twice about a taken name: once before it tried to rename
   the file, and again when it copied it instead.
 

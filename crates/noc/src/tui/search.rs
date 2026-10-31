@@ -489,9 +489,9 @@ impl Mark {
         }
     }
 
-    /// Draws `field` on the line `area` in the colors of the fields of dialogs, with the glyphs
-    /// at its right end. Returns the cursor's column in `area`, and where the glyphs are, for
-    /// the mouse; without room for both, the field shows alone.
+    /// Draws `field` on the line `area` in the style of the field it was made for, with the
+    /// glyphs at its right end. Returns the cursor's column in `area`, and where the glyphs are,
+    /// for the mouse; without room for both, the field shows alone.
     pub(crate) fn render_in_field(
         self,
         frame: &mut Frame<'_>,
@@ -502,12 +502,12 @@ impl Mark {
         let width = usize::from(area.width);
         let glyphs = self.width();
         if width <= glyphs {
-            let (line, column) = dialog::field_line(field, width, theme);
+            let (line, column) = dialog::field_line(field, width, self.style, theme);
             frame.render_widget(line, area);
             return (to_u16(column), None);
         }
         let room = to_u16(width - glyphs);
-        let (line, column) = dialog::field_line(field, usize::from(room), theme);
+        let (line, column) = dialog::field_line(field, usize::from(room), self.style, theme);
         frame.render_widget(
             line,
             Rect {
@@ -516,7 +516,7 @@ impl Mark {
             },
         );
         let at = Rect::new(area.x + room, area.y, to_u16(glyphs), 1);
-        frame.render_widget(Line::from(self.spans()).style(theme.dialog_input), at);
+        frame.render_widget(Line::from(self.spans()).style(self.style), at);
         (to_u16(column), Some(self.drawn_at(at.x, at.y)))
     }
 

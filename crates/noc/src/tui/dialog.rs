@@ -386,7 +386,10 @@ pub(crate) struct Colors {
     /// The letters of labels, over the rest, and over what has the focus.
     hotkey: Style,
     hotkey_focused: Style,
-    /// The brackets of check boxes, and their checks, over `body`.
+    /// Text fields and combo boxes, and the lists the boxes open.
+    input: Style,
+    /// The brackets of check boxes and combo boxes, and their checks and arrows, over `body`
+    /// and over `input`.
     bracket: Style,
     symbol: Style,
 }
@@ -395,6 +398,44 @@ impl Colors {
     /// The style of the button with the focus.
     pub(crate) fn focused_style(self) -> Style {
         self.focused
+    }
+
+    /// The style of text fields and combo boxes.
+    pub(crate) fn input_style(self) -> Style {
+        self.input
+    }
+
+    /// The styles of the brackets and of the symbols of a combo box, over `input`.
+    pub(crate) fn input_marks(self) -> (Style, Style) {
+        (
+            self.input.patch(self.bracket),
+            self.input.patch(self.symbol),
+        )
+    }
+
+    /// The colors of the choice under the cursor of the list, and of a box with the focus, over
+    /// those of text fields: the focus's, as on a button; where fields have the focus's colors,
+    /// as in mc-classic and the terminal theme, those of fields reversed, as Far shows the text
+    /// selected in a field.
+    pub(crate) fn selected_style(self) -> Style {
+        if self.focused != self.input {
+            self.focused
+        } else if self.input.add_modifier.contains(Modifier::REVERSED) {
+            self.input.not_reversed()
+        } else {
+            self.input.reversed()
+        }
+    }
+
+    /// The style of the letters on [`selected_style`](Self::selected_style): as on what has the
+    /// focus where that has its colors, else as on the command under the cursor of a menu,
+    /// where the color of the letters of dialogs may not show.
+    pub(crate) fn selected_hotkey_style(self, theme: &Theme) -> Style {
+        if self.focused == self.input {
+            theme.menu_hotkey_selected
+        } else {
+            self.hotkey_focused
+        }
     }
 
     /// The style of the letters of labels, over the others: over what has the focus if
@@ -437,8 +478,7 @@ impl Colors {
     }
 
     /// The colors of a dialog in `tone`: errors red, as mc draws them, and warnings on a
-    /// background of their own. Only plain dialogs set the brackets and checks of check boxes
-    /// apart, whose colors are for theirs.
+    /// background of their own, each with its own fields, brackets, and checks.
     pub(crate) fn of(theme: &Theme, tone: Tone) -> Self {
         match tone {
             Tone::Plain => Self {
@@ -449,6 +489,7 @@ impl Colors {
                 mark: theme.truncated_dialog,
                 hotkey: theme.dialog_hotkey,
                 hotkey_focused: theme.dialog_hotkey_focused,
+                input: theme.dialog_input,
                 bracket: theme.dialog_bracket,
                 symbol: theme.dialog_symbol,
             },
@@ -460,8 +501,9 @@ impl Colors {
                 mark: theme.truncated_warning,
                 hotkey: theme.warning_hotkey,
                 hotkey_focused: theme.warning_hotkey_focused,
-                bracket: Style::new(),
-                symbol: Style::new(),
+                input: theme.warning_input,
+                bracket: theme.warning_bracket,
+                symbol: theme.warning_symbol,
             },
             Tone::Error => Self {
                 body: theme.error_dialog,
@@ -471,8 +513,9 @@ impl Colors {
                 mark: theme.truncated_error,
                 hotkey: theme.error_hotkey,
                 hotkey_focused: theme.error_hotkey_focused,
-                bracket: Style::new(),
-                symbol: Style::new(),
+                input: theme.error_input,
+                bracket: theme.error_bracket,
+                symbol: theme.error_symbol,
             },
         }
     }
@@ -1586,7 +1629,7 @@ impl Dialog {
             frame.set_cursor_position(cursor);
         }
         if let Some(combo) = self.open_combo_box() {
-            combo.render_list(frame, area, theme);
+            combo.render_list(frame, area, Colors::of(theme, self.tone), theme);
         }
     }
 
@@ -1769,13 +1812,14 @@ impl Dialog {
         if labelled.disabled {
             if let Some(placeholder) = &labelled.placeholder {
                 let room = usize::from(inner.width);
-                frame.render_widget(placeholder_line(placeholder, room, theme), row(index));
+                let line = placeholder_line(placeholder, room, colors.input, theme);
+                frame.render_widget(line, row(index));
             }
-            let style = theme.dialog_input.patch(theme.disabled);
+            let style = colors.input.patch(theme.disabled);
             frame.buffer_mut().set_style(row(index), style);
             return Some(index + 1);
         }
-        let (column, area, glyph) = draw_field(frame, row(index), labelled, theme);
+        let (column, area, glyph) = draw_field(frame, row(index), labelled, (colors, theme));
         self.glyphs
             .borrow_mut()
             .extend(glyph.map(|glyph| (number, glyph)));
@@ -1861,7 +1905,9 @@ impl Dialog {
             theme.glyphs.marks,
         );
         let focused = self.focus == Focus::ComboBox(number);
-        let boxed = labelled.combo.box_spans(room - label_width, focused, theme);
+        let boxed = labelled
+            .combo
+            .box_spans(room - label_width, focused, colors, theme);
         let cells = boxed.iter().map(Span::width).sum::<usize>();
         let x = row.x + u16::try_from(label_width).unwrap_or(0);
         let width = u16::try_from(cells).unwrap_or(u16::MAX);
@@ -2320,22 +2366,22 @@ fn draw_field(
     frame: &mut Frame<'_>,
     area: Rect,
     labelled: &LabelledField,
-    theme: &Theme,
+    (colors, theme): (Colors, &Theme),
 ) -> (usize, Rect, Option<GlyphSpots>) {
     let field = &labelled.field;
     let Some(input) = labelled.search else {
         let room = usize::from(area.width);
         let (line, column) = match &labelled.placeholder {
             Some(placeholder) if field.text().is_empty() => {
-                (placeholder_line(placeholder, room, theme), 0)
+                (placeholder_line(placeholder, room, colors.input, theme), 0)
             }
-            _ => field_line(field, room, theme),
+            _ => field_line(field, room, colors.input, theme),
         };
         frame.render_widget(line, area);
         return (column, area, None);
     };
     let invalid = input.invalid(field.text());
-    let mark = input.mark(invalid, theme.dialog_input, theme);
+    let mark = input.mark(invalid, colors.input, theme);
     let (column, drawn) = mark.render_in_field(frame, area, field, theme);
     let right = drawn.map_or(area.right(), GlyphSpots::left);
     let text = Rect {
@@ -2345,9 +2391,14 @@ fn draw_field(
     (usize::from(column), text, drawn)
 }
 
-/// What of `field` fits in `room` cells, in the color of fields, what Visual mode selects
-/// reversed; and the cursor's column.
-pub(crate) fn field_line(field: &Field, room: usize, theme: &Theme) -> (Line<'static>, usize) {
+/// What of `field` fits in `room` cells, in `style`, the color of fields, what Visual mode
+/// selects reversed; and the cursor's column.
+pub(crate) fn field_line(
+    field: &Field,
+    room: usize,
+    style: Style,
+    theme: &Theme,
+) -> (Line<'static>, usize) {
     let ([before, selected, after], column) = field.visible_parts(room);
     let used = cells::width(&before) + cells::width(&selected);
     let after = cells::fit(
@@ -2359,18 +2410,16 @@ pub(crate) fn field_line(field: &Field, room: usize, theme: &Theme) -> (Line<'st
     );
     let mut line = Line::from(vec![
         Span::raw(before),
-        Span::styled(
-            selected,
-            theme.dialog_input.add_modifier(Modifier::REVERSED),
-        ),
+        Span::styled(selected, style.add_modifier(Modifier::REVERSED)),
     ]);
     line.spans.extend(after);
-    (line.style(theme.dialog_input), column)
+    (line.style(style), column)
 }
 
-/// `placeholder` in an empty field of `room` cells, faint, as the hints of settings are.
-fn placeholder_line(placeholder: &str, room: usize, theme: &Theme) -> Line<'static> {
-    let faint = theme.dialog_input.patch(theme.disabled);
+/// `placeholder` in an empty field of `room` cells in `style`, faint, as the hints of settings
+/// are.
+fn placeholder_line(placeholder: &str, room: usize, style: Style, theme: &Theme) -> Line<'static> {
+    let faint = style.patch(theme.disabled);
     let spans = cells::fit(
         placeholder,
         room,
@@ -2378,7 +2427,7 @@ fn placeholder_line(placeholder: &str, room: usize, theme: &Theme) -> Line<'stat
         (faint, theme.truncated_cursor),
         theme.glyphs.marks,
     );
-    Line::from(spans).style(theme.dialog_input)
+    Line::from(spans).style(style)
 }
 
 #[cfg(test)]
@@ -3887,6 +3936,61 @@ mod tests {
         assert_eq!(title, (Color::Black, Color::Yellow));
         assert_ne!(body, colors(Tone::Plain).1);
         assert_ne!(body, colors(Tone::Error).1);
+    }
+
+    #[test]
+    fn fields_boxes_and_checks_take_the_colors_of_errors_and_warnings() {
+        use ratatui::style::Color;
+
+        let theme = Theme::mc_classic();
+        let colors = |buffer: &Buffer, at: Position| (buffer[at].fg, buffer[at].bg);
+        let find = |buffer: &Buffer, text: &str| super::super::mouse::find(buffer, text);
+
+        // The combo box of a warning, apart from the button with the focus.
+        let mut dialog = with_items();
+        let terminal = draw_themed(&dialog, 60, 14, &theme);
+        let buffer = terminal.backend().buffer();
+        let boxed = find(buffer, "Ask each time");
+        assert_eq!(
+            colors(buffer, boxed),
+            (Color::Black, Color::Gray),
+            "the box"
+        );
+        let button = find(buffer, "{ Skip }");
+        assert_eq!(buffer[button].bg, Color::Cyan, "the focus");
+        let bracket = Position::new(boxed.x - 1, boxed.y);
+        assert_eq!(buffer[bracket].symbol(), "[");
+        assert_eq!(colors(buffer, bracket), (Color::DarkGray, Color::Gray));
+        dialog.focus = Focus::ComboBox(0);
+        let terminal = draw_themed(&dialog, 60, 14, &theme);
+        let buffer = terminal.backend().buffer();
+        let boxed = find(buffer, "Ask each time");
+        assert_eq!(
+            colors(buffer, boxed),
+            (Color::Black, Color::Cyan),
+            "with the focus, as the buttons"
+        );
+
+        // A field and a check box of an error dialog.
+        let dialog = Dialog::error("Cannot write /x")
+            .with_field("&Name:", "x")
+            .with_check("&Again", true);
+        let terminal = draw_themed(&dialog, 60, 12, &theme);
+        let buffer = terminal.backend().buffer();
+        let label = find(buffer, "Name:");
+        let field = Position::new(label.x, label.y + 1);
+        assert_eq!(buffer[field].symbol(), "x");
+        assert_eq!(
+            colors(buffer, field),
+            (Color::White, Color::Black),
+            "the field"
+        );
+        let check = find(buffer, "Again");
+        let bracket = Position::new(check.x - 4, check.y);
+        assert_eq!(buffer[bracket].symbol(), "[");
+        assert_eq!(colors(buffer, bracket), (Color::Gray, Color::Red));
+        let symbol = Position::new(check.x - 3, check.y);
+        assert_eq!(colors(buffer, symbol), (Color::LightYellow, Color::Red));
     }
 
     #[test]

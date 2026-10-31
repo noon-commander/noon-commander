@@ -150,6 +150,13 @@ pub(crate) struct Theme {
     /// The same letters in error dialogs, as mc's `errdhotnormal` and `errdhotfocus`.
     pub(crate) error_hotkey: Style,
     pub(crate) error_hotkey_focused: Style,
+    /// Text fields and combo boxes in error dialogs, and the lists the boxes open: apart from
+    /// `error_dialog` and from `error_button_focused`, which a box with the focus takes.
+    pub(crate) error_input: Style,
+    /// As `dialog_bracket` and `dialog_symbol`, in error dialogs: over `error_dialog` and over
+    /// `error_input`.
+    pub(crate) error_bracket: Style,
+    pub(crate) error_symbol: Style,
     /// Warnings, the dialogs that ask before something that cannot be undone: body, frame, text,
     /// and buttons without the focus, on a background of their own, apart from `dialog` and
     /// from the red of errors.
@@ -159,6 +166,10 @@ pub(crate) struct Theme {
     /// The letters of labels in warnings.
     pub(crate) warning_hotkey: Style,
     pub(crate) warning_hotkey_focused: Style,
+    /// The same as `error_input`, `error_bracket`, and `error_symbol`, in warnings.
+    pub(crate) warning_input: Style,
+    pub(crate) warning_bracket: Style,
+    pub(crate) warning_symbol: Style,
     /// Tabs: the line of tabs, the tabs that do not show, and what parts them; tabs drawn
     /// in a panel's frame take it too.
     pub(crate) tab: Style,
@@ -336,6 +347,11 @@ impl Theme {
             // mc's `errdhotnormal` and `errdhotfocus`.
             error_hotkey: fg(Color::LightYellow),
             error_hotkey_focused: fg(Color::LightYellow),
+            // Black, where the gray of the focus and the cyan of other fields would not show
+            // apart; brackets and checks light, which read on it and on red.
+            error_input: on(Color::White, Color::Black),
+            error_bracket: fg(Color::Gray),
+            error_symbol: fg(Color::LightYellow),
             // Yellow, the nearest of the 16 colors to orange: the terminal's palette makes it
             // brown or a dark yellow, on which black reads, and blue as in the gray dialogs.
             warning_dialog: on(Color::Black, Color::Yellow),
@@ -343,6 +359,10 @@ impl Theme {
             warning_button_focused: on(Color::Black, Color::Cyan),
             warning_hotkey: fg(Color::Blue),
             warning_hotkey_focused: fg(Color::Blue),
+            // Gray, as the dialogs: cyan is the focus here. Brackets and checks as on them.
+            warning_input: on(Color::Black, Color::Gray),
+            warning_bracket: fg(Color::DarkGray),
+            warning_symbol: fg(Color::Blue),
             // Dark, as the F-key bar below the panels.
             tab: on(Color::Gray, Color::Black),
             tab_active: on(Color::White, Color::Blue).bold(),
@@ -432,12 +452,18 @@ impl Theme {
             error_button_focused: reversed,
             error_hotkey: Style::new().underlined(),
             error_hotkey_focused: Style::new().underlined(),
+            error_input: reversed,
+            error_bracket: Style::new().dim(),
+            error_symbol: Style::new().bold(),
             // No color to tell them from errors.
             warning_dialog: plain,
             warning_title: plain.bold(),
             warning_button_focused: reversed,
             warning_hotkey: Style::new().underlined(),
             warning_hotkey_focused: Style::new().underlined(),
+            warning_input: reversed,
+            warning_bracket: Style::new().dim(),
+            warning_symbol: Style::new().bold(),
             tab: plain.dim(),
             tab_active: plain.bold().underlined(),
             tab_active_idle: plain.bold(),
@@ -523,15 +549,23 @@ impl Theme {
             busy_dialog: fg(p.mauve),
             error_dialog: on(p.base, p.red),
             error_title: on(p.base, p.red),
-            error_button_focused: on(p.text, p.surface0),
+            // In shades of red, as fields and the focus of warnings in shades of theirs.
+            error_button_focused: on(p.red_field, p.red_focus),
             // No accent reads on red.
             error_hotkey: Style::new().underlined(),
             error_hotkey_focused: Style::new().underlined(),
+            // No accent reads on the shades: weight alone.
+            error_input: on(p.red_focus, p.red_field),
+            error_bracket: Style::new().dim(),
+            error_symbol: Style::new().bold(),
             warning_dialog: on(p.base, p.warning),
             warning_title: on(p.base, p.warning),
-            warning_button_focused: on(p.text, p.surface0),
+            warning_button_focused: on(p.warning_field, p.warning_focus),
             warning_hotkey: Style::new().underlined(),
             warning_hotkey_focused: Style::new().underlined(),
+            warning_input: on(p.warning_focus, p.warning_field),
+            warning_bracket: Style::new().dim(),
+            warning_symbol: Style::new().bold(),
             tab: on(p.overlay1, p.crust),
             tab_active: on(p.text, p.base).bold(),
             tab_active_idle: on(p.subtext0, p.base),
@@ -621,15 +655,23 @@ impl Theme {
             busy_dialog: fg(p.accent),
             error_dialog: on(p.ink, p.danger),
             error_title: on(p.ink, p.danger).bold(),
-            error_button_focused: on(p.text, p.surface),
+            // In shades of red, as fields and the focus of warnings in shades of theirs.
+            error_button_focused: on(p.danger_field, p.danger_focus),
             // Gold reads poorly on the pale red of noon-light.
             error_hotkey: Style::new().underlined(),
             error_hotkey_focused: Style::new().underlined(),
+            // Gold reads neither on the reds and oranges nor on their shades: weight alone.
+            error_input: on(p.danger_focus, p.danger_field),
+            error_bracket: Style::new().dim(),
+            error_symbol: Style::new().bold(),
             warning_dialog: on(p.ink, p.warning),
             warning_title: on(p.ink, p.warning).bold(),
-            warning_button_focused: on(p.text, p.surface),
+            warning_button_focused: on(p.warning_field, p.warning_focus),
             warning_hotkey: Style::new().underlined(),
             warning_hotkey_focused: Style::new().underlined(),
+            warning_input: on(p.warning_focus, p.warning_field),
+            warning_bracket: Style::new().dim(),
+            warning_symbol: Style::new().bold(),
             tab: on(p.muted, p.deep),
             tab_active: on(p.text, p.panel).bold(),
             tab_active_idle: on(p.muted, p.panel),
@@ -771,6 +813,13 @@ struct Palette {
     /// Behind warnings, under `base`: `peach`, darkened in Latte, where `base` does not read on
     /// it.
     warning: Color,
+    /// Shades of `warning` and `red`, for the dialogs in them: behind their text fields, away
+    /// from their text, darker in Mocha and lighter in Latte; and behind what has the focus,
+    /// the other way. Each is the text on the other.
+    warning_field: Color,
+    warning_focus: Color,
+    red_field: Color,
+    red_focus: Color,
     mauve: Color,
     red: Color,
     yellow: Color,
@@ -794,6 +843,10 @@ impl Palette {
         pink: Color::from_u32(0x00f5_c2e7),
         peach: Color::from_u32(0x00fa_b387),
         warning: Color::from_u32(0x00fa_b387),
+        warning_field: Color::from_u32(0x007a_4e38),
+        warning_focus: Color::from_u32(0x00fd_d9bf),
+        red_field: Color::from_u32(0x007a_3f52),
+        red_focus: Color::from_u32(0x00fb_d0dc),
         mauve: Color::from_u32(0x00cb_a6f7),
         red: Color::from_u32(0x00f3_8ba8),
         yellow: Color::from_u32(0x00f9_e2af),
@@ -816,6 +869,10 @@ impl Palette {
         pink: Color::from_u32(0x00ea_76cb),
         peach: Color::from_u32(0x00fe_640b),
         warning: Color::from_u32(0x00be_4b08),
+        warning_field: Color::from_u32(0x00fb_e3d4),
+        warning_focus: Color::from_u32(0x008a_3605),
+        red_field: Color::from_u32(0x00fa_dadf),
+        red_focus: Color::from_u32(0x008f_0a26),
         mauve: Color::from_u32(0x0088_39ef),
         red: Color::from_u32(0x00d2_0f39),
         yellow: Color::from_u32(0x00df_8e1d),
@@ -840,6 +897,10 @@ impl Palette {
             pink: indexed(self.pink),
             peach: indexed(self.peach),
             warning: indexed(self.warning),
+            warning_field: indexed(self.warning_field),
+            warning_focus: indexed(self.warning_focus),
+            red_field: indexed(self.red_field),
+            red_focus: indexed(self.red_focus),
             mauve: indexed(self.mauve),
             red: indexed(self.red),
             yellow: indexed(self.yellow),
@@ -902,6 +963,13 @@ struct Noon {
     /// The color of the 256 that stands for `warning`, where the nearest is that of `sun` or
     /// `amber`: a warning must not look like the cursor or the menu bar.
     warning_indexed: Option<Color>,
+    /// Shades of `danger` and `warning`, for the dialogs in them: behind their text fields,
+    /// darker in the dark variant and lighter in the light one; and behind what has the focus,
+    /// the other way, apart from `sun` and `amber`. Each is the text on the other.
+    danger_field: Color,
+    danger_focus: Color,
+    warning_field: Color,
+    warning_focus: Color,
     pink: Color,
 }
 
@@ -930,6 +998,10 @@ impl Noon {
         warning: Color::from_u32(0x008f_4f0c),
         // The nearest is `amber`'s, and the next `sun`'s.
         warning_indexed: Some(Color::Indexed(166)),
+        danger_field: Color::from_u32(0x005e_1f1a),
+        danger_focus: Color::from_u32(0x00f2_a39a),
+        warning_field: Color::from_u32(0x005c_2c08),
+        warning_focus: Color::from_u32(0x00f0_b27a),
         pink: Color::from_u32(0x00e5_9ae0),
     };
 
@@ -955,6 +1027,10 @@ impl Noon {
         danger: Color::from_u32(0x00f2_a39a),
         warning: Color::from_u32(0x00f9_955f),
         warning_indexed: None,
+        danger_field: Color::from_u32(0x00ff_e0dc),
+        danger_focus: Color::from_u32(0x00b8_2a26),
+        warning_field: Color::from_u32(0x00ff_e4c0),
+        warning_focus: Color::from_u32(0x00a9_480f),
         pink: Color::from_u32(0x00a8_439a),
     };
 
@@ -984,6 +1060,10 @@ impl Noon {
                 .warning_indexed
                 .unwrap_or_else(|| indexed(self.warning)),
             warning_indexed: None,
+            danger_field: indexed(self.danger_field),
+            danger_focus: indexed(self.danger_focus),
+            warning_field: indexed(self.warning_field),
+            warning_focus: indexed(self.warning_focus),
             pink: indexed(self.pink),
         }
     }
@@ -1254,13 +1334,75 @@ mod tests {
         for name in Theme::NAMES {
             for depth in [ColorDepth::TrueColor, ColorDepth::Indexed] {
                 let theme = Theme::by_name(name, depth).unwrap();
-                let field = theme.dialog_input;
-                let disabled = field.patch(theme.disabled);
-                assert!(disabled != field, "{name} {depth:?}");
-                assert!(
-                    disabled.fg.is_none() || disabled.fg != field.bg,
-                    "{name} {depth:?}: shows on the field"
-                );
+                for field in [theme.dialog_input, theme.error_input, theme.warning_input] {
+                    let disabled = field.patch(theme.disabled);
+                    assert!(disabled != field, "{name} {depth:?}");
+                    assert!(
+                        disabled.fg.is_none() || disabled.fg != field.bg,
+                        "{name} {depth:?}: shows on the field"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fields_of_errors_and_warnings_stand_apart_from_their_dialog_and_its_focus() {
+        for name in Theme::NAMES {
+            for depth in [ColorDepth::TrueColor, ColorDepth::Indexed] {
+                let theme = Theme::by_name(name, depth).unwrap();
+                let tones = [
+                    (
+                        "error",
+                        theme.error_dialog,
+                        theme.error_input,
+                        theme.error_button_focused,
+                    ),
+                    (
+                        "warning",
+                        theme.warning_dialog,
+                        theme.warning_input,
+                        theme.warning_button_focused,
+                    ),
+                ];
+                for (tone, body, input, focused) in tones {
+                    let Some(background) = input.bg else {
+                        // Without colors, reverse video, as the fields of every dialog.
+                        assert_eq!(input, theme.dialog_input, "{name}: {tone}");
+                        continue;
+                    };
+                    assert_ne!(body.bg, Some(background), "{name} {depth:?}: {tone}");
+                    assert_ne!(focused.bg, Some(background), "{name} {depth:?}: {tone}");
+                    assert_ne!(input.fg, Some(background), "{name} {depth:?}: {tone}");
+                    if *name == "mc-classic" {
+                        continue;
+                    }
+                    // Shades of the tone, apart from the colors of plain dialogs, the cursor,
+                    // and the menu bar.
+                    let others = [
+                        ("dialog", theme.dialog),
+                        ("field", theme.dialog_input),
+                        ("focus", theme.dialog_button_focused),
+                        ("cursor", theme.cursor),
+                        ("menu bar", theme.menu_bar_inactive),
+                    ];
+                    for (other, style) in others {
+                        for (part, ours) in [("field", input), ("focus", focused)] {
+                            assert_ne!(
+                                ours.bg, style.bg,
+                                "{name} {depth:?}: {tone} {part} as {other}"
+                            );
+                        }
+                    }
+                    assert_ne!(focused.fg, focused.bg, "{name} {depth:?}: {tone}");
+                    assert_ne!(focused.bg, body.bg, "{name} {depth:?}: {tone}");
+                    if depth == ColorDepth::Indexed {
+                        assert!(
+                            matches!(background, Color::Indexed(16..)),
+                            "{name}: {tone}: {background:?}"
+                        );
+                    }
+                }
             }
         }
     }
@@ -1270,9 +1412,26 @@ mod tests {
         for name in Theme::NAMES {
             for depth in [ColorDepth::TrueColor, ColorDepth::Indexed] {
                 let theme = Theme::by_name(name, depth).unwrap();
-                for under in [theme.dialog, theme.dialog_input] {
-                    let bracket = under.patch(theme.dialog_bracket);
-                    let symbol = under.patch(theme.dialog_symbol);
+                let tones = [
+                    (
+                        [theme.dialog, theme.dialog_input],
+                        (theme.dialog_bracket, theme.dialog_symbol),
+                    ),
+                    (
+                        [theme.error_dialog, theme.error_input],
+                        (theme.error_bracket, theme.error_symbol),
+                    ),
+                    (
+                        [theme.warning_dialog, theme.warning_input],
+                        (theme.warning_bracket, theme.warning_symbol),
+                    ),
+                ];
+                let surfaces = tones.into_iter().flat_map(|(unders, marks)| {
+                    unders.into_iter().map(move |under| (under, marks))
+                });
+                for (under, (bracket, symbol)) in surfaces {
+                    let bracket = under.patch(bracket);
+                    let symbol = under.patch(symbol);
                     assert!(bracket != under, "{name} {depth:?}: brackets");
                     assert!(symbol != under, "{name} {depth:?}: symbols");
                     assert!(bracket != symbol, "{name} {depth:?}");

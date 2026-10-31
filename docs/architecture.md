@@ -1951,7 +1951,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   after its label (a Nerd Font chevron with `ui.icons`), as wide as its widest choice, in the
   colors of text fields (`dialog_input`), its brackets faint (`dialog_bracket`) and its arrow in
   the color of titles (`dialog_symbol`), as the brackets and the check of a check box, `[✓]`
-  (`󰄬` with `ui.icons`); with the focus, either is in its colors alone. `ComboBox` is in
+  (`󰄬` with `ui.icons`); with the focus, either is in its colors alone. In errors and warnings
+  they take the tone's (`error_input`, `warning_input`, and their brackets and symbols;
+  [ADR 0048](adr/0048-errors-and-warnings-in-dialogs.md)), and with the focus the colors of the
+  tone's focus. `ComboBox` is in
   `tui/combo_box.rs`, which the dialogs
   (`Dialog::with_combo_box`, the checksum dialog and the search of a tree) and the Configuration
   dialog hold. Space, Alt and its letter, or a click opens its list under it, or above it where

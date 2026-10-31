@@ -11,12 +11,11 @@ use std::cell::{Cell, RefCell};
 use noc_scroll::scrollbar::{self, Bar};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
-use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Clear};
 
 use super::cells::{self, Align};
-use super::dialog::pop_up;
+use super::dialog::{Colors, pop_up};
 use super::keymap::{Action, Extra};
 use super::label::Label;
 use super::mouse::{Drawn, Pointer, Press};
@@ -254,23 +253,23 @@ impl ComboBox {
     }
 
     /// The box in `width` cells at most, as `[choice ▼]`: the choice padded to the widest, or
-    /// cut in its middle where the room is short, in the colors of text fields, its brackets
-    /// faint and its arrow in the color of titles; or, `focused`, all in the colors of the
-    /// choice under the cursor of the list (see [`selected`]).
+    /// cut in its middle where the room is short, in the colors of text fields of the dialog's
+    /// `colors`, its brackets faint and its arrow in the color of titles; or, `focused`, all in
+    /// the colors of the choice under the cursor of the list (see [`Colors::selected_style`]).
     pub(crate) fn box_spans(
         &self,
         width: usize,
         focused: bool,
+        colors: Colors,
         theme: &Theme,
     ) -> Vec<Span<'static>> {
         let room = self.widest().min(width.saturating_sub(BOX_CELLS));
         let (style, bracket, arrow) = if focused {
-            let style = selected(theme);
+            let style = colors.selected_style();
             (style, style, style)
         } else {
-            let input = theme.dialog_input;
-            let bracket = input.patch(theme.dialog_bracket);
-            (input, bracket, input.patch(theme.dialog_symbol))
+            let (bracket, arrow) = colors.input_marks();
+            (colors.input_style(), bracket, arrow)
         };
         let styles = (style, theme.truncated_cursor);
         let marks = theme.glyphs.marks;
@@ -290,12 +289,18 @@ impl ComboBox {
     }
 
     /// Draws the list, if it is open, from where the box was drawn, within `area`: under the
-    /// box, or above it where there is more room there, in a frame in the colors of text fields,
-    /// which a dialog has not, with a scroll bar on its right when the rows do not all fit. The
-    /// row under the cursor is as a box with the focus (see [`selected`]), the choice has the
-    /// mark of a radio button, in the color of titles but under the cursor, and the letters
-    /// stand apart.
-    pub(crate) fn render_list(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
+    /// box, or above it where there is more room there, in a frame in the colors of text fields
+    /// of the dialog's `colors`, which a dialog has not, with a scroll bar on its right when the
+    /// rows do not all fit. The row under the cursor is as a box with the focus (see
+    /// [`Colors::selected_style`]), the choice has the mark of a radio button, in the color of
+    /// titles but under the cursor, and the letters stand apart.
+    pub(crate) fn render_list(
+        &self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        colors: Colors,
+        theme: &Theme,
+    ) {
         let (Some(list), Some(anchor)) = (&self.list, self.drawn.get()) else {
             return;
         };
@@ -314,7 +319,8 @@ impl ComboBox {
         }
         drawn.frame = outer;
         frame.render_widget(Clear, outer);
-        let (body, mark) = (theme.dialog_input, theme.truncated_cursor);
+        let (body, mark) = (colors.input_style(), theme.truncated_cursor);
+        let (_, symbol) = colors.input_marks();
         let block = Block::new()
             .borders(Borders::ALL)
             .border_type(BorderType::Plain)
@@ -340,13 +346,11 @@ impl ComboBox {
         let room = usize::from(inner.width).saturating_sub(2);
         let rows = self.items.iter().enumerate().skip(top).take(page);
         for (offset, (row, item)) in rows.enumerate() {
-            // The letter as on the command under the cursor of a menu, where the color of the
-            // letters of dialogs may not show.
             let (style, hotkey, symbol) = if row == cursor {
-                let style = selected(theme);
-                (style, theme.menu_hotkey_selected, style)
+                let style = colors.selected_style();
+                (style, colors.selected_hotkey_style(theme), style)
             } else {
-                (body, theme.dialog_hotkey, body.patch(theme.dialog_symbol))
+                (body, colors.hotkey_style(false), symbol)
             };
             let chosen = if row == self.chosen {
                 theme.glyphs.choice
@@ -366,27 +370,14 @@ impl ComboBox {
     }
 }
 
-/// The colors of the choice under the cursor of the list, and of a box with the focus, over
-/// those of text fields: the focus's, as on a button; where fields have the focus's colors, as
-/// in mc-classic and the terminal theme, those of fields reversed, as Far shows the text
-/// selected in a field.
-fn selected(theme: &Theme) -> Style {
-    let (input, focus) = (theme.dialog_input, theme.dialog_button_focused);
-    if focus != input {
-        focus
-    } else if input.add_modifier.contains(Modifier::REVERSED) {
-        input.not_reversed()
-    } else {
-        input.reversed()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
+    use ratatui::style::{Modifier, Style};
 
     use super::*;
+    use crate::tui::dialog::Tone;
 
     fn algorithms() -> ComboBox {
         let items = ["SHA-&256", "SHA-&512", "SHA-&1", "&MD5", "&BLAKE3"].map(str::to_owned);
@@ -406,25 +397,35 @@ mod tests {
     }
 
     /// Draws the box at `at` on a screen of `width` by `height`, and the list over it, in
-    /// `theme`.
-    fn draw_themed(
+    /// `theme`, as a dialog in `tone` does.
+    fn draw_toned(
         combo: &ComboBox,
         (width, height): (u16, u16),
         at: Position,
-        theme: &Theme,
+        (theme, tone): (&Theme, Tone),
     ) -> Terminal<TestBackend> {
+        let colors = Colors::of(theme, tone);
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         terminal
             .draw(|frame| {
-                let spans = combo.box_spans(combo.width(), false, theme);
+                let spans = combo.box_spans(combo.width(), false, colors, theme);
                 let cells = spans.iter().map(Span::width).sum::<usize>();
                 let area = Rect::new(at.x, at.y, u16::try_from(cells).unwrap(), 1);
                 frame.render_widget(Line::from(spans), area);
                 combo.place(Some(area));
-                combo.render_list(frame, frame.area(), theme);
+                combo.render_list(frame, frame.area(), colors, theme);
             })
             .unwrap();
         terminal
+    }
+
+    fn draw_themed(
+        combo: &ComboBox,
+        size: (u16, u16),
+        at: Position,
+        theme: &Theme,
+    ) -> Terminal<TestBackend> {
+        draw_toned(combo, size, at, (theme, Tone::Plain))
     }
 
     fn draw(combo: &ComboBox, size: (u16, u16), at: Position) -> Terminal<TestBackend> {
@@ -520,7 +521,7 @@ mod tests {
             assert_eq!(cell("BLAKE3").bg, input, "a row");
             assert_eq!(buffer[(2, 1)].bg, input, "the frame");
             let under = cell("SHA-512");
-            let want = selected(&theme);
+            let want = Colors::of(&theme, Tone::Plain).selected_style();
             assert_eq!(
                 (Some(under.fg), Some(under.bg)),
                 (want.fg, want.bg),
@@ -544,6 +545,45 @@ mod tests {
             mark.modifier.contains(Modifier::REVERSED),
             "under the cursor"
         );
+    }
+
+    #[test]
+    fn in_errors_and_warnings_the_box_and_its_list_take_their_colors() {
+        use crate::tui::theme::ColorDepth;
+
+        let mut combo = algorithms();
+        combo.open();
+        key(&mut combo, Action::Down);
+        for name in Theme::NAMES {
+            let theme = Theme::by_name(name, ColorDepth::TrueColor).unwrap();
+            let tones = [
+                (Tone::Error, theme.error_input, theme.error_symbol),
+                (Tone::Warning, theme.warning_input, theme.warning_symbol),
+            ];
+            for (tone, input, symbol) in tones {
+                let screen = (&theme, tone);
+                let terminal = draw_toned(&combo, (24, 9), Position::new(2, 0), screen);
+                let buffer = terminal.backend().buffer();
+                let style = |text: &str| {
+                    let at = super::super::mouse::find(buffer, text);
+                    buffer[(at.x, at.y)].style()
+                };
+                let colors = |style: Style| (style.fg, style.bg);
+                let want = colors(Style::reset().patch(input));
+                assert_eq!(colors(style("SHA-256")), want, "{name} {tone:?}: the box");
+                // Past its letter.
+                assert_eq!(colors(style("LAKE3")), want, "{name} {tone:?}: a row");
+                let frame = buffer[(2, 1)].style();
+                assert_eq!(colors(frame), want, "{name} {tone:?}: the frame");
+                let selected = Colors::of(&theme, tone).selected_style();
+                let under = Style::reset().patch(selected);
+                assert_eq!(colors(style("SHA-512")), colors(under), "{name} {tone:?}");
+                assert_ne!(selected, input, "{name} {tone:?}: the cursor apart");
+                let mark = buffer[(3, 2)].style();
+                let symbol = Style::reset().patch(input.patch(symbol));
+                assert_eq!(colors(mark), colors(symbol), "{name} {tone:?}: the mark");
+            }
+        }
     }
 
     #[test]

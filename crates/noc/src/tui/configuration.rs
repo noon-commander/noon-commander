@@ -1087,7 +1087,7 @@ impl Configuration {
             frame.render_widget(Line::from(line).style(styles.0), area);
         }
         if let Some(combo) = self.open_combo_box() {
-            combo.render_list(frame, area, theme);
+            combo.render_list(frame, area, colors, theme);
         }
     }
 
@@ -1167,7 +1167,7 @@ impl Configuration {
                 // A field, as the text fields are, whose name shows the cursor; within the row,
                 // which leaves two cells before the frame.
                 Value::Choice { combo, .. } => {
-                    combo.box_spans(value_width.saturating_sub(2), false, theme)
+                    combo.box_spans(value_width.saturating_sub(2), false, colors, theme)
                 }
                 Value::Text { field, .. } => {
                     let ([before, selected, after], column) = field.visible_parts(value_width);

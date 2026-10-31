@@ -203,7 +203,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`Algorithm: [SHA-256 ▼]`), the mode of the search of a tree (`Mode: [Text ▼]`), and every
   choice of the Configuration dialog, in the colors of text fields. Space, a click, or Alt and the
   letter of the box opens its list of choices under it, in the colors of fields too, apart from
-  the dialog; `j` and `k` move in it, Enter, Space, a click, or Alt and the letter
+  the dialog, the one taken marked `•` (a Nerd Font dot with `ui.icons`) in the color of
+  titles; `j` and `k` move in it, Enter, Space, a click, or Alt and the letter
   of a choice takes it, and Esc keeps the one it had, with `NORMAL · Combo box` on the line of the
   mode. Enter on a closed box presses the default button; in Configuration it opens the list,
   and `h` and `l` still go to the choice before and the next

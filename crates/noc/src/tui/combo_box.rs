@@ -27,8 +27,8 @@ use super::theme::Theme;
 const MAX_ROWS: usize = 10;
 /// Cells of the box around the choice: `[`, and a blank, the arrow, and `]` after it.
 const BOX_CELLS: usize = 4;
-/// Cells of a row of the list around the choice: the mark of the choice and a blank before it,
-/// and a blank after it.
+/// Cells of a row of the list around the choice: the mark of the one chosen and a blank before
+/// it, and a blank after it.
 const ROW_CELLS: usize = 3;
 
 /// What a key or a press did to the list of a combo box.
@@ -293,7 +293,8 @@ impl ComboBox {
     /// box, or above it where there is more room there, in a frame in the colors of text fields,
     /// which a dialog has not, with a scroll bar on its right when the rows do not all fit. The
     /// row under the cursor is as a box with the focus (see [`selected`]), the choice has the
-    /// mark of a choice taken, and the letters stand apart.
+    /// mark of a radio button, in the color of titles but under the cursor, and the letters
+    /// stand apart.
     pub(crate) fn render_list(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let (Some(list), Some(anchor)) = (&self.list, self.drawn.get()) else {
             return;
@@ -341,17 +342,21 @@ impl ComboBox {
         for (offset, (row, item)) in rows.enumerate() {
             // The letter as on the command under the cursor of a menu, where the color of the
             // letters of dialogs may not show.
-            let (style, hotkey) = if row == cursor {
-                (selected(theme), theme.menu_hotkey_selected)
+            let (style, hotkey, symbol) = if row == cursor {
+                let style = selected(theme);
+                (style, theme.menu_hotkey_selected, style)
             } else {
-                (body, theme.dialog_hotkey)
+                (body, theme.dialog_hotkey, body.patch(theme.dialog_symbol))
             };
             let chosen = if row == self.chosen {
-                theme.glyphs.menu_marks.0
+                theme.glyphs.choice
             } else {
                 ' '
             };
-            let mut spans = vec![Span::styled(format!("{chosen} "), style)];
+            let mut spans = vec![
+                Span::styled(chosen.to_string(), symbol),
+                Span::styled(" ", style),
+            ];
             spans.extend(item.fit(room, (style, mark), hotkey, theme.glyphs.marks));
             let y = inner.y + u16::try_from(offset).unwrap_or(0);
             let line = Rect::new(inner.x, y, inner.width, 1);
@@ -523,7 +528,22 @@ mod tests {
             );
             assert!(under.modifier.contains(want.add_modifier));
             assert_ne!(want, theme.dialog_input, "apart from the rows");
+            // The mark of the choice, SHA-256, two cells before it in the list, in the color of
+            // titles; under the cursor, in the cursor's.
+            assert_eq!(buffer[(5, 2)].symbol(), "S");
+            let mark = &buffer[(3, 2)];
+            assert_eq!(mark.symbol(), theme.glyphs.choice.to_string());
+            let symbol = theme.dialog_input.patch(theme.dialog_symbol);
+            assert_eq!((Some(mark.fg), Some(mark.bg)), (symbol.fg, symbol.bg));
         }
+        combo.handle(Action::Up, Extra::default());
+        let theme = Theme::mc_classic();
+        let terminal = draw_themed(&combo, (24, 9), Position::new(2, 0), &theme);
+        let mark = &terminal.backend().buffer()[(3, 2)];
+        assert!(
+            mark.modifier.contains(Modifier::REVERSED),
+            "under the cursor"
+        );
     }
 
     #[test]

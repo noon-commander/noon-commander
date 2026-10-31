@@ -3,7 +3,7 @@ source: crates/noc/src/tui/combo_box.rs
 expression: terminal.backend()
 ---
 "  ┌──────────┐          "
-"  │* SHA-256 │          "
+"  │• SHA-256 │          "
 "  │  SHA-512 │          "
 "  │  SHA-1   │          "
 "  │  MD5     │          "

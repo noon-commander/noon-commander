@@ -94,6 +94,9 @@ pub(crate) struct Glyphs {
     pub(crate) combo_box: char,
     /// In a check box that is on.
     pub(crate) check: char,
+    /// In front of the choice taken among others, as the dot of a radio button: in the list of a
+    /// combo box.
+    pub(crate) choice: char,
     /// In front of each point of a tip in the help.
     pub(crate) bullet: char,
     pub(crate) search_modes: SearchModes,
@@ -152,6 +155,8 @@ impl Glyphs {
         combo_box: '󰅀',
         // nf-md-check.
         check: '󰄬',
+        // nf-md-circle_medium.
+        choice: '󰧞',
         bullet: '•',
         // nf-cod-whole_word, nf-md-approximately_equal, nf-cod-regex, and nf-seti-shell, which
         // is smaller than nf-md-asterisk.
@@ -223,6 +228,8 @@ impl Glyphs {
         combo_box: '▼',
         // As the checks of checksums.
         check: '✓',
+        // As Far's radio buttons, `(•)`.
+        choice: '•',
         bullet: '-',
         search_modes: SearchModes {
             plain: "=",
@@ -388,6 +395,7 @@ mod tests {
             );
             assert_eq!(noc_text::width(&glyphs.combo_box.to_string()), 1);
             assert_eq!(noc_text::width(&glyphs.check.to_string()), 1);
+            assert_eq!(noc_text::width(&glyphs.choice.to_string()), 1);
             let spinners = glyphs.spinners;
             let still = [spinners.still, glyphs.skeleton];
             for glyph in spinners.dots.iter().chain(&still) {

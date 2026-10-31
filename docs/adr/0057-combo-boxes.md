@@ -39,9 +39,12 @@ want.
   in its colors alone.
 - **Its list opens under it**, or above it where there is more room, over the dialog and past its
   frame, as the list of completions (`dialog::pop_up`): a frame, at most ten rows, a scroll bar on
-  the frame when they do not all fit, the choice marked as the pull-down menu marks the choice
-  taken, and the cursor on it. It is in the colors of fields too, which every theme sets apart
-  from those of dialogs, so that it does not run into the dialog it covers.
+  the frame when they do not all fit, and the cursor on the choice. The choice has the dot of a
+  radio button in front of it, `•`, as Far's `(•)`, or a Nerd Font dot with `ui.icons`, in the
+  color of titles but under the cursor: one among others, where the check of a check box is on or
+  off. It
+  is in the colors of fields too, which every theme sets apart from those of dialogs, so that it
+  does not run into the dialog it covers.
 - **The row under the cursor, and a box with the focus**, are in the colors of the focus, as a
   button with it; where fields have those colors already, as in mc-classic (black on cyan) and the
   terminal theme (reversed), in those of fields reversed, as Far shows the text selected in a

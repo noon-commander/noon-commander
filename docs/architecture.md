@@ -1922,7 +1922,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   dialog hold. Space, Alt and its letter, or a click opens its list under it, or above it where
   there is more room, as the list of completions (`dialog::pop_up`), over the dialog and past its
   frame, in the colors of fields too, apart from the dialog's: at most ten rows that scroll with a
-  scroll bar, the choice marked as the pull-down menu marks the choice taken, the cursor on it. The
+  scroll bar, the choice marked with the dot of a radio button, `•` (`󰧞` with `ui.icons`), in the
+  color of titles, the cursor on it. The
   row under the cursor, and a box with the focus, are in the colors of the focus, or in those of
   fields reversed where fields have the focus's (mc-classic, the terminal theme); in the
   Configuration dialog the name of the setting shows the cursor, and the box stays as a field. The
@@ -2066,8 +2067,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 - **Glyphs.** Every special character the UI draws is in `tui/glyphs.rs`: `Glyphs::NERD` and
   `Glyphs::PLAIN`, which `ui.icons` picks and the theme carries (`Theme.glyphs`), with the icons
   and markers of kinds, hosts, and volumes, the glyph of root, the scroll bars, the marks of text
-  cut short, the marks of the pull-down menu, the arrow of combo boxes, and the check of check
-  boxes; `Lines::DOUBLE` and `Lines::SINGLE` by
+  cut short, the marks of the pull-down menu, the arrow of combo boxes and the dot of the choice in
+  their lists, and the check of check boxes; `Lines::DOUBLE` and `Lines::SINGLE` by
   `ui.borders`, with the tees that join lines to frames; and the characters that are the same either
   way: the single line, the line between columns, the `·` after the mode on its line, the spinner,
   the arrows of the sort order, the checks of checksums, the progress bar, the mark of secrets, and

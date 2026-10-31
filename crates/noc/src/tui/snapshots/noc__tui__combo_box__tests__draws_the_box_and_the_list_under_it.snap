@@ -5,7 +5,7 @@ expression: terminal.backend()
 "  [SHA-512 ▼]           "
 "  ┌──────────┐          "
 "  │  SHA-256 │          "
-"  │* SHA-512 │          "
+"  │• SHA-512 │          "
 "  │  SHA-1   │          "
 "  │  MD5     │          "
 "  │  BLAKE3  │          "

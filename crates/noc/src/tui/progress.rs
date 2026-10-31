@@ -365,8 +365,8 @@ impl Sums {
         if let Some(((byte, entry), (true, true))) = fitted {
             return (byte, entry);
         }
-        if let Some(costs) = self.streamed() {
-            return costs;
+        if let Some((byte, entry)) = self.streamed() {
+            return (byte, entry.max(0.0));
         }
         if let Some(((byte, entry), (_, true))) = fitted {
             return (byte.max(0.0), entry);
@@ -376,14 +376,15 @@ impl Sums {
 
     /// What a byte and an entry cost by the data streaming within entries: a byte what it
     /// takes there, an entry what the stretches between finished entries took beyond their
-    /// bytes. Nothing before any data has streamed.
+    /// bytes at that cost, which is less than nothing where their bytes went faster. Nothing
+    /// before any data has streamed.
     fn streamed(&self) -> Option<(f64, f64)> {
         if self.stream_bytes <= 0.0 || self.stream_time <= 0.0 {
             return None;
         }
         let byte = self.stream_time / self.stream_bytes;
         let entry = if self.nn > 0.0 {
-            ((self.nt - byte * self.bn) / self.nn).max(0.0)
+            (self.nt - byte * self.bn) / self.nn
         } else {
             0.0
         };
@@ -701,21 +702,26 @@ impl Forecast {
         ahead > AHEAD * behind
     }
 
-    /// What a byte and an entry cost, with `counts` behind the job: as the sums say, but by
-    /// the data streaming once the entry under way has moved more than [`AHEAD`] times the
-    /// bytes of the largest entry finished: the entries finished tell nothing of what its bytes
-    /// cost, and it tells them nothing until it ends.
-    fn costs(&self, counts: &Counts) -> (f64, f64) {
+    /// What a byte and an entry left cost, with `counts` behind the job, and an entry behind,
+    /// which weighs the work behind for its pace: as the sums say, but by the data streaming
+    /// once the entry under way has moved more than [`AHEAD`] times the bytes of the largest
+    /// entry finished: the entries finished tell nothing of what its bytes cost, and it tells
+    /// them nothing until it ends. An entry behind then costs what it took beyond its bytes at
+    /// that cost, less than nothing where their bytes went faster than those streaming: at
+    /// none, as an entry left costs then, small files that took the time of their bytes
+    /// weighed as many times what they took, and the time left came out as many times shorter.
+    fn costs(&self, counts: &Counts) -> (f64, f64, f64) {
         let beyond = match (self.finished, self.sizes) {
             (Some(finished), Some((_, most))) => {
                 float(counts.bytes_copied.saturating_sub(finished.copied)) > AHEAD * most
             }
             _ => false,
         };
-        if beyond && let Some(costs) = self.sums.streamed() {
-            return costs;
+        if beyond && let Some((byte, entry)) = self.sums.streamed() {
+            return (byte, entry.max(0.0), entry);
         }
-        self.sums.costs()
+        let (byte, entry) = self.sums.costs();
+        (byte, entry, entry)
     }
 
     /// The pauses the job takes as it works, at `at`: the longest of the last [`PAUSES`], and
@@ -747,8 +753,11 @@ impl Forecast {
         let sums = &self.sums;
         let bytes = float(counts.bytes_total.saturating_sub(counts.bytes_done));
         let entries = float(counts.total.saturating_sub(counts.done));
-        let (byte, entry) = self.costs(counts);
-        let done = byte * sums.bytes + entry * sums.entries;
+        let (byte, entry, behind) = self.costs(counts);
+        let mut done = byte * sums.bytes + behind * sums.entries;
+        if done <= 0.0 {
+            done = byte * sums.bytes + entry * sums.entries;
+        }
         let seconds = if done > 0.0 {
             sums.time * (byte * bytes + entry * entries) / done
         } else if counts.bytes_done >= counts.bytes_total && sums.entries > 0.0 {
@@ -3004,6 +3013,40 @@ mod tests {
                         "{small} then {big}, {second} s in: {left} for {truth}"
                     );
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn a_file_far_larger_than_small_ones_that_took_the_time_of_their_bytes_goes_at_its_pace() {
+        // On a disk, 20,000 files of up to 256 KiB at 1 GiB a second, each opened in a tenth of
+        // a millisecond, take the time of their bytes rather than of their opening; then one of
+        // 8 GiB at a fifth of that pace, as once the disk's cache is full. At its cost of a byte,
+        // their entries cost less than nothing: at none, the small files behind weighed two and
+        // a half times what they took, and the pace made the time left of the big file half as
+        // long two seconds into it, and 70% after ten.
+        let (small, big) = (1_024 * MIB, 200 * MIB);
+        let mut noise = Noise(1);
+        let sizes: Vec<u64> = (0..20_000).map(|_| 1 + noise.below(256 * 1024)).collect();
+        let size = 40 * big;
+        let mut run = Run::new(20_001, sizes.iter().sum::<u64>() + size);
+        for bytes in sizes {
+            run.file(bytes, small, (noise.around(0.000_1, 0.1), 0.000_02));
+        }
+        let fitted = run.view.forecast.sums.fitted();
+        assert!(matches!(fitted, Some((_, (true, true)))), "{fitted:?}");
+        run.report();
+        run.at += 0.000_1;
+        let start = run.at;
+        for second in 1..=30 {
+            run.stream(big, big);
+            if [2, 5, 10, 30].contains(&second) {
+                let truth = float(size) / float(big) - (run.at - start) + 0.000_02;
+                let left = run.left();
+                assert!(
+                    (left - truth).abs() < truth * 0.03,
+                    "{second} s in: {left} for {truth}"
+                );
             }
         }
     }

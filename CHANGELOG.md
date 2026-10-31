@@ -534,7 +534,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   another pace, as on a disk once its cache is full, or over a link whose window holds a small
   file whole, it showed a fifth of the time left when the big file's bytes went five times
   slower, and nearly four times as much when they went five times faster, for half a minute
-  and more. Now its data streaming tells it, and it is right within a second.
+  and more. Now its data streaming tells it, and it is right within a second, on a disk too,
+  where small files take the time of their bytes rather than of their opening.
 
 ## [0.2.0] - 2026-10-14
 

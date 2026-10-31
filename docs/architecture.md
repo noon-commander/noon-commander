@@ -1004,8 +1004,11 @@ least squares still give the cost of an entry if it stands clear; else bytes alo
 the entry under way has moved more than ten times the bytes of the largest entry finished
 (`AHEAD`), a byte costs what it does in the stretches of data streaming, whatever the least
 squares say: finished entries tell nothing of what its bytes cost, which may go at another pace,
-as into a cache that a big file fills, or over a link whose window holds a small file whole. The
-time left is the bytes and entries left at those costs and that pace. It is unknown while the
+as into a cache that a big file fills, or over a link whose window holds a small file whole. An
+entry left then costs no less than nothing, but one behind costs what it took beyond its bytes
+at that cost, even less than nothing, as where small files took the time of their bytes, which
+went faster: at no cost, they made the pace and the time left too short. The time left is the
+bytes and entries left at those costs and that pace. It is unknown while the
 entries left are on average more than ten times as large as those done since the forecast's
 first report (`AHEAD`), not the renames of a move, until the work has told what a byte costs:
 data has streamed within an entry, or finished entries with data had sizes at least twice apart.

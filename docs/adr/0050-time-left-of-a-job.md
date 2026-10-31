@@ -74,6 +74,12 @@ are those after the review.
   link whose window, 2 MiB in flight, holds a small file whole, a big one goes at the pace of the
   window. And as no finished entry tells of the big file until it ends, the costs the small
   files told held for all of it, and only the pace of the work, as it faded, came round to it.
+  An entry then costs what the stretches between finished entries took beyond their bytes at
+  that cost: no less than nothing for those left, and for those behind, which weigh the work for
+  its pace, as it comes out. It is less than nothing where the small files' bytes went faster
+  than the big file's and took most of their time, as on a disk: at no cost each, they weighed
+  more than they took, and the pace of the work made the time left of the big file shorter by as
+  much.
 - **Standing still is unknown.** A job may pause between reports as it works: a link that sends
   a chunk every few seconds, a disk that takes its time now and then to write what it holds
   back. A pause is standing still once it is longer than twice the longest pause of over two and
@@ -317,6 +323,12 @@ are those after the review.
   bytes went five times slower than theirs showed a fifth of the time left two seconds into it, a
   quarter after ten seconds, and 42% after thirty; five times faster, 3.8 times as long, then 2.2
   and 1.34 times. Now it is within 0.2% from the second second on. A test checks both.
+- Where the small files took the time of their bytes rather than of their opening, as 20,000 of up
+  to 256 KiB on a disk at 1 GiB a second, then a file at 200 MiB a second once its cache was
+  full, their entries weighed at no cost still made the time left half as long two seconds into
+  it, 70% after ten seconds, and 89% after thirty; weighed at what they took, it is within 0.01%.
+  A test checks it. While the big file goes, the bytes of small files left after it cost what its
+  bytes do: right where the disk stays slow, too long where only a big file's bytes go slower.
 - The model is two costs and a pace: a link that is fast for big files and slow to open each
   one is right; one whose pace changes with the size of the files in other ways is not, but for
   a file far larger than those done, whose own data tells what its bytes cost.

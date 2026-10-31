@@ -406,12 +406,10 @@ impl Colors {
         }
     }
 
-    /// The same colors, for what cannot be used: the body faint, its letters too.
+    /// The same colors, for what cannot be used: the body faint.
     fn disabled(self, theme: &Theme) -> Self {
-        let faint = self.body.patch(theme.disabled);
         Self {
-            body: faint,
-            hotkey: faint,
+            body: self.body.patch(theme.disabled),
             ..self
         }
     }
@@ -588,6 +586,8 @@ pub(crate) struct Dialog {
     completes: bool,
     /// Where its first field was drawn last, for the list of completions under it.
     field_area: Cell<Option<Rect>>,
+    /// Where the terminal cursor goes in the focused field, at the last render.
+    cursor: Cell<Option<Position>>,
     /// Where each combo box, field, check box, and button was drawn last, for the mouse.
     spots: RefCell<Vec<(Focus, Rect)>>,
     /// Where the glyphs of each field that searches were drawn last, by the field's index, for
@@ -736,6 +736,7 @@ impl Dialog {
             tone: Tone::Plain,
             completes: false,
             field_area: Cell::new(None),
+            cursor: Cell::new(None),
             spots: RefCell::new(Vec::new()),
             glyphs: RefCell::new(Vec::new()),
             offset: Cell::new(0),
@@ -1480,6 +1481,12 @@ impl Dialog {
         self.render_with(frame, area, theme, None);
     }
 
+    /// Draws the dialog as [`render`](Self::render) does, but under another, which has the
+    /// keys: without the terminal cursor and the open list of a combo box.
+    pub(crate) fn render_under(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
+        self.draw_parts(frame, area, theme, None);
+    }
+
     /// Draws the dialog as [`render`](Self::render) does, as tall as `area`, with its list
     /// as `list` shows it.
     pub(crate) fn render_list(
@@ -1502,6 +1509,9 @@ impl Dialog {
         list: Option<&ListView<'_>>,
     ) {
         self.draw_parts(frame, area, theme, list);
+        if let Some(cursor) = self.cursor.get() {
+            frame.set_cursor_position(cursor);
+        }
         if let Some(combo) = self.open_combo_box() {
             combo.render_list(frame, area, theme);
         }
@@ -1545,6 +1555,7 @@ impl Dialog {
         let mut spots = self.spots.borrow_mut();
         spots.clear();
         self.glyphs.borrow_mut().clear();
+        self.cursor.set(None);
         // The line and the buttons below the rest.
         let rest = height
             .saturating_sub(rows(lines.len()))
@@ -1648,14 +1659,15 @@ impl Dialog {
         let labelled = &self.fields[number];
         let label = &labelled.label;
         if !label.text.is_empty() {
-            let colors = if labelled.disabled {
-                colors.disabled(theme)
+            // Faint, its letter as the rest, as nothing takes it.
+            let lettered = if labelled.disabled {
+                (colors.disabled(theme), false)
             } else {
-                colors
+                (colors, true)
             };
             let room = usize::from(inner.width).max(1);
             frame.render_widget(
-                Line::from(label_spans(label, room, colors, theme)),
+                Line::from(label_spans(label, room, lettered, theme)),
                 row(index),
             );
             index += 1;
@@ -1678,7 +1690,8 @@ impl Dialog {
         }
         if self.focus == Focus::Field(number) {
             let column = u16::try_from(column).unwrap_or(0);
-            frame.set_cursor_position(Position::new(inner.x + column, inner.y + index));
+            self.cursor
+                .set(Some(Position::new(inner.x + column, inner.y + index)));
         }
         Some(index + 1)
     }
@@ -1842,12 +1855,17 @@ impl Dialog {
     }
 }
 
-/// A label in `room` cells of a dialog's body, its letter set apart; one too long loses its
-/// middle, and its letter with it.
-fn label_spans(label: &Label, room: usize, colors: Colors, theme: &Theme) -> Vec<Span<'static>> {
+/// A label in `room` cells of a dialog's body, its letter set apart if `lettered`; one too long
+/// loses its middle, and its letter with it.
+fn label_spans(
+    label: &Label,
+    room: usize,
+    (colors, lettered): (Colors, bool),
+    theme: &Theme,
+) -> Vec<Span<'static>> {
     if cells::width(&label.text) <= room {
-        let hotkey = colors.hotkey_style(false);
-        return label.spans(colors.body, Some(hotkey), colors.mark);
+        let hotkey = lettered.then(|| colors.hotkey_style(false));
+        return label.spans(colors.body, hotkey, colors.mark);
     }
     let styles = colors.body_styles();
     cells::fit(
@@ -3235,6 +3253,11 @@ mod tests {
         let dim = |style: Style| style.add_modifier.contains(Modifier::DIM);
         assert!(dim(theme.disabled));
         assert!(dim(buffer[(x, label)].style()), "its letter too");
+        assert_eq!(
+            buffer[(x, label)].style(),
+            buffer[(x + 1, label)].style(),
+            "its letter as the rest, not set apart nor underlined"
+        );
         let field = buffer[(x, label + 1)].style();
         assert!(dim(field), "the field");
         assert_eq!(
@@ -3249,6 +3272,32 @@ mod tests {
             !dim(buffer[(x, label)].style()),
             "else in its letter's color"
         );
+        assert_ne!(
+            buffer[(x, label)].style(),
+            buffer[(x + 1, label)].style(),
+            "and set apart"
+        );
+    }
+
+    #[test]
+    fn a_dialog_under_another_shows_without_the_cursor() {
+        let dialog = host_form();
+        let mut terminal = Terminal::new(TestBackend::new(64, 16)).unwrap();
+        let theme = Theme::terminal();
+        let mut cursor = |under: bool| {
+            terminal
+                .draw(|frame| {
+                    if under {
+                        dialog.render_under(frame, frame.area(), &theme);
+                    } else {
+                        dialog.render(frame, frame.area(), &theme);
+                    }
+                })
+                .unwrap();
+            terminal.backend().cursor_visible()
+        };
+        assert!(cursor(false), "in the field");
+        assert!(!cursor(true), "the dialog over it has the keys");
     }
 
     #[test]
@@ -3259,7 +3308,8 @@ mod tests {
         assert_eq!(dialog.focus, Focus::Check(0), "past the field");
         dialog.handle(Resolved::Hotkey('e'));
         assert_eq!(dialog.focus, Focus::Check(0), "its letter does nothing");
-        assert!(!dialog.letters().contains(&'E'));
+        assert!(!dialog.letters().contains(&'e'));
+        assert!(hashing(false).letters().contains(&'e'));
         let terminal = draw(&dialog, 40, 12);
         let buffer = terminal.backend().buffer();
         let at = (0..12)

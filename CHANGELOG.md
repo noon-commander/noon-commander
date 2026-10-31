@@ -405,6 +405,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - An expected checksum in the dialog of `f #` that is none no longer closes the dialog: OK on the
   error goes back to it, with the text as typed.
+- An error about what a dialog holds, such as the host settings of F4 or the expected checksum of
+  `f #`, shows over the dialog, which stays in sight under it, rather than in its place.
 - Killing Noon Commander (SIGHUP, SIGTERM) or closing its terminal while a command of the command
   line or the editor runs ends that command too, as a shell ends its jobs, rather than leave Noon
   Commander waiting for it: the command gets SIGHUP, or SIGTERM, and a second to end, and one

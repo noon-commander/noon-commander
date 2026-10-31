@@ -473,6 +473,9 @@ enum Purpose {
     Quit,
     /// Something to read, such as an error.
     Info,
+    /// An error about the dialog after it, which shows under it and has the keys again once
+    /// it closes.
+    InfoOver,
 }
 
 /// What a dialog about workspaces is for.
@@ -4557,7 +4560,8 @@ impl App {
             | Purpose::Mkdir { .. }
             | Purpose::Delete { .. }
             | Purpose::Transfer { .. }
-            | Purpose::Info => {}
+            | Purpose::Info
+            | Purpose::InfoOver => {}
         }
         Vec::new()
     }
@@ -6453,11 +6457,12 @@ impl App {
         });
     }
 
-    /// Shows `message` in an error dialog over the dialog in front, which stays open under it.
+    /// Shows `message` in an error dialog over the dialog in front, which stays open, and in
+    /// sight, under it.
     fn show_error_over(&mut self, message: &str) {
         self.dialogs.push_front(Open {
             dialog: Dialog::error(message),
-            purpose: Purpose::Info,
+            purpose: Purpose::InfoOver,
         });
     }
 
@@ -7461,6 +7466,15 @@ impl App {
             });
         }
         if let Some(open) = self.dialogs.front() {
+            if matches!(open.purpose, Purpose::InfoOver)
+                && let Some(under) = self.dialogs.get(1)
+            {
+                stage.show(
+                    frame,
+                    middle(zoom::Window::Dialog(under.dialog.id())),
+                    |frame| under.dialog.render_under(frame, panels, theme),
+                );
+            }
             stage.show(
                 frame,
                 middle(zoom::Window::Dialog(open.dialog.id())),
@@ -13484,6 +13498,10 @@ mod tests {
         assert!(app.handle(action(Action::Confirm)).is_empty());
         let text = screen_of(&mut app, 20);
         assert!(text.contains("is not a checksum"), "{text}");
+        assert!(
+            text.contains(" Checksum "),
+            "the dialog shows under it: {text}"
+        );
         // OK on the error goes back to the dialog, the text as typed, to put it right.
         assert!(app.handle(action(Action::Confirm)).is_empty());
         let text = screen_of(&mut app, 20);

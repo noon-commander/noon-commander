@@ -1297,12 +1297,16 @@ text, `search_input` goes before it.
 The window that `f #` shows when it ends, for several files: their checksums in a list under a
 filter, and under them, apart, the whole checksum of the file under the cursor, then the buttons
 To clipboard, All to clipboard, View, Save…, and OK
-([ADR 0058](adr/0058-the-window-of-checksums-filters-and-views-them.md)). It opens on the rows and
-falls back to `dialog`, whose motions move the cursor of the rows, whose Left, Right, and Tab move
-the focus of the buttons, and whose Enter and Space press the one with it; Alt and the letter of
-a button press it, as in every dialog. `/` types in the filter, as in the lists. F3 shows
+([ADR 0058](adr/0058-the-window-of-checksums-filters-and-views-them.md),
+[ADR 0061](adr/0061-a-picker-is-a-part-of-a-dialog.md)). It opens on the rows, which have the
+focus, and falls back to `dialog`: there the motions move the cursor of the rows, and `j` on the
+last row or `k` on the first goes on to the buttons, as Left, Right, and Tab do; on the buttons the
+motions go through them and back to the rows. Enter and Space press the button with the focus, or
+To clipboard on a row; Alt and the letter of a button press it, as in every dialog. `/` types in
+the filter from anywhere, as in the lists. F3 shows
 every line in the viewer, as `sha256sum` prints them, and the window comes back when it closes.
-One file, or two compared, have no list: their window is a dialog. mc and Far have no checksums;
+One file, or two compared, have no list: their window is a dialog, whose motions move the focus
+of the buttons, as in every dialog. mc and Far have no checksums;
 yazi and ranger neither.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
@@ -1315,7 +1319,7 @@ yazi and ranger neither.
 ## Checksums (`checksums`, Insert mode)
 
 While its filter takes text. It falls back to `list`, then to `input`, then to `global`; F3 still
-views the checksums, and Tab and Shift+Tab still move the focus of the buttons.
+views the checksums, and Tab and Shift+Tab leave the filter for the buttons.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |

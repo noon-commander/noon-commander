@@ -1,8 +1,8 @@
-//! The window with the checksums a job found: with several files, a list of them with a filter,
-//! as the lists have (ADR 0036), and under it, apart, the whole checksum of the file under the
-//! cursor, as the location menu shows the whole row under it; else, a dialog with the whole
-//! checksum of each file and, apart from it, whether it matches what was expected or the other
-//! file. Buttons put them on the clipboard, view them, or save them (ADR 0058).
+//! The window with the checksums a job found, a dialog (ADR 0061): with several files, a picker
+//! of them with a filter, as the lists have (ADR 0036), and under it, apart, the whole checksum
+//! of the file under the cursor, as the location menu shows the whole row under it; else the
+//! whole checksum of each file and, apart from it, whether it matches what was expected or the
+//! other file. Buttons put them on the clipboard, view them, or save them (ADR 0058).
 
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -13,14 +13,12 @@ use noc_scroll::Motion;
 use noc_scroll::scrollbar::Bar;
 
 use super::cells::{self, Align, Marks};
-use super::dialog::{
-    Colors, Tone, button_line, button_spots, draw_box, draw_separator, frame_around,
-};
+use super::dialog::{Button, Colors, Dialog, DialogEvent, Text, Tone, even_lines};
+use super::edit::Registers;
 use super::glyphs;
-use super::keymap::{Action, Context, Mode, Resolved};
-use super::label::Label;
-use super::mouse::{Drawn, Pointer, Scroll};
-use super::picker::{Body, MenuLine, Pick, Picker};
+use super::keymap::{Action, Context, Mode, Resolved, Typed};
+use super::mouse::{Pointer, Scroll};
+use super::picker::{Body, MenuLine, Picker};
 use super::search::{Input, Kind};
 use super::theme::Theme;
 use crate::i18n::fl;
@@ -61,31 +59,6 @@ pub(crate) struct Verdict {
     pub(crate) good: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SumsButton {
-    /// The checksum of the selected file.
-    Copy,
-    /// Every line, as `sha256sum` prints them.
-    CopyAll,
-    /// Those lines in the viewer.
-    View,
-    Save,
-    Close,
-}
-
-impl SumsButton {
-    /// Its name, with the letter that Alt and it press.
-    fn label(self) -> Label {
-        Label::parse(&match self {
-            Self::Copy => fl!("checksum-copy"),
-            Self::CopyAll => fl!("checksum-copy-all"),
-            Self::View => fl!("checksum-view"),
-            Self::Save => fl!("checksum-save"),
-            Self::Close => fl!("dialog-ok"),
-        })
-    }
-}
-
 /// What a key did in the window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SumsEvent {
@@ -101,51 +74,53 @@ pub(crate) enum SumsEvent {
 /// The window of one finished checksum job.
 #[derive(Debug)]
 pub(crate) struct SumsWindow {
-    /// The algorithm, such as `SHA-256`.
-    title: String,
     rows: Vec<SumRow>,
-    verdict: Option<Verdict>,
-    buttons: Vec<SumsButton>,
-    focus: usize,
-    /// The filter, the cursor, and the scrolling of the list of several files; one file, or
-    /// two compared, have no list.
-    list: Option<Picker>,
-    /// Where the last render drew the window without a list, for the mouse.
-    drawn: Drawn,
+    /// It has View, which F3 presses.
+    view: bool,
+    dialog: Dialog,
 }
 
 impl SumsWindow {
-    /// The window for `rows`, with `buttons`, the first of them with the focus. Several files
-    /// without a verdict get a list whose filter matches as `input` says, as it was last; it
-    /// opens on the rows. With a verdict, which only one file or two compared have, the window
-    /// is a dialog.
+    /// The window titled `title` for `rows`, with `buttons`, the first of them the default,
+    /// with the focus. Several files without a verdict get a picker whose filter matches as
+    /// `input` says, as it was last; it opens on the rows. With a verdict, which only one file
+    /// or two compared have, each file shows whole.
     pub(crate) fn new(
-        title: String,
+        title: &str,
         rows: Vec<SumRow>,
         verdict: Option<Verdict>,
-        buttons: Vec<SumsButton>,
+        buttons: Vec<Button>,
         input: Input,
     ) -> Self {
-        let list = (rows.len() > 1 && verdict.is_none()).then(|| {
+        let view = buttons.contains(&Button::View);
+        let mut dialog = Dialog::question(title, "", buttons, 0, Tone::Plain).with_width(WIDTH);
+        if rows.len() > 1 && verdict.is_none() {
             let mut picker = Picker::new(input).on_rows();
             picker.set_rows(rows.iter().map(texts).collect());
-            picker
-        });
-        Self {
-            title,
-            rows,
-            verdict,
-            buttons,
-            focus: 0,
-            list,
-            drawn: Drawn::default(),
+            dialog = dialog.with_picker(picker);
+        } else {
+            for (index, row) in rows.iter().enumerate() {
+                if index > 0 {
+                    dialog = dialog.with_separator();
+                }
+                let hex = match &row.hex {
+                    Some(hex) => Text::Even(hex.clone()),
+                    None => Text::Line(fl!("checksum-skipped")),
+                };
+                dialog = dialog
+                    .with_text(Text::Line(row.name.clone()))
+                    .with_text(hex);
+            }
+            if let Some(Verdict { text, good }) = verdict {
+                dialog = dialog.with_line().with_text(Text::Verdict { text, good });
+            }
         }
+        Self { rows, view, dialog }
     }
 
-    /// Where keys go: the window without a list is a dialog, and the list of several files has
-    /// keys of its own.
+    /// Where keys go: the dialog's, and the picker of several files has keys of its own.
     pub(crate) fn context(&self) -> Context {
-        if self.list.is_some() {
+        if self.dialog.picker().is_some() {
             Context::Checksums
         } else {
             Context::Dialog
@@ -154,103 +129,75 @@ impl SumsWindow {
 
     /// The mode keys are typed in: Insert while the filter takes them.
     pub(crate) fn mode(&self) -> Mode {
-        self.list.as_ref().map_or(Mode::Normal, Picker::mode)
+        self.dialog.mode()
     }
 
     /// The kind of its filter while that takes the keys.
     pub(crate) fn search(&self) -> Option<Kind> {
-        self.list.as_ref().and_then(Picker::search)
+        self.dialog.picker().and_then(Picker::search)
     }
 
-    /// How its filter matches now, and whether case counts; `None` without a list.
+    /// How its filter matches now, and whether case counts; `None` without a picker.
     pub(crate) fn input(&self) -> Option<Input> {
-        self.list.as_ref().map(Picker::input)
+        self.dialog.picker().map(Picker::input)
     }
 
     /// The rows, for the count before a page key.
     pub(crate) fn picker_mut(&mut self) -> Option<&mut Picker> {
-        self.list.as_mut()
+        self.dialog.picker_mut()
     }
 
     /// The file under the cursor, by its index among all; none while the filter shows none.
-    /// Without a list, the first: the one file, or that of the active panel.
+    /// Without a picker, the first: the one file, or that of the active panel.
     fn selected(&self) -> Option<usize> {
-        match &self.list {
-            Some(list) => list.shown(0..self.rows.len()).get(list.cursor()).copied(),
+        match self.dialog.picker() {
+            Some(picker) => (picker.shown(0..self.rows.len()))
+                .get(picker.cursor())
+                .copied(),
             None => (!self.rows.is_empty()).then_some(0),
         }
     }
 
-    /// Takes a key: the list's, which moves the cursor and types in the filter after `/`;
-    /// Left, Right, and Tab choose a button, and Enter or Space presses it, Alt and its letter
-    /// too; F3 views the checksums, and Esc closes the window.
+    /// Takes a key as the dialog does: on the rows the motions move the cursor, past the last
+    /// row or the first to the buttons, which they go through as Tab does, and `/` types in the
+    /// filter; Enter or Space presses the button with the focus, or To clipboard on the rows,
+    /// Alt and a letter its button; F3 views the checksums, and Esc closes the window.
     pub(crate) fn handle(&mut self, input: Resolved) -> SumsEvent {
-        match input {
-            Resolved::Hotkey(c) => {
-                return match self.buttons.iter().find(|button| button.label().has(c)) {
-                    Some(&button) => self.press(button),
-                    None => SumsEvent::Pending,
-                };
-            }
-            Resolved::Action(Action::Confirm | Action::Toggle) => {
-                let button = self.buttons.get(self.focus).copied();
-                return self.press(button.unwrap_or(SumsButton::Close));
-            }
-            Resolved::Action(Action::NextField) => self.move_focus(true),
-            Resolved::Action(Action::PrevField) => self.move_focus(false),
-            Resolved::Action(Action::View) if self.buttons.contains(&SumsButton::View) => {
-                return SumsEvent::View;
-            }
-            _ => {
-                let pick = match &mut self.list {
-                    Some(list) => list.handle(input),
-                    None => match input {
-                        Resolved::Action(Action::Cancel) => Pick::Closed,
-                        Resolved::Action(action) => Pick::Other(action),
-                        Resolved::Insert(_) | Resolved::Hotkey(_) => Pick::Pending,
-                    },
-                };
-                match pick {
-                    Pick::Closed => return SumsEvent::Closed,
-                    Pick::Other(Action::Right) => self.move_focus(true),
-                    Pick::Other(Action::Left) => self.move_focus(false),
-                    Pick::Pending | Pick::Filtered | Pick::Chosen(_) | Pick::Other(_) => {}
-                }
-            }
+        if input == Resolved::Action(Action::View) {
+            return if self.view {
+                SumsEvent::View
+            } else {
+                SumsEvent::Pending
+            };
         }
-        SumsEvent::Pending
-    }
-
-    /// The focus to the next button, or the one before, round.
-    fn move_focus(&mut self, forward: bool) {
-        let count = self.buttons.len().max(1);
-        self.focus = if forward {
-            (self.focus + 1) % count
-        } else {
-            (self.focus + count - 1) % count
-        };
+        let typed = Typed::from(input);
+        match self.dialog.handle_typed(typed, &mut Registers::default()) {
+            DialogEvent::Pressed(button) => self.press(button),
+            DialogEvent::Cancelled => SumsEvent::Closed,
+            DialogEvent::Pending | DialogEvent::Opened(_) => SumsEvent::Pending,
+        }
     }
 
     /// What `button` does.
-    fn press(&self, button: SumsButton) -> SumsEvent {
+    fn press(&self, button: Button) -> SumsEvent {
         match button {
-            SumsButton::Copy => self.selected().map_or(SumsEvent::Pending, SumsEvent::Copy),
-            SumsButton::CopyAll => SumsEvent::CopyAll,
-            SumsButton::View => SumsEvent::View,
-            SumsButton::Save => SumsEvent::Save,
-            SumsButton::Close => SumsEvent::Closed,
+            Button::ToClipboard => self.selected().map_or(SumsEvent::Pending, SumsEvent::Copy),
+            Button::AllToClipboard => SumsEvent::CopyAll,
+            Button::View => SumsEvent::View,
+            Button::Save => SumsEvent::Save,
+            _ => SumsEvent::Closed,
         }
     }
 
     /// The scroll bar of the list at the last render, for the mouse.
     pub(crate) fn bar(&self) -> Option<Bar> {
-        self.list.as_ref().and_then(Picker::bar)
+        self.dialog.picker().and_then(Picker::bar)
     }
 
     /// Moves the cursor as a press on the scroll bar asks: the next file or the one before, a
     /// page on or back, or the rows from where the thumb was dragged.
     pub(crate) fn scroll(&mut self, scroll: Scroll) {
-        let Some(list) = &mut self.list else {
+        let Some(picker) = self.dialog.picker_mut() else {
             return;
         };
         let action = match scroll {
@@ -260,62 +207,43 @@ impl SumsWindow {
             Scroll::By(Motion::PageDown) => Action::PageDown,
             Scroll::By(_) => return,
             Scroll::To(top) => {
-                list.scroll_to(top);
+                picker.scroll_to(top);
                 return;
             }
         };
-        list.handle(Resolved::Action(action));
+        picker.handle(Resolved::Action(action));
     }
 
-    /// Takes a press of the mouse, where the window was drawn last: a click chooses a file, or
-    /// switches how the filter matches on its glyphs, and one on a button returns Enter, which
-    /// presses it.
+    /// Takes a press of the mouse, where the window was drawn last, as the dialog does: a click
+    /// chooses a file, or switches how the filter matches on its glyphs, and one on a button
+    /// returns Enter, which presses it.
     pub(crate) fn pointer(&mut self, pointer: Pointer) -> Option<Action> {
-        let Some(list) = &mut self.list else {
-            return self.drawn.button_press(pointer, &mut self.focus);
-        };
-        if let Some(action) = list.button_press(pointer, &mut self.focus) {
-            return Some(action);
+        match self.dialog.pointer(pointer) {
+            DialogEvent::Pressed(_) => Some(Action::Confirm),
+            DialogEvent::Pending | DialogEvent::Opened(_) | DialogEvent::Cancelled => None,
         }
-        // A double click on a row presses no button, and a click outside closes no dialog.
-        list.pointer(pointer)
-            .filter(|action| !matches!(action, Action::Confirm | Action::Cancel))
     }
 
-    /// Draws the window centered in `area`: the list of files if there are several, under its
-    /// filter, with the file under the cursor apart below it; else each file and the verdict.
-    /// Then the buttons.
+    /// Draws the window centered in `area`: the picker of files if there are several, with the
+    /// name and the whole checksum of the one under the cursor apart below it, in as many
+    /// lines for each, so that nothing moves as the cursor goes from one to the next; else each
+    /// file and the verdict. Then the buttons.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        if self.list.is_some() {
-            self.render_list(frame, area, theme);
-        } else {
-            self.render_dialog(frame, area, theme);
-        }
-    }
-
-    /// The list of several files and, under a line, the name and the whole checksum of the one
-    /// under the cursor, in as many lines for each, so that nothing moves as the cursor goes
-    /// from one to the next.
-    fn render_list(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        let colors = Colors::of(theme, Tone::Plain);
-        let Self {
-            title,
-            rows,
-            buttons,
-            focus,
-            list,
-            ..
-        } = self;
-        let Some(list) = list else {
+        let Some(picker) = self.dialog.picker() else {
+            self.dialog.render(frame, area, theme);
             return;
         };
-        let room = usize::from(WIDTH.min(area.width).saturating_sub(4)).max(1);
-        let shown = list.shown(rows.iter());
+        let colors = Colors::of(theme, Tone::Plain);
+        let room = self.dialog.text_width(area).max(1);
+        let shown = picker.shown(self.rows.iter());
         let lines: Vec<MenuLine> = (0..shown.len()).map(MenuLine::Row).collect();
-        let cursor = list.cursor().min(shown.len().saturating_sub(1));
-        let hex_rows = rows
-            .iter()
-            .map(|row| row.hex.as_ref().map_or(1, |hex| hex_lines(hex, room).len()))
+        let cursor = picker.cursor().min(shown.len().saturating_sub(1));
+        let hex_rows = (self.rows.iter())
+            .map(|row| {
+                row.hex
+                    .as_ref()
+                    .map_or(1, |hex| even_lines(hex, room).len())
+            })
             .max()
             .unwrap_or(1)
             .max(1);
@@ -325,7 +253,7 @@ impl SumsWindow {
             let name = cells::fit(&row.name, room, Align::Left, styles, theme.glyphs.marks);
             footer[0] = Line::from(name);
             let hex = match &row.hex {
-                Some(hex) => hex_lines(hex, room),
+                Some(hex) => even_lines(hex, room),
                 None => vec![fl!("checksum-skipped")],
             };
             for (line, text) in footer[1..].iter_mut().zip(hex) {
@@ -336,82 +264,22 @@ impl SumsWindow {
             .into_iter()
             .map(|line| line.style(theme.dialog))
             .collect();
-        let labels: Vec<Label> = buttons.iter().map(|button| button.label()).collect();
         let body = Body {
-            title: title.as_str(),
-            width: WIDTH,
             lines: &lines,
             max_lines: Some(LIST_ROWS),
             footer,
-            buttons: Some((&labels, *focus)),
             ..Body::default()
         };
         let marks = theme.glyphs.marks;
-        list.render(frame, area, theme, body, &mut |row| {
-            let styles = if row.selected {
-                (colors.focused_style(), theme.truncated_cursor)
-            } else {
-                colors.body_styles()
-            };
-            Line::from(list_line(shown[row.index], row.width, styles, marks)).style(styles.0)
-        });
-    }
-
-    /// Each file, its name and its whole checksum, a blank line between two; then, under a
-    /// line, the verdict, apart from them and from the buttons under another line.
-    fn render_dialog(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        let colors = Colors::of(theme, Tone::Plain);
-        let width = WIDTH.min(area.width.saturating_sub(4)).max(20);
-        let room = usize::from(width.saturating_sub(4)).max(1);
-        let mut lines: Vec<Line<'static>> = Vec::new();
-        for (index, row) in self.rows.iter().enumerate() {
-            if index > 0 {
-                lines.push(Line::default());
-            }
-            lines.push(Line::from(cells::fit(
-                &row.name,
-                room,
-                Align::Left,
-                colors.body_styles(),
-                theme.glyphs.marks,
-            )));
-            match &row.hex {
-                Some(hex) => lines.extend(hex_lines(hex, room).into_iter().map(Line::raw)),
-                None => lines.push(Line::raw(fl!("checksum-skipped"))),
-            }
-        }
-        // A line and the verdict; a line and the buttons.
-        let verdict = self
-            .verdict
-            .as_ref()
-            .map(|verdict| verdict_line(verdict, theme));
-        let below = if verdict.is_some() { 4 } else { 2 };
-        let height = u16::try_from(lines.len() + 2 + below).unwrap_or(u16::MAX);
-        let inner = draw_box(frame, area, (width, height), &self.title, colors, theme);
-        let below = u16::try_from(below).unwrap_or(0);
-        let visible = usize::from(inner.height.saturating_sub(below));
-        let mut drawn = Drawn {
-            frame: frame_around(inner),
-            ..Drawn::default()
-        };
-        for (index, line) in lines.into_iter().take(visible).enumerate() {
-            let y = inner.y + u16::try_from(index).unwrap_or(0);
-            frame.render_widget(line, Rect::new(inner.x, y, inner.width, 1));
-        }
-        if inner.height >= below {
-            let y = inner.bottom() - 1;
-            if let Some(verdict) = verdict {
-                draw_separator(frame, inner, y - 3, colors, theme);
-                frame.render_widget(verdict, Rect::new(inner.x, y - 2, inner.width, 1));
-            }
-            let labels: Vec<Label> = self.buttons.iter().map(|button| button.label()).collect();
-            let buttons = button_line(&labels, 0, Some(self.focus), colors);
-            draw_separator(frame, inner, y - 1, colors, theme);
-            let row = Rect::new(inner.x, y, inner.width, 1);
-            drawn.buttons = button_spots(&labels, 0, row);
-            frame.render_widget(buttons, row);
-        }
-        self.drawn = drawn;
+        self.dialog
+            .render_picker(frame, area, theme, body, &mut |row| {
+                let styles = if row.selected {
+                    (colors.focused_style(), theme.truncated_cursor)
+                } else {
+                    colors.body_styles()
+                };
+                Line::from(list_line(shown[row.index], row.width, styles, marks)).style(styles.0)
+            });
     }
 }
 
@@ -419,20 +287,6 @@ impl SumsWindow {
 fn texts(row: &SumRow) -> Vec<String> {
     let hex = row.hex.clone().unwrap_or_else(|| fl!("checksum-skipped"));
     vec![row.name.clone(), hex]
-}
-
-/// The verdict after its mark, bold, in the color of titles if it is good news and of errors
-/// if not.
-fn verdict_line(verdict: &Verdict, theme: &Theme) -> Line<'static> {
-    let (style, sign) = if verdict.good {
-        (theme.dialog_title, glyphs::MATCH)
-    } else {
-        (theme.error_title, glyphs::MISMATCH)
-    };
-    Line::from(Span::styled(
-        format!("{sign} {}", verdict.text),
-        style.bold(),
-    ))
 }
 
 /// A row of the list in `room` cells: its mark, its checksum shortened in the middle, and its
@@ -472,16 +326,6 @@ fn list_line(
     cells::fit_spans(spans, room, styles, marks)
 }
 
-/// A checksum in lines of at most `width` hex digits, of equal length where it breaks.
-fn hex_lines(hex: &str, width: usize) -> Vec<String> {
-    let parts = hex.len().div_ceil(width.max(1)).max(1);
-    let per = hex.len().div_ceil(parts).max(1);
-    hex.as_bytes()
-        .chunks(per)
-        .map(|chunk| String::from_utf8_lossy(chunk).into_owned())
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use noc_config::SearchMode;
@@ -501,9 +345,9 @@ mod tests {
         }
     }
 
-    fn window(rows: Vec<SumRow>, verdict: Option<Verdict>, buttons: Vec<SumsButton>) -> SumsWindow {
+    fn window(rows: Vec<SumRow>, verdict: Option<Verdict>, buttons: Vec<Button>) -> SumsWindow {
         let input = Input::new(Kind::FILTER, SearchMode::Plain);
-        SumsWindow::new("SHA-256".to_owned(), rows, verdict, buttons, input)
+        SumsWindow::new("SHA-256", rows, verdict, buttons, input)
     }
 
     fn press(window: &mut SumsWindow, action: Action) -> SumsEvent {
@@ -528,12 +372,12 @@ mod tests {
         terminal(window, width, height).backend().to_string()
     }
 
-    const ALL: [SumsButton; 5] = [
-        SumsButton::Copy,
-        SumsButton::CopyAll,
-        SumsButton::View,
-        SumsButton::Save,
-        SumsButton::Close,
+    const ALL: [Button; 5] = [
+        Button::ToClipboard,
+        Button::AllToClipboard,
+        Button::View,
+        Button::Save,
+        Button::Ok,
     ];
 
     fn many() -> SumsWindow {
@@ -552,7 +396,7 @@ mod tests {
             good: true,
         };
         let rows = vec![row("abc.txt", Some(ABC), Mark::Match)];
-        let buttons = vec![SumsButton::Copy, SumsButton::Save, SumsButton::Close];
+        let buttons = vec![Button::ToClipboard, Button::Save, Button::Ok];
         let mut window = window(rows, Some(verdict), buttons);
         assert_eq!(window.context(), Context::Dialog);
         insta::assert_snapshot!(draw(&mut window, 80, 14));
@@ -569,12 +413,15 @@ mod tests {
             text: "The files differ.".to_owned(),
             good: false,
         };
-        let buttons = vec![SumsButton::Copy, SumsButton::CopyAll, SumsButton::Close];
+        let buttons = vec![Button::ToClipboard, Button::AllToClipboard, Button::Ok];
         let mut window = window(rows, Some(verdict), buttons);
         assert_eq!(window.context(), Context::Dialog);
         assert_eq!(window.input(), None, "no filter");
-        assert_eq!(press(&mut window, Action::Down), SumsEvent::Pending);
         assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Copy(0));
+        // The motions move the focus, as in every dialog.
+        assert_eq!(press(&mut window, Action::Down), SumsEvent::Pending);
+        assert_eq!(press(&mut window, Action::Confirm), SumsEvent::CopyAll);
+        press(&mut window, Action::Up);
         insta::assert_snapshot!(draw(&mut window, 80, 16));
     }
 
@@ -638,8 +485,15 @@ mod tests {
         typed(&mut window, "zz");
         assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Pending);
         assert!(draw(&mut window, 80, 18).contains(&fl!("picker-nothing")));
+        // Tab leaves the filter for the buttons.
         assert_eq!(press(&mut window, Action::NextField), SumsEvent::Pending);
+        assert_eq!(window.mode(), Mode::Normal);
+        press(&mut window, Action::NextField);
         assert_eq!(press(&mut window, Action::Confirm), SumsEvent::CopyAll);
+        // `/` on the buttons types in the filter again.
+        press(&mut window, Action::QuickSearch);
+        assert_eq!(window.mode(), Mode::Insert);
+        assert!(draw(&mut window, 80, 18).contains("Filter: skippedzz"));
         press(&mut window, Action::NormalMode);
         assert_eq!(window.mode(), Mode::Normal);
         assert_eq!(press(&mut window, Action::Cancel), SumsEvent::Closed);
@@ -650,7 +504,7 @@ mod tests {
         let rows = (1..=15)
             .map(|n| row(&format!("file{n:02}"), Some(ABC), Mark::None))
             .collect();
-        let mut window = window(rows, None, vec![SumsButton::Close]);
+        let mut window = window(rows, None, vec![Button::Ok]);
         let top = draw(&mut window, 80, 30);
         assert!(top.contains('▲') && top.contains('█'), "{top}");
         let bar = window.bar().unwrap();
@@ -670,32 +524,40 @@ mod tests {
     #[test]
     fn long_checksums_break_into_even_lines() {
         let hex = "0123456789".repeat(12) + "abcdefgh";
-        assert_eq!(hex_lines(&hex, 72), [&hex[..64], &hex[64..]]);
-        assert_eq!(hex_lines(ABC, 72), [ABC]);
-        assert_eq!(hex_lines("", 72), Vec::<String>::new());
+        assert_eq!(even_lines(&hex, 72), [&hex[..64], &hex[64..]]);
+        assert_eq!(even_lines(ABC, 72), [ABC]);
+        assert_eq!(even_lines("", 72), Vec::<String>::new());
     }
 
     #[test]
-    fn arrows_choose_a_file_and_the_buttons_act_on_it() {
+    fn arrows_choose_a_file_and_go_on_past_the_rows_through_the_buttons() {
         let mut window = many();
+        // Enter and Space on a row press the default button, To clipboard.
         assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Copy(0));
+        press(&mut window, Action::Down);
+        assert_eq!(press(&mut window, Action::Toggle), SumsEvent::Copy(1));
+        // Down on the last row goes on to the buttons, as `j` goes through a dialog.
         press(&mut window, Action::End);
         press(&mut window, Action::Down);
-        assert_eq!(press(&mut window, Action::Toggle), SumsEvent::Copy(2));
-        press(&mut window, Action::Up);
-        assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Copy(1));
-        press(&mut window, Action::Right);
+        assert_eq!(window.selected(), Some(2), "the cursor stays");
+        assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Copy(2));
+        press(&mut window, Action::Down);
         assert_eq!(press(&mut window, Action::Confirm), SumsEvent::CopyAll);
-        press(&mut window, Action::NextField);
+        press(&mut window, Action::Down);
         assert_eq!(press(&mut window, Action::Confirm), SumsEvent::View);
         press(&mut window, Action::Right);
         assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Save);
-        press(&mut window, Action::Right);
+        press(&mut window, Action::Down);
         assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Closed);
-        press(&mut window, Action::Right);
+        // Round to the rows, and back up from the first: Up there goes to the last button.
+        press(&mut window, Action::Down);
+        press(&mut window, Action::Up);
         assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Copy(1));
-        press(&mut window, Action::Left);
+        press(&mut window, Action::Up);
+        press(&mut window, Action::Up);
         assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Closed);
+        press(&mut window, Action::Left);
+        assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Save);
         assert_eq!(press(&mut window, Action::View), SumsEvent::View, "F3");
         assert_eq!(press(&mut window, Action::Cancel), SumsEvent::Closed);
     }
@@ -703,7 +565,7 @@ mod tests {
     #[test]
     fn one_file_has_no_list_and_no_view() {
         let rows = vec![row("abc.txt", Some(ABC), Mark::None)];
-        let mut window = window(rows, None, vec![SumsButton::Copy, SumsButton::Close]);
+        let mut window = window(rows, None, vec![Button::ToClipboard, Button::Ok]);
         assert_eq!(window.mode(), Mode::Normal);
         assert_eq!(window.input(), None);
         assert_eq!(press(&mut window, Action::QuickSearch), SumsEvent::Pending);

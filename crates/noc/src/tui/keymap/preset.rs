@@ -702,7 +702,7 @@ pub(super) const PRESET: Preset = &[
     // The window of the checksums of several files, on top of the dialogs': `/` types in its
     // filter, as in the lists, and F3 views the checksums, as F3 views a file. Ctrl+u and
     // Ctrl+d move half a page, as in the lists. While the filter takes text, its keys fall back
-    // to the lists' and the text fields', and Tab still goes through the buttons.
+    // to the lists' and the text fields', and Tab leaves it for the buttons.
     (
         Mode::Normal,
         Context::Checksums,

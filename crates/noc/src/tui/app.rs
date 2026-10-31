@@ -63,7 +63,7 @@ use super::reading::{ReadButton, Reading};
 use super::save::{self, Save};
 use super::search::{self, Input, Slot, Switch};
 use super::spinner::{self, Spin, Wait};
-use super::sums::{Mark, SumRow, SumsButton, SumsEvent, SumsWindow, Verdict};
+use super::sums::{Mark, SumRow, SumsEvent, SumsWindow, Verdict};
 use super::tab_menu::{TabMenu, TabMenuEvent};
 use super::tabs::{self, Bar, PanelId, Tab, Tabs};
 use super::tasks::{HostHandle, JobEvent, TakenName};
@@ -6247,18 +6247,18 @@ impl App {
                 }
             })
         };
-        let mut buttons = vec![SumsButton::Copy];
+        let mut buttons = vec![Button::ToClipboard];
         if rows.len() > 1 {
-            buttons.push(SumsButton::CopyAll);
+            buttons.push(Button::AllToClipboard);
         }
         // Two files compared are on screen whole.
         if rows.len() > 1 && !compared {
-            buttons.push(SumsButton::View);
+            buttons.push(Button::View);
         }
         if hashing.dir.is_some() {
-            buttons.push(SumsButton::Save);
+            buttons.push(Button::Save);
         }
-        buttons.push(SumsButton::Close);
+        buttons.push(Button::Ok);
         let lines = sums
             .into_iter()
             .zip(hexes)
@@ -6275,7 +6275,7 @@ impl App {
         let input = self.search_opens(Slot::Checksums);
         self.results.push_back(Results {
             id,
-            window: SumsWindow::new(title, rows, verdict, buttons, input),
+            window: SumsWindow::new(&title, rows, verdict, buttons, input),
             algorithm: hashing.algorithm,
             dir: hashing.dir,
             lines,
@@ -14119,7 +14119,8 @@ mod tests {
         hashed(&mut app, id, sums);
         let text = screen_of(&mut app, 24);
         assert!(text.contains("skipped"), "{text}");
-        // Copy, Copy all, View, Save.
+        // From the rows to Copy, then Copy all; View, Save.
+        app.handle(action(Action::Right));
         app.handle(action(Action::Right));
         app.handle(action(Action::Confirm));
         let all = app.take_clipboard().unwrap();

@@ -636,6 +636,15 @@ goes to the filter, in Insert mode. There are no digit hotkeys.
   holds its own rows, says what the filter finds them by, and draws them. A row may show only
   while the filter is empty, as the rows of more in the location menu do, or only while it has
   text, as the places behind them do.
+- A picker is also a part of a dialog (`Dialog::with_picker`;
+  [ADR 0061](adr/0061-a-picker-is-a-part-of-a-dialog.md)), as in the window of the checksums of
+  several files: the dialog draws the frame, the title, and the buttons, and the picker its filter,
+  its rows, and its footer between them (`Picker::render_in`); its owner gives it the lines and
+  draws the rows (`Dialog::render_picker`). Its rows are a stop of the focus (`Focus::Picker`):
+  there the motions move the cursor, and `j` on the last row or `k` on the first goes on to the
+  stop after or before, as Tab, Shift+Tab, Left, and Right do; on the buttons the motions go
+  round, back to the rows, and `/` from anywhere types in the filter. Enter and Space on a row
+  press the default button.
 - The zoxide window gives its own prompt, matches paths as paths, after `/` best, and in the
   plain mode lets zoxide pick its rows from the keywords typed: the picker says the filter changed
   (`Pick::Filtered`), and the window asks zoxide again.
@@ -1554,7 +1563,12 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   in the viewer, in place of the window, which comes back when it closes, and Save… writes them
   to a file through the dialog of saving, from the panel's directory (`name.sha256` for one
   file, `SHA256SUMS` for several; `b3`, `md5`, … for the others). A dialog has no View. No
-  message follows a button. Windows of jobs that end while one is open wait their turn.
+  message follows a button. Windows of jobs that end while one is open wait their turn. The
+  window is a `Dialog`, which `SumsWindow` (`tui/sums.rs`) wraps, as `FindWindow` wraps the
+  search of a tree ([ADR 0061](adr/0061-a-picker-is-a-part-of-a-dialog.md)): its picker for
+  several files, and for one file or two lines of text (`Dialog::with_text`): each name, which
+  loses its middle where too long, its checksum in lines of equal length (`Text::Even`), and the
+  verdict (`Text::Verdict`).
 - **Saving a file** ([ADR 0059](adr/0059-one-dialog-saves-a-file.md)). What has a file to save,
   so far Save… of the checksums, gives `tui/save.rs` a `Save`: the title, the directory, the
   name offered, and the bytes. Its dialog has one field, `File name:`, with that name; it takes a

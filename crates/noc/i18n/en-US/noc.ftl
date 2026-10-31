@@ -549,6 +549,12 @@ dialog-up = &Up
 # Buttons of a panel on a host that is not connected: connect again, go to a local directory.
 dialog-connect = &Connect
 dialog-local = &Local
+# Buttons of the checksums a job found: the checksum of the selected file on the clipboard;
+# every line, as sha256sum prints them, on the clipboard; a file of them. They show with View
+# and OK; five share a line of 72 cells: keep them short.
+dialog-to-clipboard = To &clipboard
+dialog-all-to-clipboard = &All to clipboard
+dialog-save = &Save…
 
 ## Help screen (src/tui/help). Prefix: help-. One line per key: say what it does, briefly.
 
@@ -1195,13 +1201,6 @@ checksum-matches = Matches the expected checksum.
 checksum-differs = Does not match the expected checksum.
 checksum-same = The files are the same.
 checksum-different = The files differ.
-# Buttons: the checksum of the selected file on the clipboard; every line, as sha256sum prints
-# them, on the clipboard; those lines in the viewer; a file of them. Five share a line of 72
-# cells: keep them short.
-checksum-copy = To &clipboard
-checksum-copy-all = &All to clipboard
-checksum-view = &View
-checksum-save = &Save…
 # The title of the dialog of saving them.
 checksum-save-title = Save checksums
 

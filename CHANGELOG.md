@@ -16,6 +16,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ([ADR 0060](docs/adr/0060-the-question-about-a-taken-name.md)).
 - The default button of a dialog is drawn bold in braces, `{ OK }`, rather than as mc's
   `[< OK >]`.
+- The window of checksums is a dialog: with several files, `j` on the last row and `k` on the
+  first go on to its buttons and back, as in every dialog; with one file, or two compared, the
+  arrows move the focus of its buttons
+  ([ADR 0061](docs/adr/0061-a-picker-is-a-part-of-a-dialog.md)).
 
 ### Fixed
 

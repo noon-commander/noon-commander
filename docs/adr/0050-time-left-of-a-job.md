@@ -2,7 +2,8 @@
 
 - Status: Accepted; amended by [ADR 0052](0052-bytes-written-count-once-they-arrive.md),
   [ADR 0053](0053-a-directory-is-finished-once-all-in-it-is-done.md), and
-  [ADR 0055](0055-a-job-s-reports-go-in-batches.md)
+  [ADR 0055](0055-a-job-s-reports-go-in-batches.md); frozen by
+  [ADR 0056](0056-the-time-left-of-a-job-stays-as-it-is.md)
 - Date: 2026-10-28
 
 ## Context

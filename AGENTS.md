@@ -247,6 +247,9 @@ Paths come from `crates/noc-config/src/paths.rs`.
   Conventional Commits, one logical change each.
 - ADRs: significant decisions go in `docs/adr/NNNN-title.md` (Status, Context, Decision,
   Consequences).
+- The time left of a job is frozen (ADR 0056): fix only defects, each with a test that fails
+  without it. A scenario it gets wrong is a limit: add it to ADR 0056 with its numbers, rather
+  than a case, a constant, or a tuning to `crates/noc/src/tui/progress.rs`.
 - Keep `docs/architecture.md`, `docs/roadmap.md`, `docs/keymap-compare.md`,
   `docs/keymap-non-vim.md` in sync with code.
 - User-visible changes go in `CHANGELOG.md` under `Unreleased`.

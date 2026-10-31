@@ -416,7 +416,7 @@ impl Sums {
 /// The time left of a job: the work left, bytes and entries, at the pace of the work behind
 /// it over about [`ETA_HORIZON`] of it. An entry costs time as some bytes do, opening,
 /// creating, setting attributes, and how many is learned as the job goes, so that many small
-/// files left take longer than their bytes say.
+/// files left take longer than their bytes say. It changes for defects only (ADR 0056).
 #[derive(Debug, Default)]
 struct Forecast {
     /// Where the job was when it first reported, or reported again after counting.

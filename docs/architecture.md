@@ -1043,7 +1043,9 @@ second, while it keeps within 1% of the forecast smoothed (`ETA_NEAR`), and else
 nearer edge of that band, so that it holds still where the forecast does rather than go up and
 down; beyond a tenth from the forecast (`ETA_SLACK`), it moves halfway there each second, and
 more than twice as long, or less than half (`ETA_JUMP`), it is the forecast at once. It keeps its
-fraction of a second and shows rounded.
+fraction of a second and shows rounded. All of this stays as it is
+([ADR 0056](adr/0056-the-time-left-of-a-job-stays-as-it-is.md)): it changes for defects only,
+and a scenario it gets wrong is written down there as a limit.
 
 Renaming one entry in its directory (`rename`) is no job: one call with no progress, which
 the UI runs like a new directory, through the host's shared session (`Arc<SftpFs>`) for a

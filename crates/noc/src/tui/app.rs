@@ -5849,11 +5849,17 @@ impl App {
             .unwrap_or(0);
         let buttons = vec![Button::Ok, Button::Cancel];
         let title = fl!("checksum-title");
+        let placeholder = if single_file {
+            fl!("checksum-expected-placeholder")
+        } else {
+            fl!("checksum-expected-single")
+        };
         let mut dialog = Dialog::fields(&title, &[], &[], buttons)
             .with_message(&message)
             .with_combo_box(&fl!("checksum-algorithm"), &algorithms, chosen)
             .with_separator()
-            .with_field(&fl!("checksum-expected"), "");
+            .with_field(&fl!("checksum-expected"), "")
+            .with_placeholder(0, &placeholder);
         for (label, on) in &checks {
             dialog = dialog.with_check(label, *on);
         }
@@ -13438,6 +13444,8 @@ mod tests {
         assert!(text.contains("Algorithm: [SHA-256"), "{text}");
         assert!(!text.contains("BLAKE3"), "the list is closed: {text}");
         assert!(text.contains("Expected checksum"), "{text}");
+        let placeholder = "Optional: a hex checksum or a line of a checksum file";
+        assert!(text.contains(placeholder), "{text}");
         assert!(!text.contains("Compare with"), "the same file: {text}");
         // Alt and its letter open the list, which shows every algorithm, and Esc closes it.
         app.handle(Resolved::Hotkey('a'));
@@ -13589,6 +13597,8 @@ mod tests {
             text.contains("Expected checksum:"),
             "shown, disabled: {text}"
         );
+        assert!(text.contains("Only for a single file"), "why: {text}");
+        assert!(!text.contains("Optional:"), "{text}");
         assert_eq!(
             app.place(),
             (Mode::Normal, Context::Dialog),

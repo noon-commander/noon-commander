@@ -356,8 +356,8 @@ struct LabelledField {
     /// What shows, faint, while the field is empty, such as the value that then counts; it is
     /// never the field's text. Terminal-safe. Fields that search show none.
     placeholder: Option<String>,
-    /// Shown where it cannot be used: its label faint, the field empty and faint; the focus,
-    /// the mouse, and its letter pass it by.
+    /// Shown where it cannot be used: its label faint, the field faint and empty but for its
+    /// placeholder; the focus, the mouse, and its letter pass it by.
     disabled: bool,
 }
 
@@ -944,8 +944,8 @@ impl Dialog {
         self
     }
 
-    /// The same dialog, whose field `index` shows, empty and faint, but cannot be used; the
-    /// focus on it goes to the first stop.
+    /// The same dialog, whose field `index` shows, faint and empty but for its placeholder, but
+    /// cannot be used; the focus on it goes to the first stop.
     pub(crate) fn with_disabled(mut self, index: usize) -> Self {
         if let Some(field) = self.fields.get_mut(index) {
             field.disabled = true;
@@ -1645,8 +1645,9 @@ impl Dialog {
 
     /// Draws field `number` under its label from row `index` of `inner`, with the terminal
     /// cursor in it if it has the focus, and keeps where for the mouse in `spots`, and where
-    /// the glyph that switches how it searches is. A disabled one is faint, label and field,
-    /// and takes no clicks. Returns the row after it, or `None` without room.
+    /// the glyph that switches how it searches is. A disabled one is faint, label and field
+    /// with its placeholder, and takes no clicks. Returns the row after it, or `None` without
+    /// room.
     fn draw_labelled_field(
         &self,
         frame: &mut Frame<'_>,
@@ -1676,6 +1677,10 @@ impl Dialog {
             return None;
         }
         if labelled.disabled {
+            if let Some(placeholder) = &labelled.placeholder {
+                let room = usize::from(inner.width);
+                frame.render_widget(placeholder_line(placeholder, room, theme), row(index));
+            }
             let style = theme.dialog_input.patch(theme.disabled);
             frame.buffer_mut().set_style(row(index), style);
             return Some(index + 1);
@@ -3218,6 +3223,7 @@ mod tests {
             .with_combo_box("&Count:", &choices, 0)
             .with_separator()
             .with_field("&Expected:", "")
+            .with_placeholder(0, "Optional: hex")
             .with_check("&Verbose", false);
         if disabled {
             dialog.with_disabled(0)
@@ -3265,8 +3271,15 @@ mod tests {
             theme.dialog_input.add_modifier | Modifier::DIM,
             "still in the colors of fields"
         );
+        assert_eq!(
+            row_of(&terminal, "Optional: hex"),
+            label + 1,
+            "its placeholder, faint with it"
+        );
+        assert_eq!(buffer[(x, label + 1)].symbol(), "O");
 
         let enabled = draw_themed(&hashing(false), 40, 12, &theme);
+        assert_eq!(row_of(&enabled, "Optional: hex"), label + 1);
         let buffer = enabled.backend().buffer();
         assert!(
             !dim(buffer[(x, label)].style()),

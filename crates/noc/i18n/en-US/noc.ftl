@@ -1148,6 +1148,11 @@ checksum-many = Checksums of { marked-entries }
 checksum-algorithm = &Algorithm:
 # Above a field for a checksum to compare with, as a download page gives it.
 checksum-expected = &Expected checksum:
+# Faint in that field while it is empty. A line of a checksum file is one that sha256sum and its
+# kin print: the checksum, then the file's name.
+checksum-expected-placeholder = Optional: a hex checksum or a line of a checksum file
+# Faint in that field where it is disabled: for a directory, or more than one entry.
+checksum-expected-single = Only for a single file
 # A check box: also hash the file under the cursor of the other panel, and compare the two.
 checksum-compare = &Compare with { $path }
 # The names of the algorithms, the choices of the combo box with their letters, which Alt and

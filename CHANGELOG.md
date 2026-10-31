@@ -210,8 +210,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and `h` and `l` still go to the choice before and the next
   ([ADR 0057](docs/adr/0057-combo-boxes.md)).
 - The checksum dialog of `f #` always shows its Expected checksum field, under a blank line after
-  the algorithm; for a directory or many files it is faint, and the focus, the mouse, and its
-  letter pass it by.
+  the algorithm, with what it takes faint in it while empty: a hex checksum or a line of a
+  checksum file. For a directory or many files it is faint and says it is only for a single
+  file, and the focus, the mouse, and its letter pass it by.
 - Check boxes show `[✓]` (a Nerd Font check with `ui.icons`) rather than `[x]`. Their brackets,
   and those of combo boxes, are faint, and the check and the arrow of a combo box are in the color
   of titles, but on what has the focus. The pull-down menu of F9 marks the sort order and the

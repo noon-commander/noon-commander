@@ -8,7 +8,7 @@ expression: terminal.backend()
 "  ║ Count: [one ▼]                   ║  "
 "  ║                                  ║  "
 "  ║ Expected:                        ║  "
-"  ║                                  ║  "
+"  ║ Optional: hex                    ║  "
 "  ║ [ ] Verbose                      ║  "
 "  ╟──────────────────────────────────╢  "
 "  ║       [< OK >] [ Cancel ]        ║  "

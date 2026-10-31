@@ -444,18 +444,10 @@ enum Purpose {
         other: Option<Location>,
         expect: bool,
     },
-    /// Save the checksums of the window `window` in `dir`, under the name typed.
-    SaveSums {
-        window: u64,
-        dir: Location,
-        bytes: Vec<u8>,
-    },
-    /// `location` is taken: Yes writes the checksums of the window `window` over it.
-    OverwriteSums {
-        window: u64,
-        location: Location,
-        bytes: Vec<u8>,
-    },
+    /// Save the checksums, `bytes`, in `dir`, under the name typed.
+    SaveSums { dir: Location, bytes: Vec<u8> },
+    /// `location` is taken: Yes writes the checksums, `bytes`, over it.
+    OverwriteSums { location: Location, bytes: Vec<u8> },
     /// Go to directory in `panel`: OK opens the path typed there.
     GoToDir { panel: PanelId },
     /// A question about workspaces.
@@ -847,8 +839,8 @@ pub(crate) struct App {
     results: VecDeque<Results>,
     /// Text for the event loop to put on the clipboard.
     clipboard: Option<String>,
-    /// Files of checksums being written: the window they came from, and what goes in them.
-    saving: HashMap<Location, (u64, Vec<u8>)>,
+    /// Files of checksums being written, with what goes in them.
+    saving: HashMap<Location, Vec<u8>>,
     /// For the times in questions.
     tz: TimeZone,
     /// Running jobs: at most one in front, over the panels and the help and under the
@@ -4561,16 +4553,14 @@ impl App {
                 other,
                 expect,
             } if ok => return self.start_checksum(dialog, dir, &names, other, expect),
-            Purpose::SaveSums { window, dir, bytes } if ok && !dialog.text().is_empty() => {
+            Purpose::SaveSums { dir, bytes } if ok && !dialog.text().is_empty() => {
                 let location = child(&dir, dialog.text().as_bytes());
-                return self.write_sums(window, location, bytes, false);
+                return self.write_sums(location, bytes, false);
             }
-            Purpose::OverwriteSums {
-                window,
-                location,
-                bytes,
-            } if event == DialogEvent::Pressed(Button::Yes) => {
-                return self.write_sums(window, location, bytes, true);
+            Purpose::OverwriteSums { location, bytes }
+                if event == DialogEvent::Pressed(Button::Yes) =>
+            {
+                return self.write_sums(location, bytes, true);
             }
             Purpose::RenameOver { panel, from, to }
                 if event == DialogEvent::Pressed(Button::Yes) =>
@@ -6106,7 +6096,11 @@ impl App {
         };
         let mut buttons = vec![SumsButton::Copy];
         if rows.len() > 1 {
-            buttons.extend([SumsButton::CopyAll, SumsButton::View]);
+            buttons.push(SumsButton::CopyAll);
+        }
+        // Two files compared are on screen whole.
+        if rows.len() > 1 && !compared {
+            buttons.push(SumsButton::View);
         }
         if hashing.dir.is_some() {
             buttons.push(SumsButton::Save);
@@ -6145,13 +6139,11 @@ impl App {
             SumsEvent::Copy(row) => {
                 if let Some((_, Some(hex))) = results.lines.get(row) {
                     self.clipboard = Some(hex.clone());
-                    results.window.set_status(fl!("checksum-copied"));
                 }
             }
             SumsEvent::CopyAll => {
                 let text = sums_file(&results.lines);
                 self.clipboard = Some(String::from_utf8_lossy(&text).into_owned());
-                results.window.set_status(fl!("checksum-copied"));
             }
             SumsEvent::View => {
                 if let Some(results) = self.results.pop_front() {
@@ -6162,12 +6154,11 @@ impl App {
                 if let Some(dir) = results.dir.clone() {
                     let name = sums_name(results);
                     let bytes = sums_file(&results.lines);
-                    let window = results.id;
                     let (title, prompt) = (fl!("checksum-save-title"), fl!("checksum-save-prompt"));
                     let dialog = Dialog::form(&title, &prompt, &name, &[]);
                     self.dialogs.push_back(Open {
                         dialog,
-                        purpose: Purpose::SaveSums { window, dir, bytes },
+                        purpose: Purpose::SaveSums { dir, bytes },
                     });
                 }
             }
@@ -6178,23 +6169,15 @@ impl App {
         Some(Vec::new())
     }
 
-    /// Writes the checksums of the window `window` to `location`, over what is there if
-    /// `replace`.
-    fn write_sums(
-        &mut self,
-        window: u64,
-        location: Location,
-        bytes: Vec<u8>,
-        replace: bool,
-    ) -> Vec<Effect> {
+    /// Writes the checksums, `bytes`, to `location`, over what is there if `replace`.
+    fn write_sums(&mut self, location: Location, bytes: Vec<u8>, replace: bool) -> Vec<Effect> {
         let Ok(host) = self.handle_for(&location) else {
             let reason = fl!("error-connection-closed");
             let path = location_text(&location);
             self.show_error(&fl!("checksum-save-error", path = path, reason = reason));
             return Vec::new();
         };
-        self.saving
-            .insert(location.clone(), (window, bytes.clone()));
+        self.saving.insert(location.clone(), bytes.clone());
         vec![Effect::WriteFile {
             location,
             bytes,
@@ -6203,29 +6186,21 @@ impl App {
         }]
     }
 
-    /// Takes the end of an [`Effect::WriteFile`]: panels on its directory read it again, and
-    /// the window it came from says where it went; a taken name asks whether to replace it.
-    /// `Err(None)` is a taken name.
+    /// Takes the end of an [`Effect::WriteFile`]: panels on its directory read it again, where
+    /// the file shows; a taken name asks whether to replace it. `Err(None)` is a taken name.
     pub(crate) fn written(
         &mut self,
         location: &Location,
         result: Result<(), Option<String>>,
     ) -> Vec<Effect> {
-        let Some((window, bytes)) = self.saving.remove(location) else {
+        let Some(bytes) = self.saving.remove(location) else {
             return Vec::new();
         };
         let path = location_text(location);
         match result {
-            Ok(()) => {
-                if let Some(results) = self.results.iter_mut().find(|r| r.id == window) {
-                    results
-                        .window
-                        .set_status(fl!("checksum-saved", path = path));
-                }
-                location
-                    .parent()
-                    .map_or_else(Vec::new, |dir| self.reload(&dir))
-            }
+            Ok(()) => location
+                .parent()
+                .map_or_else(Vec::new, |dir| self.reload(&dir)),
             Err(None) => {
                 let message = fl!("checksum-exists", path = path);
                 let buttons = vec![Button::Yes, Button::No];
@@ -6234,7 +6209,6 @@ impl App {
                 self.dialogs.push_back(Open {
                     dialog,
                     purpose: Purpose::OverwriteSums {
-                        window,
                         location: location.clone(),
                         bytes,
                     },
@@ -13571,7 +13545,9 @@ mod tests {
         app.handle(action(Action::Confirm));
         assert_eq!(app.take_clipboard(), Some("ab".repeat(32)));
         assert_eq!(app.take_clipboard(), None, "copied once");
-        assert!(screen_of(&mut app, 20).contains("Sent to the terminal's clipboard."));
+        let text = screen_of(&mut app, 20);
+        assert!(text.contains("[< To clipboard >]"), "{text}");
+        assert!(!text.contains("clipboard."), "no status: {text}");
         app.handle(action(Action::Cancel));
         assert_eq!(app.context(), Context::Panel);
     }
@@ -13671,9 +13647,19 @@ mod tests {
         let sums = vec![sum("/srv/b", "b", Some(1)), sum("/srv/sub/b", "b", Some(1))];
         hashed(&mut app, id, sums);
         let text = screen_of(&mut app, 24);
-        assert!(text.contains("The files are the same."), "{text}");
+        assert!(text.contains("✓ The files are the same."), "{text}");
         assert!(text.contains("/srv/sub/b"), "{text}");
         assert!(!text.contains("Save"), "two places: {text}");
+        // A dialog, with both whole: no filter, no View.
+        assert_eq!(app.place(), (Mode::Normal, Context::Dialog));
+        assert!(
+            !text.contains("Filter:") && !text.contains("View"),
+            "{text}"
+        );
+        assert_eq!(text.matches(&"01".repeat(32)).count(), 2, "{text}");
+        app.handle(action(Action::Confirm));
+        assert_eq!(app.take_clipboard(), Some("01".repeat(32)));
+        assert!(!screen_of(&mut app, 24).contains("clipboard."), "no status");
         app.handle(action(Action::Cancel));
 
         app.handle(action(Action::Checksum));
@@ -13758,8 +13744,8 @@ mod tests {
         let (_, _, replace) = written(app.handle(action(Action::Confirm)));
         assert!(replace);
         let effects = app.written(&location, Ok(()));
-        assert_eq!(effects.len(), 2, "both panels show /srv");
-        assert!(screen_of(&mut app, 24).contains("Saved to /srv/SHA256SUMS."));
+        assert_eq!(effects.len(), 2, "both panels show /srv, where it is");
+        assert!(!screen_of(&mut app, 24).contains("Saved to"), "no status");
     }
 
     #[test]

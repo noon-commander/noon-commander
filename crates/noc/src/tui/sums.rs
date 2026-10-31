@@ -1,7 +1,8 @@
 //! The window with the checksums a job found: with several files, a list of them with a filter,
 //! as the lists have (ADR 0036), and under it, apart, the whole checksum of the file under the
-//! cursor, as the location menu shows the whole row under it; whether it matches what was
-//! expected or the other file; and buttons to copy them, view them, or save them (ADR 0058).
+//! cursor, as the location menu shows the whole row under it; else, a dialog with the whole
+//! checksum of each file and, apart from it, whether it matches what was expected or the other
+//! file. Buttons put them on the clipboard, view them, or save them (ADR 0058).
 
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -52,7 +53,8 @@ pub(crate) struct SumRow {
     pub(crate) mark: Mark,
 }
 
-/// What the line under the checksum says about all of them, and whether it is good news.
+/// What the window says about all of them, apart from the checksums, and whether it is good
+/// news.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Verdict {
     pub(crate) text: String,
@@ -103,20 +105,20 @@ pub(crate) struct SumsWindow {
     title: String,
     rows: Vec<SumRow>,
     verdict: Option<Verdict>,
-    /// What the last button did, such as copying.
-    status: Option<String>,
     buttons: Vec<SumsButton>,
     focus: usize,
-    /// The filter, the cursor, and the scrolling of the list of several files; one file has no
-    /// list.
+    /// The filter, the cursor, and the scrolling of the list of several files; one file, or
+    /// two compared, have no list.
     list: Option<Picker>,
-    /// Where the last render drew the window of one file, for the mouse.
+    /// Where the last render drew the window without a list, for the mouse.
     drawn: Drawn,
 }
 
 impl SumsWindow {
     /// The window for `rows`, with `buttons`, the first of them with the focus. Several files
-    /// get a list whose filter matches as `input` says, as it was last; it opens on the rows.
+    /// without a verdict get a list whose filter matches as `input` says, as it was last; it
+    /// opens on the rows. With a verdict, which only one file or two compared have, the window
+    /// is a dialog.
     pub(crate) fn new(
         title: String,
         rows: Vec<SumRow>,
@@ -124,7 +126,7 @@ impl SumsWindow {
         buttons: Vec<SumsButton>,
         input: Input,
     ) -> Self {
-        let list = (rows.len() > 1).then(|| {
+        let list = (rows.len() > 1 && verdict.is_none()).then(|| {
             let mut picker = Picker::new(input).on_rows();
             picker.set_rows(rows.iter().map(texts).collect());
             picker
@@ -133,7 +135,6 @@ impl SumsWindow {
             title,
             rows,
             verdict,
-            status: None,
             buttons,
             focus: 0,
             list,
@@ -141,13 +142,8 @@ impl SumsWindow {
         }
     }
 
-    /// Shows `text` under the checksum, until the next one.
-    pub(crate) fn set_status(&mut self, text: String) {
-        self.status = Some(text);
-    }
-
-    /// Where keys go: the window of one file is a dialog, and the list of several has keys of
-    /// its own.
+    /// Where keys go: the window without a list is a dialog, and the list of several files has
+    /// keys of its own.
     pub(crate) fn context(&self) -> Context {
         if self.list.is_some() {
             Context::Checksums
@@ -177,6 +173,7 @@ impl SumsWindow {
     }
 
     /// The file under the cursor, by its index among all; none while the filter shows none.
+    /// Without a list, the first: the one file, or that of the active panel.
     fn selected(&self) -> Option<usize> {
         match &self.list {
             Some(list) => list.shown(0..self.rows.len()).get(list.cursor()).copied(),
@@ -286,26 +283,24 @@ impl SumsWindow {
     }
 
     /// Draws the window centered in `area`: the list of files if there are several, under its
-    /// filter, with the file under the cursor apart below it; else the one file. Then the
-    /// buttons.
+    /// filter, with the file under the cursor apart below it; else each file and the verdict.
+    /// Then the buttons.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         if self.list.is_some() {
             self.render_list(frame, area, theme);
         } else {
-            self.render_one(frame, area, theme);
+            self.render_dialog(frame, area, theme);
         }
     }
 
     /// The list of several files and, under a line, the name and the whole checksum of the one
     /// under the cursor, in as many lines for each, so that nothing moves as the cursor goes
-    /// from one to the next; then the verdict and what the last button did.
+    /// from one to the next.
     fn render_list(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let colors = Colors::of(theme, Tone::Plain);
         let Self {
             title,
             rows,
-            verdict,
-            status,
             buttons,
             focus,
             list,
@@ -337,17 +332,6 @@ impl SumsWindow {
                 *line = Line::raw(text);
             }
         }
-        footer.extend(verdict.as_ref().map(|verdict| verdict_line(verdict, theme)));
-        footer.extend(status.as_ref().map(|status| {
-            let styles = colors.body_styles();
-            Line::from(cells::fit(
-                status,
-                room,
-                Align::Left,
-                styles,
-                theme.glyphs.marks,
-            ))
-        }));
         let footer = footer
             .into_iter()
             .map(|line| line.style(theme.dialog))
@@ -373,13 +357,17 @@ impl SumsWindow {
         });
     }
 
-    /// The one file: its name and whole checksum, the verdict, and what the last button did.
-    fn render_one(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
+    /// Each file, its name and its whole checksum, a blank line between two; then, under a
+    /// line, the verdict, apart from them and from the buttons under another line.
+    fn render_dialog(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let colors = Colors::of(theme, Tone::Plain);
         let width = WIDTH.min(area.width.saturating_sub(4)).max(20);
         let room = usize::from(width.saturating_sub(4)).max(1);
         let mut lines: Vec<Line<'static>> = Vec::new();
-        if let Some(row) = self.rows.first() {
+        for (index, row) in self.rows.iter().enumerate() {
+            if index > 0 {
+                lines.push(Line::default());
+            }
             lines.push(Line::from(cells::fit(
                 &row.name,
                 room,
@@ -392,24 +380,16 @@ impl SumsWindow {
                 None => lines.push(Line::raw(fl!("checksum-skipped"))),
             }
         }
-        if let Some(verdict) = &self.verdict {
-            lines.push(Line::default());
-            lines.push(verdict_line(verdict, theme));
-        }
-        if let Some(status) = &self.status {
-            lines.push(Line::default());
-            lines.push(Line::from(cells::fit(
-                status,
-                room,
-                Align::Left,
-                colors.body_styles(),
-                theme.glyphs.marks,
-            )));
-        }
-        let height = u16::try_from(lines.len() + 2).unwrap_or(u16::MAX);
-        // Borders, the lines, a line, the buttons.
-        let inner = draw_box(frame, area, (width, height + 2), &self.title, colors, theme);
-        let visible = usize::from(inner.height.saturating_sub(2));
+        // A line and the verdict; a line and the buttons.
+        let verdict = self
+            .verdict
+            .as_ref()
+            .map(|verdict| verdict_line(verdict, theme));
+        let below = if verdict.is_some() { 4 } else { 2 };
+        let height = u16::try_from(lines.len() + 2 + below).unwrap_or(u16::MAX);
+        let inner = draw_box(frame, area, (width, height), &self.title, colors, theme);
+        let below = u16::try_from(below).unwrap_or(0);
+        let visible = usize::from(inner.height.saturating_sub(below));
         let mut drawn = Drawn {
             frame: frame_around(inner),
             ..Drawn::default()
@@ -418,10 +398,14 @@ impl SumsWindow {
             let y = inner.y + u16::try_from(index).unwrap_or(0);
             frame.render_widget(line, Rect::new(inner.x, y, inner.width, 1));
         }
-        if inner.height >= 2 {
+        if inner.height >= below {
+            let y = inner.bottom() - 1;
+            if let Some(verdict) = verdict {
+                draw_separator(frame, inner, y - 3, colors, theme);
+                frame.render_widget(verdict, Rect::new(inner.x, y - 2, inner.width, 1));
+            }
             let labels: Vec<Label> = self.buttons.iter().map(|button| button.label()).collect();
             let buttons = button_line(&labels, 0, Some(self.focus), colors);
-            let y = inner.bottom() - 1;
             draw_separator(frame, inner, y - 1, colors, theme);
             let row = Rect::new(inner.x, y, inner.width, 1);
             drawn.buttons = button_spots(&labels, 0, row);
@@ -437,14 +421,18 @@ fn texts(row: &SumRow) -> Vec<String> {
     vec![row.name.clone(), hex]
 }
 
-/// The verdict, bold, in the color of titles if it is good news and of errors if not.
+/// The verdict after its mark, bold, in the color of titles if it is good news and of errors
+/// if not.
 fn verdict_line(verdict: &Verdict, theme: &Theme) -> Line<'static> {
-    let style = if verdict.good {
-        theme.dialog_title
+    let (style, sign) = if verdict.good {
+        (theme.dialog_title, glyphs::MATCH)
     } else {
-        theme.error_title
+        (theme.error_title, glyphs::MISMATCH)
     };
-    Line::from(Span::styled(verdict.text.clone(), style.bold()))
+    Line::from(Span::styled(
+        format!("{sign} {}", verdict.text),
+        style.bold(),
+    ))
 }
 
 /// A row of the list in `room` cells: its mark, its checksum shortened in the middle, and its
@@ -566,9 +554,28 @@ mod tests {
         let rows = vec![row("abc.txt", Some(ABC), Mark::Match)];
         let buttons = vec![SumsButton::Copy, SumsButton::Save, SumsButton::Close];
         let mut window = window(rows, Some(verdict), buttons);
-        window.set_status("Sent to the terminal's clipboard.".to_owned());
         assert_eq!(window.context(), Context::Dialog);
         insta::assert_snapshot!(draw(&mut window, 80, 14));
+    }
+
+    #[test]
+    fn two_files_compared_are_a_dialog_with_both_whole_and_the_verdict_apart() {
+        let other = ABC.replace('b', "0");
+        let rows = vec![
+            row("/srv/a.iso", Some(ABC), Mark::Mismatch),
+            row("host:/srv/a.iso", Some(&other), Mark::Mismatch),
+        ];
+        let verdict = Verdict {
+            text: "The files differ.".to_owned(),
+            good: false,
+        };
+        let buttons = vec![SumsButton::Copy, SumsButton::CopyAll, SumsButton::Close];
+        let mut window = window(rows, Some(verdict), buttons);
+        assert_eq!(window.context(), Context::Dialog);
+        assert_eq!(window.input(), None, "no filter");
+        assert_eq!(press(&mut window, Action::Down), SumsEvent::Pending);
+        assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Copy(0));
+        insta::assert_snapshot!(draw(&mut window, 80, 16));
     }
 
     #[test]
@@ -586,11 +593,7 @@ mod tests {
             row("short", Some(ABC), Mark::None),
             row("long", Some(&long), Mark::None),
         ];
-        let verdict = Verdict {
-            text: "The files differ.".to_owned(),
-            good: false,
-        };
-        let mut window = window(rows, Some(verdict), ALL.to_vec());
+        let mut window = window(rows, None, ALL.to_vec());
         insta::assert_snapshot!(draw(&mut window, 80, 18));
         let first = draw(&mut window, 80, 18);
         press(&mut window, Action::Down);

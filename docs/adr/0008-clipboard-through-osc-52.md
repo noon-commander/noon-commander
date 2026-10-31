@@ -1,6 +1,8 @@
 # 0008. Clipboard through OSC 52
 
-- Status: Accepted
+- Status: Accepted; amended by
+  [ADR 0058](0058-the-window-of-checksums-filters-and-views-them.md), after which the UI says
+  nothing once it sends text, and the buttons say it goes to the clipboard
 - Date: 2026-10-02
 
 ## Context

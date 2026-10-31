@@ -14,9 +14,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and the key after it say, as it was last. The window opens on the rows, and Esc goes back to
   them from the filter, then closes it. The name and the whole checksum of the file under the
   cursor show under the list, apart from it by a line as in the location menu, in as many lines
-  whichever file it is, with the verdict. A View button, and F3, show every line as `sha256sum`
-  prints them in the viewer, under the name Save… offers, and the window comes back when it
-  closes. Copy all, View, and Save… take every file, whatever the filter shows
+  whichever file it is. A View button, and F3, show every line as `sha256sum` prints them in
+  the viewer, under the name Save… offers, and the window comes back when it closes. All to
+  clipboard, View, and Save… take every file, whatever the filter shows
   ([ADR 0058](docs/adr/0058-the-window-of-checksums-filters-and-views-them.md)).
 - Aliases and functions from the shell's rc files work on the command line (`!` and `:!`):
   `shell.run`, Command line → Run with in the Configuration dialog, says what runs a command,
@@ -208,6 +208,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- In the window of checksums, Copy and Copy all are To clipboard and All to clipboard, and nothing
+  says afterwards that the text was sent to the terminal's clipboard or that the file was saved.
+  The verdict of one file checked against the checksum expected, or of two compared, stands
+  apart, between a line under the checksums and the line over the buttons, after ✓ or ✗. Two
+  files compared are a dialog, not a list, with both checksums whole
+  ([ADR 0058](docs/adr/0058-the-window-of-checksums-filters-and-views-them.md)).
 - Combo boxes replace radio buttons and the `< … >` choices: the algorithm of `f #`
   (`Algorithm: [SHA-256 ▼]`), the mode of the search of a tree (`Mode: [Text ▼]`), and every
   choice of the Configuration dialog, in the colors of text fields. Space, a click, or Alt and the

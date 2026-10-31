@@ -1535,20 +1535,22 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   shortened in the middle and a mark (✓, ✗, or `-` for skipped), under a filter that finds a
   file by its name or its checksum, and under the list, apart from it by a line as in the
   location menu, the name and the whole checksum of the file under the cursor, in as many lines
-  whichever it is; then the verdict (matches or not, the same or different), in color
-  ([ADR 0058](adr/0058-the-window-of-checksums-filters-and-views-them.md)). The window opens on
-  the rows, in Normal mode (`checksums`, falling back to `dialog`); `/` types in the filter.
-  Copy puts the checksum of the file under the cursor on the clipboard, Copy all every line in
-  the format of `sha256sum` (`<hex>  <name>`; names with a backslash or a line break escaped as
-  GNU coreutils does), View (F3) shows those lines in the viewer, in place of the window, which
-  comes back when it closes, and Save… writes them to a file in the panel's directory, locally
-  or on the host (`name.sha256` for one file, `SHA256SUMS` for several; `b3`, `md5`, …
-  for the others), after asking before it replaces one. One file has no list and no View.
-  Windows of jobs that end while one is open wait their turn.
+  whichever it is ([ADR 0058](adr/0058-the-window-of-checksums-filters-and-views-them.md)). The
+  window opens on the rows, in Normal mode (`checksums`, falling back to `dialog`); `/` types in
+  the filter. One file, or two compared, are a dialog: each name with its whole checksum, then,
+  between two lines, the verdict (✓ matches or ✗ not, the same or different), in color.
+  To clipboard puts the checksum of the file under the cursor, or of the first file, on the
+  clipboard, All to clipboard every line in the format of `sha256sum` (`<hex>  <name>`; names
+  with a backslash or a line break escaped as GNU coreutils does), View (F3) shows those lines
+  in the viewer, in place of the window, which comes back when it closes, and Save… writes them
+  to a file in the panel's directory, locally or on the host (`name.sha256` for one file,
+  `SHA256SUMS` for several; `b3`, `md5`, … for the others), after asking before it replaces
+  one. A dialog has no View. No message follows a button; an error saving is a window of its
+  own. Windows of jobs that end while one is open wait their turn.
 - **Clipboard.** Copying goes through OSC 52: the event loop writes the escape sequence
   between frames, and the terminal puts the text on the clipboard of the machine it runs on,
-  over ssh too. Nothing tells whether it did, so the UI says the text was sent to the
-  terminal's clipboard. Noon Commander never reads the clipboard
+  over ssh too. Nothing tells whether it did, so the UI says nothing after it; the buttons that
+  copy say they put the text on the clipboard. Noon Commander never reads the clipboard
   ([ADR 0008](adr/0008-clipboard-through-osc-52.md)).
 - **Terminal title.** With `ui.terminal_title` (the default) the event loop titles the
   terminal's window or tab with OSC 0 between frames: the active panel's directory

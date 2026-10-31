@@ -1296,14 +1296,14 @@ text, `search_input` goes before it.
 
 The window that `f #` shows when it ends, for several files: their checksums in a list under a
 filter, and under them, apart, the whole checksum of the file under the cursor, then the buttons
-Copy, Copy all, View, Save…, and OK
+To clipboard, All to clipboard, View, Save…, and OK
 ([ADR 0058](adr/0058-the-window-of-checksums-filters-and-views-them.md)). It opens on the rows and
 falls back to `dialog`, whose motions move the cursor of the rows, whose Left, Right, and Tab move
 the focus of the buttons, and whose Enter and Space press the one with it; Alt and the letter of
 a button press it, as in every dialog. `/` types in the filter, as in the lists. F3 shows
 every line in the viewer, as `sha256sum` prints them, and the window comes back when it closes.
-One file has no list: its window is a dialog. mc and Far have no checksums; yazi and ranger
-neither.
+One file, or two compared, have no list: their window is a dialog. mc and Far have no checksums;
+yazi and ranger neither.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |

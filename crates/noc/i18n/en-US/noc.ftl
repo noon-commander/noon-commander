@@ -1175,17 +1175,15 @@ checksum-matches = Matches the expected checksum.
 checksum-differs = Does not match the expected checksum.
 checksum-same = The files are the same.
 checksum-different = The files differ.
-# Buttons: the checksum of the selected file; every line, as sha256sum prints them; those lines
-# in the viewer; a file of them.
-checksum-copy = &Copy
-checksum-copy-all = Copy &all
+# Buttons: the checksum of the selected file on the clipboard; every line, as sha256sum prints
+# them, on the clipboard; those lines in the viewer; a file of them. Five share a line of 72
+# cells: keep them short.
+checksum-copy = To &clipboard
+checksum-copy-all = &All to clipboard
 checksum-view = &View
 checksum-save = &Save…
-# Nothing tells whether the terminal took it: some ignore the request (OSC 52).
-checksum-copied = Sent to the terminal's clipboard.
 checksum-save-title = Save checksums
 checksum-save-prompt = &File name:
-checksum-saved = Saved to { $path }.
 checksum-exists = { $path } is there already. Overwrite it?
 checksum-save-error = Cannot save { $path }: { $reason }
 

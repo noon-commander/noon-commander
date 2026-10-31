@@ -11,7 +11,7 @@ expression: terminal.backend()
 "  ║ /var/www                                                 ║  "
 "  ║ Other directory:                                         ║  "
 "  ║                                                          ║  "
-"  ║ [x] Remember                                             ║  "
+"  ║ [✓] Remember                                             ║  "
 "  ╟──────────────────────────────────────────────────────────╢  "
 "  ║           [< OK >] [ Use current ] [ Cancel ]            ║  "
 "  ╚══════════════════════════════════════════════════════════╝  "

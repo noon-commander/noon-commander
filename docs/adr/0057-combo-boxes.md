@@ -30,6 +30,13 @@ want.
   in the colors of text fields (`dialog_input`), as Far draws its combo boxes. The arrow is `▼`,
   Far's, as the scroll bars have it, or a Nerd Font chevron with `ui.icons`, from
   `tui/glyphs.rs`.
+- **Its brackets are faint and its arrow in the color of titles**, two roles of every theme,
+  `dialog_bracket` and `dialog_symbol` (mc-classic: dark gray and blue; Catppuccin: `overlay1`
+  and `mauve`; Noon: `faint` and gold; the terminal theme: dim and bold), so that the choice
+  stands out between them. Check boxes take the same, `[✓]`, their brackets faint and their
+  check, which was `x`, a `✓` in the color of titles, or a Nerd Font check with `ui.icons`; one
+  function draws them, in the dialogs and the Configuration dialog alike. What has the focus is
+  in its colors alone.
 - **Its list opens under it**, or above it where there is more room, over the dialog and past its
   frame, as the list of completions (`dialog::pop_up`): a frame, at most ten rows, a scroll bar on
   the frame when they do not all fit, the choice marked as the pull-down menu marks the choice

@@ -381,6 +381,9 @@ pub(crate) struct Colors {
     /// The letters of labels, over the rest, and over what has the focus.
     hotkey: Style,
     hotkey_focused: Style,
+    /// The brackets of check boxes, and their checks, over `body`.
+    bracket: Style,
+    symbol: Style,
 }
 
 impl Colors {
@@ -404,8 +407,25 @@ impl Colors {
         (self.body, self.mark)
     }
 
+    /// A check box, `[✓]` while `on` and `[ ]` else, in the body's colors, its brackets faint
+    /// and its check in the color of titles; or, `focused`, in the colors of the focus alone.
+    pub(crate) fn check_box(self, on: bool, focused: bool, theme: &Theme) -> Vec<Span<'static>> {
+        let (bracket, symbol) = if focused {
+            (self.focused, self.focused)
+        } else {
+            (self.body.patch(self.bracket), self.body.patch(self.symbol))
+        };
+        let check = if on { theme.glyphs.check } else { ' ' };
+        vec![
+            Span::styled("[", bracket),
+            Span::styled(check.to_string(), symbol),
+            Span::styled("]", bracket),
+        ]
+    }
+
     /// The colors of a dialog in `tone`: errors red, as mc draws them, and warnings on a
-    /// background of their own.
+    /// background of their own. Only plain dialogs set the brackets and checks of check boxes
+    /// apart, whose colors are for theirs.
     pub(crate) fn of(theme: &Theme, tone: Tone) -> Self {
         match tone {
             Tone::Plain => Self {
@@ -416,6 +436,8 @@ impl Colors {
                 mark: theme.truncated_dialog,
                 hotkey: theme.dialog_hotkey,
                 hotkey_focused: theme.dialog_hotkey_focused,
+                bracket: theme.dialog_bracket,
+                symbol: theme.dialog_symbol,
             },
             Tone::Warning => Self {
                 body: theme.warning_dialog,
@@ -425,6 +447,8 @@ impl Colors {
                 mark: theme.truncated_warning,
                 hotkey: theme.warning_hotkey,
                 hotkey_focused: theme.warning_hotkey_focused,
+                bracket: Style::new(),
+                symbol: Style::new(),
             },
             Tone::Error => Self {
                 body: theme.error_dialog,
@@ -434,6 +458,8 @@ impl Colors {
                 mark: theme.truncated_error,
                 hotkey: theme.error_hotkey,
                 hotkey_focused: theme.error_hotkey_focused,
+                bracket: Style::new(),
+                symbol: Style::new(),
             },
         }
     }
@@ -1484,7 +1510,8 @@ impl Dialog {
             return;
         };
         index = after;
-        let Some(after) = self.draw_checks(frame, (inner, index), colors, &mut spots) else {
+        let checks = self.draw_checks(frame, (inner, index), (colors, theme), &mut spots);
+        let Some(after) = checks else {
             return;
         };
         index = after;
@@ -1560,7 +1587,7 @@ impl Dialog {
         &self,
         frame: &mut Frame<'_>,
         (inner, mut index): (Rect, u16),
-        colors: Colors,
+        (colors, theme): (Colors, &Theme),
         spots: &mut Vec<(Focus, Rect)>,
     ) -> Option<u16> {
         for (number, check) in self.checks.iter().enumerate() {
@@ -1568,10 +1595,10 @@ impl Dialog {
                 return None;
             }
             let row = Rect::new(inner.x, inner.y + index, inner.width, 1);
-            let text = format!("[{}] ", mark(check.on, glyphs::CHECKED));
             let focused = self.focus == Focus::Check(number);
             let style = if focused { colors.focused } else { colors.body };
-            let mut spans = vec![Span::styled(text, style)];
+            let mut spans = colors.check_box(check.on, focused, theme);
+            spans.push(Span::styled(" ", style));
             let hotkey = colors.hotkey_style(focused);
             spans.extend(check.label.spans(style, Some(hotkey), colors.mark));
             frame.render_widget(Line::from(spans), row);
@@ -2131,11 +2158,6 @@ fn placeholder_line(placeholder: &str, room: usize, theme: &Theme) -> Line<'stat
         theme.glyphs.marks,
     );
     Line::from(spans).style(theme.dialog_input)
-}
-
-/// `glyph` in a check box that is on, `on`; a blank in one that is off.
-fn mark(on: bool, glyph: char) -> char {
-    if on { glyph } else { ' ' }
 }
 
 #[cfg(test)]
@@ -3032,22 +3054,57 @@ mod tests {
 
         let theme = Theme::mc_classic();
         let mut dialog = picker();
-        let cell = |dialog: &Dialog| {
+        // The colors of the cells of `text`, from `from` cells before it, as many as `count`.
+        let colors = |dialog: &Dialog, text: &str, from: u16, count: u16| {
             let terminal = draw_themed(dialog, 40, 12, &theme);
             let buffer = terminal.backend().buffer();
-            let at = super::super::mouse::find(buffer, "one");
-            buffer[(at.x, at.y)].clone()
+            let at = super::super::mouse::find(buffer, text);
+            (0..count)
+                .map(|offset| {
+                    let cell = &buffer[(at.x - from + offset, at.y)];
+                    (cell.fg, cell.bg, cell.modifier.contains(Modifier::REVERSED))
+                })
+                .collect::<Vec<_>>()
         };
-        let focused = cell(&dialog);
-        assert_eq!((focused.fg, focused.bg), (Color::Black, Color::Cyan));
-        assert!(
-            focused.modifier.contains(Modifier::REVERSED),
-            "fields have the focus's colors in mc-classic: reversed"
+        // `[one   ▼]`: the bracket, a letter, the arrow, and the bracket.
+        let combo = |dialog: &Dialog| {
+            let cells = colors(dialog, "[one", 0, 9);
+            [cells[0], cells[1], cells[7], cells[8]]
+        };
+        let focused = (Color::Black, Color::Cyan, true);
+        assert_eq!(
+            combo(&dialog),
+            [focused; 4],
+            "fields have the focus's colors in mc-classic: reversed, all of it"
         );
         dialog.handle(action(Action::Down));
-        let idle = cell(&dialog);
-        assert_eq!(idle.bg, theme.dialog_input.bg.unwrap(), "as a field");
-        assert!(!idle.modifier.contains(Modifier::REVERSED));
+        let (faint, field) = (Color::DarkGray, Color::Cyan);
+        assert_eq!(
+            combo(&dialog),
+            [
+                (faint, field, false),
+                (Color::Black, field, false),
+                (Color::Blue, field, false),
+                (faint, field, false),
+            ],
+            "as a field, its brackets faint and its arrow blue as titles"
+        );
+        // `[✓] Verbose`, with the focus, then without it; its letter is blue either way.
+        dialog.handle(action(Action::Toggle));
+        let check = |dialog: &Dialog| colors(dialog, "Verbose", 4, 4);
+        let focus = (Color::Black, Color::Cyan, false);
+        assert_eq!(check(&dialog), [focus; 4]);
+        dialog.handle(action(Action::Down));
+        let gray = Color::Gray;
+        assert_eq!(
+            check(&dialog),
+            [
+                (faint, gray, false),
+                (Color::Blue, gray, false),
+                (faint, gray, false),
+                (Color::Black, gray, false),
+            ]
+        );
     }
 
     #[test]

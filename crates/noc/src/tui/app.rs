@@ -11007,7 +11007,8 @@ mod tests {
         let text = screen(&mut app);
         assert!(text.contains("Copy \"left\" to:"), "{text}");
         assert!(text.contains("/srv/right"), "{text}");
-        assert!(text.contains("[x] Preserve attributes"), "{text}");
+        let checked = format!("[{}] Preserve attributes", app.theme.glyphs.check);
+        assert!(text.contains(&checked), "{text}");
         let (id, sources, target, remote, options) = copy_job(app.handle(action(Action::Confirm)));
         assert_eq!(sources, [local("/srv/left")]);
         assert_eq!((target, remote), (local("/srv/right"), (false, false)));
@@ -11129,7 +11130,8 @@ mod tests {
         let text = screen(&mut app);
         assert!(text.contains("Move \"left\" to:"), "{text}");
         assert!(text.contains("/srv/right"), "{text}");
-        assert!(text.contains("[x] Preserve attributes"), "{text}");
+        let checked = format!("[{}] Preserve attributes", app.theme.glyphs.check);
+        assert!(text.contains(&checked), "{text}");
         let (id, sources, target, _, options) = copy_job(app.handle(action(Action::Confirm)));
         assert_eq!(
             (sources, target),
@@ -11276,7 +11278,8 @@ mod tests {
         app.handle(action(Action::Duplicate));
         let text = screen(&mut app);
         assert!(text.contains("Copy \"report.pdf\" to:"), "{text}");
-        assert!(text.contains("[x] Preserve attributes"), "{text}");
+        let checked = format!("[{}] Preserve attributes", app.theme.glyphs.check);
+        assert!(text.contains(&checked), "{text}");
         assert_eq!(field_text(&app), "report.pdf");
         type_text(&mut app, " (1)");
         let (_, sources, target, ends, options) = copy_job(app.handle(action(Action::Confirm)));
@@ -13500,7 +13503,8 @@ mod tests {
         app.active = Side::Left;
         app.handle(action(Action::Checksum));
         let text = screen_of(&mut app, 20);
-        assert!(text.contains("[x] Compare with /srv/sub/b"), "{text}");
+        let checked = format!("[{}] Compare with /srv/sub/b", app.theme.glyphs.check);
+        assert!(text.contains(&checked), "{text}");
         let (id, targets, _) = checksum_job(app.handle(action(Action::Confirm)));
         assert_eq!(
             targets,

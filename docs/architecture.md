@@ -756,10 +756,10 @@ settings window: there is no OK or Cancel, and every change takes effect as it i
 ```text
   ╔═════════════════════════ Configuration ══════════════════════════╗
   ║  󰍹 Interface  │ Language           auto                          ▲
-  ║  󰤺 Animations │ Theme              < mc-classic >                █
-  ║  󰓡 Transfers  │ Borders            < Double ═ ║ ╔ >              █
-  ║  󰣀 SSH        │ Icons              [x]                           ░
-  ║  󰋊 Volumes    │ Show hidden files  [x]                           ▼
+  ║  󰤺 Animations │ Theme              [mc-classic ▼]                █
+  ║  󰓡 Transfers  │ Borders            [Double ═ ║ ╔ ▼]              █
+  ║  󰣀 SSH        │ Icons              [✓]                           ░
+  ║  󰋊 Volumes    │ Show hidden files  [✓]                           ▼
   ╟───────────────┴──────────────────────────────────────────────────╢
   ║ A language tag, such as en-US, or auto for the system locale.    ║
   ║ Takes effect after a restart.                                    ║
@@ -767,7 +767,7 @@ settings window: there is no OK or Cancel, and every change takes effect as it i
 ```
 
 - Categories are on the left, with a Nerd Font icon each (without `ui.icons`, names only);
-  the settings of the chosen one are on the right: check boxes `[x]`, combo boxes `[… ▼]`, and
+  the settings of the chosen one are on the right: check boxes `[✓]`, combo boxes `[… ▼]`, and
   text fields. Every option of `config.toml` is there, so that nobody has to edit the file:
   Interface (`[ui]`), Animations (`[animations]`), Transfers (`[transfer]`), SSH (`[ssh]` and
   the hidden hosts of `[discovery]`), Volumes (`[volumes]`), zoxide (`[zoxide]`), Command line
@@ -1914,7 +1914,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   buttons, with a scroll bar on the frame that the mouse and the wheel move.
 - **Combo boxes** ([ADR 0057](adr/0057-combo-boxes.md)). One of a few choices, `[SHA-256 ▼]`
   after its label (a Nerd Font chevron with `ui.icons`), as wide as its widest choice, in the
-  colors of text fields (`dialog_input`); `ComboBox` in `tui/combo_box.rs`, which the dialogs
+  colors of text fields (`dialog_input`), its brackets faint (`dialog_bracket`) and its arrow in
+  the color of titles (`dialog_symbol`), as the brackets and the check of a check box, `[✓]`
+  (`󰄬` with `ui.icons`); with the focus, either is in its colors alone. `ComboBox` is in
+  `tui/combo_box.rs`, which the dialogs
   (`Dialog::with_combo_box`, the checksum dialog and the search of a tree) and the Configuration
   dialog hold. Space, Alt and its letter, or a click opens its list under it, or above it where
   there is more room, as the list of completions (`dialog::pop_up`), over the dialog and past its
@@ -1980,7 +1983,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   `base`, dialogs, menus, and the F-key labels on `surface0`, text fields on `surface1`, the
   idle menu bar on `mantle`, the F-key numbers and the shadow on `crust`; a `blue` cursor, the
   active panel's title, and focused buttons; `lavender` headers, `mauve` marks and dialog
-  titles, warnings on `peach`, darkened in Latte; directories `blue`, executables `green`,
+  titles, and the checks of check boxes and arrows of combo boxes, their brackets `overlay1`,
+  warnings on `peach`, darkened in Latte; directories `blue`, executables `green`,
   symlinks `teal`, broken links `red`,
   devices `pink`; hosts `overlay1`, `yellow`, `green`, `red` by state; the units of sizes G in
   `peach`, the color Catppuccin gives numbers, and T `red`. The Noon themes are
@@ -2062,12 +2066,12 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 - **Glyphs.** Every special character the UI draws is in `tui/glyphs.rs`: `Glyphs::NERD` and
   `Glyphs::PLAIN`, which `ui.icons` picks and the theme carries (`Theme.glyphs`), with the icons
   and markers of kinds, hosts, and volumes, the glyph of root, the scroll bars, the marks of text
-  cut short, the marks of the pull-down menu, and the arrow of combo boxes; `Lines::DOUBLE` and
-  `Lines::SINGLE` by
+  cut short, the marks of the pull-down menu, the arrow of combo boxes, and the check of check
+  boxes; `Lines::DOUBLE` and `Lines::SINGLE` by
   `ui.borders`, with the tees that join lines to frames; and the characters that are the same either
   way: the single line, the line between columns, the `·` after the mode on its line, the spinner,
-  the arrows of the sort order, the checks of checksums, the progress bar, the marks of dialogs'
-  check boxes and secrets, and the icons of the Configuration dialog's categories.
+  the arrows of the sort order, the checks of checksums, the progress bar, the mark of secrets, and
+  the icons of the Configuration dialog's categories.
   `decor.rs` picks among them by kind, and asks devicons for files. `noc-scroll`, `noc-text`, and
   `noc-viewer` hold none: they take what they draw with as parameters (`BarGlyphs`, `Marks`, the
   viewer's `Styles`). `just glyphs`, part of `just lint`, fails on a special character written in

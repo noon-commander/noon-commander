@@ -6,7 +6,7 @@ expression: terminal.backend()
 "  ╔════════════════════════ Move ════════════════════════╗  "
 "  ║ Move "notes.txt" to:                                 ║  "
 "  ║ /srv/backup                                          ║  "
-"  ║ [x] Preserve attributes                              ║  "
+"  ║ [✓] Preserve attributes                              ║  "
 "  ╟──────────────────────────────────────────────────────╢  "
 "  ║                 [< OK >] [ Cancel ]                  ║  "
 "  ╚══════════════════════════════════════════════════════╝  "

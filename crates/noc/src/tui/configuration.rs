@@ -1156,7 +1156,6 @@ impl Configuration {
             } else {
                 (theme.dialog, theme.truncated_dialog)
             };
-            let label_style = styles.0;
             let label = setting.label.fit(
                 label_width + LABEL_GAP,
                 styles,
@@ -1164,10 +1163,7 @@ impl Configuration {
                 theme.glyphs.marks,
             );
             let value = match &setting.value {
-                Value::Toggle(on) => {
-                    let mark = if *on { 'x' } else { ' ' };
-                    vec![Span::styled(format!("[{mark}]"), label_style)]
-                }
+                Value::Toggle(on) => colors.check_box(*on, on_cursor, theme),
                 // A field, as the text fields are, whose name shows the cursor; within the row,
                 // which leaves two cells before the frame.
                 Value::Choice { combo, .. } => {
@@ -1795,7 +1791,8 @@ mod tests {
         press_on(&mut dialog, "Parallel jobs", 15);
         typed(&mut dialog, "1");
         // Leaving it applies it; on the value of a check box, the click switches it too.
-        let (old, new) = press_on(&mut dialog, "[x]", 0).change.unwrap();
+        let checked = format!("[{}]", Theme::terminal().glyphs.check);
+        let (old, new) = press_on(&mut dialog, &checked, 0).change.unwrap();
         assert_eq!(old.transfer.parallel_jobs.get(), 2);
         assert_eq!(new.transfer.parallel_jobs.get(), 12);
         assert!(!new.transfer.atomic_upload);

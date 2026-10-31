@@ -131,6 +131,11 @@ pub(crate) struct Theme {
     pub(crate) dialog_hotkey_focused: Style,
     /// Text field in a dialog.
     pub(crate) dialog_input: Style,
+    /// Drawn over the others: the brackets of a check box and of a combo box, faint, so that
+    /// what is in them stands out; and what they show besides text, the check and the arrow, in
+    /// the color of titles. On what has the focus they take its colors.
+    pub(crate) dialog_bracket: Style,
+    pub(crate) dialog_symbol: Style,
     /// The progress bar of a job.
     pub(crate) gauge: Style,
     /// The color of the dots of what waits, over `panel` and over `dialog`.
@@ -316,6 +321,9 @@ impl Theme {
             dialog_hotkey: fg(Color::Blue),
             dialog_hotkey_focused: fg(Color::Blue),
             dialog_input: on(Color::Black, Color::Cyan),
+            // Readable on the gray of dialogs and the cyan of fields; blue as titles.
+            dialog_bracket: fg(Color::DarkGray),
+            dialog_symbol: fg(Color::Blue),
             gauge: on(Color::White, Color::Black),
             // As connecting hosts, and the titles of dialogs.
             busy: fg(Color::LightYellow),
@@ -411,6 +419,9 @@ impl Theme {
             dialog_hotkey: Style::new().underlined(),
             dialog_hotkey_focused: Style::new().underlined(),
             dialog_input: reversed,
+            // Without colors, weight alone.
+            dialog_bracket: Style::new().dim(),
+            dialog_symbol: Style::new().bold(),
             gauge: plain,
             busy: plain,
             busy_dialog: plain,
@@ -503,6 +514,8 @@ impl Theme {
             dialog_hotkey: fg(p.mauve),
             dialog_hotkey_focused: Style::new().underlined(),
             dialog_input: on(p.text, p.surface1),
+            dialog_bracket: fg(p.overlay1),
+            dialog_symbol: fg(p.mauve),
             gauge: on(p.blue, p.surface0),
             busy: fg(p.mauve),
             busy_dialog: fg(p.mauve),
@@ -598,6 +611,9 @@ impl Theme {
             dialog_hotkey: fg(p.accent),
             dialog_hotkey_focused: Style::new().underlined(),
             dialog_input: on(p.text, p.field),
+            // Quieter than the hints, and in the gold of titles.
+            dialog_bracket: fg(p.faint),
+            dialog_symbol: fg(p.accent),
             gauge: on(p.accent, p.surface),
             busy: fg(p.accent),
             busy_dialog: fg(p.accent),
@@ -1243,6 +1259,28 @@ mod tests {
                     disabled.fg.is_none() || disabled.fg != field.bg,
                     "{name} {depth:?}: shows on the field"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn brackets_and_symbols_of_boxes_show_apart_on_dialogs_and_fields() {
+        for name in Theme::NAMES {
+            for depth in [ColorDepth::TrueColor, ColorDepth::Indexed] {
+                let theme = Theme::by_name(name, depth).unwrap();
+                for under in [theme.dialog, theme.dialog_input] {
+                    let bracket = under.patch(theme.dialog_bracket);
+                    let symbol = under.patch(theme.dialog_symbol);
+                    assert!(bracket != under, "{name} {depth:?}: brackets");
+                    assert!(symbol != under, "{name} {depth:?}: symbols");
+                    assert!(bracket != symbol, "{name} {depth:?}");
+                    for over in [bracket, symbol] {
+                        assert!(
+                            over.fg.is_none() || over.fg != over.bg,
+                            "{name} {depth:?}: shows"
+                        );
+                    }
+                }
             }
         }
     }

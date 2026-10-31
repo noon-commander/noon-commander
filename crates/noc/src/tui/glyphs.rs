@@ -92,6 +92,8 @@ pub(crate) struct Glyphs {
     pub(crate) folds: (char, char),
     /// At the end of a combo box, whose list opens under it.
     pub(crate) combo_box: char,
+    /// In a check box that is on.
+    pub(crate) check: char,
     /// In front of each point of a tip in the help.
     pub(crate) bullet: char,
     pub(crate) search_modes: SearchModes,
@@ -148,6 +150,8 @@ impl Glyphs {
         folds: ('󰅂', '󰅀'),
         // nf-md-chevron_down, as an open fold.
         combo_box: '󰅀',
+        // nf-md-check.
+        check: '󰄬',
         bullet: '•',
         // nf-cod-whole_word, nf-md-approximately_equal, nf-cod-regex, and nf-seti-shell, which
         // is smaller than nf-md-asterisk.
@@ -217,6 +221,8 @@ impl Glyphs {
         folds: ('▸', '▾'),
         // Far's arrow, as the scroll bar's.
         combo_box: '▼',
+        // As the checks of checksums.
+        check: '✓',
         bullet: '-',
         search_modes: SearchModes {
             plain: "=",
@@ -284,8 +290,7 @@ pub(crate) const NO_NEWLINE: &str = "⏎";
 /// parts its sections.
 pub(crate) const MODE_SEPARATOR: char = '·';
 
-/// In a check box and a secret field, as mc draws them.
-pub(crate) const CHECKED: char = 'x';
+/// In a secret field, as mc draws it.
 pub(crate) const SECRET: char = '*';
 
 /// A single line across a dialog, a menu, or a list, and the line after the end of a text.
@@ -382,6 +387,7 @@ mod tests {
                 3
             );
             assert_eq!(noc_text::width(&glyphs.combo_box.to_string()), 1);
+            assert_eq!(noc_text::width(&glyphs.check.to_string()), 1);
             let spinners = glyphs.spinners;
             let still = [spinners.still, glyphs.skeleton];
             for glyph in spinners.dots.iter().chain(&still) {

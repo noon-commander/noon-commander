@@ -254,8 +254,9 @@ impl ComboBox {
     }
 
     /// The box in `width` cells at most, as `[choice ▼]`: the choice padded to the widest, or
-    /// cut in its middle where the room is short, in the colors of text fields, or of the
-    /// choice under the cursor of the list if `focused` (see [`selected`]).
+    /// cut in its middle where the room is short, in the colors of text fields, its brackets
+    /// faint and its arrow in the color of titles; or, `focused`, all in the colors of the
+    /// choice under the cursor of the list (see [`selected`]).
     pub(crate) fn box_spans(
         &self,
         width: usize,
@@ -263,16 +264,23 @@ impl ComboBox {
         theme: &Theme,
     ) -> Vec<Span<'static>> {
         let room = self.widest().min(width.saturating_sub(BOX_CELLS));
-        let style = if focused {
-            selected(theme)
+        let (style, bracket, arrow) = if focused {
+            let style = selected(theme);
+            (style, style, style)
         } else {
-            theme.dialog_input
+            let input = theme.dialog_input;
+            let bracket = input.patch(theme.dialog_bracket);
+            (input, bracket, input.patch(theme.dialog_symbol))
         };
         let styles = (style, theme.truncated_cursor);
         let marks = theme.glyphs.marks;
-        let mut spans = vec![Span::styled("[", style)];
+        let mut spans = vec![Span::styled("[", bracket)];
         spans.extend(cells::fit(self.text(), room, Align::Left, styles, marks));
-        spans.push(Span::styled(format!(" {}]", theme.glyphs.combo_box), style));
+        spans.extend([
+            Span::styled(" ", style),
+            Span::styled(theme.glyphs.combo_box.to_string(), arrow),
+            Span::styled("]", bracket),
+        ]);
         spans
     }
 

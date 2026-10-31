@@ -6544,13 +6544,24 @@ impl App {
     }
 
     /// Whether the dialog in front stays open after `event`: Use Current fills in a field, and
-    /// OK on host settings that are not valid shows why over it.
+    /// OK on host settings that are not valid, or on an expected checksum that is none, shows
+    /// why over it.
     fn keeps_open(&mut self, event: DialogEvent) -> bool {
         let Some(Open { dialog, purpose }) = self.dialogs.front_mut() else {
             return false;
         };
-        let Purpose::EditHost { current, .. } = purpose else {
-            return false;
+        let current = match purpose {
+            Purpose::EditHost { current, .. } => current,
+            Purpose::Checksum { expect: true, .. } if event == DialogEvent::Pressed(Button::Ok) => {
+                let typed = dialog.text().trim();
+                if typed.is_empty() || parse_expected(typed, Algorithm::Sha256).is_some() {
+                    return false;
+                }
+                let text = cells::sanitize(typed.as_bytes());
+                self.show_error_over(&fl!("checksum-expected-invalid", text = text));
+                return true;
+            }
+            _ => return false,
         };
         match event {
             DialogEvent::Pressed(Button::UseCurrent) => {
@@ -13473,6 +13484,16 @@ mod tests {
         assert!(app.handle(action(Action::Confirm)).is_empty());
         let text = screen_of(&mut app, 20);
         assert!(text.contains("is not a checksum"), "{text}");
+        // OK on the error goes back to the dialog, the text as typed, to put it right.
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        let text = screen_of(&mut app, 20);
+        assert!(text.contains("Checksum of \"b\""), "{text}");
+        assert!(text.contains("not-hex"), "{text}");
+        assert_eq!(app.place(), (Mode::Insert, Context::DialogInput));
+        app.handle(action(Action::DeleteToStart));
+        type_text(&mut app, &"0".repeat(32));
+        let (_, _, algorithm) = checksum_job(app.handle(action(Action::Confirm)));
+        assert_eq!(algorithm, Algorithm::Md5);
     }
 
     #[test]
